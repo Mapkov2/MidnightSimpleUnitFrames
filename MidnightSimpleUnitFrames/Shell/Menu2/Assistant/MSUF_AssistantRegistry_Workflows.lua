@@ -1,4 +1,4 @@
--- Assistant Workflow registry: declares setup, history, support, and guided flow actions.
+-- Assistant Workflow registry: wires workflow state, navigation, status, and action helpers.
 -- Workflow actions should be idempotent and serialize state through Assistant context.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -17,15 +17,6 @@ if not (Registry and type(Registry.RegisterAction) == "function") then return en
 A.Workflow = A.Workflow or {}
 A.Workflow.Lifecycle = A.Workflow.Lifecycle or {}
 
--- Multi-step workflow registry.
--- These actions hold transient assistant state for guided setup/copy flows. They may call
--- unit/group apply helpers, but should keep confirmation and cancellation explicit.
-local UnitDB = C.UnitDB or function() return {} end
-local GroupDB = C.GroupDB or function() return {} end
-local ApplyUnit = C.ApplyUnit or function() end
-local ApplyGroup = C.ApplyGroup or function() end
-local UNIT_LABELS = C.UNIT_LABELS or A.UnitLabels or {}
-
 local function Trim(text)
     if A.Trim then return A.Trim(text) end
     text = tostring(text or "")
@@ -36,78 +27,6 @@ local function Normalize(text)
     if A.Normalize then return A.Normalize(text) end
     text = tostring(text or ""):lower():gsub("[,;:!?%(%)]", " "):gsub("%s+", " ")
     return Trim(text)
-end
-
-local function IsCancel(text)
-    text = Normalize(text)
-    if text == "cancel" or text == "no" or text == "nein" or text == "abort" or text == "stop" or text == "close" then return true end
-    local phrases = {
-        "never mind", "nevermind", "forget it", "cancel that", "abort that", "stop that", "not now",
-        "no thanks", "no thank you", "dont", "do not",
-        "abbrechen", "abbruch", "nein danke", "vergiss es", "lass es", "doch nicht",
-    }
-    for i = 1, #phrases do
-        if (" " .. text .. " "):find(" " .. phrases[i] .. " ", 1, true) then return true end
-    end
-    return false
-end
-
-local function StripPrefixCI(raw, prefix)
-    raw = Trim(raw)
-    prefix = tostring(prefix or "")
-    if raw == "" or prefix == "" then return nil end
-    if raw:sub(1, #prefix):lower() == prefix:lower() then
-        local value = Trim(raw:sub(#prefix + 1))
-        value = Trim(value:gsub("^[:=%-%s]+", ""))
-        return value
-    end
-    return nil
-end
-
-local function StripSuffixCI(raw, suffix)
-    raw = Trim(raw)
-    suffix = tostring(suffix or "")
-    if raw == "" or suffix == "" or #raw < #suffix then return raw end
-    if raw:sub(#raw - #suffix + 1):lower() == suffix:lower() then
-        return Trim(raw:sub(1, #raw - #suffix))
-    end
-    return raw
-end
-
-local function CleanPendingProfileDestination(text, kind)
-    local raw = Trim(text)
-    if raw == "" then return "" end
-    raw = Trim(raw:gsub("[%.!]+$", ""))
-    raw = StripSuffixCI(raw, " please")
-    raw = StripSuffixCI(raw, " bitte")
-    local politePrefix = StripPrefixCI(raw, "please ") or StripPrefixCI(raw, "bitte ")
-    if politePrefix and politePrefix ~= "" then raw = politePrefix end
-    local prefixes = {
-        "call it ", "name it ", "use name ", "use profile name ", "profile name ",
-        "new profile name ", "new profile ", "destination profile ", "destination ",
-        "to profile ", "to ",
-        "nenn es ", "nenne es ", "name ist ", "profilname ", "zu profil ", "zu ",
-        "nach profil ", "nach ", "als ",
-    }
-    if kind == "profileCopyDestination" then
-        local copyPrefixes = { "copy it to ", "copy to ", "copy profile to ", "kopiere es nach ", "kopiere nach " }
-        for i = 1, #copyPrefixes do
-            local value = StripPrefixCI(raw, copyPrefixes[i])
-            if value and value ~= "" then raw = value; break end
-        end
-    elseif kind == "profileRenameDestination" then
-        local renamePrefixes = { "rename it to ", "rename to ", "rename profile to ", "benenne es um in ", "benenne es um zu ", "benenne es in ", "umbenennen in ", "umbenennen zu ", "in profile ", "in " }
-        for i = 1, #renamePrefixes do
-            local value = StripPrefixCI(raw, renamePrefixes[i])
-            if value and value ~= "" then raw = value; break end
-        end
-    end
-    for i = 1, #prefixes do
-        local value = StripPrefixCI(raw, prefixes[i])
-        if value and value ~= "" then raw = value; break end
-    end
-    raw = Trim(raw:gsub("^['\"`]+", ""):gsub("['\"`]+$", ""))
-    return raw
 end
 
 local function SafeContext()
@@ -151,141 +70,61 @@ local function CurrentLargePanelKind()
     return type(p) == "table" and tostring(p.kind or "text") or nil
 end
 
+local WORKFLOW_KIND_LABELS = {
+    action = "action",
+    export = "export",
+    flow = "guided step",
+    groupAnchorPicker = "group custom-anchor picker",
+    import = "import",
+    profileCopyDestination = "profile copy step",
+    profileRenameDestination = "profile rename step",
+    text = "text",
+    unitAnchorPicker = "unit custom-anchor picker",
+}
+
+local function WorkflowKindLabel(kind)
+    kind = tostring(kind or "")
+    if WORKFLOW_KIND_LABELS[kind] then return WORKFLOW_KIND_LABELS[kind] end
+    local label = kind:gsub("_", " "):gsub("(%l)(%u)", "%1 %2")
+    label = label:gsub("^%l", string.upper)
+    return label ~= "" and label or "guided step"
+end
+
 function A.Workflow.CloseLargePanel(reason)
     local kind = CurrentLargePanelKind()
-    if not kind then return false, "No Assistant panel is open." end
+    if not kind then return false, "There is no Assistant panel open right now." end
     if type(A.CloseLargeTextPanel) == "function" then A.CloseLargeTextPanel() end
-    return true, reason or ("Closed the Assistant " .. tostring(kind) .. " panel.")
+    return true, reason or ("Closed the Assistant " .. WorkflowKindLabel(kind) .. " panel.")
 end
 
-function A.Workflow.CancelAnchorPicker()
-    local ov = _G.MSUF_AnchorPicker
-    if ov then
-        ov._onPick = nil
-        if ov.Hide then ov:Hide() end
-        return true, "Cancelled the custom anchor picker."
-    end
-    return false, "No custom anchor picker is active."
+local RegisterAnchorPickerHandlers = A.Workflow and A.Workflow.RegisterAnchorPickerHandlers
+if type(RegisterAnchorPickerHandlers) == "function" then
+    RegisterAnchorPickerHandlers({
+        UnitDB = C.UnitDB,
+        GroupDB = C.GroupDB,
+        ApplyUnit = C.ApplyUnit,
+        ApplyGroup = C.ApplyGroup,
+        UNIT_LABELS = C.UNIT_LABELS or A.UnitLabels,
+    })
 end
 
-function A.Workflow.StartUnitAnchorPicker(unit)
-    unit = tostring(unit or "")
-    if unit == "" then return false, "I need a unit for the custom anchor picker." end
-    local ensure = _G.MSUF_EnsureAnchorPicker
-    local overlay = type(ensure) == "function" and ensure() or nil
-    if not overlay then return false, "Custom anchor picker is not available right now." end
-    overlay._onPick = function(frameName)
-        local function ApplyPickedAnchor()
-            local conf = UnitDB(unit)
-            conf.anchorFrameName = frameName
-            conf.anchorToUnitframe = "GLOBAL"
-            ApplyUnit(unit, "MSUF_ASSISTANT_PICK_CUSTOM_ANCHOR", { preview = true })
-        end
-        if M and type(M.CaptureHistory) == "function" and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-            M.CaptureHistory("Pick custom anchor", "assistant:unit:anchorPick:" .. tostring(unit), ApplyPickedAnchor)
-        else
-            ApplyPickedAnchor()
-        end
-        A.ClearPendingFlow()
-        if type(A.AddHistory) == "function" then
-            A.AddHistory("assistant", "Done. Picked " .. tostring(frameName or "") .. " as " .. tostring(UNIT_LABELS[unit] or unit) .. " custom anchor.", "applied")
-        end
-        if type(A.RequestRefreshUI) == "function" then
-            A.RequestRefreshUI("assistant.workflow.anchor_pick")
-        elseif type(A.RefreshUI) == "function" then
-            A.RefreshUI()
-        end
-    end
-    overlay:Show()
-    A.StartPendingFlow("unitAnchorPicker", { source = unit, label = "Unit custom anchor picker" })
-    return true, "Click a frame to pick a custom anchor for " .. tostring(UNIT_LABELS[unit] or unit) .. ", or type 'cancel custom anchor picker'."
-end
-
-function A.Workflow.StartGroupAnchorPicker(scope)
-    scope = tostring(scope or "party")
-    if scope ~= "party" and scope ~= "raid" and scope ~= "mythicraid" then scope = "party" end
-    local ensure = _G.MSUF_EnsureAnchorPicker
-    local overlay = type(ensure) == "function" and ensure() or nil
-    if not overlay then return false, "Custom anchor picker is not available right now." end
-    overlay._onPick = function(frameName)
-        local function ApplyPickedAnchor()
-            GroupDB(scope).anchorToFrame = frameName
-            ApplyGroup(scope, "rebuild")
-        end
-        if M and type(M.CaptureHistory) == "function" and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-            M.CaptureHistory("Pick group anchor", "assistant:group:anchorPick:" .. tostring(scope), ApplyPickedAnchor)
-        else
-            ApplyPickedAnchor()
-        end
-        A.ClearPendingFlow()
-        if type(A.AddHistory) == "function" then
-            A.AddHistory("assistant", "Done. Picked " .. tostring(frameName or "") .. " as " .. tostring(UNIT_LABELS[scope] or scope) .. " custom anchor.", "applied")
-        end
-        if type(A.RequestRefreshUI) == "function" then
-            A.RequestRefreshUI("assistant.workflow.group_anchor_pick")
-        elseif type(A.RefreshUI) == "function" then
-            A.RefreshUI()
-        end
-    end
-    overlay:Show()
-    A.StartPendingFlow("groupAnchorPicker", { source = scope, label = "Group custom anchor picker" })
-    return true, "Click a frame to pick a custom anchor for " .. tostring(UNIT_LABELS[scope] or scope) .. ", or type 'cancel custom anchor picker'."
-end
-
-function A.Workflow.AnchorPickerStatus()
-    local ov = _G.MSUF_AnchorPicker
-    local shown = ov and ov.IsShown and ov:IsShown()
-    local flow = A.Workflow.PendingFlow()
-    if shown then
-        return "Custom anchor picker is active. Click a frame to pick it or type 'cancel custom anchor picker'."
-    end
-    if type(flow) == "table" and (flow.kind == "unitAnchorPicker" or flow.kind == "groupAnchorPicker") then
-        return "A custom anchor picker flow is pending, but the picker overlay is not visible. Type 'cancel custom anchor picker' to clear it."
-    end
-    return "Custom anchor picker is not active."
-end
-
-function A.Workflow.PushNavigationPage(page)
-    page = tostring(page or "")
-    if page == "" then return end
-    A.Workflow.navStack = type(A.Workflow.navStack) == "table" and A.Workflow.navStack or {}
-    local stack = A.Workflow.navStack
-    if stack[#stack] ~= page then stack[#stack + 1] = page end
-    while #stack > 20 do table.remove(stack, 1) end
-end
-
-function A.Workflow.GoBackPage()
-    local stack = type(A.Workflow.navStack) == "table" and A.Workflow.navStack or nil
-    local page = stack and table.remove(stack) or nil
-    if type(page) == "string" and page ~= "" then
-        if M and type(M.Open) == "function" then
-            if M.Open(page) ~= false then return true, "Opened previous page." end
-        elseif M and type(M.SelectPage) == "function" then
-            if M.SelectPage(page) ~= false then return true, "Opened previous page." end
-        end
-    end
-    if M and type(M.GoBackPage) == "function" then return M.GoBackPage() end
-    return false, "Dashboard back navigation is not available right now."
-end
-
-function A.Workflow.GoForwardPage()
-    if M and type(M.GoForwardPage) == "function" then return M.GoForwardPage() end
-    return false, "Dashboard forward navigation is not available right now."
-end
+local InstallNavigationHelpers = A.Workflow and A.Workflow.InstallNavigationHelpers
+if type(InstallNavigationHelpers) ~= "function" then return end
+InstallNavigationHelpers({ M = M })
 
 function A.Workflow.WorkflowStatusText()
     local lines = {}
     local flow = A.Workflow.PendingFlow()
-    lines[#lines + 1] = "Assistant workflow status:"
-    lines[#lines + 1] = "- Pending confirmation: " .. (A.pendingConfirmation and "yes" or "no")
-    lines[#lines + 1] = "- Pending choices: " .. ((type(A.pendingChoices) == "table" and #A.pendingChoices > 0) and tostring(#A.pendingChoices) or "no")
-    lines[#lines + 1] = "- Pending flow: " .. (flow and tostring(flow.label or flow.kind) or "none")
-    lines[#lines + 1] = "- Assistant panel: " .. (CurrentLargePanelKind() or "none")
+    lines[#lines + 1] = "Current Assistant step:"
+    lines[#lines + 1] = "- Confirmation waiting: " .. (A.pendingConfirmation and "yes" or "no")
+    lines[#lines + 1] = "- Choices waiting: " .. ((type(A.pendingChoices) == "table" and #A.pendingChoices > 0) and tostring(#A.pendingChoices) or "no")
+    lines[#lines + 1] = "- Guided step: " .. (flow and tostring(flow.label or flow.kind) or "none")
+    lines[#lines + 1] = "- Open Assistant panel: " .. (CurrentLargePanelKind() or "none")
     local guided = SafeContext() and SafeContext().guidedSetup
-    lines[#lines + 1] = "- Guided setup: " .. (type(guided) == "table" and "active" or "inactive")
+    lines[#lines + 1] = "- Setup guide: " .. (type(guided) == "table" and "active" or "inactive")
     if M and type(M.GetPageHistoryState) == "function" then
         local state = M.GetPageHistoryState() or {}
-        lines[#lines + 1] = "- Native page history: back=" .. tostring(tonumber(state.backCount) or 0) .. ", forward=" .. tostring(tonumber(state.forwardCount) or 0)
+        lines[#lines + 1] = "- Page history: " .. tostring(tonumber(state.backCount) or 0) .. " back, " .. tostring(tonumber(state.forwardCount) or 0) .. " forward"
     end
     if A.Workflow.EditMode and type(A.Workflow.EditMode.StatusText) == "function" then
         lines[#lines + 1] = ""
@@ -299,261 +138,41 @@ function A.Workflow.CancelActiveWorkflow()
         A.pendingConfirmation = nil
         local ctx = A.GetContext and A.GetContext()
         if ctx then ctx.pendingConfirmation = nil end
-        return true, "Cancelled the pending confirmation."
+        return true, "Cancelled. I cleared the current confirmation."
     end
     if type(A.pendingChoices) == "table" and #A.pendingChoices > 0 then
         A.pendingChoices = nil
         local ctx = A.GetContext and A.GetContext()
         if ctx then ctx.pendingChoices = nil end
-        return true, "Cancelled the pending choice."
+        return true, "Cancelled. I cleared the current choice."
     end
     local flow = A.Workflow.PendingFlow()
     if type(flow) == "table" then
         if flow.kind == "unitAnchorPicker" or flow.kind == "groupAnchorPicker" then A.Workflow.CancelAnchorPicker() end
         A.ClearPendingFlow()
-        return true, "Cancelled " .. tostring(flow.label or flow.kind) .. "."
+        return true, "Cancelled " .. tostring(flow.label or WorkflowKindLabel(flow.kind)) .. "."
     end
-    if CurrentLargePanelKind() then return A.Workflow.CloseLargePanel("Cancelled the open Assistant panel.") end
+    if CurrentLargePanelKind() then return A.Workflow.CloseLargePanel("Cancelled. I closed the open Assistant panel.") end
     local ctx = A.GetContext and A.GetContext()
     if ctx and type(ctx.guidedSetup) == "table" and A.Workflow.GuidedSetupStep then
         return true, A.Workflow.GuidedSetupStep("cancel")
     end
-    return false, "There is no active Assistant workflow to cancel."
+    return false, "There is no Assistant step waiting to cancel."
 end
 
-function A.HandlePendingFlow(text)
-    local flow = A.Workflow.PendingFlow()
-    if type(flow) ~= "table" then return nil end
-    if IsCancel(text) or Normalize(text) == "cancel workflow" then
-        local ok, message = A.Workflow.CancelActiveWorkflow()
-        return { text = message, status = ok and "applied" or "failed" }
-    end
-    if flow.kind == "profileCopyDestination" then
-        local dest = CleanPendingProfileDestination(text, flow.kind)
-        if dest == "" then return { text = "Reply with the destination profile name, for example 'call it Raid Backup', or say 'never mind' to cancel.", status = "confirmation_needed" } end
-        A.ClearPendingFlow()
-        local action = Registry:GetAction("copy_profile_from_to")
-        if not action then return { text = "Profile copy flow is not available right now.", status = "failed" } end
-        return A.ExecutePlan({
-            kind = "action",
-            action = action,
-            args = { source = flow.source, name = dest },
-            confirmRequired = true,
-            label = "Copy profile " .. tostring(flow.source) .. " to " .. tostring(dest),
-            summary = "Copies one named profile to a new destination profile.",
-        })
-    end
-    if flow.kind == "profileRenameDestination" then
-        local dest = CleanPendingProfileDestination(text, flow.kind)
-        if dest == "" then return { text = "Reply with the new profile name, for example 'to Raid Renamed' or 'in Raid Neu', or say 'never mind' to cancel.", status = "confirmation_needed" } end
-        A.ClearPendingFlow()
-        local action = Registry:GetAction("rename_profile")
-        if not action then return { text = "Profile rename is not available right now.", status = "failed" } end
-        return A.ExecutePlan({
-            kind = "action",
-            action = action,
-            args = { source = flow.source, name = dest },
-            confirmRequired = true,
-            label = "Rename profile " .. tostring(flow.source) .. " to " .. tostring(dest),
-            summary = "Renames a profile through the shared profile helper if one exists.",
-        })
-    end
-    return nil
+local RegisterPendingFlowHandlers = A.Workflow and A.Workflow.RegisterPendingFlowHandlers
+if type(RegisterPendingFlowHandlers) == "function" then
+    RegisterPendingFlowHandlers({
+        Registry = Registry,
+        Trim = Trim,
+        Normalize = Normalize,
+    })
 end
 
-Registry:RegisterAction({
-    key = "assistant.workflow.status",
-    label = "Show Workflow Status",
-    type = "diagnostic",
-    combatSafe = true,
-    lifecycle = { workflow = "assistant", canStart = true, canCancel = true, canExitStop = true, canReportStatus = true },
-    run = function()
-        local text = A.Workflow.WorkflowStatusText()
-        if type(A.ShowLargeTextPanel) == "function" then
-            A.ShowLargeTextPanel({ kind = "text", title = "Assistant Workflows", help = "Current pending confirmations, flows, panels, and Edit Mode lifecycle status.", text = text, status = "No settings changed." })
-        end
-        return true, text
-    end,
-})
-
-Registry:RegisterAction({
-    key = "assistant.workflow.cancel",
-    label = "Cancel Active Assistant Workflow",
-    type = "setup",
-    combatSafe = true,
-    lifecycle = { workflow = "assistant", canCancel = true, canExitStop = true, canReportStatus = true },
-    run = function()
-        return A.Workflow.CancelActiveWorkflow()
-    end,
-})
-
-Registry:RegisterAction({
-    key = "assistant.panel.close",
-    label = "Close Assistant Panel",
-    type = "navigation",
-    combatSafe = true,
-    lifecycle = { workflow = "assistantPanel", canCancel = true, canExitStop = true, canReportStatus = true },
-    run = function()
-        return A.Workflow.CloseLargePanel()
-    end,
-})
-
-Registry:RegisterAction({
-    key = "dashboard_page_back",
-    label = "Open Previous Dashboard Page",
-    type = "navigation",
-    combatSafe = true,
-    lifecycle = { workflow = "dashboardNavigation", canStart = true, canExitStop = true, canReportStatus = true },
-    run = function()
-        return A.Workflow.GoBackPage()
-    end,
-})
-
-Registry:RegisterAction({
-    key = "dashboard_page_forward",
-    label = "Open Next Dashboard Page",
-    type = "navigation",
-    combatSafe = true,
-    lifecycle = { workflow = "dashboardNavigation", canStart = true, canExitStop = true, canReportStatus = true },
-    run = function()
-        return A.Workflow.GoForwardPage()
-    end,
-})
-
-Registry:RegisterAction({
-    key = "start_unit_custom_anchor_picker",
-    label = "Start Unit Custom Anchor Picker",
-    type = "navigation",
-    combatSafe = false,
-    lifecycle = { workflow = "customAnchorPicker", canStart = true, canCancel = true, canExitStop = true, canReportStatus = true },
-    run = function(args)
-        return A.Workflow.StartUnitAnchorPicker(args and args.unit)
-    end,
-})
-
-Registry:RegisterAction({
-    key = "start_group_custom_anchor_picker",
-    label = "Start Group Custom Anchor Picker",
-    type = "navigation",
-    combatSafe = false,
-    lifecycle = { workflow = "customAnchorPicker", canStart = true, canCancel = true, canExitStop = true, canReportStatus = true },
-    run = function(args)
-        return A.Workflow.StartGroupAnchorPicker(args and args.scope)
-    end,
-})
-
-Registry:RegisterAction({
-    key = "cancel_custom_anchor_picker",
-    label = "Cancel Custom Anchor Picker",
-    type = "navigation",
-    combatSafe = true,
-    lifecycle = { workflow = "customAnchorPicker", canCancel = true, canExitStop = true, canReportStatus = true },
-    run = function()
-        return A.Workflow.CancelAnchorPicker()
-    end,
-})
-
-Registry:RegisterAction({
-    key = "custom_anchor_picker_status",
-    label = "Show Custom Anchor Picker Status",
-    type = "diagnostic",
-    combatSafe = true,
-    lifecycle = { workflow = "customAnchorPicker", canReportStatus = true },
-    run = function()
-        return true, A.Workflow.AnchorPickerStatus()
-    end,
-})
-
-Registry:RegisterAction({
-    key = "copy_profile_from_to",
-    label = "Copy Profile Source To Destination",
-    type = "profile",
-    combatSafe = false,
-    confirmRequired = true,
-    captureSnapshot = true,
-    captureProfileSnapshot = true,
-    lifecycle = { workflow = "profileCopy", canStart = true, canConfirmApply = true, canCancel = true, canReportStatus = true },
-    run = function(args)
-        local source = Trim(args and args.source or "")
-        local dest = Trim(args and args.name or args and args.destination or "")
-        if source == "" then return false, "I need a source profile name." end
-        if dest == "" then return false, "I need a destination profile name." end
-        local resolve = A.ResolveProfileName
-        if type(resolve) == "function" then
-            local resolved, how = resolve(source)
-            if how == "multiple" then return false, "I found multiple matching source profiles. Please use the exact profile name." end
-            if resolved then source = resolved end
-        end
-        if type(A.ProfileExists) == "function" and not A.ProfileExists(source) then return false, "Profile " .. tostring(source) .. " was not found." end
-        if type(_G.MSUF_CopyProfile) ~= "function" then return false, "Profile copy is not available right now." end
-        local copied = _G.MSUF_CopyProfile(source, dest)
-        if copied and type(_G.MSUF_SwitchProfile) == "function" then _G.MSUF_SwitchProfile(dest) end
-        if A and type(A.ApplyBroad) == "function" then A.ApplyBroad("MSUF_ASSISTANT_PROFILE_COPY_FROM_TO") end
-        return copied and true or false, copied and ("Done. Copied profile " .. tostring(source) .. " to " .. tostring(dest) .. ".") or "Profile copy failed."
-    end,
-})
-
-Registry:RegisterAction({
-    key = "start_profile_copy_flow",
-    label = "Start Profile Copy Flow",
-    type = "profile",
-    combatSafe = true,
-    lifecycle = { workflow = "profileCopy", canStart = true, canConfirmApply = true, canCancel = true, canReportStatus = true },
-    run = function(args)
-        local source = Trim(args and args.source or "")
-        if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
-        A.StartPendingFlow("profileCopyDestination", { source = source, label = "Profile copy" })
-        return true, "Copy profile " .. tostring(source) .. " to which destination profile name? Reply with a name like 'call it Raid Backup', or say 'never mind' to cancel."
-    end,
-})
-
-Registry:RegisterAction({
-    key = "rename_profile",
-    label = "Rename Profile",
-    type = "profile",
-    combatSafe = false,
-    confirmRequired = true,
-    captureSnapshot = true,
-    captureProfileSnapshot = true,
-    lifecycle = { workflow = "profileRename", canStart = true, canConfirmApply = true, canCancel = true, canReportStatus = true },
-    run = function(args)
-        local source = Trim(args and args.source or "")
-        local dest = Trim(args and args.name or args and args.destination or "")
-        if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
-        if dest == "" then return false, "I need the new profile name." end
-        local requested = source
-        local resolve = A.ResolveProfileName
-        if type(resolve) == "function" then
-            local resolved, how = resolve(source)
-            if how == "multiple" then return false, "I found multiple matching source profiles. Please use the exact profile name." end
-            if resolved then source = resolved end
-        end
-        if type(A.ProfileExists) == "function" then
-            if not A.ProfileExists(source) then return false, "Profile " .. tostring(requested) .. " was not found." end
-            if A.ProfileExists(dest) then return false, "Profile " .. tostring(dest) .. " already exists." end
-        end
-        if source == "Default" then return false, "The Default profile cannot be renamed. Copy it to a new profile instead." end
-        local rename = _G.MSUF_RenameProfile or _G.MSUF_ProfileRename
-        if type(rename) ~= "function" then
-            return false, "Profile rename is not available because no shared public rename helper is exposed yet."
-        end
-        local ok = rename(source, dest)
-        if ok == false then return false, "Profile rename failed." end
-        if A and type(A.ApplyBroad) == "function" then A.ApplyBroad("MSUF_ASSISTANT_PROFILE_RENAME") end
-        return true, "Done. Renamed profile " .. tostring(source) .. " to " .. tostring(dest) .. "."
-    end,
-})
-
-Registry:RegisterAction({
-    key = "start_profile_rename_flow",
-    label = "Start Profile Rename Flow",
-    type = "profile",
-    combatSafe = true,
-    lifecycle = { workflow = "profileRename", canStart = true, canConfirmApply = true, canCancel = true, canReportStatus = true },
-    run = function(args)
-        local source = Trim(args and args.source or "")
-        if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
-        A.StartPendingFlow("profileRenameDestination", { source = source, label = "Profile rename" })
-        return true, "Rename profile " .. tostring(source) .. " to what new name? Reply like 'to Raid Renamed' or 'in Raid Neu', or say 'never mind' to cancel."
-    end,
-})
+local RegisterWorkflowActions = A.Workflow and A.Workflow.RegisterCoreActions
+if type(RegisterWorkflowActions) == "function" then
+    RegisterWorkflowActions({
+        Registry = Registry,
+        Trim = Trim,
+    })
+end

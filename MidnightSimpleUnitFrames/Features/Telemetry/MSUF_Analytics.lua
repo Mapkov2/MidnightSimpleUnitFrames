@@ -101,13 +101,9 @@ local function EnsureEventFrame()
                 QueueAfterCombat()
                 return
             end
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    FlushSession("login")
-                end)
-            else
+            C_Timer.After(0, function()
                 FlushSession("login")
-            end
+            end)
         elseif event == "PLAYER_REGEN_ENABLED" then
             self:UnregisterEvent("PLAYER_REGEN_ENABLED")
             pendingAfterCombat = false
@@ -137,40 +133,39 @@ local function GetAnalyticsSession()
     local lib = LibStub("WagoAnalytics", true)
     if not lib then return nil end
 
-    -- WagoAnalytics has shipped multiple registration names; probe them defensively and only
-    -- keep a table result that looks like a session object.
+    -- WagoAnalytics has shipped multiple registration names; use the one present.
     registerAttempted = true
-    local ok, result
+    local result
     if type(lib.RegisterAddon) == "function" then
-        ok, result = pcall(lib.RegisterAddon, lib, ADDON_NAME)
+        result = lib:RegisterAddon(ADDON_NAME)
     elseif type(lib.RegisterAddOn) == "function" then
-        ok, result = pcall(lib.RegisterAddOn, lib, ADDON_NAME)
+        result = lib:RegisterAddOn(ADDON_NAME)
     elseif type(lib.Register) == "function" and type(GetAddOnMetadata) == "function" then
         local wagoID = GetAddOnMetadata(ADDON_NAME, "X-Wago-ID")
         if wagoID then
-            ok, result = pcall(lib.Register, lib, wagoID)
+            result = lib:Register(wagoID)
         end
     end
 
-    if ok and type(result) == "table" then
+    if type(result) == "table" then
         session = result
     end
 
     return session
 end
 
-local function SafeSwitch(target, key, value)
+local function ApplySwitch(target, key, value)
     local fn = target and target.Switch
     if type(fn) ~= "function" then return end
-    pcall(fn, target, key, value and true or false)
+    fn(target, key, value and true or false)
 end
 
-local function SafeCounter(target, key, value)
+local function ApplyCounter(target, key, value)
     local n = tonumber(value)
     if not n then return end
     local fn = target and target.SetCounter
     if type(fn) ~= "function" then return end
-    pcall(fn, target, key, n)
+    fn(target, key, n)
 end
 
 local function Round(value)
@@ -210,7 +205,7 @@ end
 local function EnsureMSUFDB()
     local ensureDB = _G.MSUF_EnsureDB
     if type(ensureDB) == "function" then
-        pcall(ensureDB)
+        ensureDB()
     end
 
     local db = _G.MSUF_DB
@@ -229,21 +224,21 @@ local function CollectSessionSnapshot(target)
     local auras3 = type(db.auras3) == "table" and db.auras3 or {}
     local aurasShared = type(auras3.shared) == "table" and auras3.shared or {}
 
-    SafeSwitch(target, "Addon_Loaded", true)
-    SafeSwitch(target, "Analytics_Enabled", true)
+    ApplySwitch(target, "Addon_Loaded", true)
+    ApplySwitch(target, "Analytics_Enabled", true)
 
     if type(GetAddOnMetadata) == "function" then
         local version = GetAddOnMetadata(ADDON_NAME, "Version")
         local versionKey = SanitizeMetricPart(version)
         if versionKey ~= "" then
-            SafeSwitch(target, "Version_" .. versionKey, true)
+            ApplySwitch(target, "Version_" .. versionKey, true)
         end
     end
 
     local unitCount = 0
     local function UnitSwitch(metric, key)
         local enabled = EnabledUnlessFalse(db[key])
-        SafeSwitch(target, metric, enabled)
+        ApplySwitch(target, metric, enabled)
         if enabled then unitCount = unitCount + 1 end
     end
 
@@ -253,17 +248,17 @@ local function CollectSessionSnapshot(target)
     UnitSwitch("UF_Focus", "focus")
     UnitSwitch("UF_Pet", "pet")
     UnitSwitch("UF_Boss", "boss")
-    SafeCounter(target, "UF_EnabledCount", unitCount)
+    ApplyCounter(target, "UF_EnabledCount", unitCount)
 
-    SafeCounter(target, "Player_Width", Round(db.player and db.player.width))
-    SafeCounter(target, "Player_Height", Round(db.player and db.player.height))
-    SafeCounter(target, "Target_Width", Round(db.target and db.target.width))
-    SafeCounter(target, "Target_Height", Round(db.target and db.target.height))
+    ApplyCounter(target, "Player_Width", Round(db.player and db.player.width))
+    ApplyCounter(target, "Player_Height", Round(db.player and db.player.height))
+    ApplyCounter(target, "Target_Width", Round(db.target and db.target.width))
+    ApplyCounter(target, "Target_Height", Round(db.target and db.target.height))
 
     local castbarCount = 0
     local function CastbarSwitch(metric, value)
         local enabled = value ~= false
-        SafeSwitch(target, metric, enabled)
+        ApplySwitch(target, metric, enabled)
         if enabled then castbarCount = castbarCount + 1 end
     end
 
@@ -271,30 +266,30 @@ local function CollectSessionSnapshot(target)
     CastbarSwitch("Castbar_Target", general.enableTargetCastbar)
     CastbarSwitch("Castbar_Focus", general.enableFocusCastbar)
     CastbarSwitch("Castbar_Boss", general.enableBossCastbar)
-    SafeCounter(target, "Castbar_EnabledCount", castbarCount)
+    ApplyCounter(target, "Castbar_EnabledCount", castbarCount)
 
     local groupCount = 0
     local function GroupSwitch(metric, key)
         local enabled = type(db[key]) == "table" and db[key].enabled == true
-        SafeSwitch(target, metric, enabled)
+        ApplySwitch(target, metric, enabled)
         if enabled then groupCount = groupCount + 1 end
     end
 
     GroupSwitch("GF_Party", "gf_party")
     GroupSwitch("GF_Raid", "gf_raid")
     GroupSwitch("GF_MythicRaid", "gf_mythicraid")
-    SafeCounter(target, "GF_EnabledCount", groupCount)
+    ApplyCounter(target, "GF_EnabledCount", groupCount)
 
-    SafeSwitch(target, "Auras3_Enabled", auras3.enabled ~= false)
-    SafeSwitch(target, "Auras3_Target", auras3.showTarget ~= false)
-    SafeSwitch(target, "Auras3_Focus", auras3.showFocus ~= false)
-    SafeSwitch(target, "Auras3_Boss", auras3.showBoss ~= false)
-    SafeCounter(target, "Auras3_MaxIcons", Round(aurasShared.maxIcons))
+    ApplySwitch(target, "Auras3_Enabled", auras3.enabled ~= false)
+    ApplySwitch(target, "Auras3_Target", auras3.showTarget ~= false)
+    ApplySwitch(target, "Auras3_Focus", auras3.showFocus ~= false)
+    ApplySwitch(target, "Auras3_Boss", auras3.showBoss ~= false)
+    ApplyCounter(target, "Auras3_MaxIcons", Round(aurasShared.maxIcons))
 
     local gameplayCount = 0
     local function GameplaySwitch(metric, value)
         local enabled = Bool(value)
-        SafeSwitch(target, metric, enabled)
+        ApplySwitch(target, metric, enabled)
         if enabled then gameplayCount = gameplayCount + 1 end
     end
 
@@ -304,16 +299,16 @@ local function CollectSessionSnapshot(target)
     GameplaySwitch("Gameplay_CombatCrosshair", gameplay.enableCombatCrosshair)
     GameplaySwitch("Gameplay_CrosshairRangeColor", gameplay.enableCombatCrosshairMeleeRangeColor)
     GameplaySwitch("Gameplay_PlayerTotems", gameplay.enablePlayerTotems)
-    SafeCounter(target, "Gameplay_EnabledCount", gameplayCount)
+    ApplyCounter(target, "Gameplay_EnabledCount", gameplayCount)
 
-    SafeSwitch(target, "Style_ClassColors", general.useClassColors ~= false)
-    SafeSwitch(target, "Style_DarkMode", general.darkMode == true)
-    SafeSwitch(target, "Style_Gradient", general.enableGradient == true)
-    SafeSwitch(target, "Style_HealthGradient", general.enableHealthGradient ~= false)
+    ApplySwitch(target, "Style_ClassColors", general.useClassColors ~= false)
+    ApplySwitch(target, "Style_DarkMode", general.darkMode == true)
+    ApplySwitch(target, "Style_Gradient", general.enableGradient == true)
+    ApplySwitch(target, "Style_HealthGradient", general.enableHealthGradient ~= false)
     local uiScale = (type(general.UIScale) == "table") and general.UIScale or nil
-    SafeSwitch(target, "Style_GlobalScalingDisabled", not (uiScale and uiScale.Enabled == true))
-    SafeCounter(target, "Profiles_Count", CountProfiles())
-    SafeCounter(target, "MSUF_UiScalePct", Round((tonumber(general.msufUiScale) or 1) * 100))
+    ApplySwitch(target, "Style_GlobalScalingDisabled", not (uiScale and uiScale.Enabled == true))
+    ApplyCounter(target, "Profiles_Count", CountProfiles())
+    ApplyCounter(target, "MSUF_UiScalePct", Round((tonumber(general.msufUiScale) or 1) * 100))
 end
 
 FlushSession = function(reason)

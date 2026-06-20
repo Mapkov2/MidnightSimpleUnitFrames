@@ -32,6 +32,7 @@ local ParseGroupCopy = P.ParseGroupCopy
 local ParseCopy = P.ParseCopy
 local BuildContextReset = P.BuildContextReset
 local ParseGroupSpellIndicatorAction = P.ParseGroupSpellIndicatorAction
+local ParseGroupCornerIndicatorSetting = P.ParseGroupCornerIndicatorSetting
 local ParseGroupCornerIndicatorReset = P.ParseGroupCornerIndicatorReset
 local ParseGroupStatusIconReset = P.ParseGroupStatusIconReset
 local ParseGroupStatusPreview = P.ParseGroupStatusPreview
@@ -58,6 +59,8 @@ local ParsePresetWorkflow = P.ParsePresetWorkflow
 local ParseScopedOverrideReset = P.ParseScopedOverrideReset
 local ParseGameplayRootToggle = P.ParseGameplayRootToggle
 local ParseGameplayAction = P.ParseGameplayAction
+local ParseClassPowerRootToggle = P.ParseClassPowerRootToggle
+local ParseClassPowerAction = P.ParseClassPowerAction
 local ParseGlobalBarsAction = P.ParseGlobalBarsAction
 local ParseDarkModeBrightnessShortcut = P.ParseDarkModeBrightnessShortcut
 local ParseCastbarPreviewAction = P.ParseCastbarPreviewAction
@@ -141,8 +144,8 @@ if not P.InitUnsupportedAuraCommand then
                 return {
                     kind = "unsupported",
                     status = "info",
-                    summary = "Aura command is not registered yet.",
-                    text = "I could not safely match that Aura command yet. Registered Aura controls such as icon size, count, growth, cooldown and stack text, filters, blacklist, quick presets, and Group Aura copy can be changed. Aura backend areas that are not registered yet stay blocked.",
+                    summary = "Aura option fallback.",
+                    text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, count, growth, cooldown and stack text, filters, hidden aura lists, quick presets, and group aura copy when those options exist in MSUF. Aura areas I can't match will stay as they are.",
                 }
             end
         end
@@ -161,6 +164,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or (P.ParseBroadHumanAnchorTargetAnswer and P.ParseBroadHumanAnchorTargetAnswer(normalized, raw))
         or ParseWorkflowLifecycle(normalized)
         or (P.ParseProfileRepairShortcut and P.ParseProfileRepairShortcut(normalized))
+        or (ParseGroupCornerIndicatorSetting and ParseGroupCornerIndicatorSetting(normalized, raw))
         or ParseDiagnostic(normalized)
         or ParseGroupCopy(normalized)
         or P.ParseUnsupportedMixedCopy(normalized)
@@ -171,6 +175,20 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or (P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw))
         or (P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw))
         or (P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw))
+        or (A._ParseClassPowerDetachedPlayerPowerShortcut and A._ParseClassPowerDetachedPlayerPowerShortcut(normalized, raw))
+        or (ParseClassPowerRootToggle and ParseClassPowerRootToggle(normalized))
+        or (A._ParseClassPowerWidthModeShortcut and A._ParseClassPowerWidthModeShortcut(normalized))
+        or (A._ParseClassPowerVisibilityShortcut and A._ParseClassPowerVisibilityShortcut(normalized))
+        or (A._ParseClassPowerAnchorShortcut and A._ParseClassPowerAnchorShortcut(normalized))
+        or (A._ParseClassPowerPlacementShortcut and A._ParseClassPowerPlacementShortcut(normalized))
+        or (A._ParseClassPowerDisplayStyleShortcut and A._ParseClassPowerDisplayStyleShortcut(normalized))
+        or (A._ParseClassPowerFillDirectionShortcut and A._ParseClassPowerFillDirectionShortcut(normalized))
+        or (A._ParseClassPowerTextSizeShortcut and A._ParseClassPowerTextSizeShortcut(normalized))
+        or (A._ParseClassPowerSizeShortcut and A._ParseClassPowerSizeShortcut(normalized))
+        or (A._ParseClassPowerSeparatorShortcut and A._ParseClassPowerSeparatorShortcut(normalized))
+        or (A._ParseClassPowerGapShortcut and A._ParseClassPowerGapShortcut(normalized))
+        or (A._ParseClassPowerBackgroundShortcut and A._ParseClassPowerBackgroundShortcut(normalized))
+        or (A._ParseClassPowerMoveShortcut and A._ParseClassPowerMoveShortcut(normalized))
         or ParseGameplayRootToggle(normalized)
         or A._ParseGameplayBooleanShortcut(normalized)
         or A._ParseGameplayAnchorShortcut(normalized)
@@ -243,6 +261,8 @@ end
 --- to generic setting parsing if no domain-specific action matched.
 function A._ParsePipelineFeature(normalized, raw, ctx)
     return ParseGameplayAction(normalized, raw)
+        or (ParseClassPowerAction and ParseClassPowerAction(normalized))
+        or (A._ParseClassPowerColorShortcut and A._ParseClassPowerColorShortcut(normalized, raw))
         or ParseDarkModeBrightnessShortcut(normalized)
         or ParseGlobalBarsAction(normalized)
         or (P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx))
@@ -258,6 +278,7 @@ function A._ParsePipelineFeature(normalized, raw, ctx)
         or BuildContextReset(normalized, ctx)
         or ParseColorAction(normalized)
         or ParseGroupSpellIndicatorAction(normalized, raw)
+        or (ParseGroupCornerIndicatorSetting and ParseGroupCornerIndicatorSetting(normalized, raw))
         or ParseGroupCornerIndicatorReset(normalized)
         or ParseGroupStatusPreview(normalized)
         or (P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized))
@@ -397,7 +418,7 @@ function A.Parse(text, ctxOverride)
         kind = "unknown",
         raw = raw,
         normalized = normalized,
-        text = "I do not know that setting yet.",
+        text = "Which page and option do you want me to use? Example: 'set target cast bar height to 20'.",
         status = "failed",
     }
 end

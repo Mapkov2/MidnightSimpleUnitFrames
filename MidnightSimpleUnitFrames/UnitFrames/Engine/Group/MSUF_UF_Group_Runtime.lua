@@ -122,7 +122,7 @@ end
 
 local function BumpAuras3ConfigForGroup(mask)
   if mask ~= nil and mask ~= GF.DIRTY_ALL and not Has(mask, GF.DIRTY_AURAS) then return end
-  local A3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
+  local A3 = MSUF and MSUF.MSUF_Auras3
   if A3 and type(A3.BumpRuntimeConfig) == "function" then
     A3.BumpRuntimeConfig()
   end
@@ -221,7 +221,7 @@ local function GroupUnitMatches(frame, unit, unitGuid)
   if frameUnit == unit then
     return true
   end
-  if not (UnitGUID and frameUnit) then
+  if not frameUnit then
     return false
   end
   local frameGuid = UnitGUID(frameUnit)
@@ -262,7 +262,7 @@ function GF.RefreshGroupNames(unit)
     return false
   end
   local matchGuid
-  if UnitGUID and IsUnitToken(unit) then
+  if IsUnitToken(unit) then
     local guid = UnitGUID(unit)
     if issecretvalue(guid) ~= true then
       matchGuid = guid
@@ -341,10 +341,8 @@ local function UnitIdentity(unit)
   if not IsUnitToken(unit) then
     return ""
   end
-  if UnitGUID then
-    local guid = UnitGUID(unit)
-    if issecretvalue(guid) ~= true and guid then return guid end
-  end
+  local guid = UnitGUID(unit)
+  if issecretvalue(guid) ~= true and guid then return guid end
   if UnitName then
     local name, realm = UnitName(unit)
     if issecretvalue(name) ~= true and name and name ~= "" then
@@ -485,9 +483,6 @@ local function ScanRaidHeaderChildren()
 end
 
 local function ScheduleRosterSettle()
-  if not (C_Timer and C_Timer.After) then
-    return
-  end
   if RosterMode() ~= "raid" then
     return
   end
@@ -519,7 +514,7 @@ local function DBReady()
 end
 
 local function ScheduleDBReadyRetry(builder)
-  if DBReady() or not (C_Timer and C_Timer.After) then
+  if DBReady() then
     return
   end
   dbReadyRetryToken = dbReadyRetryToken + 1
@@ -548,6 +543,7 @@ local groupRuntimeDeferCount = 0
 local function GroupRuntimeDeferOnUpdate(self)
   if self then
     self:SetScript("OnUpdate", nil)
+    self:SetOnUpdateMode("Disabled")
   end
   groupRuntimeDeferActive = nil
   local count = groupRuntimeDeferCount
@@ -563,6 +559,7 @@ local function GroupRuntimeDeferOnUpdate(self)
   end
   if groupRuntimeDeferCount > 0 and groupRuntimeDeferFrame then
     groupRuntimeDeferActive = true
+    groupRuntimeDeferFrame:SetOnUpdateMode("RunOnce")
     groupRuntimeDeferFrame:SetScript("OnUpdate", GroupRuntimeDeferOnUpdate)
   end
 end
@@ -573,14 +570,8 @@ local function ScheduleGroupRuntimeNextFrame(key, fn)
     _G.MSUF_ScheduleOnce(key, fn)
     return true
   end
-  if not C_Timer then
-    return false
-  end
-  if not groupRuntimeDeferFrame and CreateFrame then
-    groupRuntimeDeferFrame = CreateFrame("Frame")
-  end
   if not groupRuntimeDeferFrame then
-    return false
+    groupRuntimeDeferFrame = CreateFrame("Frame")
   end
   key = key or fn
   if groupRuntimeDeferQueue[key] == nil then
@@ -590,6 +581,7 @@ local function ScheduleGroupRuntimeNextFrame(key, fn)
   groupRuntimeDeferQueue[key] = fn
   if not groupRuntimeDeferActive then
     groupRuntimeDeferActive = true
+    groupRuntimeDeferFrame:SetOnUpdateMode("RunOnce")
     groupRuntimeDeferFrame:SetScript("OnUpdate", GroupRuntimeDeferOnUpdate)
   end
   return true
@@ -1067,13 +1059,13 @@ for i = 1, #GF_PUBLIC_ALIASES do
   end)
 end
 ExportPublic("MSUF_GF_InvalidateCooldownTextCurve", function()
-  local A3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
+  local A3 = MSUF and MSUF.MSUF_Auras3
   local CT = A3 and A3.CooldownText
   if CT and CT.Invalidate then CT.Invalidate("group") end
   return true
 end)
 ExportPublic("MSUF_GF_ForceCooldownTextRecolor", function()
-  local A3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
+  local A3 = MSUF and MSUF.MSUF_Auras3
   local CT = A3 and A3.CooldownText
   if CT and CT.ForceRecolor then CT.ForceRecolor("group") end
   return GF.RefreshVisuals(nil, GF.DIRTY_AURAS)

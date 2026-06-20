@@ -8,10 +8,20 @@
 --- each create their own event frame for the same traffic.
 local _, MSUF = ...
 MSUF = MSUF or {}
-local type, pairs, pcall, tostring = type, pairs, pcall, tostring
+local type, pairs = type, pairs
 local unpack = unpack or table.unpack
+local SafeCall = _G.MSUF_SafeCall or function(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, err) end
+        return false, err
+    end
+    return true
+end
 
-local bus = { safeCalls = false, handlers = {}, _errOnce = {} }
+local bus = { handlers = {} }
 local driver = CreateFrame("Frame")
 driver:Hide()
 bus.driver = driver
@@ -75,11 +85,7 @@ local function RefreshDriverRegistration(event, ev)
     if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
     local units = BuildUnitList(ev)
     if #units == 0 then return end
-    if driver.RegisterUnitEvent then
-        driver:RegisterUnitEvent(event, unpack(units))
-    else
-        driver:RegisterEvent(event)
-    end
+    driver:RegisterUnitEvent(event, unpack(units))
 end
 
 local function UnitFilterMatches(units, unit)
@@ -205,23 +211,12 @@ end
 driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]; if not ev then return end
     ev.dd = (ev.dd or 0) + 1
-    local list, n, safe = ev.list, #ev.list, bus.safeCalls
+    local list, n = ev.list, #ev.list
     local unit = ...
     for i = 1, n do
         local h = list[i]
         if h and h.fn and UnitFilterMatches(h.units, unit) then
-            if safe then
-                local ok, err = pcall(h.fn, event, ...)
-                if not ok then
-                    local gate = event .. "|" .. (h.key or "")
-                    if not bus._errOnce[gate] then
-                        bus._errOnce[gate] = true
-                        if _G.print then _G.print("|cffff5555MSUF EventBus error|r " .. gate .. ": " .. tostring(err)) end
-                    end
-                end
-            else
-                h.fn(event, ...)
-            end
+            SafeCall(h.fn, event, ...)
             if h.once then ev.index[h.key] = nil; h.fn = nil; h.dead = true; ev.dirty = true end
         end
     end
@@ -246,7 +241,6 @@ end
 local function EventBusRegister(e, k, f, u, o) return bus:Register(e, k, f, u, o) end
 local function EventBusUnregister(e, k) return bus:Unregister(e, k) end
 local function EventBusUnregisterAll(p) return bus:UnregisterAll(p) end
-local function EventBusSetSafeCalls(v) bus.safeCalls = v and true or false end
 
 MSUF.EventBus = bus
 MSUF.MSUF_EventBus = bus
@@ -254,5 +248,4 @@ ExportPublic("MSUF_EventBus", bus)
 ExportPublic("MSUF_EventBus_Register", EventBusRegister)
 ExportPublic("MSUF_EventBus_Unregister", EventBusUnregister)
 ExportPublic("MSUF_EventBus_UnregisterAll", EventBusUnregisterAll)
-ExportPublic("MSUF_EventBus_SetSafeCalls", EventBusSetSafeCalls)
 return bus

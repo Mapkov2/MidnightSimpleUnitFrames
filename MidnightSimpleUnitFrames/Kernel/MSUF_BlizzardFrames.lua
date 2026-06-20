@@ -255,6 +255,7 @@ local function HandleFrame(frame, doNotReparent, unit)
     local totFrame = frame.totFrame or frame.TargetFrameToT
     local ccFrame = frame.CcRemoverFrame
     local debuffFrame = frame.DebuffFrame
+    local pingFrame = frame.pingIconFrame or frame.PingIconFrame
     local keepCastbar = unit and ShouldUseBlizzardCastbar(unit)
 
     Unregister(health)
@@ -265,6 +266,7 @@ local function HandleFrame(frame, doNotReparent, unit)
     Unregister(totFrame)
     Unregister(ccFrame)
     Unregister(debuffFrame)
+    Unregister(pingFrame)
     Hide(health)
     Hide(power)
     Hide(altPower)
@@ -273,6 +275,7 @@ local function HandleFrame(frame, doNotReparent, unit)
     Hide(totFrame)
     Hide(ccFrame)
     Hide(debuffFrame)
+    Hide(pingFrame)
 
     if keepCastbar then
         KeepBlizzardCastbar(castbar)

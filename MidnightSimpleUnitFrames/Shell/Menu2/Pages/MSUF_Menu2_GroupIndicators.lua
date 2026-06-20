@@ -5,7 +5,7 @@ MSUF.MSUF2 = M
 
 -- Menu2 Group indicators page.
 -- Builds party/raid status icon, placed indicator, frame effect, and spell-indicator controls.
--- Runtime indicator dispatch and aura scanning remain in the GroupFrames engine.
+-- Runtime indicator dispatch remains in the GroupFrames engine.
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}

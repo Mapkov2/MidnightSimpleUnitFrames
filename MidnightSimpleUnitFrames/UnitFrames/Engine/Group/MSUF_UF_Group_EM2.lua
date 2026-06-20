@@ -1105,12 +1105,10 @@ local function PMakeCopyButton(popup, x, y, w, currentMode, onCopy)
       if b then
         if S and S.SetButtonText then S.SetButtonText(b, label)
         elseif b._label then b._label:SetText(Tr(label)) end
-        if C_Timer and C_Timer.After then
-          C_Timer.After(1.2, function()
-            if S and S.SetButtonText then S.SetButtonText(b, "Copy to")
-            elseif b._label then b._label:SetText(Tr("Copy to")) end
-          end)
-        end
+        C_Timer.After(1.2, function()
+          if S and S.SetButtonText then S.SetButtonText(b, "Copy to")
+          elseif b._label then b._label:SetText(Tr("Copy to")) end
+        end)
       end
     end)
   end
@@ -1120,6 +1118,7 @@ local function PMakeCopyButton(popup, x, y, w, currentMode, onCopy)
     menu:SetPoint("TOP", b, "BOTTOM", 0, -3)
     menu:Show()
   end)
+  menu:SetOnUpdateMode("RunWhenVisible")
   menu:SetScript("OnUpdate", function(self)
     if not self:IsShown() then return end
     if b:IsMouseOver() or self:IsMouseOver() then
@@ -1150,13 +1149,11 @@ local function RefreshAfterPopupApply(mode)
     _G.MSUF_GF_EM2_SetPreviewNudgeTarget(mode)
   end
 
-  if C_Timer then
-    C_Timer.After(0.05, function()
-      local popup = _popups[mode]
-      if popup and popup.IsShown and popup:IsShown() and popup.Sync then popup.Sync() end
-      if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-    end)
-  end
+  C_Timer.After(0.05, function()
+    local popup = _popups[mode]
+    if popup and popup.IsShown and popup:IsShown() and popup.Sync then popup.Sync() end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+  end)
 end
 
 local function SetHUDStatus(text, kind)
@@ -1382,7 +1379,7 @@ local function HideGFPopup(mode)
   local function RefreshFocus()
     if EM2.Focus and EM2.Focus.RefreshPopupFocus then EM2.Focus.RefreshPopupFocus() end
   end
-  if C_Timer and C_Timer.After then C_Timer.After(0, RefreshFocus) else RefreshFocus() end
+  C_Timer.After(0, RefreshFocus)
 end
 
 local function SyncGFPopups()
@@ -1416,19 +1413,11 @@ local init = CreateFrame("Frame")
 init:RegisterEvent("PLAYER_LOGIN")
 init:SetScript("OnEvent", function(self)
   self:UnregisterEvent("PLAYER_LOGIN")
-  if C_Timer then
-    C_Timer.After(0.1, function()
-      RegisterGF()
-      InstallStateHooks()
-      InstallHUDToggle()
-      InstallRuntimeHooks()
-      InstallCombatHooks()
-    end)
-  else
+  C_Timer.After(0.1, function()
     RegisterGF()
     InstallStateHooks()
     InstallHUDToggle()
     InstallRuntimeHooks()
     InstallCombatHooks()
-  end
+  end)
 end)

@@ -44,7 +44,7 @@ Registry:RegisterAction({
     run = function(args)
         local preview = M and M._msuf2ClassPowerInlinePreview
         if not (preview and type(preview.SetPreviewAnimating) == "function") then
-            return false, "Open Class Resources first, then I can animate its preview."
+            return false, "Open Class Resources first so I can animate the preview."
         end
         local value = args and args.value
         if value == nil then value = not preview._msuf2Animating end
@@ -55,7 +55,7 @@ Registry:RegisterAction({
 
 Registry:RegisterAction({
     key = "class_power_quick_setup",
-    label = "Quick Setup Class Bar",
+    label = "Quick Setup Class Resources",
     type = "classPower",
     aliases = {
         "quick setup class resources",
@@ -75,8 +75,8 @@ Registry:RegisterAction({
     captureSnapshot = true,
     run = function()
         local fn = _G.MSUF2_ClassPowerQuickSetup
-        if type(fn) ~= "function" then return false, "Class Bar quick setup is not loaded yet. Open Class Resources once, then try again." end
+        if type(fn) ~= "function" then return false, "Open Class Resources first so I can run quick setup." end
         fn()
-        return true, "Done. Started Class Bar quick setup."
+        return true, "Done. Started the Class Resources quick setup."
     end,
 })

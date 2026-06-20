@@ -12,7 +12,10 @@ local AURA_LAYOUT_OVERRIDE_KEYS = WL "iconSize spacing cooldownTextSize stackTex
 local AURA_CAPS_OVERRIDE_KEYS = WL "maxBuffs maxDebuffs maxIcons perRow layoutMode growth buffGrowth debuffGrowth rowWrap buffRowWrap debuffRowWrap buffDebuffAnchor splitSpacing stackCountAnchor sortOrder"
 local function CallGlobal(name, ...)
     local fn = _G[name]
-    if type(fn) == "function" then return pcall(fn, ...) end
+    if type(fn) == "function" then
+        fn(...)
+        return true
+    end
     return false
 end
 local function DB()
@@ -110,15 +113,13 @@ local function ApplyAuras()
     local function Run()
         A3_APPLY_QUEUED = false
         local api = MSUF and MSUF.MSUF_Auras3
-        if api and api.DB and type(api.DB.InvalidateCache) == "function" then pcall(api.DB.InvalidateCache) end
-        if api and api.Colors and type(api.Colors.InvalidateCache) == "function" then pcall(api.Colors.InvalidateCache) end
+        if api and api.DB and type(api.DB.InvalidateCache) == "function" then api.DB.InvalidateCache() end
+        if api and api.Colors and type(api.Colors.InvalidateCache) == "function" then api.Colors.InvalidateCache() end
         if api and type(api.RequestApply) == "function" then
-            pcall(api.RequestApply)
-        elseif type(_G.MSUF_Auras3_RefreshAll) == "function" then
-            pcall(_G.MSUF_Auras3_RefreshAll)
+            api.RequestApply()
         end
     end
-    if C_Timer and C_Timer.After then C_Timer.After(0, Run) else Run() end
+    C_Timer.After(0, Run)
 end
 local function AurasDB()
     local db = DB()

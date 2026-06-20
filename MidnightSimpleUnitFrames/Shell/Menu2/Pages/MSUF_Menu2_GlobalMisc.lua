@@ -114,11 +114,7 @@ local function BuildMisc(ctx)
                 M.CallIf(M.InvalidatePage)
                 M.CallIf(M.SelectPage, "opt_misc")
             end
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, RebuildLocalePages)
-            else
-                RebuildLocalePages()
-            end
+            C_Timer.After(0, RebuildLocalePages)
         end)
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
@@ -168,7 +164,7 @@ local function BuildMisc(ctx)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,
         function(v)
             if type(_G.MSUF_SetMinimapIconEnabled) == "function" then
-                pcall(_G.MSUF_SetMinimapIconEnabled, v)
+                _G.MSUF_SetMinimapIconEnabled(v)
             else
                 local g = G()
                 g.minimapIconDB = g.minimapIconDB or {}

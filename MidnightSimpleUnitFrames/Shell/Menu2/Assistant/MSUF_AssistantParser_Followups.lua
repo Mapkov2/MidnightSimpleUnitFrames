@@ -58,11 +58,17 @@ local function ShouldUseLastUnitContext(text)
     })
 end
 
-function A._FollowupValueLabelForAnswer(setting, value, explicitLabel)
-    if explicitLabel ~= nil then return tostring(explicitLabel) end
+local function FollowupValueDisplay(setting, value)
+    if P and type(P.ValueDisplay) == "function" then
+        local ok, label = pcall(P.ValueDisplay, setting, value)
+        if ok and label ~= nil then return tostring(label) end
+    end
     if value == nil then return "not set" end
     if setting and setting.type == "boolean" then return value and "enabled" or "disabled" end
     if setting and setting.type == "color" and type(value) == "table" then
+        if type(value.label) == "string" and value.label ~= "" and type(A.DisplayColorLabel) == "function" then
+            return A.DisplayColorLabel(value.label)
+        end
         local r = math.floor(((tonumber(value.r or value[1]) or 0) * 255) + 0.5)
         local g = math.floor(((tonumber(value.g or value[2]) or 0) * 255) + 0.5)
         local b = math.floor(((tonumber(value.b or value[3]) or 0) * 255) + 0.5)
@@ -71,12 +77,26 @@ function A._FollowupValueLabelForAnswer(setting, value, explicitLabel)
         if b < 0 then b = 0 elseif b > 255 then b = 255 end
         return string.format("#%02X%02X%02X", r, g, b)
     end
+    if setting and (setting.type == "enum" or type(setting.values) == "table") and type(A.HumanizeDisplayKey) == "function" then
+        return A.HumanizeDisplayKey(value)
+    end
     return tostring(value)
+end
+
+function A._FollowupValueLabelForAnswer(setting, value, explicitLabel)
+    if explicitLabel ~= nil then
+        if setting and setting.type == "enum" and value ~= nil then return FollowupValueDisplay(setting, value) end
+        if setting and setting.type == "color" and type(A.DisplayColorLabel) == "function" then
+            return A.DisplayColorLabel(explicitLabel)
+        end
+        return tostring(explicitLabel)
+    end
+    return FollowupValueDisplay(setting, value)
 end
 
 function A._FollowupChangeLineForAnswer(index, setting, previous)
     if not setting then return nil end
-    local label = tostring(setting.label or setting.key or "MSUF setting")
+    local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or "MSUF option")
     local oldLabel = A._FollowupValueLabelForAnswer(setting, previous and previous.oldValue)
     local newValue = previous and previous.value
     if newValue == nil and type(setting.get) == "function" then newValue = setting.get() end
@@ -105,17 +125,17 @@ function A._ParseFollowupAnswer(text, ctx)
             local setting = previous and previous.key and Registry and Registry:GetSetting(previous.key) or nil
             local line = A._FollowupChangeLineForAnswer(nil, setting, previous)
             if line then
-                lines[#lines + 1] = "Last Assistant change: " .. line
-                lines[#lines + 1] = "You can type 'undo' to revert it."
+                lines[#lines + 1] = "Last change I made: " .. line
+                lines[#lines + 1] = "Ask for 'undo' to revert it."
                 return {
                     kind = "answer",
                     status = "info",
                     text = table.concat(lines, "\n"),
-                    summary = "Reports the last Assistant setting change from context.",
+                    summary = "Reports the last Assistant option change from context.",
                 }
             end
         elseif #bundle > 1 then
-            lines[#lines + 1] = "Last Assistant change touched " .. tostring(#bundle) .. " MSUF settings:"
+            lines[#lines + 1] = "Last change I made touched " .. tostring(#bundle) .. " MSUF options:"
             local visible = math.min(#bundle, 5)
             for i = 1, visible do
                 local previous = bundle[i]
@@ -124,12 +144,12 @@ function A._ParseFollowupAnswer(text, ctx)
                 if line then lines[#lines + 1] = line end
             end
             if #bundle > visible then lines[#lines + 1] = "And " .. tostring(#bundle - visible) .. " more." end
-            lines[#lines + 1] = "You can type 'undo' to revert it."
+            lines[#lines + 1] = "Ask for 'undo' to revert it."
             return {
                 kind = "answer",
                 status = "info",
                 text = table.concat(lines, "\n"),
-                summary = "Reports the last Assistant setting change from context.",
+                summary = "Reports the last Assistant option change from context.",
             }
         end
         local key = ctx.lastSetting
@@ -140,11 +160,12 @@ function A._ParseFollowupAnswer(text, ctx)
         local setting = key and Registry and Registry:GetSetting(key) or nil
         if setting then
             local value = type(setting.get) == "function" and setting.get() or ctx.lastValue
+            local valueLabel = A._FollowupValueLabelForAnswer(setting, value)
             return {
                 kind = "answer",
                 status = "info",
-                text = tostring(setting.label or setting.key or "Last setting") .. " is " .. tostring(value) .. ".",
-                summary = "Reports the last Assistant setting and current value from context.",
+                text = (type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or "Last option")) .. " is " .. tostring(valueLabel) .. ".",
+                summary = "Reports the last Assistant option and current value from context.",
             }
         end
     end
@@ -154,16 +175,16 @@ function A._ParseFollowupAnswer(text, ctx)
         local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction(actionKey) or nil
         local label = ctx.lastActionLabel or (action and action.label) or actionKey
         local message = tostring(ctx.lastActionMessage or "")
-        local lines = { "Last Assistant action: " .. tostring(label) .. "." }
+        local lines = { "Last thing I did: " .. tostring(label) .. "." }
         if message ~= "" then lines[#lines + 1] = "Result: " .. message end
         if ctx.lastActionUndoable == true then
-            lines[#lines + 1] = "You can type 'undo' to revert it."
+            lines[#lines + 1] = "Ask for 'undo' to revert it."
         end
         return {
             kind = "answer",
             status = "info",
             text = table.concat(lines, "\n"),
-            summary = "Reports the last Assistant action from context.",
+            summary = "Reports the last Assistant task from context.",
         }
     end
 
@@ -171,7 +192,7 @@ function A._ParseFollowupAnswer(text, ctx)
         return {
             kind = "answer",
             status = "info",
-            text = "No previous Assistant setting change is available yet.",
+            text = "I don't have an earlier option change to repeat yet.",
             summary = "Reports the last Assistant change from context.",
         }
     end
@@ -252,8 +273,8 @@ function A._BuildColorTokenFollowup(text, ctx)
     return {
         kind = "changes",
         changes = changes,
-        label = "Apply previous color to another token",
-        summary = "Uses the last Assistant color change as context for another power or class-resource token.",
+        label = "Apply previous color to another color slot",
+        summary = "Applies the last color change to another power or Class Resource color.",
     }
 end
 
@@ -268,8 +289,8 @@ local function BuildFollowup(text, ctx)
         return {
             kind = "answer",
             status = "info",
-            text = "No previous Assistant copy action is available yet.",
-            summary = "Reports missing copy action context.",
+            text = "I don't have an earlier copy task to repeat yet.",
+            summary = "Reports that there is no previous copy task yet.",
         }
     end
     if type(ctx.lastChangeBundle) ~= "table" then return nil end
@@ -572,7 +593,7 @@ local function BuildFollowup(text, ctx)
                     kind = "changes",
                     changes = textSlotChanges,
                     label = "Adjust previous text slot",
-                    summary = "Uses the last HP/Power text-slot change as context.",
+                    summary = "Continues from the last HP/Power text-slot change.",
                 }
             end
         end
@@ -593,7 +614,7 @@ local function BuildFollowup(text, ctx)
                 kind = "changes",
                 changes = exactChanges,
                 label = "Set previous numeric value",
-                summary = "Uses the previous Assistant numeric setting as context.",
+                summary = "Continues from the previous numeric option.",
             }
         end
     end
@@ -652,7 +673,7 @@ local function BuildFollowup(text, ctx)
                 kind = "changes",
                 changes = repeatChanges,
                 label = "Repeat previous adjustment",
-                summary = "Uses the previous Assistant numeric adjustment as context.",
+                summary = "Continues from the previous numeric adjustment.",
             }
         end
     end
@@ -792,7 +813,7 @@ local function BuildFollowup(text, ctx)
         kind = "changes",
         changes = changes,
         label = "Apply previous change to another frame",
-        summary = "Uses the last Assistant change as context.",
+        summary = "Continues from the last Assistant change.",
     }
 end
 
@@ -810,8 +831,8 @@ local function BuildBooleanCorrection(text, ctx)
     return {
         kind = "changes",
         changes = { { setting = setting, value = value } },
-        label = "Correct previous setting",
-        summary = "Uses the last Assistant setting as context.",
+        label = "Correct previous option",
+        summary = "Continues from the last Assistant option.",
     }
 end
 
@@ -900,8 +921,8 @@ local function ParseSetting(text, ctx)
             return {
                 kind = "answer",
                 status = "ambiguous",
-                text = "What should " .. tostring(setting.label or "this setting") .. " be set to? " .. hint,
-                summary = "Registry-backed value clarification.",
+                text = "What value do you want me to use for " .. tostring(setting.label or "this option") .. "? " .. hint,
+                summary = "Value clarification for an MSUF option.",
             }
         end
     end
@@ -920,7 +941,7 @@ local function ParseSetting(text, ctx)
         if attr == "raidMarker" then return nil end
         return {
             kind = "unknown",
-            text = "That setting exists conceptually, but it is not registered for Assistant control yet.",
+            text = "I found that option. I can show where it is without changing it.",
             status = "failed",
         }
     end
@@ -929,22 +950,22 @@ local function ParseSetting(text, ctx)
             return {
                 kind = "changes",
                 changes = BuildChanges(candidates, value, relativeDelta, direction),
-                label = "Assistant setting change",
+                label = "Assistant option change",
                 bulkSafe = true,
-                summary = "Registry-backed settings change.",
+                summary = "MSUF options change.",
             }
         end
         return {
             kind = "ambiguous",
             choices = BuildChanges(candidates, value, relativeDelta, direction),
-            label = "Multiple matching settings",
+            label = "Multiple matching options",
         }
     end
     return {
         kind = "changes",
         changes = BuildChanges(candidates, value, relativeDelta, direction),
-        label = "Assistant setting change",
-        summary = "Registry-backed settings change.",
+        label = "Assistant option change",
+        summary = "MSUF options change.",
     }
 end
 

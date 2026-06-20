@@ -15,8 +15,7 @@ local MENU_NORMAL_POPUP_FRAME_LEVEL = 120
 local MENU_EDIT_POPUP_FRAME_LEVEL = 980
 local function IsMenuEditPriorityActive()
     if type(M.IsMSUFEditModeActive) ~= "function" then return false end
-    local ok, active = pcall(M.IsMSUFEditModeActive)
-    return ok and active == true
+    return M.IsMSUFEditModeActive() == true
 end
 local function GetMenuFramePriority(level)
     if IsMenuEditPriorityActive() then return MENU_EDIT_FRAME_STRATA, level or MENU_EDIT_FRAME_LEVEL end

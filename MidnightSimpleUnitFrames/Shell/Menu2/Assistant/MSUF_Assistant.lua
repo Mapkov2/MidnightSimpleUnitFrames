@@ -158,6 +158,13 @@ function A.GetPerfTrace(limit)
     return out
 end
 
+local function FriendlyJobLabel(label)
+    label = tostring(label or "")
+    if label == "assistant.warmup" then return "preparing answers" end
+    if label == "assistant.submit" then return "answering a request" end
+    return "Assistant task"
+end
+
 function A.GetJobSummary()
     local jobs = A._assistantJobs
     local out = { count = 0, labels = {} }
@@ -166,36 +173,45 @@ function A.GetJobSummary()
     local limit = math.min(#jobs, 4)
     for i = 1, limit do
         local job = jobs[i]
-        out.labels[#out.labels + 1] = tostring(job and job.label or "assistant.job") .. "#" .. tostring(job and job.index or "?")
+        out.labels[#out.labels + 1] = FriendlyJobLabel(job and job.label)
     end
     return out
 end
 
+local function WarmupReasonLabel(reason)
+    reason = tostring(reason or "")
+    if reason:find("^combat:", 1, false) then return "waiting until combat ends" end
+    if reason:find("^busy:", 1, false) then return "waiting until the current request finishes" end
+    if reason:find("^jobs:", 1, false) then return "finishing current Assistant work" end
+    if reason ~= "" then return "warming up" end
+    return "waiting to start"
+end
+
 function A.PerformanceWarmupStatusText()
     if A._performanceWarmupCompleted == true then
-        return "completed (" .. tostring(A._performanceWarmupReason or "assistant") .. ")"
+        return "ready"
     end
     if A._performanceWarmupStarted == true then
         local jobs = A._assistantJobs
         if type(jobs) == "table" then
             for i = 1, #jobs do
                 if jobs[i] and jobs[i].label == "assistant.warmup" then
-                    return "running (" .. tostring(A._performanceWarmupReason or "assistant") .. ")"
+                    return "getting ready"
                 end
             end
         end
-        return "started (" .. tostring(A._performanceWarmupReason or "assistant") .. ")"
+        return "getting ready"
     end
     if A._performanceWarmupSuppressed then
-        return "disabled (" .. tostring(A._performanceWarmupSuppressed) .. ")"
+        return WarmupReasonLabel(A._performanceWarmupSuppressed)
     end
-    return "not started"
+    return "waiting to start"
 end
 
 local NO_MATCH_RECENT_LIMIT = 80
 local NO_MATCH_COUNT_LIMIT = 200
 
---- No-match telemetry is product feedback stored in SavedVariables. It helps
+--- no-match telemetry is product feedback stored in SavedVariables. It helps
 --- tune registry aliases and parser fallbacks without changing the command
 --- execution path for successful matches.
 local function NoMatchStore(create)
@@ -284,26 +300,39 @@ local function NoMatchTagText(tags)
     return #(tags or {}) > 0 and table.concat(tags, ",") or "uncategorized"
 end
 
+local function NoMatchOwnerLabel(owner)
+    owner = tostring(owner or "")
+    if owner == "aura-action/backend" then return "Aura tasks" end
+    if owner == "aura-registry/backend" then return "Aura options" end
+    if owner == "anchor-intent" then return "Anchoring" end
+    if owner == "action-parser" then return "Tasks and guided steps" end
+    if owner == "knowledge/help" then return "Help answers" end
+    if owner == "registry-alias" then return "Option wording" end
+    if owner == "media-alias" then return "Media names" end
+    if owner == "parser-or-help" then return "General wording" end
+    return owner ~= "" and owner or "General wording"
+end
+
 local function NoMatchAdvice(owner)
-    if owner == "aura-action/backend" then return "check Aura backend/action coverage before adding copy/filter shortcuts" end
-    if owner == "aura-registry/backend" then return "add Aura registry alias/control or keep unsupported guard explicit" end
-    if owner == "anchor-intent" then return "add generic anchor/CDM intent wording or third-party anchor alias" end
-    if owner == "action-parser" then return "map to a registered action or guided workflow before adding a fallback" end
-    if owner == "knowledge/help" then return "add Knowledge/help copy or search alias, not a setting parser" end
-    if owner == "registry-alias" then return "prefer registered setting aliases or generic registry intent before a special parser" end
-    if owner == "media-alias" then return "check SharedMedia resolver aliases and exact media names" end
-    return "reproduce, then decide registry alias vs knowledge answer vs parser fallback"
+    if owner == "aura-action/backend" then return "teach an existing Aura task this wording if MSUF supports it" end
+    if owner == "aura-registry/backend" then return "add clearer Aura wording, or explain why MSUF cannot change it" end
+    if owner == "anchor-intent" then return "add anchor wording if this points at a real frame" end
+    if owner == "action-parser" then return "connect the phrase to a supported task or guided step" end
+    if owner == "knowledge/help" then return "add a clearer help answer or search phrase" end
+    if owner == "registry-alias" then return "add clearer option wording after confirming the intended option" end
+    if owner == "media-alias" then return "check the visible media names and add a friendlier alias" end
+    return "review the phrase, then decide whether it should be an option, task, help answer, or protected response"
 end
 
 local function NoMatchCandidate(owner)
-    if owner == "aura-action/backend" then return "Aura backend/action workflow candidate" end
-    if owner == "aura-registry/backend" then return "Aura registry alias/control candidate" end
-    if owner == "anchor-intent" then return "Generic anchor intent or third-party alias candidate" end
-    if owner == "action-parser" then return "Registered action or workflow parser candidate" end
-    if owner == "knowledge/help" then return "Knowledge/help answer candidate" end
-    if owner == "registry-alias" then return "Registry exactAlias or generic intent metadata candidate" end
-    if owner == "media-alias" then return "SharedMedia alias/resolver candidate" end
-    return "Parser/help triage candidate"
+    if owner == "aura-action/backend" then return "Aura task wording" end
+    if owner == "aura-registry/backend" then return "Aura option wording" end
+    if owner == "anchor-intent" then return "Anchor wording" end
+    if owner == "action-parser" then return "Task or guided step wording" end
+    if owner == "knowledge/help" then return "Help answer wording" end
+    if owner == "registry-alias" then return "Option wording" end
+    if owner == "media-alias" then return "Media name wording" end
+    return "General wording"
 end
 
 local function NoMatchPriority(count, owner)
@@ -442,32 +471,32 @@ local function NoMatchLearningPlan(entry)
     local topKey = NoMatchTopRegistryKey(entry.registryCandidates)
     if owner == "registry-alias" then
         if topKey then
-            return "review phrase '" .. text .. "' against " .. topKey .. "; prefer exactAliases/aliases or generic registry intent metadata"
+            return "check '" .. text .. "' against " .. topKey .. "; add a setting alias or clearer setting wording"
         end
-        return "review phrase '" .. text .. "' against registry terms; add alias metadata only after reproducing the intended control"
+        return "check '" .. text .. "' against setting names; add wording after confirming the intended option"
     end
     if owner == "aura-registry/backend" then
         if topKey then
-            return "review Aura phrase '" .. text .. "' against " .. topKey .. "; prefer Aura registry aliases before a specialty parser"
+            return "check Aura phrase '" .. text .. "' against " .. topKey .. "; prefer simple Aura wording first"
         end
-        return "review Aura phrase '" .. text .. "' against Aura registry/actions; add explicit unsupported guard when backend cannot do it"
+        return "check Aura phrase '" .. text .. "' against Aura options and actions; keep a clear answer when MSUF cannot change it"
     end
     if owner == "aura-action/backend" then
-        return "map phrase '" .. text .. "' to a registered Aura action or backend helper before adding parser-only wording"
+        return "connect '" .. text .. "' to an Aura action before adding wording only"
     end
     if owner == "anchor-intent" then
-        return "add generic anchor intent metadata or a third-party frame alias if '" .. text .. "' targets a real frame"
+        return "add anchor wording if '" .. text .. "' points at a real frame"
     end
     if owner == "action-parser" then
-        return "map phrase '" .. text .. "' to an existing action/workflow or register a new action first"
+        return "connect '" .. text .. "' to an existing action or guided step first"
     end
     if owner == "knowledge/help" then
-        return "add Knowledge/Search copy for '" .. text .. "' instead of a setting parser"
+        return "add help or search wording for '" .. text .. "'"
     end
     if owner == "media-alias" then
-        return "check SharedMedia exact names and aliases for '" .. text .. "' before adding parser fallback"
+        return "check visible media names for '" .. text .. "' before adding extra wording"
     end
-    return "reproduce phrase '" .. text .. "' and classify as registry alias, action, Knowledge answer, or explicit unsupported response"
+    return "review '" .. text .. "' and decide whether it should be a setting, action, help answer, or protected response"
 end
 
 local function NoMatchResolution(entry)
@@ -543,7 +572,7 @@ function A.RecordNoMatch(text, result, source)
     entry.count = (tonumber(entry.count) or 0) + 1
     entry.lastSeen = now
     entry.source = tostring(source or "assistant")
-    entry.status = type(result) == "table" and tostring(result.status or result.kind or "") or ""
+    entry.status = type(result) == "table" and tostring(result.status or result.result or result.kind or "") or ""
     entry.owner = analysis and analysis.owner or nil
     entry.tags = analysis and analysis.tags or nil
     entry.advice = analysis and analysis.advice or nil
@@ -711,11 +740,11 @@ local function NoMatchLine(index, entry)
     local status = tostring(entry.status or "")
     local owner = tostring(entry.owner or "")
     local suffix = ""
-    if count > 0 then suffix = suffix .. " x" .. tostring(count) end
-    if source ~= "" then suffix = suffix .. " source=" .. source end
-    if status ~= "" then suffix = suffix .. " status=" .. status end
-    if owner ~= "" then suffix = suffix .. " owner=" .. owner end
-    if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " resolution=" .. tostring(entry.resolution) end
+    if count > 0 then suffix = suffix .. " (seen " .. tostring(count) .. "x)" end
+    if source ~= "" then suffix = suffix .. " from " .. source end
+    if status ~= "" then suffix = suffix .. ", result " .. status end
+    if owner ~= "" then suffix = suffix .. ", area " .. NoMatchOwnerLabel(owner) end
+    if tostring(entry.resolution or "") ~= "" then suffix = suffix .. ", result " .. tostring(entry.resolution) end
     return tostring(index) .. ". " .. text .. suffix
 end
 
@@ -733,11 +762,11 @@ local function NoMatchHintLine(index, entry)
     entry.learningPlan = entry.learningPlan or NoMatchLearningPlan(entry)
     if not entry.resolution then entry.resolution, entry.resolvedBy = NoMatchResolution(entry) end
     local plan = tostring(entry.learningPlan or "")
-    local suffix = registryCandidates ~= "" and (" | settings=" .. registryCandidates) or ""
-    if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " | resolution=" .. tostring(entry.resolution) end
-    if tostring(entry.resolvedBy or "") ~= "" then suffix = suffix .. " | resolvedBy=" .. tostring(entry.resolvedBy) end
-    local planSuffix = plan ~= "" and (" | plan=" .. plan) or ""
-    return tostring(index) .. ". " .. text .. " -> " .. owner .. " | tags=" .. tags .. " | candidate=" .. candidate .. suffix .. " | next=" .. advice .. planSuffix
+    local suffix = registryCandidates ~= "" and (" | closest MSUF options: " .. registryCandidates) or ""
+    if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " | result: " .. tostring(entry.resolution) end
+    if tostring(entry.resolvedBy or "") ~= "" then suffix = suffix .. " | now handled by: " .. tostring(entry.resolvedBy) end
+    local planSuffix = plan ~= "" and (" | note: " .. plan) or ""
+    return tostring(index) .. ". " .. text .. " | area: " .. NoMatchOwnerLabel(owner) .. " | topics: " .. tags .. " | best improvement: " .. candidate .. suffix .. " | next step: " .. advice .. planSuffix
 end
 
 local function NoMatchWorkItemLine(index, entry)
@@ -754,11 +783,11 @@ local function NoMatchWorkItemLine(index, entry)
     entry.learningPlan = entry.learningPlan or NoMatchLearningPlan(entry)
     if not entry.resolution then entry.resolution, entry.resolvedBy = NoMatchResolution(entry) end
     local plan = tostring(entry.learningPlan or "")
-    local suffix = registryCandidates ~= "" and (" | settings=" .. registryCandidates) or ""
-    if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " | resolution=" .. tostring(entry.resolution) end
-    if tostring(entry.resolvedBy or "") ~= "" then suffix = suffix .. " | resolvedBy=" .. tostring(entry.resolvedBy) end
-    local planSuffix = plan ~= "" and (" | plan=" .. plan) or ""
-    return tostring(index) .. ". [" .. priority .. "] " .. text .. " x" .. tostring(count) .. " -> " .. candidate .. " | owner=" .. owner .. suffix .. " | next=" .. advice .. planSuffix
+    local suffix = registryCandidates ~= "" and (" | closest MSUF options: " .. registryCandidates) or ""
+    if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " | result: " .. tostring(entry.resolution) end
+    if tostring(entry.resolvedBy or "") ~= "" then suffix = suffix .. " | now handled by: " .. tostring(entry.resolvedBy) end
+    local planSuffix = plan ~= "" and (" | note: " .. plan) or ""
+    return tostring(index) .. ". [" .. priority .. "] " .. text .. " (seen " .. tostring(count) .. "x) | best improvement: " .. candidate .. " | area: " .. NoMatchOwnerLabel(owner) .. suffix .. " | next step: " .. advice .. planSuffix
 end
 
 local function NoMatchOwnerSummary(ownerCounts)
@@ -772,7 +801,7 @@ local function NoMatchOwnerSummary(ownerCounts)
     end)
     local parts = {}
     for i = 1, #owners do
-        parts[#parts + 1] = owners[i].owner .. "=" .. tostring(owners[i].count)
+        parts[#parts + 1] = NoMatchOwnerLabel(owners[i].owner) .. ": " .. tostring(owners[i].count)
     end
     return #parts > 0 and table.concat(parts, ", ") or "none"
 end
@@ -785,12 +814,12 @@ local function NoMatchResolutionSummary(resolutionCounts)
         local key = order[i]
         seen[key] = true
         if tonumber(resolutionCounts and resolutionCounts[key]) then
-            parts[#parts + 1] = key .. "=" .. tostring(tonumber(resolutionCounts[key]) or 0)
+            parts[#parts + 1] = key .. ": " .. tostring(tonumber(resolutionCounts[key]) or 0)
         end
     end
     for key, count in pairs(resolutionCounts or {}) do
         key = tostring(key)
-        if not seen[key] then parts[#parts + 1] = key .. "=" .. tostring(tonumber(count) or 0) end
+        if not seen[key] then parts[#parts + 1] = key .. ": " .. tostring(tonumber(count) or 0) end
     end
     return #parts > 0 and table.concat(parts, ", ") or "none"
 end
@@ -803,12 +832,12 @@ local function NoMatchPrioritySummary(priorityCounts)
         local key = order[i]
         seen[key] = true
         if tonumber(priorityCounts and priorityCounts[key]) then
-            parts[#parts + 1] = key .. "=" .. tostring(tonumber(priorityCounts[key]) or 0)
+            parts[#parts + 1] = key .. ": " .. tostring(tonumber(priorityCounts[key]) or 0)
         end
     end
     for key, count in pairs(priorityCounts or {}) do
         key = tostring(key)
-        if not seen[key] then parts[#parts + 1] = key .. "=" .. tostring(tonumber(count) or 0) end
+        if not seen[key] then parts[#parts + 1] = key .. ": " .. tostring(tonumber(count) or 0) end
     end
     return #parts > 0 and table.concat(parts, ", ") or "none"
 end
@@ -824,7 +853,7 @@ local function NoMatchTagSummary(tagCounts)
     end)
     local parts = {}
     for i = 1, #tags do
-        parts[#parts + 1] = tags[i].tag .. "=" .. tostring(tags[i].count)
+        parts[#parts + 1] = tags[i].tag .. ": " .. tostring(tags[i].count)
     end
     return #parts > 0 and table.concat(parts, ", ") or "none"
 end
@@ -838,7 +867,7 @@ local function NoMatchTSVLine(entry)
     return table.concat({
         clean(entry.priority or "low"),
         tostring(tonumber(entry.count) or 0),
-        clean(entry.owner or "parser-or-help"),
+        clean(NoMatchOwnerLabel(entry.owner or "parser-or-help")),
         clean(entry.tags or "uncategorized"),
         clean(entry.candidate or NoMatchCandidate(entry.owner)),
         clean(entry.text or ""),
@@ -853,40 +882,40 @@ end
 function A.NoMatchWorklistText(limit, ownerFilter, resolutionFilter, priorityFilter, tagFilter)
     local data = A.GetNoMatchReview and A.GetNoMatchReview(limit or 20, ownerFilter, resolutionFilter, priorityFilter, tagFilter) or { total = 0, items = {}, ownerCounts = {}, resolutionCounts = {}, priorityCounts = {}, tagCounts = {} }
     local lines = {}
-    lines[#lines + 1] = "Assistant NoMatch worklist:"
+    lines[#lines + 1] = "Assistant wording to improve:"
     lines[#lines + 1] = "- Total recorded: " .. tostring(tonumber(data.total) or 0)
-    lines[#lines + 1] = "- Review items shown: " .. tostring(#(data.items or {}))
-    lines[#lines + 1] = "- Owners: " .. NoMatchOwnerSummary(data.ownerCounts)
-    lines[#lines + 1] = "- Resolution: " .. NoMatchResolutionSummary(data.resolutionCounts)
-    lines[#lines + 1] = "- Priorities: " .. NoMatchPrioritySummary(data.priorityCounts)
-    lines[#lines + 1] = "- Tags: " .. NoMatchTagSummary(data.tagCounts)
+    lines[#lines + 1] = "- Showing now: " .. tostring(#(data.items or {}))
+    lines[#lines + 1] = "- Areas: " .. NoMatchOwnerSummary(data.ownerCounts)
+    lines[#lines + 1] = "- Result: " .. NoMatchResolutionSummary(data.resolutionCounts)
+    lines[#lines + 1] = "- Importance: " .. NoMatchPrioritySummary(data.priorityCounts)
+    lines[#lines + 1] = "- Topics: " .. NoMatchTagSummary(data.tagCounts)
     if ownerFilter and tostring(ownerFilter) ~= "" then
         lines[#lines + 1] = "- Filter: " .. tostring(ownerFilter)
     end
     if resolutionFilter and tostring(resolutionFilter) ~= "" then
-        lines[#lines + 1] = "- Resolution filter: " .. tostring(resolutionFilter)
+        lines[#lines + 1] = "- Result filter: " .. tostring(resolutionFilter)
     end
     if priorityFilter and tostring(priorityFilter) ~= "" then
-        lines[#lines + 1] = "- Priority filter: " .. tostring(priorityFilter)
+        lines[#lines + 1] = "- Importance filter: " .. tostring(priorityFilter)
     end
     if tagFilter and tostring(tagFilter) ~= "" then
-        lines[#lines + 1] = "- Tag filter: " .. tostring(tagFilter)
+        lines[#lines + 1] = "- Topic filter: " .. tostring(tagFilter)
     end
     if (tonumber(data.total) or 0) <= 0 or #(data.items or {}) == 0 then
         lines[#lines + 1] = ""
-        lines[#lines + 1] = "No Assistant NoMatch telemetry recorded yet."
+        lines[#lines + 1] = "I haven't missed any Assistant requests yet."
         return table.concat(lines, "\n")
     end
 
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Priority queue:"
+    lines[#lines + 1] = "Phrases to improve:"
     for i = 1, #(data.items or {}) do
         local line = NoMatchWorkItemLine(i, data.items[i])
         if line then lines[#lines + 1] = line end
     end
 
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Alias/intent plan:"
+    lines[#lines + 1] = "Improvement plan:"
     for i = 1, #(data.items or {}) do
         local entry = data.items[i]
         if type(entry) == "table" then
@@ -896,46 +925,39 @@ function A.NoMatchWorklistText(limit, ownerFilter, resolutionFilter, priorityFil
     end
 
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "TSV for alias review:"
-    lines[#lines + 1] = "priority\tcount\towner\ttags\tcandidate\tphrase\tnext\tregistryCandidates\tlearningPlan\tresolution\tresolvedBy"
-    for i = 1, #(data.items or {}) do
-        lines[#lines + 1] = NoMatchTSVLine(data.items[i])
-    end
-
-    lines[#lines + 1] = ""
-    lines[#lines + 1] = "Use high/medium registry-alias items for exactAliases or generic registry intent metadata first; route knowledge/help items to Assistant Knowledge copy."
+    lines[#lines + 1] = "Start with high and medium phrases first. Help questions should become direct Assistant answers."
     return table.concat(lines, "\n")
 end
 
 function A.NoMatchTelemetryText(limit)
     local data = A.GetNoMatchTelemetry(limit or 10)
     local lines = {}
-    lines[#lines + 1] = "Assistant NoMatch telemetry:"
+    lines[#lines + 1] = "Assistant wording to improve:"
     lines[#lines + 1] = "- Total recorded: " .. tostring(tonumber(data.total) or 0)
-    lines[#lines + 1] = "- Stored top phrases: " .. tostring(#(data.top or {}))
-    lines[#lines + 1] = "- Stored recent phrases: " .. tostring(#(data.recent or {}))
+    lines[#lines + 1] = "- Common phrases: " .. tostring(#(data.top or {}))
+    lines[#lines + 1] = "- Recent phrases: " .. tostring(#(data.recent or {}))
     if (tonumber(data.total) or 0) <= 0 then
         lines[#lines + 1] = ""
-        lines[#lines + 1] = "No Assistant NoMatch telemetry recorded yet."
+        lines[#lines + 1] = "I haven't missed any Assistant requests yet."
         return table.concat(lines, "\n")
     end
 
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Top phrases:"
+    lines[#lines + 1] = "Common phrases:"
     for i = 1, #(data.top or {}) do
         local line = NoMatchLine(i, data.top[i])
         if line then lines[#lines + 1] = line end
     end
 
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Learning hints:"
+    lines[#lines + 1] = "How to improve them:"
     for i = 1, #(data.top or {}) do
         local line = NoMatchHintLine(i, data.top[i])
         if line then lines[#lines + 1] = line end
     end
 
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Review candidates:"
+    lines[#lines + 1] = "Phrases to improve:"
     for i = 1, #(data.top or {}) do
         local line = NoMatchWorkItemLine(i, data.top[i])
         if line then lines[#lines + 1] = line end
@@ -955,21 +977,21 @@ function A.NoMatchTelemetryText(limit)
             local resolution = tostring(entry.resolution or "")
             local resolvedBy = tostring(entry.resolvedBy or "")
             local suffix = ""
-            if tonumber(entry.count) then suffix = suffix .. " count=" .. tostring(tonumber(entry.count) or 0) end
-            if source ~= "" then suffix = suffix .. " source=" .. source end
-            if status ~= "" then suffix = suffix .. " status=" .. status end
-            if owner ~= "" then suffix = suffix .. " owner=" .. owner end
-            if priority ~= "" then suffix = suffix .. " priority=" .. priority end
-            if registryCandidates ~= "" then suffix = suffix .. " settings=" .. registryCandidates end
-            if resolution ~= "" then suffix = suffix .. " resolution=" .. resolution end
-            if resolvedBy ~= "" then suffix = suffix .. " resolvedBy=" .. resolvedBy end
-            if learningPlan ~= "" then suffix = suffix .. " plan=" .. learningPlan end
+            if tonumber(entry.count) then suffix = suffix .. " (seen " .. tostring(tonumber(entry.count) or 0) .. "x)" end
+            if source ~= "" then suffix = suffix .. " from " .. source end
+            if status ~= "" then suffix = suffix .. ", result " .. status end
+            if owner ~= "" then suffix = suffix .. ", area " .. NoMatchOwnerLabel(owner) end
+            if priority ~= "" then suffix = suffix .. ", priority " .. priority end
+            if registryCandidates ~= "" then suffix = suffix .. ", closest options " .. registryCandidates end
+            if resolution ~= "" then suffix = suffix .. ", result " .. resolution end
+            if resolvedBy ~= "" then suffix = suffix .. ", now handled by " .. resolvedBy end
+            if learningPlan ~= "" then suffix = suffix .. ", note " .. learningPlan end
             lines[#lines + 1] = tostring(i) .. ". " .. tostring(entry.text) .. suffix
         end
     end
 
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Use repeated phrases as candidates for registry aliases, parser fallbacks, or help-copy examples."
+    lines[#lines + 1] = "Repeated phrases show where Assistant wording, the tasks I can handle, or help examples can improve."
     return table.concat(lines, "\n")
 end
 
@@ -1204,9 +1226,15 @@ end
 
 local function SettingValueLabel(setting, value)
     if value == nil then return "not set" end
+    if A.Parser and type(A.Parser.ValueDisplay) == "function" then
+        local ok, label = pcall(A.Parser.ValueDisplay, setting, value)
+        if ok and label ~= nil then return tostring(label) end
+    end
     if setting and setting.type == "boolean" then return value and "enabled" or "disabled" end
     if setting and setting.type == "color" and type(value) == "table" then
-        if type(value.label) == "string" and value.label ~= "" then return value.label end
+        if type(value.label) == "string" and value.label ~= "" then
+            return type(A.DisplayColorLabel) == "function" and A.DisplayColorLabel(value.label) or value.label
+        end
         local r = math.floor(((tonumber(value.r or value[1]) or 0) * 255) + 0.5)
         local g = math.floor(((tonumber(value.g or value[2]) or 0) * 255) + 0.5)
         local b = math.floor(((tonumber(value.b or value[3]) or 0) * 255) + 0.5)
@@ -1215,7 +1243,21 @@ local function SettingValueLabel(setting, value)
         if b < 0 then b = 0 elseif b > 255 then b = 255 end
         return string.format("#%02X%02X%02X", r, g, b)
     end
+    if setting and (setting.type == "enum" or type(setting.values) == "table") and type(A.HumanizeDisplayKey) == "function" then
+        return A.HumanizeDisplayKey(value)
+    end
     return tostring(value)
+end
+
+local function SettingResponseValueLabel(setting, value, explicitLabel)
+    if explicitLabel ~= nil then
+        if setting and setting.type == "enum" and value ~= nil then return SettingValueLabel(setting, value) end
+        if setting and setting.type == "color" and type(A.DisplayColorLabel) == "function" then
+            return A.DisplayColorLabel(explicitLabel)
+        end
+        return tostring(explicitLabel)
+    end
+    return SettingValueLabel(setting, value)
 end
 
 local function ValuesEqual(setting, oldValue, newValue)
@@ -1232,31 +1274,46 @@ local function ValuesEqual(setting, oldValue, newValue)
     return oldValue == newValue
 end
 
+local function ChoiceDisplayLabel(choice)
+    local setting = choice and choice.setting
+    if setting and setting.type == "enum" and choice.value ~= nil then
+        local valueLabel = SettingResponseValueLabel(setting, choice.value, choice.valueLabel)
+        local label = tostring(choice.label or "")
+        if label == "" or label:find("%-%>") or label == tostring(choice.valueLabel or "") then
+            if type(A.DisplaySettingValueLabel) == "function" then
+                return A.DisplaySettingValueLabel(setting, valueLabel, "Option")
+            end
+            return tostring(setting.label or "Option") .. ": " .. valueLabel
+        end
+    end
+    return choice and (choice.label or choice.valueLabel) or nil
+end
+
 local function ChoiceText(choices)
     local lines = { (#choices == 1) and "I found a likely match:" or "I found multiple matches:" }
     for i = 1, #choices do
         local choice = choices[i]
         local setting = choice and choice.setting
         local action = choice and choice.action
-        local label = choice and (choice.label or choice.valueLabel) or nil
+        local label = ChoiceDisplayLabel(choice)
         if not label or label == "" then
             label = tostring((setting and setting.label) or (action and action.label) or "Option")
         end
         label = tostring(label):gsub("%s*%[%s*%]", "")
         lines[#lines + 1] = tostring(i) .. ". " .. tostring(label)
     end
-    lines[#lines + 1] = "0. None - do nothing."
+    lines[#lines + 1] = "0. Cancel and keep it as it is."
     if #choices == 1 then
         local only = choices[1]
         if only and only.diagnosticFix == true then
-            lines[#lines + 1] = "Type 1, yes, or 'fix it' to apply the repair; 0/None cancels."
+            lines[#lines + 1] = "Select 1, yes, or 'fix it' to apply the repair. Select 0 or cancel to keep it as it is."
         elseif only and (only.action or only.actionKey) then
-            lines[#lines + 1] = "Type 1, yes, or a natural reply like 'open it' to apply; 0/None cancels."
+            lines[#lines + 1] = "Select 1, yes, or a natural answer like 'open it' to continue. Select 0 or cancel to keep it as it is."
         else
-            lines[#lines + 1] = "Type 1, yes, or 'apply it' to apply the setting; 0/None cancels."
+            lines[#lines + 1] = "Select 1, yes, or 'apply it' to make the change. Select 0 or cancel to keep it as it is."
         end
     else
-        lines[#lines + 1] = "Please choose one by number or label, or 0/None to cancel."
+        lines[#lines + 1] = "Select one by number or label. Select 0 or cancel to keep it as it is."
     end
     return table.concat(lines, "\n")
 end
@@ -1430,7 +1487,7 @@ local function ConfirmationText(plan)
         return plan.confirmText
     end
     local label = tostring(plan and plan.label or "this action")
-    return "This will apply: " .. label .. ". Type 'yes', 'do it', or 'mach das' to apply, or 'cancel'."
+    return "I can apply " .. label .. ". Answer with 'yes', 'do it', 'apply', or 'cancel'."
 end
 
 local function NormalizeReply(text)
@@ -1631,28 +1688,28 @@ local function ExecuteChoice(choice)
         return A.ExecutePlan({
             kind = "changes",
             changes = choice.changes,
-            label = choice.label or "Assistant selected settings",
-            summary = choice.summary or "Assistant selected settings.",
+            label = choice.label or "Assistant selected options",
+            summary = choice.summary or "Assistant selected options.",
             bulkSafe = choice.bulkSafe,
         })
     end
     if choice and choice.setting then
-        return A.ExecutePlan({ kind = "changes", changes = { choice }, label = "Assistant selected setting" })
+        return A.ExecutePlan({ kind = "changes", changes = { choice }, label = "Assistant selected option" })
     end
     if choice and (choice.action or choice.actionKey) then
         local action = choice.action
         if not action and Registry and type(Registry.GetAction) == "function" then action = Registry:GetAction(choice.actionKey) end
-        if not action then return { text = "That Assistant action is not available anymore.", status = "failed" } end
+        if not action then return { text = "That option list changed. Start that change again and I'll rebuild the list.", result = "failed" } end
         return A.ExecutePlan({
             kind = "action",
             action = action,
             args = choice.args or {},
             confirmRequired = choice.confirmRequired,
-            label = choice.label or action.label or "Assistant selected action",
-            summary = choice.summary or "Assistant selected action.",
+            label = choice.label or action.label or "Assistant selected task",
+            summary = choice.summary or "Assistant selected task.",
         })
     end
-    return { text = "That option is not available anymore.", status = "failed" }
+    return { text = "That option list changed. Start that change again and I'll rebuild the list.", result = "failed" }
 end
 
 local function RunApplies(changedSettings)
@@ -1759,16 +1816,17 @@ local function CopySerializableActionArgs(value, depth)
 end
 
 local function SettingLabel(setting)
-    return tostring(setting and setting.label or "MSUF setting")
+    if type(A.DisplaySettingLabel) == "function" then return A.DisplaySettingLabel(setting) end
+    return tostring(setting and setting.label or "MSUF option")
 end
 
 local function DescribeChange(setting, undo)
     local oldLabel = SettingValueLabel(setting, undo and undo.oldValue)
-    local newLabel = tostring((undo and undo.valueLabel) or SettingValueLabel(setting, undo and undo.newValue))
+    local newLabel = SettingResponseValueLabel(setting, undo and undo.newValue, undo and undo.valueLabel)
     return SettingLabel(setting) .. " from " .. tostring(oldLabel) .. " to " .. tostring(newLabel)
 end
 
-local UNDO_FOLLOWUP_HINT = "Next: type 'undo' to revert, or describe another follow-up change."
+local UNDO_FOLLOWUP_HINT = "Next: ask for 'undo' to revert, or describe another follow-up change."
 
 local function AppendUndoFollowupHint(text)
     text = tostring(text or "")
@@ -1783,7 +1841,7 @@ local function ChangedResponse(changedSettings, undoChanges)
     end
 
     local visible = math.min(count, 5)
-    local lines = { "Done. I changed " .. tostring(count) .. " MSUF settings:" }
+    local lines = { "Done. I changed " .. tostring(count) .. " MSUF options:" }
     for i = 1, visible do
         lines[#lines + 1] = tostring(i) .. ". " .. DescribeChange(changedSettings[i], undoChanges[i]) .. "."
     end
@@ -1800,14 +1858,14 @@ local function AlreadySetResponse(changes)
             return "Already set. " .. SettingLabel(setting) .. " is already " .. SettingValueLabel(setting, setting.get()) .. "."
         end
     end
-    return "Already set. No MSUF setting changed."
+    return "Already set. MSUF already uses that value."
 end
 
 local function RefreshedAlreadySetResponse(setting)
     if setting and type(setting.get) == "function" then
         return "Already set. " .. SettingLabel(setting) .. " is already " .. SettingValueLabel(setting, setting.get()) .. ". I refreshed it so the visible UI uses the current value."
     end
-    return "Already set. I refreshed the related MSUF control so the visible UI uses the current value."
+    return "Already set. I refreshed the related MSUF option so the visible UI uses the current value."
 end
 
 local function ExecuteChanges(plan)
@@ -1874,9 +1932,9 @@ local function ExecuteChanges(plan)
         if #unchangedApplySettings > 0 then
             RunApplies(unchangedApplySettings)
             local first = unchangedApplySettings[1]
-            return { text = RefreshedAlreadySetResponse(first), status = "applied", summary = plan.summary }
+            return { text = RefreshedAlreadySetResponse(first), result = "applied", summary = plan.summary }
         end
-        return { text = AlreadySetResponse(changes), status = "applied", summary = plan.summary }
+        return { text = AlreadySetResponse(changes), result = "applied", summary = plan.summary }
     end
 
     RunApplies(changedSettings)
@@ -1896,15 +1954,15 @@ local function ExecuteChanges(plan)
     A.RememberAppliedBundle(bundle)
 
     local text = ChangedResponse(changedSettings, undoChanges)
-    if requiresReload then text = text .. " Reload UI is required for the change to fully take effect." end
+    if requiresReload then text = text .. " Reload the UI for this change to fully take effect." end
     text = AppendUndoFollowupHint(text)
-    return { text = text, status = "applied", summary = plan.summary }
+    return { text = text, result = "applied", summary = plan.summary }
 end
 
 local function ActionResponse(action, plan, message)
     message = Trim(message or "")
     if message == "" or message == "Done." then
-        return "Done. I ran " .. tostring(plan and plan.label or action and action.label or "that MSUF action") .. "."
+        return "Done. I ran " .. tostring(plan and plan.label or action and action.label or "that MSUF task") .. "."
     end
     if message:find("^Done%.") or message:find("^Already set%.") then return message end
     return "Done. " .. message
@@ -1913,7 +1971,7 @@ end
 local function ExecuteAction(plan)
     local action = plan.action
     if not (action and type(action.run) == "function") then
-        return { text = "That action is not available yet.", status = "failed", summary = plan.summary }
+        return { text = "Open the MSUF menu first so I can run that task.", result = "failed", summary = plan.summary }
     end
     local before
     local beforeProfile
@@ -1925,7 +1983,7 @@ local function ExecuteAction(plan)
     A.RecordPerfSample("assistant.snapshot.before", snapshotStart, action.key)
     local ok, message = action.run(plan.args or {})
     if not ok then
-        return { text = message or "Action failed.", status = "failed", summary = plan.summary }
+        return { text = message or "I kept that task as it was.", result = "failed", summary = plan.summary }
     end
     local undoAvailable = false
     if before or beforeProfile then
@@ -1934,7 +1992,7 @@ local function ExecuteAction(plan)
         local afterProfile = captureProfile and A.CaptureProfileSnapshot(action.key, plan.args or {}) or nil
         A.RecordPerfSample("assistant.snapshot.after", snapshotStart, action.key)
         undoAvailable = A.PushUndo({
-            label = plan.label or action.label or "Assistant action",
+            label = plan.label or action.label or "Assistant task",
             action = action.key,
             beforeSnapshot = before,
             afterSnapshot = after,
@@ -1956,7 +2014,7 @@ local function ExecuteAction(plan)
         serializable = {},
     })
     if undoAvailable then text = AppendUndoFollowupHint(text) end
-    return { text = text, status = "applied", summary = plan.summary }
+    return { text = text, result = "applied", summary = plan.summary }
 end
 
 function A.ShowLargeTextPanel(spec)
@@ -1981,20 +2039,20 @@ end
 
 function A.ExecutePlan(plan, opts)
     opts = opts or {}
-    if type(plan) ~= "table" then return { text = "I could not parse that.", status = "failed" } end
+    if type(plan) ~= "table" then return { text = "Which frame, page, or option do you want me to change?", result = "failed" } end
     if PlanNeedsConfirmation(plan) and opts.confirmed ~= true then
         A.pendingConfirmation = plan
         local ctx = A.GetContext and A.GetContext()
-        if ctx then ctx.pendingConfirmation = plan.label or "Assistant action" end
-        return { text = ConfirmationText(plan), status = "confirmation_needed", summary = plan.summary }
+        if ctx then ctx.pendingConfirmation = plan.label or "Assistant task" end
+        return { text = ConfirmationText(plan), result = "confirmation_needed", summary = plan.summary }
     end
     if InCombat() and AnyCombatUnsafe(plan) and opts.fromQueue ~= true then
         A.QueuePlan(plan)
-        return { text = "Queued until combat ends: " .. tostring(plan.label or "Assistant change") .. ".", status = "queued", summary = plan.summary }
+        return { text = "I will apply this after combat ends: " .. tostring(plan.label or "Assistant change") .. ".", result = "queued", summary = plan.summary }
     end
     if plan.kind == "changes" then return ExecuteChanges(plan) end
     if plan.kind == "action" then return ExecuteAction(plan) end
-    return { text = "I do not know that setting yet.", status = "failed", summary = plan.summary }
+    return { text = "Which page and option do you want me to use? Example: 'set target cast bar height to 20'.", result = "failed", summary = plan.summary }
 end
 
 local function HandlePending(text)
@@ -2007,7 +2065,7 @@ local function HandlePending(text)
             A.pendingConfirmation = nil
             local ctx = A.GetContext and A.GetContext()
             if ctx then ctx.pendingConfirmation = nil end
-            return { text = "Cancelled.", status = NormalizeReply(text) == "cancel" and "applied" or "failed" }
+            return { text = "Cancelled. I kept the options as they were.", result = NormalizeReply(text) == "cancel" and "applied" or "failed" }
         end
         if IsConfirmationApply(text) then
             local plan = A.pendingConfirmation
@@ -2016,13 +2074,13 @@ local function HandlePending(text)
             if ctx then ctx.pendingConfirmation = nil end
             return A.ExecutePlan(plan, { confirmed = true })
         end
-        return { text = "Type 'yes', 'do it', or 'mach das' to apply, or 'cancel'.", status = "confirmation_needed" }
+        return { text = "Yes, do it, or apply will continue. Cancel stops it.", result = "confirmation_needed" }
     end
     local choices = CurrentPendingChoices()
     if choices then
         if IsChoiceAbort(text) then
             ClearPendingChoices()
-            return { text = "Cancelled. No MSUF change applied.", status = "info" }
+            return { text = "Cancelled. MSUF stayed as it was.", result = "info" }
         end
         if #choices == 1 and IsSingleChoiceApply(text) then
             local choice = choices[1]
@@ -2043,7 +2101,7 @@ local function HandlePending(text)
             ClearPendingChoices()
             return nil
         end
-        return { text = "Please choose one of the listed options by number or unit name.", status = "ambiguous" }
+        return { text = "Which listed option do you want me to use? A number, label, or unit name is enough.", result = "ambiguous" }
     end
     return nil
 end
@@ -2053,42 +2111,42 @@ function A.HandleCommandInput(text)
     if pending then return pending end
 
     local parsed = A.Parse and A.Parse(text) or nil
-    if not parsed then return { text = "I could not parse that.", status = "failed" } end
+    if not parsed then return { text = "Which frame, page, or option do you want me to change?", result = "failed" } end
 
     if parsed.kind == "empty" then return nil end
     if parsed.kind == "undo" then
         local ok, message = A.UndoLast()
-        return { text = message, status = ok and "applied" or "failed" }
+        return { text = message, result = ok and "applied" or "failed" }
     end
     if parsed.kind == "redo" then
         local ok, message = A.RedoLast()
-        return { text = message, status = ok and "applied" or "failed" }
+        return { text = message, result = ok and "applied" or "failed" }
     end
     if parsed.kind == "ambiguous" then
         A.pendingChoices = parsed.choices or {}
         local ctx = A.GetContext and A.GetContext()
         if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
-        return { text = ChoiceText(A.pendingChoices), status = "ambiguous", summary = parsed.summary }
+        return { text = ChoiceText(A.pendingChoices), result = "ambiguous", summary = parsed.summary }
     end
     if parsed.kind == "unknown" then
-        local result = { text = parsed.text or "I do not know that setting yet.", status = parsed.status or "failed", kind = "unknown" }
+        local result = { text = parsed.text or "Which page and option do you want me to use? Example: 'set target cast bar height to 20'.", result = parsed.status or "failed", kind = "unknown" }
         if A.RecordNoMatch and type(A.RouteInput) ~= "function" then A.RecordNoMatch(text, result, "parser") end
         return result
     end
     if parsed.kind == "unsupported" then
-        return { text = parsed.text or "That Assistant command is not supported yet.", status = parsed.status or "info", kind = "unsupported", summary = parsed.summary }
+        return { text = parsed.text or "I don't see an MSUF option for that request yet.", result = parsed.status or "info", kind = "unsupported", summary = parsed.summary }
     end
     if parsed.kind == "answer" then
-        return { text = parsed.text or "", status = parsed.status or "info", summary = parsed.summary }
+        return { text = parsed.text or "", result = parsed.status or "info", summary = parsed.summary }
     end
     return A.ExecutePlan(parsed)
 end
 
 local function CombatSubmitResult()
     return {
-        text = "MSUF Assistant is paused during combat. Try again after combat.",
+        text = "MSUF menu changes have to wait until combat ends. Ask for the same change after combat ends.",
         status = "combat",
-        summary = "Assistant input blocked during combat.",
+        summary = "Assistant menu changes wait until combat ends.",
     }
 end
 
@@ -2314,10 +2372,6 @@ local function ExtractProfileString(text)
     return nil, false
 end
 
-local function UUFBestEffortConfirmText()
-    return "This is an UnhaltedUnitFrames profile. MSUF will translate it as a best-effort import. Auras are not imported, and unsupported UUF-only settings may not map 1:1. Type 'yes', 'do it', or 'mach das' to import anyway, or 'cancel'."
-end
-
 local function LongInputResult(text)
     text = tostring(text or "")
     if #text <= NORMAL_INPUT_MAX_CHARS then return nil end
@@ -2330,16 +2384,16 @@ local function LongInputResult(text)
                 action = action,
                 args = { value = value, uufBestEffortAccepted = isUUF == true },
                 confirmRequired = true,
-                confirmText = isUUF and UUFBestEffortConfirmText() or nil,
+                confirmText = isUUF and A.UUFBestEffortConfirmText() or nil,
                 label = isUUF and "Import UnhaltedUnitFrames profile string" or "Import profile string",
                 summary = "Imports profile data into the active profile.",
             })
         end
     end
     return {
-        text = "That message is too long for the inline Assistant input. Please shorten it, or use the profile import panel for large profile strings.",
+        text = "That message is too long here. Shorten it, or use the profile import window for large profile strings.",
         status = "failed",
-        summary = "Inline Assistant input length guard.",
+        summary = "Inline input is too long.",
     }
 end
 
@@ -2351,23 +2405,23 @@ local function TrySubmitBatch(text)
     for i = 1, #parts do
         local result = A.HandleInput(parts[i])
         if not result then
-            return { text = "I could not process command " .. tostring(i) .. ": " .. tostring(parts[i]), status = "failed" }
+            return { text = "I paused at step " .. tostring(i) .. ": " .. tostring(parts[i]), result = "failed" }
         end
-        if result.status ~= "applied" and result.status ~= "info" then
+        if (result.status or result.result) ~= "applied" and (result.status or result.result) ~= "info" then
             return result
         end
-        if result.status == "applied" then applied = applied + 1 end
+        if (result.status or result.result) == "applied" then applied = applied + 1 end
         lines[#lines + 1] = tostring(i) .. ". " .. BatchLine(result.text)
     end
-    local textOut = "Done. I handled " .. tostring(#parts) .. " commands:\n" .. table.concat(lines, "\n")
+    local textOut = "Done. I handled " .. tostring(#parts) .. " requests:\n" .. table.concat(lines, "\n")
     if applied > 0 then textOut = AppendUndoFollowupHint(textOut) end
-    return { text = textOut, status = applied > 0 and "applied" or "info", summary = "Executed multiple Assistant commands." }
+    return { text = textOut, result = applied > 0 and "applied" or "info", summary = "Handled multiple Assistant requests." }
 end
 
 local function RecordAssistantResult(result)
     if result and result.text then
-        A.AddHistory("assistant", result.text, result.status, result.summary)
-        if result.status == "applied" and type(A.RecordSuccessfulAssistantAction) == "function" and type(A.MaybePowerUserSupportHint) == "function" then
+        A.AddHistory("assistant", result.text, result.status or result.result, result.summary)
+        if (result.status or result.result) == "applied" and type(A.RecordSuccessfulAssistantAction) == "function" and type(A.MaybePowerUserSupportHint) == "function" then
             A.RecordSuccessfulAssistantAction()
             local hint = A.MaybePowerUserSupportHint()
             if hint then A.AddHistory("assistant", hint, "info", "Assistant power-user dashboard links hint") end
@@ -2434,25 +2488,25 @@ local function BuildDeferredSubmitSteps(text, callback, opts)
                 local part = parts[partIndex]
                 local result = LongInputResult(part) or A.HandleInput(part)
                 if not result then
-                    result = { text = "I could not process command " .. tostring(partIndex) .. ": " .. tostring(part), status = "failed" }
+                    result = { text = "I paused at step " .. tostring(partIndex) .. ": " .. tostring(part), result = "failed" }
                 end
-                if result.status ~= "applied" and result.status ~= "info" then
+                if (result.status or result.result) ~= "applied" and (result.status or result.result) ~= "info" then
                     finalResult = result
                     stopped = true
                     return
                 end
-                if result.status == "applied" then applied = applied + 1 end
+                if (result.status or result.result) == "applied" then applied = applied + 1 end
                 lines[#lines + 1] = tostring(partIndex) .. ". " .. BatchLine(result.text)
             end)
         end
         steps[#steps + 1] = function()
             if not finalResult then
-                local textOut = "Done. I handled " .. tostring(#parts) .. " commands:\n" .. table.concat(lines, "\n")
+                local textOut = "Done. I handled " .. tostring(#parts) .. " requests:\n" .. table.concat(lines, "\n")
                 if applied > 0 then textOut = AppendUndoFollowupHint(textOut) end
                 finalResult = {
                     text = textOut,
                     status = applied > 0 and "applied" or "info",
-                    summary = "Executed multiple Assistant commands.",
+                    summary = "Handled multiple Assistant requests.",
                 }
             end
             Complete(finalResult)
@@ -2482,7 +2536,7 @@ function A.SubmitDeferred(text, callback)
     if text == "" then return nil end
     if InCombat() then return CombatSubmitResult() end
     if A.IsBusy() then
-        return { text = "I am still working on the previous request.", status = "busy" }
+        return { text = "I am still working on the previous request.", result = "busy" }
     end
 
     A.SetBusy(true, "I am working on that")
@@ -2493,7 +2547,7 @@ function A.SubmitDeferred(text, callback)
     if job and type(job.result) == "table" and not A.IsBusy() then
         return job.result
     end
-    return { text = A.GetBusyText(), status = "queued" }
+    return { text = A.GetBusyText(), result = "queued" }
 end
 
 function A.WarmupPerformanceIndexes(reason)

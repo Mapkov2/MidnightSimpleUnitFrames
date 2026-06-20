@@ -13,7 +13,6 @@ local CreateFrame = CreateFrame
 local UIParent = UIParent
 local UnitClass = UnitClass
 local InCombatLockdown = InCombatLockdown
-local C_Timer_After = C_Timer and C_Timer.After
 local C_Spell = C_Spell
 local GetCursorPosition = GetCursorPosition
 local GameTooltip = GameTooltip
@@ -284,6 +283,7 @@ do
         else
             overlay:EnableMouse(false)
             overlay:SetScript("OnUpdate", nil)
+            overlay:SetOnUpdateMode("Disabled")
             overlay._msufDragging = nil
             overlay:Hide()
         end
@@ -304,6 +304,7 @@ do
         previewButton:EnableMouse(false)
         if previewButton.SetScript then
             previewButton:SetScript("OnUpdate", nil)
+            previewButton:SetOnUpdateMode("Disabled")
         end
         if previewButton.Icon and previewButton.Icon.Cooldown then previewButton.Icon.Cooldown:Hide() end
         if previewButton.Duration then
@@ -361,6 +362,7 @@ do
             self._msufDragging = true
             _BeginHistory(self, "TotemFrame position", "gameplay:totems:position")
 
+            self:SetOnUpdateMode("RunWhenVisible")
             self:SetScript("OnUpdate", function(frame)
                 if not frame._msufDragging then return end
                 local dragG = frame._msufDragG
@@ -388,6 +390,7 @@ do
             if button ~= "LeftButton" then return end
             self._msufDragging = nil
             self:SetScript("OnUpdate", nil)
+            self:SetOnUpdateMode("Disabled")
             _SelectNudgeFrame(self, true)
 
             if _RefreshBlizzardTotems then
@@ -492,12 +495,8 @@ do
             if event == "UNIT_SPELLCAST_SUCCEEDED" then
                 local unit = ...
                 if unit ~= "player" then return end
-                if C_Timer_After then
-                    C_Timer_After(0, _RefreshBlizzardTotems)
-                    C_Timer_After(0.10, _RefreshBlizzardTotems)
-                else
-                    _RefreshBlizzardTotems()
-                end
+                C_Timer.After(0, _RefreshBlizzardTotems)
+                C_Timer.After(0.10, _RefreshBlizzardTotems)
                 return
             end
 
@@ -520,11 +519,7 @@ do
 
         if g and g.enablePlayerTotems and _PlayerHasBlizzardTotemFrame() then
             eventFrame:RegisterEvent("PLAYER_TOTEM_UPDATE")
-            if eventFrame.RegisterUnitEvent then
-                eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-            else
-                eventFrame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-            end
+            eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
         end
 
         _RefreshBlizzardTotems()

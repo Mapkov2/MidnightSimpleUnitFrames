@@ -125,11 +125,9 @@ local function _SetEclipseColor(r, g, b, fallback)
 end
 
 local function _refreshEclipses()
-    local getAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
-    if not getAura then return end
     _solarExp, _lunarExp, _caExp, _incExp = 0, 0, 0, 0
     for auraID, kind in pairs(CPConst.ECLIPSE_AURAS or {}) do
-        local aura = getAura(auraID)
+        local aura = C_UnitAuras.GetPlayerAuraBySpellID(auraID)
         if aura and aura.expirationTime then
             local exp = aura.expirationTime
             if kind == "SOLAR" then _solarExp = exp
@@ -347,11 +345,7 @@ end
 local function _deferAuraRefresh()
     if _auraDeferred then return end
     _auraDeferred = true
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, _runDeferredAuraRefresh)
-    else
-        _runDeferredAuraRefresh()
-    end
+    C_Timer.After(0, _runDeferredAuraRefresh)
 end
 
 f:SetScript("OnEvent", function(_, event, arg1, _, arg3)

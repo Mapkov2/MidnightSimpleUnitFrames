@@ -124,13 +124,14 @@ local function ReadValue(layout, shared, layoutKey, sharedKey, fallback)
 end
 
 local function ReapplyAuras(units)
-    if type(_G.MSUF_Auras3_RefreshUnit) == "function" then
-        for i = 1, #units do _G.MSUF_Auras3_RefreshUnit(units[i]) end
-    elseif type(_G.MSUF_Auras3_RefreshAll) == "function" then
-        _G.MSUF_Auras3_RefreshAll()
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.RefreshUnit) == "function" then
+        for i = 1, #units do a3.RefreshUnit(units[i]) end
+    elseif a3 and type(a3.RefreshAll) == "function" then
+        a3.RefreshAll()
     end
-    if type(_G.MSUF_Auras3_RefreshEditPreview) == "function" then
-        _G.MSUF_Auras3_RefreshEditPreview()
+    if a3 and type(a3.RefreshEditPreview) == "function" then
+        a3.RefreshEditPreview()
     end
     SyncMovers()
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh("EM2_AURA_POPUP_APPLY") end

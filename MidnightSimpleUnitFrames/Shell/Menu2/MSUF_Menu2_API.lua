@@ -70,7 +70,7 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
     if cmd == "versiontest" then
         if type(_G.MSUF_VersionCheck_DebugFakeUpdate) == "function" then
-            pcall(_G.MSUF_VersionCheck_DebugFakeUpdate)
+            _G.MSUF_VersionCheck_DebugFakeUpdate()
         else
             print("|cffffd700MSUF:|r Version test helper is not loaded.")
         end
@@ -82,8 +82,8 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
             return
         end
         if type(_G.MSUF_BugReport_TriggerDummy) == "function" then
-            local ok, report, reason = pcall(_G.MSUF_BugReport_TriggerDummy)
-            if not ok or not report then
+            local report, reason = _G.MSUF_BugReport_TriggerDummy()
+            if not report then
                 print("|cffffd700MSUF:|r Bug report dummy was not created" .. (reason and (": " .. tostring(reason)) or "."))
                 return
             end
@@ -100,7 +100,7 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
             return
         end
         if type(_G.MSUF_BugReport_OpenManual) == "function" then
-            pcall(_G.MSUF_BugReport_OpenManual)
+            _G.MSUF_BugReport_OpenManual()
         else
             M.SetMenuStateValue("dashboardBugReportOpen", true)
         end
@@ -109,7 +109,7 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
     end
     if cmd == "help" or cmd == "reset" or cmd == "fullreset" or cmd == "absorb" or cmd == "analytics" then
         if cmd ~= "help" and M.BlockCombatAction and M.BlockCombatAction() then return end
-        if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then pcall(_G.SlashCmdList["MIDNIGHTSUF"], msg) end
+        if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"](msg) end
         return
     end
     if msg == "locale" or msg == "locales" or msg == "loc" then

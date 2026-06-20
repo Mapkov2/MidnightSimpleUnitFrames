@@ -51,12 +51,12 @@ local GetTime = GetTime
 local C_Timer = C_Timer
 local GetPowerRegenForPowerType = GetPowerRegenForPowerType
 
---- Aura API (12.0)
+--- Aura API (player-only class resources; unitframe aura display is native 12.1)
 local C_UnitAuras = C_UnitAuras
 local C_Spell = C_Spell
 local C_SpellBook = C_SpellBook
 
---- Secret-value guard (12.0 Midnight)
+--- Secret-value guard (Midnight/12.1)
 local _issecretvalue = _G.issecretvalue
 local function NotSecret(v)
     if _issecretvalue then return _issecretvalue(v) == false end
@@ -233,16 +233,14 @@ do
         --- Cancel previous timer token by bumping generation counter
         _expiryTimer = (_expiryTimer or 0) + 1
         local myTimer = _expiryTimer
-        if C_Timer and C_Timer.After then
-            C_Timer.After(remaining + 0.05, function()
-                if myTimer ~= _expiryTimer then return end  --- stale
-                if expiresAt and GetTime() >= expiresAt then
-                    stacks = 0
-                    expiresAt = nil
-                    if _wwRender then _wwRender() end
-                end
-            end)
-        end
+        C_Timer.After(remaining + 0.05, function()
+            if myTimer ~= _expiryTimer then return end  --- stale
+            if expiresAt and GetTime() >= expiresAt then
+                stacks = 0
+                expiresAt = nil
+                if _wwRender then _wwRender() end
+            end
+        end)
     end
 
     function ResetSeenCastGUID()
@@ -1155,6 +1153,7 @@ local function CP_StartCentralTick(tickFn)
     if not _cpTickActive then
         _cpTickElapsed = 0
         if not _cpTickFrame then _cpTickFrame = CreateFrame("Frame") end
+        _cpTickFrame:SetOnUpdateMode("RunWhenVisible")
         _cpTickFrame:SetScript("OnUpdate", CP_CentralTickOnUpdate)
         _cpTickActive = true
     elseif _cpTickFn ~= tickFn then
@@ -1167,6 +1166,7 @@ local function CP_StopCentralTick()
     _cpTickFn = nil
     _cpTickElapsed = 0
     _cpTickFrame:SetScript("OnUpdate", nil)
+    _cpTickFrame:SetOnUpdateMode("Disabled")
     _cpTickActive = false
 end
 
@@ -1591,10 +1591,8 @@ local function FullRefresh()
             if powerType == "MAELSTROM_WEAPON" then
                 --- Maelstrom Weapon: max stacks from spell data
                 maxP = 10  --- default
-                if C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications then
-                    local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
-                    if type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
-                end
+                local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
+                if type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6  --- Vengeance: 6 soul fragment segments
             elseif powerType == "WHIRLWIND" then
@@ -2093,11 +2091,7 @@ end
 local function CP_DeferAuraUpdate()
     if _cpAuraDeferred then return end
     _cpAuraDeferred = true
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, CP_RunDeferredAuraUpdate)
-    else
-        CP_RunDeferredAuraUpdate()
-    end
+    C_Timer.After(0, CP_RunDeferredAuraUpdate)
 end
 
 eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
@@ -2225,11 +2219,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     --- Vehicle enter/exit: rebuild everything (CP type may change)
     if event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
         if arg1 == "player" then
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0.1, FullRefresh)
-            else
-                ThrottledFullRefresh()
-            end
+            C_Timer.After(0.1, FullRefresh)
         end
         return
     end
@@ -2285,7 +2275,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
                 --- that clears the PBEmbedLayout stamp so the detached power bar
                 --- re-computes its width from the now-correct frame geometry.
                 --- Uses pre-allocated _CP_DeferredPBRelayout (zero closures).
-                if C_Timer and C_Timer.After and (CP.visible or AM.visible or PHP.visible or CP.CDMWidthWantsSync()) then
+                if CP.visible or AM.visible or PHP.visible or CP.CDMWidthWantsSync() then
                     C_Timer.After(0.35, _CP_DeferredPBRelayout)
                 end
             elseif retries < 20 then
@@ -2293,11 +2283,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
                 C_Timer.After(0.05, TryRefresh)
             end
         end
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0.05, TryRefresh)
-        else
-            FullRefresh()
-        end
+        C_Timer.After(0.05, TryRefresh)
         return
     end
 

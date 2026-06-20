@@ -55,8 +55,8 @@ end
 local function ConfiguredFontColorPreview()
     local fn = _G.MSUF_GetConfiguredFontColor or (MSUF and MSUF.MSUF_GetConfiguredFontColor)
     if type(fn) == "function" then
-        local ok, r, g, b = pcall(fn)
-        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
+        local r, g, b = fn()
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
     local general = G()
     if general.useCustomFontColor and type(general.fontColorCustomR) == "number"
@@ -182,12 +182,7 @@ local function ApplyPreviewFont(fs)
     path = path or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
     local resolve = _G.MSUF_ResolveFontPath
     if type(resolve) == "function" then path = resolve(path, size, flags, key) end
-    local safeSet = _G.MSUF_SetFontSafe
-    if type(safeSet) == "function" then
-        safeSet(fs, path, size, flags, key)
-    else
-        pcall(fs.SetFont, fs, path, size, flags)
-    end
+    fs:SetFont(path, size, flags)
     local c = ConfiguredFontColorPreview()
     c[4] = NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1))
     if fs.SetTextColor then fs:SetTextColor(c[1], c[2], c[3], c[4] or 1) end

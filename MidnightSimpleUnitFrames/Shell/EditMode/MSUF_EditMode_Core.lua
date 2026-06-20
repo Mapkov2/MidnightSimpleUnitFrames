@@ -386,10 +386,7 @@ local function NotifyListeners()
     for i = 1, #t do
         local fn = t[i]
         if type(fn) == "function" then
-            local ok, err = pcall(fn, active)
-            if not ok and type(err) == "string" then
-                --- one bad listener must not break the rest
-            end
+            fn(active)
         end
     end
 end
@@ -498,8 +495,9 @@ local function RestoreAfterCombatExit()
     if _G.MSUF_SyncAllUnitPreviews then
         _G.MSUF_SyncAllUnitPreviews()
     end
-    if _G.MSUF_Auras3_RefreshAll then
-        _G.MSUF_Auras3_RefreshAll()
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.RefreshAll) == "function" then
+        a3.RefreshAll()
     end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
@@ -676,8 +674,9 @@ function State.Exit(source)
     end
 
     --- Refresh Auras3
-    if not combatLocked and _G.MSUF_Auras3_RefreshAll then
-        _G.MSUF_Auras3_RefreshAll()
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if not combatLocked and a3 and type(a3.RefreshAll) == "function" then
+        a3.RefreshAll()
     end
 
     --- Notify listeners
@@ -736,7 +735,10 @@ function State.CancelAll()
 
     PublishCompat("MSUF_UnitPreviewActive", false)
     if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
-    if _G.MSUF_Auras3_RefreshAll then _G.MSUF_Auras3_RefreshAll() end
+    do
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
+    end
 
     NotifyListeners()
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
@@ -862,7 +864,8 @@ local function RestoreState(snap)
     elseif snap.category == "aura" then
         db.auras3 = db.auras3 or {}
         DeepRestore(db.auras3, snap.data)
-        if _G.MSUF_Auras3_RefreshAll then _G.MSUF_Auras3_RefreshAll() end
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
     elseif snap.category == "gf" then
         local dbKey = snap.dbKey or ResolveGFDBKey(snap.key)
         if dbKey then

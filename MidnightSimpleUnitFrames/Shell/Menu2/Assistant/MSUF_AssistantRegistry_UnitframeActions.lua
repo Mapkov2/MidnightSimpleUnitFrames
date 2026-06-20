@@ -29,47 +29,30 @@ MSUF = ctx.MSUF or MSUF
 if not (Registry and type(Registry.RegisterAction) == "function") then return end
 if type(UnitDB) ~= "function" or type(ApplyUnit) ~= "function" then return end
 
-local POSITION_FIELDS = { "offsetX", "offsetY", "point", "relativePoint", "anchorFrameName", "anchorToUnitframe" }
+local BuildUnitframeActionHelpers = A.UnitframesRegistry and A.UnitframesRegistry.BuildUnitframeActionHelpers
+local ActionHelpers = type(BuildUnitframeActionHelpers) == "function" and BuildUnitframeActionHelpers({
+    UnitDB = UnitDB,
+}) or nil
+if type(ActionHelpers) ~= "table" then return end
+local ResetUnitPositionFromDefaults = ActionHelpers.ResetUnitPositionFromDefaults
+local UnitCopyScopeSummary = ActionHelpers.UnitCopyScopeSummary
+if type(ResetUnitPositionFromDefaults) ~= "function" or type(UnitCopyScopeSummary) ~= "function" then return end
 
-local function ResetUnitPositionFromDefaults(unit, defaults)
-    local src = type(defaults) == "table" and defaults[unit] or nil
-    if type(src) ~= "table" then return false end
-    local dst = UnitDB(unit)
-    for i = 1, #POSITION_FIELDS do
-        local key = POSITION_FIELDS[i]
-        dst[key] = src[key]
-    end
-    return true
-end
-
-local UNIT_COPY_SCOPE_LABELS = {
-    { key = "basics", label = "Frame Basics" },
-    { key = "text", label = "Text" },
-    { key = "portrait", label = "Portrait" },
-    { key = "power", label = "Power Bar" },
-    { key = "castbar", label = "Castbar" },
-    { key = "status", label = "Status Icons" },
-    { key = "load", label = "Load Conditions" },
-    { key = "transparency", label = "Transparency" },
-    { key = "layout", label = "Size & Anchoring" },
-}
-
-local function UnitCopyScopeSummary(scopes)
-    if type(scopes) ~= "table" then return "" end
-    local selected, total = {}, 0
-    for i = 1, #UNIT_COPY_SCOPE_LABELS do
-        local row = UNIT_COPY_SCOPE_LABELS[i]
-        total = total + 1
-        if scopes[row.key] == true then selected[#selected + 1] = row.label end
-    end
-    if #selected == 0 then return " No copy categories were selected." end
-    if #selected == total then return " Categories: all unit copy categories." end
-    return " Categories: " .. table.concat(selected, ", ") .. "."
+local function DisplayUnitLabel(unit)
+    if A and type(A.DisplayUnitLabel) == "function" then return A.DisplayUnitLabel(unit) end
+    unit = tostring(unit or "")
+    local label = UNIT_LABELS[unit]
+    if label ~= nil and tostring(label) ~= "" then return tostring(label) end
+    if unit == "targettarget" then return "Target of Target" end
+    if unit == "focustarget" then return "Focus Target" end
+    unit = unit:gsub("^uf_", ""):gsub("_", " ")
+    unit = unit:gsub("(%l)(%u)", "%1 %2")
+    return (unit:gsub("^%l", string.upper))
 end
 
 Registry:RegisterAction({
     key = "copy_unit",
-    label = "Copy Unit Settings",
+    label = "Copy Unit Options",
     type = "copy",
     combatSafe = false,
     captureSnapshot = true,
@@ -77,69 +60,41 @@ Registry:RegisterAction({
         local src = args and args.source
         local targets = args and args.targets
         if type(src) ~= "string" or type(targets) ~= "table" or #targets == 0 then
-            return false, "Copy needs a source and at least one destination."
+            return false, "Which source and destination do you want me to use for the copy?"
         end
         local UP = M and M.UnitPage
         if not (UP and type(UP.CopyUnitSettings) == "function") then
-            return false, "Unit copy is not available yet."
+            return false, "Open a unit frame page first so I can copy those options."
         end
         local targetLabels = {}
         for i = 1, #targets do
             UP.CopyUnitSettings(src, targets[i], args.scopes)
-            targetLabels[#targetLabels + 1] = tostring(UNIT_LABELS[targets[i]] or targets[i])
+            targetLabels[#targetLabels + 1] = DisplayUnitLabel(targets[i])
         end
         local targetText = table.concat(targetLabels, ", ")
         if targetText == "" then targetText = "the selected destination" end
-        return true, "Done. I copied " .. tostring(UNIT_LABELS[src] or src) .. " settings to " .. targetText .. "." .. UnitCopyScopeSummary(args and args.scopes)
+        return true, "Done. I copied " .. DisplayUnitLabel(src) .. " options to " .. targetText .. "." .. UnitCopyScopeSummary(args and args.scopes)
     end,
 })
 
-Registry:RegisterAction({
-    key = "reset_unit_position",
-    label = "Reset Unit Position",
-    type = "reset",
-    combatSafe = false,
-    captureSnapshot = true,
-    run = function(args)
-        local unit = args and args.unit
-        if type(unit) ~= "string" then return false, "I do not know which frame position to reset." end
-        local create = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
-        if type(create) ~= "function" then return false, "Factory defaults are not available yet." end
-        local defaults = create()
-        if not ResetUnitPositionFromDefaults(unit, defaults) then return false, "No default position is known for " .. tostring(UNIT_LABELS[unit] or unit) .. "." end
-        ApplyUnit(unit, "MSUF_ASSISTANT_RESET_POSITION", { preview = true })
-        return true, "Done. Reset " .. tostring(UNIT_LABELS[unit] or unit) .. " frame position."
-    end,
-})
-
-Registry:RegisterAction({
-    key = "reset_all_unit_positions",
-    label = "Reset All Unit Positions",
-    type = "reset",
-    combatSafe = false,
-    confirmRequired = true,
-    captureSnapshot = true,
-    run = function()
-        local create = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
-        if type(create) ~= "function" then return false, "Factory defaults are not available yet." end
-        local defaults = create()
-        local count = 0
-        for i = 1, #UNIT_KEYS do
-            local unit = UNIT_KEYS[i]
-            if ResetUnitPositionFromDefaults(unit, defaults) then
-                ApplyUnit(unit, "MSUF_ASSISTANT_RESET_ALL_POSITIONS", { preview = true })
-                count = count + 1
-            end
-        end
-        if count == 0 then return false, "No default frame positions are available." end
-        if type(CallGlobal) == "function" then CallGlobal("MSUF_ForceReanchorAllUnitFrames_Once") end
-        return true, "Done. Reset " .. tostring(count) .. " unit-frame positions."
-    end,
-})
+local RegisterPositionResetActions = A.UnitframesRegistry and A.UnitframesRegistry.RegisterPositionResetActions
+if type(RegisterPositionResetActions) == "function" then
+    RegisterPositionResetActions({
+        Registry = Registry,
+        UNIT_LABELS = UNIT_LABELS,
+        UNIT_KEYS = UNIT_KEYS,
+        DisplayUnitLabel = DisplayUnitLabel,
+        ApplyUnit = ApplyUnit,
+        CallGlobal = CallGlobal,
+        ResetUnitPositionFromDefaults = ResetUnitPositionFromDefaults,
+        M = M,
+        MSUF = MSUF,
+    })
+end
 
 Registry:RegisterAction({
     key = "reset_unit_page",
-    label = "Reset Unit Settings",
+    label = "Reset Unit Options",
     type = "reset",
     combatSafe = false,
     confirmRequired = true,
@@ -150,12 +105,12 @@ Registry:RegisterAction({
         if unit == "targettarget" then page = "uf_targettarget" end
         if unit == "focustarget" then page = "uf_focustarget" end
         if type(page) ~= "string" or not (M and type(M.ResetPageToDefaults) == "function") then
-            return false, "Unit reset is not available right now."
+            return false, "Open a unit frame page first so I can reset it."
         end
         if M.ResetPageToDefaults(page) then
-            return true, "Done. Reset " .. tostring(UNIT_LABELS[unit] or unit) .. " settings."
+            return true, "Done. Reset " .. DisplayUnitLabel(unit) .. " options."
         end
-        return false, "Reset failed."
+        return false, "I kept that frame as it was."
     end,
 })
 
@@ -170,7 +125,7 @@ Registry:RegisterAction({
         local unit = args and args.unit
         local spec = ResolveUnitStatusSpec(unit, args and (args.status or args.text))
         if type(unit) ~= "string" or not spec then
-            return false, "I do not know which status indicator to reset."
+            return false, "Which status indicator do you want me to reset?"
         end
 
         local conf = UnitDB(unit)
@@ -189,7 +144,7 @@ Registry:RegisterAction({
             if spec.iconStyle then conf[spec.iconStyle] = nil end
         end
         ApplyStatusRefresh(unit, spec.refresh, spec.statusRuntime, spec.level)
-        return true, "Done. Reset " .. tostring(UNIT_LABELS[unit] or unit) .. " " .. tostring(spec.label or "status indicator") .. "."
+        return true, "Done. Reset " .. DisplayUnitLabel(unit) .. " " .. tostring(spec.label or "status indicator") .. "."
     end,
 })
 
@@ -219,7 +174,7 @@ Registry:RegisterAction({
     aliases = { "clear custom anchor", "clear custom anchor frame", "reset custom anchor", "remove custom anchor" },
     run = function(args)
         local unit = args and args.unit
-        if type(unit) ~= "string" then return false, "I do not know which custom anchor to clear." end
+        if type(unit) ~= "string" then return false, "Which frame custom anchor do you want me to clear?" end
         local conf = UnitDB(unit)
         local allowed = AllowedMap(ANCHOR_TARGET_VALUES)
         conf.anchorFrameName = nil
@@ -227,6 +182,6 @@ Registry:RegisterAction({
             conf.anchorToUnitframe = "GLOBAL"
         end
         ApplyUnit(unit, "MSUF_ASSISTANT_CLEAR_CUSTOM_ANCHOR", { preview = true })
-        return true, "Done. Cleared " .. tostring(UNIT_LABELS[unit] or unit) .. " custom anchor."
+        return true, "Done. Cleared " .. DisplayUnitLabel(unit) .. " custom anchor."
     end,
 })

@@ -1,0 +1,159 @@
+-- Assistant UnitFrame status control static values.
+-- Loaded after MSUF_AssistantRegistry_Unitframes_Data.lua so shared symbol tables are available.
+local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or {}
+
+local M = MSUF.MSUF2 or _G.MSUF2 or {}
+MSUF.MSUF2 = M
+
+local A = MSUF.Assistant or {}
+MSUF.Assistant = A
+M.Assistant = A
+
+local Data = A.UnitframeRegistryData or {}
+A.UnitframeRegistryData = Data
+
+Data.STATUS_CONTROL_SPECS = {
+    {
+        value = "leader", label = "Leader / Assist", show = "showLeaderIcon",
+        defaultShow = true, size = "leaderIconSize", defaultSize = 14,
+        anchor = "leaderIconAnchor", defaultAnchor = "TOPLEFT",
+        x = "leaderIconOffsetX", defaultX = 0, y = "leaderIconOffsetY", defaultY = 3,
+        layer = "leaderIconLayer", defaultLayer = 7,
+        refresh = "MSUF_RefreshLeaderIconFrames", iconStyle = "leaderIconStyle",
+        defaultIconStyle = "BLIZZARD", units = { player = true, target = true },
+        aliases = {
+            "leader icon", "leader indicator", "assist icon",
+            "assist indicator", "leader assist icon", "leader assist indicator",
+        },
+    },
+    {
+        value = "raidmarker", label = "Raid Marker", show = "showRaidMarker",
+        defaultShow = true, size = "raidMarkerSize", defaultSize = 18,
+        anchor = "raidMarkerAnchor", defaultAnchor = "TOPLEFT",
+        x = "raidMarkerOffsetX", defaultX = 16, y = "raidMarkerOffsetY", defaultY = 3,
+        layer = "raidMarkerLayer", defaultLayer = 7,
+        refresh = "MSUF_RefreshRaidMarkerFrames",
+        aliases = {
+            "raid marker", "raid marker icon", "raid marker indicator",
+            "raid indicator", "raid icon", "raid symbol",
+            "target marker", "target marker icon", "target marker indicator",
+        },
+    },
+    {
+        value = "level", label = "Level Indicator", show = "showLevelIndicator",
+        defaultShow = true, size = "levelIndicatorSize", defaultSize = 14,
+        anchor = "levelIndicatorAnchor", defaultAnchor = "NAMERIGHT",
+        x = "levelIndicatorOffsetX", defaultX = 0, y = "levelIndicatorOffsetY", defaultY = 0,
+        layer = "levelIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RefreshLevelIndicatorFrames", level = true, nameAnchors = true,
+        aliases = { "level", "level indicator", "level text" },
+    },
+    {
+        value = "raidgroupname", label = "Raid Group Name", show = "showRaidGroupInName",
+        defaultShow = false, size = "nameFontSize", defaultSize = 14,
+        anchor = "raidGroupNameAnchor", defaultAnchor = "NAMERIGHT",
+        x = "raidGroupNameOffsetX", defaultX = 3, y = "raidGroupNameOffsetY", defaultY = 0,
+        layer = "nameTextLayer", defaultLayer = 5,
+        refresh = "MSUF_RefreshRaidGroupNameFrames", inlineName = true, nameAnchors = true,
+        units = { player = true, target = true, targettarget = true, focustarget = true, focus = true },
+        aliases = {
+            "raid group name", "raid group", "group number in name",
+            "subgroup name", "raid group indicator",
+            "group number indicator", "subgroup indicator",
+        },
+    },
+    {
+        value = "eliteicon", label = "Elite / Rare Icon", show = "showEliteIcon",
+        defaultShow = true, size = "eliteIconSize", defaultSize = 20,
+        anchor = "eliteIconAnchor", defaultAnchor = "TOPRIGHT",
+        x = "eliteIconOffsetX", defaultX = 2, y = "eliteIconOffsetY", defaultY = 2,
+        layer = "eliteIconLayer", defaultLayer = 7,
+        refresh = "MSUF_RefreshEliteIconFrames",
+        units = { target = true, focus = true, targettarget = true, focustarget = true, boss = true },
+        aliases = { "elite icon", "rare icon", "elite rare icon" },
+    },
+    {
+        value = "statusText", label = "Dead Text", show = "statusTextEnabled",
+        defaultShow = true, size = "statusTextSize", defaultSize = 16,
+        anchor = "statusTextAnchor", defaultAnchor = "CENTER",
+        x = "statusTextOffsetX", defaultX = 0, y = "statusTextOffsetY", defaultY = 0,
+        layer = "statusTextLayer", defaultLayer = 7,
+        refresh = "MSUF_RequestStatusTextRefresh", statusRuntime = true,
+        aliases = {
+            "dead text", "status text", "ghost text", "offline text",
+            "dead indicator", "ghost indicator", "offline indicator",
+        },
+    },
+    {
+        value = "statusCombat", label = "Combat Indicator", show = "showCombatStateIndicator",
+        defaultShow = true, size = "combatStateIndicatorSize", defaultSize = 18,
+        anchor = "combatStateIndicatorAnchor", defaultAnchor = "TOPLEFT",
+        x = "combatStateIndicatorOffsetX", defaultX = 0,
+        y = "combatStateIndicatorOffsetY", defaultY = 0,
+        layer = "combatStateIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RequestStatusCombatIndicatorRefresh",
+        symbol = "combatStateIndicatorSymbol",
+        symbolValues = Data.COMBAT_SYMBOL_VALUES,
+        statusRuntime = true,
+        units = { player = true, target = true },
+        aliases = {
+            "combat indicator", "combat state indicator", "combat status indicator",
+            "combat icon", "combat state icon", "combat symbol", "combat state symbol",
+        },
+    },
+    {
+        value = "statusResting", label = "Rested Indicator", show = "showRestingIndicator",
+        defaultShow = false, size = "restedStateIndicatorSize", defaultSize = 18,
+        anchor = "restedStateIndicatorAnchor", defaultAnchor = "TOPLEFT",
+        x = "restedStateIndicatorOffsetX", defaultX = 0,
+        y = "restedStateIndicatorOffsetY", defaultY = 0,
+        layer = "restedStateIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RequestStatusRestingIndicatorRefresh",
+        symbol = "restedStateIndicatorSymbol",
+        symbolValues = Data.RESTED_SYMBOL_VALUES,
+        statusRuntime = true,
+        units = { player = true },
+        aliases = {
+            "rested indicator", "resting indicator", "rested icon",
+            "resting icon", "rested symbol", "resting symbol",
+        },
+    },
+    {
+        value = "statusIncomingRes", label = "Incoming Rez Indicator",
+        show = "showIncomingResIndicator", defaultShow = true,
+        size = "incomingResIndicatorSize", defaultSize = 18,
+        anchor = "incomingResIndicatorAnchor", defaultAnchor = "TOPRIGHT",
+        x = "incomingResIndicatorOffsetX", defaultX = 0,
+        y = "incomingResIndicatorOffsetY", defaultY = 0,
+        layer = "incomingResIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RequestStatusIncomingResIndicatorRefresh",
+        symbol = "incomingResIndicatorSymbol",
+        symbolValues = Data.RESS_SYMBOL_VALUES,
+        statusRuntime = true,
+        units = { player = true, target = true },
+        aliases = {
+            "incoming rez indicator", "incoming resurrection indicator",
+            "incoming rez icon", "incoming resurrection icon",
+            "incoming rez symbol", "incoming resurrection symbol",
+            "rez indicator", "rez icon", "rez symbol",
+            "resurrection indicator", "resurrection icon", "resurrection symbol",
+        },
+    },
+    {
+        value = "statusPvp", label = "PvP Flag Indicator (War Mode/PvP)",
+        show = "showPvpIndicator", defaultShow = true,
+        size = "pvpIndicatorSize", defaultSize = 18,
+        anchor = "pvpIndicatorAnchor", defaultAnchor = "TOPRIGHT",
+        x = "pvpIndicatorOffsetX", defaultX = 0, y = "pvpIndicatorOffsetY", defaultY = 0,
+        layer = "pvpIndicatorLayer", defaultLayer = 7,
+        refresh = "MSUF_RequestStatusPvpIndicatorRefresh", statusRuntime = true,
+        units = { player = true, target = true, focus = true, targettarget = true, focustarget = true },
+        description = "Only active in War Mode, Arena/Battleground, or while the player is PvP flagged; PvE instances keep it cold.",
+        aliases = {
+            "pvp flag", "pvp flag indicator", "pvp indicator", "pvp icon",
+            "pvp flag icon", "pvp status", "pvp status indicator",
+            "pvp status icon", "war mode indicator", "flagged indicator",
+        },
+    },
+}

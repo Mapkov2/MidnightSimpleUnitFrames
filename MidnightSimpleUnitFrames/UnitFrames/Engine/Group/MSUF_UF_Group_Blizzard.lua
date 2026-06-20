@@ -70,30 +70,6 @@ local function ResolveFrame(frame)
   return frame
 end
 
-local function SafeHide(frame)
-  if frame and frame.Hide and not IsForbidden(frame) then
-    frame:Hide()
-  end
-end
-
-local function SafeShow(frame)
-  if frame and frame.Show and not IsForbidden(frame) then
-    frame:Show()
-  end
-end
-
-local function SafeUnregister(frame)
-  if frame and frame.UnregisterAllEvents and not IsForbidden(frame) then
-    frame:UnregisterAllEvents()
-  end
-end
-
-local function SafeSetParent(frame, parent)
-  if frame and frame.SetParent and parent and not IsForbidden(frame) then
-    frame:SetParent(parent)
-  end
-end
-
 local function IsHiddenFrameParent(parent)
   return parent
     and parent ~= UIParent
@@ -145,7 +121,7 @@ local function ReparentHidden(frame)
     return
   end
   if frame.GetParent and not IsHiddenFrameParent(frame:GetParent()) then
-    SafeSetParent(frame, parent)
+    frame:SetParent(parent)
   end
 end
 
@@ -163,8 +139,8 @@ end
 
 local function HideIfOwned(frame)
   local info = ownedFrames[frame]
-  if info and info.hidden then
-    SafeHide(frame)
+  if info and info.hidden and frame and frame.Hide and not IsForbidden(frame) then
+    frame:Hide()
   end
 end
 
@@ -186,15 +162,26 @@ local function UnregisterKnownChildren(frame)
   if not frame then
     return
   end
-  SafeUnregister(frame.healthBar or frame.healthbar or frame.HealthBar or (frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar))
-  SafeUnregister(frame.manabar or frame.ManaBar or frame.PowerBar)
-  SafeUnregister(frame.castBar or frame.spellbar or frame.CastingBarFrame)
-  SafeUnregister(frame.powerBarAlt or frame.PowerBarAlt)
-  SafeUnregister(frame.BuffFrame or frame.AurasFrame)
-  SafeUnregister(frame.DebuffFrame)
-  SafeUnregister(frame.petFrame or frame.PetFrame)
-  SafeUnregister(frame.totFrame or frame.TargetFrameToT)
-  SafeUnregister(frame.CcRemoverFrame)
+  local child = frame.healthBar or frame.healthbar or frame.HealthBar or (frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar)
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
+  child = frame.manabar or frame.ManaBar or frame.PowerBar
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
+  child = frame.castBar or frame.spellbar or frame.CastingBarFrame
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
+  child = frame.powerBarAlt or frame.PowerBarAlt
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
+  child = frame.BuffFrame or frame.AurasFrame
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
+  child = frame.DebuffFrame
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
+  child = frame.pingIconFrame or frame.PingIconFrame
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
+  child = frame.petFrame or frame.PetFrame
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
+  child = frame.totFrame or frame.TargetFrameToT
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
+  child = frame.CcRemoverFrame
+  if child and child.UnregisterAllEvents and not IsForbidden(child) then child:UnregisterAllEvents() end
 end
 
 local function HardHideFrame(frame, doNotReparent)
@@ -214,9 +201,13 @@ local function HardHideFrame(frame, doNotReparent)
   info.hard = true
   info.doNotReparent = doNotReparent and true or false
 
-  SafeUnregister(frame)
+  if frame.UnregisterAllEvents then
+    frame:UnregisterAllEvents()
+  end
   UnregisterKnownChildren(frame)
-  SafeHide(frame)
+  if frame.Hide then
+    frame:Hide()
+  end
   HookFrame(frame, doNotReparent)
 
   if not doNotReparent then
@@ -240,7 +231,9 @@ local function SoftHideFrame(frame, doNotReparent)
   info.hard = info.hard == true
   info.doNotReparent = doNotReparent and true or false
 
-  SafeHide(frame)
+  if frame.Hide then
+    frame:Hide()
+  end
   HookFrame(frame, doNotReparent)
   if not doNotReparent then
     ReparentHidden(frame)
@@ -269,10 +262,12 @@ local function RestoreFrame(frame, showAfter)
   local hidden = HiddenParent()
   local parent = info.parent or UIParent
   if frame.GetParent and frame:GetParent() == hidden then
-    SafeSetParent(frame, parent)
+    if frame.SetParent and parent then
+      frame:SetParent(parent)
+    end
   end
-  if showAfter then
-    SafeShow(frame)
+  if showAfter and frame.Show then
+    frame:Show()
   end
 end
 
@@ -344,25 +339,44 @@ local function HidePartyFrames(hard)
 end
 
 local function SoftHidePartyFramesOnly()
-  SafeHide(_G.PartyFrame)
+  if _G.PartyFrame and _G.PartyFrame.Hide and not IsForbidden(_G.PartyFrame) then
+    _G.PartyFrame:Hide()
+  end
   if _G.PartyFrame then
     ForEachPoolActive(_G.PartyFrame.PartyMemberFramePool, function(frame)
-      SafeHide(frame)
+      if frame.Hide and not IsForbidden(frame) then
+        frame:Hide()
+      end
     end)
   end
-  SafeHide(_G.CompactPartyFrame)
-  SafeHide(_G.CompactPartyFrameTitle)
+  if _G.CompactPartyFrame and _G.CompactPartyFrame.Hide and not IsForbidden(_G.CompactPartyFrame) then
+    _G.CompactPartyFrame:Hide()
+  end
+  if _G.CompactPartyFrameTitle and _G.CompactPartyFrameTitle.Hide and not IsForbidden(_G.CompactPartyFrameTitle) then
+    _G.CompactPartyFrameTitle:Hide()
+  end
   if _G.CompactPartyFrame then
     ForEachFrameTable(_G.CompactPartyFrame.memberUnitFrames, function(frame)
-      SafeHide(frame)
+      if frame.Hide and not IsForbidden(frame) then
+        frame:Hide()
+      end
     end)
   end
   for i = 1, MEMBERS_PER_RAID_GROUP do
-    SafeHide(_G["CompactPartyFrameMember" .. i])
+    local frame = _G["CompactPartyFrameMember" .. i]
+    if frame and frame.Hide and not IsForbidden(frame) then
+      frame:Hide()
+    end
   end
   for i = 1, 4 do
-    SafeHide(_G["PartyMemberFrame" .. i])
-    SafeHide(_G["PartyMemberFrame" .. i .. "PetFrame"])
+    local frame = _G["PartyMemberFrame" .. i]
+    if frame and frame.Hide and not IsForbidden(frame) then
+      frame:Hide()
+    end
+    frame = _G["PartyMemberFrame" .. i .. "PetFrame"]
+    if frame and frame.Hide and not IsForbidden(frame) then
+      frame:Hide()
+    end
   end
 end
 
@@ -405,11 +419,7 @@ local function SchedulePartyReconcile(hideSolo)
       SoftHidePartyFramesOnly()
     end
   end
-  if C_Timer and C_Timer.After then
-    C_Timer.After(0, Run)
-  else
-    Run()
-  end
+  C_Timer.After(0, Run)
 end
 
 local function HideRaidFrames(hard)
@@ -559,7 +569,9 @@ local function ApplyDisabledRaidFallback(mode, msufOwnsGroupFrames)
     local wantsShown = BlizzardRaidManagerWantsShown()
     RestoreRaidFrames(wantsShown == true)
     if wantsShown == false and _G.CompactRaidFrameContainer and _G.CompactRaidFrameContainer.Hide then
-      SafeHide(_G.CompactRaidFrameContainer)
+      if not IsForbidden(_G.CompactRaidFrameContainer) then
+        _G.CompactRaidFrameContainer:Hide()
+      end
     end
   end
 end
@@ -655,24 +667,20 @@ local function ScheduleApply(reason)
     return
   end
   applyScheduled = reason or true
-  if C_Timer and C_Timer.After then
-    C_Timer.After(0, function()
-      local r = applyScheduled
-      applyScheduled = nil
-      GF.ApplyBlizzardGroupFrameOwnership(r)
-    end)
-  else
+  C_Timer.After(0, function()
     local r = applyScheduled
     applyScheduled = nil
     GF.ApplyBlizzardGroupFrameOwnership(r)
-  end
+  end)
 end
 
 local function FlushPending()
   for frame in next, pendingHide do
     pendingHide[frame] = nil
     if frame and ownedFrames[frame] and ownedFrames[frame].hidden then
-      SafeHide(frame)
+      if frame.Hide and not IsForbidden(frame) then
+        frame:Hide()
+      end
       ReparentHidden(frame)
     end
   end

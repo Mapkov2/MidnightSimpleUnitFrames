@@ -54,10 +54,8 @@ local function ScheduleApplyCommit()
     if type(commit) ~= "function" then return end
     if _G.MSUF_ScheduleOnce then
         _G.MSUF_ScheduleOnce("UF_APPLY_COMMIT", function() commit(UF) end)
-    elseif _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, function() commit(UF) end)
     else
-        commit(UF)
+        _G.C_Timer.After(0, function() commit(UF) end)
     end
 end
 

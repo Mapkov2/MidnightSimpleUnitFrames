@@ -5,11 +5,11 @@ MSUF.MSUF2 = M
 
 -- Menu2 Auras page.
 -- Builds controls for Auras3 unit/group scopes, lanes, filters, and visual options. The page
--- talks to the Auras3 menu model; aura scanning and button pooling remain in Auras3 runtime.
+-- talks to the Auras3 menu model; live tracking/filtering is handled by native 12.1 aura containers.
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
-local A3 = MSUF.MSUF_Auras3 or _G.MSUF_Auras3
+local A3 = MSUF.MSUF_Auras3
 local Model = A3 and A3.MenuModel
 local VTP = M.ValueTextPairs
 local PreviewHelpers = M.PreviewHelpers or {}
@@ -375,8 +375,9 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
         function(v) GFWriteGroupValue(scope, groupKey, key, v or defaultValue, mode or "visual") end)
 end
 local function RequestAuraTextRefresh()
-    if type(_G.MSUF_A3_InvalidateCooldownTextCurve) == "function" then _G.MSUF_A3_InvalidateCooldownTextCurve() end
-    if type(_G.MSUF_A3_ForceCooldownTextRecolor) == "function" then _G.MSUF_A3_ForceCooldownTextRecolor() end
+    local ct = A3 and A3.CooldownText
+    if ct and type(ct.Invalidate) == "function" then ct.Invalidate("unit") end
+    if ct and type(ct.ForceRecolor) == "function" then ct.ForceRecolor("unit") end
     if type(_G.MSUF_GF_InvalidateCooldownTextCurve) == "function" then _G.MSUF_GF_InvalidateCooldownTextCurve() end
     if type(_G.MSUF_GF_ForceCooldownTextRecolor) == "function" then _G.MSUF_GF_ForceCooldownTextRecolor() end
     QueueGroupScope("party", "visual")

@@ -212,7 +212,7 @@ local function FlashCollapsibleHeader(entry)
             flash:SetAlpha(0)
         end
     end
-    if C_Timer and C_Timer.After then C_Timer.After(0.14, FadeOut) else FadeOut() end
+    C_Timer.After(0.14, FadeOut)
 end
 
 --- Used by search/edit-mode deep links. Opens the section, scrolls it into view,
@@ -241,7 +241,7 @@ function W.FocusCollapsibleSection(section, opts)
         ScrollToCollapsibleEntry(entry)
         if opts.flash ~= false then FlashCollapsibleHeader(entry) end
     end
-    if C_Timer and C_Timer.After then C_Timer.After(0, FinishFocus) else FinishFocus() end
+    C_Timer.After(0, FinishFocus)
     return true
 end
 function M.FocusRequestedSection(pageKey, opts)
@@ -346,7 +346,7 @@ function W.PageBuilder(ctx)
                 if entry.body.SetAlpha and not entry._msuf2MotionActive then entry.body:SetAlpha(1) end
                 T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
                 if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
-                if entry._msuf2RefreshState then pcall(entry._msuf2RefreshState, entry) end
+                if entry._msuf2RefreshState then entry._msuf2RefreshState(entry) end
                 y = y - entry.outer:GetHeight() - 8
             end
         end
@@ -551,7 +551,7 @@ function W.PageBuilder(ctx)
             entry._msuf2MotionActive = true
             entry._msuf2Closing = true
             T.ApplyCollapseVisual(entry.arrow, entry.hint, false)
-            if entry._msuf2RefreshState then pcall(entry._msuf2RefreshState, entry) end
+            if entry._msuf2RefreshState then entry._msuf2RefreshState(entry) end
             if body.Show then body:Show() end
             if T.PlayMotion then
                 T.PlayMotion(body, "accordionOut", { fromAlpha = body.GetAlpha and body:GetAlpha() or 1, onFinished = function()
@@ -1087,12 +1087,11 @@ local function HideNativeCheckTexture(texture)
     if texture.SetAlpha then texture:SetAlpha(0) end
     if texture.Hide then texture:Hide() end
 end
-local NATIVE_CHECK_TEXTURE_METHODS = { { "SetNormalTexture", "GetNormalTexture" }, { "SetPushedTexture", "GetPushedTexture" }, { "SetHighlightTexture", "GetHighlightTexture" }, { "SetDisabledTexture", "GetDisabledTexture" } }
+local NATIVE_CHECK_TEXTURE_GETTERS = { "GetNormalTexture", "GetPushedTexture", "GetHighlightTexture", "GetDisabledTexture" }
 local function SuppressNativeCheckChrome(self)
-    for i = 1, #NATIVE_CHECK_TEXTURE_METHODS do
-        local spec = NATIVE_CHECK_TEXTURE_METHODS[i]
-        if self[spec[1]] then pcall(self[spec[1]], self, nil) end
-        HideNativeCheckTexture(self[spec[2]] and self[spec[2]](self))
+    for i = 1, #NATIVE_CHECK_TEXTURE_GETTERS do
+        local getter = NATIVE_CHECK_TEXTURE_GETTERS[i]
+        HideNativeCheckTexture(self[getter] and self[getter](self))
     end
 end
 local function ApplyControlCardChrome(card)
@@ -2077,7 +2076,7 @@ function W.AttachPinnedPreview(body, box, opts)
         box:HookScript("OnHide", Restore)
         box:HookScript("OnSizeChanged", ApplyPinnedState)
     end
-    if C_Timer and C_Timer.After then C_Timer.After(0, ApplyPinnedState) end
+    C_Timer.After(0, ApplyPinnedState)
     RefreshButton()
     return record
 end
@@ -2189,8 +2188,8 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     slider:_msuf2SetLayoutWidth(width)
     local function FormatValue(value)
         if type(slider._msuf2ValueFormatter) == "function" then
-            local ok, text = pcall(slider._msuf2ValueFormatter, value, slider)
-            if ok and text ~= nil then return tostring(text) end
+            local text = slider._msuf2ValueFormatter(value, slider)
+            if text ~= nil then return tostring(text) end
         end
         local st = step or 1
         if st < 1 then return string.format("%.2f", value) end
@@ -2221,8 +2220,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         local text = self:GetText()
         local v
         if type(slider._msuf2ValueParser) == "function" then
-            local ok, parsed = pcall(slider._msuf2ValueParser, text, slider)
-            if ok then v = tonumber(parsed) end
+            v = tonumber(slider._msuf2ValueParser(text, slider))
         end
         if v == nil then v = tonumber(text) end
         if v ~= nil then slider:SetValue(v) end

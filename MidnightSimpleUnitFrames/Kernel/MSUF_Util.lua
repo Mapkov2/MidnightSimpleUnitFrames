@@ -270,11 +270,8 @@ if type(_G._MSUF_SetAtlasOrFallback) ~= "function" then
         end
 
         if atlasName and tex.SetAtlas then
-            --- SetAtlas may error if atlasName is invalid in the current build.
-            local ok = pcall(tex.SetAtlas, tex, atlasName, true)
-            if ok then
-                return true
-            end
+            tex:SetAtlas(atlasName, true)
+            return true
         end
 
         if fallbackTexture and tex.SetTexture then
@@ -349,8 +346,7 @@ do
 
             local resolver = MSUF_GetFilenameResolver()
             if type(resolver) == "function" then
-                local ok, filename = pcall(resolver, texture)
-                local path = ok and MSUF_NormalizeInterfaceIconPath(filename) or nil
+                local path = MSUF_NormalizeInterfaceIconPath(resolver(texture))
                 if path then
                     _fileDataIconPathCache[texture] = path
                     return path
@@ -785,6 +781,37 @@ if type(FastCall) ~= "function" then
 end
 ExportPublic("MSUF_FastCall", FastCall)
 
+--- Protected callback helper for shared dispatch/scheduler surfaces.
+--- Keep hot UnitFrame render paths on MSUF_FastCall/direct calls; use this where
+--- one module's error must not corrupt shared queue/dispatch state.
+local SafeCall = _G.MSUF_SafeCall
+if type(SafeCall) ~= "function" then
+    local pcall = pcall
+    local geterrorhandler = _G.geterrorhandler
+
+    local function ReportSafeCallError(err)
+        local handler = geterrorhandler and geterrorhandler()
+        if type(handler) == "function" then
+            local ok = pcall(handler, err)
+            if ok then return end
+        end
+        if print then print("|cffffd700MSUF:|r callback error:", tostring(err)) end
+    end
+
+    SafeCall = function(fn, ...)
+        if type(fn) ~= "function" then
+            return false
+        end
+        local ok, err = pcall(fn, ...)
+        if not ok then
+            ReportSafeCallError(err)
+            return false, err
+        end
+        return true
+    end
+end
+ExportPublic("MSUF_SafeCall", SafeCall)
+
 --- Global helper: "any edit mode" (MSUF Edit Mode OR Blizzard Edit Mode)
 local IsInAnyEditMode = _G.MSUF_IsInAnyEditMode
 if type(IsInAnyEditMode) ~= "function" then
@@ -899,8 +926,8 @@ if type(GetProfileScopedCache) ~= "function" then
         local charKey = "global"
         local charFn = _G.MSUF_GetCharKey
         if type(charFn) == "function" then
-            local ok, key = pcall(charFn)
-            if ok and type(key) == "string" and key ~= "" then
+            local key = charFn()
+            if type(key) == "string" and key ~= "" then
                 charKey = key
             end
         end
@@ -1078,9 +1105,9 @@ function MSUF_Keybind_ToggleEditMode()
         if st and st.active ~= nil then
             nextActive = not st.active
         end
-        pcall(_G.MSUF_SetMSUFEditModeDirect, nextActive, nil)
+        _G.MSUF_SetMSUFEditModeDirect(nextActive, nil)
     elseif type(_G.MSUF_ToggleEditMode) == "function" then
-        pcall(_G.MSUF_ToggleEditMode)
+        _G.MSUF_ToggleEditMode()
     end
 end
 

@@ -399,6 +399,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         surface[PAN_CURSOR_X], surface[PAN_CURSOR_Y] = nil, nil
         surface[PAN_START_X], surface[PAN_START_Y] = nil, nil
         surface:SetScript("OnUpdate", nil)
+        surface:SetOnUpdateMode("Disabled")
         local update = deps[opts.updateHintKey or "UpdateHandleHint"]
         if box and type(update) == "function" then update(box, box._selectedHandle) end
     end
@@ -418,6 +419,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         surface[PAN_START_X], surface[PAN_START_Y] = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
         local hint = box[opts.hintField or "hint"]
         if hint then hint:SetText(TR("moving preview canvas - release mouse to stop - Fit recenters")) end
+        surface:SetOnUpdateMode("RunWhenVisible")
         surface:SetScript("OnUpdate", function(self)
             if not self[PAN_PANNING] then return end
             local mx, my = GetCursorPosition()
@@ -600,7 +602,7 @@ function H.FocusKeyboardTarget(owner, handle, defer, opts)
     elseif owner.SetFocus then
         owner:SetFocus()
     end
-    if defer and _G.C_Timer and _G.C_Timer.After then
+    if defer then
         local selected = handle
         _G.C_Timer.After(0, function()
             if not (owner and owner.IsShown and owner:IsShown()) then return end
@@ -933,18 +935,18 @@ function H.SetMask(mock, tex, mask, maskedStoreKey)
     local store = mock[maskedStoreKey]
     local old = store[tex]
     if old == mask then return end
-    if old and tex.RemoveMaskTexture then pcall(tex.RemoveMaskTexture, tex, old) end
+    if old and tex.RemoveMaskTexture then tex:RemoveMaskTexture(old) end
     store[tex] = nil
     if mask then
-        local ok = pcall(tex.AddMaskTexture, tex, mask)
-        if ok then store[tex] = mask end
+        tex:AddMaskTexture(mask)
+        store[tex] = mask
     end
 end
 function H.ClearMasks(mock, maskedStoreKey)
     local store = mock and mock[maskedStoreKey or "_msufPreviewRoundedMasked"]
     if store then
         for tex, mask in pairs(store) do
-            if tex and tex.RemoveMaskTexture and mask then pcall(tex.RemoveMaskTexture, tex, mask) end
+            if tex and tex.RemoveMaskTexture and mask then tex:RemoveMaskTexture(mask) end
         end
     end
     if mock then mock[maskedStoreKey or "_msufPreviewRoundedMasked"] = nil end
@@ -1094,8 +1096,8 @@ end
 function H.BaseEdgeColor()
     local fn = _G.MSUF_GetBarOutlineColor
     if type(fn) == "function" then
-        local ok, r, g, b = pcall(fn)
-        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b, 1 end
+        local r, g, b = fn()
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b, 1 end
     end
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if gen then

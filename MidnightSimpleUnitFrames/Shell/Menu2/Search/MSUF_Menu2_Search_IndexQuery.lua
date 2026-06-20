@@ -240,10 +240,10 @@ local function SearchCanonicalWords(raw)
         if canonical then
             words[#words + 1] = canonical
             i = i + 2
-        elseif (word == "ÃÂ¿ÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÂ¾ÃÂµ" or word == "ÃÂ¿ÃÂ»ÃÂ°ÃÂ²ÃÂ½ÃÂ°Ã‘Â") and (nextWord == "ÃÂ·ÃÂ°ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½ÃÂµÃÂ½ÃÂ¸ÃÂµ" or nextWord == "ÃÂ·ÃÂ°ÃÂ»ÃÂ¸ÃÂ²ÃÂºÃÂ°") then
+        elseif (word == "плавное" or word == "плавная") and (nextWord == "заполнение" or nextWord == "заливка") then
             words[#words + 1] = "smoothfill"
             i = i + 2
-        elseif (word == "Ã«Â¶â‚¬Ã«â€œÅ“Ã«Å¸Â¬Ã¬Å¡Â´" and nextWord == "Ã¬Â±â€žÃ¬Å¡Â°ÃªÂ¸Â°") or (word == "Ã«Â§â€°Ã«Å’â‚¬" and nextWord == "Ã¬â€¢Â Ã«â€¹Ë†Ã«Â©â€Ã¬ÂÂ´Ã¬â€¦Ëœ") then
+        elseif (word == "부드러운" and nextWord == "채우기") or (word == "막대" and nextWord == "애니메이션") then
             words[#words + 1] = "smoothfill"
             i = i + 2
         elseif word == "focus" and nextWord == "target" then
@@ -439,7 +439,7 @@ local function SearchLooksLikeSupportQuestion(query)
     return false
 end
 
-local SEARCH_CONTROL_QUERY_TERMS = "toggle checkbox switch enable disable enabled disabled show hide dropdown select choose slider adjust increase decrease color colour swatch input field textfield editbox aktivier deaktivier einschalt ausschalt anzeigen ausblenden auswahl auswaehlen dropdown regler schieberegler aument reducir ajustar seleccionar choisir activer desactiver selezionare attivare disattivare ativar desativar ÃÂ²Ã‘â€¹ÃÂ±Ã‘â‚¬ÃÂ°Ã‘â€šÃ‘Å’ ÃÂ²ÃÂºÃÂ»Ã‘Å½Ã‘â€¡ÃÂ¸Ã‘â€šÃ‘Å’ ÃÂ¾Ã‘â€šÃÂºÃÂ»Ã‘Å½Ã‘â€¡ÃÂ¸Ã‘â€šÃ‘Å’ Ã¬â€žÂ¤Ã¬Â â€¢ Ã¬â€žÂ Ã­Æ’Â Ã¬â€šÂ¬Ã¬Å¡Â© Ã«Â¹â€žÃ­â„¢Å“Ã¬â€žÂ± Ã­â„¢Å“Ã¬â€žÂ± Ã¤Â¸â€¹Ã¦â€¹â€° Ã©â‚¬â€°Ã¦â€¹Â© Ã¥â€¢Å¸Ã§â€Â¨ Ã¥ÂÅ“Ã§â€Â¨ Ã©ÂÂ¸Ã¦â€œâ€¡"
+local SEARCH_CONTROL_QUERY_TERMS = "toggle checkbox switch enable disable enabled disabled show hide dropdown select choose slider adjust increase decrease color colour swatch input field textfield editbox aktivier deaktivier einschalt ausschalt anzeigen ausblenden auswahl auswaehlen dropdown regler schieberegler aument reducir ajustar seleccionar choisir activer desactiver selezionare attivare disattivare ativar desativar выбрать включить отключить 설정 선택 사용 비활성 활성 下拉 选择 启用 停用 選擇 啟用 停用"
 
 local function SearchLooksLikeControlQuestion(query)
     local normalized = NormalizeSearchText(query)
@@ -1096,7 +1096,6 @@ end
 local function StartSearchBackgroundIndex()
     if SEARCH_STATE.indexing then return end
     if SearchCombatLocked() then return end
-    if not (_G.C_Timer and _G.C_Timer.After) then return end
     if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
     if not M.scrollChild then return end
 
@@ -1364,11 +1363,7 @@ local function ScheduleSearchInputQuery(searchBox, query)
         RunSearchInputQuery(query, true)
     end
 
-    if _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, RunLatest)
-    else
-        RunLatest()
-    end
+    _G.C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, RunLatest)
 end
 
 local function OpenSearchResults(query)

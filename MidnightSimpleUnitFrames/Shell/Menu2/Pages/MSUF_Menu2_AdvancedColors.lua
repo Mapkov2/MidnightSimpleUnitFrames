@@ -21,7 +21,7 @@ local ColorValueAt
 local function FlushColorApply()
     colorApplyQueued = false
     local api = MSUF and MSUF._colorsAPI
-    if api and type(api.PushVisualUpdates) == "function" then pcall(api.PushVisualUpdates) end
+    if api and type(api.PushVisualUpdates) == "function" then api.PushVisualUpdates() end
     M.RequestGeneralApply("MSUF2_COLORS", { preview = true, applyAll = false })
     CallGlobal("MSUF_RefreshAllFrames")
     CallGlobal("MSUF_RefreshAllIdentityColors")
@@ -29,23 +29,21 @@ local function FlushColorApply()
     CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
     M.CallIf(M.ApplyGameplay)
     local gf = MSUF and MSUF.GF
-    if gf and type(gf.RefreshVisuals) == "function" then pcall(gf.RefreshVisuals) end
+    if gf and type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals() end
 end
 local function ApplyColors()
     if colorApplyQueued then return end
     colorApplyQueued = true
     if type(_G.MSUF_ScheduleOnce) == "function" then
         _G.MSUF_ScheduleOnce("MSUF2_COLORS_APPLY", FlushColorApply)
-    elseif _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, FlushColorApply)
     else
-        FlushColorApply()
+        _G.C_Timer.After(0, FlushColorApply)
     end
 end
 local function ApplyCastbarColors()
     ApplyColors()
-    if MSUF and type(MSUF.MSUF_UpdateCastbarVisuals) == "function" then pcall(MSUF.MSUF_UpdateCastbarVisuals) end
-    if MSUF and type(MSUF.MSUF_UpdateCastbarTextures_Immediate) == "function" then pcall(MSUF.MSUF_UpdateCastbarTextures_Immediate) end
+    if MSUF and type(MSUF.MSUF_UpdateCastbarVisuals) == "function" then MSUF.MSUF_UpdateCastbarVisuals() end
+    if MSUF and type(MSUF.MSUF_UpdateCastbarTextures_Immediate) == "function" then MSUF.MSUF_UpdateCastbarTextures_Immediate() end
 end
 local function ApplyGameplayColors()
     ApplyColors()
@@ -56,7 +54,8 @@ local function ApplyAuraColors()
     ApplyColors()
     CallGlobal("MSUF_GF_InvalidateCooldownTextCurve")
     CallGlobal("MSUF_GF_ForceCooldownTextRecolor")
-    CallGlobal("MSUF_Auras3_RefreshAll")
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
     CallGlobal("MSUF_GF_ForceAuraTextColorRefresh")
 end
 local function ApplyClassPowerColors()
@@ -99,16 +98,16 @@ end
 local function ApiCall(name, ...)
     local fn = ColorAPI()[name]
     if type(fn) == "function" then
-        local ok = pcall(fn, ...)
-        if ok then return true end
+        fn(...)
+        return true
     end
     return false
 end
 local function ApiValue(name, fallback, ...)
     local fn = ColorAPI()[name]
     if type(fn) == "function" then
-        local ok, value = pcall(fn, ...)
-        if ok and value ~= nil then return value end
+        local value = fn(...)
+        if value ~= nil then return value end
     end
     if type(fallback) == "function" then return fallback() end
     return fallback
@@ -116,8 +115,8 @@ end
 local function ApiRGB(name, dr, dg, db, ...)
     local fn = ColorAPI()[name]
     if type(fn) == "function" then
-        local ok, r, g, b = pcall(fn, ...)
-        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
+        local r, g, b = fn(...)
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
     end
     return dr, dg, db
 end

@@ -362,11 +362,9 @@ local function BuildNavRail(parent)
         local intro = EnsureSearchIntro()
         intro:Show()
         MarkSearchIntroSeen()
-        if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(10, function()
-                if intro and intro.Hide then intro:Hide() end
-            end)
-        end
+        _G.C_Timer.After(10, function()
+            if intro and intro.Hide then intro:Hide() end
+        end)
     end
     M.HideNavSearchIntro = HideSearchIntro
     M.ShowNavSearchIntro = ShowSearchIntro

@@ -15,7 +15,10 @@ local T = M.Theme
 local VTP = M.ValueTextPairs
 local function Call(name, ...)
     local fn = _G[name]
-    if type(fn) == "function" then return pcall(fn, ...) end
+    if type(fn) == "function" then
+        fn(...)
+        return true
+    end
     return false
 end
 local function DB()
@@ -521,8 +524,8 @@ local function ApplyFonts(reason)
     Call("MSUF_RefreshAllFrames")
     local gf = MSUF and MSUF.GF
     if gf then
-        if type(gf.RefreshFonts) == "function" then pcall(gf.RefreshFonts) end
-        if type(gf.MarkAllDirty) == "function" then pcall(gf.MarkAllDirty, (gf.DIRTY_FONT or 4) + (gf.DIRTY_LAYOUT or 32)) end
+        if type(gf.RefreshFonts) == "function" then gf.RefreshFonts() end
+        if type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty((gf.DIRTY_FONT or 4) + (gf.DIRTY_LAYOUT or 32)) end
     end
 end
 function ApplyBars(reason)
@@ -534,8 +537,8 @@ function ApplyBars(reason)
     Call("MSUF_RefreshAllFrames")
     local gf = MSUF and MSUF.GF
     if gf then
-        if type(gf.RefreshVisuals) == "function" then pcall(gf.RefreshVisuals) end
-        if type(gf.MarkAllDirty) == "function" then pcall(gf.MarkAllDirty, (gf.DIRTY_VISUAL or 2) + (gf.DIRTY_LAYOUT or 32)) end
+        if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals() end
+        if type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty((gf.DIRTY_VISUAL or 2) + (gf.DIRTY_LAYOUT or 32)) end
     end
 end
 local function ApplyCastbars(reason)

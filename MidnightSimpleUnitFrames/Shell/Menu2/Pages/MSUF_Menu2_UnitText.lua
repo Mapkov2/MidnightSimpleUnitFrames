@@ -32,20 +32,18 @@ local function BuildText(ctx, builder, unit)
         local req = _G.MSUF_EM2_MenuFocusRequest
         if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit and (req.component == "name" or req.component == "hp" or req.component == "power") then
             ExportPublic("MSUF_EM2_MenuFocusSection", sec)
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    if _G.MSUF_EM2_MenuFocusRequest ~= req or req.consumed == true then return end
-                    local entry = sec and sec._msuf2CollapsibleEntry
-                    local outer = entry and entry.outer
-                    local scroll = M.scrollFrame
-                    local child = M.scrollChild
-                    if not (outer and scroll and child and outer.GetTop and child.GetTop and scroll.SetVerticalScroll) then return end
-                    local childTop = child:GetTop()
-                    local outerTop = outer:GetTop()
-                    if not (childTop and outerTop) then return end
-                    scroll:SetVerticalScroll(max(0, floor((childTop - outerTop) + 0.5) - 12))
-                end)
-            end
+            C_Timer.After(0, function()
+                if _G.MSUF_EM2_MenuFocusRequest ~= req or req.consumed == true then return end
+                local entry = sec and sec._msuf2CollapsibleEntry
+                local outer = entry and entry.outer
+                local scroll = M.scrollFrame
+                local child = M.scrollChild
+                if not (outer and scroll and child and outer.GetTop and child.GetTop and scroll.SetVerticalScroll) then return end
+                local childTop = child:GetTop()
+                local outerTop = outer:GetTop()
+                if not (childTop and outerTop) then return end
+                scroll:SetVerticalScroll(max(0, floor((childTop - outerTop) + 0.5) - 12))
+            end)
         end
     end
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
@@ -537,6 +535,8 @@ end
 if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "text",
+        title = "Text",
+        height = 620,
         placement = "after_auras",
         order = 10,
         build = BuildText,

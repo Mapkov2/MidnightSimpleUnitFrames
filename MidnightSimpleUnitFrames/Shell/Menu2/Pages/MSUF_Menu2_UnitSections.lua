@@ -261,7 +261,7 @@ local function BuildPreview(ctx, builder, unit)
             initialPreviewQueued = nil
             return
         end
-        if not box and not initialPreviewQueued and _G.C_Timer and _G.C_Timer.After then
+        if not box and not initialPreviewQueued then
             initialPreviewQueued = true
             previewQueueSerial = previewQueueSerial + 1
             local serial = previewQueueSerial
@@ -329,11 +329,7 @@ local function BuildTopActions(ctx, builder, unit, label)
         local wasActive = IsEditModeActive()
         ToggleEditMode(unit)
         if M.ShowStatusFeedback then M.ShowStatusFeedback(wasActive and M.Tr("Edit mode off") or M.Tr("Edit mode on"), "info", 1.2) end
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, RefreshEditButton)
-        else
-            RefreshEditButton()
-        end
+        C_Timer.After(0, RefreshEditButton)
     end)
     M.TrackRefresh(ctx, RefreshEditButton)
     local function DefaultScopes()
@@ -716,6 +712,8 @@ local function BuildStatus(ctx, builder, unit)
         if UP.BuildSectionLazy then
             return UP.BuildSectionLazy(ctx, builder, unit, {
                 id = "status_icons",
+                title = "Status icons",
+                height = 646,
                 build = function(lazyCtx, lazyBuilder, lazyUnit)
                     return fn(lazyCtx, lazyBuilder, lazyUnit)
                 end,
@@ -790,6 +788,10 @@ end
 local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn, opts)
     if UP.BuildSectionLazy and not (opts and opts.lazy == false) then
         return UP.BuildSectionLazy(ctx, builder, unit, {
+            sectionId = opts and opts.sectionId,
+            title = opts and opts.title,
+            height = opts and opts.height,
+            defaultOpen = opts and opts.defaultOpen,
             prepareShell = opts and opts.prepareShell,
             build = function(lazyCtx, lazyBuilder, lazyUnit)
                 return buildFn(lazyCtx, lazyBuilder, lazyUnit)
@@ -822,6 +824,9 @@ local function BuildUnitPage(info)
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, function(lazyCtx, lazyBuilder, lazyUnit)
             return BuildBasics(lazyCtx, lazyBuilder, lazyUnit, info.label)
         end, {
+            sectionId = "frame_basics",
+            title = "Frame Basics",
+            height = 104,
             prepareShell = function(lazyCtx, sec, lazyUnit)
                 local refresh = AttachBasicsHeaderStatus(sec, lazyUnit)
                 if refresh then
@@ -838,6 +843,8 @@ local function BuildUnitPage(info)
             if UP.BuildSectionLazy then
                 UP.BuildSectionLazy(ctx, builder, info.unit, {
                     id = "auras3",
+                    title = "Auras",
+                    height = 622,
                     build = function(lazyCtx, lazyBuilder, lazyUnit)
                         return M.BuildAuras3UnitSection(lazyCtx, lazyBuilder, lazyUnit)
                     end,
@@ -847,13 +854,15 @@ local function BuildUnitPage(info)
             end
         end
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_auras") end
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildInlineText)
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildInlineText, { sectionId = "inline_text", title = "Inline Text", height = 214 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_inline_text") end
         BuildStatus(ctx, builder, info.unit)
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout)
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions)
+        if info.unit == "boss" then
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 152 })
+        end
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 148 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout)
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchoring", height = 220 })
         M.TrackRefresh(ctx, function()
             ApplyUnitFrameEnabledGate(ctx, info.unit)
         end)

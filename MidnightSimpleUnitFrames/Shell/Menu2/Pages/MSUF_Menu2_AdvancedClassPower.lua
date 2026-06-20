@@ -505,13 +505,9 @@ local function QuickEnsurePopups()
         button1 = QuickTr("Setup Now"), button2 = QuickTr("Not Now"), hideOnEscape = true, showAlert = true,
         OnAccept = function()
             QuickMarkOffered()
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0.05, function()
-                    if _G.MSUF2_ClassPowerQuickSetup then _G.MSUF2_ClassPowerQuickSetup() end
-                end)
-            elseif _G.MSUF2_ClassPowerQuickSetup then
-                _G.MSUF2_ClassPowerQuickSetup()
-            end
+            C_Timer.After(0.05, function()
+                if _G.MSUF2_ClassPowerQuickSetup then _G.MSUF2_ClassPowerQuickSetup() end
+            end)
         end,
         OnCancel = QuickMarkOffered,
     })
@@ -547,13 +543,9 @@ local function MaybeOfferQuickSetup()
     if quickSetupFirstRunChecked or QuickWasOffered() then return end
     quickSetupFirstRunChecked = true
     QuickEnsurePopups()
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0.15, function()
-            if not QuickWasOffered() and StaticPopup_Show then StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_OFFER") end
-        end)
-    elseif StaticPopup_Show then
-        StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_OFFER")
-    end
+    C_Timer.After(0.15, function()
+        if not QuickWasOffered() and StaticPopup_Show then StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_OFFER") end
+    end)
 end
 local function BuildInlineClassPowerPreview(ctx, b)
     -- ClassPower preview was split into Preview/MSUF_Menu2_ClassPowerPreview.lua.

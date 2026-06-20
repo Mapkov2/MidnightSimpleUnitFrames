@@ -341,6 +341,7 @@ do
     pending = nil
     if driver then
       driver:SetScript("OnUpdate", nil)
+      driver:SetOnUpdateMode("Disabled")
     end
     if _G.MSUF_RefreshAllUnitAlphas then
       return _G.MSUF_RefreshAllUnitAlphas()
@@ -357,6 +358,7 @@ do
       return false
     end
     driver = driver or create("Frame")
+    driver:SetOnUpdateMode("RunOnce")
     driver:SetScript("OnUpdate", FlushOnUpdate)
     return true
   end

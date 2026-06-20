@@ -51,6 +51,8 @@ end
 if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "transparency",
+        title = "Transparency",
+        height = 188,
         placement = "after_load_conditions",
         order = 20,
         build = BuildAlpha,

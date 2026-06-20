@@ -338,11 +338,9 @@ function Grid.Show()
     bgTex:SetColorTexture(th.bgR, th.bgG, th.bgB, GetBgAlpha())
     RebuildLines()
     gridFrame:Show()
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, function()
-            if gridFrame and gridFrame:IsShown() then RebuildLines() end
-        end)
-    end
+    C_Timer.After(0, function()
+        if gridFrame and gridFrame:IsShown() then RebuildLines() end
+    end)
 end
 
 function Grid.Hide()
@@ -436,6 +434,7 @@ local function StartGuideFade()
         return
     end
     guideFadeFrame = CreateFrame("Frame", "MSUF_EM2_SnapGuideFade", UIParent)
+    guideFadeFrame:SetOnUpdateMode("RunWhenVisible")
     guideFadeFrame:SetScript("OnUpdate", function(self, elapsed)
         local alive = false
         for i = #fadingGuides, 1, -1 do
@@ -695,10 +694,8 @@ function Anchors.PropagateMove(parentKey, dx, dy)
                     local fS = frame:GetEffectiveScale()
                     local uiS = UIParent:GetEffectiveScale()
                     local ratio = uiS / fS
-                    pcall(function()
-                        frame:ClearAllPoints()
-                        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l * ratio, b * ratio)
-                    end)
+                    frame:ClearAllPoints()
+                    frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l * ratio, b * ratio)
                 end
 
                 --- Save to DB
@@ -876,10 +873,11 @@ local function NudgeTarget(dx, dy)
                         lay[ky] = floor(((tonumber(cy) or 0) + ndy) + 0.5)
                     end
                 end
-                if type(_G.MSUF_Auras3_RefreshUnit) == "function" then
-                    for _, k in ipairs(applyKeys) do _G.MSUF_Auras3_RefreshUnit(k) end
-                elseif _G.MSUF_Auras3_RefreshAll then
-                    _G.MSUF_Auras3_RefreshAll()
+                local a3 = MSUF and MSUF.MSUF_Auras3
+                if a3 and type(a3.RefreshUnit) == "function" then
+                    for _, k in ipairs(applyKeys) do a3.RefreshUnit(k) end
+                elseif a3 and type(a3.RefreshAll) == "function" then
+                    a3.RefreshAll()
                 end
                 if auraPopupOpen and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
                 local syncFn = _G.MSUF_SyncAuras3PositionPopup
@@ -1510,16 +1508,11 @@ function Ticker.EndDrag()
                     menu.SelectPage("home")
                 end
             end
-            if C_Timer and C_Timer.After then C_Timer.After(0.08, RefreshHomeDashboard) else RefreshHomeDashboard() end
+            C_Timer.After(0.08, RefreshHomeDashboard)
         end
         if d.isGroupFrame and d.conf then
             ApplyGroupDragPosition(d, cx, cy)
             if d.bar and not IsConfigCombatLocked() then
-                pcall(function()
-                    d.bar._msufDragActive = false
-                    if d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
-                    if d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
-                end)
                 d.bar._msufDragActive = false
                 if d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
                 if d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
@@ -1574,6 +1567,7 @@ function Ticker.Start()
         tickerFrame:Hide()
     end
     idleSyncAcc = 0; activeDrag = nil
+    tickerFrame:SetOnUpdateMode("RunWhenVisible")
     tickerFrame:SetScript("OnUpdate", OnUpdate)
     tickerFrame:Show()
 end
@@ -1582,6 +1576,7 @@ function Ticker.Stop()
     activeDrag = nil
     if tickerFrame then
         tickerFrame:SetScript("OnUpdate", nil)
+        tickerFrame:SetOnUpdateMode("Disabled")
         tickerFrame:Hide()
     end
 end

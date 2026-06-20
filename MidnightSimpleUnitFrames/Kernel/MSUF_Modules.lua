@@ -18,13 +18,6 @@ MSUF.MSUF_ModulesByKey = MSUF.MSUF_ModulesByKey or {}
 MSUF.__MSUF_ModulesInitialized = MSUF.__MSUF_ModulesInitialized or false
 MSUF.__MSUF_ModulesApplied = MSUF.__MSUF_ModulesApplied or false
 
---- Module hooks are optional by contract. SafeCall keeps lifecycle fanout simple
---- without forcing every module table to provide every method.
-local function SafeCall(fn, ...)
-    if type(fn) ~= "function" then return false end
-    return true, fn(...)
-end
-
 local function SortModulesIfNeeded()
     --- Only sort once, unless a late registration happens after init.
     if MSUF.__MSUF_ModulesSorted then return end
@@ -74,7 +67,9 @@ function MSUF.MSUF_RegisterModule(key, module)
     if MSUF.__MSUF_ModulesInitialized and not module.__msufInited then
         SortModulesIfNeeded()
         module.__msufInited = true
-        SafeCall(module.Init, module)
+        if type(module.Init) == "function" then
+            module:Init()
+        end
     end
 
     --- If core already applied desired states, apply this module immediately too.
@@ -90,8 +85,7 @@ MSUF.RegisterModule = MSUF.MSUF_RegisterModule
 local function GetDesiredEnabled(module)
     --- Modules may provide IsEnabled() which returns the desired state.
     if type(module.IsEnabled) == "function" then
-        local ok, val = SafeCall(module.IsEnabled, module)
-        if ok then return not not val end
+        return not not module:IsEnabled()
     end
 
     --- Fallback: if the module sets module.enabled = true/false, respect it.
@@ -111,7 +105,9 @@ function MSUF.MSUF_InitModules()
         local m = MSUF.MSUF_Modules[i]
         if m and not m.__msufInited then
             m.__msufInited = true
-            SafeCall(m.Init, m)
+            if type(m.Init) == "function" then
+                m:Init()
+            end
         end
     end
 
@@ -134,10 +130,14 @@ function MSUF.MSUF_ApplyModules()
 
             if desired and not current then
                 m.__msufEnabled = true
-                SafeCall(m.Enable, m)
+                if type(m.Enable) == "function" then
+                    m:Enable()
+                end
             elseif (not desired) and current then
                 m.__msufEnabled = false
-                SafeCall(m.Disable, m)
+                if type(m.Disable) == "function" then
+                    m:Disable()
+                end
             end
         end
     end
@@ -165,7 +165,7 @@ function MSUF.MSUF_RefreshModuleSettings(source)
         if m and m.__msufEnabled and not m.__msufDebugOff then
             local fn = m.RefreshSettings
             if type(fn) == "function" then
-                SafeCall(fn, m, source)
+                fn(m, source)
             end
         end
     end
@@ -180,7 +180,7 @@ function MSUF.MSUF_ShutdownModules(reason)
         if m then
             local fn = m.Shutdown
             if type(fn) == "function" then
-                SafeCall(fn, m, reason)
+                fn(m, reason)
             end
             m.__msufEnabled = false
         end
@@ -205,17 +205,17 @@ function MSUF.MSUF_ToggleModule(key)
         --- Re-enable
         m.__msufDebugOff = nil
         if m.__msufEnabled and type(m.Enable) == "function" then
-            SafeCall(m.Enable, m)
+            m:Enable()
         end
         if m.__msufEnabled and type(m.RefreshSettings) == "function" then
-            SafeCall(m.RefreshSettings, m, "debug_toggle")
+            m:RefreshSettings("debug_toggle")
         end
         return true
     else
         --- Disable
         m.__msufDebugOff = true
         if m.__msufEnabled and type(m.Disable) == "function" then
-            SafeCall(m.Disable, m)
+            m:Disable()
         end
         return false
     end

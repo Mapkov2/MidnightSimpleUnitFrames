@@ -25,9 +25,21 @@ local EnumValueForText = P.EnumValueForText
 local CurrentPageUnit = P.CurrentPageUnit
 local GroupScopesOrCurrentPage = P.GroupScopesOrCurrentPage
 
+local function DisplayValue(setting, value)
+    if P and type(P.ValueDisplay) == "function" then
+        local ok, label = pcall(P.ValueDisplay, setting, value)
+        if ok and label ~= nil then return tostring(label) end
+    end
+    if value == "NONE" then return "none" end
+    if setting and (setting.type == "enum" or type(setting.values) == "table") and type(A.HumanizeDisplayKey) == "function" then
+        return A.HumanizeDisplayKey(value)
+    end
+    return tostring(value)
+end
+
 -- Text geometry parser helpers.
 -- These identify text tabs, anchor slots, and font-size/offset intent before the broader
--- geometry parser maps the result to registered settings.
+-- geometry parser maps the result to settings.
 local function TextSelectorTab(text)
     if ContainsAny(text, { "advanced text tab", "advanced text", "text advanced", "text layers", "advanced tab" }) then return "advanced" end
     if ContainsAny(text, { "power text tab", "power text", "mana text", "power number", "power numbers", "mana number", "mana numbers", "power tab", "mana tab", "power", "mana" }) then return "power" end
@@ -161,7 +173,7 @@ function A._ParseTextFontSizeShortcut(text)
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Multiple matching group text font-size settings",
+            label = "Multiple matching group text font-size options",
         }
     end
     return {
@@ -170,8 +182,8 @@ function A._ParseTextFontSizeShortcut(text)
         label = allText and "Set all text font sizes" or "Set text font size",
         bulkSafe = allText and #changes > 1 or nil,
         summary = allText
-            and "Changes only the registered Name, HP, and Power text font-size sliders for the selected unit or group scope."
-            or "Changes the registered Name/HP/Power text font-size slider for the selected unit or group scope.",
+            and "Changes only the Name, HP, and Power text font-size sliders for the selected unit or group scope."
+            or "Changes the Name/HP/Power text font-size slider for the selected unit or group scope.",
     }
 end
 
@@ -224,14 +236,14 @@ function A._ParseTextLayerShortcut(text)
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Multiple matching group text-layer settings",
+            label = "Multiple matching group text-layer options",
         }
     end
     return {
         kind = "changes",
         changes = changes,
         label = "Set text layer",
-        summary = "Changes the registered Name/HP/Power text-layer slider for the selected unit or group scope.",
+        summary = "Changes the Name/HP/Power text layer for the selected unit or group.",
     }
 end
 
@@ -518,7 +530,7 @@ function A._ParseNameTextAnchorShortcut(text)
                 setting = showSetting,
                 value = true,
                 valueLabel = "enabled",
-                label = tostring(showSetting.label or "Name") .. " -> enabled",
+                label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(showSetting, "enabled", "Name") or (tostring(showSetting.label or "Name") .. ": enabled"),
             }
         end
         local setting = Registry and Registry:GetSetting(settingKey)
@@ -526,7 +538,7 @@ function A._ParseNameTextAnchorShortcut(text)
             changes[#changes + 1] = {
                 setting = setting,
                 value = value,
-                valueLabel = value == "CENTER" and "center" or (value == "LEFT" and "left" or "right"),
+                valueLabel = DisplayValue(setting, value),
             }
         end
     end
@@ -545,15 +557,15 @@ function A._ParseNameTextAnchorShortcut(text)
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Multiple matching name text anchor settings",
-            summary = "The command matched more than one Name anchor dropdown, so the Assistant is asking which real setting to change.",
+            label = "Multiple matching name text anchor options",
+            summary = "The request matched more than one Name anchor option, so the Assistant is asking which option to change.",
         }
     end
     return {
         kind = "changes",
         changes = changes,
         label = "Set name text anchor",
-        summary = "Changes the registered Name anchor dropdown for the selected unit or group scope.",
+        summary = "Changes the Name anchor for the selected unit or group.",
     }
 end
 
@@ -626,7 +638,7 @@ function A._ParseNameTextVerticalPlacementShortcut(text)
         kind = "changes",
         changes = changes,
         label = "Move name text vertically",
-        summary = "Moves Name text above or below the frame through the registered Name Y Offset slider.",
+        summary = "Moves Name text above or below the frame.",
     }
 end
 
@@ -765,7 +777,7 @@ function A._AddTextSlotVisibilityChange(out, frameType, unitOrScope, tab)
         value = true,
         valueLabel = "on",
         textArea = tab,
-        label = tostring(setting.label or "Text visibility") .. " -> on",
+        label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, "on", "Text visibility") or (tostring(setting.label or "Text visibility") .. ": on"),
     }
 end
 
@@ -807,13 +819,14 @@ function A._ParseTextSlotValueMoveShortcut(text)
         local value, invalid = A._TextSlotDropdownValueForText(dst, text)
         if value == nil then return invalid end
 
+        local valueLabel = DisplayValue(dst, value)
         out[#out + 1] = {
             setting = dst,
             value = value,
             textArea = tab,
             textSlot = A._TextSlotLower(slot),
-            label = tostring(dst.label or "Text slot") .. " -> " .. tostring(value),
-            valueLabel = value,
+            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(dst, valueLabel, "Text slot") or (tostring(dst.label or "Text slot") .. ": " .. valueLabel),
+            valueLabel = valueLabel,
         }
 
         if value ~= "NONE" then
@@ -821,13 +834,14 @@ function A._ParseTextSlotValueMoveShortcut(text)
                 if sourceSlot ~= slot then
                     local source = TextSlotSetting(frameType, unitOrScope, tab, sourceSlot)
                     if source and ReadSettingValue(source) == value then
+                        local sourceValueLabel = DisplayValue(source, "NONE")
                         out[#out + 1] = {
                             setting = source,
                             value = "NONE",
                             textArea = tab,
                             textSlot = A._TextSlotLower(sourceSlot),
-                            label = tostring(source.label or "Text slot") .. " -> NONE",
-                            valueLabel = "NONE",
+                            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(source, sourceValueLabel, "Text slot") or (tostring(source.label or "Text slot") .. ": " .. sourceValueLabel),
+                            valueLabel = sourceValueLabel,
                         }
                     end
                 end
@@ -848,7 +862,7 @@ function A._ParseTextSlotValueMoveShortcut(text)
     if #changes == 0 and invalidValue then
         return {
             kind = "unknown",
-            text = "That text-slot value is not available for the selected MSUF dropdown.",
+            text = "That value is not available for the selected text option.",
             status = "failed",
         }
     end
@@ -858,7 +872,7 @@ function A._ParseTextSlotValueMoveShortcut(text)
             kind = "ambiguous",
             choices = changes,
             label = "Multiple matching text-slot move targets",
-            summary = "The command matched more than one text-slot target, so the Assistant is asking which real slot to change.",
+            summary = "The request matched more than one text-slot target, so the Assistant is asking which real slot to change.",
         }
     end
     return {
@@ -961,13 +975,14 @@ function A._ParseTextSlotDropdownShortcut(text)
         if not setting then return nil end
         local value, invalid = A._TextSlotDropdownValueForText(setting, text)
         if value ~= nil then
+            local valueLabel = DisplayValue(setting, value)
             out[#out + 1] = {
                 setting = setting,
                 value = value,
                 textArea = tab,
                 textSlot = A._TextSlotLower(slotName),
-                label = tostring(setting.label or "Text slot") .. " -> " .. tostring(value),
-                valueLabel = value,
+                label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, valueLabel, "Text slot") or (tostring(setting.label or "Text slot") .. ": " .. valueLabel),
+                valueLabel = valueLabel,
             }
             if shouldShowTextArea and value ~= "NONE" then
                 pendingVisibility[#pendingVisibility + 1] = { frameType = frameType, unitOrScope = unitOrScope }
@@ -995,7 +1010,7 @@ function A._ParseTextSlotDropdownShortcut(text)
     if #changes == 0 and invalidValue then
         return {
             kind = "unknown",
-            text = "That text-slot value is not available for the selected MSUF dropdown.",
+            text = "That value is not available for the selected text option.",
             status = "failed",
         }
     end
@@ -1004,8 +1019,8 @@ function A._ParseTextSlotDropdownShortcut(text)
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Multiple matching text-slot dropdown settings",
-            summary = "The command did not identify one concrete text slot, so the Assistant is asking which real slot to change.",
+            label = "Multiple matching text-slot options",
+            summary = "The request did not identify one concrete text slot, so the Assistant is asking which real slot to change.",
         }
     end
     if #pendingVisibility > 0 then
@@ -1027,7 +1042,7 @@ function A._ParseTextSlotDropdownShortcut(text)
         kind = "changes",
         changes = changes,
         label = "Set text slot content",
-        summary = "Changes the registered HP/Power left/center/right text-slot dropdown for the selected unit or group scope.",
+        summary = "Changes the HP/Power left/center/right text slot for the selected unit or group.",
         compoundComplete = combinedTextValue or nil,
     }
 end
@@ -1104,14 +1119,14 @@ function A._ParseTextSlotOffsetShortcut(text)
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Multiple matching text-slot offset settings",
+            label = "Multiple matching text-slot offset options",
         }
     end
     return {
         kind = "changes",
         changes = changes,
         label = "Set text slot offset",
-        summary = "Changes the registered HP/Power left/center/right text-slot offset slider for the selected unit or group scope.",
+        summary = "Changes the HP/Power left/center/right text-slot offset for the selected unit or group.",
     }
 end
 

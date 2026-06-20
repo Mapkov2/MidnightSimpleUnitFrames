@@ -228,8 +228,8 @@ builders.PLAYER_HP = function(E)
         value = tonumber(value) or 0
         local abbrev = _G.AbbreviateShortNumber or _G.AbbreviateLargeNumbers
         if type(abbrev) == "function" then
-            local ok, text = pcall(abbrev, value)
-            if ok and text ~= nil then return text end
+            local text = abbrev(value)
+            if text ~= nil then return text end
         end
         local absValue = value < 0 and -value or value
         local sign = value < 0 and "-" or ""
@@ -467,12 +467,9 @@ builders.PLAYER_HP = function(E)
         local stamp = tostring(fontPath) .. ":" .. tostring(size) .. ":" .. tostring(fontFlags)
         if PHP._fontStamp == stamp then return end
         PHP._fontStamp = stamp
-        local setFontSafe = _G.MSUF_SetFontSafe
         for _, fs in pairs({ PHP.left, PHP.center, PHP.right }) do
-            if type(setFontSafe) == "function" then
-                setFontSafe(fs, fontPath, size, fontFlags)
-            elseif fs.SetFont then
-                pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+            if fs.SetFont then
+                fs:SetFont(fontPath, size, fontFlags)
             end
             fs._phpTextR, fs._phpTextG, fs._phpTextB, fs._phpTextA = nil, nil, nil, nil
             if fs.SetTextColor then fs:SetTextColor(1, 1, 1, 1) end

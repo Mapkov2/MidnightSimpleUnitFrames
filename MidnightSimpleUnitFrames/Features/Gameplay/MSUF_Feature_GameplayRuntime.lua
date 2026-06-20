@@ -54,7 +54,6 @@ local function MSUF_IsSubRogueCached()
     return GameplayHelpers.IsSubRogueCached and GameplayHelpers.IsSubRogueCached() or false
 end
 
-local C_Timer_After = C_Timer and C_Timer.After
 local ScheduleOnce = _G.MSUF_ScheduleOnce
 local EventBus_Register = _G.MSUF_EventBus_Register
 local EventBus_Unregister = _G.MSUF_EventBus_Unregister
@@ -85,10 +84,8 @@ do
 
         if type(ScheduleOnce) == "function" then
             ScheduleOnce("MSUF_GAMEPLAY_APPLY", _DoGameplayApply)
-        elseif C_Timer_After then
-            C_Timer_After(0, _DoGameplayApply)
         else
-            _DoGameplayApply()
+            C_Timer.After(0, _DoGameplayApply)
         end
     end
 end
@@ -317,19 +314,18 @@ local function TickCombatTimer()
 end
 
 local function _StartCombatTimerTick()
-    if not C_Timer_After then return end
     if combatTimerLoop then return end
     local loop = {}
     loop.step = function()
         if combatTimerLoop ~= loop or MSUF._MSUF_CombatTimerLoopActive ~= loop then return end
         TickCombatTimer()
         if combatTimerLoop == loop and MSUF._MSUF_CombatTimerLoopActive == loop then
-            C_Timer_After(1.0, loop.step)
+            C_Timer.After(1.0, loop.step)
         end
     end
     combatTimerLoop = loop
     MSUF._MSUF_CombatTimerLoopActive = loop
-    C_Timer_After(1.0, loop.step)
+    C_Timer.After(1.0, loop.step)
 end
 
 local function _StopCombatTimerTick()
@@ -358,7 +354,7 @@ local function StopFirstDanceTick()
     firstDanceEndTime = 0
     firstDanceLastText = nil
     firstDanceTickElapsed = 0
-    if danceFrame then danceFrame:SetScript("OnUpdate", nil) end
+    if danceFrame then danceFrame:SetScript("OnUpdate", nil); danceFrame:SetOnUpdateMode("Disabled") end
     ResetFirstDanceDisplay()
 end
 
@@ -447,8 +443,7 @@ local function ClearCombatStateText()
 end
 
 local function ScheduleCombatStateClear(duration)
-    if not C_Timer_After then return end
-    C_Timer_After(duration, function()
+    C_Timer.After(duration, function()
         local g = GetGameplayDB()
         if stateText and g and g.enableCombatStateText then
             ClearCombatStateText()
@@ -582,10 +577,10 @@ do
 
     local function _FD_EnsureMasqueGroup()
         if _fdMasqueGroup then return _fdMasqueGroup end
-        local ok, lib = pcall(LibStub, "Masque", true)
-        if not ok or not lib then return nil end
-        local ok2, grp = pcall(lib.Group, lib, "Midnight Simple Unit Frames", "First Dance")
-        if not ok2 or not grp then return nil end
+        local lib = LibStub("Masque", true)
+        if not lib then return nil end
+        local grp = lib:Group("Midnight Simple Unit Frames", "First Dance")
+        if not grp then return nil end
         _fdMasqueGroup = grp
         return grp
     end
@@ -593,7 +588,7 @@ do
     ApplyFirstDanceMasque = function()
         if not _FD_IsMasqueEnabled() then
             if _fdMasqueRegistered and _fdMasqueGroup then
-                pcall(_fdMasqueGroup.RemoveButton, _fdMasqueGroup, danceFrame)
+                _fdMasqueGroup:RemoveButton(danceFrame)
                 _fdMasqueRegistered = false
             end
             return
@@ -604,18 +599,16 @@ do
 
         if _fdMasqueRegistered then return end
 
-        local ok = pcall(grp.AddButton, grp, danceFrame, { Icon = danceIcon, Cooldown = danceCooldown })
-        if ok then
-            _fdMasqueRegistered = true
-            if grp.ReSkin then pcall(grp.ReSkin, grp) end
-            local base = danceCooldown.GetFrameLevel and danceCooldown:GetFrameLevel() or 0
-            local overlay = CreateFrame("Frame", nil, danceCooldown)
-            overlay:SetAllPoints()
-            overlay:SetFrameLevel(base + 5)
-            danceCDText:SetParent(overlay)
-            danceCDText:ClearAllPoints()
-            danceCDText:SetPoint("CENTER")
-        end
+        grp:AddButton(danceFrame, { Icon = danceIcon, Cooldown = danceCooldown })
+        _fdMasqueRegistered = true
+        if grp.ReSkin then grp:ReSkin() end
+        local base = danceCooldown.GetFrameLevel and danceCooldown:GetFrameLevel() or 0
+        local overlay = CreateFrame("Frame", nil, danceCooldown)
+        overlay:SetAllPoints()
+        overlay:SetFrameLevel(base + 5)
+        danceCDText:SetParent(overlay)
+        danceCDText:ClearAllPoints()
+        danceCDText:SetPoint("CENTER")
     end
     MSUF.MSUF_FirstDance_ApplyMasque = ApplyFirstDanceMasque
 end
@@ -627,17 +620,11 @@ local function ApplyGameplayFont(fs, path, size, flags)
     path = path or GAMEPLAY_FALLBACK_FONT
     size = size or 12
     flags = flags or "OUTLINE"
-    local safeSet = _G.MSUF_SetFontSafe
-    if type(safeSet) == "function" then
-        return safeSet(fs, path, size, flags) == true
-    end
-    local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
-    if ok and applied ~= false then
+    if fs:SetFont(path, size, flags) ~= false then
         return true
     end
     if path ~= GAMEPLAY_FALLBACK_FONT then
-        ok, applied = pcall(fs.SetFont, fs, GAMEPLAY_FALLBACK_FONT, size, flags)
-        return ok and applied ~= false
+        return fs:SetFont(GAMEPLAY_FALLBACK_FONT, size, flags) ~= false
     end
     return false
 end
@@ -725,6 +712,7 @@ StartFirstDanceWindow = function()
 
     danceFrame:Show()
 
+    danceFrame:SetOnUpdateMode("RunWhenVisible")
     danceFrame:SetScript("OnUpdate", function(self, elapsed)
         firstDanceTickElapsed = firstDanceTickElapsed + (elapsed or 0)
         if firstDanceTickElapsed < 0.05 then return end
@@ -959,15 +947,10 @@ local UpdateCrosshairRangeColor
 local function ScheduleCombatCrosshairAnchor()
     if not crosshairFrame or crosshairFrame._msufAnchorPending then return end
     crosshairFrame._msufAnchorPending = true
-    if C_Timer_After then
-        C_Timer_After(0, function()
-            if crosshairFrame then crosshairFrame._msufAnchorPending = nil end
-            AnchorCombatCrosshair()
-        end)
-    else
-        crosshairFrame._msufAnchorPending = nil
+    C_Timer.After(0, function()
+        if crosshairFrame then crosshairFrame._msufAnchorPending = nil end
         AnchorCombatCrosshair()
-    end
+    end)
 end
 
 local function EnsureCombatCrosshair()
@@ -1108,9 +1091,9 @@ local function ApplyCombatTimerAnchor(g)
 
     local want = ValidateCombatTimerAnchor(g.combatTimerAnchor)
     if want ~= "none" and anchor == UIParent then
-        if not combatFrame._msufAnchorRetryPending and C_Timer_After then
+        if not combatFrame._msufAnchorRetryPending then
             combatFrame._msufAnchorRetryPending = true
-            C_Timer_After(0.2, function()
+            C_Timer.After(0.2, function()
                 if combatFrame then
                     combatFrame._msufAnchorRetryPending = nil
                     ApplyCombatTimerAnchor()
@@ -1272,11 +1255,7 @@ RequestCrosshairRangeRefresh = function()
         return
     end
     MSUF._MSUF_CrosshairRangeRefreshPending = true
-    if C_Timer_After then
-        C_Timer_After(0, RunCrosshairRangeRefresh)
-    else
-        RunCrosshairRangeRefresh()
-    end
+    C_Timer.After(0, RunCrosshairRangeRefresh)
 end
 
 UpdateCrosshairRangeColor = function()
@@ -1558,11 +1537,7 @@ do
         if MSUF.MSUF_RequestGameplayApply then MSUF.MSUF_RequestGameplayApply() end
     end
 
-    if C_Timer_After then
-        C_Timer_After(0, AutoApplyOnce)
-    else
-        AutoApplyOnce()
-    end
+    C_Timer.After(0, AutoApplyOnce)
 
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")

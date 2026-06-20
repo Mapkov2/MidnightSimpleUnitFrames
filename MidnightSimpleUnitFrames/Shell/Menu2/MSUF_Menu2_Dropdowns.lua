@@ -341,6 +341,7 @@ local function EnsureDropdownFrame()
         if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(true) end
         if dropdownFrame.SetAlpha then dropdownFrame:SetAlpha(1) end
     end)
+    dropdownFrame:SetOnUpdateMode("RunWhenVisible")
     dropdownFrame:SetScript("OnUpdate", function(self, elapsed)
         if not dropdownOwner then return end
         self._msuf2PositionElapsed = (self._msuf2PositionElapsed or 0) + (elapsed or 0)
@@ -399,15 +400,15 @@ local function DropdownItemDisabled(item)
 end
 local function StoreDropdownDefaultFont(fs)
     if not (fs and fs.GetFont) then return end
-    local ok, font, size, flags = pcall(fs.GetFont, fs)
-    if ok and font and size then fs._msuf2DropdownDefaultFont = { font, size, flags or "" } end
+    local font, size, flags = fs:GetFont()
+    if font and size then fs._msuf2DropdownDefaultFont = { font, size, flags or "" } end
 end
 local function RestoreDropdownDefaultFont(fs)
     local d = fs and fs._msuf2DropdownDefaultFont
     if d and fs.SetFont then
-        pcall(fs.SetFont, fs, d[1], d[2], d[3] or "")
+        fs:SetFont(d[1], d[2], d[3] or "")
     elseif fs and fs.SetFontObject then
-        pcall(fs.SetFontObject, fs, GameFontHighlight)
+        fs:SetFontObject(GameFontHighlight)
     end
 end
 local function ApplyDropdownItemFont(fs, item)
@@ -424,19 +425,14 @@ local function ApplyDropdownItemFont(fs, item)
         local getPath = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (MSUF and MSUF.MSUF_GetFontPathForKey)
         if type(getPath) == "function" then fontPath = getPath(fontKey) end
     end
-    local safeSetFont = _G.MSUF_SetFontSafe or (MSUF and MSUF.Util and MSUF.Util.SetFontSafe)
-    if type(safeSetFont) == "function" and type(fontPath) == "string" and fontPath ~= "" then
-        local ok = safeSetFont(fs, fontPath, size, "", fontKey)
-        if ok then return end
-    end
     local fontObject = item.fontObject or item.fontPreviewObject
     if fontObject and fs.SetFontObject then
-        local ok = pcall(fs.SetFontObject, fs, fontObject)
-        if ok then return end
+        fs:SetFontObject(fontObject)
+        return
     end
     if type(fontPath) == "string" and fontPath ~= "" and fs.SetFont then
-        local ok = pcall(fs.SetFont, fs, fontPath, size, "")
-        if ok then return end
+        fs:SetFont(fontPath, size, "")
+        return
     end
     RestoreDropdownDefaultFont(fs)
 end

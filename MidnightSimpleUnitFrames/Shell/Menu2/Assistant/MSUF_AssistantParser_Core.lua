@@ -16,6 +16,10 @@ local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
 
+A.UUFBestEffortConfirmText = A.UUFBestEffortConfirmText or function()
+    return "This is an UnhaltedUnitFrames profile. MSUF can import it as closely as possible. Auras are not imported, and some UUF-only options may not have an MSUF equivalent. Answer with 'yes', 'do it', or 'apply' to import anyway, or 'cancel'."
+end
+
 local function Trim(text)
     text = tostring(text or "")
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
@@ -53,6 +57,13 @@ local function Normalize(text)
     text = text:gsub("\195\182", "oe")
     text = text:gsub("\195\188", "ue")
     text = text:gsub("\195\159", "ss")
+    text = text:gsub("\228", "ae")
+    text = text:gsub("\246", "oe")
+    text = text:gsub("\252", "ue")
+    text = text:gsub("\196", "ae")
+    text = text:gsub("\214", "oe")
+    text = text:gsub("\220", "ue")
+    text = text:gsub("\223", "ss")
     text = text:gsub("seperat", "separat")
     text = text:gsub("delimeter", "delimiter")
     text = text:gsub("heigth", "height")
@@ -98,6 +109,36 @@ local function Normalize(text)
     return CacheNormalize(raw, Trim(text))
 end
 A.Normalize = Normalize
+
+local DISPLAY_COLOR_LABEL_FALLBACKS = {
+    gray = "grey",
+    grau = "grey",
+    violet = "purple",
+    violett = "purple",
+    aqua = "cyan",
+    teal = "turquoise",
+    weiss = "white",
+    schwarz = "black",
+    rot = "red",
+    gruen = "green",
+    blau = "blue",
+    gelb = "yellow",
+    lila = "purple",
+    rosa = "pink",
+    tuerkis = "turquoise",
+}
+
+if type(A.DisplayColorLabel) ~= "function" then
+    function A.DisplayColorLabel(label)
+        label = tostring(label or "")
+        if label == "" then return "" end
+        local normalized = Normalize(label)
+        local data = A.GlobalColorSettingsRegistryData
+        local aliases = type(data) == "table" and data.COLOR_ALIASES or nil
+        if type(aliases) == "table" and aliases[normalized] then return aliases[normalized] end
+        return DISPLAY_COLOR_LABEL_FALLBACKS[normalized] or label
+    end
+end
 
 local EXACT_ONLY_FUZZY_WORDS = {
     ["on"] = true,
@@ -277,8 +318,17 @@ local CLASS_POWER_TERMS = {
     "class power", "class resource", "class resources", "class bar", "resource bar",
     "combo point", "combo points", "holy power", "soul shard", "soul shards",
     "chi", "arcane charge", "arcane charges", "rune", "runes",
+    "klassenressource", "klassenressourcen", "klassenleiste", "klassen ressourcen",
+    "ressourcenleiste", "ressourcen leiste", "kombopunkt", "kombopunkte",
+    "heilige kraft", "seelensplitter", "rune", "runen",
 }
-local GAMEPLAY_TERMS = { "gameplay", "combat timer", "combat state", "combat enter", "combat leave", "totem frame", "totemframe", "blizzard totem", "statue frame", "first dance", "combat crosshair", "crosshair", "fadenkreuz", "melee range spell" }
+local GAMEPLAY_TERMS = {
+    "gameplay", "spielhilfe", "combat timer", "combat state", "combat enter", "combat leave",
+    "kampf timer", "kampftimer", "kampf text", "kampfstatus", "kampfanzeige",
+    "totem frame", "totemframe", "blizzard totem", "statue frame", "totem rahmen", "totemrahmen",
+    "statuen rahmen", "statuenrahmen", "first dance", "erster tanz", "combat crosshair",
+    "crosshair", "fadenkreuz", "melee range spell", "nahkampf zauber", "reichweiten zauber",
+}
 local GLOBAL_BARS_TERMS = { "bar texture", "bar background", "bar gradient", "gradient direction", "absorb bar", "absorb bars", "heal prediction", "heal absorb", "bar outline", "rounded frames", "rounded frame", "rounded texture", "highlight border", "aggro border", "dispel border", "purge border", "boss target border", "dispel overlay", "power text" }
 local CASTBAR_ROOT_DETAIL_TERMS = {
     "castbar time", "cast time", "time text", "timer",
@@ -309,7 +359,7 @@ local PAGE_TEXT_TARGETS = {
     { page = "auras3_buffs", label = "Aura Buffs", terms = { "buff", "buffs", "buff settings", "buff style" } },
     { page = "auras3_styling", label = "Auras", terms = { "aura", "auras", "aura settings", "aura style" } },
 
-    { page = "opt_castbar", label = "Castbars", terms = { "castbar", "castbars", "zauberleiste" } },
+    { page = "opt_castbar", label = "Cast Bars", terms = { "castbar", "castbars", "zauberleiste" } },
     { page = "opt_colors", label = "Colors", terms = { "colors", "colours", "color palette", "farben" } },
     { page = "opt_fonts", label = "Fonts", terms = { "fonts", "font", "schrift" } },
     { page = "opt_misc", label = "Miscellaneous", terms = { "misc", "miscellaneous", "tooltips", "tooltip", "modules style", "dropdown style" } },
@@ -415,12 +465,15 @@ local OFF_WORDS = {
     "off", "disable", "disabled", "hide", "hidden", "false", "no",
     "dont", "dont show", "do not", "do not show", "never", "never show",
     "aus", "deaktivieren", "deaktiviert", "ausschalten", "ausgeschaltet",
-    "verstecken", "versteckt", "ausblenden", "ausgeblendet", "nein",
+    "deaktiviere", "schalte aus", "mach aus", "verstecken", "versteckt",
+    "verstecke", "ausblenden", "ausgeblendet", "blende aus", "nein",
 }
 local ON_WORDS = {
     "on", "enable", "enabled", "show", "visible", "true", "yes",
     "an", "aktivieren", "aktiviert", "einschalten", "eingeschaltet",
-    "anzeigen", "einblenden", "eingeblendet", "sichtbar", "wieder an", "ja",
+    "aktiviere", "schalte an", "mach an", "anzeigen", "zeige",
+    "zeig", "einblenden", "eingeblendet", "blende ein", "sichtbar",
+    "wieder an", "ja",
 }
 
 local function DetectBoolean(text)
@@ -551,13 +604,13 @@ local function AliasRelationText(text)
     if text == aliasRelationCacheText then return aliasRelationCacheValue end
     local padded = " " .. text .. " "
     if not (padded:find(" for ", 1, true) or padded:find(" on ", 1, true) or padded:find(" of ", 1, true)
-        or padded:find(" vom ", 1, true) or padded:find(" von ", 1, true) or padded:find(" fuer ", 1, true) or padded:find(" für ", 1, true)) then
+        or padded:find(" vom ", 1, true) or padded:find(" von ", 1, true) or padded:find(" fuer ", 1, true)) then
         aliasRelationCacheText = text
         aliasRelationCacheValue = text
         return text
     end
     local t = padded
-    local rel = { "for", "on", "of", "vom", "von", "fuer", "für" }
+    local rel = { "for", "on", "of", "vom", "von", "fuer" }
     for i = 1, #rel do
         t = t:gsub("%f[%w]" .. rel[i] .. "%f[%W]", " ")
     end
@@ -614,8 +667,8 @@ local function DetectFrameType(text, ctx)
     if ContainsAny(text, GLOBAL_BARS_TERMS) then return "globalBars" end
     if ContainsAny(text, { "combat timer" }) then return "combatTimer" end
     if ContainsAny(text, { "combat state", "combat enter", "combat leave", "combat enter leave" }) then return "combatState" end
-    if ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame" }) then return "playerTotems" end
-    if ContainsAny(text, { "first dance" }) then return "firstDance" end
+    if ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem rahmen", "totemrahmen", "statuen rahmen", "statuenrahmen", "statue rahmen" }) then return "playerTotems" end
+    if ContainsAny(text, { "first dance", "erster tanz", "der erste tanz" }) then return "firstDance" end
     if ContainsAny(text, { "combat crosshair", "crosshair", "fadenkreuz", "melee range spell" }) then return "combatCrosshair" end
     if HasPhrase(text, "castbar") or HasPhrase(text, "zauberleiste") then return "castbar" end
     if ContainsAny(text, { "raid marker", "raidmarker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker" })

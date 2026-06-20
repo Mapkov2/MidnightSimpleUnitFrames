@@ -51,8 +51,8 @@ function Bridge.ClearSearchRegistryPage(pageKey)
 end
 function Bridge.CurrentMenuLocaleKey()
     if type(MSUF.GetEffectiveLocale) == "function" then
-        local ok, locale = pcall(MSUF.GetEffectiveLocale)
-        if ok and locale then return tostring(locale) end
+        local locale = MSUF.GetEffectiveLocale()
+        if locale then return tostring(locale) end
     end
     if MSUF.LOCALE then return tostring(MSUF.LOCALE) end
     if type(_G.GetLocale) == "function" then return tostring(_G.GetLocale()) end

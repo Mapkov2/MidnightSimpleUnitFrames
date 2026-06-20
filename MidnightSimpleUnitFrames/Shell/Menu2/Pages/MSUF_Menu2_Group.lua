@@ -106,10 +106,8 @@ local function QueueGF(kind, mode)
     gfFlushQueued = true
     if _G.MSUF_ScheduleOnce then
         _G.MSUF_ScheduleOnce("MSUF2_GF_APPLY", FlushGF)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, FlushGF)
     else
-        FlushGF()
+        C_Timer.After(0, FlushGF)
     end
 end
 local function Set(kind, key, value, mode)
@@ -208,7 +206,7 @@ local function RefreshContext(ctx)
     if not (ctx and ctx.refreshers) then return end
     for i = 1, #ctx.refreshers do
         local fn = ctx.refreshers[i]
-        if type(fn) == "function" then pcall(fn) end
+        if type(fn) == "function" then fn() end
     end
 end
 local function SetSectionHeaderStatus(sec, opts)
@@ -349,7 +347,7 @@ local function ScopeSection(ctx, builder)
                 RefreshTop()
                 if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
             end
-            if C_Timer and C_Timer.After then C_Timer.After(0, RefreshAfterToggle) else RefreshAfterToggle() end
+            C_Timer.After(0, RefreshAfterToggle)
         end,
     })
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
@@ -803,8 +801,8 @@ local function EffectiveSpellSpec(kind)
         end
     end
     if si and type(si.GetPlayerSpec) == "function" then
-        local ok, specKey = pcall(si.GetPlayerSpec)
-        if ok and specKey and si.SpecInfo and si.SpecInfo[specKey] then return specKey end
+        local specKey = si.GetPlayerSpec()
+        if specKey and si.SpecInfo and si.SpecInfo[specKey] then return specKey end
     end
     if si and type(si.SpecInfo) == "table" then
         for specKey in pairs(si.SpecInfo) do return specKey end

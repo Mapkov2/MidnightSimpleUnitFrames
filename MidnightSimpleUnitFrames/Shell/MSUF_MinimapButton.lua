@@ -51,34 +51,34 @@ local function ToggleEditMode()
         if st and st.active ~= nil then
             nextActive = not st.active
         end
-        pcall(_G.MSUF_SetMSUFEditModeDirect, nextActive, nil)
+        _G.MSUF_SetMSUFEditModeDirect(nextActive, nil)
         return
     end
     if type(_G.MSUF_ToggleEditMode) == "function" then
-        pcall(_G.MSUF_ToggleEditMode)
+        _G.MSUF_ToggleEditMode()
         return
     end
     if type(_G.MSUF_EditMode_Toggle) == "function" then
-        pcall(_G.MSUF_EditMode_Toggle)
+        _G.MSUF_EditMode_Toggle()
         return
     end
 end
 
 local function ToggleOptionsWindow()
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-        pcall(_G.MSUF_OpenStandaloneOptionsWindow, "home")
+        _G.MSUF_OpenStandaloneOptionsWindow("home")
         return
     end
     if type(_G.MSUF_ShowStandaloneOptionsWindow) == "function" then
-        pcall(_G.MSUF_ShowStandaloneOptionsWindow, "home")
+        _G.MSUF_ShowStandaloneOptionsWindow("home")
         return
     end
     if type(_G.MSUF_OpenOptionsMenu) == "function" then
-        pcall(_G.MSUF_OpenOptionsMenu)
+        _G.MSUF_OpenOptionsMenu()
         return
     end
     if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
-        pcall(_G.SlashCmdList["MIDNIGHTSUF"], "")
+        _G.SlashCmdList["MIDNIGHTSUF"]("")
     elseif type(print) == "function" then
         print(Tr("|cffffd700MSUF:|r Use /msuf to open the menu."))
     end
@@ -144,9 +144,9 @@ local function ApplyShowHide(enabled)
 
     if usingLDB and DBIcon and type(DBIcon.Show) == "function" and type(DBIcon.Hide) == "function" then
         if enabled then
-            pcall(DBIcon.Show, DBIcon, DATA_NAME)
+            DBIcon:Show(DATA_NAME)
         else
-            pcall(DBIcon.Hide, DBIcon, DATA_NAME)
+            DBIcon:Hide(DATA_NAME)
         end
         return
     end
@@ -173,7 +173,7 @@ local function EnsureInitialized()
                         ToggleEditMode()
                     elseif IsShiftKeyDown() then
                         if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-                            pcall(_G.MSUF_OpenStandaloneOptionsWindow, "profiles")
+                            _G.MSUF_OpenStandaloneOptionsWindow("profiles")
                         end
                     else
                         ToggleOptionsWindow()
@@ -187,12 +187,11 @@ local function EnsureInitialized()
 
         --- Register once (idempotent)
         if type(DBIcon.IsRegistered) == "function" then
-            local ok, reg = pcall(DBIcon.IsRegistered, DBIcon, DATA_NAME)
-            if not ok or not reg then
-                pcall(DBIcon.Register, DBIcon, DATA_NAME, dataObj, g.minimapIconDB)
+            if not DBIcon:IsRegistered(DATA_NAME) then
+                DBIcon:Register(DATA_NAME, dataObj, g.minimapIconDB)
             end
         else
-            pcall(DBIcon.Register, DBIcon, DATA_NAME, dataObj, g.minimapIconDB)
+            DBIcon:Register(DATA_NAME, dataObj, g.minimapIconDB)
         end
 
         usingLDB = true
@@ -221,7 +220,7 @@ local function EnsureInitialized()
                 ToggleEditMode()
             elseif IsShiftKeyDown() then
                 if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-                    pcall(_G.MSUF_OpenStandaloneOptionsWindow, "profiles")
+                    _G.MSUF_OpenStandaloneOptionsWindow("profiles")
                 end
             else
                 ToggleOptionsWindow()
@@ -252,6 +251,7 @@ local function EnsureInitialized()
         end
 
         b:SetScript("OnDragStart", function(self)
+            self:SetOnUpdateMode("RunWhenVisible")
             self:SetScript("OnUpdate", function()
                 local gg = EnsureGeneralDB()
                 if not gg then return end
@@ -268,6 +268,7 @@ local function EnsureInitialized()
         end)
         b:SetScript("OnDragStop", function(self)
             self:SetScript("OnUpdate", nil)
+            self:SetOnUpdateMode("Disabled")
         end)
         b:RegisterForDrag("LeftButton")
 

@@ -45,10 +45,8 @@ if LSM and not G.MSUF_LSM_CallbacksRegistered and not G.MSUF_LSM_FontCallbackReg
             deferredFontsPending = true
             if G.MSUF_ScheduleOnce then
                 G.MSUF_ScheduleOnce("UF_FONTS_DEFERRED_UPDATE", DeferredUpdateAllFonts)
-            elseif G.C_Timer and G.C_Timer.After then
-                G.C_Timer.After(0, DeferredUpdateAllFonts)
             else
-                DeferredUpdateAllFonts()
+                C_Timer.After(0, DeferredUpdateAllFonts)
             end
         end
     end)
@@ -390,22 +388,10 @@ local function MSUF_GetFontPreviewObject(key)
     path = path or G.MSUF_GetInternalFontPathByKey(key) or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
     path = (G.MSUF_ResolveFontPath or function(p) return p end)(path, 14, "", key)
     if path then
-        local safeSet = G.MSUF_SetFontSafe
-        local ok
-        if type(safeSet) == "function" then
-            ok = safeSet(obj, path, 14, "", key)
-        else
-            local applied
-            ok, applied = pcall(obj.SetFont, obj, path, 14, "")
-            ok = ok and applied ~= false
-        end
+        local ok = obj:SetFont(path, 14, "") ~= false
         if (not ok) and FONT_LIST[1] and FONT_LIST[1].path then
             local fallback = (G.MSUF_ResolveFontPath or function(p) return p end)(FONT_LIST[1].path, 14, "")
-            if type(safeSet) == "function" then
-                safeSet(obj, fallback, 14, "", "FRIZQT")
-            else
-                pcall(obj.SetFont, obj, fallback, 14, "")
-            end
+            obj:SetFont(fallback, 14, "")
         end
     end
     return obj

@@ -1,4 +1,4 @@
--- Assistant Aura parser: parses aura-specific natural language into registry-backed plans.
+-- Assistant Aura parser: parses aura-specific natural language into setting plans.
 -- Mutating aura commands must preserve combat safety, confirmation, and undo metadata.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -332,7 +332,7 @@ local function ParseAuraGeometryShortcut(text)
         changes = changes,
         bulkSafe = #changes > 1,
         label = "Change Aura layout",
-        summary = "Maps natural Aura lane layout wording to registered Aura settings.",
+        summary = "Adjusts Aura layout options.",
     }
 end
 

@@ -295,16 +295,12 @@ local function GroupButtonOnEnter(self)
   if not TooltipAllowed() then return end
   self._msufGFTooltipToken = (self._msufGFTooltipToken or 0) + 1
   local token = self._msufGFTooltipToken
-  if C_Timer and C_Timer.After then
-    tooltipPendingFrame = self
-    tooltipPendingToken = token
-    tooltipPendingAt = (GetTime and GetTime() or 0) + 0.12
-    if tooltipTimerActive ~= true then
-      tooltipTimerActive = true
-      C_Timer.After(0.12, GroupTooltipTimerCallback)
-    end
-  else
-    ShowTooltip(self)
+  tooltipPendingFrame = self
+  tooltipPendingToken = token
+  tooltipPendingAt = (GetTime and GetTime() or 0) + 0.12
+  if tooltipTimerActive ~= true then
+    tooltipTimerActive = true
+    C_Timer.After(0.12, GroupTooltipTimerCallback)
   end
 end
 
@@ -494,6 +490,7 @@ ApplyUnitChangeFast = function(frame, kind, unit)
 
   local spec = GF.CompileSpec(kind, frame, unit)
   UF.SetFrameSpec(frame, spec, unit)
+  UF.RefreshNativePingIcon(frame)
 
   local power = spec and spec.power
   local sameStructure = appliedSerial[frame] == (spec and spec._msufGFCompileSerial or 0)
@@ -526,6 +523,16 @@ function GF.UntrackFrame(frame)
   end
   if UF and UF.DetachFrame then
     UF.DetachFrame(frame)
+  end
+  local ping = frame.pingIconFrame or frame.PingIconFrame
+  if ping and not (IsForbidden and IsForbidden(ping)) then
+    frame._msufNativePingGUID = nil
+    if ping.Hide then
+      ping:Hide()
+    end
+    if type(ping.SetGUIDMatch) == "function" then
+      ping:SetGUIDMatch(nil)
+    end
   end
   GF.frames[frame] = nil
   local indexedUnit = frame._msufGFIndexedUnit
@@ -583,6 +590,7 @@ function GF.ApplyButton(frame, kind, reason)
 
   local spec = GF.CompileSpec(kind, frame, unit)
   UF.SetFrameSpec(frame, spec, unit)
+  UF.RefreshNativePingIcon(frame)
   if HasSameApplyState(frame, kind, unit, spec) then
     attrUnit[frame] = unit
     scanNonce[frame] = layoutNonce
@@ -704,7 +712,6 @@ end
 local RunScheduledHeaderScans
 
 local function ArmScanTimer(when)
-  if not (C_Timer and C_Timer.After) then return end
   if scanTimerAt and scanTimerAt <= when then return end
   scanTimerAt = when
   local delay = when - (GetTime and GetTime() or 0)
@@ -775,7 +782,6 @@ RunScheduledHeaderScans = function()
 end
 
 local function ScheduleScanAfter(key, kind, delay)
-  if not (C_Timer and C_Timer.After) then return end
   local scheduleKey = tostring(key) .. ":" .. tostring(delay)
   scanScheduledKind[scheduleKey] = kind
   scanScheduledKey[scheduleKey] = key
@@ -790,9 +796,7 @@ end
 
 function GF.ScheduleScan(key, kind)
   GF.ScanHeader(key, kind)
-  if C_Timer and C_Timer.After then
-    ScheduleScanAfter(key, kind, 0.05)
-  end
+  ScheduleScanAfter(key, kind, 0.05)
 end
 
 function GF.ForEachFrame(fn, includeHidden, a, b, c)

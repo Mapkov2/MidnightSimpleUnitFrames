@@ -307,8 +307,8 @@ function Render.Install(Preview, deps)
             local fontPath, fontFlags, _, _, _, _, useShadow
             local gfs = _G.MSUF_GetGlobalFontSettings
             if type(gfs) == "function" then
-                local ok, path, flags, _, _, _, _, shadow = pcall(gfs)
-                if ok then fontPath, fontFlags, useShadow = path, flags, shadow end
+                local path, flags, _, _, _, _, shadow = gfs()
+                fontPath, fontFlags, useShadow = path, flags, shadow
             end
             if type(fontPath) ~= "string" or fontPath == "" then
                 local getPath = _G.MSUF_GetFontPath
@@ -327,12 +327,7 @@ function Render.Install(Preview, deps)
                 if type(pathForKey) == "function" and fontKey then fontPath = pathForKey(fontKey, size, fontFlags) end
             end
             if type(fontPath) ~= "string" or fontPath == "" then fontPath = fallbackFont end
-            local safeSetFont = _G.MSUF_SetFontSafe
-            if type(safeSetFont) == "function" then
-                safeSetFont(fs, fontPath, size, fontFlags, fontKey)
-            else
-                fs:SetFont(fontPath, size, fontFlags)
-            end
+            fs:SetFont(fontPath, size, fontFlags)
             if fs.SetShadowOffset then
                 if useShadow == nil then useShadow = not (general and general.textBackdrop == false) end
                 if useShadow then

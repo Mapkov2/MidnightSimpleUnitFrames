@@ -44,8 +44,8 @@ local MENU_STATE_SCALAR_DEFAULTS = {
 local function MenuCharKey()
     local fn = rawget(_G, "MSUF_GetCharKey")
     if type(fn) == "function" then
-        local ok, key = pcall(fn)
-        if ok and type(key) == "string" and key ~= "" then return key end
+        local key = fn()
+        if type(key) == "string" and key ~= "" then return key end
     end
     local name = (_G.UnitName and _G.UnitName("player")) or "Unknown"
     local realm = (_G.GetRealmName and _G.GetRealmName()) or "Realm"

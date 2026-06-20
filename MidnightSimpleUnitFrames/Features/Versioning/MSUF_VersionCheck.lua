@@ -64,11 +64,8 @@ local moduleActive   = false  --- true if Init() ran successfully
 --- Core
 local function ReadMyVersion()
     if myVersionStr then return end
-    local ok, ver = pcall(function()
-        return C_AddOns and C_AddOns.GetAddOnMetadata
-            and C_AddOns.GetAddOnMetadata(addonName, "Version")
-    end)
-    if ok and type(ver) == "string" and ver ~= "" then
+    local ver = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(addonName, "Version")
+    if type(ver) == "string" and ver ~= "" then
         myVersionStr   = ver
         myVersionNum   = VersionToNumber(ver)
         highestSeenNum = myVersionNum
@@ -98,17 +95,17 @@ local function BroadcastOnce()
 
     --- Guild
     if IsInGuild and IsInGuild() then
-        pcall(C_ChatInfo.SendAddonMessage, MSG_PREFIX, payload, "GUILD")
+        C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "GUILD")
     end
 
     --- Group / Raid / Instance
     if IsInGroup and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
-        pcall(C_ChatInfo.SendAddonMessage, MSG_PREFIX, payload, "INSTANCE_CHAT")
+        C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "INSTANCE_CHAT")
     elseif IsInGroup and IsInGroup(LE_PARTY_CATEGORY_HOME) then
         if IsInRaid and IsInRaid() then
-            pcall(C_ChatInfo.SendAddonMessage, MSG_PREFIX, payload, "RAID")
+            C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "RAID")
         else
-            pcall(C_ChatInfo.SendAddonMessage, MSG_PREFIX, payload, "PARTY")
+            C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "PARTY")
         end
     end
 end

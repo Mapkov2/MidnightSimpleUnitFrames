@@ -320,16 +320,16 @@ local function BuildDashboardUX(ctx)
         end
         if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then _G.MSUF_SetMSUFEditModeDirect(not active) end
         RefreshMenuFramePrioritySafe()
-        if C_Timer and C_Timer.After then C_Timer.After(0, RefreshMenuFramePrioritySafe) end
+        C_Timer.After(0, RefreshMenuFramePrioritySafe)
         RefreshDashboardEditModeButtonSafe()
         RefreshDashboardFrameStatus()
     end
     local function StartNewAssistantTask()
         local A = MSUF and MSUF.Assistant
         if not A then return end
-        if A.Workflow and type(A.Workflow.CancelActiveWorkflow) == "function" then pcall(A.Workflow.CancelActiveWorkflow) end
+        if A.Workflow and type(A.Workflow.CancelActiveWorkflow) == "function" then A.Workflow.CancelActiveWorkflow() end
         if type(A.CloseLargeTextPanel) == "function" then
-            pcall(A.CloseLargeTextPanel)
+            A.CloseLargeTextPanel()
         else
             A.largeTextPanel = nil
         end
@@ -444,8 +444,8 @@ local function BuildDashboardUX(ctx)
     end
     local function PixelScale()
         if type(_G.MSUF_GetPixelPerfectScale) == "function" then
-            local ok, v = pcall(_G.MSUF_GetPixelPerfectScale)
-            if ok and tonumber(v) then return Clamp(v, 0.3, 1.5) end
+            local v = _G.MSUF_GetPixelPerfectScale()
+            if tonumber(v) then return Clamp(v, 0.3, 1.5) end
         end
         if type(GetPhysicalScreenSize) == "function" then
             local _, h = GetPhysicalScreenSize()
@@ -484,8 +484,8 @@ local function BuildDashboardUX(ctx)
     local function RunMSUFSlashCommand(message)
         local slash = _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
         if type(slash) ~= "function" then return false end
-        local ok = pcall(slash, message or "")
-        return ok and true or false
+        slash(message or "")
+        return true
     end
     M.dashboardEditModeButton = nil
     local compactHeader = layoutW < 640
@@ -754,7 +754,7 @@ local function BuildDashboardUX(ctx)
         if recoveryNarrow then helpX, helpY, discordX, factoryY = 16, -126, 114, -158 end
         Button(recovery, "Wago Profiles", wagoX, -94, 112, 22, CopyWagoLink)
         Button(recovery, "Print Help", helpX, helpY, 86, 22, function()
-            if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then pcall(_G.SlashCmdList["MIDNIGHTSUF"], "help") end
+            if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"]("help") end
         end)
         Button(recovery, "Discord", discordX, helpY, 80, 22, function()
             if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
@@ -901,9 +901,9 @@ local function BuildDashboardUX(ctx)
             dbScale.globalUiScaleValue = ui.Enabled and ui.Scale or nil
             pendingGlobalEnabled, pendingGlobalScale = nil, nil
             if ui.Enabled and type(_G.MSUF_SetGlobalUiScale) == "function" then
-                pcall(_G.MSUF_SetGlobalUiScale, ui.Scale, true)
+                _G.MSUF_SetGlobalUiScale(ui.Scale, true)
             elseif (not ui.Enabled) and type(_G.MSUF_ResetGlobalUiScale) == "function" then
-                pcall(_G.MSUF_ResetGlobalUiScale, true)
+                _G.MSUF_ResetGlobalUiScale(true)
             end
             if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_DASH_GLOBAL_SCALE", { preview = true, applyAll = false }) end
             RefreshGlobalScale()
@@ -935,7 +935,7 @@ local function BuildDashboardUX(ctx)
                 local dbScale = M.GetGeneralDB()
                 dbScale.msufUiScale = scaleValue
                 pendingMsufScale = nil
-                if type(_G.MSUF_ApplyMsufScale) == "function" then pcall(_G.MSUF_ApplyMsufScale, scaleValue) end
+                if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scaleValue) end
                 if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false }) end
                 local UF = MSUF and MSUF.UF
                 if UF and UF.Apply then UF.Apply(nil) end

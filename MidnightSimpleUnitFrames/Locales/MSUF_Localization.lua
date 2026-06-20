@@ -114,7 +114,7 @@ local function ApplyLocale(locale)
     RebuildActiveLocale()
     for _, callback in pairs(MSUF.LocaleCallbacks) do
         if type(callback) == "function" then
-            pcall(callback, MSUF.LOCALE)
+            callback(MSUF.LOCALE)
         end
     end
     return MSUF.LOCALE

@@ -212,8 +212,9 @@ local function BuildBars(ctx)
         if sample._msuf2RoundedPreviewMasked and sample._msuf2RoundedPreviewMasked[tex] == mask then return end
         sample._msuf2RoundedPreviewMasked = sample._msuf2RoundedPreviewMasked or {}
         local old = sample._msuf2RoundedPreviewMasked[tex]
-        if old and tex.RemoveMaskTexture then pcall(tex.RemoveMaskTexture, tex, old) end
-        if pcall(tex.AddMaskTexture, tex, mask) then sample._msuf2RoundedPreviewMasked[tex] = mask end
+        if old and tex.RemoveMaskTexture then tex:RemoveMaskTexture(old) end
+        tex:AddMaskTexture(mask)
+        sample._msuf2RoundedPreviewMasked[tex] = mask
     end
     local function CreateRoundedTexturePreview(parent, x, y, width)
         width = max(320, floor((tonumber(width) or 560) + 0.5))

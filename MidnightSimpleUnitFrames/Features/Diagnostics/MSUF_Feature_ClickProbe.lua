@@ -305,12 +305,8 @@ RegisterUnitWatch(self)
     probeHeader:SetAttribute("unitsPerColumn", 5)
     probeHeader:SetAttribute("maxColumns", 1)
     probeHeader:Show()
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0.1, StyleProbeHeaderChildren)
-        C_Timer.After(0.5, StyleProbeHeaderChildren)
-    else
-        StyleProbeHeaderChildren()
-    end
+    C_Timer.After(0.1, StyleProbeHeaderChildren)
+    C_Timer.After(0.5, StyleProbeHeaderChildren)
     print("|cff7fd5ffMSUF ClickProbe|r header probe spawned. Click H buttons and compare to live group frames.")
 end
 
@@ -581,11 +577,7 @@ SlashCmdList["MSUFCLICKPROBE"] = function(msg)
     else
         print("|cff7fd5ffMSUF ClickProbe|r armed for 4 seconds -- click your frames NOW (right-click player, left-click raid members).")
     end
-    if C_Timer and C_Timer.After then
-        C_Timer.After(4, Report)
-    else
-        Report()
-    end
+    C_Timer.After(4, Report)
 end
 
 -- /msufidprobe: per-element identity cost. Wraps the compiled per-frame
@@ -712,11 +704,7 @@ SlashCmdList["MSUFIDPROBE"] = function()
     end
     idActive = true
     print(string.format("|cff7fd5ffMSUF IdProbe|r armed 6s (%d group frames wrapped) -- click through group members NOW (different targets included).", gfCount))
-    if C_Timer and C_Timer.After then
-        C_Timer.After(6, IdReport)
-    else
-        IdReport()
-    end
+    C_Timer.After(6, IdReport)
 end
 
 -- /msufprofpeek: reads C_AddOnProfiler (the SAME source the in-game profiler
@@ -742,6 +730,7 @@ local function ProfPeek()
     local driver = CreateFrame("Frame")
     local elapsed = 0
     print("|cff7fd5ffMSUF ProfPeek|r sampling 5s -- click frames NOW. Reports MSUF peak per-frame ms from C_AddOnProfiler.")
+    driver:SetOnUpdateMode("RunWhenVisible")
     driver:SetScript("OnUpdate", function(self, dt)
         elapsed = elapsed + dt
         samples = samples + 1
@@ -754,6 +743,7 @@ local function ProfPeek()
         if type(v) == "number" and v > peak then peak = v end
         if elapsed >= 5 then
             self:SetScript("OnUpdate", nil)
+            self:SetOnUpdateMode("Disabled")
             print(string.format("|cff7fd5ffMSUF ProfPeek|r over %d frames: peak RecentAvg=%.3fms  peak LastTime=%.3fms", samples, peak, lastTickPeak))
             print("  (LastTime peak is the single worst frame MSUF was billed -- compare to the profiler's Peak column.)")
         end
@@ -820,55 +810,22 @@ SlashCmdList["MSUFOPPROBE"] = function()
     if UF then OpWrapTable(UF, "ApplyElementToFrame", "UF.ApplyElementToFrame") end
     if GF then OpWrapTable(GF, "ApplyButton", "GF.ApplyButton") end
     if A3 then OpWrapTable(A3, "RenderFrame", "A3.RenderFrame") end
-    if A3 then OpWrapTable(A3, "FlushIdentityAuraRebuilds", "A3.FlushIdentityAura") end
     opProbeActive = true
     print("|cff7fd5ffMSUF OpProbe|r armed 6s -- click 3 fresh units NOW.")
-    if C_Timer and C_Timer.After then
-        C_Timer.After(6, function()
-            opProbeActive = false
-            local list = {}
-            for k,r in pairs(results) do list[#list+1] = {key=k,total=r.total,count=r.count,max=r.max} end
-            table.sort(list, function(a,b) return a.total>b.total end)
-            print("|cff7fd5ffMSUF OpProbe|r (total | count | worst):")
-            if #list == 0 then print("  no wrapped op ran -- cost is elsewhere; report this.") end
-            for i=1,math.min(#list,15) do
-                local e=list[i]
-                print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
-            end
-            OpRestore()
-            results = {}
-        end)
-    else
+    C_Timer.After(6, function()
         opProbeActive = false
+        local list = {}
+        for k,r in pairs(results) do list[#list+1] = {key=k,total=r.total,count=r.count,max=r.max} end
+        table.sort(list, function(a,b) return a.total>b.total end)
+        print("|cff7fd5ffMSUF OpProbe|r (total | count | worst):")
+        if #list == 0 then print("  no wrapped op ran -- cost is elsewhere; report this.") end
+        for i=1,math.min(#list,15) do
+            local e=list[i]
+            print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
+        end
         OpRestore()
-    end
-end
-
--- /msuflaneflags: prints why the target's aura lanes scan capped or full.
--- The full (uncapped) scan walks every aura on a raid-buffed unit (~0.3ms);
--- the capped scan stops at cfg.max. This shows which config flag forces full.
-SLASH_MSUFLANEFLAGS1 = "/msuflaneflags"
-SlashCmdList["MSUFLANEFLAGS"] = function()
-    local frames = MSUF.UF and MSUF.UF.frames
-    local frame = frames and frames.target
-    if not frame then print("no target frame (target something).") return end
-    local state = frame._msufA3State
-    if not state then print("target has no aura state.") return end
-    local function dump(kind)
-        local lane = state.lanes and state.lanes[kind]
-        local cfg = lane and lane.config
-        if not cfg then print(kind..": no lane") return end
-        local capped = cfg.renderEnabled and cfg.naturalOrder and cfg.max > 0
-            and cfg.visibleOnlyScan and (cfg.hasFilterWork ~= true or cfg.cappedFilterScan)
-        print(string.format("|cff7fd5ff%s|r capped=%s | max=%s renderEnabled=%s naturalOrder=%s visibleOnlyScan=%s hasFilterWork=%s cappedFilterScan=%s sortOrder=%s needsPlayerFlag=%s",
-            kind, tostring(capped == true), tostring(cfg.max),
-            tostring(cfg.renderEnabled), tostring(cfg.naturalOrder),
-            tostring(cfg.visibleOnlyScan), tostring(cfg.hasFilterWork),
-            tostring(cfg.cappedFilterScan), tostring(cfg.sortOrder),
-            tostring(cfg.needsPlayerFlag)))
-    end
-    dump("buff")
-    dump("debuff")
+        results = {}
+    end)
 end
 
 -- /msufrt: times the RUNTIME (post-click, deferred) layer that profpeek sees
@@ -909,21 +866,19 @@ SlashCmdList["MSUFRT"] = function()
     RtWrap(UF, "ForceUpdate", "UF.ForceUpdate")
     rtActive = true
     print("|cff7fd5ffMSUF RT|r armed 6s (auras can be OFF) -- click 3 fresh units NOW.")
-    if C_Timer and C_Timer.After then
-        C_Timer.After(6, function()
-            rtActive = false
-            local list = {}
-            for k,r in pairs(results) do list[#list+1] = {key=k,total=r.total,count=r.count,max=r.max} end
-            table.sort(list, function(a,b) return a.total>b.total end)
-            print("|cff7fd5ffMSUF RT|r (total | count | worst):")
-            if #list == 0 then print("  no runtime call ran -- cost is in the secure/event layer; report this.") end
-            for i=1,math.min(#list,15) do
-                local e=list[i]
-                print(string.format("  %.3fms | %dx | max %.3fms | %s [%s]", e.total, e.count, e.max, e.key, tostring(e.key)))
-            end
-            RtRestore(); results = {}
-        end)
-    else rtActive = false; RtRestore() end
+    C_Timer.After(6, function()
+        rtActive = false
+        local list = {}
+        for k,r in pairs(results) do list[#list+1] = {key=k,total=r.total,count=r.count,max=r.max} end
+        table.sort(list, function(a,b) return a.total>b.total end)
+        print("|cff7fd5ffMSUF RT|r (total | count | worst):")
+        if #list == 0 then print("  no runtime call ran -- cost is in the secure/event layer; report this.") end
+        for i=1,math.min(#list,15) do
+            local e=list[i]
+            print(string.format("  %.3fms | %dx | max %.3fms | %s [%s]", e.total, e.count, e.max, e.key, tostring(e.key)))
+        end
+        RtRestore(); results = {}
+    end)
 end
 
 -- /msufdispatch: wraps UF.DispatchFrameEvent -- the single chokepoint EVERY
@@ -963,34 +918,29 @@ SlashCmdList["MSUFDISPATCH"] = function()
     end
     dispActive = true
     print("|cff7fd5ffMSUF Dispatch|r armed 6s -- click 3 fresh units NOW (auras off ok).")
-    if C_Timer and C_Timer.After then
-        C_Timer.After(6, function()
-            dispActive = false
-            -- restore
-            local cur = UF.DispatchFrameEvent
-            UF.DispatchFrameEvent = dispSaved
-            if UF.frames then
-                for _, f in pairs(UF.frames) do
-                    if f.GetScript and f:GetScript("OnEvent") == cur then
-                        f:SetScript("OnEvent", dispSaved)
-                    end
+    C_Timer.After(6, function()
+        dispActive = false
+        -- restore
+        local cur = UF.DispatchFrameEvent
+        UF.DispatchFrameEvent = dispSaved
+        if UF.frames then
+            for _, f in pairs(UF.frames) do
+                if f.GetScript and f:GetScript("OnEvent") == cur then
+                    f:SetScript("OnEvent", dispSaved)
                 end
             end
-            local list = {}
-            for k,r in pairs(results) do list[#list+1] = {key=k,total=r.total,count=r.count,max=r.max} end
-            table.sort(list, function(a,b) return a.total>b.total end)
-            print("|cff7fd5ffMSUF Dispatch|r per (frameUnit, event) (total | count | worst):")
-            if #list == 0 then print("  no dispatch ran -- cost is NOT event dispatch; report this.") end
-            for i=1,math.min(#list,18) do
-                local e=list[i]
-                print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
-            end
-            results = {}
-        end)
-    else
-        dispActive = false
-        UF.DispatchFrameEvent = dispSaved
-    end
+        end
+        local list = {}
+        for k,r in pairs(results) do list[#list+1] = {key=k,total=r.total,count=r.count,max=r.max} end
+        table.sort(list, function(a,b) return a.total>b.total end)
+        print("|cff7fd5ffMSUF Dispatch|r per (frameUnit, event) (total | count | worst):")
+        if #list == 0 then print("  no dispatch ran -- cost is NOT event dispatch; report this.") end
+        for i=1,math.min(#list,18) do
+            local e=list[i]
+            print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
+        end
+        results = {}
+    end)
 end
 
 -- /msufvs: side-by-side per-frame profiler peak for MSUF vs UnhaltedUnitFrames
@@ -1020,6 +970,7 @@ SlashCmdList["MSUFVS"] = function()
     local driver = CreateFrame("Frame")
     local elapsed = 0
     print("|cff7fd5ffMSUF VS|r 8s -- click MSUF frames for 4s, then UUF frames for 4s. Comparing: " .. table.concat(names, ", "))
+    driver:SetOnUpdateMode("RunWhenVisible")
     driver:SetScript("OnUpdate", function(self, dt)
         elapsed = elapsed + dt
         for _, n in ipairs(names) do
@@ -1028,6 +979,7 @@ SlashCmdList["MSUFVS"] = function()
         end
         if elapsed >= 8 then
             self:SetScript("OnUpdate", nil)
+            self:SetOnUpdateMode("Disabled")
             print("|cff7fd5ffMSUF VS|r peak per-frame ms (worst single frame each addon was billed):")
             for _, n in ipairs(names) do
                 print(string.format("  %.3fms | %s", peak[n], n))
@@ -1088,21 +1040,19 @@ SlashCmdList["MSUFGFCLICK"] = function()
     end
     gfClickActive = true
     print("|cff7fd5ffMSUF GFClick|r armed 6s -- click 3 different GROUP members NOW.")
-    if C_Timer and C_Timer.After then
-        C_Timer.After(6, function()
-            gfClickActive = false
-            local out = {}
-            for k,r in pairs(results) do out[#out+1] = {key=k,total=r.total,count=r.count,max=r.max} end
-            table.sort(out, function(a,b) return a.total>b.total end)
-            print("|cff7fd5ffMSUF GFClick|r (total | count | worst):")
-            if #out == 0 then print("  no group-child path ran on click -- cost is the secure target action (Blizzard floor).") end
-            for i=1,math.min(#out,15) do
-                local e=out[i]
-                print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
-            end
-            GfRestore(); results = {}
-        end)
-    else gfClickActive = false; GfRestore() end
+    C_Timer.After(6, function()
+        gfClickActive = false
+        local out = {}
+        for k,r in pairs(results) do out[#out+1] = {key=k,total=r.total,count=r.count,max=r.max} end
+        table.sort(out, function(a,b) return a.total>b.total end)
+        print("|cff7fd5ffMSUF GFClick|r (total | count | worst):")
+        if #out == 0 then print("  no group-child path ran on click -- cost is the secure target action (Blizzard floor).") end
+        for i=1,math.min(#out,15) do
+            local e=out[i]
+            print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
+        end
+        GfRestore(); results = {}
+    end)
 end
 
 -- /msufdrivers: lists which live frames still carry a secure RegisterStateDriver

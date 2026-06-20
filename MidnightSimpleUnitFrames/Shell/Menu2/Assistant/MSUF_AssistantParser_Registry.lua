@@ -612,11 +612,141 @@ local function CustomSiblingForSetting(setting)
     return nil
 end
 
+local ENUM_VALUE_DISPLAY_LABELS = {
+    ALr = "alt",
+    ALWAYS = "always",
+    AUrO = "auto",
+    BLIZZARD = "Blizzard",
+    BOrrOM = "bottom",
+    BOrrOMLEFr = "bottom left",
+    BOrrOMRIGHr = "bottom right",
+    BRACKEr = "brackets",
+    CENrER = "center",
+    CIRCLE = "circle",
+    CLASS = "class",
+    CLASS_COLOR = "class color",
+    CrRL = "ctrl",
+    CURSOR = "cursor",
+    CUSrOM = "custom",
+    DEFAULr = "default",
+    DIAMOND = "diamond",
+    EXrERNAL = "external",
+    FIXED = "fixed",
+    GAME = "GameTooltip",
+    HARMFUL = "harmful",
+    ["HARMFUL|PLAYER"] = "harmful player",
+    HELPFUL = "helpful",
+    ["HELPFUL|PLAYER"] = "helpful player",
+    HORIZONrAL_LEFr = "horizontal left",
+    HORIZONrAL_RIGHr = "horizontal right",
+    LEFr = "left",
+    LEFrDOWN = "left then down",
+    LEFrUP = "left then up",
+    LrR = "left to right",
+    MODIFIER = "modifier key",
+    MSUF = "MSUF",
+    NAMELEFr = "left of name",
+    NAMERIGHr = "right of name",
+    NEVER = "never",
+    NONE = "none",
+    NPC = "NPC",
+    OFF = "off",
+    ON = "on",
+    OOC = "out of combat",
+    PAREN = "parentheses",
+    REACrION = "reaction",
+    RIGHr = "right",
+    RIGHrDOWN = "right then down",
+    RIGHrUP = "right then up",
+    ROUNDED = "rounded",
+    RrL = "right to left",
+    SHIFr = "shift",
+    SINGLE = "single",
+    SOLID = "solid",
+    SQUARE = "square",
+    rARGEr_NAME = "target name",
+    rOP = "top",
+    rOPLEFr = "top left",
+    rOPRIGHr = "top right",
+    rOr_NAME = "target of target name",
+    rYPE = "type",
+    VERrICAL_DOWN = "vertical down",
+    VERrICAL_UP = "vertical up",
+}
+
+local ENUM_WORD_DISPLAY_LABELS = {
+    afk = "AFK",
+    dnd = "DND",
+    hp = "HP",
+    id = "ID",
+    msuf = "MSUF",
+    npc = "NPC",
+    ooc = "out of combat",
+    pvp = "PvP",
+    ui = "UI",
+}
+
+local function HumanizeEnumDisplay(value)
+    local raw = tostring(value or "")
+    if raw == "" then return nil end
+    local exact = ENUM_VALUE_DISPLAY_LABELS[raw] or ENUM_VALUE_DISPLAY_LABELS[raw:upper()]
+    if exact then return exact end
+    if not raw:find("[A-Z_|]") then return nil end
+
+    local text = raw:gsub("|", " "):gsub("_", " ")
+    text = text:gsub("(%l)(%u)", "%1 %2")
+    text = text:gsub("(%u)(%u%l)", "%1 %2")
+
+    local out = {}
+    for word in text:gmatch("%S+") do
+        local lower = word:lower()
+        out[#out + 1] = ENUM_WORD_DISPLAY_LABELS[lower] or lower
+    end
+    if #out == 0 then return nil end
+    return table.concat(out, " ")
+end
+
+local function DirectEnumDisplay(setting, value)
+    if not (setting and setting.type == "enum" and type(value) == "string") then return nil end
+    local colorLabel = type(A.DisplayColorLabel) == "function" and A.DisplayColorLabel(value) or value
+    if colorLabel ~= value then return colorLabel end
+    if value:match("^[a-z][a-z0-9 %-]*$") then return value end
+    return HumanizeEnumDisplay(value)
+end
+
+local GERMAN_DISPLAY_ALIAS_rOKENS = {
+    aktuell = true, alt = true, an = true, anzeige = true, anzeigen = true, aus = true,
+    ausblenden = true, ausserhalb = true, automatisch = true, balken = true, deaktivieren = true,
+    dunkel = true, einblenden = true, einfaerben = true, eigenes = true, einheitlich = true,
+    erzwingen = true, fest = true, fixiert = true, gelb = true, grau = true, gruen = true,
+    heilung = true, hoch = true, immer = true, keine = true, keiner = true, klassisch = true,
+    klassenfarben = true, kontrolliert = true, leuchten = true, links = true, lila = true,
+    maus = true, mauszeiger = true, mitte = true, modernisiert = true, namensfarbe = true,
+    neu = true, nie = true, niemals = true, nichts = true, oben = true, panel = true,
+    platzierung = true, pulsieren = true, punkt = true, quadrat = true, rand = true,
+    rechts = true, rahmen = true, rosa = true, rot = true, runter = true, schwarz = true,
+    sichtbar = true, spiel = true, taste = true, tuer = true, tuerkis = true, unten = true,
+    umschalt = true, umschalttaste = true, verstecken = true, verlauf = true, violett = true,
+    weiss = true,
+}
+
+local function IsGermanDisplayAlias(alias)
+    local text = Normalize(alias)
+    if text == "" then return false end
+    if GERMAN_DISPLAY_ALIAS_rOKENS[text] then return true end
+    for token in text:gmatch("%S+") do
+        if GERMAN_DISPLAY_ALIAS_rOKENS[token] then return true end
+    end
+    return false
+end
+
 local function ValueDisplay(setting, value)
     if value == nil then return "value" end
     if setting and setting.type == "boolean" then return value and "enabled" or "disabled" end
     if setting and setting.type == "color" and type(value) == "table" then
-        if type(value.label) == "string" and value.label ~= "" then return value.label end
+        if type(value.label) == "string" and value.label ~= "" then
+            return type(A.DisplayColorLabel) == "function" and A.DisplayColorLabel(value.label) or value.label
+        end
         local r = math.floor(((tonumber(value.r or value[1]) or 0) * 255) + 0.5)
         local g = math.floor(((tonumber(value.g or value[2]) or 0) * 255) + 0.5)
         local b = math.floor(((tonumber(value.b or value[3]) or 0) * 255) + 0.5)
@@ -627,11 +757,17 @@ local function ValueDisplay(setting, value)
     end
     if tostring(value) == "" then return "blank" end
     if tostring(value) == "__CUSTOM__" then return "Custom" end
+    if setting and type(setting.displayValues) == "table" then
+        local display = setting.displayValues[value]
+        if type(display) == "string" and display ~= "" then return display end
+    end
+    local directEnumDisplay = DirectEnumDisplay(setting, value)
+    if directEnumDisplay then return directEnumDisplay end
     if setting and type(setting.valueAliases) == "table" then
         local bestAlias
         local bestLen = 999999
         for alias, aliasValue in pairs(setting.valueAliases) do
-            if aliasValue == value then
+            if aliasValue == value and not IsGermanDisplayAlias(alias) then
                 local len = #tostring(alias or "")
                 if len < bestLen then
                     bestLen = len
@@ -641,7 +777,17 @@ local function ValueDisplay(setting, value)
         end
         if bestAlias and bestAlias ~= "" then return tostring(bestAlias) end
     end
+    if setting and (setting.type == "enum" or type(setting.values) == "table") and type(A.HumanizeDisplayKey) == "function" then
+        return A.HumanizeDisplayKey(value)
+    end
     return tostring(value)
+end
+
+local function TooltipModifierValueForText(text)
+    if ContainsAny(text, { "shift", "umschalt", "umschalttaste", "shift taste" }) then return "SHIFr" end
+    if ContainsAny(text, { "ctrl", "control", "strg", "steuerung", "strg taste" }) then return "CrRL" end
+    if ContainsAny(text, { "alt", "option", "alt taste" }) then return "ALr" end
+    return nil
 end
 
 local function MissingValueResponse(matches, raw)
@@ -669,14 +815,14 @@ local function MissingValueResponse(matches, raw)
                 value = value,
                 matchScore = best.score,
                 valueLabel = ValueDisplay(setting, value),
-                label = tostring(setting.label or "Setting") .. " -> " .. ValueDisplay(setting, value),
+                label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, ValueDisplay(setting, value), "Option") or (tostring(setting.label or "Option") .. ": " .. ValueDisplay(setting, value)),
             }
         end
         return {
             kind = "ambiguous",
             choices = choices,
-            label = "Choose a value for " .. tostring(setting.label or "this setting"),
-            summary = "Registry-backed value clarification.",
+            label = "Choose a value for " .. tostring(setting.label or "this option"),
+            summary = "Value clarification for an MSUF option.",
         }
     end
 
@@ -696,8 +842,8 @@ local function MissingValueResponse(matches, raw)
     return {
         kind = "answer",
         status = "ambiguous",
-        text = "What should " .. tostring(setting.label or "this setting") .. " be set to? " .. hint,
-        summary = "Registry-backed value clarification.",
+        text = "What value do you want me to use for " .. tostring(setting.label or "this option") .. "? " .. hint,
+        summary = "Value clarification for an MSUF option.",
     }
 end
 
@@ -1084,13 +1230,13 @@ end
 
 local UNIT_LOAD_CONDITION_SPECS = {
     { key = "loadCondHideMounted", label = "Hide Mounted", terms = { "mounted", "mount", "on mount", "while mounted", "when mounted", "gemountet", "reittier" } },
-    { key = "loadCondHideOutOfCombat", label = "Hide Out Of Combat", terms = { "out of combat", "outside combat", "not in combat", "ooc", "while out of combat", "when out of combat", "ausserhalb kampf", "ausser kampf", "nicht im kampf" } },
+    { key = "loadCondHideOutOfCombat", label = "Hide Out of Combat", terms = { "out of combat", "outside combat", "not in combat", "ooc", "while out of combat", "when out of combat", "ausserhalb kampf", "ausser kampf", "nicht im kampf" } },
     { key = "loadCondHideSolo", label = "Hide Solo", terms = { "solo", "alone", "while solo", "when solo", "allein" } },
-    { key = "loadCondHideInVehicle", label = "Hide In Vehicle", terms = { "in vehicle", "vehicle", "while in vehicle", "when in vehicle", "fahrzeug" } },
-    { key = "loadCondHideInGroup", label = "Hide In Group", terms = { "in group", "while in group", "when in group", "grouped", "in party", "in raid", "in gruppe", "gruppe" } },
-    { key = "loadCondHideInInstance", label = "Hide In Instance", terms = { "in instance", "instance", "dungeon", "while in instance", "when in instance", "instanz" } },
+    { key = "loadCondHideInVehicle", label = "Hide in Vehicle", terms = { "in vehicle", "vehicle", "while in vehicle", "when in vehicle", "fahrzeug" } },
+    { key = "loadCondHideInGroup", label = "Hide in Group", terms = { "in group", "while in group", "when in group", "grouped", "in party", "in raid", "in gruppe", "gruppe" } },
+    { key = "loadCondHideInInstance", label = "Hide in Instance", terms = { "in instance", "instance", "dungeon", "while in instance", "when in instance", "instanz" } },
     { key = "loadCondHideResting", label = "Hide Resting", terms = { "resting", "rested", "rest area", "while resting", "when resting", "ruhend", "erholt" } },
-    { key = "loadCondHideInCombat", label = "Hide In Combat", terms = { "in combat", "combat", "fight", "while in combat", "when in combat", "im kampf", "kampf" } },
+    { key = "loadCondHideInCombat", label = "Hide in Combat", terms = { "in combat", "combat", "fight", "while in combat", "when in combat", "im kampf", "kampf" } },
     { key = "loadCondHideStealthed", label = "Hide Stealthed", terms = { "stealthed", "stealth", "in stealth", "while stealthed", "when stealthed", "getarnt", "verstohlen" } },
 }
 
@@ -1210,8 +1356,8 @@ local function GroupAvailabilityUnsupportedAnswer(text)
     return {
         kind = "answer",
         status = "info",
-        text = "Group Frames do not have a real load-condition toggle for that situation yet. I can change the real Group Frame availability options MSUF exposes: Use MSUF group frames, Show player, Show while solo, Hide during client scene, Offline Members, and Hide offline in combat.",
-        summary = "Explains unsupported Group Frame load-condition request without faking a setting.",
+        text = "That Group Frame situation has no load-condition toggle yet. I can still help with these visibility options: MSUF group frames, Show player, Show while solo, Hide during client scene, Offline Members, and Hide offline in combat.",
+        summary = "Shows which Group Frame visibility options I can help with.",
     }
 end
 
@@ -1236,7 +1382,7 @@ local function ParseGroupAvailabilityIntent(text)
                 setting = setting,
                 value = value,
                 valueLabel = ValueDisplay(setting, value),
-                label = tostring(setting.label or "Group setting") .. " -> " .. ValueDisplay(setting, value),
+                label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, ValueDisplay(setting, value), "Group option") or (tostring(setting.label or "Group option") .. ": " .. ValueDisplay(setting, value)),
             }
         end
     end
@@ -1246,14 +1392,14 @@ local function ParseGroupAvailabilityIntent(text)
             kind = "changes",
             changes = changes,
             label = changes[1].setting and changes[1].setting.label or "Group availability",
-            summary = "Registry-backed group-frame availability change.",
+            summary = "Changes group-frame visibility.",
         }
     end
     return {
         kind = "ambiguous",
         choices = changes,
-        label = "Which group-frame scope?",
-        summary = "The command matched a real group-frame availability option but did not name Party, Raid, or Mythic Raid.",
+        label = "Which group-frame target?",
+        summary = "The request matched a real group-frame availability option but did not name Party, Raid, or Mythic Raid.",
     }
 end
 
@@ -1282,7 +1428,7 @@ local function RegistrySuggestions(text, raw, settings)
                     relativeDelta = relativeDelta,
                     matchScore = score,
                     valueLabel = ValueDisplay(setting, value),
-                    label = tostring(setting.label or "Setting") .. " -> " .. ValueDisplay(setting, value),
+                    label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, ValueDisplay(setting, value), "Option") or (tostring(setting.label or "Option") .. ": " .. ValueDisplay(setting, value)),
                 })
             end
         end
@@ -1297,8 +1443,8 @@ local function RegistrySuggestions(text, raw, settings)
             kind = "changes",
             changes = filtered,
             bulkSafe = P.AreBulkSafeAuraSettingChanges and P.AreBulkSafeAuraSettingChanges(filtered) or nil,
-            label = "Multiple matching settings",
-            summary = "Registry-backed multi-scope setting change.",
+            label = "Multiple matching options",
+            summary = "Changes multiple matched options.",
         }
     end
     table.sort(filtered, function(a, b)
@@ -1308,8 +1454,8 @@ local function RegistrySuggestions(text, raw, settings)
     return {
         kind = "ambiguous",
         choices = filtered,
-        label = "Suggested MSUF setting",
-        summary = "Registry-backed partial setting suggestion.",
+        label = "Suggested MSUF option",
+        summary = "Suggests matching options.",
     }
 end
 
@@ -1474,7 +1620,7 @@ local function AddMediaResolverChanges(changes, setting, text, raw, score)
             value = media.value,
             matchScore = score,
             valueLabel = media.label or media.value,
-            label = tostring(setting.label or "Setting") .. " → " .. tostring(media.label or media.value),
+            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, media.label or media.value, "Option") or (tostring(setting.label or "Option") .. ": " .. tostring(media.label or media.value)),
             mediaType = media.mediaType,
         }
         return true
@@ -1487,7 +1633,7 @@ local function AddMediaResolverChanges(changes, setting, text, raw, score)
                 value = item.value,
                 matchScore = score,
                 valueLabel = item.label or item.value,
-                label = tostring(setting.label or "Setting") .. " → " .. tostring(item.label or item.value),
+                label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, item.label or item.value, "Option") or (tostring(setting.label or "Option") .. ": " .. tostring(item.label or item.value)),
                 mediaType = media.mediaType,
             }
         end
@@ -1542,7 +1688,7 @@ P._ParseAllTextWhiteShortcut = function(text)
         changes = changes,
         label = "Text color white",
         bulkSafe = true,
-        summary = "Sets shared text color to white and resets automatic text color modes.",
+        summary = "Sets text color to white and resets automatic text color modes.",
     }
 end
 
@@ -1659,7 +1805,7 @@ local function ParseScopedFontTextColorShortcut(text)
         kind = "changes",
         changes = changes,
         label = spec.label,
-        summary = "Changes the registered scoped Font text color mode.",
+        summary = "Changes the target-specific Font text color mode.",
     }
 end
 
@@ -1686,9 +1832,15 @@ local function AddRegisteredChange(out, key, value, relativeDelta, direction)
 end
 
 function P.HasInterruptReadyIntent(text)
-    if ContainsAny(text, { "interrupt ready", "kick ready", "ready interrupt", "ready kick" }) then return true end
-    return ContainsAny(text, { "interrupt", "kick" })
-        and ContainsAny(text, { "ready indicator", "ready icon", "ready border", "ready box" })
+    if ContainsAny(text, {
+        "interrupt ready", "kick ready", "ready interrupt", "ready kick",
+        "interrupt bereit", "kick bereit", "unterbrechung bereit", "unterbrechen bereit",
+    }) then return true end
+    return ContainsAny(text, { "interrupt", "kick", "unterbrechen", "unterbrechung" })
+        and ContainsAny(text, {
+            "ready indicator", "ready icon", "ready border", "ready box",
+            "bereit anzeige", "bereit symbol", "bereit rand", "bereit box",
+        })
 end
 
 function P.ParseInterruptReadyRegistryShortcut(text, raw)
@@ -1699,30 +1851,30 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
     local key
     local relativeDelta
     local direction = DetectDirection(text, {})
-    if ContainsAny(text, { "auto size", "autosize", "automatic size", "automatic sizing", "auto-size" }) then
+    if ContainsAny(text, { "auto size", "autosize", "automatic size", "automatic sizing", "auto-size", "automatische groesse", "automatisch groesse" }) then
         key = "general.kickReadyAutoSize"
-    elseif ContainsAny(text, { "style", "border", "box", "outline", "square" }) then
+    elseif ContainsAny(text, { "style", "border", "box", "outline", "square", "stil", "rand", "kasten", "quadrat" }) then
         key = "general.kickReadyStyle"
-    elseif ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown", "put", "place", "position" })
+    elseif ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown", "put", "place", "position", "anker", "ankerpunkt", "platzieren" })
         and direction
-        and not ContainsAny(text, { "move", "nudge", "shift", "offset", "x offset", "y offset" })
+        and not ContainsAny(text, { "move", "nudge", "shift", "offset", "x offset", "y offset", "verschiebe", "verschieben", "versatz" })
     then
         key = "general.kickReadyAnchor"
-    elseif ContainsAny(text, { "x offset", "horizontal offset", "offset x", "move left", "move right", "nudge left", "nudge right", "left by", "right by" }) then
+    elseif ContainsAny(text, { "x offset", "horizontal offset", "offset x", "move left", "move right", "nudge left", "nudge right", "left by", "right by", "x versatz", "horizontaler versatz", "nach links", "nach rechts", "links um", "rechts um" }) then
         key = "general.kickReadyOffsetX"
-    elseif ContainsAny(text, { "y offset", "vertical offset", "offset y", "move up", "move down", "nudge up", "nudge down", "up by", "down by" }) then
+    elseif ContainsAny(text, { "y offset", "vertical offset", "offset y", "move up", "move down", "nudge up", "nudge down", "up by", "down by", "y versatz", "vertikaler versatz", "nach oben", "nach unten", "hoch um", "runter um" }) then
         key = "general.kickReadyOffsetY"
-    elseif ContainsAny(text, { "move", "nudge", "shift" }) and (direction == "left" or direction == "right") then
+    elseif ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "verschieben" }) and (direction == "left" or direction == "right") then
         key = "general.kickReadyOffsetX"
-    elseif ContainsAny(text, { "move", "nudge", "shift" }) and (direction == "up" or direction == "down") then
+    elseif ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "verschieben" }) and (direction == "up" or direction == "down") then
         key = "general.kickReadyOffsetY"
-    elseif ContainsAny(text, { "size", "scale", "groesse", "grosse", "bigger", "larger", "smaller", "grow", "shrink", "icon bigger", "icon smaller" }) then
+    elseif ContainsAny(text, { "size", "scale", "groesse", "grosse", "bigger", "larger", "smaller", "grow", "shrink", "icon bigger", "icon smaller", "groesser", "kleiner", "symbol groesser", "symbol kleiner" }) then
         key = "general.kickReadySize"
-    elseif ContainsAny(text, { "target", "target castbar", "target cast bar" }) then
+    elseif ContainsAny(text, { "target", "target castbar", "target cast bar", "ziel", "ziel castbar", "ziel zauberleiste" }) then
         key = "general.kickReadyShowTarget"
-    elseif ContainsAny(text, { "focus", "focus castbar", "focus cast bar" }) then
+    elseif ContainsAny(text, { "focus", "focus castbar", "focus cast bar", "fokus", "fokus castbar", "fokus zauberleiste" }) then
         key = "general.kickReadyShowFocus"
-    elseif ContainsAny(text, { "boss", "bosses", "boss castbar", "boss castbars", "boss cast bar", "boss cast bars" }) then
+    elseif ContainsAny(text, { "boss", "bosses", "boss castbar", "boss castbars", "boss cast bar", "boss cast bars", "boss zauberleiste", "boss zauberleisten" }) then
         key = "general.kickReadyShowBoss"
     end
     if not key then return nil end
@@ -1748,8 +1900,8 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
         end
         if value == nil then value = ValueForRegistrySetting(setting, text, raw) end
         if value == nil and setting.type == "boolean" then
-            if ContainsAny(text, { "show", "enable", "enabled", "turn on", "on", "true", "yes" }) then value = true end
-            if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "false", "no" }) then value = false end
+            if ContainsAny(text, { "show", "enable", "enabled", "turn on", "on", "true", "yes", "anzeigen", "einblenden", "aktivieren", "an" }) then value = true end
+            if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "false", "no", "ausblenden", "deaktivieren", "aus" }) then value = false end
         end
     end
     if value == nil and relativeDelta == nil then return nil end
@@ -1757,41 +1909,45 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
     return {
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta, valueLabel = value ~= nil and ValueDisplay(setting, value) or nil } },
-        label = setting.label or "Interrupt Ready setting",
-        summary = "Changes the registered Castbar Interrupt Ready control.",
+        label = setting.label or "Interrupt Ready option",
+        summary = "Changes the Cast Bar Interrupt Ready option.",
     }
 end
 
 function P.ParseFocusKickRegistryShortcut(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, { "focus kick", "focus interrupt tracker", "focus interrupt icon", "focus kick tracker", "focus kick icon" }) then return nil end
-    if ContainsAny(text, { "reset", "restore", "default", "defaults" }) then return nil end
+    if not ContainsAny(text, {
+        "focus kick", "focus interrupt tracker", "focus interrupt icon", "focus kick tracker", "focus kick icon",
+        "fokus kick", "fokus interrupt tracker", "fokus interrupt symbol", "fokus kick tracker", "fokus kick symbol",
+        "fokus kick anzeige", "fokus interrupt anzeige",
+    }) then return nil end
+    if ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen", "zurucksetzen", "standard" }) then return nil end
 
     local changes = {}
     local direction = DetectDirection(text, {})
-    if ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "x", "y", "horizontal", "vertical" }) and direction then
+    if ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "x", "y", "horizontal", "vertical", "verschiebe", "verschieben", "versatz", "platzierung" }) and direction then
         local key = (direction == "left" or direction == "right") and "general.focusKickIconOffsetX" or "general.focusKickIconOffsetY"
         local amount = FirstNumber(text) or 10
         if direction == "left" or direction == "down" then amount = -amount end
         AddRegisteredChange(changes, key, nil, amount, direction)
-    elseif ContainsAny(text, { "x offset", "offset x", "horizontal" }) then
+    elseif ContainsAny(text, { "x offset", "offset x", "horizontal", "x versatz", "horizontaler versatz" }) then
         AddRegisteredChange(changes, "general.focusKickIconOffsetX", FirstNumber(text))
-    elseif ContainsAny(text, { "y offset", "offset y", "vertical" }) then
+    elseif ContainsAny(text, { "y offset", "offset y", "vertical", "y versatz", "vertikaler versatz" }) then
         AddRegisteredChange(changes, "general.focusKickIconOffsetY", FirstNumber(text))
-    elseif ContainsAny(text, { "text size", "font size", "text bigger", "text smaller" }) then
+    elseif ContainsAny(text, { "text size", "font size", "text bigger", "text smaller", "textgroesse", "schriftgroesse", "text groesser", "text kleiner", "schrift groesser", "schrift kleiner" }) then
         local setting = Registry and Registry:GetSetting("general.focusKickTextSize")
         local relativeDelta = setting and RelativeNumberDeltaForText(setting, text) or nil
         local value = relativeDelta == nil and FirstNumber(text) or nil
         AddRegisteredChange(changes, "general.focusKickTextSize", value, relativeDelta)
-    elseif ContainsAny(text, { "size", "scale", "bigger", "larger", "smaller", "grow", "shrink", "width", "height" }) then
+    elseif ContainsAny(text, { "size", "scale", "bigger", "larger", "smaller", "grow", "shrink", "width", "height", "groesse", "grosse", "groesser", "kleiner", "breite", "hoehe" }) then
         local width = Registry and Registry:GetSetting("general.focusKickIconWidth")
         local height = Registry and Registry:GetSetting("general.focusKickIconHeight")
         local relativeWidth = width and RelativeNumberDeltaForText(width, text) or nil
         local relativeHeight = height and RelativeNumberDeltaForText(height, text) or nil
         local value = (relativeWidth == nil and relativeHeight == nil) and FirstNumber(text) or nil
-        if ContainsAny(text, { "width", "wide", "wider", "narrower" }) and not ContainsAny(text, { "height", "tall", "taller", "shorter" }) then
+        if ContainsAny(text, { "width", "wide", "wider", "narrower", "breite", "breiter", "schmaler" }) and not ContainsAny(text, { "height", "tall", "taller", "shorter", "hoehe", "hoeher", "niedriger" }) then
             AddRegisteredChange(changes, "general.focusKickIconWidth", value, relativeWidth)
-        elseif ContainsAny(text, { "height", "tall", "taller", "shorter" }) and not ContainsAny(text, { "width", "wide", "wider", "narrower" }) then
+        elseif ContainsAny(text, { "height", "tall", "taller", "shorter", "hoehe", "hoeher", "niedriger" }) and not ContainsAny(text, { "width", "wide", "wider", "narrower", "breite", "breiter", "schmaler" }) then
             AddRegisteredChange(changes, "general.focusKickIconHeight", value, relativeHeight)
         else
             AddRegisteredChange(changes, "general.focusKickIconWidth", value, relativeWidth)
@@ -1799,8 +1955,8 @@ function P.ParseFocusKickRegistryShortcut(text)
         end
     else
         local value = DetectBoolean(text)
-        if value == nil and ContainsAny(text, { "show", "enable", "turn on", "on" }) then value = true end
-        if value == nil and ContainsAny(text, { "hide", "disable", "turn off", "off" }) then value = false end
+        if value == nil and ContainsAny(text, { "show", "enable", "turn on", "on", "anzeigen", "einblenden", "aktivieren", "an" }) then value = true end
+        if value == nil and ContainsAny(text, { "hide", "disable", "turn off", "off", "ausblenden", "deaktivieren", "aus" }) then value = false end
         if value ~= nil then AddRegisteredChange(changes, "general.enableFocusKickIcon", value) end
     end
 
@@ -1810,7 +1966,7 @@ function P.ParseFocusKickRegistryShortcut(text)
         changes = changes,
         label = "Focus Kick Tracker",
         bulkSafe = #changes > 1,
-        summary = "Changes registered Focus Kick tracker controls.",
+        summary = "Changes Focus Kick tracker options.",
     }
 end
 
@@ -1875,7 +2031,7 @@ function P.ParseUnitStatusSymbolRegistryShortcut(text)
         changes = changes,
         label = spec.label,
         bulkSafe = #changes > 1,
-        summary = "Changes registered unit-frame status indicator symbol dropdowns.",
+        summary = "Changes unit-frame status indicator symbols.",
     }
 end
 
@@ -1938,8 +2094,8 @@ function P.ParseAlphaExcludeTextPortraitShortcut(text)
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Which Unit Frame?",
-            summary = "The command matched Keep Text & Portrait Visible but did not name a unit or group frame.",
+            label = "Which unit frame?",
+            summary = "The request matched Keep Text & Portrait Visible but did not name a unit or group frame.",
         }
     end
 
@@ -1952,14 +2108,155 @@ function P.ParseAlphaExcludeTextPortraitShortcut(text)
             changes = changes,
             label = "Keep Text & Portrait Visible",
             bulkSafe = #changes > 1,
-            summary = "Changes registered unit/group transparency controls.",
+            summary = "Changes unit/group transparency options.",
         }
     end
     return {
         kind = "ambiguous",
         choices = changes,
         label = "Which Group Frame?",
-        summary = "The command matched Keep Text & Portrait Visible but did not name a concrete group frame.",
+        summary = "The request matched Keep Text & Portrait Visible but did not name a concrete group frame.",
+    }
+end
+
+local CASTBAR_BACKEND_UNITS = { "player", "target", "focus", "boss" }
+local CASTBAR_BACKEND_ENABLE_KEYS = {
+    player = "general.enablePlayerCastbar",
+    target = "general.enableTargetCastbar",
+    focus = "general.enableFocusCastbar",
+    boss = "general.enableBossCastbar",
+}
+local CASTBAR_BACKEND_PROVIDER_KEYS = {
+    player = "general.castbarPlayerBackend",
+}
+local CASTBAR_BACKEND_BLOCKERS = {
+    "texture", "bar texture", "background texture", "sharedmedia", "color", "colour", "farbe",
+    "font", "schrift", "size", "width", "height", "breite", "hoehe", "position", "placement",
+    "offset", "x offset", "y offset", "versatz", "icon", "symbol", "text", "spell name",
+    "time", "timer", "fill direction", "direction", "richtung", "spark", "glow", "latency",
+    "interrupt", "kick", "tick", "ticks", "outline", "border", "rand",
+}
+local CASTBAR_BACKEND_PROVIDER_TERMS = {
+    "provider", "backend", "source", "renderer", "owner",
+    "anbieter", "quelle", "besitzer",
+}
+
+local function HasCastbarBackendIntent(text)
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "zauberleisten" }) then return false end
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return false end
+    if ContainsAny(text, CASTBAR_BACKEND_PROVIDER_TERMS) then return true end
+    if ContainsAny(text, CASTBAR_BACKEND_BLOCKERS) then return false end
+    if ContainsAny(text, { "blizzard", "msuf", "hide castbar", "hide cast bar", "hide zauberleiste", "verstecke zauberleiste", "zauberleiste ausblenden", "deaktiviere zauberleiste" }) then return true end
+    if ContainsAny(text, {
+        "hide", "disable", "disabled", "turn off", "off",
+        "ausblenden", "verstecken", "verstecke", "deaktivieren", "deaktiviere", "ausschalten", "aus",
+    }) then return true end
+    return false
+end
+
+local function CastbarBackendValueForText(text)
+    if ContainsAny(text, {
+        "hide", "hidden", "disable", "disabled", "turn off", "off",
+        "ausblenden", "verstecken", "verstecke", "deaktivieren", "deaktiviere", "ausschalten", "aus",
+    }) and not ContainsAny(text, { "blizzard", "msuf" }) then
+        return "HIDE"
+    end
+    if ContainsAny(text, {
+        "blizzard", "blizzard castbar", "blizzard cast bar", "blizzard zauberleiste",
+        "wow castbar", "wow zauberleiste", "standard castbar", "standard zauberleiste",
+    }) then
+        return "BLIZZARD"
+    end
+    if ContainsAny(text, {
+        "msuf", "msuf castbar", "msuf cast bar", "msuf zauberleiste",
+        "own castbar", "custom castbar", "eigene castbar", "eigene zauberleiste",
+    }) then
+        return "MSUF"
+    end
+    return nil
+end
+
+local function CastbarBackendUnitsForText(text, value)
+    local explicitUnits = DetectUnits(text)
+    local units = {}
+    local concrete = false
+    for i = 1, #explicitUnits do
+        local unit = explicitUnits[i]
+        if CASTBAR_BACKEND_ENABLE_KEYS[unit] then
+            units[#units + 1] = unit
+            concrete = true
+        end
+    end
+    if #units > 0 then return units, concrete end
+    if HasAllScopeIntent(text) or ContainsAny(text, { "all castbars", "all cast bars", "alle castbar", "alle castbars", "alle zauberleisten" }) then
+        for i = 1, #CASTBAR_BACKEND_UNITS do units[#units + 1] = CASTBAR_BACKEND_UNITS[i] end
+        return units, true
+    end
+    local pageUnit = CurrentRegistryPageUnit()
+    if pageUnit and CASTBAR_BACKEND_ENABLE_KEYS[pageUnit] then
+        units[#units + 1] = pageUnit
+        return units, true
+    end
+    if value == "BLIZZARD" then
+        return units, false
+    end
+    return units, false
+end
+
+P.ParseCastbarBackendShortcut = function(text)
+    if not HasCastbarBackendIntent(text) then return nil end
+    local value = CastbarBackendValueForText(text)
+    if value == nil then return nil end
+    local units, concrete = CastbarBackendUnitsForText(text, value)
+    if #units == 0 then
+        if value == "BLIZZARD" then
+            return {
+                kind = "answer",
+                status = "ambiguous",
+                text = "Player is the only cast bar that can switch between Blizzard and MSUF. For Blizzard, ask for 'use Blizzard player cast bar'. Target, Focus, and Boss cast bars can use MSUF or be hidden.",
+                summary = "Explains which cast bars can use Blizzard mode.",
+            }
+        end
+        return nil
+    end
+    if value == "BLIZZARD" then
+        for i = 1, #units do
+            if units[i] ~= "player" then
+                return {
+                    kind = "answer",
+                    status = "unsupported",
+                    text = "Only the Player cast bar can use Blizzard mode. For Target, Focus, and Boss, use the MSUF cast bar or hide the cast bar.",
+                    summary = "Only the Player cast bar can use Blizzard mode.",
+                }
+            end
+        end
+    end
+    local changes = {}
+    for i = 1, #units do
+        local unit = units[i]
+        if unit == "player" and (value == "MSUF" or value == "BLIZZARD") then
+            AddRegisteredChange(changes, CASTBAR_BACKEND_PROVIDER_KEYS.player, value)
+        elseif value == "MSUF" then
+            AddRegisteredChange(changes, CASTBAR_BACKEND_ENABLE_KEYS[unit], true)
+        elseif value == "HIDE" then
+            AddRegisteredChange(changes, CASTBAR_BACKEND_ENABLE_KEYS[unit], false)
+        end
+    end
+    if #changes == 0 then return nil end
+    if concrete or #changes == 1 or ShouldApplyMultipleRegistryChanges(text, changes) then
+        return {
+            kind = "changes",
+            changes = changes,
+            label = "Cast Bar Provider",
+            bulkSafe = #changes > 1,
+            summary = "Changes whether a cast bar uses MSUF, Blizzard, or is hidden.",
+        }
+    end
+    return {
+        kind = "ambiguous",
+        choices = changes,
+        label = "Which Cast Bar?",
+        summary = "Which cast bar do you want me to change: Player, Target, Focus, or Boss?",
     }
 end
 
@@ -1982,17 +2279,17 @@ function P.ParseCastbarPositionRegistryShortcut(text)
         or (naturalPlacement and ContainsAny(text, { "icon", "spell icon" }))
     then
         field = "IconPosition"
-        label = "Castbar Icon Position"
+        label = "Cast Bar Icon Position"
     elseif ContainsAny(text, { "spell name position", "spell text position", "castbar text position", "cast bar text position", "castbar name position" })
         or (naturalPlacement and ContainsAny(text, { "spell name", "spell text", "castbar text", "cast bar text", "text", "name" }))
     then
         field = "SpellNamePosition"
-        label = "Castbar Spell Name Position"
+        label = "Cast Bar Spell Name Position"
     elseif ContainsAny(text, { "time position", "time text position", "timer position", "cast time position", "castbar time position", "cast bar time position" })
         or (naturalPlacement and ContainsAny(text, { "time", "timer", "cast time" }))
     then
         field = "TimePosition"
-        label = "Castbar Time Position"
+        label = "Cast Bar rime Position"
     else
         return nil
     end
@@ -2051,14 +2348,14 @@ function P.ParseCastbarPositionRegistryShortcut(text)
             changes = changes,
             label = label,
             bulkSafe = #changes > 1,
-            summary = "Changes registered castbar position dropdown controls.",
+            summary = "Changes cast bar position options.",
         }
     end
     return {
         kind = "ambiguous",
         choices = changes,
-        label = "Which Castbar?",
-        summary = "The command matched a castbar position dropdown but did not name Player, Target, Focus, or Boss.",
+        label = "Which Cast Bar?",
+        summary = "The request matched a cast bar position option but did not name Player, Target, Focus, or Boss.",
     }
 end
 
@@ -2124,7 +2421,7 @@ function P.ParsePowerBarGradientRegistryShortcut(text)
             kind = "changes",
             changes = { { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) } },
             label = setting.label or "Power Bar Gradient",
-            summary = "Changes the shared Power Bar Gradient setting.",
+            summary = "Changes the Power Bar Gradient option.",
         }
     end
 
@@ -2133,7 +2430,7 @@ function P.ParsePowerBarGradientRegistryShortcut(text)
         changes = changes,
         label = "Power Bar Gradient",
         bulkSafe = #changes > 1,
-        summary = "Changes registered scoped Power Bar Gradient controls.",
+        summary = "Changes target-specific Power Bar Gradient options.",
     }
 end
 
@@ -2191,7 +2488,7 @@ P.ParseGroupRolePowerVisibilityShortcut = function(text)
     for i = 1, #scopes do
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. "." .. attr, value)
     end
-    return P.GroupShortcutResponse(text, changes, concrete, "Group frame role power", "Changes role-specific Group Frame power visibility controls for " .. label .. ".")
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame role power", "Changes role-specific Group Frame power visibility options for " .. label .. ".")
 end
 
 P.ParseGroupRoleIconVisibilityShortcut = function(text)
@@ -2220,7 +2517,7 @@ P.ParseGroupRoleIconVisibilityShortcut = function(text)
     for i = 1, #scopes do
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. "." .. attr, value)
     end
-    return P.GroupShortcutResponse(text, changes, concrete, "Group frame role icon visibility", "Changes role-specific Group Frame role-icon visibility controls for " .. label .. ".")
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame role icon visibility", "Changes role-specific Group Frame role-icon visibility options for " .. label .. ".")
 end
 
 P.ParseGroupOfflineAlphaShortcut = function(text)
@@ -2255,7 +2552,7 @@ P.ParseGroupOfflineAlphaShortcut = function(text)
     for i = 1, #scopes do
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".offlineAlpha", value, relativeDelta)
     end
-    return P.GroupShortcutResponse(text, changes, concrete, "Group frame offline opacity", "Changes the registered Group Frame Offline Opacity slider.")
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame offline opacity", "Changes the Group Frame Offline Opacity slider.")
 end
 
 P.ParseGroupColumnLayoutShortcut = function(text)
@@ -2293,7 +2590,7 @@ P.ParseGroupColumnLayoutShortcut = function(text)
     for i = 1, #scopes do
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. "." .. attr, value)
     end
-    return P.GroupShortcutResponse(text, changes, concrete, label, "Changes registered Group Layout column controls.")
+    return P.GroupShortcutResponse(text, changes, concrete, label, "Changes Group Layout column options.")
 end
 
 P.ParseGroupPlayerFirstInRoleShortcut = function(text)
@@ -2316,7 +2613,80 @@ P.ParseGroupPlayerFirstInRoleShortcut = function(text)
     for i = 1, #scopes do
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".playerFirstInRole", value)
     end
-    return P.GroupShortcutResponse(text, changes, concrete, "Group frame player first in role", "Changes the registered Player First In Role sorting toggle.")
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame player first in role", "Changes the Player First in Role sorting toggle.")
+end
+
+local GROUP_BLIZZARD_FALLBACK_TERMS = {
+    "blizzard fallback", "blizzard fallback mode", "fallback mode", "fallback modus",
+    "if this switch is off", "when disabled", "when group frames are disabled",
+    "disabled group frame behavior", "disabled group frame blizzard behavior",
+    "wenn dieser schalter aus ist", "wenn der schalter aus ist", "wenn gruppenframes aus sind",
+    "wenn gruppenframes deaktiviert sind", "wenn party aus ist", "wenn raid aus ist",
+    "wenn party frames aus sind", "wenn raid frames aus sind",
+}
+
+local GROUP_BLIZZARD_FRAME_TERMS = {
+    "blizzard group frames", "blizzard group frame", "blizzard party frames", "blizzard raid frames",
+    "blizzard frames", "default group frames", "default party frames", "default raid frames",
+    "standard group frames", "standard party frames", "standard raid frames",
+    "blizzard gruppenframes", "blizzard gruppen frames",
+    "standard gruppenframes", "standard gruppen frames", "standardrahmen", "standard rahmen",
+}
+
+local function HasGroupBlizzardFallbackIntent(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar", "unitframe", "unit frame", "unitframes", "unit frames" }) then return false end
+    local groups = DetectGroups(text)
+    if ContainsAny(text, GROUP_BLIZZARD_FALLBACK_TERMS) then return true end
+    if #groups == 0 then return false end
+    if not ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return false end
+    return ContainsAny(text, {
+        "show", "hide", "force", "auto", "automatic", "fallback", "when disabled", "if off",
+        "anzeigen", "einblenden", "ausblenden", "verstecken", "erzwingen", "automatisch",
+        "wenn aus", "wenn deaktiviert", "wenn ausgeschaltet",
+    })
+end
+
+local function GroupBlizzardFallbackValueForText(text)
+    if ContainsAny(text, {
+        "auto", "automatic", "automatically", "blizzard default", "blizzard decides",
+        "normal behavior", "default behavior", "automatisch", "blizzard entscheidet",
+        "standard verhalten", "normales verhalten",
+    }) then
+        return "AUrO"
+    end
+    if ContainsAny(text, {
+        "hide all", "hide both", "hide blizzard", "hide default", "hide standard",
+        "none", "no blizzard", "no default frames", "no standard frames",
+        "alles ausblenden", "alle verstecken", "beide ausblenden", "blizzard ausblenden",
+        "blizzard verstecken", "standardrahmen ausblenden", "standard rahmen ausblenden",
+        "keine blizzard frames", "keine standardrahmen", "nichts anzeigen",
+    }) then
+        return "NONE"
+    end
+    if ContainsAny(text, {
+        "show blizzard", "show default", "show standard", "force blizzard",
+        "restore blizzard", "use blizzard", "blizzard visible", "blizzard frames visible",
+        "blizzard anzeigen", "blizzard einblenden", "standardrahmen anzeigen",
+        "standard rahmen anzeigen", "standardframes anzeigen", "blizzard erzwingen",
+        "blizzard sichtbar", "blizzard frames sichtbar",
+    }) then
+        return "SHOW"
+    end
+    if ContainsAny(text, { "show", "visible", "anzeigen", "einblenden", "sichtbar" }) and ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return "SHOW" end
+    if ContainsAny(text, { "hide", "hidden", "off", "ausblenden", "verstecken", "aus" }) and ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return "NONE" end
+    return nil
+end
+
+P.ParseGroupBlizzardFallbackShortcut = function(text)
+    if not HasGroupBlizzardFallbackIntent(text) then return nil end
+    local value = GroupBlizzardFallbackValueForText(text)
+    if value == nil then return nil end
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".blizzardFallbackMode", value)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame Blizzard fallback", "Changes the Group Frame Blizzard Fallback Mode dropdown.")
 end
 
 P.ParseGroupSortShortcut = function(text)
@@ -2366,7 +2736,7 @@ P.ParseGroupSortShortcut = function(text)
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".sortMode", sortValue)
         if roleOrderValue then AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".roleOrder", roleOrderValue) end
     end
-    return P.GroupShortcutResponse(text, changes, concrete, "Group frame sorting", "Changes registered Group Frame sort mode and role order controls.")
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame sorting", "Changes Group Frame sort mode and role order options.")
 end
 
 P.ParseGroupScaleModeShortcut = function(text)
@@ -2401,7 +2771,7 @@ P.ParseGroupScaleModeShortcut = function(text)
     for i = 1, #scopes do
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".frameScaleMode", value)
     end
-    return P.GroupShortcutResponse(text, changes, concrete, "Group frame scaling mode", "Changes the registered Group Layout Frame Scaling Mode control.")
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame scaling mode", "Changes the Group Layout Frame Scaling Mode option.")
 end
 
 P.ParseGroupOfflineDelayShortcut = function(text)
@@ -2418,7 +2788,7 @@ P.ParseGroupOfflineDelayShortcut = function(text)
         if enableHide then AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".hideOfflineEnabled", true) end
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".hideOfflineDelay", value)
     end
-    return P.GroupShortcutResponse(text, changes, concrete, "Group frame offline delay", "Changes registered Group Frame offline-member hiding controls.")
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame offline delay", "Changes Group Frame offline-member hiding options.")
 end
 
 P.ParseMiscRegistryShortcut = function(text, raw)
@@ -2430,6 +2800,8 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if focusKick then return focusKick end
     local unitStatusSymbol = P.ParseUnitStatusSymbolRegistryShortcut and P.ParseUnitStatusSymbolRegistryShortcut(text)
     if unitStatusSymbol then return unitStatusSymbol end
+    local castbarBackend = P.ParseCastbarBackendShortcut and P.ParseCastbarBackendShortcut(text)
+    if castbarBackend then return castbarBackend end
     local castbarPosition = P.ParseCastbarPositionRegistryShortcut and P.ParseCastbarPositionRegistryShortcut(text)
     if castbarPosition then return castbarPosition end
     local powerGradient = P.ParsePowerBarGradientRegistryShortcut and P.ParsePowerBarGradientRegistryShortcut(text)
@@ -2448,6 +2820,8 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if groupColumns then return groupColumns end
     local groupPlayerFirst = P.ParseGroupPlayerFirstInRoleShortcut and P.ParseGroupPlayerFirstInRoleShortcut(text)
     if groupPlayerFirst then return groupPlayerFirst end
+    local groupBlizzardFallback = P.ParseGroupBlizzardFallbackShortcut and P.ParseGroupBlizzardFallbackShortcut(text)
+    if groupBlizzardFallback then return groupBlizzardFallback end
     local groupBoolean = P.ParseGroupBooleanRegistryShortcut and P.ParseGroupBooleanRegistryShortcut(text)
     if groupBoolean then return groupBoolean end
     local groupNumber = P.ParseGroupNumberRegistryShortcut and P.ParseGroupNumberRegistryShortcut(text)
@@ -2491,34 +2865,46 @@ P.ParseMiscRegistryShortcut = function(text, raw)
         forcedValue = "LTR"
     elseif ContainsAny(text, { "nameplate melee spell id", "melee nameplate spell id", "melee range spell id", "crosshair melee spell id", "crosshair spell id" }) then
         key = "gameplay.nameplateMeleeSpellID"
-    elseif ContainsAny(text, { "snap", "snapping", "edge snap", "window snap", "menu snap", "snapping feature", "snap feature" }) then
+    elseif ContainsAny(text, { "snap", "snapping", "edge snap", "window snap", "menu snap", "snapping feature", "snap feature", "menue snap", "menue einrasten", "menue andocken", "fenster einrasten", "fenster andocken", "kante andocken" }) then
         if ContainsAny(text, { "edit mode", "grid snap", "snap to grid", "snap frames", "mover snap", "raster snap" }) then return nil end
         key = "general.slashMenuSnapEnabled"
-    elseif ContainsAny(text, { "advanced menu", "advanced menu section", "advanced section", "erweitertes menu" }) then
+    elseif ContainsAny(text, { "advanced menu", "advanced menu section", "advanced section", "erweitertes menu", "erweitertes menue", "advanced menue" }) then
         key = "general.hideAdvancedMenu"
-    elseif ContainsAny(text, { "reduce motion", "menu motion", "reduce animations", "menu animations", "bewegung reduzieren" }) then
+    elseif ContainsAny(text, { "reduce motion", "menu motion", "reduce animations", "menu animations", "bewegung reduzieren", "menue bewegung reduzieren", "animationen reduzieren", "weniger bewegung", "weniger animationen", "reduzierte bewegung" }) then
         key = "general.reduceMotion"
-    elseif ContainsAny(text, { "welcome message", "startup welcome", "startup message", "start message", "willkommensnachricht" }) then
+    elseif ContainsAny(text, { "welcome message", "startup welcome", "startup message", "start message", "willkommensnachricht", "willkommens nachricht", "willkommens meldung", "willkommen nachricht", "login nachricht", "start meldung" }) then
         key = "general.showWelcomeMessage"
-    elseif ContainsAny(text, { "version check", "peer version check", "peer-to-peer version check", "update check", "versionscheck" }) then
+    elseif ContainsAny(text, { "version check", "peer version check", "peer-to-peer version check", "update check", "versionscheck", "versions pruefung", "version pruefung", "versionspruefung", "peer versionspruefung", "update pruefung" }) then
         key = "general.versionCheckEnabled"
-    elseif ContainsAny(text, { "minimap icon", "minimap button", "msuf minimap icon", "msuf minimap button", "minikarten symbol" }) then
+    elseif ContainsAny(text, { "minimap icon", "minimap button", "msuf minimap icon", "msuf minimap button", "minikarten symbol", "minimap symbol", "minimap knopf", "minikarten icon", "minikarten button", "minikarten knopf" }) then
         key = "general.showMinimapIcon"
-    elseif ContainsAny(text, { "target sounds", "target sound", "target lost sound", "target lost sounds", "target select sound", "target select sounds", "target select lost sounds", "play sound on target", "play sound on target lost", "play sound on target select", "ziel sound", "ziel sounds" }) then
+    elseif ContainsAny(text, { "target sounds", "target sound", "target lost sound", "target lost sounds", "target select sound", "target select sounds", "target select lost sounds", "play sound on target", "play sound on target lost", "play sound on target select", "ziel sound", "ziel sounds", "zielauswahl sound", "ziel verloren sound", "ziel verloren sounds", "sound bei ziel", "sound bei zielwechsel", "spiele sound bei ziel" }) then
         key = "general.playTargetSelectLostSounds"
-    elseif ContainsAny(text, { "fully hide blizzard playerframe", "fully hide blizzard player frame", "hard hide blizzard playerframe", "hard hide blizzard player frame", "hard kill blizzard playerframe", "hard kill blizzard player frame", "resource bar compatibility" }) then
+    elseif ContainsAny(text, { "fully hide blizzard playerframe", "fully hide blizzard player frame", "hard hide blizzard playerframe", "hard hide blizzard player frame", "hard kill blizzard playerframe", "hard kill blizzard player frame", "resource bar compatibility", "blizzard spieler rahmen komplett verstecken", "blizzard spieler frame komplett verstecken", "playerframe hart verstecken", "spieler frame hart verstecken", "ressourcenleisten kompatibilitaet" }) then
         key = "general.hardKillBlizzardPlayerFrame"
-    elseif ContainsAny(text, { "blizzard unitframes", "blizzard unit frames", "blizzard frames", "standard frames", "default frames" }) then
+    elseif ContainsAny(text, { "blizzard unitframes", "blizzard unit frames", "blizzard frames", "standard frames", "default frames", "blizzard unitframe", "blizzard rahmen", "standardrahmen", "standard rahmen", "wow unitframes", "wow rahmen", "original frames" }) then
         key = "general.disableBlizzardUnitFrames"
-    elseif ContainsAny(text, { "menu language", "msuf language", "menu locale", "locale", "language", "sprache" }) then
+    elseif ContainsAny(text, { "menu language", "msuf language", "menu locale", "locale", "language", "sprache", "menue sprache", "menuesprache", "msuf sprache", "optionen sprache" }) then
         key = "general.menuLocale"
-    elseif ContainsAny(text, { "tooltip modifier", "tooltip modifier key", "unit tooltip modifier", "unitframe tooltip modifier", "modifier key" }) and ContainsAny(text, { "tooltip", "tooltips" }) then
+    elseif ContainsAny(text, { "dropdown style", "dropdown style mode", "dropdown module style", "menu dropdown style", "dropdown skin", "dropdown design", "dropdown stil", "menue dropdown stil", "dropdown modus", "dropdown aussehen", "auswahlmenue stil", "menue auswahl stil" }) then
+        key = "general.dropdownStyleMode"
+    elseif ContainsAny(text, { "msuf style", "msuf style module", "midnight style", "midnight design", "style module", "module style", "msuf skin", "msuf stil", "midnight stil", "stil modul", "style modul", "design modul", "msuf design", "skin modul" }) then
+        key = "general.styleEnabled"
+    elseif ContainsAny(text, { "tooltip modifier", "tooltip modifier key", "unit tooltip modifier", "unitframe tooltip modifier", "modifier key", "tooltip taste", "tooltip modifier taste", "tooltip hotkey", "tooltip aktivierungstaste" }) and ContainsAny(text, { "tooltip", "tooltips" }) then
         key = "general.unitTooltipModifier"
-    elseif ContainsAny(text, { "tooltip source", "unitframe tooltip source", "unit tooltip source", "group frame tooltip source", "game tooltip source", "gametooltip source" }) then
+    elseif ContainsAny(text, { "use msuf tooltip", "use msuf tooltips", "use msuf unitframe tooltip", "nutze msuf tooltip", "nutze msuf tooltips", "verwende msuf tooltip", "verwende msuf tooltips" }) then
         key = "general.unitTooltipProvider"
-    elseif ContainsAny(text, { "tooltip anchor", "unitframe tooltip anchor", "unit tooltip anchor", "tooltip position", "tooltip location" }) then
+        forcedValue = "MSUF"
+    elseif ContainsAny(text, { "use gametooltip", "use game tooltip", "use game tooltips", "use blizzard tooltip", "nutze gametooltip", "nutze game tooltip", "verwende gametooltip", "verwende blizzard tooltip" }) then
+        key = "general.unitTooltipProvider"
+        forcedValue = "GAME"
+    elseif ContainsAny(text, { "tooltip source", "unitframe tooltip source", "unit tooltip source", "group frame tooltip source", "game tooltip source", "gametooltip source", "tooltip quelle", "tooltip anbieter", "unitframe tooltip quelle", "einheiten tooltip quelle", "gruppen tooltip quelle", "game tooltip quelle", "msuf tooltip quelle" }) then
+        key = "general.unitTooltipProvider"
+    elseif ContainsAny(text, { "tooltip anchor", "unitframe tooltip anchor", "unit tooltip anchor", "tooltip position", "tooltip location", "tooltip anker", "unitframe tooltip anker", "tooltip ort", "tooltip platzierung" })
+        or (ContainsAny(text, { "tooltip", "tooltips" }) and ContainsAny(text, { "cursor", "mouse", "maus", "mauszeiger", "fixed", "fest", "fixiert", "external", "extern", "addon kontrolliert", "am cursor", "an der maus" })) then
         key = "general.unitTooltipAnchor"
-    elseif ContainsAny(text, { "unitframe tooltips", "unit frame tooltips", "unit tooltips", "group frame tooltips", "show tooltips", "tooltips", "tooltip mode", "tooltip visibility" }) then
+    elseif ContainsAny(text, { "unitframe tooltips", "unit frame tooltips", "unit tooltips", "group frame tooltips", "show tooltips", "tooltips", "tooltip mode", "tooltip visibility", "tooltip anzeigen", "tooltips anzeigen", "tooltip modus", "tooltip sichtbarkeit", "unitframe tooltip anzeigen", "einheiten tooltips", "gruppen tooltips" })
+        or (ContainsAny(text, { "tooltip", "tooltips" }) and ContainsAny(text, { "always", "immer", "ooc", "out of combat", "ausserhalb kampf", "modifier", "alt", "ctrl", "strg", "shift", "umschalt", "never", "nie", "niemals", "aus", "an" })) then
         key = "general.unitTooltipMode"
     end
     if not key then return nil end
@@ -2528,11 +2914,26 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     local value = forcedValue
     if value == nil then value = ValueForRegistrySetting(setting, text, raw) end
     if value == nil then return nil end
+    if key == "general.unitTooltipMode" and value == "MODIFIER" then
+        local modifierValue = TooltipModifierValueForText(text)
+        local modifierSetting = modifierValue and Registry and Registry:GetSetting("general.unitTooltipModifier") or nil
+        if modifierSetting then
+            return {
+                kind = "changes",
+                changes = {
+                    { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) },
+                    { setting = modifierSetting, value = modifierValue, valueLabel = ValueDisplay(modifierSetting, modifierValue) },
+                },
+                label = "Unit Frame tooltip behavior",
+                summary = "Changes the Unit Frame Tooltip mode and modifier key together.",
+            }
+        end
+    end
     return {
         kind = "changes",
         changes = { { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) } },
-        label = setting.label or "Miscellaneous setting",
-        summary = "Changes a registered Miscellaneous setting through the real MSUF control.",
+        label = setting.label or "Miscellaneous option",
+        summary = "Changes a Miscellaneous option in MSUF.",
     }
 end
 
@@ -2566,7 +2967,7 @@ local function UnitLoadConditionChoices(spec, value)
                 setting = setting,
                 value = value,
                 valueLabel = ValueDisplay(setting, value),
-                label = tostring(setting.label or spec.label) .. " -> " .. ValueDisplay(setting, value),
+                label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, ValueDisplay(setting, value), spec.label) or (tostring(setting.label or spec.label) .. ": " .. ValueDisplay(setting, value)),
             }
         end
     end
@@ -2580,8 +2981,8 @@ local function ParseUnitLoadConditionShortcut(text)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Which Unit Frame load condition should I change? MSUF exposes Mounted, Out of combat, Solo, In vehicle, In group, In instance, Resting, In combat, and Stealthed.",
-            summary = "Asks for the real Unit Frame load-condition option.",
+            text = "Which unit frame visibility rule do you want me to change? MSUF offers Mounted, Out of combat, Solo, In vehicle, In group, In instance, Resting, In combat, and Stealthed.",
+            summary = "Asks which unit frame visibility rule to change.",
         }
     end
 
@@ -2593,8 +2994,8 @@ local function ParseUnitLoadConditionShortcut(text)
         return {
             kind = "ambiguous",
             choices = choices,
-            label = "Which Unit Frame?",
-            summary = "The command matched a real Unit Frame load condition but did not name a unit.",
+            label = "Which unit frame?",
+            summary = "The request matched a unit frame visibility rule but did not name a unit.",
         }
     end
 
@@ -2607,16 +3008,16 @@ local function ParseUnitLoadConditionShortcut(text)
         return {
             kind = "changes",
             changes = changes,
-            label = "Unit Frame " .. tostring(spec.label),
+            label = "Unit frame " .. tostring(spec.label),
             bulkSafe = true,
-            summary = "Changes registered Unit Frame load-condition controls.",
+            summary = "Changes unit frame visibility rules.",
         }
     end
     return {
         kind = "ambiguous",
         choices = changes,
-        label = "Which Unit Frame?",
-        summary = "The command matched a real Unit Frame load condition but did not name a unit.",
+        label = "Which unit frame?",
+        summary = "The request matched a unit frame visibility rule but did not name a unit.",
     }
 end
 
@@ -2750,7 +3151,7 @@ function P.ParseDetachedPowerBarRegistryShortcut(text, raw)
         changes = changes,
         label = label,
         bulkSafe = #changes > 1,
-        summary = "Changes registered detached Power Bar detail controls.",
+        summary = "Changes detached Power Bar detail options.",
     }
 end
 
@@ -2773,9 +3174,9 @@ local function ParsePowerBarRegistryShortcut(text, raw)
             return {
                 kind = "changes",
                 changes = changes,
-                label = "Power Bar detached state",
+                label = "Detach Power Bar",
                 bulkSafe = true,
-                summary = "Changes registered per-unit Power Bar detach controls.",
+                summary = "Changes whether the selected Power Bar is detached.",
             }
         end
         return nil
@@ -2790,9 +3191,9 @@ local function ParsePowerBarRegistryShortcut(text, raw)
             return {
                 kind = "changes",
                 changes = changes,
-                label = "Power Bar embed state",
+                label = "Embed Power Bar",
                 bulkSafe = #changes > 1,
-                summary = "Changes registered per-unit Power Bar embed-into-health controls.",
+                summary = "Changes whether the selected Power Bar sits inside the health bar.",
             }
         end
         return nil
@@ -2817,7 +3218,7 @@ local function ParsePowerBarRegistryShortcut(text, raw)
                     changes = changes,
                     label = "Power Bar border thickness",
                     bulkSafe = true,
-                    summary = "Changes registered per-unit Power Bar Border Thickness sliders.",
+                    summary = "Changes per-unit Power Bar Border Thickness.",
                 }
             end
         end
@@ -2831,7 +3232,7 @@ local function ParsePowerBarRegistryShortcut(text, raw)
                 changes = changes,
                 label = "Power Bar border",
                 bulkSafe = true,
-                summary = "Changes registered per-unit Power Bar Border toggles.",
+                summary = "Changes per-unit Power Bar Border toggles.",
             }
         end
         return nil
@@ -2863,7 +3264,7 @@ local function ParsePowerBarRegistryShortcut(text, raw)
                 changes = changes,
                 label = "Power Bar height",
                 bulkSafe = true,
-                summary = "Changes registered Power Bar Height sliders.",
+                summary = "Changes Power Bar Height.",
             }
         end
         return nil
@@ -2881,7 +3282,7 @@ local function ParsePowerBarRegistryShortcut(text, raw)
         changes = changes,
         label = "Power Bar visibility",
         bulkSafe = true,
-        summary = "Changes registered root Power Bar visibility controls.",
+        summary = "Changes root Power Bar visibility options.",
     }
 end
 
@@ -2915,9 +3316,9 @@ local function ParseCastbarInterruptRegistryShortcut(text)
     return {
         kind = "changes",
         changes = changes,
-        label = "Castbar interrupt visibility",
+        label = "Cast Bar interrupt visibility",
         bulkSafe = true,
-        summary = "Changes registered per-unit Show Castbar Interrupt controls.",
+        summary = "Changes per-unit Show Cast Bar Interrupt options.",
     }
 end
 
@@ -2934,7 +3335,7 @@ P.BuildColorShortcutChange = function(key, value, valueLabel)
         setting = setting,
         value = value,
         valueLabel = valueLabel,
-        label = tostring(setting.label or "MSUF color") .. " -> " .. tostring(valueLabel or "color"),
+        label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, valueLabel or "color", "MSUF color") or (tostring(setting.label or "MSUF color") .. ": " .. tostring(valueLabel or "color")),
     }
 end
 
@@ -2946,14 +3347,14 @@ P.ColorShortcutResponse = function(changes, title, concrete, summary)
             changes = changes,
             label = title or (changes[1].setting and changes[1].setting.label) or "MSUF color",
             bulkSafe = #changes > 1,
-            summary = summary or "Changes a registered MSUF color setting.",
+            summary = summary or "Changes an MSUF color option.",
         }
     end
     return {
         kind = "ambiguous",
         choices = changes,
         label = title or "Which MSUF color?",
-        summary = summary or "The color command matched multiple registered MSUF color settings.",
+        summary = summary or "The color request matched multiple MSUF color options.",
     }
 end
 
@@ -3001,14 +3402,14 @@ P.ParseCastbarColorShortcut = function(text, raw)
     end
 
     if key then
-        return P.ColorShortcutResponse(P.BuildCastbarColorChoices({ key }, value, valueLabel), "Castbar color", true, "Changes the registered Castbar color setting.")
+        return P.ColorShortcutResponse(P.BuildCastbarColorChoices({ key }, value, valueLabel), "Castbar color", true, "Changes the Castbar color option.")
     end
     if ContainsAny(text, { "interrupt color", "interrupt colour" }) then
         return P.ColorShortcutResponse(P.BuildCastbarColorChoices({
             "general.castbarInterruptibleColor",
             "general.castbarNonInterruptibleColor",
             "general.castbarInterruptFeedbackColor",
-        }, value, valueLabel), "Which castbar interrupt color?", false, "The command mentions interrupt color, which maps to several real Castbar color controls.")
+        }, value, valueLabel), "Which castbar interrupt color?", false, "The request mentions interrupt color, which maps to several real Castbar color options.")
     end
     if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then
         return P.ColorShortcutResponse(P.BuildCastbarColorChoices({
@@ -3018,7 +3419,7 @@ P.ParseCastbarColorShortcut = function(text, raw)
             "general.castbarFontColor",
             "general.castbarBorderColor",
             "general.castbarBackgroundColor",
-        }, value, valueLabel), "Which castbar color?", false, "The command mentions Castbar color but not the exact registered Castbar color control.")
+        }, value, valueLabel), "Which castbar color?", false, "The request mentions Castbar color but not the exact Castbar color option.")
     end
     return nil
 end
@@ -3080,7 +3481,7 @@ P.ParseGroupFrameColorShortcut = function(text, raw)
         local change = P.BuildColorShortcutChange("gf_" .. tostring(scopes[i]) .. "." .. target.key, value, valueLabel)
         if change then changes[#changes + 1] = change end
     end
-    return P.ColorShortcutResponse(changes, target.title, concrete, "Changes a registered Group Frame color setting.")
+    return P.ColorShortcutResponse(changes, target.title, concrete, "Changes a Group Frame color option.")
 end
 
 local STATUS_TEST_UNITS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
@@ -3126,7 +3527,7 @@ local function ParseStatusIconTestModeRegistryShortcut(text)
         changes = changes,
         label = "Status Icon Test Mode",
         bulkSafe = true,
-        summary = "Changes registered per-unit Status Icon Test Mode toggles.",
+        summary = "Changes per-unit Status Icon Test Mode toggles.",
     }
 end
 
@@ -3144,7 +3545,7 @@ function P.ParseGroupBooleanRegistryShortcut(text)
         "hide name on dead or offline", "hide name when dead or offline", "dead or offline",
     }) then
         attr = "hideNameOnDeadOffline"
-        label = "Hide Name On Dead Or Offline"
+            label = "Hide Name on Dead or Offline"
         if ContainsAny(text, { "turn off", "disable", "disabled", "deactivate", "deactivated", "ausschalten", "deaktivieren" }) then
             value = false
         else
@@ -3175,7 +3576,7 @@ function P.ParseGroupBooleanRegistryShortcut(text)
     for i = 1, #scopes do
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. "." .. attr, value)
     end
-    return P.GroupShortcutResponse(text, changes, concrete, label, "Changes a registered Group Frame boolean control.")
+    return P.GroupShortcutResponse(text, changes, concrete, label, "Changes a Group Frame boolean option.")
 end
 
 function P.ParseUnitHPTextReverseShortcut(text)
@@ -3220,8 +3621,8 @@ function P.ParseUnitHPTextReverseShortcut(text)
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Which Unit Frame?",
-            summary = "The command matched Reverse HP Text Order but did not name a unit frame.",
+            label = "Which unit frame?",
+            summary = "The request matched reverse HP text order but did not name a unit frame.",
         }
     end
 
@@ -3232,9 +3633,9 @@ function P.ParseUnitHPTextReverseShortcut(text)
     return {
         kind = "changes",
         changes = changes,
-        label = "Unit Frame Reverse HP Text Order",
+        label = "Unit frame reverse HP text order",
         bulkSafe = #changes > 1,
-        summary = "Changes registered Unit Frame Reverse HP Text Order controls.",
+        summary = "Changes reverse HP text order for unit frames.",
     }
 end
 
@@ -3319,8 +3720,8 @@ function P.ParseExactRegistryKeyShortcut(text, raw)
                         valueLabel = value ~= nil and ValueDisplay(bestSetting, value) or nil,
                     },
                 },
-                label = bestSetting.label or bestSetting.key,
-                summary = "Changes the registered setting addressed by its exact MSUF key.",
+                label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(bestSetting) or bestSetting.label or "MSUF option",
+                summary = "Changes the matching MSUF option.",
             }
         end
         return MissingValueResponse({ { setting = bestSetting, score = 100 } }, raw)
@@ -3370,7 +3771,7 @@ function P.ParseGroupNumberRegistryShortcut(text)
         if relativeDelta == nil then value = FirstNumber(text) end
         if value ~= nil or relativeDelta ~= nil then AddRegisteredChange(changes, key, value, relativeDelta) end
     end
-    return P.GroupShortcutResponse(text, changes, concrete, label, "Changes a registered Group Frame numeric control.")
+    return P.GroupShortcutResponse(text, changes, concrete, label, "Changes a Group Frame numeric option.")
 end
 
 local function ParseRepeatedRegistryShortcut(text, raw)
@@ -3379,6 +3780,7 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or P.ParseCastbarColorShortcut(text, raw)
         or P.ParseInterruptReadyRegistryShortcut(text, raw)
         or P.ParseUnitStatusSymbolRegistryShortcut(text)
+        or P.ParseCastbarBackendShortcut(text)
         or P.ParseCastbarPositionRegistryShortcut(text)
         or (P.ParseFocusKickRegistryShortcut and P.ParseFocusKickRegistryShortcut(text))
         or P.ParsePowerBarGradientRegistryShortcut(text)
@@ -3434,7 +3836,7 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings)
                             value = freeform,
                             matchScore = score,
                             valueLabel = freeform,
-                            label = tostring(customSetting.label or setting.label or "Custom setting") .. " -> " .. tostring(freeform),
+                            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(customSetting, freeform, setting and setting.label or "Custom option") or (tostring(customSetting.label or setting.label or "Custom option") .. ": " .. tostring(freeform)),
                         }
                         if score > bestScore then bestScore = score end
                     elseif setting.type ~= "boolean" then
@@ -3451,7 +3853,7 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings)
     end
     if #changes == 1 and changes[1].mediaNoMatch then
         local resolver = A.MediaResolver
-        local textOut = resolver and resolver.NoMatchMessage and resolver.NoMatchMessage(changes[1].mediaType, changes[1].mediaQuery) or "I could not find that media entry."
+        local textOut = resolver and resolver.NoMatchMessage and resolver.NoMatchMessage(changes[1].mediaType, changes[1].mediaQuery) or "That media entry is not in the current list."
         return { kind = "unknown", text = textOut, status = "failed" }
     end
     local usable = {}
@@ -3465,8 +3867,8 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings)
             kind = "changes",
             changes = changes,
             bulkSafe = P.AreBulkSafeAuraSettingChanges and P.AreBulkSafeAuraSettingChanges(changes) or nil,
-            label = "Multiple matching settings",
-            summary = "Registry-backed multi-scope setting change.",
+            label = "Multiple matching options",
+            summary = "Changes multiple matched options.",
         }
     end
     if #changes > 1 and bestScore > 0 then
@@ -3482,23 +3884,23 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings)
             kind = "changes",
             changes = changes,
             bulkSafe = P.AreBulkSafeAuraSettingChanges and P.AreBulkSafeAuraSettingChanges(changes) or nil,
-            label = "Multiple matching settings",
-            summary = "Registry-backed multi-scope setting change.",
+            label = "Multiple matching options",
+            summary = "Changes multiple matched options.",
         }
     end
     if #changes > 1 then
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Multiple matching settings",
+            label = "Multiple matching options",
         }
     end
     local setting = changes[1].setting
     return {
         kind = "changes",
         changes = changes,
-        label = setting and setting.label or "Assistant setting change",
-        summary = "Registry-backed settings change.",
+        label = setting and setting.label or "Assistant option change",
+        summary = "MSUF options change.",
     }
 end
 
@@ -3602,7 +4004,7 @@ local function ParseScopedOnlyOverride(text, raw)
             kind = "changes",
             changes = { { setting = overrideSetting, value = value } },
             label = overrideSetting.label or "Scoped override",
-            summary = "Uses ONLY as a scoped Bars/Fonts override command.",
+            summary = "Uses ONLY for target-specific Bars or Fonts.",
         }
     end
 
@@ -3610,7 +4012,7 @@ local function ParseScopedOnlyOverride(text, raw)
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Multiple matching scoped settings",
+            label = "Multiple matching target-specific options",
         }
     end
 
@@ -3621,8 +4023,8 @@ local function ParseScopedOnlyOverride(text, raw)
     return {
         kind = "changes",
         changes = changes,
-        label = setting and setting.label or "Scoped override setting",
-        summary = "Uses ONLY to enable the scoped Bars/Fonts override before applying the requested setting.",
+        label = setting and setting.label or "Scoped override option",
+        summary = "Enables the target-specific Bars or Fonts override before applying the requested option.",
     }
 end
 

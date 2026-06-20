@@ -386,22 +386,18 @@ local function ConfigureGradientTexture(tex, direction, alpha)
     tex:SetBlendMode("BLEND")
   end
   if tex.SetGradient and CreateColor then
-    local ok = pcall(tex.SetGradient, tex, orientation, CreateColor(0, 0, 0, minA), CreateColor(0, 0, 0, maxA))
-    if ok then
-      tex._msufGradientReady = true
-      tex._msufGradientDirection = direction
-      tex._msufGradientAlpha = alpha
-      return
-    end
+    tex:SetGradient(orientation, CreateColor(0, 0, 0, minA), CreateColor(0, 0, 0, maxA))
+    tex._msufGradientReady = true
+    tex._msufGradientDirection = direction
+    tex._msufGradientAlpha = alpha
+    return
   end
   if tex.SetGradientAlpha then
-    local ok = pcall(tex.SetGradientAlpha, tex, orientation, 0, 0, 0, minA, 0, 0, 0, maxA)
-    if ok then
-      tex._msufGradientReady = true
-      tex._msufGradientDirection = direction
-      tex._msufGradientAlpha = alpha
-      return
-    end
+    tex:SetGradientAlpha(orientation, 0, 0, 0, minA, 0, 0, 0, maxA)
+    tex._msufGradientReady = true
+    tex._msufGradientDirection = direction
+    tex._msufGradientAlpha = alpha
+    return
   end
   tex:SetColorTexture(0, 0, 0, alpha)
   tex._msufGradientReady = true

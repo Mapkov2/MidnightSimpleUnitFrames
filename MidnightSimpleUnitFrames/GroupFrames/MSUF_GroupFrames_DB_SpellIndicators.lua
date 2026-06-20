@@ -198,7 +198,7 @@ do
                 GF.SeedCurrentSpecSpellIndicatorDefaults()
             end
         end
-        if C_Timer and C_Timer.After then C_Timer.After(0, Run) else Run() end
+        C_Timer.After(0, Run)
     end
 
     seedFrame:RegisterEvent("PLAYER_LOGIN")

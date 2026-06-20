@@ -15,36 +15,4 @@ M.Assistant = A
 A.Registry = A.Registry or { settings = {}, settingsByKey = {}, actions = {}, actionsByKey = {}, todos = {} }
 A.Workflow = A.Workflow or {}
 
--- Keep the load manifest explicit. A missing domain file is easier to spot here than when
--- a natural-language command silently cannot match an otherwise valid setting.
-A.RegistryDomainFiles = {
-    "MSUF_AssistantRegistry_Core.lua",
-    "MSUF_AssistantRegistry_Unitframes.lua",
-    "MSUF_AssistantRegistry_UnitframeActions.lua",
-    "MSUF_AssistantRegistry_Castbars.lua",
-    "MSUF_AssistantRegistry_Auras.lua",
-    "MSUF_AssistantRegistry_AurasGroupSettings.lua",
-    "MSUF_AssistantRegistry_AurasActions.lua",
-    "MSUF_AssistantRegistry_AurasGroupActions.lua",
-    "MSUF_AssistantRegistry_GroupFrames.lua",
-    "MSUF_AssistantRegistry_GroupFramesSettings.lua",
-    "MSUF_AssistantRegistry_GroupFramesActions.lua",
-    "MSUF_AssistantRegistry_GroupFramesSpellIndicators.lua",
-    "MSUF_AssistantRegistry_Boss.lua",
-    "MSUF_AssistantRegistry_ClassPower.lua",
-    "MSUF_AssistantRegistry_ClassPowerActions.lua",
-    "MSUF_AssistantRegistry_Gameplay.lua",
-    "MSUF_AssistantRegistry_Global.lua",
-    "MSUF_AssistantRegistry_GlobalFontSettings.lua",
-    "MSUF_AssistantRegistry_GlobalBarSettings.lua",
-    "MSUF_AssistantRegistry_GlobalColorSettings.lua",
-    "MSUF_AssistantRegistry_GlobalActions.lua",
-    "MSUF_AssistantRegistry_GlobalColorResetActions.lua",
-    "MSUF_AssistantRegistry_Dashboard.lua",
-    "MSUF_AssistantRegistry_DashboardActions.lua",
-    "MSUF_AssistantRegistry_Profiles.lua",
-    "MSUF_AssistantRegistry_EditMode.lua",
-    "MSUF_AssistantRegistry_Workflows.lua",
-    "MSUF_AssistantRegistry_Diagnostics.lua",
-    "MSUF_AssistantRegistry_DiagnosticsActions.lua",
-}
+-- The explicit registry domain load list lives in MSUF_AssistantRegistry_Manifest.lua.

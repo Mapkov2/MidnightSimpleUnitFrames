@@ -59,21 +59,6 @@ local WOW_JOKES_EN = {
     "Sure. The profile import promised it was simple, then arrived with seven backups and a reload prompt.",
 }
 
-local WOW_JOKES_DE = {
-    "Klar. Warum ist der Unit Frame dem Raid beigetreten? Er wollte endlich eine stabile Gruppe.",
-    "Klar. Meine Castbar wollte einen Witz erzaehlen, aber jemand hat sie vor der Pointe unterbrochen.",
-    "Klar. Der Heiler wollte mehr Uebersicht, also hat MSUF drei Pixel Chaos dispellt.",
-    "Klar. Ich habe Bedarf auf ein perfektes UI gewuerfelt. Das Lootfenster sagte: schon angelegt.",
-    "Klar. Warum hat der DPS das Target Frame groesser gemacht? Damit die Meter kleiner wirken.",
-    "Klar. MSUF kam aus dem Raidmeeting mit genau einer Aufgabe zurueck: alle sichtbar halten.",
-    "Klar. Die Power Bar wollte mehr Platz, aber die Health Bar sagte: nicht in diesem Layout.",
-    "Klar. Ich habe das Boss Frame nach Feedback gefragt. Es sagte: zu viele Ziele, zu wenig Fokus.",
-    "Klar. Mein liebster Pulltimer ist eine Checkbox. Die wiped seltener als die meisten Countdowns.",
-    "Klar. Warum bleibt der Unit Frame aus dem Feuer? Range Fade ist an.",
-    "Klar. Target-of-Target Text war mit Raidmarkern aus. Es sagte: es ist kompliziert.",
-    "Klar. Der Profilimport versprach, einfach zu sein, und kam dann mit sieben Backups und einem Reload-Hinweis.",
-}
-
 local MUTATION_TERMS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset",
     "copy", "export", "import", "create", "delete", "remove", "add", "put", "clear", "switch", "assign", "rename", "close", "toggle",
@@ -85,7 +70,7 @@ local MUTATION_TERMS = {
 }
 local NAV_HELP_TERMS = {
     "open", "go to", "where", "where is", "where are", "find", "search", "show me", "help", "why", "diagnose", "what", "how",
-    "oeffne", "wo", "wo ist", "finde", "suche", "hilfe", "warum", "wie",
+    "oeffne", "wo", "wo ist", "finde", "suche", "hilfe", "warum", "wie", "was", "was ist", "was kann", "was kannst",
 }
 local EXPLICIT_DOMAIN_TERMS = {
     "unitframe", "unitframes", "unit frame", "unit frames",
@@ -118,11 +103,11 @@ local PAGE_CONTEXT = {
     uf_targettarget = { prefix = "targettarget", label = "Target of Target" },
     uf_focustarget = { prefix = "focustarget", label = "Focus Target" },
     uf_boss = { prefix = "boss", label = "Boss Frames" },
-    opt_castbar = { prefix = "castbar", label = "Castbars" },
+    opt_castbar = { prefix = "castbar", label = "Cast Bars" },
     opt_bars = { prefix = "bar", label = "Bars" },
     opt_colors = { prefix = "color", label = "Colors" },
     opt_fonts = { prefix = "font", label = "Fonts" },
-    opt_misc = { prefix = "dashboard", label = "Miscellaneous" },
+    opt_misc = { prefix = "misc", label = "Miscellaneous" },
     classpower = { prefix = "class resource", label = "Class Resources" },
     gameplay = { prefix = "gameplay", label = "Gameplay" },
     profiles = { prefix = "profile", label = "Profiles" },
@@ -274,6 +259,7 @@ local function LooksLikeKnowledgeQuestionPrefix(text)
     if norm:match("^where%s+is%s+") or norm:match("^where%s+are%s+") then return true end
     if norm:match("^show%s+me%s+.+settings") or norm:match("^show%s+me%s+.+options") then return true end
     if norm:match("^wo%s+ist%s+") or norm:match("^wo%s+kann%s+") or norm:match("^was%s+ist%s+") then return true end
+    if norm:match("^was%s+kann%s+") or norm:match("^was%s+kannst%s+") or norm:match("^wie%s+kann%s+") then return true end
     return false
 end
 
@@ -295,6 +281,7 @@ local function LooksLikeKnowledgeRequest(text)
         "help", "why", "where", "where is", "where are", "what", "what is", "what are", "how", "how do",
         "search", "find", "faq", "explain", "show me",
         "hilfe", "warum", "wo", "wo ist", "wie", "suche", "finde", "erklaere",
+        "was", "was ist", "was sind", "was kann", "was kannst",
     })
 end
 
@@ -314,6 +301,7 @@ local function LooksLikeKnowledgeFirstRequest(text)
     return ContainsAny(norm, {
         "search", "find", "where", "where is", "where are", "faq", "explain",
         "suche", "finde", "wo", "wo ist", "erklaere",
+        "was ist", "was sind", "was kann", "was kannst",
     })
 end
 
@@ -346,6 +334,9 @@ local function IsGermanConversation(text)
         "hallo", "moin", "servus", "danke", "danke dir", "bitte", "wie gehts", "wie geht es dir", "alles gut",
         "wer bist du", "was bist du", "witz", "normal reden", "einfach reden", "besser in wow",
         "besser bei wow", "wie werde ich besser", "klassenguide", "talente", "spielweise",
+        "was kannst du", "was kannst du alles", "was kann der assistant", "was kann der assistent",
+        "wie chatgpt", "chatgpt", "chat gpt", "ki assistant", "ki assistent", "rede ueber msuf",
+        "reden ueber msuf", "ueber msuf reden", "rede ueber wow", "reden ueber wow", "ueber wow reden",
     })
 end
 
@@ -419,6 +410,7 @@ local SCOPED_HELP_INTENT_TERMS = {
     "what can i change", "what settings can i change", "what can i do",
     "what can i change here", "what can i do here", "how do profiles work",
     "hilfe", "hilfe fuer", "hilfe mit", "befehle fuer", "was kann ich aendern",
+    "was kann ich hier aendern", "was kann ich tun", "was kann ich hier tun",
 }
 
 local function LooksLikeScopedHelpKnowledgeRequest(text)
@@ -430,17 +422,6 @@ local function LooksLikeScopedHelpKnowledgeRequest(text)
 end
 
 local function BugReportReply(text)
-    local german = IsGermanConversation(text) or ContainsAny(text, {
-        "bug melden", "fehler", "problem melden", "wo melde", "wo kann", "wie melde",
-        "gefunden", "kommentar auf curseforge",
-    })
-    if german then
-        return {
-            text = "Danke, dass du es melden willst. Es waere super, wenn du den Bug reportest, damit ich ihn reproduzieren kann.\nDiscord: " .. DISCORD_INVITE .. "\nAlternativ kannst du auf der MSUF CurseForge-Seite einen Kommentar hinterlassen: " .. CURSEFORGE_PAGE .. "\nHilfreich sind: dein genauer Assistant-Text, die offene MSUF-Seite, was du erwartet hast und was wirklich passiert ist.",
-            status = "info",
-            summary = "Assistant bug report help",
-        }
-    end
     return {
         text = "Thanks for wanting to report it. That would really help MSUF development, especially if I can reproduce it.\nDiscord: " .. DISCORD_INVITE .. "\nAlternatively, you can leave a comment on the MSUF CurseForge page: " .. CURSEFORGE_PAGE .. "\nHelpful details: the exact Assistant text, the open MSUF page, what you expected, and what actually happened.",
         status = "info",
@@ -448,11 +429,11 @@ local function BugReportReply(text)
     }
 end
 
-local function NextConversationJoke(german)
-    local jokes = german and WOW_JOKES_DE or WOW_JOKES_EN
+local function NextConversationJoke()
+    local jokes = WOW_JOKES_EN
     if #jokes == 0 then return nil end
 
-    local key = german and "lastGermanJokeIndex" or "lastEnglishJokeIndex"
+    local key = "lastEnglishJoke ndex"
     local index = 1
     local ctx = A.GetContext and A.GetContext() or nil
     if type(ctx) == "table" then
@@ -463,10 +444,19 @@ local function NextConversationJoke(german)
     return jokes[index]
 end
 
+local function AssistantCapabilityReply()
+    local helper = A.Knowledge and A.Knowledge.CapabilityHelp
+    if type(helper) == "function" then return helper(false) end
+    return {
+        text = "I'm the local MSUF Assistant. I can find and explain MSUF options, open pages, run checks, and apply safe changes.",
+        status = "info",
+        summary = "Assistant capabilities",
+    }
+end
+
 local function HumanConversationReply(text)
     local norm = Normalize(text)
     if norm == "" then return nil end
-    local german = IsGermanConversation(norm)
 
     if ContainsAny(norm, {
         "tell me a joke", "tell joke", "tell me another joke", "another joke", "say something funny", "make me laugh", "joke", "jokes",
@@ -474,20 +464,42 @@ local function HumanConversationReply(text)
         "erzaehle einen witz", "mach einen witz", "noch einen witz", "noch ein witz", "naechster witz", "witz",
     }) then
         return {
-            text = NextConversationJoke(german) or (german and "Klar. MSUF ist bereit fuer den naechsten Witz." or "Sure. MSUF is ready for the next joke."),
+            text = NextConversationJoke() or "Sure. MSUF is ready for the next joke.",
             status = "info",
             summary = "Assistant conversation",
         }
     end
 
     if ContainsAny(norm, {
-        "can we talk", "talk to me", "chat with me", "normal talk", "talk normally", "just talk",
-        "small talk", "normal reden", "einfach reden", "lass uns reden", "kannst du normal reden",
+        "what can you do", "what can i ask", "what can i ask you", "what can the assistant do",
+        "what can msuf assistant do", "assistant help", "show commands",
+        "was kannst du", "was kannst du alles", "was kann der assistant", "was kann der assistent",
+        "was kann msuf assistant", "was kann msuf assistent", "was kann ich fragen", "zeig mir befehle",
+    }) then
+        return AssistantCapabilityReply()
+    end
+
+    if ContainsAny(norm, {
+        "chatgpt", "chat gpt", "ai assistant", "ai chat", "like chatgpt", "like chat gpt",
+        "be like chatgpt", "talk like chatgpt", "wie chatgpt", "wie chat gpt",
+        "ki assistant", "ki assistent", "ki chat", "wie eine ki",
     }) then
         return {
-            text = german
-                and "Ja, kurz schon. Ich bin aber ein lokaler MSUF Assistant, keine externe KI. Ich kann dir MSUF erklaeren, Einstellungen aendern, Fehlerwege nennen oder dich bei WoW-Fragen auf aktuelle Seiten wie Wowhead verweisen."
-                or "Yes, a little. I am still a local MSUF Assistant, not an external AI. I can explain MSUF, change settings, help with bug-report paths, or point general WoW questions to current sites like Wowhead.",
+            text = "Yes, for MSUF. I use local MSUF menu data, so I work offline rather than calling ChatGPT. You can still talk to me naturally about MSUF: ask questions, find options, open pages, run checks, or apply concrete changes. Ask: what can you do?",
+            status = "info",
+            summary = "Assistant ChatGPT-style answer",
+        }
+    end
+
+    if ContainsAny(norm, {
+        "can we talk", "talk to me", "chat with me", "normal talk", "talk normally", "just talk",
+        "small talk", "talk about msuf", "talk about wow", "chat about msuf", "chat about wow",
+        "normal reden", "einfach reden", "lass uns reden", "kannst du normal reden",
+        "rede ueber msuf", "reden ueber msuf", "ueber msuf reden",
+        "rede ueber wow", "reden ueber wow", "ueber wow reden",
+    }) then
+        return {
+            text = "Yes. I work best with MSUF, unit frames, auras, cast bars, profiles, or WoW UI readability. For current class, talent, and patch guides I point to current guides because MSUF runs offline.",
             status = "info",
             summary = "Assistant conversation",
         }
@@ -504,9 +516,7 @@ local function HumanConversationReply(text)
         "rotation", "spielweise", "wow guide deutsch",
     }) then
         return {
-            text = german
-                and ("Dabei kann ich nur begrenzt helfen, weil MSUF offline laeuft und keine aktuellen Klassen- oder Patch-Guides laden kann. Fuer aktuelle WoW-Guides schau am besten auf Wowhead: " .. WOWHEAD_GUIDES .. ". Bei UI-Setup, Unit Frames, Sichtbarkeit, Texten und MSUF-Profilen helfe ich dir direkt hier.")
-                or ("I can only help a little with that, because MSUF runs offline and cannot keep live class or patch guides updated. For current WoW guides, check Wowhead: " .. WOWHEAD_GUIDES .. ". For UI setup, unit frames, visibility, texts, and MSUF profiles, I can help directly here."),
+            text = "For live class, talent, and patch guides, I point to current Wowhead guides because MSUF runs offline. Check Wowhead: " .. WOWHEAD_GUIDES .. ". For UI setup, unit frames, visibility, text, and MSUF profiles, I can help directly here.",
             status = "info",
             summary = "General WoW help",
         }
@@ -514,9 +524,7 @@ local function HumanConversationReply(text)
 
     if ContainsAny(norm, { "how are you", "how are you doing", "are you ok", "you good", "wie gehts", "wie geht es dir", "alles gut", "gehts dir gut" }) then
         return {
-            text = german
-                and "Mir geht es gut. Ich bin bereit fuer MSUF. Sag mir einfach, welche Einstellung oder welches Frame du aendern willst."
-                or "I am ready to help with MSUF. Tell me the setting or frame you want to change, or ask where something is.",
+            text = "I'm ready to help with MSUF. Name the option or frame you want to change, or ask where something is.",
             status = "info",
             summary = "Assistant conversation",
         }
@@ -524,9 +532,7 @@ local function HumanConversationReply(text)
 
     if ContainsAny(norm, { "hi", "hello", "hey", "good morning", "good evening", "hallo", "moin", "servus" }) then
         return {
-            text = german
-                and "Hallo. Ich bin der lokale MSUF Assistant. Sag mir, was du in MSUF aendern oder finden willst."
-                or "Hi. I am the local MSUF Assistant. Tell me what you want to change or find in MSUF.",
+            text = "Hi. I'm the local MSUF Assistant. Name what you want to change or find in MSUF.",
             status = "info",
             summary = "Assistant conversation",
         }
@@ -534,9 +540,7 @@ local function HumanConversationReply(text)
 
     if ContainsAny(norm, { "thanks", "thank you", "thx", "danke", "danke dir" }) then
         return {
-            text = german
-                and "Gerne. Sag mir einfach den naechsten MSUF-Wunsch."
-                or "You are welcome. Send the next MSUF change whenever you are ready.",
+            text = "You're welcome. Give me the next MSUF change whenever you're ready.",
             status = "info",
             summary = "Assistant conversation",
         }
@@ -544,9 +548,7 @@ local function HumanConversationReply(text)
 
     if ContainsAny(norm, { "who are you", "what are you", "wer bist du", "was bist du" }) then
         return {
-            text = german
-                and "Ich bin der lokale MSUF Assistant. Ich kann echte registrierte MSUF-Funktionen aendern, Seiten erklaeren und bei unklaren Befehlen nachfragen. Registrierte Aura-Regler funktionieren, nicht angebundene Aura-Backend-Bereiche bleiben blockiert."
-                or "I am the local MSUF Assistant. I can change real registered MSUF controls, explain pages, and ask when a command is ambiguous. Registered Aura controls work; Aura backend areas that are not registered yet stay blocked.",
+            text = "I'm the local MSUF Assistant. I can change MSUF options, explain pages, and ask follow-up questions when a request needs a choice. For auras, I change areas that have a matching MSUF option.",
             status = "info",
             summary = "Assistant conversation",
         }
@@ -566,17 +568,11 @@ local function UnsupportedAuraReply(text)
     then
         return nil
     end
-    local german = ContainsAny(norm, {
-        "auren", "gruppenauren", "hilfe", "warum", "wo", "oeffne", "suche", "finde",
-        "einschalten", "ausschalten", "aktivieren", "deaktivieren", "anzeigen", "verstecken",
-    })
     return {
         kind = "unsupported",
         status = "info",
-        summary = "Aura command is not registered yet.",
-        text = german
-            and "Ich konnte diesen Aura-Befehl noch nicht sicher matchen. Registrierte Aura-Regler wie Icon-Groesse, Anzahl, Wachstum, Cooldown-/Stack-Text, Filter, Blacklist und Quick-Presets funktionieren. Aura-Copy und nicht angebundene Backend-Bereiche bleiben blockiert."
-            or "I could not safely match that Aura command yet. Registered Aura controls such as icon size, count, growth, cooldown and stack text, filters, blacklist, quick presets, and Group Aura copy can be changed. Aura backend areas that are not registered yet stay blocked.",
+        summary = "Aura option fallback.",
+        text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, count, growth, cooldown and stack text, filters, hidden aura lists, quick presets, and group aura copy when those options exist in MSUF. Aura areas I can't match will stay as they are.",
     }
 end
 
@@ -584,9 +580,9 @@ local function FriendlyNoMatch(text)
     local noMatch = KnowledgeNoMatch(text)
     if noMatch then return noMatch end
     local result = {
-        text = "I could not safely match that MSUF command yet. I will not guess at settings. Try the frame or page plus the exact control, for example 'set player width to 300', 'turn off raid range fade', or 'set target buff icon size to 30'. If that wording should work, send the exact text in Discord: " .. DISCORD_INVITE,
+        text = "I'm not sure which MSUF request you mean yet. I can help once I can match the request to an MSUF menu option. Include the frame or page plus the option, for example 'set player width to 300', 'turn off raid range fade', or 'set target buff icon size to 30'. If that wording should work, send the full text in Discord: " .. DISCORD_INVITE,
         status = "info",
-        summary = "Assistant no match",
+        summary = "Assistant request unclear",
     }
     if A.RecordNoMatch then A.RecordNoMatch(text, result, "router") end
     return result
@@ -595,9 +591,10 @@ end
 local function IsNoClueResult(result)
     if type(result) ~= "table" then return true end
     local msg = tostring(result.text or "")
-    if result.kind == "unknown" and (msg == "" or msg:find("I do not know that setting yet", 1, true)) then return true end
-    if result.status == "failed" and msg:find("I do not know that setting yet", 1, true) then return true end
-    if result.status == "failed" and msg:find("could not parse", 1, true) then return true end
+    local looksLikeNoOption = msg:find("  do not know that setting yet", 1, true) or msg:find("  could not match that setting yet", 1, true) or msg:find("  do not know that option yet", 1, true) or msg:find("  could not match that option yet", 1, true) or msg:find("does not match an MSUF aura option yet", 1, true)
+    if result.kind == "unknown" and (msg == "" or looksLikeNoOption) then return true end
+    if result.status == "failed" and looksLikeNoOption then return true end
+    if result.status == "failed" and (msg:find("could not parse", 1, true) or msg:find("could not understand", 1, true)) then return true end
     return false
 end
 
@@ -606,7 +603,7 @@ local function IsUnknownResult(result)
     if result.kind == "unknown" then return true end
     local msg = tostring(result.text or "")
     if result.status == "failed" and msg:find("do not know", 1, true) then return true end
-    if result.status == "failed" and msg:find("could not parse", 1, true) then return true end
+    if result.status == "failed" and (msg:find("could not parse", 1, true) or msg:find("could not understand", 1, true)) then return true end
     if result.status == "failed" and msg:find("not registered", 1, true) then return true end
     if result.status == "failed" and msg:find("unsupported", 1, true) then return true end
     return false
@@ -940,7 +937,7 @@ local function TryMutationFallbacks(text, coreHandler)
         if variants[i] ~= Normalize(text) then
             local result = coreHandler(variants[i])
             if result and not IsUnknownResult(result) then
-                result.summary = result.summary or "Mutation fallback alias."
+                result.summary = result.summary or "Matched by a wording shortcut."
                 return result
             end
         end
@@ -1082,7 +1079,7 @@ function A.RouteInput(text, coreHandler)
         local auraUnsupported = UnsupportedAuraReply(text)
         if auraUnsupported then return auraUnsupported end
         if IsNoClueResult(coreResult) then return FriendlyNoMatch(text) end
-        return coreResult or { text = "I could not apply that command. Try being more specific or ask for help.", status = "failed" }
+        return coreResult or { text = "Include a specific frame, page, or option name, or ask for help.", status = "failed" }
     end
 
     if A.Knowledge and type(A.Knowledge.Answer) == "function" then

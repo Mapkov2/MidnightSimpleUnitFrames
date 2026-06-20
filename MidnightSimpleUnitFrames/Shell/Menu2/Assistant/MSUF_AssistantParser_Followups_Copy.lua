@@ -21,6 +21,17 @@ local ContainsAny = P.ContainsAny
 local DetectUnits = P.DetectUnits
 local DetectGroups = P.DetectGroups
 
+local function CopySourceLabel(actionKey, source)
+    if actionKey == "copy_group" and A and type(A.DisplayGroupLabel) == "function" then return A.DisplayGroupLabel(source) end
+    if A and type(A.DisplayUnitLabel) == "function" then return A.DisplayUnitLabel(source) end
+    local label = (A.UnitLabels or {})[source]
+    if label ~= nil and tostring(label) ~= "" then return tostring(label) end
+    if source == "targettarget" then return "Target of Target" end
+    if source == "focustarget" then return "Focus Target" end
+    if source == "mythicraid" then return "Mythic Raid" end
+    return tostring(source or "")
+end
+
 local function CopyPlainArgs(value, depth)
     -- Follow-up state can contain runtime tables; copy only simple serializable values so a
     -- later action cannot accidentally retain frames, functions, or deep cyclic structures.
@@ -76,8 +87,8 @@ function P.BuildCopyActionFollowup(text, ctx)
         return {
             kind = "answer",
             status = "info",
-            text = "I need a previous Assistant copy action before I can copy that somewhere else. Try a full command first, for example: copy target text to player, or copy party health and text to raid.",
-            summary = "Explains missing copy follow-up context instead of guessing.",
+            text = "Start with a full copy request first so I can reuse it somewhere else. For example: copy target text to player, or copy party health and text to raid.",
+            summary = "Asks for copy context instead of guessing.",
         }
     end
     local previous = type(ctx.lastActionArgs) == "table" and ctx.lastActionArgs or nil
@@ -86,8 +97,8 @@ function P.BuildCopyActionFollowup(text, ctx)
         return {
             kind = "answer",
             status = "info",
-            text = "I need a previous Assistant copy action before I can copy that somewhere else. Try a full command first, for example: copy target text to player, or copy party health and text to raid.",
-            summary = "Explains missing copy source context instead of guessing.",
+            text = "Start with a full copy request first so I can reuse it somewhere else. For example: copy target text to player, or copy party health and text to raid.",
+            summary = "Asks for the copy source instead of guessing.",
         }
     end
     local targets = CopyActionTargetsForFollowup(text, actionKey, source)
@@ -95,8 +106,8 @@ function P.BuildCopyActionFollowup(text, ctx)
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me where to copy the previous copy action, for example: copy that to target, or same for mythic raid.",
-            summary = "Explains missing copy follow-up destination instead of guessing.",
+            text = "Where do you want me to copy the previous change? For example: copy that to target, or same for mythic raid.",
+            summary = "Asks for the copy destination instead of guessing.",
         }
     end
     local action = Registry and Registry:GetAction(actionKey)
@@ -106,12 +117,12 @@ function P.BuildCopyActionFollowup(text, ctx)
         targets = targets,
         scopes = CopyPlainArgs(previous.scopes or {}),
     }
-    local labelSource = tostring((A.UnitLabels or {})[source] or source)
+    local labelSource = CopySourceLabel(actionKey, source)
     return {
         kind = "action",
         action = action,
         args = args,
-        label = actionKey == "copy_group" and ("Copy previous " .. labelSource .. " group settings") or ("Copy previous " .. labelSource .. " settings"),
-        summary = "Repeats the last Assistant copy action with a new destination.",
+        label = actionKey == "copy_group" and ("Copy previous " .. labelSource .. " group options") or ("Copy previous " .. labelSource .. " options"),
+        summary = "Repeats the last Assistant copy task with a new destination.",
     }
 end

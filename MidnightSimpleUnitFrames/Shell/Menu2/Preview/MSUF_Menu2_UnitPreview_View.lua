@@ -346,6 +346,7 @@ end
 local function OnUFPreviewArrowDisable(box)
     if box and box._msufArrowPoller then
         box._msufArrowPoller:SetScript("OnUpdate", nil)
+        box._msufArrowPoller:SetOnUpdateMode("Disabled")
         box._msufArrowPoller:Hide()
     end
 end
@@ -586,6 +587,7 @@ local function MakeHandle(preview, key, fields, label, color)
         self._cursorX, self._cursorY = cx, cy
         self._dragPoint, self._dragRelTo, self._dragRelPoint, self._dragOffsetX, self._dragOffsetY = self:GetPoint(1)
         preview.dragFrame._handle = self
+        preview.dragFrame:SetOnUpdateMode("RunWhenVisible")
         preview.dragFrame:SetScript("OnUpdate", preview._onDragUpdate)
         preview.dragFrame:Show()
         RefreshHandleSelectionVisuals(preview)
@@ -597,6 +599,7 @@ local function MakeHandle(preview, key, fields, label, color)
         if not wasDragging then return end
         if preview.dragFrame._handle == self then
             preview.dragFrame:SetScript("OnUpdate", nil)
+            preview.dragFrame:SetOnUpdateMode("Disabled")
             preview.dragFrame._handle = nil
             preview.dragFrame:Hide()
         end
@@ -982,6 +985,7 @@ local function BuildPreview(parent, panel, width, height)
         if Preview.active == self then Preview.active = nil end
         if type(Preview.UninstallRefreshHooks) == "function" then Preview.UninstallRefreshHooks() end
         self.dragFrame:SetScript("OnUpdate", nil)
+        self.dragFrame:SetOnUpdateMode("Disabled")
         self.dragFrame._handle = nil
         if self._msufPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
