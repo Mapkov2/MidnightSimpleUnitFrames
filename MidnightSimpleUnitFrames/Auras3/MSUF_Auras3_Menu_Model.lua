@@ -2,11 +2,11 @@
 --- Cold-path DB adapter for Auras3 menu surfaces.
 ---
 --- The model writes profile values and invalidates prepared runtime config.
---- It intentionally does not hook UNIT_AURA and does not install render logic.
+--- It intentionally does not install live aura render logic.
 ---
 --- Menus should use this model instead of touching MSUF_DB directly. The model
 --- preserves shared-vs-per-unit override semantics and knows which writes must
---- invalidate prepared runtime config or blacklist hashes.
+--- invalidate prepared native runtime config.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local ExportPublic = MSUF.ExportPublic or function(name, value)
@@ -788,7 +788,7 @@ local function SpellLabel(spellID)
 end
 
 --- Ensure the Auras3 DB shape for menu operations. This is coldpath and may
---- seed defaults; live UNIT_AURA rendering consumes compiled config from the
+--- seed defaults; live native aura rendering consumes compiled config from the
 --- UnitFrames backend after Model.Apply invalidates it.
 function Model.EnsureDB()
     local auras, shared
@@ -1368,9 +1368,8 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
     filters.enabled = false
 end
 
---- Blacklists are compiled into hashes by the runtime. Model writes keep the
---- saved form human-editable, then invalidate prepared hashes so UNIT_AURA does
---- not rebuild blacklist tables on every event.
+--- Blacklists remain saved in human-editable form. The 12.1 native runtime does
+--- not rebuild blacklist tables during aura display updates.
 local function EnsureBlacklist(scope, create)
     local auras, shared = Model.EnsureDB()
     scope = NormalizeScope(scope)
@@ -1944,7 +1943,6 @@ function Model.ReadPreviewConfig(unit)
 end
 
 function Model.Apply(unit, reason)
-    if A3.BumpRuntimeConfig then A3.BumpRuntimeConfig() end
     reason = reason or "AURAS3_MENU"
     local function IsGroupApplyScope(scope)
         scope = tostring(scope or ""):lower()
@@ -1952,9 +1950,12 @@ function Model.Apply(unit, reason)
             or scope == "party" or scope == "raid" or scope == "mythicraid"
             or scope == "gf_party" or scope == "gf_raid" or scope == "gf_mythicraid"
     end
+    local normalizedScope = unit and NormalizeScope(unit) or "shared"
+    local globalScope = (not unit) or normalizedScope == "shared" or IsGroupApplyScope(unit)
+    if globalScope and A3.BumpRuntimeConfig then A3.BumpRuntimeConfig() end
     local function RefreshGroup(scope)
         if A3.RequestUnit then
-            return A3.RequestUnit(scope, 0)
+            return A3.RequestUnit(scope)
         end
         local gf = MSUF and MSUF.GF
         if gf and type(gf.RefreshVisuals) == "function" then
@@ -1971,8 +1972,8 @@ function Model.Apply(unit, reason)
         return false
     end
     local function Refresh(runtimeUnit)
-        if type(_G.MSUF_Auras3_UpdateUnitAnchor) == "function" then _G.MSUF_Auras3_UpdateUnitAnchor(runtimeUnit) end
-        if type(_G.MSUF_Auras3_RefreshUnit) == "function" then _G.MSUF_Auras3_RefreshUnit(runtimeUnit) end
+        if type(A3.UpdateUnitAnchor) == "function" then A3.UpdateUnitAnchor(runtimeUnit) end
+        if type(A3.RefreshUnit) == "function" then A3.RefreshUnit(runtimeUnit) end
     end
     if unit and IsGroupApplyScope(unit) then
         RefreshGroup(unit)
@@ -1987,5 +1988,3 @@ function Model.Apply(unit, reason)
     end
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason) end
 end
-
-ExportPublic("MSUF_Auras3_MenuModel", Model)
