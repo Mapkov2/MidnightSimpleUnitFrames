@@ -54,10 +54,9 @@ local max = math.max
 local min = math.min
 local IsEditModeActive
 local PREVIEW_WARNING_LINES = {
-    "|cffff5555MSUF 6.0 Preview Warning:|r This is an alpha/preview build for World of Warcraft 12.1.",
-    "|cffffd700MSUF:|r MSUF 6.0 release is planned for 10.08.2026.",
-    "|cffffd700MSUF:|r Blizzard rewrote the aura system in 12.1. Buffs, debuffs, and aura tracking currently do not work in MSUF.",
-    "|cffffd700MSUF:|r Use this build only for preview/testing if you can play without MSUF aura display and aura configuration.",
+    "|cffff5555MSUF 6.0 Preview Warning:|r This build targets World of Warcraft 12.1 PTR APIs.",
+    "|cffffd700MSUF:|r Aura display uses native 12.1 AuraContainer and AuraButton objects.",
+    "|cffffd700MSUF:|r Use preview builds only for PTR testing; production builds should be versioned without alpha/beta/pre labels.",
 }
 local previewWarningShown = {}
 local function GetAddonVersion()
@@ -103,11 +102,7 @@ do
         loginWarningFrame:RegisterEvent("PLAYER_LOGIN")
         loginWarningFrame:SetScript("OnEvent", function(self)
             self:UnregisterEvent("PLAYER_LOGIN")
-            if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-                _G.C_Timer.After(2, function() ShowPreviewWarning("login") end)
-            else
-                ShowPreviewWarning("login")
-            end
+            _G.C_Timer.After(2, function() ShowPreviewWarning("login") end)
         end)
     end
 end
@@ -490,7 +485,7 @@ local function RunRefreshers(entry, opts)
     if opts.force ~= true and entry._msuf2RefreshRevision == revision then return false end
     for i = 1, #entry.refreshers do
         local fn = entry.refreshers[i]
-        if type(fn) == "function" then pcall(fn) end
+        if type(fn) == "function" then fn() end
     end
     entry._msuf2RefreshRevision = revision
     return true
@@ -595,11 +590,9 @@ local function BuildPageEntry(key, hidden)
     local prevBuildKey = M._msuf2SearchBuildKey
     M._msuf2SearchBuildKey = key
     if spec and type(spec.build) == "function" then
-        local ok, result = pcall(spec.build, ctx)
-        if ok and tonumber(result) then
+        local result = spec.build(ctx)
+        if tonumber(result) then
             ctx:SetContentHeight(result)
-        elseif not ok then
-            entry.buildError = tostring(result or "unknown error")
         end
     else
         BuildPlaceholderPage(ctx, key)
@@ -926,6 +919,7 @@ local function BuildWindow()
         f._msuf2LastSnapLayout = nil
         f:StartMoving()
         if IsSlashMenuSnapEnabled() then
+            f:SetOnUpdateMode("RunWhenVisible")
             f:SetScript("OnUpdate", UpdateSnapPreview)
             UpdateSnapPreview()
         end
@@ -933,6 +927,7 @@ local function BuildWindow()
     FinishWindowDrag = function(applySnap)
         f._msuf2DraggingWindow = nil
         f:SetScript("OnUpdate", nil)
+        f:SetOnUpdateMode("Disabled")
         HideWindowLayoutProxy()
         if f.StopMovingOrSizing then f:StopMovingOrSizing() end
         if applySnap then ApplySlashMenuSnap(f) end
@@ -978,6 +973,7 @@ local function BuildWindow()
             scale = WindowVisualScale(f),
         }
         local proxy = EnsureResizeProxy()
+        proxy:SetOnUpdateMode("RunWhenVisible")
         proxy:SetScript("OnUpdate", UpdateResizeProxy)
         proxy:Show()
         UpdateResizeProxy()
@@ -990,6 +986,7 @@ local function BuildWindow()
         local proxy = f._msuf2ResizeProxy
         if proxy then
             proxy:SetScript("OnUpdate", nil)
+            proxy:SetOnUpdateMode("Disabled")
             HideWindowLayoutProxy()
         end
         if not state then
@@ -1099,25 +1096,23 @@ local function BuildWindow()
         feedback:SetAlpha(1)
         if T.PlayMotion then T.PlayMotion(feedback, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 }) end
         local delay = tonumber(seconds) or 1.4
-        if C_Timer and C_Timer.After then
-            C_Timer.After(delay, function()
-                if not (f and f.status and f.status.feedbackText) then return end
-                if f.status._msuf2FeedbackSerial ~= serial then return end
-                if T.PlayMotion then
-                    T.PlayMotion(feedback, "controlFocusOut", {
-                        fromAlpha = feedback.GetAlpha and feedback:GetAlpha() or 1,
-                        toAlpha = 0,
-                        duration = 0.16,
-                        onFinished = function()
-                            if f.status and f.status._msuf2FeedbackSerial == serial then feedback:SetText("") end
-                        end,
-                    })
-                else
-                    feedback:SetAlpha(0)
-                    feedback:SetText("")
-                end
-            end)
-        end
+        C_Timer.After(delay, function()
+            if not (f and f.status and f.status.feedbackText) then return end
+            if f.status._msuf2FeedbackSerial ~= serial then return end
+            if T.PlayMotion then
+                T.PlayMotion(feedback, "controlFocusOut", {
+                    fromAlpha = feedback.GetAlpha and feedback:GetAlpha() or 1,
+                    toAlpha = 0,
+                    duration = 0.16,
+                    onFinished = function()
+                        if f.status and f.status._msuf2FeedbackSerial == serial then feedback:SetText("") end
+                    end,
+                })
+            else
+                feedback:SetAlpha(0)
+                feedback:SetText("")
+            end
+        end)
     end
     M.ShowInlineFeedback = M.ShowStatusFeedback
     function f:RefreshStatus()

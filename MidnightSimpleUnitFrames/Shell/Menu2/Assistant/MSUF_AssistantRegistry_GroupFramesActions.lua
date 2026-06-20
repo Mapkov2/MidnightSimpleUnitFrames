@@ -23,6 +23,16 @@ local GROUP_STATUS_ICON_SPECS = ctx.GROUP_STATUS_ICON_SPECS or {}
 
 if not (Registry and type(Registry.RegisterAction) == "function") then return end
 if type(ResolveGroupStatusIcon) ~= "function" or type(ResetGroupStatusIcon) ~= "function" then return end
+
+local function GroupLabel(scope)
+    if A and type(A.DisplayGroupLabel) == "function" then return A.DisplayGroupLabel(scope) end
+    local label = UNIT_LABELS[scope]
+    if label ~= nil and tostring(label) ~= "" then return tostring(label) end
+    if scope == "mythicraid" then return "Mythic Raid" end
+    if scope == "raid" then return "Raid" end
+    return "Party"
+end
+
 Registry:RegisterAction({
     key = "reset_group_status_icon",
     label = "Reset Group Status Icon",
@@ -33,9 +43,9 @@ Registry:RegisterAction({
         local scope = args and args.scope
         if scope ~= "raid" and scope ~= "mythicraid" then scope = "party" end
         local spec = ResolveGroupStatusIcon(args and args.icon)
-        if not spec then return false, "I need a group status icon name to reset." end
+        if not spec then return false, "Which group status icon do you want me to reset?" end
         ResetGroupStatusIcon(scope, spec)
-        return true, "Done. Reset " .. tostring(UNIT_LABELS[scope]) .. " " .. tostring(spec.label) .. " placement and icon pack."
+        return true, "Done. Reset " .. GroupLabel(scope) .. " " .. tostring(spec.label) .. " placement and icon pack."
     end,
 })
 
@@ -49,7 +59,7 @@ Registry:RegisterAction({
         local scope = args and args.scope
         if scope ~= "raid" and scope ~= "mythicraid" then scope = "party" end
         for i = 1, #GROUP_STATUS_ICON_SPECS do ResetGroupStatusIcon(scope, GROUP_STATUS_ICON_SPECS[i]) end
-        return true, "Done. Reset " .. tostring(UNIT_LABELS[scope]) .. " status icon placement and icon packs."
+        return true, "Done. Reset " .. GroupLabel(scope) .. " status icon placement and icon packs."
     end,
 })
 
@@ -93,14 +103,14 @@ local function GroupCopyScopeSummary(scopes)
         total = total + 1
         if scopes[row.key] == true then selected[#selected + 1] = row.label end
     end
-    if #selected == 0 then return " No copy categories were selected." end
-    if #selected == total then return " Categories: all group-frame copy categories." end
+    if #selected == 0 then return " Which group-frame parts do you want me to copy?" end
+    if #selected == total then return " Categories: all group-frame parts." end
     return " Categories: " .. table.concat(selected, ", ") .. "."
 end
 
 Registry:RegisterAction({
     key = "copy_group",
-    label = "Copy Group Frame Settings",
+    label = "Copy Group Frame Options",
     type = "copy",
     combatSafe = false,
     captureSnapshot = true,
@@ -108,7 +118,7 @@ Registry:RegisterAction({
     run = function(args)
         local GP = M and M.GroupPage
         if not (GP and type(GP.CopyGroupSettings) == "function") then
-            return false, "Group frame copy is not available yet."
+            return false, "Open Group Frames first so I can copy those options."
         end
         local src = args and args.source
         if src ~= "raid" and src ~= "mythicraid" then src = "party" end
@@ -117,7 +127,7 @@ Registry:RegisterAction({
             local target = args and args.target
             targets = target and { target } or {}
         end
-        if #targets == 0 then return false, "Copy needs at least one group-frame destination." end
+        if #targets == 0 then return false, "Which group frame should receive the copied options?" end
         local scopes = args and args.scopes
         if type(scopes) ~= "table" and type(GP.NewGFCopyScopes) == "function" then scopes = GP.NewGFCopyScopes() end
         local count = 0
@@ -127,10 +137,10 @@ Registry:RegisterAction({
             if dst ~= "raid" and dst ~= "mythicraid" then dst = "party" end
             if dst ~= src and GP.CopyGroupSettings(src, dst, scopes) then
                 count = count + 1
-                copiedLabels[#copiedLabels + 1] = tostring(UNIT_LABELS[dst] or dst)
+                copiedLabels[#copiedLabels + 1] = GroupLabel(dst)
             end
         end
-        if count == 0 then return false, "No group-frame destination was copied." end
-        return true, "Done. I copied " .. tostring(UNIT_LABELS[src] or src) .. " group-frame settings to " .. table.concat(copiedLabels, ", ") .. "." .. GroupCopyScopeSummary(scopes)
+        if count == 0 then return false, "I did not copy any group-frame options. Pick a different source and destination." end
+        return true, "Done. I copied " .. GroupLabel(src) .. " group-frame options to " .. table.concat(copiedLabels, ", ") .. "." .. GroupCopyScopeSummary(scopes)
     end,
 })

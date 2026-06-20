@@ -206,9 +206,6 @@ local function SameUnit(unit, otherUnit)
   if unit == otherUnit then
     return true
   end
-  if not UnitGUID then
-    return false
-  end
   local guid = UnitGUID(unit)
   local otherGuid = UnitGUID(otherUnit)
   if issecretvalue(guid) == true or issecretvalue(otherGuid) == true then
@@ -408,7 +405,7 @@ local focusIndicatorIndex = {}
 local indicatorGUIDBuckets = {}
 
 local function PlainUnitGUID(unit)
-  if not (UnitGUID and IsUnitToken(unit)) then
+  if not IsUnitToken(unit) then
     return nil
   end
   local guid = UnitGUID(unit)

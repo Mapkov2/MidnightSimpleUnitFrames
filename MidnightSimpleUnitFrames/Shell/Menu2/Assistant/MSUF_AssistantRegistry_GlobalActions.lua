@@ -25,12 +25,20 @@ local ApplyAbsorbBars = ctx.ApplyAbsorbBars
 
 if not (Registry and type(Registry.RegisterAction) == "function") then return end
 if type(NormalizeGlobalScope) ~= "function" or type(GlobalScopeSetOverride) ~= "function" or type(GlobalScopeLabel) ~= "function" then return end
+
+local BORDER_TEST_LABELS = {
+    aggro = "aggro",
+    dispel = "dispel",
+    purge = "purge",
+    bossTarget = "boss target",
+}
+
 local function ResetGlobalScopeOverride(flag, scope, applyFn, reason)
     scope = NormalizeGlobalScope(scope)
-    if scope == "shared" then return false, "Shared scope has no override to reset." end
+    if scope == "shared" then return false, "Shared options already use the base value, so there is no override to reset." end
     GlobalScopeSetOverride(scope, flag, false)
     if type(applyFn) == "function" then applyFn(reason) end
-    return true, "Done. " .. GlobalScopeLabel(scope) .. " now follows Shared settings."
+    return true, "Done. " .. GlobalScopeLabel(scope) .. " now follows Shared options."
 end
 
 local function ResetAllGlobalScopeOverrides(flag, applyFn, reason, label)
@@ -38,12 +46,12 @@ local function ResetAllGlobalScopeOverrides(flag, applyFn, reason, label)
         GlobalScopeSetOverride(scope, flag, false)
     end
     if type(applyFn) == "function" then applyFn(reason) end
-    return true, "Done. Reset all scoped " .. tostring(label or "override") .. " overrides."
+    return true, "Done. All " .. tostring(label or "matching") .. " overrides now follow Shared options."
 end
 
 Registry:RegisterAction({
     key = "reset_scoped_global_bars_override",
-    label = "Reset Scoped Bars Override",
+    label = "Reset Section Bars Override",
     type = "globalBars",
     combatSafe = false,
     captureSnapshot = true,
@@ -54,7 +62,7 @@ Registry:RegisterAction({
 
 Registry:RegisterAction({
     key = "reset_all_scoped_global_bars_overrides",
-    label = "Reset All Scoped Bars Overrides",
+    label = "Reset All Section Bars Overrides",
     type = "globalBars",
     combatSafe = false,
     confirmRequired = true,
@@ -66,7 +74,7 @@ Registry:RegisterAction({
 
 Registry:RegisterAction({
     key = "reset_scoped_global_font_override",
-    label = "Reset Scoped Font Override",
+    label = "Reset Section Font Override",
     type = "fonts",
     combatSafe = false,
     captureSnapshot = true,
@@ -77,7 +85,7 @@ Registry:RegisterAction({
 
 Registry:RegisterAction({
     key = "reset_all_scoped_global_font_overrides",
-    label = "Reset All Scoped Font Overrides",
+    label = "Reset All Section Font Overrides",
     type = "fonts",
     combatSafe = false,
     confirmRequired = true,
@@ -128,7 +136,7 @@ Registry:RegisterAction({
         else
             ExportPublic("MSUF_" .. kind .. "BorderTestMode", enabled and true or false)
         end
-        return true, (enabled and "Enabled" or "Disabled") .. " " .. tostring(kind) .. " border test."
+        return true, (enabled and "Enabled" or "Disabled") .. " " .. tostring(BORDER_TEST_LABELS[kind] or kind) .. " border test."
     end,
 })
 

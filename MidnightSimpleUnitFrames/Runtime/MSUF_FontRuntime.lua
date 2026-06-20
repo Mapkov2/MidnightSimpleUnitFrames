@@ -53,10 +53,8 @@ local function ScheduleApplyCommit()
     if type(commit) ~= "function" then return end
     if _G.MSUF_ScheduleOnce then
         _G.MSUF_ScheduleOnce("UF_APPLY_COMMIT", function() commit(UF) end)
-    elseif _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, function() commit(UF) end)
     else
-        commit(UF)
+        _G.C_Timer.After(0, function() commit(UF) end)
     end
 end
 
@@ -173,12 +171,6 @@ local function _MSUF_FontApplied(fs, requestedPath)
 end
 
 local function _MSUF_SetFontChecked(fs, path, size, flags, fontKey)
-    local safeSet = _G.MSUF_SetFontSafe
-    if type(safeSet) == "function" then
-        local ok = safeSet(fs, path, size, flags, fontKey)
-        return ok == true
-    end
-
     local applied = fs:SetFont(path, size, flags)
     return applied ~= false and _MSUF_FontApplied(fs, path)
 end
@@ -378,7 +370,8 @@ local function UpdateAllFonts(onlyKey)
     end
     if MSUF and MSUF.MSUF_ApplyGameplayFontFromGlobal then MSUF.MSUF_ApplyGameplayFontFromGlobal() end
     if type(_G.MSCB_ApplyFontsFromMSUF) == "function" then _G.MSCB_ApplyFontsFromMSUF() end
-    if _G.MSUF_Auras3_ApplyFontsFromGlobal then _G.MSUF_Auras3_ApplyFontsFromGlobal() end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.ApplyFontsFromGlobal) == "function" then a3.ApplyFontsFromGlobal() end
     if _G.MSUF_ClassPower_ApplyFonts then _G.MSUF_ClassPower_ApplyFonts() end
     -- Re-resolve every spec's font and re-run the text layout so width-dependent
     -- anchors recompute for the fonts now applied -- but only once the configured
@@ -402,10 +395,10 @@ local function UpdateAllFonts(onlyKey)
         end
     elseif _fontRelayoutRetries < MSUF_FONT_RELAYOUT_MAX_RETRIES then
         _fontRelayoutRetries = _fontRelayoutRetries + 1
-        if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0.1, function() UpdateAllFonts() end)
-        elseif _G.MSUF_ScheduleOnce then
+        if _G.MSUF_ScheduleOnce then
             _G.MSUF_ScheduleOnce("UF_FONT_COLD_RELAYOUT", function() UpdateAllFonts() end)
+        else
+            _G.C_Timer.After(0.1, function() UpdateAllFonts() end)
         end
     end
 

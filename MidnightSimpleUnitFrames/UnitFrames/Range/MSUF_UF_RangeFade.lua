@@ -188,8 +188,8 @@ local function SpellOverrideID(spellID)
   if cached ~= nil then
     return cached or nil
   end
-  local ok, overrideID = pcall(GetOverrideSpell, spellID)
-  if ok and type(overrideID) == "number" and overrideID > 0 and overrideID ~= spellID then
+  local overrideID = GetOverrideSpell(spellID)
+  if type(overrideID) == "number" and overrideID > 0 and overrideID ~= spellID then
     spellOverrideCache[spellID] = overrideID
     return overrideID
   end
@@ -214,29 +214,15 @@ local function AddTargetWantedSpell(spellID)
   if overrideID then targetWanted[overrideID] = true end
 end
 
-local function SpellBookKnown(fn, spellID, includeOverrides)
-  if not fn then return false end
-  local ok, known
-  if SPELL_BANK_PLAYER ~= nil then
-    ok, known = pcall(fn, spellID, SPELL_BANK_PLAYER, includeOverrides)
-    if ok and known == true then return true end
-  end
-  ok, known = pcall(fn, spellID, nil, includeOverrides)
-  if ok and known == true then return true end
-  ok, known = pcall(fn, spellID)
-  return ok and known == true
-end
-
 local function IsKnownSpell(spellID)
   if not spellID then return false end
   if C_SpellBook then
-    if SpellBookKnown(C_SpellBook.IsSpellKnownOrInSpellBook, spellID, true) then return true end
-    if SpellBookKnown(C_SpellBook.IsSpellKnown, spellID, true) then return true end
-    if SpellBookKnown(C_SpellBook.IsSpellInSpellBook, spellID, true) then return true end
+    if C_SpellBook.IsSpellKnownOrInSpellBook and C_SpellBook.IsSpellKnownOrInSpellBook(spellID, SPELL_BANK_PLAYER, true) == true then return true end
+    if C_SpellBook.IsSpellKnown and C_SpellBook.IsSpellKnown(spellID, SPELL_BANK_PLAYER) == true then return true end
+    if C_SpellBook.IsSpellInSpellBook and C_SpellBook.IsSpellInSpellBook(spellID, SPELL_BANK_PLAYER, true) == true then return true end
   end
   if IsPlayerSpell then
-    local ok, known = pcall(IsPlayerSpell, spellID)
-    if ok and known == true then return true end
+    return IsPlayerSpell(spellID) == true
   end
   return false
 end
@@ -681,9 +667,7 @@ local function PollTimerCallback()
   if not pollQueued then return end
   local now = GetTime and GetTime() or 0
   if pollNextAt and now < pollNextAt then
-    if C_Timer and C_Timer.After then
-      C_Timer.After(pollNextAt - now, PollTimerCallback)
-    end
+    C_Timer.After(pollNextAt - now, PollTimerCallback)
     return
   end
   pollQueued = false
@@ -692,7 +676,7 @@ local function PollTimerCallback()
 end
 
 local function SchedulePoll(delay)
-  if pollQueued or pollCount <= 0 or not (C_Timer and C_Timer.After) then return end
+  if pollQueued or pollCount <= 0 then return end
   pollQueued = true
   delay = delay or PollInterval()
   pollNextAt = (GetTime and GetTime() or 0) + delay
@@ -747,6 +731,7 @@ end
 RangeFlushOnUpdate = function(self)
   if self then
     self:SetScript("OnUpdate", nil)
+    self:SetOnUpdateMode("Disabled")
   end
   RunPendingRangeFlush()
 end
@@ -755,6 +740,7 @@ local function QueueRangeFlush()
   if pendingRangeFlush then return true end
   if driver and driver.SetScript then
     pendingRangeFlush = true
+    driver:SetOnUpdateMode("RunOnce")
     driver:SetScript("OnUpdate", RangeFlushOnUpdate)
     return true
   end
@@ -1018,24 +1004,13 @@ local function RegisterDriver()
   if petActive then f:RegisterEvent("UNIT_PET") end
   if bossActive then f:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT") end
   if targetActive and EnableSpellRangeCheck then f:RegisterEvent("SPELL_RANGE_CHECK_UPDATE") end
-  if f.RegisterUnitEvent then
+  if unitCount > 0 then
     for i = 1, #UNIT_EVENTS do
-      if unitCount > 0 then
-        f:RegisterUnitEvent(UNIT_EVENTS[i], unpack(unitEventUnits, 1, unitCount))
-      end
+      f:RegisterUnitEvent(UNIT_EVENTS[i], unpack(unitEventUnits, 1, unitCount))
     end
-    if targetCount > 0 then
-      f:RegisterUnitEvent(TARGET_UNIT_EVENT, unpack(targetEventUnits, 1, targetCount))
-    end
-  else
-    if unitCount > 0 then
-      for i = 1, #UNIT_EVENTS do
-        f:RegisterEvent(UNIT_EVENTS[i])
-      end
-    end
-    if targetCount > 0 then
-      f:RegisterEvent(TARGET_UNIT_EVENT)
-    end
+  end
+  if targetCount > 0 then
+    f:RegisterUnitEvent(TARGET_UNIT_EVENT, unpack(targetEventUnits, 1, targetCount))
   end
   driverRegistered = true
   driverUnitMask = unitMask
@@ -1076,6 +1051,7 @@ local function SyncRuntime()
   pendingFocusTargetRange = false
   if driver and driver.SetScript then
     driver:SetScript("OnUpdate", nil)
+    driver:SetOnUpdateMode("Disabled")
   end
   UnregisterDriver()
 end

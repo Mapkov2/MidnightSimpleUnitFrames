@@ -38,10 +38,8 @@ local function ResolveBaseEdgeColor(f)
 
   local fn = _G.MSUF_GetBarOutlineColor
   if type(fn) == "function" then
-    -- User skin hooks can be stale during profile swaps; keep failures local to
-    -- rounded-frame coloring instead of breaking the full UF apply pass.
-    local ok, r, g, b = pcall(fn)
-    if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+    local r, g, b = fn()
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
       return r, g, b, BASE_BORDER_A
     end
   end
@@ -1215,8 +1213,7 @@ local Module = {
 }
 
 do
-  local f = CreateFrame and CreateFrame("Frame") or nil
-  if f and f.RegisterEvent and f.SetScript then
+  local f = CreateFrame("Frame")
     MSUF.__msufRoundedEventFrame = f
     f:RegisterEvent("ADDON_LOADED")
     f:RegisterEvent("PLAYER_LOGIN")
@@ -1237,23 +1234,14 @@ do
         if f.UnregisterEvent then f:UnregisterEvent("PLAYER_LOGIN") end
         if IsEnabled() then
           HookOnce()
-          if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0, ApplyAll)
-          else
-            ApplyAll()
-          end
+          _G.C_Timer.After(0, ApplyAll)
         end
       elseif event == "PLAYER_REGEN_ENABLED" then
         if MSUF.__msufRoundedPending then
-          if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0, ApplyAll)
-          else
-            ApplyAll()
-          end
+          _G.C_Timer.After(0, ApplyAll)
         end
       end
     end)
-  end
 end
 
 if not MSUF.__msufRoundedUF_Registered then

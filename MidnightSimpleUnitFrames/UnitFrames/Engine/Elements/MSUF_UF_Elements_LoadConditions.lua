@@ -206,7 +206,7 @@ local function RegisterVisibility(frame, spec)
       end
       -- Swapping from unit-watch to driver: the watch and the driver both
       -- manage visibility, so drop the watch first to avoid double control.
-      if frame._msufUnitWatched == true and UnregisterUnitWatch then
+      if frame._msufUnitWatched == true then
         UnregisterUnitWatch(frame)
         frame._msufUnitWatched = nil
       end
@@ -370,18 +370,15 @@ local function ApplyBossPreviewFrameData(frame, index)
 end
 
 local function RefreshBossAuras()
-  local A3 = MSUF and MSUF.MSUF_Auras3 or _G.MSUF_Auras3
-  local refreshUnit = (A3 and A3.RefreshUnit) or _G.MSUF_Auras3_RefreshUnit or _G.MSUF_A3_RefreshUnit
-  if type(refreshUnit) == "function" then
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.RefreshUnit) == "function" then
     for i = 1, 5 do
-      refreshUnit("boss" .. i)
+      A3.RefreshUnit("boss" .. i)
     end
     return
   end
   if A3 and type(A3.RefreshAll) == "function" then
     A3.RefreshAll()
-  elseif type(_G.MSUF_Auras3_RefreshAll) == "function" then
-    _G.MSUF_Auras3_RefreshAll()
   end
 end
 

@@ -374,7 +374,6 @@ local function ApplyPreviewData(frame, index, kind)
   ApplyPreviewStatus(frame, kind, index, role)
   if GF.PreviewSpellIndicators then GF.PreviewSpellIndicators(frame, kind, nil, nil) end
   if GF.PreviewFrameAuras then GF.PreviewFrameAuras(frame, kind, index) end
-  if GF.PreviewPrivateAuras then GF.PreviewPrivateAuras(frame, kind) end
   frame:Show()
   return true
 end
@@ -402,7 +401,6 @@ local function ClearPreviewData(frame)
   SetShown(frame.statusIndicatorText, false)
   if GF.HideSpellIndicators then GF.HideSpellIndicators(frame) end
   if GF.HideFrameAuras then GF.HideFrameAuras(frame) end
-  if GF.HidePreviewPrivateAuras then GF.HidePreviewPrivateAuras(frame) end
 end
 
 local function PlacePreviewFrame(frame, layout, index, w, h, spacing, growth, upc)

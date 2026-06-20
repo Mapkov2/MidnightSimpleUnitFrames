@@ -7,6 +7,16 @@ MSUF = MSUF or (_G.MSUF_NS or {})
 
 local C_Timer = _G.C_Timer
 local type = type
+local SafeCall = _G.MSUF_SafeCall or function(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then pcall(handler, err) end
+        return false, err
+    end
+    return true
+end
 
 local Scheduler = MSUF.Scheduler or {}
 MSUF.Scheduler = Scheduler
@@ -19,7 +29,7 @@ Scheduler.head = Scheduler.head or 1
 Scheduler.tail = Scheduler.tail or 0
 
 local frame = Scheduler.frame
-if not frame and _G.CreateFrame then
+if not frame then
     frame = _G.CreateFrame("Frame", "MSUF_SchedulerFrame")
     Scheduler.frame = frame
 end
@@ -41,7 +51,7 @@ end
 --- Net result: one schedule = one execution per frame, no re-entry storm,
 --- no lost work. Pure Lua state --- secret-safe by construction.
 local function FlushNextFrame()
-    if frame then frame:SetScript("OnUpdate", nil) end
+    if frame then frame:SetScript("OnUpdate", nil); frame:SetOnUpdateMode("Disabled") end
     Scheduler.nextFrameActive = false
 
     local head = Scheduler.head or 1
@@ -55,7 +65,7 @@ local function FlushNextFrame()
         if key ~= nil then
             local cb = pending[key]
             pending[key] = nil
-            if type(cb) == "function" then cb() end
+            if type(cb) == "function" then SafeCall(cb) end
         end
     end
 
@@ -78,11 +88,10 @@ local function FlushNextFrame()
         end
         Scheduler.head = 1
         Scheduler.tail = writeIdx
-        if frame and not Scheduler.nextFrameActive then
+        if not Scheduler.nextFrameActive then
             Scheduler.nextFrameActive = true
+            frame:SetOnUpdateMode("RunOnce")
             frame:SetScript("OnUpdate", FlushNextFrame)
-        elseif not frame and C_Timer and C_Timer.After then
-            C_Timer.After(0, FlushNextFrame)
         end
     else
         Scheduler.head, Scheduler.tail = 1, 0
@@ -97,15 +106,10 @@ local function QueueNextFrame(key, fn)
     Scheduler.tail = tail
     queue[tail] = key
 
-    if frame then
-        if not Scheduler.nextFrameActive then
-            Scheduler.nextFrameActive = true
-            frame:SetScript("OnUpdate", FlushNextFrame)
-        end
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, FlushNextFrame)
-    else
-        FlushNextFrame()
+    if not Scheduler.nextFrameActive then
+        Scheduler.nextFrameActive = true
+        frame:SetOnUpdateMode("RunOnce")
+        frame:SetScript("OnUpdate", FlushNextFrame)
     end
 end
 
@@ -126,17 +130,11 @@ function Scheduler.ScheduleDelayOnce(key, delay, fn)
     if pending[key] then return end
     pending[key] = fn
 
-    if C_Timer and C_Timer.After then
-        C_Timer.After(delay or 0, function()
-            local cb = pending[key]
-            pending[key] = nil
-            if type(cb) == "function" then cb() end
-        end)
-    else
+    C_Timer.After(delay or 0, function()
         local cb = pending[key]
         pending[key] = nil
-        if type(cb) == "function" then cb() end
-    end
+        if type(cb) == "function" then SafeCall(cb) end
+    end)
 end
 
 local ExportPublic = MSUF.ExportPublic or function(name, value)

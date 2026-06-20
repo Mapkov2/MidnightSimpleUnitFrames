@@ -230,11 +230,7 @@ local function RunSoon(fn)
         fn()
         return
     end
-    if _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, fn)
-    else
-        fn()
-    end
+    _G.C_Timer.After(0, fn)
 end
 
 local function SearchRouteHasAny(normalized, terms)

@@ -68,7 +68,6 @@ Metadata.hotEventKind = BuildEventKindMap({
   [2] = "UNIT_POWER_UPDATE UNIT_POWER_FREQUENT UNIT_MAXPOWER UNIT_DISPLAYPOWER UNIT_POWER_BAR_SHOW UNIT_POWER_BAR_HIDE",
   [3] = "UNIT_CONNECTION",
   [4] = "UNIT_NAME_UPDATE",
-  [5] = "UNIT_AURA",
   [6] = "UNIT_THREAT_SITUATION_UPDATE UNIT_THREAT_LIST_UPDATE",
   [8] = "UNIT_PORTRAIT_UPDATE UNIT_MODEL_CHANGED",
   [9] = "UNIT_HEAL_PREDICTION UNIT_ABSORB_AMOUNT_CHANGED UNIT_HEAL_ABSORB_AMOUNT_CHANGED",
@@ -95,7 +94,6 @@ Metadata.hotStateSpecs = {
     "StatusTextIndicator:statusText GroupVisuals:groupVisuals GroupStatusRuntime:groupStatus " ..
     "RangeFade:range GroupRangeFade:groupRange"),
   [4] = BuildHotSpecs("NameText:name InlineToT:inline:inlineMode"),
-  [5] = BuildHotSpecs("Auras:auras"),
   [6] = BuildHotSpecs("GroupVisuals:groupVisuals GroupCornerIndicators:groupCorners Borders:borders"),
   [8] = BuildHotSpecs("Portrait:portrait"),
   [9] = BuildHotSpecs("Prediction:prediction:predictionMode"),

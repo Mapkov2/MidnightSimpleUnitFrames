@@ -15,7 +15,7 @@ MSUF.Assistant = A
 M.Assistant = A
 
 -- Assistant history and context storage.
--- This is profile-local assistant UX state, not gameplay runtime state. Keep it bounded so
+-- This is profile-local assistant UX state, not gameplay state. Keep it bounded so
 -- chat-style history never becomes a SavedVariables growth problem.
 local DEFAULT_HISTORY_LIMIT = 100
 local SUPPORT_HINT_SUCCESS_THRESHOLD = 100

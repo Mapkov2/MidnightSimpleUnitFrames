@@ -211,6 +211,7 @@ function Handles.Install(box, deps)
         local wasDragging = handle and handle._dragging == true
         if box._dragFrame then
             box._dragFrame:SetScript("OnUpdate", nil)
+            box._dragFrame:SetOnUpdateMode("Disabled")
             box._dragFrame._handle = nil
             box._dragFrame:Hide()
         end
@@ -312,6 +313,7 @@ function Handles.Install(box, deps)
             or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
             or 1
         box._dragFrame._handle = handle
+        box._dragFrame:SetOnUpdateMode("RunWhenVisible")
         box._dragFrame:SetScript("OnUpdate", UpdateHandleDrag)
         box._dragFrame:Show()
         RefreshHandleSelection(box)

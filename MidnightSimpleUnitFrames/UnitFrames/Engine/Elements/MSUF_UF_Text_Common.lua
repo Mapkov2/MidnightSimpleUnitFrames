@@ -89,14 +89,7 @@ end
 
 local function ApplyFontChecked(fs, requested, size, flags)
   if not (fs and type(fs.SetFont) == "function") then return false end
-  local safeSet = _G.MSUF_SetFontSafe
-  if type(safeSet) == "function" then
-    return safeSet(fs, requested, size, flags) == true and FontApplied(fs, requested)
-  end
-  -- SetFont can fail for missing SharedMedia paths. Treat that as a recoverable
-  -- font miss so callers can fall back to STANDARD_FONT without aborting apply.
-  local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
-  return ok and applied ~= false and FontApplied(fs, requested)
+  return fs:SetFont(requested, size, flags) ~= false and FontApplied(fs, requested)
 end
 
 local function SetFont(fs, spec, size)

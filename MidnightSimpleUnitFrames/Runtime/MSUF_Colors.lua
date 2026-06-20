@@ -26,11 +26,7 @@ local type                  = type
 local tonumber              = tonumber
 local RunNextFrame          = _G.MSUF_RunNextFrame or _G.MSUF_Core_RunNextFrame or function(fn)
     if type(fn) ~= "function" then return end
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, fn)
-    else
-        fn()
-    end
+    C_Timer.After(0, fn)
 end
 
 ---

@@ -105,14 +105,15 @@ end
 local function MSUF_ProfileIO_RunFrameScaleApply()
     local scale = MSUF_ProfileIO_SafeMSUFScale()
     if type(_G.MSUF_ApplyMsufScale) == "function" then
-        return pcall(_G.MSUF_ApplyMsufScale, scale)
+        _G.MSUF_ApplyMsufScale(scale)
+        return true
     end
     local UF = MSUF and MSUF.UF
     local frames = UF and UF.frames
     if type(frames) == "table" then
         for _, frame in pairs(frames) do
             if frame and type(frame.SetScale) == "function" then
-                pcall(frame.SetScale, frame, scale)
+                frame:SetScale(scale)
             end
         end
         return true
@@ -152,8 +153,8 @@ MSUF_ProfileIO_CallGlobal = function(name, ...)
     if type(fn) ~= "function" then
         return false
     end
-    local ok = pcall(fn, ...)
-    return ok == true
+    fn(...)
+    return true
 end
 local MSUF_ProfileIO_PostProfileRuntimeApply
 local function MSUF_ProfileIO_InCombatLockdown()
@@ -210,7 +211,7 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     local nsGlobal = _G.MSUF_NS
     local core = nsGlobal and nsGlobal.MSUF_UnitframeCore
     if core and type(core.InvalidateAllFrameConfigs) == "function" then
-        pcall(core.InvalidateAllFrameConfigs)
+        core.InvalidateAllFrameConfigs()
     end
     MSUF_ProfileIO_CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
     MSUF_ProfileIO_CallGlobal("MSUF_ApplyModules")
@@ -1244,11 +1245,11 @@ local function MSUF_ProfileIO_EnsureCompleteProfileDB()
     local auras = MSUF and MSUF.MSUF_Auras3
     if auras then
         if type(auras.EnsureDB) == "function" then
-            pcall(auras.EnsureDB)
+            auras.EnsureDB()
         end
         local aurasDB = auras.DB
         if aurasDB and type(aurasDB.Ensure) == "function" then
-            pcall(aurasDB.Ensure)
+            aurasDB.Ensure()
         end
     end
 end
@@ -1257,11 +1258,11 @@ end
 --- clean payload copy, translates old aliases, and strips runtime/cache-only
 --- state so copied profile strings stay portable across characters and clients.
 local MSUF_GF_BLIZZARD_TYPE_DEFAULTS = {
-    buffs = false,
-    debuffs = false,
-    dispels = false,
-    externals = false,
-    privateAuras = false,
+    buffs = true,
+    debuffs = true,
+    dispels = true,
+    externals = true,
+    privateAuras = true,
 }
 
 local function MSUF_ProfileIO_NormalizeBlizzardAuraPosition(auras)
@@ -1316,7 +1317,7 @@ local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
     if type(conf.auras) ~= "table" then return end
 
     local auras = conf.auras
-    if auras.renderer ~= "CUSTOM" then auras.renderer = "CUSTOM" end
+    if auras.renderer ~= "NATIVE_12_1" then auras.renderer = "NATIVE_12_1" end
     if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
     for key, value in pairs(MSUF_GF_BLIZZARD_TYPE_DEFAULTS) do
         if auras.blizzardTypes[key] == nil then
@@ -1449,15 +1450,12 @@ local function MSUF_ProfileIO_PostImportApply_Auras(kind, payload, isUUFImport)
         end
     end
     if not touched then  return end
-    if _G.MSUF_Auras3_RefreshAll then
-        _G.MSUF_Auras3_RefreshAll()
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.RefreshAll) == "function" then
+        a3.RefreshAll()
     end
-    if _G.MSUF_Auras3_ApplyFontsFromGlobal then
-        _G.MSUF_Auras3_ApplyFontsFromGlobal()
-    end
-    --- Legacy auras (if still present in the build / older profiles).
-    if _G.MSUF_UpdateTargetAuras then
-        _G.MSUF_UpdateTargetAuras()
+    if a3 and type(a3.ApplyFontsFromGlobal) == "function" then
+        a3.ApplyFontsFromGlobal()
     end
 end
 local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload, isUUFImport)
@@ -1521,7 +1519,7 @@ local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     local refresh = _G.MSUF_RefreshAllUnitAlphas or _G.MSUF_RequestAlphaRefresh
     if type(refresh) == "function" then
-        pcall(refresh)
+        refresh()
     end
 end
 local function MSUF_ApplySnapshotToActiveProfile(snapshot)
@@ -2955,10 +2953,10 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
     end
     MSUF_ProfileIO_NormalizeUnitFramePositionDB(newTable)
     if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
-        pcall(_G.MSUF_NormalizePortraitRenderDB, newTable)
+        _G.MSUF_NormalizePortraitRenderDB(newTable)
     end
     if type(_G.MSUF_MigrateDispelPriorityProfile) == "function" then
-        pcall(_G.MSUF_MigrateDispelPriorityProfile, newTable)
+        _G.MSUF_MigrateDispelPriorityProfile(newTable)
     end
     MSUF_ProfileIO_EnsureProfilesTable()
     local existing = MSUF_GlobalDB.profiles[profileKey]

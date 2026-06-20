@@ -111,7 +111,11 @@ local function GetBars()
 end
 local function Call(name, ...)
     local fn = _G[name]
-    if type(fn) == "function" then pcall(fn, ...) end
+    if type(fn) == "function" then
+        fn(...)
+        return true
+    end
+    return false
 end
 local function DeepCopy(src)
     if type(src) ~= "table" then return src end
@@ -396,7 +400,7 @@ local function SyncBossPagePreview()
         _G.MSUF_ApplyBossUnitframePreviewState(active, active and "MSUF2_BOSS_PAGE" or "MSUF2_BOSS_PAGE_OFF")
         return
     end
-    if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then pcall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) end
+    if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncBossUnitframePreviewWithUnitEdit() end
 end
 local function EnsureBossPagePreviewEvents()
     if bossPagePreviewEvents then return bossPagePreviewEvents end
@@ -442,7 +446,7 @@ local function SetBossPagePreviewActive(active)
         events:UnregisterAllEvents()
     end
     SyncBossPagePreview()
-    if active and C_Timer and C_Timer.After then
+    if active then
         C_Timer.After(0, SyncBossPagePreview)
         C_Timer.After(0.12, SyncBossPagePreview)
     end
@@ -561,7 +565,7 @@ end
 local SetControlEnabled = W.SetControlEnabled
 local function SeedText(unit)
     local conf = GetConf(unit)
-    if type(_G.MSUF_Bars_SeedTextFromGeneral) == "function" then pcall(_G.MSUF_Bars_SeedTextFromGeneral, conf) end
+    if type(_G.MSUF_Bars_SeedTextFromGeneral) == "function" then _G.MSUF_Bars_SeedTextFromGeneral(conf) end
     return conf
 end
 local function ReadText(unit, key, default)

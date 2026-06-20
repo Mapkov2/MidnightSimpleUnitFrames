@@ -180,14 +180,14 @@ local function ResolvePreviewStatusbarTexture(conf, key)
         value = db and db.general and db.general.barTexture or "Solid"
     end
     if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
-        local ok, texture = pcall(_G.MSUF_ResolveStatusbarTextureKey, value)
-        if ok and texture then return texture end
+        local texture = _G.MSUF_ResolveStatusbarTextureKey(value)
+        if texture then return texture end
     end
     if LibStub then
-        local ok, lsm = pcall(LibStub, "LibSharedMedia-3.0", true)
-        if ok and lsm and type(lsm.Fetch) == "function" then
-            local okFetch, texture = pcall(lsm.Fetch, lsm, "statusbar", value, true)
-            if okFetch and texture then return texture end
+        local lsm = LibStub("LibSharedMedia-3.0", true)
+        if lsm and type(lsm.Fetch) == "function" then
+            local texture = lsm:Fetch("statusbar", value, true)
+            if texture then return texture end
         end
     end
     return "Interface\\Buttons\\WHITE8X8"
@@ -377,8 +377,8 @@ local function CurrentSpellTexture(kind)
     local gf = MSUF and MSUF.GF
     local si = gf and gf.SpellIndicators
     if si and type(si.GetAuraIcon) == "function" and specKey and auraName and auraName ~= "" then
-        local ok, icon = pcall(si.GetAuraIcon, specKey, auraName)
-        if ok and icon then return icon end
+        local icon = si.GetAuraIcon(specKey, auraName)
+        if icon then return icon end
     end
     if info and info.spellId then return MockSpellTexture(info.spellId) end
     return MockSpellTexture(774)
@@ -921,6 +921,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local StopHandleDrag = handleBundle.StopHandleDrag or function()
         if box._dragFrame then
             box._dragFrame:SetScript("OnUpdate", nil)
+            box._dragFrame:SetOnUpdateMode("Disabled")
             box._dragFrame._handle = nil
             box._dragFrame:Hide()
         end
@@ -964,20 +965,16 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
                 self:ReleaseRuntimePreview()
                 return
             end
-            if self.Refresh then pcall(self.Refresh, self, self._msufGFRefreshReason) end
+            if self.Refresh then self:Refresh(self._msufGFRefreshReason) end
             self._msufGFRefreshReason = nil
         end
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, RunRefresh)
-        else
-            RunRefresh()
-        end
+        C_Timer.After(0, RunRefresh)
     end
     function box:ReleaseRuntimePreview()
         self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
         self._msufGFRefreshQueued = nil
         self._msufGFRefreshReason = nil
-        pcall(StopHandleDrag, self and self._selectedHandle)
+        StopHandleDrag(self and self._selectedHandle)
         self._selectedHandle = nil
     end
     box:HookScript("OnShow", function(self)

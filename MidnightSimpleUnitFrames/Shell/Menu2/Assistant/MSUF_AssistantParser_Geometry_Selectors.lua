@@ -27,7 +27,7 @@ local TextSelectorIntent = P.TextSelectorIntent
 
 -- Menu selector parser for UI-only changes.
 -- Selecting a visible tab/dropdown/slot should not mutate the underlying setting value; it
--- only changes Menu2 editor state so the user lands on the relevant control.
+-- only changes the active editor selection so the user lands on the relevant control.
 local MENU_SELECTOR_VERBS = {
     "select", "choose", "pick", "open", "show", "switch to", "go to", "edit",
 }
@@ -42,8 +42,8 @@ local function MenuSelectorAction(args, label, summary)
         kind = "action",
         action = action,
         args = args,
-        label = label or "Set menu selector state",
-        summary = summary or "Selects a visible Menu2 tab, dropdown entry, or editor slot without changing the underlying setting value.",
+        label = label or "Choose menu option",
+        summary = summary or "Selects a visible menu tab, list choice, or editor slot without changing the actual option.",
     } or nil
 end
 
@@ -199,7 +199,7 @@ local function ParseMenuSelectorState(text)
                 scope = groups[1] or SelectorGroupScope(text),
                 tab = anchorTextTab,
                 slot = anchorTextSlot,
-            }, "Select group text editor state")
+            }, "Select group text choice")
         end
         local unit = SelectorUnit(text)
         if unit then
@@ -208,7 +208,7 @@ local function ParseMenuSelectorState(text)
                 unit = unit,
                 tab = anchorTextTab,
                 slot = anchorTextSlot,
-            }, "Select unit text editor state")
+            }, "Select unit text choice")
         end
     end
 
@@ -246,7 +246,7 @@ local function ParseMenuSelectorState(text)
     then
         local token = ClassPowerColorTokenForText(text)
         if token then
-            return MenuSelectorAction({ selector = "color_token", kind = "classPower", token = token }, "Select class resource color token")
+            return MenuSelectorAction({ selector = "color_token", kind = "classPower", token = token }, "Select class resource color slot")
         end
     end
     if ContainsAny(text, { "power color token", "power token", "power type", "resource type", "resource color token" })
@@ -254,7 +254,7 @@ local function ParseMenuSelectorState(text)
     then
         local token = PowerColorTokenForText(text)
         if token then
-            return MenuSelectorAction({ selector = "color_token", kind = "power", token = token }, "Select power color token")
+            return MenuSelectorAction({ selector = "color_token", kind = "power", token = token }, "Select power color slot")
         end
     end
 
@@ -268,7 +268,7 @@ local function ParseMenuSelectorState(text)
                 scope = groups[1] or SelectorGroupScope(text),
                 tab = textTab,
                 slot = textSlot,
-            }, "Select group text editor state")
+            }, "Select group text choice")
         end
         local unit = SelectorUnit(text)
         if unit then
@@ -277,7 +277,7 @@ local function ParseMenuSelectorState(text)
                 unit = unit,
                 tab = textTab,
                 slot = textSlot,
-            }, "Select unit text editor state")
+            }, "Select unit text choice")
         end
     end
 
@@ -295,7 +295,7 @@ local function ParseMenuSelectorState(text)
                 spec = spec,
                 aura = aura,
                 text = text,
-            }, "Select group spell indicator editor state")
+            }, "Select group spell indicator")
         end
     end
 
@@ -324,7 +324,7 @@ local function ParseMenuSelectorState(text)
                     tab = statusTab,
                     icon = groupStatusIcon,
                     text = text,
-                }, "Select group status icon editor state")
+                }, "Select group status icon")
             end
         end
 
@@ -337,7 +337,7 @@ local function ParseMenuSelectorState(text)
                 tab = statusTab,
                 status = unitStatus and unitStatus.value,
                 text = text,
-            }, "Select unit status editor state")
+            }, "Select unit status icon")
         end
 
         if groupStatusIcon then
@@ -346,7 +346,7 @@ local function ParseMenuSelectorState(text)
                 scope = SelectorGroupScope(text),
                 icon = groupStatusIcon,
                 text = text,
-            }, "Select group status icon editor state")
+            }, "Select group status icon")
         end
     end
 
@@ -354,72 +354,72 @@ local function ParseMenuSelectorState(text)
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me the frame, text area, and slot or mode. For example: select player hp left slot, select party power text right slot, turn off party hp move text as one group, or use individual player power text units.",
-            summary = "Explains the missing target details for a text selector request.",
+            text = "Which frame, text area, and slot or mode do you want me to use? For example: select player hp left slot, select party power text right slot, turn off party hp move text as one group, or use individual player power text units.",
+            summary = "Asks which text choice to use.",
         }
     end
     if ContainsAny(text, { "select status tab", "select status indicator", "select group status icon" }) then
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me the frame and indicator. For example: select target advanced status tab, select party leader icon indicator, or select party ready check icon indicator.",
-            summary = "Explains the missing target details for a status selector request.",
+            text = "Which frame and indicator do you want me to use? For example: select target advanced status tab, select party leader icon indicator, or select party ready check icon indicator.",
+            summary = "Asks which status indicator to select.",
         }
     end
     if ContainsAny(text, { "select spell indicator" }) then
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me the group frame and tracked spell entry. For example: select party spell indicator for priest, or select raid tracked spell prayer of mending.",
-            summary = "Explains the missing target details for a spell-indicator selector request.",
+            text = "Which group frame and tracked spell slot do you want me to use? For example: select party spell indicator for priest, or select raid tracked spell prayer of mending.",
+            summary = "Asks which spell indicator to select.",
         }
     end
     if ContainsAny(text, { "select corner editor slot", "corner editor slot", "editor slot" }) then
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me which corner slot. For example: select bottom right corner editor slot, or select top left corner editor slot.",
-            summary = "Explains the missing target details for a corner editor selector request.",
+            text = "Which corner slot do you want me to use? For example: select bottom right corner editor slot, or select top left corner editor slot.",
+            summary = "Asks which corner slot to select.",
         }
     end
     if ContainsAny(text, { "select power color token", "select class resource color token", "select class power color token" }) then
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me the token. For example: select mana power color token, select rage power color token, or select combo point class resource color.",
-            summary = "Explains the missing token for a color-token selector request.",
+            text = "Which color slot do you want me to use? For example: select mana power color, select rage power color, or select combo point class resource color.",
+            summary = "Asks which color slot to select.",
         }
     end
     if ContainsAny(text, { "select class power style tab", "select class resource style tab", "class resources style area" }) then
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me which Class Resources Style tab. For example: select class resource style text tab, select class power style opacity tab, or select class power style pips tab.",
-            summary = "Explains the missing Class Resources style tab.",
+            text = "Which Class Resources Style tab do you want me to open? For example: select class resource style text tab, select class power style opacity tab, or select class power style pips tab.",
+            summary = "Asks for the Class Resources style tab.",
         }
     end
     if ContainsAny(text, { "select highlight borders tab", "select bars highlight tab", "select highlight area" }) then
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me which Highlight Borders tab. For example: select highlight borders preview tab, select highlight priority tab, or select highlight modes tab.",
-            summary = "Explains the missing Highlight Borders tab.",
+            text = "Which Highlight Borders tab do you want me to open? For example: select highlight borders preview tab, select highlight priority tab, or select highlight modes tab.",
+            summary = "Asks for the Highlight Borders tab.",
         }
     end
     if ContainsAny(text, { "set profile staging field", "set profile string field" }) then
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me which profile field and value. For example: set profile name field to Raid Draft, set profile import new profile name to Imported Raid, or set profile string field to MSUF5:staged.",
-            summary = "Explains the missing profile field or value for a profile selector request.",
+            text = "Which profile value do you want me to prepare? For example: set profile name to Raid Draft, set import profile name to Imported Raid, or set profile import text to MSUF5:....",
+            summary = "Asks which profile value to select.",
         }
     end
     if ContainsAny(text, { "set unit copy category", "select unit copy categories", "set group copy category", "select group copy categories" }) then
         return {
             kind = "answer",
             status = "info",
-            text = "Tell me which copy categories to set. For example: select only unit copy text and castbar categories, turn off unit copy portrait category, or select only group copy health and text categories.",
-            summary = "Explains the missing copy-category details for a selector request.",
+            text = "Which copy categories do you want me to set? For example: select only unit copy text and cast bar categories, turn off unit copy portrait category, or select only group copy health and text categories.",
+            summary = "Asks which copy details to use.",
         }
     end
 

@@ -51,19 +51,6 @@ end
 local IsConfigCombatLocked = U.IsConfigCombatLocked
 local BlockConfigCombatLocked = U.BlockConfigCombatLocked
 
-local function ReportSafeError(err)
-    local handler = _G.geterrorhandler and _G.geterrorhandler()
-    if type(handler) == "function" then
-        pcall(handler, err)
-    end
-end
-
-local function SafeRefreshCall(fn, ...)
-    local ok, err = pcall(fn, ...)
-    if not ok then ReportSafeError(err) end
-    return ok
-end
-
 local function FrameRectToUI(frame)
     if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
         return nil
@@ -671,11 +658,7 @@ local function SchedulePreviewMoverSync(delay)
         previewMoverSyncQueued = false
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     end
-    if C_Timer and C_Timer.After then
-        C_Timer.After(delay or 0.08, Run)
-    else
-        Run()
-    end
+    C_Timer.After(delay or 0.08, Run)
 end
 
 local function GetPreviewFrame(unitKey)
@@ -701,13 +684,11 @@ local function MSUF_EM2_ReforcePreviewFrames()
     end)
     if EM2.Movers and EM2.Movers.SyncAll then
         EM2.Movers.SyncAll()
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, function()
-                if _G.MSUF_PreviewTestMode and EM2.Movers and EM2.Movers.SyncAll then
-                    EM2.Movers.SyncAll()
-                end
-            end)
-        end
+        C_Timer.After(0, function()
+            if _G.MSUF_PreviewTestMode and EM2.Movers and EM2.Movers.SyncAll then
+                EM2.Movers.SyncAll()
+            end
+        end)
     end
 end
 ExportPublic("MSUF_EM2_ReforcePreviewFrames", MSUF_EM2_ReforcePreviewFrames)
@@ -760,108 +741,26 @@ local function MSUF_SyncAllUnitPreviews()
 
     --- 3) Castbars
     if _G.MSUF_SyncCastbarEditModeWithUnitEdit then
-        SafeRefreshCall(_G.MSUF_SyncCastbarEditModeWithUnitEdit)
+        _G.MSUF_SyncCastbarEditModeWithUnitEdit()
     end
     for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
-        local f = _G[fn]; if type(f) == "function" then SafeRefreshCall(f, want, true) end
+        local f = _G[fn]; if type(f) == "function" then f(want, true) end
     end
 
     --- 4) Aura refresh
-    if _G.MSUF_Auras3_RefreshAll then
-        _G.MSUF_Auras3_RefreshAll()
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.RefreshAll) == "function" then
+        a3.RefreshAll()
     end
 
     --- 5) Sync movers
     SchedulePreviewMoverSync(0.08)
+    if want then
+        MSUF_EM2_SchedulePreviewReforce()
+    end
 end
 
---- --- Auto-reforce wrappers ---
---- Visual update functions can overwrite preview text/bars/colors while Edit
---- Mode preview is active. Wrap MSUF-owned entry points only for the active
---- preview window, then restore originals when preview mode stops.
-do
-    local PIPELINE_REFORCE_NAMES = {
-        --- Font/color/bar/castbar visual entry points that can overwrite preview state.
-        "MSUF_UpdateAllFonts",
-        "MSUF_UpdateAllFonts_Immediate",
-        "MSUF_RefreshAllIdentityColors",
-        "MSUF_RefreshAllPowerTextColors",
-        "MSUF_UpdateAllBarTextures",
-        "MSUF_UpdateAllBarTextures_Immediate",
-        "MSUF_ApplyBarOutlineThickness_All",
-        "MSUF_ApplyPowerBarBorder_All",
-        "MSUF_ApplyReverseFillBars",
-        "MSUF_UpdateCastbarVisuals",
-        "MSUF_UpdateCastbarVisuals_Immediate",
-        "MSUF_UpdateCastbarTextures",
-        "MSUF_UpdateCastbarTextures_Immediate",
-        "MSUF_RefreshDispelOutlineStates",
-        "MSUF_ApplyAllAlpha",
-    }
-    local wrapped = {}
-    local wrappers = {}
-    local unpack = table.unpack or unpack
-
-    local function ScheduleReforce(delay)
-        if not _G.MSUF_PreviewTestMode then return end
-        if IsConfigCombatLocked() then return end
-        C_Timer.After(delay, function()
-            if not _G.MSUF_PreviewTestMode then return end
-            if IsConfigCombatLocked() then return end
-            MSUF_EM2_ReforcePreviewFrames()
-        end)
-    end
-
-    local function UninstallPipelineWrappers()
-        for name, original in pairs(wrapped) do
-            if _G[name] == wrappers[name] then
-                _G[name] = original
-            end
-            wrapped[name] = nil
-            wrappers[name] = nil
-        end
-    end
-
-    local function InstallPipelineWrappers()
-        if not _G.MSUF_PreviewTestMode then return end
-        for _, name in ipairs(PIPELINE_REFORCE_NAMES) do
-            if not wrapped[name] and type(_G[name]) == "function" then
-                local original = _G[name]
-                local function wrapper(...)
-                    if not _G.MSUF_PreviewTestMode then
-                        UninstallPipelineWrappers()
-                        return original(...)
-                    end
-                    local results = { original(...) }
-                    ScheduleReforce(0.05)
-                    return unpack(results)
-                end
-                wrapped[name] = original
-                wrappers[name] = wrapper
-                _G[name] = wrapper
-            end
-        end
-    end
-
-    local _origSync = MSUF_SyncAllUnitPreviews
-    local function SyncAllUnitPreviewsWithPipelineWrappers(...)
-        if _G.MSUF_PreviewTestMode then
-            InstallPipelineWrappers()
-        else
-            UninstallPipelineWrappers()
-        end
-        local results = { _origSync(...) }
-        if _G.MSUF_PreviewTestMode then
-            ScheduleReforce(0.05)
-            ScheduleReforce(0.20)
-        else
-            UninstallPipelineWrappers()
-        end
-        return unpack(results)
-    end
-    MSUF_SyncAllUnitPreviews = SyncAllUnitPreviewsWithPipelineWrappers
-    ExportPublic("MSUF_SyncAllUnitPreviews", SyncAllUnitPreviewsWithPipelineWrappers)
-end
+ExportPublic("MSUF_SyncAllUnitPreviews", MSUF_SyncAllUnitPreviews)
 
 --- --- MSUF_SyncCastbarEditModeWithUnitEdit (castbar preview sync) ---
 local function MSUF_SyncCastbarEditModeWithUnitEdit()
@@ -877,12 +776,12 @@ local function MSUF_SyncCastbarEditModeWithUnitEdit()
 
     for _, name in ipairs(CASTBAR_REFRESH_FUNCS) do
         local fn = _G[name]
-        if type(fn) == "function" then SafeRefreshCall(fn) end
+        if type(fn) == "function" then fn() end
     end
     if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
         and _G.MSUF_UpdateBossCastbarPreview
     then
-        SafeRefreshCall(_G.MSUF_UpdateBossCastbarPreview)
+        _G.MSUF_UpdateBossCastbarPreview()
     end
 end
 ExportPublic("MSUF_SyncCastbarEditModeWithUnitEdit", MSUF_SyncCastbarEditModeWithUnitEdit)

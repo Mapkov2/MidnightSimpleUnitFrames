@@ -1698,6 +1698,7 @@ FrameRuntimeUpdate = function(frame, reason)
   end
   reason = reason or "MSUF_FORCE_UPDATE"
   local unit = frame.unit
+  UF.RefreshNativePingIcon(frame)
   if RuntimeCanSkipMissingUnit(frame, reason) then
     if RUNTIME_MISSING_AURA_CLEAR[reason] == true then
       RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")

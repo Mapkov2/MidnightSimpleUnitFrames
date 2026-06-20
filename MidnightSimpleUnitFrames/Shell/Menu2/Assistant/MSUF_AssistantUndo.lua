@@ -59,12 +59,8 @@ local function ScheduleNextFrame(key, fn)
         _G.MSUF_ScheduleOnce(tostring(key or "MSUF_ASSISTANT_BROAD_APPLY"), fn)
         return true
     end
-    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        _G.C_Timer.After(0, fn)
-        return true
-    end
-    fn()
-    return false
+    _G.C_Timer.After(0, fn)
+    return true
 end
 
 local function BroadApply(reason)
@@ -163,7 +159,7 @@ function A.RequestBroadApply(reason, opts, callback)
         local function Finish(result)
             state.running = nil
             if type(result) == "table" and result.status == "failed" and type(A.AddHistory) == "function" then
-                A.AddHistory("assistant", result.text or "Assistant broad apply failed.", result.status)
+                A.AddHistory("assistant", result.text or "Some affected MSUF views still need a refresh.", result.status)
             end
             for i = 1, #callbacks do pcall(callbacks[i], result) end
             if state.reason and not state.scheduled then
@@ -290,7 +286,7 @@ function A.UndoLast()
     A.redoStack = A.redoStack or {}
     local bundle = table.remove(A.undoStack)
     if not bundle then
-        return false, "There is no Assistant change to undo."
+        return false, "I have no Assistant change to undo."
     end
     if type(bundle.beforeProfileSnapshot) == "table" then
         if RestoreProfileSnapshot(bundle.beforeProfileSnapshot) then
@@ -314,7 +310,7 @@ function A.RedoLast()
     A.redoStack = A.redoStack or {}
     local bundle = table.remove(A.redoStack)
     if not bundle then
-        return false, "There is no Assistant change to redo."
+        return false, "I have no Assistant change to redo."
     end
     if type(bundle.afterProfileSnapshot) == "table" then
         if RestoreProfileSnapshot(bundle.afterProfileSnapshot) then

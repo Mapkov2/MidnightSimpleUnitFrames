@@ -652,8 +652,7 @@ end
 
 function GF.NormalizeGroupRole(role)
     if _GF_issecretvalue then
-        local ok, secret = pcall(_GF_issecretvalue, role)
-        if ok and secret == true then return "DAMAGER" end
+        if _GF_issecretvalue(role) == true then return "DAMAGER" end
     end
     if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
         return role
@@ -2124,8 +2123,7 @@ local function TextureProbeRaw(path)
     end
     if not (_textureProbe and _textureProbe.SetTexture) then return false end
     _textureProbe:SetTexture(nil)
-    local ok, applied = pcall(_textureProbe.SetTexture, _textureProbe, path)
-    if not ok or applied == false then
+    if _textureProbe:SetTexture(path) == false then
         _textureProbe:SetTexture(nil)
         return false
     end

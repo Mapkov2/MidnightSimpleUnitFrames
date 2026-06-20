@@ -54,6 +54,8 @@ end
 if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "range_fade",
+        title = "Range Fade",
+        height = 214,
         placement = "after_load_conditions",
         order = 10,
         units = RANGE_FADE_UNITS,

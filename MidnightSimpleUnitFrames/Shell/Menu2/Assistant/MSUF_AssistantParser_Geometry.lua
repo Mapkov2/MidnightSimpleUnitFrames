@@ -124,8 +124,8 @@ function P.ParseUnitSizeMatchShortcut(text)
             { setting = widthSetting, value = sourceWidth, valueLabel = tostring(sourceWidth) },
             { setting = heightSetting, value = sourceHeight, valueLabel = tostring(sourceHeight) },
         },
-        label = "Match unitframe size",
-        summary = "Sets the target unitframe width and height to the current source unitframe size.",
+        label = "Match unit frame size",
+        summary = "Sets the target unit frame width and height to the current source unit frame size.",
         bulkSafe = true,
     }
 end
@@ -134,7 +134,7 @@ local function ParseUnsupportedDetailShortcut(text)
     if ContainsAny(text, { "combat timer alpha", "combat timer opacity", "combat timer transparency" }) then
         return {
             kind = "unknown",
-            text = "Combat Timer alpha is not exposed by the current MSUF UI/DB. The Assistant can change real Combat Timer controls like enable, size, position, anchor, lock, and colors.",
+            text = "Combat Timer supports enable, size, position, anchor, lock, and colors in MSUF, but not opacity.",
             status = "failed",
         }
     end
@@ -170,7 +170,7 @@ local function BuildUnitDetailChoices(attr, value, relativeDelta, direction)
     return {
         kind = "ambiguous",
         choices = BuildChanges(settings, value, relativeDelta, direction),
-        label = "Multiple matching unitframe detail settings",
+        label = "Multiple matching unit frame detail options",
     }
 end
 
@@ -278,7 +278,7 @@ local function ParsePortraitDetailShortcut(text)
         changes = changes,
         label = "Portrait detail",
         bulkSafe = #changes > 1,
-        summary = "Changes a registered portrait detail control.",
+        summary = "Changes a portrait detail option.",
     }
 end
 
@@ -563,7 +563,7 @@ function OM.ParseUnitFrameRootMove(text)
             label = "Move unit frame",
             bulkSafe = #changes > 1,
             compoundComplete = true,
-            summary = "Moves the registered Unit Frame root X/Y position controls.",
+            summary = "Moves the unit frame X/Y position.",
         }
     end
 
@@ -599,7 +599,7 @@ function OM.ParseUnitFrameRootMove(text)
         changes = changes,
         label = "Move unit frame",
         bulkSafe = #changes > 1,
-        summary = "Moves the registered Unit Frame root X/Y position controls.",
+        summary = "Moves the unit frame X/Y position.",
     }
 end
 
@@ -758,8 +758,8 @@ local function ParseGenericOffsetMove(text)
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Which position offset should I move?",
-            summary = "The command matched more than one registered non-Aura X/Y offset.",
+            label = "Which position offset do you want me to move?",
+            summary = "The request matched more than one non-Aura X/Y offset.",
         }
     end
 
@@ -768,7 +768,7 @@ local function ParseGenericOffsetMove(text)
         changes = changes,
         label = "Move position offset",
         bulkSafe = #changes > 1,
-        summary = "Moves the matching registered non-Aura X/Y offset control.",
+        summary = "Moves the matching non-Aura X/Y offset option.",
     }
 end
 
@@ -808,7 +808,7 @@ local function ParseUnitDetailMove(text)
         kind = "changes",
         changes = changes,
         label = spec.label,
-        summary = "Moves a unitframe detail control by pixels.",
+        summary = "Moves a unit frame detail option by pixels.",
     }
 end
 
@@ -860,8 +860,8 @@ function P.ParseDetachedPowerBarMoveShortcut(text)
             return {
                 kind = "answer",
                 status = "info",
-                text = "Detached Power Bars do not have their own external anchor-frame setting. I can move a detached Power Bar with X/Y offsets, for example: move target detached powerbar left 10; move target detached powerbar up 4. To anchor the whole Target frame to cooldownmanager, say 'anchor target to cooldownmanager'.",
-                summary = "Explains detached Power Bar external anchor limits without changing the unit frame anchor.",
+                text = "Detached Power Bars use X/Y offsets instead of direct anchors. I can move one with requests like: move target detached power bar left 10; move target detached power bar up 4. To anchor the whole Target frame to Cooldown Manager, ask for 'anchor target to Cooldown Manager'.",
+                summary = "Detached Power Bars move with offsets instead of direct anchors.",
             }
         end
         return nil
@@ -917,7 +917,7 @@ function P.ParseDetachedPowerBarMoveShortcut(text)
         changes = changes,
         label = "Move detached Power Bar",
         bulkSafe = #changes > 1,
-        summary = "Moves the registered Detached Power Bar X/Y offset controls when the unit power bar is detached.",
+        summary = "Moves the Detached Power Bar X/Y offset options when the unit power bar is detached.",
     }
 end
 
@@ -1032,7 +1032,7 @@ function P.ParsePairwiseFrameSpacingShortcut(text)
         label = mode == "closer" and "Move frames closer together" or "Move frames farther apart",
         bulkSafe = true,
         compoundComplete = true,
-        summary = "Moves two registered frame root offsets along their strongest separation axis.",
+        summary = "Moves two frame root offsets along their strongest separation axis.",
     }
 end
 
@@ -1083,7 +1083,7 @@ function P.ParseGroupFrameSpacingShortcut(text)
             },
         },
         label = mode == "closer" and "Reduce group frame spacing" or "Increase group frame spacing",
-        summary = "Maps natural group-frame spacing wording to the registered Group Layout Spacing slider.",
+        summary = "Adjusts group-frame layout spacing.",
     }
 end
 
@@ -1132,15 +1132,15 @@ local function HumanAnchorFrameNameForText(text, raw)
 end
 
 local function BroadHumanAnchorAnswer(frameName)
-    local target = frameName == "EssentialCooldownViewer" and "cooldownmanager" or tostring(frameName or "that frame")
+    local target = frameName == "EssentialCooldownViewer" and "Cooldown Manager" or tostring(frameName or "that frame")
     return {
         kind = "answer",
         status = "info",
         text = table.concat({
             "I can anchor real MSUF frame families, but 'all frames' is too broad to change safely.",
-            "Use a concrete target, for example: anchor unitframes to " .. target .. "; anchor party and raid frames to " .. target .. "; anchor class resources to " .. target .. ".",
+            "Use a concrete target, for example: anchor unit frames to " .. target .. "; anchor party and raid frames to " .. target .. "; anchor class resources to " .. target .. ".",
         }, "\n"),
-        summary = "Explains ambiguous broad frame anchor wording.",
+        summary = "Asks for a concrete frame anchor target.",
     }
 end
 
@@ -1150,15 +1150,15 @@ function P.ParseBroadHumanAnchorTargetAnswer(text, raw)
     if ContainsAny(text, { "open", "where", "where is", "where are", "how", "help", "settings", "setting", "page" })
         and ContainsAny(text, { "anchor", "anchors", "custom anchor", "anchor settings", "anchor page" })
     then
-        local target = externalFrameName == "EssentialCooldownViewer" and "cooldownmanager" or tostring(externalFrameName)
+        local target = externalFrameName == "EssentialCooldownViewer" and "Cooldown Manager" or tostring(externalFrameName)
         return {
             kind = "answer",
             status = "info",
             text = table.concat({
-                tostring(target) .. " is an external custom anchor target, not a separate MSUF settings page.",
-                "Use a concrete MSUF frame command, for example: anchor target to " .. tostring(target) .. "; anchor player and target to " .. tostring(target) .. "; open target custom anchor picker.",
+                tostring(target) .. " is an external custom anchor target, not a separate MSUF options page.",
+                "Use a concrete MSUF frame request, for example: anchor target to " .. tostring(target) .. "; anchor player and target to " .. tostring(target) .. "; open target custom anchor picker.",
             }, "\n"),
-            summary = "Explains external custom anchor wording without pretending there is a separate page.",
+            summary = "Shows how custom anchor frame names work.",
         }
     end
     local attachIntent = ContainsAny(text, {
@@ -1247,7 +1247,7 @@ function P.ParseHumanAnchorTarget(text, raw)
                 label = "Set unit custom anchor frame",
                 bulkSafe = #changes > 1,
                 compoundComplete = true,
-                summary = "Interprets human placement wording as the registered Unit Frame Custom Anchor Frame field.",
+                summary = "Sets the unit frame custom anchor from placement wording.",
             }
         end
         if value == nil then return nil end
@@ -1268,10 +1268,10 @@ function P.ParseHumanAnchorTarget(text, raw)
         return {
             kind = "changes",
             changes = changes,
-            label = detachIntent and "Detach unit frame anchor target" or "Set unitframe anchor target",
+            label = detachIntent and "Detach unit frame anchor target" or "Set unit frame anchor target",
             bulkSafe = #changes > 1,
             compoundComplete = true,
-            summary = "Interprets human placement wording as the registered Unit Frame Anchor To dropdown.",
+            summary = "Applies the unit frame Anchor To option for placement wording.",
         }
     end
 
@@ -1309,7 +1309,7 @@ function P.ParseHumanAnchorTarget(text, raw)
         label = detachIntent and "Detach group frame anchor target" or "Set group frame anchor target",
         bulkSafe = #changes > 1,
         compoundComplete = true,
-        summary = "Interprets human placement wording as the registered Group Layout anchor controls.",
+        summary = "Interprets human placement wording as the Group Layout anchor options.",
     }
 end
 
@@ -1573,7 +1573,7 @@ local function GroupScaleMissingValueAnswer(groups, attr, playerCount)
     local scopeText = scope == "mythicraid" and "mythic raid" or (scope or "raid")
     return table.concat({
         "Group frame scaling breakpoints",
-        "I can change " .. tostring(label) .. " scaling " .. targetText .. ", but I need the target percent or a relative direction.",
+        "I can change " .. tostring(label) .. " scaling " .. targetText .. ". Use a target percent, or say whether to make it larger or smaller.",
         "Examples: set " .. tostring(scopeText) .. " scale for 20 players to 80; make " .. tostring(scopeText) .. " frames smaller when 20 people; increase " .. tostring(scopeText) .. " scale for 20m by 5.",
     }, "\n")
 end
@@ -1608,7 +1608,7 @@ function P.ParseGroupScaleBreakpointShortcut(text)
                 kind = "answer",
                 status = "info",
                 text = GroupScaleMissingValueAnswer(groups, attr, playerCount),
-                summary = "Explains the missing group player-count scale value.",
+                summary = "Asks which group player-count scale value to use.",
             }
         end
     end
@@ -1624,7 +1624,7 @@ function P.ParseGroupScaleBreakpointShortcut(text)
         label = value == nil and "Adjust group frame player-count scale" or "Set group frame player-count scale",
         bulkSafe = #changes > 1,
         compoundComplete = true,
-        summary = "Maps player-count wording to the Group Layout scaling breakpoint sliders.",
+        summary = "Adjusts group-frame player-count scaling.",
     }
 end
 
@@ -1663,7 +1663,7 @@ function P.ParseGroupGrowthDirectionShortcut(text)
         changes = changes,
         label = "Set group frame growth direction",
         bulkSafe = #changes > 1,
-        summary = "Maps natural group-frame growth wording to the registered Growth Direction control.",
+        summary = "Changes group-frame growth direction.",
     }
 end
 
@@ -1720,7 +1720,7 @@ function P.ParseGroupPowerBarSizeShortcut(text)
             kind = "answer",
             status = "info",
             text = tostring(label) .. " Power Bar width follows the group frame width. To make the Power Bar wider, resize the " .. tostring(label):lower() .. " frame width. To change only the Power Bar thickness, say 'set " .. tostring(label):lower() .. " power bar height to 5'.",
-            summary = "Explains why group Power Bars do not have a separate width control.",
+            summary = "Group Power Bars follow the group frame width.",
         }
     end
 
@@ -1748,7 +1748,7 @@ function P.ParseGroupPowerBarSizeShortcut(text)
         changes = changes,
         label = "Resize group Power Bar",
         bulkSafe = #changes > 1,
-        summary = "Maps natural group Power Bar size wording to the registered Group Power Bar Height control.",
+        summary = "Adjusts group Power Bar height.",
     }
 end
 
@@ -1800,7 +1800,7 @@ function P.ParseGroupFrameRootMove(text)
         changes = changes,
         label = "Move group frame",
         bulkSafe = #changes > 1,
-        summary = "Moves the registered Group Frame root X/Y position controls.",
+        summary = "Moves the Group Frame root X/Y position options.",
     }
 end
 
@@ -1874,11 +1874,17 @@ function P.FrameResizeActionLabel(direction)
 end
 
 function P.FrameResizeUnitLabel(unit)
+    if A and type(A.DisplayUnitLabel) == "function" then return A.DisplayUnitLabel(unit) end
     local labels = A.UnitLabels or {}
-    return tostring(labels[unit] or unit or "Unitframe")
+    if labels[unit] ~= nil and tostring(labels[unit]) ~= "" then return tostring(labels[unit]) end
+    if unit == "targettarget" then return "Target of Target" end
+    if unit == "focustarget" then return "Focus Target" end
+    if unit == "mythicraid" then return "Mythic Raid" end
+    return tostring(unit or "Unit Frame")
 end
 
 function P.FrameResizeGroupLabel(scope)
+    if A and type(A.DisplayGroupLabel) == "function" then return A.DisplayGroupLabel(scope) end
     if scope == "party" then return "Party" end
     if scope == "raid" then return "Raid" end
     if scope == "mythicraid" then return "Mythic Raid" end
@@ -1894,8 +1900,8 @@ function P.FrameResizeTargetLabel(kind, targets)
         if #targets >= #ALL_GROUPS then return "all group frames" end
         return tostring(#targets) .. " group frames"
     end
-    if #targets >= #ALL_UNITFRAMES then return "all unitframes" end
-    return tostring(#targets) .. " unitframes"
+    if #targets >= #ALL_UNITFRAMES then return "all unit frames" end
+    return tostring(#targets) .. " unit frames"
 end
 
 function P.FrameResizeSettingKey(kind, target, attr)
@@ -1936,7 +1942,7 @@ function P.FrameResizeChoice(kind, targets, dimension, widthDelta, heightDelta, 
         changes = changes,
         label = label,
         bulkSafe = #changes >= 6,
-        summary = "Applies a relative frame size change to registered width/height controls.",
+        summary = "Applies a relative frame size change to width/height options.",
     }
 end
 
@@ -1979,16 +1985,16 @@ function P.ParseFrameResizeShortcut(text)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Which frame should I resize? For example: 'make player frame bigger', 'make target frame smaller', or 'make party frame bigger'.",
-            summary = "Asks for the missing frame target before resizing.",
+            text = "Which frame do you want me to resize? For example: 'make player frame bigger', 'make target frame smaller', or 'make party frame bigger'.",
+            summary = "Asks which frame should be resized.",
         }
     end
     if not direction then
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Should I make " .. P.FrameResizeTargetLabel(kind, targets) .. " bigger or smaller? You can also say 'width only' or 'height only'.",
-            summary = "Asks for the missing resize direction.",
+            text = "Do you want me to make " .. P.FrameResizeTargetLabel(kind, targets) .. " bigger or smaller? You can also say 'width only' or 'height only'.",
+            summary = "Asks which resize direction to use.",
         }
     end
 
@@ -2006,7 +2012,7 @@ function P.ParseFrameResizeShortcut(text)
             changes = changes,
             label = P.FrameResizeActionLabel(direction) .. " frame width and height",
             bulkSafe = #changes >= 6,
-            summary = "Applies a relative frame size change to registered width and height controls.",
+            summary = "Applies a relative frame size change to width and height options.",
         }
     end
 
@@ -2022,7 +2028,7 @@ function P.ParseFrameResizeShortcut(text)
         kind = "ambiguous",
         choices = choices,
         label = "Which frame size should change?",
-        summary = "The command named a frame and a broad resize direction, so the Assistant asks which registered size controls to adjust.",
+        summary = "The request named a frame and a broad resize direction, so the Assistant asks which size options to adjust.",
     }
 end
 
@@ -2148,8 +2154,8 @@ function P.ParsePowerBarSizeShortcut(text)
         return {
             kind = "unknown",
             status = "failed",
-            text = "Which unit Power Bar should I resize? Try 'make player power bar taller' or 'set target power bar height to 8'.",
-            summary = "Asks for the missing unit before changing a Power Bar size control.",
+            text = "Which unit Power Bar do you want me to resize? For example: 'make player power bar taller' or 'set target power bar height to 8'.",
+            summary = "Asks which unit's Power Bar size to change.",
         }
     end
 
@@ -2198,8 +2204,8 @@ function P.ParsePowerBarSizeShortcut(text)
         return {
             kind = "answer",
             status = "info",
-            text = tostring(unitLabel) .. " Power Bar width follows the unitframe while it is attached. To make the bar wider, resize the " .. tostring(unitLabel):lower() .. " frame width, or detach the Power Bar and then resize the detached Power Bar width.",
-            summary = "Explains why attached unit Power Bars do not have a separate width control.",
+            text = tostring(unitLabel) .. " Power Bar width follows the frame while it is attached. To make the bar wider, resize the " .. tostring(unitLabel):lower() .. " frame width, or detach the Power Bar and then resize the detached Power Bar width.",
+            summary = "Attached unit Power Bars follow the unit frame width.",
         }
     end
     if #changes == 0 then return nil end
@@ -2208,7 +2214,7 @@ function P.ParsePowerBarSizeShortcut(text)
         changes = changes,
         label = "Resize Power Bar",
         bulkSafe = #changes > 1,
-        summary = "Maps natural Power Bar size wording to the registered Power Bar height or detached Power Bar size controls.",
+        summary = "Adjusts Power Bar height or detached Power Bar size.",
     }
 end
 
@@ -2303,7 +2309,7 @@ function P.ParseTextVisibilityShortcut(text)
             setting = setting,
             value = value,
             valueLabel = valueLabel,
-            label = tostring(setting.label or "Text visibility") .. " -> " .. valueLabel,
+            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, valueLabel, "Text visibility") or (tostring(setting.label or "Text visibility") .. ": " .. valueLabel),
         }
     end
     if #units == 0 and #groups == 0 then
@@ -2325,7 +2331,7 @@ function P.ParseTextVisibilityShortcut(text)
             kind = "ambiguous",
             choices = changes,
             label = "Which " .. spec.label .. "?",
-            summary = "The command names more than one frame, so the Assistant asks which real text visibility toggle to change.",
+            summary = "The request names more than one frame, so the Assistant asks which real text visibility toggle to change.",
         }
     end
 
@@ -2334,7 +2340,7 @@ function P.ParseTextVisibilityShortcut(text)
         changes = changes,
         label = spec.label .. " Visibility",
         bulkSafe = #changes > 1,
-        summary = "Changes the registered text visibility toggle instead of a text-slot value or color mode.",
+        summary = "Changes the text visibility toggle instead of a text-slot value or color mode.",
     }
 end
 
@@ -2383,9 +2389,9 @@ function A._ParseGroupAnchorTargetShortcut(text)
                 return {
                     kind = "changes",
                     changes = changes,
-                    label = "Set unitframe anchor target",
+                    label = "Set unit frame anchor target",
                     bulkSafe = #changes > 1,
-                    summary = "Changes the registered Unit Frame Anchor To dropdown.",
+                    summary = "Changes the unit frame Anchor To option.",
                 }
             end
         end
@@ -2404,7 +2410,7 @@ function A._ParseGroupAnchorTargetShortcut(text)
         kind = "changes",
         changes = changes,
         label = "Set group anchor target",
-        summary = "Changes the registered Group Layout Anchor To dropdown.",
+        summary = "Changes the group layout Anchor To option.",
     }
 end
 
@@ -2436,7 +2442,7 @@ local function ParseGroupDetailMove(text)
         kind = "changes",
         changes = changes,
         label = spec.label,
-        summary = "Moves a registered group-frame text control by pixels.",
+        summary = "Moves a group-frame text option by pixels.",
     }
 end
 
@@ -2503,7 +2509,7 @@ function A._ParseTextDetailExactOffset(text)
         kind = "changes",
         changes = changes,
         label = "Set text offset",
-        summary = "Sets a registered unit/group text offset slider value.",
+        summary = "Sets a unit or group text offset.",
     }
 end
 
@@ -2555,7 +2561,7 @@ local function ParseBorderThicknessShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = setting.label or "Frame outline thickness",
-        summary = "Changes the registered frame/bar outline thickness control instead of toggling the whole unit frame.",
+        summary = "Changes the frame/bar outline thickness option instead of toggling the whole unit frame.",
     }
 end
 
@@ -2594,8 +2600,8 @@ local function ParseUnitDetailOffsetShortcut(text)
     return {
         kind = "ambiguous",
         choices = changes,
-        label = "Which " .. tostring(spec.label or "detail") .. " offset should I set?",
-        summary = "The command names an offset but not X/Y or a movement direction.",
+        label = "Which " .. tostring(spec.label or "detail") .. " offset do you want me to set?",
+        summary = "The request names an offset but not X/Y or a movement direction.",
     }
 end
 
@@ -2678,14 +2684,14 @@ function P.ParseCastbarSizeShortcut(text)
     end
     if #changes == 0 then return nil end
     if #changes > 1 and #DetectUnits(text) == 0 and not CurrentPageUnit() then
-        return { kind = "ambiguous", choices = changes, label = "Which castbar should I resize?" }
+        return { kind = "ambiguous", choices = changes, label = "Which cast bar do you want me to resize?" }
     end
     return {
         kind = "changes",
         changes = changes,
-        label = "Resize castbar",
+        label = "Resize Cast Bar",
         bulkSafe = #changes > 1,
-        summary = "Maps natural castbar size wording to registered Castbar Width and Height controls.",
+        summary = "Adjusts cast bar width or height.",
     }
 end
 
@@ -2715,14 +2721,14 @@ function P.ParseCastbarPlacementShortcut(text)
     end
     if #changes == 0 then return nil end
     if #changes > 1 and #DetectUnits(text) == 0 and not CurrentPageUnit() then
-        return { kind = "ambiguous", choices = changes, label = "Which castbar should I move?" }
+        return { kind = "ambiguous", choices = changes, label = "Which cast bar do you want me to move?" }
     end
     return {
         kind = "changes",
         changes = changes,
-        label = direction == "down" and "Move castbar below frame" or "Move castbar above frame",
+        label = direction == "down" and "Move cast bar below frame" or "Move cast bar above frame",
         bulkSafe = #changes > 1,
-        summary = "Maps above/below castbar placement wording to the registered Castbar Y Offset control.",
+        summary = "Moves the cast bar above or below its frame.",
     }
 end
 
@@ -2741,10 +2747,10 @@ function P.ParseCastbarTextSizeShortcut(text)
     local label
     if ContainsAny(text, { "timer", "time text", "cast time" }) then
         field = "TimeFontSize"
-        label = "Castbar time text size"
+        label = "Cast Bar time text size"
     elseif ContainsAny(text, { "spell name", "spell text", "castbar text", "castbar name", "text" }) then
         field = "SpellNameFontSize"
-        label = "Castbar spell text size"
+        label = "Cast Bar spell text size"
     else
         return nil
     end
@@ -2770,14 +2776,14 @@ function P.ParseCastbarTextSizeShortcut(text)
     end
     if #changes == 0 then return nil end
     if #changes > 1 and #DetectUnits(text) == 0 and not CurrentPageUnit() then
-        return { kind = "ambiguous", choices = changes, label = "Which castbar text should I resize?" }
+        return { kind = "ambiguous", choices = changes, label = "Which cast bar text do you want me to resize?" }
     end
     return {
         kind = "changes",
         changes = changes,
         label = label,
         bulkSafe = #changes > 1,
-        summary = "Maps natural castbar text size wording to registered Castbar font size controls.",
+        summary = "Adjusts cast bar text size.",
     }
 end
 
@@ -2790,10 +2796,10 @@ local function ParseCastbarTextMoveShortcut(text)
     local label
     if ContainsAny(text, { "time text", "castbar time", "cast time", "timer", "time" }) then
         field = (direction == "left" or direction == "right") and "TimeOffsetX" or "TimeOffsetY"
-        label = "Move castbar time text"
+        label = "Move cast bar time text"
     elseif ContainsAny(text, { "spell name", "spell text", "castbar text", "castbar name", "text" }) then
         field = (direction == "left" or direction == "right") and "TextOffsetX" or "TextOffsetY"
-        label = "Move castbar spell text"
+        label = "Move cast bar spell text"
     else
         return nil
     end
@@ -2808,13 +2814,13 @@ local function ParseCastbarTextMoveShortcut(text)
     end
     if #changes == 0 then return nil end
     if #changes > 1 and #DetectUnits(text) == 0 and not CurrentPageUnit() then
-        return { kind = "ambiguous", choices = changes, label = "Which castbar text should I move?" }
+        return { kind = "ambiguous", choices = changes, label = "Which cast bar text do you want me to move?" }
     end
     return {
         kind = "changes",
         changes = changes,
         label = label,
-        summary = "Moves a registered castbar text detail control by pixels.",
+        summary = "Moves Cast Bar text by pixels.",
     }
 end
 
@@ -2854,7 +2860,7 @@ local function ParseUnitOpacityShortcut(text)
         else
             return {
                 kind = "unknown",
-                text = "Which unitframe alpha should I change? Try 'set player alpha to 50' or open a unit page and say 'set alpha to 50'.",
+                text = "Which unit frame alpha do you want me to change? For example: 'set player alpha to 50', or open a unit page and use 'set alpha to 50'.",
                 status = "failed",
             }
         end
@@ -2870,7 +2876,7 @@ local function ParseUnitOpacityShortcut(text)
         kind = "changes",
         changes = changes,
         label = "Set unit opacity",
-        summary = "Sets the HP bar opacity for the requested unitframe.",
+        summary = "Sets the HP bar opacity for the requested unit frame.",
     }
 end
 
@@ -2923,7 +2929,7 @@ function A._ParseGroupOpacityShortcut(text)
         kind = "changes",
         changes = changes,
         label = "Set group opacity",
-        summary = "Sets the HP bar opacity for the requested group-frame scope.",
+        summary = "Sets the HP bar opacity for the requested group-frame target.",
     }
 end
 
@@ -2993,7 +2999,7 @@ function A._ParseGroupRangeFadeShortcut(text)
         changes = changes,
         label = "Set group range fade",
         bulkSafe = #changes > 1,
-        summary = "Maps out-of-range transparency wording to registered Group Frame Range Fade controls.",
+        summary = "Adjusts group-frame range fade.",
     }
 end
 
@@ -3070,7 +3076,7 @@ local function ParseGroupFrameColorMode(text)
         kind = "changes",
         changes = changes,
         label = "Set group-frame bar color mode",
-        summary = "Changes the real Group Frames > Health & Text Bar Color Mode instead of the global unitframe bar mode.",
+        summary = "Changes the Group Frames > Health & Text Bar Color Mode instead of the global unit frame bar mode.",
     }
 end
 

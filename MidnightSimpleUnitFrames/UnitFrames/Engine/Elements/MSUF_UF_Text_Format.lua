@@ -1313,7 +1313,6 @@ local function FlushPendingHealthText(frame)
   end
 end
 
-local textThrottleFrame
 local textThrottleTimerActive
 local textThrottleTimerAt
 local healthTextQueue = {}
@@ -1485,16 +1484,6 @@ local function RunTextThrottle(now)
   return true
 end
 
-local function TextThrottleOnUpdate(self)
-  local now = GetTime and GetTime() or 0
-  if textThrottleTimerAt and now < textThrottleTimerAt then
-    return
-  end
-  if not RunTextThrottle(now) then
-    self:Hide()
-  end
-end
-
 local function TextThrottleTimerCallback()
   -- MUST ALWAYS run RunTextThrottle -- never gate on textThrottleTimerAt.
   RunTextThrottle()
@@ -1510,17 +1499,7 @@ ScheduleTextThrottleTimer = function(delay, when)
 
   textThrottleTimerActive = true
   textThrottleTimerAt = when
-  if C_Timer and C_Timer.After then
-    C_Timer.After(delay, TextThrottleTimerCallback)
-    return
-  end
-
-  if not textThrottleFrame then
-    textThrottleFrame = CreateFrame("Frame")
-    textThrottleFrame:SetScript("OnUpdate", TextThrottleOnUpdate)
-    textThrottleFrame:Hide()
-  end
-  textThrottleFrame:Show()
+  C_Timer.After(delay, TextThrottleTimerCallback)
 end
 
 local function QueueHealthTextFlush(frame, rt, remaining)

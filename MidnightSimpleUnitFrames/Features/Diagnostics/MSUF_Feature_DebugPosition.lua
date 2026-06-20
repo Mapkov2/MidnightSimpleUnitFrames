@@ -4,7 +4,7 @@
 --- ZERO overhead guarantee when OFF:
 --- • No function wrappers installed (originals restored on toggle-off)
 --- • No event listeners active (combat frame unregistered on toggle-off)
---- • Overlay ticker cancelled on toggle-off
+--- • Overlay OnUpdate disabled on toggle-off
 ---
 --- Hooks are installed lazily on first toggle-on; no PLAYER_LOGIN frame needed.
 
@@ -55,7 +55,7 @@ end
 local _overlay
 
 local function UpdateOverlay()
-    --- guard: ticker calls this even after cancel on slow machines; bail instantly
+    --- guard: scheduled debug updates can run after toggle-off; bail instantly
     if not _G.MSUF_DebugPositions then return end
     if not _overlay then return end
     local l   = _overlay.lines
@@ -110,11 +110,25 @@ local function UpdateOverlay()
 end
 ExportPublic("MSUF_DbgPos_UpdateOverlay", UpdateOverlay)
 
+local function OverlayOnUpdate(frame, elapsed)
+    frame._updateAccum = (frame._updateAccum or 0) + (elapsed or 0)
+    if frame._updateAccum < 0.5 then return end
+    frame._updateAccum = 0
+    UpdateOverlay()
+end
+
+local function StartOverlayUpdates()
+    if not _overlay then return end
+    if _overlay._updatesActive then return end
+    _overlay._updatesActive = true
+    _overlay._updateAccum = 0.5
+    _overlay:SetOnUpdateMode("RunWhenVisible")
+    _overlay:SetScript("OnUpdate", OverlayOnUpdate)
+end
+
 local function CreateOverlay()
     if _overlay then
-        if not _overlay._ticker and C_Timer and C_Timer.NewTicker then
-            _overlay._ticker = C_Timer.NewTicker(0.5, UpdateOverlay)
-        end
+        StartOverlayUpdates()
         return
     end
     local f = CreateFrame("Frame", "MSUF_DebugPosOverlay", UIParent)
@@ -139,15 +153,15 @@ local function CreateOverlay()
     end
     f.lines = lines
     _overlay = f
-    if C_Timer and C_Timer.NewTicker then
-        f._ticker = C_Timer.NewTicker(0.5, UpdateOverlay)
-    end
+    StartOverlayUpdates()
 end
 
-local function CancelOverlayTicker()
-    if _overlay and _overlay._ticker then
-        _overlay._ticker:Cancel()
-        _overlay._ticker = nil
+local function StopOverlayUpdates()
+    if _overlay then
+        _overlay._updatesActive = nil
+        _overlay._updateAccum = nil
+        _overlay:SetScript("OnUpdate", nil)
+        _overlay:SetOnUpdateMode("Disabled")
     end
 end
 
@@ -237,7 +251,7 @@ local function DebugPositionsToggle()
         print("|cFFFF8800[MSUF]|r /msufdbgpos to toggle off")
     else
         RemoveHooks()
-        CancelOverlayTicker()
+        StopOverlayUpdates()
         if _overlay then _overlay:Hide() end
         print("|cFFFF8800[MSUF]|r Position debug |cFFFF4444OFF|r")
     end

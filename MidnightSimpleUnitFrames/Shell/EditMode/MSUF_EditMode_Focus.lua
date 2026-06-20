@@ -424,7 +424,7 @@ function Focus.Pulse(key, component, slot, opts)
             Focus.ClearHover()
         end
     end
-    if C_Timer and C_Timer.After then C_Timer.After(duration, ClearPulse) else ClearPulse() end
+    C_Timer.After(duration, ClearPulse)
     return true
 end
 

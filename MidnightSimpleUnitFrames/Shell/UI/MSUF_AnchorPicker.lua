@@ -49,11 +49,9 @@ local function IsBlockedName(name)
 end
 
 local function SafeGetRect(frame)
-    -- Frame geometry can throw on forbidden frames; keep hover probing non-fatal.
     if not frame or not frame.GetRect then return nil end
     if frame.IsForbidden and frame:IsForbidden() then return nil end
-    local ok, l, b, w, h = pcall(frame.GetRect, frame)
-    if not ok then return nil end
+    local l, b, w, h = frame:GetRect()
     l = tonumber(l); b = tonumber(b); w = tonumber(w); h = tonumber(h)
     if not (l and b and w and h) then return nil end
     if w <= 0 or h <= 0 then return nil end
@@ -84,8 +82,7 @@ end
 
 local function SafeVis(frame)
     if not frame or not frame.IsVisible then return false end
-    local ok, v = pcall(frame.IsVisible, frame)
-    return ok and PlainBool(v) == true
+    return PlainBool(frame:IsVisible()) == true
 end
 
 local lastFrame, lastName
@@ -230,6 +227,7 @@ local function EnsureAnchorPicker()
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
 
+    ov:SetOnUpdateMode("RunWhenVisible")
     ov:SetScript("OnUpdate", function(self, elapsed)
         -- Hit-testing all visible frames is expensive; throttle while keeping hover feedback responsive.
         self._elapsed = (self._elapsed or 0) + elapsed

@@ -174,8 +174,9 @@ local function QueuePortraitUpdate(frame)
   if not portraitQueueDriver then
     portraitQueueDriver = CreateFrame("Frame")
     portraitQueueDriver:Hide()
-    portraitQueueDriver:SetScript("OnUpdate", FlushQueuedPortraits)
   end
+  portraitQueueDriver:SetOnUpdateMode("RunOnce")
+  portraitQueueDriver:SetScript("OnUpdate", FlushQueuedPortraits)
   portraitQueueDriver:Show()
 end
 
@@ -348,7 +349,7 @@ ApplyUnitPortrait = function(texture, unit, frame)
     return
   end
   local guid
-  if UnitGUID and unit then
+  if unit then
     guid = UnitGUID(unit)
     if issecretvalue(guid) == true then
       guid = nil
@@ -360,12 +361,8 @@ ApplyUnitPortrait = function(texture, unit, frame)
   SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
   texture._msufTexture = nil
   texture._msufAtlas = nil
-  if SetPortraitTexture then
-    SetPortraitTexture(texture, unit, true)
-    texture._msufPortraitGUID = guid
-  else
-    SetTextureCached(texture, QUESTION_MARK)
-  end
+  SetPortraitTexture(texture, unit, true)
+  texture._msufPortraitGUID = guid
 end
 
 ResolvePortraitBorderColor = function(frame, p, class)

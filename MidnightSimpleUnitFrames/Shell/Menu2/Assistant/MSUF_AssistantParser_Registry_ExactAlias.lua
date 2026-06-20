@@ -23,7 +23,7 @@ local MissingValueResponse = P.MissingValueResponse
 
 if not (Normalize and Compact and AliasRelationText and ValueForRegistrySetting) then return end
 
--- Exact-alias acceleration for registry settings.
+-- Exact-alias acceleration for registry options.
 -- This index catches precise multi-word aliases before slower fuzzy scoring. Common command
 -- words are ignored as triggers so broad phrases do not fan out across the whole registry.
 local MAX_EXACT_ALIAS_TOKENS = 8
@@ -154,7 +154,7 @@ local function GuardedSettingResponse(setting, text, raw)
         return {
             kind = "unknown",
             status = status or "failed",
-            text = message or "I could not safely use that matched setting.",
+            text = message or "I found a matching option. Which value do you want me to use before I apply it?",
         }
     end
     return nil
@@ -274,8 +274,8 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
             kind = "changes",
             changes = changes,
             bulkSafe = true,
-            label = setting and setting.label or "Assistant setting change",
-            summary = "Registry exact-alias setting change.",
+            label = setting and setting.label or "Assistant option change",
+            summary = "Changes the matched option.",
         }
     end
     if #changes > 1 then
@@ -286,15 +286,15 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
                 kind = "changes",
                 changes = changes,
                 bulkSafe = P.AreBulkSafeAuraSettingChanges and P.AreBulkSafeAuraSettingChanges(changes) or nil,
-                label = "Multiple matching settings",
-                summary = "Registry exact-alias multi-scope setting change.",
+                label = "Multiple matching options",
+                summary = "Changes multiple matched options.",
             }
         end
         return {
             kind = "ambiguous",
             choices = changes,
-            label = "Multiple matching settings",
-            summary = "Registry exact-alias match needs a more specific target.",
+            label = "Multiple matching options",
+            summary = "Asks for a more specific target.",
         }
     end
 
@@ -302,7 +302,7 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
     return {
         kind = "changes",
         changes = changes,
-        label = setting and setting.label or "Assistant setting change",
-        summary = "Registry exact-alias setting change.",
+        label = setting and setting.label or "Assistant option change",
+        summary = "Changes the matched option.",
     }
 end

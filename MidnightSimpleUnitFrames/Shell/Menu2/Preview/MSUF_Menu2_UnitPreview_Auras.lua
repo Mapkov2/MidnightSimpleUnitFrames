@@ -2,7 +2,7 @@
 --- Cold-path buff/debuff preview provider for the MSUF2 unit frame preview.
 ---
 --- Reads Auras3 menu-model settings and draws fake aura buttons for layout feedback only.
---- Live aura filtering, scanning, cooldown text, and button pooling stay in Auras3 runtime.
+--- Live aura filtering, icon, stack, and duration data stay in Blizzard's native 12.1 aura containers.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 local floor, max, min = math.floor, math.max, math.min
@@ -30,10 +30,8 @@ local AURA_TEXTURES = {
     debuff = { 136118, 136139, 136197, 135817, 132851, 136188, 136170, 135813 },
 }
 local function MenuModel()
-    -- Prefer the Auras3 module table when loaded, with a global fallback for older load orders
-    -- and test harnesses that inject only the menu model.
-    local a3 = (MSUF and MSUF.MSUF_Auras3) or _G.MSUF_Auras3
-    return type(a3) == "table" and a3.MenuModel or _G.MSUF_Auras3_MenuModel
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    return type(a3) == "table" and a3.MenuModel or nil
 end
 local function NormalizeKind(kind)
     kind = tostring(kind or ""):lower()
@@ -61,15 +59,11 @@ end
 local function RefreshRuntime(unit)
     unit = Auras.PreviewUnitKey(unit)
     if not unit then return false end
-    local a3 = (MSUF and MSUF.MSUF_Auras3) or _G.MSUF_Auras3
-    if a3 and type(a3.BumpRuntimeConfig) == "function" then pcall(a3.BumpRuntimeConfig) end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.BumpRuntimeConfig) == "function" then a3.BumpRuntimeConfig() end
     local function Refresh(runtime)
         if a3 and type(a3.RequestUnit) == "function" then
-            pcall(a3.RequestUnit, runtime, 0)
-        else
-            if type(_G.MSUF_Auras3_UpdateUnitAnchor) == "function" then pcall(_G.MSUF_Auras3_UpdateUnitAnchor, runtime) end
-            if type(_G.MSUF_Auras3_RefreshUnit) == "function" then pcall(_G.MSUF_Auras3_RefreshUnit, runtime) end
-            if type(_G.MSUF_Auras3_RefreshEditPreview) == "function" then pcall(_G.MSUF_Auras3_RefreshEditPreview, runtime) end
+            a3.RequestUnit(runtime)
         end
     end
     if unit == "boss" then
@@ -80,7 +74,7 @@ local function RefreshRuntime(unit)
     return true
 end
 local function SyncPopup(unit)
-    if type(_G.MSUF_SyncAuras3PositionPopup) == "function" then pcall(_G.MSUF_SyncAuras3PositionPopup, RuntimeUnit(unit)) end
+    if type(_G.MSUF_SyncAuras3PositionPopup) == "function" then _G.MSUF_SyncAuras3PositionPopup(RuntimeUnit(unit)) end
 end
 function Auras.ReadOffsets(handle)
     local fields = handle and handle._fields
@@ -103,8 +97,8 @@ function Auras.WriteOffsets(handle, x, y, reason)
     model.WriteNumber(unit, spec.x, RoundOffset(x), -4096, 4096)
     model.WriteNumber(unit, spec.y, RoundOffset(y), -4096, 4096)
     if reason ~= "UNIT_PREVIEW_DRAG" then
-        local a3 = (MSUF and MSUF.MSUF_Auras3) or _G.MSUF_Auras3
-        if a3 and type(a3.BumpRuntimeConfig) == "function" then pcall(a3.BumpRuntimeConfig) end
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        if a3 and type(a3.BumpRuntimeConfig) == "function" then a3.BumpRuntimeConfig() end
         RefreshRuntime(unit)
         SyncPopup(unit)
     end
@@ -348,10 +342,7 @@ local function ApplyAuraFont(fs, size)
     if type(_G.MSUF_GetGlobalFontSettings) == "function" then fontPath, fontFlags, r, g, b, _, useShadow = _G.MSUF_GetGlobalFontSettings() end
     fontPath = fontPath or FONT
     fontFlags = fontFlags or "OUTLINE"
-    local fontKey = (_G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.fontKey) or "FRIZQT"
-    if type(_G.MSUF_SetFontSafe) == "function" then
-        _G.MSUF_SetFontSafe(fs, fontPath, size, fontFlags, fontKey)
-    elseif fs.SetFont then
+    if fs.SetFont then
         fs:SetFont(fontPath, size, fontFlags)
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end

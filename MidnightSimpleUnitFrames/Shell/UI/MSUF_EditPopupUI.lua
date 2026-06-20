@@ -472,7 +472,7 @@ function Quick.RefreshPopupFocus()
 end
 
 function Quick.DeferPopupFocusRefresh()
-    if C_Timer and C_Timer.After then C_Timer.After(0, Quick.RefreshPopupFocus) else Quick.RefreshPopupFocus() end
+    C_Timer.After(0, Quick.RefreshPopupFocus)
 end
 
 function Quick.CreateShell(name, opts)
@@ -601,6 +601,7 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
         menu:SetPoint(opts.point or "TOP", btn, opts.relativePoint or "BOTTOM", opts.offsetX or 0, opts.offsetY or -3)
         menu:Show()
     end)
+    menu:SetOnUpdateMode("RunWhenVisible")
     menu:SetScript("OnUpdate", function(self)
         if not self:IsShown() then return end
         if btn:IsMouseOver() or self:IsMouseOver() then

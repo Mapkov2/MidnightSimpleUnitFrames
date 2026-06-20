@@ -34,16 +34,11 @@ local function Queue(fn, tokenName)
     return
   end
   UF[tokenName] = true
-  local timer = _G.C_Timer
   local function flush()
     UF[tokenName] = nil
     fn()
   end
-  if timer and timer.After then
-    timer.After(0, flush)
-  else
-    flush()
-  end
+  _G.C_Timer.After(0, flush)
 end
 
 local function QueueCastbarRefresh()

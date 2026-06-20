@@ -39,6 +39,34 @@ local EnumValueForText = P.EnumValueForText
 local RelativeNumberDeltaForText = P.RelativeNumberDeltaForText
 local ValueForRegistrySetting = P.ValueForRegistrySetting
 
+local function UnitDisplayLabel(unit)
+    if A and type(A.DisplayUnitLabel) == "function" then return A.DisplayUnitLabel(unit) end
+    local label = (A.UnitLabels or {})[unit]
+    if label ~= nil and tostring(label) ~= "" then return tostring(label) end
+    if unit == "targettarget" then return "Target of Target" end
+    if unit == "focustarget" then return "Focus Target" end
+    return tostring(unit or "Unit Frame")
+end
+
+local function GroupDisplayLabel(scope)
+    if A and type(A.DisplayGroupLabel) == "function" then return A.DisplayGroupLabel(scope) end
+    if scope == "mythicraid" then return "Mythic Raid" end
+    if scope == "raid" then return "Raid" end
+    if scope == "party" then return "Party" end
+    return UnitDisplayLabel(scope)
+end
+
+local function DisplayValueLabel(setting, value)
+    if P and type(P.ValueDisplay) == "function" then
+        local ok, label = pcall(P.ValueDisplay, setting, value)
+        if ok and label ~= nil then return tostring(label) end
+    end
+    if setting and (setting.type == "enum" or type(setting.values) == "table") and type(A.HumanizeDisplayKey) == "function" then
+        return A.HumanizeDisplayKey(value)
+    end
+    return tostring(value)
+end
+
 local CLASS_POWER_DETAIL_TERMS = {
     "height", "width", "mode", "x", "y", "offset", "frame level",
     "anchor", "cooldown", "combo", "text", "rune", "reverse", "fill",
@@ -121,7 +149,7 @@ function A._ParseClassPowerWidthModeShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = mode } },
         label = "Class Resource Width Mode",
-        summary = "Sets the Class Resources width dropdown to the requested source.",
+        summary = "Sets the Class Resources width source.",
     } or nil
 end
 
@@ -155,11 +183,11 @@ function A._ParseClassPowerVisibilityShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
     local rule
     if ContainsAny(text, { "out of combat", "ooc" }) then
-        rule = { key = "bars.classPowerHideOOC", label = "Class Resource Hide Out Of Combat" }
+        rule = { key = "bars.classPowerHideOOC", label = "Class Resource Hide Out of Combat" }
     elseif ContainsAny(text, { "when full", "if full", "full resource", "full resources", "full" }) then
-        rule = { key = "bars.classPowerHideWhenFull", label = "Class Resource Hide When Full" }
+        rule = { key = "bars.classPowerHideWhenFull", label = "Hide Class Resource When Full" }
     elseif ContainsAny(text, { "when empty", "if empty", "empty resource", "empty resources", "empty" }) then
-        rule = { key = "bars.classPowerHideWhenEmpty", label = "Class Resource Hide When Empty" }
+        rule = { key = "bars.classPowerHideWhenEmpty", label = "Hide Class Resource When Empty" }
     end
     if not rule then return nil end
     local value = ClassPowerHideRuleValue(text)
@@ -261,7 +289,7 @@ function A._ParseClassPowerPlacementShortcut(text)
         kind = "changes",
         changes = changes,
         label = placement == "below" and "Place Class Resource Below Player" or "Place Class Resource Near Player",
-        summary = "Positions Class Resources relative to the Player frame with the registered Class Resource offsets.",
+        summary = "Positions Class Resources relative to the Player frame with Class Resource offsets.",
     }
 end
 
@@ -294,7 +322,7 @@ function A._ParseClassPowerDisplayStyleShortcut(text)
         changes = changes,
         label = value and "Show Class Resource Text" or "Show Class Resource Pips",
         bulkSafe = #changes > 1,
-        summary = "Maps text/pips wording to the registered Class Resource Text toggle.",
+        summary = "Switches Class Resources between text and pips.",
     }
 end
 
@@ -397,7 +425,7 @@ function A._ParseClassPowerTextSizeShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = "Class Resource Font Size",
-        summary = "Maps natural Class Resource text-size wording to the registered font-size slider.",
+        summary = "Adjusts Class Resource text size.",
     }
 end
 
@@ -431,7 +459,7 @@ function A._ParseClassPowerSizeShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = key == "bars.classPowerWidth" and "Class Resource Width" or "Class Resource Height",
-        summary = "Maps natural Class Resource size wording to the registered width/height sliders.",
+        summary = "Adjusts Class Resource width or height.",
     }
 end
 
@@ -451,7 +479,7 @@ function A._ParseClassPowerSeparatorShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = "Class Resource Separator Width",
-        summary = "Maps natural Class Resource separator wording to the registered separator-width slider.",
+        summary = "Adjusts the Class Resource separator width.",
     }
 end
 
@@ -471,7 +499,7 @@ function A._ParseClassPowerGapShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = "Class Resource Pip Gap",
-        summary = "Maps natural Class Resource spacing wording to the registered pip-gap slider.",
+        summary = "Adjusts Class Resource pip spacing.",
     }
 end
 
@@ -498,7 +526,7 @@ function A._ParseClassPowerBackgroundShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = "Class Resource Background Opacity",
-        summary = "Maps background show/hide wording to the registered Class Resource Background Opacity slider.",
+        summary = "Adjusts Class Resource background visibility.",
     }
 end
 
@@ -517,7 +545,136 @@ function A._ParseClassPowerMoveShortcut(text)
         kind = "changes",
         changes = { { setting = setting, relativeDelta = amount, direction = direction } },
         label = "Move Class Resource",
-        summary = "Moves the registered Class Resource Offset X/Y slider by pixels.",
+        summary = "Moves the Class Resource offset by pixels.",
+    }
+end
+
+local function HasClassPowerDetachedPlayerPowerIntent(text)
+    if ContainsAny(text, { "player hp", "player health", "second hp", "second player hp", "duplicate hp", "alt mana", "alternative mana" }) then return false end
+    if ContainsAny(text, {
+        "class resources player power", "class resource player power", "class power player power",
+        "class resources player power bar", "class resource player power bar", "class power player power bar",
+        "attached player power", "attached player power bar", "detached player power", "detached player power bar",
+        "klassenressourcen spieler energie", "klassenressourcen spieler energieleiste",
+    }) then
+        return true
+    end
+    if HasClassPowerIntent(text) and ContainsAny(text, {
+        "detached power", "detached power bar", "detached mana", "detached mana bar",
+        "player power", "player power bar", "player mana", "player mana bar",
+        "spieler energie", "spieler energieleiste", "abgekoppelte energie", "abgekoppelte energieleiste",
+    }) then
+        return true
+    end
+    if M and M.activeKey == "classpower" and ContainsAny(text, {
+        "detached power", "detached power bar", "player power", "player power bar",
+        "power area", "power section", "spieler energie", "energieleiste",
+    }) then
+        return true
+    end
+    return false
+end
+
+local function PlayerSetting(key)
+    return Registry and Registry:GetSetting("player." .. tostring(key or ""))
+end
+
+local function PlayerChange(key, value, relativeDelta, direction)
+    local setting = PlayerSetting(key)
+    if not setting then return nil end
+    return {
+        setting = setting,
+        value = value,
+        relativeDelta = relativeDelta,
+        direction = direction,
+        valueLabel = value ~= nil and (P.ValueDisplay and P.ValueDisplay(setting, value) or nil) or nil,
+    }
+end
+
+local function NumberPlayerChange(key, text, fallback, direction)
+    local setting = PlayerSetting(key)
+    if not setting then return nil end
+    local relativeDelta
+    local value
+    if direction then
+        local amount = FirstNumber(text) or fallback or 1
+        if direction == "left" or direction == "down" then amount = -amount end
+        relativeDelta = amount
+    else
+        relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, fallback)
+        if relativeDelta == nil then
+            value = FirstNumber(text)
+            if value == nil then return nil end
+        end
+    end
+    return PlayerChange(key, value, relativeDelta, direction)
+end
+
+function A._ParseClassPowerDetachedPlayerPowerShortcut(text, raw)
+    if not HasClassPowerDetachedPlayerPowerIntent(text) then return nil end
+
+    local key
+    local value
+    local relativeDelta
+    local direction = DetectDirection(text, {})
+    local change
+
+    if ContainsAny(text, { "anchor to class", "anchor to class resource", "anchor to class resources", "anchor player power to class", "attached to class resource", "follow class resource", "an klassenressource ankern", "an klassenressourcen ankern" }) then
+        key = "detachedPowerBarAnchorToClassPower"
+        value = DetectBoolean(text)
+        if value == nil then value = not ContainsAny(text, { "off", "disable", "disabled", "no", "not", "detach", "disconnect", "aus", "deaktivieren", "nicht" }) end
+        change = PlayerChange(key, value)
+    elseif ContainsAny(text, { "sync width", "sync to class", "sync with class", "match class resource width", "same width as class resource", "breite synchron", "gleiche breite" }) then
+        key = "detachedPowerBarSyncClassPower"
+        value = DetectBoolean(text)
+        if value == nil then value = not ContainsAny(text, { "manual", "off", "disable", "disabled", "no", "not", "aus", "deaktivieren", "nicht" }) end
+        change = PlayerChange(key, value)
+    elseif ContainsAny(text, { "detach", "detached", "undock", "separate", "separated", "enable", "show", "attach", "reattach", "dock", "hide", "disable", "abkoppeln", "abgekoppelt", "ankoppeln", "anzeigen", "ausblenden" }) then
+        key = "powerBarDetached"
+        if ContainsAny(text, { "attach", "reattach", "dock", "ankoppeln" }) then
+            value = false
+        elseif ContainsAny(text, { "detach", "detached", "undock", "separate", "separated", "abkoppeln", "abgekoppelt" }) then
+            value = true
+        else
+            value = DetectBoolean(text)
+        end
+        if value ~= nil then change = PlayerChange(key, value) end
+    elseif ContainsAny(text, { "text on bar", "power text on bar", "text inside", "text auf leiste", "text in leiste" }) then
+        key = "detachedPowerBarTextOnBar"
+        value = DetectBoolean(text)
+        if value == nil then value = true end
+        change = PlayerChange(key, value)
+    elseif ContainsAny(text, { "shape", "form", "orb", "round", "crystal", "bar", "follow class", "sphere", "kugel", "rund", "kristall" }) then
+        key = "detachedPowerBarShape"
+        local setting = PlayerSetting(key)
+        value = setting and EnumValueForText(setting, text) or nil
+        if value ~= nil then change = PlayerChange(key, value) end
+    elseif ContainsAny(text, { "orb size", "sphere size", "kugel groesse", "orb groesse" }) then
+        change = NumberPlayerChange("detachedPowerOrbSize", text, 4)
+    elseif ContainsAny(text, { "text size", "font size", "power text size", "schriftgroesse", "textgroesse" }) then
+        change = NumberPlayerChange("powerFontSize", text, 1)
+    elseif ContainsAny(text, { "frame level", "framelevel", "layer", "strata", "ebene", "schicht" }) then
+        change = NumberPlayerChange("detachedPowerBarFrameLevelOffset", text, 1)
+    elseif ContainsAny(text, { "height", "tall", "higher", "lower", "hoehe", "hoeher", "niedriger" }) then
+        change = NumberPlayerChange("detachedPowerBarHeight", text, 1)
+    elseif direction or ContainsAny(text, { "x", "y", "offset", "move", "nudge", "shift", "verschiebe", "versatz", "position" }) then
+        local axis
+        if ContainsAny(text, { "x", "x offset", "offset x", "horizontal", "x versatz" }) then axis = "x" end
+        if ContainsAny(text, { "y", "y offset", "offset y", "vertical", "y versatz" }) then axis = "y" end
+        if not axis and direction then axis = (direction == "left" or direction == "right") and "x" or "y" end
+        if axis == "x" then
+            change = NumberPlayerChange("detachedPowerBarOffsetX", text, 10, direction)
+        elseif axis == "y" then
+            change = NumberPlayerChange("detachedPowerBarOffsetY", text, 10, direction)
+        end
+    end
+
+    if not change then return nil end
+    return {
+        kind = "changes",
+        changes = { change },
+        label = change.setting and change.setting.label or "Class Resources Player Power",
+        summary = "Changes the Player detached Power Bar options shown on the Class Resources page.",
     }
 end
 
@@ -525,42 +682,42 @@ A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
     {
         id = "combatTimer",
         label = "Combat Timer",
-        terms = { "combat timer" },
-        pageTerms = { "timer" },
+        terms = { "combat timer", "kampf timer", "kampftimer" },
+        pageTerms = { "timer", "kampf timer", "kampftimer" },
         enable = "gameplay.enableCombatTimer",
         x = "gameplay.combatOffsetX",
         y = "gameplay.combatOffsetY",
         size = "gameplay.combatFontSize",
         anchor = "gameplay.combatTimerAnchor",
         booleans = {
-            { key = "gameplay.lockCombatTimer", terms = { "lock", "locked", "unlock", "unlocked", "lock position" } },
-            { key = "gameplay.combatTimerClickThrough", terms = { "click through", "click-through", "clickable", "mouse clicks", "mouse input", "accept clicks" } },
+            { key = "gameplay.lockCombatTimer", terms = { "lock", "locked", "unlock", "unlocked", "lock position", "sperren", "entsperren", "position sperren" } },
+            { key = "gameplay.combatTimerClickThrough", terms = { "click through", "click-through", "clickable", "mouse clicks", "mouse input", "accept clicks", "durchklickbar", "klick durch", "mausklicks", "mauseingabe" } },
         },
     },
     {
         id = "combatState",
-        label = "Combat Enter Leave Text",
-        terms = { "combat state", "combat enter leave", "combat enter", "combat leave" },
-        pageTerms = { "enter leave", "enter text", "leave text", "combat text", "state text" },
+        label = "Combat Enter/Leave Text",
+        terms = { "combat state", "combat enter leave", "combat enter", "combat leave", "kampf text", "kampf status", "kampfstatus", "kampfanzeige" },
+        pageTerms = { "enter leave", "enter text", "leave text", "combat text", "state text", "kampf text", "kampfstatus", "kampfanzeige" },
         enable = "gameplay.enableCombatStateText",
         x = "gameplay.combatStateOffsetX",
         y = "gameplay.combatStateOffsetY",
         size = "gameplay.combatStateFontSize",
         duration = "gameplay.combatStateDuration",
         booleans = {
-            { key = "gameplay.lockCombatState", terms = { "lock", "locked", "unlock", "unlocked", "lock position" } },
+            { key = "gameplay.lockCombatState", terms = { "lock", "locked", "unlock", "unlocked", "lock position", "sperren", "entsperren", "position sperren" } },
             { key = "gameplay.combatStateColorSync", terms = {
                 "sync color", "sync colors", "color sync",
                 "sync combat state colors", "sync combat enter leave colors",
-                "same combat state colors", "combat state color sync",
+                "same combat state colors", "combat state color sync", "farben synchron", "gleiche farben",
             } },
         },
     },
     {
         id = "playerTotems",
         label = "Totem Frame",
-        terms = { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem icon", "totem icons", "totems" },
-        pageTerms = { "totem", "totems", "statue" },
+        terms = { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem icon", "totem icons", "totem", "totems", "totem rahmen", "totemrahmen", "statuen rahmen", "statuenrahmen", "statue rahmen" },
+        pageTerms = { "totem", "totems", "statue", "totem rahmen", "totemrahmen", "statuen rahmen", "statuenrahmen", "statue rahmen" },
         enable = "gameplay.enablePlayerTotems",
         x = "gameplay.playerTotemsOffsetX",
         y = "gameplay.playerTotemsOffsetY",
@@ -571,17 +728,17 @@ A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
     {
         id = "firstDance",
         label = "First Dance Tracker",
-        terms = { "first dance" },
-        pageTerms = { "dance tracker" },
+        terms = { "first dance", "first dance tracker", "erster tanz", "der erste tanz" },
+        pageTerms = { "dance tracker", "first dance tracker", "erster tanz", "der erste tanz" },
         enable = "gameplay.enableFirstDanceTimer",
         x = "gameplay.firstDanceOffsetX",
         y = "gameplay.firstDanceOffsetY",
         size = "gameplay.firstDanceIconSize",
         booleans = {
-            { key = "gameplay.lockFirstDance", terms = { "lock", "locked", "unlock", "unlocked", "lock position" } },
-            { key = "gameplay.firstDanceClickThrough", terms = { "click through", "click-through", "clickable", "mouse input", "accept clicks" } },
-            { key = "gameplay.firstDanceShowIcon", terms = { "icon", "icon mode", "cooldown swipe" } },
-            { key = "gameplay.firstDanceShowReady", terms = { "show ready", "ready visible", "keep visible", "ready" } },
+            { key = "gameplay.lockFirstDance", terms = { "lock", "locked", "unlock", "unlocked", "lock position", "sperren", "entsperren", "position sperren" } },
+            { key = "gameplay.firstDanceClickThrough", terms = { "click through", "click-through", "clickable", "mouse input", "accept clicks", "durchklickbar", "klick durch", "mauseingabe" } },
+            { key = "gameplay.firstDanceShowIcon", terms = { "icon", "icon mode", "cooldown swipe", "symbol", "icon modus" } },
+            { key = "gameplay.firstDanceShowReady", terms = { "show ready", "ready visible", "keep visible", "ready", "bereit sichtbar", "sichtbar wenn bereit", "bereit anzeigen" } },
         },
     },
     {
@@ -593,9 +750,9 @@ A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
         size = "gameplay.crosshairSize",
         thickness = "gameplay.crosshairThickness",
         booleans = {
-            { key = "gameplay.enableCombatCrosshairMeleeRangeColor", terms = { "range color", "melee range color", "in range color", "color mode" } },
-            { key = "gameplay.meleeSpellPerClass", terms = { "per class", "class spell", "spell per class" } },
-            { key = "gameplay.meleeSpellPerSpec", terms = { "per spec", "spec spell", "spell per spec" } },
+            { key = "gameplay.enableCombatCrosshairMeleeRangeColor", terms = { "range color", "melee range color", "in range color", "color mode", "reichweitenfarbe", "reichweite farbe", "nahkampf reichweite farbe", "farbe nach reichweite" } },
+            { key = "gameplay.meleeSpellPerClass", terms = { "per class", "class spell", "spell per class", "pro klasse", "je klasse", "zauber pro klasse" } },
+            { key = "gameplay.meleeSpellPerSpec", terms = { "per spec", "spec spell", "spell per spec", "pro spec", "pro spezialisierung", "je spec", "je spezialisierung", "zauber pro spec" } },
         },
     },
 }
@@ -624,7 +781,7 @@ function A._GameplayShortcutChange(key, value, relativeDelta, direction, label, 
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction } },
         label = label or setting.label,
-        summary = summary or "Changes a registered Gameplay control.",
+        summary = summary or "Changes a Gameplay option.",
     } or nil
 end
 
@@ -651,25 +808,25 @@ function A._ParseGameplayBooleanShortcut(text)
     end
     if value == nil then return nil end
     if not key then
-        if ContainsAny(text, { "anchor", "attach", "size", "font", "duration", "offset", "position", "move", "x", "y", "thickness", "thick", "thin", "spell" }) then
+        if ContainsAny(text, { "anchor", "attach", "size", "groesse", "grosse", "font", "duration", "dauer", "offset", "position", "move", "verschiebe", "x", "y", "thickness", "thick", "thin", "dicke", "staerke", "spell", "zauber" }) then
             return nil
         end
         key = spec.enable
     end
-    return A._GameplayShortcutChange(key, value, nil, nil, spec.label, "Toggles a registered Gameplay control.")
+    return A._GameplayShortcutChange(key, value, nil, nil, spec.label, "Toggles a Gameplay option.")
 end
 
 function A._ParseGameplayAnchorShortcut(text)
-    if not ContainsAny(text, { "anchor", "attach", "attached", "from point", "to point" }) then return nil end
+    if not ContainsAny(text, { "anchor", "attach", "attached", "from point", "to point", "anker", "ankerpunkt", "anhaengen", "anhaengen an", "von punkt", "zu punkt" }) then return nil end
     local spec = A._GameplayShortcutSpec(text)
     if not spec then return nil end
     local key
     if spec.id == "combatTimer" then
         key = spec.anchor
     elseif spec.id == "playerTotems" then
-        if ContainsAny(text, { "from anchor", "anchor from", "from point" }) then
+        if ContainsAny(text, { "from anchor", "anchor from", "from point", "von anker", "anker von", "von punkt" }) then
             key = spec.anchorFrom
-        elseif ContainsAny(text, { "to anchor", "anchor to", "to point", "attach to" }) then
+        elseif ContainsAny(text, { "to anchor", "anchor to", "to point", "attach to", "zu anker", "anker zu", "zu punkt", "anhaengen an" }) then
             key = spec.anchorTo
         end
     end
@@ -682,7 +839,7 @@ function A._ParseGameplayAnchorShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value } },
         label = setting.label or spec.label,
-        summary = "Changes a registered Gameplay anchor selector.",
+        summary = "Changes the selected Gameplay anchor.",
     }
 end
 
@@ -691,11 +848,11 @@ function A._ParseGameplayNumberShortcut(text)
     if not spec then return nil end
     if ContainsAny(text, { "spell", "spell id", "range check spell" }) then return nil end
     local key
-    if spec.id == "combatState" and ContainsAny(text, { "duration", "time visible", "visible time" }) then
+    if spec.id == "combatState" and ContainsAny(text, { "duration", "time visible", "visible time", "dauer", "anzeigedauer", "sichtbar dauer" }) then
         key = spec.duration
-    elseif spec.id == "combatCrosshair" and ContainsAny(text, { "thickness", "thick", "thicker", "thin", "thinner" }) then
+    elseif spec.id == "combatCrosshair" and ContainsAny(text, { "thickness", "thick", "thicker", "thin", "thinner", "dicke", "staerke", "strichstaerke", "duenner", "dunner" }) then
         key = spec.thickness
-    elseif ContainsAny(text, { "size", "font size", "text size", "icon size", "bigger", "larger", "smaller", "grow", "shrink", "groesser", "kleiner" }) then
+    elseif ContainsAny(text, { "size", "font size", "text size", "icon size", "bigger", "larger", "smaller", "grow", "shrink", "groesse", "grosse", "groesser", "kleiner" }) then
         key = spec.size
     end
     if not key then return nil end
@@ -711,7 +868,7 @@ function A._ParseGameplayNumberShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = setting.label or spec.label,
-        summary = "Changes a registered Gameplay number slider.",
+        summary = "Changes a Gameplay number option.",
     }
 end
 
@@ -851,7 +1008,7 @@ function A._ParseGameplayPositionPreset(text)
     if spec.id ~= "combatTimer" and spec.id ~= "combatState" and spec.id ~= "firstDance" then
         return {
             kind = "unknown",
-            text = tostring(spec.label or "That Gameplay element") .. " uses its own runtime anchoring. I can still move it with pixel nudges or change its registered anchor controls.",
+            text = tostring(spec.label or "That Gameplay element") .. " uses its own anchoring. I can still move it with pixel nudges or change its anchor options.",
             status = "failed",
         }
     end
@@ -872,7 +1029,7 @@ function A._ParseGameplayPositionPreset(text)
         kind = "changes",
         changes = changes,
         label = "Position " .. tostring(spec.label or "Gameplay element"),
-        summary = "Positions a Gameplay tracker near the selected MSUF frame using DB geometry and the correct anchor space.",
+        summary = "Positions a Gameplay tracker near the selected MSUF frame with the right anchor.",
     }
 end
 
@@ -893,7 +1050,7 @@ function A._ParseGameplayMoveShortcut(text)
     if not key then
         return {
             kind = "unknown",
-            text = tostring(spec.label or "That Gameplay element") .. " position is not exposed by the current MSUF UI/DB. The Assistant can only change registered safe UI controls.",
+            text = tostring(spec.label or "That Gameplay element") .. " has no position option in MSUF. I can still help with safe UI options.",
             status = "failed",
         }
     end
@@ -913,7 +1070,7 @@ function A._ParseGameplayMoveShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } },
         label = "Move " .. tostring(spec.label or "Gameplay element"),
-        summary = "Moves a registered Gameplay element through its real X/Y offset setting.",
+        summary = "Moves a Gameplay element through its X/Y offset option.",
     }
 end
 
@@ -1065,7 +1222,7 @@ function A._ParseClassPowerColorShortcut(text, raw)
         kind = "changes",
         changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
         label = background and "Class Resource Background Color" or "Class Resource Color",
-        summary = "Maps natural Class Resource color wording to the registered foreground/background token color.",
+        summary = "Changes a Class Resource foreground or background color.",
     }
 end
 
@@ -1095,8 +1252,8 @@ local function ParseColorAction(text)
             kind = "action",
             action = action,
             args = { token = powerToken },
-            label = "Reset power bar token color",
-            summary = "Resets a single Power Bar color token.",
+            label = "Reset power bar color",
+            summary = "Resets a single Power Bar color.",
         } or nil
     end
     local cpToken = ClassPowerColorTokenForText(text)
@@ -1110,18 +1267,18 @@ local function ParseColorAction(text)
             kind = "action",
             action = action,
             args = { token = cpToken, background = ContainsAny(text, { "background", "bg" }) },
-            label = "Reset class resource token color",
-            summary = "Resets a single Class Resource foreground or background token color.",
+            label = "Reset class resource color",
+            summary = "Resets a single Class Resource foreground or background color.",
         } or nil
     end
     if ContainsAny(text, { "castbar", "cast bar" }) then
-        return BuildColorResetAction("reset_castbar_colors", "Reset castbar colors", "Resets castbar colors through the existing Colors page state.")
+        return BuildColorResetAction("reset_castbar_colors", "Reset cast bar colors", "Resets cast bar colors through the existing Colors page state.")
     end
     if ContainsAny(text, { "npc type", "npc role" }) then
         return BuildColorResetAction("reset_npc_type_colors", "Reset NPC type colors", "Resets NPC type colors.")
     end
     if ContainsAny(text, { "unitframe", "unit frame", "npc reaction", "reaction color" }) then
-        return BuildColorResetAction("reset_unitframe_colors", "Reset unitframe colors", "Resets unitframe NPC reaction colors.")
+        return BuildColorResetAction("reset_unitframe_colors", "Reset unit frame colors", "Resets unit frame NPC reaction colors.")
     end
     if ContainsAny(text, { "bar background", "background tint", "bar tint" }) then
         return BuildColorResetAction("reset_bar_background_color", "Reset bar background tint", "Resets the global bar background tint.")
@@ -1133,13 +1290,13 @@ local function ParseColorAction(text)
         return BuildColorResetAction("reset_dispel_colors", "Reset dispel colors", "Resets dispel border and debuff-type colors.")
     end
     if ContainsAny(text, { "gameplay", "combat timer", "combat state", "crosshair" }) then
-        return BuildColorResetAction("reset_gameplay_colors", "Reset gameplay colors", "Resets Gameplay color settings.")
+        return BuildColorResetAction("reset_gameplay_colors", "Reset gameplay colors", "Resets Gameplay color options.")
     end
     if ContainsAny(text, { "aura", "auras", "buff", "debuff", "pandemic" }) then
-        return BuildColorResetAction("reset_aura_colors", "Reset aura colors", "Resets Aura color settings.")
+        return BuildColorResetAction("reset_aura_colors", "Reset aura colors", "Resets Aura color options.")
     end
     if ContainsAny(text, { "portrait" }) then
-        return BuildColorResetAction("reset_portrait_colors", "Reset portrait colors", "Resets portrait color settings.")
+        return BuildColorResetAction("reset_portrait_colors", "Reset portrait colors", "Resets portrait color options.")
     end
     if ContainsAny(text, { "resource", "power color", "class power", "class resource", "combo point" }) then
         return BuildColorResetAction("reset_resource_colors", "Reset resource colors", "Resets power and class-resource color overrides.")
@@ -1153,6 +1310,8 @@ end
 local function ParseDiagnostic(text)
     if not ContainsAny(text, {
         "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum",
+        "diagnostik", "diagnosebericht", "fehlersuche", "fehleranalyse",
+        "pruefe", "pruefen", "ueberpruefe", "ueberpruefen", "checke", "check",
         "not showing", "not visible", "not appearing", "not displayed", "not there",
         "doesnt show", "does not show", "doesnt appear", "does not appear",
         "cant see", "can't see", "cannot see", "can not see", "missing", "hidden", "invisible",
@@ -1160,6 +1319,7 @@ local function ParseDiagnostic(text)
         "disappeared", "disappear", "gone", "vanished", "broken", "not working", "doesnt work",
         "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
         "nicht sichtbar", "zeigt nicht", "verschwunden", "kaputt", "haengt",
+        "fehlt", "versteckt", "unsichtbar", "funktioniert nicht", "geht nicht", "fehler",
     }) then return nil end
     if ContainsAny(text, {
         "profile mapping", "profile mappings", "spec profile mapping", "spec profile mappings",
@@ -1174,7 +1334,7 @@ local function ParseDiagnostic(text)
         gameplayFeature = "combatState"
     elseif ContainsAny(text, { "totem", "totem frame", "statue", "statue frame" }) then
         gameplayFeature = "playerTotems"
-    elseif ContainsAny(text, { "first dance", "first dance tracker", "first dancer" }) then
+    elseif ContainsAny(text, { "first dance", "first dance tracker", "first dancer", "erster tanz", "der erste tanz" }) then
         gameplayFeature = "firstDance"
     elseif ContainsAny(text, { "crosshair", "combat crosshair", "fadenkreuz" }) then
         gameplayFeature = "combatCrosshair"
@@ -1189,18 +1349,18 @@ local function ParseDiagnostic(text)
             kind = "action",
             action = action,
             args = { feature = gameplayFeature },
-            label = "Diagnose " .. (gameplayFeature == "all" and "Gameplay helpers" or "Gameplay helper"),
-            summary = "Inspects Gameplay helper settings and suggests safe setting-backed fixes when a focused helper is clearly requested.",
+            label = "Check " .. (gameplayFeature == "all" and "Gameplay features" or "Gameplay feature"),
+            summary = "Checks Gameplay options and suggests clear next steps.",
         } or nil
     end
-    if ContainsAny(text, { "profile", "profiles", "profil", "profile import", "profile export", "spec profile" }) then
+    if ContainsAny(text, { "profile", "profiles", "profil", "profile import", "profile export", "spec profile", "profil import", "profil export", "spec profil" }) then
         local action = Registry and Registry:GetAction("diagnose_profile_status")
         return action and {
             kind = "action",
             action = action,
             args = {},
-            label = "Diagnose Profiles",
-            summary = "Inspects profile storage, active profile, spec mappings, staging fields, and helper availability.",
+            label = "Check Profiles",
+            summary = "Checks the active profile, saved profiles, specialization links, and prepared profile values.",
         } or nil
     end
     if ContainsAny(text, CLASS_POWER_TERMS)
@@ -1211,8 +1371,8 @@ local function ParseDiagnostic(text)
             kind = "action",
             action = action,
             args = {},
-            label = "Diagnose Class Resources",
-            summary = "Inspects Class Resource visibility, sizing, opacity, width mode, and hide rules.",
+            label = "Check Class Resources",
+            summary = "Checks Class Resource visibility, sizing, opacity, width mode, and hide rules.",
         } or nil
     end
     if ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then
@@ -1227,8 +1387,8 @@ local function ParseDiagnostic(text)
             kind = "action",
             action = action,
             args = { scope = scope, lane = lane },
-            label = "Diagnose Auras",
-            summary = "Inspects Aura visibility settings and suggests safe setting-backed fixes.",
+            label = "Check Auras",
+            summary = "Checks Aura visibility options and suggests clear next steps.",
         } or nil
     end
     if ContainsAny(text, { "castbar", "zauberleiste" }) then
@@ -1239,8 +1399,8 @@ local function ParseDiagnostic(text)
             kind = "action",
             action = action,
             args = { unit = unit },
-            label = "Diagnose " .. tostring((A.UnitLabels or {})[unit] or unit) .. " castbar",
-            summary = "Inspects current castbar settings and suggests the next safe fix.",
+            label = "Check " .. UnitDisplayLabel(unit) .. " cast bar",
+            summary = "Checks current cast bar options and suggests the next step.",
         } or nil
     end
     if ContainsAny(text, { "detached power", "detached power bar", "power bar", "powerbar", "resource bar" }) then
@@ -1249,12 +1409,29 @@ local function ParseDiagnostic(text)
             return {
                 kind = "answer",
                 status = "info",
-                text = "Tell me which Unit Frame power bar to diagnose, for example: 'why is target detached power bar gone' or 'diagnose player power bar'.",
-                summary = "Asks for the missing unit before diagnosing a detached power bar.",
+                text = "Which unit-frame power bar do you want me to check? For example: 'why is target detached power bar gone' or 'check player power bar'.",
+                summary = "Asks which unit's detached Power Bar to check.",
             }
         end
     end
     local groups = DetectGroups(text)
+    if ContainsAny(text, { "how", "where", "where can", "where do", "help", "explain", "what", "which" })
+        and ContainsAny(text, {
+            "ready check", "readycheck", "status icon", "status icons", "indicator", "indicators",
+            "role icon", "leader icon", "assist icon", "summon icon", "phase icon", "pvp icon",
+            "war mode", "spell indicator", "corner indicator", "raid marker",
+        })
+        and (#groups > 0 or ContainsAny(text, { "group frames", "party frames", "raid frames", "mythic raid frames" }))
+    then
+        local action = Registry and Registry:GetAction("assistant_scope_help")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { page = "gf_indicators", frameType = "group" },
+            label = "Group Indicators help",
+            summary = "Shows Group Indicator help instead of running a visibility diagnosis.",
+        } or nil
+    end
     if #groups > 0 or ContainsAny(text, { "group frames", "gruppenframes", "party frames", "raid frames", "mythic raid frames" }) then
         local scope = groups[1] or "party"
         if scope == "mythicraid" then scope = "mythicraid" end
@@ -1263,8 +1440,8 @@ local function ParseDiagnostic(text)
             kind = "action",
             action = action,
             args = { scope = scope },
-            label = "Diagnose " .. tostring((A.UnitLabels or {})[scope] or scope) .. " group frames",
-            summary = "Inspects current group-frame settings and suggests the next safe fix.",
+            label = "Check " .. GroupDisplayLabel(scope) .. " group frames",
+            summary = "Checks current group-frame options and suggests the next step.",
         } or nil
     end
     local units = DetectUnits(text)
@@ -1275,22 +1452,25 @@ local function ParseDiagnostic(text)
             kind = "action",
             action = action,
             args = { unit = unit },
-            label = "Diagnose " .. tostring((A.UnitLabels or {})[unit] or unit) .. " frame",
-            summary = "Inspects current unit-frame settings and suggests the next safe fix.",
+            label = "Check " .. UnitDisplayLabel(unit) .. " frame",
+            summary = "Checks current unit-frame options and suggests the next step.",
         } or nil
     end
-    if ContainsAny(text, { "dashboard", "assistant", "menu", "menu2", "assistant setup", "menu setup", "navigation", "page stack", "workflow", "setup checklist", "guided setup" })
+    if ContainsAny(text, { "dashboard", "assistant", "menu", "menu2", "setup", "assistant setup", "menu setup", "navigation", "page stack", "workflow", "setup checklist", "guided setup", "assistent", "menue", "einrichtung", "setup checkliste" })
         or text == "diagnose setup"
         or text == "diagnostic setup"
         or text == "troubleshoot setup"
+        or text == "diagnostik setup"
+        or text == "pruefe setup"
+        or text == "setup pruefen"
     then
         local action = Registry and Registry:GetAction("diagnose_dashboard_setup")
         return action and {
             kind = "action",
             action = action,
             args = {},
-            label = "Diagnose Dashboard setup",
-            summary = "Inspects Assistant pending state, Dashboard panels, page stack, and navigation helper availability.",
+            label = "Check Dashboard setup",
+            summary = "Checks the Assistant state, Dashboard panels, and menu navigation.",
         } or nil
     end
     return nil
@@ -1351,10 +1531,10 @@ local function ParseScopedHelp(text)
     if editModeHelp then frameType = "editMode" end
     if group then
         frameType = ContainsAny(text, { "aura", "auras", "buff", "debuff" }) and "groupAura" or "group"
-        label = (A.UnitLabels and A.UnitLabels[group]) or label
+        label = GroupDisplayLabel(group)
     elseif unit then
         frameType = ContainsAny(text, { "castbar", "cast bar" }) and "castbar" or "unitframe"
-        label = (A.UnitLabels and A.UnitLabels[unit]) or label
+        label = UnitDisplayLabel(unit)
     elseif not frameType then
         frameType = DetectFrameType(text, {})
     end
@@ -1362,8 +1542,8 @@ local function ParseScopedHelp(text)
         kind = "action",
         action = action,
         args = { page = page, label = label, frameType = frameType, unit = unit, group = group },
-        label = "Show scoped Assistant help",
-        summary = "Shows registry-backed commands for the requested area.",
+        label = "Show target-specific Assistant help",
+        summary = "Shows what the Assistant can do for the requested area.",
     }
 end
 
@@ -1377,7 +1557,8 @@ local function SupportLinkForText(text)
 end
 
 local EDIT_MODE_CONTEXT_TERMS = {
-    "edit mode", "editmode", "msuf edit mode", "bearbeitungsmodus", "frame edit mode",
+    "edit mode", "editmode", "msuf edit mode", "bearbeitungsmodus", "bearbeitungs modus",
+    "editmodus", "frame edit mode", "rahmen bearbeiten", "rahmen verschieben",
 }
 
 local function HasEditModeContext(text)
@@ -1391,7 +1572,7 @@ local function EditModeAction(actionKey, args, label, summary)
         action = action,
         args = args or {},
         label = label,
-        summary = summary or "Controls a real MSUF Edit Mode HUD control.",
+        summary = summary or "Changes a real MSUF Edit Mode HUD option.",
     } or nil
 end
 
@@ -1415,21 +1596,24 @@ local function HasEditModeHUDControlIntent(text)
         "preview", "previews", "aura", "auras", "group preview", "group previews",
         "party preview", "party previews", "raid preview", "raid previews",
         "mythic raid preview", "mythic raid previews", "snap", "snapping",
-        "grid", "grid lines", "grid spacing", "grid size", "background opacity",
+        "grid", "grid lines", "grid spacing", "grid size", "raster", "raster groesse", "raster abstand",
+        "rasterlinien", "hilfsraster", "background opacity",
         "background alpha", "bg opacity", "bg alpha", "background overlay",
+        "hintergrund transparenz", "hintergrund deckkraft", "hintergrund overlay",
         "cdm", "cooldown manager", "anchor picker", "pick anchor", "select anchor",
-        "reset", "undo", "redo",
+        "ankerwahl", "anker auswahl", "reset", "undo", "redo",
     })
 end
 
 local function ParseEditModeHUDControl(text)
     local hasEditContext = HasEditModeContext(text)
-    local previewWord = ContainsAny(text, { "preview", "previews", "preview mode", "preview modes", "vorschau" })
+    local previewWord = ContainsAny(text, { "preview", "previews", "preview mode", "preview modes", "vorschau", "platzhalter", "testdaten" })
     local hasExplicitAuraPreview = ContainsAny(text, {
         "preview auras", "preview aura", "preview aura icons", "preview auras icons",
         "aura preview", "aura previews", "aura icon preview", "aura icon previews", "aura icons",
         "aura preview icons", "aura mover", "aura movers", "aura mover boxes",
         "auren vorschau", "vorschau auren", "auren symbole", "auren icons",
+        "auren platzhalter", "aura platzhalter",
     }) and (hasEditContext or previewWord or ContainsAny(text, { "mover", "movers", "vorschau", "toggle", "umschalten" }))
     local hasAuraPreview = hasExplicitAuraPreview
         or (hasEditContext and ContainsAny(text, { "auras", "aura", "auren" }) and (previewWord or DetectBoolean(text) ~= nil or ContainsAny(text, { "toggle", "umschalten" })))
@@ -1445,6 +1629,8 @@ local function ParseEditModeHUDControl(text)
         "mythic raid preview", "mythic raid previews",
         "party raid preview", "party raid previews", "gruppenframes preview",
         "gruppenframes previews", "gruppen preview", "gruppen previews",
+        "gruppenframes vorschau", "gruppen vorschau", "gruppe vorschau",
+        "party vorschau", "raid vorschau", "schlachtzug vorschau",
     }) or (hasEditContext and previewWord and ContainsAny(text, {
         "gf", "group frame", "group frames", "party", "party frame", "party frames",
         "raid", "raid frame", "raid frames", "mythic raid", "mythicraid",
@@ -1457,43 +1643,46 @@ local function ParseEditModeHUDControl(text)
         "mover preview", "mover previews", "placeholder data", "placeholder frame",
         "placeholder frames", "preview placeholders", "fake frame", "fake frames",
         "test frame", "test frames", "vorschau frames", "frame vorschau",
+        "platzhalter", "platzhalter frames", "testdaten", "vorschau daten",
     }) or (hasEditContext and previewWord and not hasAuraPreview and not hasGroupPreview)
     local hasSnap = ContainsAny(text, {
         "snap", "snapping", "grid snap", "snap frames", "snap to grid", "einrasten",
-        "raster snap", "raster einrasten",
+        "raster snap", "raster einrasten", "am raster ausrichten", "einrasten am raster", "rasterfang",
     })
     local hasGrid = (hasEditContext and ContainsAny(text, {
         "grid", "grid line", "grid lines", "grid overlay", "grid overlays",
-        "edit mode grid", "raster", "raster lines",
-    })) or ContainsAny(text, { "edit mode grid", "msuf edit mode grid", "grid lines in edit mode" })
+        "edit mode grid", "raster", "raster lines", "rasterlinien", "hilfsraster",
+    })) or ContainsAny(text, { "edit mode grid", "msuf edit mode grid", "grid lines in edit mode", "raster groesse", "raster abstand", "rasterweite", "rasterlinien im bearbeitungsmodus" })
     local hasGridStep = hasGrid and FirstNumber(text) ~= nil and ContainsAny(text, {
         "grid", "grid spacing", "grid size", "grid step", "spacing", "space",
-        "size", "step", "pixel", "pixels", "px",
+        "size", "groesse", "abstand", "rasterweite", "step", "pixel", "pixels", "px",
     })
     local hasBackgroundOpacity = (hasEditContext and ContainsAny(text, {
         "background opacity", "background alpha", "bg opacity", "bg alpha",
         "background overlay", "overlay opacity", "edit mode background", "edit mode bg",
-    })) or ContainsAny(text, { "edit mode background opacity", "edit mode bg opacity" })
+        "hintergrund transparenz", "hintergrund deckkraft", "hintergrund alpha", "overlay transparenz",
+    })) or ContainsAny(text, { "edit mode background opacity", "edit mode bg opacity", "bearbeitungsmodus hintergrund transparenz", "bearbeitungsmodus hintergrund deckkraft" })
     local hasCDM = ContainsAny(text, {
         "cdm", "cooldown manager", "essential cooldown manager", "anchor to cooldown",
-        "cooldown anchor", "cooldown manager anchor",
+        "cooldown anchor", "cooldown manager anchor", "cooldownmanager", "cooldownmanager anker", "cdm anker",
     })
     local hasAnchorPicker = ContainsAny(text, {
         "anchor picker", "global anchor picker", "pick anchor", "select anchor",
-        "choose anchor", "open anchor", "anker picker", "anker auswahl", "anker waehlen",
+        "choose anchor", "open anchor", "anker picker", "anker auswahl", "anker auswaehlen",
+        "anker waehlen", "ankerwahl", "anker waehler",
     }) and not ContainsAny(text, { "custom anchor", "custom anchor picker", "custom anchor frame", "anchor frame picker" })
-        and (hasEditContext or ContainsAny(text, { "global anchor picker", "anchor picker" }))
-    local hasResetPosition = hasEditContext and ContainsAny(text, { "reset", "restore", "default", "zuruecksetzen" })
-        and ContainsAny(text, { "position", "selected frame", "current frame", "selected", "selection", "frame position", "mover" })
+        and (hasEditContext or ContainsAny(text, { "global anchor picker", "anchor picker", "anker picker", "anker auswahl" }))
+    local hasResetPosition = hasEditContext and ContainsAny(text, { "reset", "restore", "default", "zuruecksetzen", "zurucksetzen" })
+        and ContainsAny(text, { "position", "selected frame", "current frame", "selected", "selection", "frame position", "mover", "auswahl", "ausgewaehlter frame", "aktueller frame", "rahmen position" })
     local hasUndo = hasEditContext and ContainsAny(text, {
         "edit mode undo", "undo edit mode", "undo in edit mode", "undo last edit mode",
         "undo edit mode position", "undo last position", "undo position change",
-        "undo last change", "undo edit mode change",
+        "undo last change", "undo edit mode change", "rueckgaengig", "rueckgaengig machen", "position rueckgaengig", "bearbeitungsmodus rueckgaengig",
     })
     local hasRedo = hasEditContext and ContainsAny(text, {
         "edit mode redo", "redo edit mode", "redo in edit mode", "redo last edit mode",
         "redo edit mode position", "redo last position", "redo position change",
-        "redo last change", "redo edit mode change",
+        "redo last change", "redo edit mode change", "wiederholen", "erneut anwenden", "bearbeitungsmodus wiederholen",
     })
 
     if hasAnchorPicker then
@@ -1519,7 +1708,7 @@ local function ParseEditModeHUDControl(text)
     if hasUnitPreview then
         return EditModeAction("assistant.action.editMode.preview", { value = value }, "Set Edit Mode Preview")
     end
-    if hasSnap and (hasEditContext or ContainsAny(text, { "snap frames", "grid snap", "snap to grid" })) then
+    if hasSnap and (hasEditContext or ContainsAny(text, { "snap frames", "grid snap", "snap to grid", "raster snap", "raster einrasten" })) then
         return EditModeAction("assistant.action.editMode.snap", { value = value }, "Set Edit Mode Snap")
     end
     if hasGridStep then
@@ -1544,6 +1733,8 @@ local function ParseSupportWorkflow(text)
         "clear no match telemetry", "clear nomatch telemetry", "clear assistant no match telemetry",
         "reset no match telemetry", "reset nomatch telemetry", "reset assistant misses",
         "clear unmatched commands", "clear missed commands",
+        "loesche unbekannte befehle", "loesche nicht erkannte befehle",
+        "leere nomatch telemetry", "leere no match telemetry", "assistant misses loeschen",
     }) then
         local action = Registry and Registry:GetAction("assistant_nomatch_clear")
         return action and {
@@ -1551,8 +1742,8 @@ local function ParseSupportWorkflow(text)
             action = action,
             args = {},
             confirmRequired = true,
-            label = "Clear Assistant NoMatch telemetry",
-            summary = "Clears stored unmatched Assistant wording telemetry.",
+            label = "Clear Assistant learning phrases",
+            summary = "Clears stored phrases that still need better Assistant answers.",
         } or nil
     end
 
@@ -1614,6 +1805,9 @@ local function ParseSupportWorkflow(text)
         "scope review candidates", "scope no match worklist", "scope nomatch worklist",
         "tagged no match worklist", "tagged nomatch worklist", "tagged misses",
         "show learning candidates", "show review candidates", "show alias candidates",
+        "unbekannte befehle arbeitsliste", "nicht erkannte befehle arbeitsliste",
+        "assistant arbeitsliste", "alias arbeitsliste", "fehlende aliases",
+        "zeige unbekannte befehle", "zeige nicht erkannte befehle",
     }) then
         local action = Registry and Registry:GetAction("assistant_nomatch_worklist")
         local owner = NoMatchOwnerFilterForText(text)
@@ -1629,8 +1823,8 @@ local function ParseSupportWorkflow(text)
             kind = "action",
             action = action,
             args = args,
-            label = "Show Assistant NoMatch worklist",
-            summary = "Shows prioritized unmatched Assistant wording as review work items.",
+            label = "Show Assistant learning list",
+            summary = "Shows phrases that still need better Assistant answers.",
         } or nil
     end
 
@@ -1639,23 +1833,27 @@ local function ParseSupportWorkflow(text)
         "assistant misses", "assistant missed commands", "missed commands",
         "unmatched commands", "unmatched wording", "show no match", "show nomatch",
         "assistant learning report", "learning report", "no match report",
+        "unbekannte befehle", "nicht erkannte befehle", "nicht erkannte eingaben",
+        "assistant lernbericht", "no match bericht", "nomatch bericht",
     }) then
         local action = Registry and Registry:GetAction("assistant_nomatch_telemetry")
         return action and {
             kind = "action",
             action = action,
             args = {},
-            label = "Show Assistant NoMatch telemetry",
-            summary = "Shows stored unmatched Assistant wording telemetry.",
+            label = "Show Assistant phrases to improve",
+            summary = "Shows stored phrases that still need better Assistant answers.",
         } or nil
     end
 
     if ContainsAny(text, {
         "msuf status", "assistant status", "status report", "diagnostic report",
-        "diagnostics", "debug summary", "debug report", "debug info",
+        "diagnostics", "diagnose", "diagnosen", "diagnose starten", "diagnosebericht", "debug summary", "debug report", "debug info", "debug bericht", "status bericht",
+        "diagnostik", "fehlerbericht", "statusbericht", "diagnostik bericht",
         "assistant debug report", "version info", "locale info",
         "assistant performance", "assistant timing", "assistant slow",
         "is the assistant slow", "performance report", "perf report", "lag report",
+        "assistant leistung", "assistant langsam", "performance bericht", "lag bericht",
     }) then
         local action = Registry and Registry:GetAction("assistant_status")
         return action and {
@@ -1663,7 +1861,7 @@ local function ParseSupportWorkflow(text)
             action = action,
             args = {},
             label = "Show MSUF status",
-            summary = "Shows read-only MSUF and Assistant diagnostic status.",
+            summary = "Shows read-only MSUF and Assistant details.",
         } or nil
     end
 
@@ -1678,34 +1876,41 @@ local function ParseSupportWorkflow(text)
             action = action,
             args = {},
             label = "Show Assistant help",
-            summary = "Shows deterministic Assistant command examples.",
+            summary = "Shows Assistant examples handled locally by MSUF.",
         } or nil
     end
 
     local editModeControl = ParseEditModeHUDControl(text)
     if editModeControl then return editModeControl end
 
-    if ContainsAny(text, { "edit mode", "move frames", "drag frames", "position frames" }) then
+    if ContainsAny(text, {
+        "edit mode", "editmode", "msuf edit mode", "bearbeitungsmodus", "bearbeitungs modus",
+        "editmodus", "move frames", "drag frames", "position frames", "frames verschieben",
+        "rahmen verschieben", "frames bewegen", "rahmen bewegen",
+    }) then
         local actionKey
         local label
         local args = {}
         if ContainsAny(text, {
-            "am i in edit mode", "is edit mode on", "is edit mode active", "edit mode status",
+            "am i in edit mode", "is edit mode on", "is edit mode active", "edit mode status", "bearbeitungsmodus status", "ist bearbeitungsmodus an", "ist edit mode an",
             "why can't i exit edit mode", "why cant i exit edit mode", "why can not i exit edit mode",
             "why can't leave edit mode", "why cant leave edit mode",
+            "bin ich im bearbeitungsmodus", "ist der bearbeitungsmodus aktiv", "ist editmodus aktiv",
+            "warum kann ich bearbeitungsmodus nicht verlassen", "warum kann ich bearbeitungsmodus nicht beenden",
         }) then
             actionKey = "assistant.diagnostic.editMode.status"
             label = "Show MSUF Edit Mode status"
-            if ContainsAny(text, { "why can't", "why cant", "why can not" }) then args.reason = "why_exit" end
-        elseif ContainsAny(text, { "cancel edit mode", "discard edit mode", "cancel msuf edit mode", "cancel all edit mode" }) then
+            if ContainsAny(text, { "why can't", "why cant", "why can not", "warum kann" }) then args.reason = "why_exit" end
+        elseif ContainsAny(text, { "cancel edit mode", "discard edit mode", "cancel msuf edit mode", "cancel all edit mode", "bearbeitungsmodus abbrechen", "edit mode abbrechen", "bearbeitungsmodus verwerfen", "editmodus abbrechen" }) then
             actionKey = "assistant.action.editMode.cancel"
             label = "Cancel MSUF Edit Mode"
-        elseif ContainsAny(text, { "toggle edit mode", "toggle msuf edit mode" }) then
+        elseif ContainsAny(text, { "toggle edit mode", "toggle msuf edit mode", "bearbeitungsmodus umschalten", "edit mode umschalten", "editmodus umschalten", "bearbeitungsmodus toggeln" }) then
             actionKey = "assistant.action.editMode.toggle"
             label = "Toggle MSUF Edit Mode"
         elseif ContainsAny(text, {
             "stop edit mode", "exit edit mode", "exit msuf edit mode", "leave edit mode", "leave msuf edit mode",
-            "close edit mode", "close msuf edit mode", "disable edit mode", "turn off edit mode", "edit mode off",
+            "close edit mode", "close msuf edit mode", "disable edit mode", "turn off edit mode", "edit mode off", "edit mode aus", "bearbeitungsmodus aus", "bearbeitungsmodus beenden", "bearbeitungsmodus verlassen", "bearbeitungsmodus deaktivieren",
+            "editmodus aus", "editmodus beenden", "editmodus verlassen", "rahmen verschieben beenden",
         }) then
             actionKey = "assistant.action.editMode.exit"
             label = "Exit MSUF Edit Mode"
@@ -1721,7 +1926,7 @@ local function ParseSupportWorkflow(text)
             args = args,
             confirmRequired = actionKey == "assistant.action.editMode.cancel",
             label = label,
-            summary = "Controls the shared MSUF Edit Mode lifecycle helpers.",
+            summary = "Starts, stops, or checks MSUF Edit Mode.",
         } or nil
     end
 
@@ -1733,7 +1938,7 @@ local function ParseSupportWorkflow(text)
             action = action,
             args = { confirmed = not clear },
             label = clear and "Clear Wago backup confirmation" or "Confirm Wago backup",
-            summary = "Updates the Dashboard Wago backup checklist state for the active profile.",
+            summary = "Marks the Wago backup checklist for the active profile.",
         } or nil
     end
 
@@ -1782,7 +1987,10 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    if ContainsAny(text, { "support links", "support msuf", "donate links", "development links" }) then
+    if ContainsAny(text, {
+        "support links", "support msuf", "donate links", "development links",
+        "hilfe links", "support link liste", "spenden links", "entwicklungs links",
+    }) then
         local action = Registry and Registry:GetAction("support_links_summary")
         return action and {
             kind = "action",
@@ -1865,7 +2073,7 @@ local function ParseDashboardScaleShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = label,
-        summary = "Maps natural Dashboard scaling wording to the registered scale slider.",
+        summary = "Adjusts Dashboard scale.",
     }
 end
 
@@ -1900,8 +2108,8 @@ local function ParseScopedOverrideReset(text)
         action = action,
         args = { scope = scope },
         confirmRequired = all == true,
-        label = all and "Reset all scoped overrides" or "Reset scoped override",
-        summary = "Uses the same scoped override flags as Global Style.",
+        label = all and "Reset all section overrides" or "Reset section override",
+        summary = "Enables the matching target-specific style override before applying the change.",
     } or nil
 end
 
@@ -1926,11 +2134,11 @@ local function ParseClassPowerPreviewResource(text)
             {
                 setting = setting,
                 value = value,
-                valueLabel = P.ValueDisplay and P.ValueDisplay(setting, value) or tostring(value),
+                valueLabel = DisplayValueLabel(setting, value),
             },
         },
         label = "Class resource preview",
-        summary = "Selects the Class Resources preview dropdown without changing saved layout settings.",
+        summary = "Selects the Class Resources preview without changing saved layout options.",
     }
 end
 
@@ -1957,7 +2165,7 @@ local function ParseClassPowerAction(text)
             action = action,
             args = { value = value },
             label = "Animate class resource preview",
-            summary = "Controls the Class Resources inline preview animation.",
+            summary = "Changes the Class Resources inline preview animation.",
         } or nil
     end
     if not ContainsAny(text, { "quick setup", "quicksetup", "setup" }) then return nil end
@@ -1968,8 +2176,8 @@ local function ParseClassPowerAction(text)
         action = action,
         args = {},
         confirmRequired = true,
-        label = "Quick setup class bar",
-        summary = "Runs the Class Resources quick setup workflow.",
+        label = "Quick setup Class Resources",
+        summary = "Starts the Class Resources quick setup.",
     } or nil
 end
 
@@ -1977,32 +2185,32 @@ local GAMEPLAY_ROOT_TOGGLES = {
     {
         key = "gameplay.enableCombatTimer",
         label = "Combat Timer",
-        terms = { "combat timer" },
-        details = { "anchor", "attach", "size", "font", "text size", "lock", "locked", "click through", "click-through", "x", "y", "offset", "move", "color", "colors" },
+        terms = { "combat timer", "kampf timer", "kampftimer" },
+        details = { "anchor", "attach", "size", "groesse", "font", "text size", "lock", "locked", "sperren", "click through", "click-through", "durchklickbar", "x", "y", "offset", "move", "verschiebe", "color", "colors", "farbe", "farben" },
     },
     {
         key = "gameplay.enableCombatStateText",
-        label = "Combat Enter Leave Text",
-        terms = { "combat state", "combat enter leave", "combat enter", "combat leave" },
-        details = { "size", "font", "duration", "lock", "locked", "x", "y", "offset", "move", "color", "colors", "sync" },
+        label = "Combat Enter/Leave Text",
+        terms = { "combat state", "combat enter leave", "combat enter", "combat leave", "kampf text", "kampf status", "kampfstatus", "kampfanzeige" },
+        details = { "size", "groesse", "font", "duration", "dauer", "lock", "locked", "sperren", "x", "y", "offset", "move", "verschiebe", "color", "colors", "farbe", "farben", "sync", "synchron" },
     },
     {
         key = "gameplay.enablePlayerTotems",
         label = "Blizzard Totem Frame",
-        terms = { "totem frame", "totemframe", "blizzard totem", "statue frame" },
-        details = { "icon", "size", "x", "y", "offset", "anchor", "from", "to", "preview", "reset", "layout", "move" },
+        terms = { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem", "totems", "totem rahmen", "statuen rahmen", "statue rahmen" },
+        details = { "icon", "symbol", "size", "groesse", "x", "y", "offset", "anchor", "anker", "from", "to", "preview", "vorschau", "reset", "zuruecksetzen", "zurucksetzen", "layout", "move", "verschiebe" },
     },
     {
         key = "gameplay.enableFirstDanceTimer",
         label = "First Dance Tracker",
-        terms = { "first dance" },
-        details = { "icon", "ready", "size", "lock", "locked", "click through", "click-through", "x", "y", "offset", "move" },
+        terms = { "first dance", "first dance tracker", "erster tanz", "der erste tanz" },
+        details = { "icon", "symbol", "ready", "bereit", "size", "groesse", "lock", "locked", "sperren", "click through", "click-through", "durchklickbar", "x", "y", "offset", "move", "verschiebe" },
     },
     {
         key = "gameplay.enableCombatCrosshair",
         label = "Combat Crosshair",
         terms = { "combat crosshair", "crosshair", "fadenkreuz" },
-        details = { "range", "melee", "color", "colors", "spell", "size", "thickness", "x", "y", "offset", "move", "class", "spec" },
+        details = { "range", "reichweite", "reichweitenfarbe", "melee", "nahkampf", "color", "colors", "farbe", "farben", "farbe nach reichweite", "spell", "zauber", "size", "groesse", "thickness", "dicke", "staerke", "x", "y", "offset", "move", "verschiebe", "class", "klasse", "spec", "spezialisierung" },
     },
 }
 
@@ -2017,7 +2225,7 @@ local function ParseGameplayRootToggle(text)
                 kind = "changes",
                 changes = { { setting = setting, value = value } },
                 label = item.label,
-                summary = "Toggles a Gameplay setting.",
+                summary = "Toggles a Gameplay option.",
             } or nil
         end
     end
@@ -2025,10 +2233,10 @@ local function ParseGameplayRootToggle(text)
 end
 
 local function ParseGameplayAction(text, raw)
-    if ContainsAny(text, { "crosshair", "fadenkreuz", "melee range spell", "range check spell" }) and ContainsAny(text, { "spell", "range check" }) then
+    if ContainsAny(text, { "crosshair", "fadenkreuz", "melee range spell", "range check spell", "nahkampf zauber", "reichweiten zauber" }) and ContainsAny(text, { "spell", "zauber", "range check", "reichweite" }) then
         local rawText = tostring(raw or "")
         local value
-        if ContainsAny(text, { "clear", "reset", "none", "no spell" }) then
+        if ContainsAny(text, { "clear", "reset", "none", "no spell", "loeschen", "zuruecksetzen", "kein zauber", "ohne zauber" }) then
             value = "0"
         else
             value = rawText:match("([Ss][Pp][Ee][Ll][Ll]:%d+)") or rawText:match("#%s*(%d+)") or rawText:match("(%d%d+)")
@@ -2042,6 +2250,14 @@ local function ParseGameplayAction(text, raw)
                     "[Cc]hange%s+.+[Mm]elee%s+[Rr]ange%s+[Ss]pell%s+[Tt]o%s+(.+)",
                     "[Uu]se%s+(.+)%s+[Ff]or%s+.+[Cc]rosshair",
                     "[Uu]se%s+(.+)%s+[Ff]or%s+.+[Mm]elee%s+[Rr]ange",
+                    "[Ss]etze%s+[Ff]adenkreuz%s+[Zz]auber%s+[Aa]uf%s+(.+)",
+                    "[Ss]etze%s+.+[Ff]adenkreuz%s+.+[Zz]auber%s+[Aa]uf%s+(.+)",
+                    "[Aa]endere%s+.+[Ff]adenkreuz%s+.+[Zz]auber%s+[Aa]uf%s+(.+)",
+                    "[Ss]etze%s+[Nn]ahkampf%s+[Rr]eichweiten%s+[Zz]auber%s+[Aa]uf%s+(.+)",
+                    "[Ss]etze%s+[Nn]ahkampf%s+[Zz]auber%s+[Aa]uf%s+(.+)",
+                    "[Ff]adenkreuz%s+[Zz]auber%s+[Aa]uf%s+(.+)",
+                    "[Nn]utze%s+(.+)%s+[Ff]uer%s+.+[Ff]adenkreuz",
+                    "[Nn]utze%s+(.+)%s+[Ff]uer%s+.+[Nn]ahkampf%s+[Rr]eichweite",
                 }
                 for i = 1, #patterns do
                     value = rawText:match(patterns[i])
@@ -2061,17 +2277,17 @@ local function ParseGameplayAction(text, raw)
             } or nil
         end
     end
-    if ContainsAny(text, { "preview", "test" }) and ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame" }) then
+    if ContainsAny(text, { "preview", "test", "vorschau" }) and ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem", "totems", "totem rahmen", "statuen rahmen", "statue rahmen" }) then
         local action = Registry and Registry:GetAction("preview_player_totems")
         return action and {
             kind = "action",
             action = action,
             args = {},
             label = "Preview Totem Frame",
-            summary = "Toggles the TotemFrame preview.",
+            summary = "Toggles the Totem Frame preview.",
         } or nil
     end
-    if ContainsAny(text, { "reset", "restore", "default", "defaults" }) and ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame" }) then
+    if ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen", "zurucksetzen", "standard" }) and ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem", "totems", "totem rahmen", "statuen rahmen", "statue rahmen" }) then
         local action = Registry and Registry:GetAction("reset_player_totems_layout")
         return action and {
             kind = "action",
@@ -2079,14 +2295,17 @@ local function ParseGameplayAction(text, raw)
             args = {},
             confirmRequired = true,
             label = "Reset Totem Frame Layout",
-            summary = "Restores the TotemFrame layout defaults.",
+            summary = "Restores the Totem Frame layout defaults.",
         } or nil
     end
     return nil
 end
 
 local function ParseGlobalBarsAction(text)
-    if ContainsAny(text, { "dispel test type", "dispel border test type", "dispel border preview type" }) then
+    local previewTerms = { "test", "preview", "vorschau" }
+    local offTerms = { "off", "disable", "stop", "clear", "aus", "deaktiviere", "deaktivieren", "beende", "beenden" }
+
+    if ContainsAny(text, { "dispel test type", "dispel border test type", "dispel border preview type", "dispel vorschau typ", "dispel border vorschau typ", "dispel rand vorschau typ" }) then
         local value
         if ContainsAny(text, { "curse" }) then value = "Curse"
         elseif ContainsAny(text, { "disease" }) then value = "Disease"
@@ -2102,21 +2321,22 @@ local function ParseGlobalBarsAction(text)
             summary = "Changes the transient dispel border preview type.",
         } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+    if ContainsAny(text, previewTerms) and ContainsAny(text, {
         "absorb bar", "absorb bars", "absorb test", "absorb test bar", "absorb test bars",
         "test absorb bar", "test absorb bars", "absorb prediction bar", "absorb prediction bars",
-        "prediction bars", "heal absorb",
+        "prediction bars", "heal absorb", "absorb vorschau", "absorb balken",
+        "absorb balken test", "absorb balken vorschau", "heil absorb", "heal absorb vorschau",
     }) then
         local action = Registry and Registry:GetAction("toggle_absorb_bar_test")
         return action and {
             kind = "action",
             action = action,
-            args = { value = not ContainsAny(text, { "off", "disable", "stop", "clear" }) },
+            args = { value = not ContainsAny(text, offTerms) },
             label = "Toggle absorb bar test",
             summary = "Toggles the absorb prediction bar test display.",
         } or nil
     end
-    if ContainsAny(text, { "clear", "stop", "disable", "off" }) and ContainsAny(text, { "absorb test", "prediction bar test" }) then
+    if ContainsAny(text, offTerms) and ContainsAny(text, { "absorb test", "prediction bar test", "absorb vorschau", "absorb balken", "absorb balken test", "absorb balken vorschau" }) then
         local action = Registry and Registry:GetAction("toggle_absorb_bar_test")
         return action and {
             kind = "action",
@@ -2126,37 +2346,44 @@ local function ParseGlobalBarsAction(text)
             summary = "Turns off the absorb prediction bar test display.",
         } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+    if ContainsAny(text, previewTerms) and ContainsAny(text, {
         "aggro border", "threat border", "aggro test border", "aggro border test",
         "threat test border", "threat border test", "border test aggro", "border test for aggro",
-        "border test threat", "border test for threat",
+        "border test threat", "border test for threat", "aggro rand", "aggro rand test",
+        "aggro rand vorschau", "bedrohung rand", "bedrohung rand test",
+        "bedrohung rand vorschau", "bedrohungsrand",
     }) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
-        return action and { kind = "action", action = action, args = { kind = "aggro", value = not ContainsAny(text, { "off", "disable", "stop", "clear" }) }, label = "Test aggro border", summary = "Toggles the aggro border test." } or nil
+        return action and { kind = "action", action = action, args = { kind = "aggro", value = not ContainsAny(text, offTerms) }, label = "Test aggro border", summary = "Toggles the aggro border test." } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+    if ContainsAny(text, previewTerms) and ContainsAny(text, {
         "dispel border", "dispellable border", "dispel test border", "dispel border test",
         "dispellable test border", "dispellable border test", "border test dispel",
         "border test for dispel", "border test dispellable", "border test for dispellable",
+        "dispel rand", "dispel rand test", "dispel rand vorschau", "dispellable rand",
+        "entzauber rand", "entzauber rand vorschau", "entzauberbar rand",
     }) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
-        return action and { kind = "action", action = action, args = { kind = "dispel", value = not ContainsAny(text, { "off", "disable", "stop", "clear" }) }, label = "Test dispel border", summary = "Toggles the dispel border test." } or nil
+        return action and { kind = "action", action = action, args = { kind = "dispel", value = not ContainsAny(text, offTerms) }, label = "Test dispel border", summary = "Toggles the dispel border test." } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+    if ContainsAny(text, previewTerms) and ContainsAny(text, {
         "purge border", "purgeable border", "purge test border", "purge border test",
         "purgeable test border", "purgeable border test", "border test purge",
         "border test for purge", "border test purgeable", "border test for purgeable",
+        "purge rand", "purge rand test", "purge rand vorschau", "purgeable rand",
+        "offensiv dispel rand", "offensiv dispel rand vorschau",
     }) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
-        return action and { kind = "action", action = action, args = { kind = "purge", value = not ContainsAny(text, { "off", "disable", "stop", "clear" }) }, label = "Test purge border", summary = "Toggles the purge border test." } or nil
+        return action and { kind = "action", action = action, args = { kind = "purge", value = not ContainsAny(text, offTerms) }, label = "Test purge border", summary = "Toggles the purge border test." } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+    if ContainsAny(text, previewTerms) and ContainsAny(text, {
         "boss target border", "boss target highlight", "boss target test border",
         "boss target border test", "boss target highlight test", "border test boss target",
-        "border test for boss target",
+        "border test for boss target", "boss ziel border", "boss ziel rand",
+        "boss ziel rand test", "boss ziel rand vorschau", "bossziel rand",
     }) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
-        return action and { kind = "action", action = action, args = { kind = "bossTarget", value = not ContainsAny(text, { "off", "disable", "stop", "clear" }) }, label = "Test boss target border", summary = "Toggles the boss target border test." } or nil
+        return action and { kind = "action", action = action, args = { kind = "bossTarget", value = not ContainsAny(text, offTerms) }, label = "Test boss target border", summary = "Toggles the boss target border test." } or nil
     end
     return nil
 end
@@ -2196,7 +2423,7 @@ local function ParseDarkModeBrightnessShortcut(text)
         kind = "changes",
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = "Set dark mode bar color",
-        summary = "Adjusts the real Colors > Unitframe Global Coloring dark-mode bar color slider.",
+        summary = "Adjusts the Colors > Unit Frame Global Coloring dark-mode bar color.",
     }
 end
 
@@ -2377,7 +2604,7 @@ local function ParseNameShorteningDots(text, ctx)
         return {
             kind = "answer",
             status = "ambiguous",
-            text = "Should shortened names show the trailing dots? Say 'turn off name dots' to hide them, or 'turn on name dots' to show them.",
+            text = "Do you want shortened names to show trailing dots? For hidden dots: 'turn off name dots'. For visible dots: 'turn on name dots'.",
             summary = "Asks whether name-shortening ellipsis dots should be shown.",
         }
     end
@@ -2388,7 +2615,7 @@ local function ParseNameShorteningDots(text, ctx)
         return {
             kind = "unknown",
             status = "failed",
-            text = "Name-shortening dots are not registered for that scope. Use Shared, Target, Focus, Pet, Boss, Party, or Raid.",
+            text = "Name-shortening dots work for Shared, Target, Focus, Pet, Boss, Party, or Raid.",
         }
     end
     return {
@@ -2413,9 +2640,9 @@ local function ParseNameShorteningShortcut(text, ctx)
         return nil
     end
     if scope == "player" or not (enabledSetting and maxSetting and sideSetting) then
-        local message = "Name shortening is not registered for that scope. Use Shared, Target, Focus, Pet, Boss, Party, or Raid."
+        local message = "Name shortening is available for Shared, Target, Focus, Pet, Boss, Party, or Raid."
         if scope == "player" then
-            message = "Name shortening is not registered for Player in Global Fonts. Use Shared, Target, Focus, Pet, Boss, Party, or Raid."
+            message = "Global Font name shortening is available for Shared, Target, Focus, Pet, Boss, Party, or Raid."
         end
         return {
             kind = "unknown",
@@ -2436,7 +2663,7 @@ local function ParseNameShorteningShortcut(text, ctx)
             kind = "changes",
             changes = changes,
             label = sideSetting.label or "Name Truncation Style",
-            summary = "Changes the registered name-shortening side control without changing the length.",
+            summary = "Changes the name-shortening side option without changing the length.",
         }
     end
     if bool ~= nil and not maxChars and not sideValue then
@@ -2482,21 +2709,21 @@ local function ParseNameShorteningShortcut(text, ctx)
         kind = "answer",
         status = "ambiguous",
         text = "How many letters should names keep, and which side should remain visible? For example: 'shorten names to 10 letters keeping first letters' or 'shorten names to 10 letters keeping last letters'.",
-        summary = "Asks for the missing name-shortening length or direction.",
+        summary = "Asks which name-shortening length or direction to use.",
     }
 end
 
 local function ParseCastbarPreviewAction(text)
-    if not ContainsAny(text, { "test", "preview", "show preview" }) then return nil end
-    if not ContainsAny(text, { "castbar", "cast bar" }) then return nil end
+    if not ContainsAny(text, { "test", "preview", "show preview", "vorschau", "zeige vorschau", "preview anzeigen" }) then return nil end
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "zauberleisten" }) then return nil end
     local action = Registry and Registry:GetAction("preview_castbar")
     if not action then return nil end
     local units = DetectUnits(text)
     local unit = units[1] or "player"
     local kind = "normal"
-    if ContainsAny(text, { "channel", "channeled", "channelled" }) then
+    if ContainsAny(text, { "channel", "channeled", "channelled", "kanal", "kanalisiert" }) then
         kind = "channel"
-    elseif ContainsAny(text, { "empowered", "empower", "evoker" }) then
+    elseif ContainsAny(text, { "empowered", "empower", "evoker", "verstaerkt", "verstaerken", "ermaechtigt", "ermaechtigen" }) then
         kind = "empowered"
     end
     return {
@@ -2505,23 +2732,23 @@ local function ParseCastbarPreviewAction(text)
         args = {
             unit = unit,
             kind = kind,
-            interrupt = ContainsAny(text, { "interrupt", "interrupted", "shake" }),
+            interrupt = ContainsAny(text, { "interrupt", "interrupted", "shake", "kick", "unterbrechen", "unterbrochen", "schuetteln", "schutteln" }),
         },
-        label = "Preview castbar",
-        summary = "Opens the Castbar page and selects the requested transient preview.",
+        label = "Preview Cast Bar",
+        summary = "Opens the Cast Bar page and selects the requested preview.",
     }
 end
 
 local CASTBAR_GLOBAL_BOOLEAN_DETAILS = {
-    { key = "general.castbarShowChannelTicks", terms = { "channel ticks", "channel tick lines", "castbar ticks", "tick lines" } },
-    { key = "general.castbarShowGlow", terms = { "glow", "glow effect" } },
-    { key = "general.castbarShowSpark", terms = { "spark", "castbar spark" } },
-    { key = "general.castbarSparkOverflow", terms = { "spark overflow", "spark beyond bar" } },
-    { key = "general.castbarShowLatency", terms = { "latency", "latency indicator" } },
-    { key = "general.castbarUnifiedDirection", terms = { "unified direction", "unified fill direction", "same fill direction" } },
-    { key = "general.castbarOpositeDirectionTarget", terms = { "target opposite direction", "opposite target direction", "target opposite fill direction" } },
-    { key = "general.empowerColorStages", terms = { "empower color stages", "empowered stage colors", "empower stage colors" } },
-    { key = "general.empowerStageBlink", terms = { "empower stage blink", "empowered stage blink", "stage blink" } },
+    { key = "general.castbarShowChannelTicks", terms = { "channel ticks", "channel tick lines", "castbar ticks", "tick lines", "kanal ticks", "kanal tick linien", "kanal ticks anzeigen" } },
+    { key = "general.castbarShowGlow", terms = { "glow", "glow effect", "gluehen", "glow effekt" } },
+    { key = "general.castbarShowSpark", terms = { "spark", "castbar spark", "funke", "zauberleisten funke" } },
+    { key = "general.castbarSparkOverflow", terms = { "spark overflow", "spark beyond bar", "funke ausserhalb", "spark ausserhalb" } },
+    { key = "general.castbarShowLatency", terms = { "latency", "latency indicator", "latenz", "latenzanzeige", "latenz anzeige" } },
+    { key = "general.castbarUnifiedDirection", terms = { "unified direction", "unified fill direction", "same fill direction", "gleiche fuellrichtung", "einheitliche fuellrichtung", "gleiche richtung" } },
+    { key = "general.castbarOpositeDirectionTarget", terms = { "target opposite direction", "opposite target direction", "target opposite fill direction", "ziel entgegengesetzte richtung", "ziel umgekehrte richtung", "ziel andere fuellrichtung" } },
+    { key = "general.empowerColorStages", terms = { "empower color stages", "empowered stage colors", "empower stage colors", "empower stufen farben", "ermaechtigen stufen farben", "verstaerkte stufen farben" } },
+    { key = "general.empowerStageBlink", terms = { "empower stage blink", "empowered stage blink", "stage blink", "empower stufen blinken", "ermaechtigen stufen blinken", "stufen blinken" } },
 }
 
 local function ParseCastbarGlobalDetail(text)
@@ -2535,8 +2762,8 @@ local function ParseCastbarGlobalDetail(text)
             return setting and {
                 kind = "changes",
                 changes = { { setting = setting, value = value } },
-                label = setting.label or "Castbar detail",
-                summary = "Changes a global Castbar detail setting without toggling the unit castbar root.",
+                label = setting.label or "Cast Bar detail",
+                summary = "Changes a global Cast Bar detail option without toggling the unit cast bar.",
             } or nil
         end
     end
@@ -2544,13 +2771,15 @@ local function ParseCastbarGlobalDetail(text)
 end
 
 local function ParseCastbarDirectionClarification(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if not ContainsAny(text, { "target", "target castbar", "target cast bar", "ziel" }) then return nil end
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "zauberleisten" }) then return nil end
+    if not ContainsAny(text, { "target", "target castbar", "target cast bar", "ziel", "ziel castbar", "ziel zauberleiste" }) then return nil end
     if not ContainsAny(text, {
         "other direction", "opposite direction", "opposite fill direction", "fill in the other direction",
         "fill the other direction", "other way", "opposite way", "reverse direction", "fill opposite", "opposite fill",
         "filling opposite", "fills opposite", "normal direction", "normal fill", "same direction", "same fill",
         "not opposite", "no opposite", "stop opposite", "stop filling opposite",
+        "andere richtung", "entgegengesetzte richtung", "umgekehrte richtung", "andere fuellrichtung",
+        "normal richtung", "normale richtung", "gleiche richtung", "gleiche fuellrichtung",
     }) then return nil end
 
     local opposite = Registry and Registry:GetSetting("general.castbarOpositeDirectionTarget")
@@ -2559,24 +2788,26 @@ local function ParseCastbarDirectionClarification(text)
     if value == nil and ContainsAny(text, {
         "use opposite", "use opposite direction", "use opposite fill direction",
         "use target opposite", "use target opposite direction", "fill opposite", "opposite fill",
+        "entgegengesetzte richtung", "umgekehrte richtung", "andere fuellrichtung",
     }) then
         value = true
     end
     if value == nil and ContainsAny(text, {
         "normal direction", "normal fill", "same direction", "same fill",
         "not opposite", "no opposite", "stop opposite", "stop filling opposite",
+        "normal richtung", "normale richtung", "gleiche richtung", "gleiche fuellrichtung",
     }) then
         value = false
     end
-    if value == nil and ContainsAny(text, { "stop", "clear", "remove" }) and ContainsAny(text, { "opposite", "other way", "reverse" }) then
+    if value == nil and ContainsAny(text, { "stop", "clear", "remove", "aus", "deaktiviere", "beende" }) and ContainsAny(text, { "opposite", "other way", "reverse", "entgegengesetzt", "umgekehrt" }) then
         value = false
     end
     if value ~= nil then
         return {
             kind = "changes",
             changes = { { setting = opposite, value = value } },
-            label = opposite.label or "Use Opposite Fill Direction For Target",
-            summary = "Changes the target castbar opposite-fill checkbox.",
+            label = opposite.label or "Use Opposite Fill Direction for Target",
+            summary = "Changes the Target cast bar opposite-fill checkbox.",
         }
     end
 
@@ -2585,7 +2816,7 @@ local function ParseCastbarDirectionClarification(text)
             setting = opposite,
             value = true,
             valueLabel = "enabled",
-            label = "Use Opposite Fill Direction For Target -> enabled",
+            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(opposite, "enabled", "Use Opposite Fill Direction for Target") or "Use Opposite Fill Direction for Target: enabled",
         },
     }
     local fill = Registry and Registry:GetSetting("general.castbarFillDirection")
@@ -2594,23 +2825,22 @@ local function ParseCastbarDirectionClarification(text)
             setting = fill,
             value = "RTL",
             valueLabel = "rtl",
-            label = "Castbar Fill Direction -> rtl",
+            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(fill, "right to left", "Cast Bar Fill Direction") or "Cast Bar Fill Direction: right to left",
         }
         choices[#choices + 1] = {
             setting = fill,
             value = "LTR",
             valueLabel = "ltr",
-            label = "Castbar Fill Direction -> ltr",
+            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(fill, "left to right", "Cast Bar Fill Direction") or "Cast Bar Fill Direction: left to right",
         }
     end
     return {
         kind = "ambiguous",
         choices = choices,
-        label = "Which target castbar direction option?",
-        summary = "The command could mean the target opposite-fill checkbox or the global castbar fill direction.",
+        label = "Which Target cast bar direction option?",
+        summary = "That could mean the Target opposite-fill checkbox or the global Cast Bar Fill Direction.",
     }
 end
-
 local function ParseGuidedSetup(text)
     if not ContainsAny(text, {
         "help me build", "guided setup", "setup", "setup guide", "start guide", "start tour",
@@ -2620,6 +2850,9 @@ local function ParseGuidedSetup(text)
         "beginner setup", "onboarding", "build a clean", "clean layout", "rogue layout",
         "layout bauen", "setup hilfe", "fuehre mich", "fuehr mich", "fuehrung",
         "einsteiger", "anfanger", "neu in msuf", "noch nie msuf", "zeig mir msuf",
+        "hilf mir einrichten", "hilf mir beim einrichten", "einrichtungshilfe",
+        "schritt fuer schritt", "fuehre mich durch msuf", "msuf einrichten",
+        "assistant einrichtung", "assistent einrichtung",
     }) then return nil end
     local action = Registry and Registry:GetAction("guided_setup")
     return action and {
@@ -2627,7 +2860,7 @@ local function ParseGuidedSetup(text)
         action = action,
         args = { style = text },
         label = "Guided setup",
-        summary = "Starts a deterministic setup workflow.",
+        summary = "Starts the guided setup flow.",
     } or nil
 end
 
@@ -2640,36 +2873,41 @@ local function ParseGuidedSetupFollowup(text, ctx)
         "next setup", "next setup step", "setup next", "continue setup",
         "back setup", "back setup step", "setup back", "previous setup", "previous setup step", "setup previous",
         "show setup", "show setup step", "repeat setup", "current setup step", "setup status",
+        "setup weiter", "weiter setup", "naechster setup schritt", "naechster schritt",
+        "setup zurueck", "zurueck setup", "vorheriger setup schritt", "vorheriger schritt",
+        "setup abbrechen", "einrichtung abbrechen", "setup fertig", "einrichtung fertig",
+        "setup ueberspringen", "schritt ueberspringen", "setup anzeigen", "zeige setup",
+        "setup wiederholen", "schritt wiederholen", "setup status",
     })
     if not active and not explicit then return nil end
     local exact
     if active then
-        if text == "cancel" or text == "stop" or text == "abort" then
+        if text == "cancel" or text == "stop" or text == "abort" or text == "abbrechen" then
             exact = "cancel"
-        elseif text == "finish" or text == "done" or text == "complete" then
+        elseif text == "finish" or text == "done" or text == "complete" or text == "fertig" then
             exact = "finish"
-        elseif text == "skip" then
+        elseif text == "skip" or text == "ueberspringen" then
             exact = "skip"
-        elseif text == "next" or text == "continue" then
+        elseif text == "next" or text == "continue" or text == "weiter" then
             exact = "next"
-        elseif text == "back" or text == "previous" then
+        elseif text == "back" or text == "previous" or text == "zurueck" then
             exact = "back"
-        elseif text == "show" or text == "repeat" or text == "status" then
+        elseif text == "show" or text == "repeat" or text == "status" or text == "anzeigen" or text == "wiederholen" then
             exact = "show"
         end
     end
     local command
-    if ContainsAny(text, { "cancel setup", "stop setup", "abort setup", "setup cancel" }) then
+    if ContainsAny(text, { "cancel setup", "stop setup", "abort setup", "setup cancel", "setup abbrechen", "einrichtung abbrechen" }) then
         command = "cancel"
-    elseif ContainsAny(text, { "finish setup", "done setup", "setup done", "complete setup", "setup complete" }) then
+    elseif ContainsAny(text, { "finish setup", "done setup", "setup done", "complete setup", "setup complete", "setup fertig", "einrichtung fertig" }) then
         command = "finish"
-    elseif ContainsAny(text, { "skip setup", "skip setup step", "setup skip" }) then
+    elseif ContainsAny(text, { "skip setup", "skip setup step", "setup skip", "setup ueberspringen", "schritt ueberspringen" }) then
         command = "skip"
-    elseif ContainsAny(text, { "next setup", "next setup step", "setup next", "continue setup" }) then
+    elseif ContainsAny(text, { "next setup", "next setup step", "setup next", "continue setup", "setup weiter", "weiter setup", "naechster setup schritt", "naechster schritt" }) then
         command = "next"
-    elseif ContainsAny(text, { "back setup", "back setup step", "setup back", "previous setup", "previous setup step", "setup previous" }) then
+    elseif ContainsAny(text, { "back setup", "back setup step", "setup back", "previous setup", "previous setup step", "setup previous", "setup zurueck", "zurueck setup", "vorheriger setup schritt", "vorheriger schritt" }) then
         command = "back"
-    elseif ContainsAny(text, { "show setup", "show setup step", "repeat setup", "current setup step", "setup status" }) then
+    elseif ContainsAny(text, { "show setup", "show setup step", "repeat setup", "current setup step", "setup status", "setup anzeigen", "zeige setup", "setup wiederholen", "schritt wiederholen" }) then
         command = "show"
     elseif exact then
         command = exact
@@ -2681,7 +2919,7 @@ local function ParseGuidedSetupFollowup(text, ctx)
         action = action,
         args = { command = command },
         label = "Guided setup step",
-        summary = "Continues the active deterministic setup workflow.",
+        summary = "Continues the active guided setup.",
     } or nil
 end
 
@@ -2695,9 +2933,9 @@ function P.ParseProfileBackupImportQuestion(text)
         status = "info",
         text = table.concat({
             "Before importing a profile, export your current profile first.",
-            "Type 'backup before importing profile' to create a copyable full-profile backup string. Then paste or import the new profile string from the Profiles page.",
+            "Ask for 'backup before importing profile' to create a copyable full-profile backup string. Then add or import the new profile string from the Profiles page.",
         }, "\n"),
-        summary = "Explains the safe profile backup-before-import workflow without changing settings.",
+        summary = "Shows the safe profile backup-before-import steps without changing options.",
     }
 end
 
@@ -2706,8 +2944,8 @@ function P.ParseCustomAnchorLookupQuestion(text)
     return {
         kind = "answer",
         status = "info",
-        text = "The custom anchor picker needs a concrete MSUF frame or the current Unit/Group page. Try: open player custom anchor picker, open target custom anchor picker, open raid custom anchor picker, or set target custom anchor to cooldownmanager.",
-        summary = "Explains custom anchor picker usage without guessing a frame.",
+        text = "Pick a concrete MSUF frame or open a Unit/Group page for the custom anchor picker. Examples: open player custom anchor picker, open target custom anchor picker, open raid custom anchor picker, or set target custom anchor to Cooldown Manager.",
+        summary = "Shows custom anchor picker usage without guessing a frame.",
     }
 end
 
@@ -2727,7 +2965,7 @@ function P.ParseGroupScaleLookupQuestion(text)
     end
     if #groups == 0 then return nil end
     local scope = groups[1]
-    local label = type(P.FrameResizeGroupLabel) == "function" and P.FrameResizeGroupLabel(scope) or tostring((A.UnitLabels or {})[scope] or scope or "Group")
+    local label = type(P.FrameResizeGroupLabel) == "function" and P.FrameResizeGroupLabel(scope) or GroupDisplayLabel(scope)
     local breakpoint = ({ scaleAt10 = "1-10 players", scaleAt20 = "11-20 players", scaleAt25 = "21-25 players", scaleOver25 = "26+ players" })[attr] or "that player count"
     local targetText = playerCount
         and ("at " .. tostring(playerCount) .. " players (" .. tostring(breakpoint) .. " breakpoint)")
@@ -2741,7 +2979,7 @@ function P.ParseGroupScaleLookupQuestion(text)
             "I can change " .. tostring(label) .. " scaling " .. targetText .. " with the Group Layout scaling sliders.",
             "Examples: set " .. tostring(scopeText) .. " scale for 20 players to 80; make " .. tostring(scopeText) .. " frames smaller when 20 people; increase " .. tostring(scopeText) .. " scale for 20m by 5.",
         }, "\n"),
-        summary = "Explains group player-count scaling without changing settings.",
+        summary = "Shows group player-count scaling without changing options.",
     }
 end
 
@@ -2760,8 +2998,8 @@ local function ParseLookupQuestion(text, raw)
         or {
             kind = "unknown",
             status = "info",
-            text = "I treated that as a question, so I did not change settings. Ask from the Assistant Dashboard or name the frame/page and control, for example 'where can I change target power text'.",
-            summary = "Lookup question was not treated as a setting change.",
+            text = "I read that as a question, so MSUF stayed as it was. Open the Assistant Dashboard or include the frame/page and option, for example 'where can I change target power text'.",
+            summary = "Lookup question was not treated as an option change.",
         }
 end
 

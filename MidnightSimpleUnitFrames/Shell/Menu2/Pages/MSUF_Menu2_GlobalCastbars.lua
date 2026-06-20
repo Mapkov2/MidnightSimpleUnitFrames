@@ -356,15 +356,14 @@ local function BuildCastbars(ctx)
         end
         local function EmpowerBlinkEnabled()
             if type(_G.MSUF_IsEmpowerStageBlinkEnabled) == "function" then
-                local ok, enabled = pcall(_G.MSUF_IsEmpowerStageBlinkEnabled)
-                if ok then return enabled and true or false end
+                return _G.MSUF_IsEmpowerStageBlinkEnabled() and true or false
             end
             return ReadGBool("empowerStageBlink", true)
         end
         local function EmpowerBlinkTime()
             if type(_G.MSUF_GetEmpowerStageBlinkTime) == "function" then
-                local ok, value = pcall(_G.MSUF_GetEmpowerStageBlinkTime)
-                if ok and tonumber(value) then return max(0.05, min(1.00, tonumber(value))) end
+                local value = _G.MSUF_GetEmpowerStageBlinkTime()
+                if tonumber(value) then return max(0.05, min(1.00, tonumber(value))) end
             end
             local value = tonumber(ReadG("empowerStageBlinkTime", 0.25)) or 0.25
             return max(0.05, min(1.00, value))
@@ -496,8 +495,8 @@ local function BuildCastbars(ctx)
             local fillW = max(1, floor(barWLocal * visual + 0.5))
             local ir, ig, ib = 0.20, 0.78, 0.94
             if type(_G.MSUF_ResolveCastbarColors) == "function" then
-                local ok, r, g, b = pcall(_G.MSUF_ResolveCastbarColors)
-                if ok and r then ir, ig, ib = r, g or ig, b or ib end
+                local r, g, b = _G.MSUF_ResolveCastbarColors()
+                if r then ir, ig, ib = r, g or ig, b or ib end
             end
             if now < (self.interruptUntil or 0) then ir, ig, ib = 0.90, 0.14, 0.20 end
             ir, ig, ib = GlowBlend(ir, ig, ib, progress)
@@ -766,6 +765,7 @@ local function BuildCastbars(ctx)
                 if btn.SetActive then btn:SetActive(key == unit) end
             end
         end
+        box:SetOnUpdateMode("RunWhenVisible")
         box:SetScript("OnUpdate", function(_, elapsed)
             elapsed = tonumber(elapsed) or 0
             preview.progress = (preview.progress or 0) + (elapsed / CastDuration(preview.castType or "normal"))

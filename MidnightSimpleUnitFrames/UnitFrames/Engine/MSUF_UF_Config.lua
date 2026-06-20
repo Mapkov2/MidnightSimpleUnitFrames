@@ -668,8 +668,7 @@ local function APIBool(fn, ...)
   if type(fn) ~= "function" then
     return false
   end
-  local ok, value = pcall(fn, ...)
-  return ok and PlainTrue(value) == true
+  return PlainTrue(fn(...)) == true
 end
 
 local function CurrentInstanceType()
@@ -680,8 +679,8 @@ local function CurrentInstanceType()
     end
   end
   if GetInstanceInfo then
-    local ok, _, instanceType = pcall(GetInstanceInfo)
-    if ok and type(instanceType) == "string" and instanceType ~= "" then
+    local _, instanceType = GetInstanceInfo()
+    if type(instanceType) == "string" and instanceType ~= "" then
       return instanceType
     end
   end
@@ -745,17 +744,14 @@ function UF.RefreshPVPIndicatorContext(reason, force)
 end
 
 local function RegisterPVPContextEvent(frame, event, unit)
-  if not (frame and event) then
-    return
-  end
-  if unit and frame.RegisterUnitEvent then
-    pcall(frame.RegisterUnitEvent, frame, event, unit)
-  elseif frame.RegisterEvent then
-    pcall(frame.RegisterEvent, frame, event)
+  if unit then
+    frame:RegisterUnitEvent(event, unit)
+  else
+    frame:RegisterEvent(event)
   end
 end
 
-if CreateFrame and not UF.pvpIndicatorContextDriver then
+if not UF.pvpIndicatorContextDriver then
   local pvpDriver = CreateFrame("Frame")
   pvpDriver:SetScript("OnEvent", function(_, event, unit)
     if unit and unit ~= "player" then
@@ -1629,7 +1625,7 @@ local function CompileUnitTail(out, unit, key, conf, general, bars)
   CompileUnitStatus(out, conf, general, key)
 
   out.auras = out.auras or {}
-  local A3 = MSUF.MSUF_Auras3 or _G.MSUF_Auras3
+  local A3 = MSUF.MSUF_Auras3
   out.auras.enabled = A3 and A3.UnitFrameAuraEnabled and A3.UnitFrameAuraEnabled(unit) == true or false
 
   out.castbar = out.castbar or {}

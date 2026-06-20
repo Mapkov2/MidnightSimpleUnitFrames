@@ -16,6 +16,7 @@ local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER, PORTRAIT_SHAPES, PORTRAIT_BO
 local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, NormalizePortrait, SetPortraitValue, IsPlayerPowerManagedByClassResources = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool NormalizePortrait SetPortraitValue IsPlayerPowerManagedByClassResources]])
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
+local CASTBAR_UNITS = M.KeySetFromWords "player target focus boss"
 local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT", "Inside Left", "INSIDE_RIGHT", "Inside Right")
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
@@ -28,6 +29,20 @@ local DETACHED_POWER_SHAPE_VALUES = VT("FOLLOW_CLASS", "Follow Class Resource", 
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
+local function PowerSectionHeight(unit)
+    local isPlayer = unit == "player"
+    return math.abs(-254) + (isPlayer and 406 or 304) + 52
+end
+local function NormalizeCastbarTabKey(key)
+    if key ~= "general" and key ~= "icon" and key ~= "spell" and key ~= "time" and key ~= "advanced" then key = "general" end
+    return key
+end
+local function CurrentCastbarTab(unit)
+    M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
+    local key = NormalizeCastbarTabKey(M.unitCastbarTabSelection[unit])
+    M.unitCastbarTabSelection[unit] = key
+    return key
+end
 local function RefreshClassPowerDetachedState()
     -- Detached player power is influenced by both unitframe and class-resource controls, so
     -- ask the ClassPower page/runtime to recompute enabled state after relevant edits.
@@ -154,7 +169,7 @@ local function BuildPower(ctx, builder, unit)
     local isPlayer = unit == "player"
     local detachedCardY = -254
     local detachedCardHeight = isPlayer and 406 or 304
-    local powerSectionHeight = math.abs(detachedCardY) + detachedCardHeight + 52
+    local powerSectionHeight = PowerSectionHeight(unit)
     local powerNoticeY = detachedCardY - detachedCardHeight - 12
     local sec = builder:CollapsibleSection("power_bar", "Power Bar", powerSectionHeight, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
@@ -373,17 +388,7 @@ end
 local function BuildCastbar(ctx, builder, unit)
     local fields = CASTBAR_FIELDS[unit]
     if not fields then return end
-    M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
-    local function NormalizeCastbarTabKey(key)
-        if key ~= "general" and key ~= "icon" and key ~= "spell" and key ~= "time" and key ~= "advanced" then key = "general" end
-        return key
-    end
-    local function CurrentCastbarTab()
-        local key = NormalizeCastbarTabKey(M.unitCastbarTabSelection[unit])
-        M.unitCastbarTabSelection[unit] = key
-        return key
-    end
-    local sec = builder:CollapsibleSection("castbar", "Castbar", CASTBAR_TAB_HEIGHTS[CurrentCastbarTab()] or CASTBAR_TAB_HEIGHTS.general, false)
+    local sec = builder:CollapsibleSection("castbar", "Castbar", CASTBAR_TAB_HEIGHTS[CurrentCastbarTab(unit)] or CASTBAR_TAB_HEIGHTS.general, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 16
     local cardGap = 28
@@ -643,7 +648,7 @@ local function BuildCastbar(ctx, builder, unit)
     }))
 end
 if type(UP.RegisterSection) == "function" then
-    UP.RegisterSection({ id = "portrait", placement = "after_inline_text", order = 10, build = BuildPortrait })
-    UP.RegisterSection({ id = "power", placement = "after_inline_text", order = 20, build = BuildPower })
-    UP.RegisterSection({ id = "castbar", placement = "after_inline_text", order = 30, build = BuildCastbar })
+    UP.RegisterSection({ id = "portrait", title = "Portrait", height = 558, placement = "after_inline_text", order = 10, build = BuildPortrait })
+    UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end, placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower })
+    UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CASTBAR_TAB_HEIGHTS[CurrentCastbarTab(unit)] or CASTBAR_TAB_HEIGHTS.general end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar })
 end

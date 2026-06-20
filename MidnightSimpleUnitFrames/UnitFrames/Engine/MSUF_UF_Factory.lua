@@ -28,6 +28,7 @@ local RegisterUnitWatch = RegisterUnitWatch
 local UnregisterUnitWatch = UnregisterUnitWatch
 local UnitFrame_OnEnter = UnitFrame_OnEnter
 local UnitFrame_OnLeave = UnitFrame_OnLeave
+local UnitGUID = UnitGUID
 local UIParent = UIParent
 
 local COOLDOWN_ANCHORS = {
@@ -211,10 +212,8 @@ local function DisableFrame(frame)
   end
   if frame.Disable then
     frame:Disable()
-  elseif UnregisterUnitWatch then
-    UnregisterUnitWatch(frame)
-    frame:Hide()
   else
+    UnregisterUnitWatch(frame)
     frame:Hide()
   end
 end
@@ -318,6 +317,66 @@ local function HideUnitTooltip(frame)
   end
 end
 
+function UF.EnsureNativePingIcon(frame)
+  if not frame then
+    return nil
+  end
+  local ping = frame.pingIconFrame or frame.PingIconFrame
+  if not ping then
+    -- UnitPingIconFrameTemplate is restricted; only drive a native ping child if Blizzard created one.
+    frame._msufNativePingGUID = nil
+    return nil
+  end
+  if IsForbidden and IsForbidden(ping) then
+    return nil
+  end
+  if type(ping.SetGUIDMatch) ~= "function" then
+    return nil
+  end
+  if not ping._msufNativePingIconConfigured then
+    ping._msufNativePingIconConfigured = true
+    if ping.SetSize then
+      ping:SetSize(24, 24)
+    end
+    if ping.ClearAllPoints and ping.SetPoint then
+      ping:ClearAllPoints()
+      ping:SetPoint("CENTER", frame, "CENTER", 0, 0)
+    end
+    if ping.SetFrameLevel and frame.GetFrameLevel then
+      ping:SetFrameLevel((frame:GetFrameLevel() or 0) + 20)
+    end
+    if ping.SetOnUpdateMode then
+      ping:SetOnUpdateMode("RunWhenVisible")
+    end
+  end
+  frame.pingIconFrame = ping
+  frame.PingIconFrame = ping
+  if ping.Show then
+    ping:Show()
+  end
+  return ping
+end
+
+function UF.RefreshNativePingIcon(frame)
+  local ping = UF.EnsureNativePingIcon(frame)
+  if not ping then
+    return false
+  end
+  local unit = frame and frame.unit
+  local guid = unit and UnitGUID(unit) or nil
+  if frame._msufNativePingGUID == guid then
+    return true
+  end
+  frame._msufNativePingGUID = guid
+  if guid == nil then
+    ping:Hide()
+  else
+    ping:Show()
+  end
+  ping:SetGUIDMatch(guid)
+  return true
+end
+
 local function SpawnFrame(unit)
   if not UF.IsManagedUnit(unit) then
     return nil
@@ -340,11 +399,10 @@ local function SpawnFrame(unit)
   frame:SetAttribute("*type2", "togglemenu")
   frame:SetAttribute("toggleForVehicle", true)
   frame:RegisterForClicks("AnyUp")
+  UF.RefreshNativePingIcon(frame)
   frame.Enable = RegisterUnitWatch
   frame.Disable = function(self)
-    if UnregisterUnitWatch then
-      UnregisterUnitWatch(self)
-    end
+    UnregisterUnitWatch(self)
     self:Hide()
   end
   if not frame._msufTooltipHooked then
@@ -548,12 +606,6 @@ local function ScheduleLateAnchorReanchor()
   if state.pending then return false end
   state.pending = true
 
-  if not (_G.C_Timer and _G.C_Timer.After) then
-    FlushLateAnchorReanchor()
-    state.pending = false
-    return true
-  end
-
   _G.C_Timer.After(0, function()
     if not state.pending then return end
     FlushLateAnchorReanchor()
@@ -579,11 +631,7 @@ do
         _G.MSUF_ScheduleLateAnchorReanchor()
       end
     end
-    if _G.C_Timer and _G.C_Timer.After then
-      _G.C_Timer.After(0, run)
-    else
-      run()
-    end
+    _G.C_Timer.After(0, run)
   end
 
   local lateAnchorEvents = CreateFrame("Frame")

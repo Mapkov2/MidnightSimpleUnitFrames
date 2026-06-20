@@ -264,12 +264,7 @@ local function ApplyStatusFont(region, font, size, flags)
   if not (region and region.SetFont and font) then
     return false
   end
-  local safeSet = _G.MSUF_SetFontSafe
-  if type(safeSet) == "function" then
-    return safeSet(region, font, size, flags) == true
-  end
-  local ok, applied = pcall(region.SetFont, region, font, size, flags)
-  return ok and applied ~= false
+  return region:SetFont(font, size, flags) ~= false
 end
 
 local function SetFont(region, spec, size)
@@ -479,8 +474,7 @@ local function UnitFramePVPContextualDisabled()
   local enum = _G.Enum
   local rule = enum and enum.GameRule and enum.GameRule.UnitFramePvPContextualDisabled
   if gameRules and type(gameRules.IsGameRuleActive) == "function" and rule ~= nil then
-    local ok, disabled = pcall(gameRules.IsGameRuleActive, rule)
-    return ok and disabled == true
+    return gameRules.IsGameRuleActive(rule) == true
   end
   return false
 end
@@ -784,7 +778,6 @@ end
 local ReadyCheckTimerCallback
 
 local function ArmReadyCheckTimer(when)
-  if not (C_Timer and C_Timer.After) then return end
   if READY_CHECK_TIMER_AT and READY_CHECK_TIMER_AT <= when then return end
   READY_CHECK_TIMER_AT = when
   local now = GetTime and GetTime() or 0
@@ -853,7 +846,7 @@ ReadyCheckTimerCallback = function()
 end
 
 local function QueueReadyCheckHide(frame)
-  if not (frame and C_Timer and C_Timer.After) then return end
+  if not frame then return end
   local now = GetTime and GetTime() or 0
   local due = now + 6
   local known = READY_CHECK_TIMERS[frame] ~= nil
@@ -966,7 +959,7 @@ local function UpdateReadyCheck(frame, status, event)
     SetTexture(tex, texture)
     SetTexCoord(tex, 0, 1, 0, 1)
     SetShown(tex, true)
-  elseif event == "READY_CHECK_FINISHED" and tex.IsShown and tex:IsShown() and C_Timer and C_Timer.After then
+  elseif event == "READY_CHECK_FINISHED" and tex.IsShown and tex:IsShown() then
     -- Blizzard leaves ready-check result icons visible briefly after finish; queue a delayed
     -- hide so MSUF matches that readable window without polling.
     QueueReadyCheckHide(frame)

@@ -8,21 +8,21 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0 Alpha 1",
+    currentVersion = "6.0.0",
     previousVersion = "5.59",
-    rangeLabel = "5.59 -> 6.0 Alpha 1",
+    rangeLabel = "5.59 -> 6.0.0",
     entries = {
         {
-            version = "6.0 Alpha 1",
-            date = "2026-06-14",
+            version = "6.0.0",
+            date = "2026-06-19",
             sections = {
                 {
                     title = "Release Context",
                     bullets = {
-                        "First public 6.0 alpha after the 5.59 stable line.",
+                        "First 6.0 production build after the 5.59 stable line.",
                         "Baseline for this changelog: 5.59.",
-                        "5.59 was a maintenance build for compound-unit event routing and Interrupt Ready taint safety. 6.0 Alpha 1 is the first public build of the rewritten 6.x core addon.",
-                        "This alpha can load existing profiles, but the runtime below those profiles changed heavily. Export important profiles before testing.",
+                        "5.59 was a maintenance build for compound-unit event routing and Interrupt Ready taint safety. 6.0.0 is the first 12.1 production build of the rewritten 6.x core addon.",
+                        "This build can load existing profiles, but the runtime below those profiles changed heavily. Export important profiles before testing.",
                         "The biggest change is not one single option. MSUF now has a new runtime foundation, a new configuration experience, integrated castbars, a stronger Assistant, updated class resources, and a much larger preview/editing layer.",
                     },
                 },
@@ -39,12 +39,12 @@ local data = {
                 {
                     title = "Compared To 5.59",
                     bullets = {
-                        "5.59 was a small maintenance build. 6.0 Alpha 1 is a broad rewrite of the shipped core addon.",
+                        "5.59 was a small maintenance build. 6.0 is a broad 12.1 production rewrite of the shipped core addon.",
                         "The old Core layer was removed from the active load path. Health, power, prediction, absorb, text, alpha, borders, textures, portraits, range fade, status, class power, and castbar bridge work moved into focused runtime modules.",
                         "The old Foundation shape was reorganized into Kernel, Runtime, and State responsibilities. Bootstrap, modules, events, scheduling, utility helpers, Blizzard frame handling, changelog state, profile state, migrations, and UI state now have clearer homes.",
                         "The old EditMode2 implementation was replaced by Shell/EditMode modules for core behavior, HUD, focus, layout, movers, popup scale, aura popups, cast popups, and tooltip/unit/group editing.",
                         "The old broad GroupFrames/MSUF_GF_* backend was replaced or wrapped by the newer 6.x group-frame architecture. Party, raid, mythic raid, headers, visuals, status, indicators, spell indicators, previews, and edit-mode paths are now split by purpose.",
-                        "Auras2 files were removed from the shipped addon. Auras3 configuration, profile data, menu model, edit-mode hooks, unit-frame surfaces, and preview surfaces are in the 6.0 tree, while live aura behavior remains alpha because Midnight aura APIs are still moving.",
+                        "Auras2 files were removed from the shipped addon. Auras3 now drives unit-frame aura display through native 12.1 AuraContainer/AuraButton objects, with menu/edit/preview code kept out of live aura data.",
                         "Castbars moved from the older split-package model into the main addon package so castbars, unit frames, previews, profile updates, and release metadata ship together.",
                         "Menu2 was split from large page/search/widget files into smaller page, preview, routing, search, theme, widget, section, and helper modules.",
                         "The public _G.MSUF_* surface was reduced in the rewritten areas in favor of a clearer MSUF namespace/API pattern, while compatibility exports are kept where older modules or user macros still need them.",
@@ -94,7 +94,7 @@ local data = {
                         "Improved preview/live parity for group dummies, party previews, raid previews, mythic raid previews, growth direction, columns, spacing, size, and anchor behavior.",
                         "Improved dead, ghost, offline, resurrection, aggro, status icon, group number, role, mouseover highlight, range/threat, and tooltip mouseover behavior.",
                         "Split spell-indicator data and group-frame DB helpers so large registry-style data is easier to reason about and less risky to edit.",
-                        "Kept Auras3 group button-pool prewarming out of this alpha. No extra out-of-combat pool prewarm spike was added.",
+                        "Kept Auras3 native group aura containers allocation-bound to configured frame counts. No extra out-of-combat aura prewarm spike is added.",
                     },
                 },
                 {
@@ -155,11 +155,13 @@ local data = {
                     title = "Auras And Aura Scope",
                     bullets = {
                         "Removed the old Auras2 runtime files from the active addon tree.",
-                        "Added Auras3 core, menu model, edit-mode hooks, unit-frame surfaces, and runtime XML scaffolding.",
-                        "Kept Auras3 profile/configuration and preview surfaces so aura settings can survive while the live backend continues to move.",
-                        "Paused or limited live aura-dependent paths where Blizzard Midnight aura APIs are not stable enough for a final backend.",
-                        "Disabled old group aura cache, group custom aura lanes, private aura anchoring, custom aura rendering, and aura cooldown-text runtime paths that no longer match the current Midnight API state.",
-                        "Aura behavior should be treated as alpha in this build even though configuration and preview surfaces are present.",
+                        "Added Auras3 core, menu model, edit-mode hooks, unit-frame surfaces, and native 12.1 AuraContainer/AuraButton runtime loading.",
+                        "Kept Auras3 profile/configuration and preview surfaces while moving live unit-frame aura display to Blizzard-owned filtering, assignment, icon, stack, and duration bindings.",
+                        "Removed the legacy aura scan/diff/render backend for unit-frame aura display.",
+                        "Removed an unsupported native AuraButton SetCountText call; 12.1 exposes icon/duration binding directly, while stack text is left on the conventional button.Count field for Blizzard/template ownership.",
+                        "Reduced native Auras3 runtime to the documented Blizzard setup path: configure AuraContainer, prepare AuraButtons, add frames once, and recreate containers for layout/font changes instead of mutating AuraButtons after AddAuraFrame.",
+                        "Disabled old group aura cache, private aura anchoring, custom aura rendering, and aura cooldown-text polling paths that no longer match the 12.1 API model.",
+                        "Aura behavior is now a 12.1 production path and must be validated on PTR with Blizzard's native aura filters.",
                     },
                 },
                 {
@@ -184,8 +186,14 @@ local data = {
                         "Reduced group-frame rebuilds by distinguishing structural changes from state-only or visual-only changes.",
                         "Reduced disabled-feature overhead in text, alpha, visual, status, aura, range, castbar, and preview paths.",
                         "Added safer combat-lock handling so blocked secure-frame work defers or reports state instead of trying to mutate restricted frames.",
-                        "Added budgeted/deferred scheduling for non-urgent work without adding a forced Auras3 group-pool prewarm spike.",
-                        "Added more guarded runtime calls and defensive fallbacks around Blizzard ownership, profile state, preview state, and menu state.",
+                        "Kept non-urgent work budgeted/deferred while avoiding forced aura prewarm spikes; native aura containers allocate only the configured frame counts.",
+                        "Removed runtime NewTicker usage and Castbar NewTimer handle paths; remaining frame loops use SetOnUpdateMode-aware OnUpdate or tokenized C_Timer.After one-shots.",
+                        "Removed pcall/error-swallowing wrappers from productive unit-frame, aura, castbar, class-power, feature, EventBus, and runtime utility hotpaths.",
+                        "Removed the old MSUF_SetFontSafe export and direct-converted Menu2 font/refresh apply fanouts used by the 6.0 configuration path.",
+                        "Direct-converted production Menu2 shell, dashboard, page, preview, scale, minimap, and builder refresh paths so 6.0 errors surface instead of being swallowed by compatibility wrappers.",
+                        "Direct-converted Unit Frame page lazy sections so closed sections build lightweight shells without pcall/error-based control flow.",
+                        "Direct-converted Edit Mode, anchor picker, locale apply, and profile runtime apply paths away from pcall wrappers and temporary global preview wrappers.",
+                        "Audited 12.1 texture filename, SVG/VectorGraphics, per-file Bootstrap directive, and Roleset changes; MSUF keeps no active SVG/Roleset dependency, and unknown ManifestInterfaceData assets are treated as unknown rather than invalid.",
                         "Added local smoke/quality checks for syntax, Assistant command behavior, profile migration, options load, runtime budgets, and WoW Lua local-limit risk.",
                         "Removed local docs and smoke scripts from the shipped addon package so development-only files do not inflate the public install.",
                     },
@@ -198,7 +206,7 @@ local data = {
                         "Test party, raid, mythic raid, combat lockdown, roster transitions, role changes, dead/offline/ghost states, resurrection visuals, status icons, spell indicators, range fade, and Blizzard frame fallback.",
                         "Test player, target, focus, and boss castbars, including channels, empower casts, interrupt-ready visuals, focus kick behavior, and preview editing.",
                         "Test Unit Frame text, health, power, prediction, absorbs, class power, player HP integration, alpha, borders, portraits, range fade, and status visuals.",
-                        "Treat Auras3 live behavior as alpha until Blizzard Midnight aura APIs settle.",
+                        "Test native 12.1 AuraContainer/AuraButton display on player, target, focus, boss, party, raid, and mythic raid frames.",
                         "Report regressions against 5.59 when possible, especially visibility issues, combat-state issues, taint, profile migration errors, and secure-frame behavior.",
                     },
                 },

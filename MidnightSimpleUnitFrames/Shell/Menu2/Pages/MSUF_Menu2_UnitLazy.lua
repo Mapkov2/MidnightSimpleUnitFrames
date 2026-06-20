@@ -46,10 +46,26 @@ function UnitPage.RegisterSection(spec)
     end
     return true
 end
-local LAZY_SECTION_ABORT = "__MSUF_UNIT_LAZY_SECTION_ABORT__"
+local function ResolveLazyValue(value, ctx, builder, unit, spec)
+    if type(value) == "function" then return value(ctx, builder, unit, spec) end
+    return value
+end
+local function ResolveLazyMeta(ctx, builder, unit, spec)
+    local sectionId = ResolveLazyValue(spec.sectionId or spec.id, ctx, builder, unit, spec)
+    local title = ResolveLazyValue(spec.title, ctx, builder, unit, spec)
+    local height = ResolveLazyValue(spec.height, ctx, builder, unit, spec)
+    if type(sectionId) ~= "string" or sectionId == "" then return nil end
+    if type(title) ~= "string" or title == "" then return nil end
+    height = tonumber(height)
+    if not height then return nil end
+    return sectionId, title, height, ResolveLazyValue(spec.defaultOpen, ctx, builder, unit, spec) == true
+end
 local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
     if ctx and ctx.entry and ctx.entry.hiddenBuild then return spec.build(ctx, builder, unit, spec) end
-    local shellBody, shellEntry
+    local sectionId, title, height, defaultOpen = ResolveLazyMeta(ctx, builder, unit, spec)
+    if not sectionId then return spec.build(ctx, builder, unit, spec) end
+    local shellBody = builder:CollapsibleSection(sectionId, title, height, defaultOpen)
+    local shellEntry = shellBody and shellBody._msuf2CollapsibleEntry
     local shellRefresh
     local built = false
     local building = false
@@ -60,7 +76,7 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
         fromIndex = tonumber(fromIndex) or #refreshers
         for i = fromIndex + 1, #refreshers do
             local fn = refreshers[i]
-            if type(fn) == "function" then pcall(fn) end
+            if type(fn) == "function" then fn() end
         end
     end
     local function BuildContent()
@@ -71,17 +87,13 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
             return shellBody
         end
         local refreshStart = ctx and ctx.refreshers and #ctx.refreshers or 0
-        local ok, err = pcall(spec.build, ctx, proxy, unit, spec)
+        spec.build(ctx, proxy, unit, spec)
         building = false
-        if not ok and err ~= LAZY_SECTION_ABORT then
-            built = false
-            error(err)
-        end
         built = true
-        if ok and shellEntry then
+        if shellEntry then
             RefreshNewControls(refreshStart)
             local refresh = shellEntry._msuf2RefreshState
-            if type(refresh) == "function" and refresh ~= LazyRefresh then pcall(refresh, shellEntry) end
+            if type(refresh) == "function" and refresh ~= LazyRefresh then refresh(shellEntry) end
         end
     end
     LazyRefresh = function(entryArg)
@@ -91,26 +103,19 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
             builtNow = true
         end
         local current = shellEntry and shellEntry._msuf2RefreshState
-        if current and current ~= LazyRefresh and not builtNow then return pcall(current, entryArg or shellEntry) end
-        if shellRefresh and not builtNow then return pcall(shellRefresh, entryArg or shellEntry) end
+        if current and current ~= LazyRefresh and not builtNow then return current(entryArg or shellEntry) end
+        if shellRefresh and not builtNow then return shellRefresh(entryArg or shellEntry) end
     end
-    local proxy = setmetatable({}, { __index = builder })
-    function proxy:CollapsibleSection(id, title, height, defaultOpen)
-        shellBody = builder:CollapsibleSection(id, title, height, defaultOpen)
-        shellEntry = shellBody and shellBody._msuf2CollapsibleEntry
-        if shellEntry and type(spec.prepareShell) == "function" then
-            local refresh = spec.prepareShell(ctx, shellBody, unit, spec)
-            if type(refresh) == "function" then shellRefresh = refresh end
-        end
-        if not shellEntry or shellEntry.open then return shellBody end
+    if shellEntry and type(spec.prepareShell) == "function" then
+        local refresh = spec.prepareShell(ctx, shellBody, unit, spec)
+        if type(refresh) == "function" then shellRefresh = refresh end
+    end
+    if not shellEntry or shellEntry.open then
+        BuildContent()
+    else
         shellEntry._msuf2RefreshState = LazyRefresh
-        error(LAZY_SECTION_ABORT, 0)
     end
-    local refreshStart = ctx and ctx.refreshers and #ctx.refreshers or 0
-    local ok, err = pcall(spec.build, ctx, proxy, unit, spec)
-    if ok then RefreshNewControls(refreshStart) end
-    if ok or err == LAZY_SECTION_ABORT then return true end
-    error(err)
+    return true
 end
 function UnitPage.BuildSectionLazy(ctx, builder, unit, spec)
     if type(spec) ~= "table" or type(spec.build) ~= "function" then return false end

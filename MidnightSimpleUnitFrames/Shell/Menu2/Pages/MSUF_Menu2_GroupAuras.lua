@@ -4,8 +4,8 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
 -- Menu2 Group Auras page.
--- Builds party/raid aura lane controls and group aura backend toggles. Auras3/group runtime
--- own aura scanning, filtering, and icon updates after these settings change.
+-- Builds party/raid aura lane controls. Auras3 refreshes native 12.1 container layout
+-- after these settings change; Blizzard owns live filtering, assignment, and icon updates.
 local W = M.Widgets
 local GP = M.GroupPage or {}
 local floor = math.floor

@@ -269,12 +269,14 @@ local FlushRangeSettle
 local function SettleFlushOnUpdate(self)
   if self then
     self:SetScript("OnUpdate", nil)
+    self:SetOnUpdateMode("Disabled")
   end
   FlushRangeSettle()
 end
 
 local function QueueRangeSettleNextFrame()
   if settleDriver and settleDriver.SetScript then
+    settleDriver:SetOnUpdateMode("RunOnce")
     settleDriver:SetScript("OnUpdate", SettleFlushOnUpdate)
     return true
   end
@@ -369,11 +371,7 @@ local function QueueRangeSettle(delay)
     FlushRangeSettle()
     return
   end
-  if C_Timer and C_Timer.After then
-    C_Timer.After(delay, FlushRangeSettle)
-  else
-    FlushRangeSettle()
-  end
+  C_Timer.After(delay, FlushRangeSettle)
 end
 
 local settleDriverRegistered
@@ -695,7 +693,7 @@ RemoveOfflineDelayFrame = function(frame)
 end
 
 local function QueueOfflineDelayFrame(frame, delay)
-  if not (frame and C_Timer and C_Timer.After) then
+  if not frame then
     return
   end
   local now = GetTime and GetTime() or 0
@@ -751,9 +749,6 @@ local function OfflineDelayTimerCallback()
 end
 
 ScheduleOfflineDelayTimer = function(when)
-  if not (C_Timer and C_Timer.After) then
-    return
-  end
   if offlineDelayTimerActive and offlineDelayTimerAt and offlineDelayTimerAt <= when then
     return
   end
@@ -769,7 +764,7 @@ end
 
 local function OfflineHideReady(frame)
   local delay = frame and frame._msufGFOfflineDelayValue or 0
-  if delay <= 0 or not (C_Timer and C_Timer.After) then
+  if delay <= 0 then
     return true
   end
   local unit = frame and frame.unit

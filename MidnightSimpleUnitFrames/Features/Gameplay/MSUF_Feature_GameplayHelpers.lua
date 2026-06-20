@@ -95,16 +95,14 @@ local function MSUF_Gameplay_CheckpointHistory(label, source)
     local h = _G.MSUF2
     local checkpoint = h and h.CheckpointHistory
     if type(checkpoint) ~= "function" then return false end
-    local ok, result = pcall(checkpoint, label or "Gameplay position", source or "gameplay:position")
-    return ok and result or false
+    return checkpoint(label or "Gameplay position", source or "gameplay:position") or false
 end
 
 local function MSUF_Gameplay_BeginHistory(frame, label, source)
     local h = _G.MSUF2
     local begin = h and h.BeginHistoryTransaction
     if not (frame and type(begin) == "function") then return false end
-    local ok, started = pcall(begin, label or "Gameplay position", source or "gameplay:position")
-    if ok and started then
+    if begin(label or "Gameplay position", source or "gameplay:position") then
         frame._msufGameplayHistoryTransaction = true
         return true
     end
@@ -117,8 +115,7 @@ local function MSUF_Gameplay_CommitHistory(frame)
     local h = _G.MSUF2
     local commit = h and h.CommitHistoryTransaction
     if type(commit) ~= "function" then return false end
-    local ok, result = pcall(commit)
-    return ok and result or false
+    return commit() or false
 end
 
 local function MSUF_Gameplay_SelectNudgeFrame(frame, selected)

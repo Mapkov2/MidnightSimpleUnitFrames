@@ -107,8 +107,7 @@ end
 M.Format = M.Format or function(text, ...)
     local translated = M.Tr(text)
     if select("#", ...) == 0 then return translated end
-    local ok, value = pcall(string.format, translated, ...)
-    return ok and value or translated
+    return string.format(translated, ...)
 end
 local function SetColor(tex, c)
     if tex and c then tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
@@ -149,18 +148,16 @@ local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preser
         if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
     end
     if tex.SetGradientAlpha then
-        -- Retail/Era clients expose slightly different gradient APIs; try the richer alpha API
-        -- first, then fall back without failing page construction.
-        local ok = pcall(tex.SetGradientAlpha, tex, orientation,
+        tex:SetGradientAlpha(orientation,
             fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1,
             toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1)
-        if ok then return true end
+        return true
     end
     if tex.SetGradient and _G.CreateColor then
-        local ok = pcall(tex.SetGradient, tex, orientation,
+        tex:SetGradient(orientation,
             _G.CreateColor(fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1),
             _G.CreateColor(toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1))
-        if ok then return true end
+        return true
     end
     if tex.SetVertexColor then
         tex:SetVertexColor(
@@ -199,12 +196,12 @@ function T.StyleFontString(fs, color, bump)
     if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0.70) end
     if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
     if fs.GetFont and fs.SetFont then
-        local ok, font, size, flags = pcall(fs.GetFont, fs)
-        if ok and font and size then
+        local font, size, flags = fs:GetFont()
+        if font and size then
             if not fs._msuf2FontOriginal then fs._msuf2FontOriginal = { font = font, size = size, flags = flags } end
             local orig = fs._msuf2FontOriginal
             local nextSize = math.max(8, (tonumber(orig.size) or size) + (tonumber(bump) or T.fontBump or 0))
-            pcall(fs.SetFont, fs, orig.font or font, nextSize, orig.flags or flags or "")
+            fs:SetFont(orig.font or font, nextSize, orig.flags or flags or "")
         end
     end
     return fs
@@ -398,7 +395,7 @@ function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
     if anim.SetFromAlpha then anim:SetFromAlpha(fromAlpha or 0) end
     if anim.SetToAlpha then anim:SetToAlpha(toAlpha or 1) end
     if anim.SetDuration then anim:SetDuration(ClampMotionDuration(duration, T.motion.standard)) end
-    if anim.SetSmoothing then pcall(anim.SetSmoothing, anim, smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN")) end
+    if anim.SetSmoothing then anim:SetSmoothing(smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN")) end
     group:SetScript("OnFinished", function()
         if frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
         if type(onFinished) == "function" then onFinished(frame) end
@@ -430,17 +427,17 @@ function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleT
     if ok and alpha.SetToAlpha then alpha:SetToAlpha(toAlpha or 1) end
     if ok and alpha.SetDuration then alpha:SetDuration(dur) end
     if ok and alpha.SetOrder then alpha:SetOrder(1) end
-    if ok and alpha.SetSmoothing then pcall(alpha.SetSmoothing, alpha, smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN")) end
+    if ok and alpha.SetSmoothing then alpha:SetSmoothing(smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN")) end
     if ok and scale.SetScaleFrom and scale.SetScaleTo then
-        ok = pcall(scale.SetScaleFrom, scale, scaleFrom or 1, scaleFrom or 1)
-        ok = ok and pcall(scale.SetScaleTo, scale, scaleTo or 1, scaleTo or 1)
+        scale:SetScaleFrom(scaleFrom or 1, scaleFrom or 1)
+        scale:SetScaleTo(scaleTo or 1, scaleTo or 1)
     else
         ok = false
     end
     if ok and scale.SetDuration then scale:SetDuration(dur) end
     if ok and scale.SetOrder then scale:SetOrder(1) end
-    if ok and scale.SetSmoothing then pcall(scale.SetSmoothing, scale, smoothing or "OUT") end
-    if ok and scale.SetOrigin then pcall(scale.SetOrigin, scale, origin or "CENTER", 0, 0) end
+    if ok and scale.SetSmoothing then scale:SetSmoothing(smoothing or "OUT") end
+    if ok and scale.SetOrigin then scale:SetOrigin(origin or "CENTER", 0, 0) end
     if not ok then
         if group.Stop then group:Stop() end
         return T.PlayAlpha(frame, fromAlpha, toAlpha, dur, onFinished, smoothing)
@@ -955,7 +952,7 @@ function T.StyleCheckmark(checkButton)
     if not checkButton then return end
     local UI = MSUF and MSUF.UI
     local styleText = (_G and _G.MSUF_StyleToggleText) or (MSUF and MSUF.MSUF_StyleToggleText) or (UI and UI.StyleToggleText)
-    if type(styleText) == "function" then pcall(styleText, checkButton) end
+    if type(styleText) == "function" then styleText(checkButton) end
     local function HideQuietCheckboxTexture(texture)
         if not texture then return end
         if texture.SetAlpha then texture:SetAlpha(0) end
@@ -981,7 +978,7 @@ function T.StyleCheckmark(checkButton)
     end
     local function ApplyCheckTexture()
         local oldStyle = (_G and _G.MSUF_StyleCheckmark) or (MSUF and MSUF.MSUF_StyleCheckmark) or (UI and UI.StyleCheckmark)
-        if type(oldStyle) == "function" then pcall(oldStyle, checkButton) end
+        if type(oldStyle) == "function" then oldStyle(checkButton) end
         HideQuietCheckboxNative()
         local check = checkButton.GetCheckedTexture and checkButton:GetCheckedTexture()
         if not check and checkButton.GetName and checkButton:GetName() then check = _G[checkButton:GetName() .. "Check"] end
@@ -1101,8 +1098,8 @@ function T.SkinEditBox(editBox)
         PaintEditBox(self, false)
         if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill then self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1) end
     end)
-    pcall(editBox.HookScript, editBox, "OnEnable", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
-    pcall(editBox.HookScript, editBox, "OnDisable", function(self) PaintEditBox(self, false) end)
+    editBox:HookScript("OnEnable", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
+    editBox:HookScript("OnDisable", function(self) PaintEditBox(self, false) end)
     editBox:HookScript("OnShow", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
     PaintEditBox(editBox, false)
     return editBox

@@ -71,7 +71,7 @@ local function RequestRefreshForBox(box, reason)
         local queuedRefresh = Preview.Refresh
         if type(queuedRefresh) == "function" and box:IsShown() and (not box.IsVisible or box:IsVisible()) then queuedRefresh(box, refreshReason) end
     end
-    if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
+    C_Timer.After(0, run)
 end
 function Preview.RequestRefresh(reason)
     RequestRefreshForBox(Preview.active, reason)
@@ -98,8 +98,7 @@ MSUF_UpdateCastbarVisuals MSUF_ApplyCastbarUnitAndSync MSUF_SyncCastbarPositionP
 MSUF_UFCore_RefreshSettingsCache MSUF_RefreshAllIdentityColors MSUF_RefreshAllPowerTextColors MSUF_RefreshAllFrames MSUF_RefreshAllUnitAlphas MSUF_RequestAlphaRefresh
 MSUF_ClassPower_Refresh MSUF_ApplyPowerBarEmbedLayout MSUF_ApplyPowerBarEmbedLayout_All MSUF_ApplyPowerBarEmbedLayout_ForUnitKey MSUF_RefreshRaidMarkerFrames
 MSUF_RefreshLeaderIconFrames MSUF_RefreshLevelIndicatorFrames MSUF_RefreshEliteIconFrames MSUF_RequestStatusTextRefresh MSUF_RequestStatusCombatIndicatorRefresh
-MSUF_RequestStatusRestingIndicatorRefresh MSUF_RequestStatusIncomingResIndicatorRefresh MSUF_SyncAuras3PositionPopup MSUF_Auras3_RefreshUnit MSUF_Auras3_RefreshAll
-MSUF_Auras3_UpdateUnitAnchor MSUF_Auras3_RefreshEditPreview
+MSUF_RequestStatusRestingIndicatorRefresh MSUF_RequestStatusIncomingResIndicatorRefresh MSUF_SyncAuras3PositionPopup
 ]]
 local wrappedNames = {}
 local wrappers = {}

@@ -37,11 +37,8 @@ Debug.PrintGFHover = Debug.PrintGFHover or function(message, ...)
     if Debug.gfHover ~= true then return end
     local prefix = "|cff7aa2f7MSUF GFDBG|r "
     if select("#", ...) > 0 then
-        local ok, formatted = pcall(string.format, message, ...)
-        if ok then
-            print(prefix .. formatted)
-            return
-        end
+        print(prefix .. string.format(message, ...))
+        return
     end
     print(prefix .. tostring(message))
 end
@@ -140,9 +137,7 @@ end
 
 local function MSUF_SafeGetKeyboardPropagation(frame)
     if not (frame and frame.GetPropagateKeyboardInput) then return nil end
-    local ok, value = pcall(frame.GetPropagateKeyboardInput, frame)
-    if not ok then return nil end
-    return value
+    return frame:GetPropagateKeyboardInput()
 end
 
 --- Diagnostic command for stuck movement/keybind reports. It only prints state;
@@ -831,20 +826,19 @@ do
     local SetBlizzardEditModeFromMSUF = _G.MSUF_SetBlizzardEditModeFromMSUF
     if type(SetBlizzardEditModeFromMSUF) ~= "function" then
         SetBlizzardEditModeFromMSUF = function(active)
-        if InCombatLockdown and InCombatLockdown() then
-             return
-        end
-        MSUF_Chat_RunEnsureDB()
-        if MSUF_DB and MSUF_DB.general and MSUF_DB.general.linkEditModes == false then
-             return
-        end
-        local emf = _G.EditModeManagerFrame
-        if not emf then return end
-        if active then
-            if not _G.MSUF_BlizzEditModeStartedByMSUF then
-                PublishCompat("MSUF_BlizzEditModeStartedByMSUF", true)
+            if InCombatLockdown and InCombatLockdown() then
+                return
             end
-            local ok = pcall(function()
+            MSUF_Chat_RunEnsureDB()
+            if MSUF_DB and MSUF_DB.general and MSUF_DB.general.linkEditModes == false then
+                return
+            end
+            local emf = _G.EditModeManagerFrame
+            if not emf then return end
+            if active then
+                if not _G.MSUF_BlizzEditModeStartedByMSUF then
+                    PublishCompat("MSUF_BlizzEditModeStartedByMSUF", true)
+                end
                 if type(securecallfunction) == "function" and type(_G.ShowUIPanel) == "function" then
                     securecallfunction(_G.ShowUIPanel, emf) --- this will show the edit mode panel and enter edit mode
                 elseif emf.Show then
@@ -852,14 +846,9 @@ do
                 elseif emf.EnterEditMode then
                     emf:EnterEditMode()
                 end
-             end)
-            if not ok then
+            else
+                if not _G.MSUF_BlizzEditModeStartedByMSUF then return end
                 PublishCompat("MSUF_BlizzEditModeStartedByMSUF", nil)
-            end
-        else
-            if not _G.MSUF_BlizzEditModeStartedByMSUF then return end
-            PublishCompat("MSUF_BlizzEditModeStartedByMSUF", nil)
-            pcall(function()
                 if type(securecallfunction) == "function" and type(emf.ExitEditMode) == "function" then
                     securecallfunction(emf.ExitEditMode, emf)
                 elseif emf.ExitEditMode then
@@ -870,9 +859,8 @@ do
                 elseif emf.Hide and emf.IsShown and emf:IsShown() then
                     emf:Hide()
                 end
-             end)
+            end
         end
-     end
     end
     PublishCompat("MSUF_SetBlizzardEditModeFromMSUF", SetBlizzardEditModeFromMSUF)
 end
@@ -920,11 +908,7 @@ do
             end
         end
 
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, OpenSection)
-        else
-            OpenSection()
-        end
+        C_Timer.After(0, OpenSection)
     end
 
     local function MSUF_Tooltip_OpenMiscSettings()
@@ -1210,13 +1194,9 @@ do
             p:StopMovingOrSizing()
             p:SetMovable(false)
             MSUF_Tooltip_SavePosition(p)
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0.05, function()
-                    if self then self._msufTooltipSuppressClick = nil end
-                end)
-            else
-                self._msufTooltipSuppressClick = nil
-            end
+            C_Timer.After(0.05, function()
+                if self then self._msufTooltipSuppressClick = nil end
+            end)
         end)
 
         dh:SetScript("OnMouseDown", function(self, button)

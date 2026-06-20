@@ -91,18 +91,16 @@ end
 
 MSUF.RegisterThirdPartyAnchors = RegisterBCDMAnchors
 
-local watcher = CreateFrame and CreateFrame("Frame")
-if watcher then
-    watcher:RegisterEvent("PLAYER_LOGIN")
-    watcher:RegisterEvent("ADDON_LOADED")
-    watcher:SetScript("OnEvent", function(self, event, addon)
-        if event == "ADDON_LOADED" and addon ~= "BetterCooldownManager" then
-            return
-        end
-        if RegisterBCDMAnchors(event == "ADDON_LOADED") then
-            self:UnregisterEvent("PLAYER_LOGIN")
-            self:UnregisterEvent("ADDON_LOADED")
-            self:SetScript("OnEvent", nil)
-        end
-    end)
-end
+local watcher = CreateFrame("Frame")
+watcher:RegisterEvent("PLAYER_LOGIN")
+watcher:RegisterEvent("ADDON_LOADED")
+watcher:SetScript("OnEvent", function(self, event, addon)
+    if event == "ADDON_LOADED" and addon ~= "BetterCooldownManager" then
+        return
+    end
+    if RegisterBCDMAnchors(event == "ADDON_LOADED") then
+        self:UnregisterEvent("PLAYER_LOGIN")
+        self:UnregisterEvent("ADDON_LOADED")
+        self:SetScript("OnEvent", nil)
+    end
+end)

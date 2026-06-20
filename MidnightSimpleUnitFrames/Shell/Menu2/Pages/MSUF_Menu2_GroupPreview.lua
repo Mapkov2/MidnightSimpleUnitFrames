@@ -52,7 +52,7 @@ local function RequestPreviewRefresh(box, reason)
     if box.RequestRefresh then
         box:RequestRefresh(reason or "GROUP_PREVIEW_PAGE")
     elseif box.IsShown and box:IsShown() then
-        pcall(box.Refresh, box)
+        box:Refresh()
     end
 end
 local function RegisterNativePreview(box, ctx)

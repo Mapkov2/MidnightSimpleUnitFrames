@@ -20,7 +20,18 @@ local max = math.max
 local min = math.min
 
 local function Tr(text)
-    return M.Tr and M.Tr(text) or tostring(text or "")
+    -- Assistant output stays English-only even when the surrounding Menu2 locale changes.
+    return tostring(text or "")
+end
+
+local function SetAssistantText(region, text)
+    if not region then return end
+    text = Tr(text)
+    if type(region._msuf2RawSetText) == "function" then
+        region._msuf2RawSetText(region, text)
+    elseif type(region.SetText) == "function" then
+        region:SetText(text)
+    end
 end
 
 local function Trim(text)
@@ -40,10 +51,6 @@ local function IsUUFImportString(value)
     return type(value) == "string" and value:match("^%s*!UUF_") ~= nil
 end
 
-local function UUFBestEffortConfirmText()
-    return "This is an UnhaltedUnitFrames profile. MSUF will translate it as a best-effort import. Auras are not imported, and unsupported UUF-only settings may not map 1:1. Type 'yes', 'do it', or 'mach das' to import anyway, or 'cancel'."
-end
-
 local function SetRegionShown(region, shown)
     if not region then return end
     shown = shown and true or false
@@ -57,16 +64,40 @@ local function SetRegionShown(region, shown)
 end
 
 local function Font(parent, template, text, color, bump)
-    if T.Font then return T.Font(parent, template, Tr(text), color, bump) end
+    if T.Font then
+        local fs = T.Font(parent, template, Tr(text), color, bump)
+        SetAssistantText(fs, text)
+        return fs
+    end
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
-    fs:SetText(Tr(text))
+    SetAssistantText(fs, text)
     if color and fs.SetTextColor then fs:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
     return fs
 end
 
 local function AddTooltip(frame, title, body)
-    if M.AddTooltip then
-        M.AddTooltip(frame, title, body, { hook = true, titleAsLine = true })
+    if not (frame and frame.HookScript) then return frame end
+    frame:HookScript("OnEnter", function(self)
+        if not _G.GameTooltip then return end
+        _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if title and title ~= "" then _G.GameTooltip:AddLine(Tr(title), 1, 1, 1, true) end
+        if body and body ~= "" then _G.GameTooltip:AddLine(Tr(body), 0.80, 0.86, 1.00, true) end
+        _G.GameTooltip:Show()
+    end)
+    frame:HookScript("OnLeave", function()
+        if _G.GameTooltip then _G.GameTooltip:Hide() end
+    end)
+    if frame._msuf2LabelHit and frame._msuf2LabelHit ~= frame and frame._msuf2LabelHit.HookScript then
+        frame._msuf2LabelHit:HookScript("OnEnter", function(self)
+            if not _G.GameTooltip then return end
+            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            if title and title ~= "" then _G.GameTooltip:AddLine(Tr(title), 1, 1, 1, true) end
+            if body and body ~= "" then _G.GameTooltip:AddLine(Tr(body), 0.80, 0.86, 1.00, true) end
+            _G.GameTooltip:Show()
+        end)
+        frame._msuf2LabelHit:HookScript("OnLeave", function()
+            if _G.GameTooltip then _G.GameTooltip:Hide() end
+        end)
     end
     return frame
 end
@@ -74,7 +105,11 @@ end
 local function Button(parent, text, width, height, role)
     local btn = T.Button and T.Button(parent, Tr(text), width, height) or CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     btn:SetSize(width or 80, height or 24)
-    if btn.SetText then btn:SetText(Tr(text)) end
+    if btn._msuf2Label then
+        SetAssistantText(btn._msuf2Label, text)
+    elseif btn.SetText then
+        btn:SetText(Tr(text))
+    end
     if role == "primary" and T.SkinPrimaryButton then T.SkinPrimaryButton(btn) end
     if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
     return btn
@@ -122,8 +157,6 @@ local function ScheduleBusyPulse(ui)
     if not (ui and A.IsBusy and A.IsBusy()) then return end
     if InCombat() then return end
     if ui._msufAssistantBusyPulse then return end
-    if not (_G.C_Timer and type(_G.C_Timer.After) == "function") then return end
-
     ui._msufAssistantBusyPulse = true
     local function Pulse()
         if not (A.IsBusy and A.IsBusy()) or A.dashboardUI ~= ui then
@@ -136,7 +169,7 @@ local function ScheduleBusyPulse(ui)
         end
         ui._msufAssistantBusyPhase = ((tonumber(ui._msufAssistantBusyPhase) or 1) % 4) + 1
         if ui._msufAssistantBusyText and ui._msufAssistantBusyText.SetText then
-            ui._msufAssistantBusyText:SetText(BusyText(ui))
+            SetAssistantText(ui._msufAssistantBusyText, BusyText(ui))
         elseif type(A.RequestRefreshUI) == "function" then
             A.RequestRefreshUI("assistant.busy.pulse")
         elseif type(A.RefreshUI) == "function" then
@@ -172,7 +205,7 @@ local function RenderHistory(ui)
         row.text:SetWidth(width - 12)
         row.text:SetJustifyH("LEFT")
         if row.text.SetWordWrap then row.text:SetWordWrap(true) end
-        row.text:SetText(Tr("Examples: hide player name, move target castbar down, copy player layout to target, export current profile."))
+        SetAssistantText(row.text, "Examples: what can you do, hide player name, move target cast bar down, copy player layout to target, export current profile.")
         y = y - 90
     else
         for i = 1, #history do
@@ -189,7 +222,7 @@ local function RenderHistory(ui)
             row.role:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -4)
             row.role:SetWidth(78)
             row.role:SetJustifyH("LEFT")
-            row.role:SetText(item.role == "user" and Tr("You") or Tr("MSUF"))
+            SetAssistantText(row.role, item.role == "user" and "You" or "MSUF")
 
             row.text = row.text or Font(row, "GameFontHighlightSmall", "", T.colors and T.colors.text or { 1, 1, 1, 1 })
             row.text:ClearAllPoints()
@@ -199,7 +232,7 @@ local function RenderHistory(ui)
             if row.text.SetWordWrap then row.text:SetWordWrap(true) end
             local c = MessageColor(item.role, item.status)
             if row.text.SetTextColor then row.text:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
-            row.text:SetText(tostring(item.text or ""))
+            SetAssistantText(row.text, item.text)
 
             local h = max(30, floor((row.text.GetStringHeight and row.text:GetStringHeight() or 20) + 12))
             row:SetHeight(h)
@@ -220,7 +253,7 @@ local function RenderHistory(ui)
         row.role:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -4)
         row.role:SetWidth(78)
         row.role:SetJustifyH("LEFT")
-        row.role:SetText(Tr("MSUF"))
+        SetAssistantText(row.role, "MSUF")
 
         row.text = row.text or Font(row, "GameFontHighlightSmall", "", T.colors and T.colors.text or { 1, 1, 1, 1 })
         row.text:ClearAllPoints()
@@ -230,7 +263,7 @@ local function RenderHistory(ui)
         if row.text.SetWordWrap then row.text:SetWordWrap(true) end
         local c = MessageColor("assistant", "queued")
         if row.text.SetTextColor then row.text:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
-        row.text:SetText(BusyText(ui))
+        SetAssistantText(row.text, BusyText(ui))
         ui._msufAssistantBusyText = row.text
 
         local h = max(30, floor((row.text.GetStringHeight and row.text:GetStringHeight() or 20) + 12))
@@ -247,8 +280,12 @@ local function RenderHistory(ui)
 end
 
 local function SetButtonText(btn, text)
-    if btn and btn._msuf2Label then btn._msuf2Label:SetText(Tr(text)) end
-    if btn and btn.SetText then btn:SetText(Tr(text)) end
+    if not btn then return end
+    if btn._msuf2Label then
+        SetAssistantText(btn._msuf2Label, text)
+    elseif btn.SetText then
+        btn:SetText(Tr(text))
+    end
 end
 
 local function SetControlEnabled(control, enabled)
@@ -287,9 +324,9 @@ local function RenderLargeTextPanel(ui)
     panel:Show()
     if ui.scroll then ui.scroll:Hide() end
 
-    panel.title:SetText(Tr(spec.title or "Assistant"))
-    panel.help:SetText(Tr(spec.help or ""))
-    panel.status:SetText(Tr(spec.status or ""))
+    SetAssistantText(panel.title, spec.title or "Assistant")
+    SetAssistantText(panel.help, spec.help or "")
+    SetAssistantText(panel.status, spec.status or "")
 
     local kind = spec.kind or "export"
     local text = tostring(spec.text or "")
@@ -309,12 +346,12 @@ local function RenderLargeTextPanel(ui)
         panel.primary:SetScript("OnClick", function()
             local value = Trim(panel.box:GetText() or "")
             if value == "" then
-                panel.status:SetText(Tr("Paste an MSUF profile string first."))
+                SetAssistantText(panel.status, "Paste an MSUF profile string first.")
                 return
             end
             local action = A.Registry and A.Registry:GetAction("import_profile_string")
             if not action then
-                panel.status:SetText(Tr("Profile import is not available right now."))
+                SetAssistantText(panel.status, "Open Profiles first, then send the profile import text.")
                 return
             end
             A.AddHistory("user", "Profile import pasted from Assistant panel.", "submitted")
@@ -324,13 +361,13 @@ local function RenderLargeTextPanel(ui)
                 action = action,
                 args = { value = value, uufBestEffortAccepted = isUUF == true },
                 confirmRequired = true,
-                confirmText = isUUF and UUFBestEffortConfirmText() or nil,
+                confirmText = isUUF and A.UUFBestEffortConfirmText() or nil,
                 label = isUUF and "Import UnhaltedUnitFrames profile string" or "Import profile string",
                 summary = "Imports profile data into the active profile.",
             })
             if result and result.text then A.AddHistory("assistant", result.text, result.status, result.summary) end
-            A.largeTextPanel.status = "Confirmation requested in the conversation. Type yes, do it, or mach das to apply; cancel stops it."
-            panel.status:SetText(Tr(A.largeTextPanel.status))
+            A.largeTextPanel.status = "Confirmation is waiting in the conversation. Yes, do it, or apply will continue; cancel stops it."
+            SetAssistantText(panel.status, A.largeTextPanel.status)
             if type(A.RequestRefreshUI) == "function" then
                 A.RequestRefreshUI("assistant.profile_import.confirm")
             elseif type(A.RefreshUI) == "function" then
@@ -343,7 +380,7 @@ local function RenderLargeTextPanel(ui)
         panel.primary:SetScript("OnClick", function()
             panel.box:SetFocus()
             if panel.box.HighlightText then panel.box:HighlightText() end
-            panel.status:SetText(Tr("Selected. Press Ctrl+C to copy."))
+            SetAssistantText(panel.status, "Selected. Press Ctrl+C to copy.")
         end)
     end
 end
@@ -371,8 +408,8 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     title:SetWidth(cardW - 44)
     title:SetJustifyH("LEFT")
 
-    local subtitle = W.Text and W.Text(parent, "This is the main place to change settings or find the right page.", 22, -76, cardW - 44, T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
-        or Font(parent, "GameFontDisableSmall", "This is the main place to change settings or find the right page.", T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
+    local subtitle = W.Text and W.Text(parent, "Ask for the MSUF thing you want to change or find.", 22, -76, cardW - 44, T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
+        or Font(parent, "GameFontDisableSmall", "Ask for the MSUF thing you want to change or find.", T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
     if subtitle.SetPoint and not subtitle:GetPoint() then subtitle:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -76) end
 
     local inputH = 30
@@ -432,10 +469,10 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     end)
 
     local chipPrompts = {
+        { "What can I ask", "what can you do" },
         { "Move frames", "start edit mode" },
-        { "Make text bigger", "make text bigger" },
-        { "Import safely", "import profile safely" },
         { "Find auras", "where do I change auras" },
+        { "Import safely", "import profile safely" },
     }
     local chipX = 22
     local chips = {}
@@ -467,7 +504,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     placeholder:SetJustifyH("LEFT")
     if placeholder.SetWordWrap then placeholder:SetWordWrap(false) end
     if T.StyleFontString then T.StyleFontString(placeholder, T.colors and T.colors.dim or { 0.45, 0.50, 0.60, 1 }, 0) end
-    placeholder:SetText(Tr("make raid frames wider"))
+    SetAssistantText(placeholder, "what can you do")
     input._msufAssistantPlaceholder = placeholder
 
     local send = Button(parent, "Send", sendW, inputH, "primary")
@@ -505,7 +542,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
         if type(A.SubmitDeferred) == "function" then
             A.SubmitDeferred(query)
         elseif type(A.AddHistory) == "function" then
-            A.AddHistory("assistant", "Assistant runtime is not ready yet. Reopen the dashboard and try again.", "failed")
+            A.AddHistory("assistant", "The Assistant is still preparing. Open the Dashboard first to finish loading it.", "failed")
             if type(A.RequestRefreshUI) == "function" then
                 A.RequestRefreshUI("assistant.not_ready")
             elseif type(A.RefreshUI) == "function" then

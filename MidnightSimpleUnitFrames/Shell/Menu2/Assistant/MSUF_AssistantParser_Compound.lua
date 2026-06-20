@@ -170,8 +170,8 @@ local function MergePlans(plans)
     return {
         kind = "changes",
         changes = changes,
-        label = "Combined Assistant setting change",
-        summary = "Combined natural-language setting changes.",
+        label = "Combined Assistant option changes",
+        summary = "Applies several requested option changes.",
         bulkSafe = true,
     }
 end
@@ -334,8 +334,8 @@ local function ScopeLabels(tail)
         { label = "focus", terms = { "focus", "fokus" } },
         { label = "pet", terms = { "pet", "begleiter" } },
         { label = "boss", terms = { "boss" } },
-        { label = "targettarget", terms = { "targettarget", "target of target", "tot", "ziel des ziels" } },
-        { label = "focustarget", terms = { "focustarget", "focus target", "fokus ziel" } },
+        { label = "target of target", terms = { "targettarget", "target of target", "tot", "ziel des ziels" } },
+        { label = "focus target", terms = { "focustarget", "focus target", "fokus ziel" } },
     }
     for i = 1, #explicitUnits do
         if ContainsAny(tail, explicitUnits[i].terms) then add(explicitUnits[i].label) end
@@ -1076,8 +1076,8 @@ local function FastKeepBoolean(text)
     return {
         kind = "changes",
         changes = changes,
-        label = "Combined Assistant setting change",
-        summary = "Combined natural-language setting changes.",
+        label = "Combined Assistant option changes",
+        summary = "Applies several requested option changes.",
         bulkSafe = true,
         compoundForce = true,
     }
@@ -1098,8 +1098,8 @@ local function FastBooleanScopeList(text)
     return {
         kind = "changes",
         changes = changes,
-        label = "Combined Assistant setting change",
-        summary = "Combined natural-language setting changes.",
+        label = "Combined Assistant option changes",
+        summary = "Applies several requested option changes.",
         bulkSafe = true,
         compoundForce = true,
     }
@@ -1176,8 +1176,8 @@ local function FastNumericBooleanChain(text)
     return {
         kind = "changes",
         changes = changes,
-        label = "Combined Assistant setting change",
-        summary = "Combined natural-language setting changes.",
+        label = "Combined Assistant option changes",
+        summary = "Applies several requested option changes.",
         bulkSafe = true,
         compoundForce = true,
     }
@@ -1260,8 +1260,8 @@ local function FastAttributeListTrailingNumbers(text)
     return {
         kind = "changes",
         changes = changes,
-        label = "Combined Assistant setting change",
-        summary = "Combined natural-language setting changes.",
+        label = "Combined Assistant option changes",
+        summary = "Applies several requested option changes.",
         bulkSafe = true,
         compoundForce = true,
     }
@@ -2421,8 +2421,8 @@ ScopedColorSegmentPlan = function(segment)
     return {
         kind = "changes",
         changes = changes,
-        label = "Combined Assistant setting change",
-        summary = "Combined natural-language setting changes.",
+        label = "Combined Assistant option changes",
+        summary = "Applies several requested option changes.",
         bulkSafe = true,
     }
 end
@@ -2468,8 +2468,8 @@ local function FastScopedBorderColorChain(text)
     return {
         kind = "changes",
         changes = changes,
-        label = "Combined Assistant setting change",
-        summary = "Combined natural-language setting changes.",
+        label = "Combined Assistant option changes",
+        summary = "Applies several requested option changes.",
         bulkSafe = true,
         compoundForce = true,
     }

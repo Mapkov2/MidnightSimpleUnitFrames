@@ -283,8 +283,8 @@ local function ShortValue(value)
     value = tonumber(value) or 0
     local abbrev = _G.AbbreviateShortNumber or _G.AbbreviateLargeNumbers
     if type(abbrev) == "function" then
-        local ok, text = pcall(abbrev, value)
-        if ok and text ~= nil then return text end
+        local text = abbrev(value)
+        if text ~= nil then return text end
     end
     local absValue = value < 0 and -value or value
     local sign = value < 0 and "-" or ""
@@ -332,11 +332,7 @@ local function ApplyFont(region, size)
     local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
     if not fontPath or fontPath == "" then fontPath = "Fonts\\FRIZQT__.TTF" end
     if not fontFlags or fontFlags == "" then fontFlags = "OUTLINE" end
-    if type(_G.MSUF_SetFontSafe) == "function" then
-        _G.MSUF_SetFontSafe(region, fontPath, size, fontFlags)
-    else
-        pcall(region.SetFont, region, fontPath, size, fontFlags)
-    end
+    region:SetFont(fontPath, size, fontFlags)
     if region.SetShadowColor then region:SetShadowColor(0, 0, 0, 1) end
     if region.SetShadowOffset then region:SetShadowOffset(1, -1) end
 end
@@ -529,6 +525,7 @@ local function StopHandleDrag(handle, button, skipApply)
     handle._dragging = nil
     if preview and preview.dragFrame and preview.dragFrame._handle == handle then
         preview.dragFrame:SetScript("OnUpdate", nil)
+        preview.dragFrame:SetOnUpdateMode("Disabled")
         preview.dragFrame._handle = nil
         preview.dragFrame:Hide()
     end
@@ -581,6 +578,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         self._cursorX, self._cursorY = GetCursorPosition()
         self._historyTx = BeginHistory(self)
         preview.dragFrame._handle = self
+        preview.dragFrame:SetOnUpdateMode("RunWhenVisible")
         preview.dragFrame:SetScript("OnUpdate", preview.dragUpdate)
         preview.dragFrame:Show()
     end)
@@ -1319,6 +1317,7 @@ local function StopAnimationDriver(preview)
     local driver = preview and preview.animationDriver
     if not driver then return end
     driver:SetScript("OnUpdate", nil)
+    driver:SetOnUpdateMode("Disabled")
     driver:Hide()
 end
 local function AnimationOnUpdate(driver, elapsed)
@@ -1341,6 +1340,7 @@ local function StartAnimationDriver(preview)
         preview.animationDriver._preview = preview
     end
     preview.animationDriver._preview = preview
+    preview.animationDriver:SetOnUpdateMode("RunWhenVisible")
     preview.animationDriver:SetScript("OnUpdate", AnimationOnUpdate)
     preview.animationDriver:Show()
 end
@@ -1530,6 +1530,7 @@ function Preview.Create(ctx, builder)
         if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
         if box.dragFrame then
             box.dragFrame:SetScript("OnUpdate", nil)
+            box.dragFrame:SetOnUpdateMode("Disabled")
             box.dragFrame._handle = nil
             box.dragFrame:Hide()
         end

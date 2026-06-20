@@ -125,12 +125,7 @@ function dirtyQueueMethods:Schedule()
     sched(self.scheduleKey, self.flushCallback)
     return
   end
-  local timer = _G.C_Timer
-  if timer and type(timer.After) == "function" then
-    timer.After(0, self.flushCallback)
-    return
-  end
-  self.flushCallback()
+  _G.C_Timer.After(0, self.flushCallback)
 end
 
 function dirtyQueueMethods:Mark(frame, bits, deferSchedule)
@@ -497,10 +492,11 @@ local pendingFocusTargetVisual = false
 local pendingFocusTargetAuras = false
 local pendingIdentityFlush = false
 local RuntimeFlushOnUpdate
-local dependentUnitTicker
+local dependentUnitTimerQueued = false
 local dependentUnitTickerBudget = 0
 local dependentUnitPollTick = 0
 local DependentIdentityGuidChanged
+local DependentUnitTimerCallback
 local DEPENDENT_UNIT_TICK_SECONDS = 0.5
 local DEPENDENT_UNIT_TICK_BUDGET = 3
 local DEPENDENT_UNIT_TICK_REASON = "MSUF_UNIT_IDENTITY_SOFT_FAST"
@@ -623,6 +619,7 @@ end
 RuntimeFlushOnUpdate = function(self)
   if self then
     self:SetScript("OnUpdate", nil)
+    self:SetOnUpdateMode("Disabled")
   end
   if pendingIdentityFlush then
     RunPendingIdentityFlush()
@@ -630,6 +627,7 @@ RuntimeFlushOnUpdate = function(self)
   if pendingIdentityFlush then
     local driver = UF.driver
     if driver and driver.SetScript then
+      driver:SetOnUpdateMode("RunOnce")
       driver:SetScript("OnUpdate", RuntimeFlushOnUpdate)
     end
   end
@@ -640,6 +638,7 @@ local function QueueIdentityFlush()
   local driver = UF.driver
   if driver and driver.SetScript then
     pendingIdentityFlush = true
+    driver:SetOnUpdateMode("RunOnce")
     driver:SetScript("OnUpdate", RuntimeFlushOnUpdate)
     return true
   end
@@ -757,11 +756,14 @@ local function DependentUnitPollFrame(unit)
 end
 
 local function StopDependentUnitTicker()
-  if dependentUnitTicker and dependentUnitTicker.Cancel then
-    dependentUnitTicker:Cancel()
-  end
-  dependentUnitTicker = nil
+  dependentUnitTimerQueued = false
   dependentUnitTickerBudget = 0
+end
+
+local function ScheduleDependentUnitTicker()
+  if dependentUnitTimerQueued then return end
+  dependentUnitTimerQueued = true
+  C_Timer.After(DEPENDENT_UNIT_TICK_SECONDS, DependentUnitTimerCallback)
 end
 
 -- oUF's eventless-unit model: ToT/FoT have no unit events, so a shared poll
@@ -771,6 +773,7 @@ end
 -- change or every 4th tick, bars-only otherwise).
 local function RunDependentUnitTicker()
   local active = false
+  local visible = false
   dependentUnitPollTick = dependentUnitPollTick + 1
   local fullTick = dependentUnitPollTick % 4 == 0
   for i = 1, #DEPENDENT_UNITS do
@@ -779,6 +782,7 @@ local function RunDependentUnitTicker()
     if frame then
       active = true
       if frame:IsShown() then
+        visible = true
         if DependentIdentityGuidChanged(frame, unit) or fullTick then
           RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_SOFT")
         else
@@ -789,7 +793,23 @@ local function RunDependentUnitTicker()
   end
   if not active then
     StopDependentUnitTicker()
+  elseif visible then
+    dependentUnitTickerBudget = 0
+    ScheduleDependentUnitTicker()
+  else
+    dependentUnitTickerBudget = dependentUnitTickerBudget + 1
+    if dependentUnitTickerBudget >= DEPENDENT_UNIT_TICK_BUDGET then
+      StopDependentUnitTicker()
+    else
+      ScheduleDependentUnitTicker()
+    end
   end
+end
+
+DependentUnitTimerCallback = function()
+  if dependentUnitTimerQueued ~= true then return end
+  dependentUnitTimerQueued = false
+  RunDependentUnitTicker()
 end
 
 local function EnsureDependentUnitTicker()
@@ -808,10 +828,25 @@ local function EnsureDependentUnitTicker()
     StopDependentUnitTicker()
     return
   end
-  if dependentUnitTicker then return end
-  if not (C_Timer and C_Timer.NewTicker) then return end
   dependentUnitPollTick = 0
-  dependentUnitTicker = C_Timer.NewTicker(DEPENDENT_UNIT_TICK_SECONDS, RunDependentUnitTicker)
+  ScheduleDependentUnitTicker()
+end
+
+local function ConfigTouchesDependentUnits(unit)
+  if unit == nil or unit == "*" then
+    return true
+  end
+  local units = UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
+  if not units then
+    return false
+  end
+  for i = 1, #units do
+    local resolved = units[i]
+    if resolved == "targettarget" or resolved == "focustarget" then
+      return true
+    end
+  end
+  return false
 end
 
 local function ScheduleTargetVisual(skipAuras, frame)
@@ -870,7 +905,6 @@ end
 -- MSUF re-ran 11 ToT elements per click. Secret GUIDs disable the skip
 -- (stored as false so the next plain compare always mismatches).
 DependentIdentityGuidChanged = function(frame, unit)
-  if not UnitGUID then return true end
   local guid = UnitGUID(unit)
   if issecretvalue(guid) == true then
     frame._msufIdentityGUID = false
@@ -936,11 +970,7 @@ end
 local function RunIdentityAurasCoalesced(frame, unit)
   if not (frame and frame._msufUpdateAuras) then return end
   local slot = auraCoalesce[unit]
-  if not slot or not (C_Timer and C_Timer.After) then
-    if slot then
-      slot.ranAt = timePrecise()
-      slot.dirty = false
-    end
+  if not slot then
     frame._msufA3IdentityRebuildPending = nil
     RunImmediateIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
     return
@@ -995,7 +1025,7 @@ local function DriverOnEvent(self, event, unit)
   end
 end
 
-if CreateFrame and not UF.driver then
+if not UF.driver then
   UF.driver = CreateFrame("Frame")
   UF.driver:SetScript("OnEvent", DriverOnEvent)
   UF.driver:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -1003,11 +1033,7 @@ if CreateFrame and not UF.driver then
   UF.driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
   UF.driver:RegisterEvent("UNIT_PET")
   UF.driver:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-  if UF.driver.RegisterUnitEvent then
-    UF.driver:RegisterUnitEvent("UNIT_TARGET", "target", "focus")
-  else
-    UF.driver:RegisterEvent("UNIT_TARGET")
-  end
+  UF.driver:RegisterUnitEvent("UNIT_TARGET", "target", "focus")
 end
 
 local REFRESH_ELEMENT_GROUPS = Metadata.refreshElementGroups or EMPTY_METADATA_SET
@@ -1034,6 +1060,9 @@ function UF.NotifyConfigChanged(unit, applyNow, forceUpdate)
   end
   if applyNow ~= false then
     UF.Apply(unit)
+    if ConfigTouchesDependentUnits(unit) then
+      EnsureDependentUnitTicker()
+    end
   elseif forceUpdate ~= false then
     if UF.Config then
       if unit and UF.Config.RefreshUnit then
@@ -1048,6 +1077,9 @@ function UF.NotifyConfigChanged(unit, applyNow, forceUpdate)
       end
     end
     UF.ForceUpdate(unit)
+    if ConfigTouchesDependentUnits(unit) then
+      EnsureDependentUnitTicker()
+    end
   end
   return true
 end

@@ -210,17 +210,17 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         conf.offsetX = x
         conf.offsetY = y
     end
-    local function ForceFreshGroupAuraCustomRenderer(conf)
+    local function ForceFreshGroupAuraNativeRenderer(conf)
         if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
         local auras = conf.auras
-        auras.renderer = "CUSTOM"
+        auras.renderer = "NATIVE_12_1"
         if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
         local types = auras.blizzardTypes
-        types.buffs = false
-        types.debuffs = false
-        types.dispels = false
-        types.externals = false
-        types.privateAuras = false
+        types.buffs = true
+        types.debuffs = true
+        types.dispels = true
+        types.externals = true
+        types.privateAuras = true
         if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
         if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
         if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
@@ -257,9 +257,9 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     ForceFreshUnitframeScreenPosition(db.pet, -260, 135)
     ForceFreshUnitframeScreenPosition(db.targettarget or db.tot, 260, 225)
     ForceFreshUnitframeScreenPosition(db.boss, MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y)
-    ForceFreshGroupAuraCustomRenderer(db.gf_party)
-    ForceFreshGroupAuraCustomRenderer(db.gf_raid)
-    ForceFreshGroupAuraCustomRenderer(db.gf_mythicraid)
+    ForceFreshGroupAuraNativeRenderer(db.gf_party)
+    ForceFreshGroupAuraNativeRenderer(db.gf_raid)
+    ForceFreshGroupAuraNativeRenderer(db.gf_mythicraid)
     db.bars = db.bars or {}
     db.bars.showAltMana = false
     db.bars.roundedFramesEnabled = false
@@ -1037,7 +1037,7 @@ end
     if g.bossTargetOutlineMode == nil then
         g.bossTargetOutlineMode = g.bossTargetHighlightEnabled and 1 or 0
     end
-    --- UnitFrame dispel overlay (health-bar tint driven by the Dispel Border aura scanner)
+    --- UnitFrame dispel overlay (health-bar tint driven by native 12.1 aura visual state)
     if g.dispelOutlineMode == nil then g.dispelOutlineMode = 1 end
     if g.dispelBorderTrigger == nil then g.dispelBorderTrigger = "BY_ME" end
     if g.unitDispelOverlayEnabled == nil then g.unitDispelOverlayEnabled = false end
@@ -1472,16 +1472,16 @@ end
     local function _MSUF_IsValidStatusbarKey(key)
         if type(key) ~= "string" or key == "" then  return false end
         if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
-            local ok, tex = pcall(_G.MSUF_ResolveStatusbarTextureKey, key)
-            if ok and type(tex) == "string" and tex ~= "" then
+            local tex = _G.MSUF_ResolveStatusbarTextureKey(key)
+            if type(tex) == "string" and tex ~= "" then
                  return true
             end
              return false
         end
         local LSM = (MSUF and MSUF.LSM) or _G.MSUF_LSM
         if LSM and type(LSM.Fetch) == "function" then
-            local ok, tex = pcall(LSM.Fetch, LSM, "statusbar", key, true)
-            if ok and type(tex) == "string" and tex ~= "" then
+            local tex = LSM:Fetch("statusbar", key, true)
+            if type(tex) == "string" and tex ~= "" then
                  return true
             end
              return false

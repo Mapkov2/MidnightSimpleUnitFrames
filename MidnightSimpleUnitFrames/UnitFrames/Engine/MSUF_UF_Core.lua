@@ -575,7 +575,6 @@ local UNIT_EVENT_HAS_UNIT = {
   UNIT_PHASE = true,
   UNIT_CTR_OPTIONS = true,
   UNIT_OTHER_PARTY_CHANGED = true,
-  UNIT_AURA = true,
 }
 
 --- Event routing model:
@@ -678,7 +677,7 @@ local function CentralDriverRegistration(event)
   end
   local sourceUnits = BuildCentralUnitSources(event)
   local count = #sourceUnits
-  if count > 0 and eventDriver and eventDriver.RegisterUnitEvent then
+  if count > 0 and eventDriver then
     local signature = "unit"
     for i = 1, count do
       signature = signature .. ":" .. sourceUnits[i]
@@ -993,11 +992,7 @@ RefreshEventDriverRegistration = function(event)
         eventDriver:UnregisterEvent(event)
       end
       if units and unitCount > 0 then
-        local ok = pcall(eventDriver.RegisterUnitEvent, eventDriver, event, unpack(units, 1, unitCount))
-        if not ok then
-          eventDriver:RegisterEvent(event)
-          signature = "event"
-        end
+        eventDriver:RegisterUnitEvent(event, unpack(units, 1, unitCount))
       else
         eventDriver:RegisterEvent(event)
       end
@@ -1014,9 +1009,6 @@ ApplyFrameUnitFilter = function(frame, event, unit)
   if not (frame and event and unit and UNIT_EVENT_HAS_UNIT[event]) then
     return
   end
-  if not frame.RegisterUnitEvent then
-    return
-  end
   local registered = frame._msufFrameUnitEvents
   if not registered then
     registered = {}
@@ -1029,10 +1021,7 @@ ApplyFrameUnitFilter = function(frame, event, unit)
     frame:UnregisterEvent(event)
     registered[event] = nil
   end
-  local ok = pcall(frame.RegisterUnitEvent, frame, event, unit)
-  if not ok then
-    return false
-  end
+  frame:RegisterUnitEvent(event, unit)
   registered[event] = unit
   return true
 end

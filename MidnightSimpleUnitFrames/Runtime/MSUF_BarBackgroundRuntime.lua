@@ -27,8 +27,8 @@ do
     local function _CompatCharKey()
         local fn = _G.MSUF_GetCharKey
         if type(fn) == "function" then
-            local ok, key = pcall(fn)
-            if ok and type(key) == "string" and key ~= "" then return key end
+            local key = fn()
+            if type(key) == "string" and key ~= "" then return key end
         end
         local name = _G.UnitName and _G.UnitName("player")
         local realm = _G.GetRealmName and _G.GetRealmName()
@@ -78,7 +78,6 @@ do
     end
 
     local function EnsureLegacyCooldownViewerAnchor()
-        if not (_G.CreateFrame and _G.UIParent) then return nil end
         local anchor = _G[LEGACY_CDM_ANCHOR]
         if not anchor then
             anchor = _G.CreateFrame("Frame", LEGACY_CDM_ANCHOR, _G.UIParent)

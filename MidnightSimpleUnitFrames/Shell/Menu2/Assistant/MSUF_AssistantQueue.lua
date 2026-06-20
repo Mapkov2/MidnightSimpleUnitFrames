@@ -63,11 +63,11 @@ function A.FlushQueue()
     local function RunOne(index)
         if _G.InCombatLockdown and _G.InCombatLockdown() then
             RequeueFrom(index)
-            return false, { text = "Combat started again. Remaining queued Assistant changes will wait.", status = "queued" }
+            return false, { text = "Combat started again. I will keep the remaining Assistant changes queued.", status = "queued" }
         end
         local result = A.ExecutePlan and A.ExecutePlan(plans[index], { fromQueue = true, confirmed = true })
         if type(result) == "table" and result.text and A.AddHistory then
-            A.AddHistory("assistant", "Applied queued change: " .. tostring(result.text), result.status or "applied", result.summary)
+            A.AddHistory("assistant", "Applied after combat: " .. tostring(result.text), result.status or "applied", result.summary)
         end
         return true
     end

@@ -21,7 +21,7 @@ local function ApplyBossPagePreviewFallback(active, reason)
         _G.MSUF_ApplyBossUnitframePreviewState(active and true or false, reason or "MSUF2_BOSS_PAGE")
         return
     end
-    if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then pcall(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) end
+    if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncBossUnitframePreviewWithUnitEdit() end
 end
 local lastBossPreviewActive
 local lastBossPreviewFn
@@ -39,12 +39,8 @@ local function SyncBossPagePreviewForKey(key, force)
     lastBossPreviewActive = active
     lastBossPreviewFn = fn
     if type(fn) == "function" then
-        local ok = pcall(fn, active and true or false)
-        if ok then
-            if active and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" and not BossPagePreviewInCombat() then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_BOSS_PAGE_CORE") end
-        else
-            ApplyBossPagePreviewFallback(active and true or false, "MSUF2_BOSS_PAGE_FALLBACK")
-        end
+        fn(active and true or false)
+        if active and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" and not BossPagePreviewInCombat() then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_BOSS_PAGE_CORE") end
         return
     end
     ApplyBossPagePreviewFallback(active and true or false, "MSUF2_BOSS_PAGE_FALLBACK")

@@ -351,9 +351,6 @@ function Render.Install(box, ctx, deps)
         local showText = LayerOn("text")
         local fontPath = (runtimeSpec and runtimeSpec.font) or (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
         local fontFlags = (runtimeSpec and runtimeSpec.fontFlags) or (gf and gf.ResolveFontFlags and gf.ResolveFontFlags(kind)) or "OUTLINE"
-        local db = _G.MSUF_DB
-        local fontKey = db and db.general and db.general.fontKey
-        local safeSetFont = _G.MSUF_SetFontSafe
         local fontShadow = true
         local fontShadowAlpha = tonumber(runtimeSpec and runtimeSpec.fontShadowAlpha) or 1
         local fontShadowX = tonumber(runtimeSpec and runtimeSpec.fontShadowX) or 1
@@ -365,11 +362,7 @@ function Render.Install(box, ctx, deps)
         end
         local function SetPreviewFont(fs, size)
             if not fs then return end
-            if type(safeSetFont) == "function" then
-                safeSetFont(fs, fontPath, size, fontFlags, fontKey)
-            else
-                fs:SetFont(fontPath, size, fontFlags)
-            end
+            fs:SetFont(fontPath, size, fontFlags)
             if fs.SetShadowOffset then
                 if fontShadow then
                     if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, fontShadowAlpha or 1) end

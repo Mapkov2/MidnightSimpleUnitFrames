@@ -13,14 +13,14 @@ if not LSM or type(LSM.Register) ~= "function" then return end
 local base = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 
 --- Fonts (bundled in Media/Fonts). Keep these paths in sync with the shipped files.
-pcall(LSM.Register, LSM, "font", "EXPRESSWAY",                 base .. "Fonts\\Expressway Regular.ttf")
-pcall(LSM.Register, LSM, "font", "Expressway Regular (MSUF)",  base .. "Fonts\\Expressway Regular.ttf")
-pcall(LSM.Register, LSM, "font", "Expressway (MSUF)",          base .. "Fonts\\Expressway Regular.ttf")
-pcall(LSM.Register, LSM, "font", "EXPRESSWAY_BOLD",            base .. "Fonts\\Expressway Bold.ttf")
-pcall(LSM.Register, LSM, "font", "Expressway Bold (MSUF)",     base .. "Fonts\\Expressway Bold.ttf")
-pcall(LSM.Register, LSM, "font", "EXPRESSWAY_SEMIBOLD",        base .. "Fonts\\Expressway SemiBold.ttf")
-pcall(LSM.Register, LSM, "font", "EXPRESSWAY_EXTRABOLD",       base .. "Fonts\\Expressway ExtraBold.ttf")
-pcall(LSM.Register, LSM, "font", "EXPRESSWAY_CONDENSED_LIGHT", base .. "Fonts\\Expressway Condensed Light.otf")
+LSM:Register("font", "EXPRESSWAY",                 base .. "Fonts\\Expressway Regular.ttf")
+LSM:Register("font", "Expressway Regular (MSUF)",  base .. "Fonts\\Expressway Regular.ttf")
+LSM:Register("font", "Expressway (MSUF)",          base .. "Fonts\\Expressway Regular.ttf")
+LSM:Register("font", "EXPRESSWAY_BOLD",            base .. "Fonts\\Expressway Bold.ttf")
+LSM:Register("font", "Expressway Bold (MSUF)",     base .. "Fonts\\Expressway Bold.ttf")
+LSM:Register("font", "EXPRESSWAY_SEMIBOLD",        base .. "Fonts\\Expressway SemiBold.ttf")
+LSM:Register("font", "EXPRESSWAY_EXTRABOLD",       base .. "Fonts\\Expressway ExtraBold.ttf")
+LSM:Register("font", "EXPRESSWAY_CONDENSED_LIGHT", base .. "Fonts\\Expressway Condensed Light.otf")
 
 --- Bar / Castbar textures (Media/Bars)
 --- IMPORTANT: We intentionally do NOT register the old "MSUF Flat"/"MSUF Smooth" entries anymore,
@@ -30,7 +30,7 @@ pcall(LSM.Register, LSM, "font", "EXPRESSWAY_CONDENSED_LIGHT", base .. "Fonts\\E
 local baseBars = base .. "Bars\\"
 
 local function Reg(name, file)
-    pcall(LSM.Register, LSM, "statusbar", name, baseBars .. file)
+    LSM:Register("statusbar", name, baseBars .. file)
 end
 
 Reg("MSUF Charcoal",   "Charcoal.tga")
@@ -84,21 +84,19 @@ local function TryMigrate()
 
     if changed then
         if type(_G.MSUF_UpdateAllBarTextures) == "function" then
-            pcall(_G.MSUF_UpdateAllBarTextures)
+            _G.MSUF_UpdateAllBarTextures()
         end
         if type(_G.MSUF_UpdateCastbarTextures_Immediate) == "function" then
-            pcall(_G.MSUF_UpdateCastbarTextures_Immediate)
+            _G.MSUF_UpdateCastbarTextures_Immediate()
         elseif type(_G.MSUF_UpdateCastbarTextures) == "function" then
-            pcall(_G.MSUF_UpdateCastbarTextures)
+            _G.MSUF_UpdateCastbarTextures()
         end
     end
     return changed
 end
 
-if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-    _G.C_Timer.After(0, function()
-        if not TryMigrate() then
-            _G.C_Timer.After(2, TryMigrate)
-        end
-    end)
-end
+_G.C_Timer.After(0, function()
+    if not TryMigrate() then
+        _G.C_Timer.After(2, TryMigrate)
+    end
+end)

@@ -246,7 +246,7 @@ local function BuildGameplay(ctx)
         })
     end
     previewBtn:SetScript("OnClick", function()
-        if MSUF and type(MSUF.MSUF_PlayerTotems_TogglePreview) == "function" then pcall(MSUF.MSUF_PlayerTotems_TogglePreview) end
+        if MSUF and type(MSUF.MSUF_PlayerTotems_TogglePreview) == "function" then MSUF.MSUF_PlayerTotems_TogglePreview() end
     end)
     resetTotemBtn:SetScript("OnClick", function()
         local g = Gameplay()

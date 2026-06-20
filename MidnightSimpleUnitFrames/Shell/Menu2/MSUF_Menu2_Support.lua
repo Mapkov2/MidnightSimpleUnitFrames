@@ -64,7 +64,7 @@ end
 M.IsConfigCombatLocked = M.IsConfigCombatLocked or IsConfigCombatLocked
 local function EnsureGeneral()
     local ensureDB = _G.MSUF_EnsureDB
-    if type(ensureDB) == "function" then pcall(ensureDB) end
+    if type(ensureDB) == "function" then ensureDB() end
     ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
     _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
     return _G.MSUF_DB.general
@@ -513,8 +513,14 @@ function M.NormalizePowerMode(mode)
     return mode
 end
 function M.ApplyGameplay()
-    if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then return pcall(MSUF.MSUF_RequestGameplayApply) end
-    if MSUF and type(MSUF.MSUF_ApplyGameplayVisuals) == "function" then return pcall(MSUF.MSUF_ApplyGameplayVisuals) end
+    if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
+        local result = MSUF.MSUF_RequestGameplayApply()
+        return result ~= false
+    end
+    if MSUF and type(MSUF.MSUF_ApplyGameplayVisuals) == "function" then
+        local result = MSUF.MSUF_ApplyGameplayVisuals()
+        return result ~= false
+    end
     return false
 end
 local function GameplayDB()
@@ -529,12 +535,10 @@ local function GameplayDB()
 end
 function M.GetGameplayPlayerSpecID()
     if MSUF and type(MSUF.MSUF_GetPlayerSpecID) == "function" then
-        local ok, value = pcall(MSUF.MSUF_GetPlayerSpecID)
-        if ok then return value end
+        return MSUF.MSUF_GetPlayerSpecID()
     end
     if type(_G.MSUF_GetPlayerSpecID) == "function" then
-        local ok, value = pcall(_G.MSUF_GetPlayerSpecID)
-        if ok then return value end
+        return _G.MSUF_GetPlayerSpecID()
     end
     if GetSpecialization and GetSpecializationInfo then
         local spec = GetSpecialization()
@@ -553,8 +557,8 @@ function M.ResolveGameplaySpellInput(value)
     local asNumber = tonumber(text)
     if asNumber then return floor(asNumber + 0.5) end
     if C_Spell and type(C_Spell.GetSpellInfo) == "function" then
-        local ok, info = pcall(C_Spell.GetSpellInfo, text)
-        if ok and type(info) == "table" and info.spellID then return tonumber(info.spellID) or 0 end
+        local info = C_Spell.GetSpellInfo(text)
+        if type(info) == "table" and info.spellID then return tonumber(info.spellID) or 0 end
     end
     if text ~= "" and GetSpellInfo then
         local _, _, _, _, _, _, spellID = GetSpellInfo(text)
@@ -777,8 +781,7 @@ function M.IsMSUFEditModeActive(includeBlizzard)
         or rawget(_G, "MSUF_IsEditModeActive")
         or (includeBlizzard and rawget(_G, "IsEditModeActive") or nil)
     if type(fn) == "function" then
-        local ok, active = pcall(fn)
-        if ok then return active and true or false end
+        return fn() and true or false
     end
     return rawget(_G, "MSUF_UnitEditModeActive") == true
         or rawget(_G, "MSUF_EDITMODE_ACTIVE") == true
@@ -786,8 +789,7 @@ end
 function M.IsEditModeCombatLocked(includeBlizzard)
     local fn = includeBlizzard and rawget(_G, "IsEditModeCombatLocked") or nil
     if type(fn) == "function" then
-        local ok, locked = pcall(fn)
-        if ok then return locked and true or false end
+        return fn() and true or false
     end
     return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
 end
@@ -831,8 +833,8 @@ function M.SetMSUFEditModeActive(active, unitKey, opts)
     end
     local fn = rawget(_G, "MSUF_SetMSUFEditModeDirect") or rawget(_G, "MSUF_SetEditMode")
     if type(fn) == "function" then
-        local ok, result = pcall(fn, active, unitKey)
-        if not ok or result == false then return false, "helper_failed", before end
+        local result = fn(active, unitKey)
+        if result == false then return false, "helper_failed", before end
         RefreshEditModeSurfaces()
         local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
         if after.active == active then return true, active and "enabled" or "disabled", after end
@@ -857,8 +859,8 @@ function M.CancelMSUFEditMode(opts)
     if not before.active then return true, "already_disabled", before end
     local state = EditModeState()
     if not (state and type(state.CancelAll) == "function") then return false, "missing_cancel_helper", before end
-    local ok, result = pcall(state.CancelAll)
-    if not ok or result == false then return false, "helper_failed", before end
+    local result = state.CancelAll()
+    if result == false then return false, "helper_failed", before end
     RefreshEditModeSurfaces()
     local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
     if not after.active then return true, "canceled", after end
@@ -892,7 +894,7 @@ function M.WireEditModeButton(ctx, button, opts)
         local unit = type(opts.unit) == "function" and opts.unit() or opts.unit
         local nextActive = not active
         M.ToggleMSUFEditMode(unit, { includeBlizzard = opts.includeBlizzard, source = opts.source or "msuf2_menu" })
-        if opts.defer and C_Timer and C_Timer.After then C_Timer.After(0, Refresh) else Refresh() end
+        if opts.defer then C_Timer.After(0, Refresh) else Refresh() end
         if type(opts.afterClick) == "function" then opts.afterClick(nextActive, active) end
     end)
     M.TrackRefresh(ctx, Refresh)
@@ -1019,7 +1021,7 @@ local function EnsureCopyLinkPopup()
     ok:RegisterForClicks("LeftButtonUp")
     ok:SetScript("OnClick", function() frame:Hide() end)
     frame._msufOkButton = ok
-    if type(_G.MSUF_SkinButton) == "function" then pcall(_G.MSUF_SkinButton, ok) end
+    if type(_G.MSUF_SkinButton) == "function" then _G.MSUF_SkinButton(ok) end
     frame:SetScript("OnShow", function(self)
         if self._msufTitleFS then self._msufTitleFS:SetText(Tr(self._msufTitle or "Link")) end
         if self._msufEditBox then
@@ -1143,11 +1145,11 @@ local function ScheduleUnitframeReanchorAfterScale()
         if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
             local previous = _G.MSUF_ExternalAnchorForceReanchor
             ExportPublic("MSUF_ExternalAnchorForceReanchor", true)
-            pcall(_G.MSUF_ForceReanchorAllUnitFrames_Once, true)
+            _G.MSUF_ForceReanchorAllUnitFrames_Once(true)
             ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
         end
     end
-    if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, flush) else flush() end
+    _G.C_Timer.After(0, flush)
 end
 local EnsureScaleApplyAfterCombat
 local ResetGlobalUiScale
@@ -1162,9 +1164,10 @@ local function ApplyMsufScale(scale)
     end
     local frames = CollectMsufScaleFrames()
     for i = 1, #frames do
-        pcall(frames[i].SetScale, frames[i], scale)
+        frames[i]:SetScale(scale)
     end
-    if type(_G.MSUF_Auras3_RefreshEditPreview) == "function" then pcall(_G.MSUF_Auras3_RefreshEditPreview) end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.RefreshEditPreview) == "function" then a3.RefreshEditPreview() end
     ScheduleUnitframeReanchorAfterScale()
 end
 local function GetCurrentGlobalUiScale()
@@ -1228,16 +1231,13 @@ end
 local function GetBlizzardCVarScale()
     local useUiScale
     if type(_G.GetCVarBool) == "function" then
-        local ok, value = pcall(_G.GetCVarBool, "useUiScale")
-        if ok then useUiScale = value end
+        useUiScale = _G.GetCVarBool("useUiScale")
     end
     if useUiScale == nil and type(_G.GetCVar) == "function" then
-        local ok, value = pcall(_G.GetCVar, "useUiScale")
-        if ok then useUiScale = tostring(value) == "1" end
+        useUiScale = tostring(_G.GetCVar("useUiScale")) == "1"
     end
     if useUiScale and type(_G.GetCVar) == "function" then
-        local ok, value = pcall(_G.GetCVar, "uiScale")
-        value = ok and tonumber(value) or nil
+        local value = tonumber(_G.GetCVar("uiScale"))
         if value and value > 0 then return Clamp(value, 0.3, 2.0) end
     end
     if type(_G.GetPhysicalScreenSize) == "function" then
@@ -1250,12 +1250,12 @@ local function GetBlizzardCVarScale()
 end
 local function RestoreBlizzardUiScaleOnce()
     if type(_G.UIParent_UpdateScale) == "function" then
-        local ok = pcall(_G.UIParent_UpdateScale)
-        if ok then return true end
+        _G.UIParent_UpdateScale()
+        return true
     end
     local scale = GetBlizzardCVarScale()
     if scale and _G.UIParent and _G.UIParent.SetScale then
-        pcall(_G.UIParent.SetScale, _G.UIParent, scale)
+        _G.UIParent:SetScale(scale)
         return true
     end
     return false
@@ -1263,11 +1263,9 @@ end
 local function RestoreBlizzardUiScale(silent)
     if BlockConfigCombatLocked(silent) then return false end
     RestoreBlizzardUiScaleOnce()
-    if _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, RestoreBlizzardUiScaleOnce)
-        _G.C_Timer.After(0.25, RestoreBlizzardUiScaleOnce)
-        _G.C_Timer.After(1.0, RestoreBlizzardUiScaleOnce)
-    end
+    _G.C_Timer.After(0, RestoreBlizzardUiScaleOnce)
+    _G.C_Timer.After(0.25, RestoreBlizzardUiScaleOnce)
+    _G.C_Timer.After(1.0, RestoreBlizzardUiScaleOnce)
     lastGlobalUiParentScale = nil
     if not silent then Print("Global UI scale restored to Blizzard settings.") end
     return true
@@ -1279,13 +1277,13 @@ local function WriteBlizzardUiScaleCVar(scale)
     local value = string.format("%.6f", scale)
     local ok = false
     if _G.C_CVar and type(_G.C_CVar.SetCVar) == "function" then
-        pcall(_G.C_CVar.SetCVar, "useUiScale", "1")
-        pcall(_G.C_CVar.SetCVar, "uiScale", value)
+        _G.C_CVar.SetCVar("useUiScale", "1")
+        _G.C_CVar.SetCVar("uiScale", value)
         ok = true
     end
     if type(_G.SetCVar) == "function" then
-        pcall(_G.SetCVar, "useUiScale", "1")
-        pcall(_G.SetCVar, "uiScale", value)
+        _G.SetCVar("useUiScale", "1")
+        _G.SetCVar("uiScale", value)
         ok = true
     end
     return ok
@@ -1304,8 +1302,8 @@ local function HandOffGlobalUiScaleToBlizzard(scale)
     if not scale or scale <= 0 then return false end
     scale = Clamp(scale, 0.3, 1.5)
     WriteBlizzardUiScaleCVar(scale)
-    if type(_G.UIParent_UpdateScale) == "function" then pcall(_G.UIParent_UpdateScale) end
-    if _G.UIParent and _G.UIParent.SetScale then pcall(_G.UIParent.SetScale, _G.UIParent, scale) end
+    if type(_G.UIParent_UpdateScale) == "function" then _G.UIParent_UpdateScale() end
+    if _G.UIParent and _G.UIParent.SetScale then _G.UIParent:SetScale(scale) end
     blizzardUiParentScale = scale
     lastGlobalUiParentScale = nil
     return true
@@ -1316,7 +1314,7 @@ local function EnforceUIParentScale(scale)
     scale = Clamp(scale, 0.3, 1.5)
     if not (_G.UIParent and _G.UIParent.SetScale) then return end
     local current = _G.UIParent.GetScale and tonumber(_G.UIParent:GetScale()) or 0
-    if abs((current or 0) - scale) > 0.001 then pcall(_G.UIParent.SetScale, _G.UIParent, scale) end
+    if abs((current or 0) - scale) > 0.001 then _G.UIParent:SetScale(scale) end
     lastGlobalUiParentScale = scale
 end
 local function SetGlobalUiScale(scale, silent)
@@ -1434,10 +1432,10 @@ local function ResetStandaloneWindowGeometry(frame, silent)
     if win then
         local scale = 1.0
         if _G.MSUF2 and type(_G.MSUF2.GetEffectiveMenuScale) == "function" then scale = _G.MSUF2.GetEffectiveMenuScale(1.0) end
-        if win.SetScale then pcall(win.SetScale, win, scale) end
-        if win.SetSize then pcall(win.SetSize, win, 900, 700) end
-        if win.ClearAllPoints then pcall(win.ClearAllPoints, win) end
-        if win.SetPoint then pcall(win.SetPoint, win, "CENTER", _G.UIParent, "CENTER", -60, 10) end
+        if win.SetScale then win:SetScale(scale) end
+        if win.SetSize then win:SetSize(900, 700) end
+        if win.ClearAllPoints then win:ClearAllPoints() end
+        if win.SetPoint then win:SetPoint("CENTER", _G.UIParent, "CENTER", -60, 10) end
     end
     if not silent then Print("MSUF menu size reset to default.") end
 end
@@ -1496,23 +1494,15 @@ local function QueueStartupScaleApply(applyGlobalCVar)
         startupScaleNeedsGlobalCVar = nil
         ApplySavedScaleState(needsGlobalCVar)
     end
-    if _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, flush)
-    else
-        flush()
-    end
+    _G.C_Timer.After(0, flush)
 end
-if _G.C_Timer and _G.C_Timer.After then QueueStartupScaleApply(true) end
-local startupScaleEvents = _G.CreateFrame and _G.CreateFrame("Frame")
-if startupScaleEvents then
-    startupScaleEvents:RegisterEvent("PLAYER_LOGIN")
-    startupScaleEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
-    startupScaleEvents:SetScript("OnEvent", function(self, event)
-        self:UnregisterAllEvents()
-        self:SetScript("OnEvent", nil)
-        QueueStartupScaleApply(event == "PLAYER_LOGIN")
-        UpdateGlobalScaleEvents()
-    end)
-else
+QueueStartupScaleApply(true)
+local startupScaleEvents = _G.CreateFrame("Frame")
+startupScaleEvents:RegisterEvent("PLAYER_LOGIN")
+startupScaleEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
+startupScaleEvents:SetScript("OnEvent", function(self, event)
+    self:UnregisterAllEvents()
+    self:SetScript("OnEvent", nil)
+    QueueStartupScaleApply(event == "PLAYER_LOGIN")
     UpdateGlobalScaleEvents()
-end
+end)

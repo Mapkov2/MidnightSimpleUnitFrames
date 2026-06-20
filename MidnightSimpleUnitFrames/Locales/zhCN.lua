@@ -991,7 +991,6 @@ local T = {
     ["Crosshair: color by melee range to target (green=in range, red=out)"] = "十字准星: 按近战范围到目标着色 (绿色=范围内, 红色=范围外)",
     ["Uses the spell selected below."] = "使用下方选择的法术.",
     ["|cffff8800No melee range spell selected — Crosshair will not work.|r"] = "|cffff8800没有选择近战范围法术 — 十字准星将无法工作.|r",
-    ["|cffff8800No melee range spell selected â€” Crosshair will not work.|r"] = "|cffff8800没有选择近战范围法术 — 十字准星将无法工作.|r",
     ["Crosshair thickness"] = "十字准星粗细",
     ["Crosshair size"] = "十字准星大小",
     ["Cooldown Manager"] = "冷却管理器",

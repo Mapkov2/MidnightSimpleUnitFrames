@@ -719,12 +719,7 @@ builders.PRESENTATION = function(E)
 
         local function ApplyClassPowerFont(region, fontPath, size, fontFlags)
             if not (region and region.SetFont) then return false end
-            local safeSet = _G.MSUF_SetFontSafe
-            if type(safeSet) == "function" then
-                return safeSet(region, fontPath, size, fontFlags) == true
-            end
-            local ok, applied = pcall(region.SetFont, region, fontPath, size, fontFlags)
-            return ok and applied ~= false
+            return region:SetFont(fontPath, size, fontFlags) ~= false
         end
 
         local rev = (_G.MSUF_FontPathSerial or 0) + fontSize * 1000003
@@ -887,10 +882,8 @@ builders.RUNTIME = function(env)
         elseif mode == CPK.MODE.AURA_SEGMENTED then
             if powerType == "MAELSTROM_WEAPON" then
                 maxP = 10
-                if C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications then
-                    local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
-                    if type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
-                end
+                local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
+                if type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6
             elseif powerType == "WHIRLWIND" then
@@ -982,7 +975,7 @@ builders.RUNTIME = function(env)
         if CP_ShouldUseLiteBindings() then
             local newSig = CP_ComputeStructuralSignature()
             if newSig ~= CP.structuralSig then
-                if useTimer and C_Timer and C_Timer.After then
+                if useTimer then
                     C_Timer.After(0.1, FullRefresh)
                 else
                     ThrottledFullRefresh()
@@ -1000,7 +993,7 @@ builders.RUNTIME = function(env)
             return
         end
 
-        if useTimer and C_Timer and C_Timer.After then
+        if useTimer then
             C_Timer.After(0.1, FullRefresh)
         else
             FullRefresh()
@@ -1022,9 +1015,10 @@ builders.RUNTIME = function(env)
         RunActiveUpdate(CP.powerType, CP.currentMax)
     end
 
-    --- Aura-backed resources share UNIT_AURA traffic with the rest of the addon.
-    --- Keep the branch narrow: segmented aura resources, timer bars, and stagger
-    --- each have a dedicated value updater.
+    --- Aura-backed class resources keep their own player-only UNIT_AURA traffic.
+    --- UnitFrame aura display is native AuraContainer-owned in 12.1 and does
+    --- not share this path. Keep the branch narrow: segmented aura resources,
+    --- timer bars, and stagger each have a dedicated value updater.
     local function OnAuraUpdate(unit)
         if CP.visible and CP.isAuraPower then
             RunActiveUpdate(CP.powerType, CP.currentMax)
