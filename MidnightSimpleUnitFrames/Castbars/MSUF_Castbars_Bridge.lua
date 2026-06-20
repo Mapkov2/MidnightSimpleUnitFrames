@@ -265,11 +265,7 @@ local function RunNextFrame(callback)
         return
     end
 
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, callback)
-    else
-        callback()
-    end
+    C_Timer.After(0, callback)
 end
 
 local CastbarsRunNextFrame = _G.MSUF_Castbars_RunNextFrame

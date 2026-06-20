@@ -12,3 +12,6 @@ tools/
 _local_workflows/
 MidnightSimpleUnitFrames/scripts/
 MidnightSimpleUnitFrames/docs/
+
+# Local standalone addon worktree; not part of the MSUF repo.
+/MidnightSimpleAuras/

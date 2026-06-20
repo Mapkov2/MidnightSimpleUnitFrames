@@ -1,0 +1,17 @@
+name: MSUF Static Checks
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua syntax checker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+      - name: Run static checks
+        run: python3 .github/scripts/msuf_static_checks.py

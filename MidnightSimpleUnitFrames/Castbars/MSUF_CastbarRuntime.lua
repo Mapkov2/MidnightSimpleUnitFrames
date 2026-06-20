@@ -358,6 +358,7 @@ function Runtime:Stop(frame, reasonOrOptions)
 
     if frame.SetScript then
         frame:SetScript("OnUpdate", nil)
+        frame:SetOnUpdateMode("Disabled")
     end
 
     if type(_G.MSUF_UnregisterCastbar) == "function" then

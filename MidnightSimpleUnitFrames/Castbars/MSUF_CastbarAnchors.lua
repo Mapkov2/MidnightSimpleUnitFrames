@@ -371,10 +371,8 @@ local function QueueWidthSourceSync()
     local runNext = _G.MSUF_Castbars_RunNextFrame
     if type(runNext) == "function" then
         runNext(flush)
-    elseif _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, flush)
     else
-        flush()
+        _G.C_Timer.After(0, flush)
     end
 end
 
@@ -451,7 +449,7 @@ local function WidthSourceRetryStep()
     end
 
     local delay = WIDTH_SOURCE_RETRY_DELAYS[widthSourceRetryIndex]
-    if delay and _G.C_Timer and _G.C_Timer.After then
+    if delay then
         _G.C_Timer.After(delay, WidthSourceRetryStep)
     else
         widthSourceRetryActive = false
@@ -459,7 +457,7 @@ local function WidthSourceRetryStep()
 end
 
 local function StartWidthSourceRetry()
-    if widthSourceRetryActive or not (_G.C_Timer and _G.C_Timer.After) then return end
+    if widthSourceRetryActive then return end
     if InCombat() then
         widthSourcePendingAfterCombat = true
         return
@@ -795,6 +793,7 @@ end
 local function HideCastbar(frame, preview)
     if frame then
         frame:SetScript("OnUpdate", nil)
+        frame:SetOnUpdateMode("Disabled")
         if frame.timeText and _G.MSUF_IsCastTimeEnabled(frame) then
             _G.MSUF_SetTextIfChanged(frame.timeText, "")
         end

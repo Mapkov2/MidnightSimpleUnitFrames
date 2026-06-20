@@ -137,7 +137,7 @@ local function ClampBossOffsets(general, config)
 end
 
 local function PulsePreview(unit)
-    if not (_G.MSUF_UnitEditModeActive and C_Timer and C_Timer.After) then
+    if not _G.MSUF_UnitEditModeActive then
         return
     end
 
@@ -304,9 +304,11 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             self._snapHH = (top - bottom) * 0.5 * frameScale / uiScale
         end
 
+        self:SetOnUpdateMode("RunWhenVisible")
         self:SetScript("OnUpdate", function(dragFrame)
             if not dragFrame.isDragging then
                 dragFrame:SetScript("OnUpdate", nil)
+                dragFrame:SetOnUpdateMode("Disabled")
                 return
             end
 
@@ -373,6 +375,7 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         if self.isDragging then
             self.isDragging = false
             self:SetScript("OnUpdate", nil)
+            self:SetOnUpdateMode("Disabled")
 
             local snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
             if snap and snap.HideGuides then
