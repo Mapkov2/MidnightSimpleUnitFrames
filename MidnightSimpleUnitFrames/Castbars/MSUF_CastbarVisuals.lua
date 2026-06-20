@@ -223,9 +223,7 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     local outline = DetailString(g, prefix, suffix .. "Outline", nil, "GLOBAL")
     local flags = ComposeFontFlags(outline, globalFlags)
     size = Clamp(size, 6, 128)
-    if type(_G.MSUF_SetFontSafe) == "function" then
-        _G.MSUF_SetFontSafe(fontString, fontPath, size, flags, fontKey or g.fontKey)
-    elseif fontString.SetFont then
+    if fontString.SetFont then
         fontString:SetFont(fontPath, size, flags)
     end
 
@@ -558,9 +556,7 @@ local function HookPlayerCastbarReanchor()
 end
 
 HookPlayerCastbarReanchor()
-if C_Timer and C_Timer.After then
-    C_Timer.After(0, HookPlayerCastbarReanchor)
-end
+C_Timer.After(0, HookPlayerCastbarReanchor)
 
 --- Refreshes one existing frame without touching cast state. This is used by the
 --- global visual refresh and by profile/style changes.

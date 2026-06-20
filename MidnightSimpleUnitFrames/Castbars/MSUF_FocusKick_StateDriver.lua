@@ -10,8 +10,6 @@ local G = _G
 
 G.MSUF_FocusKickUseEngineDriver = true
 
-local After = G.C_Timer and G.C_Timer.After or nil
-
 local FOCUS_CAST_EVENTS = {
     "UNIT_SPELLCAST_START",
     "UNIT_SPELLCAST_STOP",
@@ -146,12 +144,7 @@ local function QueueRefresh()
     end
 
     refreshQueued = true
-    if After then
-        After(0, FlushQueuedRefresh)
-    else
-        refreshQueued = false
-        Refresh()
-    end
+    G.C_Timer.After(0, FlushQueuedRefresh)
 end
 
 frame = CreateFrame("Frame")
@@ -170,8 +163,4 @@ end)
 
 G.MSUF_FocusKickDriver_ForceUpdate = QueueRefresh
 
-if After then
-    After(0.2, QueueRefresh)
-else
-    QueueRefresh()
-end
+G.C_Timer.After(0.2, QueueRefresh)

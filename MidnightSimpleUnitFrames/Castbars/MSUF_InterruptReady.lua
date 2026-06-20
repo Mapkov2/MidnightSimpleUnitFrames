@@ -39,7 +39,6 @@ local SPECIALIZATION_KEYS = {
 }
 
 local state = {}
-local cooldownTimer
 local cooldownTimerGeneration = 0
 local cooldownTimerEndTime
 
@@ -460,8 +459,8 @@ end
 --- When the interrupt is on cooldown, schedule one refresh near the expected
 --- ready time instead of polling every frame.
 local function ScheduleCooldownRefresh(remaining, remainingResolved)
-    if cooldownTimer and cooldownTimer.Cancel then
-        if remaining and remaining > 0.05 and cooldownTimerEndTime and TimerAPI and TimerAPI.NewTimer then
+    if cooldownTimerEndTime then
+        if remaining and remaining > 0.05 then
             local delay = math.min(remaining + 0.05, 90)
             local fireAt = Now() + delay
             local drift = fireAt - cooldownTimerEndTime
@@ -473,18 +472,16 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved)
                 return
             end
         end
-
-        cooldownTimer:Cancel()
+        cooldownTimerGeneration = cooldownTimerGeneration + 1
     end
 
-    cooldownTimer = nil
     cooldownTimerEndTime = nil
 
     if remaining == nil and not remainingResolved then
         remaining = InterruptRemaining()
     end
 
-    if not (remaining and remaining > 0.05 and TimerAPI and TimerAPI.NewTimer) then
+    if not (remaining and remaining > 0.05) then
         return
     end
 
@@ -493,9 +490,8 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved)
     local delay = math.min(remaining + 0.05, 90)
     cooldownTimerEndTime = Now() + delay
 
-    cooldownTimer = TimerAPI.NewTimer(delay, function()
+    TimerAPI.After(delay, function()
         if generation == cooldownTimerGeneration then
-            cooldownTimer = nil
             cooldownTimerEndTime = nil
             local remaining, resolved = RefreshAll()
             if resolved then

@@ -1,0 +1,11 @@
+# Lua/compiler artifacts
+luac.out
+*.luac
+
+# Local scratch output
+*.tmp
+*.bak
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
