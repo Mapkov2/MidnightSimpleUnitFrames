@@ -2,7 +2,8 @@
 --- Auras3 namespace and profile DB adapter.
 ---
 --- 6.0 keeps aura configuration, menu, edit-mode handles, previews, and the
---- UnitFrame backend split so gameplay aura deltas never enter menu/edit code.
+--- 12.1 native UnitFrame backend split so secure aura objects stay isolated
+--- from menu/edit code.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 
@@ -99,15 +100,7 @@ function A3.SetUnitFrameOwner(unit, frame, owns)
     end
 end
 
-function A3.UnitFrameOwnsUnitAura()
-    return false
-end
-
 function A3.RuntimeOwnsUnit()
-    return false
-end
-
-function A3.HandleUnitAura()
     return false
 end
 
@@ -167,15 +160,3 @@ CT.TouchButton = CT.TouchButton or NoopTrue
 CT.UnregisterButton = CT.UnregisterButton or NoopTrue
 CT.Invalidate = CT.Invalidate or NoopTrue
 CT.ForceRecolor = CT.ForceRecolor or NoopTrue
-
-ExportPublic("MSUF_A3_RequestUnit", A3.RequestUnit)
-ExportPublic("MSUF_A3_RefreshAll", A3.RefreshAll)
-ExportPublic("MSUF_A3_InvalidateCooldownTextCurve", function() return CT.Invalidate("unit") end)
-ExportPublic("MSUF_A3_ForceCooldownTextRecolor", function() return CT.ForceRecolor("unit") end)
-ExportPublic("MSUF_Auras3_ApplyFontsFromGlobal", _G.MSUF_Auras3_ApplyFontsFromGlobal or NoopTrue)
-ExportPublic("MSUF_Auras3_RefreshUnit", A3.RefreshUnit)
-ExportPublic("MSUF_Auras3_RefreshAll", A3.RefreshAll)
-ExportPublic("MSUF_Auras3_UpdateUnitAnchor", A3.UpdateUnitAnchor)
-ExportPublic("MSUF_Auras3_RefreshEditPreview", A3.RefreshEditPreview)
-ExportPublic("MSUF_A3_RefreshUnit", A3.RefreshUnit)
-ExportPublic("MSUF_A3_UpdateUnitAnchor", A3.UpdateUnitAnchor)

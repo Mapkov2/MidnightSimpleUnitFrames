@@ -1,13 +1,13 @@
 --- Auras3/MSUF_Auras3_EditMode.lua
 --- Cold-path edit mode preview and movement for the oUF-style Auras3 runtime.
 ---
---- This file intentionally does not hook UNIT_AURA and does not add per-aura
---- render callbacks. It owns only edit-mode fake previews, drag movement, and
---- config refresh bridges.
+--- This file intentionally does not own live aura objects and does not add
+--- per-aura render callbacks. It owns only edit-mode fake previews, drag
+--- movement, and config refresh bridges.
 ---
 --- Edit-mode state is visual and coldpath. Dragging writes layout offsets to
 --- the Auras3 DB through the same shape that Menu_Model uses, then asks runtime
---- frames to refresh. Do not add aura scanning or per-aura render decisions here.
+--- frames to refresh. Keep live aura payload handling inside the native runtime.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local ExportPublic = MSUF.ExportPublic or function(name, value)
@@ -553,7 +553,11 @@ local function ApplyDragDelta(self, dx, dy)
 end
 
 local function AuraGroupDragOnUpdate(me)
-    if not me._dragging then me:SetScript("OnUpdate", nil); return end
+    if not me._dragging then
+        me:SetScript("OnUpdate", nil)
+        me:SetOnUpdateMode("Disabled")
+        return
+    end
     local uiScale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
     local mx, my = GetCursorPosition()
     mx, my = mx / uiScale, my / uiScale
@@ -585,10 +589,7 @@ local function ApplyGlobalFont(fs, size)
     end
     fontPath = fontPath or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     fontFlags = fontFlags or "OUTLINE"
-    local fontKey = (_G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.fontKey) or "FRIZQT"
-    if type(_G.MSUF_SetFontSafe) == "function" then
-        _G.MSUF_SetFontSafe(fs, fontPath, size or 14, fontFlags, fontKey)
-    elseif fs.SetFont then
+    if fs.SetFont then
         fs:SetFont(fontPath, size or 14, fontFlags)
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
@@ -616,41 +617,6 @@ local function PlaceStackText(fs, owner, cfg)
         fs:SetPoint("TOPRIGHT", owner, "TOPRIGHT", cfg.stackX, cfg.stackY)
         fs:SetJustifyH("RIGHT")
         fs:SetJustifyV("TOP")
-    end
-end
-
-local function ApplyRuntimeButtonStyle(button, unit)
-    if not button then return end
-    local cfg = ReadTextConfig(unit)
-    local count = button.Count
-    if count then
-        ApplyGlobalFont(count, cfg.stackSize)
-        PlaceStackText(count, button, cfg)
-    end
-end
-
-local function PostCreateRuntimeButton(element, button)
-    ApplyRuntimeButtonStyle(button, element and element.unit)
-end
-
-local function StyleRuntimeLane(lane, unit)
-    if not lane then return end
-    lane.PostCreateButton = PostCreateRuntimeButton
-    local n = lane.createdButtons or #lane or 0
-    for i = 1, n do
-        ApplyRuntimeButtonStyle(lane[i], unit)
-    end
-end
-
-local function StyleRuntimeButtons(unit)
-    local frame = GetFrame(unit)
-    local element = frame and frame.Auras
-    if not element then return end
-
-    StyleRuntimeLane(element.Buffs, unit)
-    StyleRuntimeLane(element.Debuffs, unit)
-    if not element.Buffs and not element.Debuffs then
-        StyleRuntimeLane(element, unit)
     end
 end
 
@@ -811,6 +777,7 @@ local function CreateGroup(unit, kind)
         self._snapHW = (r - l) * 0.5
         self._snapHH = (t - b) * 0.5
 
+        self:SetOnUpdateMode("RunWhenVisible")
         self:SetScript("OnUpdate", AuraGroupDragOnUpdate)
     end)
 
@@ -818,6 +785,7 @@ local function CreateGroup(unit, kind)
         local moved = self._dragMoved == true
         self._dragging = false
         self:SetScript("OnUpdate", nil)
+        self:SetOnUpdateMode("Disabled")
         self._dragAuras = nil
         self._dragShared = nil
         local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
@@ -955,9 +923,6 @@ local CoreRefreshAll = A3.RefreshAll
 function A3.RefreshAll(...)
     local ret
     if type(CoreRefreshAll) == "function" then ret = CoreRefreshAll(...) end
-    for i = 1, #AURA_UNITS do
-        StyleRuntimeButtons(AURA_UNITS[i])
-    end
     if IsEditModeActive() then
         EM.RefreshAll()
     else
@@ -971,7 +936,6 @@ if type(CoreEnableFrame) == "function" then
     function A3.EnableFrame(frame, ...)
         local ret = CoreEnableFrame(frame, ...)
         if frame and frame.unit then
-            StyleRuntimeButtons(frame.unit)
             if UnitPreviewActive(frame.unit) then
                 EM.RefreshUnit(frame.unit)
             else
@@ -990,21 +954,17 @@ if type(CoreDisableFrame) == "function" then
     end
 end
 
+local CoreRefreshUnit = A3.RefreshUnit
 function A3.RefreshUnit(unit)
     if not unit then return end
     if IsEditModeActive() then
         PromoteRuntimeLayout(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
     end
-    if A3.BumpRuntimeConfig then
-        A3.BumpRuntimeConfig()
-    elseif A3._runtimeConfigGen then
-        A3._runtimeConfigGen = A3._runtimeConfigGen + 1
-    end
     local frame = GetFrame(unit)
     if frame and frame.Auras then frame.Auras.needFullUpdate = true end
-    if A3.RequestUnit then A3.RequestUnit(unit, 0) end
-    StyleRuntimeButtons(unit)
+    local ret = CoreRefreshUnit(unit)
     EM.RefreshUnit(unit)
+    return ret
 end
 
 function A3.UpdateUnitAnchor(unit)
@@ -1019,13 +979,6 @@ function A3.RefreshEditPreview(unit)
     if unit then return EM.RefreshUnit(unit) end
     return EM.RefreshAll()
 end
-
-ExportPublic("MSUF_Auras3_RefreshUnit", A3.RefreshUnit)
-ExportPublic("MSUF_Auras3_RefreshAll", A3.RefreshAll)
-ExportPublic("MSUF_Auras3_UpdateUnitAnchor", A3.UpdateUnitAnchor)
-ExportPublic("MSUF_Auras3_RefreshEditPreview", A3.RefreshEditPreview)
-ExportPublic("MSUF_A3_RefreshUnit", A3.RefreshUnit)
-ExportPublic("MSUF_A3_UpdateUnitAnchor", A3.UpdateUnitAnchor)
 
 local function OpenAuras3PositionPopup(unit, parent)
     if parent and parent._msufA3MoverKind then
@@ -1062,6 +1015,6 @@ local function RegisterEditListener()
 end
 
 RegisterEditListener()
-if not EM._registered and C_Timer and C_Timer.After then
+if not EM._registered then
     C_Timer.After(0, RegisterEditListener)
 end
