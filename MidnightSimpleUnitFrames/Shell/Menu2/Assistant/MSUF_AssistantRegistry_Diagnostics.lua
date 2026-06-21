@@ -44,11 +44,56 @@ local function LowOpacity(value)
     return value ~= nil and value <= 0.05
 end
 
+local function ChoiceValueKey(value)
+    local valueType = type(value)
+    if valueType == "nil" then return "nil:" end
+    if valueType == "boolean" then return "boolean:" .. (value and "1" or "0") end
+    if valueType == "number" or valueType == "string" then return valueType .. ":" .. tostring(value) end
+    return valueType .. ":" .. tostring(value)
+end
+
+local function ChoiceArgsKey(args)
+    if type(args) ~= "table" then return "" end
+    local keys = {}
+    for key in pairs(args) do
+        keys[#keys + 1] = tostring(key)
+    end
+    table.sort(keys)
+    local parts = {}
+    for i = 1, #keys do
+        local key = keys[i]
+        parts[#parts + 1] = key .. "=" .. ChoiceValueKey(args[key])
+    end
+    return table.concat(parts, "\n")
+end
+
+local function HasSettingChoice(choices, setting, value)
+    local valueKey = ChoiceValueKey(value)
+    for i = 1, #choices do
+        local choice = choices[i]
+        if choice and choice.setting == setting and ChoiceValueKey(choice.value) == valueKey then
+            return true
+        end
+    end
+    return false
+end
+
+local function HasActionChoice(choices, action, args)
+    local argsKey = ChoiceArgsKey(args)
+    for i = 1, #choices do
+        local choice = choices[i]
+        if choice and choice.action == action and ChoiceArgsKey(choice.args) == argsKey then
+            return true
+        end
+    end
+    return false
+end
+
 local function AddFixChoice(choices, key, value, label, valueLabel)
     if type(choices) ~= "table" or type(key) ~= "string" or key == "" then return end
     if not (Registry and type(Registry.GetSetting) == "function") then return end
     local setting = Registry:GetSetting(key)
-    if not setting then return end
+    if not setting or HasSettingChoice(choices, setting, value) then return end
     choices[#choices + 1] = {
         setting = setting,
         value = value,
@@ -63,16 +108,17 @@ local function AddActionChoice(choices, key, args, label, summary, confirmRequir
     if not (Registry and type(Registry.GetAction) == "function") then return end
     local action = Registry:GetAction(key)
     if not action then return end
+    args = type(args) == "table" and args or {}
+    if HasActionChoice(choices, action, args) then return end
     choices[#choices + 1] = {
         action = action,
-        args = type(args) == "table" and args or {},
+        args = args,
         label = label,
         summary = summary,
         confirmRequired = confirmRequired,
         diagnosticFix = diagnosticFix == true,
     }
 end
-
 local function AppendFixChoices(text, choices)
     if type(choices) ~= "table" or #choices == 0 then return text end
     local choiceText

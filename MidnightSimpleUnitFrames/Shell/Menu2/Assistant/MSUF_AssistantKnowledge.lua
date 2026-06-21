@@ -23,6 +23,7 @@ local MAX_RESULTS = 6
 local INDEX_VERSION = 3
 local SEARCH_CACHE_LIMIT = 32
 local SEARCH_TEXT_LIMIT = 360
+local KNOWLEDGE_ALIAS_LIMIT = 24
 local DISCORD_INVITE = "https://discord.gg/2Gf9b2Wprz"
 
 local function Trim(text)
@@ -65,17 +66,23 @@ local function AddSearchSnippet(list, seen, value)
     AddUnique(list, seen, value)
 end
 
-local function AddMany(list, seen, values)
+local function AddMany(list, seen, values, limit)
     if type(values) == "string" then
         if values:find("|", 1, true) then
-            for value in values:gmatch("[^|]+") do AddUnique(list, seen, value) end
+            local count = 0
+            for value in values:gmatch("[^|]+") do
+                count = count + 1
+                if not limit or count <= limit then AddUnique(list, seen, value) end
+                if limit and count >= limit then break end
+            end
         else
             AddUnique(list, seen, values)
         end
         return
     end
     if type(values) ~= "table" then return end
-    for i = 1, #values do AddUnique(list, seen, values[i]) end
+    local max = limit and math.min(#values, limit) or #values
+    for i = 1, max do AddUnique(list, seen, values[i]) end
 end
 
 local function SplitTokens(text)
@@ -184,7 +191,41 @@ local function DisplayFallbackLabel(value, fallback)
     return out
 end
 
+local PAGE_LABEL_OVERRIDES = {
+    home = "Dashboard",
+    profiles = "Profiles",
+    gameplay = "Gameplay",
+    classpower = "Class Resources",
+    modules = "Modules",
+    search = "Search",
+
+    opt_castbar = "Cast Bars",
+    opt_bars = "Bars",
+    opt_colors = "Colors",
+    opt_fonts = "Fonts",
+    opt_misc = "Miscellaneous",
+
+    gf_layout = "Group Layout",
+    gf_bars = "Group Health & Text",
+    gf_indicators = "Group Indicators",
+    gf_auras = "Group Auras",
+
+    auras3 = "Auras",
+    auras3_buffs = "Aura Buffs",
+    auras3_debuffs = "Aura Debuffs",
+    auras3_filters = "Aura Filters",
+    auras3_styling = "Aura Style",
+
+    uf_player = "Player",
+    uf_target = "Target",
+    uf_focus = "Focus",
+    uf_pet = "Pet",
+    uf_boss = "Boss",
+    uf_targettarget = "Target of Target",
+    uf_focustarget = "Focus Target",
+}
 local function PageLabel(pageKey)
+    if pageKey and PAGE_LABEL_OVERRIDES[pageKey] then return PAGE_LABEL_OVERRIDES[pageKey] end
     if pageKey and M.pages and M.pages[pageKey] and M.pages[pageKey].title then return tostring(M.pages[pageKey].title) end
     if type(M.navItems) == "table" then
         for i = 1, #M.navItems do
@@ -283,13 +324,14 @@ local function AddIndexItem(index, item)
     AddSearchSnippet(textParts, seen, item.answer)
     AddUnique(textParts, seen, item.target)
     AddUnique(textParts, seen, item.controlType)
-    AddMany(textParts, seen, item.aliases)
+    AddMany(textParts, seen, item.aliases, KNOWLEDGE_ALIAS_LIMIT)
     AddMany(textParts, seen, item.keywords)
     item.haystack = Normalize(table.concat(textParts, " "))
     item.keyNorm = Normalize(item.key)
     item.labelNorm = Normalize(item.label)
     item.aliasNorms = {}
-    for i = 1, #item.aliases do
+    local aliasCount = math.min(#item.aliases, KNOWLEDGE_ALIAS_LIMIT)
+    for i = 1, aliasCount do
         local aliasNorm = Normalize(item.aliases[i])
         if aliasNorm ~= "" then item.aliasNorms[#item.aliasNorms + 1] = aliasNorm end
     end
@@ -779,13 +821,11 @@ local function CapabilityHelp(german)
     local counts = K.Summary()
     local settingCount = tostring(counts.setting or 0)
     local actionCount = tostring((counts.action or 0) + (counts.diagnostic or 0))
-    local faqCount = tostring(counts.faq or 0)
-    local pageCount = tostring(counts.page or 0)
     local lines = {
         "MSUF Assistant: what I can do",
         "I'm the local in-game assistant for MSUF. I use MSUF's menu data on your client, so I don't call an external ChatGPT service.",
         "I can find and explain MSUF options, open pages, import/export profiles, run checks, use undo/redo, and change MSUF options.",
-        "I can handle " .. settingCount .. " MSUF options, " .. actionCount .. " guided tasks or checks, " .. faqCount .. " help answers, and " .. pageCount .. " pages.",
+        "I can handle " .. settingCount .. " MSUF options plus " .. actionCount .. " guided tasks or checks across unit frames, group frames, cast bars, auras, class resources, gameplay, profiles, diagnostics, and Edit Mode.",
         "Examples: hide player name; set target cast bar height to 18; where do I change auras; export current profile; why is target cast bar hidden?",
         "I can answer WoW questions near UI setup. For current class, talent, or patch guides I point to current external guides because MSUF runs offline.",
         "You can ask: Open Player | Open Cast Bars | Profile Help | What can I change here?",
@@ -959,6 +999,9 @@ end
 local KNOWLEDGE_INTENT_TERMS = {
     "explain", "what is", "what does", "what are", "where", "where is", "where do", "where can",
     "how", "how do", "how can", "help", "change", "make", "set", "move", "open", "find",
+    "wo", "wo ist", "wo sind", "wo kann", "wo aendere", "wo aendern", "wo finde",
+    "hilfe", "erklaere", "erklaer", "was ist", "was sind", "wie", "wie kann",
+    "aendere", "aendern", "setze", "stelle", "verschiebe", "oeffne", "finde",
 }
 
 local GROUP_FRAME_SCOPE_TERMS = {
@@ -1079,7 +1122,18 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant unit text help",
         }
     end
-    if ContainsAny(norm, { "castbar", "cast bar" })
+    if ContainsAny(norm, { "castbar", "castbars", "cast bar", "cast bars", "zauberleiste", "zauberleisten" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+        and not ContainsAny(norm, CASTBAR_TEXT_HELP_TERMS)
+        and not ContainsAny(norm, { "interrupt", "interruptible", "uninterruptible", "kick", "focus kick" })
+    then
+        return {
+            text = "Cast Bars help\nIn Cast Bars, I can help with Player, Target, Focus, and Boss cast bars: visibility, size, position, fill direction, textures, text, interrupt-ready indicators, cast colors, and preview options.\nExamples: open cast bars; set target cast bar height to 24; move focus cast bar down; make boss cast bars wider; change cast bar texture.\nYou can ask: Open Cast Bars",
+            status = "applied",
+            summary = "Assistant cast bars help",
+        }
+    end
+    if ContainsAny(norm, { "castbar", "castbars", "cast bar", "cast bars" })
         and ContainsAny(norm, CASTBAR_TEXT_HELP_TERMS)
         and not ContainsAny(norm, { "texture", "textures", "bar texture", "castbar texture", "cast bar texture" })
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
@@ -1355,10 +1409,8 @@ function K.Answer(query, opts)
 end
 
 function K.NoMatch(query)
-    local text = Trim(query)
-    local suffix = text ~= "" and (": " .. text) or "."
     return {
-        text = "I'm not sure which MSUF request you mean yet" .. suffix .. "\nI can help once I can match the request to an MSUF menu option. Include the frame or page plus the option, for example 'set target cast bar height to 20' or 'turn on party dead background'. For aura requests, I change aura options that exist in the MSUF menu.\nIf that wording should work, share the exact text in Discord: " .. DISCORD_INVITE,
+        text = "I'm not sure which MSUF request you mean yet.\nI can help once I can match the request to an MSUF menu option. Include the frame or page plus the option, for example 'set target cast bar height to 20' or 'turn on party dead background'. For aura requests, I change aura options that exist in the MSUF menu.\nIf that wording should work, share the exact text in Discord: " .. DISCORD_INVITE,
         status = "info",
         summary = "Assistant help fallback",
     }

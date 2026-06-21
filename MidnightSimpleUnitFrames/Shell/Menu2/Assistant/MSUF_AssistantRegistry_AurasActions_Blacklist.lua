@@ -1,4 +1,4 @@
--- Aura blacklist assistant action registrations.
+﻿-- Aura blacklist assistant action registrations.
 -- Loaded before MSUF_AssistantRegistry_AurasActions.lua; the main action file passes parser helpers in.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -42,6 +42,8 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
             "blacklist", "blacklist spell", "blacklist aura", "blacklist aura spell",
             "block aura", "block aura spell", "ignore aura", "ignore aura spell",
             "hide", "suppress", "stop showing",
+            "verstecke", "verstecken", "ausblenden", "aura ausblenden",
+            "verstecke aura", "verstecke aura spell", "verstecke spell",
             "hide aura", "hide aura spell", "hide spell", "suppress aura", "suppress spell",
             "stop showing aura", "stop showing spell",
         },

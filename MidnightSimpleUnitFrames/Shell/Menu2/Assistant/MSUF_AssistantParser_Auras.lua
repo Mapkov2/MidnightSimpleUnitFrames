@@ -135,10 +135,34 @@ local function HasUnitAuraGeometryScope(text)
         or HasPhrase(text, "alle unit frame auren")
 end
 
+local function HasGenericGroupAuraGeometryScope(text)
+    return ContainsAny(text, {
+        "group aura", "group auras", "group aura icon", "group aura icons",
+        "group buff", "group buffs", "group buff icon", "group buff icons",
+        "group debuff", "group debuffs", "group debuff icon", "group debuff icons",
+        "group frame aura", "group frame auras", "group frame buff", "group frame buffs",
+        "group frame debuff", "group frame debuffs",
+        "gruppen aura", "gruppen auren", "gruppen buff", "gruppen buffs",
+        "gruppen debuff", "gruppen debuffs", "gruppenframe aura", "gruppenframe auren",
+    })
+end
+
+local function HasConcreteGroupAuraGeometryScope(text)
+    return ContainsAny(text, {
+        "party", "party frame", "party frames", "party aura", "party auras",
+        "party buff", "party buffs", "party debuff", "party debuffs",
+        "raid", "raid frame", "raid frames", "raid aura", "raid auras",
+        "raid buff", "raid buffs", "raid debuff", "raid debuffs",
+        "mythic", "mythic raid", "mythicraid", "mythic raid aura", "mythic raid auras",
+        "all group", "all group aura", "all group auras", "all group buffs", "all group debuffs",
+        "alle gruppen aura", "alle gruppen auren", "alle gruppen buffs", "alle gruppen debuffs",
+        "every group aura", "every group buff", "every group debuff",
+    })
+end
 local function AuraGeometryLanes(text)
     if ContainsAny(text, { "buff", "buffs" }) then return { "buff" } end
     if ContainsAny(text, { "debuff", "debuffs" }) then return { "debuff" } end
-    if ContainsAny(text, { "aura", "auras", "aura icon", "aura icons" }) then return { "buff", "debuff" } end
+    if ContainsAny(text, { "aura", "auras", "auren", "aura icon", "aura icons", "aura symbole", "auren symbole" }) then return { "buff", "debuff" } end
     return nil
 end
 
@@ -281,7 +305,7 @@ local function AuraGeometryDelta(text, setting, attr, direction)
 end
 
 local function ParseAuraGeometryShortcut(text)
-    if not ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return nil end
+    if not ContainsAny(text, { "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs" }) then return nil end
     if ContainsAny(text, { "copy", "preset", "blacklist", "category" }) then return nil end
     local explicitNonGroupAuraScope = ContainsAny(text, {
         "shared", "shared aura", "shared auras", "global", "all aura", "all auras",
@@ -300,6 +324,8 @@ local function ParseAuraGeometryShortcut(text)
         and ContainsAny(text, { "text", "font", "anchor", "x offset", "offset x", "y offset", "offset y", "text x", "text y" }) then
         return nil
     end
+    if HasGenericGroupAuraGeometryScope(text) and not HasConcreteGroupAuraGeometryScope(text) then return nil end
+
     local lanes = AuraGeometryLanes(text)
     local scopes = AuraGeometryScopes(text)
     if not lanes or not scopes then return nil end
@@ -442,6 +468,10 @@ local function AuraBlacklistSpellValue(raw)
         "[Ii]gnore%s+(.+)%s+[Oo]n%s+",
         "[Hh]ide%s+(.+)%s+[Ff]or%s+",
         "[Hh]ide%s+(.+)%s+[Oo]n%s+",
+        "[Vv]erstecke%s+(.+)%s+[Aa]uf%s+",
+        "[Vv]erstecke%s+(.+)%s+[Ff]uer%s+",
+        "[Aa]usblenden%s+(.+)%s+[Aa]uf%s+",
+        "[Aa]usblenden%s+(.+)%s+[Ff]uer%s+",
         "[Ss]uppress%s+(.+)%s+[Ff]or%s+",
         "[Ss]uppress%s+(.+)%s+[Oo]n%s+",
         "[Ss]top%s+showing%s+(.+)%s+[Ff]or%s+",
@@ -478,6 +508,7 @@ P.AURA_QUICK_PRESETS = AURA_QUICK_PRESETS
 P.AuraQuickPresetForText = AuraQuickPresetForText
 P.AuraEditScopeForText = AuraEditScopeForText
 P.ParseAuraGeometryShortcut = ParseAuraGeometryShortcut
+P.AuraGeometryShortcut = ParseAuraGeometryShortcut
 P.AuraBlacklistPresetForText = AuraBlacklistPresetForText
 P.AuraGroupBlacklistScope = AuraGroupBlacklistScope
 P.AuraGroupBlacklistLane = AuraGroupBlacklistLane

@@ -1,4 +1,4 @@
--- Assistant geometry-text parser: parses text slot, offset, layer, and alignment commands.
+﻿-- Assistant geometry-text parser: parses text slot, offset, layer, and alignment commands.
 -- Produces parser plans only; DB writes and apply side effects remain in Assistant execution.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -87,6 +87,8 @@ local function TextFontSizeIntent(text)
         "hp text size", "health text size", "power text size", "mana text size",
         "hp number size", "hp numbers size", "health number size", "health numbers size",
         "power number size", "power numbers size", "mana number size", "mana numbers size",
+        "text groesse", "name groesse", "name text groesse",
+        "hp text groesse", "health text groesse", "power text groesse", "mana text groesse",
         "schriftgroesse", "schrift groesse",
     }) then
         return true
@@ -889,6 +891,15 @@ function A._ParseTextSlotDropdownShortcut(text)
     if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
     if ContainsAny(text, { "dispel overlay", "debuff overlay", "current health only", "on current health only", "on health only" }) then return nil end
     if ContainsAny(text, { "dark mode", "dark bars", "dark bar", "bar color", "brightness" }) then return nil end
+    if not (text:find("text", 1, true) or text:find("slot", 1, true)
+        or text:find("hp", 1, true) or text:find("health", 1, true)
+        or text:find("power", 1, true) or text:find("mana", 1, true)
+        or text:find("current", 1, true) or text:find("percent", 1, true)
+        or text:find("%", 1, true) or text:find("it", 1, true)
+        or text:find("that", 1, true) or text:find("this", 1, true)
+        or text:find("same", 1, true) or text:find("now", 1, true)) then
+        return nil
+    end
     if not ContainsAny(text, { "set", "show", "display", "use", "put", "make", "change", "hide", "turn off", "turn on", "create", "create new", "add", "new", "remove", "clear" }) then return nil end
     local tab = TextSelectorTab(text)
     local ctxFrame, ctxUnit, ctxTab, ctxSlot = A._SelectedTextTargetFromContext(tab)

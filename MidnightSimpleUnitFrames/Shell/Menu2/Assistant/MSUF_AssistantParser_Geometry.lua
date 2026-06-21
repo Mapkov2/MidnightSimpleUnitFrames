@@ -1,4 +1,4 @@
---- Shell/Menu2/Assistant/MSUF_AssistantParser_Geometry.lua
+﻿--- Shell/Menu2/Assistant/MSUF_AssistantParser_Geometry.lua
 --- Geometry/layout parser shard for natural-language frame edits.
 ---
 --- Produces declarative move/size/anchor plans only; secure/combat-safe frame
@@ -127,6 +127,7 @@ function P.ParseUnitSizeMatchShortcut(text)
         label = "Match unit frame size",
         summary = "Sets the target unit frame width and height to the current source unit frame size.",
         bulkSafe = true,
+        compoundComplete = true,
     }
 end
 
@@ -2243,6 +2244,18 @@ P.TEXT_VISIBILITY_VERBS = {
 }
 
 function P.ParseTextVisibilityShortcut(text)
+    text = tostring(text or "")
+    if not (text:find("turn", 1, true) or text:find("disable", 1, true)
+        or text:find("enable", 1, true) or text:find("hide", 1, true)
+        or text:find("show", 1, true) or text:find("display", 1, true)
+        or text:find("visible", 1, true) or text:find("deaktiv", 1, true)
+        or text:find("aktiv", 1, true) or text:find("ausschalten", 1, true)
+        or text:find("einschalten", 1, true) or text:find("ausblenden", 1, true)
+        or text:find("verstecken", 1, true) or text:find("anzeigen", 1, true)
+        or text:find("zeigen", 1, true) or text:find("einblenden", 1, true)
+        or text:find("sichtbar", 1, true) or text == "an" or text == "aus") then
+        return nil
+    end
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
     if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
     if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end

@@ -52,7 +52,10 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
     end
 
     local function ParseAuraBlacklistSummaryAliasArgs(text)
-        if not AuraActionContainsAny(text, { "show", "list", "summary", "current", "what is", "whats" }) then
+        if not AuraActionContainsAny(text, {
+            "show", "list", "summary", "current", "what is", "whats",
+            "zeige", "anzeigen", "auflisten", "liste", "aktuell", "aktuelle",
+        }) then
             return false
         end
         if AuraBlacklistHasDirectGroupScope(text) then return false end
@@ -106,6 +109,8 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
             or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
             or normalized:find("unblock", 1, true) or normalized:find("entfernen", 1, true)
             or normalized:find("loeschen", 1, true) or normalized:find("unhide", 1, true)
+            or normalized:find("zeige", 1, true) or normalized:find("anzeigen", 1, true)
+            or normalized:find("auflisten", 1, true)
             or normalized:find("stop hiding", 1, true)
             or (normalized:find("show", 1, true) and normalized:find("again", 1, true))
             or (normalized:find("let", 1, true) and normalized:find("show", 1, true)) then

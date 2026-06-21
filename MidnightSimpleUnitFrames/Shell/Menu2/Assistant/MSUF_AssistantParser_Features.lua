@@ -1,4 +1,4 @@
---- Shell/Menu2/Assistant/MSUF_AssistantParser_Features.lua
+﻿--- Shell/Menu2/Assistant/MSUF_AssistantParser_Features.lua
 --- Feature shortcut parser for Assistant workflows.
 ---
 --- Narrows broad class-power/gameplay/global-bars phrasing into registry plans
@@ -94,6 +94,10 @@ local function HasClassPowerIntent(text)
 end
 
 local function ParseClassPowerRootToggle(text)
+    if ContainsAny(text, { "setting", "settings", "option", "options", "page", "menu" })
+        and ContainsAny(text, { "show me", "show", "open", "where", "find", "help" }) then
+        return nil
+    end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     if not HasClassPowerIntent(text) then return nil end
@@ -1308,6 +1312,26 @@ local function ParseColorAction(text)
 end
 
 local function ParseDiagnostic(text)
+    local directChangeIntent = ContainsAny(text, {
+        "turn on", "turn off", "enable", "disable", "show", "hide", "set", "make",
+        "move", "put", "send", "bring", "increase", "decrease", "raise", "lower",
+        "an", "aus", "einschalten", "ausschalten", "aktivieren", "deaktivieren",
+        "einblenden", "ausblenden", "zeige", "anzeigen", "verstecke", "setze",
+        "stelle", "mach", "mache", "verschiebe", "erhoehe", "reduziere", "senke",
+    })
+    local explicitTroubleIntent = ContainsAny(text, {
+        "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum",
+        "diagnostik", "diagnosebericht", "fehlersuche", "fehleranalyse",
+        "not showing", "not visible", "not appearing", "not displayed", "not there",
+        "doesnt show", "does not show", "doesnt appear", "does not appear",
+        "cant see", "can't see", "cannot see", "can not see", "missing", "hidden", "invisible",
+        "filtered out", "filtered", "blacklisted", "blocked",
+        "disappeared", "disappear", "gone", "vanished", "broken", "not working", "doesnt work",
+        "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
+        "nicht sichtbar", "zeigt nicht", "verschwunden", "kaputt", "haengt",
+        "fehlt", "versteckt", "unsichtbar", "funktioniert nicht", "geht nicht", "fehler",
+    })
+    if directChangeIntent and not explicitTroubleIntent then return nil end
     if not ContainsAny(text, {
         "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum",
         "diagnostik", "diagnosebericht", "fehlersuche", "fehleranalyse",
@@ -1670,7 +1694,10 @@ local function ParseEditModeHUDControl(text)
         "anchor picker", "global anchor picker", "pick anchor", "select anchor",
         "choose anchor", "open anchor", "anker picker", "anker auswahl", "anker auswaehlen",
         "anker waehlen", "ankerwahl", "anker waehler",
-    }) and not ContainsAny(text, { "custom anchor", "custom anchor picker", "custom anchor frame", "anchor frame picker" })
+    }) and not ContainsAny(text, {
+        "custom anchor", "custom anchor picker", "custom anchor frame", "anchor frame picker",
+        "status", "active", "is picker", "show picker",
+    })
         and (hasEditContext or ContainsAny(text, { "global anchor picker", "anchor picker", "anker picker", "anker auswahl" }))
     local hasResetPosition = hasEditContext and ContainsAny(text, { "reset", "restore", "default", "zuruecksetzen", "zurucksetzen" })
         and ContainsAny(text, { "position", "selected frame", "current frame", "selected", "selection", "frame position", "mover", "auswahl", "ausgewaehlter frame", "aktueller frame", "rahmen position" })
@@ -1848,6 +1875,8 @@ local function ParseSupportWorkflow(text)
 
     if ContainsAny(text, {
         "msuf status", "assistant status", "status report", "diagnostic report",
+        "run checks", "run check", "run diagnostics", "health check", "run health check",
+        "assistant support text", "support text", "support report", "support summary", "build support text", "make support text",
         "diagnostics", "diagnose", "diagnosen", "diagnose starten", "diagnosebericht", "debug summary", "debug report", "debug info", "debug bericht", "status bericht",
         "diagnostik", "fehlerbericht", "statusbericht", "diagnostik bericht",
         "assistant debug report", "version info", "locale info",
@@ -2143,6 +2172,13 @@ local function ParseClassPowerPreviewResource(text)
 end
 
 local function ParseClassPowerAction(text)
+    text = tostring(text or "")
+    if not (text:find("class", 1, true) or text:find("resource", 1, true)
+        or text:find("power", 1, true) or text:find("combo", 1, true)
+        or text:find("rune", 1, true) or text:find("pip", 1, true)
+        or text:find("separator", 1, true)) then
+        return nil
+    end
     local previewResource = ParseClassPowerPreviewResource(text)
     if previewResource then return previewResource end
 

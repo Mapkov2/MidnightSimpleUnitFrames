@@ -1,4 +1,4 @@
--- Aura blacklist summary assistant action registration.
+﻿-- Aura blacklist summary assistant action registration.
 -- Loaded before MSUF_AssistantRegistry_AurasActions_Blacklist.lua; the main blacklist registry preserves action order.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -31,8 +31,11 @@ function A.AurasRegistry.RegisterBlacklistSummaryAction(ctx)
         combatSafe = true,
         aliases = {
             "show aura blacklist", "list aura blacklist", "aura blacklist summary",
+            "zeige aura blacklist", "anzeigen aura blacklist", "liste aura blacklist", "aura blacklist anzeigen",
             "current aura blacklist", "what is aura blacklist",
             "show player aura blacklist", "show target aura blacklist", "show focus aura blacklist", "show boss aura blacklist",
+            "zeige player aura blacklist", "zeige target aura blacklist", "zeige focus aura blacklist", "zeige boss aura blacklist",
+            "player aura blacklist anzeigen", "target aura blacklist anzeigen", "focus aura blacklist anzeigen", "boss aura blacklist anzeigen",
             "show current player aura blacklist", "show current target aura blacklist",
             "show current focus aura blacklist", "show current boss aura blacklist",
             "list player aura blacklist", "list target aura blacklist", "list focus aura blacklist", "list boss aura blacklist",

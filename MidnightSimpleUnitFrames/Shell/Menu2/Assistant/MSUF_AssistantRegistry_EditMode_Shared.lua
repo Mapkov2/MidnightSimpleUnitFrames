@@ -107,10 +107,14 @@ function A.EditModeRegistry.BuildSharedHelpers(ctx)
 
     local function ScheduleEditModeSync(includePreviewForce)
         if InCombat() then return false end
-        C_Timer.After(0.1, function()
-            if InCombat() then return end
+        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+            _G.C_Timer.After(0.1, function()
+                if InCombat() then return end
+                SyncEditModeMovers(includePreviewForce)
+            end)
+        else
             SyncEditModeMovers(includePreviewForce)
-        end)
+        end
         return true
     end
 

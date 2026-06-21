@@ -108,6 +108,104 @@ local function GroupCopyScopeSummary(scopes)
     return " Categories: " .. table.concat(selected, ", ") .. "."
 end
 
+
+local function WordList(words)
+    local out = {}
+    for word in tostring(words or ""):gmatch("%S+") do out[#out + 1] = word end
+    return out
+end
+
+local function WordSet(words)
+    local out = {}
+    for _, word in ipairs(WordList(words)) do out[word] = true end
+    return out
+end
+
+local GROUP_COPY_EXCLUDE = WordSet("offsetX offsetY point positionMode _hlMigrated")
+local GROUP_COPY_CATEGORIES = {
+    { key = "general", keys = WordList("enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25") },
+    { key = "health", keys = WordList("gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA") },
+    { key = "text", keys = WordList("showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight textDelimiter hpTextReverse hpOffsetX hpOffsetY textLayer") },
+    { key = "font", keys = WordList("fontOverride fontOutline useGlobalFontColor fontR fontG fontB") },
+    { key = "border", keys = WordList("bgR bgG bgB hpBarAlpha hpBgAlpha alphaExcludeTextPortrait") },
+    { key = "range", keys = WordList("rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha") },
+    { key = "indicators", keys = WordList("pvpIcon statusText statusGhostText statusAFKText showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle"), prefix = WordList("si_ statusIcon indicator") },
+    { key = "auras", tables = WordList("auras") },
+    { key = "highlight", keys = WordList("targetIndicator targetR targetG targetB"), prefix = WordList("hl dispel") },
+    { key = "dstripe", prefix = WordList("debuffStripe") },
+    { key = "features", keys = WordList("ciEnabled ciAlpha"), tables = WordList("spellIndicators"), prefix = WordList("ci") },
+}
+
+local function NewGroupCopyScopesFallback()
+    local scopes = {}
+    for i = 1, #GROUP_COPY_CATEGORIES do scopes[GROUP_COPY_CATEGORIES[i].key] = true end
+    return scopes
+end
+
+local function DeepCopyLocal(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return seen[value] end
+    local out = {}
+    seen[value] = out
+    for key, item in pairs(value) do
+        out[DeepCopyLocal(key, seen)] = DeepCopyLocal(item, seen)
+    end
+    return out
+end
+
+local function DeepCopyGroupValue(value)
+    if type(value) ~= "table" then return value end
+    if type(_G.MSUF_DeepCopy) == "function" then return _G.MSUF_DeepCopy(value) end
+    if M and type(M.DeepCopy) == "function" then return M.DeepCopy(value) end
+    return DeepCopyLocal(value)
+end
+
+local function GroupConfig(kind)
+    local db = _G.MSUF_DB
+    if type(db) ~= "table" then return nil end
+    return db["gf_" .. tostring(kind)]
+end
+
+local function RefreshGroupCopyRuntime()
+    local gf = MSUF and (MSUF.GF or MSUF.GroupFrames)
+    if gf and type(gf.RefreshAll) == "function" then gf.RefreshAll(); return end
+    if gf and type(gf.RebuildAll) == "function" then gf.RebuildAll(); return end
+    if gf and type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout() end
+end
+
+local function CopyGroupSettingsFallback(srcKind, dstKind, scopes)
+    local srcConf = GroupConfig(srcKind)
+    local dstConf = GroupConfig(dstKind)
+    if not (srcConf and dstConf and srcKind and dstKind) or srcKind == dstKind then return false end
+    scopes = (type(scopes) == "table") and scopes or NewGroupCopyScopesFallback()
+    local allowKeys, allowPrefixes, allowTables = {}, {}, {}
+    for i = 1, #GROUP_COPY_CATEGORIES do
+        local cat = GROUP_COPY_CATEGORIES[i]
+        if scopes[cat.key] == true then
+            for j = 1, #(cat.keys or {}) do allowKeys[cat.keys[j]] = true end
+            for j = 1, #(cat.prefix or {}) do allowPrefixes[#allowPrefixes + 1] = cat.prefix[j] end
+            for j = 1, #(cat.tables or {}) do allowTables[cat.tables[j]] = true end
+        end
+    end
+    for key, value in pairs(srcConf) do
+        if not GROUP_COPY_EXCLUDE[key] then
+            local copy = allowKeys[key] or allowTables[key]
+            if (not copy) and type(key) == "string" then
+                for i = 1, #allowPrefixes do
+                    local prefix = allowPrefixes[i]
+                    if key:sub(1, #prefix) == prefix then
+                        copy = true
+                        break
+                    end
+                end
+            end
+            if copy then dstConf[key] = DeepCopyGroupValue(value) end
+        end
+    end
+    RefreshGroupCopyRuntime()
+    return true
+end
 Registry:RegisterAction({
     key = "copy_group",
     label = "Copy Group Frame Options",
@@ -117,10 +215,10 @@ Registry:RegisterAction({
     aliases = { "copy party to raid", "copy group frame settings", "copy group settings", "copy raid settings" },
     run = function(args)
         local GP = M and M.GroupPage
-        if not (GP and type(GP.CopyGroupSettings) == "function") then
-            return false, "Open Group Frames first so I can copy those options."
-        end
-        local src = args and args.source
+        local copyFn = GP and type(GP.CopyGroupSettings) == "function" and GP.CopyGroupSettings or CopyGroupSettingsFallback
+        if type(copyFn) ~= "function" then
+            return false, "I could not find the Group Frames copy helper."
+        end        local src = args and args.source
         if src ~= "raid" and src ~= "mythicraid" then src = "party" end
         local targets = args and args.targets
         if type(targets) ~= "table" or #targets == 0 then
@@ -129,13 +227,19 @@ Registry:RegisterAction({
         end
         if #targets == 0 then return false, "Which group frame should receive the copied options?" end
         local scopes = args and args.scopes
-        if type(scopes) ~= "table" and type(GP.NewGFCopyScopes) == "function" then scopes = GP.NewGFCopyScopes() end
+        if type(scopes) ~= "table" then
+            if GP and type(GP.NewGFCopyScopes) == "function" then
+                scopes = GP.NewGFCopyScopes()
+            else
+                scopes = NewGroupCopyScopesFallback()
+            end
+        end
         local count = 0
         local copiedLabels = {}
         for i = 1, #targets do
             local dst = targets[i]
             if dst ~= "raid" and dst ~= "mythicraid" then dst = "party" end
-            if dst ~= src and GP.CopyGroupSettings(src, dst, scopes) then
+            if dst ~= src and copyFn(src, dst, scopes) then
                 count = count + 1
                 copiedLabels[#copiedLabels + 1] = GroupLabel(dst)
             end

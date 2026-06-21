@@ -1,4 +1,4 @@
---- Shell/Menu2/Assistant/MSUF_Assistant.lua
+﻿--- Shell/Menu2/Assistant/MSUF_Assistant.lua
 --- Command execution layer for the Menu2 assistant.
 ---
 --- Owns job scheduling, combat deferral, confirmations, choice handling, undo
@@ -210,6 +210,7 @@ end
 
 local NO_MATCH_RECENT_LIMIT = 80
 local NO_MATCH_COUNT_LIMIT = 200
+local NO_MATCH_CANDIDATE_ALIAS_LIMIT = 24
 
 --- no-match telemetry is product feedback stored in SavedVariables. It helps
 --- tune registry aliases and parser fallbacks without changing the command
@@ -404,8 +405,10 @@ local function NoMatchRegistryCandidateScore(setting, requestSet, requestList)
     addTokens(setting.key)
     addTokens(setting.label)
     addTokens(setting.attribute)
-    for i = 1, #(setting.aliases or {}) do addTokens(setting.aliases[i]) end
-    for i = 1, #(setting.exactAliases or {}) do addTokens(setting.exactAliases[i]) end
+    local aliases = setting.aliases or {}
+    for i = 1, math.min(#aliases, NO_MATCH_CANDIDATE_ALIAS_LIMIT) do addTokens(aliases[i]) end
+    local exactAliases = setting.exactAliases or {}
+    for i = 1, math.min(#exactAliases, NO_MATCH_CANDIDATE_ALIAS_LIMIT) do addTokens(exactAliases[i]) end
 
     local common, meaningful = 0, 0
     local scopeTokens = NoMatchScopeTokens()
@@ -431,7 +434,7 @@ local function NoMatchRegistryCandidateSummary(text, limit)
 
     local settings = registry:AllSettings() or {}
     local candidates = parser.RegistryCandidateSettings(text, settings, false) or {}
-    if #candidates == 0 then candidates = parser.RegistryCandidateSettings(text, settings, true) or {} end
+    if #candidates == 0 then return nil end
     local scored = {}
     for i = 1, #(candidates or {}) do
         if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -464,39 +467,44 @@ local function NoMatchTopRegistryKey(registryCandidates)
     return key and key ~= "" and key or nil
 end
 
+local function NoMatchPhraseRef(index)
+    local n = tonumber(index)
+    if n and n > 0 then return "phrase #" .. tostring(n) end
+    return "the saved phrase"
+end
+
 local function NoMatchLearningPlan(entry)
     if type(entry) ~= "table" then return "" end
     local owner = tostring(entry.owner or "parser-or-help")
-    local text = tostring(entry.text or "")
     local topKey = NoMatchTopRegistryKey(entry.registryCandidates)
     if owner == "registry-alias" then
         if topKey then
-            return "check '" .. text .. "' against " .. topKey .. "; add a setting alias or clearer setting wording"
+            return "check the saved phrase against " .. topKey .. "; add a setting alias or clearer setting wording"
         end
-        return "check '" .. text .. "' against setting names; add wording after confirming the intended option"
+        return "check the saved phrase against setting names; add wording after confirming the intended option"
     end
     if owner == "aura-registry/backend" then
         if topKey then
-            return "check Aura phrase '" .. text .. "' against " .. topKey .. "; prefer simple Aura wording first"
+            return "check the saved Aura phrase against " .. topKey .. "; prefer simple Aura wording first"
         end
-        return "check Aura phrase '" .. text .. "' against Aura options and actions; keep a clear answer when MSUF cannot change it"
+        return "check the saved Aura phrase against Aura options and actions; keep a clear answer when MSUF cannot change it"
     end
     if owner == "aura-action/backend" then
-        return "connect '" .. text .. "' to an Aura action before adding wording only"
+        return "connect the saved phrase to an Aura action before adding wording only"
     end
     if owner == "anchor-intent" then
-        return "add anchor wording if '" .. text .. "' points at a real frame"
+        return "add anchor wording if the saved phrase points at a real frame"
     end
     if owner == "action-parser" then
-        return "connect '" .. text .. "' to an existing action or guided step first"
+        return "connect the saved phrase to an existing action or guided step first"
     end
     if owner == "knowledge/help" then
-        return "add help or search wording for '" .. text .. "'"
+        return "add help or search wording for the saved phrase"
     end
     if owner == "media-alias" then
-        return "check visible media names for '" .. text .. "' before adding extra wording"
+        return "check visible media names before adding extra wording"
     end
-    return "review '" .. text .. "' and decide whether it should be a setting, action, help answer, or protected response"
+    return "review the saved phrase and decide whether it should be a setting, action, help answer, or protected response"
 end
 
 local function NoMatchResolution(entry)
@@ -552,7 +560,7 @@ local function RefreshNoMatchEntry(entry)
     entry.registryCandidates = entry.registryCandidates or NoMatchRegistryCandidateSummary(text, 3)
     entry.learningPlan = NoMatchLearningPlan(entry)
     entry.priority = NoMatchPriority(entry.count, entry.owner)
-    entry.resolution, entry.resolvedBy = NoMatchResolution(entry)
+    if not entry.resolution then entry.resolution, entry.resolvedBy = "unknown", "" end
     return entry
 end
 
@@ -577,10 +585,18 @@ function A.RecordNoMatch(text, result, source)
     entry.tags = analysis and analysis.tags or nil
     entry.advice = analysis and analysis.advice or nil
     entry.candidate = analysis and analysis.candidate or nil
-    entry.registryCandidates = NoMatchRegistryCandidateSummary(key, 3)
+    if entry.owner == "registry-alias" or entry.owner == "aura-registry/backend" then
+        entry.registryCandidates = NoMatchRegistryCandidateSummary(key, 3)
+    else
+        entry.registryCandidates = nil
+    end
     entry.learningPlan = NoMatchLearningPlan(entry)
     entry.priority = NoMatchPriority(entry.count, entry.owner)
-    entry.resolution, entry.resolvedBy = NoMatchResolution(entry)
+    if entry.owner == "aura-registry/backend" or entry.owner == "aura-action/backend" then
+        entry.resolution, entry.resolvedBy = NoMatchResolution(entry)
+    else
+        entry.resolution, entry.resolvedBy = "unknown", ""
+    end
     store.total = (tonumber(store.total) or 0) + 1
     store.recent[#store.recent + 1] = {
         text = key,
@@ -686,7 +702,7 @@ local function RefreshNoMatchRecentEntry(entry, counts)
         entry.resolution = aggregate.resolution or entry.resolution
         entry.resolvedBy = aggregate.resolvedBy or entry.resolvedBy
     end
-    if not entry.resolution then entry.resolution, entry.resolvedBy = NoMatchResolution(entry) end
+    if not entry.resolution then entry.resolution, entry.resolvedBy = "unknown", "" end
     return entry
 end
 
@@ -745,7 +761,7 @@ local function NoMatchLine(index, entry)
     if status ~= "" then suffix = suffix .. ", result " .. status end
     if owner ~= "" then suffix = suffix .. ", area " .. NoMatchOwnerLabel(owner) end
     if tostring(entry.resolution or "") ~= "" then suffix = suffix .. ", result " .. tostring(entry.resolution) end
-    return tostring(index) .. ". " .. text .. suffix
+    return tostring(index) .. ". " .. NoMatchPhraseRef(index) .. suffix
 end
 
 local function NoMatchHintLine(index, entry)
@@ -760,13 +776,13 @@ local function NoMatchHintLine(index, entry)
     local registryCandidates = tostring(entry.registryCandidates or NoMatchRegistryCandidateSummary(text, 3) or "")
     entry.registryCandidates = registryCandidates ~= "" and registryCandidates or entry.registryCandidates
     entry.learningPlan = entry.learningPlan or NoMatchLearningPlan(entry)
-    if not entry.resolution then entry.resolution, entry.resolvedBy = NoMatchResolution(entry) end
+    if not entry.resolution then entry.resolution, entry.resolvedBy = "unknown", "" end
     local plan = tostring(entry.learningPlan or "")
     local suffix = registryCandidates ~= "" and (" | closest MSUF options: " .. registryCandidates) or ""
     if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " | result: " .. tostring(entry.resolution) end
     if tostring(entry.resolvedBy or "") ~= "" then suffix = suffix .. " | now handled by: " .. tostring(entry.resolvedBy) end
     local planSuffix = plan ~= "" and (" | note: " .. plan) or ""
-    return tostring(index) .. ". " .. text .. " | area: " .. NoMatchOwnerLabel(owner) .. " | topics: " .. tags .. " | best improvement: " .. candidate .. suffix .. " | next step: " .. advice .. planSuffix
+    return tostring(index) .. ". " .. NoMatchPhraseRef(index) .. " | area: " .. NoMatchOwnerLabel(owner) .. " | topics: " .. tags .. " | best improvement: " .. candidate .. suffix .. " | next step: " .. advice .. planSuffix
 end
 
 local function NoMatchWorkItemLine(index, entry)
@@ -781,13 +797,13 @@ local function NoMatchWorkItemLine(index, entry)
     local registryCandidates = tostring(entry.registryCandidates or NoMatchRegistryCandidateSummary(text, 3) or "")
     entry.registryCandidates = registryCandidates ~= "" and registryCandidates or entry.registryCandidates
     entry.learningPlan = entry.learningPlan or NoMatchLearningPlan(entry)
-    if not entry.resolution then entry.resolution, entry.resolvedBy = NoMatchResolution(entry) end
+    if not entry.resolution then entry.resolution, entry.resolvedBy = "unknown", "" end
     local plan = tostring(entry.learningPlan or "")
     local suffix = registryCandidates ~= "" and (" | closest MSUF options: " .. registryCandidates) or ""
     if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " | result: " .. tostring(entry.resolution) end
     if tostring(entry.resolvedBy or "") ~= "" then suffix = suffix .. " | now handled by: " .. tostring(entry.resolvedBy) end
     local planSuffix = plan ~= "" and (" | note: " .. plan) or ""
-    return tostring(index) .. ". [" .. priority .. "] " .. text .. " (seen " .. tostring(count) .. "x) | best improvement: " .. candidate .. " | area: " .. NoMatchOwnerLabel(owner) .. suffix .. " | next step: " .. advice .. planSuffix
+    return tostring(index) .. ". [" .. priority .. "] " .. NoMatchPhraseRef(index) .. " (seen " .. tostring(count) .. "x) | best improvement: " .. candidate .. " | area: " .. NoMatchOwnerLabel(owner) .. suffix .. " | next step: " .. advice .. planSuffix
 end
 
 local function NoMatchOwnerSummary(ownerCounts)
@@ -870,7 +886,7 @@ local function NoMatchTSVLine(entry)
         clean(NoMatchOwnerLabel(entry.owner or "parser-or-help")),
         clean(entry.tags or "uncategorized"),
         clean(entry.candidate or NoMatchCandidate(entry.owner)),
-        clean(entry.text or ""),
+        clean(NoMatchPhraseRef()),
         clean(entry.advice or NoMatchAdvice(entry.owner)),
         clean(entry.registryCandidates or NoMatchRegistryCandidateSummary(entry.text or "", 3) or ""),
         clean(entry.learningPlan or NoMatchLearningPlan(entry)),
@@ -986,7 +1002,7 @@ function A.NoMatchTelemetryText(limit)
             if resolution ~= "" then suffix = suffix .. ", result " .. resolution end
             if resolvedBy ~= "" then suffix = suffix .. ", now handled by " .. resolvedBy end
             if learningPlan ~= "" then suffix = suffix .. ", note " .. learningPlan end
-            lines[#lines + 1] = tostring(i) .. ". " .. tostring(entry.text) .. suffix
+            lines[#lines + 1] = tostring(i) .. ". " .. NoMatchPhraseRef(i) .. suffix
         end
     end
 
@@ -1274,16 +1290,75 @@ local function ValuesEqual(setting, oldValue, newValue)
     return oldValue == newValue
 end
 
+local function AssistantSettingLabel(setting, fallback)
+    if type(A.DisplaySettingLabel) == "function" then return A.DisplaySettingLabel(setting) end
+    return tostring(setting and setting.label or fallback or "MSUF option")
+end
+
+local function AssistantActionLabel(action, fallback)
+    if type(A.DisplayActionLabel) == "function" then return A.DisplayActionLabel(action) end
+    return tostring(action and action.label or fallback or "Assistant task")
+end
+
+local function AssistantSettingValueLabel(setting, valueLabel, fallback)
+    if type(A.DisplaySettingValueLabel) == "function" then
+        return A.DisplaySettingValueLabel(setting, valueLabel, fallback or "MSUF option")
+    end
+    return AssistantSettingLabel(setting, fallback or "MSUF option") .. ": " .. tostring(valueLabel or "value")
+end
+
+local function LabelSuffixAfterPrefix(label, prefix)
+    label = tostring(label or "")
+    prefix = tostring(prefix or "")
+    if prefix == "" or label:sub(1, #prefix) ~= prefix then return nil end
+    local suffix = label:sub(#prefix + 1):gsub("^%s+", "")
+    if suffix:match("^:%s*.+$") or suffix:match("^%-%>%s*.+$") then return suffix end
+    return nil
+end
+
+local function SingleSettingPlanLabel(change, explicitLabel, fallback)
+    local setting = change and change.setting
+    if not setting then return nil end
+    local displayLabel = AssistantSettingLabel(setting, fallback or "Assistant change")
+    local rawLabel = tostring(setting.label or "")
+    explicitLabel = type(explicitLabel) == "string" and explicitLabel or ""
+    if explicitLabel ~= "" and explicitLabel ~= "Assistant selected option" and explicitLabel ~= "Assistant selected options" then
+        local suffix = LabelSuffixAfterPrefix(explicitLabel, rawLabel) or LabelSuffixAfterPrefix(explicitLabel, displayLabel)
+        if suffix then
+            suffix = suffix:gsub("^:%s*", ": ")
+            return suffix:sub(1, 1) == ":" and (displayLabel .. suffix) or (displayLabel .. " " .. suffix)
+        end
+    end
+    if change.value ~= nil or change.valueLabel ~= nil then
+        return AssistantSettingValueLabel(setting, SettingResponseValueLabel(setting, change.value, change.valueLabel), fallback or "Assistant change")
+    end
+    return displayLabel
+end
+
+local function AssistantPlanLabel(plan, fallback)
+    if type(plan) ~= "table" then return tostring(fallback or "Assistant change") end
+    if type(plan.changes) == "table" and #plan.changes == 1 then
+        local label = SingleSettingPlanLabel(plan.changes[1], plan.label, fallback)
+        if label then return label end
+    end
+    if plan.action then
+        local rawActionLabel = plan.action and plan.action.label
+        if type(plan.label) ~= "string" or plan.label == "" or plan.label == tostring(rawActionLabel or "") then
+            return AssistantActionLabel(plan.action, fallback or "Assistant task")
+        end
+    end
+    if type(plan.label) == "string" and plan.label ~= "" then return plan.label end
+    if plan.action then return AssistantActionLabel(plan.action, fallback or "Assistant task") end
+    return tostring(fallback or "Assistant change")
+end
+
 local function ChoiceDisplayLabel(choice)
     local setting = choice and choice.setting
-    if setting and setting.type == "enum" and choice.value ~= nil then
+    if setting and (choice.value ~= nil or choice.valueLabel ~= nil) then
         local valueLabel = SettingResponseValueLabel(setting, choice.value, choice.valueLabel)
         local label = tostring(choice.label or "")
-        if label == "" or label:find("%-%>") or label == tostring(choice.valueLabel or "") then
-            if type(A.DisplaySettingValueLabel) == "function" then
-                return A.DisplaySettingValueLabel(setting, valueLabel, "Option")
-            end
-            return tostring(setting.label or "Option") .. ": " .. valueLabel
+        if label == "" or label:find("%-%>") or label:find(":%s*") or label == tostring(choice.valueLabel or "") or label == tostring(setting.label or "") then
+            return AssistantSettingValueLabel(setting, valueLabel, "Option")
         end
     end
     return choice and (choice.label or choice.valueLabel) or nil
@@ -1297,7 +1372,7 @@ local function ChoiceText(choices)
         local action = choice and choice.action
         local label = ChoiceDisplayLabel(choice)
         if not label or label == "" then
-            label = tostring((setting and setting.label) or (action and action.label) or "Option")
+            label = setting and AssistantSettingLabel(setting, "Option") or (action and AssistantActionLabel(action, "Assistant task") or "Option")
         end
         label = tostring(label):gsub("%s*%[%s*%]", "")
         lines[#lines + 1] = tostring(i) .. ". " .. tostring(label)
@@ -1486,7 +1561,7 @@ local function ConfirmationText(plan)
     if type(plan) == "table" and type(plan.confirmText) == "string" and plan.confirmText ~= "" then
         return plan.confirmText
     end
-    local label = tostring(plan and plan.label or "this action")
+    local label = AssistantPlanLabel(plan, "this action")
     return "I can apply " .. label .. ". Answer with 'yes', 'do it', 'apply', or 'cancel'."
 end
 
@@ -1574,6 +1649,21 @@ local function IsConfirmationApply(text)
         "run it", "confirm it", "ok do it", "okay do it", "ok apply it", "okay apply it",
         "ja bitte", "ja mach das", "mach das", "mach es", "mach weiter", "leg los",
         "anwenden", "uebernehmen", "bestaetigen",
+    }
+    for i = 1, #phrases do
+        if ReplyHasPhrase(text, phrases[i]) or normalized == NormalizeReply(phrases[i]) then return true end
+    end
+    return false
+end
+
+local function LooksLikeUndoRedoCommand(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "undo" or normalized == "redo" then return true end
+    local phrases = {
+        "undo", "undo that", "undo this", "undo last", "undo last change",
+        "redo", "redo that", "redo this", "redo last", "reapply",
+        "revert", "revert that", "revert this", "take it back",
+        "rueckgaengig", "rueckgaengig machen", "wiederholen", "erneut anwenden",
     }
     for i = 1, #phrases do
         if ReplyHasPhrase(text, phrases[i]) or normalized == NormalizeReply(phrases[i]) then return true end
@@ -1688,7 +1778,7 @@ local function ExecuteChoice(choice)
         return A.ExecutePlan({
             kind = "changes",
             changes = choice.changes,
-            label = choice.label or "Assistant selected options",
+            label = ChoiceDisplayLabel(choice) or "Assistant selected options",
             summary = choice.summary or "Assistant selected options.",
             bulkSafe = choice.bulkSafe,
         })
@@ -1705,7 +1795,7 @@ local function ExecuteChoice(choice)
             action = action,
             args = choice.args or {},
             confirmRequired = choice.confirmRequired,
-            label = choice.label or action.label or "Assistant selected task",
+            label = ChoiceDisplayLabel(choice) or AssistantActionLabel(action, "Assistant selected task"),
             summary = choice.summary or "Assistant selected task.",
         })
     end
@@ -1816,8 +1906,7 @@ local function CopySerializableActionArgs(value, depth)
 end
 
 local function SettingLabel(setting)
-    if type(A.DisplaySettingLabel) == "function" then return A.DisplaySettingLabel(setting) end
-    return tostring(setting and setting.label or "MSUF option")
+    return AssistantSettingLabel(setting, "MSUF option")
 end
 
 local function DescribeChange(setting, undo)
@@ -1940,7 +2029,7 @@ local function ExecuteChanges(plan)
     RunApplies(changedSettings)
 
     local bundle = {
-        label = plan.label or "Assistant change",
+        label = AssistantPlanLabel(plan, "Assistant change"),
         action = "change",
         changes = undoChanges,
         lastSetting = lastSetting,
@@ -1962,7 +2051,7 @@ end
 local function ActionResponse(action, plan, message)
     message = Trim(message or "")
     if message == "" or message == "Done." then
-        return "Done. I ran " .. tostring(plan and plan.label or action and action.label or "that MSUF task") .. "."
+        return "Done. I ran " .. AssistantPlanLabel(plan, AssistantActionLabel(action, "that MSUF task")) .. "."
     end
     if message:find("^Done%.") or message:find("^Already set%.") then return message end
     return "Done. " .. message
@@ -1992,7 +2081,7 @@ local function ExecuteAction(plan)
         local afterProfile = captureProfile and A.CaptureProfileSnapshot(action.key, plan.args or {}) or nil
         A.RecordPerfSample("assistant.snapshot.after", snapshotStart, action.key)
         undoAvailable = A.PushUndo({
-            label = plan.label or action.label or "Assistant task",
+            label = AssistantPlanLabel(plan, AssistantActionLabel(action, "Assistant task")),
             action = action.key,
             beforeSnapshot = before,
             afterSnapshot = after,
@@ -2007,7 +2096,7 @@ local function ExecuteAction(plan)
     end
     A.RememberAppliedBundle({
         action = action.key,
-        actionLabel = plan.label or action.label,
+        actionLabel = AssistantPlanLabel(plan, AssistantActionLabel(action, "Assistant task")),
         actionMessage = text,
         undoAvailable = undoAvailable,
         actionArgs = actionArgs,
@@ -2043,12 +2132,12 @@ function A.ExecutePlan(plan, opts)
     if PlanNeedsConfirmation(plan) and opts.confirmed ~= true then
         A.pendingConfirmation = plan
         local ctx = A.GetContext and A.GetContext()
-        if ctx then ctx.pendingConfirmation = plan.label or "Assistant task" end
+        if ctx then ctx.pendingConfirmation = AssistantPlanLabel(plan, "Assistant task") end
         return { text = ConfirmationText(plan), result = "confirmation_needed", summary = plan.summary }
     end
     if InCombat() and AnyCombatUnsafe(plan) and opts.fromQueue ~= true then
         A.QueuePlan(plan)
-        return { text = "I will apply this after combat ends: " .. tostring(plan.label or "Assistant change") .. ".", result = "queued", summary = plan.summary }
+        return { text = "I will apply this after combat ends: " .. AssistantPlanLabel(plan, "Assistant change") .. ".", result = "queued", summary = plan.summary }
     end
     if plan.kind == "changes" then return ExecuteChanges(plan) end
     if plan.kind == "action" then return ExecuteAction(plan) end
@@ -2061,6 +2150,12 @@ local function HandlePending(text)
         if flowResult then return flowResult end
     end
     if A.pendingConfirmation then
+        if LooksLikeUndoRedoCommand(text) then
+            A.pendingConfirmation = nil
+            local ctx = A.GetContext and A.GetContext()
+            if ctx then ctx.pendingConfirmation = nil end
+            return nil
+        end
         if IsChoiceAbort(text) then
             A.pendingConfirmation = nil
             local ctx = A.GetContext and A.GetContext()
@@ -2078,6 +2173,10 @@ local function HandlePending(text)
     end
     local choices = CurrentPendingChoices()
     if choices then
+        if LooksLikeUndoRedoCommand(text) then
+            ClearPendingChoices()
+            return nil
+        end
         if IsChoiceAbort(text) then
             ClearPendingChoices()
             return { text = "Cancelled. MSUF stayed as it was.", result = "info" }
@@ -2405,7 +2504,7 @@ local function TrySubmitBatch(text)
     for i = 1, #parts do
         local result = A.HandleInput(parts[i])
         if not result then
-            return { text = "I paused at step " .. tostring(i) .. ": " .. tostring(parts[i]), result = "failed" }
+            return { text = "I paused at step " .. tostring(i) .. " because I could not match that request.", result = "failed" }
         end
         if (result.status or result.result) ~= "applied" and (result.status or result.result) ~= "info" then
             return result
@@ -2488,7 +2587,7 @@ local function BuildDeferredSubmitSteps(text, callback, opts)
                 local part = parts[partIndex]
                 local result = LongInputResult(part) or A.HandleInput(part)
                 if not result then
-                    result = { text = "I paused at step " .. tostring(partIndex) .. ": " .. tostring(part), result = "failed" }
+                    result = { text = "I paused at step " .. tostring(partIndex) .. " because I could not match that request.", result = "failed" }
                 end
                 if (result.status or result.result) ~= "applied" and (result.status or result.result) ~= "info" then
                     finalResult = result

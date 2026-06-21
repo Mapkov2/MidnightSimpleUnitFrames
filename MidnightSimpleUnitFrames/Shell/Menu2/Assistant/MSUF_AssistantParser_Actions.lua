@@ -1,4 +1,4 @@
---- Shell/Menu2/Assistant/MSUF_AssistantParser_Actions.lua
+﻿--- Shell/Menu2/Assistant/MSUF_AssistantParser_Actions.lua
 --- Action parser shard for concrete Assistant commands.
 ---
 --- Returns action/changes plans rather than executing them, keeping undo,
@@ -1235,7 +1235,7 @@ local function ParseUnitStatusIndicatorMove(text)
 end
 
 local function ParseCustomAnchorWorkflow(text)
-    if not ContainsAny(text, { "custom anchor", "custom anchor picker", "anchor picker", "anchor frame picker" }) then return nil end
+    if not ContainsAny(text, { "custom anchor", "custom anchor picker", "anchor picker", "anchor frame picker", "anker picker" }) then return nil end
     if ContainsAny(text, { "cancel", "close", "stop", "abort" }) then
         local action = Registry and Registry:GetAction("cancel_custom_anchor_picker")
         return action and {
@@ -1682,6 +1682,13 @@ local function ParseMenuWindowAction(text)
 end
 
 function A._ParseMenuHistoryAction(text)
+    text = tostring(text or "")
+    if not (text:find("history", 1, true) or text:find("change", 1, true)
+        or text:find("session", 1, true) or text:find("navrail", 1, true)
+        or text:find("verlauf", 1, true) or text:find("aenderung", 1, true)
+        or text:find("sitzung", 1, true)) then
+        return nil
+    end
     if not ContainsAny(text, {
         "menu history", "menu change", "menu changes", "menu session", "session changes",
         "msuf2 menu changes", "ui change", "ui changes", "navrail history",
@@ -1820,13 +1827,30 @@ local function RegistryActionAliasCandidates(actions, text)
         local action = actions[i]
         if candidateSet[action] then out[#out + 1] = action end
     end
-    if #out == 0 then out = actions end
     P._lastRegistryActionAliasCandidateCount = #out
     P._lastRegistryActionAliasTotalCount = #actions
     return out
 end
 
+local function LooksLikeNumericSettingChange(text)
+    if FirstNumber(text) == nil then return false end
+    if ContainsAny(text, { "import", "export", "profile string", "copy", "backup", "reset", "open", "diagnose", "test" }) then return false end
+    if not ContainsAny(text, {
+        "width", "height", "size", "scale", "font size", "text size",
+        "x offset", "y offset", "offset", "spacing", "alpha", "opacity",
+        "breite", "hoehe", "groesse", "schriftgroesse", "text groesse",
+    }) then
+        return false
+    end
+    return ContainsAny(text, {
+        "player", "target", "focus", "pet", "boss", "party", "raid", "mythic",
+        "frame", "unit", "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
+        "name", "health", "hp", "power", "mana", "text", "spieler", "ziel", "fokus",
+    })
+end
+
 function P.ParseRegistryActionAliasShortcut(text, raw)
+    if LooksLikeNumericSettingChange(text) then return nil end
     local actions = Registry and Registry:AllActions() or {}
     local bestAction, bestArgs, bestMeta, bestScore
     local candidates = RegistryActionAliasCandidates(actions, text)
