@@ -357,7 +357,7 @@ local PAGE_TEXT_TARGETS = {
     { page = "auras3_styling", label = "Aura Style", terms = { "aura style", "aura styling", "aura colors", "aura cooldown text", "aura borders" } },
     { page = "auras3_debuffs", label = "Aura Debuffs", terms = { "debuff", "debuffs", "debuff settings", "debuff style" } },
     { page = "auras3_buffs", label = "Aura Buffs", terms = { "buff", "buffs", "buff settings", "buff style" } },
-    { page = "auras3_styling", label = "Auras", terms = { "aura", "auras", "aura settings", "aura style" } },
+    { page = "auras3_styling", label = "Auras", terms = { "aura", "auras", "auren", "aura settings", "aura style", "auren einstellungen" } },
 
     { page = "opt_castbar", label = "Cast Bars", terms = { "castbar", "castbars", "zauberleiste" } },
     { page = "opt_colors", label = "Colors", terms = { "colors", "colours", "color palette", "farben" } },

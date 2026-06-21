@@ -146,19 +146,34 @@ local function MaybeYield()
     if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
 end
 
-local function HasPhrase(text, phrase)
-    text = Normalize(text)
+local function HasNormalizedPhrase(normalizedText, phrase)
     phrase = Normalize(phrase)
     if phrase == "" then return false end
-    return (" " .. text .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
+    return (" " .. tostring(normalizedText or "") .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
+end
+
+local function HasPhrase(text, phrase)
+    return HasNormalizedPhrase(Normalize(text), phrase)
 end
 
 local function ContainsAny(text, words)
-    text = Normalize(text)
+    local normalizedText = Normalize(text)
     for i = 1, #(words or {}) do
-        if HasPhrase(text, words[i]) then return true end
+        if HasNormalizedPhrase(normalizedText, words[i]) then return true end
     end
     return false
+end
+
+local function IsStandaloneCancelReply(text)
+    local norm = Normalize(text)
+    return norm == "no"
+        or norm == "no thanks"
+        or norm == "cancel"
+        or norm == "abort"
+        or norm == "stop"
+        or norm == "nein"
+        or norm == "nein danke"
+        or norm == "abbrechen"
 end
 
 local exactAssistantKeyCache
@@ -335,8 +350,10 @@ local function IsGermanConversation(text)
         "wer bist du", "was bist du", "witz", "normal reden", "einfach reden", "besser in wow",
         "besser bei wow", "wie werde ich besser", "klassenguide", "talente", "spielweise",
         "was kannst du", "was kannst du alles", "was kann der assistant", "was kann der assistent",
-        "wie chatgpt", "chatgpt", "chat gpt", "ki assistant", "ki assistent", "rede ueber msuf",
-        "reden ueber msuf", "ueber msuf reden", "rede ueber wow", "reden ueber wow", "ueber wow reden",
+        "welche befehle", "befehle gibt", "befehle anzeigen", "wie chatgpt", "chatgpt", "chat gpt",
+        "ki assistant", "ki assistent", "rede ueber msuf", "reden ueber msuf", "ueber msuf reden",
+        "rede ueber wow", "reden ueber wow", "ueber wow reden", "kannst du mit wow helfen",
+        "wow hilfe", "hilfe mit wow", "interface kaputt", "ui kaputt", "addon kaputt",
     })
 end
 
@@ -433,7 +450,7 @@ local function NextConversationJoke()
     local jokes = WOW_JOKES_EN
     if #jokes == 0 then return nil end
 
-    local key = "lastEnglishJoke ndex"
+    local key = "lastEnglishJokeIndex"
     local index = 1
     local ctx = A.GetContext and A.GetContext() or nil
     if type(ctx) == "table" then
@@ -454,6 +471,14 @@ local function AssistantCapabilityReply()
     }
 end
 
+local function TroubleshootingReply()
+    return {
+        text = "Troubleshooting help\nI can run local MSUF checks, inspect common visibility problems, build support text, and open recovery tools. Start with 'run checks' or name the broken area, for example: why is target cast bar hidden; why are party frames hidden; why are target buffs hidden.\nYou can ask: Run Checks | Assistant Support Text | Open Display & Recovery",
+        status = "info",
+        summary = "Assistant troubleshooting help",
+    }
+end
+
 local function HumanConversationReply(text)
     local norm = Normalize(text)
     if norm == "" then return nil end
@@ -470,11 +495,66 @@ local function HumanConversationReply(text)
         }
     end
 
+    if norm == "help"
+        or norm == "help me"
+        or norm == "i need help"
+        or norm == "show me help"
+        or norm == "show help"
+        or norm == "hilfe"
+        or norm == "hilf mir"
+        or norm == "ich brauche hilfe"
+        or norm == "brauche hilfe"
+        or norm == "zeige mir hilfe"
+        or norm == "zeig mir hilfe"
+        or norm == "zeige mir alles"
+        or norm == "show me everything"
+    then
+        return AssistantCapabilityReply()
+    end
+
+    if ContainsAny(norm, {
+        "what is msuf", "what is midnight simple unit frames", "what are midnight simple unit frames",
+        "was ist msuf", "was sind midnight simple unit frames",
+    }) then
+        return {
+            text = "MSUF is Midnight Simple Unit Frames, a local WoW unit-frame addon. I can help with its frames, cast bars, auras, group frames, class resources, gameplay helpers, profiles, and diagnostics. Ask me to find an option, open a page, explain a setting, run checks, or apply a concrete MSUF change.",
+            status = "info",
+            summary = "MSUF overview",
+        }
+    end
+
+    if ContainsAny(norm, {
+        "cant find auras", "can't find auras", "cannot find auras", "where are auras",
+        "where do i find auras", "where is auras", "find auras",
+        "ich finde auren nicht", "finde auren nicht", "wo sind auren", "wo finde ich auren",
+        "auren nicht finden", "auren suche",
+    }) then
+        return {
+            text = "Auras are in the MSUF Auras pages. I can open Aura pages, explain filters, change icon size/count/growth, adjust cooldown and stack text, manage hidden aura lists, and run visibility checks. Ask: open auras; where do I change aura filters; why are target buffs hidden?",
+            status = "info",
+            summary = "Auras help",
+        }
+    end
+
+    if ContainsAny(norm, {
+        "profile import broken", "profile import not working", "import broken", "import not working",
+        "import failed", "profile import failed", "import kaputt", "profil import kaputt",
+        "profile import kaputt", "import geht nicht", "profil import geht nicht",
+    }) then
+        return {
+            text = "Profile import help\nOpen Profiles first, paste a full MSUF profile string, and import into a backup or new profile when possible. I can open the import panel, export the current profile first, or run a profile check.\nYou can ask: Open Profile Import | Export Current Profile | Check Profiles",
+            status = "info",
+            summary = "Profile import help",
+        }
+    end
+
     if ContainsAny(norm, {
         "what can you do", "what can i ask", "what can i ask you", "what can the assistant do",
-        "what can msuf assistant do", "assistant help", "show commands",
+        "what can msuf assistant do", "assistant help", "show commands", "what commands",
+        "which commands", "available commands", "commands list", "list commands",
         "was kannst du", "was kannst du alles", "was kann der assistant", "was kann der assistent",
         "was kann msuf assistant", "was kann msuf assistent", "was kann ich fragen", "zeig mir befehle",
+        "welche befehle", "welche befehle gibt es", "befehle gibt es", "befehle anzeigen",
     }) then
         return AssistantCapabilityReply()
     end
@@ -506,13 +586,37 @@ local function HumanConversationReply(text)
     end
 
     if ContainsAny(norm, {
+        "interface broken", "ui broken", "addon broken", "broken interface", "broken ui",
+        "everything is broken", "something is broken", "interface problem", "ui problem",
+        "addon problem", "interface issue", "ui issue", "not working", "does not work",
+        "doesnt work", "why is my interface broken", "why is my ui broken",
+        "interface kaputt", "interface ist kaputt", "mein interface ist kaputt",
+        "ui kaputt", "ui ist kaputt", "meine ui ist kaputt", "addon kaputt", "alles kaputt",
+        "warum ist mein interface kaputt", "warum ist meine ui kaputt", "funktioniert nicht",
+        "geht nicht", "problem mit interface", "problem mit ui", "fehler im interface",
+        "unitframes weg", "unit frames weg", "frames weg", "rahmen weg",
+        "unit frames gone", "unitframes gone", "unit frames missing", "unitframes missing",
+        "unit frames not shown", "unitframes not shown", "unit frames not showing", "unitframes not showing",
+        "frames gone", "frames are gone", "my frames are gone", "frames missing", "frames are missing",
+        "frames not shown", "frames not showing", "my ui is gone", "everything is gone",
+        "settings disappeared", "settings missing", "settings are missing", "options disappeared",
+        "party frames weg", "raid frames weg", "group frames weg", "gruppenframes weg",
+        "ziel buffs weg", "target buffs gone", "ziel castbar weg", "target castbar gone",
+        "spieler frame unsichtbar", "player frame invisible", "frames unsichtbar", "rahmen unsichtbar",
+    }) then
+        return TroubleshootingReply()
+    end
+
+    if ContainsAny(norm, {
         "get better at wow", "better at wow", "improve at wow", "improve in wow", "wow improvement",
         "learn wow", "wow guide", "guide for wow", "class guide", "rotation guide", "talent guide",
         "best talents", "best build", "dps guide", "healer guide", "tank guide", "raid guide",
         "mythic plus guide", "m plus guide", "m+ guide", "how do i play my class",
-        "where can i find wow guides", "wowhead",
+        "where can i find wow guides", "wowhead", "help with wow", "wow help",
+        "can you help with wow", "can you help me with wow", "help me with wow",
         "besser in wow", "besser bei wow", "wow besser", "wie werde ich besser",
-        "wie werde ich besser in wow", "klassenguide", "klassen guide", "talente",
+        "wie werde ich besser in wow", "kannst du mit wow helfen", "hilf mir mit wow",
+        "hilfe mit wow", "wow hilfe", "klassenguide", "klassen guide", "talente",
         "rotation", "spielweise", "wow guide deutsch",
     }) then
         return {
@@ -574,6 +678,356 @@ local function UnsupportedAuraReply(text)
         summary = "Aura option fallback.",
         text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, count, growth, cooldown and stack text, filters, hidden aura lists, quick presets, and group aura copy when those options exist in MSUF. Aura areas I can't match will stay as they are.",
     }
+end
+
+local NATURAL_PROBLEM_TERMS = {
+    "gone", "missing", "disappeared", "vanished", "lost", "not shown", "not showing",
+    "not displayed", "not appearing", "does not show", "doesn't show", "cannot see", "can't see", "cant see", "hidden",
+    "weg", "fehlt", "verschwunden", "nicht angezeigt", "wird nicht angezeigt",
+    "werden nicht angezeigt", "unsichtbar", "nicht sichtbar", "versteckt", "ausgeblendet",
+}
+
+local function HasNaturalProblemTerm(norm)
+    return ContainsAny(norm, NATURAL_PROBLEM_TERMS)
+        or (ContainsAny(norm, { "sehe", "sehen" }) and ContainsAny(norm, { "nicht" }))
+end
+
+local NATURAL_PROFILE_PROBLEM_TERMS = {
+    "profile", "profiles", "profil", "profile import", "import profile",
+}
+
+local NATURAL_GENERIC_PROBLEM_TOPICS = {
+    "frame", "frames", "unit frame", "unit frames", "unitframe", "unitframes",
+    "ui", "interface", "settings", "setting", "options", "option",
+    "everything", "all", "alles",
+    "einstellungen", "optionen",
+}
+
+local NATURAL_CONCRETE_VISIBILITY_TOPICS = {
+    "player", "target", "focus", "pet", "boss", "party", "raid", "mythic raid",
+    "spieler", "ziel", "fokus", "begleiter", "gruppe", "schlachtzug",
+    "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs",
+    "castbar", "cast bar", "zauberleiste",
+}
+
+local function TryNaturalProblemShortcut(text, coreHandler)
+    local norm = Normalize(text)
+    if norm == "" or not HasNaturalProblemTerm(norm) then return nil end
+
+    if type(coreHandler) == "function" and ContainsAny(norm, NATURAL_PROFILE_PROBLEM_TERMS) then
+        local result = coreHandler("profile missing")
+        if result and not (type(result) == "table" and result.kind == "unknown") then return result end
+    end
+
+    if ContainsAny(norm, NATURAL_GENERIC_PROBLEM_TOPICS)
+        and not ContainsAny(norm, NATURAL_CONCRETE_VISIBILITY_TOPICS)
+    then
+        return TroubleshootingReply()
+    end
+
+    return nil
+end
+
+local READABILITY_PROBLEM_TERMS = {
+    "too small", "too tiny", "too big", "too large", "tiny", "unreadable",
+    "hard to read", "hard to see", "cannot read", "can't read", "cant read",
+    "more readable", "overlap", "overlaps", "overlapping", "crowded", "cluttered",
+    "zu klein", "zu gross", "schwer zu lesen", "nicht lesen",
+    "kann den text nicht lesen", "ueberlappen", "ueberlappt",
+}
+
+local READABILITY_AURA_TERMS = {
+    "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs", "icon", "icons",
+}
+
+local READABILITY_CASTBAR_TERMS = {
+    "castbar", "castbars", "cast bar", "cast bars", "zauberleiste", "zauberleisten",
+}
+
+local READABILITY_GROUP_TERMS = {
+    "party", "party frame", "party frames", "raid", "raid frame", "raid frames",
+    "group frame", "group frames", "gruppe", "gruppenframes", "schlachtzug",
+}
+
+local READABILITY_TEXT_TERMS = {
+    "text", "font", "name", "names", "hp", "health", "power", "read",
+    "lesen", "schrift",
+}
+
+local READABILITY_MENU_TERMS = {
+    "menu", "dashboard", "options", "config", "assistant", "ui", "interface",
+    "everything", "all", "alles",
+}
+
+local READABILITY_FRAME_TERMS = {
+    "frame", "frames", "unit frame", "unit frames", "unitframe", "unitframes",
+    "player", "target", "focus", "boss", "spieler", "ziel", "fokus",
+}
+
+local function ReadabilityReply(title, body, examples, actions)
+    return {
+        text = tostring(title or "Readability help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "set player width to 300; set target cast bar height to 24.") .. "\nYou can ask: " .. tostring(actions or "Open Dashboard Scaling | Open Fonts"),
+        status = "info",
+        summary = "Assistant readability help",
+    }
+end
+
+local function TryReadabilityShortcut(text)
+    local norm = Normalize(text)
+    if norm == "" or not ContainsAny(norm, READABILITY_PROBLEM_TERMS) then return nil end
+
+    if ContainsAny(norm, READABILITY_AURA_TERMS) then
+        return ReadabilityReply(
+            "Aura readability help",
+            "For aura size and overlap, I can change icon size, icon count, spacing, growth direction, anchors, cooldown text, and stack text when the scope is clear.",
+            "set target buff icon size to 30; set party aura spacing to 4; make raid buffs grow up.",
+            "Open Auras | Check target buffs"
+        )
+    end
+
+    if ContainsAny(norm, READABILITY_CASTBAR_TERMS) then
+        return ReadabilityReply(
+            "Cast bar readability help",
+            "For cast bars, I can adjust Player, Target, Focus, and Boss cast bar size, text, icon, position, fill direction, and preview settings.",
+            "set target cast bar height to 24; make focus cast bar wider; open cast bars.",
+            "Open Cast Bars | Check target cast bar"
+        )
+    end
+
+    if ContainsAny(norm, READABILITY_GROUP_TERMS) then
+        return ReadabilityReply(
+            "Group frame readability help",
+            "For Party, Raid, and Mythic Raid readability, I can adjust group frame scale, layout, spacing, health text, name text, range fade, and aura layout.",
+            "set raid scale for 20 players to 90; set party name text size to 13; open group health and text.",
+            "Open Group Layout | Open Group Health & Text"
+        )
+    end
+
+    if ContainsAny(norm, READABILITY_TEXT_TERMS) then
+        return ReadabilityReply(
+            "Text readability help",
+            "For text readability, I can adjust unit-frame name, health, power, level, status, font-size, anchor, slot, offset, and global font settings.",
+            "set player name font size to 14; set target hp text left current; open fonts.",
+            "Open Fonts | Open Player | Open Target"
+        )
+    end
+
+    if ContainsAny(norm, READABILITY_MENU_TERMS) or ContainsAny(norm, READABILITY_FRAME_TERMS) then
+        return ReadabilityReply(
+            "Scaling readability help",
+            "For broad readability, start with Dashboard scaling. I can adjust the MSUF menu scale, MSUF frame scale, WoW UI scale, and then refine frame sizes or text.",
+            "open dashboard scaling; set MSUF frame scale to 100; set player width to 300.",
+            "Open Dashboard Scaling | Open Fonts"
+        )
+    end
+
+    return nil
+end
+
+local COLOR_CONTRAST_PROBLEM_TERMS = {
+    "color is wrong", "colors are wrong", "color looks wrong", "colors look wrong",
+    "wrong color", "wrong colors", "ugly color", "ugly colors", "colors are ugly",
+    "too dark", "too bright", "too faded", "too transparent", "faded",
+    "opacity too low", "opacity too high", "no contrast", "bad contrast", "poor contrast",
+    "contrast bad", "contrast is bad", "contrast looks bad",
+    "farbe ist falsch", "farben sind falsch", "farben sehen falsch", "falsche farbe",
+    "zu dunkel", "zu hell", "kontrast schlecht", "schlechter kontrast",
+    "zu transparent",
+}
+
+local COLOR_CONTRAST_AURA_TERMS = {
+    "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs", "icon", "icons",
+}
+
+local COLOR_CONTRAST_CASTBAR_TERMS = {
+    "castbar", "castbars", "cast bar", "cast bars", "zauberleiste", "zauberleisten",
+}
+
+local COLOR_CONTRAST_TEXT_TERMS = {
+    "text", "font", "name", "names", "hp text", "health text", "power text",
+    "schrift", "text kontrast",
+}
+
+local COLOR_CONTRAST_GROUP_TERMS = {
+    "party", "party frame", "party frames", "raid", "raid frame", "raid frames",
+    "group frame", "group frames", "gruppe", "gruppenframes", "schlachtzug",
+}
+
+local COLOR_CONTRAST_FRAME_TERMS = {
+    "frame", "frames", "unit frame", "unit frames", "unitframe", "unitframes",
+    "player", "target", "focus", "boss", "health bar", "power bar", "bar", "bars",
+    "spieler", "ziel", "fokus",
+}
+
+local function ColorContrastReply(title, body, examples, actions)
+    return {
+        text = tostring(title or "Color and contrast help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "set player border color blue; set global font color white.") .. "\nYou can ask: " .. tostring(actions or "Open Colors | Open Bars"),
+        status = "info",
+        summary = "Assistant color and contrast help",
+    }
+end
+
+local function TryColorContrastShortcut(text)
+    local norm = Normalize(text)
+    if norm == "" or not ContainsAny(norm, COLOR_CONTRAST_PROBLEM_TERMS) then return nil end
+
+    if ContainsAny(norm, COLOR_CONTRAST_AURA_TERMS) then
+        return ColorContrastReply(
+            "Aura color and opacity help",
+            "For aura readability, I can adjust aura cooldown text colors, stack text, icon sizing, filters, and hidden aura lists. For faded or hard-to-read aura icons, start by naming the scope and lane.",
+            "set aura safe timer color to white; set target buff icon size to 30; check target buffs.",
+            "Open Auras | Check target buffs"
+        )
+    end
+
+    if ContainsAny(norm, COLOR_CONTRAST_CASTBAR_TERMS) then
+        return ColorContrastReply(
+            "Cast bar color help",
+            "For cast bars, I can adjust cast text color, background color, border color, cast colors, interrupt feedback, and interrupt-ready indicators.",
+            "set cast bar text color white; set target cast bar height to 24; open cast bars.",
+            "Open Cast Bars | Check target cast bar"
+        )
+    end
+
+    if ContainsAny(norm, COLOR_CONTRAST_TEXT_TERMS) then
+        return ColorContrastReply(
+            "Text contrast help",
+            "For text contrast, I can adjust global font color, unit-frame text colors, health text color modes, font sizes, anchors, and text slots.",
+            "set global font color white; set target health text color mode class; set player name font size to 14.",
+            "Open Fonts | Open Colors"
+        )
+    end
+
+    if ContainsAny(norm, COLOR_CONTRAST_GROUP_TERMS) then
+        return ColorContrastReply(
+            "Group frame color and opacity help",
+            "For group frames, I can adjust health text, range fade, debuff stripe colors, bar colors, dispel overlays, and aura readability.",
+            "set raid range fade to 40; set party debuff stripe color red; open group health and text.",
+            "Open Group Health & Text | Open Group Layout"
+        )
+    end
+
+    if ContainsAny(norm, COLOR_CONTRAST_FRAME_TERMS) then
+        return ColorContrastReply(
+            "Frame color and opacity help",
+            "For frames and bars, I can adjust bar mode, bar texture, border colors, health bar colors, opacity, range fade, and global color settings.",
+            "set global bar mode class; set player border color blue; set player width to 300.",
+            "Open Colors | Open Bars"
+        )
+    end
+
+    return ColorContrastReply(
+        "Color and contrast help",
+        "For color or contrast problems, tell me the area first: frame, cast bar, aura, text, group frames, or class colors. I can then point to the exact MSUF options or apply a concrete change.",
+        "set global bar mode class; set cast bar text color white; set player border color blue.",
+        "Open Colors | Open Bars"
+    )
+end
+
+local VISIBILITY_PROBLEM_TERMS = {
+    "hidden", "missing", "gone", "invisible", "not visible", "not showing",
+    "not shown", "not displayed", "not appearing", "does not show", "doesn't show", "cannot see", "can't see", "cant see",
+    "weg", "fehlt", "unsichtbar", "nicht sichtbar", "nicht da", "nicht angezeigt",
+    "wird nicht angezeigt", "werden nicht angezeigt", "zeigt nicht", "zeigt keine",
+    "versteckt", "ausgeblendet", "verschwunden",
+}
+
+local VISIBILITY_AURA_TERMS = {
+    "aura", "auras", "buff", "buffs", "debuff", "debuffs",
+    "auren",
+}
+
+local VISIBILITY_DEBUFF_TERMS = { "debuff", "debuffs" }
+local VISIBILITY_BUFF_TERMS = { "buff", "buffs" }
+local VISIBILITY_CASTBAR_TERMS = { "castbar", "cast bar", "zauberleiste" }
+
+local VISIBILITY_PARTY_TERMS = { "party", "party frame", "party frames", "party group", "party group frames" }
+local VISIBILITY_RAID_TERMS = { "raid", "raid frame", "raid frames", "raid group", "raid group frames", "schlachtzug" }
+local VISIBILITY_MYTHIC_TERMS = { "mythic raid", "mythicraid", "mythic raid frame", "mythic raid frames" }
+
+local VISIBILITY_PLAYER_TERMS = { "player", "player frame", "player unitframe", "spieler", "spieler frame", "spieler unitframe", "spieler rahmen", "ich" }
+local VISIBILITY_TARGETTARGET_TERMS = { "targettarget", "target of target", "target of target frame", "ziel des ziels" }
+local VISIBILITY_TARGET_TERMS = { "target", "target frame", "target unitframe", "ziel", "ziel frame", "ziel rahmen" }
+local VISIBILITY_FOCUSTARGET_TERMS = { "focustarget", "focus target", "focus target frame", "fokus ziel" }
+local VISIBILITY_FOCUS_TERMS = { "focus", "focus frame", "focus unitframe", "fokus", "fokus frame", "fokus rahmen" }
+local VISIBILITY_PET_TERMS = { "pet", "pet frame", "pet unitframe", "begleiter", "begleiter frame", "begleiter rahmen" }
+local VISIBILITY_BOSS_TERMS = { "boss", "boss frame", "boss frames", "boss rahmen" }
+
+local function VisibilityGroupForText(norm)
+    if ContainsAny(norm, VISIBILITY_MYTHIC_TERMS) then return "mythicraid" end
+    if ContainsAny(norm, VISIBILITY_PARTY_TERMS) then return "party" end
+    if ContainsAny(norm, VISIBILITY_RAID_TERMS) then return "raid" end
+    return nil
+end
+
+local function VisibilityUnitForText(norm)
+    if ContainsAny(norm, VISIBILITY_TARGETTARGET_TERMS) then return "targettarget" end
+    if ContainsAny(norm, VISIBILITY_FOCUSTARGET_TERMS) then return "focustarget" end
+    if ContainsAny(norm, VISIBILITY_TARGET_TERMS) then return "target" end
+    if ContainsAny(norm, VISIBILITY_FOCUS_TERMS) then return "focus" end
+    if ContainsAny(norm, VISIBILITY_PET_TERMS) then return "pet" end
+    if ContainsAny(norm, VISIBILITY_BOSS_TERMS) then return "boss" end
+    if ContainsAny(norm, VISIBILITY_PLAYER_TERMS) then return "player" end
+    return nil
+end
+
+local function VisibilityAuraLaneForText(norm)
+    if ContainsAny(norm, VISIBILITY_DEBUFF_TERMS) then return "debuffs" end
+    if ContainsAny(norm, VISIBILITY_BUFF_TERMS) then return "buffs" end
+    return "auras"
+end
+
+local function VisibilityAuraScopeForText(group, unit)
+    if group then return group end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+    if not unit then return "target" end
+    return nil
+end
+
+local function VisibilityCastbarUnitForText(unit)
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+    if not unit then return "target" end
+    return nil
+end
+
+local function TryVisibilityDiagnosticShortcut(text, coreHandler)
+    if type(coreHandler) ~= "function" then return nil end
+    local norm = Normalize(text)
+    if norm == "" then return nil end
+    if not ContainsAny(norm, VISIBILITY_PROBLEM_TERMS)
+        and not (ContainsAny(norm, { "sehe", "sehen" }) and ContainsAny(norm, { "nicht" }))
+    then
+        return nil
+    end
+
+    local group = VisibilityGroupForText(norm)
+    local unit = VisibilityUnitForText(norm)
+    local query
+
+    if ContainsAny(norm, VISIBILITY_AURA_TERMS) then
+        local scope = VisibilityAuraScopeForText(group, unit)
+        if scope then
+            query = "why are " .. scope .. " " .. VisibilityAuraLaneForText(norm) .. " hidden"
+        end
+    elseif ContainsAny(norm, VISIBILITY_CASTBAR_TERMS) then
+        local castbarUnit = VisibilityCastbarUnitForText(unit)
+        if castbarUnit then
+            query = "why is " .. castbarUnit .. " cast bar hidden"
+        end
+    elseif group then
+        query = "why are " .. group .. " frames hidden"
+    elseif unit then
+        query = "diagnose " .. unit .. " frame"
+    end
+
+    if not query then return nil end
+
+    local result = coreHandler(query)
+    if result and not (type(result) == "table" and result.kind == "unknown") then
+        result.summary = result.summary or "Matched by a visibility diagnostic shortcut."
+        return result
+    end
+    return nil
 end
 
 local function FriendlyNoMatch(text)
@@ -653,6 +1107,188 @@ local function HasPendingAssistantState()
     return false
 end
 
+local CORRECTION_HISTORY_TERMS = {
+    "what did you change", "what changed", "what was changed", "what did you do",
+    "what did you just do", "what did you just change", "what exactly did you change",
+    "what exactly did you just do", "what did you set", "last change", "last assistant change",
+    "previous change", "what is it now", "what is it set to", "current value", "value now",
+    "show last change", "show me last change", "show me the last change",
+    "was hast du geaendert", "was hast du gerade geaendert", "was hast du gemacht",
+    "was hast du gerade gemacht", "was wurde geaendert", "was ist geaendert",
+    "letzte aenderung", "zeige letzte aenderung", "zeig letzte aenderung",
+}
+
+local CORRECTION_UNDO_TERMS = {
+    "undo", "undo that", "undo this", "undo last", "undo last change", "undo please",
+    "revert", "revert that", "revert this", "revert last", "revert last change",
+    "rollback", "roll back", "roll back that", "roll back last change",
+    "take it back", "take that back", "back out that change",
+    "restore previous", "restore previous value", "restore previous change",
+    "restore last value", "restore last change", "put it back", "put that back",
+    "make it like before", "that was wrong", "this was wrong", "wrong change",
+    "i changed the wrong thing", "i changed wrong thing", "i did the wrong change",
+    "i do not like that", "i dont like that", "i do not like this", "i dont like this",
+    "do not like that", "dont like that", "not like that", "bad change",
+    "cancel that change", "cancel this change", "cancel last change",
+    "nevermind undo", "never mind undo", "nevermind revert", "never mind revert",
+    "nevermind that", "never mind that", "actually undo", "actually revert",
+    "rueckgaengig", "rueckgaengig machen", "mach das rueckgaengig",
+    "mach es rueckgaengig", "das rueckgaengig machen", "zuruecknehmen",
+    "nimm das zurueck", "mach das zurueck", "wieder zurueck",
+    "das war falsch", "das ist falsch", "falsche aenderung",
+}
+
+local CORRECTION_REDO_TERMS = {
+    "redo", "redo that", "redo this", "redo last", "redo last change",
+    "reapply", "reapply that", "apply it again", "do it again",
+    "restore undone change", "restore the undone change", "repeat that",
+    "repeat last change", "wiederholen", "erneut anwenden",
+}
+
+local function ControlResult(text, status)
+    return {
+        text = text,
+        status = status or "info",
+        result = status or "info",
+        summary = "Assistant correction flow",
+    }
+end
+
+local function CoreControl(coreHandler, command, fallbackText, fallbackStatus)
+    if type(coreHandler) == "function" then
+        local result = coreHandler(command)
+        if result and not IsUnknownResult(result) then return result end
+    end
+    return ControlResult(fallbackText, fallbackStatus)
+end
+
+local function TryCorrectionShortcut(text, coreHandler)
+    local norm = Normalize(text)
+    if norm == "" then return nil end
+
+    if ContainsAny(norm, CORRECTION_REDO_TERMS) then
+        return CoreControl(coreHandler, "redo", "I have no Assistant change to redo.", "failed")
+    end
+
+    if ContainsAny(norm, CORRECTION_UNDO_TERMS) then
+        return CoreControl(coreHandler, "undo", "I have no Assistant change to undo.", "failed")
+    end
+
+    if ContainsAny(norm, CORRECTION_HISTORY_TERMS) then
+        return CoreControl(coreHandler, "what did you change", "I do not have a recorded Assistant change yet.", "info")
+    end
+
+    return nil
+end
+local SETUP_GUIDANCE_TERMS = {
+    "help me set up my ui", "help me setup my ui", "help me set up my interface",
+    "help me setup my interface", "help me configure my frames", "help me configure unitframes",
+    "help me configure unit frames", "help me build my ui", "help me build my layout",
+    "i am new to unitframes", "i am new to unit frames", "im new to unitframes",
+    "im new to unit frames", "new to unitframes", "new to unit frames",
+    "what should i do first", "what should i change first", "where should i start",
+    "make my ui better", "make my ui cleaner", "make my interface better",
+    "make my interface cleaner", "clean up my ui", "clean up my interface",
+}
+
+local ROLE_RECOMMEND_TERMS = {
+    "recommend settings for healer", "recommend healer settings", "healer setup",
+    "best healer settings", "settings for healer", "recommend settings for tank",
+    "recommend tank settings", "tank setup", "best tank settings", "settings for tank",
+    "recommend settings for dps", "recommend dps settings", "dps setup",
+    "best dps settings", "settings for dps",
+}
+
+local RECOVERY_GUIDANCE_TERMS = {
+    "can you fix it", "fix it", "please fix this", "fix this", "fix that",
+    "that did not work", "that didnt work", "it did not work", "it didnt work",
+    "this did not work", "this didnt work", "it still does not work",
+    "it still doesnt work", "still does not work", "still doesnt work",
+    "still broken", "still not working", "not fixed",
+}
+
+local CONTEXTLESS_GUIDANCE_TERMS = {
+    "what now", "what should i do now", "i am confused", "im confused",
+    "i dont understand", "i do not understand", "explain it simpler",
+    "explain that", "explain it", "explain this", "which one should i pick",
+    "which option should i choose", "which one should i choose",
+    "open the right page", "show me where", "take me there",
+    "do the safe thing", "choose for me",
+}
+
+local function SetupGuidanceReply()
+    return {
+        text = "Setup guidance\nStart with a clean baseline: readable Player and Target frames, visible Party/Raid frames, clear cast bars, and only then aura filters. I can walk you through it step by step.\nYou can ask: Guided Setup | Run Checks | Open Player | Open Group Layout",
+        status = "info",
+        summary = "Assistant setup guidance",
+    }
+end
+
+local function RoleGuidanceReply(text)
+    local norm = Normalize(text)
+    local role = ContainsAny(norm, { "healer" }) and "healer"
+        or (ContainsAny(norm, { "tank" }) and "tank")
+        or (ContainsAny(norm, { "dps", "damage" }) and "dps")
+        or "role"
+    local detail
+    if role == "healer" then
+        detail = "For healing, prioritize readable Party/Raid health text, dispel visibility, range fade, cast bars, and important buffs/debuffs."
+    elseif role == "tank" then
+        detail = "For tanking, prioritize Target, Target of Target, Boss frames, cast bars, debuffs, threat/status visibility, and clear health bars."
+    elseif role == "dps" then
+        detail = "For DPS, prioritize Target, Focus, cast bars, class resources, important buffs/debuffs, and enough group visibility without clutter."
+    else
+        detail = "For role setup, start with visibility, readable text, cast bars, and only the aura information you actively use."
+    end
+    return {
+        text = "Role setup guidance\n" .. detail .. "\nI will not guess-change your profile without a concrete request. Ask for Guided Setup, Run Checks, or name the area you want tuned.\nExamples: open group health and text; why are party frames hidden; set target cast bar height to 24.",
+        status = "info",
+        summary = "Assistant role setup guidance",
+    }
+end
+
+local function RecoveryGuidanceReply()
+    return {
+        text = "Recovery guidance\nI can help, but I need the broken MSUF area before I apply a fix. Tell me what is still wrong, or let me run local checks.\nGood next prompts: Run Checks | why are target buffs hidden | why are party frames hidden | why is target cast bar hidden | undo",
+        status = "info",
+        summary = "Assistant recovery guidance",
+    }
+end
+
+local function ContextlessGuidanceReply()
+    return {
+        text = "I need a little more MSUF context before I choose or open something. Name the area, page, setting, or result number you mean.\nUseful next prompts: Guided Setup | Run Checks | Open Auras | Open Cast Bars | explain result 1 | why are target buffs hidden",
+        status = "info",
+        summary = "Assistant context guidance",
+    }
+end
+
+local function TryGeneralGuidanceShortcut(text, coreHandler)
+    local norm = Normalize(text)
+    if norm == "" then return nil end
+
+    if ContainsAny(norm, ROLE_RECOMMEND_TERMS) then
+        return RoleGuidanceReply(norm)
+    end
+
+    if ContainsAny(norm, SETUP_GUIDANCE_TERMS) then
+        if type(coreHandler) == "function" then
+            local result = coreHandler("guided setup")
+            if result and not IsUnknownResult(result) then return result end
+        end
+        return SetupGuidanceReply()
+    end
+
+    if ContainsAny(norm, RECOVERY_GUIDANCE_TERMS) then
+        return RecoveryGuidanceReply()
+    end
+
+    if ContainsAny(norm, CONTEXTLESS_GUIDANCE_TERMS) then
+        return ContextlessGuidanceReply()
+    end
+
+    return nil
+end
 local function ShouldSkipContext(text)
     local norm = Normalize(text)
     if norm == "" then return true end
@@ -912,6 +1548,10 @@ local function MutationFallbackVariants(text)
         AddUnique(variants, "global bar " .. norm)
     end
 
+    if ContainsAny(norm, { "open", "oeffne" }) then
+        AddUnique(variants, norm:gsub("^oeffne%s+", "open "))
+    end
+
     if ContainsAny(norm, { "turn off", "turn on", "enable", "disable", "show", "hide", "an", "aus", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken", "einblenden", "ausblenden" }) then
         AddUnique(variants, norm:gsub("^turn%s+off%s+", "disable "))
         AddUnique(variants, norm:gsub("^turn%s+on%s+", "enable "))
@@ -961,8 +1601,22 @@ function A.RouteInput(text, coreHandler)
         return coreCache[value] ~= false and coreCache[value] or nil
     end
 
+    local hasPendingState = HasPendingAssistantState()
+    if not hasPendingState and IsStandaloneCancelReply(text) then
+        return {
+            text = "Cancelled. Nothing was waiting for confirmation or a choice.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    if not hasPendingState then
+        local correctionResult = TryCorrectionShortcut(text, Core)
+        if correctionResult then return correctionResult end
+    end
+
     -- Pending confirmations/choices/flows must always win. The core handler owns those.
-    if hasCore and (HasPendingAssistantState() or (ContainsAny(text, FLOW_TERMS) and not LooksLikeKnowledgeQuestionPrefix(text))) then
+    if hasCore and (hasPendingState or (ContainsAny(text, FLOW_TERMS) and not LooksLikeKnowledgeQuestionPrefix(text))) then
         local pendingResult = Core(text)
         if pendingResult and (not IsUnknownResult(pendingResult) or HasPendingAssistantState()) then return pendingResult end
     end
@@ -973,6 +1627,21 @@ function A.RouteInput(text, coreHandler)
         local guidedResult = Core(text)
         if guidedResult and not IsUnknownResult(guidedResult) then return guidedResult end
     end
+
+    local generalGuidanceResult = TryGeneralGuidanceShortcut(text, Core)
+    if generalGuidanceResult then return generalGuidanceResult end
+
+    local naturalProblemResult = TryNaturalProblemShortcut(text, Core)
+    if naturalProblemResult then return naturalProblemResult end
+
+    local visibilityResult = TryVisibilityDiagnosticShortcut(text, Core)
+    if visibilityResult then return visibilityResult end
+
+    local colorContrastResult = TryColorContrastShortcut(text)
+    if colorContrastResult then return colorContrastResult end
+
+    local readabilityResult = TryReadabilityShortcut(text)
+    if readabilityResult then return readabilityResult end
 
     local humanResult = HumanConversationReply(text)
     if humanResult then return humanResult end

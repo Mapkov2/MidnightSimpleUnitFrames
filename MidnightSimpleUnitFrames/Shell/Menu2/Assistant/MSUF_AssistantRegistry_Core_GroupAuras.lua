@@ -48,7 +48,7 @@ function A.RegistryCoreBuilders.BuildGroupAuraHelpers(ctx)
         shown = shown and true or false
         local root = GFAurasRoot(scope)
         root.enabled = true
-        root.blizzardTypes[lane == "buff" and "buffs" or "debuffs"] = true
+        root.blizzardTypes[lane == "buff" and "buffs" or "debuffs"] = false
         GFAuraGroup(scope, lane).enabled = shown
     end
 

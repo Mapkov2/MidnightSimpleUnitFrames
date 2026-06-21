@@ -1,4 +1,4 @@
---- Shell/Menu2/Assistant/MSUF_AssistantParser_Registry.lua
+﻿--- Shell/Menu2/Assistant/MSUF_AssistantParser_Registry.lua
 --- Registry-backed parser for Assistant setting-change plans.
 ---
 --- Ranks declarative registry entries and returns planned changes only; do not
@@ -100,6 +100,8 @@ local function ScopeAdjustedTextForSetting(setting, text)
     -- without target aliases making unrelated target settings look equally valid.
     local unit = tostring(setting.unit)
     local keyScope = SettingKeyScope(setting)
+    local settingKey = tostring(setting.key or ""):lower()
+    if settingKey:find("bosstarget", 1, true) and ContainsAny(text, { "boss target", "boss targets" }) then return text end
     local units, groups = ExplicitScopes(text)
     local adjusted = text
     if setting.frameType == "group" or setting.frameType == "groupAura" then
@@ -333,6 +335,8 @@ local function SettingAllowedByExplicitScopes(setting, text)
         if #units > 0 then return false end
         return true
     end
+    local settingKey = tostring(setting.key or ""):lower()
+    if settingKey:find("bosstarget", 1, true) and ContainsAny(text, { "boss target", "boss targets" }) then return true end
     if #units > 0 and unit ~= "" and unit ~= "global" and not ListContains(units, unit) and not ListContains(units, keyScope) then return false end
     if #groups > 0 and #units == 0 and unit ~= "" and unit ~= "global" and not ListContains(groups, unit) and not ListContains(groups, keyScope) then return false end
     return true
@@ -784,9 +788,9 @@ local function ValueDisplay(setting, value)
 end
 
 local function TooltipModifierValueForText(text)
-    if ContainsAny(text, { "shift", "umschalt", "umschalttaste", "shift taste" }) then return "SHIFr" end
-    if ContainsAny(text, { "ctrl", "control", "strg", "steuerung", "strg taste" }) then return "CrRL" end
-    if ContainsAny(text, { "alt", "option", "alt taste" }) then return "ALr" end
+    if ContainsAny(text, { "shift", "umschalt", "umschalttaste", "shift taste" }) then return "SHIFT" end
+    if ContainsAny(text, { "ctrl", "control", "strg", "steuerung", "strg taste" }) then return "CTRL" end
+    if ContainsAny(text, { "alt", "option", "alt taste" }) then return "ALT" end
     return nil
 end
 
@@ -861,11 +865,13 @@ local SUGGESTION_IGNORE_TOKENS = {
     ["for"] = true, of = true, from = true, into = true, onto = true,
     frame = true, frames = true, unitframe = true, unitframes = true, group = true, groups = true,
     setting = true, settings = true, option = true, options = true, control = true, controls = true,
+    command = true, commands = true, help = true, please = true,
     all = true, every = true, everyone = true, everything = true, each = true,
     setze = true, stelle = true, aktivieren = true, aktiviert = true, deaktivieren = true, deaktiviert = true,
     einschalten = true, eingeschaltet = true, ausschalten = true, ausgeschaltet = true,
     erhoehe = true, erhoehen = true, hoeher = true, groesser = true, kleiner = true, senke = true, reduziere = true,
     anzeigen = true, einblenden = true, ausblenden = true, verstecken = true, versteckt = true,
+    zeige = true, zeigen = true, hilfe = true, befehl = true, befehle = true, bitte = true, mir = true,
     an = true, aus = true, ja = true, nein = true, auf = true, zu = true, als = true, wert = true,
     fuer = true, fur = true, vom = true, von = true, nach = true, ["in"] = true,
     gruppe = true, gruppen = true, gruppenframes = true,
@@ -1007,9 +1013,18 @@ local function SettingPartialSuggestionScore(setting, text)
 end
 
 P._AddCandidateIndexTokens = function(tokenSet, text)
-    local _, tokens = MeaningTokens(text)
-    for i = 1, #tokens do
-        tokenSet[tokens[i]] = true
+    if type(tokenSet) ~= "table" then return end
+    text = tostring(text or "")
+    if text == "" then return end
+    local function add(word)
+        if #word >= 2 and not word:match("^[-+]?%d") and not SUGGESTION_IGNORE_TOKENS[word] then
+            tokenSet[word] = true
+        end
+    end
+    for word in Normalize(text):gmatch("%S+") do
+        add(word)
+        local folded = P.PluralFoldWord and P.PluralFoldWord(word) or word
+        if folded ~= word then add(folded) end
     end
 end
 
@@ -2132,7 +2147,7 @@ local CASTBAR_BACKEND_PROVIDER_KEYS = {
 local CASTBAR_BACKEND_BLOCKERS = {
     "texture", "bar texture", "background texture", "sharedmedia", "color", "colour", "farbe",
     "font", "schrift", "size", "width", "height", "breite", "hoehe", "position", "placement",
-    "offset", "x offset", "y offset", "versatz", "icon", "symbol", "text", "spell name",
+    "offset", "x offset", "y offset", "versatz", "icon", "symbol", "text", "name", "castbar name", "cast bar name", "spell name",
     "time", "timer", "fill direction", "direction", "richtung", "spark", "glow", "latency",
     "interrupt", "kick", "tick", "ticks", "outline", "border", "rand",
 }
@@ -2889,6 +2904,12 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     elseif ContainsAny(text, { "dropdown style", "dropdown style mode", "dropdown module style", "menu dropdown style", "dropdown skin", "dropdown design", "dropdown stil", "menue dropdown stil", "dropdown modus", "dropdown aussehen", "auswahlmenue stil", "menue auswahl stil" }) then
         key = "general.dropdownStyleMode"
     elseif ContainsAny(text, { "msuf style", "msuf style module", "midnight style", "midnight design", "style module", "module style", "msuf skin", "msuf stil", "midnight stil", "stil modul", "style modul", "design modul", "msuf design", "skin modul" }) then
+        if ContainsAny(text, {
+            "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators",
+            "ready check", "readycheck", "combat icon", "combat indicator", "rested icon", "resting icon",
+            "leader icon", "assist icon", "role icon", "raid marker", "pvp flag", "phase icon", "summon icon",
+            "party", "party frame", "raid", "raid frame", "group frame", "group frames",
+        }) then return nil end
         key = "general.styleEnabled"
     elseif ContainsAny(text, { "tooltip modifier", "tooltip modifier key", "unit tooltip modifier", "unitframe tooltip modifier", "modifier key", "tooltip taste", "tooltip modifier taste", "tooltip hotkey", "tooltip aktivierungstaste" }) and ContainsAny(text, { "tooltip", "tooltips" }) then
         key = "general.unitTooltipModifier"
@@ -3918,6 +3939,9 @@ local function ParseRegistryAlias(text, raw)
     local result = P.ParseRegistryAliasCandidates(text, raw, lightSettings)
     if result then return result end
     if (tonumber(P._compoundDepth) or 0) > 0 then return nil end
+
+    local _, fallbackTokens = MeaningTokens(AliasRelationText(text))
+    if #fallbackTokens == 0 then return nil end
 
     local fullSettings = P.RegistryCandidateSettings(text, allSettings, true)
     if fullSettings ~= lightSettings then

@@ -154,7 +154,6 @@ Registry:RegisterSetting({
     aliases = {
         "boss target highlight",
         "boss target outline",
-        "boss target border",
         "highlight boss target",
         "highlight boss target frame",
         "boss ziel highlight",

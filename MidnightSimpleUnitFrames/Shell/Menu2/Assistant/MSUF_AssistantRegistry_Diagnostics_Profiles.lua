@@ -109,16 +109,18 @@ function A.DiagnosticsRegistry.BuildProfileDiagnostic(ctx)
         lines[#lines + 1] = "- Export selection: " .. tostring((Menu and Menu.profileExportKind) or "all")
         lines[#lines + 1] = "- Import text: " .. (((Menu and type(Menu.profileImportString) == "string" and Menu.profileImportString ~= "") and "present") or "empty")
         lines[#lines + 1] = "- Import as new profile: " .. ((Menu and Menu.profileImportCreateNew == true) and "on" or "off")
+        local lifecycleTasks = {}
+        if type(_G.MSUF_CreateProfile) == "function" then lifecycleTasks[#lifecycleTasks + 1] = "create" end
+        if type(_G.MSUF_SwitchProfile) == "function" then lifecycleTasks[#lifecycleTasks + 1] = "switch" end
+        if type(_G.MSUF_CopyProfile) == "function" then lifecycleTasks[#lifecycleTasks + 1] = "copy" end
+        if type(_G.MSUF_DeleteProfile) == "function" then lifecycleTasks[#lifecycleTasks + 1] = "delete" end
+        if type(_G.MSUF_RenameProfile) == "function" then lifecycleTasks[#lifecycleTasks + 1] = "rename" end
+        local transferTasks = {}
+        if type(_G.MSUF_ImportFromString) == "function" then transferTasks[#transferTasks + 1] = "import" end
+        if type(_G.MSUF_ExportSelectionToString) == "function" then transferTasks[#transferTasks + 1] = "export" end
         lines[#lines + 1] = "Available profile tasks:"
-        lines[#lines + 1] = "- create/switch/copy/delete/rename: "
-            .. ((type(_G.MSUF_CreateProfile) == "function") and "create " or "")
-            .. ((type(_G.MSUF_SwitchProfile) == "function") and "switch " or "")
-            .. ((type(_G.MSUF_CopyProfile) == "function") and "copy " or "")
-            .. ((type(_G.MSUF_DeleteProfile) == "function") and "delete " or "")
-            .. ((type(_G.MSUF_RenameProfile) == "function") and "rename" or "")
-        lines[#lines + 1] = "- import/export: "
-            .. ((type(_G.MSUF_ImportFromString) == "function") and "import " or "")
-            .. ((type(_G.MSUF_ExportSelectionToString) == "function") and "export" or "")
+        lines[#lines + 1] = "- Lifecycle: " .. (#lifecycleTasks > 0 and table.concat(lifecycleTasks, ", ") or "open Profiles to create, switch, copy, delete, or rename profiles")
+        lines[#lines + 1] = "- Import/export: " .. (#transferTasks > 0 and table.concat(transferTasks, ", ") or "open Profiles to import or export profile strings")
         if type(activeTable) ~= "table" then
             lines[#lines + 1] = "Next step: switch to an existing profile or create/copy a new profile before importing."
         elseif brokenSpecs > 0 then

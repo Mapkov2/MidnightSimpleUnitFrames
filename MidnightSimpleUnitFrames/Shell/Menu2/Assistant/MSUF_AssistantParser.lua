@@ -1,4 +1,4 @@
-local addonName, MSUF = ...
+﻿local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
@@ -225,6 +225,7 @@ function A._ParsePipelineGeometry(normalized, raw)
         or (P.ParseCastbarTextSizeShortcut and P.ParseCastbarTextSizeShortcut(normalized))
         or (P.ParseCastbarSizeShortcut and P.ParseCastbarSizeShortcut(normalized))
         or (P.ParseCastbarPlacementShortcut and P.ParseCastbarPlacementShortcut(normalized))
+        or (P.AuraGeometryShortcut and P.AuraGeometryShortcut(normalized))
         or (P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized))
         or (P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized))
         or A._ParseTextFontSizeShortcut(normalized)

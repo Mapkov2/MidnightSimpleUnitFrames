@@ -59,7 +59,11 @@ local function ScheduleNextFrame(key, fn)
         _G.MSUF_ScheduleOnce(tostring(key or "MSUF_ASSISTANT_BROAD_APPLY"), fn)
         return true
     end
-    _G.C_Timer.After(0, fn)
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, fn)
+    else
+        fn()
+    end
     return true
 end
 

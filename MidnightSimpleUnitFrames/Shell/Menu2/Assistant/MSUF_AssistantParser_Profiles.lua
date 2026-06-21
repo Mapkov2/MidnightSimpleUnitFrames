@@ -993,7 +993,7 @@ end
 
 
 local function ParseWorkflowLifecycle(text)
-    if ContainsAny(text, { "workflow status", "assistant workflow status", "pending workflow", "pending flow", "active workflow", "what workflow", "what is pending" }) then
+    if ContainsAny(text, { "workflow status", "assistant workflow status", "pending workflow", "pending flow", "active workflow", "what workflow", "what is pending", "assistant current step", "current assistant step", "current step", "show current step", "show assistant current step", "assistant step status", "step status", "what is the current step" }) then
         local action = Registry and Registry:GetAction("assistant.workflow.status")
         return action and {
             kind = "action",

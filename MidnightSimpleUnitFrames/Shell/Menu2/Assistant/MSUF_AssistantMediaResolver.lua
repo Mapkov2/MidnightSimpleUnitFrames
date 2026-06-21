@@ -309,5 +309,5 @@ end
 
 function R.NoMatchMessage(mediaType, query)
     local label = mediaType == "font" and "font" or "texture"
-    return "I don't see a matching " .. label .. " for '" .. tostring(query or "") .. "'. Pick one of the names shown in the MSUF media list."
+    return "I don't see a matching " .. label .. " in the current MSUF media list. Pick one of the names shown there."
 end

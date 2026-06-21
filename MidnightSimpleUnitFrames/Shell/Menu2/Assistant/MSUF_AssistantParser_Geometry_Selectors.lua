@@ -1,4 +1,4 @@
--- Assistant geometry selector parser: handles selector-state and page-local geometry phrases.
+﻿-- Assistant geometry selector parser: handles selector-state and page-local geometry phrases.
 -- It resolves UI intent only; applying DB changes remains in registry/action execution.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -164,6 +164,22 @@ function P.BarsHighlightIntent(text)
 end
 
 local function ParseMenuSelectorState(text)
+    text = tostring(text or "")
+    if not (text:find("select", 1, true) or text:find("choose", 1, true)
+        or text:find("pick", 1, true) or text:find("open", 1, true)
+        or text:find("show", 1, true) or text:find("switch", 1, true)
+        or text:find("edit", 1, true) or text:find("tab", 1, true)
+        or text:find("slot", 1, true) or text:find("selector", 1, true)
+        or text:find("dropdown", 1, true) or text:find("status", 1, true)
+        or text:find("indicator", 1, true) or text:find("text", 1, true)
+        or text:find("put", 1, true) or text:find("place", 1, true)
+        or text:find("align", 1, true) or text:find("anchor", 1, true)
+        or text:find("class power", 1, true) or text:find("class resource", 1, true)
+        or text:find("highlight", 1, true) or text:find("copy", 1, true)
+        or text:find("category", 1, true) or text:find("categories", 1, true)
+        or text:find("scope", 1, true) or text:find("scopes", 1, true)) then
+        return nil
+    end
     if TextMoveTogetherIntent(text) then
         local textTab = TextSelectorTab(text)
         if textTab == "hp" or textTab == "power" then
