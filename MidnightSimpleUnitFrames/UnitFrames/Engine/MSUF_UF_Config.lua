@@ -278,6 +278,21 @@ local function ResolveBarMode(general)
   return mode
 end
 
+local HEALTH_MODE_ALIASES = {
+  CLASS = "class", class = "class",
+  GRADIENT = "gradient", gradient = "gradient",
+  DARK = "dark", dark = "dark",
+  UNIFIED = "unified", unified = "unified",
+}
+
+local function ResolveUnitBarMode(conf, general)
+  local mode = conf and conf.healthColorMode
+  if type(mode) == "string" then
+    mode = HEALTH_MODE_ALIASES[mode] or HEALTH_MODE_ALIASES[mode:lower()]
+  end
+  return mode or ResolveBarMode(general)
+end
+
 local function ResolvePowerMode(general)
   local mode = general and (general.powerColorMode or general.powerBarColorMode)
   if type(mode) == "string" then
@@ -1437,7 +1452,7 @@ local function CompileUnitHealth(out, conf, general, bars)
   health.backgroundTexture = out.backgroundTexture
   health.reverse = conf.reverseFillBars == true
   health.smooth = conf.smoothFill ~= false
-  health.mode = ResolveBarMode(general)
+  health.mode = ResolveUnitBarMode(conf, general)
   health.gradient = general.enableHealthGradient ~= false
   health.barGradient = ResolveBarGradient(conf, general, "enableGradient")
   ApplyNpcTypeFlags(health, general, "npcTypeColorBar")

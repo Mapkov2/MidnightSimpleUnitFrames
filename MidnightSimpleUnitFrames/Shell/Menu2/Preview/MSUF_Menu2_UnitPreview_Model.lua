@@ -487,15 +487,35 @@ local function GradientPreviewColor(pct)
     local t = (pct - 0.5) * 2
     return 1 - t, 1, 0
 end
-local function HealthColor(key, data)
-    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
-    local cache = SettingsCache()
+local PREVIEW_HEALTH_MODE_ALIASES = {
+    CLASS = "class", class = "class",
+    GRADIENT = "gradient", gradient = "gradient",
+    DARK = "dark", dark = "dark",
+    UNIFIED = "unified", unified = "unified",
+}
+local function NormalizePreviewHealthMode(value)
+    if type(value) ~= "string" then return nil end
+    return PREVIEW_HEALTH_MODE_ALIASES[value] or PREVIEW_HEALTH_MODE_ALIASES[value:lower()]
+end
+local function PreviewGlobalHealthMode(g, cache)
     local mode = (cache and cache.barMode) or g.barMode or "dark"
+    mode = NormalizePreviewHealthMode(mode) or ((g.useClassColors and "class") or "dark")
     if mode == "gradient" then
         local enabled = cache and cache.healthGradientEnabled
         if enabled == nil then enabled = g.enableHealthGradient ~= false end
         if not enabled then mode = "class" end
     end
+    return mode
+end
+local function PreviewHealthMode(key, g, cache)
+    local db = _G.MSUF_DB
+    local conf = db and db[CanonKey(key)]
+    return NormalizePreviewHealthMode(conf and conf.healthColorMode) or PreviewGlobalHealthMode(g, cache)
+end
+local function HealthColor(key, data)
+    local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    local cache = SettingsCache()
+    local mode = PreviewHealthMode(key, g, cache)
     data = data or UNIT_DATA.player
     if mode == "class" then
         if data.isPet and cache and cache.petFrameColorEnabled then return cache.petFrameColorR or 0, cache.petFrameColorG or 0.8, cache.petFrameColorB or 0 end

@@ -15,6 +15,7 @@ local min = math.min
 local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled]])
 local KLR, WL, ColorRows, KeyLabelMap, ValueTextPairs, SetControlsEnabled = M.KeyLabelRows, M.WordList, M.ColorRows, M.KeyLabelMap, M.ValueTextPairs, W.SetControlsEnabled
 local colorApplyQueued = false
+local unitframeColorReloadPromptQueued = false
 -- Multiple color sliders can fire in one frame while dragging. Queue a single apply so live
 -- frames repaint once per frame instead of per slider event.
 local ColorValueAt
@@ -39,6 +40,24 @@ local function ApplyColors()
     else
         _G.C_Timer.After(0, FlushColorApply)
     end
+end
+local function ShowUnitframeColorReloadPrompt()
+    if unitframeColorReloadPromptQueued then return end
+    unitframeColorReloadPromptQueued = true
+    local function Show()
+        unitframeColorReloadPromptQueued = false
+        if type(_G.StaticPopup_FindVisible) == "function" and _G.StaticPopup_FindVisible("MSUF_RELOAD_RECOMMENDED") then return end
+        CallGlobal("MSUF_ShowReloadRecommendedPopup", "Unitframe color changes")
+    end
+    if type(_G.MSUF_ScheduleOnce) == "function" then
+        _G.MSUF_ScheduleOnce("MSUF2_UNITFRAME_COLOR_RELOAD_PROMPT", Show)
+    else
+        _G.C_Timer.After(0, Show)
+    end
+end
+local function ApplyUnitframeColorWithReload()
+    ApplyColors()
+    ShowUnitframeColorReloadPrompt()
 end
 local function ApplyCastbarColors()
     ApplyColors()
@@ -268,11 +287,12 @@ local function ButtonAt(parent, label, x, y, width, onClick)
     end
     return btn
 end
-local function NPCColorAt(ctx, section, row, x, y)
+local function NPCColorAt(ctx, section, row, x, y, apply)
     return ColorValueAt(ctx, section, row.label, x, y,
         function() return ApiRGB("GetNPCColor", row.dr, row.dg, row.db, row.key) end,
         function(r, g, c)
             if not ApiCall("SetNPCColor", row.key, r, g, c) then ApplyColors() end
+            if type(apply) == "function" then apply() end
         end)
 end
 local COLOR_HELPERS = {
@@ -543,15 +563,16 @@ local function BuildColors(ctx)
             function() return ClassColorRGB(token) end,
             function(r, g, c)
                 if not ApiCall("SetClassColor", token, r, g, c) then ApplyColors() end
+                ApplyUnitframeColorWithReload()
             end, classLabelW, 44)
     end
     CH.ButtonAt(classColors, "Reset all class colors", 12, classResetY, 190, function()
         if not ApiCall("ResetAllClassColors") then DB().classColors = nil end
-        ApplyColors()
+        ApplyUnitframeColorWithReload()
     end)
     local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 226, false)
     LabelAt(background, "Tint applied to the bar background in *all* bar modes. Dark Mode uses this tint too.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
-    ApiOrGeneralColorAt(ctx, background, "Bar background tint", 12, -46, "GetClassBarBgColor", "SetClassBarBgColor", "classBarBg", 0, 0, 0)
+    ApiOrGeneralColorAt(ctx, background, "Bar background tint", 12, -46, "GetClassBarBgColor", "SetClassBarBgColor", "classBarBg", 0, 0, 0, ApplyUnitframeColorWithReload)
     ValueToggleAt(ctx, background, "Background follows HP color", 12, -86,
         function() return ApiValue("GetBarBgMatchHP", function() return G().barBgMatchHPColor == true end) end,
         function(v)
@@ -559,7 +580,7 @@ local function BuildColors(ctx)
                 G().barBgMatchHPColor = v and true or false
                 if v then G().barBgClassColor = false end
             end
-            ApplyColors()
+            ApplyUnitframeColorWithReload()
         end)
     ValueToggleAt(ctx, background, "Health background follows class color", 12, -114,
         function() return ApiValue("GetBarBgClassColor", function() return G().barBgClassColor == true end) end,
@@ -568,14 +589,14 @@ local function BuildColors(ctx)
                 G().barBgClassColor = v and true or false
                 if v then G().barBgMatchHPColor = false end
             end
-            ApplyColors()
+            ApplyUnitframeColorWithReload()
         end)
     ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -142,
         function() return G().darkBgCustomColor == true end,
-        function(v) G().darkBgCustomColor = v and true or false; ApplyColors() end)
+        function(v) G().darkBgCustomColor = v and true or false; ApplyUnitframeColorWithReload() end)
     CH.ButtonAt(background, "Reset to black", 12, -184, 140, function()
         if not ApiCall("ResetClassBarBgColor") then ClearRGB(G(), "classBarBg") end
-        ApplyColors()
+        ApplyUnitframeColorWithReload()
     end)
     local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 290, true)
     ValueDropdownAt(ctx, appearance, "Bar mode", 12, -10, ValueTextPairs "dark=Dark Mode (dark black bars)|class=Class Color Mode (color HP bars)|unified=Unified Color Mode (one color for all frames)|gradient=Color Gradient", 320,
@@ -590,9 +611,9 @@ local function BuildColors(ctx)
             g.barMode = mode
             g.darkMode = (mode == "dark")
             g.useClassColors = (mode == "class")
-            ApplyColors()
+            ApplyUnitframeColorWithReload()
         end)
-    CH.GeneralColorAt(ctx, appearance, "Unified bar color", 12, -70, "unifiedBar", 0.10, 0.60, 0.90)
+    CH.GeneralColorAt(ctx, appearance, "Unified bar color", 12, -70, "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload)
     ValueSliderAt(ctx, appearance, "Dark mode bar color", 12, -112, 0, 100, 1, 300,
         function()
             local v = tonumber(G().darkBarGray)
@@ -603,19 +624,19 @@ local function BuildColors(ctx)
         function(v)
             G().darkBarGray = (tonumber(v) or 0) / 100
             G().darkBarTone = nil
-            ApplyColors()
+            ApplyUnitframeColorWithReload()
         end)
-    SliderAt(ctx, appearance, "Gradient strength", 360, -70, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyColors)
-    SwitchAt(ctx, appearance, "Health Gradient", 360, -158, 230, G, "enableHealthGradient", true, ApplyColors)
+    SliderAt(ctx, appearance, "Gradient strength", 360, -70, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload)
+    SwitchAt(ctx, appearance, "Health Gradient", 360, -158, 230, G, "enableHealthGradient", true, ApplyUnitframeColorWithReload)
     local unit = b:CollapsibleSection("colors_unit", "Unitframe Colors", 230, false)
     for i = 1, #COLOR_DATA.NPC_ROWS do
         local row = COLOR_DATA.NPC_ROWS[i]
-        NPCColorAt(ctx, unit, row, 12, -10 - (i - 1) * 36)
+        NPCColorAt(ctx, unit, row, 12, -10 - (i - 1) * 36, ApplyUnitframeColorWithReload)
     end
-    CH.ApiColorAt(ctx, unit, "Pet Frame Color", 360, -10, "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0)
+    CH.ApiColorAt(ctx, unit, "Pet Frame Color", 360, -10, "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0, ApplyUnitframeColorWithReload)
     CH.ButtonAt(unit, "Reset Unitframe Colors", 12, -190, 190, function()
         if not ApiCall("ResetAllNPCColors") then DB().npcColors = nil end
-        ApplyColors()
+        ApplyUnitframeColorWithReload()
     end)
     local npcType = b:CollapsibleSection("colors_npc_type", "NPC Type Colors", 330, false)
     local npcControls = {}
@@ -632,7 +653,7 @@ local function BuildColors(ctx)
                 local ok
                 if apiArg then ok = ApiCall(apiSet, apiArg, v) else ok = ApiCall(apiSet, v) end
                 if not ok then G()[key] = v and true or false end
-                ApplyColors()
+                ApplyUnitframeColorWithReload()
             end))
     end
     AddNPCTypeToggle("Color HP bar (Class Color mode only)", 32, -38, "GetNPCTypeColorBar", "SetNPCTypeColorBar", "npcTypeColorBar")
@@ -643,7 +664,7 @@ local function BuildColors(ctx)
         end,
         function(v)
             if not ApiCall("SetNPCColorMode", v and "type" or "reaction") then G().npcColorMode = v and "type" or "reaction" end
-            ApplyColors()
+            ApplyUnitframeColorWithReload()
             RefreshNPCTypeControls(v and true or false)
         end)
     local units = GetNPCTypeUnits()
@@ -658,11 +679,11 @@ local function BuildColors(ctx)
         local row = COLOR_DATA.NPC_TYPE_ROWS[i]
         local col = (i - 1) % 2
         local line = floor((i - 1) / 2)
-        AddNPCTypeControl(NPCColorAt(ctx, npcType, row, 12 + col * 330, -174 - line * 38))
+        AddNPCTypeControl(NPCColorAt(ctx, npcType, row, 12 + col * 330, -174 - line * 38, ApplyUnitframeColorWithReload))
     end
     CH.ButtonAt(npcType, "Reset NPC Type Colors", 12, -292, 190, function()
         if not ApiCall("ResetNPCTypeColors") then DB().npcColors = nil end
-        ApplyColors()
+        ApplyUnitframeColorWithReload()
     end)
     M.TrackRefresh(ctx, RefreshNPCTypeControls)
     local barColors = b:CollapsibleSection("colors_bar_colors", "Bar Colors", 240, false)
