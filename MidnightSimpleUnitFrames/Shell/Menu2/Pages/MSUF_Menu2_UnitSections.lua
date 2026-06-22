@@ -30,6 +30,30 @@ local TOT_INLINE_COLOR_VALUES = {
     [TOT_INLINE_COLOR_NPC] = true,
     [TOT_INLINE_COLOR_DEFAULT] = true,
 }
+local HEALTH_COLOR_GLOBAL = "GLOBAL"
+local HEALTH_COLOR_LABELS = {
+    class = "Class / Reaction",
+    gradient = "Health Gradient",
+    unified = "Unified Color",
+    dark = "Dark Mode",
+}
+local HEALTH_COLOR_ALIASES = {
+    CLASS = "class",
+    class = "class",
+    GRADIENT = "gradient",
+    gradient = "gradient",
+    UNIFIED = "unified",
+    unified = "unified",
+    DARK = "dark",
+    dark = "dark",
+}
+local HEALTH_COLOR_OPTIONS = {
+    { value = HEALTH_COLOR_GLOBAL, text = "Use Global" },
+    { value = "class", text = HEALTH_COLOR_LABELS.class },
+    { value = "gradient", text = HEALTH_COLOR_LABELS.gradient },
+    { value = "unified", text = HEALTH_COLOR_LABELS.unified },
+    { value = "dark", text = HEALTH_COLOR_LABELS.dark },
+}
 local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_ARROW = { 0.88, 0.62, 0.22, 1 }
 local WARNING_BADGE_FILL = { 0.205, 0.148, 0.080, 0.96 }
@@ -72,6 +96,34 @@ local function NormalizeToTInlineColorMode(value)
 end
 local function ToTInlineColorDropdownValue(conf)
     return NormalizeToTInlineColorMode(conf and conf.totInlineColorMode)
+end
+local function NormalizeHealthColorMode(value)
+    if value == nil or value == HEALTH_COLOR_GLOBAL then return nil end
+    if type(value) ~= "string" then return nil end
+    return HEALTH_COLOR_ALIASES[value] or HEALTH_COLOR_ALIASES[value:lower()]
+end
+local function GlobalHealthColorMode()
+    local g = GetGeneral()
+    local mode = g and g.barMode
+    if type(mode) == "string" then mode = mode:lower() end
+    if not HEALTH_COLOR_LABELS[mode] then
+        if g and g.useClassColors == true then
+            mode = "class"
+        elseif g and g.darkMode == true then
+            mode = "dark"
+        else
+            mode = "dark"
+        end
+    end
+    if mode == "gradient" and g and g.enableHealthGradient == false then mode = "class" end
+    return mode
+end
+local function HealthColorModeLabel(mode)
+    return HEALTH_COLOR_LABELS[mode] or HEALTH_COLOR_LABELS.dark
+end
+local function HealthColorModeOptions()
+    HEALTH_COLOR_OPTIONS[1].text = "Use Global (" .. HealthColorModeLabel(GlobalHealthColorMode()) .. ")"
+    return HEALTH_COLOR_OPTIONS
 end
 local function ToTInlineNPCColorAvailable()
     local fn = _G.MSUF_UFCore_IsToTInlineNPCColorModeAvailable
@@ -456,7 +508,7 @@ local function AttachBasicsHeaderStatus(sec, unit)
     return RefreshBasicsState
 end
 local function BuildBasics(ctx, builder, unit, label)
-    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 104, false)
+    local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 170, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 24
     local colW = math.floor((sectionW - 28 - (gap * 2)) / 3)
@@ -482,14 +534,31 @@ local function BuildBasics(ctx, builder, unit, label)
     M.BindBoolWidget(ctx, smooth,
         function() return ReadBool(unit, "smoothFill", true) end,
         function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end)
+    local colorMode = W.Dropdown(sec, "Health Color Scheme", HealthColorModeOptions, math.min(270, math.max(220, colW * 2)))
+    UnitSectionShared.PlaceDropdown(sec, colorMode, x1, -84, math.min(270, math.max(220, colW * 2)))
+    M.BindDropdownWidget(ctx, colorMode,
+        function()
+            return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or HEALTH_COLOR_GLOBAL
+        end,
+        function(v)
+            local conf = GetConf(unit)
+            conf.healthColorMode = NormalizeHealthColorMode(v)
+            M.RequestUnitApply(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true })
+            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+                _G.MSUF_ShowReloadRecommendedPopup("Unitframe color changes")
+            end
+        end)
+    if M.AddTooltip then
+        M.AddTooltip(colorMode, "Health Color Scheme", "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.", { hook = true, owner = "ANCHOR_RIGHT" })
+    end
     if W.AttachUnitEditFocus then
-        for _, control in ipairs({ enable, reverse, smooth }) do W.AttachUnitEditFocus(control, unit, "frame") end
+        for _, control in ipairs({ enable, reverse, smooth, colorMode }) do W.AttachUnitEditFocus(control, unit, "frame") end
     end
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
     local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit) or function() end
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
     local unitLabel = label or UnitTopLabel(unit)
-    local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -70, "Enable", 92)
+    local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -132, "Enable", 92)
     notice:SetMessage(unitLabel .. " frame is disabled and will not appear.", "warning")
     enableNow:SetScript("OnClick", function()
         if unit == "focustarget" and not ReadBool("focus", "enabled", true) then SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true }) end
@@ -497,7 +566,7 @@ local function BuildBasics(ctx, builder, unit, label)
         M.RequestOrRefresh(ctx, "frame-basics-enable-now")
     end)
     notice:Hide()
-    local basicsDependentControls = { reverse, smooth }
+    local basicsDependentControls = { reverse, smooth, colorMode }
     local function RefreshBasicsEnabled()
         local ownOn = ReadBool(unit, "enabled", true)
         local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
@@ -826,7 +895,7 @@ local function BuildUnitPage(info)
         end, {
             sectionId = "frame_basics",
             title = "Frame Basics",
-            height = 104,
+            height = 170,
             prepareShell = function(lazyCtx, sec, lazyUnit)
                 local refresh = AttachBasicsHeaderStatus(sec, lazyUnit)
                 if refresh then
