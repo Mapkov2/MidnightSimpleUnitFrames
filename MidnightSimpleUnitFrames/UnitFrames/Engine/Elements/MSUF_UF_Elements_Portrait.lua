@@ -50,6 +50,16 @@ local PORTRAIT_GUID_BUST_EVENTS = {
   MSUF_UNIT_IDENTITY_SOFT = true,
   MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
 }
+local PORTRAIT_UNIT_STATE_EVENTS = {
+  PLAYER_TARGET_CHANGED = true,
+  PLAYER_FOCUS_CHANGED = true,
+  PORTRAITS_UPDATED = true,
+  PARTY_MEMBER_ENABLE = true,
+  PARTY_MEMBER_DISABLE = true,
+}
+local PORTRAIT_UNITLESS_EVENTS = { "PORTRAITS_UPDATED" }
+local TARGET_PORTRAIT_UNITLESS_EVENTS = { "PLAYER_TARGET_CHANGED", "PORTRAITS_UPDATED", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
+local FOCUS_PORTRAIT_UNITLESS_EVENTS = { "PLAYER_FOCUS_CHANGED", "PORTRAITS_UPDATED" }
 local SetShown = V.SetShown
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
@@ -96,9 +106,9 @@ local function ClearPortraitGUID(texture)
 end
 
 local function SetVertexColorCached(texture, r, g, b, a)
-  if texture and (texture._msufR ~= r or texture._msufG ~= g or texture._msufBv ~= b or texture._msufA ~= a) then
+  if texture and (texture._msufVertexR ~= r or texture._msufVertexG ~= g or texture._msufVertexB ~= b or texture._msufVertexA ~= a) then
     texture:SetVertexColor(r, g, b, a)
-    texture._msufR, texture._msufG, texture._msufBv, texture._msufA = r, g, b, a
+    texture._msufVertexR, texture._msufVertexG, texture._msufVertexB, texture._msufVertexA = r, g, b, a
   end
 end
 
@@ -361,7 +371,7 @@ ApplyUnitPortrait = function(texture, unit, frame)
   SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
   texture._msufTexture = nil
   texture._msufAtlas = nil
-  SetPortraitTexture(texture, unit, true)
+  SetPortraitTexture(texture, unit)
   texture._msufPortraitGUID = guid
 end
 
@@ -480,6 +490,20 @@ function Portrait.GetEvents(frame, spec)
   return EMPTY_EVENTS
 end
 
+function Portrait.GetUnitlessEvents(frame, spec)
+  local p = spec and spec.portrait
+  if not (p and p.enabled == true and p.render ~= "CLASS") then
+    return EMPTY_EVENTS
+  end
+  local unit = frame and frame.unit or spec and spec.unit
+  if unit == "target" then
+    return TARGET_PORTRAIT_UNITLESS_EVENTS
+  elseif unit == "focus" then
+    return FOCUS_PORTRAIT_UNITLESS_EVENTS
+  end
+  return PORTRAIT_UNITLESS_EVENTS
+end
+
 function Portrait.IsEnabled(frame, spec)
   return spec and spec.portrait and spec.portrait.enabled == true
 end
@@ -512,6 +536,7 @@ function Portrait.Disable(frame)
   local holder = frame.MSUFPortraitHolder
   frame._msufPortraitNeedsVisibleRefresh = nil
   frame._msufPortraitForceRefresh = nil
+  frame._msufPortraitQueued = nil
   frame._msufUpdatePortraitConnection = nil
   frame._msufPortraitRuntimeCfg = nil
   frame._msufPortraitFrameHeight = nil
@@ -559,15 +584,14 @@ function Portrait.Update(frame, event, unit)
   local identityVisual = event == "MSUF_UNIT_IDENTITY_VISUAL"
     or event == "MSUF_UNIT_IDENTITY_SOFT"
     or event == "MSUF_UNIT_IDENTITY_SOFT_VISUAL"
-  if PORTRAIT_GUID_BUST_EVENTS[event] == true then
+  local forceRefresh = PORTRAIT_GUID_BUST_EVENTS[event] == true
+    or PORTRAIT_UNIT_STATE_EVENTS[event] == true
+  if forceRefresh then
     frame._msufPortraitForceRefresh = true
     ClearPortraitGUID(texture)
   end
   if not PortraitFrameVisible(frame) then
     frame._msufPortraitNeedsVisibleRefresh = true
-    if p.render ~= "CLASS" and identityVisual then
-      ClearPortraitTexture(texture)
-    end
     return
   end
 
@@ -579,10 +603,15 @@ function Portrait.Update(frame, event, unit)
     class = UnitClassToken(unit)
     ApplyClassPortrait(texture, unit, p, class, frame)
   else
-    if QUEUED_2D_PORTRAIT_EVENTS[event] == true then
-      if identityVisual then
-        ClearPortraitTexture(texture)
+    if identityVisual or PORTRAIT_UNIT_STATE_EVENTS[event] == true then
+      frame._msufPortraitNeedsVisibleRefresh = nil
+      frame._msufPortraitQueued = nil
+      if frame._msufPortraitForceRefresh == true then
+        frame._msufPortraitForceRefresh = nil
+        ClearPortraitGUID(texture)
       end
+      ApplyUnitPortrait(texture, unit, frame)
+    elseif QUEUED_2D_PORTRAIT_EVENTS[event] == true then
       QueuePortraitUpdate(frame)
     else
       frame._msufPortraitNeedsVisibleRefresh = nil
