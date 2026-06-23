@@ -30,6 +30,24 @@ function A.GroupFramesRegistry.RegisterFrameAlphaAnchorSettings(ctx, scope)
     if type(RegisterGroupColor) ~= "function" or type(StandardGroupAnchorTarget) ~= "function" then return end
     if type(TrimString) ~= "function" then return end
 
+    local function GroupAnchorTargetExactAliases()
+        local out = {}
+        local scopeTerms = {
+            party = { "party frames", "party frame", "party" },
+            raid = { "raid frames", "raid frame", "raid" },
+            mythicraid = { "mythic raid frames", "mythic raid frame", "mythic raid" },
+        }
+        local targetTerms = { "player", "target", "target of target", "focus target", "focus", "free", "none" }
+        local terms = scopeTerms[scope] or {}
+        for i = 1, #terms do
+            for j = 1, #targetTerms do
+                out[#out + 1] = terms[i] .. " anchor to " .. targetTerms[j]
+                out[#out + 1] = "anchor " .. terms[i] .. " to " .. targetTerms[j]
+            end
+        end
+        return out
+    end
+
     local aliases = {}
     AddAliasesForUnit(aliases, scope, "opacity affects")
     AddAliasesForUnit(aliases, scope, "transparency affects")
@@ -118,6 +136,7 @@ function A.GroupFramesRegistry.RegisterFrameAlphaAnchorSettings(ctx, scope)
         ["focus target"] = "focustarget",
         focus = "focus",
     }, "rebuild", aliases, {
+        exactAliases = GroupAnchorTargetExactAliases(),
         get = function(scopeKey)
             local value = GroupDB(scopeKey).anchorToFrame
             return StandardGroupAnchorTarget(value) and (value and value ~= "" and value or "FREE") or "FREE"

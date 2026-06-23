@@ -89,6 +89,124 @@ local function HumanizeKeyLabel(key)
 end
 A.HumanizeDisplayKey = A.HumanizeDisplayKey or HumanizeKeyLabel
 
+local LOCALIZED_LABEL_CODES = {
+    de = true,
+    fr = true,
+    es = true,
+    pt = true,
+    it = true,
+    ru = true,
+    ko = true,
+    zh = true,
+}
+
+local LOCALIZED_LABEL_TOKENS = {
+    gruppen = true,
+    gesundheit = true,
+    klassen = true,
+    zauber = true,
+    menue = true,
+    ["men\195\188"] = true,
+    zurueck = true,
+    ["zur\195\188ck"] = true,
+    weiter = true,
+    abbrechen = true,
+    anwenden = true,
+    hilfe = true,
+    groupe = true,
+    cadre = true,
+    cadres = true,
+    sante = true,
+    ["sant\195\169"] = true,
+    ressources = true,
+    indicateurs = true,
+    annuler = true,
+    appliquer = true,
+    grupo = true,
+    grupos = true,
+    diseno = true,
+    ["dise\195\177o"] = true,
+    salud = true,
+    recursos = true,
+    indicadores = true,
+    cancelar = true,
+    aplicar = true,
+    saude = true,
+    ["sa\195\186de"] = true,
+    feitico = true,
+    ["feiti\195\167o"] = true,
+    gruppo = true,
+    salute = true,
+    risorse = true,
+    indicatori = true,
+    annulla = true,
+    applica = true,
+}
+
+local function LooksLocalizedAssistantLabel(label)
+    label = tostring(label or "")
+    if label == "" then return false end
+    local normalized = label:lower()
+    normalized = normalized:gsub("[%c%p]+", " ")
+    normalized = normalized:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    if normalized == "" then return false end
+
+    local tokens = {}
+    for token in normalized:gmatch("%S+") do
+        tokens[#tokens + 1] = token
+    end
+    if #tokens > 1 and LOCALIZED_LABEL_CODES[tokens[1]] then return true end
+    for i = 1, #tokens do
+        if LOCALIZED_LABEL_TOKENS[tokens[i]] then return true end
+    end
+    return false
+end
+
+local PAGE_DISPLAY_LABELS = {
+    home = "Dashboard",
+    profiles = "Profiles",
+    gameplay = "Gameplay",
+    classpower = "Class Resources",
+    modules = "Modules",
+    search = "Search",
+
+    opt_castbar = "Cast Bars",
+    opt_bars = "Bars",
+    opt_colors = "Colors",
+    opt_fonts = "Fonts",
+    opt_misc = "Miscellaneous",
+
+    gf_layout = "Group Layout",
+    gf_bars = "Group Health & Text",
+    gf_indicators = "Group Indicators",
+    gf_auras = "Group Auras",
+
+    auras3 = "Auras",
+    auras3_buffs = "Aura Buffs",
+    auras3_debuffs = "Aura Debuffs",
+    auras3_filters = "Aura Filters",
+    auras3_styling = "Aura Style",
+
+    uf_player = "Player",
+    uf_target = "Target",
+    uf_focus = "Focus",
+    uf_pet = "Pet",
+    uf_boss = "Boss Frames",
+    uf_targettarget = "Target of Target",
+    uf_focustarget = "Focus Target",
+}
+
+function A.DisplayPageLabel(page, fallback)
+    page = tostring(page or "")
+    if page ~= "" and PAGE_DISPLAY_LABELS[page] then return PAGE_DISPLAY_LABELS[page] end
+    return tostring(fallback or "MSUF page")
+end
+
+function A.IsKnownPageKey(page)
+    page = tostring(page or "")
+    return PAGE_DISPLAY_LABELS[page] ~= nil
+end
+
 function A.DisplayUnitLabel(unit)
     unit = tostring(unit or "")
     local labels = A.UnitLabels or UNIT_LABELS or {}
@@ -112,7 +230,13 @@ function A.DisplayGroupLabel(scope)
 end
 
 function A.DisplayEnumLabel(label, value)
-    if label ~= nil and tostring(label) ~= "" and tostring(label) ~= tostring(value or "") then return tostring(label) end
+    if label ~= nil
+        and tostring(label) ~= ""
+        and tostring(label) ~= tostring(value or "")
+        and not LooksLocalizedAssistantLabel(label)
+    then
+        return tostring(label)
+    end
     local parser = A.Parser
     if parser and type(parser.ValueDisplay) == "function" then
         local ok, display = pcall(parser.ValueDisplay, { type = "enum" }, value)
@@ -144,7 +268,13 @@ end
 
 function A.DisplaySettingLabel(setting)
     local label = setting and setting.label
-    if label ~= nil and tostring(label) ~= "" and tostring(label) ~= tostring(setting and setting.key or "") then return tostring(label) end
+    if label ~= nil
+        and tostring(label) ~= ""
+        and tostring(label) ~= tostring(setting and setting.key or "")
+        and not LooksLocalizedAssistantLabel(label)
+    then
+        return tostring(label)
+    end
     return DisplayScopedKeyLabel(setting and setting.key or label)
 end
 
@@ -158,7 +288,13 @@ end
 
 function A.DisplayActionLabel(action)
     local label = action and action.label
-    if label ~= nil and tostring(label) ~= "" and tostring(label) ~= tostring(action and action.key or "") then return tostring(label) end
+    if label ~= nil
+        and tostring(label) ~= ""
+        and tostring(label) ~= tostring(action and action.key or "")
+        and not LooksLocalizedAssistantLabel(label)
+    then
+        return tostring(label)
+    end
     local key = tostring(action and action.key or label or "")
     if key == "" then return "Assistant action" end
     return HumanizeKeyLabel(key)

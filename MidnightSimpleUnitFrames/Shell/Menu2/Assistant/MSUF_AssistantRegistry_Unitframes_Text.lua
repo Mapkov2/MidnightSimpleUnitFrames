@@ -13,6 +13,17 @@ M.Assistant = A
 
 A.UnitframesRegistry = A.UnitframesRegistry or {}
 
+local function AppendAliases(aliases, ...)
+    if type(aliases) ~= "table" then return aliases end
+    for i = 1, select("#", ...) do
+        local alias = select(i, ...)
+        if type(alias) == "string" and alias ~= "" then
+            aliases[#aliases + 1] = alias
+        end
+    end
+    return aliases
+end
+
 function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
     if type(ctx) ~= "table" or type(unit) ~= "string" then return end
 
@@ -44,27 +55,35 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
         MakeAliases(unit, "name x", "name x offset"), { min = -300, max = 300 })
     RegisterUnitTextNumber(unit, "nameOffsetY", "nameOffsetY", "Name Y Offset", -4,
         MakeAliases(unit, "name y", "name y offset"), { min = -300, max = 300 })
+    local nameFontAliases = MakeAliases(unit, "name size", "name font size")
+    AppendAliases(nameFontAliases, "unit name text size", "unit frame name text size", "unit name font size")
     RegisterUnitTextNumber(unit, "nameFontSize", "nameFontSize", "Name Font Size", 14,
-        MakeAliases(unit, "name size", "name font size"), { min = 6, max = 48, fonts = true, generalKey = "nameFontSize" })
+        nameFontAliases, { min = 6, max = 48, fonts = true, generalKey = "nameFontSize" })
 
+    local hpLeftAliases = MakeAliases(unit, "hp left slot", "health left slot", "left hp text")
+    AppendAliases(hpLeftAliases, "unit text slot", "unit text left slot", "unit hp left slot", "unit health left slot", "unit health text left slot")
     RegisterUnitEnum(unit, "hpTextLeft", "textLeft", "HP Left Slot", "NONE", HP_MODE_VALUES,
-        MakeAliases(unit, "hp left slot", "health left slot", "left hp text"),
+        hpLeftAliases,
         {
             category = "Text",
             text = true,
             valueAliases = HP_MODE_ALIASES,
             get = function(unitKey) return TextValue(unitKey, "textLeft", TextValue(unitKey, "hpTextMode", "NONE")) end,
         })
+    local hpCenterAliases = MakeAliases(unit, "hp center slot", "health center slot", "center hp text")
+    AppendAliases(hpCenterAliases, "unit text slot", "unit text center slot", "unit text middle slot", "unit hp center slot", "unit health center slot", "unit health text center slot")
     RegisterUnitEnum(unit, "hpTextCenter", "textCenter", "HP Center Slot", "NONE", HP_MODE_VALUES,
-        MakeAliases(unit, "hp center slot", "health center slot", "center hp text"),
+        hpCenterAliases,
         {
             category = "Text",
             text = true,
             valueAliases = HP_MODE_ALIASES,
             get = function(unitKey) return TextValue(unitKey, "textCenter", TextValue(unitKey, "hpTextMode", "NONE")) end,
         })
+    local hpRightAliases = MakeAliases(unit, "hp right slot", "health right slot", "right hp text")
+    AppendAliases(hpRightAliases, "unit text slot", "unit text right slot", "unit hp right slot", "unit health right slot", "unit health text right slot")
     RegisterUnitEnum(unit, "hpTextRight", "textRight", "HP Right Slot", "CURPERCENT", HP_MODE_VALUES,
-        MakeAliases(unit, "hp right slot", "health right slot", "right hp text"),
+        hpRightAliases,
         {
             category = "Text",
             text = true,
@@ -80,27 +99,35 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
         MakeAliases(unit, "hp text x", "health text x offset"), { min = -300, max = 300 })
     RegisterUnitTextNumber(unit, "hpOffsetY", "hpOffsetY", "HP Text Y Offset", -4,
         MakeAliases(unit, "hp text y", "health text y offset"), { min = -300, max = 300 })
+    local hpFontAliases = MakeAliases(unit, "hp text size", "hp font size", "health text size")
+    AppendAliases(hpFontAliases, "unit text size", "unit frame text size", "unit hp text size", "unit health text size", "unit health font size")
     RegisterUnitTextNumber(unit, "hpFontSize", "hpFontSize", "HP Font Size", 14,
-        MakeAliases(unit, "hp text size", "hp font size", "health text size"), { min = 6, max = 48, fonts = true, generalKey = "hpFontSize" })
+        hpFontAliases, { min = 6, max = 48, fonts = true, generalKey = "hpFontSize" })
 
+    local powerLeftAliases = MakeAliases(unit, "power left slot", "mana left slot", "left power text")
+    AppendAliases(powerLeftAliases, "unit text slot", "unit text left slot", "unit power left slot", "unit mana left slot", "unit power text left slot")
     RegisterUnitEnum(unit, "powerTextLeft", "powerTextLeft", "Power Left Slot", "NONE", POWER_MODE_VALUES,
-        MakeAliases(unit, "power left slot", "mana left slot", "left power text"),
+        powerLeftAliases,
         {
             category = "Text",
             text = true,
             valueAliases = POWER_MODE_ALIASES,
             get = function(unitKey) return TextValue(unitKey, "powerTextLeft", TextValue(unitKey, "powerTextMode", "NONE")) end,
         })
+    local powerCenterAliases = MakeAliases(unit, "power center slot", "mana center slot", "center power text")
+    AppendAliases(powerCenterAliases, "unit text slot", "unit text center slot", "unit text middle slot", "unit power center slot", "unit mana center slot", "unit power text center slot")
     RegisterUnitEnum(unit, "powerTextCenter", "powerTextCenter", "Power Center Slot", "NONE", POWER_MODE_VALUES,
-        MakeAliases(unit, "power center slot", "mana center slot", "center power text"),
+        powerCenterAliases,
         {
             category = "Text",
             text = true,
             valueAliases = POWER_MODE_ALIASES,
             get = function(unitKey) return TextValue(unitKey, "powerTextCenter", TextValue(unitKey, "powerTextMode", "NONE")) end,
         })
+    local powerRightAliases = MakeAliases(unit, "power right slot", "mana right slot", "right power text")
+    AppendAliases(powerRightAliases, "unit text slot", "unit text right slot", "unit power right slot", "unit mana right slot", "unit power text right slot")
     RegisterUnitEnum(unit, "powerTextRight", "powerTextRight", "Power Right Slot", "CURPERCENT", POWER_MODE_VALUES,
-        MakeAliases(unit, "power right slot", "mana right slot", "right power text"),
+        powerRightAliases,
         {
             category = "Text",
             text = true,
@@ -119,8 +146,10 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
         MakeAliases(unit, "power text x", "mana text x offset"), { min = -300, max = 300 })
     RegisterUnitTextNumber(unit, "powerOffsetY", "powerOffsetY", "Power Text Y Offset", 4,
         MakeAliases(unit, "power text y", "mana text y offset"), { min = -300, max = 300 })
+    local powerFontAliases = MakeAliases(unit, "power text size", "power font size", "mana text size")
+    AppendAliases(powerFontAliases, "unit text size", "unit frame text size", "unit power text size", "unit mana text size", "unit power font size")
     RegisterUnitTextNumber(unit, "powerFontSize", "powerFontSize", "Power Font Size", 14,
-        MakeAliases(unit, "power text size", "power font size", "mana text size"), { min = 6, max = 48, fonts = true, generalKey = "powerFontSize" })
+        powerFontAliases, { min = 6, max = 48, fonts = true, generalKey = "powerFontSize" })
 
     local hpSlots = {
         { suffix = "Left", label = "HP Left Slot", keyPrefix = "hpTextLeft", alias = "hp left slot" },
@@ -129,10 +158,26 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
     }
     for s = 1, #hpSlots do
         local slot = hpSlots[s]
+        local slotLower = tostring(slot.suffix or ""):lower()
+        if slotLower == "center" then slotLower = "center" end
+        local slotXAliases = MakeAliases(unit, slot.alias .. " x", slot.alias .. " x offset")
+        AppendAliases(slotXAliases,
+            "unit text slot x", "unit text slot x offset",
+            "unit text " .. slotLower .. " slot x", "unit text " .. slotLower .. " slot x offset",
+            "unit hp " .. slotLower .. " slot x", "unit hp " .. slotLower .. " slot x offset",
+            "unit health " .. slotLower .. " slot x", "unit health " .. slotLower .. " slot x offset"
+        )
         RegisterUnitTextNumber(unit, slot.keyPrefix .. "OffsetX", slot.keyPrefix .. "OffsetX", slot.label .. " X Offset", 0,
-            MakeAliases(unit, slot.alias .. " x", slot.alias .. " x offset"), { min = -300, max = 300 })
+            slotXAliases, { min = -300, max = 300 })
+        local slotYAliases = MakeAliases(unit, slot.alias .. " y", slot.alias .. " y offset")
+        AppendAliases(slotYAliases,
+            "unit text slot y", "unit text slot y offset",
+            "unit text " .. slotLower .. " slot y", "unit text " .. slotLower .. " slot y offset",
+            "unit hp " .. slotLower .. " slot y", "unit hp " .. slotLower .. " slot y offset",
+            "unit health " .. slotLower .. " slot y", "unit health " .. slotLower .. " slot y offset"
+        )
         RegisterUnitTextNumber(unit, slot.keyPrefix .. "OffsetY", slot.keyPrefix .. "OffsetY", slot.label .. " Y Offset", 0,
-            MakeAliases(unit, slot.alias .. " y", slot.alias .. " y offset"), { min = -300, max = 300 })
+            slotYAliases, { min = -300, max = 300 })
     end
     local powerSlots = {
         { label = "Power Left Slot", keyPrefix = "powerTextLeft", alias = "power left slot" },
@@ -141,10 +186,26 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
     }
     for s = 1, #powerSlots do
         local slot = powerSlots[s]
+        local slotLower = tostring(slot.label or ""):match("Power%s+(%S+)%s+Slot")
+        slotLower = tostring(slotLower or ""):lower()
+        local slotXAliases = MakeAliases(unit, slot.alias .. " x", slot.alias .. " x offset")
+        AppendAliases(slotXAliases,
+            "unit text slot x", "unit text slot x offset",
+            "unit text " .. slotLower .. " slot x", "unit text " .. slotLower .. " slot x offset",
+            "unit power " .. slotLower .. " slot x", "unit power " .. slotLower .. " slot x offset",
+            "unit mana " .. slotLower .. " slot x", "unit mana " .. slotLower .. " slot x offset"
+        )
         RegisterUnitTextNumber(unit, slot.keyPrefix .. "OffsetX", slot.keyPrefix .. "OffsetX", slot.label .. " X Offset", 0,
-            MakeAliases(unit, slot.alias .. " x", slot.alias .. " x offset"), { min = -300, max = 300 })
+            slotXAliases, { min = -300, max = 300 })
+        local slotYAliases = MakeAliases(unit, slot.alias .. " y", slot.alias .. " y offset")
+        AppendAliases(slotYAliases,
+            "unit text slot y", "unit text slot y offset",
+            "unit text " .. slotLower .. " slot y", "unit text " .. slotLower .. " slot y offset",
+            "unit power " .. slotLower .. " slot y", "unit power " .. slotLower .. " slot y offset",
+            "unit mana " .. slotLower .. " slot y", "unit mana " .. slotLower .. " slot y offset"
+        )
         RegisterUnitTextNumber(unit, slot.keyPrefix .. "OffsetY", slot.keyPrefix .. "OffsetY", slot.label .. " Y Offset", 0,
-            MakeAliases(unit, slot.alias .. " y", slot.alias .. " y offset"), { min = -300, max = 300 })
+            slotYAliases, { min = -300, max = 300 })
     end
 
     RegisterUnitTextNumber(unit, "nameTextLayer", "nameTextLayer", "Name Text Layer", 5,

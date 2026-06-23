@@ -60,6 +60,7 @@ if type(RegisterCoreLoopSettings) == "function" then
         AddAliasesForUnit = AddAliasesForUnit,
         MakeAliases = UnitframesCore.MakeAliases,
         RegisterUnitBooleanSetting = UnitframesCore.RegisterUnitBooleanSetting,
+        RegisterUnitEnum = UnitframesCore.RegisterUnitEnum,
         RegisterUnitAnchoringSettings = A.UnitframesRegistry.RegisterAnchoringSettings,
         RegisterUnitPortraitSettings = A.UnitframesRegistry.RegisterPortraitSettings,
         RegisterUnitPowerSettings = A.UnitframesRegistry.RegisterPowerSettings,
@@ -68,6 +69,7 @@ if type(RegisterCoreLoopSettings) == "function" then
         RegisterUnitStatusIconSettings = A.UnitframesRegistry.RegisterStatusIconSettings,
         RegisterStatusTextStateSettings = A.UnitframesRegistry.RegisterStatusTextStateSettings,
         UnitDB = UnitDB,
+        CallGlobal = CallGlobal,
         ApplyLoadCondition = UnitframesCore.ApplyLoadCondition,
         UNIT_KEYS = UnitframesCore.UNIT_KEYS or UNIT_KEYS,
         LOAD_CONDITION_SPECS = UnitframesCore.LOAD_CONDITION_SPECS,
@@ -77,6 +79,8 @@ if type(RegisterCoreLoopSettings) == "function" then
         UnitTextSettings = UnitframesCore.UnitTextSettings,
         UnitTransparencySettings = UnitframesCore.UnitTransparencySettings,
         UnitStatusSettings = UnitframesCore.UnitStatusSettings,
+        HEALTH_COLOR_MODE_VALUES = UnitframeData.HEALTH_COLOR_MODE_VALUES,
+        HEALTH_COLOR_MODE_ALIASES = UnitframeData.HEALTH_COLOR_MODE_ALIASES,
     })
 end
 

@@ -12,6 +12,8 @@ M.Assistant = A
 
 A.GlobalRegistry = A.GlobalRegistry or {}
 
+local Unpack = unpack or (table and table.unpack)
+
 function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
     if type(ctx) ~= "table" then return false end
 
@@ -55,8 +57,20 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
     if type(RegisterScopedUnitFontTextSettings) ~= "function" then return false end
 
     for _, scope in ipairs(SCOPED_FONT_CONTROL_SCOPES) do
-        RegisterScopedSetting("fontScope", scope, "outline", "outline", "Font Outline", "enum", "OUTLINE", SharedOrScopedAliases(scope, {
+        local isShared = scope == "shared"
+        local outlineAliases = {
             "font outline", "text outline", "outline style",
+        }
+        if isShared then
+            outlineAliases[#outlineAliases + 1] = "global font outline"
+            outlineAliases[#outlineAliases + 1] = "global text outline"
+            outlineAliases[#outlineAliases + 1] = "shared font outline"
+            outlineAliases[#outlineAliases + 1] = "shared text outline"
+            outlineAliases[#outlineAliases + 1] = "default font outline"
+            outlineAliases[#outlineAliases + 1] = "default text outline"
+        end
+        RegisterScopedSetting("fontScope", scope, "outline", "outline", "Font Outline", "enum", "OUTLINE", SharedOrScopedAliases(scope, {
+            Unpack(outlineAliases),
         }), {
             flag = "fontOverride",
             values = FONT_OUTLINE_VALUES,
@@ -66,8 +80,28 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_FONT_OUTLINE",
         })
-        RegisterScopedSetting("fontScope", scope, "fontMonochrome", "rendering", "Rendering", "enum", "SMOOTH", SharedOrScopedAliases(scope, {
+        local renderingAliases = {
             "font rendering", "text rendering", "font smoothing", "text smoothing", "sharp text", "pixel font", "monochrome font",
+        }
+        if isShared then
+            renderingAliases[#renderingAliases + 1] = "global font rendering"
+            renderingAliases[#renderingAliases + 1] = "global text rendering"
+            renderingAliases[#renderingAliases + 1] = "global font smoothing"
+            renderingAliases[#renderingAliases + 1] = "global monochrome font"
+            renderingAliases[#renderingAliases + 1] = "global font monochrome"
+            renderingAliases[#renderingAliases + 1] = "shared font rendering"
+            renderingAliases[#renderingAliases + 1] = "shared text rendering"
+            renderingAliases[#renderingAliases + 1] = "shared font smoothing"
+            renderingAliases[#renderingAliases + 1] = "shared monochrome font"
+            renderingAliases[#renderingAliases + 1] = "shared font monochrome"
+            renderingAliases[#renderingAliases + 1] = "default font rendering"
+            renderingAliases[#renderingAliases + 1] = "default font monochrome"
+            renderingAliases[#renderingAliases + 1] = "font outline monochrome"
+            renderingAliases[#renderingAliases + 1] = "global font outline monochrome"
+            renderingAliases[#renderingAliases + 1] = "shared font outline monochrome"
+        end
+        RegisterScopedSetting("fontScope", scope, "fontMonochrome", "rendering", "Rendering", "enum", "SMOOTH", SharedOrScopedAliases(scope, {
+            Unpack(renderingAliases),
         }), {
             flag = "fontOverride",
             values = FONT_RENDERING_VALUES,
@@ -77,8 +111,17 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_FONT_RENDERING",
         })
-        RegisterScopedSetting("fontScope", scope, "fontTextAlpha", "textOpacity", "Text Opacity", "number", 1, SharedOrScopedAliases(scope, {
+        local opacityAliases = {
             "text opacity", "font opacity", "text alpha", "font alpha",
+        }
+        if isShared then
+            opacityAliases[#opacityAliases + 1] = "global text opacity"
+            opacityAliases[#opacityAliases + 1] = "global font opacity"
+            opacityAliases[#opacityAliases + 1] = "shared text opacity"
+            opacityAliases[#opacityAliases + 1] = "shared font opacity"
+        end
+        RegisterScopedSetting("fontScope", scope, "fontTextAlpha", "textOpacity", "Text Opacity", "number", 1, SharedOrScopedAliases(scope, {
+            Unpack(opacityAliases),
         }), {
             flag = "fontOverride",
             min = 0.7,
@@ -90,8 +133,19 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_FONT_TEXT_ALPHA",
         })
-        RegisterScopedSetting("fontScope", scope, "fontBaselineOffset", "baseline", "Baseline", "number", 0, SharedOrScopedAliases(scope, {
+        local baselineAliases = {
             "text baseline", "font baseline", "baseline offset", "vertical font offset", "font y nudge", "text y nudge",
+        }
+        if isShared then
+            baselineAliases[#baselineAliases + 1] = "global text baseline"
+            baselineAliases[#baselineAliases + 1] = "global font baseline"
+            baselineAliases[#baselineAliases + 1] = "global baseline offset"
+            baselineAliases[#baselineAliases + 1] = "shared text baseline"
+            baselineAliases[#baselineAliases + 1] = "shared font baseline"
+            baselineAliases[#baselineAliases + 1] = "shared baseline offset"
+        end
+        RegisterScopedSetting("fontScope", scope, "fontBaselineOffset", "baseline", "Baseline", "number", 0, SharedOrScopedAliases(scope, {
+            Unpack(baselineAliases),
         }), {
             flag = "fontOverride",
             min = -4,
@@ -100,10 +154,19 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_FONT_BASELINE",
         })
-        RegisterScopedSetting("fontScope", scope, "nameColorMode", "nameColor", "Name Text Color Mode", "enum", "DEFAULT", SharedOrScopedAliases(scope, {
+        local nameColorAliases = {
             "name color", "name text color", "player name color", "unit name color",
             "name text by class", "name text color by class", "color name by class",
             "color name text by class", "class color name text", "class colored name text",
+        }
+        if isShared then
+            nameColorAliases[#nameColorAliases + 1] = "global name color"
+            nameColorAliases[#nameColorAliases + 1] = "global name text color"
+            nameColorAliases[#nameColorAliases + 1] = "shared name color"
+            nameColorAliases[#nameColorAliases + 1] = "shared name text color"
+        end
+        RegisterScopedSetting("fontScope", scope, "nameColorMode", "nameColor", "Name Text Color Mode", "enum", "DEFAULT", SharedOrScopedAliases(scope, {
+            Unpack(nameColorAliases),
         }), {
             flag = "fontOverride",
             values = CLASS_DEFAULT_VALUES,
@@ -113,15 +176,35 @@ function A.GlobalRegistry.RegisterScopedFontDetailSettings(ctx)
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_NAME_COLOR_MODE",
         })
-        RegisterScopedSetting("fontScope", scope, "textBackdrop", "textShadow", "Text Shadow", "boolean", true, SharedOrScopedAliases(scope, {
+        local shadowAliases = {
             "text shadow", "font shadow", "shadow text", "shadow",
+        }
+        if isShared then
+            shadowAliases[#shadowAliases + 1] = "global text shadow"
+            shadowAliases[#shadowAliases + 1] = "global font shadow"
+            shadowAliases[#shadowAliases + 1] = "shared text shadow"
+            shadowAliases[#shadowAliases + 1] = "shared font shadow"
+        end
+        RegisterScopedSetting("fontScope", scope, "textBackdrop", "textShadow", "Text Shadow", "boolean", true, SharedOrScopedAliases(scope, {
+            Unpack(shadowAliases),
         }), {
             flag = "fontOverride",
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_FONT_SHADOW",
         })
-        RegisterScopedSetting("fontScope", scope, "fontShadowStrength", "shadowStrength", "Shadow Strength", "enum", "NORMAL", SharedOrScopedAliases(scope, {
+        local shadowStrengthAliases = {
             "shadow strength", "text shadow strength", "font shadow strength", "shadow intensity",
+        }
+        if isShared then
+            shadowStrengthAliases[#shadowStrengthAliases + 1] = "global shadow strength"
+            shadowStrengthAliases[#shadowStrengthAliases + 1] = "global text shadow strength"
+            shadowStrengthAliases[#shadowStrengthAliases + 1] = "global font shadow strength"
+            shadowStrengthAliases[#shadowStrengthAliases + 1] = "shared shadow strength"
+            shadowStrengthAliases[#shadowStrengthAliases + 1] = "shared text shadow strength"
+            shadowStrengthAliases[#shadowStrengthAliases + 1] = "shared font shadow strength"
+        end
+        RegisterScopedSetting("fontScope", scope, "fontShadowStrength", "shadowStrength", "Shadow Strength", "enum", "NORMAL", SharedOrScopedAliases(scope, {
+            Unpack(shadowStrengthAliases),
         }), {
             flag = "fontOverride",
             values = FONT_SHADOW_STRENGTH_VALUES,

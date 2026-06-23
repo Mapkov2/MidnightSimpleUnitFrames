@@ -164,6 +164,44 @@ local function RootFrameEnabledBlockedByDetail(setting, text)
     return ContainsAny(text, ROOT_FRAME_ENABLED_DETAIL_TERMS)
 end
 
+local AURA_LANE_VISIBILITY_DETAIL_TERMS = {
+    "stack text", "stack count", "count text", "stacks",
+    "cooldown text", "timer text", "cooldown swipe", "timer swipe",
+    "text size", "font size", "cooldown size", "stack size",
+    "filter", "filters", "only my", "my buffs only", "my debuffs only", "only mine",
+    "dispellable", "dispel", "blacklist", "whitelist", "hidden aura", "hidden spell",
+    "spell id", "spell:", "spell ",
+}
+
+local function IsAuraLaneVisibilitySetting(setting)
+    if type(setting) ~= "table" then return false end
+    local frameType = tostring(setting.frameType or "")
+    if frameType ~= "aura" and frameType ~= "groupAura" then return false end
+    if setting.type ~= "boolean" then return false end
+    local key = tostring(setting.key or ""):lower()
+    local attr = tostring(setting.attribute or ""):lower()
+    if key == "auras3.shared.showbuffs" or key == "auras3.shared.showdebuffs" then return true end
+    if key:find("%.buff%.visible", 1, true) or key:find("%.debuff%.visible", 1, true) then return true end
+    if key:find("%.auras%.buff%.enabled", 1, true) or key:find("%.auras%.debuff%.enabled", 1, true) then return true end
+    return attr == "aurashowbuffs"
+        or attr == "aurashowdebuffs"
+        or attr == "aurabuffvisible"
+        or attr == "auradebuffvisible"
+        or attr == "gfaurabuffenabled"
+        or attr == "gfauradebuffenabled"
+end
+
+local function AuraLaneVisibilityBlockedByDetail(setting, text)
+    if not IsAuraLaneVisibilitySetting(setting) then return false end
+    if ContainsAny(text, AURA_LANE_VISIBILITY_DETAIL_TERMS) then return true end
+    if ContainsAny(text, { " icon", " icons" })
+        and not ContainsAny(text, { "buff icons", "debuff icons", "aura icons", "buff icon", "debuff icon", "aura icon" })
+    then
+        return true
+    end
+    return false
+end
+
 local function ClassPowerMentionIsNegated(text)
     return ContainsAny(text, {
         "not class resource", "not class resources", "not class power", "not class bar", "not resource bar",
@@ -240,6 +278,7 @@ local function NonAuraSettingBlockedByAuraIntent(setting, text)
     if not HasAuraSettingIntent(text) then return false end
     local frameType = tostring(setting and setting.frameType or "")
     if frameType == "aura" or frameType == "groupAura" then return false end
+    if frameType == "classPower" and HasClassPowerIntent(text) then return false end
     local key = tostring(setting and setting.key or "")
     local attribute = tostring(setting and setting.attribute or ""):lower()
     local category = tostring(setting and setting.category or ""):lower()
@@ -298,6 +337,7 @@ local function SettingAllowedByExplicitScopes(setting, text)
     if ClassPowerBlockedByExplicitUnitPowerIntent(setting, text) then return false end
     if NonAuraSettingBlockedByAuraIntent(setting, text) then return false end
     local frameType = tostring(setting.frameType or "")
+    if AuraLaneVisibilityBlockedByDetail(setting, text) then return false end
     if P.HasVagueAuraIconSizeIntent(text)
         and (frameType == "aura" or frameType == "groupAura")
         and not P.IsAuraIconSizeSetting(setting)
@@ -307,6 +347,13 @@ local function SettingAllowedByExplicitScopes(setting, text)
     local unit = tostring(setting.unit or "")
     local keyScope = SettingKeyScope(setting)
     local units, groups = ExplicitScopes(text)
+    if frameType == "aura"
+        and unit == "shared"
+        and (#units > 0 or #groups > 0)
+        and not ContainsAny(text, { "shared", "global", "all aura", "all auras", "all buffs", "all debuffs", "every aura", "every auras", "every buff", "every buffs", "every debuff", "every debuffs" })
+    then
+        return false
+    end
     -- Shared aura controls can be valid for "all auras", but some lane-level shared growth
     -- options are deliberately excluded because they would fight the per-frame buff/debuff
     -- settings the user usually means.
@@ -345,6 +392,7 @@ end
 local function SettingMatchesText(setting, text)
     if type(setting) ~= "table" then return false end
     if RootFrameEnabledBlockedByDetail(setting, text) then return false end
+    if AuraLaneVisibilityBlockedByDetail(setting, text) then return false end
     if not SettingAllowedByExplicitScopes(setting, text) then return false end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
         local wantedGroup
@@ -378,6 +426,7 @@ local function SettingMatchScore(setting, text)
         if cached ~= nil then return cached end
     end
     if RootFrameEnabledBlockedByDetail(setting, text) then return 0 end
+    if AuraLaneVisibilityBlockedByDetail(setting, text) then return 0 end
     if not SettingAllowedByExplicitScopes(setting, text) then return 0 end
     if setting.frameType == "castbar" and setting.attribute == "enabled" and ContainsAny(text, CASTBAR_ROOT_DETAIL_TERMS) then
         return 0
@@ -4054,6 +4103,11 @@ end
 
 P.SettingMatchesText = SettingMatchesText
 P.SettingMatchScore = SettingMatchScore
+P.RegistrySettingMayMatchExactAlias = function(setting, text)
+    if RootFrameEnabledBlockedByDetail(setting, text) then return false end
+    if AuraLaneVisibilityBlockedByDetail(setting, text) then return false end
+    return SettingAllowedByExplicitScopes(setting, text)
+end
 P.EnumValueForText = EnumValueForText
 P.StringValueForText = StringValueForText
 P.ExplicitFreeformValue = ExplicitFreeformValue

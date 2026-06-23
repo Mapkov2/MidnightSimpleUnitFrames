@@ -62,7 +62,7 @@ function A.Workflow.RegisterProfileWorkflowActions(ctx)
             local source = Trim(args and args.source or "")
             if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
             A.StartPendingFlow("profileCopyDestination", { source = source, label = "Profile copy" })
-            return true, "What do you want me to call the copy of profile " .. tostring(source) .. "? For example: 'call it Raid Backup'. 'never mind' cancels."
+            return true, "What do you want me to call the copy of profile " .. tostring(source) .. "? For example: 'call it Raid Backup'. Say 'cancel' or 'never mind' to stop."
         end,
     })
 
@@ -113,7 +113,7 @@ function A.Workflow.RegisterProfileWorkflowActions(ctx)
             local source = Trim(args and args.source or "")
             if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
             A.StartPendingFlow("profileRenameDestination", { source = source, label = "Profile rename" })
-            return true, "What should the new name be for profile " .. tostring(source) .. "? For example: 'to Raid Renamed' or 'named Raid Renamed'. 'never mind' cancels."
+            return true, "What should the new name be for profile " .. tostring(source) .. "? For example: 'to Raid Renamed' or 'named Raid Renamed'. Say 'cancel' or 'never mind' to stop."
         end,
     })
 end

@@ -33,6 +33,8 @@ function A.ClassPowerRegistry.RegisterDetachedPowerSettings(ctx)
     }, {
         "detached power bar width mode", "detached power width mode", "detached mana width mode",
         "detached power bar width source", "detached power follows cooldowns", "detached power follows tracked buffs",
+        "class resources player power width mode", "class resources player power bar width mode",
+        "class resources player power width source", "class resources player power bar width source",
     }, {
         category = "Global / Detached Power Bar",
         frameType = "detachedPowerBar",
@@ -44,6 +46,10 @@ function A.ClassPowerRegistry.RegisterDetachedPowerSettings(ctx)
     RegisterBarsString("detachedPowerBarTexture", "texture", "Detached Power Bar Foreground Texture", "", {
         "detached power bar foreground texture", "detached power bar texture", "detached power texture",
         "detached mana foreground texture", "detached mana texture",
+        "class resources player power foreground texture", "class resources player power bar foreground texture",
+        "class resources player power texture", "class resources player power bar texture",
+        "class resource player power foreground texture", "class resource player power bar texture",
+        "player power texture in class resources", "player power bar texture in class resources",
     }, {
         category = "Global / Detached Power Bar",
         frameType = "detachedPowerBar",
@@ -55,6 +61,9 @@ function A.ClassPowerRegistry.RegisterDetachedPowerSettings(ctx)
     RegisterBarsString("detachedPowerBarBgTexture", "backgroundTexture", "Detached Power Bar Background Texture", "", {
         "detached power bar background texture", "detached power bar bg texture", "detached power background texture",
         "detached mana background texture", "detached mana bg texture",
+        "class resources player power background texture", "class resources player power bar background texture",
+        "class resources player power bg texture", "class resources player power bar bg texture",
+        "class resource player power background texture", "player power background texture in class resources",
     }, {
         category = "Global / Detached Power Bar",
         frameType = "detachedPowerBar",
@@ -65,6 +74,8 @@ function A.ClassPowerRegistry.RegisterDetachedPowerSettings(ctx)
     })
     RegisterBarsNumber("detachedPowerBarOutline", "outline", "Detached Power Bar Outline", 1, 0, 8, {
         "detached power bar outline", "detached power outline", "detached mana outline", "detached power bar border",
+        "class resources player power outline", "class resources player power bar outline",
+        "class resource player power outline", "player power outline in class resources",
     }, {
         category = "Global / Detached Power Bar",
         frameType = "detachedPowerBar",

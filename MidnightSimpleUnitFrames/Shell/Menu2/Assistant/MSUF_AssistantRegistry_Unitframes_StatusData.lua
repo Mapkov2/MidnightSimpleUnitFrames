@@ -36,8 +36,16 @@ Data.STATUS_CONTROL_SPECS = {
         refresh = "MSUF_RefreshRaidMarkerFrames",
         aliases = {
             "raid marker", "raid marker icon", "raid marker indicator",
-            "raid indicator", "raid icon", "raid symbol",
-            "target marker", "target marker icon", "target marker indicator",
+            "raid target marker", "raid target icon", "raid indicator", "raid icon", "raid symbol",
+            "target marker", "target marker icon", "target marker indicator", "target icon",
+            "moon", "moon icon", "moon marker", "moon symbol", "moon mark",
+            "skull", "skull icon", "skull marker", "skull symbol", "skull mark",
+            "cross", "cross icon", "cross marker", "cross symbol", "cross mark", "x marker", "x icon", "red x", "red cross",
+            "square", "square icon", "square marker", "square symbol", "square mark", "blue square",
+            "star", "star icon", "star marker", "star symbol", "star mark", "yellow star",
+            "circle", "circle icon", "circle marker", "circle symbol", "circle mark", "orange circle",
+            "diamond", "diamond icon", "diamond marker", "diamond symbol", "diamond mark", "purple diamond",
+            "triangle", "triangle icon", "triangle marker", "triangle symbol", "triangle mark", "green triangle",
         },
     },
     {

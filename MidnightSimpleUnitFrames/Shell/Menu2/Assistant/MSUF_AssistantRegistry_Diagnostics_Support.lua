@@ -21,6 +21,44 @@ local function ActiveProfileName()
     return name
 end
 
+local function ActivePageLabel()
+    local page = M and M.activeKey
+    if type(page) ~= "string" or page == "" then return "not open" end
+    if A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(page, "MSUF page") end
+    return "MSUF page"
+end
+
+local function AssistantPerfLabel(label)
+    label = tostring(label or "")
+    if label == "assistant.submit" then return "answering a request" end
+    if label == "assistant.submit.deferred" then return "queued request" end
+    if label == "assistant.refresh_ui" then return "refreshing the UI" end
+    if label == "assistant.job.step" then return "background Assistant work" end
+    if label == "assistant.warmup" then return "preparing answers" end
+    return "Assistant work"
+end
+
+local LOCALE_DISPLAY_LABELS = {
+    enUS = "English (US)",
+    enGB = "English (UK)",
+    deDE = "German (deDE)",
+    esES = "Spanish (EU)",
+    esMX = "Spanish (MX)",
+    frFR = "French",
+    itIT = "Italian",
+    ptBR = "Portuguese (BR)",
+    ruRU = "Russian",
+    koKR = "Korean",
+    zhCN = "Chinese (Simplified)",
+    zhTW = "Chinese (Traditional)",
+}
+
+local function LocaleDisplayLabel(locale)
+    locale = tostring(locale or "")
+    if locale == "" or locale == "not reported" then return "not reported" end
+    return LOCALE_DISPLAY_LABELS[locale] or ("Unknown (" .. locale .. ")")
+end
+
 A.Workflow.SupportLinks = {
     discord = { title = "Discord", parts = { "h", "tt", "ps", "://discord.gg/2Gf9b2Wprz" } },
     patreon = { title = "Patreon", parts = { "h", "tt", "ps", "://www.patreon.com/cw/MidnightSimpleUnitframes" } },
@@ -81,8 +119,8 @@ function A.Workflow.StatusText()
     end
     lines[#lines + 1] = "MSUF Assistant details"
     lines[#lines + 1] = "Version: " .. tostring(version)
-    lines[#lines + 1] = "Locale: " .. tostring(locale)
-    lines[#lines + 1] = "Active page: " .. tostring((M and M.activeKey) or "not open")
+    lines[#lines + 1] = "Locale: " .. LocaleDisplayLabel(locale)
+    lines[#lines + 1] = "Active page: " .. ActivePageLabel()
     lines[#lines + 1] = "Active profile: " .. ActiveProfileName()
     lines[#lines + 1] = "In combat: " .. combat
     lines[#lines + 1] = "Edit mode: " .. edit
@@ -105,11 +143,11 @@ function A.Workflow.StatusText()
     end
     local perf = A.GetLastPerfSample and A.GetLastPerfSample() or nil
     if type(perf) == "table" then
-        lines[#lines + 1] = "Last response time: " .. tostring(perf.label or "assistant") .. " " .. tostring(math.floor((tonumber(perf.ms) or 0) + 0.5)) .. " ms"
+        lines[#lines + 1] = "Last response time: " .. AssistantPerfLabel(perf.label) .. " " .. tostring(math.floor((tonumber(perf.ms) or 0) + 0.5)) .. " ms"
     end
     local slow = A.GetLastSlowPerfSample and A.GetLastSlowPerfSample() or nil
     if type(slow) == "table" then
-        lines[#lines + 1] = "Last slow response time: " .. tostring(slow.label or "assistant") .. " " .. tostring(math.floor((tonumber(slow.ms) or 0) + 0.5)) .. " ms"
+        lines[#lines + 1] = "Last slow response time: " .. AssistantPerfLabel(slow.label) .. " " .. tostring(math.floor((tonumber(slow.ms) or 0) + 0.5)) .. " ms"
     end
     return table.concat(lines, "\n")
 end

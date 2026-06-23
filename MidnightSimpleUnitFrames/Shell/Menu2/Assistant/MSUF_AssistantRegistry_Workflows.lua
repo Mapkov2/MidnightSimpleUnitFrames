@@ -85,9 +85,16 @@ local WORKFLOW_KIND_LABELS = {
 local function WorkflowKindLabel(kind)
     kind = tostring(kind or "")
     if WORKFLOW_KIND_LABELS[kind] then return WORKFLOW_KIND_LABELS[kind] end
-    local label = kind:gsub("_", " "):gsub("(%l)(%u)", "%1 %2")
-    label = label:gsub("^%l", string.upper)
-    return label ~= "" and label or "guided step"
+    return "guided step"
+end
+
+local function WorkflowFlowLabel(flow)
+    if type(flow) ~= "table" then return "none" end
+    return WorkflowKindLabel(flow.kind)
+end
+
+function A.Workflow.FlowLabel(flow)
+    return WorkflowFlowLabel(flow)
 end
 
 function A.Workflow.CloseLargePanel(reason)
@@ -118,7 +125,7 @@ function A.Workflow.WorkflowStatusText()
     lines[#lines + 1] = "Current Assistant step:"
     lines[#lines + 1] = "- Confirmation waiting: " .. (A.pendingConfirmation and "yes" or "no")
     lines[#lines + 1] = "- Choices waiting: " .. ((type(A.pendingChoices) == "table" and #A.pendingChoices > 0) and tostring(#A.pendingChoices) or "no")
-    lines[#lines + 1] = "- Guided step: " .. (flow and tostring(flow.label or flow.kind) or "none")
+    lines[#lines + 1] = "- Guided step: " .. WorkflowFlowLabel(flow)
     lines[#lines + 1] = "- Open Assistant panel: " .. (CurrentLargePanelKind() or "none")
     local guided = SafeContext() and SafeContext().guidedSetup
     lines[#lines + 1] = "- Setup guide: " .. (type(guided) == "table" and "active" or "inactive")
@@ -150,7 +157,7 @@ function A.Workflow.CancelActiveWorkflow()
     if type(flow) == "table" then
         if flow.kind == "unitAnchorPicker" or flow.kind == "groupAnchorPicker" then A.Workflow.CancelAnchorPicker() end
         A.ClearPendingFlow()
-        return true, "Cancelled " .. tostring(flow.label or WorkflowKindLabel(flow.kind)) .. "."
+        return true, "Cancelled " .. WorkflowFlowLabel(flow) .. "."
     end
     if CurrentLargePanelKind() then return A.Workflow.CloseLargePanel("Cancelled. I closed the open Assistant panel.") end
     local ctx = A.GetContext and A.GetContext()

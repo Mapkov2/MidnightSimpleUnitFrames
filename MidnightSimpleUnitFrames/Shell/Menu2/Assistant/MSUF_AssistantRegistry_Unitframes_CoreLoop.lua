@@ -18,6 +18,7 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
     local UNIT_KEYS = ctx.UNIT_KEYS or {}
     local LOAD_CONDITION_SPECS = ctx.LOAD_CONDITION_SPECS or {}
     local RegisterUnitBooleanSetting = ctx.RegisterUnitBooleanSetting
+    local RegisterUnitEnum = ctx.RegisterUnitEnum
     local MakeAliases = ctx.MakeAliases
     local RegisterUnitAnchoringSettings = ctx.RegisterUnitAnchoringSettings
     local RegisterUnitPortraitSettings = ctx.RegisterUnitPortraitSettings
@@ -27,9 +28,12 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
     local RegisterUnitStatusIconSettings = ctx.RegisterUnitStatusIconSettings
     local RegisterStatusTextStateSettings = ctx.RegisterStatusTextStateSettings
     local UnitDB = ctx.UnitDB
+    local CallGlobal = ctx.CallGlobal
     local ApplyLoadCondition = ctx.ApplyLoadCondition
+    local HEALTH_COLOR_MODE_VALUES = ctx.HEALTH_COLOR_MODE_VALUES or {}
+    local HEALTH_COLOR_MODE_ALIASES = ctx.HEALTH_COLOR_MODE_ALIASES or {}
 
-    if type(RegisterUnitBooleanSetting) ~= "function" or type(MakeAliases) ~= "function" then return end
+    if type(RegisterUnitBooleanSetting) ~= "function" or type(RegisterUnitEnum) ~= "function" or type(MakeAliases) ~= "function" then return end
     if type(ctx.AddAliasesForUnit) ~= "function" then return end
     if type(UnitDB) ~= "function" or type(ApplyLoadCondition) ~= "function" then return end
 
@@ -44,6 +48,34 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
         RegisterUnitBooleanSetting(unit, "smoothFill", "smoothFill", "Smooth Health Fill", true, MakeAliases(unit, "smooth fill", "smooth health fill", "smooth frame fill"), {
             category = "Frame",
             reason = "MSUF_ASSISTANT_SMOOTH_FILL",
+        })
+        RegisterUnitEnum(unit, "healthColorMode", "healthColorMode", "Health Color Scheme", "GLOBAL", HEALTH_COLOR_MODE_VALUES,
+            MakeAliases(unit, "health color scheme", "health color mode", "health bar color scheme", "health bar color mode", "unitframe color scheme"), {
+            category = "Frame",
+            reason = "MSUF_ASSISTANT_HEALTH_COLOR_MODE",
+            valueAliases = HEALTH_COLOR_MODE_ALIASES,
+            get = function(unitKey)
+                local value = UnitDB(unitKey).healthColorMode
+                if value == "class" or value == "gradient" or value == "unified" or value == "dark" then return value end
+                return "GLOBAL"
+            end,
+            set = function(unitKey, value)
+                if value == "class" or value == "gradient" or value == "unified" or value == "dark" then
+                    UnitDB(unitKey).healthColorMode = value
+                else
+                    UnitDB(unitKey).healthColorMode = nil
+                end
+            end,
+            apply = function(unitKey)
+                if type(CallGlobal) == "function" then
+                    CallGlobal("MSUF_ShowReloadRecommendedPopup", "Unitframe color changes")
+                elseif type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
+                    _G.MSUF_ShowReloadRecommendedPopup("Unitframe color changes")
+                end
+                if M and type(M.RequestUnitApply) == "function" then
+                    M.RequestUnitApply(unitKey, "MSUF_ASSISTANT_HEALTH_COLOR_MODE", { preview = true })
+                end
+            end,
         })
 
         if type(RegisterUnitAnchoringSettings) == "function" then

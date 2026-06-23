@@ -50,6 +50,8 @@ function A.GlobalRegistry.RegisterBarColorSettings(ctx)
 
     ColorSetting("general.absorbBarColor", "Absorb Bar Color", {
         "absorb bar color", "absorb color", "absorb overlay color",
+        "global absorb bar color", "global bar absorb color", "global absorb color",
+        "bar absorb color", "bar absorb overlay color",
     }, function()
         return ApiRGB("GetAbsorbOverlayColor", 1, 1, 1, function() return GeneralRGB("absorbBarColor", 1, 1, 1) end)
     end, function(r, g, b)
@@ -57,6 +59,8 @@ function A.GlobalRegistry.RegisterBarColorSettings(ctx)
     end, { category = "Colors / Bar Colors", attribute = "absorbColor", apply = ApplyColors })
     ColorSetting("general.healAbsorbBarColor", "Heal-Absorb Bar Color", {
         "heal absorb bar color", "heal absorb color", "heal-absorb color",
+        "global heal absorb bar color", "global bar heal absorb color",
+        "bar heal absorb color", "heal absorb overlay color",
     }, function()
         return ApiRGB("GetHealAbsorbOverlayColor", 0.7, 0, 0, function() return GeneralRGB("healAbsorbBarColor", 0.7, 0, 0) end)
     end, function(r, g, b)

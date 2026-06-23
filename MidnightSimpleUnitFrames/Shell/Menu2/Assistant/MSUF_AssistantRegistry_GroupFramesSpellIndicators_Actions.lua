@@ -88,9 +88,26 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
     Registry:RegisterAction({
         key = "set_group_spell_indicator_aura",
         label = "Set Group Spell Indicator Aura",
+        page = "gf_indicators",
         type = "configure",
         combatSafe = false,
         captureSnapshot = true,
+        description = "Configures one tracked Group Spell Indicator aura entry, including enable state, own-aura filtering, placed indicator type, anchor, size, offsets, bar width, growth, cooldown text, frame effect, color, opacity, thickness, and priority.",
+        aliases = {
+            "configure group spell indicator", "edit group spell indicator", "set group spell indicator",
+            "set group tracked spell", "configure tracked spell", "edit tracked spell",
+            "group spell indicator enabled", "group spell indicator own aura", "group spell indicator only own",
+            "group spell indicator type", "group spell indicator placed type", "group spell indicator anchor",
+            "group spell indicator size", "group spell indicator x offset", "group spell indicator y offset",
+            "group spell indicator bar width", "group spell indicator growth", "group spell indicator cooldown",
+            "group spell indicator cooldown swipe", "group spell indicator cooldown size",
+            "group spell indicator frame effect", "group spell indicator frame priority",
+            "group spell indicator tint alpha", "group spell indicator opacity", "group spell indicator thickness",
+            "group spell indicator color", "party spell indicator anchor", "raid spell indicator anchor",
+            "mythic raid spell indicator anchor", "party spell indicator growth", "raid spell indicator growth",
+            "mythic raid spell indicator growth", "party spell indicator size", "raid spell indicator size",
+            "mythic raid spell indicator size",
+        },
         run = function(args)
             local scope, specKey, auraName, display = ActionTarget(args)
             if not specKey then return false, "Which spell-indicator spec do you want me to use? Examples: Holy Paladin or Restoration Druid." end
@@ -103,9 +120,16 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
     Registry:RegisterAction({
         key = "reset_group_spell_indicator_aura",
         label = "Reset Group Spell Indicator Aura",
+        page = "gf_indicators",
         type = "reset",
         combatSafe = false,
         captureSnapshot = true,
+        description = "Resets one tracked Group Spell Indicator aura entry back to its default setup for the selected spec.",
+        aliases = {
+            "reset group spell indicator", "reset group tracked spell", "reset tracked spell indicator",
+            "clear group spell indicator aura", "restore group spell indicator aura",
+            "reset party spell indicator", "reset raid spell indicator", "reset mythic raid spell indicator",
+        },
         run = function(args)
             local scope, specKey, auraName, display = ActionTarget(args)
             if not specKey then return false, "Which spell-indicator spec do you want me to reset?" end
@@ -121,9 +145,17 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
     Registry:RegisterAction({
         key = "set_group_spell_indicator_multi_spec",
         label = "Set Group Spell Indicator Multi-Spec Entry",
+        page = "gf_indicators",
         type = "configure",
         combatSafe = false,
         captureSnapshot = true,
+        description = "Adds or removes one specialization from Group Spell Indicator Multi-Spec tracking.",
+        aliases = {
+            "track group spell indicator spec", "group spell indicator multi spec",
+            "group spell indicator multi-spec", "group tracked spell multi spec",
+            "party spell indicator multi spec", "raid spell indicator multi spec",
+            "mythic raid spell indicator multi spec",
+        },
         run = function(args)
             local scope, specKey = Scope(args and args.scope), ResolveSpec(args and args.spec)
             if not specKey or specKey == "auto" or specKey == "multi" then return false, "Which specific spell-indicator spec do you want me to track in Multi-Spec mode?" end
@@ -140,9 +172,17 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
     Registry:RegisterAction({
         key = "move_group_spell_indicator_order",
         label = "Move Group Spell Indicator Order",
+        page = "gf_indicators",
         type = "configure",
         combatSafe = false,
         captureSnapshot = true,
+        description = "Moves one tracked Group Spell Indicator aura to another position in that spec's ordered spell list.",
+        aliases = {
+            "move group spell indicator", "reorder group spell indicator",
+            "move group tracked spell", "reorder group tracked spell",
+            "party spell indicator order", "raid spell indicator order",
+            "mythic raid spell indicator order",
+        },
         run = function(args)
             local scope, specKey, auraName, display = ActionTarget(args)
             if not specKey then return false, "Which spell-indicator spec do you want me to reorder?" end

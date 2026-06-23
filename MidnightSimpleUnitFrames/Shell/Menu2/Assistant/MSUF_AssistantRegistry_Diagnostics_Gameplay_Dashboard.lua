@@ -22,6 +22,19 @@ function A.DiagnosticsRegistry.BuildDashboardSetupDiagnostic(ctx)
 
     if type(AddActionChoice) ~= "function" or type(AppendFixChoices) ~= "function" then return nil end
 
+    local function DashboardPageLabel(page)
+        if type(page) ~= "string" or page == "" then return "not open" end
+        if Assistant and type(Assistant.DisplayPageLabel) == "function" then return Assistant.DisplayPageLabel(page, "MSUF page") end
+        return "MSUF page"
+    end
+
+    local function GuidedStepLabel()
+        local flow = Assistant.pendingFlow
+        if type(flow) ~= "table" then return "none" end
+        if Assistant.Workflow and type(Assistant.Workflow.FlowLabel) == "function" then return Assistant.Workflow.FlowLabel(flow) end
+        return "guided step"
+    end
+
     local function DashboardSetupDiagnosticText()
         local context = Assistant.GetContext and Assistant.GetContext() or {}
         local global = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or nil
@@ -37,12 +50,12 @@ function A.DiagnosticsRegistry.BuildDashboardSetupDiagnostic(ctx)
         local function OpenClosed(value) return value and "open" or "closed" end
         local lines = {
             "Dashboard setup check:",
-            "Current page: " .. tostring((Menu and Menu.activeKey) or "not open"),
+            "Current page: " .. DashboardPageLabel(Menu and Menu.activeKey),
             "Dashboard navigation: " .. (navReady and "ready" or "open the menu first"),
             "Pages in back history: " .. tostring(Assistant.Workflow and type(Assistant.Workflow.navStack) == "table" and #Assistant.Workflow.navStack or 0),
             "Confirmation waiting: " .. YesNo(Assistant.pendingConfirmation ~= nil),
             "Choices waiting: " .. (pendingChoices > 0 and tostring(pendingChoices) or "no"),
-            "Guided step: " .. tostring(type(Assistant.pendingFlow) == "table" and (Assistant.pendingFlow.label or Assistant.pendingFlow.kind) or "none"),
+            "Guided step: " .. GuidedStepLabel(),
             "Setup guide: " .. tostring(type(context.guidedSetup) == "table" and "active" or "inactive"),
             "Recovery panel: " .. OpenClosed(recoveryOpen),
             "Scaling panel: " .. OpenClosed(scalingOpen),

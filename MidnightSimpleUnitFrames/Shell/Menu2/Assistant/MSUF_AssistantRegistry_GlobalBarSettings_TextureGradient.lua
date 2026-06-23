@@ -69,7 +69,12 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
         frameType = "globalBars",
         attribute = "gradientDirection",
         type = "enum",
-        aliases = { "gradient direction", "bar gradient direction", "health gradient direction", "power gradient direction" },
+        aliases = {
+            "gradient direction", "bar gradient direction", "health gradient direction", "power gradient direction",
+            "global bar gradient direction", "global bars gradient direction",
+            "global bar right", "global bar right gradient", "global bar right direction",
+            "global bar right color", "bar right gradient", "bar right direction", "right bar gradient",
+        },
         values = GRADIENT_DIRECTION_VALUES,
         valueAliases = GRADIENT_DIRECTION_ALIASES,
         get = function()

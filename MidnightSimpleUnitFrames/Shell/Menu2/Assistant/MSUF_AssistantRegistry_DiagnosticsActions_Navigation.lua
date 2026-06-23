@@ -19,6 +19,44 @@ M = ctx.M or M
 
 if not (Registry and type(Registry.RegisterAction) == "function") then return end
 
+local PAGE_LABEL_OVERRIDES = {
+    home = "Dashboard",
+    profiles = "Profiles",
+    gameplay = "Gameplay",
+    classpower = "Class Resources",
+    modules = "Modules",
+    search = "Search",
+    opt_castbar = "Cast Bars",
+    opt_bars = "Bars",
+    opt_colors = "Colors",
+    opt_fonts = "Fonts",
+    opt_misc = "Miscellaneous",
+    gf_layout = "Group Layout",
+    gf_bars = "Group Health & Text",
+    gf_indicators = "Group Indicators",
+    gf_auras = "Group Auras",
+    auras3 = "Auras",
+    auras3_buffs = "Aura Buffs",
+    auras3_debuffs = "Aura Debuffs",
+    auras3_filters = "Aura Filters",
+    auras3_styling = "Aura Style",
+    uf_player = "Player",
+    uf_target = "Target",
+    uf_focus = "Focus",
+    uf_pet = "Pet",
+    uf_boss = "Boss",
+    uf_targettarget = "Target of Target",
+    uf_focustarget = "Focus Target",
+}
+
+local function DashboardPageLabel(page)
+    page = tostring(page or "")
+    if page ~= "" and A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(page, "MSUF page") end
+    if page ~= "" and PAGE_LABEL_OVERRIDES[page] then return PAGE_LABEL_OVERRIDES[page] end
+    if page ~= "" then return "MSUF page" end
+    return "Dashboard"
+end
+
 Registry:RegisterAction({
     key = "open_page",
     label = "Open Dashboard Page",
@@ -28,7 +66,7 @@ Registry:RegisterAction({
         local page = args and args.page
         if type(page) ~= "string" or page == "" then return false, "Which page do you want me to open?" end
         local previousPage = M and M.activeKey
-        local label = tostring(args.label or page)
+        local label = DashboardPageLabel(page)
         local opened = false
         local bridge = M and M.SearchBridge
         local query = args and args.query

@@ -1832,6 +1832,107 @@ local function RegistryActionAliasCandidates(actions, text)
     return out
 end
 
+local EXACT_ACTION_PREFIXES = {
+    "run ", "execute ", "start ", "show ", "use ", "apply ", "check ",
+}
+
+local function ExactActionPhraseText(text)
+    text = Normalize(text)
+    if text == "" then return "" end
+    for i = 1, #EXACT_ACTION_PREFIXES do
+        local prefix = EXACT_ACTION_PREFIXES[i]
+        if text:sub(1, #prefix) == prefix then
+            return Trim(text:sub(#prefix + 1))
+        end
+    end
+    return text
+end
+
+local function AddExactActionPhrase(index, phrase, action)
+    phrase = ExactActionPhraseText(phrase)
+    if phrase == "" or #phrase < 4 then return end
+    local existing = index[phrase]
+    if existing == nil then
+        index[phrase] = action
+    elseif type(existing) == "table" and existing.key then
+        if tostring(existing.key or "") == tostring(action and action.key or "") then return end
+        index[phrase] = { existing, action }
+    elseif type(existing) == "table" then
+        local actionKey = tostring(action and action.key or "")
+        for i = 1, #existing do
+            if tostring(existing[i] and existing[i].key or "") == actionKey then return end
+        end
+        existing[#existing + 1] = action
+    end
+end
+
+local function EnsureExactActionPhraseIndex(actions)
+    actions = actions or {}
+    if P._exactActionPhraseActions == actions
+        and P._exactActionPhraseCount == #actions
+        and type(P._exactActionPhraseIndex) == "table" then
+        return P._exactActionPhraseIndex
+    end
+
+    local index = {}
+    for i = 1, #actions do
+        local action = actions[i]
+        if type(action) == "table" then
+            AddExactActionPhrase(index, action.label, action)
+            if type(action.aliases) == "table" then
+                for j = 1, #action.aliases do
+                    local alias = Normalize(action.aliases[j])
+                    if alias:sub(1, 5) ~= "open " then AddExactActionPhrase(index, action.aliases[j], action) end
+                end
+            end
+        end
+    end
+
+    P._exactActionPhraseActions = actions
+    P._exactActionPhraseCount = #actions
+    P._exactActionPhraseIndex = index
+    return index
+end
+
+function P.ParseExactActionPhraseShortcut(text, raw)
+    local phrase = ExactActionPhraseText(raw or text)
+    if phrase == "" then return nil end
+    local actions = Registry and Registry:AllActions() or {}
+    local index = EnsureExactActionPhraseIndex(actions)
+    local match = index[phrase]
+    if not match then return nil end
+    if type(match) == "table" and not match.key then
+        local choices = {}
+        for i = 1, #match do
+            local action = match[i]
+            choices[#choices + 1] = {
+                kind = "action",
+                action = action,
+                args = {},
+                confirmRequired = action.confirmRequired == true,
+                label = type(A.DisplayActionLabel) == "function" and A.DisplayActionLabel(action) or action.label or "Assistant shortcut",
+                summary = "Runs the matching Assistant shortcut.",
+            }
+        end
+        return #choices > 0 and {
+            kind = "choice",
+            status = "needs_choice",
+            summary = "Multiple Assistant shortcuts matched.",
+            text = "Which Assistant shortcut do you want to run?",
+            choices = choices,
+        } or nil
+    end
+    local action = match
+    return {
+        kind = "action",
+        action = action,
+        args = {},
+        confirmRequired = action.confirmRequired == true,
+        label = type(A.DisplayActionLabel) == "function" and A.DisplayActionLabel(action) or action.label or "Assistant shortcut",
+        summary = "Runs the matching Assistant shortcut.",
+    }
+end
+
 local function LooksLikeNumericSettingChange(text)
     if FirstNumber(text) == nil then return false end
     if ContainsAny(text, { "import", "export", "profile string", "copy", "backup", "reset", "open", "diagnose", "test" }) then return false end

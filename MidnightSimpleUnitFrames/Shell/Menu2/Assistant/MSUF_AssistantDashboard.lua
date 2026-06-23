@@ -540,7 +540,12 @@ function A.BuildDashboardCard(parent, cardW, cardH)
         input:SetText("")
         SetRegionShown(input._msufAssistantPlaceholder, true)
         if type(A.SubmitDeferred) == "function" then
-            A.SubmitDeferred(query)
+            local result = A.SubmitDeferred(query)
+            local status = type(result) == "table" and (result.status or result.result) or nil
+            if status == "combat" and type(A.AddHistory) == "function" then
+                A.AddHistory("user", query, "submitted")
+                A.AddHistory("assistant", result.text or "MSUF menu changes have to wait until combat ends.", status, result.summary)
+            end
         elseif type(A.AddHistory) == "function" then
             A.AddHistory("assistant", "The Assistant is still preparing. Open the Dashboard first to finish loading it.", "failed")
             if type(A.RequestRefreshUI) == "function" then

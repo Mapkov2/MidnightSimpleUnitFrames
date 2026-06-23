@@ -55,7 +55,7 @@ end
 local function ResolveNavSection(section)
     if M and type(M.ResolveNavHeader) == "function" then
         local id, label, item = M.ResolveNavHeader(section)
-        if id then return id, label, item end
+        if id then return id, NAV_SECTION_LABELS[id] or tostring(id), item end
     end
     local token = NormalizeKey(section)
     local aliasId = NAV_SECTION_ALIASES[token]
@@ -65,7 +65,7 @@ local function ResolveNavSection(section)
         if item and item.header then
             local id = tostring(item.id or item.header)
             if aliasId == id or token == NormalizeKey(id) or token == NormalizeKey(item.header) then
-                return id, item.header, item
+                return id, NAV_SECTION_LABELS[id] or id, item
             end
         end
     end
@@ -101,7 +101,14 @@ end
 
 function A.Workflow.SetNavSection(section, open)
     if M and type(M.SetNavHeaderOpen) == "function" then
-        return M.SetNavHeaderOpen(section, open)
+        local ok, message, state, resolvedId = M.SetNavHeaderOpen(section, open)
+        if not ok then return ok, message end
+        if not resolvedId then resolvedId = select(1, ResolveNavSection(section)) end
+        if state == nil and resolvedId and type(M.navHeaderState) == "table" then
+            state = M.navHeaderState[resolvedId]
+        end
+        if state == nil then state = open ~= false end
+        return true, (state and "Opened " or "Closed ") .. tostring(NAV_SECTION_LABELS[resolvedId] or resolvedId or section) .. " navigation section."
     end
     local id, label, item = ResolveNavSection(section)
     if not id then return false, "Which navigation section do you want me to open?" end

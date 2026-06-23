@@ -101,7 +101,13 @@ function A.UnitframesRegistry.BuildSettingBaseUnitContext(ctx)
                 end
                 UnitDB(unit)[dbKey] = value
             end,
-            apply = function() UnitApply(unit, opts, "MSUF_ASSISTANT_" .. tostring(dbKey)) end,
+            apply = function()
+                if opts.apply then
+                    opts.apply(unit)
+                else
+                    UnitApply(unit, opts, "MSUF_ASSISTANT_" .. tostring(dbKey))
+                end
+            end,
             combatSafe = opts.combatSafe == true,
             description = opts.description,
         })

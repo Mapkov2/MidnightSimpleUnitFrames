@@ -157,138 +157,138 @@ P.InitUnsupportedAuraCommand()
 --- before broad registry matching, otherwise "yes", copy/profile flows, and
 --- exact assistant keys can be swallowed by generic setting aliases.
 function A._ParsePipelineWorkflow(normalized, raw, ctx)
-    return ParseGuidedSetupFollowup(normalized, ctx)
-        or A._ParseFollowupAnswer(normalized, ctx)
-        or BuildFollowup(normalized, ctx)
-        or BuildBooleanCorrection(normalized, ctx)
-        or (P.ParseBroadHumanAnchorTargetAnswer and P.ParseBroadHumanAnchorTargetAnswer(normalized, raw))
-        or ParseWorkflowLifecycle(normalized)
-        or (P.ParseProfileRepairShortcut and P.ParseProfileRepairShortcut(normalized))
-        or (ParseGroupCornerIndicatorSetting and ParseGroupCornerIndicatorSetting(normalized, raw))
-        or ParseDiagnostic(normalized)
-        or ParseGroupCopy(normalized)
-        or P.ParseUnsupportedMixedCopy(normalized)
-        or ParseCopy(normalized)
-        or ParseProfileStagingState(normalized, raw)
-        or ParseProfile(normalized, raw)
-        or (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
-        or (P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw))
-        or (P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw))
-        or (P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw))
-        or (A._ParseClassPowerDetachedPlayerPowerShortcut and A._ParseClassPowerDetachedPlayerPowerShortcut(normalized, raw))
-        or (ParseClassPowerRootToggle and ParseClassPowerRootToggle(normalized))
-        or (A._ParseClassPowerWidthModeShortcut and A._ParseClassPowerWidthModeShortcut(normalized))
-        or (A._ParseClassPowerVisibilityShortcut and A._ParseClassPowerVisibilityShortcut(normalized))
-        or (A._ParseClassPowerAnchorShortcut and A._ParseClassPowerAnchorShortcut(normalized))
-        or (A._ParseClassPowerPlacementShortcut and A._ParseClassPowerPlacementShortcut(normalized))
-        or (A._ParseClassPowerDisplayStyleShortcut and A._ParseClassPowerDisplayStyleShortcut(normalized))
-        or (A._ParseClassPowerFillDirectionShortcut and A._ParseClassPowerFillDirectionShortcut(normalized))
-        or (A._ParseClassPowerTextSizeShortcut and A._ParseClassPowerTextSizeShortcut(normalized))
-        or (A._ParseClassPowerSizeShortcut and A._ParseClassPowerSizeShortcut(normalized))
-        or (A._ParseClassPowerSeparatorShortcut and A._ParseClassPowerSeparatorShortcut(normalized))
-        or (A._ParseClassPowerGapShortcut and A._ParseClassPowerGapShortcut(normalized))
-        or (A._ParseClassPowerBackgroundShortcut and A._ParseClassPowerBackgroundShortcut(normalized))
-        or (A._ParseClassPowerMoveShortcut and A._ParseClassPowerMoveShortcut(normalized))
-        or ParseGameplayRootToggle(normalized)
-        or A._ParseGameplayBooleanShortcut(normalized)
-        or A._ParseGameplayAnchorShortcut(normalized)
-        or A._ParseGameplayNumberShortcut(normalized)
-        or A._ParseGameplayPositionPreset(normalized)
-        or A._ParseGameplayMoveShortcut(normalized)
-        or ParsePresetWorkflow(normalized)
-        or (P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx))
-        or ParseGuidedSetup(normalized)
-        or ParseScopedHelp(normalized)
-        or (P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized))
-        or (P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized))
-        or P.ParseMiscRegistryShortcut(normalized, raw)
-        or ParseDashboardPanelAction(normalized)
-        or ParseNavRailAction(normalized)
-        or ParseSupportWorkflow(normalized)
-        or ParseMenuWindowAction(normalized)
-        or ParseScopedFontTextColorShortcut(normalized)
-        or ParseUnitCopyScopeState(normalized)
-        or (P.ParseDashboardScaleShortcut and P.ParseDashboardScaleShortcut(normalized))
+    local result = ParseGuidedSetupFollowup(normalized, ctx); if result then return result end
+    result = A._ParseFollowupAnswer(normalized, ctx); if result then return result end
+    result = BuildFollowup(normalized, ctx); if result then return result end
+    result = BuildBooleanCorrection(normalized, ctx); if result then return result end
+    result = P.ParseBroadHumanAnchorTargetAnswer and P.ParseBroadHumanAnchorTargetAnswer(normalized, raw); if result then return result end
+    result = ParseWorkflowLifecycle(normalized); if result then return result end
+    result = P.ParseProfileRepairShortcut and P.ParseProfileRepairShortcut(normalized); if result then return result end
+    result = ParseGroupCornerIndicatorSetting and ParseGroupCornerIndicatorSetting(normalized, raw); if result then return result end
+    result = ParseDiagnostic(normalized); if result then return result end
+    result = ParseGroupCopy(normalized); if result then return result end
+    result = P.ParseUnsupportedMixedCopy(normalized); if result then return result end
+    result = ParseCopy(normalized); if result then return result end
+    result = ParseProfileStagingState(normalized, raw); if result then return result end
+    result = ParseProfile(normalized, raw); if result then return result end
+    result = P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw); if result then return result end
+    result = P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw); if result then return result end
+    result = P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw); if result then return result end
+    result = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw); if result then return result end
+    result = A._ParseClassPowerDetachedPlayerPowerShortcut and A._ParseClassPowerDetachedPlayerPowerShortcut(normalized, raw); if result then return result end
+    result = ParseClassPowerRootToggle and ParseClassPowerRootToggle(normalized); if result then return result end
+    result = A._ParseClassPowerWidthModeShortcut and A._ParseClassPowerWidthModeShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerVisibilityShortcut and A._ParseClassPowerVisibilityShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerAnchorShortcut and A._ParseClassPowerAnchorShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerPlacementShortcut and A._ParseClassPowerPlacementShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerDisplayStyleShortcut and A._ParseClassPowerDisplayStyleShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerFillDirectionShortcut and A._ParseClassPowerFillDirectionShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerTextSizeShortcut and A._ParseClassPowerTextSizeShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerSizeShortcut and A._ParseClassPowerSizeShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerSeparatorShortcut and A._ParseClassPowerSeparatorShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerGapShortcut and A._ParseClassPowerGapShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerBackgroundShortcut and A._ParseClassPowerBackgroundShortcut(normalized); if result then return result end
+    result = A._ParseClassPowerMoveShortcut and A._ParseClassPowerMoveShortcut(normalized); if result then return result end
+    result = ParseGameplayRootToggle(normalized); if result then return result end
+    result = A._ParseGameplayBooleanShortcut(normalized); if result then return result end
+    result = A._ParseGameplayAnchorShortcut(normalized); if result then return result end
+    result = A._ParseGameplayNumberShortcut(normalized); if result then return result end
+    result = A._ParseGameplayPositionPreset(normalized); if result then return result end
+    result = A._ParseGameplayMoveShortcut(normalized); if result then return result end
+    result = ParsePresetWorkflow(normalized); if result then return result end
+    result = P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx); if result then return result end
+    result = ParseGuidedSetup(normalized); if result then return result end
+    result = ParseScopedHelp(normalized); if result then return result end
+    result = P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized); if result then return result end
+    result = P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized); if result then return result end
+    result = P.ParseMiscRegistryShortcut(normalized, raw); if result then return result end
+    result = ParseDashboardPanelAction(normalized); if result then return result end
+    result = ParseNavRailAction(normalized); if result then return result end
+    result = ParseSupportWorkflow(normalized); if result then return result end
+    result = ParseMenuWindowAction(normalized); if result then return result end
+    result = ParseScopedFontTextColorShortcut(normalized); if result then return result end
+    result = ParseUnitCopyScopeState(normalized); if result then return result end
+    return P.ParseDashboardScaleShortcut and P.ParseDashboardScaleShortcut(normalized)
 end
 
 --- Geometry commands often share words with visual feature commands ("move",
 --- "size", "left", "right"). Keep exact/positional parsers before fallback
 --- setting lookup so directional phrases stay actionable.
 function A._ParsePipelineGeometry(normalized, raw)
-    return (P.ParseTextVisibilityShortcut and P.ParseTextVisibilityShortcut(normalized))
-        or A._ParseNameTextAnchorShortcut(normalized)
-        or A._ParseNameTextVerticalPlacementShortcut(normalized)
-        or A._ParseTextSlotValueMoveShortcut(normalized)
-        or A._ParseTextSlotOffsetShortcut(normalized)
-        or (P.ParseHumanAnchorTarget and P.ParseHumanAnchorTarget(normalized, raw))
-        or (P.ParseGroupScaleBreakpointShortcut and P.ParseGroupScaleBreakpointShortcut(normalized))
-        or (P.ParseCastbarTextSizeShortcut and P.ParseCastbarTextSizeShortcut(normalized))
-        or (P.ParseCastbarSizeShortcut and P.ParseCastbarSizeShortcut(normalized))
-        or (P.ParseCastbarPlacementShortcut and P.ParseCastbarPlacementShortcut(normalized))
-        or (P.AuraGeometryShortcut and P.AuraGeometryShortcut(normalized))
-        or (P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized))
-        or (P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized))
-        or A._ParseTextFontSizeShortcut(normalized)
-        or (P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized))
-        or (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
-        or (P.ParseUnitStatusIndicatorMove and P.ParseUnitStatusIndicatorMove(normalized))
-        or (P.ParseFrameResizeShortcut and P.ParseFrameResizeShortcut(normalized))
-        or P.ParseUnitSizeMatchShortcut(normalized)
-        or (P.ParseDetachedPowerBarMoveShortcut and P.ParseDetachedPowerBarMoveShortcut(normalized))
-        or (P.ParsePairwiseFrameSpacingShortcut and P.ParsePairwiseFrameSpacingShortcut(normalized))
-        or (P.ParseGroupFrameSpacingShortcut and P.ParseGroupFrameSpacingShortcut(normalized))
-        or ParseUnitDetailMove(normalized)
-        or ParseGroupDetailMove(normalized)
-        or (P.ParseGroupFrameRootMove and P.ParseGroupFrameRootMove(normalized))
-        or (P.ParseUnitFrameRootMove and P.ParseUnitFrameRootMove(normalized))
-        or P.ParseGenericOffsetMove(normalized)
-        or ParseUnsupportedDetailShortcut(normalized)
-        or ParseScopedOnlyOverride(normalized, raw)
-        or A._ParseTextLayerShortcut(normalized)
-        or A._ParseTextSlotDropdownShortcut(normalized)
-        or ParseMenuSelectorState(normalized)
-        or ParsePortraitDetailShortcut(normalized)
-        or ParseBorderThicknessShortcut(normalized)
-        or A._ParseTextDetailExactOffset(normalized)
-        or ParseUnitDetailOffsetShortcut(normalized)
-        or ParseCastbarTextMoveShortcut(normalized)
-        or A._ParseGroupRangeFadeShortcut(normalized)
-        or A._ParseGroupOpacityShortcut(normalized)
-        or ParseUnitOpacityShortcut(normalized)
+    local result = P.ParseTextVisibilityShortcut and P.ParseTextVisibilityShortcut(normalized); if result then return result end
+    result = A._ParseNameTextAnchorShortcut(normalized); if result then return result end
+    result = A._ParseNameTextVerticalPlacementShortcut(normalized); if result then return result end
+    result = A._ParseTextSlotValueMoveShortcut(normalized); if result then return result end
+    result = A._ParseTextSlotOffsetShortcut(normalized); if result then return result end
+    result = P.ParseHumanAnchorTarget and P.ParseHumanAnchorTarget(normalized, raw); if result then return result end
+    result = P.ParseGroupScaleBreakpointShortcut and P.ParseGroupScaleBreakpointShortcut(normalized); if result then return result end
+    result = P.ParseCastbarTextSizeShortcut and P.ParseCastbarTextSizeShortcut(normalized); if result then return result end
+    result = P.ParseCastbarSizeShortcut and P.ParseCastbarSizeShortcut(normalized); if result then return result end
+    result = P.ParseCastbarPlacementShortcut and P.ParseCastbarPlacementShortcut(normalized); if result then return result end
+    result = P.AuraGeometryShortcut and P.AuraGeometryShortcut(normalized); if result then return result end
+    result = P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized); if result then return result end
+    result = P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized); if result then return result end
+    result = A._ParseTextFontSizeShortcut(normalized); if result then return result end
+    result = P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized); if result then return result end
+    result = P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized); if result then return result end
+    result = P.ParseUnitStatusIndicatorMove and P.ParseUnitStatusIndicatorMove(normalized); if result then return result end
+    result = P.ParseFrameResizeShortcut and P.ParseFrameResizeShortcut(normalized); if result then return result end
+    result = P.ParseUnitSizeMatchShortcut(normalized); if result then return result end
+    result = P.ParseDetachedPowerBarMoveShortcut and P.ParseDetachedPowerBarMoveShortcut(normalized); if result then return result end
+    result = P.ParsePairwiseFrameSpacingShortcut and P.ParsePairwiseFrameSpacingShortcut(normalized); if result then return result end
+    result = P.ParseGroupFrameSpacingShortcut and P.ParseGroupFrameSpacingShortcut(normalized); if result then return result end
+    result = ParseUnitDetailMove(normalized); if result then return result end
+    result = ParseGroupDetailMove(normalized); if result then return result end
+    result = P.ParseGroupFrameRootMove and P.ParseGroupFrameRootMove(normalized); if result then return result end
+    result = P.ParseUnitFrameRootMove and P.ParseUnitFrameRootMove(normalized); if result then return result end
+    result = P.ParseGenericOffsetMove(normalized); if result then return result end
+    result = ParseUnsupportedDetailShortcut(normalized); if result then return result end
+    result = ParseScopedOnlyOverride(normalized, raw); if result then return result end
+    result = A._ParseTextLayerShortcut(normalized); if result then return result end
+    result = A._ParseTextSlotDropdownShortcut(normalized); if result then return result end
+    result = ParseMenuSelectorState(normalized); if result then return result end
+    result = ParsePortraitDetailShortcut(normalized); if result then return result end
+    result = ParseBorderThicknessShortcut(normalized); if result then return result end
+    result = A._ParseTextDetailExactOffset(normalized); if result then return result end
+    result = ParseUnitDetailOffsetShortcut(normalized); if result then return result end
+    result = ParseCastbarTextMoveShortcut(normalized); if result then return result end
+    result = A._ParseGroupRangeFadeShortcut(normalized); if result then return result end
+    result = A._ParseGroupOpacityShortcut(normalized); if result then return result end
+    return ParseUnitOpacityShortcut(normalized)
 end
 
 --- Feature pipeline handles domain toggles and richer actions that are not
 --- pure geometry. It runs after workflow/geometry in A.Parse, then falls back
 --- to generic setting parsing if no domain-specific action matched.
 function A._ParsePipelineFeature(normalized, raw, ctx)
-    return ParseGameplayAction(normalized, raw)
-        or (ParseClassPowerAction and ParseClassPowerAction(normalized))
-        or (A._ParseClassPowerColorShortcut and A._ParseClassPowerColorShortcut(normalized, raw))
-        or ParseDarkModeBrightnessShortcut(normalized)
-        or ParseGlobalBarsAction(normalized)
-        or (P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx))
-        or ParseCastbarGlobalDetail(normalized)
-        or (P.ParseCastbarDirectionClarification and P.ParseCastbarDirectionClarification(normalized))
-        or ParseCastbarPreviewAction(normalized)
-        or ParseScopedOverrideReset(normalized)
-        or ParseGuidedSetup(normalized)
-        or ParseGroupCopyScopeState(normalized)
-        or ParseGroupCopy(normalized)
-        or P.ParseUnsupportedMixedCopy(normalized)
-        or ParseCopy(normalized)
-        or BuildContextReset(normalized, ctx)
-        or ParseColorAction(normalized)
-        or ParseGroupSpellIndicatorAction(normalized, raw)
-        or (ParseGroupCornerIndicatorSetting and ParseGroupCornerIndicatorSetting(normalized, raw))
-        or ParseGroupCornerIndicatorReset(normalized)
-        or ParseGroupStatusPreview(normalized)
-        or (P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized))
-        or ParseUnitStatusPreview(normalized, ctx)
-        or (P.ParseUnitStatusIconStyle and P.ParseUnitStatusIconStyle(normalized))
-        or ParseGroupStatusIconReset(normalized)
-        or ParseUnitStatusIndicatorReset(normalized, ctx)
-        or (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
-        or ParseUnitStatusIndicatorMove(normalized)
+    local result = ParseGameplayAction(normalized, raw); if result then return result end
+    result = ParseClassPowerAction and ParseClassPowerAction(normalized); if result then return result end
+    result = A._ParseClassPowerColorShortcut and A._ParseClassPowerColorShortcut(normalized, raw); if result then return result end
+    result = ParseDarkModeBrightnessShortcut(normalized); if result then return result end
+    result = ParseGlobalBarsAction(normalized); if result then return result end
+    result = P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx); if result then return result end
+    result = ParseCastbarGlobalDetail(normalized); if result then return result end
+    result = P.ParseCastbarDirectionClarification and P.ParseCastbarDirectionClarification(normalized); if result then return result end
+    result = ParseCastbarPreviewAction(normalized); if result then return result end
+    result = ParseScopedOverrideReset(normalized); if result then return result end
+    result = ParseGuidedSetup(normalized); if result then return result end
+    result = ParseGroupCopyScopeState(normalized); if result then return result end
+    result = ParseGroupCopy(normalized); if result then return result end
+    result = P.ParseUnsupportedMixedCopy(normalized); if result then return result end
+    result = ParseCopy(normalized); if result then return result end
+    result = BuildContextReset(normalized, ctx); if result then return result end
+    result = ParseColorAction(normalized); if result then return result end
+    result = ParseGroupSpellIndicatorAction(normalized, raw); if result then return result end
+    result = ParseGroupCornerIndicatorSetting and ParseGroupCornerIndicatorSetting(normalized, raw); if result then return result end
+    result = ParseGroupCornerIndicatorReset(normalized); if result then return result end
+    result = ParseGroupStatusPreview(normalized); if result then return result end
+    result = P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized); if result then return result end
+    result = ParseUnitStatusPreview(normalized, ctx); if result then return result end
+    result = P.ParseUnitStatusIconStyle and P.ParseUnitStatusIconStyle(normalized); if result then return result end
+    result = ParseGroupStatusIconReset(normalized); if result then return result end
+    result = ParseUnitStatusIndicatorReset(normalized, ctx); if result then return result end
+    result = P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized); if result then return result end
+    return ParseUnitStatusIndicatorMove(normalized)
 end
 
 function A._ParsePipelineFallback(normalized, raw, ctx)
@@ -299,6 +299,7 @@ function A._ParsePipelineFallback(normalized, raw, ctx)
         or ParseReset(normalized)
         or ParseOpen(normalized, raw)
         or ParseFontColorAction(normalized, raw)
+        or (P.ParseExactActionPhraseShortcut and P.ParseExactActionPhraseShortcut(normalized, raw))
         or ParseRegistryAlias(normalized, raw)
         or ParseSetting(normalized, ctx)
 end
@@ -377,6 +378,12 @@ function A.Parse(text, ctxOverride)
         "apply it again", "do it again", "repeat undo", "wiederholen", "erneut anwenden",
     }) then
         return { kind = "redo" }
+    end
+    local guidedSetupFollowup = ParseGuidedSetupFollowup(normalized, ctx)
+    if guidedSetupFollowup then
+        guidedSetupFollowup.raw = raw
+        guidedSetupFollowup.normalized = normalized
+        return guidedSetupFollowup
     end
     local lookupQuestion = P.ParseLookupQuestion and P.ParseLookupQuestion(normalized, raw)
     if lookupQuestion then

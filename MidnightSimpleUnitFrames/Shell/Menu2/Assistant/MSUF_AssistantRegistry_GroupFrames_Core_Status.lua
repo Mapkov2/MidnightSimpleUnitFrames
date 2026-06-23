@@ -31,10 +31,16 @@ function A.GroupFramesRegistry.BuildStatusIconCoreContext(ctx)
             local term = spec.terms[i]
             local alias = suffix and (term .. " " .. suffix) or term
             out[#out + 1] = alias
+            out[#out + 1] = "group " .. alias
+            out[#out + 1] = "group status " .. alias
+            out[#out + 1] = "group indicator " .. alias
             AddAliasesForUnit(out, scope, alias)
             if suffix then
                 local prefixAlias = suffix .. " " .. term
                 out[#out + 1] = prefixAlias
+                out[#out + 1] = "group " .. prefixAlias
+                out[#out + 1] = "group status " .. prefixAlias
+                out[#out + 1] = "group indicator " .. prefixAlias
                 AddAliasesForUnit(out, scope, prefixAlias)
             end
         end

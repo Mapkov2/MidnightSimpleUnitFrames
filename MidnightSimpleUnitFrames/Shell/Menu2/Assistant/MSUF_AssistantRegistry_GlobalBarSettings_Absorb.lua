@@ -42,6 +42,9 @@ function A.GlobalBarRegistry.RegisterAbsorbSettings(ctx)
     }, { category = "Global / Bars / Absorb", frameType = "globalBars", apply = ApplyAbsorbBars, reason = "MSUF_ASSISTANT_ABSORB_MODE", valueAliases = ABSORB_MODE_ALIASES })
     RegisterGeneralMappedEnum("absorbAnchorMode", "absorbAnchor", "Absorb Bar Anchor", "right", ABSORB_ANCHOR_VALUES, ABSORB_ANCHOR_STORAGE, {
         "absorb bar anchor", "absorb anchor", "absorb anchoring",
+        "global absorb bar anchor", "global bar absorb anchor",
+        "global bar right absorb", "global absorb right", "right absorb bar", "right absorb anchor",
+        "absorb right side", "absorb anchor right", "absorb bar right side",
     }, { category = "Global / Bars / Absorb", frameType = "globalBars", apply = ApplyAbsorbBars, reason = "MSUF_ASSISTANT_ABSORB_ANCHOR", valueAliases = ABSORB_ANCHOR_ALIASES })
     RegisterGeneralBoolean("showSelfHealPrediction", "healPrediction", "Heal Prediction Overlay", false, {
         "heal prediction", "heal prediction overlay", "incoming heal prediction", "self heal prediction",
