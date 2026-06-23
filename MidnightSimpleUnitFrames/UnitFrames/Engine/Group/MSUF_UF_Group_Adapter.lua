@@ -89,7 +89,7 @@ GF.ClickCastEnabled = true
 --- engine because only secure group buttons need this registration behavior.
 local function RegisterDefaultClicks(frame)
   if frame and frame.RegisterForClicks then
-    frame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    frame:RegisterForClicks("AnyUp")
   end
 end
 
@@ -490,6 +490,9 @@ ApplyUnitChangeFast = function(frame, kind, unit)
 
   local spec = GF.CompileSpec(kind, frame, unit)
   UF.SetFrameSpec(frame, spec, unit)
+  if UF.InstallPingCompatibility then
+    UF.InstallPingCompatibility(frame)
+  end
   UF.RefreshNativePingIcon(frame)
 
   local power = spec and spec.power
@@ -590,6 +593,9 @@ function GF.ApplyButton(frame, kind, reason)
 
   local spec = GF.CompileSpec(kind, frame, unit)
   UF.SetFrameSpec(frame, spec, unit)
+  if UF.InstallPingCompatibility then
+    UF.InstallPingCompatibility(frame)
+  end
   UF.RefreshNativePingIcon(frame)
   if HasSameApplyState(frame, kind, unit, spec) then
     attrUnit[frame] = unit

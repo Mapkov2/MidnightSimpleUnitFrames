@@ -51,7 +51,12 @@ end
 --- Net result: one schedule = one execution per frame, no re-entry storm,
 --- no lost work. Pure Lua state --- secret-safe by construction.
 local function FlushNextFrame()
-    if frame then frame:SetScript("OnUpdate", nil); frame:SetOnUpdateMode("Disabled") end
+    if frame then
+        frame:SetScript("OnUpdate", nil)
+        if type(frame.SetOnUpdateMode) == "function" then
+            frame:SetOnUpdateMode("Disabled")
+        end
+    end
     Scheduler.nextFrameActive = false
 
     local head = Scheduler.head or 1
@@ -90,7 +95,9 @@ local function FlushNextFrame()
         Scheduler.tail = writeIdx
         if not Scheduler.nextFrameActive then
             Scheduler.nextFrameActive = true
-            frame:SetOnUpdateMode("RunOnce")
+            if type(frame.SetOnUpdateMode) == "function" then
+                frame:SetOnUpdateMode("RunOnce")
+            end
             frame:SetScript("OnUpdate", FlushNextFrame)
         end
     else
@@ -108,7 +115,9 @@ local function QueueNextFrame(key, fn)
 
     if not Scheduler.nextFrameActive then
         Scheduler.nextFrameActive = true
-        frame:SetOnUpdateMode("RunOnce")
+        if type(frame.SetOnUpdateMode) == "function" then
+            frame:SetOnUpdateMode("RunOnce")
+        end
         frame:SetScript("OnUpdate", FlushNextFrame)
     end
 end

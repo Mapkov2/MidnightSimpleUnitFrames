@@ -923,7 +923,9 @@ local function BuildUnitPage(info)
             end
         end
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_auras") end
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildInlineText, { sectionId = "inline_text", title = "Inline Text", height = 214 })
+        if info.unit == "target" then
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildInlineText, { sectionId = "inline_text", title = "Inline Text", height = 214 })
+        end
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_inline_text") end
         BuildStatus(ctx, builder, info.unit)
         if info.unit == "boss" then
