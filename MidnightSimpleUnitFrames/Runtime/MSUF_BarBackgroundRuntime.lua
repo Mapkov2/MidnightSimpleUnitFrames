@@ -175,6 +175,13 @@ end
 ExportPublic("MSUF_IsBlizzardCooldownViewerFrameName", MSUF_IsBlizzardCooldownViewerFrameName)
 
 local function MSUF_GetEffectiveCooldownFrame(frameName)
+    if frameName == "EssentialCooldownViewer" then
+        local getSkironProxy = _G.MSUF_GetSkironCooldownAnchorProxy
+        local skironProxy = type(getSkironProxy) == "function" and getSkironProxy() or nil
+        if skironProxy then
+            return skironProxy
+        end
+    end
     if MSUF_IsBlizzardCooldownViewerFrameName(frameName) then
         return nil
     end
