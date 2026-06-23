@@ -56,6 +56,17 @@ local function GroupDisplayLabel(scope)
     return UnitDisplayLabel(scope)
 end
 
+local function UnitForPage(page)
+    if page == "uf_player" then return "player" end
+    if page == "uf_target" then return "target" end
+    if page == "uf_focus" then return "focus" end
+    if page == "uf_pet" then return "pet" end
+    if page == "uf_targettarget" then return "targettarget" end
+    if page == "uf_focustarget" then return "focustarget" end
+    if page == "uf_boss" then return "boss" end
+    return nil
+end
+
 local function DisplayValueLabel(setting, value)
     if P and type(P.ValueDisplay) == "function" then
         local ok, label = pcall(P.ValueDisplay, setting, value)
@@ -623,12 +634,28 @@ function A._ParseClassPowerDetachedPlayerPowerShortcut(text, raw)
     local direction = DetectDirection(text, {})
     local change
 
-    if ContainsAny(text, { "anchor to class", "anchor to class resource", "anchor to class resources", "anchor player power to class", "attached to class resource", "follow class resource", "an klassenressource ankern", "an klassenressourcen ankern" }) then
+    if ContainsAny(text, {
+        "anchor to class", "anchor to class resource", "anchor to class resources",
+        "anchor player power to class", "anchor player power bar to class",
+        "anchor class resources player power", "anchor class resource player power", "anchor class power player power",
+        "anchor class resources player power bar", "anchor class resource player power bar", "anchor class power player power bar",
+        "player power to class resource", "player power to class resources", "player power bar to class resource",
+        "power bar to class resource", "attached to class resource", "follow class resource",
+        "an klassenressource ankern", "an klassenressourcen ankern",
+    }) then
         key = "detachedPowerBarAnchorToClassPower"
         value = DetectBoolean(text)
         if value == nil then value = not ContainsAny(text, { "off", "disable", "disabled", "no", "not", "detach", "disconnect", "aus", "deaktivieren", "nicht" }) end
         change = PlayerChange(key, value)
-    elseif ContainsAny(text, { "sync width", "sync to class", "sync with class", "match class resource width", "same width as class resource", "breite synchron", "gleiche breite" }) then
+    elseif ContainsAny(text, {
+        "sync width", "sync to class", "sync with class", "match class resource width", "same width as class resource",
+        "class resources player power sync", "class resources player power sync width",
+        "class resources player power bar sync", "class resources player power bar sync width",
+        "player power sync class resource", "player power bar sync class resource",
+        "sync class resources player power", "sync class resources player power width",
+        "sync class resources player power bar", "sync class resources player power bar width",
+        "breite synchron", "gleiche breite",
+    }) then
         key = "detachedPowerBarSyncClassPower"
         value = DetectBoolean(text)
         if value == nil then value = not ContainsAny(text, { "manual", "off", "disable", "disabled", "no", "not", "aus", "deaktivieren", "nicht" }) end
@@ -648,7 +675,10 @@ function A._ParseClassPowerDetachedPlayerPowerShortcut(text, raw)
         value = DetectBoolean(text)
         if value == nil then value = true end
         change = PlayerChange(key, value)
-    elseif ContainsAny(text, { "shape", "form", "orb", "round", "crystal", "bar", "follow class", "sphere", "kugel", "rund", "kristall" }) then
+    elseif ContainsAny(text, { "width", "wide", "wider", "narrower", "breite", "breiter", "schmaler" }) then
+        change = NumberPlayerChange("detachedPowerBarWidth", text, 10)
+    elseif ContainsAny(text, { "shape", "form", "orb", "round", "crystal", "bar", "follow class", "sphere", "kugel", "rund", "kristall" })
+        and not ContainsAny(text, { "texture", "foreground", "background", "outline", "border", "color", "colour", "textur", "vordergrund", "hintergrund", "rahmen", "farbe" }) then
         key = "detachedPowerBarShape"
         local setting = PlayerSetting(key)
         value = setting and EnumValueForText(setting, text) or nil
@@ -1511,6 +1541,12 @@ local function HasScopedHelpIntent(text, page)
         "what can i change", "what can change", "what settings can i change",
         "what can i do here", "what can i change here", "commands for",
         "show commands for", "help for", "help with", "help me with",
+        "what can i do on this page", "what can i do on current page",
+        "what can i change on this page", "what can i change on current page",
+        "explain this page", "explain current page", "page help",
+        "help on this page", "help for this page", "commands on this page",
+        "how can i configure this page", "how do i configure this page",
+        "how can i use this page",
     }) then
         return true
     end
@@ -1549,7 +1585,7 @@ local function ParseScopedHelp(text)
     end
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
-    local unit = units[1]
+    local unit = units[1] or UnitForPage(page)
     local group = groups[1]
     local frameType = FrameTypeForPage(page)
     if editModeHelp then frameType = "editMode" end
@@ -2930,6 +2966,16 @@ local function ParseGuidedSetupFollowup(text, ctx)
             exact = "back"
         elseif text == "show" or text == "repeat" or text == "status" or text == "anzeigen" or text == "wiederholen" then
             exact = "show"
+        elseif text == "why" or text == "why this" or text == "explain" or text == "details"
+            or text == "tell me more" or text == "more details" or text == "what is it for" then
+            exact = "explain"
+        elseif text == "examples" or text == "show examples" or text == "show me examples" or text == "commands" then
+            exact = "examples"
+        elseif text == "open" or text == "open it" or text == "open this" or text == "open that"
+            or text == "show me where" or text == "take me there" or text == "go there" then
+            exact = "open"
+        elseif text == "do it" or text == "do that" or text == "apply it" or text == "use it" or text == "run it" then
+            exact = "apply"
         end
     end
     local command
@@ -2945,6 +2991,19 @@ local function ParseGuidedSetupFollowup(text, ctx)
         command = "back"
     elseif ContainsAny(text, { "show setup", "show setup step", "repeat setup", "current setup step", "setup status", "setup anzeigen", "zeige setup", "setup wiederholen", "schritt wiederholen" }) then
         command = "show"
+    elseif active and ContainsAny(text, {
+        "why this", "tell me more", "more details",
+        "what is it for", "why this step", "what does this step do",
+    }) then
+        command = "explain"
+    elseif active and ContainsAny(text, { "show examples", "show me examples", "example commands" }) then
+        command = "examples"
+    elseif active and ContainsAny(text, {
+        "open it", "open this", "open that", "show me where", "take me there", "go there",
+    }) then
+        command = "open"
+    elseif active and ContainsAny(text, { "do it", "do that", "apply it", "use it", "run it" }) then
+        command = "apply"
     elseif exact then
         command = exact
     end

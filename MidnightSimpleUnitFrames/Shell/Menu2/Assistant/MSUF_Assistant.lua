@@ -18,6 +18,9 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
+local AP = A.RuntimePrivate or {}
+A.RuntimePrivate = AP
+
 --- Keep UI mutation and protected-frame work behind the job/combat helpers here.
 --- Parser modules should return plans, not directly change SavedVariables.
 
@@ -874,6 +877,27 @@ local function NoMatchTagSummary(tagCounts)
     return #parts > 0 and table.concat(parts, ", ") or "none"
 end
 
+local NO_MATCH_FILTER_LABELS = {
+    result = { resolved = "resolved", ["needs-clarification"] = "needs clarification", unresolved = "unresolved", unknown = "unknown" },
+    priority = { high = "high", medium = "medium", low = "low" },
+    topic = { action = "tasks", anchor = "anchoring", aura = "auras", geometry = "geometry", knowledge = "help", media = "media", scope = "frame scope", setting = "settings", uncategorized = "uncategorized" },
+}
+
+local function NoMatchFilterLabel(kind, value)
+    value = kind == "topic" and NormalizeNoMatchText(value or "") or tostring(value or ""):lower()
+    if value == "" then return nil end
+    if kind == "owner" then
+        local label = NoMatchOwnerLabel(value)
+        return label ~= "" and label ~= value and label or "custom area"
+    end
+    local labels = NO_MATCH_FILTER_LABELS[kind]
+    if labels and labels[value] then return labels[value] end
+    if kind == "result" then return "custom result" end
+    if kind == "priority" then return "custom importance" end
+    if kind == "topic" then return "custom topic" end
+    return "custom filter"
+end
+
 local function NoMatchTSVLine(entry)
     local function clean(value)
         value = tostring(value or "")
@@ -905,17 +929,21 @@ function A.NoMatchWorklistText(limit, ownerFilter, resolutionFilter, priorityFil
     lines[#lines + 1] = "- Result: " .. NoMatchResolutionSummary(data.resolutionCounts)
     lines[#lines + 1] = "- Importance: " .. NoMatchPrioritySummary(data.priorityCounts)
     lines[#lines + 1] = "- Topics: " .. NoMatchTagSummary(data.tagCounts)
-    if ownerFilter and tostring(ownerFilter) ~= "" then
-        lines[#lines + 1] = "- Filter: " .. tostring(ownerFilter)
+    local ownerLabel = NoMatchFilterLabel("owner", ownerFilter)
+    if ownerLabel then
+        lines[#lines + 1] = "- Filter: " .. ownerLabel
     end
-    if resolutionFilter and tostring(resolutionFilter) ~= "" then
-        lines[#lines + 1] = "- Result filter: " .. tostring(resolutionFilter)
+    local resultLabel = NoMatchFilterLabel("result", resolutionFilter)
+    if resultLabel then
+        lines[#lines + 1] = "- Result filter: " .. resultLabel
     end
-    if priorityFilter and tostring(priorityFilter) ~= "" then
-        lines[#lines + 1] = "- Importance filter: " .. tostring(priorityFilter)
+    local priorityLabel = NoMatchFilterLabel("priority", priorityFilter)
+    if priorityLabel then
+        lines[#lines + 1] = "- Importance filter: " .. priorityLabel
     end
-    if tagFilter and tostring(tagFilter) ~= "" then
-        lines[#lines + 1] = "- Topic filter: " .. tostring(tagFilter)
+    local tagLabel = NoMatchFilterLabel("topic", tagFilter)
+    if tagLabel then
+        lines[#lines + 1] = "- Topic filter: " .. tagLabel
     end
     if (tonumber(data.total) or 0) <= 0 or #(data.items or {}) == 0 then
         lines[#lines + 1] = ""
@@ -1523,6 +1551,161 @@ local function CurrentPendingChoices()
     return nil
 end
 
+local function NormalizeResultItem(item)
+    if item and item.item then item = item.item end
+    if type(item) ~= "table" then return nil end
+    local kind = tostring(item.kind or "")
+    local key = item.key
+    local settingKey = item.settingKey or (item.setting and item.setting.key) or (kind == "setting" and key)
+    local actionKey = item.actionKey or (item.action and item.action.key) or ((kind == "action" or kind == "diagnostic") and key or nil)
+    local setting = item.setting
+    if not setting and settingKey and Registry and type(Registry.GetSetting) == "function" then setting = Registry:GetSetting(settingKey) end
+    local action = item.action
+    if not action and actionKey and Registry and type(Registry.GetAction) == "function" then action = Registry:GetAction(actionKey) end
+    local label = item.label or (setting and AssistantSettingLabel(setting, nil)) or (action and AssistantActionLabel(action, nil))
+    if not label or label == "" then label = tostring(key or "Result") end
+    return {
+        kind = kind ~= "" and kind or (setting and "setting" or action and "action" or "result"),
+        key = key,
+        settingKey = settingKey,
+        actionKey = actionKey,
+        setting = setting,
+        action = action,
+        label = label,
+        page = item.page,
+        pageLabel = item.pageLabel,
+        category = item.category,
+        description = item.description,
+        answer = item.answer,
+        target = item.target,
+        controlType = item.controlType,
+        canOpen = item.canOpen,
+        canExplain = item.canExplain,
+    }
+end
+
+local function SerializeResults(results)
+    local out = {}
+    for i = 1, #(results or {}) do
+        local item = NormalizeResultItem(results[i])
+        if item then
+            out[#out + 1] = {
+                kind = item.kind,
+                key = item.key,
+                settingKey = item.settingKey,
+                actionKey = item.actionKey,
+                label = item.label,
+                page = item.page,
+                pageLabel = item.pageLabel,
+                category = item.category,
+                description = item.description,
+                answer = item.answer,
+                target = item.target,
+                controlType = item.controlType,
+                canOpen = item.canOpen,
+                canExplain = item.canExplain,
+            }
+        end
+    end
+    return out
+end
+
+local function RehydrateResults(serialized)
+    local results = {}
+    if type(serialized) ~= "table" then return results end
+    for i = 1, #serialized do
+        local item = NormalizeResultItem(serialized[i])
+        if item then results[#results + 1] = item end
+    end
+    return results
+end
+
+local function SerializeResultSelection(item, index)
+    local result = NormalizeResultItem(item)
+    if not result then return nil end
+    local serialized = SerializeResults({ result })[1]
+    if serialized then serialized.index = tonumber(index) end
+    return serialized
+end
+
+local function RehydrateResultSelection(selection)
+    if type(selection) ~= "table" then return nil end
+    local item = NormalizeResultItem(selection)
+    if not item then return nil end
+    item.index = tonumber(selection.index)
+    return item
+end
+
+local function ClearSelectedPendingResult()
+    A.pendingSelectedResult = nil
+    local ctx = A.GetContext and A.GetContext()
+    if ctx then ctx.pendingSelectedResult = nil end
+end
+
+local function SetSelectedPendingResult(item, index)
+    local selected = RehydrateResultSelection(SerializeResultSelection(item, index) or {})
+    if not selected then
+        ClearSelectedPendingResult()
+        return nil
+    end
+    A.pendingSelectedResult = selected
+    local ctx = A.GetContext and A.GetContext()
+    if ctx then ctx.pendingSelectedResult = SerializeResultSelection(selected, selected.index) end
+    return selected
+end
+
+local function CurrentSelectedPendingResult()
+    if type(A.pendingSelectedResult) == "table" then return A.pendingSelectedResult end
+    local ctx = A.GetContext and A.GetContext()
+    if ctx and type(ctx.pendingSelectedResult) == "table" then
+        local selected = RehydrateResultSelection(ctx.pendingSelectedResult)
+        if selected then
+            A.pendingSelectedResult = selected
+            return selected
+        end
+        ctx.pendingSelectedResult = nil
+    end
+    return nil
+end
+
+function A.HasPendingSelectedResult()
+    return CurrentSelectedPendingResult() ~= nil
+end
+
+local function ClearPendingResults()
+    A.pendingResults = nil
+    ClearSelectedPendingResult()
+    local ctx = A.GetContext and A.GetContext()
+    if ctx then ctx.pendingResults = nil end
+end
+
+function A.SetPendingResults(results)
+    local hydrated = RehydrateResults(results)
+    if #hydrated == 0 then
+        ClearPendingResults()
+        return nil
+    end
+    ClearSelectedPendingResult()
+    A.pendingResults = hydrated
+    local ctx = A.GetContext and A.GetContext()
+    if ctx then ctx.pendingResults = SerializeResults(hydrated) end
+    return hydrated
+end
+
+local function CurrentPendingResults()
+    if type(A.pendingResults) == "table" and #A.pendingResults > 0 then return A.pendingResults end
+    local ctx = A.GetContext and A.GetContext()
+    if ctx and type(ctx.pendingResults) == "table" then
+        local results = RehydrateResults(ctx.pendingResults)
+        if #results > 0 then
+            A.pendingResults = results
+            return results
+        end
+        ctx.pendingResults = nil
+    end
+    return nil
+end
+
 --- Plans are declarative until this section. Confirmation and combat checks
 --- happen before ExecuteChanges/ExecuteAction mutates SavedVariables or live UI.
 local function AnyCombatUnsafe(plan)
@@ -1584,6 +1767,75 @@ end
 local function IsCancel(text)
     text = NormalizeReply(text)
     return text == "cancel" or text == "no" or text == "nein" or text == "abort" or text == "stop"
+end
+
+local function IsSimpleExplainIntent(text)
+    return ReplyHasPhrase(text, "simpler")
+        or ReplyHasPhrase(text, "more simple")
+        or ReplyHasPhrase(text, "simple explanation")
+        or ReplyHasPhrase(text, "in simple words")
+        or ReplyHasPhrase(text, "plain english")
+        or ReplyHasPhrase(text, "plain language")
+        or ReplyHasPhrase(text, "i dont understand")
+        or ReplyHasPhrase(text, "i do not understand")
+        or ReplyHasPhrase(text, "what does that mean")
+        or ReplyHasPhrase(text, "what does it mean")
+end
+
+local function IsValueQuestionIntent(text)
+    return ReplyHasPhrase(text, "current value")
+        or ReplyHasPhrase(text, "value now")
+        or ReplyHasPhrase(text, "what is it set to")
+        or ReplyHasPhrase(text, "what is this set to")
+        or ReplyHasPhrase(text, "what is that set to")
+        or ReplyHasPhrase(text, "what is the result set to")
+        or ReplyHasPhrase(text, "what is the option set to")
+        or ReplyHasPhrase(text, "what is it now")
+        or ReplyHasPhrase(text, "what is this now")
+        or ReplyHasPhrase(text, "what is that now")
+        or ReplyHasPhrase(text, "what is the value")
+        or ReplyHasPhrase(text, "what value is it")
+        or ReplyHasPhrase(text, "is it on")
+        or ReplyHasPhrase(text, "is it off")
+        or ReplyHasPhrase(text, "is it enabled")
+        or ReplyHasPhrase(text, "is it disabled")
+end
+
+local function IsWhyReasonIntent(text)
+    return ReplyHasPhrase(text, "why this")
+        or ReplyHasPhrase(text, "why that")
+        or ReplyHasPhrase(text, "why it")
+        or ReplyHasPhrase(text, "why result")
+        or ReplyHasPhrase(text, "why option")
+        or ReplyHasPhrase(text, "why choice")
+        or ReplyHasPhrase(text, "why setting")
+        or ReplyHasPhrase(text, "why this option")
+        or ReplyHasPhrase(text, "why that option")
+        or ReplyHasPhrase(text, "why this result")
+        or ReplyHasPhrase(text, "why that result")
+        or ReplyHasPhrase(text, "why would i use it")
+        or ReplyHasPhrase(text, "why would i use this")
+        or ReplyHasPhrase(text, "why would i use that")
+        or ReplyHasPhrase(text, "why should i use it")
+        or ReplyHasPhrase(text, "why should i use this")
+        or ReplyHasPhrase(text, "why should i use that")
+        or ReplyHasPhrase(text, "what is it for")
+        or ReplyHasPhrase(text, "what is this for")
+        or ReplyHasPhrase(text, "what is that for")
+        or ReplyHasPhrase(text, "what does it help with")
+        or ReplyHasPhrase(text, "what does this help with")
+        or ReplyHasPhrase(text, "what does that help with")
+        or ReplyHasPhrase(text, "purpose")
+        or ReplyHasPhrase(text, "reason")
+end
+
+local function CompactExplanationText(text, limit)
+    text = tostring(text or ""):gsub("[%r\n]+", " "):gsub("%s+", " ")
+    text = Trim(text)
+    limit = tonumber(limit) or 180
+    if text == "" then return nil end
+    if #text > limit then text = text:sub(1, limit - 3) .. "..." end
+    return text
 end
 
 local function IsChoiceAbort(text)
@@ -1687,7 +1939,10 @@ local function LooksLikeFreshCommand(text)
     return false
 end
 
-local function ClearPendingChoices()
+local ClearPendingChoices
+local ExecuteChoice
+
+ClearPendingChoices = function()
     A.pendingChoices = nil
     local ctx = A.GetContext and A.GetContext()
     if ctx then ctx.pendingChoices = nil end
@@ -1709,7 +1964,16 @@ local function FindChoice(text, choices)
     local n = tonumber(normalized)
     if n and choices[n] then return choices[n] end
 
-    local withPrefix = normalized:gsub("^option%s+", ""):gsub("^choice%s+", ""):gsub("^select%s+", ""):gsub("^pick%s+", "")
+    local withPrefix = normalized
+        :gsub("^run%s+", "")
+        :gsub("^execute%s+", "")
+        :gsub("^apply%s+", "")
+        :gsub("^use%s+", "")
+        :gsub("^option%s+", "")
+        :gsub("^choice%s+", "")
+        :gsub("^result%s+", "")
+        :gsub("^select%s+", "")
+        :gsub("^pick%s+", "")
     n = tonumber(withPrefix)
     if n and choices[n] then return choices[n] end
 
@@ -1761,6 +2025,1403 @@ local function FindChoice(text, choices)
     return nil
 end
 
+local PENDING_PAGE_LABEL_OVERRIDES = {
+    home = "Dashboard",
+    profiles = "Profiles",
+    gameplay = "Gameplay",
+    classpower = "Class Resources",
+    modules = "Modules",
+    search = "Search",
+    opt_castbar = "Cast Bars",
+    opt_bars = "Bars",
+    opt_colors = "Colors",
+    opt_fonts = "Fonts",
+    opt_misc = "Miscellaneous",
+    gf_layout = "Group Layout",
+    gf_bars = "Group Health & Text",
+    gf_indicators = "Group Indicators",
+    gf_auras = "Group Auras",
+    auras3 = "Auras",
+    auras3_buffs = "Aura Buffs",
+    auras3_debuffs = "Aura Debuffs",
+    auras3_filters = "Aura Filters",
+    auras3_styling = "Aura Style",
+    uf_player = "Player",
+    uf_target = "Target",
+    uf_focus = "Focus",
+    uf_pet = "Pet",
+    uf_boss = "Boss",
+    uf_targettarget = "Target of Target",
+    uf_focustarget = "Focus Target",
+}
+
+local function PendingPageLabel(page)
+    page = tostring(page or "")
+    if page == "" then return nil end
+    if A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(page, "MSUF page") end
+    if PENDING_PAGE_LABEL_OVERRIDES[page] then return PENDING_PAGE_LABEL_OVERRIDES[page] end
+    return "MSUF page"
+end
+
+local function PendingResultPageLabel(item)
+    if type(item) ~= "table" then return nil end
+    if item.page and tostring(item.page) ~= "" then return PendingPageLabel(item.page) end
+    if item.kind == "page" and item.key and tostring(item.key) ~= "" then return PendingPageLabel(item.key) end
+    if item.action or item.actionKey or item.kind == "action" or item.kind == "diagnostic" then return "Assistant" end
+    return nil
+end
+
+local PENDING_GROUP_LAYOUT_ATTRS = {
+    enabled = true,
+    showPlayer = true,
+    showSolo = true,
+    clickCast = true,
+    clickCastEnabled = true,
+    blizzardFallbackMode = true,
+    hideInClientScene = true,
+    hideOfflineEnabled = true,
+    hideOfflineInCombat = true,
+    hideOfflineDelay = true,
+    smoothFill = true,
+    reverseFill = true,
+    width = true,
+    height = true,
+    offsetX = true,
+    offsetY = true,
+    spacing = true,
+    unitsPerColumn = true,
+    maxColumns = true,
+    preserveRaidGroups = true,
+    growth = true,
+    sortMode = true,
+    sortByRole = true,
+    playerFirstInRole = true,
+    roleOrder = true,
+    frameScaleMode = true,
+    frameScaleEnabled = true,
+    frameScaleManual = true,
+    scaleAt10 = true,
+    scaleAt20 = true,
+    scaleAt25 = true,
+    scaleOver25 = true,
+    hpBarAlpha = true,
+    hpBgAlpha = true,
+    alphaExcludeTextPortrait = true,
+    groupBackdropColor = true,
+    anchorToFrame = true,
+    customAnchorFrame = true,
+    anchorPoint = true,
+}
+
+local PENDING_GROUP_INDICATOR_KEY_PARTS = {
+    "roleicon", "leadericon", "assisticon", "raidmarker", "readycheck",
+    "summonicon", "summonanchor", "summonx", "summony", "summonlayer",
+    "resurrecticon", "resurrectanchor", "resurrectx", "resurrecty", "resurrectlayer",
+    "phaseicon", "pvpicon", "warmode", "threaticon", "aggroicon",
+    "spellindicator", "spellindicators", "cornerindicator", "cornerindicators",
+}
+
+local function PendingGroupSettingPage(setting)
+    local attr = tostring(setting and setting.attribute or "")
+    local key = NormalizeReply(setting and setting.key or ""):gsub("%s+", "")
+    local attrNorm = NormalizeReply(attr):gsub("%s+", "")
+    for i = 1, #PENDING_GROUP_INDICATOR_KEY_PARTS do
+        local part = PENDING_GROUP_INDICATOR_KEY_PARTS[i]
+        if attrNorm:find(part, 1, true) or key:find(part, 1, true) then return "gf_indicators" end
+    end
+    if PENDING_GROUP_LAYOUT_ATTRS[attr] then return "gf_layout" end
+    local suffix = tostring(setting and setting.key or ""):match("%.([^%.]+)$")
+    if suffix and PENDING_GROUP_LAYOUT_ATTRS[suffix] then return "gf_layout" end
+    return "gf_bars"
+end
+
+local function PendingSettingPage(setting)
+    if type(setting) ~= "table" then return nil end
+    if tostring(setting.frameType or "") == "group" then return PendingGroupSettingPage(setting) end
+    local unit = tostring(setting.unit or "")
+    if unit ~= "" then
+        if unit == "targettarget" then return "uf_targettarget" end
+        if unit == "focustarget" then return "uf_focustarget" end
+        return "uf_" .. unit
+    end
+    local frameType = tostring(setting.frameType or "")
+    if frameType == "castbar" then return "opt_castbar" end
+    if frameType == "fonts" then return "opt_fonts" end
+    if frameType == "bars" or frameType == "globalBars" then return "opt_bars" end
+    if frameType == "classPower" then return "classpower" end
+    if frameType == "gameplay" then return "gameplay" end
+    if frameType == "modules" then return "modules" end
+    if frameType == "groupAura" then return "gf_auras" end
+    if frameType == "aura" then return "auras3_styling" end
+    local category = NormalizeReply(setting.category or "")
+    if category:find("castbar", 1, true) or category:find("cast bar", 1, true) then return "opt_castbar" end
+    if category:find("font", 1, true) then return "opt_fonts" end
+    if category:find("color", 1, true) or category:find("colour", 1, true) then return "opt_colors" end
+    if category:find("profile", 1, true) then return "profiles" end
+    return nil
+end
+
+local function PendingChoicePrimarySetting(choice)
+    if choice and choice.setting then return choice.setting, choice end
+    if choice and type(choice.changes) == "table" then
+        for i = 1, #choice.changes do
+            local change = choice.changes[i]
+            if change and change.setting then return change.setting, change end
+        end
+    end
+    return nil, nil
+end
+
+local function PendingChoicePage(choice)
+    if type(choice) ~= "table" then return nil end
+    if (choice.action or choice.actionKey) and type(choice.args) == "table" and type(choice.args.page) == "string" then
+        return choice.args.page, nil
+    end
+    local setting = PendingChoicePrimarySetting(choice)
+    return PendingSettingPage(setting)
+end
+
+local function PendingChoiceIndex(text, choices)
+    local normalized = NormalizeReply(text)
+    local n = tonumber(normalized)
+    if n and choices[n] then return n end
+    n = tonumber(normalized:match("option%s+(%d+)"))
+        or tonumber(normalized:match("choice%s+(%d+)"))
+        or tonumber(normalized:match("result%s+(%d+)"))
+        or tonumber(normalized:match("number%s+(%d+)"))
+        or tonumber(normalized:match("#(%d+)"))
+    if n and choices[n] then return n end
+    local wordToNumber = {
+        first = 1, second = 2, third = 3, fourth = 4, fifth = 5,
+        sixth = 6, seventh = 7, eighth = 8, ninth = 9, tenth = 10,
+    }
+    for word, index in pairs(wordToNumber) do
+        if (normalized == word or ReplyHasPhrase(text, word)) and choices[index] then return index end
+    end
+    if #choices == 1 and (
+        ReplyHasPhrase(text, "that")
+        or ReplyHasPhrase(text, "this")
+        or ReplyHasPhrase(text, "it")
+        or ReplyHasPhrase(text, "the fix")
+        or ReplyHasPhrase(text, "the option")
+        or ReplyHasPhrase(text, "the choice")
+        or ReplyHasPhrase(text, "selected option")
+        or ReplyHasPhrase(text, "listed option")
+    ) then
+        return 1
+    end
+    return nil
+end
+
+local function PendingChoiceForFollowup(text, choices)
+    local index = PendingChoiceIndex(text, choices)
+    if index then return choices[index], index end
+    if #choices == 1 then return choices[1], 1 end
+    return nil, nil
+end
+
+local function IsPendingChoiceExplainIntent(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "" then return false end
+    return ReplyHasPhrase(text, "explain")
+        or ReplyHasPhrase(text, "what does")
+        or ReplyHasPhrase(text, "what will")
+        or ReplyHasPhrase(text, "what would")
+        or ReplyHasPhrase(text, "tell me more")
+        or ReplyHasPhrase(text, "more details")
+        or ReplyHasPhrase(text, "why this")
+        or ReplyHasPhrase(text, "why that")
+        or ReplyHasPhrase(text, "why it")
+        or ReplyHasPhrase(text, "why this fix")
+        or ReplyHasPhrase(text, "why that fix")
+        or ReplyHasPhrase(text, "why the fix")
+        or ReplyHasPhrase(text, "why option")
+        or ReplyHasPhrase(text, "why would i use it")
+        or ReplyHasPhrase(text, "why would i use this")
+        or ReplyHasPhrase(text, "why should i use it")
+        or ReplyHasPhrase(text, "what is it for")
+        or ReplyHasPhrase(text, "what is this for")
+        or ReplyHasPhrase(text, "what does it help with")
+        or ReplyHasPhrase(text, "which one should i pick")
+        or ReplyHasPhrase(text, "which option should i choose")
+        or ReplyHasPhrase(text, "which one should i choose")
+        or IsValueQuestionIntent(text)
+end
+
+local function IsPendingChoiceOpenIntent(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "" then return false end
+    if normalized == "open" or normalized == "show me" then return true end
+    local phrases = {
+        "open it", "open that", "open this", "open option", "open choice", "open result",
+        "open the option", "open the choice", "open selected", "open listed",
+        "show it", "show that", "show this", "show option", "show choice", "show result",
+        "show me where", "take me there", "go there",
+    }
+    for i = 1, #phrases do
+        if ReplyHasPhrase(text, phrases[i]) then return true end
+    end
+    return false
+end
+
+local function PendingChoiceExplainText(choice, index, choices)
+    if not choice then
+        return {
+            text = "Tell me which listed option you mean, for example 'explain option 1' or 'open option 2'.",
+            result = "info",
+        }
+    end
+
+    local label = ChoiceDisplayLabel(choice)
+    local setting, change = PendingChoicePrimarySetting(choice)
+    local action = choice.action
+    if not action and choice.actionKey and Registry and type(Registry.GetAction) == "function" then action = Registry:GetAction(choice.actionKey) end
+    if not label or label == "" then
+        label = setting and AssistantSettingLabel(setting, "MSUF option")
+            or (action and AssistantActionLabel(action, "Assistant task") or "listed option")
+    end
+
+    local lines = { "Option " .. tostring(index or 1) .. ": " .. tostring(label) .. "." }
+    local page, pageLabel = PendingChoicePage(choice)
+    pageLabel = pageLabel or PendingPageLabel(page)
+    if pageLabel then lines[#lines + 1] = "Page: " .. tostring(pageLabel) .. "." end
+
+    if setting then
+        if type(setting.get) == "function" then
+            lines[#lines + 1] = "Current value: " .. tostring(SettingValueLabel(setting, setting.get())) .. "."
+        end
+        local nextValue = change and change.value
+        if nextValue == nil then nextValue = choice.value end
+        local nextLabel = (change and change.valueLabel) or choice.valueLabel
+        if nextValue ~= nil or nextLabel ~= nil then
+            lines[#lines + 1] = "Selecting it would set " .. AssistantSettingLabel(setting, "this option") .. " to " .. tostring(SettingResponseValueLabel(setting, nextValue, nextLabel)) .. "."
+        else
+            lines[#lines + 1] = "Selecting it would change " .. AssistantSettingLabel(setting, "this option") .. "."
+        end
+        if choice.diagnosticFix == true then
+            lines[#lines + 1] = "This is a suggested repair from the last check."
+        end
+        lines[#lines + 1] = "Say 'fix it' or the option number to apply it, or 'open option " .. tostring(index or 1) .. "' to inspect the page first."
+    elseif action then
+        if type(choice.summary) == "string" and choice.summary ~= "" then lines[#lines + 1] = choice.summary end
+        lines[#lines + 1] = "Selecting it would run this MSUF task."
+        lines[#lines + 1] = "Say the option number to run it, or cancel to keep MSUF as it is."
+    elseif type(choice.changes) == "table" and #choice.changes > 0 then
+        lines[#lines + 1] = "Selecting it would apply " .. tostring(#choice.changes) .. " MSUF changes."
+        if choice.diagnosticFix == true then lines[#lines + 1] = "This is a suggested repair from the last check." end
+    end
+
+    if type(choices) == "table" and #choices > 1 then
+        lines[#lines + 1] = "Other listed options are still available by number."
+    end
+
+    return { text = table.concat(lines, "\n"), result = "info", summary = "Explains a pending Assistant option." }
+end
+
+local function PendingChoiceSimpleExplainText(choice, index, choices)
+    if not choice then
+        return {
+            text = "Tell me which listed option you want simplified, for example 'explain option 1 simpler'.",
+            result = "info",
+            summary = "Asks which pending Assistant option to simplify.",
+        }
+    end
+
+    local label = ChoiceDisplayLabel(choice)
+    local setting, change = PendingChoicePrimarySetting(choice)
+    local action = choice.action
+    if not action and choice.actionKey and Registry and type(Registry.GetAction) == "function" then action = Registry:GetAction(choice.actionKey) end
+    if not label or label == "" then
+        label = setting and AssistantSettingLabel(setting, "MSUF option")
+            or (action and AssistantActionLabel(action, "Assistant task") or "listed option")
+    end
+
+    local lines = { "Simple explanation" }
+    if setting then
+        local settingLabel = AssistantSettingLabel(setting, tostring(label))
+        local nextValue = change and change.value
+        if nextValue == nil then nextValue = choice.value end
+        local nextLabel = (change and change.valueLabel) or choice.valueLabel
+        local current
+        if type(setting.get) == "function" then current = SettingValueLabel(setting, setting.get()) end
+        lines[#lines + 1] = "Option " .. tostring(index or 1) .. " changes " .. tostring(settingLabel) .. "."
+        if current ~= nil then lines[#lines + 1] = "Right now it is " .. tostring(current) .. "." end
+        if nextValue ~= nil or nextLabel ~= nil then
+            lines[#lines + 1] = "If you pick it, I will set it to " .. tostring(SettingResponseValueLabel(setting, nextValue, nextLabel)) .. "."
+        end
+        if choice.diagnosticFix == true then lines[#lines + 1] = "It is suggested because the last check found this as a likely fix." end
+        lines[#lines + 1] = "Say 'fix it' to apply it, or 'open option " .. tostring(index or 1) .. "' to inspect the page first."
+    elseif action then
+        lines[#lines + 1] = "Option " .. tostring(index or 1) .. " runs the Assistant task " .. tostring(label) .. "."
+        local detail = CompactExplanationText(choice.summary, 160)
+        if detail then lines[#lines + 1] = detail end
+        lines[#lines + 1] = "Say the option number to run it, or cancel to leave MSUF unchanged."
+    elseif type(choice.changes) == "table" and #choice.changes > 0 then
+        lines[#lines + 1] = "Option " .. tostring(index or 1) .. " applies " .. tostring(#choice.changes) .. " MSUF changes."
+        if choice.diagnosticFix == true then lines[#lines + 1] = "It is suggested because the last check found this as a likely fix." end
+        lines[#lines + 1] = "Say the option number to apply it, or cancel to leave MSUF unchanged."
+    else
+        lines[#lines + 1] = "Option " .. tostring(index or 1) .. " is a listed Assistant choice."
+        lines[#lines + 1] = "Ask me to open or explain it before applying it."
+    end
+
+    if type(choices) == "table" and #choices > 1 then
+        lines[#lines + 1] = "Other listed options are still available by number."
+    end
+    return { text = table.concat(lines, "\n"), result = "info", summary = "Explains a pending Assistant option in simple language." }
+end
+
+local function PendingChoiceOpenResult(choice, index)
+    if not choice then
+        return {
+            text = "Tell me which listed option to open, for example 'open option 1'.",
+            result = "info",
+        }
+    end
+    if choice.action or choice.actionKey then
+        local action = choice.action
+        if not action and Registry and type(Registry.GetAction) == "function" then action = Registry:GetAction(choice.actionKey) end
+        if action and action.key == "open_page" then
+            ClearPendingChoices()
+            return ExecuteChoice(choice)
+        end
+    end
+    local page, label = PendingChoicePage(choice)
+    label = label or PendingPageLabel(page)
+    if not page then
+        return {
+            text = "I can explain that option, but I do not know a direct MSUF page to open for it yet.",
+            result = "info",
+        }
+    end
+    local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction("open_page") or nil
+    if not action then
+        return {
+            text = "Open " .. tostring(label or page) .. " to inspect option " .. tostring(index or 1) .. ". The listed choice is still waiting.",
+            result = "info",
+        }
+    end
+    local result = A.ExecutePlan({
+        kind = "action",
+        action = action,
+        args = { page = page, label = label or page },
+        label = "Open " .. tostring(label or page),
+        summary = "Opens the page for a pending Assistant option.",
+    })
+    if type(result) == "table" and type(result.text) == "string" and result.text ~= "" then
+        result.text = result.text .. "\nThe listed choice is still waiting. Say 'fix it', the option number, or cancel."
+    end
+    return result
+end
+
+local function PendingChoiceExplainResult(text, choices)
+    if not IsPendingChoiceExplainIntent(text) then return nil end
+    if #choices > 1 and not PendingChoiceIndex(text, choices) and (
+        ReplyHasPhrase(text, "which one should i pick")
+        or ReplyHasPhrase(text, "which option should i choose")
+        or ReplyHasPhrase(text, "which one should i choose")
+    ) then
+        return {
+            text = "I cannot choose safely without your intent. Pick a number, or ask me to explain a specific one, for example 'explain option 1'.\n" .. ChoiceText(choices),
+            result = "info",
+            summary = "Explains that a pending Assistant choice needs user intent.",
+        }
+    end
+    local choice, index = PendingChoiceForFollowup(text, choices)
+    if IsSimpleExplainIntent(text) then return PendingChoiceSimpleExplainText(choice, index, choices) end
+    return PendingChoiceExplainText(choice, index, choices)
+end
+
+local function PendingChoiceOpenFollowupResult(text, choices)
+    if not IsPendingChoiceOpenIntent(text) then return nil end
+    local choice, index = PendingChoiceForFollowup(text, choices)
+    return PendingChoiceOpenResult(choice, index)
+end
+
+local PENDING_RESULT_ORDINALS = {
+    { word = "first", index = 1 },
+    { word = "second", index = 2 },
+    { word = "third", index = 3 },
+    { word = "fourth", index = 4 },
+    { word = "fifth", index = 5 },
+    { word = "sixth", index = 6 },
+    { word = "seventh", index = 7 },
+    { word = "eighth", index = 8 },
+    { word = "ninth", index = 9 },
+    { word = "tenth", index = 10 },
+}
+
+local PENDING_RESULT_ORDINAL_NOUNS = { "one", "result", "option", "choice", "item", "match" }
+local PENDING_RESULT_ORDINAL_ACTIONS = {
+    "open", "show", "show me", "explain", "describe", "tell me about",
+    "what is", "what does", "run", "execute", "use", "apply", "select", "pick",
+    "compare", "set", "change", "make", "turn", "enable", "disable", "hide",
+    "increase", "decrease", "raise", "lower",
+}
+
+local function PendingResultOrdinalWord(index)
+    index = tonumber(index)
+    for i = 1, #PENDING_RESULT_ORDINALS do
+        if PENDING_RESULT_ORDINALS[i].index == index then return PENDING_RESULT_ORDINALS[i].word end
+    end
+    return nil
+end
+
+local function PendingResultOrdinalReferenceTermsForWord(word, includeBare)
+    local terms = {}
+    word = NormalizeReply(word)
+    if word == "" then return terms end
+    for i = 1, #PENDING_RESULT_ORDINAL_NOUNS do
+        local noun = PENDING_RESULT_ORDINAL_NOUNS[i]
+        terms[#terms + 1] = "the " .. word .. " " .. noun
+        terms[#terms + 1] = word .. " " .. noun
+    end
+    if includeBare then
+        terms[#terms + 1] = "the " .. word
+        terms[#terms + 1] = word
+    end
+    return terms
+end
+
+local function PendingResultOrdinalActionTargets(normalized, word)
+    local function targetMatches(target)
+        target = NormalizeReply(target)
+        if normalized == target then return true end
+        if normalized:sub(1, #target + 1) ~= target .. " " then return false end
+        local tail = Trim(normalized:sub(#target + 2))
+        if tail == "" then return true end
+        if tail == "on" or tail == "off" or tail == "enabled" or tail == "disabled" then return true end
+        if tail == "up" or tail == "down" or tail == "higher" or tail == "lower" then return true end
+        if tail:sub(1, 3) == "to " then return true end
+        if tail:sub(1, 4) == "and " then return true end
+        return false
+    end
+    for i = 1, #PENDING_RESULT_ORDINAL_ACTIONS do
+        local action = PENDING_RESULT_ORDINAL_ACTIONS[i]
+        if targetMatches(action .. " the " .. word) or targetMatches(action .. " " .. word) then
+            return true
+        end
+    end
+    return false
+end
+
+local function PendingResultOrdinalMentioned(text, word, includeBare)
+    local normalized = NormalizeReply(text)
+    if normalized == "" then return false end
+    local terms = PendingResultOrdinalReferenceTermsForWord(word, false)
+    for i = 1, #terms do
+        if ReplyHasPhrase(normalized, terms[i]) then return true end
+    end
+    if PendingResultOrdinalActionTargets(normalized, word) then return true end
+    if includeBare and (normalized == word or normalized == "the " .. word) then return true end
+    return false
+end
+
+local function PendingResultOrdinalIndex(text, results)
+    results = results or {}
+    for i = 1, #PENDING_RESULT_ORDINALS do
+        local row = PENDING_RESULT_ORDINALS[i]
+        if results[row.index] and PendingResultOrdinalMentioned(text, row.word, true) then
+            return row.index
+        end
+    end
+    return nil
+end
+
+local function HasPendingResultOrdinalReference(text)
+    local results = CurrentPendingResults()
+    if type(results) ~= "table" or #results == 0 then return false end
+    return PendingResultOrdinalIndex(text, results) ~= nil
+end
+
+local function PendingResultIndex(text, results)
+    local normalized = NormalizeReply(text)
+    local n = tonumber(normalized)
+    if n and results[n] then return n end
+    n = tonumber(normalized:match("result%s+(%d+)"))
+        or tonumber(normalized:match("option%s+(%d+)"))
+        or tonumber(normalized:match("choice%s+(%d+)"))
+        or tonumber(normalized:match("number%s+(%d+)"))
+        or tonumber(normalized:match("#(%d+)"))
+    if n and results[n] then return n end
+    local withoutPrefix = normalized:gsub("^result%s+", ""):gsub("^option%s+", ""):gsub("^choice%s+", "")
+    n = tonumber(withoutPrefix)
+    if n and results[n] then return n end
+    n = PendingResultOrdinalIndex(text, results)
+    if n and results[n] then return n end
+    if #results == 1 and (
+        ReplyHasPhrase(text, "that")
+        or ReplyHasPhrase(text, "this")
+        or ReplyHasPhrase(text, "it")
+        or ReplyHasPhrase(text, "the result")
+        or ReplyHasPhrase(text, "the option")
+        or ReplyHasPhrase(text, "listed result")
+    ) then
+        return 1
+    end
+    local selected = CurrentSelectedPendingResult()
+    if selected and (
+        ReplyHasPhrase(text, "that")
+        or ReplyHasPhrase(text, "this")
+        or ReplyHasPhrase(text, "it")
+        or ReplyHasPhrase(text, "the result")
+        or ReplyHasPhrase(text, "the option")
+        or ReplyHasPhrase(text, "that result")
+        or ReplyHasPhrase(text, "that option")
+        or ReplyHasPhrase(text, "this result")
+        or ReplyHasPhrase(text, "this option")
+    ) then
+        return tonumber(selected.index)
+    end
+    if selected and IsSimpleExplainIntent(text) then return tonumber(selected.index) end
+    if selected and IsValueQuestionIntent(text) then return tonumber(selected.index) end
+    if selected and IsWhyReasonIntent(text) then return tonumber(selected.index) end
+    return nil
+end
+
+local SELECTED_RESULT_PRONOUNS = {
+    "it", "that", "this",
+    "the result", "the option",
+    "that result", "that option",
+    "this result", "this option",
+}
+
+local function HasSelectedResultPronoun(text)
+    if not CurrentSelectedPendingResult() then return false end
+    for i = 1, #SELECTED_RESULT_PRONOUNS do
+        if ReplyHasPhrase(text, SELECTED_RESULT_PRONOUNS[i]) then return true end
+    end
+    return false
+end
+
+function A._HasResultPronounReference(text)
+    for i = 1, #SELECTED_RESULT_PRONOUNS do
+        if ReplyHasPhrase(text, SELECTED_RESULT_PRONOUNS[i]) then return true end
+    end
+    return false
+end
+
+function A._StartsWithResultCommandPronoun(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "" then return false end
+    for _, starter in ipairs({
+        "set", "change", "make", "turn", "enable", "disable", "hide",
+        "increase", "decrease", "raise", "lower",
+    }) do
+        for j = 1, #SELECTED_RESULT_PRONOUNS do
+            local target = starter .. " " .. SELECTED_RESULT_PRONOUNS[j]
+            if normalized == target or normalized:sub(1, #target + 1) == target .. " " then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local IsPendingResultCompareIntent
+
+function A._PendingResultRelatedIntent(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "related" or normalized == "same page" or normalized == "more" then return true end
+    return ReplyHasPhrase(text, "related option")
+        or ReplyHasPhrase(text, "related options")
+        or ReplyHasPhrase(text, "related setting")
+        or ReplyHasPhrase(text, "related settings")
+        or ReplyHasPhrase(text, "similar option")
+        or ReplyHasPhrase(text, "similar options")
+        or ReplyHasPhrase(text, "similar setting")
+        or ReplyHasPhrase(text, "same page")
+        or ReplyHasPhrase(text, "this page")
+        or ReplyHasPhrase(text, "that page")
+        or ReplyHasPhrase(text, "page options")
+        or ReplyHasPhrase(text, "page settings")
+        or ReplyHasPhrase(text, "options on this page")
+        or ReplyHasPhrase(text, "settings on this page")
+        or ReplyHasPhrase(text, "what else")
+        or ReplyHasPhrase(text, "more like this")
+        or ReplyHasPhrase(text, "more options")
+        or ReplyHasPhrase(text, "other options")
+        or ReplyHasPhrase(text, "other settings")
+        or ReplyHasPhrase(text, "what else can i change")
+        or ReplyHasPhrase(text, "what else is here")
+end
+
+local function IsPendingResultReference(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "" then return false end
+    local hasPendingResults = CurrentPendingResults() ~= nil
+    return normalized:match("^%d+$") ~= nil
+        or normalized:match("^run%s+%d+") ~= nil
+        or normalized:match("^execute%s+%d+") ~= nil
+        or normalized:match("^compare%s+%d+") ~= nil
+        or normalized:match("^result%s+%d+$") ~= nil
+        or normalized:match("^option%s+%d+$") ~= nil
+        or normalized:match("^choice%s+%d+$") ~= nil
+        or ReplyHasPhrase(text, "result")
+        or ReplyHasPhrase(text, "option")
+        or ReplyHasPhrase(text, "choice")
+        or ReplyHasPhrase(text, "listed result")
+        or ReplyHasPhrase(text, "results")
+        or ReplyHasPhrase(text, "listed results")
+        or HasPendingResultOrdinalReference(text)
+        or HasSelectedResultPronoun(text)
+        or (hasPendingResults and IsPendingResultCompareIntent(text))
+        or (hasPendingResults and (
+            normalized == "explain"
+            or normalized == "details"
+            or normalized == "describe"
+            or normalized == "open"
+            or normalized == "show me"
+            or normalized == "current value"
+            or normalized == "value now"
+            or normalized == "why"
+            or ReplyHasPhrase(text, "open it")
+            or ReplyHasPhrase(text, "open that")
+            or ReplyHasPhrase(text, "open this")
+            or ReplyHasPhrase(text, "show me where")
+            or ReplyHasPhrase(text, "take me there")
+            or ReplyHasPhrase(text, "go there")
+            or ReplyHasPhrase(text, "tell me more")
+            or ReplyHasPhrase(text, "more details")
+            or A._StartsWithResultCommandPronoun(text)
+            or IsSimpleExplainIntent(text)
+            or IsValueQuestionIntent(text)
+            or IsWhyReasonIntent(text)
+        ))
+        or (hasPendingResults and A._PendingResultRelatedIntent(text))
+        or (CurrentSelectedPendingResult() and IsSimpleExplainIntent(text))
+        or (CurrentSelectedPendingResult() and IsValueQuestionIntent(text))
+        or (CurrentSelectedPendingResult() and IsWhyReasonIntent(text))
+end
+
+local function IsPendingResultExplainIntent(text)
+    return ReplyHasPhrase(text, "explain")
+        or ReplyHasPhrase(text, "what does")
+        or ReplyHasPhrase(text, "what is")
+        or ReplyHasPhrase(text, "what are")
+        or ReplyHasPhrase(text, "tell me about")
+        or ReplyHasPhrase(text, "tell me more")
+        or ReplyHasPhrase(text, "more details")
+        or ReplyHasPhrase(text, "details")
+        or ReplyHasPhrase(text, "describe")
+end
+
+local function IsPendingResultOpenIntent(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "open" or normalized == "show me" then return true end
+    return ReplyHasPhrase(text, "open")
+        or ReplyHasPhrase(text, "show it")
+        or ReplyHasPhrase(text, "show that")
+        or ReplyHasPhrase(text, "show this")
+        or ReplyHasPhrase(text, "show me where")
+        or ReplyHasPhrase(text, "take me there")
+        or ReplyHasPhrase(text, "go there")
+end
+
+local function IsPendingResultRunIntent(text)
+    return ReplyHasPhrase(text, "run")
+        or ReplyHasPhrase(text, "execute")
+        or ReplyHasPhrase(text, "do result")
+        or ReplyHasPhrase(text, "use result")
+        or ReplyHasPhrase(text, "apply result")
+end
+
+local RESULT_SETTING_CHANGE_STARTERS = {
+    "set", "change", "make", "turn", "enable", "disable", "hide",
+    "increase", "decrease", "raise", "lower",
+}
+
+local function StartsWithCommand(text, starters)
+    text = tostring(text or "")
+    for i = 1, #(starters or {}) do
+        local starter = starters[i]
+        if text == starter or text:sub(1, #starter + 1) == starter .. " " then return true end
+    end
+    return false
+end
+
+local function ReplaceFirstPhrase(text, phrase, replacement)
+    text = tostring(text or "")
+    phrase = tostring(phrase or "")
+    if phrase == "" then return nil end
+    local padded = " " .. text .. " "
+    local startPos, endPos = padded:find(" " .. phrase .. " ", 1, true)
+    if not startPos then return nil end
+    return Trim(text:sub(1, startPos - 1) .. tostring(replacement or "") .. " " .. text:sub(endPos))
+end
+
+local function PendingResultReferenceTerms(index)
+    local n = tostring(index or "")
+    if n == "" then return {} end
+    local terms = {
+        "result " .. n,
+        "option " .. n,
+        "choice " .. n,
+        "number " .. n,
+    }
+    local word = PendingResultOrdinalWord(index)
+    if word then
+        local ordinalTerms = PendingResultOrdinalReferenceTermsForWord(word, true)
+        for i = 1, #ordinalTerms do terms[#terms + 1] = ordinalTerms[i] end
+    end
+    return terms
+end
+
+local function PendingResultSettingSyntheticText(text, setting, index)
+    if not (setting and index) then return nil end
+    local normalized = NormalizeReply(text)
+    if normalized == "" then return nil end
+    local label = AssistantSettingLabel(setting, "MSUF option")
+    local refs = PendingResultReferenceTerms(index)
+
+    if StartsWithCommand(normalized, RESULT_SETTING_CHANGE_STARTERS) then
+        for i = 1, #refs do
+            local replaced = ReplaceFirstPhrase(normalized, refs[i], label)
+            if replaced then return replaced end
+        end
+        if A._HasResultPronounReference(normalized) then
+            for i = 1, #SELECTED_RESULT_PRONOUNS do
+                local replaced = ReplaceFirstPhrase(normalized, SELECTED_RESULT_PRONOUNS[i], label)
+                if replaced then return replaced end
+            end
+        end
+    end
+
+    for i = 1, #refs do
+        local ref = refs[i]
+        if normalized:sub(1, #ref + 1) == ref .. " " then
+            local tail = Trim(normalized:sub(#ref + 2))
+            if tail ~= "" then
+                if tail:sub(1, 3) == "to " then
+                    return "set " .. label .. " " .. tail
+                end
+                return "set " .. label .. " to " .. tail
+            end
+        end
+    end
+    return nil
+end
+
+local function SafeSingleSettingChangePlan(parsed, setting)
+    if not (parsed and parsed.kind == "changes" and type(parsed.changes) == "table" and #parsed.changes == 1) then return nil end
+    local change = parsed.changes[1]
+    if not (change and change.setting and setting and change.setting.key == setting.key) then return nil end
+    parsed.label = parsed.label or AssistantSettingLabel(setting, "Assistant option change")
+    parsed.summary = parsed.summary or "Changes an Assistant search result setting."
+    return parsed
+end
+
+local function PendingResultSettingChangeResult(text, item, index)
+    if not (item and item.setting) then return nil end
+    SetSelectedPendingResult(item, index)
+    local synthetic = PendingResultSettingSyntheticText(text, item.setting, index)
+    if not synthetic then return nil end
+
+    local parser = A.Parser or {}
+    local parsed
+    if type(parser.ParseRegistryAliasCandidates) == "function" then
+        parsed = parser.ParseRegistryAliasCandidates(NormalizeReply(synthetic), synthetic, { item.setting })
+    end
+    local plan = SafeSingleSettingChangePlan(parsed, item.setting)
+    if not plan and type(parser.ValueForRegistrySetting) == "function" then
+        local relativeDelta
+        if item.setting.type == "number" and type(parser.RelativeNumberDeltaForText) == "function" then
+            relativeDelta = parser.RelativeNumberDeltaForText(item.setting, synthetic)
+        end
+        local value
+        if relativeDelta == nil then value = parser.ValueForRegistrySetting(item.setting, synthetic, synthetic) end
+        if value ~= nil or relativeDelta ~= nil then
+            plan = {
+                kind = "changes",
+                changes = {
+                    {
+                        setting = item.setting,
+                        value = value,
+                        relativeDelta = relativeDelta,
+                        valueLabel = value ~= nil and SettingResponseValueLabel(item.setting, value) or nil,
+                    },
+                },
+                label = AssistantSettingLabel(item.setting, "Assistant option change"),
+                summary = "Changes an Assistant search result setting.",
+            }
+        end
+    end
+    if plan then return A.ExecutePlan(plan) end
+
+    local settingLabel = AssistantSettingLabel(item.setting, "that option")
+    return {
+        text = "I found result " .. tostring(index or 1) .. " (" .. settingLabel .. "), but I need a concrete supported value. Try 'turn result " .. tostring(index or 1) .. " off', 'set result " .. tostring(index or 1) .. " to 20', or ask me to explain it first.",
+        result = "ambiguous",
+        summary = "Asks for a concrete value for an Assistant search result setting.",
+    }
+end
+
+IsPendingResultCompareIntent = function(text)
+    return ReplyHasPhrase(text, "compare")
+        or ReplyHasPhrase(text, "difference")
+        or ReplyHasPhrase(text, "differences")
+        or ReplyHasPhrase(text, "which is better")
+        or ReplyHasPhrase(text, "which one is better")
+end
+
+local function PendingResultIndexes(text, results)
+    local normalized = NormalizeReply(text)
+    local indexes, seen = {}, {}
+    local function add(n)
+        n = tonumber(n)
+        if n and results[n] and not seen[n] then
+            seen[n] = true
+            indexes[#indexes + 1] = n
+        end
+    end
+    if IsPendingResultCompareIntent(text) and CurrentSelectedPendingResult() and (
+        normalized == "compare it"
+        or normalized:sub(1, 11) == "compare it "
+        or normalized == "compare this"
+        or normalized:sub(1, 13) == "compare this "
+        or normalized == "compare that"
+        or normalized:sub(1, 13) == "compare that "
+        or normalized == "difference between it"
+        or normalized:sub(1, 22) == "difference between it "
+        or normalized == "difference between this"
+        or normalized:sub(1, 24) == "difference between this "
+        or normalized == "difference between that"
+        or normalized:sub(1, 24) == "difference between that "
+    ) then
+        add(CurrentSelectedPendingResult().index)
+    end
+    for n in normalized:gmatch("result%s+(%d+)") do add(n) end
+    for n in normalized:gmatch("option%s+(%d+)") do add(n) end
+    for n in normalized:gmatch("choice%s+(%d+)") do add(n) end
+    if #indexes <= 1 and IsPendingResultCompareIntent(text) then
+        for n in normalized:gmatch("(%d+)") do add(n) end
+    end
+    if IsPendingResultCompareIntent(text) then
+        if ReplyHasPhrase(text, "first two")
+            or ReplyHasPhrase(text, "first 2")
+            or ReplyHasPhrase(text, "the first two")
+            or ReplyHasPhrase(text, "the first 2")
+            or ReplyHasPhrase(text, "top two")
+            or ReplyHasPhrase(text, "top 2")
+            or ReplyHasPhrase(text, "the top two")
+            or ReplyHasPhrase(text, "the top 2") then
+            add(1)
+            add(2)
+        end
+        local selected = CurrentSelectedPendingResult()
+        if selected and HasSelectedResultPronoun(text) then add(selected.index) end
+        for i = 1, #PENDING_RESULT_ORDINALS do
+            local row = PENDING_RESULT_ORDINALS[i]
+            if PendingResultOrdinalMentioned(text, row.word, true) then add(row.index) end
+        end
+        if #indexes == 0 and (
+            ReplyHasPhrase(text, "compare them")
+            or ReplyHasPhrase(text, "compare these")
+            or ReplyHasPhrase(text, "compare those")
+            or ReplyHasPhrase(text, "compare results")
+            or ReplyHasPhrase(text, "compare the results")
+            or ReplyHasPhrase(text, "compare listed results")
+            or ReplyHasPhrase(text, "compare options")
+            or ReplyHasPhrase(text, "compare the options")
+            or ReplyHasPhrase(text, "compare listed options")
+            or ReplyHasPhrase(text, "difference between them")
+            or ReplyHasPhrase(text, "differences between them")
+            or ReplyHasPhrase(text, "difference between the results")
+            or ReplyHasPhrase(text, "differences between the results")
+            or ReplyHasPhrase(text, "which is better")
+            or ReplyHasPhrase(text, "which one is better")
+        ) then
+            add(1)
+            add(2)
+        end
+    end
+    return indexes
+end
+
+local function ResultListText(results)
+    local lines = { "Which result do you mean?" }
+    for i = 1, #(results or {}) do
+        local item = results[i]
+        local label = item and item.label or "Result"
+        local page = PendingResultPageLabel(item)
+        lines[#lines + 1] = tostring(i) .. ". " .. tostring(label) .. (page and page ~= "" and (" - " .. tostring(page)) or "")
+    end
+    return table.concat(lines, "\n")
+end
+
+local function PendingResultSimpleExplainText(item, index, results)
+    if not item then
+        return { text = "Tell me which listed result you want simplified, for example 'explain result 1 simpler'.\n" .. ResultListText(results), result = "ambiguous", summary = "Asks which Assistant search result to simplify." }
+    end
+    SetSelectedPendingResult(item, index)
+
+    local lines = { "Simple explanation" }
+    local label = tostring(item.label or "MSUF result")
+    local pageLabel = PendingResultPageLabel(item)
+    if item.setting then
+        lines[#lines + 1] = "Result " .. tostring(index or 1) .. " is an MSUF setting: " .. label .. "."
+        if pageLabel then lines[#lines + 1] = "You can find it on " .. tostring(pageLabel) .. "." end
+        if type(item.setting.get) == "function" then
+            lines[#lines + 1] = "Right now it is " .. tostring(SettingValueLabel(item.setting, item.setting.get())) .. "."
+        end
+        local detail = CompactExplanationText(item.answer ~= "" and item.answer or item.description, 170)
+        if detail then lines[#lines + 1] = detail end
+        if item.setting.type == "boolean" then
+            lines[#lines + 1] = "Say 'turn it on' or 'turn it off' if you want me to change it."
+        elseif item.setting.type == "number" then
+            lines[#lines + 1] = "Say 'set it to 18' with the number you want if you want me to change it."
+        elseif item.setting.type == "color" then
+            lines[#lines + 1] = "Say 'set it to red' with the color you want if you want me to change it."
+        else
+            lines[#lines + 1] = "Tell me the value you want, or say 'open result " .. tostring(index or 1) .. "' to inspect it first."
+        end
+    elseif item.action then
+        lines[#lines + 1] = "Result " .. tostring(index or 1) .. " is an Assistant task: " .. label .. "."
+        if pageLabel then lines[#lines + 1] = "It belongs to " .. tostring(pageLabel) .. "." end
+        local detail = CompactExplanationText(item.answer ~= "" and item.answer or item.description, 170)
+        if detail then lines[#lines + 1] = detail end
+        lines[#lines + 1] = "Say 'run result " .. tostring(index or 1) .. "' if you want me to run it."
+    elseif item.kind == "page" or item.page then
+        lines[#lines + 1] = "Result " .. tostring(index or 1) .. " opens an MSUF page: " .. label .. "."
+        if pageLabel then lines[#lines + 1] = "That page is " .. tostring(pageLabel) .. "." end
+        lines[#lines + 1] = "Say 'open result " .. tostring(index or 1) .. "' to go there."
+    else
+        lines[#lines + 1] = "Result " .. tostring(index or 1) .. " is an MSUF help result: " .. label .. "."
+        local detail = CompactExplanationText(item.answer ~= "" and item.answer or item.description, 200)
+        if detail then lines[#lines + 1] = detail end
+    end
+    return { text = table.concat(lines, "\n"), result = "info", summary = "Explains an Assistant search result in simple language." }
+end
+
+local function PendingResultCurrentValueText(item, index, results)
+    if not item then
+        return { text = "Tell me which listed result you want the value for, for example 'current value of result 1'.\n" .. ResultListText(results), result = "ambiguous", summary = "Asks which Assistant search result value to show." }
+    end
+    SetSelectedPendingResult(item, index)
+
+    local label = tostring(item.label or "MSUF result")
+    if item.setting and type(item.setting.get) == "function" then
+        local value = SettingValueLabel(item.setting, item.setting.get())
+        local lines = {
+            "Current value: " .. tostring(label) .. " is " .. tostring(value) .. ".",
+        }
+        if item.setting.type == "boolean" then
+            lines[#lines + 1] = "You can ask: turn it on | turn it off | open result " .. tostring(index or 1)
+        elseif item.setting.type == "number" then
+            lines[#lines + 1] = "You can ask: set it to a number | open result " .. tostring(index or 1)
+        elseif item.setting.type == "color" then
+            lines[#lines + 1] = "You can ask: set it to a color | open result " .. tostring(index or 1)
+        else
+            lines[#lines + 1] = "You can ask: explain it | open result " .. tostring(index or 1)
+        end
+        return { text = table.concat(lines, "\n"), result = "info", summary = "Shows the current value for an Assistant search result." }
+    end
+
+    if item.action then
+        return {
+            text = "Result " .. tostring(index or 1) .. " (" .. label .. ") is an Assistant task, not a setting with a saved value. Ask 'run result " .. tostring(index or 1) .. "' to run it or 'explain it' for details.",
+            result = "info",
+            summary = "Explains that an Assistant search result action has no current value.",
+        }
+    end
+
+    if item.kind == "page" or item.page then
+        return {
+            text = "Result " .. tostring(index or 1) .. " (" .. label .. ") opens an MSUF page, not a setting with a saved value. Ask 'open result " .. tostring(index or 1) .. "' to go there.",
+            result = "info",
+            summary = "Explains that an Assistant search result page has no current value.",
+        }
+    end
+
+    return {
+        text = "Result " .. tostring(index or 1) .. " (" .. label .. ") is not a setting with a saved value. Ask 'explain it' for details.",
+        result = "info",
+        summary = "Explains that an Assistant search result has no current value.",
+    }
+end
+
+local function PendingResultWhyText(item, index, results)
+    if not item then
+        return { text = "Tell me which listed result you mean, for example 'why result 1?'.\n" .. ResultListText(results), result = "ambiguous", summary = "Asks which Assistant search result to explain by purpose." }
+    end
+    SetSelectedPendingResult(item, index)
+
+    local label = tostring(item.label or "MSUF result")
+    local pageLabel = PendingResultPageLabel(item)
+    local lines = { "Why this result matters" }
+    if item.setting then
+        lines[#lines + 1] = "Result " .. tostring(index or 1) .. " is " .. label .. ", an MSUF setting" .. (pageLabel and (" on " .. tostring(pageLabel)) or "") .. "."
+        local detail = CompactExplanationText(item.answer ~= "" and item.answer or item.description, 170)
+        if detail then lines[#lines + 1] = detail end
+        if type(item.setting.get) == "function" then
+            lines[#lines + 1] = "Current value: " .. tostring(SettingValueLabel(item.setting, item.setting.get())) .. "."
+        end
+        if item.setting.type == "boolean" then
+            lines[#lines + 1] = "Use it when you want that UI feature enabled or disabled."
+            lines[#lines + 1] = "Ask 'turn it on' or 'turn it off' when you want me to change it."
+        elseif item.setting.type == "number" then
+            lines[#lines + 1] = "Use it when the exact size, spacing, position, alpha, or amount needs tuning."
+            lines[#lines + 1] = "Ask 'set it to 18' with the number you want when you want me to change it."
+        elseif item.setting.type == "color" then
+            lines[#lines + 1] = "Use it when that UI element needs a different color."
+            lines[#lines + 1] = "Ask 'set it to red' with the color you want when you want me to change it."
+        else
+            lines[#lines + 1] = "Use it when you want to change that specific part of the MSUF UI."
+            lines[#lines + 1] = "Tell me the exact value or state before I change it."
+        end
+    elseif item.action then
+        lines[#lines + 1] = "Result " .. tostring(index or 1) .. " is " .. label .. ", an Assistant task" .. (pageLabel and (" on " .. tostring(pageLabel)) or "") .. "."
+        local detail = CompactExplanationText(item.answer ~= "" and item.answer or item.description, 180)
+        if detail then lines[#lines + 1] = detail end
+        lines[#lines + 1] = "It is an Assistant task, not a saved option."
+        lines[#lines + 1] = "Use it when you want me to run that MSUF helper. Ask 'run result " .. tostring(index or 1) .. "' to execute it."
+    elseif item.kind == "page" or item.page then
+        lines[#lines + 1] = "Result " .. tostring(index or 1) .. " opens the MSUF page " .. label .. "."
+        if pageLabel then lines[#lines + 1] = "That page is " .. tostring(pageLabel) .. "." end
+        local detail = CompactExplanationText(item.answer ~= "" and item.answer or item.description, 180)
+        if detail then lines[#lines + 1] = detail end
+        lines[#lines + 1] = "Use it when you want to inspect or change related settings on that page."
+    else
+        lines[#lines + 1] = "Result " .. tostring(index or 1) .. " is an MSUF help result: " .. label .. "."
+        local detail = CompactExplanationText(item.answer ~= "" and item.answer or item.description, 220)
+        if detail then lines[#lines + 1] = detail end
+        lines[#lines + 1] = "Use it when you need context before changing MSUF."
+    end
+    return { text = table.concat(lines, "\n"), result = "info", summary = "Explains why an Assistant search result matters." }
+end
+
+function A._PendingResultRelatedPageForItem(item)
+    if type(item) ~= "table" then return nil end
+    if item.page and item.page ~= "" then return item.page end
+    if item.setting then return PendingSettingPage(item.setting) end
+    return nil
+end
+
+function A._PendingResultRelatedIdentity(item)
+    if type(item) ~= "table" then return nil end
+    local settingKey = item.settingKey or (item.setting and item.setting.key)
+    if settingKey then return "setting:" .. tostring(settingKey) end
+    local actionKey = item.actionKey or (item.action and item.action.key)
+    if actionKey then return "action:" .. tostring(actionKey) end
+    if item.kind and item.key then return tostring(item.kind) .. ":" .. tostring(item.key) end
+    return item.key and tostring(item.key) or nil
+end
+
+function A._PendingResultRelatedTokenSet(text)
+    local out = {}
+    local normalized = NormalizeReply(text)
+    for token in normalized:gmatch("%S+") do
+        if #token > 2 then out[token] = true end
+    end
+    return out
+end
+
+function A._PendingResultRelatedTokenOverlapScore(a, b)
+    local aTokens = A._PendingResultRelatedTokenSet(a)
+    local score = 0
+    for token in NormalizeReply(b):gmatch("%S+") do
+        if #token > 2 and aTokens[token] then score = score + 4 end
+    end
+    return score
+end
+
+function A._PendingResultRelatedItems(page, seed, limit)
+    local knowledge = A.Knowledge
+    if not (knowledge and type(knowledge.EnsureIndex) == "function") then return {} end
+    local index = knowledge.EnsureIndex()
+    local items = index and index.items or nil
+    if type(items) ~= "table" then return {} end
+    local seedIdentity = A._PendingResultRelatedIdentity(seed)
+    local seedCategory = seed and seed.category
+    local seedKind = seed and seed.kind
+    local seedLabel = seed and seed.label
+    local candidates = {}
+    for i = 1, #items do
+        if i % 64 == 0 and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        local item = items[i]
+        if item and item.page == page and (item.kind == "setting" or item.kind == "action" or item.kind == "diagnostic") then
+            local identity = A._PendingResultRelatedIdentity(item)
+            if not seedIdentity or identity ~= seedIdentity then
+                local score = 0
+                if item.kind == "setting" then score = score + 30
+                elseif item.kind == "action" or item.kind == "diagnostic" then score = score + 18
+                end
+                if seedCategory and item.category == seedCategory then score = score + 40 end
+                if seedKind and item.kind == seedKind then score = score + 12 end
+                if seedLabel then score = score + A._PendingResultRelatedTokenOverlapScore(seedLabel, item.label) end
+                candidates[#candidates + 1] = { item = item, score = score, order = i }
+            end
+        end
+    end
+    table.sort(candidates, function(a, b)
+        if a.score == b.score then return a.order < b.order end
+        return a.score > b.score
+    end)
+    local out = {}
+    limit = tonumber(limit) or 8
+    for i = 1, math.min(limit, #candidates) do
+        local item = NormalizeResultItem(candidates[i].item)
+        if item then out[#out + 1] = item end
+    end
+    return out
+end
+
+function A._PendingResultRelatedCommonPage(results)
+    local commonPage, count
+    for i = 1, #(results or {}) do
+        local page = A._PendingResultRelatedPageForItem(results[i])
+        if page then
+            if commonPage and commonPage ~= page then return nil end
+            commonPage = page
+            count = (count or 0) + 1
+        end
+    end
+    return count and commonPage or nil
+end
+
+function A._PendingResultRelatedLine(index, item)
+    local label = tostring(item and item.label or "MSUF result")
+    local kind = item and item.kind and (" [" .. tostring(item.kind) .. "]") or ""
+    local value = ""
+    if item and item.setting and type(item.setting.get) == "function" then
+        value = " - current value " .. tostring(SettingValueLabel(item.setting, item.setting.get()))
+    end
+    return tostring(index) .. ". " .. label .. kind .. value
+end
+
+function A._PendingResultRelatedText(item, index, results)
+    if not item then
+        local selected = CurrentSelectedPendingResult()
+        if selected then
+            item = selected
+            index = selected.index
+        end
+    end
+    local page = A._PendingResultRelatedPageForItem(item)
+    if not page and #((results or {})) == 1 then
+        item = results[1]
+        index = 1
+        page = A._PendingResultRelatedPageForItem(item)
+    end
+    if not page then page = A._PendingResultRelatedCommonPage(results) end
+    if not page then
+        return {
+            text = "Tell me which listed result you want related options for, for example 'related options for result 1'.\n" .. ResultListText(results),
+            result = "ambiguous",
+            summary = "Asks which Assistant search result should be used for related options.",
+        }
+    end
+
+    local related = A._PendingResultRelatedItems(page, item, 8)
+    local pageLabel = (item and PendingResultPageLabel(item)) or PendingPageLabel(page)
+    if #related == 0 then
+        local label = item and item.label or pageLabel or page
+        return {
+            text = "I know the page for " .. tostring(label) .. ", but I did not find other indexed settings or tasks on that page. Ask 'open result " .. tostring(index or 1) .. "' to inspect it directly.",
+            result = "info",
+            summary = "No related Assistant search results found.",
+        }
+    end
+
+    A.SetPendingResults(related)
+    local lines = { "Related MSUF options on " .. tostring(pageLabel or page) }
+    if item then lines[#lines + 1] = "Based on result " .. tostring(index or 1) .. ": " .. tostring(item.label or "MSUF result") .. "." end
+    for i = 1, #related do lines[#lines + 1] = A._PendingResultRelatedLine(i, related[i]) end
+    lines[#lines + 1] = "These are now the active results. You can ask: explain result 1 | open result 1 | set result 1 to a value."
+    return { text = table.concat(lines, "\n"), result = "info", summary = "Shows related MSUF options for an Assistant search result." }
+end
+
+local function PendingResultExplainText(item, index, results)
+    if not item then
+        return { text = ResultListText(results), result = "ambiguous", summary = "Asks which Assistant search result to explain." }
+    end
+    SetSelectedPendingResult(item, index)
+    local lines = { "Result " .. tostring(index or 1) .. ": " .. tostring(item.label or "MSUF result") .. "." }
+    local pageLabel = PendingResultPageLabel(item)
+    if pageLabel then lines[#lines + 1] = "Page: " .. tostring(pageLabel) .. "." end
+    if item.kind and item.kind ~= "" then lines[#lines + 1] = "Type: " .. tostring(item.kind) .. "." end
+    if item.answer and item.answer ~= "" then
+        lines[#lines + 1] = tostring(item.answer)
+    elseif item.description and item.description ~= "" then
+        lines[#lines + 1] = tostring(item.description)
+    end
+    if item.setting then
+        if type(item.setting.get) == "function" then
+            lines[#lines + 1] = "Current value: " .. tostring(SettingValueLabel(item.setting, item.setting.get())) .. "."
+        end
+        local exampleLabel = AssistantSettingLabel(item.setting, "this option")
+        if item.setting.type == "boolean" then
+            lines[#lines + 1] = "You can ask: turn on " .. exampleLabel .. " | turn off " .. exampleLabel .. " | open result " .. tostring(index or 1)
+        elseif item.setting.type == "number" then
+            lines[#lines + 1] = "You can ask: set " .. exampleLabel .. " to a number | open result " .. tostring(index or 1)
+        elseif item.setting.type == "color" then
+            lines[#lines + 1] = "You can ask: set " .. exampleLabel .. " to red | open result " .. tostring(index or 1)
+        else
+            lines[#lines + 1] = "You can ask: open result " .. tostring(index or 1) .. " | change " .. exampleLabel
+        end
+    elseif item.action then
+        lines[#lines + 1] = "This is an Assistant task. Ask for it by name when you want to run it."
+    elseif item.kind == "page" then
+        lines[#lines + 1] = "This is an MSUF page. Ask 'open result " .. tostring(index or 1) .. "' to go there."
+    end
+    return { text = table.concat(lines, "\n"), result = "info", summary = "Explains an Assistant search result." }
+end
+
+local function PendingResultValueLine(item)
+    if not item then return nil end
+    if item.setting and type(item.setting.get) == "function" then
+        return "current value " .. tostring(SettingValueLabel(item.setting, item.setting.get()))
+    end
+    if item.action then return "runs an Assistant task" end
+    if item.kind == "page" then return "opens an MSUF page" end
+    if item.answer and item.answer ~= "" then return "help answer" end
+    return nil
+end
+
+local function PendingResultSummaryLine(index, item)
+    if not item then return nil end
+    local parts = { "Result " .. tostring(index) .. ": " .. tostring(item.label or "MSUF result") }
+    local pageLabel = PendingResultPageLabel(item)
+    if pageLabel then parts[#parts + 1] = "page " .. tostring(pageLabel) end
+    if item.kind and item.kind ~= "" then parts[#parts + 1] = "type " .. tostring(item.kind) end
+    local value = PendingResultValueLine(item)
+    if value then parts[#parts + 1] = value end
+    return table.concat(parts, "; ")
+end
+
+local function PendingResultCompareText(indexes, results)
+    if #indexes < 2 then
+        return {
+            text = "Tell me two listed results to compare, for example 'compare result 1 and result 2'.\n" .. ResultListText(results),
+            result = "ambiguous",
+            summary = "Asks which Assistant search results to compare.",
+        }
+    end
+    local aIndex, bIndex = indexes[1], indexes[2]
+    local a, b = results[aIndex], results[bIndex]
+    local lines = {
+        "Result comparison",
+        PendingResultSummaryLine(aIndex, a),
+        PendingResultSummaryLine(bIndex, b),
+    }
+    if a and b then
+        if a.page ~= b.page then
+            lines[#lines + 1] = "They live on different MSUF pages."
+        elseif a.page then
+            lines[#lines + 1] = "They live on the same MSUF page."
+        end
+        if a.kind ~= b.kind then
+            lines[#lines + 1] = "They are different result types, so use 'open result " .. tostring(aIndex) .. "' or 'open result " .. tostring(bIndex) .. "' to inspect before changing anything."
+        elseif a.kind == "setting" then
+            lines[#lines + 1] = "Both are settings. Ask for a concrete value or on/off state before I change one."
+        elseif a.action or b.action then
+            lines[#lines + 1] = "At least one result is an Assistant task. Ask 'run result " .. tostring(aIndex) .. "' or 'run result " .. tostring(bIndex) .. "' when you want one executed."
+        end
+    end
+    return { text = table.concat(lines, "\n"), result = "info", summary = "Compares Assistant search results." }
+end
+
+local function PendingResultOpenResult(item, index)
+    if not item then
+        return { text = "Tell me which result to open, for example 'open result 1'.", result = "ambiguous" }
+    end
+    SetSelectedPendingResult(item, index)
+    local page = item.page
+    local label = PendingResultPageLabel(item) or PendingPageLabel(page)
+    if not page then
+        return { text = "I can explain result " .. tostring(index or 1) .. ", but I do not know a direct MSUF page to open for it.", result = "info" }
+    end
+    local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction("open_page") or nil
+    if not action then
+        return { text = "Open " .. tostring(label or page) .. " to inspect result " .. tostring(index or 1) .. ".", result = "info" }
+    end
+    return A.ExecutePlan({
+        kind = "action",
+        action = action,
+        args = { page = page, label = label },
+        label = "Open " .. tostring(label or page),
+        summary = "Opens the page for an Assistant search result.",
+    })
+end
+
+local function PendingResultRunResult(item, index)
+    if not item then
+        return { text = "Tell me which result to run, for example 'run result 1'.", result = "ambiguous" }
+    end
+    SetSelectedPendingResult(item, index)
+    if item.action then
+        return A.ExecutePlan({
+            kind = "action",
+            action = item.action,
+            args = {},
+            label = AssistantActionLabel(item.action, item.label or "Assistant task"),
+            summary = "Runs an Assistant search result.",
+        })
+    end
+    if item.setting then
+        local settingLabel = AssistantSettingLabel(item.setting, "that option")
+        local example
+        if item.setting.type == "boolean" then
+            example = "'turn on " .. settingLabel .. "' or 'turn off " .. settingLabel .. "'"
+        elseif item.setting.type == "number" then
+            example = "'set " .. settingLabel .. " to 20'"
+        elseif item.setting.type == "color" then
+            example = "'set " .. settingLabel .. " to red'"
+        else
+            example = "'set " .. settingLabel .. " to a supported value'"
+        end
+        return {
+            text = "Result " .. tostring(index or 1) .. " is a setting, so I will not run it without a concrete value. Tell me the value or state you want, for example " .. example .. ".",
+            result = "info",
+            summary = "Explains that a setting search result needs a concrete value.",
+        }
+    end
+    if item.kind == "page" or item.page then
+        return PendingResultOpenResult(item, index)
+    end
+    return {
+        text = "I can explain result " .. tostring(index or 1) .. ", but it is not a runnable Assistant task.",
+        result = "info",
+        summary = "Explains that a search result is not runnable.",
+    }
+end
+
+local function PendingResultFollowupResult(text, results)
+    if not IsPendingResultReference(text) then return nil end
+    local compareIndexes = PendingResultIndexes(text, results)
+    if IsPendingResultCompareIntent(text) then return PendingResultCompareText(compareIndexes, results) end
+    local index = PendingResultIndex(text, results)
+    local item = index and results[index] or nil
+    if not item and HasSelectedResultPronoun(text) then
+        local selected = CurrentSelectedPendingResult()
+        if selected then
+            item = selected
+            index = selected.index
+        end
+    end
+    if not item and results[1] and (
+        IsPendingResultOpenIntent(text)
+        or IsPendingResultExplainIntent(text)
+        or IsValueQuestionIntent(text)
+        or IsSimpleExplainIntent(text)
+        or IsWhyReasonIntent(text)
+        or A._StartsWithResultCommandPronoun(text)
+    ) then
+        index = 1
+        item = results[1]
+    end
+    local settingChange = PendingResultSettingChangeResult(text, item, index)
+    if settingChange then return settingChange end
+    if IsPendingResultRunIntent(text) then return PendingResultRunResult(item, index) end
+    if A._PendingResultRelatedIntent(text) then return A._PendingResultRelatedText(item, index, results) end
+    if IsValueQuestionIntent(text) then return PendingResultCurrentValueText(item, index, results) end
+    if IsSimpleExplainIntent(text) then return PendingResultSimpleExplainText(item, index, results) end
+    if IsWhyReasonIntent(text) then return PendingResultWhyText(item, index, results) end
+    if IsPendingResultExplainIntent(text) then return PendingResultExplainText(item, index, results) end
+    if IsPendingResultOpenIntent(text) or index then return PendingResultOpenResult(item, index) end
+    return { text = ResultListText(results), result = "ambiguous", summary = "Asks which Assistant search result to use." }
+end
+
 local function SingleNaturalFixChoice(text, choices)
     if not IsNaturalFixApply(text) then return nil end
     local fixes = {}
@@ -1773,7 +3434,7 @@ local function SingleNaturalFixChoice(text, choices)
     return #fixes == 1 and fixes[1] or nil
 end
 
-local function ExecuteChoice(choice)
+ExecuteChoice = function(choice)
     if choice and type(choice.changes) == "table" and #choice.changes > 0 then
         return A.ExecutePlan({
             kind = "changes",
@@ -2144,6 +3805,136 @@ function A.ExecutePlan(plan, opts)
     return { text = "Which page and option do you want me to use? Example: 'set target cast bar height to 20'.", result = "failed", summary = plan.summary }
 end
 
+function A._PendingConfirmationPage(plan)
+    if type(plan) ~= "table" then return nil end
+    if type(plan.args) == "table" and type(plan.args.page) == "string" and plan.args.page ~= "" then return plan.args.page end
+    local actionKey = tostring(plan.actionKey or (plan.action and plan.action.key) or ""):lower()
+    local label = NormalizeReply((plan.label or "") .. " " .. (plan.summary or "") .. " " .. (plan.action and plan.action.label or ""))
+    if actionKey:find("profile", 1, true) or label:find("profile", 1, true) then return "profiles" end
+    if actionKey:find("aura", 1, true) or label:find("aura", 1, true) or label:find("buff", 1, true) or label:find("debuff", 1, true) then return "auras3" end
+    if actionKey:find("castbar", 1, true) or label:find("castbar", 1, true) or label:find("cast bar", 1, true) then return "opt_castbar" end
+    if actionKey:find("editmode", 1, true) or label:find("edit mode", 1, true) then return "home" end
+    if type(plan.changes) == "table" and plan.changes[1] and plan.changes[1].setting then
+        return PendingSettingPage(plan.changes[1].setting)
+    end
+    return nil
+end
+
+function A._PendingConfirmationQuestionIntent(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "why" or normalized == "what" or normalized == "details" or normalized == "more details" then return true end
+    return ReplyHasPhrase(text, "what will you do")
+        or ReplyHasPhrase(text, "what are you doing")
+        or ReplyHasPhrase(text, "what are you going to do")
+        or ReplyHasPhrase(text, "what does this do")
+        or ReplyHasPhrase(text, "what does it do")
+        or ReplyHasPhrase(text, "what will change")
+        or ReplyHasPhrase(text, "what changes")
+        or ReplyHasPhrase(text, "what happens")
+        or ReplyHasPhrase(text, "what am i confirming")
+        or ReplyHasPhrase(text, "tell me more")
+        or ReplyHasPhrase(text, "more details")
+        or IsValueQuestionIntent(text)
+        or IsWhyReasonIntent(text)
+        or IsSimpleExplainIntent(text)
+end
+
+function A._PendingConfirmationChangeLines(plan)
+    local lines = {}
+    if type(plan) ~= "table" or type(plan.changes) ~= "table" then return lines end
+    for i = 1, math.min(#plan.changes, 6) do
+        local change = plan.changes[i]
+        local setting = change and change.setting
+        if setting then
+            local label = AssistantSettingLabel(setting, "MSUF option")
+            local current = type(setting.get) == "function" and SettingValueLabel(setting, setting.get()) or nil
+            local target
+            if change.relativeDelta ~= nil then
+                local delta = tonumber(change.relativeDelta) or 0
+                target = (delta >= 0 and "+" or "") .. tostring(delta)
+            elseif change.value ~= nil or change.valueLabel ~= nil then
+                target = SettingResponseValueLabel(setting, change.value, change.valueLabel)
+            end
+            if current and target then
+                lines[#lines + 1] = "- " .. label .. ": " .. tostring(current) .. " -> " .. tostring(target)
+            elseif target then
+                lines[#lines + 1] = "- " .. label .. ": set to " .. tostring(target)
+            else
+                lines[#lines + 1] = "- " .. label
+            end
+        end
+    end
+    if #plan.changes > #lines then lines[#lines + 1] = "- " .. tostring(#plan.changes - #lines) .. " more changes are waiting." end
+    return lines
+end
+
+function A._PendingConfirmationExplainResult(plan)
+    local label = AssistantPlanLabel(plan, "this pending action")
+    local lines = { "Pending confirmation", "I am waiting before applying: " .. tostring(label) .. "." }
+    if type(plan) == "table" and type(plan.summary) == "string" and plan.summary ~= "" then
+        lines[#lines + 1] = "What it does: " .. tostring(plan.summary)
+    elseif type(plan) == "table" and plan.action then
+        lines[#lines + 1] = "What it does: runs the MSUF task " .. AssistantActionLabel(plan.action, "Assistant task") .. "."
+    end
+    local changes = A._PendingConfirmationChangeLines(plan)
+    if #changes > 0 then
+        lines[#lines + 1] = "Changes waiting:"
+        for i = 1, #changes do lines[#lines + 1] = changes[i] end
+    end
+    local page = A._PendingConfirmationPage(plan)
+    if page then lines[#lines + 1] = "Page: " .. tostring(PendingPageLabel(page)) .. "." end
+    lines[#lines + 1] = "Why I am asking: this can change profile data, run an Assistant task, or affect several MSUF options, so I only continue after a clear yes/apply."
+    lines[#lines + 1] = "Answer 'yes' to apply it, or 'cancel' to leave MSUF unchanged."
+    return { text = table.concat(lines, "\n"), result = "confirmation_needed", summary = "Explains a pending Assistant confirmation." }
+end
+
+function A._PendingConfirmationOpenResult(plan)
+    local page = A._PendingConfirmationPage(plan)
+    if not page then
+        return {
+            text = "I do not know a direct MSUF page for this pending confirmation yet.\n" .. A._PendingConfirmationExplainResult(plan).text,
+            result = "confirmation_needed",
+            summary = "Explains a pending Assistant confirmation without a direct page.",
+        }
+    end
+    local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction("open_page") or nil
+    if not action then
+        return {
+            text = "Open " .. tostring(PendingPageLabel(page)) .. " to inspect this before confirming.\nThe confirmation is still waiting. Answer 'yes' to apply it, or 'cancel' to leave MSUF unchanged.",
+            result = "confirmation_needed",
+            summary = "Shows where to inspect a pending Assistant confirmation.",
+        }
+    end
+    local result = A.ExecutePlan({
+        kind = "action",
+        action = action,
+        args = { page = page, label = PendingPageLabel(page) },
+        label = "Open " .. tostring(PendingPageLabel(page)),
+        summary = "Opens the page for a pending Assistant confirmation.",
+    })
+    if type(result) == "table" then
+        result.result = result.result or result.status or "confirmation_needed"
+        result.status = result.status or result.result
+        result.summary = "Opens the page for a pending Assistant confirmation."
+        result.text = tostring(result.text or "") .. "\nThe confirmation is still waiting. Answer 'yes' to apply it, or 'cancel' to leave MSUF unchanged."
+    end
+    return result
+end
+
+function A._PendingConfirmationFollowupResult(text, plan)
+    if IsPendingResultOpenIntent(text)
+        or ReplyHasPhrase(text, "open it")
+        or ReplyHasPhrase(text, "open this")
+        or ReplyHasPhrase(text, "open that")
+        or ReplyHasPhrase(text, "show me where")
+        or ReplyHasPhrase(text, "take me there")
+        or ReplyHasPhrase(text, "go there") then
+        return A._PendingConfirmationOpenResult(plan)
+    end
+    if A._PendingConfirmationQuestionIntent(text) then return A._PendingConfirmationExplainResult(plan) end
+    return nil
+end
+
 local function HandlePending(text)
     if type(A.HandlePendingFlow) == "function" then
         local flowResult = A.HandlePendingFlow(text)
@@ -2162,6 +3953,8 @@ local function HandlePending(text)
             if ctx then ctx.pendingConfirmation = nil end
             return { text = "Cancelled. I kept the options as they were.", result = NormalizeReply(text) == "cancel" and "applied" or "failed" }
         end
+        local confirmationFollowup = A._PendingConfirmationFollowupResult(text, A.pendingConfirmation)
+        if confirmationFollowup then return confirmationFollowup end
         if IsConfirmationApply(text) then
             local plan = A.pendingConfirmation
             A.pendingConfirmation = nil
@@ -2181,6 +3974,14 @@ local function HandlePending(text)
             ClearPendingChoices()
             return { text = "Cancelled. MSUF stayed as it was.", result = "info" }
         end
+        local choiceExplain = PendingChoiceExplainResult(text, choices)
+        if choiceExplain then return choiceExplain end
+        local choiceOpen = PendingChoiceOpenFollowupResult(text, choices)
+        if choiceOpen then return choiceOpen end
+        if LooksLikeFreshCommand(text) then
+            ClearPendingChoices()
+            return nil
+        end
         if #choices == 1 and IsSingleChoiceApply(text) then
             local choice = choices[1]
             ClearPendingChoices()
@@ -2196,11 +3997,17 @@ local function HandlePending(text)
             ClearPendingChoices()
             return ExecuteChoice(choice)
         end
-        if LooksLikeFreshCommand(text) then
-            ClearPendingChoices()
-            return nil
-        end
         return { text = "Which listed option do you want me to use? A number, label, or unit name is enough.", result = "ambiguous" }
+    end
+    local results = CurrentPendingResults()
+    if results then
+        if IsChoiceAbort(text) then
+            ClearPendingResults()
+            return { text = "Cancelled. I cleared the last search results.", result = "info" }
+        end
+        local resultFollowup = PendingResultFollowupResult(text, results)
+        if resultFollowup then return resultFollowup end
+        if LooksLikeFreshCommand(text) then ClearSelectedPendingResult() end
     end
     return nil
 end
@@ -2277,7 +4084,7 @@ function A.SetBusy(active, text)
     return A._busy
 end
 
-local BATCH_COMMAND_STARTERS = {
+AP.BATCH_COMMAND_STARTERS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset", "copy",
     "add", "put", "clear", "increase", "decrease", "raise", "lower", "detach", "attach", "embed",
     "remove", "open", "close", "toggle", "diagnose", "start", "stop", "pause", "play", "animate", "preview",
@@ -2289,20 +4096,18 @@ local BATCH_COMMAND_STARTERS = {
 --- Batch parsing lets one input fan out into multiple normal assistant commands.
 --- It inherits obvious verbs across fragments but only executes after each part
 --- goes through the same parser/confirmation path as a single command.
-local function NormalizeForBatch(text)
-    if A.Normalize then return A.Normalize(text) end
+function AP.NormalizeForBatch(text)    if A.Normalize then return A.Normalize(text) end
     text = tostring(text or ""):lower():gsub("[,;:!?%(%)]", " "):gsub("%s+", " ")
     return Trim(text)
 end
 
-local function StripBatchLead(text)
-    text = Trim(text)
+function AP.StripBatchLead(text)    text = Trim(text)
     local changed = true
     while changed do
         changed = false
         for _, lead in ipairs({ "also", "then", "please", "pls", "and then", "auch", "dann", "bitte", "und dann" }) do
             local prefix = lead .. " "
-            if NormalizeForBatch(text):sub(1, #prefix) == prefix then
+            if AP.NormalizeForBatch(text):sub(1, #prefix) == prefix then
                 text = Trim(text:sub(#prefix + 1))
                 changed = true
                 break
@@ -2312,26 +4117,23 @@ local function StripBatchLead(text)
     return text
 end
 
-local function StartsBatchCommand(text)
-    local norm = NormalizeForBatch(StripBatchLead(text))
+function AP.StartsBatchCommand(text)    local norm = AP.NormalizeForBatch(AP.StripBatchLead(text))
     if norm == "" then return false end
-    for i = 1, #BATCH_COMMAND_STARTERS do
-        local starter = BATCH_COMMAND_STARTERS[i]
+    for i = 1, #AP.BATCH_COMMAND_STARTERS do
+        local starter = AP.BATCH_COMMAND_STARTERS[i]
         if norm == starter or norm:sub(1, #starter + 1) == starter .. " " then return true end
     end
     return false
 end
 
-local function BatchBooleanLead(text)
-    local norm = NormalizeForBatch(text)
+function AP.BatchBooleanLead(text)    local norm = AP.NormalizeForBatch(text)
     for _, lead in ipairs({ "turn on", "turn off", "enable", "disable", "show", "hide", "start", "stop", "preview" }) do
         if norm == lead or norm:sub(1, #lead + 1) == lead .. " " then return lead end
     end
     return nil
 end
 
-local function HasOwnBatchBoolean(text)
-    local norm = NormalizeForBatch(text)
+function AP.HasOwnBatchBoolean(text)    local norm = AP.NormalizeForBatch(text)
     if norm == "" then return false end
     for _, lead in ipairs({ "on", "off", "enable", "disable", "enabled", "disabled", "show", "hide", "true", "false", "yes", "no" }) do
         if norm == lead or norm:sub(1, #lead + 1) == lead .. " " then return true end
@@ -2340,9 +4142,8 @@ local function HasOwnBatchBoolean(text)
     return false
 end
 
-local function InheritableActionTail(text)
-    text = NormalizeForBatch(text)
-    if text == "" or StartsBatchCommand(text) then return false end
+function AP.InheritableActionTail(text)    text = AP.NormalizeForBatch(text)
+    if text == "" or AP.StartsBatchCommand(text) then return false end
     if text:find("test", 1, true) and (
         text:find("border", 1, true)
         or text:find("bar", 1, true)
@@ -2360,35 +4161,31 @@ local function InheritableActionTail(text)
     return false
 end
 
-local function BatchHasPhrase(text, phrase)
-    local norm = NormalizeForBatch(text)
-    phrase = NormalizeForBatch(phrase)
+function AP.BatchHasPhrase(text, phrase)    local norm = AP.NormalizeForBatch(text)
+    phrase = AP.NormalizeForBatch(phrase)
     if norm == "" or phrase == "" then return false end
     return (" " .. norm .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
 end
 
-local function BatchContainsAny(text, phrases)
-    for i = 1, #(phrases or {}) do
-        if BatchHasPhrase(text, phrases[i]) then return true end
+function AP.BatchContainsAny(text, phrases)    for i = 1, #(phrases or {}) do
+        if AP.BatchHasPhrase(text, phrases[i]) then return true end
     end
     return false
 end
 
-local function HasExplicitBatchScope(text)
-    local parser = A.Parser or {}
+function AP.HasExplicitBatchScope(text)    local parser = A.Parser or {}
     if type(parser.DetectUnits) == "function" and #(parser.DetectUnits(text) or {}) > 0 then return true end
     if type(parser.DetectGroups) == "function" and #(parser.DetectGroups(text) or {}) > 0 then return true end
-    return BatchContainsAny(text, {
+    return AP.BatchContainsAny(text, {
         "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
         "party", "raid", "party frames", "raid frames", "group frames",
     })
 end
 
-local function HasScopedSettingDetail(text)
-    text = NormalizeForBatch(text)
+function AP.HasScopedSettingDetail(text)    text = AP.NormalizeForBatch(text)
     if text == "" then return false end
-    if not HasExplicitBatchScope(text) then return false end
-    return BatchContainsAny(text, {
+    if not AP.HasExplicitBatchScope(text) then return false end
+    return AP.BatchContainsAny(text, {
         "frame", "frames", "name", "names", "portrait", "portraits", "power bar", "powerbar", "mana bar",
         "health bar", "hp bar", "castbar", "cast bar", "text", "raid marker", "leader icon", "assist icon",
         "ready check", "status icon", "rested icon", "combat indicator", "dead indicator", "ghost indicator",
@@ -2396,25 +4193,22 @@ local function HasScopedSettingDetail(text)
     })
 end
 
-local function InheritableSettingTail(text)
-    text = NormalizeForBatch(text)
-    if text == "" or StartsBatchCommand(text) then return false end
-    return HasScopedSettingDetail(text)
+function AP.InheritableSettingTail(text)    text = AP.NormalizeForBatch(text)
+    if text == "" or AP.StartsBatchCommand(text) then return false end
+    return AP.HasScopedSettingDetail(text)
 end
 
-local function InheritedBatchCommand(before, after)
-    local actionTail = InheritableActionTail(after)
-    local settingTail = InheritableSettingTail(after)
+function AP.InheritedBatchCommand(before, after)    local actionTail = AP.InheritableActionTail(after)
+    local settingTail = AP.InheritableSettingTail(after)
     if not actionTail and not settingTail then return nil end
-    local lead = BatchBooleanLead(before)
+    local lead = AP.BatchBooleanLead(before)
     if not lead then return nil end
-    if settingTail and HasOwnBatchBoolean(after) then return nil end
-    if settingTail and not HasScopedSettingDetail(before) then return nil end
+    if settingTail and AP.HasOwnBatchBoolean(after) then return nil end
+    if settingTail and not AP.HasScopedSettingDetail(before) then return nil end
     return Trim(lead .. " " .. after)
 end
 
-local function SplitBatchCommands(text)
-    if A.pendingConfirmation or CurrentPendingChoices() then return nil end
+function AP.SplitBatchCommands(text)    if A.pendingConfirmation or CurrentPendingChoices() then return nil end
     local parts = { Trim(text) }
     local connectors = { " and ", " then ", " und ", " dann " }
     local changed = true
@@ -2429,14 +4223,14 @@ local function SplitBatchCommands(text)
                     local s, e = lower:find(connectors[c], startAt, true)
                     if not s then break end
                     local before = Trim(raw:sub(1, s - 1))
-                    local after = StripBatchLead(raw:sub(e + 1))
-                    if before ~= "" and after ~= "" and StartsBatchCommand(after) then
+                    local after = AP.StripBatchLead(raw:sub(e + 1))
+                    if before ~= "" and after ~= "" and AP.StartsBatchCommand(after) then
                         parts[p] = before
                         table.insert(parts, p + 1, after)
                         changed = true
                         break
                     end
-                    local inherited = before ~= "" and after ~= "" and InheritedBatchCommand(before, after) or nil
+                    local inherited = before ~= "" and after ~= "" and AP.InheritedBatchCommand(before, after) or nil
                     if inherited then
                         parts[p] = before
                         table.insert(parts, p + 1, inherited)
@@ -2453,17 +4247,15 @@ local function SplitBatchCommands(text)
     return #parts > 1 and parts or nil
 end
 
-local function BatchLine(text)
-    text = tostring(text or ""):gsub("\r", "")
+function AP.BatchLine(text)    text = tostring(text or ""):gsub("\r", "")
     text = text:gsub("\nNext:.-$", "")
     local first = text:match("([^\n]+)") or text
     return Trim(first)
 end
 
-local NORMAL_INPUT_MAX_CHARS = 20000
+AP.NORMAL_INPUT_MAX_CHARS = 20000
 
-local function ExtractProfileString(text)
-    text = tostring(text or "")
+function AP.ExtractProfileString(text)    text = tostring(text or "")
     local compact = text:match("(MSUF%d+:%S+)")
     if compact then return compact, false end
     local uuf = text:match("(!UUF_%S+)")
@@ -2471,10 +4263,9 @@ local function ExtractProfileString(text)
     return nil, false
 end
 
-local function LongInputResult(text)
-    text = tostring(text or "")
-    if #text <= NORMAL_INPUT_MAX_CHARS then return nil end
-    local value, isUUF = ExtractProfileString(text)
+function AP.LongInputResult(text)    text = tostring(text or "")
+    if #text <= AP.NORMAL_INPUT_MAX_CHARS then return nil end
+    local value, isUUF = AP.ExtractProfileString(text)
     if value and Registry and type(Registry.GetAction) == "function" then
         local action = Registry:GetAction("import_profile_string")
         if action then
@@ -2496,8 +4287,7 @@ local function LongInputResult(text)
     }
 end
 
-local function TrySubmitBatch(text)
-    local parts = SplitBatchCommands(text)
+function AP.TrySubmitBatch(text)    local parts = AP.SplitBatchCommands(text)
     if not parts then return nil end
     local lines = {}
     local applied = 0
@@ -2510,15 +4300,17 @@ local function TrySubmitBatch(text)
             return result
         end
         if (result.status or result.result) == "applied" then applied = applied + 1 end
-        lines[#lines + 1] = tostring(i) .. ". " .. BatchLine(result.text)
+        lines[#lines + 1] = tostring(i) .. ". " .. AP.BatchLine(result.text)
     end
     local textOut = "Done. I handled " .. tostring(#parts) .. " requests:\n" .. table.concat(lines, "\n")
     if applied > 0 then textOut = AppendUndoFollowupHint(textOut) end
     return { text = textOut, result = applied > 0 and "applied" or "info", summary = "Handled multiple Assistant requests." }
 end
 
-local function RecordAssistantResult(result)
-    if result and result.text then
+function AP.RecordAssistantResult(result)    if result and result.text then
+        if type(result.searchResults) == "table" and type(A.SetPendingResults) == "function" then
+            A.SetPendingResults(result.searchResults)
+        end
         A.AddHistory("assistant", result.text, result.status or result.result, result.summary)
         if (result.status or result.result) == "applied" and type(A.RecordSuccessfulAssistantAction) == "function" and type(A.MaybePowerUserSupportHint) == "function" then
             A.RecordSuccessfulAssistantAction()
@@ -2528,8 +4320,7 @@ local function RecordAssistantResult(result)
     end
 end
 
-local function SubmitNow(text, opts)
-    opts = opts or {}
+function AP.SubmitNow(text, opts)    opts = opts or {}
     text = Trim(text)
     if text == "" then return nil end
     if InCombat() then return CombatSubmitResult() end
@@ -2537,8 +4328,8 @@ local function SubmitNow(text, opts)
     if opts.skipUserHistory ~= true then
         A.AddHistory("user", text, "submitted")
     end
-    local result = LongInputResult(text) or TrySubmitBatch(text) or A.HandleInput(text)
-    RecordAssistantResult(result)
+    local result = AP.LongInputResult(text) or AP.TrySubmitBatch(text) or A.HandleInput(text)
+    AP.RecordAssistantResult(result)
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.submit")
     elseif type(A.RefreshUI) == "function" then
@@ -2549,14 +4340,13 @@ local function SubmitNow(text, opts)
 end
 
 function A.Submit(text)
-    return SubmitNow(text)
+    return AP.SubmitNow(text)
 end
 
-local function BuildDeferredSubmitSteps(text, callback, opts)
-    opts = opts or {}
+function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
     local steps = {}
     local startedMs = PerfNowMs()
-    local parts = SplitBatchCommands(text)
+    local parts = AP.SplitBatchCommands(text)
     local finalResult
     local finished = false
 
@@ -2564,7 +4354,7 @@ local function BuildDeferredSubmitSteps(text, callback, opts)
         if finished then return end
         finished = true
         finalResult = result
-        RecordAssistantResult(finalResult)
+        AP.RecordAssistantResult(finalResult)
         A.RecordPerfSample("assistant.submit.deferred", startedMs, text)
         A.SetBusy(false)
         if type(callback) == "function" then pcall(callback, finalResult) end
@@ -2585,7 +4375,7 @@ local function BuildDeferredSubmitSteps(text, callback, opts)
             steps[#steps + 1] = A.CoroutineStep(function()
                 if stopped then return end
                 local part = parts[partIndex]
-                local result = LongInputResult(part) or A.HandleInput(part)
+                local result = AP.LongInputResult(part) or A.HandleInput(part)
                 if not result then
                     result = { text = "I paused at step " .. tostring(partIndex) .. " because I could not match that request.", result = "failed" }
                 end
@@ -2595,7 +4385,7 @@ local function BuildDeferredSubmitSteps(text, callback, opts)
                     return
                 end
                 if (result.status or result.result) == "applied" then applied = applied + 1 end
-                lines[#lines + 1] = tostring(partIndex) .. ". " .. BatchLine(result.text)
+                lines[#lines + 1] = tostring(partIndex) .. ". " .. AP.BatchLine(result.text)
             end)
         end
         steps[#steps + 1] = function()
@@ -2613,7 +4403,7 @@ local function BuildDeferredSubmitSteps(text, callback, opts)
         end
     else
         steps[#steps + 1] = A.CoroutineStep(function()
-            finalResult = LongInputResult(text) or A.HandleInput(text)
+            finalResult = AP.LongInputResult(text) or A.HandleInput(text)
         end)
         steps[#steps + 1] = function()
             Complete(finalResult)
@@ -2641,7 +4431,7 @@ function A.SubmitDeferred(text, callback)
     A.SetBusy(true, "I am working on that")
 
     A.AddHistory("user", text, "submitted")
-    local steps, onDone = BuildDeferredSubmitSteps(text, callback, { userHistoryRecorded = true })
+    local steps, onDone = AP.BuildDeferredSubmitSteps(text, callback, { userHistoryRecorded = true })
     local job = A.StartJob("assistant.submit", steps, onDone)
     if job and type(job.result) == "table" and not A.IsBusy() then
         return job.result

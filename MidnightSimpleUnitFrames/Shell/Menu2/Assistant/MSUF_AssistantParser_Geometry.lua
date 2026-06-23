@@ -41,6 +41,61 @@ local SettingMatchScore = P.SettingMatchScore
 local EnumValueForText = P.EnumValueForText
 local RelativeNumberDeltaForText = P.RelativeNumberDeltaForText
 
+local HUMAN_ANCHOR_UNIT_TERMS = {
+    targettarget = { "targettarget", "target of target", "tot", "ziel des ziels" },
+    focustarget = { "focustarget", "focus target", "fokus ziel" },
+    player = { "player", "player frame", "spieler", "spieler frame", "self", "ich" },
+    target = { "target", "target frame", "ziel", "ziel frame" },
+    focus = { "focus", "focus frame", "fokus", "fokus frame" },
+    pet = { "pet", "pet frame", "begleiter", "begleiter frame" },
+    boss = { "boss", "boss frame", "boss frames", "bossframe", "bossframes" },
+}
+
+local function UnitInHumanAnchorFragment(fragment)
+    fragment = Normalize(fragment or "")
+    if fragment == "" then return nil end
+    for i = 1, #UNIT_ORDER do
+        local unit = UNIT_ORDER[i]
+        local terms = HUMAN_ANCHOR_UNIT_TERMS[unit] or { unit }
+        for j = 1, #terms do
+            if HasPhrase(fragment, terms[j]) then return unit end
+        end
+    end
+    return nil
+end
+
+local function RelativeUnitAnchorFromText(text)
+    text = Normalize(text)
+    if text == "" then return nil, nil end
+    local patterns = {
+        "^.-%s+move%s+(.+)%s+below%s+(.+)$",
+        "^.-%s+move%s+(.+)%s+under%s+(.+)$",
+        "^.-%s+move%s+(.+)%s+beneath%s+(.+)$",
+        "^.-%s+move%s+(.+)%s+above%s+(.+)$",
+        "^.-%s+move%s+(.+)%s+over%s+(.+)$",
+        "^.-%s+put%s+(.+)%s+below%s+(.+)$",
+        "^.-%s+put%s+(.+)%s+under%s+(.+)$",
+        "^.-%s+put%s+(.+)%s+next to%s+(.+)$",
+        "^.-%s+place%s+(.+)%s+below%s+(.+)$",
+        "^.-%s+place%s+(.+)%s+under%s+(.+)$",
+        "^.-%s+place%s+(.+)%s+next to%s+(.+)$",
+        "^.-%s+anchor%s+(.+)%s+to%s+(.+)$",
+        "^.-%s+attach%s+(.+)%s+to%s+(.+)$",
+        "^.-%s+dock%s+(.+)%s+to%s+(.+)$",
+        "^.-%s+(.+)%s+below%s+(.+)$",
+        "^.-%s+(.+)%s+under%s+(.+)$",
+        "^.-%s+(.+)%s+next to%s+(.+)$",
+        "^.-%s+(.+)%s+near%s+(.+)$",
+    }
+    for i = 1, #patterns do
+        local before, after = text:match(patterns[i])
+        local subject = UnitInHumanAnchorFragment(before)
+        local anchor = UnitInHumanAnchorFragment(after)
+        if subject and anchor and subject ~= anchor then return subject, anchor end
+    end
+    return nil, nil
+end
+
 local function BuildChanges(settings, value, relativeDelta, direction)
     local changes = {}
     for i = 1, #settings do
@@ -1213,6 +1268,10 @@ function P.ParseHumanAnchorTarget(text, raw)
 
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
+    local explicitAnchorSubject, explicitAnchorValue = RelativeUnitAnchorFromText(text)
+    if explicitAnchorSubject and explicitAnchorValue and not detachIntent then
+        units = { explicitAnchorSubject }
+    end
     local unitframeScope = ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames" })
     if #units == 0 and #groups == 0 and not unitframeScope and externalFrameName ~= nil
         and ContainsAny(text, { "frame", "frames", "all frames", "everything", "all msuf", "all ui" })
@@ -1230,7 +1289,7 @@ function P.ParseHumanAnchorTarget(text, raw)
         end
         local enumValue = valueSetting and EnumValueForText(valueSetting, text)
         local cooldownValue = P.CooldownManagerAnchorValueForText(text)
-        local value = detachIntent and "GLOBAL" or enumValue or cooldownValue
+        local value = detachIntent and "GLOBAL" or explicitAnchorValue or enumValue or cooldownValue
         if value ~= nil and #units == 1 and value == units[1] and cooldownValue then
             value = cooldownValue
         end

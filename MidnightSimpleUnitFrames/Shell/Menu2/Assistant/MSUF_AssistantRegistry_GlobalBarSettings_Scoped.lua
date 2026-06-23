@@ -93,6 +93,7 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
         })
         RegisterScopedSetting("barScope", scope, "gradientDirection", "gradientDirection", "Bar Gradient Direction", "enum", "RIGHT", GlobalScopeAliases(scope, {
             "gradient direction", "bar gradient direction", "health gradient direction", "power gradient direction",
+            "bar right gradient", "bar right direction", "right bar gradient",
         }), {
             flag = "hlOverride",
             values = GRADIENT_DIRECTION_VALUES,

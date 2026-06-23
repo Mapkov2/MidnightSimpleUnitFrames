@@ -68,7 +68,14 @@ Registry:RegisterAction({
     label = "Preview Group Status Icon",
     type = "preview",
     combatSafe = true,
-    aliases = { "preview group status icon", "preview group status indicator", "show all group status icons", "show all group status indicators" },
+    aliases = {
+        "preview group status icon", "preview group status indicator",
+        "preview group indicator", "preview group indicators",
+        "group status icon test mode", "group status indicator test mode",
+        "group indicator test mode", "group indicators test mode",
+        "test group status icons", "test group status indicators", "test group indicators",
+        "show all group status icons", "show all group status indicators", "show all group indicators",
+    },
     run = function(args)
         local mode = args and args.mode == "all" and "all" or "current"
         local spec = ResolveGroupStatusIcon(args and (args.icon or args.text))

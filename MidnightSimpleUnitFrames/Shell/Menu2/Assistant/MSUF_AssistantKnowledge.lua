@@ -20,7 +20,7 @@ local K = A.Knowledge or {}
 A.Knowledge = K
 
 local MAX_RESULTS = 6
-local INDEX_VERSION = 3
+local INDEX_VERSION = 6
 local SEARCH_CACHE_LIMIT = 32
 local SEARCH_TEXT_LIMIT = 360
 local KNOWLEDGE_ALIAS_LIMIT = 24
@@ -85,6 +85,16 @@ local function AddMany(list, seen, values, limit)
     for i = 1, max do AddUnique(list, seen, values[i]) end
 end
 
+local function AddMapKeys(list, seen, values, limit)
+    if type(values) ~= "table" then return end
+    local count = 0
+    for key in pairs(values) do
+        count = count + 1
+        if not limit or count <= limit then AddUnique(list, seen, key) end
+        if limit and count >= limit then break end
+    end
+end
+
 local function SplitTokens(text)
     local out, seen = {}, {}
     local norm = Normalize(text)
@@ -118,14 +128,15 @@ local PAGE_TO_UNIT = {
 }
 
 local PAGE_FRAME_TYPES = {
+    home = { dashboard = true },
     opt_castbar = { castbar = true },
     opt_bars = { bars = true, globalBars = true },
     opt_colors = { colors = true, bars = true, fonts = true, castbar = true, classPower = true, gameplay = true },
     opt_fonts = { fonts = true },
-    opt_misc = { misc = true, dashboard = true },
+    opt_misc = { misc = true },
     modules = { modules = true },
-    classpower = { classPower = true },
-    gameplay = { gameplay = true },
+    classpower = { classPower = true, classPowerPlayerHP = true, detachedPowerBar = true, altMana = true },
+    gameplay = { gameplay = true, combatTimer = true, combatState = true, playerTotems = true, firstDance = true, combatCrosshair = true },
     profiles = { profiles = true },
     gf_layout = { group = true },
     gf_bars = { group = true },
@@ -139,14 +150,15 @@ local PAGE_FRAME_TYPES = {
 }
 
 local PAGE_CATEGORY_TERMS = {
+    home = { "dashboard", "scaling", "scale" },
     opt_castbar = { "castbar" },
     opt_bars = { "bars", "bar", "outline", "border", "texture", "gradient", "background" },
     opt_colors = { "colors", "colour", "color", "palette" },
     opt_fonts = { "fonts", "font", "text" },
     opt_misc = { "misc", "dashboard", "minimap", "tooltip" },
     modules = { "modules", "module", "style module", "msuf style", "dropdown style" },
-    classpower = { "class resource", "class power", "resource" },
-    gameplay = { "gameplay", "combat timer", "target sound", "totem" },
+    classpower = { "class resource", "class power", "resource", "detached power", "alternative mana", "player hp" },
+    gameplay = { "gameplay", "combat timer", "combat enter", "combat leave", "combat state", "target sound", "totem", "first dance", "crosshair" },
     profiles = { "profile", "profiles" },
     gf_layout = { "group", "layout", "party", "raid", "mythic" },
     gf_bars = { "group", "health", "text", "bars" },
@@ -225,15 +237,82 @@ local PAGE_LABEL_OVERRIDES = {
     uf_focustarget = "Focus Target",
 }
 local function PageLabel(pageKey)
+    if not pageKey or tostring(pageKey) == "" then return "Assistant" end
+    if pageKey and A and type(A.DisplayPageLabel) == "function" then return A.DisplayPageLabel(pageKey, "MSUF page") end
     if pageKey and PAGE_LABEL_OVERRIDES[pageKey] then return PAGE_LABEL_OVERRIDES[pageKey] end
-    if pageKey and M.pages and M.pages[pageKey] and M.pages[pageKey].title then return tostring(M.pages[pageKey].title) end
-    if type(M.navItems) == "table" then
-        for i = 1, #M.navItems do
-            local item = M.navItems[i]
-            if item.key == pageKey then return tostring(item.label or DisplayFallbackLabel(pageKey, "Dashboard")) end
-        end
+    return "MSUF page"
+end
+
+local function ItemPageLabel(item)
+    if type(item) ~= "table" then return nil end
+    if item.page and tostring(item.page) ~= "" then return PageLabel(item.page) end
+    if item.kind == "page" and item.key and tostring(item.key) ~= "" then return PageLabel(item.key) end
+    if item.kind == "action" or item.kind == "diagnostic" then return "Assistant" end
+    return nil
+end
+
+local GROUP_LAYOUT_ATTRS = {
+    enabled = true,
+    showPlayer = true,
+    showSolo = true,
+    clickCast = true,
+    clickCastEnabled = true,
+    blizzardFallbackMode = true,
+    hideInClientScene = true,
+    hideOfflineEnabled = true,
+    hideOfflineInCombat = true,
+    hideOfflineDelay = true,
+    smoothFill = true,
+    reverseFill = true,
+    width = true,
+    height = true,
+    offsetX = true,
+    offsetY = true,
+    spacing = true,
+    unitsPerColumn = true,
+    maxColumns = true,
+    preserveRaidGroups = true,
+    growth = true,
+    sortMode = true,
+    sortByRole = true,
+    playerFirstInRole = true,
+    roleOrder = true,
+    frameScaleMode = true,
+    frameScaleEnabled = true,
+    frameScaleManual = true,
+    scaleAt10 = true,
+    scaleAt20 = true,
+    scaleAt25 = true,
+    scaleOver25 = true,
+    hpBarAlpha = true,
+    hpBgAlpha = true,
+    alphaExcludeTextPortrait = true,
+    groupBackdropColor = true,
+    anchorToFrame = true,
+    customAnchorFrame = true,
+    anchorPoint = true,
+}
+
+local GROUP_INDICATOR_KEY_PARTS = {
+    "roleicon", "leadericon", "assisticon", "raidmarker", "readycheck",
+    "summonicon", "summonanchor", "summonx", "summony", "summonlayer",
+    "resurrecticon", "resurrectanchor", "resurrectx", "resurrecty", "resurrectlayer",
+    "phaseicon", "pvpicon", "warmode", "threaticon", "aggroicon",
+    "spellindicator", "spellindicators", "cornerindicator", "cornerindicators",
+}
+
+local function GroupSettingLikelyPage(setting)
+    local attr = tostring(setting and setting.attribute or "")
+    local key = Normalize(setting and setting.key or "")
+    local attrNorm = Normalize(attr):gsub("%s+", "")
+    for i = 1, #GROUP_INDICATOR_KEY_PARTS do
+        local part = GROUP_INDICATOR_KEY_PARTS[i]
+        if attrNorm:find(part, 1, true) or key:find(part, 1, true) then return "gf_indicators" end
     end
-    return DisplayFallbackLabel(pageKey, "Dashboard")
+    if GROUP_LAYOUT_ATTRS[attr] then return "gf_layout" end
+    local suffix = tostring(setting and setting.key or ""):match("%.([^%.]+)$")
+    if suffix and GROUP_LAYOUT_ATTRS[suffix] then return "gf_layout" end
+    return "gf_bars"
 end
 
 local function SettingLikelyPage(setting)
@@ -242,16 +321,23 @@ local function SettingLikelyPage(setting)
         for key, unit in pairs(PAGE_TO_UNIT) do if unit == setting.unit then return key end end
     end
     local ft = setting.frameType
+    if ft == "dashboard" then return "home" end
+    if ft == "misc" then return "opt_misc" end
     if ft == "castbar" then return "opt_castbar" end
     if ft == "fonts" then return "opt_fonts" end
     if ft == "bars" or ft == "globalBars" then return "opt_bars" end
-    if ft == "classPower" then return "classpower" end
-    if ft == "gameplay" then return "gameplay" end
+    if ft == "classPower" or ft == "classPowerPlayerHP" or ft == "detachedPowerBar" or ft == "altMana" then return "classpower" end
+    if ft == "gameplay" or ft == "combatTimer" or ft == "combatState" or ft == "playerTotems" or ft == "firstDance" or ft == "combatCrosshair" then return "gameplay" end
     if ft == "modules" then return "modules" end
-    if ft == "group" then return "gf_bars" end
+    if ft == "group" then return GroupSettingLikelyPage(setting) end
     if ft == "groupAura" then return "gf_auras" end
     if ft == "aura" then return "auras3_styling" end
     local cat = Normalize(setting.category or "")
+    if ft == "unitframe" and tostring(setting.unit or "") == "global" and cat:find("status icon", 1, true) then return "uf_player" end
+    if cat:find("dashboard", 1, true) then return "home" end
+    if cat:find("misc", 1, true) then return "opt_misc" end
+    if cat:find("class resource", 1, true) or cat:find("class power", 1, true) then return "classpower" end
+    if cat:find("gameplay", 1, true) then return "gameplay" end
     if cat:find("castbar", 1, true) then return "opt_castbar" end
     if cat:find("font", 1, true) then return "opt_fonts" end
     if cat:find("color", 1, true) or cat:find("colour", 1, true) then return "opt_colors" end
@@ -261,12 +347,30 @@ end
 
 local function ActionLikelyPage(action)
     if type(action) ~= "table" then return nil end
+    if type(action.page) == "string" and action.page ~= "" then return action.page end
+    if type(action.pageKey) == "string" and action.pageKey ~= "" then return action.pageKey end
     local key = tostring(action.key or "")
     local typ = tostring(action.type or "")
+    if key:find("aura_group", 1, true) or key:find("group_aura", 1, true) then return "gf_auras" end
+    if key:find("aura_blacklist", 1, true) or key:find("aura_group_category_blacklist", 1, true) then return "auras3_filters" end
+    if key:find("aura", 1, true) then return "auras3" end
+    if key:find("group_status", 1, true) or key:find("group_corner", 1, true) then return "gf_indicators" end
+    if key == "copy_group" or key:find("group_custom_anchor", 1, true) then return "gf_layout" end
+    if key:find("class_power", 1, true) or typ == "classPower" then return "classpower" end
+    if key:find("castbar", 1, true) or key:find("kick", 1, true) then return "opt_castbar" end
+    if key:find("totem", 1, true) or key:find("crosshair", 1, true) or typ == "gameplay" then return "gameplay" end
+    if key:find("global_scale", 1, true) then return "home" end
+    if key:find("font", 1, true) or typ == "fonts" then return "opt_fonts" end
+    if typ == "globalBars" then return "opt_bars" end
+    if key:find("unit_status", 1, true) then return "uf_player" end
+    if key:find("unit", 1, true) then return "uf_player" end
+    if typ == "history" or typ == "support" or typ == "setup" then return "home" end
+    if typ == "color" or key:find("color", 1, true) then return "opt_colors" end
     if key:find("profile", 1, true) or typ == "profile" then return "profiles" end
     if key:find("edit", 1, true) then return "home" end
     if typ == "navigation" then return "home" end
     if typ == "diagnostic" then return "home" end
+    if typ == "preview" or typ == "preset" or typ == "copy" or typ == "reset" then return "home" end
     return nil
 end
 
@@ -325,15 +429,40 @@ local function AddIndexItem(index, item)
     AddUnique(textParts, seen, item.target)
     AddUnique(textParts, seen, item.controlType)
     AddMany(textParts, seen, item.aliases, KNOWLEDGE_ALIAS_LIMIT)
+    AddMany(textParts, seen, item.exactAliases, KNOWLEDGE_ALIAS_LIMIT)
+    AddMapKeys(textParts, seen, item.valueAliases, KNOWLEDGE_ALIAS_LIMIT)
+    AddMapKeys(textParts, seen, item.booleanAliases, KNOWLEDGE_ALIAS_LIMIT)
     AddMany(textParts, seen, item.keywords)
     item.haystack = Normalize(table.concat(textParts, " "))
     item.keyNorm = Normalize(item.key)
     item.labelNorm = Normalize(item.label)
     item.aliasNorms = {}
+    local aliasSeen = {}
+    local function addAliasNorm(value)
+        local aliasNorm = Normalize(value)
+        if aliasNorm ~= "" and not aliasSeen[aliasNorm] then
+            aliasSeen[aliasNorm] = true
+            item.aliasNorms[#item.aliasNorms + 1] = aliasNorm
+        end
+    end
     local aliasCount = math.min(#item.aliases, KNOWLEDGE_ALIAS_LIMIT)
-    for i = 1, aliasCount do
-        local aliasNorm = Normalize(item.aliases[i])
-        if aliasNorm ~= "" then item.aliasNorms[#item.aliasNorms + 1] = aliasNorm end
+    for i = 1, aliasCount do addAliasNorm(item.aliases[i]) end
+    local exactAliases = type(item.exactAliases) == "table" and item.exactAliases or {}
+    local exactCount = math.min(#exactAliases, KNOWLEDGE_ALIAS_LIMIT)
+    for i = 1, exactCount do addAliasNorm(exactAliases[i]) end
+    local valueAliases = type(item.valueAliases) == "table" and item.valueAliases or {}
+    local valueCount = 0
+    for key in pairs(valueAliases) do
+        valueCount = valueCount + 1
+        if valueCount > KNOWLEDGE_ALIAS_LIMIT then break end
+        addAliasNorm(key)
+    end
+    local booleanAliases = type(item.booleanAliases) == "table" and item.booleanAliases or {}
+    local boolCount = 0
+    for key in pairs(booleanAliases) do
+        boolCount = boolCount + 1
+        if boolCount > KNOWLEDGE_ALIAS_LIMIT then break end
+        addAliasNorm(key)
     end
     item.tokens = SplitTokens(item.haystack)
     index.items[#index.items + 1] = item
@@ -358,6 +487,9 @@ local function BuildIndex()
                 label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or (setting.label or "MSUF option"),
                 category = setting.category,
                 aliases = setting.aliases,
+                exactAliases = setting.exactAliases,
+                valueAliases = setting.valueAliases,
+                booleanAliases = setting.booleanAliases,
                 page = page,
                 pageLabel = PageLabel(page),
                 controlType = setting.type,
@@ -381,6 +513,7 @@ local function BuildIndex()
                 label = type(A.DisplayActionLabel) == "function" and A.DisplayActionLabel(action) or (action.label or "Assistant task"),
                 category = action.category or action.type,
                 aliases = action.aliases,
+                exactAliases = action.exactAliases,
                 page = page,
                 pageLabel = PageLabel(page),
                 controlType = action.type,
@@ -398,7 +531,7 @@ local function BuildIndex()
             if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
             local nav = M.navItems[i]
             if nav.key then
-                local navLabel = tostring(nav.label or PageLabel(nav.key))
+                local navLabel = PageLabel(nav.key)
                 local aliases = {}
                 if type(M.ALIASES) == "table" then
                     for alias, key in pairs(M.ALIASES) do
@@ -491,6 +624,104 @@ local function QueryIntent(text)
     if ContainsAny(norm, LOCATION_TERMS) then return "location" end
     if ContainsAny(norm, HELP_TERMS) then return "help" end
     return "search"
+end
+
+local ACTION_QUERY_WORDS = {
+    action = true,
+    actions = true,
+    task = true,
+    tasks = true,
+    run = true,
+    execute = true,
+    diagnostic = true,
+    diagnostics = true,
+}
+
+local function HasQueryWord(text, word)
+    text = tostring(text or "")
+    word = tostring(word or "")
+    return word ~= "" and (" " .. text .. " "):find(" " .. word .. " ", 1, true) ~= nil
+end
+
+local function HasActionQueryHint(queryNorm, exactNorm)
+    for word in pairs(ACTION_QUERY_WORDS) do
+        if HasQueryWord(queryNorm, word) or HasQueryWord(exactNorm, word) then return true end
+    end
+    return false
+end
+
+local QUERY_SCOPE_ORDER = {
+    { unit = "mythicraid", terms = { "mythic raid", "mythicraid" } },
+    { unit = "targettarget", terms = { "targettarget" } },
+    { unit = "focustarget", terms = { "focustarget" } },
+    { unit = "party", terms = { "party", "party frame", "party frames" } },
+    { unit = "raid", terms = { "raid", "raid frame", "raid frames" } },
+    { unit = "player", terms = { "player" } },
+    { unit = "target", terms = { "target" } },
+    { unit = "focus", terms = { "focus" } },
+    { unit = "pet", terms = { "pet" } },
+    { unit = "boss", terms = { "boss" } },
+}
+
+local GROUP_QUERY_UNITS = { party = true, raid = true, mythicraid = true }
+local UNIT_QUERY_UNITS = {
+    player = true, target = true, focus = true, pet = true, boss = true,
+    targettarget = true, focustarget = true,
+}
+
+local function QueryStartsWithScope(norm, term)
+    norm = tostring(norm or "")
+    term = Normalize(term)
+    return term ~= "" and (norm == term or norm:sub(1, #term + 1) == term .. " ")
+end
+
+local function RequestedSearchUnit(queryNorm, exactNorm)
+    local exact = Normalize(exactNorm or "")
+    local norm = Normalize(queryNorm or "")
+    for i = 1, #QUERY_SCOPE_ORDER do
+        local info = QUERY_SCOPE_ORDER[i]
+        for j = 1, #(info.terms or {}) do
+            if QueryStartsWithScope(exact, info.terms[j]) or QueryStartsWithScope(norm, info.terms[j]) then
+                return info.unit
+            end
+        end
+    end
+    if StringContainsPhrase(exact, "mythic raid frame") or StringContainsPhrase(exact, "mythic raid frames")
+        or StringContainsPhrase(norm, "mythic raid frame") or StringContainsPhrase(norm, "mythic raid frames") then
+        return "mythicraid"
+    end
+    if StringContainsPhrase(exact, "party frame") or StringContainsPhrase(exact, "party frames")
+        or StringContainsPhrase(norm, "party frame") or StringContainsPhrase(norm, "party frames") then
+        return "party"
+    end
+    if StringContainsPhrase(exact, "raid frame") or StringContainsPhrase(exact, "raid frames")
+        or StringContainsPhrase(norm, "raid frame") or StringContainsPhrase(norm, "raid frames") then
+        return "raid"
+    end
+    if StringContainsPhrase(exact, "group frame") or StringContainsPhrase(exact, "group frames")
+        or StringContainsPhrase(norm, "group frame") or StringContainsPhrase(norm, "group frames") then
+        if StringContainsPhrase(exact, "mythic raid") or StringContainsPhrase(norm, "mythic raid") then return "mythicraid" end
+        if StringContainsPhrase(exact, "party") or StringContainsPhrase(norm, "party") then return "party" end
+        if StringContainsPhrase(exact, "raid") or StringContainsPhrase(norm, "raid") then return "raid" end
+    end
+    return nil
+end
+
+local function SearchScopeScore(item, queryNorm, exactNorm)
+    local setting = item and item.setting
+    if type(setting) ~= "table" then return 0 end
+    local requested = RequestedSearchUnit(queryNorm, exactNorm)
+    if not requested then return 0 end
+    local unit = tostring(setting.unit or "")
+    if unit == requested then return 430 end
+    if GROUP_QUERY_UNITS[requested] then
+        if GROUP_QUERY_UNITS[unit] then return -260 end
+        if UNIT_QUERY_UNITS[unit] then return -180 end
+    elseif UNIT_QUERY_UNITS[requested] then
+        if UNIT_QUERY_UNITS[unit] then return -180 end
+        if GROUP_QUERY_UNITS[unit] then return -160 end
+    end
+    return 0
 end
 
 local QUERY_PREFIXES = {
@@ -595,12 +826,24 @@ local function TokenScore(item, queryTokens, queryNorm, intent, pageKey, exactQu
     if item.kind == "setting" then score = score + 90 end
     if item.kind == "page" then score = score + 65 end
     if item.kind == "diagnostic" then score = score + 70 end
+    if HasActionQueryHint(queryNorm, exactNorm) then
+        if item.kind == "action" or item.kind == "diagnostic" then
+            score = score + 460
+        elseif item.kind == "setting" then
+            score = score - 180
+        elseif item.kind == "faq" then
+            score = score - 120
+        elseif item.kind == "page" then
+            score = score - 60
+        end
+    end
     if intent == "location" then
         if item.kind == "setting" or item.kind == "page" or item.kind == "action" or item.kind == "diagnostic" then score = score + 260 end
         if item.kind == "faq" then score = score - 260 end
     elseif intent == "help" then
         if item.kind == "faq" then score = score + 120 end
     end
+    score = score + SearchScopeScore(item, queryNorm, exactNorm)
     score = score + SettingPageBoost(item.setting, pageKey)
     return score
 end
@@ -623,7 +866,7 @@ end
 function K.Search(query, limit, opts)
     opts = opts or {}
     local index = K.EnsureIndex()
-    local pageKey = CurrentPageKey()
+    local pageKey = opts.ignoreCurrentPage and "home" or CurrentPageKey()
     local intent = QueryIntent(query)
     local cleanedQuery = SearchQueryText(query)
     local exactNorm = Normalize(cleanedQuery ~= "" and cleanedQuery or query)
@@ -656,7 +899,7 @@ end
 
 local function OpenPageText(item)
     if item and item.page and item.page ~= "" then
-        return "Ask me to open " .. tostring(item.pageLabel or item.page) .. "."
+        return "Ask me to open " .. tostring(ItemPageLabel(item) or "MSUF page") .. "."
     end
     return nil
 end
@@ -678,9 +921,37 @@ end
 local function FormatResultLine(rank, item)
     local prefix = tostring(rank) .. ". "
     local label = tostring(item.label or DisplayFallbackLabel(item.key, "Result"))
-    local page = item.pageLabel and item.pageLabel ~= "" and (" - " .. tostring(item.pageLabel)) or ""
+    local pageLabel = ItemPageLabel(item)
+    local page = pageLabel and pageLabel ~= "" and (" - " .. tostring(pageLabel)) or ""
     local kind = item.kind and (" [" .. tostring(item.kind) .. "]") or ""
     return prefix .. label .. page .. kind
+end
+
+local function ResultFollowups(results, limit)
+    local out = {}
+    limit = math.min(tonumber(limit) or 5, #(results or {}))
+    for i = 1, limit do
+        local item = results[i] and results[i].item
+        if item then
+            out[#out + 1] = {
+                kind = item.kind,
+                key = item.key,
+                label = item.label,
+                page = item.page,
+                pageLabel = ItemPageLabel(item),
+                category = item.category,
+                description = item.description,
+                answer = item.answer,
+                target = item.target,
+                controlType = item.controlType,
+                settingKey = item.setting and item.setting.key,
+                actionKey = item.action and item.action.key,
+                canOpen = item.canOpen,
+                canExplain = item.canExplain,
+            }
+        end
+    end
+    return out
 end
 
 
@@ -743,13 +1014,22 @@ local PAGE_HELP = {
         },
         actions = { "Export Current Profile", "Import Profile", "Create Profile" },
     },
-    auras3 = { title = "Aura Style help", lines = { "You can change Aura and Group Aura options such as visibility, icon size, count, per-row layout, growth, offsets, cooldown text, stack text, filters, hidden auras, and quick presets.", "Examples: set target buff icon size to 30; turn on shared buff raid filter; apply clean aura preset." }, actions = { "Open Auras", "Open Aura Filters" } },
+    auras3 = { title = "Auras help", lines = { "You can change Aura and Group Aura options such as visibility, icon size, count, per-row layout, growth, offsets, cooldown text, stack text, filters, hidden auras, and quick presets.", "Examples: set target buff icon size to 30; turn on shared buff raid filter; apply clean aura preset." }, actions = { "Open Auras", "Open Aura Filters" } },
+    auras3_styling = { title = "Aura Style help", lines = { "You can change aura visual styling such as colors, borders, cooldown text, stack text, and related rendering details.", "Examples: set aura cooldown text size to 14; change aura border color; open Aura Style." }, actions = { "Open Aura Style", "Open Aura Filters" } },
     auras3_buffs = { title = "Aura Buffs help", lines = { "You can change buff options for unit and group frames, including icon size, max buffs, layout, stack text, cooldown text, and filters.", "Examples: set player buff max to 8; set party buff icon size to 24; turn on target buff player filter." }, actions = { "Open Aura Buffs" } },
     auras3_debuffs = { title = "Aura Debuffs help", lines = { "You can change debuff options for unit and group frames, including icon size, max debuffs, layout, cooldown text, and debuff filters.", "Examples: set focus debuff icon size to 28; turn on shared debuff raid filter." }, actions = { "Open Aura Debuffs" } },
     auras3_filters = { title = "Aura Filters help", lines = { "You can change Aura filter toggles, hidden-aura entries, hidden group-aura categories, Aura quick presets, and Group Aura copy through Group Copy categories.", "Examples: hide spell 12345 for player auras; show hidden raid buff categories; apply performance aura preset; copy raid auras to party." }, actions = { "Open Aura Filters" } },
     gf_layout = { title = "Group Layout help", lines = { "You can change group frame layout, spacing, growth, anchoring, reverse health fill, scaling breakpoints, party/raid/mythic raid options, Blizzard fallback behavior, and visibility options.", "Examples: 'set raid scale for 20 players to 80', 'make raid frames fill backwards', 'move raid frame closer to player', 'set party growth direction to down', or 'show Blizzard party frames when Party is disabled'." }, actions = { "Open Group Layout" } },
-    gf_bars = { title = "Group Health & Text help", lines = { "You can change group health and text options, text slots, bar sizes, colors, and related layout options available in MSUF." }, actions = { "Open Group Health & Text" } },
+    gf_bars = {
+        title = "Group Health & Text help",
+        lines = {
+            "You can change Party, Raid, and Mythic Raid health, power, role power, text slots, text font sizes, bar colors, range fade, dispel overlay, debuff stripe, and related group bar options.",
+            "Examples: set raid health text size to 14; hide healer power bars in raid frames; set party range fade to 45; change raid debuff stripe color red.",
+        },
+        actions = { "Open Group Health & Text" },
+    },
     gf_indicators = { title = "Group Indicators help", lines = { "You can change group status indicators, role/ready/summon icons, corner indicators, and related editor choices available in MSUF." }, actions = { "Open Group Indicators" } },
+    gf_auras = { title = "Group Auras help", lines = { "You can change Party, Raid, and Mythic Raid aura visibility, icon size, count, layout, filters, hidden group-aura categories, and group aura copy behavior.", "Examples: set raid buff icon size to 24; show only dispellable debuffs; hide raid buff category long term buffs; copy raid auras to party." }, actions = { "Open Group Auras", "Open Aura Filters" } },
     classpower = { title = "Class Resources help", lines = { "You can change class resource mode, size, position, colors, and gameplay-specific class resource options available in MSUF." }, actions = { "Open Class Resources" } },
     gameplay = { title = "Gameplay help", lines = { "You can change gameplay features such as combat timer, sounds, totem/statue frame behavior, and related options." }, actions = { "Open Gameplay" } },
 }
@@ -767,10 +1047,13 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "profile help", "profiles help", "help profile", "help profiles", "profil hilfe", "profile hilfe", "hilfe profile", "hilfe profil", "wie funktionieren profile", "how do profiles work" }, page = "profiles" },
     { terms = { "misc help", "miscellaneous help", "help misc", "help miscellaneous", "tooltip help", "tooltips help", "minimap help", "sprache hilfe", "tooltip hilfe", "misc hilfe", "menue sprache hilfe", "blizzard frames hilfe" }, page = "opt_misc" },
     { terms = { "modules help", "module help", "help modules", "help module", "style module help", "msuf style help", "module hilfe", "stil modul hilfe", "module hilfe", "msuf stil hilfe", "dropdown stil hilfe" }, page = "modules" },
-    { terms = { "aura help", "auras help", "buff help", "debuff help" }, page = "auras3_styling" },
+    { terms = { "aura style help", "aura styling help", "help aura style", "help aura styling" }, page = "auras3_styling" },
+    { terms = { "aura help", "auras help", "buff help", "debuff help" }, page = "auras3" },
     { terms = { "edit mode help", "editmode help", "help edit mode", "bearbeitungsmodus hilfe", "hilfe bearbeitungsmodus", "editmodus hilfe" }, page = "home", special = "editmode" },
     { terms = { "group help", "group frames help", "help group", "help group frames", "party help", "help party", "raid help", "help raid" }, page = "gf_layout" },
+    { terms = { "group text help", "group health help", "group health and text help", "help group text", "help group health", "help group health and text", "party text help", "raid text help", "party health help", "raid health help" }, page = "gf_bars" },
     { terms = { "indicator help", "help indicator", "group indicator help", "help group indicator", "corner indicator help", "help corner indicator" }, page = "gf_indicators" },
+    { terms = { "group aura help", "group auras help", "help group aura", "help group auras", "party aura help", "raid aura help", "mythic raid aura help" }, page = "gf_auras" },
     { terms = { "class resource help", "help class resource", "class power help", "help class power" }, page = "classpower" },
     { terms = { "gameplay help", "help gameplay" }, page = "gameplay" },
 }
@@ -815,6 +1098,103 @@ local function PageHelp(page, titleOverride)
     local action = ActionLine(spec.actions)
     if action then lines[#lines + 1] = action end
     return { text = JoinLines(lines), status = "applied", summary = "Assistant page help" }
+end
+
+local WHAT_CAN_PAGE_HELP_INTENTS = {
+    "show me", "show me options", "list", "list options", "explain where",
+    "help me find", "help me locate", "can you help me find", "can you help me locate",
+    "i want to change", "i want to adjust", "i want to configure", "i want to manage",
+    "i need to change", "i need to adjust", "i need to configure", "i need to manage",
+    "i am trying to change", "i am trying to adjust", "i am trying to configure", "i am trying to manage",
+    "i'm trying to change", "i'm trying to adjust", "i'm trying to configure", "i'm trying to manage",
+    "im trying to change", "im trying to adjust", "im trying to configure", "im trying to manage",
+    "i am looking for", "i'm looking for", "im looking for", "i need help with",
+    "what can i change", "what settings can i change", "what options can i change",
+    "what can i do", "what can you change", "what can you do in",
+    "how do i change", "how can i change", "how do i configure", "how can i configure",
+    "how do i adjust", "how can i adjust", "how do i set", "how can i set",
+    "where should i go", "where should i go to", "where should i go for",
+    "where do i manage", "where can i manage", "where do i edit", "where can i edit",
+    "where are", "where can i change", "where do i change", "where can i adjust", "where do i adjust",
+    "where can i configure", "where do i configure", "which page has", "which page contains",
+    "which menu has", "which menu contains", "what page has", "what menu has",
+    "what controls", "what option changes", "what setting controls", "tell me where", "tell me where to",
+    "was kann ich aendern", "was kann ich einstellen", "was kann ich hier aendern",
+}
+
+local function LooksLikeWhatCanPageHelpIntent(norm)
+    if ContainsAny(norm, WHAT_CAN_PAGE_HELP_INTENTS) then return true end
+    return ContainsAny(norm, { "i want", "i need" })
+        and ContainsAny(norm, { "option", "options", "where", "find", "locate", "page", "menu" })
+end
+
+local WHAT_CAN_UNIT_FRAME_SCOPE_TERMS = {
+    "player", "target", "focus", "pet", "target of target", "targettarget", "focus target", "focustarget",
+    "boss", "unit frame", "unit frames", "unitframe", "unitframes",
+}
+
+local WHAT_CAN_UNIT_TEXT_TERMS = {
+    "health text", "hp text", "power text", "mana text", "name text", "level text", "status text",
+    "text slot", "text slots", "left text", "right text", "font size", "text offset", "text anchor",
+}
+
+local WHAT_CAN_GROUP_FRAME_SCOPE_TERMS = {
+    "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames",
+    "mythic raid frame", "mythic raid frames", "group", "party", "raid", "mythic raid",
+}
+
+local WHAT_CAN_GROUP_LAYOUT_TERMS = {
+    "width", "height", "size", "wider", "narrower", "taller", "shorter",
+    "spacing", "space", "gap", "growth", "grow", "direction", "column", "columns",
+    "offline", "hide offline", "show offline", "range fade", "range check", "out of range",
+}
+
+local WHAT_CAN_DIRECT_HELP_TERMS = {
+    "interrupt color", "interruptible color", "uninterruptible color", "castbar interrupt color", "cast bar interrupt color",
+    "powerbar offset", "power bar offset", "powerbar x", "powerbar y", "power bar x", "power bar y",
+    "powerbar position", "power bar position",
+}
+
+local WHAT_CAN_PAGE_HELP_TARGETS = {
+    { page = "gf_bars", terms = { "group health and text", "group health", "group text", "party health", "party text", "raid health", "raid text", "mythic raid health", "mythic raid text" } },
+    { page = "gf_indicators", terms = { "group indicator", "group indicators", "party indicator", "party indicators", "raid indicator", "raid indicators", "corner indicator", "corner indicators", "status icon", "status icons", "ready check", "raid marker", "role icon" } },
+    { page = "gf_auras", terms = { "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras", "mythic raid aura", "mythic raid auras", "group buff", "group buffs", "group debuff", "group debuffs" } },
+    { page = "gf_layout", terms = { "group layout", "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames", "party layout", "raid layout" } },
+    { page = "auras3_filters", terms = { "aura filter", "aura filters", "hidden aura", "hidden auras", "blacklist", "whitelist", "ignore list" } },
+    { page = "auras3_styling", terms = { "aura style", "aura styling", "aura cooldown text", "aura stack text", "cooldown text", "stack text" } },
+    { page = "auras3_debuffs", terms = { "target debuff", "target debuffs", "player debuff", "player debuffs", "focus debuff", "focus debuffs", "unit debuff", "unit debuffs", "debuff", "debuffs" } },
+    { page = "auras3_buffs", terms = { "target buff", "target buffs", "player buff", "player buffs", "focus buff", "focus buffs", "unit buff", "unit buffs", "buff", "buffs" } },
+    { page = "auras3", terms = { "aura", "auras" } },
+    { page = "opt_castbar", terms = { "cast bar", "cast bars", "castbar", "castbars", "target cast", "focus cast", "boss cast" } },
+    { page = "classpower", terms = { "class resource", "class resources", "class power", "class powers", "combo point", "combo points", "holy power" } },
+    { page = "profiles", terms = { "profile", "profiles", "profile import", "profile export", "spec profile", "spec profiles" } },
+    { page = "gameplay", terms = { "gameplay", "combat timer", "combat crosshair", "totem", "totems", "totem frame", "first dance" } },
+    { page = "opt_colors", terms = { "color", "colors", "class colors", "bar colors", "font color" } },
+    { page = "opt_fonts", terms = { "font", "fonts", "font outline", "font shadow" } },
+    { page = "opt_bars", terms = { "bar texture", "bar textures", "health bar", "power bar", "bars", "bar", "absorb bar", "dispel overlay", "rounded bars" } },
+    { page = "opt_misc", terms = { "misc", "miscellaneous", "tooltip", "tooltips", "minimap", "menu language", "blizzard frames" } },
+    { page = "modules", terms = { "module", "modules", "style module", "msuf style", "dropdown style" } },
+    { page = "uf_targettarget", terms = { "target of target", "targettarget" } },
+    { page = "uf_focustarget", terms = { "focus target", "focustarget" } },
+    { page = "uf_boss", terms = { "boss frame", "boss frames", "boss" } },
+    { page = "uf_player", terms = { "player frame", "player", "self frame" } },
+    { page = "uf_target", terms = { "target frame", "target" } },
+    { page = "uf_focus", terms = { "focus frame", "focus" } },
+    { page = "uf_pet", terms = { "pet frame", "pet" } },
+}
+
+local function TryWhatCanPageHelp(norm)
+    if not LooksLikeWhatCanPageHelpIntent(norm) then return nil end
+    if ContainsAny(norm, WHAT_CAN_UNIT_FRAME_SCOPE_TERMS) and ContainsAny(norm, WHAT_CAN_UNIT_TEXT_TERMS) then return nil end
+    if ContainsAny(norm, WHAT_CAN_GROUP_FRAME_SCOPE_TERMS) and ContainsAny(norm, WHAT_CAN_GROUP_LAYOUT_TERMS) then return nil end
+    if ContainsAny(norm, WHAT_CAN_DIRECT_HELP_TERMS) then return nil end
+    for i = 1, #WHAT_CAN_PAGE_HELP_TARGETS do
+        local spec = WHAT_CAN_PAGE_HELP_TARGETS[i]
+        if ContainsAny(norm, spec.terms) then
+            return PageHelp(spec.page)
+        end
+    end
+    return nil
 end
 
 local function CapabilityHelp(german)
@@ -998,7 +1378,9 @@ end
 
 local KNOWLEDGE_INTENT_TERMS = {
     "explain", "what is", "what does", "what are", "where", "where is", "where do", "where can",
+    "what controls", "what option", "what setting",
     "how", "how do", "how can", "help", "change", "make", "set", "move", "open", "find",
+    "list", "option", "options", "show me", "explain where",
     "wo", "wo ist", "wo sind", "wo kann", "wo aendere", "wo aendern", "wo finde",
     "hilfe", "erklaere", "erklaer", "was ist", "was sind", "wie", "wie kann",
     "aendere", "aendern", "setze", "stelle", "verschiebe", "oeffne", "finde",
@@ -1051,6 +1433,26 @@ local CLASS_RESOURCE_HELP_TERMS = {
     "kombopunkt", "kombopunkte", "heilige kraft", "seelensplitter", "runen",
 }
 
+local CONCEPT_HELP_INTENT_TERMS = {
+    "what", "what is", "what are", "what does", "can msuf", "does msuf",
+    "help", "explain", "mean", "where", "where is", "where do", "where can",
+    "how", "how do", "how can",
+}
+
+local function HasConceptHelpIntent(norm)
+    return ContainsAny(norm, CONCEPT_HELP_INTENT_TERMS)
+end
+
+local function HasConceptDefinitionIntent(norm)
+    norm = Normalize(norm)
+    if norm == "" then return false end
+    if norm:match("^what%s+is%s+") or norm:match("^what%s+are%s+") or norm:match("^what%s+does%s+") then return true end
+    if norm:match("^explain%s+") or norm:match("^describe%s+") then return true end
+    if norm:match("%smean$") or norm:find(" mean ", 1, true) or norm:find(" means ", 1, true) then return true end
+    if norm:match("^[%w%s%-]+%s+help$") then return true end
+    return false
+end
+
 local function DirectHelpAnswer(query, opts)
     local norm = Normalize(query)
     if norm == "help" or norm == "show commands" or norm == "commands" or norm == "what can you do"
@@ -1071,6 +1473,309 @@ local function DirectHelpAnswer(query, opts)
     end
     if norm == "was kann ich hier aendern" or norm == "hilfe hier" or norm == "hilfe fuer diese seite" or norm == "diese seite hilfe" then
         return PageHelp((opts and opts.currentPage) or CurrentPageKey(), "Current page help")
+    end
+    local pageHelp = TryWhatCanPageHelp(norm)
+    if pageHelp then return pageHelp end
+    if ContainsAny(norm, { "gcd", "global cooldown", "global cool down" })
+        and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "mean" })
+    then
+        return {
+            text = "Global cooldown help\nThe global cooldown, or GCD, is the short shared cooldown WoW triggers after most abilities. MSUF does not change the GCD, but it can make related UI easier to read through cast bars, aura cooldown text, class resources, and action-adjacent frame visibility.\nExamples: make aura cooldown text bigger; open cast bars; open class resources; show combat timer.\nYou can ask: Open Cast Bars | Open Aura Style | Open Class Resources",
+            status = "applied",
+            summary = "Assistant global cooldown help",
+        }
+    end
+    if ContainsAny(norm, { "nameplate", "nameplates", "enemy nameplate", "enemy nameplates" })
+        and ContainsAny(norm, { "what", "what are", "can msuf", "change", "help", "explain", "enemy", "where" })
+    then
+        return {
+            text = "Nameplates help\nNameplates are the floating bars above units in the 3D world. MSUF focuses on unit frames, group frames, cast bars, auras, class resources, and gameplay helpers; it does not replace Blizzard nameplates. For enemy nameplate behavior, use Blizzard nameplate settings or a nameplate addon. In MSUF, I can still help with Target, Focus, Boss frames, enemy NPC colors, cast bars, and aura visibility.\nExamples: open target; open boss frames; set enemy NPC color red; make target cast bar bigger.\nYou can ask: Open Target | Open Boss Frames | Open Colors",
+            status = "applied",
+            summary = "Assistant nameplates help",
+        }
+    end
+    if ContainsAny(norm, { "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames" })
+        and not ContainsAny(norm, GROUP_LAYOUT_HELP_TERMS)
+        and not ContainsAny(norm, GROUP_HEALTH_TEXT_HELP_TERMS)
+        and not ContainsAny(norm, GROUP_INDICATOR_HELP_TERMS)
+        and not ContainsAny(norm, { "scaling", "scale", "player count", "role sorting", "role sort", "sort by role" })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Party and raid frame help\nParty, Raid, and Mythic Raid frames are group frames: they show members of your group so you can track health, range, buffs, debuffs, role icons, ready checks, and other group status. In MSUF, their layout lives mainly in Group Layout, while health/text, indicators, and auras have their own group-frame pages.\nExamples: open group layout; make raid frames wider; set raid range fade to 40; show party ready check icon.\nYou can ask: Open Group Layout | Open Group Health & Text | Open Group Indicators | Open Group Auras",
+            status = "applied",
+            summary = "Assistant group frames help",
+        }
+    end
+    if ContainsAny(norm, { "boss frame", "boss frames", "boss unit frame", "boss unit frames" })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Boss Frames help\nBoss frames show active boss units, usually in dungeon, raid, and encounter UI. In MSUF, Boss Frames can have their own visibility, size, position, text, auras, raid markers, range fade, and boss cast bar options.\nExamples: open boss frames; show boss frames; make boss frames wider; set boss cast bar height to 20.\nYou can ask: Open Boss Frames | Open Cast Bars",
+            status = "applied",
+            summary = "Assistant boss frames help",
+        }
+    end
+    if ContainsAny(norm, { "unit frame", "unit frames", "unitframe", "unitframes", "player frame", "target frame", "focus frame", "pet frame" })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Unit Frames help\nUnit frames are the UI frames for important units such as Player, Target, Focus, Pet, Boss, Target of Target, and Focus Target. MSUF can configure their visibility, size, position, health and power bars, text, portraits, auras, cast bars, range fade, colors, and related status options.\nExamples: open player; open target; set target width to 240; hide player name; why is target frame hidden?\nYou can ask: Open Player | Open Target | Open Focus | Open Boss Frames",
+            status = "applied",
+            summary = "Assistant unit frames help",
+        }
+    end
+    if ContainsAny(norm, { "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras", "mythic raid aura", "mythic raid auras", "group buff", "group buffs", "group debuff", "group debuffs" })
+        and HasConceptHelpIntent(norm)
+    then
+        return PageHelp("gf_auras")
+    end
+    if ContainsAny(norm, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "buffs and debuffs", "buff and debuff" })
+        and not ContainsAny(norm, { "dispel", "dispels", "dispellable", "debuff dispel" })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Auras, buffs, and debuffs help\nAuras are buffs and debuffs shown on unit or group frames. Buffs are usually helpful effects; debuffs are usually harmful effects. MSUF can change aura visibility, icon size, layout, cooldown text, stack text, hidden aura filters, dispellable-debuff behavior, and group aura categories.\nExamples: open auras; set target buff icon size to 30; hide spell 12345 for player auras; show only dispellable debuffs.\nYou can ask: Open Auras | Open Aura Filters | Open Group Auras",
+            status = "applied",
+            summary = "Assistant auras help",
+        }
+    end
+    if ContainsAny(norm, { "health bar", "health bars", "hp bar", "hp bars", "life bar", "life bars" })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Health Bar help\nA health bar shows how much health a unit has. MSUF can change health bar size, opacity, texture, color behavior, gradients, absorb overlays, incoming-heal overlays, text, and group-frame health layout options.\nExamples: set player height to 40; set raid health text size to 14; turn on heal prediction overlay; set health bar texture to Smooth.\nYou can ask: Open Player | Open Group Health & Text | Open Bars",
+            status = "applied",
+            summary = "Assistant health bar help",
+        }
+    end
+    if ContainsAny(norm, { "power bar", "power bars", "mana bar", "mana bars", "energy bar", "rage bar", "resource bar", "resource bars" })
+        and not ContainsAny(norm, {
+            "detached", "detach", "powerbar offset", "power bar offset", "powerbar x", "powerbar y",
+            "power bar x", "power bar y", "offset", "role power", "healer power", "tank power",
+            "dps power", "damager power",
+        })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Power Bar help\nA power bar shows a unit resource such as mana, energy, rage, focus, runic power, or a similar class resource. MSUF can change unit power bars, detached power bars, power text, role power in group frames, and class-resource/player-power options.\nExamples: detach target power bar; hide healer power bars in raid frames; set mana power bar color blue; open class resources.\nYou can ask: Open Player | Open Group Health & Text | Open Class Resources | Open Colors",
+            status = "applied",
+            summary = "Assistant power bar help",
+        }
+    end
+    if ContainsAny(norm, { "ready check", "ready checks", "readycheck", "ready-check" })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Ready Check help\nA ready check lets the group confirm who is ready before a pull. MSUF can show ready-check icons on Party, Raid, and Mythic Raid frames through Group Indicators, including size, anchor, layer, and offset options.\nExamples: show raid ready check icon; set party ready check size to 18; move raid ready check icon right 4.\nYou can ask: Open Group Indicators",
+            status = "applied",
+            summary = "Assistant ready check help",
+        }
+    end
+    if ContainsAny(norm, { "raid marker", "raid markers", "target marker", "target markers", "world marker", "skull marker" })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Raid Marker help\nRaid markers are target icons such as skull, cross, square, and moon. MSUF can display raid-marker indicators on unit frames and group frames and can help with their size, anchor, layer, and offsets where the menu exposes those controls.\nExamples: show raid marker on target; set raid marker size to 18; move raid marker icon up.\nYou can ask: Open Player | Open Target | Open Group Indicators",
+            status = "applied",
+            summary = "Assistant raid marker help",
+        }
+    end
+    if ContainsAny(norm, { "absorb", "absorbs", "absorb bar", "absorb bars", "shield", "shields", "shield bar", "shield bars" })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Absorb and shield help\nAbsorbs are shield effects that prevent incoming damage. MSUF can show absorb information through absorb bars, absorb overlays, colors, anchor choices, and preview/test helpers depending on the frame area.\nExamples: show absorb bar preview; set absorb bar color blue; set absorb bar anchor right; open bars.\nYou can ask: Open Bars | Open Colors",
+            status = "applied",
+            summary = "Assistant absorb help",
+        }
+    end
+    if ContainsAny(norm, { "incoming heal", "incoming heals", "heal prediction", "healing prediction", "predicted heal", "predicted heals" })
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Incoming Heal and Heal Prediction help\nIncoming heals are heals that are already being cast or predicted. MSUF can show them with heal prediction overlays and related bar options, so healers can see health plus expected healing.\nExamples: turn on heal prediction overlay; set heal prediction anchor right; open bars; open group health and text.\nYou can ask: Open Bars | Open Group Health & Text",
+            status = "applied",
+            summary = "Assistant heal prediction help",
+        }
+    end
+    if ContainsAny(norm, CLASS_RESOURCE_HELP_TERMS)
+        and HasConceptHelpIntent(norm)
+    then
+        return {
+            text = "Class Resources help\nClass resources are class-specific combat resources such as combo points, holy power, chi, soul shards, runes, or arcane charges. MSUF can show and style Class Resources, configure related player HP/player power sections, and adjust resource colors, size, position, and anchoring.\nExamples: open class resources; make class resources wider; set combo point color red; detach player power bar.\nYou can ask: Open Class Resources",
+            status = "applied",
+            summary = "Assistant class resources help",
+        }
+    end
+    if ContainsAny(norm, { "alpha", "opacity", "transparent", "transparency", "fade", "faded" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Alpha and opacity help\nAlpha and opacity both describe transparency. Lower opacity makes a frame, bar, text, or aura more see-through; higher opacity makes it more solid. MSUF uses these options for frame alpha, bar/background alpha, range fade, aura fading, and some highlight overlays.\nExamples: set player alpha to 80; set raid range fade to 40; make party frames less transparent; open bars.\nYou can ask: Open Bars | Open Group Health & Text | Open Player",
+            status = "applied",
+            summary = "Assistant alpha opacity help",
+        }
+    end
+    if ContainsAny(norm, { "anchor", "anchors", "anchoring", "anchor point", "anchor points", "attach point", "attach points" })
+        and not ContainsAny(norm, { "cooldown manager", "cooldownmanager", "essential cooldown", "combat timer", "totem", "statue", "first dance", "interrupt ready", "kick ready" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Anchoring help\nAn anchor tells MSUF what a frame is attached to and which point is used, such as TOPLEFT, CENTER, or BOTTOMRIGHT. Anchors plus X/Y offsets control where frames, icons, indicators, text, and helper widgets appear.\nExamples: anchor raid frames to player; set target anchor point to center; move raid ready check icon right 4; open group layout.\nYou can ask: Open Group Layout | Open Player | Open Group Indicators",
+            status = "applied",
+            summary = "Assistant anchoring help",
+        }
+    end
+    if ContainsAny(norm, { "x offset", "y offset", "offset", "offsets", "position offset", "horizontal offset", "vertical offset" })
+        and not ContainsAny(norm, { "powerbar offset", "power bar offset", "detached power", "castbar text", "cast bar text" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Offset help\nOffsets move something away from its anchor. X Offset moves left or right; Y Offset moves up or down. MSUF uses offsets for unit frames, group frames, text, cast bars, icons, indicators, auras, and gameplay helpers.\nExamples: move target 20 right; move raid ready check icon up 4; set target buff x offset to 6; open edit mode.\nYou can ask: Enter Edit Mode | Open Player | Open Group Indicators",
+            status = "applied",
+            summary = "Assistant offset help",
+        }
+    end
+    if ContainsAny(norm, { "scale", "scaling", "ui scale", "menu scale", "frame scale", "raid scale" })
+        and not ContainsAny(norm, { "player count", "10 players", "20 players", "25 players", "26 players", "breakpoint", "breakpoints" })
+        and not ContainsAny(norm, { "menu scale", "ui scale", "msuf frame scale", "msuf frames scale", "dashboard scale", "dashboard scaling", "options scale", "menu bigger", "menu smaller" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Scale help\nScale changes the rendered size of UI elements without always changing their saved width or height. MSUF has menu scale, frame scale, and group-frame scaling options, while some areas use direct width, height, font size, or icon size instead.\nExamples: set menu scale to 110; set raid scale for 20 players to 80; make target frame wider; open group layout.\nYou can ask: Open Dashboard | Open Group Layout | Open Player",
+            status = "applied",
+            summary = "Assistant scale help",
+        }
+    end
+    if ContainsAny(norm, { "texture", "textures", "bar texture", "castbar texture", "cast bar texture", "foreground texture", "background texture" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Texture help\nA texture is the visual fill style used by bars, such as health bars, power bars, cast bars, absorb bars, and some background bars. MSUF can use shared bar textures or specific foreground/background textures where the menu exposes them.\nExamples: set bar texture to Smooth; set cast bar texture to Blizzard; set detached power bar texture to Smooth; open bars.\nYou can ask: Open Bars | Open Cast Bars | Open Class Resources",
+            status = "applied",
+            summary = "Assistant texture help",
+        }
+    end
+    if ContainsAny(norm, { "font", "fonts", "font outline", "outline", "monochrome", "font shadow", "text shadow", "shadow strength" })
+        and not ContainsAny(norm, { "font help", "fonts help", "help font", "help fonts" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Font rendering help\nFont options control how text is drawn. Size changes readability, outline makes letters stand out, monochrome changes the render style, and shadow options add contrast behind text. MSUF has shared font options plus text-specific font settings.\nExamples: set global font size to 14; set shared font outline to thick; set player name font size to 16; open fonts.\nYou can ask: Open Fonts | Open Player | Open Group Health & Text",
+            status = "applied",
+            summary = "Assistant font rendering help",
+        }
+    end
+    if ContainsAny(norm, { "cooldown swipe", "cooldown text", "aura cooldown", "cooldown number", "cooldown numbers", "cooldown timer" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Cooldown display help\nCooldown swipe is the radial overlay that shows time remaining on an icon. Cooldown text is the number shown on top of the icon. MSUF can configure aura cooldown swipe, cooldown text size, offsets, and related aura styling options.\nExamples: turn on target buff cooldown swipe; set aura cooldown text size to 14; move target buff cooldown text up; open aura style.\nYou can ask: Open Aura Style | Open Auras",
+            status = "applied",
+            summary = "Assistant cooldown display help",
+        }
+    end
+    if ContainsAny(norm, { "stack", "stacks", "stack count", "stack text", "aura stack", "aura stacks" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Aura stack help\nA stack count shows how many times the same aura is applied. MSUF can control aura stack text visibility, size, X/Y offsets, and styling where the aura page exposes those options.\nExamples: set target buff stack text size to 14; move target debuff stack text right 3; open aura style.\nYou can ask: Open Aura Style | Open Auras",
+            status = "applied",
+            summary = "Assistant aura stack help",
+        }
+    end
+    if ContainsAny(norm, { "growth direction", "grow direction", "growth", "per row", "columns", "column layout", "layout direction" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Growth direction help\nGrowth direction controls where new frames or icons are added: left, right, up, down, or into columns depending on the MSUF area. It matters for group frame layout and aura icon layout.\nExamples: set party growth direction to down; set target buffs per row to 8; make raid frames grow right; open group layout.\nYou can ask: Open Group Layout | Open Auras",
+            status = "applied",
+            summary = "Assistant growth direction help",
+        }
+    end
+    if ContainsAny(norm, { "click through", "click-through", "clickable", "lock", "locked", "unlock", "unlocked" })
+        and not ContainsAny(norm, { "combat lockdown", "lockdown", "in combat lockdown", "combat protected", "combat restriction", "protected action" })
+        and HasConceptDefinitionIntent(norm)
+    then
+        return {
+            text = "Click-through and lock help\nLocked means a widget should not be moved accidentally. Click-through means the widget ignores mouse clicks so you can click the game world or frames behind it. MSUF uses these ideas for gameplay helpers and movable UI elements.\nExamples: lock combat timer; make combat timer click through; unlock first dance; open gameplay.\nYou can ask: Open Gameplay | Enter Edit Mode",
+            status = "applied",
+            summary = "Assistant click-through lock help",
+        }
+    end
+    if ContainsAny(norm, { "focus target", "focustarget" })
+        and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "where" })
+    then
+        return {
+            text = "Focus Target help\nFocus Target is the unit your Focus is targeting. In MSUF, Focus Target has its own unit-frame page, so you can configure visibility, size, health, text, cast bar, auras, range fade, colors, and position separately from Focus.\nExamples: open focus target; show focus target frame; make focus target width 180; hide focus target buffs.\nYou can ask: Open Focus Target",
+            status = "applied",
+            summary = "Assistant focus target help",
+        }
+    end
+    if ContainsAny(norm, { "target of target", "targettarget" })
+        and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "where" })
+    then
+        return {
+            text = "Target of Target help\nTarget of Target shows what your current target is targeting. It is useful for tanks, assist targeting, and checking whether an enemy is targeting you or another player. In MSUF, it has its own page for visibility, size, text, cast bar, auras, range fade, colors, and position.\nExamples: open target of target; show target of target; make target of target smaller; hide target of target buffs.\nYou can ask: Open Target of Target",
+            status = "applied",
+            summary = "Assistant target of target help",
+        }
+    end
+    if ContainsAny(norm, { "interrupt", "interrupts", "kick", "kicks", "interrupting", "kick tracker" })
+        and not ContainsAny(norm, { "interrupt color", "interruptible color", "uninterruptible color", "castbar interrupt color", "cast bar interrupt color" })
+        and ContainsAny(norm, { "help", "how", "how do", "make", "easier", "see", "what", "explain", "where" })
+    then
+        return {
+            text = "Interrupt help\nMSUF can make interrupts easier to read through Cast Bar options: Interrupt Ready indicators, Focus Kick Tracker, cast bar colors, interrupt shake, and Target/Focus/Boss cast bar visibility. It cannot decide when to interrupt, but it can make the relevant frame feedback clearer.\nExamples: show kick ready on target; show focus kick tracker; turn on shake on interrupt; set uninterruptible cast color red.\nYou can ask: Open Cast Bars | Explain Interrupt Ready",
+            status = "applied",
+            summary = "Assistant interrupt help",
+        }
+    end
+    if ContainsAny(norm, { "mouseover healing", "mouse over healing", "mouseover heal", "mouse over heal", "click casting", "click-casting", "click cast", "clickcast" })
+        and ContainsAny(norm, { "help", "what", "what is", "how", "where", "enable", "show", "explain" })
+    then
+        return {
+            text = "Mouseover and click casting help\nFor healing UI, MSUF can enable Click Casting on Party, Raid, and Mythic Raid frames and can improve mouseover readability with hover highlights, range fade, dispel visibility, and clear group health text. Spell bindings themselves come from WoW's click-cast/keybind system or a click-casting addon.\nExamples: turn on raid click casting; turn on party click casting; set raid range fade to 40; open group layout.\nYou can ask: Open Group Layout | Open Group Health & Text | Open Colors",
+            status = "applied",
+            summary = "Assistant mouseover healing help",
+        }
+    end
+    if ContainsAny(norm, { "range check", "range fade", "out of range", "in range", "melee range" })
+        and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain", "range" })
+    then
+        return {
+            text = "Range check help\nMSUF can show range through unit-frame and group-frame Range Fade options, and Gameplay has Combat Crosshair range feedback through the melee range spell. Range Fade makes frames more transparent when the unit is out of range.\nExamples: set raid range fade to 40; turn on target range fade; show combat crosshair; set crosshair melee spell 100780.\nYou can ask: Open Group Health & Text | Open Target | Open Gameplay",
+            status = "applied",
+            summary = "Assistant range check help",
+        }
+    end
+    if ContainsAny(norm, { "dispel", "dispels", "dispellable", "dispellable debuff", "dispellable debuffs", "debuff dispel" })
+        and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain", "debuff" })
+    then
+        return {
+            text = "Dispel help\nA dispel removes certain debuffs from friendly units or buffs from enemies, depending on your class and spell. In MSUF, dispel-related visibility lives in aura filters, debuff type colors, dispel borders, group indicators, and group health overlays.\nExamples: show only dispellable debuffs; open aura filters; test dispel border; set magic debuff color blue; open group indicators.\nYou can ask: Open Aura Filters | Open Group Indicators | Open Colors",
+            status = "applied",
+            summary = "Assistant dispel help",
+        }
+    end
+    if ContainsAny(norm, { "threat", "aggro", "threat border", "aggro border" })
+        and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain" })
+    then
+        return {
+            text = "Threat and aggro help\nThreat is how enemies decide whom to attack; aggro means a unit currently has enemy attention. MSUF can highlight this with Aggro Border options, threat/status indicators, group indicators, and colors.\nExamples: turn on aggro border; test aggro border; set aggro border color red; open group indicators.\nYou can ask: Open Bars | Open Colors | Open Group Indicators",
+            status = "applied",
+            summary = "Assistant threat help",
+        }
+    end
+    if ContainsAny(norm, { "combat lockdown", "lockdown", "in combat lockdown", "combat protected", "combat restriction", "protected action" })
+        and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "why", "explain" })
+    then
+        return {
+            text = "Combat lockdown help\nWoW blocks protected UI changes while you are in combat. MSUF can still answer questions, but some frame movement, layout, secure-click, and protected frame changes may wait until combat ends. If an action is delayed, leave combat and let MSUF apply or retry it.\nExamples: enter edit mode out of combat; move frames after combat; run checks; open display recovery.\nYou can ask: Run Checks | Open Display & Recovery",
+            status = "applied",
+            summary = "Assistant combat lockdown help",
+        }
     end
     if ContainsAny(norm, { "undo", "redo" })
         and ContainsAny(norm, { "explain", "what is", "what does", "how do", "how can", "help" })
@@ -1180,6 +1885,15 @@ local function DirectHelpAnswer(query, opts)
             text = "Dashboard scaling help\nIn Dashboard > Scaling, I can help with UI scale, Menu scale, and MSUF frame scale. The Dashboard also handles applying or reverting those scale changes.\nExamples: open dashboard scaling; make menu bigger; set MSUF frame scale to 100.\nYou can ask: Open Dashboard Scaling",
             status = "applied",
             summary = "Assistant dashboard scaling help",
+        }
+    end
+    if ContainsAny(norm, { "display recovery", "display and recovery", "recovery tools", "dashboard recovery", "factory reset", "print help" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Display & Recovery help\nOn the Dashboard, Display & Recovery contains recovery tools such as Print Help, Discord/support links, and Factory Reset staging. Use it when the menu or profile state looks broken and you need a safe recovery path.\nExamples: open display recovery; print help; factory reset all; copy support link.\nYou can ask: Open Display & Recovery | Run Checks",
+            status = "applied",
+            summary = "Assistant display recovery help",
         }
     end
     if ContainsAny(norm, { "edit mode", "editmode", "frame edit mode", "anchor picker", "move frames mode", "bearbeitungsmodus", "editmodus", "anker picker", "rahmen verschieben" })
@@ -1295,6 +2009,15 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant totem frame help",
         }
     end
+    if ContainsAny(norm, { "combat crosshair", "crosshair", "melee range crosshair", "melee range spell", "fadenkreuz" })
+        and ContainsAny(norm, { "where", "where can", "where do", "what", "what is", "what does", "help", "explain", "size", "thickness", "spell", "range", "color", "wo", "hilfe", "erklaeren", "erklaer", "groesse", "dicke", "farbe" })
+    then
+        return {
+            text = "Combat Crosshair help\nIn Gameplay, I can help with Combat Crosshair options. You can enable it, set size and thickness, configure in-range/out-of-range colors, and set the melee range spell used for range checks.\nExamples: show combat crosshair; make combat crosshair thicker; set crosshair size to 60; set crosshair melee spell 100780.\nYou can ask: Open Gameplay",
+            status = "applied",
+            summary = "Assistant combat crosshair help",
+        }
+    end
     if ContainsAny(norm, { "first dance", "first dance tracker", "first dancer", "erster tanz", "der erste tanz" })
         and ContainsAny(norm, { "explain", "what is", "what does", "where", "where is", "where do", "help", "tracker", "icon", "ready", "hilfe", "erklaeren", "erklaer", "wo", "symbol", "bereit" })
     then
@@ -1318,6 +2041,21 @@ local function DirectHelpAnswer(query, opts)
     then
         return PageHelp("gf_layout")
     end
+    if ContainsAny(norm, { "what can i change", "what settings can i change", "what can i do" })
+        and ContainsAny(norm, { "group health", "group text", "group health and text", "party health", "party text", "raid health", "raid text", "mythic raid health", "mythic raid text" })
+    then
+        return PageHelp("gf_bars")
+    end
+    if ContainsAny(norm, { "what can i change", "what settings can i change", "what can i do" })
+        and ContainsAny(norm, { "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras", "group buff", "group buffs", "group debuff", "group debuffs" })
+    then
+        return PageHelp("gf_auras")
+    end
+    if ContainsAny(norm, { "what can i change", "what settings can i change", "what can i do" })
+        and ContainsAny(norm, { "module", "modules", "style module", "msuf style", "dropdown style" })
+    then
+        return PageHelp("modules")
+    end
     for i = 1, #SCOPED_HELP_ALIASES do
         local spec = SCOPED_HELP_ALIASES[i]
         if ContainsAny(norm, spec.terms) then
@@ -1337,7 +2075,7 @@ end
 local function ActionableHint(item)
     if not item then return nil end
     local actions = {}
-    if item.canOpen and item.page and item.pageLabel then actions[#actions + 1] = "Open " .. tostring(item.pageLabel) end
+    if item.canOpen and item.page then actions[#actions + 1] = "Open " .. tostring(ItemPageLabel(item) or "MSUF page") end
     if item.kind == "setting" then
         actions[#actions + 1] = "Explain"
         local example = ExampleCommand(item)
@@ -1354,15 +2092,17 @@ end
 
 function K.Answer(query, opts)
     opts = opts or {}
-    local changelog = ChangelogAnswer(query)
-    if changelog then return changelog end
+    if opts.forceSearch ~= true then
+        local changelog = ChangelogAnswer(query)
+        if changelog then return changelog end
 
-    local direct = DirectHelpAnswer(query, opts)
-    if direct then return direct end
+        local direct = DirectHelpAnswer(query, opts)
+        if direct then return direct end
+    end
 
     local results = K.Search(query, MAX_RESULTS, opts)
     if #results == 0 then return nil end
-    local intent = QueryIntent(query)
+    local intent = opts.forceSearch == true and "location" or QueryIntent(query)
     local topResult = results[1]
     local top = topResult.item
 
@@ -1385,7 +2125,7 @@ function K.Answer(query, opts)
         if example then lines[#lines + 1] = example end
         local action = ActionableHint(top)
         if action then lines[#lines + 1] = action end
-        return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant search result" }
+        return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant search result", searchResults = ResultFollowups(results, 4) }
     end
 
     if top.kind == "faq" and top.answer and top.answer ~= "" and (intent == "help" or (topResult.score or 0) > 650) then
@@ -1405,7 +2145,7 @@ function K.Answer(query, opts)
     if example then lines[#lines + 1] = example end
     local action = ActionableHint(top)
     if action then lines[#lines + 1] = action end
-    return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant knowledge result" }
+    return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant knowledge result", searchResults = ResultFollowups(results, 5) }
 end
 
 function K.NoMatch(query)

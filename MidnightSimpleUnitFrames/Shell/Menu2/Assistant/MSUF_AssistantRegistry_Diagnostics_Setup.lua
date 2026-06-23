@@ -85,6 +85,25 @@ local function GuidedSetupPageHint(step)
     return "I will stay on the current page. Ask me to open the matching page when you want to go there."
 end
 
+local function GuidedSetupCurrentStep(flow)
+    flow = flow or GuidedSetupFlow()
+    if type(flow) ~= "table" then return nil, nil, nil end
+    local guide = GuidedSetupGuideForFlow(flow)
+    local steps = (guide and guide.steps) or GUIDED_SETUP_STEPS
+    local index = tonumber(flow.step) or 1
+    if index < 1 then index = 1 end
+    if index > #steps then index = #steps end
+    return steps[index], index, steps
+end
+
+local function GuidedSetupExamplesText(step)
+    local lines = { "Examples:" }
+    for i = 1, #(step and step.examples or {}) do
+        lines[#lines + 1] = tostring(i) .. ". " .. tostring(step.examples[i])
+    end
+    return table.concat(lines, "\n")
+end
+
 local function GuidedSetupStepText(flow)
     flow = flow or GuidedSetupFlow()
     if type(flow) ~= "table" then return "Guided setup is closed. Say 'help me build a clean layout' to start." end
@@ -108,15 +127,68 @@ local function GuidedSetupStepText(flow)
     local pageHint = GuidedSetupPageHint(step)
     if pageHint then lines[#lines + 1] = pageHint end
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Examples:"
-    for i = 1, #(step.examples or {}) do
-        lines[#lines + 1] = tostring(i) .. ". " .. step.examples[i]
-    end
+    lines[#lines + 1] = GuidedSetupExamplesText(step)
     lines[#lines + 1] = ""
     lines[#lines + 1] = "You can still make normal MSUF requests during the guide. The tour responds to 'next', 'back', 'show setup', 'done', or 'cancel setup'."
     local text = table.concat(lines, "\n")
     CloseGuidedSetupPanel()
     return text
+end
+
+local function GuidedSetupExplainText(flow)
+    flow = flow or GuidedSetupFlow()
+    if type(flow) ~= "table" then return "Guided setup is closed. Say 'help me build a clean layout' to start." end
+    local step, index, steps = GuidedSetupCurrentStep(flow)
+    if not step then return GuidedSetupStepText(flow) end
+    local pageLabel = step.page and type(A.DisplayPageLabel) == "function" and A.DisplayPageLabel(step.page, "MSUF page") or step.page
+    local lines = {
+        "Guided setup detail",
+        "Step " .. tostring(index) .. "/" .. tostring(#steps) .. ": " .. tostring(step.title or "MSUF setup"),
+        "Goal: " .. tostring(step.goal or ""),
+        "Why this step matters: " .. tostring(step.body or "It keeps the setup focused before moving to the next area."),
+    }
+    if pageLabel then lines[#lines + 1] = "Page: " .. tostring(pageLabel) .. "." end
+    lines[#lines + 1] = GuidedSetupExamplesText(step)
+    lines[#lines + 1] = "Type one example exactly, ask 'open it' to inspect the matching page, or say 'next' when this step is done."
+    return table.concat(lines, "\n")
+end
+
+local function GuidedSetupOpenPageText(flow)
+    flow = flow or GuidedSetupFlow()
+    local step = GuidedSetupCurrentStep(flow)
+    if type(step) ~= "table" or type(step.page) ~= "string" or step.page == "" then
+        return "This setup step has no direct MSUF page. Ask for 'show setup' to see the current step again."
+    end
+    local page = step.page
+    local label = type(A.DisplayPageLabel) == "function" and A.DisplayPageLabel(page, "MSUF page") or page
+    local action = A.Registry and type(A.Registry.GetAction) == "function" and A.Registry:GetAction("open_page") or nil
+    if action and type(A.ExecutePlan) == "function" then
+        local result = A.ExecutePlan({
+            kind = "action",
+            action = action,
+            args = { page = page, label = label },
+            label = "Open " .. tostring(label),
+            summary = "Opens the page for the current guided setup step.",
+        })
+        local text = type(result) == "table" and tostring(result.text or "") or ""
+        if text ~= "" then
+            return text .. "\nGuided setup is still active. Type one example exactly, ask 'show setup', or say 'next'."
+        end
+    end
+    return "Open " .. tostring(label) .. " for this setup step. Guided setup is still active."
+end
+
+local function GuidedSetupApplyText(flow)
+    local step = GuidedSetupCurrentStep(flow)
+    if type(step) ~= "table" then return GuidedSetupStepText(flow) end
+    local lines = {
+        "I will not run a setup example until you name the exact change.",
+        "For this step, you can type one of these examples exactly:",
+        GuidedSetupExamplesText(step),
+    }
+    if step.examples and step.examples[1] then lines[#lines + 1] = "For example: " .. tostring(step.examples[1]) end
+    lines[#lines + 1] = "Say 'next' to skip this step, or 'open it' to inspect the matching page first."
+    return table.concat(lines, "\n")
 end
 
 function A.Workflow.StartGuidedSetup(style)
@@ -145,6 +217,13 @@ function A.Workflow.GuidedSetupStep(command)
         CloseGuidedSetupPanel()
         return "Guided setup marked complete. You can still ask me to run checks or use 'undo' for the last Assistant change."
     end
+    if command == "explain" then return GuidedSetupExplainText(flow) end
+    if command == "examples" then
+        local step = GuidedSetupCurrentStep(flow)
+        return (step and GuidedSetupExamplesText(step) or GuidedSetupStepText(flow)) .. "\nType one example exactly, or say 'next' when this step is done."
+    end
+    if command == "open" then return GuidedSetupOpenPageText(flow) end
+    if command == "apply" then return GuidedSetupApplyText(flow) end
     if command == "back" or command == "previous" then
         flow.step = (tonumber(flow.step) or 1) - 1
     elseif command == "next" or command == "skip" then

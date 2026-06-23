@@ -108,7 +108,7 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         end
         if flow.kind == "profileCopyDestination" then
             local dest = CleanPendingProfileDestination(text, flow.kind)
-            if dest == "" then return { text = "What should the destination profile be called? Example: 'call it Raid Backup'. 'never mind' cancels.", status = "confirmation_needed" } end
+            if dest == "" then return { text = "What should the destination profile be called? Example: 'call it Raid Backup'. Say 'cancel' or 'never mind' to stop.", status = "confirmation_needed" } end
             A.ClearPendingFlow()
             local action = Registry:GetAction("copy_profile_from_to")
             if not action then return { text = "Open Profiles first so I can copy that profile.", status = "failed" } end
@@ -123,7 +123,7 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         end
         if flow.kind == "profileRenameDestination" then
             local dest = CleanPendingProfileDestination(text, flow.kind)
-            if dest == "" then return { text = "What should the new profile be called? Examples: 'to Raid Renamed' or 'named Raid Renamed'. 'never mind' cancels.", status = "confirmation_needed" } end
+            if dest == "" then return { text = "What should the new profile be called? Examples: 'to Raid Renamed' or 'named Raid Renamed'. Say 'cancel' or 'never mind' to stop.", status = "confirmation_needed" } end
             A.ClearPendingFlow()
             local action = Registry:GetAction("rename_profile")
             if not action then return { text = "Open Profiles first so I can rename that profile.", status = "failed" } end

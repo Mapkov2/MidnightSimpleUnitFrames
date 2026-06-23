@@ -244,15 +244,21 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
         local match = matches[i]
         if match.score == bestScore then
             local setting = match.setting
-            local guarded = GuardedSettingResponse(setting, text, raw)
-            if guarded then return guarded end
-            local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text) or nil
-            local value
-            if relativeDelta == nil then value = ValueForRegistrySetting(setting, text, raw) end
-            if value ~= nil or relativeDelta ~= nil then
-                AddExactAliasChange(changes, seenChangeKeys, setting, value, relativeDelta, match.score, text)
-            elseif setting.type ~= "boolean" then
-                missingValue[#missingValue + 1] = { setting = setting, score = match.score }
+            local allowed = true
+            if type(P.RegistrySettingMayMatchExactAlias) == "function" then
+                allowed = P.RegistrySettingMayMatchExactAlias(setting, text) == true
+            end
+            if allowed then
+                local guarded = GuardedSettingResponse(setting, text, raw)
+                if guarded then return guarded end
+                local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text) or nil
+                local value
+                if relativeDelta == nil then value = ValueForRegistrySetting(setting, text, raw) end
+                if value ~= nil or relativeDelta ~= nil then
+                    AddExactAliasChange(changes, seenChangeKeys, setting, value, relativeDelta, match.score, text)
+                elseif setting.type ~= "boolean" then
+                    missingValue[#missingValue + 1] = { setting = setting, score = match.score }
+                end
             end
         end
     end

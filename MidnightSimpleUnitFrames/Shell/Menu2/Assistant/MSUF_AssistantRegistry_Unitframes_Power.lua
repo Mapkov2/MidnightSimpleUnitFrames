@@ -24,6 +24,17 @@ local DetachedPowerMoveAliases = UnitframesRegistry.DetachedPowerMoveAliases
 local DetachedPowerMoveGuard = UnitframesRegistry.DetachedPowerMoveGuard
 local InitDetachedPowerBar = UnitframesRegistry.InitDetachedPowerBar
 
+local function AppendAliases(aliases, ...)
+    if type(aliases) ~= "table" then return aliases end
+    for i = 1, select("#", ...) do
+        local alias = select(i, ...)
+        if type(alias) == "string" and alias ~= "" then
+            aliases[#aliases + 1] = alias
+        end
+    end
+    return aliases
+end
+
 function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
     if type(ctx) ~= "table" or type(unit) ~= "string" or not POWER_UNITS[unit] then return end
 
@@ -91,27 +102,60 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
             if value then InitDetachedPowerBar(ctx, unitKey) end
         end,
     })
+    local detachedTextOnBarAliases = MakeAliases(unit, "text on detached power bar", "detached power text on bar")
+    if unit == "player" then
+        AppendAliases(detachedTextOnBarAliases,
+            "class resources player power text on bar", "class resources player power bar text on bar",
+            "class resource player power text on bar", "player power text on class resources bar"
+        )
+    end
     RegisterUnitBooleanSetting(unit, "detachedPowerBarTextOnBar", "detachedPowerBarTextOnBar",
         "Text on Detached Power Bar", false,
-        MakeAliases(unit, "text on detached power bar", "detached power text on bar"),
+        detachedTextOnBarAliases,
         { category = "Power Bar", power = true, text = true })
 
     if unit == "player" then
+        local syncClassPowerAliases = MakeAliases(unit, "detached power sync class resource", "sync power bar to class resource")
+        AppendAliases(syncClassPowerAliases,
+            "class resources player power sync", "class resources player power sync width",
+            "class resources player power bar sync", "class resources player power bar sync width",
+            "class resource player power sync width", "class power player power sync width",
+            "sync class resources player power", "sync class resources player power width",
+            "sync class resources player power bar", "sync class resources player power bar width",
+            "player power sync class resource width", "player power bar sync class resource width"
+        )
         RegisterUnitBooleanSetting(unit, "detachedPowerBarSyncClassPower", "detachedPowerBarSyncClassPower",
             "Detached Power Bar Syncs to Class Resource Width", true,
-            MakeAliases(unit, "detached power sync class resource", "sync power bar to class resource"), {
+            syncClassPowerAliases, {
             category = "Power Bar",
             power = true,
             get = function(unitKey) return UnitDB(unitKey).detachedPowerBarSyncClassPower ~= false end,
         })
+        local anchorClassPowerAliases = MakeAliases(unit, "anchor detached power to class resource", "detached power anchor class resource")
+        AppendAliases(anchorClassPowerAliases,
+            "class resources player power anchor", "class resources player power bar anchor",
+            "class resource player power anchor", "class power player power anchor",
+            "anchor class resources player power to class resource",
+            "anchor class resources player power bar to class resource",
+            "anchor class resource player power to class resource",
+            "anchor player power bar to class resource",
+            "class resources player power to class resource",
+            "class resources player power bar to class resource",
+            "player power bar to class resource"
+        )
         RegisterUnitBooleanSetting(unit, "detachedPowerBarAnchorToClassPower", "detachedPowerBarAnchorToClassPower",
             "Detached Power Bar Anchors to Class Resource", false,
-            MakeAliases(unit, "anchor detached power to class resource", "detached power anchor class resource"),
+            anchorClassPowerAliases,
             { category = "Power Bar", power = true })
-        RegisterUnitEnum(unit, "detachedPowerBarShape", "detachedPowerBarShape", "Detached Power Bar Shape", "FOLLOW_CLASS", DETACHED_POWER_SHAPE_VALUES, MakeAliases(unit,
+        local shapeAliases = MakeAliases(unit,
             "player power shape", "detached power shape", "detached power bar shape", "player detached power shape",
             "follow class resource shape", "power bar shape", "mana orb", "power orb", "mana ball", "power ball", "power sphere"
-        ), {
+        )
+        AppendAliases(shapeAliases,
+            "class resources player power shape", "class resources player power bar shape",
+            "class resource player power shape", "class power player power shape"
+        )
+        RegisterUnitEnum(unit, "detachedPowerBarShape", "detachedPowerBarShape", "Detached Power Bar Shape", "FOLLOW_CLASS", DETACHED_POWER_SHAPE_VALUES, shapeAliases, {
             category = "Power Bar",
             power = true,
             valueAliases = DETACHED_POWER_SHAPE_ALIASES,
@@ -121,18 +165,31 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
                 return "FOLLOW_CLASS"
             end,
         })
-        RegisterUnitNumberSetting(unit, "detachedPowerOrbSize", "detachedPowerOrbSize", "Detached Power Orb Size", 54, 20, 160, MakeAliases(unit,
+        local orbSizeAliases = MakeAliases(unit,
             "mana orb size", "power orb size", "detached power orb size", "orb size", "mana ball size", "power ball size"
-        ), {
+        )
+        AppendAliases(orbSizeAliases,
+            "class resources player power orb size", "class resources player power bar orb size",
+            "class resource player power orb size", "class power player power orb size"
+        )
+        RegisterUnitNumberSetting(unit, "detachedPowerOrbSize", "detachedPowerOrbSize", "Detached Power Orb Size", 54, 20, 160, orbSizeAliases, {
             category = "Power Bar",
             power = true,
             get = function(unitKey) return tonumber(UnitDB(unitKey).detachedPowerOrbSize) or 54 end,
         })
     end
 
+    local detachedPowerXAliases = MakeAliases(unit, "detached power x", "detached power bar x offset")
+    if unit == "player" then
+        AppendAliases(detachedPowerXAliases,
+            "class resources player power x", "class resources player power x offset",
+            "class resources player power bar x", "class resources player power bar x offset",
+            "class resource player power x", "player power x in class resources"
+        )
+    end
     RegisterUnitNumberSetting(unit, "detachedPowerBarOffsetX", "detachedPowerBarOffsetX",
         "Detached Power Bar X Offset", 0, -1000, 1000,
-        MakeAliases(unit, "detached power x", "detached power bar x offset"), {
+        detachedPowerXAliases, {
         category = "Power Bar",
         power = true,
         exactAliases = DetachedPowerMoveAliases(unit, "x"),
@@ -140,9 +197,17 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
         moveStep = 10,
         intentGuard = DetachedPowerMoveGuard(ctx, unit),
     })
+    local detachedPowerYAliases = MakeAliases(unit, "detached power y", "detached power bar y offset")
+    if unit == "player" then
+        AppendAliases(detachedPowerYAliases,
+            "class resources player power y", "class resources player power y offset",
+            "class resources player power bar y", "class resources player power bar y offset",
+            "class resource player power y", "player power y in class resources"
+        )
+    end
     RegisterUnitNumberSetting(unit, "detachedPowerBarOffsetY", "detachedPowerBarOffsetY",
         "Detached Power Bar Y Offset", -4, -1000, 1000,
-        MakeAliases(unit, "detached power y", "detached power bar y offset"), {
+        detachedPowerYAliases, {
         category = "Power Bar",
         power = true,
         exactAliases = DetachedPowerMoveAliases(unit, "y"),
@@ -150,19 +215,45 @@ function A.UnitframesRegistry.RegisterPowerSettings(ctx, unit)
         moveStep = 10,
         intentGuard = DetachedPowerMoveGuard(ctx, unit),
     })
+    local detachedPowerWidthAliases = MakeAliases(unit, "detached power width", "detached power bar width")
+    if unit == "player" then
+        AppendAliases(detachedPowerWidthAliases,
+            "class resources player power width", "class resources player power bar width",
+            "class resource player power width", "class resource player power bar width",
+            "class power player power width", "class power player power bar width",
+            "player power width in class resources", "player power bar width in class resources"
+        )
+    end
     RegisterUnitNumberSetting(unit, "detachedPowerBarWidth", "detachedPowerBarWidth",
         "Detached Power Bar Width", unit == "focus" and 180 or 275, 20, 800,
-        MakeAliases(unit, "detached power width", "detached power bar width"), {
+        detachedPowerWidthAliases, {
         category = "Power Bar",
         power = true,
         get = function(unitKey) return tonumber(UnitDB(unitKey).detachedPowerBarWidth) or tonumber(UnitDB(unitKey).width) or (unitKey == "focus" and 180 or 275) end,
     })
+    local detachedPowerHeightAliases = MakeAliases(unit, "detached power height", "detached power bar height")
+    if unit == "player" then
+        AppendAliases(detachedPowerHeightAliases,
+            "class resources player power height", "class resources player power bar height",
+            "class resource player power height", "class power player power height",
+            "player power height in class resources", "player power bar height in class resources"
+        )
+    end
     RegisterUnitNumberSetting(unit, "detachedPowerBarHeight", "detachedPowerBarHeight",
         "Detached Power Bar Height", 6, 2, 80,
-        MakeAliases(unit, "detached power height", "detached power bar height"),
+        detachedPowerHeightAliases,
         { category = "Power Bar", power = true })
+    local detachedPowerLayerAliases = MakeAliases(unit, "detached power layer", "detached power bar frame level")
+    if unit == "player" then
+        AppendAliases(detachedPowerLayerAliases,
+            "class resources player power layer", "class resources player power bar layer",
+            "class resources player power frame level", "class resources player power bar frame level",
+            "class resource player power layer", "class power player power layer",
+            "player power layer in class resources", "player power bar layer in class resources"
+        )
+    end
     RegisterUnitNumberSetting(unit, "detachedPowerBarFrameLevelOffset", "detachedPowerBarFrameLevelOffset",
         "Detached Power Bar Layer", 6, 0, 20,
-        MakeAliases(unit, "detached power layer", "detached power bar frame level"),
+        detachedPowerLayerAliases,
         { category = "Power Bar", power = true })
 end
