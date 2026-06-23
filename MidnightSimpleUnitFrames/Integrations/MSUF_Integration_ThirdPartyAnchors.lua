@@ -3,104 +3,163 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
 -- Third-party anchor integration.
--- Registers MSUF unitframe anchors with external cooldown/utility addons after frames exist.
+-- Tracks Skiron's cooldown anchor proxy after frames exist.
 -- Integration is deferred in combat and must not take ownership of external addon layouts.
-local C_AddOns = C_AddOns
 local CreateFrame = CreateFrame
+local C_Timer = C_Timer
+local EventRegistry = EventRegistry
 local InCombatLockdown = InCombatLockdown
+local UIParent = UIParent
 local type = type
 
-local BCDM_TYPES = {
-    "Utility",
-    "CustomViewer",
-    "Custom",
-    "AdditionalCustom",
-    "Item",
-    "ItemSpell",
-    "Trinket",
-    "Power",
-    "SecondaryPower",
-    "CastBar",
-    "Buffs",
-    "BuffBar",
-}
+local SKIRON_ANCHOR_EVENT = "SkironCooldownManager.AnchorProxy.SizeChanged"
+local SKIRON_RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00 }
 
-local BCDM_ANCHORS = {
-    MSUF_player = "|cFFFFD700Midnight|rSimpleUnitFrames: Player Frame",
-    MSUF_target = "|cFFFFD700Midnight|rSimpleUnitFrames: Target Frame",
-    MSUF_focus = "|cFFFFD700Midnight|rSimpleUnitFrames: Focus Frame",
-    MSUF_pet = "|cFFFFD700Midnight|rSimpleUnitFrames: Pet Frame",
-    MSUF_targettarget = "|cFFFFD700Midnight|rSimpleUnitFrames: Target of Target Frame",
-    MSUF_focustarget = "|cFFFFD700Midnight|rSimpleUnitFrames: Focus Target Frame",
-    MSUF_boss1 = "|cFFFFD700Midnight|rSimpleUnitFrames: Boss 1 Frame",
-    MSUF_boss2 = "|cFFFFD700Midnight|rSimpleUnitFrames: Boss 2 Frame",
-    MSUF_boss3 = "|cFFFFD700Midnight|rSimpleUnitFrames: Boss 3 Frame",
-    MSUF_boss4 = "|cFFFFD700Midnight|rSimpleUnitFrames: Boss 4 Frame",
-    MSUF_boss5 = "|cFFFFD700Midnight|rSimpleUnitFrames: Boss 5 Frame",
-}
+local registeredSkiron
 
-local registered
+local function IsFrameUsable(frame)
+    if not (frame and frame ~= UIParent and frame ~= WorldFrame) then
+        return false
+    end
+    if frame.IsForbidden and frame:IsForbidden() then
+        return false
+    end
+    if frame.IsShown and not frame:IsShown() then
+        return false
+    end
+    local width = frame.GetWidth and frame:GetWidth() or 0
+    local height = frame.GetHeight and frame:GetHeight() or 0
+    return width > 0 and height > 0 and frame.SetPoint ~= nil
+end
 
-local function ApplyUnitFrameAnchors()
-    -- Anchor registration needs real spawned frames. If the UnitFrames factory is not ready,
-    -- callers can retry later without mutating third-party state.
+local function ResolveSkironAnchorSource(preferredFrame, isActiveProxy)
+    if isActiveProxy and IsFrameUsable(preferredFrame) then
+        return preferredFrame
+    end
+    local preferredName = preferredFrame and preferredFrame.GetName and preferredFrame:GetName()
+    if preferredName == "SCM_GroupAnchor_1" and IsFrameUsable(preferredFrame) then
+        return preferredFrame
+    end
+
+    local proxy = _G.SCM_GroupAnchorProxy_1
+    if IsFrameUsable(proxy) then
+        return proxy
+    end
+
+    local groupAnchor = _G.SCM_GroupAnchor_1
+    if IsFrameUsable(groupAnchor) then
+        return groupAnchor
+    end
+end
+
+local function EnsureSkironAnchorProxy(source, isActiveProxy)
+    source = ResolveSkironAnchorSource(source, isActiveProxy)
+    if not source then
+        return nil, false
+    end
+
+    local proxy = _G.MSUF_SkironCooldownAnchor
+    if not proxy then
+        proxy = CreateFrame("Frame", "MSUF_SkironCooldownAnchor", UIParent)
+        proxy._msufStableAnchorProxy = true
+        proxy._msufExternalAnchorCacheKey = "SkironCooldownManager"
+        if proxy.EnableMouse then proxy:EnableMouse(false) end
+        if proxy.SetAlpha then proxy:SetAlpha(0) end
+        _G.MSUF_SkironCooldownAnchor = proxy
+    end
+
+    local changed = proxy.MSUFSkironSource ~= source
+    if changed then
+        proxy:ClearAllPoints()
+        proxy:SetAllPoints(source)
+        proxy.MSUFSkironSource = source
+    end
+    if proxy.Show then proxy:Show() end
+    return proxy, changed
+end
+
+function MSUF.GetSkironCooldownAnchorProxy()
+    return EnsureSkironAnchorProxy()
+end
+
+_G.MSUF_GetSkironCooldownAnchorProxy = function()
+    return MSUF.GetSkironCooldownAnchorProxy()
+end
+
+local function RequestSkironAnchorApply()
     local UF = MSUF.UF
-    local factory = UF and UF.Factory
-    if not (UF and UF.spawned and factory and type(factory.Apply) == "function") then
+    if not (UF and UF.spawned) then
         return
     end
     if InCombatLockdown and InCombatLockdown() then
-        local order = UF.unitOrder
-        for i = 1, order and #order or 0 do
-            UF.pendingApply[order[i]] = true
-        end
-        if type(factory.EnsureDeferredDriver) == "function" then
-            factory.EnsureDeferredDriver()
+        if type(UF.RequestReanchorAfterCombat) == "function" then
+            UF.RequestReanchorAfterCombat()
         end
         return
     end
-    factory.Apply()
+    local factory = UF.Factory
+    if factory and type(factory.Apply) == "function" then
+        factory.Apply()
+    end
 end
 
-local function RegisterBCDMAnchors(applyAnchors)
-    if registered then
-        if applyAnchors then
-            ApplyUnitFrameAnchors()
-        end
+local function RefreshSkironAnchorProxy(source, isActiveProxy)
+    local proxy, changed = EnsureSkironAnchorProxy(source, isActiveProxy)
+    if changed and proxy then
+        RequestSkironAnchorApply()
+    end
+    return proxy ~= nil
+end
+
+local function ScheduleSkironAnchorResolve()
+    local function run()
+        RefreshSkironAnchorProxy()
+    end
+    if not (C_Timer and C_Timer.After) then
+        run()
+        return
+    end
+    for i = 1, #SKIRON_RETRY_DELAYS do
+        C_Timer.After(SKIRON_RETRY_DELAYS[i], run)
+    end
+end
+
+local function OnSkironAnchorProxySizeChanged(_, proxyGroup, proxy, _width, _height, _selectedAnchorRef, isActiveProxy)
+    if proxyGroup ~= 1 then
+        return
+    end
+    RefreshSkironAnchorProxy(proxy, isActiveProxy)
+end
+
+local function RegisterSkironAnchorProxy()
+    if registeredSkiron then
+        ScheduleSkironAnchorResolve()
         return true
     end
-    if not (_G.MSUF_player or _G.MSUF_target) then
+    if not (EventRegistry and type(EventRegistry.RegisterCallback) == "function") then
         return false
     end
-    if not (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("BetterCooldownManager")) then
-        return false
-    end
-
-    local api = _G.BCDMG
-    if not (api and type(api.AddAnchors) == "function") then
-        return false
-    end
-
-    api:AddAnchors("MidnightSimpleUnitFrames", BCDM_TYPES, BCDM_ANCHORS)
-    registered = true
-    if applyAnchors then
-        ApplyUnitFrameAnchors()
-    end
+    EventRegistry:RegisterCallback(SKIRON_ANCHOR_EVENT, OnSkironAnchorProxySizeChanged, "MidnightSimpleUnitFrames")
+    registeredSkiron = true
+    ScheduleSkironAnchorResolve()
     return true
 end
 
-MSUF.RegisterThirdPartyAnchors = RegisterBCDMAnchors
+local function RegisterThirdPartyAnchors()
+    return RegisterSkironAnchorProxy()
+end
+
+MSUF.RegisterThirdPartyAnchors = RegisterThirdPartyAnchors
 
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("PLAYER_LOGIN")
+watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 watcher:RegisterEvent("ADDON_LOADED")
 watcher:SetScript("OnEvent", function(self, event, addon)
-    if event == "ADDON_LOADED" and addon ~= "BetterCooldownManager" then
+    if event == "ADDON_LOADED" and addon ~= "SkironCooldownManager" then
         return
     end
-    if RegisterBCDMAnchors(event == "ADDON_LOADED") then
-        self:UnregisterEvent("PLAYER_LOGIN")
-        self:UnregisterEvent("ADDON_LOADED")
-        self:SetScript("OnEvent", nil)
-    end
+    RegisterThirdPartyAnchors()
 end)
+
+RegisterSkironAnchorProxy()
