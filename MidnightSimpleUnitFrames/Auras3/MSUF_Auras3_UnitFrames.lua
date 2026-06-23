@@ -676,11 +676,22 @@ local function ConfigureContainer(container, lane, parentFrame)
 end
 
 local function CreateNativeLane(root, lane, parentFrame)
-    local container = CreateFrame("AuraContainer", nil, root, "CustomAuraContainerTemplate")
+    local ok, container = pcall(CreateFrame, "AuraContainer", nil, root, "CustomAuraContainerTemplate")
+    if not ok or not container then
+        A3.nativeAuraRuntimeAvailable = false
+        A3.nativeAuraRuntimeError = tostring(container or "CustomAuraContainerTemplate is unavailable")
+        return nil
+    end
     A3.nativeAuraRuntimeAvailable = true
     ConfigureContainer(container, lane, parentFrame)
     for i = 1, lane.max do
-        local button = CreateFrame("AuraButton", nil, container, "CustomAuraButtonTemplate")
+        local buttonOk, button = pcall(CreateFrame, "AuraButton", nil, container, "CustomAuraButtonTemplate")
+        if not buttonOk or not button then
+            A3.nativeAuraRuntimeAvailable = false
+            A3.nativeAuraRuntimeError = tostring(button or "CustomAuraButtonTemplate is unavailable")
+            if container.Hide then container:Hide() end
+            return nil
+        end
         PrepareAuraButton(button, lane, i)
         container[i] = button
         container:AddAuraFrame(button)

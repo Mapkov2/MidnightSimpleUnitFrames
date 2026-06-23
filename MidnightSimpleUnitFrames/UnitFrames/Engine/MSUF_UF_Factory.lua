@@ -317,6 +317,79 @@ local function HideUnitTooltip(frame)
   end
 end
 
+local function ResolvePingUnit(frame)
+  if not frame then
+    return nil
+  end
+  if frame.GetAttribute then
+    local attrUnit = frame:GetAttribute("unit")
+    if type(attrUnit) == "string" and attrUnit ~= "" then
+      return attrUnit
+    end
+  end
+  local unit = frame.unit
+  if type(unit) == "string" and unit ~= "" then
+    return unit
+  end
+  return nil
+end
+
+local function PingTargetGUID(frame)
+  local unit = ResolvePingUnit(frame)
+  return unit and UnitGUID(unit) or nil
+end
+
+local function MSUF_GetPingTargetInfo(self)
+  return {
+    guid = PingTargetGUID(self),
+  }
+end
+
+local function MSUF_GetTargetPingGUID(self)
+  return PingTargetGUID(self)
+end
+
+local function MSUF_GetContextualPingType(self)
+  local guid = PingTargetGUID(self)
+  if PingUtil and type(PingUtil.GetContextualPingTypeForUnit) == "function" then
+    return PingUtil:GetContextualPingTypeForUnit(guid)
+  end
+  return nil
+end
+
+local function MSUF_GetIsPingable(self)
+  return PingTargetGUID(self) ~= nil
+end
+
+local function MSUF_GetAllowRadialWheel()
+  return true
+end
+
+function UF.ResolvePingUnit(frame)
+  return ResolvePingUnit(frame)
+end
+
+function UF.InstallPingCompatibility(frame)
+  if not frame then
+    return false
+  end
+  if frame._msufPingCompatInstalled == true then
+    return true
+  end
+  frame._msufPingCompatInstalled = true
+  frame.IsPingable = true
+  frame.GetTargetInfo = MSUF_GetPingTargetInfo
+  frame.GetTargetPingGUID = MSUF_GetTargetPingGUID
+  frame.GetContextualPingType = MSUF_GetContextualPingType
+  if type(frame.GetIsPingable) ~= "function" then
+    frame.GetIsPingable = MSUF_GetIsPingable
+  end
+  if type(frame.GetAllowRadialWheel) ~= "function" then
+    frame.GetAllowRadialWheel = MSUF_GetAllowRadialWheel
+  end
+  return true
+end
+
 function UF.EnsureNativePingIcon(frame)
   if not frame then
     return nil
@@ -362,7 +435,7 @@ function UF.RefreshNativePingIcon(frame)
   if not ping then
     return false
   end
-  local unit = frame and frame.unit
+  local unit = UF.ResolvePingUnit and UF.ResolvePingUnit(frame) or frame and frame.unit
   local guid = unit and UnitGUID(unit) or nil
   if frame._msufNativePingGUID == guid then
     return true
@@ -399,6 +472,7 @@ local function SpawnFrame(unit)
   frame:SetAttribute("*type2", "togglemenu")
   frame:SetAttribute("toggleForVehicle", true)
   frame:RegisterForClicks("AnyUp")
+  UF.InstallPingCompatibility(frame)
   UF.RefreshNativePingIcon(frame)
   frame.Enable = RegisterUnitWatch
   frame.Disable = function(self)
