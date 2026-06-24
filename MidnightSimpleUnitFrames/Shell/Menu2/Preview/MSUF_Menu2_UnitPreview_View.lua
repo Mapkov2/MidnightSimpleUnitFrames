@@ -346,7 +346,6 @@ end
 local function OnUFPreviewArrowDisable(box)
     if box and box._msufArrowPoller then
         box._msufArrowPoller:SetScript("OnUpdate", nil)
-        box._msufArrowPoller:SetOnUpdateMode("Disabled")
         box._msufArrowPoller:Hide()
     end
 end
@@ -516,7 +515,8 @@ local function MakeHandle(preview, key, fields, label, color)
     local h = CreateFrame("Button", nil, preview.canvas)
     h:SetFrameLevel((preview.canvas:GetFrameLevel() or 0) + 30)
     h:SetSize(20, 20)
-    h:RegisterForClicks("LeftButtonUp")
+    h:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
+    if h.RegisterForDrag then h:RegisterForDrag("LeftButton") end
     h:EnableMouse(true)
     h:EnableKeyboard(true)
     if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(true) end
@@ -570,6 +570,7 @@ local function MakeHandle(preview, key, fields, label, color)
     end)
     local function StartHandleDrag(self, button)
         if button and button ~= "LeftButton" then return end
+        if self._dragging == true or preview.dragFrame._handle == self or (preview.canvas and preview.canvas._msufPreviewPanning) then return true end
         if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and StartPreviewPan and StartPreviewPan(preview.canvas, preview, button) then
             self._suppressNextClick = true
             return
@@ -587,8 +588,13 @@ local function MakeHandle(preview, key, fields, label, color)
         self._cursorX, self._cursorY = cx, cy
         self._dragPoint, self._dragRelTo, self._dragRelPoint, self._dragOffsetX, self._dragOffsetY = self:GetPoint(1)
         preview.dragFrame._handle = self
-        preview.dragFrame:SetOnUpdateMode("RunWhenVisible")
+        if preview.dragFrame.SetAllPoints then preview.dragFrame:SetAllPoints(preview.canvas) end
         preview.dragFrame:SetScript("OnUpdate", preview._onDragUpdate)
+        preview.dragFrame:SetScript("OnMouseUp", function(df, upButton)
+            local activeHandle = df and df._handle
+            local stop = activeHandle and activeHandle.GetScript and activeHandle:GetScript("OnMouseUp")
+            if type(stop) == "function" then stop(activeHandle, upButton) end
+        end)
         preview.dragFrame:Show()
         RefreshHandleSelectionVisuals(preview)
     end
@@ -599,7 +605,7 @@ local function MakeHandle(preview, key, fields, label, color)
         if not wasDragging then return end
         if preview.dragFrame._handle == self then
             preview.dragFrame:SetScript("OnUpdate", nil)
-            preview.dragFrame:SetOnUpdateMode("Disabled")
+            preview.dragFrame:SetScript("OnMouseUp", nil)
             preview.dragFrame._handle = nil
             preview.dragFrame:Hide()
         end
@@ -625,6 +631,8 @@ local function MakeHandle(preview, key, fields, label, color)
     end
     h:SetScript("OnMouseDown", StartHandleDrag)
     h:SetScript("OnMouseUp", StopHandleDrag)
+    h:SetScript("OnDragStart", StartHandleDrag)
+    h:SetScript("OnDragStop", StopHandleDrag)
     h:SetScript("OnHide", StopHandleDrag)
     h:SetScript("OnKeyDown", PreviewArrowKeyDown)
     h:Hide()
@@ -920,10 +928,16 @@ local function BuildPreview(parent, panel, width, height)
     end
     box.handles = {}
     box.dragFrame = CreateFrame("Frame", nil, canvas)
+    box.dragFrame:EnableMouse(true)
     box.dragFrame:Hide()
     box._onDragUpdate = function(df)
         local h = df._handle
         if not h then return end
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+            local stop = h.GetScript and h:GetScript("OnMouseUp")
+            if type(stop) == "function" then stop(h, "LeftButton") end
+            return
+        end
         local cx, cy = GetCursorPosition()
         local scale = box._mockEffectiveScale or box._mockScale or 1
         local uiScale = (box.canvas and box.canvas.GetEffectiveScale and box.canvas:GetEffectiveScale())
@@ -985,7 +999,7 @@ local function BuildPreview(parent, panel, width, height)
         if Preview.active == self then Preview.active = nil end
         if type(Preview.UninstallRefreshHooks) == "function" then Preview.UninstallRefreshHooks() end
         self.dragFrame:SetScript("OnUpdate", nil)
-        self.dragFrame:SetOnUpdateMode("Disabled")
+        self.dragFrame:SetScript("OnMouseUp", nil)
         self.dragFrame._handle = nil
         if self._msufPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end

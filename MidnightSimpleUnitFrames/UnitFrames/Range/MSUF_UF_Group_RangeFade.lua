@@ -269,14 +269,12 @@ local FlushRangeSettle
 local function SettleFlushOnUpdate(self)
   if self then
     self:SetScript("OnUpdate", nil)
-    self:SetOnUpdateMode("Disabled")
   end
   FlushRangeSettle()
 end
 
 local function QueueRangeSettleNextFrame()
   if settleDriver and settleDriver.SetScript then
-    settleDriver:SetOnUpdateMode("RunOnce")
     settleDriver:SetScript("OnUpdate", SettleFlushOnUpdate)
     return true
   end

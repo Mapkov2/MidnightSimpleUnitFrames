@@ -185,7 +185,6 @@ local function QueuePortraitUpdate(frame)
     portraitQueueDriver = CreateFrame("Frame")
     portraitQueueDriver:Hide()
   end
-  portraitQueueDriver:SetOnUpdateMode("RunOnce")
   portraitQueueDriver:SetScript("OnUpdate", FlushQueuedPortraits)
   portraitQueueDriver:Show()
 end

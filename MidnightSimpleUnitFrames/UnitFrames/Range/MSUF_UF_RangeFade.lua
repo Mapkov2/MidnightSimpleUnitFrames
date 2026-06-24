@@ -731,7 +731,6 @@ end
 RangeFlushOnUpdate = function(self)
   if self then
     self:SetScript("OnUpdate", nil)
-    self:SetOnUpdateMode("Disabled")
   end
   RunPendingRangeFlush()
 end
@@ -740,7 +739,6 @@ local function QueueRangeFlush()
   if pendingRangeFlush then return true end
   if driver and driver.SetScript then
     pendingRangeFlush = true
-    driver:SetOnUpdateMode("RunOnce")
     driver:SetScript("OnUpdate", RangeFlushOnUpdate)
     return true
   end
@@ -1051,7 +1049,6 @@ local function SyncRuntime()
   pendingFocusTargetRange = false
   if driver and driver.SetScript then
     driver:SetScript("OnUpdate", nil)
-    driver:SetOnUpdateMode("Disabled")
   end
   UnregisterDriver()
 end

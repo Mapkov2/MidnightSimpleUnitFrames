@@ -919,7 +919,6 @@ local function BuildWindow()
         f._msuf2LastSnapLayout = nil
         f:StartMoving()
         if IsSlashMenuSnapEnabled() then
-            f:SetOnUpdateMode("RunWhenVisible")
             f:SetScript("OnUpdate", UpdateSnapPreview)
             UpdateSnapPreview()
         end
@@ -927,7 +926,6 @@ local function BuildWindow()
     FinishWindowDrag = function(applySnap)
         f._msuf2DraggingWindow = nil
         f:SetScript("OnUpdate", nil)
-        f:SetOnUpdateMode("Disabled")
         HideWindowLayoutProxy()
         if f.StopMovingOrSizing then f:StopMovingOrSizing() end
         if applySnap then ApplySlashMenuSnap(f) end
@@ -973,7 +971,6 @@ local function BuildWindow()
             scale = WindowVisualScale(f),
         }
         local proxy = EnsureResizeProxy()
-        proxy:SetOnUpdateMode("RunWhenVisible")
         proxy:SetScript("OnUpdate", UpdateResizeProxy)
         proxy:Show()
         UpdateResizeProxy()
@@ -986,7 +983,6 @@ local function BuildWindow()
         local proxy = f._msuf2ResizeProxy
         if proxy then
             proxy:SetScript("OnUpdate", nil)
-            proxy:SetOnUpdateMode("Disabled")
             HideWindowLayoutProxy()
         end
         if not state then

@@ -310,6 +310,7 @@ function H.InstallZoomPan(ZoomPan, opts)
     local PAN_PANNING, PAN_BOX = PanKey("Panning"), PanKey("PanBox")
     local PAN_CURSOR_X, PAN_CURSOR_Y = PanKey("PanCursorX"), PanKey("PanCursorY")
     local PAN_START_X, PAN_START_Y = PanKey("PanStartX"), PanKey("PanStartY")
+    local PAN_BUTTON = PanKey("PanButton")
     ZoomPan.MIN = minZoom
     ZoomPan.MAX = maxZoom
     function ZoomPan.Configure(nextDeps)
@@ -395,16 +396,16 @@ function H.InstallZoomPan(ZoomPan, opts)
     function ZoomPan.Stop(surface)
         if not surface then return end
         local box = surface[PAN_BOX]
-        surface[PAN_PANNING], surface[PAN_BOX] = nil, nil
+        surface[PAN_PANNING], surface[PAN_BOX], surface[PAN_BUTTON] = nil, nil, nil
         surface[PAN_CURSOR_X], surface[PAN_CURSOR_Y] = nil, nil
         surface[PAN_START_X], surface[PAN_START_Y] = nil, nil
         surface:SetScript("OnUpdate", nil)
-        surface:SetOnUpdateMode("Disabled")
         local update = deps[opts.updateHintKey or "UpdateHandleHint"]
         if box and type(update) == "function" then update(box, box._selectedHandle) end
     end
     function ZoomPan.Start(surface, box, button)
         if not (surface and box) then return false end
+        if surface[PAN_PANNING] then return true end
         local ctrlLeft = button == "LeftButton" and IsControlKeyDown and IsControlKeyDown()
         if not (ctrlLeft or button == "RightButton" or button == "MiddleButton") then return false end
         if not box._manualZoom then
@@ -415,13 +416,17 @@ function H.InstallZoomPan(ZoomPan, opts)
         local uiScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
         if uiScale <= 0 then uiScale = 1 end
         surface[PAN_PANNING], surface[PAN_BOX] = true, box
+        surface[PAN_BUTTON] = button
         surface[PAN_CURSOR_X], surface[PAN_CURSOR_Y] = (cx or 0) / uiScale, (cy or 0) / uiScale
         surface[PAN_START_X], surface[PAN_START_Y] = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
         local hint = box[opts.hintField or "hint"]
         if hint then hint:SetText(TR("moving preview canvas - release mouse to stop - Fit recenters")) end
-        surface:SetOnUpdateMode("RunWhenVisible")
         surface:SetScript("OnUpdate", function(self)
             if not self[PAN_PANNING] then return end
+            if IsMouseButtonDown and self[PAN_BUTTON] and not IsMouseButtonDown(self[PAN_BUTTON]) then
+                ZoomPan.Stop(self)
+                return
+            end
             local mx, my = GetCursorPosition()
             local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
             if scale <= 0 then scale = 1 end
@@ -550,8 +555,11 @@ function H.BuildZoomBar(box, surface, opts)
     if opts.wheelField then box[opts.wheelField] = ZoomWheel end
     surface:SetScript("OnMouseWheel", ZoomWheel)
     zoomBar:SetScript("OnMouseWheel", function(_, delta) stepZoom(box, (delta or 0) > 0 and 1 or -1) end)
+    if surface.RegisterForDrag then surface:RegisterForDrag("LeftButton") end
     surface:SetScript("OnMouseDown", function(self, button) startPan(self, box, button) end)
     surface:SetScript("OnMouseUp", stopPan)
+    surface:SetScript("OnDragStart", function(self, button) startPan(self, box, button) end)
+    surface:SetScript("OnDragStop", stopPan)
     surface:SetScript("OnHide", stopPan)
     return zoomBar, ZoomWheel
 end

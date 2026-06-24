@@ -434,7 +434,6 @@ local function StartGuideFade()
         return
     end
     guideFadeFrame = CreateFrame("Frame", "MSUF_EM2_SnapGuideFade", UIParent)
-    guideFadeFrame:SetOnUpdateMode("RunWhenVisible")
     guideFadeFrame:SetScript("OnUpdate", function(self, elapsed)
         local alive = false
         for i = #fadingGuides, 1, -1 do
@@ -1195,6 +1194,19 @@ local function OnUpdate(self, elapsed)
     if activeDrag then
         local d = activeDrag
 
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+            local mover = d.mover
+            local sourceFrame = mover and mover._msufGFEM2DragSourceFrame
+            local moved = Ticker.EndDrag()
+            if mover then
+                if moved then mover._suppressNextClick = true end
+                if mover._dragging ~= nil then mover._dragging = false end
+                if mover._coordFS then mover._coordFS:Hide() end
+            end
+            if moved and sourceFrame then sourceFrame._msufGFEM2LastDragEnd = GetTime and GetTime() or 0 end
+            return
+        end
+
         local sc = d.uiScale or UIParent:GetEffectiveScale()
         local mx, my = GetCursorPosition()
         mx = mx / sc; my = my / sc
@@ -1481,6 +1493,10 @@ function Ticker.EndDrag()
     if d.bar then d.bar._msufDragActive = false end
     if d.bar and d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
     if d.bar and d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
+    if d.mover and d.mover._msufGFEM2DragSourceFrame then
+        d.mover._msufGFEM2DragSourceFrame._msufGFEM2Dragging = nil
+        d.mover._msufGFEM2DragSourceFrame = nil
+    end
     if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
 
     local mover = d.mover
@@ -1567,7 +1583,6 @@ function Ticker.Start()
         tickerFrame:Hide()
     end
     idleSyncAcc = 0; activeDrag = nil
-    tickerFrame:SetOnUpdateMode("RunWhenVisible")
     tickerFrame:SetScript("OnUpdate", OnUpdate)
     tickerFrame:Show()
 end
@@ -1576,7 +1591,6 @@ function Ticker.Stop()
     activeDrag = nil
     if tickerFrame then
         tickerFrame:SetScript("OnUpdate", nil)
-        tickerFrame:SetOnUpdateMode("Disabled")
         tickerFrame:Hide()
     end
 end

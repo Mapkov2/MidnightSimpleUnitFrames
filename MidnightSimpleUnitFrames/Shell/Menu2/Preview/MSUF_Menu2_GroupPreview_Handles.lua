@@ -211,7 +211,6 @@ function Handles.Install(box, deps)
         local wasDragging = handle and handle._dragging == true
         if box._dragFrame then
             box._dragFrame:SetScript("OnUpdate", nil)
-            box._dragFrame:SetOnUpdateMode("Disabled")
             box._dragFrame._handle = nil
             box._dragFrame:Hide()
         end
@@ -251,6 +250,10 @@ function Handles.Install(box, deps)
     local function UpdateHandleDrag(df)
         local handle = df and df._handle
         if not (handle and handle._dragging) then return end
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+            StopHandleDrag(handle, "LeftButton")
+            return
+        end
         local cx, cy = GetCursorPosition()
         if not (cx and cy) then return end
         if handle._cfgText then
@@ -313,7 +316,6 @@ function Handles.Install(box, deps)
             or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
             or 1
         box._dragFrame._handle = handle
-        box._dragFrame:SetOnUpdateMode("RunWhenVisible")
         box._dragFrame:SetScript("OnUpdate", UpdateHandleDrag)
         box._dragFrame:Show()
         RefreshHandleSelection(box)
@@ -325,6 +327,7 @@ function Handles.Install(box, deps)
         handle:EnableMouse(true)
         handle:EnableMouseWheel(true)
         if handle.SetPropagateMouseWheel then handle:SetPropagateMouseWheel(true) end
+        if handle.RegisterForClicks then handle:RegisterForClicks("LeftButtonDown", "LeftButtonUp") end
         if handle.RegisterForDrag then handle:RegisterForDrag("LeftButton") end
         handle:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
         handle:SetBackdropColor(color[1] * 0.12, color[2] * 0.12, color[3] * 0.12, 0.42)
@@ -381,6 +384,8 @@ function Handles.Install(box, deps)
         handle:SetScript("OnMouseWheel", ZoomWheel)
         handle:SetScript("OnMouseDown", StartHandleDrag)
         handle:SetScript("OnMouseUp", StopHandleDrag)
+        handle:SetScript("OnDragStart", StartHandleDrag)
+        handle:SetScript("OnDragStop", StopHandleDrag)
         handle:HookScript("OnHide", function(self)
             StopHandleDrag(self)
             if box._selectedHandle == self then SelectHandle(nil) end

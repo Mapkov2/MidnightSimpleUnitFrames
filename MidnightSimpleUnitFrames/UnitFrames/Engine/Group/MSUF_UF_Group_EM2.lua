@@ -29,6 +29,7 @@ local UIParent = UIParent
 local hooksecurefunc = hooksecurefunc
 local floor, max, min = math.floor, math.max, math.min
 local type, tonumber, tostring = type, tonumber, tostring
+local abs = math.abs
 
 local KIND_TO_KEY = {
   party = "gf_party",
@@ -56,10 +57,17 @@ local _em2Active = false
 local _previewShownByEM2 = true
 local _activePreviewKind
 local _gfButton
-local DRAG_WIRE_VERSION = 2
+local DRAG_WIRE_VERSION = 3
 local _childScratch = {}
 local _childScratchCount = 0
 local _syncMoversSoonPending = {}
+local _pendingGroupDragFrame
+local _pendingGroupDragTarget
+local _pendingGroupDragKind
+local _pendingGroupDragSource
+local _pendingGroupDragStartX
+local _pendingGroupDragStartY
+local GROUP_DRAG_THRESHOLD = 3
 
 local function GF()
   return MSUF and MSUF.GF
@@ -599,6 +607,7 @@ local function BeginGroupDrag(frame, kind, source)
   local cfg = key and Reg.Get and Reg.Get(key)
   local mover = key and EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(key)
   if not (key and cfg and mover and EM2.Ticker) then return end
+  if frame._msufGFEM2Dragging then return true end
   if BlockConfigLocked() then return end
   frame._msufGFEM2Dragging = true
   if EM2.Focus and EM2.Focus.SetSelection then
@@ -606,14 +615,71 @@ local function BeginGroupDrag(frame, kind, source)
   end
   if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("unit", key) end
   EM2.Ticker.BeginDrag(mover, key, cfg)
+  mover._msufGFEM2DragSourceFrame = frame
+  return true
 end
 
 local function EndGroupDrag(frame)
   if not (frame and frame._msufGFEM2Dragging) then return end
   frame._msufGFEM2Dragging = nil
-  frame._msufGFEM2LastDragEnd = GetTime and GetTime() or 0
-  if EM2.Ticker then EM2.Ticker.EndDrag() end
+  local moved = false
+  if EM2.Ticker then moved = EM2.Ticker.EndDrag() == true end
+  if moved then frame._msufGFEM2LastDragEnd = GetTime and GetTime() or 0 end
   if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
+  return moved
+end
+
+local function StopPendingGroupDrag(frame)
+  if frame and _pendingGroupDragTarget and _pendingGroupDragTarget ~= frame then return end
+  _pendingGroupDragTarget = nil
+  _pendingGroupDragKind = nil
+  _pendingGroupDragSource = nil
+  _pendingGroupDragStartX = nil
+  _pendingGroupDragStartY = nil
+  if _pendingGroupDragFrame then
+    _pendingGroupDragFrame:SetScript("OnUpdate", nil)
+    _pendingGroupDragFrame:Hide()
+  end
+end
+
+local function EnsurePendingGroupDragFrame()
+  if _pendingGroupDragFrame then return _pendingGroupDragFrame end
+  _pendingGroupDragFrame = CreateFrame("Frame", "MSUF_GF_EM2_PendingDragFrame", UIParent)
+  _pendingGroupDragFrame:Hide()
+  return _pendingGroupDragFrame
+end
+
+local function QueuePendingGroupDrag(frame, kind, source, button)
+  if button ~= "LeftButton" or not frame or ConfigLocked() then return end
+  local cx, cy = GetCursorPosition()
+  if not (cx and cy) then return end
+  _pendingGroupDragTarget = frame
+  _pendingGroupDragKind = kind
+  _pendingGroupDragSource = source
+  _pendingGroupDragStartX = cx
+  _pendingGroupDragStartY = cy
+  local driver = EnsurePendingGroupDragFrame()
+  driver:SetScript("OnUpdate", function()
+    local target = _pendingGroupDragTarget
+    if not target then
+      StopPendingGroupDrag()
+      return
+    end
+    if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+      StopPendingGroupDrag(target)
+      return
+    end
+    local mx, my = GetCursorPosition()
+    if not (mx and my) then return end
+    if max(abs(mx - (_pendingGroupDragStartX or mx)), abs(my - (_pendingGroupDragStartY or my))) < GROUP_DRAG_THRESHOLD then
+      return
+    end
+    local dragKind = target._msufGFEM2Kind or _pendingGroupDragKind
+    local dragSource = _pendingGroupDragSource
+    StopPendingGroupDrag(target)
+    BeginGroupDrag(target, dragKind, dragSource)
+  end)
+  driver:Show()
 end
 
 local function ClickGroupFrame(frame, kind, button, source)
@@ -639,12 +705,24 @@ local function WireDragFrame(frame, kind, source)
   frame._msufGFEM2Kind = kind
   if frame.RegisterForDrag then frame:RegisterForDrag("LeftButton") end
   if frame.EnableMouse then frame:EnableMouse(true) end
+  frame:SetScript("OnMouseDown", function(self, button)
+    if button ~= "LeftButton" then return end
+    StopPendingGroupDrag(self)
+    BeginGroupDrag(self, self._msufGFEM2Kind or kind, source)
+  end)
   frame:SetScript("OnDragStart", function(self)
+    StopPendingGroupDrag(self)
     BeginGroupDrag(self, self._msufGFEM2Kind or kind, source)
   end)
   frame:SetScript("OnDragStop", EndGroupDrag)
   frame:SetScript("OnMouseUp", function(self, button)
-    ClickGroupFrame(self, self._msufGFEM2Kind or kind, button, source)
+    StopPendingGroupDrag(self)
+    local moved = EndGroupDrag(self)
+    if not moved then ClickGroupFrame(self, self._msufGFEM2Kind or kind, button, source) end
+  end)
+  frame:SetScript("OnHide", function(self)
+    StopPendingGroupDrag(self)
+    EndGroupDrag(self)
   end)
 end
 
@@ -660,6 +738,15 @@ local function WirePreviewMouse(kind)
       if f.RegisterForClicks then f:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
       if f.RegisterForDrag then f:RegisterForDrag("LeftButton") end
       if f.EnableMouse then f:EnableMouse(true) end
+      f:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
+        StopPendingGroupDrag(self)
+        BeginGroupDrag(self, self._msufGFEM2Kind or kind, "group-preview")
+      end)
+      f:SetScript("OnMouseUp", function(self)
+        StopPendingGroupDrag(self)
+        EndGroupDrag(self)
+      end)
       f:SetScript("OnEnter", function(self)
         local key = KIND_TO_KEY[self._msufGFEM2Kind or kind]
         if EM2.Focus and EM2.Focus.SetHover then EM2.Focus.SetHover(key, nil, nil, { source = "group-preview" }) end
@@ -668,9 +755,14 @@ local function WirePreviewMouse(kind)
         if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("group-preview") end
       end)
       f:SetScript("OnDragStart", function(self)
+        StopPendingGroupDrag(self)
         BeginGroupDrag(self, self._msufGFEM2Kind or kind, "group-preview")
       end)
       f:SetScript("OnDragStop", EndGroupDrag)
+      f:SetScript("OnHide", function(self)
+        StopPendingGroupDrag(self)
+        EndGroupDrag(self)
+      end)
       f:SetScript("OnClick", function(self, button)
         ClickGroupFrame(self, self._msufGFEM2Kind or kind, button, "group-preview")
       end)
@@ -1118,7 +1210,6 @@ local function PMakeCopyButton(popup, x, y, w, currentMode, onCopy)
     menu:SetPoint("TOP", b, "BOTTOM", 0, -3)
     menu:Show()
   end)
-  menu:SetOnUpdateMode("RunWhenVisible")
   menu:SetScript("OnUpdate", function(self)
     if not self:IsShown() then return end
     if b:IsMouseOver() or self:IsMouseOver() then
