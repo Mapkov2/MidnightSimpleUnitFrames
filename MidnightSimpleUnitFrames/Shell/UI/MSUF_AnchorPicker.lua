@@ -227,7 +227,6 @@ local function EnsureAnchorPicker()
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
     end)
 
-    ov:SetOnUpdateMode("RunWhenVisible")
     ov:SetScript("OnUpdate", function(self, elapsed)
         -- Hit-testing all visible frames is expensive; throttle while keeping hover feedback responsive.
         self._elapsed = (self._elapsed or 0) + elapsed

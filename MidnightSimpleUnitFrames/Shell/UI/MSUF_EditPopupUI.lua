@@ -601,7 +601,6 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
         menu:SetPoint(opts.point or "TOP", btn, opts.relativePoint or "BOTTOM", opts.offsetX or 0, opts.offsetY or -3)
         menu:Show()
     end)
-    menu:SetOnUpdateMode("RunWhenVisible")
     menu:SetScript("OnUpdate", function(self)
         if not self:IsShown() then return end
         if btn:IsMouseOver() or self:IsMouseOver() then

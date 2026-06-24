@@ -765,7 +765,6 @@ local function BuildCastbars(ctx)
                 if btn.SetActive then btn:SetActive(key == unit) end
             end
         end
-        box:SetOnUpdateMode("RunWhenVisible")
         box:SetScript("OnUpdate", function(_, elapsed)
             elapsed = tonumber(elapsed) or 0
             preview.progress = (preview.progress or 0) + (elapsed / CastDuration(preview.castType or "normal"))

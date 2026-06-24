@@ -251,7 +251,6 @@ local function EnsureInitialized()
         end
 
         b:SetScript("OnDragStart", function(self)
-            self:SetOnUpdateMode("RunWhenVisible")
             self:SetScript("OnUpdate", function()
                 local gg = EnsureGeneralDB()
                 if not gg then return end
@@ -268,7 +267,6 @@ local function EnsureInitialized()
         end)
         b:SetScript("OnDragStop", function(self)
             self:SetScript("OnUpdate", nil)
-            self:SetOnUpdateMode("Disabled")
         end)
         b:RegisterForDrag("LeftButton")
 

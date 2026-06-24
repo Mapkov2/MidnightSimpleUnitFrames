@@ -178,7 +178,6 @@ local function HideScaleProxy(frame)
     local proxy = frame and frame._msufEM2ScaleProxy
     if proxy then
         proxy:SetScript("OnUpdate", nil)
-        proxy:SetOnUpdateMode("Disabled")
         proxy:Hide()
     end
 end
@@ -262,7 +261,6 @@ function EM2.AttachPopupScaleGrip(frame)
             top = top,
         }
         frame._msufEM2PendingScale = currentScale
-        grip:SetOnUpdateMode("RunWhenVisible")
         grip:SetScript("OnUpdate", update)
         update()
     end
@@ -272,7 +270,6 @@ function EM2.AttachPopupScaleGrip(frame)
         frame._msufEM2FinishingScale = true
         if state then update() end
         grip:SetScript("OnUpdate", nil)
-        grip:SetOnUpdateMode("Disabled")
         frame._msufEM2ScaleDrag = nil
         HideScaleProxy(frame)
         if apply and state then

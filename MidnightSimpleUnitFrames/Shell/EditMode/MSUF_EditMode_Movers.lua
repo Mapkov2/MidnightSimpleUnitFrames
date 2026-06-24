@@ -42,6 +42,11 @@ end
 
 local movers = {}
 local moverParent
+local pendingDragFrame
+local pendingDragMover
+local pendingDragStartX
+local pendingDragStartY
+local PENDING_DRAG_THRESHOLD = 3
 
 local function RefreshUFPreview(reason)
     if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
@@ -116,6 +121,55 @@ local function SyncMoverToFrame(mover, frame, cfg)
     mover:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
 end
 
+local function StopPendingDrag(mover)
+    if mover and pendingDragMover and pendingDragMover ~= mover then return end
+    pendingDragMover = nil
+    pendingDragStartX = nil
+    pendingDragStartY = nil
+    if pendingDragFrame then
+        pendingDragFrame:SetScript("OnUpdate", nil)
+        pendingDragFrame:Hide()
+    end
+end
+
+local function EnsurePendingDragFrame()
+    if pendingDragFrame then return pendingDragFrame end
+    pendingDragFrame = CreateFrame("Frame", "MSUF_EM2_MoverPendingDragFrame", UIParent)
+    pendingDragFrame:Hide()
+    return pendingDragFrame
+end
+
+local function QueuePendingDrag(mover, button)
+    if button ~= "LeftButton" or not mover then return end
+    if IsConfigCombatLocked and IsConfigCombatLocked() then return end
+    local cx, cy = GetCursorPosition()
+    if not (cx and cy) then return end
+    pendingDragMover = mover
+    pendingDragStartX = cx
+    pendingDragStartY = cy
+    local frame = EnsurePendingDragFrame()
+    frame:SetScript("OnUpdate", function()
+        local target = pendingDragMover
+        if not target then
+            StopPendingDrag()
+            return
+        end
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+            StopPendingDrag(target)
+            return
+        end
+        local mx, my = GetCursorPosition()
+        if not (mx and my) then return end
+        if max(math.abs(mx - (pendingDragStartX or mx)), math.abs(my - (pendingDragStartY or my))) < PENDING_DRAG_THRESHOLD then
+            return
+        end
+        local begin = target._msufEM2BeginDrag
+        StopPendingDrag(target)
+        if type(begin) == "function" then begin(target, "LeftButton", "mouse") end
+    end)
+    frame:Show()
+end
+
 local function CreateMover(key, cfg)
     local th = T()
 
@@ -183,7 +237,10 @@ local function CreateMover(key, cfg)
     end
 
     --- Drag ? delegate to Ticker
-    mover:SetScript("OnDragStart", function(self)
+    local function BeginMoverDrag(self, button)
+        if button and button ~= "LeftButton" then return end
+        StopPendingDrag(self)
+        if self._dragging then return true end
         if BlockConfigCombatLocked() then return end
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         self._dragging = true
@@ -200,9 +257,13 @@ local function CreateMover(key, cfg)
 
         if EM2.Ticker then EM2.Ticker.BeginDrag(self, key, cfg) end
         if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "drag" }) end
-    end)
+        return true
+    end
 
-    mover:SetScript("OnDragStop", function(self)
+    local function EndMoverDrag(self, button)
+        if button and button ~= "LeftButton" then return end
+        StopPendingDrag(self)
+        if not self._dragging then return end
         self._dragging = false
         self._coordFS:Hide()
 
@@ -216,14 +277,29 @@ local function CreateMover(key, cfg)
         self._bg:SetColorTexture(t.bgR, t.bgG, t.bgB, 0.55)
         self._brd:SetBackdropBorderColor(t.edgeR, t.edgeG, t.edgeB, 0.60)
         self._label:SetTextColor(t.textR, t.textG, t.textB, 0.85)
+        if moved then self._suppressNextClick = true end
         if EM2.Focus and EM2.Focus.SetHover and self:IsMouseOver() then
             EM2.Focus.SetHover(key, nil, nil, { source = "mover", force = true })
         end
+    end
+
+    mover._msufEM2BeginDrag = BeginMoverDrag
+    mover:SetScript("OnMouseDown", BeginMoverDrag)
+    mover:SetScript("OnMouseUp", EndMoverDrag)
+    mover:SetScript("OnDragStart", BeginMoverDrag)
+    mover:SetScript("OnDragStop", EndMoverDrag)
+    mover:SetScript("OnHide", function(self)
+        StopPendingDrag(self)
+        if self._dragging then EndMoverDrag(self, "LeftButton") end
     end)
 
     --- Click keeps the legacy edit-mode behavior: select the item and open
     --- its popup. Focus visuals are handled separately by the popup veil.
     mover:SetScript("OnClick", function(self, button)
+        if self._suppressNextClick then
+            self._suppressNextClick = nil
+            return
+        end
         if button ~= "LeftButton" and button ~= "RightButton" then return end
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         if EM2.State then EM2.State.SetUnitKey(key) end
@@ -514,15 +590,22 @@ local function MSUF_MakeBlizzardOptionsMovable()
     drag:SetHeight(22)
     drag:EnableMouse(true)
     drag:RegisterForDrag("LeftButton")
-    drag:SetScript("OnDragStart", function(self)
+    local function StartPanelDrag(self, button)
+        if button and button ~= "LeftButton" then return end
         if BlockConfigCombatLocked() then return end
         local p = self:GetParent()
         if p and p.StartMoving then p:StartMoving() end
-    end)
-    drag:SetScript("OnDragStop", function(self)
+    end
+    local function StopPanelDrag(self, button)
+        if button and button ~= "LeftButton" then return end
         local p = self:GetParent()
         if p and p.StopMovingOrSizing then p:StopMovingOrSizing() end
-    end)
+    end
+    drag:SetScript("OnMouseDown", StartPanelDrag)
+    drag:SetScript("OnMouseUp", StopPanelDrag)
+    drag:SetScript("OnDragStart", StartPanelDrag)
+    drag:SetScript("OnDragStop", StopPanelDrag)
+    drag:SetScript("OnHide", StopPanelDrag)
 end
 ExportPublic("MSUF_MakeBlizzardOptionsMovable", MSUF_MakeBlizzardOptionsMovable)
 

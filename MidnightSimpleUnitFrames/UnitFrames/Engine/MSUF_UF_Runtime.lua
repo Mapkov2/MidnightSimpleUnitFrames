@@ -619,7 +619,6 @@ end
 RuntimeFlushOnUpdate = function(self)
   if self then
     self:SetScript("OnUpdate", nil)
-    self:SetOnUpdateMode("Disabled")
   end
   if pendingIdentityFlush then
     RunPendingIdentityFlush()
@@ -627,7 +626,6 @@ RuntimeFlushOnUpdate = function(self)
   if pendingIdentityFlush then
     local driver = UF.driver
     if driver and driver.SetScript then
-      driver:SetOnUpdateMode("RunOnce")
       driver:SetScript("OnUpdate", RuntimeFlushOnUpdate)
     end
   end
@@ -638,7 +636,6 @@ local function QueueIdentityFlush()
   local driver = UF.driver
   if driver and driver.SetScript then
     pendingIdentityFlush = true
-    driver:SetOnUpdateMode("RunOnce")
     driver:SetScript("OnUpdate", RuntimeFlushOnUpdate)
     return true
   end

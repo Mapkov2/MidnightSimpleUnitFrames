@@ -543,7 +543,6 @@ local groupRuntimeDeferCount = 0
 local function GroupRuntimeDeferOnUpdate(self)
   if self then
     self:SetScript("OnUpdate", nil)
-    self:SetOnUpdateMode("Disabled")
   end
   groupRuntimeDeferActive = nil
   local count = groupRuntimeDeferCount
@@ -559,7 +558,6 @@ local function GroupRuntimeDeferOnUpdate(self)
   end
   if groupRuntimeDeferCount > 0 and groupRuntimeDeferFrame then
     groupRuntimeDeferActive = true
-    groupRuntimeDeferFrame:SetOnUpdateMode("RunOnce")
     groupRuntimeDeferFrame:SetScript("OnUpdate", GroupRuntimeDeferOnUpdate)
   end
 end
@@ -581,7 +579,6 @@ local function ScheduleGroupRuntimeNextFrame(key, fn)
   groupRuntimeDeferQueue[key] = fn
   if not groupRuntimeDeferActive then
     groupRuntimeDeferActive = true
-    groupRuntimeDeferFrame:SetOnUpdateMode("RunOnce")
     groupRuntimeDeferFrame:SetScript("OnUpdate", GroupRuntimeDeferOnUpdate)
   end
   return true

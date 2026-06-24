@@ -921,7 +921,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local StopHandleDrag = handleBundle.StopHandleDrag or function()
         if box._dragFrame then
             box._dragFrame:SetScript("OnUpdate", nil)
-            box._dragFrame:SetOnUpdateMode("Disabled")
             box._dragFrame._handle = nil
             box._dragFrame:Hide()
         end

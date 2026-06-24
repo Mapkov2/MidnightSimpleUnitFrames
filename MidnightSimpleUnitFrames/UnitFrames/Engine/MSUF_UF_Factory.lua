@@ -418,9 +418,6 @@ function UF.EnsureNativePingIcon(frame)
     if ping.SetFrameLevel and frame.GetFrameLevel then
       ping:SetFrameLevel((frame:GetFrameLevel() or 0) + 20)
     end
-    if ping.SetOnUpdateMode then
-      ping:SetOnUpdateMode("RunWhenVisible")
-    end
   end
   frame.pingIconFrame = ping
   frame.PingIconFrame = ping

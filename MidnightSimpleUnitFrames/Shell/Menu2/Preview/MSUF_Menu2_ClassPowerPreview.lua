@@ -525,7 +525,6 @@ local function StopHandleDrag(handle, button, skipApply)
     handle._dragging = nil
     if preview and preview.dragFrame and preview.dragFrame._handle == handle then
         preview.dragFrame:SetScript("OnUpdate", nil)
-        preview.dragFrame:SetOnUpdateMode("Disabled")
         preview.dragFrame._handle = nil
         preview.dragFrame:Hide()
     end
@@ -545,7 +544,8 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h:EnableMouse(true)
     h:EnableKeyboard(true)
     if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(false) end
-    h:RegisterForClicks("LeftButtonUp")
+    if h.RegisterForClicks then h:RegisterForClicks("LeftButtonDown", "LeftButtonUp") end
+    if h.RegisterForDrag then h:RegisterForDrag("LeftButton") end
     h._preview, h._key, h._store = preview, key, store
     h._xKey, h._yKey = xKey, yKey
     h._defaultX, h._defaultY = defaultX, defaultY
@@ -571,6 +571,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h:SetScript("OnKeyDown", HandleKeyDown)
     h:SetScript("OnMouseDown", function(self, button)
         if button ~= "LeftButton" then return end
+        if self._dragging then return end
         SelectHandle(self)
         self._dragging = true
         self._startX, self._startY = ReadHandle(self)
@@ -578,11 +579,12 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         self._cursorX, self._cursorY = GetCursorPosition()
         self._historyTx = BeginHistory(self)
         preview.dragFrame._handle = self
-        preview.dragFrame:SetOnUpdateMode("RunWhenVisible")
         preview.dragFrame:SetScript("OnUpdate", preview.dragUpdate)
         preview.dragFrame:Show()
     end)
     h:SetScript("OnMouseUp", function(self, button) StopHandleDrag(self, button, false) end)
+    h:SetScript("OnDragStart", function(self) self:GetScript("OnMouseDown")(self, "LeftButton") end)
+    h:SetScript("OnDragStop", function(self) StopHandleDrag(self, "LeftButton", false) end)
     h:SetScript("OnHide", function(self)
         StopHandleDrag(self, nil, true)
     end)
@@ -1317,7 +1319,6 @@ local function StopAnimationDriver(preview)
     local driver = preview and preview.animationDriver
     if not driver then return end
     driver:SetScript("OnUpdate", nil)
-    driver:SetOnUpdateMode("Disabled")
     driver:Hide()
 end
 local function AnimationOnUpdate(driver, elapsed)
@@ -1340,7 +1341,6 @@ local function StartAnimationDriver(preview)
         preview.animationDriver._preview = preview
     end
     preview.animationDriver._preview = preview
-    preview.animationDriver:SetOnUpdateMode("RunWhenVisible")
     preview.animationDriver:SetScript("OnUpdate", AnimationOnUpdate)
     preview.animationDriver:Show()
 end
@@ -1393,6 +1393,10 @@ end
 local function DragUpdate(frame)
     local handle = frame and frame._handle
     if not (handle and handle._dragging) then return end
+    if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+        StopHandleDrag(handle, "LeftButton", false)
+        return
+    end
     local cx, cy = GetCursorPosition()
     if not (cx and cy) then return end
     local scale = handle.GetEffectiveScale and handle:GetEffectiveScale() or 1
@@ -1530,7 +1534,6 @@ function Preview.Create(ctx, builder)
         if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
         if box.dragFrame then
             box.dragFrame:SetScript("OnUpdate", nil)
-            box.dragFrame:SetOnUpdateMode("Disabled")
             box.dragFrame._handle = nil
             box.dragFrame:Hide()
         end

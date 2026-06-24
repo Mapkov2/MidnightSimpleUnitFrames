@@ -459,6 +459,9 @@ local function BuildGFBars(ctx)
     end
     local tabFrames = {}
     local TextCard = UnitSectionShared.TextCard
+    local PlaceSlider = UnitSectionShared.PlaceSlider or function(parent, control, x, y, width)
+        return W.MoveWidget(control, parent, x, y, width, "CENTER")
+    end
     local function IsPowerTextEnabled()
         local gf = GF()
         if gf and type(gf.IsPowerTextEnabled) == "function" then return gf.IsPowerTextEnabled(CurrentScope(), Conf(CurrentScope())) and true or false end

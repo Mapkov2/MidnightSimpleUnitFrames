@@ -341,7 +341,6 @@ local function EnsureDropdownFrame()
         if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(true) end
         if dropdownFrame.SetAlpha then dropdownFrame:SetAlpha(1) end
     end)
-    dropdownFrame:SetOnUpdateMode("RunWhenVisible")
     dropdownFrame:SetScript("OnUpdate", function(self, elapsed)
         if not dropdownOwner then return end
         self._msuf2PositionElapsed = (self._msuf2PositionElapsed or 0) + (elapsed or 0)
