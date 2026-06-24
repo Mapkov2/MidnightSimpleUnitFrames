@@ -1160,20 +1160,31 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
     local anchorCY = targetCY + gridDY
     local nextX, nextY = GroupOffsetFromCenter(bar, d.conf, targetCX, targetCY, gridDX, gridDY)
     local changed = d.conf.offsetX ~= nextX or d.conf.offsetY ~= nextY
+    local positionChanged = (d.lastGroupTargetCX == nil)
+        or abs(targetCX - d.lastGroupTargetCX) > 0.001
+        or abs(targetCY - d.lastGroupTargetCY) > 0.001
+        or abs(anchorCX - d.lastGroupAnchorCX) > 0.001
+        or abs(anchorCY - d.lastGroupAnchorCY) > 0.001
     if changed then
         d.conf.offsetX = nextX
         d.conf.offsetY = nextY
     end
     bar._msufDragActive = true
-    bar:ClearAllPoints()
-    bar:SetPoint("CENTER", UIParent, "BOTTOMLEFT", targetCX, targetCY)
-    local liveAnchor = bar._msufGFLiveAnchor
-    local logicalAnchor = bar._msufGFLogicalAnchor
-    local anchor = liveAnchor or logicalAnchor
-    if anchor and anchor ~= bar and anchor.ClearAllPoints and anchor.SetPoint then
-        anchor._msufDragActive = true
-        anchor:ClearAllPoints()
-        anchor:SetPoint("CENTER", UIParent, "BOTTOMLEFT", anchorCX, anchorCY)
+    if changed or positionChanged then
+        d.lastGroupTargetCX = targetCX
+        d.lastGroupTargetCY = targetCY
+        d.lastGroupAnchorCX = anchorCX
+        d.lastGroupAnchorCY = anchorCY
+        bar:ClearAllPoints()
+        bar:SetPoint("CENTER", UIParent, "BOTTOMLEFT", targetCX, targetCY)
+        local liveAnchor = bar._msufGFLiveAnchor
+        local logicalAnchor = bar._msufGFLogicalAnchor
+        local anchor = liveAnchor or logicalAnchor
+        if anchor and anchor ~= bar and anchor.ClearAllPoints and anchor.SetPoint then
+            anchor._msufDragActive = true
+            anchor:ClearAllPoints()
+            anchor:SetPoint("CENTER", UIParent, "BOTTOMLEFT", anchorCX, anchorCY)
+        end
     end
     return changed
 end
@@ -1188,6 +1199,14 @@ local function SyncCastbarPopupDuringDrag(d, elapsed)
     elseif EM2.CastPopup and EM2.CastPopup.IsOpen and EM2.CastPopup.IsOpen() and EM2.CastPopup.Sync then
         EM2.CastPopup.Sync()
     end
+end
+
+local function NotifyFocusDuringDrag(d, elapsed)
+    if not (d and EM2.Focus and EM2.Focus.NotifyPositionChanged) then return end
+    d.focusNotifyAcc = (d.focusNotifyAcc or 0) + (elapsed or 0)
+    if d.focusNotifyAcc < 0.05 then return end
+    d.focusNotifyAcc = 0
+    EM2.Focus.NotifyPositionChanged(d.key, false)
 end
 
 local function OnUpdate(self, elapsed)
@@ -1222,21 +1241,29 @@ local function OnUpdate(self, elapsed)
         snapCX = max(d.halfW, min(d.screenW - d.halfW, snapCX))
         snapCY = max(d.halfH, min(d.screenH - d.halfH, snapCY))
 
-        d.mover:ClearAllPoints()
-        d.mover:SetPoint("TOPLEFT", UIParent, "TOPLEFT",
-            snapCX - d.halfW,
-            snapCY + d.halfH - d.screenH)
+        local moverX = snapCX - d.halfW
+        local moverY = snapCY + d.halfH - d.screenH
+        local moverMoved = (d.lastMoverX == nil)
+            or abs(moverX - d.lastMoverX) > 0.001
+            or abs(moverY - d.lastMoverY) > 0.001
 
-        if d.mover._coordFS then
-            d.mover._coordFS:SetText(format("%.0f, %.0f",
-                round(snapCX - d.screenW * 0.5),
-                round(snapCY - d.screenH * 0.5)))
+        if moverMoved then
+            d.lastMoverX = moverX
+            d.lastMoverY = moverY
+            d.mover:ClearAllPoints()
+            d.mover:SetPoint("TOPLEFT", UIParent, "TOPLEFT", moverX, moverY)
+
+            if d.mover._coordFS then
+                d.mover._coordFS:SetText(format("%.0f, %.0f",
+                    round(snapCX - d.screenW * 0.5),
+                    round(snapCY - d.screenH * 0.5)))
+            end
         end
 
         if d.isCastbar then
             ApplyCastbarDragPosition(d, snapCX, snapCY)
             SyncCastbarPopupDuringDrag(d, elapsed)
-            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, false) end
+            NotifyFocusDuringDrag(d, elapsed)
             return
         end
 
@@ -1320,7 +1347,7 @@ local function OnUpdate(self, elapsed)
         else
             SyncUnitPopupDuringDrag(d, elapsed)
         end
-        if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, false) end
+        NotifyFocusDuringDrag(d, elapsed)
     else
         idleSyncAcc = idleSyncAcc + elapsed
         if idleSyncAcc >= 0.2 then
@@ -1461,6 +1488,7 @@ function Ticker.BeginDrag(mover, key, cfg)
         bossAdjY     = bossAdjY,
         popupSyncAcc = 0.05,
         isGroupFrame = isGroupFrame,
+        focusNotifyAcc = 0.05,
         isCastbar    = isCastbar,
         castbarUnit  = castbarUnit,
         castbarXKey  = castbarXKey,

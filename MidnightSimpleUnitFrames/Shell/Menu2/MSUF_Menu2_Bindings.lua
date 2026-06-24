@@ -246,6 +246,7 @@ local function CommandFeedback(text, kind, seconds)
 end
 local function PushHistory(label, source, before, after)
     if DeepEqual(before, after) then return false end
+    if historySessionActive and type(historySessionBaseSnapshot) ~= "table" then historySessionBaseSnapshot = before end
     local stack, redo = EnsureHistoryStacks()
     stack[#stack + 1] = {
         label = label or "MSUF2 change",
@@ -350,8 +351,8 @@ function M.StartHistorySession()
         historyDepth = math.max(0, historyDepth - 1)
     end
     historySessionActive = true
-    historySessionBaseSnapshot = SnapshotDB()
-    historySessionSnapshot = historySessionBaseSnapshot
+    historySessionBaseSnapshot = nil
+    historySessionSnapshot = nil
     historySessionDirty = false
     local undo, redo = EnsureHistoryStacks()
     WipeTable(undo)

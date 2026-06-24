@@ -550,6 +550,11 @@ end
 local function BuildInlineClassPowerPreview(ctx, b)
     -- ClassPower preview was split into Preview/MSUF_Menu2_ClassPowerPreview.lua.
     -- Keeping only this loader guard prevents a second renderer from drifting out of sync.
+    if ctx and ctx.hiddenBuild then
+        local section = b:Section("Preview", 64)
+        W.Text(section, "Class resource preview is built when this page is opened.", 14, -38, ctx.width - 28, T.colors.muted)
+        return section
+    end
     local preview = M.ClassPowerStackPreview and M.ClassPowerStackPreview.Create
     if type(preview) == "function" then return preview(ctx, b) end
     return b:Section("Preview unavailable", 64)

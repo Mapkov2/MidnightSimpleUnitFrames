@@ -405,6 +405,7 @@ local function CreateAuraPreviewIcon(parent)
     return f
 end
 local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lane)
+    if ctx and ctx.hiddenBuild then return nil end
     lane = lane == "buff" and "buff" or (lane == "debuff" and "debuff" or nil)
     local box = T.Panel(parent, nil, { 0.010, 0.016, 0.034, 0.88 }, T.colors.borderSoft)
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
