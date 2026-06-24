@@ -7,18 +7,15 @@ end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local KS, KSW, WL = M.KeySet, M.KeySetFromWords, M.WordList
+local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
+if type(ApplyService) ~= "table" then error("MSUF Menu2 ApplyService missing") end
+local SafeInvoke = ApplyService.SafeInvoke
+local CallGlobal = ApplyService.CallGlobal
 
 -- Menu2 binding/apply layer.
 -- Owns DB accessors, pending apply coalescing, edit history snapshots, and fanout into the
 -- older MSUF global refresh APIs. Page files bind controls here instead of calling globals
 -- directly for every slider/toggle movement.
-local pendingUnits = {}
-local pendingGeneral
-local pendingOpts = {}
-local pendingPreview
-local pendingAlpha
-local pendingCastbar
-local flushQueued = false
 local HISTORY_LIMIT = 500
 local historyDepth = 0
 local historyRestoring = false
@@ -39,7 +36,7 @@ local function EnsureHistoryStacks()
 end
 function M.EnsureDB()
     local ensure = _G.MSUF_EnsureDB
-    if type(ensure) == "function" then ensure() end
+    if type(ensure) == "function" then SafeInvoke(ensure) end
     ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
     return _G.MSUF_DB
@@ -56,51 +53,6 @@ function M.GetGeneralDB()
     local db = M.EnsureDB()
     db.general = db.general or {}
     return db.general, db
-end
-local function CallGlobal(name, ...)
-    local fn = _G[name]
-    if type(fn) == "function" then
-        fn(...)
-        return true
-    end
-    return false
-end
-local function CallGlobalList(names)
-    for i = 1, #(names or {}) do CallGlobal(names[i]) end
-end
-
--- Profile restore still has to notify several legacy global bridges. Keeping the list here
--- makes broad fanout reviewable instead of scattered through page widgets.
-local PROFILE_APPLY_GLOBALS = WL [[
-    MSUF_GF_InvalidateCooldownTextCurve MSUF_GF_ForceCooldownTextRecolor MSUF_RefreshAllIdentityColors
-    MSUF_RefreshAllPowerTextColors MSUF_RefreshAllFrames MSUF_UpdateAllBarTextures_Immediate
-    MSUF_UpdateAllBarTextures MSUF_UpdateCastbarVisuals_Immediate MSUF_ClassPower_Refresh MSUF_ClassPower_RefreshTextures
-]]
-
--- Undo/redo restores need a slightly wider visual sweep than one slider change because the
--- restored snapshot may have touched unrelated pages.
-local RESTORE_GLOBALS = WL [[
-    MSUF_UpdateAllFonts_Immediate MSUF_UpdateAllBarTextures_Immediate MSUF_UpdateAllBarTextures
-    MSUF_UpdateCastbarVisuals_Immediate MSUF_UpdateCastbarVisuals MSUF_RefreshAllIdentityColors
-    MSUF_RefreshAllPowerTextColors MSUF_RefreshAllUnitAlphas MSUF_RefreshAllFrames
-]]
-local function ApplyUnitFrame(unit)
-    -- Keep the modern UF apply path first, then fall back to legacy globals for older modules
-    -- that still listen outside the UnitFrames engine.
-    local UF = MSUF and MSUF.UF
-    if UF and UF.Apply then
-        UF.Apply(unit)
-        return true
-    end
-    return false
-end
-local function RefreshActiveBossPreview(reason)
-    local bossPageActive = _G.MSUF2_BossUnitframePreviewActive == true
-    local editPreviewActive = _G.MSUF_UnitEditModeActive == true
-        and (_G.MSUF_BossTestMode == true or _G.MSUF_PreviewTestMode == true)
-    if not bossPageActive and not editPreviewActive then return end
-    if bossPageActive and CallGlobal("MSUF_ApplyBossUnitframePreviewState", true, reason or "MSUF2_BOSS_PREVIEW") then return end
-    CallGlobal("MSUF_SyncBossUnitframePreviewWithUnitEdit")
 end
 local IsConfigCombatLocked = M.IsConfigCombatLocked
 function M.IsConfigCombatLocked()
@@ -129,59 +81,6 @@ local function BlockCombatAndRefresh(ctx)
     if not M.BlockCombatAction() then return false end
     M.CallIf(M.Refresh, ctx)
     return true
-end
-local function FlushApply()
-    flushQueued = false
-    local wantPreview = pendingPreview
-    pendingPreview = nil
-    local wantAlpha = pendingAlpha
-    pendingAlpha = nil
-    for unit in pairs(pendingUnits) do
-        local opt = pendingOpts[unit] or {}
-        local notifyUnit = (unit == "boss") and nil or unit
-        local applied = false
-        -- Unit changes prefer the UF-core dirty path. Legacy ApplyUnitFrame is a fallback for
-        -- modules not yet fully represented in the UF engine.
-        if opt.notify ~= false then applied = CallGlobal("MSUF_UFCore_NotifyConfigChanged", notifyUnit, true, true, opt.reason or "MSUF2") and true or false end
-        if opt.text then CallGlobal("MSUF_ForceTextLayoutForUnitKey", unit) end
-        if opt.power then
-            -- Embedded power layout touches frame anchors and is intentionally skipped in combat.
-            if not (_G.InCombatLockdown and _G.InCombatLockdown()) then
-                if not CallGlobal("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", unit, true) then CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All") end
-            end
-            if unit == "player" then CallGlobal("MSUF_ClassPower_Refresh") end
-        end
-        if not applied then ApplyUnitFrame(unit) end
-    end
-    WipeTable(pendingUnits)
-    WipeTable(pendingOpts)
-    if pendingGeneral then
-        local opt = pendingGeneral
-        pendingGeneral = nil
-        local applied = false
-        local applyAll = opt.applyAll ~= false
-        if applyAll and opt.notify ~= false then applied = CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, opt.reason or "MSUF2_GENERAL") and true or false end
-        if applyAll and not applied then ApplyUnitFrame(nil) end
-    end
-    if pendingCastbar then
-        pendingCastbar = nil
-        CallGlobal("MSUF_UpdateCastbarVisuals")
-    end
-    if wantAlpha then CallGlobal("MSUF_RefreshAllUnitAlphas") end
-    if wantPreview then
-        CallGlobal("MSUF_UFPreview_RequestRefresh", wantPreview)
-        RefreshActiveBossPreview(wantPreview)
-    end
-end
-local function QueueFlush()
-    if flushQueued then return end
-    flushQueued = true
-    -- Slider drags and compound Assistant writes collapse to one next-frame apply burst.
-    if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("MSUF2_APPLY", FlushApply)
-    else
-        C_Timer.After(0, FlushApply)
-    end
 end
 local DeepCopy = M.DeepCopy
 local function DeepEqual(a, b, seen)
@@ -227,11 +126,15 @@ local function QueueMenuRefresh()
         refreshQueued = false
         if M.frame and M.frame.IsShown and M.frame:IsShown() and M.Refresh then M.Refresh() end
     end
-    _G.C_Timer.After(0, Run)
+    if _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(0, Run)
+    else
+        Run()
+    end
 end
 local function NotifyHistoryChanged(refreshMenu)
-    if M.RefreshHistoryControls then M.RefreshHistoryControls() end
-    if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
+    if M.RefreshHistoryControls then SafeInvoke(M.RefreshHistoryControls) end
+    if M.frame and M.frame.RefreshStatus then SafeInvoke(M.frame.RefreshStatus, M.frame) end
     if refreshMenu == true then QueueMenuRefresh() end
 end
 local function FeedbackLabel(text, limit)
@@ -285,35 +188,37 @@ local function ApplyHistorySnapshot(snapshot, reason)
     -- Menu2 state, so restore fanout is centralized and explicit.
     M.RequestGeneralApply(reason or "MSUF2_HISTORY", { preview = true, alpha = true, castbar = true })
     if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
-        MSUF.MSUF_RequestGameplayApply()
+        SafeInvoke(MSUF.MSUF_RequestGameplayApply)
     elseif MSUF and type(MSUF.MSUF_ApplyGameplayVisuals) == "function" then
-        MSUF.MSUF_ApplyGameplayVisuals()
+        SafeInvoke(MSUF.MSUF_ApplyGameplayVisuals)
     end
     do
         local db = M.EnsureDB()
         local g = db and db.general
         local ui = type(g) == "table" and type(g.UIScale) == "table" and g.UIScale or nil
         if ui and ui.Enabled == true and type(_G.MSUF_SetGlobalUiScale) == "function" then
-            _G.MSUF_SetGlobalUiScale(tonumber(ui.Scale) or 1, true)
+            SafeInvoke(_G.MSUF_SetGlobalUiScale, tonumber(ui.Scale) or 1, true)
         elseif ui and type(_G.MSUF_ResetGlobalUiScale) == "function" then
-            _G.MSUF_ResetGlobalUiScale(true)
+            SafeInvoke(_G.MSUF_ResetGlobalUiScale, true)
         end
         if M.ApplyMenuFrameScale and M.frame then
-            M.ApplyMenuFrameScale(M.frame)
+            SafeInvoke(M.ApplyMenuFrameScale, M.frame)
         elseif M.GetEffectiveMenuScale and M.frame and M.frame.SetScale and type(g) == "table" then
-            M.frame:SetScale(M.GetEffectiveMenuScale(g.slashMenuScale))
+            local ok, scale = SafeInvoke(M.GetEffectiveMenuScale, g.slashMenuScale)
+            if ok and type(scale) == "number" then M.frame:SetScale(scale) end
         end
     end
     local auras = MSUF and MSUF.MSUF_Auras3
     if auras and type(auras.RequestApply) == "function" then
-        auras.RequestApply()
+        SafeInvoke(auras.RequestApply)
     end
-    CallGlobalList(PROFILE_APPLY_GLOBALS)
-    CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, "MSUF2_PROFILE_APPLY")
+    if ApplyService.ApplyProfileFanout then
+        ApplyService.ApplyProfileFanout("MSUF2_PROFILE_APPLY")
+    end
     if MSUF and MSUF.GF then
-        if type(MSUF.GF.RebuildAll) == "function" then MSUF.GF.RebuildAll() end
-        if type(MSUF.GF.RefreshPreviewLayout) == "function" then MSUF.GF.RefreshPreviewLayout() end
-        if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
+        if type(MSUF.GF.RebuildAll) == "function" then SafeInvoke(MSUF.GF.RebuildAll) end
+        if type(MSUF.GF.RefreshPreviewLayout) == "function" then SafeInvoke(MSUF.GF.RefreshPreviewLayout) end
+        if type(MSUF.GF.RefreshVisuals) == "function" then SafeInvoke(MSUF.GF.RefreshVisuals) end
     end
     M.CallIf(M.ApplyLocaleSelection)
     M.CallIf(M.MarkMenuDataDirty, reason or "history")
@@ -327,14 +232,19 @@ function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
     if M.BlockCombatAction() then return false end
     if historyDepth > 0 or historyRestoring then
-        local result = fn()
+        local ok, result = SafeInvoke(fn)
+        if not ok then return nil end
         if result ~= false and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
         return result
     end
     local before = CurrentHistorySnapshot()
     historyDepth = historyDepth + 1
-    local result = fn()
+    local ok, result = SafeInvoke(fn)
     historyDepth = historyDepth - 1
+    if not ok then
+        CommandFeedback("Action failed", "danger", 1.8)
+        return nil
+    end
     if result == false then return result end
     local pushed = PushHistory(label, source, before, SnapshotDB())
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
@@ -458,12 +368,12 @@ end
 local function WidgetHistoryLabel(ctx, widget, fallback)
     local fs = widget and (widget._msuf2Title or widget._msuf2Label)
     if fs and fs.GetText then
-        local text = fs:GetText()
-        if text and text ~= "" then return text end
+        local ok, text = SafeInvoke(fs.GetText, fs)
+        if ok and text and text ~= "" then return text end
     end
     if widget and widget.GetText then
-        local text = widget:GetText()
-        if text and text ~= "" then return text end
+        local ok, text = SafeInvoke(widget.GetText, widget)
+        if ok and text and text ~= "" then return text end
     end
     return fallback or tostring((ctx and ctx.key) or "MSUF2 option")
 end
@@ -478,28 +388,16 @@ local function CaptureWidgetChange(ctx, widget, label, fn)
 end
 function M.RequestUnitApply(unit, reason, opts)
     if M.BlockCombatAction() then return false end
-    unit = (unit == "tot") and "targettarget" or unit
-    unit = (unit == "focus_target" or unit == "focustargettarget") and "focustarget" or unit
+    if ApplyService.NormalizeUnit then
+        unit = ApplyService.NormalizeUnit(unit)
+    else
+        unit = (unit == "tot") and "targettarget" or unit
+        unit = (unit == "focus_target" or unit == "focustargettarget") and "focustarget" or unit
+    end
     if not UNIT_KEYS[unit] then return end
     M.CheckpointHistory(reason or ("MSUF2_" .. tostring(unit)), "apply:unit:" .. tostring(unit) .. ":" .. tostring(reason or "change"))
-    pendingUnits[unit] = true
-    local o = pendingOpts[unit]
-    if not o then
-        o = {}
-        pendingOpts[unit] = o
-    end
-    o.reason = reason or o.reason or "MSUF2"
-    if opts then
-        if opts.text then o.text = true end
-        if opts.power then o.power = true end
-        if opts.castbar then pendingCastbar = true end
-        if opts.notify == false then o.notify = false end
-        if opts.preview ~= false then pendingPreview = opts.previewReason or reason or "MSUF2" end
-        if opts.alpha then pendingAlpha = true end
-    else
-        pendingPreview = reason or "MSUF2"
-    end
-    QueueFlush()
+    if ApplyService.RequestUnit then return ApplyService.RequestUnit(unit, reason, opts) end
+    return false
 end
 function M.SetUnitValue(unit, key, value, reason, opts)
     if M.BlockCombatAction() then return false end
@@ -517,22 +415,8 @@ end
 function M.RequestGeneralApply(reason, opts)
     if M.BlockCombatAction() then return false end
     M.CheckpointHistory(reason or "MSUF2_GENERAL", "apply:general:" .. tostring(reason or "change"))
-    if not pendingGeneral then pendingGeneral = {} end
-    pendingGeneral.reason = reason or pendingGeneral.reason or "MSUF2_GENERAL"
-    if opts and opts.applyAll == false then
-        if pendingGeneral.applyAll == nil then pendingGeneral.applyAll = false end
-    else
-        pendingGeneral.applyAll = true
-    end
-    if opts and opts.notify == false then pendingGeneral.notify = false end
-    if opts then
-        if opts.castbar then pendingCastbar = true end
-        if opts.preview ~= false then pendingPreview = opts.previewReason or reason or "MSUF2_GENERAL" end
-        if opts.alpha then pendingAlpha = true end
-    else
-        pendingPreview = reason or "MSUF2_GENERAL"
-    end
-    QueueFlush()
+    if ApplyService.RequestGeneral then return ApplyService.RequestGeneral(reason, opts) end
+    return false
 end
 function M.SetGeneralValue(key, value, reason, opts)
     if M.BlockCombatAction() then return false end
@@ -544,7 +428,7 @@ function M.SetGeneralValue(key, value, reason, opts)
     local g = M.GetGeneralDB()
     if g[key] == value then return false end
     g[key] = value
-    if key == "menuLocale" and M.ApplyLocaleSelection then M.ApplyLocaleSelection(value) end
+    if key == "menuLocale" and M.ApplyLocaleSelection then SafeInvoke(M.ApplyLocaleSelection, value) end
     M.RequestGeneralApply(reason or ("MSUF2_" .. tostring(key)), opts)
     return true
 end
@@ -755,8 +639,8 @@ end
 local function FactoryDefaults()
     local create = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
     if type(create) ~= "function" then return nil end
-    local defaults = create()
-    if type(defaults) == "table" then return defaults end
+    local ok, defaults = SafeInvoke(create)
+    if ok and type(defaults) == "table" then return defaults end
     return nil
 end
 local function ResetUnitPage(db, defaults, unit)
@@ -774,7 +658,10 @@ local function ResetUnitPage(db, defaults, unit)
 end
 local function ResetGroupFrames(db, defaults)
     local gf = MSUF and MSUF.GF
-    if gf and type(gf.ResetAllToDefaults) == "function" then return gf.ResetAllToDefaults() end
+    if gf and type(gf.ResetAllToDefaults) == "function" then
+        local ok, result = SafeInvoke(gf.ResetAllToDefaults)
+        return ok and result
+    end
     ReplaceRootTable(db, defaults, "gf_party")
     ReplaceRootTable(db, defaults, "gf_raid")
     ReplaceRootTable(db, defaults, "gf_mythicraid")
@@ -851,16 +738,16 @@ local function ApplyAfterPageReset(pageKey, info)
     -- secure group headers or Auras3 lanes unnecessarily.
     if info and (info.kind == "auras" or info.kind == "colors") then
         if auras and type(auras.RequestApply) == "function" then
-            auras.RequestApply()
+            SafeInvoke(auras.RequestApply)
         end
     end
     if info and (info.kind == "group" or info.kind == "bars" or info.kind == "fonts" or info.kind == "colors") then
         local gf = MSUF and MSUF.GF
         if gf then
-            if type(gf.InvalidateConfCache) == "function" then gf.InvalidateConfCache() end
-            if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals() end
-            if type(gf.RebuildAll) == "function" then gf.RebuildAll() end
-            if type(gf.RequestAuraRefresh) == "function" then gf.RequestAuraRefresh() end
+            if type(gf.InvalidateConfCache) == "function" then SafeInvoke(gf.InvalidateConfCache) end
+            if type(gf.RefreshVisuals) == "function" then SafeInvoke(gf.RefreshVisuals) end
+            if type(gf.RebuildAll) == "function" then SafeInvoke(gf.RebuildAll) end
+            if type(gf.RequestAuraRefresh) == "function" then SafeInvoke(gf.RequestAuraRefresh) end
         end
     end
     if info and info.kind == "classpower" then
@@ -869,10 +756,11 @@ local function ApplyAfterPageReset(pageKey, info)
         CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
     end
     if info and info.kind == "modules" then CallGlobal("MSUF_ApplyModules") end
-    CallGlobalList(RESTORE_GLOBALS)
-    CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, "MSUF2_RESTORE")
+    if ApplyService.ApplyRestoreFanout then
+        ApplyService.ApplyRestoreFanout("MSUF2_RESTORE")
+    end
     M.CallIf(M.ApplyLocaleSelection)
-    if M.ApplyMenuFrameScale and M.frame then M.ApplyMenuFrameScale(M.frame) end
+    if M.ApplyMenuFrameScale and M.frame then SafeInvoke(M.ApplyMenuFrameScale, M.frame) end
     if pageKey and M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
         M.InvalidatePage(pageKey)
         M.activeKey = nil
@@ -884,7 +772,7 @@ end
 local function ResetProfilePage()
     local name = _G.MSUF_ActiveProfile or "Default"
     if type(_G.MSUF_ResetProfile) ~= "function" then return false end
-    _G.MSUF_ResetProfile(name)
+    SafeInvoke(_G.MSUF_ResetProfile, name)
     M.CallIf(M.ClearHistory)
     ApplyAfterPageReset("profiles", PAGE_RESET_INFO.profiles)
     if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then _G.MSUF_ShowReloadRecommendedPopup("Profile reset") end
@@ -1006,7 +894,7 @@ local function RunRefreshList(refreshers)
     if type(refreshers) ~= "table" then return end
     for i = 1, #refreshers do
         local fn = refreshers[i]
-        if type(fn) == "function" then fn() end
+        if type(fn) == "function" then SafeInvoke(fn) end
     end
 end
 function M.RequestRefresh(ctx, reason)
@@ -1021,12 +909,12 @@ function M.RequestRefresh(ctx, reason)
             entry._msuf2RefreshQueued = nil
             if entry._msuf2Invalidated then return end
             if M.RunEntryRefreshers then
-                M.RunEntryRefreshers(entry)
+                SafeInvoke(M.RunEntryRefreshers, entry)
             else
                 RunRefreshList(entry.refreshers)
             end
         end
-        _G.C_Timer.After(0, Run)
+        if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, Run) else Run() end
         return true
     end
     if M._msuf2RefreshQueued then return true end
@@ -1035,17 +923,17 @@ function M.RequestRefresh(ctx, reason)
         M._msuf2RefreshQueued = nil
         local active = ResolveRefreshEntry()
         if active then
-            if M.RunEntryRefreshers then M.RunEntryRefreshers(active) else RunRefreshList(active.refreshers) end
+            if M.RunEntryRefreshers then SafeInvoke(M.RunEntryRefreshers, active) else RunRefreshList(active.refreshers) end
         end
     end
-    _G.C_Timer.After(0, Run)
+    if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, Run) else Run() end
     return true
 end
 function M.Refresh(ctx)
     M.CallIf(M.MarkMenuDataDirty, "refresh")
     local entry = ResolveRefreshEntry(ctx)
     if entry and M.RunEntryRefreshers then
-        M.RunEntryRefreshers(entry, { force = true })
+        SafeInvoke(M.RunEntryRefreshers, entry, { force = true })
         return
     end
     local refreshers = ctx and ctx.refreshers
@@ -1054,9 +942,9 @@ function M.Refresh(ctx)
 end
 local function MarkCommandSearchDirty()
     if M.SearchBridge and type(M.SearchBridge.MarkSearchIndexDirty) == "function" then
-        M.SearchBridge.MarkSearchIndexDirty()
+        SafeInvoke(M.SearchBridge.MarkSearchIndexDirty)
     elseif M.Search and type(M.Search.MarkIndexDirty) == "function" then
-        M.Search.MarkIndexDirty()
+        SafeInvoke(M.Search.MarkIndexDirty)
     end
 end
 local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
@@ -1123,12 +1011,7 @@ function M.BindToggle(ctx, widget, getValue, setValue)
             return
         end
         local currentValue = getValue() and true or false
-        local nativeValue = self.GetChecked and self:GetChecked()
-        local nextValue = nativeValue ~= nil and (nativeValue and true or false) or not currentValue
-        if nextValue == currentValue then
-            SyncFromValue(self)
-            return
-        end
+        local nextValue = not currentValue
         CaptureWidgetChange(ctx, self, nil, function()
             setValue(nextValue)
         end)

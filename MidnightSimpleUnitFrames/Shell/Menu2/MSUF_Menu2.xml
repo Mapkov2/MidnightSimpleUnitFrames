@@ -9,6 +9,7 @@
     <Script file="MSUF_Menu2_ControlGates.lua"/>
     <Script file="MSUF_Menu2_PreviewHelpers.lua"/>
     <Script file="MSUF_Menu2_Dropdowns.lua"/>
+    <Script file="MSUF_Menu2_ApplyService.lua"/>
     <Script file="MSUF_Menu2_Bindings.lua"/>
     <Script file="MSUF_Menu2_SearchBridge.lua"/>
     <Script file="MSUF_Menu2_PagePreviews.lua"/>

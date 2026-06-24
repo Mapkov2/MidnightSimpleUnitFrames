@@ -23,14 +23,7 @@ local function FlushColorApply()
     colorApplyQueued = false
     local api = MSUF and MSUF._colorsAPI
     if api and type(api.PushVisualUpdates) == "function" then api.PushVisualUpdates() end
-    M.RequestGeneralApply("MSUF2_COLORS", { preview = true, applyAll = false })
-    CallGlobal("MSUF_RefreshAllFrames")
-    CallGlobal("MSUF_RefreshAllIdentityColors")
-    CallGlobal("MSUF_RefreshAllPowerTextColors")
-    CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
-    M.CallIf(M.ApplyGameplay)
-    local gf = MSUF and MSUF.GF
-    if gf and type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals() end
+    M.RequestGeneralApply("MSUF2_COLORS", { preview = true, applyAll = false, colors = true })
 end
 local function ApplyColors()
     if colorApplyQueued then return end
@@ -61,18 +54,14 @@ local function ApplyUnitframeColorWithReload()
 end
 local function ApplyCastbarColors()
     ApplyColors()
-    if MSUF and type(MSUF.MSUF_UpdateCastbarVisuals) == "function" then MSUF.MSUF_UpdateCastbarVisuals() end
-    if MSUF and type(MSUF.MSUF_UpdateCastbarTextures_Immediate) == "function" then MSUF.MSUF_UpdateCastbarTextures_Immediate() end
+    M.RequestGeneralApply("MSUF2_CASTBAR_COLORS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
 end
 local function ApplyGameplayColors()
     ApplyColors()
-    M.CallIf(M.ApplyGameplay)
 end
 local function ApplyAuraColors()
     ApplyAuras()
     ApplyColors()
-    CallGlobal("MSUF_GF_InvalidateCooldownTextCurve")
-    CallGlobal("MSUF_GF_ForceCooldownTextRecolor")
     local a3 = MSUF and MSUF.MSUF_Auras3
     if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
     CallGlobal("MSUF_GF_ForceAuraTextColorRefresh")

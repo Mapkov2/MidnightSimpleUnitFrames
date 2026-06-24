@@ -310,7 +310,7 @@ local function BuildText(ctx, builder, unit)
     PlaceSlider(nameAppearance, nameSize, 16, -58, rightW - 58)
     M.BindNumberWidget(ctx, nameSize,
         function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
-        function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end,
+        function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, fonts = true, preview = true }) end,
         12, { step = 1, roundStep = true })
     local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
     local function BuildValueTextTab(kind, tab, cfg)
@@ -398,7 +398,7 @@ local function BuildText(ctx, builder, unit)
         PlaceSlider(appearance, controls.size, 16, -58, cardW - 72)
         M.BindNumberWidget(ctx, controls.size,
             function() return EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey) end,
-            function(v) SetNumber(unit, cfg.sizeKey, v, cfg.sizeReason, { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end,
+            function(v) SetNumber(unit, cfg.sizeKey, v, cfg.sizeReason, { text = true, fonts = true, preview = true }) end,
             10, { step = 1, roundStep = true })
         return controls
     end
@@ -483,8 +483,7 @@ local function BuildText(ctx, builder, unit)
         M.BindNumberWidget(ctx, control,
             function() return ReadNumber(unit, key, defaultValue) end,
             function(v)
-                SetNumber(unit, key, v, reason, { text = true, preview = true })
-                Call("MSUF_UpdateAllFonts_Immediate")
+                SetNumber(unit, key, v, reason, { text = true, fonts = true, preview = true })
                 RefreshTextHeader()
             end,
             defaultValue, { step = 1, roundStep = true })

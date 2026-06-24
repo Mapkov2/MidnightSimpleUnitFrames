@@ -762,7 +762,12 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "ShowStacks"] = defaults[7] ~= false and group.showStacks ~= false or group.showStacks == true
   out[prefix .. "CooldownSize"] = scale(group.cooldownSize, defaults[5], 6)
   out[prefix .. "CooldownAnchor"] = AuraTextAnchor(group.cooldownAnchor, "CENTER")
+  out[prefix .. "CooldownX"] = scale(group.cooldownX, 0)
+  out[prefix .. "CooldownY"] = scale(group.cooldownY, 0)
   out[prefix .. "StackSize"] = scale(group.stackSize, defaults[6], 6)
+  out[prefix .. "StackAnchor"] = AuraTextAnchor(group.stackAnchor, "BOTTOMRIGHT")
+  out[prefix .. "StackX"] = scale(group.stackX, 0)
+  out[prefix .. "StackY"] = scale(group.stackY, 0)
   if defaults[8] ~= false then
     out[prefix .. "BlacklistHash"] = AuraBlacklistHash(kind, groupKey, group)
   end

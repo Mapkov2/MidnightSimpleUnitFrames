@@ -110,11 +110,10 @@ local function GetBars()
     return db.bars
 end
 local function Call(name, ...)
+    local apply = M.ApplyService
+    if apply and type(apply.CallGlobal) == "function" then return apply.CallGlobal(name, ...) end
     local fn = _G[name]
-    if type(fn) == "function" then
-        fn(...)
-        return true
-    end
+    if type(fn) == "function" then fn(...); return true end
     return false
 end
 local function DeepCopy(src)
@@ -346,12 +345,10 @@ local function CopyUnitSettings(unit, target, scopes)
         })
     end
     local function FinishCopy()
-        if scopes.castbar then Call("MSUF_UpdateCastbarVisuals") end
         if scopes.status then
             Call("MSUF_RefreshAllIndicators")
             Call("MSUF_RefreshStatusIndicators")
         end
-        if scopes.transparency then Call("MSUF_RefreshAllUnitAlphas") end
         Call("MSUF_UFPreview_RequestRefresh", "COPY_UNIT_SETTINGS")
     end
     if target == "all" then
@@ -556,11 +553,9 @@ local function RefreshStatusRuntime(unit, spec)
         Call("MSUF_RequestStatusIconsRefreshForCurrent")
     end
     if spec and spec.value == "level" then
-        Call("MSUF_UpdateAllFonts_Immediate")
-        Call("MSUF_UpdateAllFonts")
         if unit == "boss" and _G.MSUF_BossTestMode and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR") end
     end
-    M.RequestUnitApply(unit, "MSUF2_STATUS_INDICATOR", { preview = true, text = true })
+    M.RequestUnitApply(unit, "MSUF2_STATUS_INDICATOR", { preview = true, text = true, fonts = spec and spec.value == "level" })
 end
 local SetControlEnabled = W.SetControlEnabled
 local function SeedText(unit)

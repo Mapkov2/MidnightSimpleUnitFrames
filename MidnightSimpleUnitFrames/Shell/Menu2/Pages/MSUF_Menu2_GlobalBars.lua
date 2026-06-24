@@ -136,9 +136,13 @@ local function BuildBars(ctx)
     end
     local function ApplyRoundedRuntime()
         Call("MSUF_ApplyRoundedUnitframes")
-        Call("MSUF_RefreshAllFrames")
+        if M.RequestGeneralApply then
+            M.RequestGeneralApply("MSUF2_ROUNDED", { preview = true, applyAll = false, bars = true })
+        else
+            Call("MSUF_RefreshAllFrames")
+            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_ROUNDED")
+        end
         RefreshGroupFrameVisuals()
-        Call("MSUF_UFPreview_RequestRefresh", "MSUF2_ROUNDED")
         Call("MSUF_GF_RefreshPreviewLayout", "party")
         Call("MSUF_GF_RefreshPreviewLayout", "raid")
         Call("MSUF_GF_RefreshPreviewLayout", "mythicraid")
@@ -403,7 +407,7 @@ local function BuildBars(ctx)
             local strength = tonumber(GradientScopeGet("gradientStrength", nil))
             if not (strength and strength > 0) then GradientScopeSet("gradientStrength", 0.45) end
         end
-        M.RequestGeneralApply(reason or "MSUF2_GRADIENT", { preview = true, applyAll = false, notify = false })
+        M.RequestGeneralApply(reason or "MSUF2_GRADIENT", { preview = true, applyAll = false, notify = false, bars = true })
         Call("MSUF_UpdateAllBarGradients")
     end
     local function SetOutlineRGB(entry, r, g, b)

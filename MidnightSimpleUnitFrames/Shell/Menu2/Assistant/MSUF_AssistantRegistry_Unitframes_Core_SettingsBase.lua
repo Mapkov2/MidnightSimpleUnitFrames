@@ -51,15 +51,12 @@ function A.UnitframesRegistry.BuildSettingBaseContext(ctx)
         ApplyUnit(unit, opts.reason or defaultReason or "MSUF_ASSISTANT_UNIT", opts.applyOpts or {
             preview = true,
             text = opts.text,
+            fonts = opts.fonts,
             power = opts.power,
             alpha = opts.alpha,
             castbar = opts.castbar,
         })
         if opts.refresh then CallGlobal(opts.refresh) end
-        if opts.fonts then
-            CallGlobal("MSUF_UpdateAllFonts_Immediate")
-            CallGlobal("MSUF_UpdateAllFonts")
-        end
     end
 
     local BuildSettingBaseUnitContext = A.UnitframesRegistry.BuildSettingBaseUnitContext
