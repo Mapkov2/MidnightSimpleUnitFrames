@@ -29,9 +29,22 @@ local type, tostring, tonumber, pairs, next = type, tostring, tonumber, pairs, n
 local table_concat = table.concat
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
+local C_AddOns = _G.C_AddOns
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local EMPTY_EVENTS = {}
+local AURA_CONTAINER_ADDON = "Blizzard_AuraContainer"
+local IDENTITY_AURA_REFRESH_REASONS = {
+    MSUF_UNIT_IDENTITY_AURAS = true,
+    MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
+    MSUF_GF_UNIT_IDENTITY = true,
+}
+local COLD_APPLY_REASONS = {
+    MSUF_ELEMENT_REFRESH = true,
+}
+
+local RefreshAppliedNativeRoot
+local EnsureNativeAuraRefreshDriver
 
 local MANAGED_UNITS = {
     player = true, target = true, focus = true,
@@ -52,8 +65,11 @@ local UNIT_FLAG = {
 local DEFAULT_SHARED = {
     showBuffs = true,
     showDebuffs = true,
+    showTooltip = true,
+    showCooldownSwipe = true,
     showCooldownText = true,
     showStackCount = true,
+    useDebuffTypeBorders = false,
     iconSize = 26,
     spacing = 2,
     perRow = 12,
@@ -96,6 +112,7 @@ local LANE_SPECS = {
         growthKey = "buffGrowthX",
         wrapKey = "buffGrowthY",
         showTextKey = "buffShowCooldownText",
+        swipeKey = "buffShowCooldownSwipe",
         showStackKey = "buffShowStackCount",
         stackAnchorKey = "buffStackCountAnchor",
         stackSizeKey = "buffStackTextSize",
@@ -122,6 +139,7 @@ local LANE_SPECS = {
         growthKey = "debuffGrowthX",
         wrapKey = "debuffGrowthY",
         showTextKey = "debuffShowCooldownText",
+        swipeKey = "debuffShowCooldownSwipe",
         showStackKey = "debuffShowStackCount",
         stackAnchorKey = "debuffStackCountAnchor",
         stackSizeKey = "debuffStackTextSize",
@@ -142,8 +160,11 @@ local GROUP_LANE_SPECS = {
         spacingKey = "buffSpacing", perRowKey = "buffPerRow", growthXKey = "buffGrowthX",
         growthYKey = "buffGrowthY", anchorKey = "buffAnchor", xKey = "buffOffsetX",
         yKey = "buffOffsetY", layerKey = "buffLayer", filterKey = "buffFilter",
-        showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks",
+        showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
         cooldownSizeKey = "buffCooldownSize", stackSizeKey = "buffStackSize",
+        cooldownAnchorKey = "buffCooldownAnchor", cooldownXKey = "buffCooldownX",
+        cooldownYKey = "buffCooldownY", stackAnchorKey = "buffStackAnchor",
+        stackXKey = "buffStackX", stackYKey = "buffStackY",
         defaultSize = 22, defaultMax = 4, defaultPerRow = 4, defaultAnchor = "BOTTOMRIGHT",
         defaultLayer = 5,
     },
@@ -153,8 +174,11 @@ local GROUP_LANE_SPECS = {
         spacingKey = "debuffSpacing", perRowKey = "debuffPerRow", growthXKey = "debuffGrowthX",
         growthYKey = "debuffGrowthY", anchorKey = "debuffAnchor", xKey = "debuffOffsetX",
         yKey = "debuffOffsetY", layerKey = "debuffLayer", filterKey = "debuffFilter",
-        showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks",
+        showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
         cooldownSizeKey = "debuffCooldownSize", stackSizeKey = "debuffStackSize",
+        cooldownAnchorKey = "debuffCooldownAnchor", cooldownXKey = "debuffCooldownX",
+        cooldownYKey = "debuffCooldownY", stackAnchorKey = "debuffStackAnchor",
+        stackXKey = "debuffStackX", stackYKey = "debuffStackY",
         defaultSize = 20, defaultMax = 3, defaultPerRow = 3, defaultAnchor = "TOPLEFT",
         defaultLayer = 6,
     },
@@ -164,20 +188,59 @@ local GROUP_LANE_SPECS = {
         spacingKey = "externalSpacing", perRowKey = "externalPerRow", growthXKey = "externalGrowthX",
         growthYKey = "externalGrowthY", anchorKey = "externalAnchor", xKey = "externalOffsetX",
         yKey = "externalOffsetY", layerKey = "externalLayer", filterKey = "externalFilter",
-        showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks",
+        showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks", swipeKey = "externalShowCooldownSwipe",
         cooldownSizeKey = "externalCooldownSize", stackSizeKey = "externalStackSize",
+        cooldownAnchorKey = "externalCooldownAnchor", cooldownXKey = "externalCooldownX",
+        cooldownYKey = "externalCooldownY", stackAnchorKey = "externalStackAnchor",
+        stackXKey = "externalStackX", stackYKey = "externalStackY",
         defaultSize = 28, defaultMax = 2, defaultPerRow = 2, defaultAnchor = "CENTER",
         defaultLayer = 7,
     },
 }
 
-local function NoopTrue() return true end
-local function NoopFalse() return false end
+local function InCombat()
+    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+end
 
-local CT = A3.CooldownText
-if type(CT) ~= "table" then
-    CT = {}
-    A3.CooldownText = CT
+-- NOTE: Inbound AuraContainer/AuraButton methods (SetEnabled, SetUnit,
+-- AddAuraFrame, SetIcon, ...) are secure delegates. Call them directly from
+-- our code. Wrapping them does not fix forbidden table access and makes PTR
+-- stack traces harder to reason about.
+--
+-- Do NOT call container:UpdateAllAuras() from MSUF on this PTR build. It
+-- resolves into the private CustomAuraContainer path and taint-fails while
+-- parsing Blizzard's protected aura tables.
+
+local function IsAddOnLoaded(addonName)
+    if C_AddOns and type(C_AddOns.IsAddOnLoaded) == "function" then
+        return C_AddOns.IsAddOnLoaded(addonName) == true
+    end
+    if type(_G.IsAddOnLoaded) == "function" then
+        return _G.IsAddOnLoaded(addonName) == true
+    end
+    return false
+end
+
+local function EnsureBlizzardAuraContainerLoaded()
+    if IsAddOnLoaded(AURA_CONTAINER_ADDON) then
+        A3.nativeAuraRuntimeLoadError = nil
+        return true
+    end
+
+    local loadAddOn = C_AddOns and C_AddOns.LoadAddOn or _G.LoadAddOn
+    if type(loadAddOn) ~= "function" then
+        A3.nativeAuraRuntimeLoadError = "LoadAddOn API is unavailable"
+        return false
+    end
+
+    local loaded, reason = loadAddOn(AURA_CONTAINER_ADDON)
+    if loaded == true or IsAddOnLoaded(AURA_CONTAINER_ADDON) then
+        A3.nativeAuraRuntimeLoadError = nil
+        return true
+    end
+
+    A3.nativeAuraRuntimeLoadError = tostring(reason or loaded or "not loaded")
+    return false
 end
 
 local function Round(value)
@@ -263,7 +326,15 @@ local function EffectiveUnitTables(auras, unit)
     local perUnit = type(auras.perUnit) == "table" and auras.perUnit or nil
     local unitCfg = perUnit and perUnit[unit] or nil
     local layout = unitCfg and unitCfg.overrideLayout == true and type(unitCfg.layout) == "table" and unitCfg.layout or nil
+    local layoutShared = unitCfg and unitCfg.overrideSharedLayout == true and type(unitCfg.layoutShared) == "table" and unitCfg.layoutShared or nil
     local filters = unitCfg and unitCfg.overrideFilters == true and type(unitCfg.filters) == "table" and unitCfg.filters or nil
+    if layoutShared then
+        return layout or {}, setmetatable({}, { __index = function(_, key)
+            local value = layoutShared[key]
+            if value ~= nil then return value end
+            return shared[key]
+        end }), filters or shared.filters
+    end
     return layout or {}, shared, filters or shared.filters
 end
 
@@ -338,18 +409,26 @@ local function GridShape(maxCount, perRow, verticalGrowth)
     return major, minor
 end
 
+local LaneTrackingSignature, LaneLayoutSignature
+
+local function FinalizeLane(lane)
+    if lane then
+        lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
+        lane._msufA3LayoutSignature = LaneLayoutSignature(lane)
+    end
+    return lane
+end
+
 local function NativeFilter(baseFilter, filters)
     filters = type(filters) == "table" and filters or nil
     local filter = tostring(baseFilter or "")
     local helpful = filter:find("HELPFUL", 1, true) ~= nil
-    local harmful = filter:find("HARMFUL", 1, true) ~= nil
-    if filters then
+    if filters and filters.enabled ~= false then
         if filters.onlyMine == true then filter = filter .. "|PLAYER" end
         if filters.onlyImportant == true or filters.exclusive == "important" then filter = filter .. "|RAID" end
         if filters.raid == true then filter = filter .. "|RAID" end
-        if filters.includeBoss == true or filters.boss == true then filter = filter .. "|RAID" end
-        if filters.includeStealable == true and helpful then filter = filter .. "|RAID" end
-        if filters.includeDispellable == true and harmful then filter = filter .. "|RAID" end
+        if filters.cancelable == true and helpful then filter = filter .. "|CANCELABLE" end
+        if filters.notCancelable == true and helpful then filter = filter .. "|NOT_CANCELABLE" end
     end
     return NormalizeNativeFilterString(filter, baseFilter)
 end
@@ -367,7 +446,8 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
     local rowWrap = ReadRaw(shared, nil, spec.wrapKey) or ReadRaw(shared, nil, "rowWrap") or DEFAULT_SHARED.rowWrap
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(growth, rowWrap)
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
-    return {
+    local useDebuffTypeBorders = kind == "debuff" and ReadBool(layout, shared, "useDebuffTypeBorders", false)
+    return FinalizeLane({
         kind = kind,
         rootKey = spec.rootKey,
         unit = unit,
@@ -393,16 +473,21 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
         ySign = ySign,
         verticalGrowth = verticalGrowth == true,
         initialAnchor = ButtonAnchor(xSign, ySign),
-        showCooldownText = ReadBool(shared, nil, spec.showTextKey, ReadBool(shared, nil, "showCooldownText", true)),
-        showStacks = ReadBool(shared, nil, spec.showStackKey, ReadBool(shared, nil, "showStackCount", true)),
+        showCooldownText = ReadBool(layout, shared, spec.showTextKey, ReadBool(layout, shared, "showCooldownText", true)),
+        showCooldownSwipe = ReadBool(layout, shared, spec.swipeKey, ReadBool(layout, shared, "showCooldownSwipe", true)),
+        showStacks = ReadBool(layout, shared, spec.showStackKey, ReadBool(layout, shared, "showStackCount", true)),
+        showTooltip = ReadBool(layout, shared, "showTooltip", DEFAULT_SHARED.showTooltip),
+        showAuraBorder = useDebuffTypeBorders == true,
+        showAuraSymbol = useDebuffTypeBorders == true,
         cooldownSize = ReadNumber(layout, shared, spec.cooldownSizeKey, ReadRaw(shared, nil, "cooldownTextSize") or DEFAULT_SHARED.cooldownTextSize, 6, 40),
+        cooldownAnchor = "CENTER",
         cooldownX = ReadNumber(layout, shared, spec.cooldownXKey, ReadRaw(shared, nil, "cooldownTextOffsetX") or DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
         cooldownY = ReadNumber(layout, shared, spec.cooldownYKey, ReadRaw(shared, nil, "cooldownTextOffsetY") or DEFAULT_SHARED.cooldownTextOffsetY, -2000, 2000),
         stackAnchor = ReadAnchor(shared, nil, spec.stackAnchorKey, ReadRaw(shared, nil, "stackCountAnchor") or DEFAULT_SHARED.stackCountAnchor),
         stackSize = ReadNumber(layout, shared, spec.stackSizeKey, ReadRaw(shared, nil, "stackTextSize") or DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = ReadNumber(layout, shared, spec.stackXKey, ReadRaw(shared, nil, "stackTextOffsetX") or DEFAULT_SHARED.stackTextOffsetX, -2000, 2000),
         stackY = ReadNumber(layout, shared, spec.stackYKey, ReadRaw(shared, nil, "stackTextOffsetY") or DEFAULT_SHARED.stackTextOffsetY, -2000, 2000),
-    }
+    })
 end
 
 local function CompileGroupLane(unit, source, kind)
@@ -415,7 +500,10 @@ local function CompileGroupLane(unit, source, kind)
     local enabled = source.enabled ~= false and source[spec.showKey] == true and maxCount > 0
     local growthX, growthY, xSign, ySign, verticalGrowth = GroupGrowthParts(source[spec.growthXKey], source[spec.growthYKey])
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
-    return {
+    local useDispelBorder = kind == "debuff"
+        and (source.debuffShowDispelBorder == true
+            or (type(source.blizzard) == "table" and source.blizzard.dispelBorder == true))
+    return FinalizeLane({
         kind = kind,
         rootKey = spec.rootKey,
         unit = unit,
@@ -442,15 +530,20 @@ local function CompileGroupLane(unit, source, kind)
         verticalGrowth = verticalGrowth == true,
         initialAnchor = ButtonAnchor(xSign, ySign),
         showCooldownText = source[spec.showTextKey] ~= false,
+        showCooldownSwipe = source[spec.swipeKey] ~= false,
         showStacks = source[spec.showStackKey] ~= false,
+        showTooltip = source.showTooltip ~= false,
+        showAuraBorder = useDispelBorder == true,
+        showAuraSymbol = useDispelBorder == true,
         cooldownSize = ClampNumber(source[spec.cooldownSizeKey] or source.cooldownSize, DEFAULT_SHARED.cooldownTextSize, 6, 40),
-        cooldownX = 0,
-        cooldownY = 0,
-        stackAnchor = "BOTTOMRIGHT",
+        cooldownAnchor = ReadAnchor(source, nil, spec.cooldownAnchorKey, "CENTER"),
+        cooldownX = ClampNumber(source[spec.cooldownXKey] or source.cooldownX, 0, -2000, 2000),
+        cooldownY = ClampNumber(source[spec.cooldownYKey] or source.cooldownY, 0, -2000, 2000),
+        stackAnchor = ReadAnchor(source, nil, spec.stackAnchorKey, "BOTTOMRIGHT"),
         stackSize = ClampNumber(source[spec.stackSizeKey] or source.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
-        stackX = 0,
-        stackY = 0,
-    }
+        stackX = ClampNumber(source[spec.stackXKey] or source.stackX, 0, -2000, 2000),
+        stackY = ClampNumber(source[spec.stackYKey] or source.stackY, 0, -2000, 2000),
+    })
 end
 
 local frameSpecConfigCache = setmetatable({}, { __mode = "k" })
@@ -481,6 +574,8 @@ local function BuildUnitFrameConfig(unit)
         enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true),
         lanes = { buff = buff, debuff = debuff },
         group = false,
+        _msufA3ConfigGen = A3._runtimeConfigGen or 1,
+        _msufA3VisualGen = A3._nativeVisualGen or 0,
     }
 end
 
@@ -488,18 +583,19 @@ function A3.ResolveUnitFrameConfig(unit, frameSpec)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
     local gen = A3._runtimeConfigGen or 1
+    local visualGen = A3._nativeVisualGen or 0
     if frameSpec ~= nil then
         local cached = frameSpecConfigCache[frameSpec]
-        if cached and cached.gen == gen and cached.unit == unit then return cached.config end
+        if cached and cached.gen == gen and cached.visualGen == visualGen and cached.unit == unit then return cached.config end
         local cfg = BuildUnitFrameConfig(unit)
-        frameSpecConfigCache[frameSpec] = { gen = gen, unit = unit, config = cfg }
+        frameSpecConfigCache[frameSpec] = { gen = gen, visualGen = visualGen, unit = unit, config = cfg }
         return cfg
     end
     A3._runtimeConfigCache = A3._runtimeConfigCache or {}
     local cached = A3._runtimeConfigCache[unit]
-    if cached and cached.gen == gen then return cached.config end
+    if cached and cached.gen == gen and cached.visualGen == visualGen then return cached.config end
     local cfg = BuildUnitFrameConfig(unit)
-    A3._runtimeConfigCache[unit] = { gen = gen, config = cfg }
+    A3._runtimeConfigCache[unit] = { gen = gen, visualGen = visualGen, config = cfg }
     return cfg
 end
 
@@ -509,12 +605,21 @@ local function ResolveGroupFrameConfig(frame, unit)
     local spec = frame.MSUFSpec
     local source = spec and (spec.auras or (spec.group and spec.group.auras))
     local gen = A3._runtimeConfigGen or 1
+    local visualGen = A3._nativeVisualGen or 0
     local cached = frame._msufA3NativeGroupConfig
     if cached and frame._msufA3NativeGroupSource == source and frame._msufA3NativeGroupUnit == unit
-        and frame._msufA3NativeGroupGen == gen then
+        and frame._msufA3NativeGroupGen == gen and frame._msufA3NativeGroupVisualGen == visualGen then
         return cached
     end
-    local cfg = { unit = unit, enabled = false, lanes = {}, group = true }
+    local cfg = {
+        unit = unit,
+        enabled = false,
+        lanes = {},
+        group = true,
+        _msufA3ConfigGen = gen,
+        _msufA3VisualGen = visualGen,
+        _msufA3Source = source,
+    }
     if type(source) == "table" and type(unit) == "string" and unit ~= "" and source.enabled ~= false then
         local buff = CompileGroupLane(unit, source, "buff")
         local debuff = CompileGroupLane(unit, source, "debuff")
@@ -527,6 +632,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     frame._msufA3NativeGroupSource = source
     frame._msufA3NativeGroupUnit = unit
     frame._msufA3NativeGroupGen = gen
+    frame._msufA3NativeGroupVisualGen = visualGen
     frame._msufA3NativeGroupConfig = cfg
     return cfg
 end
@@ -585,6 +691,67 @@ local function ApplyFont(fs, size)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
 end
 
+local function PlaceStackText(fs, owner, lane)
+    if not (fs and owner and lane) then return end
+    fs:ClearAllPoints()
+    local anchor = lane.stackAnchor or "TOPRIGHT"
+    local x, y = lane.stackX or -1, lane.stackY or 1
+    if anchor == "TOPLEFT" or anchor == "LEFT" then
+        fs:SetPoint(anchor, owner, anchor, x, y)
+        fs:SetJustifyH("LEFT")
+        fs:SetJustifyV(anchor == "LEFT" and "MIDDLE" or "TOP")
+    elseif anchor == "BOTTOMLEFT" then
+        fs:SetPoint(anchor, owner, anchor, x, y)
+        fs:SetJustifyH("LEFT")
+        fs:SetJustifyV("BOTTOM")
+    elseif anchor == "BOTTOMRIGHT" then
+        fs:SetPoint(anchor, owner, anchor, x, y)
+        fs:SetJustifyH("RIGHT")
+        fs:SetJustifyV("BOTTOM")
+    elseif anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM" then
+        fs:SetPoint(anchor, owner, anchor, x, y)
+        fs:SetJustifyH("CENTER")
+        fs:SetJustifyV(anchor == "TOP" and "TOP" or (anchor == "BOTTOM" and "BOTTOM" or "MIDDLE"))
+    elseif anchor == "RIGHT" then
+        fs:SetPoint(anchor, owner, anchor, x, y)
+        fs:SetJustifyH("RIGHT")
+        fs:SetJustifyV("MIDDLE")
+    else
+        fs:SetPoint("TOPRIGHT", owner, "TOPRIGHT", x, y)
+        fs:SetJustifyH("RIGHT")
+        fs:SetJustifyV("TOP")
+    end
+end
+
+local function PlaceCooldownText(fs, owner, lane)
+    if not (fs and owner and lane) then return end
+    fs:ClearAllPoints()
+    local anchor = lane.cooldownAnchor or "CENTER"
+    local x, y = lane.cooldownX or 0, lane.cooldownY or 0
+    fs:SetPoint(anchor, owner, anchor, x, y)
+    if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
+        fs:SetJustifyH("LEFT")
+    elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
+        fs:SetJustifyH("RIGHT")
+    else
+        fs:SetJustifyH("CENTER")
+    end
+    if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
+        fs:SetJustifyV("TOP")
+    elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
+        fs:SetJustifyV("BOTTOM")
+    else
+        fs:SetJustifyV("MIDDLE")
+    end
+end
+
+local function CallButtonMethod(button, methodName, ...)
+    local method = button and button[methodName]
+    if type(method) ~= "function" then return false end
+    method(button, ...)
+    return true
+end
+
 local function EnsureRoot(frame)
     if not frame then return nil end
     local root = frame.Auras
@@ -592,17 +759,55 @@ local function EnsureRoot(frame)
     root = CreateFrame("Frame", nil, frame)
     root._msufA3NativeRoot = true
     root:SetAllPoints(frame)
+    root:SetScript("OnShow", function(self)
+        if RefreshAppliedNativeRoot then RefreshAppliedNativeRoot(self, true) end
+    end)
     root:Hide()
     frame.Auras = root
     return root
 end
 
-local function LaneTrackingSignature(lane)
+local function ConfigGen(cfg)
+    return cfg and cfg._msufA3ConfigGen or (A3._runtimeConfigGen or 1)
+end
+
+local function VisualGen(cfg)
+    return cfg and cfg._msufA3VisualGen or (A3._nativeVisualGen or 0)
+end
+
+local function ReasonRequiresAuraApply(reason)
+    if reason == nil then return true end
+    if IDENTITY_AURA_REFRESH_REASONS[reason] == true then return true end
+    if COLD_APPLY_REASONS[reason] == true then return true end
+    reason = tostring(reason or "")
+    return reason:find("^AURAS3_", 1, false) ~= nil
+        or reason:find("^MSUF2_", 1, false) ~= nil
+        or reason:find("^MSUF_ASSISTANT_", 1, false) ~= nil
+end
+
+local function RootAppliedConfigIsCurrent(root, frame, cfg, reason)
+    if not (root and root._msufA3NativeRoot == true and root._msufA3Applied == true) then return false end
+    if root.needFullUpdate == true then return false end
+    if ReasonRequiresAuraApply(reason) and not (reason == nil and cfg and root._msufA3Config == cfg) then return false end
+    if cfg and root._msufA3Config ~= cfg then return false end
+    if root._msufA3ConfigGen ~= (cfg and ConfigGen(cfg) or (A3._runtimeConfigGen or 1)) then return false end
+    if root._msufA3VisualGen ~= (cfg and VisualGen(cfg) or (A3._nativeVisualGen or 0)) then return false end
+    if root._msufA3AppliedUnit ~= (cfg and cfg.unit or (frame and frame.unit)) then return false end
+    if root._msufA3FrameSpec ~= (frame and frame.MSUFSpec) then return false end
+    return true
+end
+
+local function FrameAppliedConfigIsCurrent(frame, reason)
+    if not frame then return false end
+    return RootAppliedConfigIsCurrent(frame.Auras, frame, nil, reason)
+end
+
+LaneTrackingSignature = function(lane)
     return tostring(lane.unit) .. "\030" .. tostring(lane.kind) .. "\030" .. tostring(lane.nativeFilter)
         .. "\030" .. tostring(lane.max)
 end
 
-local function LaneLayoutSignature(lane)
+LaneLayoutSignature = function(lane)
     return tostring(lane.size) .. "\030" .. tostring(lane.spacing)
         .. "\030" .. tostring(lane.step) .. "\030" .. tostring(lane.perRow)
         .. "\030" .. tostring(lane.cols) .. "\030" .. tostring(lane.rows)
@@ -611,8 +816,13 @@ local function LaneLayoutSignature(lane)
         .. "\030" .. tostring(lane.y) .. "\030" .. tostring(lane.layer)
         .. "\030" .. tostring(lane.xSign) .. "\030" .. tostring(lane.ySign)
         .. "\030" .. tostring(lane.verticalGrowth) .. "\030" .. tostring(lane.initialAnchor)
-        .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.cooldownSize)
-        .. "\030" .. tostring(lane.cooldownX) .. "\030" .. tostring(lane.cooldownY)
+        .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.showCooldownSwipe) .. "\030" .. tostring(lane.cooldownSize)
+        .. "\030" .. tostring(lane.cooldownAnchor) .. "\030" .. tostring(lane.cooldownX)
+        .. "\030" .. tostring(lane.cooldownY)
+        .. "\030" .. tostring(lane.showStacks) .. "\030" .. tostring(lane.stackAnchor)
+        .. "\030" .. tostring(lane.stackSize) .. "\030" .. tostring(lane.stackX)
+        .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(lane.showTooltip)
+        .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
         .. "\030" .. tostring(lane.alpha) .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
 
@@ -648,22 +858,105 @@ local function PrepareAuraButton(button, lane, index)
     end
     button:SetIcon(icon)
 
+    -- Native cooldown swipe. Blizzard's ApplyDurationCooldown drives this from
+    -- the (secret) aura duration C-side, so there is no addon timer cost.
+    --
+    -- Use CooldownFrameTemplate for the actual swipe art, then immediately opt
+    -- out of countdown numbers, bling, and edge drawing. Created once per button
+    -- and reused.
+    if lane.showCooldownSwipe == true then
+        local cooldown = button._msufA3Cooldown
+        if not cooldown then
+            local cd = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
+            cd:SetAllPoints(button)
+            if type(cd.SetDrawSwipe) == "function" then cd:SetDrawSwipe(true) end
+            if type(cd.SetHideCountdownNumbers) == "function" then cd:SetHideCountdownNumbers(true) end
+            if type(cd.SetDrawBling) == "function" then cd:SetDrawBling(false) end
+            if type(cd.SetDrawEdge) == "function" then cd:SetDrawEdge(false) end
+            button._msufA3Cooldown = cd
+            cooldown = cd
+        end
+        if cooldown then
+            cooldown:Show()
+            CallButtonMethod(button, "SetDurationCooldown", cooldown)
+        end
+    else
+        CallButtonMethod(button, "ClearDurationCooldown")
+        if button._msufA3Cooldown then button._msufA3Cooldown:Hide() end
+    end
+
     local duration = button.Text or button.DurationText
     if not duration then
         duration = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         button.Text = duration
     end
-    duration:ClearAllPoints()
-    duration:SetPoint("CENTER", button, "CENTER", lane.cooldownX or 0, lane.cooldownY or 0)
-    ApplyFont(duration, lane.cooldownSize)
-    if lane.showCooldownText ~= true then duration:Hide() else duration:Show() end
-    button:SetDurationText(duration)
+    duration:Hide()
+    if lane.showCooldownText == true then
+        ApplyFont(duration, lane.cooldownSize)
+        PlaceCooldownText(duration, button, lane)
+        duration:Show()
+        CallButtonMethod(button, "SetDurationText", duration)
+    else
+        CallButtonMethod(button, "ClearDurationText")
+    end
+
+    local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
+    if not count then
+        count = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        button._msufA3ApplicationCount = count
+    end
+    button.Count = count
+    count:Hide()
+    if lane.showStacks == true then
+        ApplyFont(count, lane.stackSize)
+        PlaceStackText(count, button, lane)
+        count:Show()
+        CallButtonMethod(button, "SetApplicationCount", count, {})
+    else
+        CallButtonMethod(button, "ClearApplicationCount")
+    end
+
+    local auraBorderBound = false
+    if lane.showAuraBorder == true then
+        local border = button._msufA3AuraBorder or button.AuraBorder or button.Border
+        if not border then
+            border = button:CreateTexture(nil, "OVERLAY")
+            border:SetAllPoints(button)
+        end
+        button._msufA3AuraBorder = border
+        auraBorderBound = CallButtonMethod(button, "SetAuraBorder", border, { showWhenHarmful = true, showWhenHelpful = false })
+    else
+        CallButtonMethod(button, "ClearAuraBorder")
+        if button._msufA3AuraBorder and button._msufA3AuraBorder.Hide then button._msufA3AuraBorder:Hide() end
+    end
+
+    if lane.showAuraSymbol == true and auraBorderBound == true then
+        local symbol = button._msufA3AuraSymbol or button.AuraSymbol or button.Symbol
+        if not symbol then
+            symbol = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        end
+        button._msufA3AuraSymbol = symbol
+        button.Symbol = symbol
+        symbol:ClearAllPoints()
+        symbol:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+        symbol:SetJustifyH("RIGHT")
+        symbol:SetJustifyV("BOTTOM")
+        ApplyFont(symbol, math_min(lane.stackSize or DEFAULT_SHARED.stackTextSize, 14))
+        CallButtonMethod(button, "SetAuraSymbol", symbol, { showWhenHarmful = true, showWhenHelpful = false })
+    else
+        CallButtonMethod(button, "ClearAuraSymbol")
+        if button._msufA3AuraSymbol and button._msufA3AuraSymbol.Hide then button._msufA3AuraSymbol:Hide() end
+    end
+
+    CallButtonMethod(button, "SetMouseMotionEnabled", lane.showTooltip ~= false)
 
     LayoutButton(button, lane, index)
 end
 
 local function ConfigureContainer(container, lane, parentFrame)
     container._msufA3NativeLane = lane.kind
+    container._msufA3NativeRegistered = nil
+    container._msufA3NativeRegistrationPending = nil
     container.unit = lane.unit
     container.createdButtons = lane.max
     container:SetSize(lane.width, lane.height)
@@ -671,24 +964,58 @@ local function ConfigureContainer(container, lane, parentFrame)
     container:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
     container:SetAlpha(lane.alpha or 1)
     container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1))
-    container:SetUnit(lane.unit)
-    container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
+end
+
+local function NativeContainerVisible(container)
+    if not container then return false end
+    if type(container.IsVisible) == "function" and container:IsVisible() ~= true then return false end
+    if type(container.IsShown) == "function" and container:IsShown() ~= true then return false end
+    return true
+end
+
+local function RegisterNativeContainer(container, forceRefresh)
+    if not container then return false end
+    if forceRefresh ~= true and container._msufA3NativeRegistered == true then return true end
+    if not NativeContainerVisible(container) then
+        container._msufA3NativeRegistrationPending = true
+        return true
+    end
+
+    container._msufA3NativeRegistered = true
+    container._msufA3NativeRegistrationPending = nil
+    return true
+end
+
+local function UnregisterNativeContainer(container)
+    if not container then return true end
+    container._msufA3NativeRegistered = nil
+    container._msufA3NativeRegistrationPending = nil
+    return true
 end
 
 local function CreateNativeLane(root, lane, parentFrame)
-    local ok, container = pcall(CreateFrame, "AuraContainer", nil, root, "CustomAuraContainerTemplate")
-    if not ok or not container then
+    if not EnsureBlizzardAuraContainerLoaded() then
         A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = tostring(container or "CustomAuraContainerTemplate is unavailable")
+        A3.nativeAuraRuntimeError = AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
+        return nil
+    end
+
+    local container = CreateFrame("AuraContainer", nil, root, "CustomAuraContainerTemplate")
+    if not container then
+        A3.nativeAuraRuntimeAvailable = false
+        A3.nativeAuraRuntimeError = "CustomAuraContainerTemplate is unavailable"
         return nil
     end
     A3.nativeAuraRuntimeAvailable = true
     ConfigureContainer(container, lane, parentFrame)
+    container:Show()
+    container:SetUnit(lane.unit)
+    container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
     for i = 1, lane.max do
-        local buttonOk, button = pcall(CreateFrame, "AuraButton", nil, container, "CustomAuraButtonTemplate")
-        if not buttonOk or not button then
+        local button = CreateFrame("AuraButton", nil, container, "CustomAuraButtonTemplate")
+        if not button then
             A3.nativeAuraRuntimeAvailable = false
-            A3.nativeAuraRuntimeError = tostring(button or "CustomAuraButtonTemplate is unavailable")
+            A3.nativeAuraRuntimeError = "CustomAuraButtonTemplate is unavailable"
             if container.Hide then container:Hide() end
             return nil
         end
@@ -696,28 +1023,37 @@ local function CreateNativeLane(root, lane, parentFrame)
         container[i] = button
         container:AddAuraFrame(button)
     end
-    container:Show()
+    if not RegisterNativeContainer(container) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    A3.nativeAuraRuntimeError = nil
     return container
 end
 
 local function HideLane(lane)
-    if lane then lane:Hide() end
+    if lane then
+        UnregisterNativeContainer(lane)
+        lane:Hide()
+    end
 end
 
-local function ApplyLane(root, lane, parentFrame)
+local function ApplyLane(root, lane, parentFrame, forceRecreate)
     if not (root and lane and lane.enabled) then return nil end
     local key = lane.rootKey
-    local trackingSignature = LaneTrackingSignature(lane)
-    local layoutSignature = LaneLayoutSignature(lane)
+    local trackingSignature = lane._msufA3TrackingSignature or LaneTrackingSignature(lane)
+    local layoutSignature = lane._msufA3LayoutSignature or LaneLayoutSignature(lane)
     local current = root[key]
-    if current
+    if forceRecreate ~= true
+        and current
         and current._msufA3TrackingSignature == trackingSignature
         and current._msufA3LayoutSignature == layoutSignature
     then
         current:Show()
-        return current
+        return RegisterNativeContainer(current) and current or nil
     end
     HideLane(current)
+    root[key] = nil
     current = CreateNativeLane(root, lane, parentFrame)
     if current then
         current._msufA3TrackingSignature = trackingSignature
@@ -727,6 +1063,45 @@ local function ApplyLane(root, lane, parentFrame)
     return current
 end
 
+local function RefreshNativeContainer(container, forceRefresh)
+    if not RegisterNativeContainer(container) then return false end
+    if not NativeContainerVisible(container) then return true end
+    return true
+end
+
+RefreshAppliedNativeRoot = function(root, forceRefresh)
+    if not (root and root._msufA3NativeRoot == true and root._msufA3Applied == true) then return false end
+    local cfg = root._msufA3Config
+    local lanes = cfg and cfg.lanes or nil
+    if not lanes then return false end
+
+    local ok, any = true, false
+    if lanes.buff and lanes.buff.enabled then
+        any = true
+        ok = RefreshNativeContainer(root.Buffs, forceRefresh) and ok
+    end
+    if lanes.debuff and lanes.debuff.enabled then
+        any = true
+        ok = RefreshNativeContainer(root.Debuffs, forceRefresh) and ok
+    end
+    if lanes.external and lanes.external.enabled then
+        any = true
+        ok = RefreshNativeContainer(root.Externals, forceRefresh) and ok
+    end
+    if ok and any then A3.nativeAuraRuntimeError = nil end
+    return ok and any
+end
+
+local function RefreshAppliedNativeAuras(frame, forceRefresh)
+    return RefreshAppliedNativeRoot(frame and frame.Auras, forceRefresh)
+end
+
+EnsureNativeAuraRefreshDriver = function()
+    if A3._nativeAuraRefreshDriver then return A3._nativeAuraRefreshDriver end
+    A3._nativeAuraRefreshDriver = true
+    return true
+end
+
 local function HideState(frame)
     local root = frame and frame.Auras
     if not (root and root._msufA3NativeRoot) then return end
@@ -734,6 +1109,11 @@ local function HideState(frame)
     HideLane(root.Debuffs)
     HideLane(root.Externals)
     root._msufA3Config = nil
+    root._msufA3Applied = nil
+    root._msufA3ConfigGen = nil
+    root._msufA3VisualGen = nil
+    root._msufA3AppliedUnit = nil
+    root._msufA3FrameSpec = nil
     root:Hide()
     local unit = frame and frame.unit
     if unit and A3._runtimeFrames and A3._runtimeFrames[unit] == frame then
@@ -745,25 +1125,35 @@ local function HideState(frame)
     if frame then frame._msufA3UnitAuraOwner = nil end
 end
 
-local function ApplyConfig(frame, cfg)
+local function ApplyConfig(frame, cfg, reason)
     if not (frame and cfg and cfg.enabled) then
         HideState(frame)
         return false
     end
     local root = EnsureRoot(frame)
     if not root then return false end
+    if RootAppliedConfigIsCurrent(root, frame, cfg, reason) then return true end
     root.unit = cfg.unit or frame.unit
-    root._msufA3Config = cfg
     root:SetAllPoints(frame)
+    root:Show()
     local lanes = cfg.lanes or {}
-    ApplyLane(root, lanes.buff, frame)
-    ApplyLane(root, lanes.debuff, frame)
-    ApplyLane(root, lanes.external, frame)
+    local forceRecreate = false
+    local ok = true
+    if lanes.buff and lanes.buff.enabled and not ApplyLane(root, lanes.buff, frame, forceRecreate) then ok = false end
+    if lanes.debuff and lanes.debuff.enabled and not ApplyLane(root, lanes.debuff, frame, forceRecreate) then ok = false end
+    if lanes.external and lanes.external.enabled and not ApplyLane(root, lanes.external, frame, forceRecreate) then ok = false end
     if not (lanes.buff and lanes.buff.enabled) then HideLane(root.Buffs) end
     if not (lanes.debuff and lanes.debuff.enabled) then HideLane(root.Debuffs) end
     if not (lanes.external and lanes.external.enabled) then HideLane(root.Externals) end
+    root._msufA3Config = cfg
+    root._msufA3Applied = ok == true
+    root._msufA3ConfigGen = ConfigGen(cfg)
+    root._msufA3VisualGen = VisualGen(cfg)
+    root._msufA3AppliedUnit = cfg.unit or frame.unit
+    root._msufA3FrameSpec = frame.MSUFSpec
+    root.needFullUpdate = nil
     root:Show()
-    return true
+    return ok == true
 end
 
 function A3.SetUnitFrameOwner(unit, frame, owns)
@@ -778,6 +1168,7 @@ end
 
 function A3.EnableFrame(frame)
     if not (frame and frame.unit and MANAGED_UNITS[frame.unit]) then return false end
+    if EnsureNativeAuraRefreshDriver then EnsureNativeAuraRefreshDriver() end
     local cfg = A3.ResolveUnitFrameConfig(frame.unit, frame.MSUFSpec)
     if not (cfg and cfg.enabled) then
         HideState(frame)
@@ -802,17 +1193,22 @@ function A3.DisableFrame(frame)
     return true
 end
 
-function A3.RenderFrame(frame)
+function A3.RenderFrame(frame, reason)
     if not frame then return false end
+    if IDENTITY_AURA_REFRESH_REASONS[reason] == true then
+        if RefreshAppliedNativeAuras(frame, false) then return true end
+        if InCombat() then return false end
+    end
+    if FrameAppliedConfigIsCurrent(frame, reason) then return true end
     local cfg = FrameAuraConfig(frame, frame.unit)
-    return ApplyConfig(frame, cfg)
+    return ApplyConfig(frame, cfg, reason)
 end
 
 A3.ForceUpdateFrame = A3.RenderFrame
 A3.RenderCachedFrame = A3.RenderFrame
 
 function A3.QueueIdentityAuraRebuild(frame)
-    return A3.RenderFrame(frame)
+    return A3.RenderFrame(frame, "MSUF_UNIT_IDENTITY_AURAS")
 end
 
 function A3.RuntimeOwnsUnit(unit)
@@ -841,6 +1237,7 @@ end
 
 function A3._ApplyGroupAuraFrame(frame, unit, kind)
     if not (frame and type(unit) == "string" and unit ~= "") then return false end
+    if EnsureNativeAuraRefreshDriver then EnsureNativeAuraRefreshDriver() end
     frame._msufIsGroupFrame = true
     if kind then frame._msufGFKind = kind end
     if UF.ApplyElementToFrame then
@@ -938,6 +1335,9 @@ function A3.ApplyFontsFromGlobal()
     return A3.RefreshAll()
 end
 
+-- AuraContainer owns UNIT_AURA and per-aura churn. Do not add an MSUF
+-- UNIT_AURA/UpdateAllAuras fallback here; on 12.1 PTR direct UpdateAllAuras can
+-- taint-fail inside Blizzard's private AuraContainer tables.
 local AurasElement = {
     events = EMPTY_EVENTS,
     unitlessEvents = EMPTY_EVENTS,
@@ -973,8 +1373,11 @@ function AurasElement.Disable(frame)
     return A3.DisableFrame(frame)
 end
 
-function AurasElement.Update(frame)
-    return A3.RenderFrame(frame)
+function AurasElement.Update(frame, event)
+    if event ~= nil and not ReasonRequiresAuraApply(event) then
+        return FrameAppliedConfigIsCurrent(frame, event)
+    end
+    return A3.RenderFrame(frame, event)
 end
 
 UF.RegisterElement("Auras", AurasElement)
@@ -987,10 +1390,3 @@ A3.RefreshRuntime = A3.RefreshAll
 MSUF.AuraBackendEnabled = true
 MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
 MSUF.AuraCore.Auras3 = A3
-
-CT.ApplyButtonStyle = NoopFalse
-CT.RegisterButton = NoopFalse
-CT.TouchButton = NoopTrue
-CT.UnregisterButton = NoopTrue
-CT.Invalidate = function() return A3.RefreshAll() end
-CT.ForceRecolor = function() return A3.ApplyFontsFromGlobal() end

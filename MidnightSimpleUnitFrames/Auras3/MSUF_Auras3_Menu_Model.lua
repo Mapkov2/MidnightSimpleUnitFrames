@@ -145,9 +145,11 @@ local LAYOUT_KEYS = {
 }
 
 local SHARED_LAYOUT_KEYS = {
+    showTooltip = true,
     showCooldownSwipe = true,
     showCooldownText = true,
     showStackCount = true,
+    useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
@@ -218,6 +220,7 @@ local LANE_STYLE_KEYS = {
         showCooldownSwipe = "debuffShowCooldownSwipe",
         showCooldownText = "debuffShowCooldownText",
         showStackCount = "debuffShowStackCount",
+        useDebuffTypeBorders = "useDebuffTypeBorders",
         stackCountAnchor = "debuffStackCountAnchor",
         stackTextSize = "debuffStackTextSize",
         stackTextOffsetX = "debuffStackTextOffsetX",
@@ -240,6 +243,7 @@ local DEFAULT_SHARED = {
     showCooldownSwipe = true,
     showCooldownText = true,
     showStackCount = true,
+    useDebuffTypeBorders = false,
     buffShowCooldownSwipe = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
@@ -971,10 +975,18 @@ local function SeedUnitVisuals(auras, shared, runtimeUnit)
     local seededLayout = {}
     local seededShared = {}
     for key in pairs(LAYOUT_KEYS) do
-        seededLayout[key] = (layout and layout[key] ~= nil and layout[key]) or (shared and shared[key])
+        if layout and layout[key] ~= nil then
+            seededLayout[key] = layout[key]
+        elseif shared then
+            seededLayout[key] = shared[key]
+        end
     end
     for key in pairs(SHARED_LAYOUT_KEYS) do
-        seededShared[key] = (sharedLayout and sharedLayout[key] ~= nil and sharedLayout[key]) or (shared and shared[key])
+        if sharedLayout and sharedLayout[key] ~= nil then
+            seededShared[key] = sharedLayout[key]
+        elseif shared then
+            seededShared[key] = shared[key]
+        end
     end
     pu.layout = seededLayout
     pu.layoutShared = seededShared
@@ -1001,10 +1013,12 @@ function Model.ReadValue(unit, key, defaultValue)
     local auras, shared = Model.EnsureDB()
     if type(shared) ~= "table" then return defaultValue end
     if NormalizeScope(unit) == "shared" then
-        return shared[key] ~= nil and shared[key] or defaultValue
+        if shared[key] ~= nil then return shared[key] end
+        return defaultValue
     end
     local value = ReadKeyRaw(auras, shared, unit, key)
-    return value ~= nil and value or defaultValue
+    if value ~= nil then return value end
+    return defaultValue
 end
 
 function Model.ReadNumber(unit, key, defaultValue, minValue, maxValue)
@@ -1279,7 +1293,8 @@ function Model.ReadFilter(scope, kind, key, defaultValue)
     local group = filters and filters[tableKey]
     if type(group) ~= "table" then return defaultValue end
     local value = group[key]
-    return value ~= nil and value or defaultValue
+    if value ~= nil then return value end
+    return defaultValue
 end
 
 function Model.WriteFilter(scope, kind, key, value)
@@ -1918,6 +1933,7 @@ function Model.ReadPreviewConfig(unit)
         debuffShowStackCount = Model.ReadLaneStyleBool(unit, "debuff", "showStackCount", true),
         debuffShowCooldownText = Model.ReadLaneStyleBool(unit, "debuff", "showCooldownText", true),
         debuffShowCooldownSwipe = Model.ReadLaneStyleBool(unit, "debuff", "showCooldownSwipe", true),
+        useDebuffTypeBorders = Model.ReadLaneStyleBool(unit, "debuff", "useDebuffTypeBorders", false),
         stackAnchor = (runtimeCfg and runtimeCfg.stackAnchor) or Model.ReadStackAnchor(unit),
         buffStackAnchor = Model.ReadLaneStackAnchor(unit, "buff"),
         debuffStackAnchor = Model.ReadLaneStackAnchor(unit, "debuff"),
