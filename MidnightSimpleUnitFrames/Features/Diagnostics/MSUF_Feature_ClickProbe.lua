@@ -196,7 +196,7 @@ local function AddProbeBars(button)
 end
 
 local function CreateSecureProbe(name, y, unit, label, template, withBars, withTargetAction)
-    local button = CreateFrame("Button", name, UIParent, template or "SecureUnitButtonTemplate, PingableUnitFrameTemplate")
+    local button = CreateFrame("Button", name, UIParent, template or "SecureUnitButtonTemplate")
     button:SetSize(190, 34)
     button:SetPoint("CENTER", 0, y)
     if unit then
@@ -248,7 +248,7 @@ local function ToggleProbeButtons()
         -234,
         unit,
         "D: old handlers target",
-        "SecureUnitButtonTemplate,SecureHandlerStateTemplate,SecureHandlerEnterLeaveTemplate,PingableUnitFrameTemplate",
+        "SecureUnitButtonTemplate,SecureHandlerStateTemplate,SecureHandlerEnterLeaveTemplate",
         true
     )
     local b = CreateFrame("Button", "MSUF_ProbeInertBtn", UIParent)
@@ -287,7 +287,7 @@ local function ToggleHeaderProbe()
     end
     probeHeader = CreateFrame("Frame", "MSUF_ProbeGroupHeader", UIParent, "SecureGroupHeaderTemplate")
     probeHeader:SetPoint("CENTER", 0, -330)
-    probeHeader:SetAttribute("template", "SecureUnitButtonTemplate, PingableUnitFrameTemplate")
+    probeHeader:SetAttribute("template", "SecureUnitButtonTemplate")
     probeHeader:SetAttribute("initial-width", 190)
     probeHeader:SetAttribute("initial-height", 34)
     probeHeader:SetAttribute("initialConfigFunction", [[

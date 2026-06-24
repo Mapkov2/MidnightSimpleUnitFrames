@@ -21,6 +21,7 @@ local tostring = tostring
 local select = select
 local math_max = math.max
 local math_abs = math.abs
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local function EnsureDBLazy()
     local fn = _G.MSUF_EnsureDBLazy
@@ -229,10 +230,11 @@ local function UpdateColorForInterruptible(frame)
     if nameplate then
         local nativeCastbar = (nameplate.UnitFrame and nameplate.UnitFrame.castBar) or nameplate.castBar or nameplate.CastBar
         local barType = nativeCastbar and nativeCastbar.barType
-        if barType == "uninterruptable"
-            or barType == "uninterruptible"
-            or barType == "uninterruptibleSpell"
-            or barType == "shield" then
+        if issecretvalue(barType) ~= true
+            and (barType == "uninterruptable"
+                or barType == "uninterruptible"
+                or barType == "uninterruptibleSpell"
+                or barType == "shield") then
             forceNotInterruptible = true
         end
     end
@@ -405,14 +407,7 @@ local function SetStatusBarRemaining(frame, totalSeconds, remainingSeconds, reve
 end
 
 local function PlainBoolean(value)
-    local isSecret = _G.issecretvalue
-    if type(isSecret) == "function" and isSecret(value) == true then
-        local toPlain = _G.ToPlain
-        if type(toPlain) ~= "function" then return false end
-        value = toPlain(value)
-        if type(isSecret) == "function" and isSecret(value) == true then return false end
-    end
-    if value == nil then return false end
+    if issecretvalue(value) == true then return false end
     return value == true
 end
 
