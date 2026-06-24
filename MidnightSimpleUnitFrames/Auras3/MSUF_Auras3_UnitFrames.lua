@@ -844,6 +844,45 @@ local function LayoutButton(button, lane, index)
     button:SetSize(lane.size, lane.size)
 end
 
+local function SyncButtonGeometry(button, lane, index)
+    if not (button and lane) then return false end
+    LayoutButton(button, lane, index)
+    if button.Icon then
+        button.Icon:ClearAllPoints()
+        button.Icon:SetAllPoints(button)
+    end
+    if button._msufA3Cooldown then
+        button._msufA3Cooldown:ClearAllPoints()
+        button._msufA3Cooldown:SetAllPoints(button)
+    end
+    if button._msufA3AuraBorder then
+        button._msufA3AuraBorder:ClearAllPoints()
+        button._msufA3AuraBorder:SetAllPoints(button)
+    end
+    return true
+end
+
+local function SyncContainerGeometry(container, lane, parentFrame)
+    if not (container and lane) then return false end
+    parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
+    container._msufA3NativeLaneConfig = lane
+    container._msufA3ParentFrame = parentFrame
+    container.createdButtons = lane.max
+    container:SetSize(lane.width, lane.height)
+    if parentFrame then
+        container:ClearAllPoints()
+        container:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
+    end
+    container:SetAlpha(lane.alpha or 1)
+    if parentFrame then
+        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1))
+    end
+    for i = 1, (container.createdButtons or lane.max or 0) do
+        SyncButtonGeometry(container[i], lane, i)
+    end
+    return true
+end
+
 local function PrepareAuraButton(button, lane, index)
     button._msufA3NativeButton = true
     button._msufA3LaneKind = lane.kind
@@ -950,7 +989,7 @@ local function PrepareAuraButton(button, lane, index)
 
     CallButtonMethod(button, "SetMouseMotionEnabled", lane.showTooltip ~= false)
 
-    LayoutButton(button, lane, index)
+    SyncButtonGeometry(button, lane, index)
 end
 
 local function ConfigureContainer(container, lane, parentFrame)
@@ -958,12 +997,7 @@ local function ConfigureContainer(container, lane, parentFrame)
     container._msufA3NativeRegistered = nil
     container._msufA3NativeRegistrationPending = nil
     container.unit = lane.unit
-    container.createdButtons = lane.max
-    container:SetSize(lane.width, lane.height)
-    container:ClearAllPoints()
-    container:SetPoint(lane.anchor, parentFrame, lane.anchor, lane.x, lane.y)
-    container:SetAlpha(lane.alpha or 1)
-    container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1))
+    SyncContainerGeometry(container, lane, parentFrame)
 end
 
 local function NativeContainerVisible(container)
@@ -1049,6 +1083,7 @@ local function ApplyLane(root, lane, parentFrame, forceRecreate)
         and current._msufA3TrackingSignature == trackingSignature
         and current._msufA3LayoutSignature == layoutSignature
     then
+        SyncContainerGeometry(current, lane, parentFrame)
         current:Show()
         return RegisterNativeContainer(current) and current or nil
     end
@@ -1063,7 +1098,8 @@ local function ApplyLane(root, lane, parentFrame, forceRecreate)
     return current
 end
 
-local function RefreshNativeContainer(container, forceRefresh)
+local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame)
+    SyncContainerGeometry(container, lane or (container and container._msufA3NativeLaneConfig), parentFrame)
     if not RegisterNativeContainer(container) then return false end
     if not NativeContainerVisible(container) then return true end
     return true
@@ -1078,15 +1114,15 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
     local ok, any = true, false
     if lanes.buff and lanes.buff.enabled then
         any = true
-        ok = RefreshNativeContainer(root.Buffs, forceRefresh) and ok
+        ok = RefreshNativeContainer(root.Buffs, forceRefresh, lanes.buff, root:GetParent()) and ok
     end
     if lanes.debuff and lanes.debuff.enabled then
         any = true
-        ok = RefreshNativeContainer(root.Debuffs, forceRefresh) and ok
+        ok = RefreshNativeContainer(root.Debuffs, forceRefresh, lanes.debuff, root:GetParent()) and ok
     end
     if lanes.external and lanes.external.enabled then
         any = true
-        ok = RefreshNativeContainer(root.Externals, forceRefresh) and ok
+        ok = RefreshNativeContainer(root.Externals, forceRefresh, lanes.external, root:GetParent()) and ok
     end
     if ok and any then A3.nativeAuraRuntimeError = nil end
     return ok and any
@@ -1132,7 +1168,10 @@ local function ApplyConfig(frame, cfg, reason)
     end
     local root = EnsureRoot(frame)
     if not root then return false end
-    if RootAppliedConfigIsCurrent(root, frame, cfg, reason) then return true end
+    if RootAppliedConfigIsCurrent(root, frame, cfg, reason) then
+        RefreshAppliedNativeRoot(root, false)
+        return true
+    end
     root.unit = cfg.unit or frame.unit
     root:SetAllPoints(frame)
     root:Show()
@@ -1199,7 +1238,10 @@ function A3.RenderFrame(frame, reason)
         if RefreshAppliedNativeAuras(frame, false) then return true end
         if InCombat() then return false end
     end
-    if FrameAppliedConfigIsCurrent(frame, reason) then return true end
+    if FrameAppliedConfigIsCurrent(frame, reason) then
+        RefreshAppliedNativeAuras(frame, false)
+        return true
+    end
     local cfg = FrameAuraConfig(frame, frame.unit)
     return ApplyConfig(frame, cfg, reason)
 end
