@@ -45,6 +45,18 @@ local REASON_HARDHIDE = "HARDHIDE"
 local EMPTY_OPTIONS = {}
 local STOP_TIMERS = { "hideTimer", "succeededTimer", "timer" }
 
+local function CancelTimerHandle(timer)
+    local timerType = type(timer)
+    if timerType ~= "table" and timerType ~= "userdata" then
+        return
+    end
+
+    local cancel = timer.Cancel
+    if type(cancel) == "function" then
+        cancel(timer)
+    end
+end
+
 local function Now()
     return (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
 end
@@ -422,9 +434,7 @@ function Runtime:Stop(frame, reasonOrOptions)
         local timerKey = STOP_TIMERS[index]
         local timer = frame[timerKey]
 
-        if timer and timer.Cancel then
-            timer:Cancel()
-        end
+        CancelTimerHandle(timer)
 
         frame[timerKey] = nil
     end
