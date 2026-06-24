@@ -527,6 +527,9 @@ function GF.UntrackFrame(frame)
   if UF and UF.DetachFrame then
     UF.DetachFrame(frame)
   end
+  if UF and UF.DisablePingCompatibility then
+    UF.DisablePingCompatibility(frame)
+  end
   local ping = frame.pingIconFrame or frame.PingIconFrame
   if ping and not (IsForbidden and IsForbidden(ping)) then
     frame._msufNativePingGUID = nil

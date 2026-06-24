@@ -1485,6 +1485,15 @@ local RUNTIME_MISSING_AURA_CLEAR = {
   MSUF_UNIT_IDENTITY_SOFT_DEFERRED = true,
   MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
 }
+local RUNTIME_PING_REFRESH = {
+  MSUF_UNIT_IDENTITY = true,
+  MSUF_UNIT_IDENTITY_DEFERRED = true,
+  MSUF_UNIT_IDENTITY_FAST = true,
+  MSUF_UNIT_IDENTITY_SOFT = true,
+  MSUF_UNIT_IDENTITY_SOFT_DEFERRED = true,
+  MSUF_UNIT_IDENTITY_SOFT_FAST = true,
+  MSUF_GF_UNIT_IDENTITY = true,
+}
 local BOSS_IDENTITY_UNITS = {
   boss1 = true,
   boss2 = true,
@@ -1698,7 +1707,10 @@ FrameRuntimeUpdate = function(frame, reason)
   end
   reason = reason or "MSUF_FORCE_UPDATE"
   local unit = frame.unit
-  UF.RefreshNativePingIcon(frame)
+  if RUNTIME_PING_REFRESH[reason] then
+    if UF.InstallPingCompatibility then UF.InstallPingCompatibility(frame) end
+    UF.RefreshNativePingIcon(frame)
+  end
   if RuntimeCanSkipMissingUnit(frame, reason) then
     if RUNTIME_MISSING_AURA_CLEAR[reason] == true then
       RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")

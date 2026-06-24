@@ -22,6 +22,9 @@ local Factory = UF.Factory
 local type = type
 local ipairs = ipairs
 local tonumber = tonumber
+local select = select
+local table_concat = table.concat
+local string_format = string.format
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local RegisterUnitWatch = RegisterUnitWatch
@@ -29,6 +32,8 @@ local UnregisterUnitWatch = UnregisterUnitWatch
 local UnitFrame_OnEnter = UnitFrame_OnEnter
 local UnitFrame_OnLeave = UnitFrame_OnLeave
 local UnitGUID = UnitGUID
+local GetBindingKey = GetBindingKey
+local ClearOverrideBindings = ClearOverrideBindings
 local UIParent = UIParent
 
 local COOLDOWN_ANCHORS = {
@@ -231,6 +236,9 @@ local function ApplyFrame(frame, spec)
     if UF.DetachFrame then
       UF.DetachFrame(frame)
     end
+    if UF.DisablePingCompatibility then
+      UF.DisablePingCompatibility(frame)
+    end
     frame._msufDisabledByConfig = true
     return true
   end
@@ -358,6 +366,9 @@ local function MSUF_GetContextualPingType(self)
 end
 
 local function MSUF_GetIsPingable(self)
+  if self and (self._msufGFIsPreviewFrame or self._msufGFPreviewActive) then
+    return false
+  end
   return PingTargetGUID(self) ~= nil
 end
 
@@ -365,29 +376,405 @@ local function MSUF_GetAllowRadialWheel()
   return true
 end
 
+local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate"
+-- Blizzard's PingableUnitFrameTemplate sends a GUID through protected ping code
+-- after reading addon-owned unit data. Use secure /ping macros instead.
+local PING_COMPAT_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate,SecureHandlerEnterLeaveTemplate,SecureHandlerShowHideTemplate"
+local PING_ICON_TEMPLATE = "UnitPingIconFrameTemplate"
+local MAX_PING_BINDING_KEYS = 2
+local SECURE_PING_BINDINGS = {
+  { command = "TOGGLEPINGLISTENER", button = "MSUFPing", attrPrefix = "msuf-ping-key-context", macro = "/ping [@mouseover]" },
+  { command = "PINGATTACK", button = "MSUFPingAttack", attrPrefix = "msuf-ping-key-attack", macro = "/ping [@mouseover] 1" },
+  { command = "PINGWARNING", button = "MSUFPingWarning", attrPrefix = "msuf-ping-key-warning", macro = "/ping [@mouseover] 2" },
+  { command = "PINGONMYWAY", button = "MSUFPingOnMyWay", attrPrefix = "msuf-ping-key-onmyway", macro = "/ping [@mouseover] 3" },
+  { command = "PINGASSIST", button = "MSUFPingAssist", attrPrefix = "msuf-ping-key-assist", macro = "/ping [@mouseover] 4" },
+}
+local SECURE_PING_ONENTER = [[
+local owner = self:GetFrameRef("MSUFPingBindingOwner") or self
+owner:ClearBindings()
+local name = self:GetName()
+if name then
+  local key = self:GetAttribute("msuf-ping-key-context-1")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPing") end
+  key = self:GetAttribute("msuf-ping-key-context-2")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPing") end
+  key = self:GetAttribute("msuf-ping-key-attack-1")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPingAttack") end
+  key = self:GetAttribute("msuf-ping-key-attack-2")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPingAttack") end
+  key = self:GetAttribute("msuf-ping-key-warning-1")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPingWarning") end
+  key = self:GetAttribute("msuf-ping-key-warning-2")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPingWarning") end
+  key = self:GetAttribute("msuf-ping-key-onmyway-1")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPingOnMyWay") end
+  key = self:GetAttribute("msuf-ping-key-onmyway-2")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPingOnMyWay") end
+  key = self:GetAttribute("msuf-ping-key-assist-1")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPingAssist") end
+  key = self:GetAttribute("msuf-ping-key-assist-2")
+  if key then owner:SetBindingClick(true, key, name, "MSUFPingAssist") end
+end
+]]
+local SECURE_PING_ONLEAVE = [[
+local owner = self:GetFrameRef("MSUFPingBindingOwner") or self
+owner:ClearBindings()
+]]
+local SECURE_PING_ONHIDE = SECURE_PING_ONLEAVE
+local pendingPingFrames = setmetatable({}, { __mode = "k" })
+local pingEventFrame
+local securePingInitialConfig
+
+function UF.GetSecureUnitButtonTemplate()
+  return PING_COMPAT_UNIT_BUTTON_TEMPLATE
+end
+
 function UF.ResolvePingUnit(frame)
   return ResolvePingUnit(frame)
+end
+
+local function InCombat()
+  return (InCombatLockdown and InCombatLockdown()) or _G.MSUF_InCombat == true
+end
+
+local function EnsurePingEventFrame()
+  if pingEventFrame then
+    return pingEventFrame
+  end
+  pingEventFrame = CreateFrame("Frame")
+  pingEventFrame:SetScript("OnEvent", function(self, event, addon)
+    if event == "ADDON_LOADED" then
+      if addon ~= "Blizzard_PingUI" then return end
+    elseif event ~= "PLAYER_REGEN_ENABLED" and event ~= "UPDATE_BINDINGS" then
+      return
+    end
+
+    if event == "UPDATE_BINDINGS" then
+      if UF.RefreshPingCompatibility then
+        UF.RefreshPingCompatibility()
+      end
+      return
+    end
+
+    if not InCombat() then
+      self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+      for frame in pairs(pendingPingFrames) do
+        pendingPingFrames[frame] = nil
+        if frame then
+          UF.InstallPingCompatibility(frame)
+          UF.RefreshNativePingIcon(frame)
+        end
+      end
+    end
+
+    if event == "ADDON_LOADED" then
+      self:UnregisterEvent("ADDON_LOADED")
+      if UF.RefreshPingCompatibility then
+        UF.RefreshPingCompatibility()
+      end
+    end
+  end)
+  return pingEventFrame
+end
+
+local function QueuePingRefresh(frame)
+  if frame then
+    pendingPingFrames[frame] = true
+  end
+  EnsurePingEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
+end
+
+local function ClearAddonPingMethods(frame)
+  if not frame then return false end
+  frame.IsPingable = nil
+  if frame.GetTargetInfo == MSUF_GetPingTargetInfo then frame.GetTargetInfo = nil end
+  if frame.GetTargetPingGUID == MSUF_GetTargetPingGUID then frame.GetTargetPingGUID = nil end
+  if frame.GetContextualPingType == MSUF_GetContextualPingType then frame.GetContextualPingType = nil end
+  if frame.GetIsPingable == MSUF_GetIsPingable then frame.GetIsPingable = nil end
+  if frame.GetAllowRadialWheel == MSUF_GetAllowRadialWheel then frame.GetAllowRadialWheel = nil end
+  return true
+end
+
+local function ClearLegacyPingReceiver(frame)
+  if not (frame and frame.SetAttribute) then
+    return false
+  end
+  if frame.ClearAttribute then
+    frame:ClearAttribute("ping-receiver")
+    frame:ClearAttribute("ping-top-level-pass-through")
+  else
+    frame:SetAttribute("ping-receiver", nil)
+    frame:SetAttribute("ping-top-level-pass-through", nil)
+  end
+  return true
+end
+
+local function PingBindingKey(command, index)
+  if not GetBindingKey then
+    return nil
+  end
+  return select(index, GetBindingKey(command))
+end
+
+function UF.ForEachPingBindingAttribute(callback)
+  if type(callback) ~= "function" then
+    return
+  end
+  for _, info in ipairs(SECURE_PING_BINDINGS) do
+    for keyIndex = 1, MAX_PING_BINDING_KEYS do
+      callback(info.attrPrefix .. "-" .. keyIndex, PingBindingKey(info.command, keyIndex))
+    end
+  end
+end
+
+local function ApplyPingBindingKeys(frame)
+  UF.ForEachPingBindingAttribute(function(attribute, key)
+    frame:SetAttribute(attribute, key)
+  end)
+end
+
+local function EnsurePingBindingOwner(frame)
+  if not frame or frame._msufPingBindingOwner or type(frame.SetFrameRef) ~= "function" then
+    return true
+  end
+  local ok, owner = pcall(CreateFrame, "Frame", nil, frame, "SecureHandlerBaseTemplate")
+  if not ok or not owner then
+    frame._msufPingBindingOwnerError = owner
+    return true
+  end
+  frame._msufPingBindingOwner = owner
+  frame:SetFrameRef("MSUFPingBindingOwner", owner)
+  return true
+end
+
+local function ClearPingOverrideBindings(frame)
+  if not (ClearOverrideBindings and frame) then
+    return
+  end
+  ClearOverrideBindings(frame._msufPingBindingOwner or frame)
+end
+
+local function ApplySecurePingCompatibility(frame)
+  if not (frame and frame.SetAttribute) then
+    return false
+  end
+  if frame._msufGFIsPreviewFrame or frame._msufGFPreviewActive or not ResolvePingUnit(frame) then
+    return false
+  end
+  if InCombat() then
+    QueuePingRefresh(frame)
+    return false
+  end
+
+  ClearAddonPingMethods(frame)
+  ClearLegacyPingReceiver(frame)
+  EnsurePingBindingOwner(frame)
+
+  for _, info in ipairs(SECURE_PING_BINDINGS) do
+    frame:SetAttribute("type-" .. info.button, "macro")
+    frame:SetAttribute("macrotext-" .. info.button, info.macro)
+  end
+  ApplyPingBindingKeys(frame)
+  frame:SetAttribute("_onenter", SECURE_PING_ONENTER)
+  frame:SetAttribute("_onleave", SECURE_PING_ONLEAVE)
+  frame:SetAttribute("_onhide", SECURE_PING_ONHIDE)
+  return true
+end
+
+local function BuildSecurePingInitialConfig()
+  local lines = {}
+  for _, info in ipairs(SECURE_PING_BINDINGS) do
+    lines[#lines + 1] = string_format("self:SetAttribute(%q, %q)", "type-" .. info.button, "macro")
+    lines[#lines + 1] = string_format("self:SetAttribute(%q, %q)", "macrotext-" .. info.button, info.macro)
+  end
+  lines[#lines + 1] = "local msufPingHeader = self:GetParent()"
+  UF.ForEachPingBindingAttribute(function(attribute)
+    lines[#lines + 1] = string_format("self:SetAttribute(%q, msufPingHeader and msufPingHeader:GetAttribute(%q) or nil)", attribute, attribute)
+  end)
+  lines[#lines + 1] = string_format("self:SetAttribute(%q, %q)", "_onenter", SECURE_PING_ONENTER)
+  lines[#lines + 1] = string_format("self:SetAttribute(%q, %q)", "_onleave", SECURE_PING_ONLEAVE)
+  lines[#lines + 1] = string_format("self:SetAttribute(%q, %q)", "_onhide", SECURE_PING_ONHIDE)
+  return table_concat(lines, "\n")
+end
+
+function UF.GetSecurePingInitialConfig()
+  if not securePingInitialConfig then
+    securePingInitialConfig = BuildSecurePingInitialConfig()
+  end
+  return securePingInitialConfig
+end
+
+function UF.DisablePingCompatibility(frame)
+  if not frame then return false end
+  if InCombat() then
+    QueuePingRefresh(frame)
+    return false
+  end
+  ClearPingOverrideBindings(frame)
+  ClearAddonPingMethods(frame)
+  ClearLegacyPingReceiver(frame)
+  frame._msufPingCompatInstalled = nil
+  return true
 end
 
 function UF.InstallPingCompatibility(frame)
   if not frame then
     return false
   end
-  if frame._msufPingCompatInstalled == true then
-    return true
+  if IsForbidden and IsForbidden(frame) then
+    return false
   end
-  frame._msufPingCompatInstalled = true
-  frame.IsPingable = true
-  frame.GetTargetInfo = MSUF_GetPingTargetInfo
-  frame.GetTargetPingGUID = MSUF_GetTargetPingGUID
-  frame.GetContextualPingType = MSUF_GetContextualPingType
-  if type(frame.GetIsPingable) ~= "function" then
-    frame.GetIsPingable = MSUF_GetIsPingable
+  if InCombat() then
+    QueuePingRefresh(frame)
+    return frame._msufPingCompatInstalled == true
   end
-  if type(frame.GetAllowRadialWheel) ~= "function" then
-    frame.GetAllowRadialWheel = MSUF_GetAllowRadialWheel
+  local ok = ApplySecurePingCompatibility(frame)
+  frame._msufPingCompatInstalled = ok and true or nil
+  return ok
+end
+
+function UF.RefreshPingCompatibility()
+  for i = 1, #UF.frameList do
+    local frame = UF.frameList[i]
+    if frame then
+      UF.InstallPingCompatibility(frame)
+      UF.RefreshNativePingIcon(frame)
+    end
+  end
+  local GF = MSUF.GF
+  if GF and type(GF.ForEachFrame) == "function" then
+    GF.ForEachFrame(function(frame)
+      UF.InstallPingCompatibility(frame)
+      UF.RefreshNativePingIcon(frame)
+    end, true)
   end
   return true
+end
+ExportPublic("MSUF_RefreshPingCompatibility", UF.RefreshPingCompatibility)
+
+local function PingDebugValue(frame)
+  if not frame then return nil end
+  local unit = ResolvePingUnit(frame)
+  return {
+    frame = frame.GetName and frame:GetName() or tostring(frame),
+    unit = unit,
+    guid = unit and UnitGUID(unit) or nil,
+    pingReceiver = frame.GetAttribute and frame:GetAttribute("ping-receiver") or nil,
+    passThrough = frame.GetAttribute and frame:GetAttribute("ping-top-level-pass-through") or nil,
+    hasTargetInfo = type(frame.GetTargetInfo) == "function",
+    hasIsPingable = type(frame.GetIsPingable) == "function",
+    hasPingBindingOwner = frame._msufPingBindingOwner ~= nil,
+    addonTargetInfo = frame.GetTargetInfo == MSUF_GetPingTargetInfo,
+    addonIsPingable = frame.GetIsPingable == MSUF_GetIsPingable,
+    addonAllowRadial = frame.GetAllowRadialWheel == MSUF_GetAllowRadialWheel,
+    isPingable = type(frame.GetIsPingable) == "function" and frame:GetIsPingable() or nil,
+    allowRadial = type(frame.GetAllowRadialWheel) == "function" and frame:GetAllowRadialWheel() or nil,
+    pingMacro = frame.GetAttribute and frame:GetAttribute("macrotext-MSUFPing") or nil,
+    pingKey1 = frame.GetAttribute and frame:GetAttribute("msuf-ping-key-context-1") or nil,
+    attackKey1 = frame.GetAttribute and frame:GetAttribute("msuf-ping-key-attack-1") or nil,
+    pingTemplate = frame._msufPingTemplate,
+    pingCompat = frame._msufPingCompatInstalled == true,
+    nativePingGUID = frame._msufNativePingGUID,
+  }
+end
+
+local function CountArray(list)
+  return type(list) == "table" and #list or 0
+end
+
+local function FrameMatchesUnit(frame, unit)
+  if not frame or type(unit) ~= "string" then
+    return false
+  end
+  if frame.unit == unit or frame.MSUFUnitKey == unit or frame.unitKey == unit then
+    return true
+  end
+  if frame.GetAttribute then
+    return frame:GetAttribute("unit") == unit
+  end
+  return false
+end
+
+local function FindPingDebugFrame(unit)
+  local frame = UF.frames and UF.frames[unit]
+  if frame then
+    return frame, "UF.frames"
+  end
+  if UF.FrameName then
+    frame = _G[UF.FrameName(unit)]
+    if frame then
+      return frame, "global"
+    end
+  end
+  if type(UF.frameList) == "table" then
+    for i = 1, #UF.frameList do
+      frame = UF.frameList[i]
+      if FrameMatchesUnit(frame, unit) then
+        return frame, "UF.frameList"
+      end
+    end
+  end
+  local GF = MSUF.GF
+  if GF and type(GF.FrameForUnit) == "function" then
+    frame = GF.FrameForUnit(unit)
+    if frame then
+      return frame, "GF.FrameForUnit"
+    end
+  end
+  if GF and type(GF.frameList) == "table" then
+    for i = 1, #GF.frameList do
+      frame = GF.frameList[i]
+      if FrameMatchesUnit(frame, unit) then
+        return frame, "GF.frameList"
+      end
+    end
+  end
+  return nil, nil
+end
+
+ExportPublic("MSUF_DebugPingFrame", function(unitOrFrame)
+  local frame = unitOrFrame
+  local source
+  if type(unitOrFrame) == "string" then
+    frame, source = FindPingDebugFrame(unitOrFrame)
+    if not frame then
+      local GF = MSUF.GF
+      return {
+        missing = true,
+        requested = unitOrFrame,
+        expectedGlobal = UF.FrameName and UF.FrameName(unitOrFrame) or nil,
+        ufFrameListCount = CountArray(UF.frameList),
+        gfFrameListCount = GF and CountArray(GF.frameList) or 0,
+      }
+    end
+  end
+  local info = PingDebugValue(frame)
+  if info then
+    info.source = source
+  end
+  return info or {
+    missing = true,
+    requested = unitOrFrame,
+    ufFrameListCount = CountArray(UF.frameList),
+  }
+end)
+
+function UF.CreateSecureUnitButton(name, parent)
+  local ok, frame = pcall(CreateFrame, "Button", name, parent or UIParent, PING_COMPAT_UNIT_BUTTON_TEMPLATE)
+  if ok and frame then
+    frame._msufPingTemplate = PING_COMPAT_UNIT_BUTTON_TEMPLATE
+    return frame
+  end
+  UF._pingableUnitButtonTemplateError = frame
+  frame = CreateFrame("Button", name, parent or UIParent, SECURE_UNIT_BUTTON_TEMPLATE)
+  frame._msufPingTemplate = SECURE_UNIT_BUTTON_TEMPLATE
+  return frame
+end
+
+EnsurePingEventFrame():RegisterEvent("UPDATE_BINDINGS")
+
+if type(_G.UnitPingIconFrameMixin) ~= "table" then
+  EnsurePingEventFrame():RegisterEvent("ADDON_LOADED")
 end
 
 function UF.EnsureNativePingIcon(frame)
@@ -396,9 +783,17 @@ function UF.EnsureNativePingIcon(frame)
   end
   local ping = frame.pingIconFrame or frame.PingIconFrame
   if not ping then
-    -- UnitPingIconFrameTemplate is restricted; only drive a native ping child if Blizzard created one.
-    frame._msufNativePingGUID = nil
-    return nil
+    if InCombat() or type(_G.UnitPingIconFrameMixin) ~= "table" then
+      frame._msufNativePingGUID = nil
+      return nil
+    end
+    local ok, created = pcall(CreateFrame, "Frame", nil, frame, PING_ICON_TEMPLATE)
+    if not ok or not created then
+      frame._msufNativePingGUID = nil
+      frame._msufNativePingIconError = created
+      return nil
+    end
+    ping = created
   end
   if IsForbidden and IsForbidden(ping) then
     return nil
@@ -418,7 +813,13 @@ function UF.EnsureNativePingIcon(frame)
     if ping.SetFrameLevel and frame.GetFrameLevel then
       ping:SetFrameLevel((frame:GetFrameLevel() or 0) + 20)
     end
+    if type(ping.SetGUIDMatch) == "function" then
+      ping:SetGUIDMatch(function(guid)
+        return guid ~= nil and guid == frame._msufNativePingGUID
+      end)
+    end
   end
+  ping.isRaidFrame = frame._msufIsGroupFrame == true
   frame.pingIconFrame = ping
   frame.PingIconFrame = ping
   if ping.Show then
@@ -439,11 +840,10 @@ function UF.RefreshNativePingIcon(frame)
   end
   frame._msufNativePingGUID = guid
   if guid == nil then
-    ping:Hide()
+    if ping.ClearPing then ping:ClearPing() end
   else
     ping:Show()
   end
-  ping:SetGUIDMatch(guid)
   return true
 end
 
@@ -458,7 +858,7 @@ local function SpawnFrame(unit)
   local name = UF.FrameName(unit)
   local frame = _G[name]
   if not frame then
-    frame = CreateFrame("Button", name, UIParent, "SecureUnitButtonTemplate, PingableUnitFrameTemplate")
+    frame = UF.CreateSecureUnitButton(name, UIParent)
   end
 
   UF.AttachFrameMethods(frame)

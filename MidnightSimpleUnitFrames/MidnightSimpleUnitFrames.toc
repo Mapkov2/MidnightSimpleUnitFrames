@@ -6,7 +6,7 @@
 ## Version: 6.0-alpha2
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
-## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics
+## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_PingUI
 ## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
 ## X-Website: https://discord.gg/2Gf9b2Wprz

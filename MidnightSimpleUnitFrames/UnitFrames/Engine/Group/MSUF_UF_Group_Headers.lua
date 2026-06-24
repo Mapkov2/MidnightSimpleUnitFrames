@@ -691,21 +691,29 @@ local function ApplySortAttributes(header, state)
   return changed
 end
 
-local BUTTON_TEMPLATE = "SecureUnitButtonTemplate,PingableUnitFrameTemplate"
+local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate"
+local PING_INIT_VERSION = 3
+
+local function ButtonTemplate()
+  if UF and type(UF.GetSecureUnitButtonTemplate) == "function" then
+    return UF.GetSecureUnitButtonTemplate()
+  end
+  return SECURE_UNIT_BUTTON_TEMPLATE
+end
 
 local _initCfgNonce = 0
 local function BuildInitialConfigFunction(w, h)
   _initCfgNonce = _initCfgNonce + 1
+  local pingInit = UF and type(UF.GetSecurePingInitialConfig) == "function" and UF.GetSecurePingInitialConfig() or ""
   return string.format([[
 self:ClearAllPoints()
 self:SetWidth(%.3f)
 self:SetHeight(%.3f)
 self:SetAttribute('*type1', 'target')
 self:SetAttribute('*type2', 'togglemenu')
-self:RegisterForClicks('AnyUp')
-RegisterUnitWatch(self)
+%s
 -- nonce %d
-]], w, h, _initCfgNonce)
+]], w, h, pingInit, _initCfgNonce)
 end
 
 local function ApplyGroupBorder(anchor, conf)
@@ -751,6 +759,7 @@ local function ApplyGroupBorder(anchor, conf)
 end
 
 local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount)
+  local buttonTemplate = ButtonTemplate()
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing)
   local upc = ClampInt(conf.unitsPerColumn, kind == "party" and 5 or 5, 1, 40)
   local requiredColumns = RequiredHeaderColumns(kind, conf, layoutCount)
@@ -759,11 +768,12 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
   local initialHeight = floor((h or 32) + 0.5)
   local sizeChanged = AttrChanged(header, "initial-width", initialWidth)
     or AttrChanged(header, "initial-height", initialHeight)
-  local initCfg = sizeChanged and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
+  local pingInitChanged = AttrChanged(header, "_msufPingInitVersion", PING_INIT_VERSION)
+  local initCfg = (sizeChanged or pingInitChanged) and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
   local sortState = BuildSortState(key, kind, conf)
   local groupFilter = sortState.sortMethod == "NAMELIST" and nil or (key == "party" and nil or ResolveGroupFilter(conf))
   local shouldHide = header.IsShown and header:IsShown()
-    and (AttrChanged(header, "template", BUTTON_TEMPLATE)
+    and (AttrChanged(header, "template", buttonTemplate)
       or sizeChanged
       or AttrChanged(header, "point", point)
       or AttrChanged(header, "xOffset", xOffset)
@@ -773,6 +783,7 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
       or AttrChanged(header, "unitsPerColumn", upc)
       or AttrChanged(header, "maxColumns", columns)
       or AttrChanged(header, "groupFilter", groupFilter)
+      or pingInitChanged
       or SortStateChanged(header, sortState))
 
   if shouldHide then
@@ -780,9 +791,15 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
   end
 
   local changed = false
-  changed = SetAttrIfChanged(header, "template", BUTTON_TEMPLATE) or changed
+  changed = SetAttrIfChanged(header, "template", buttonTemplate) or changed
   changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
   changed = SetAttrIfChanged(header, "initial-height", initialHeight) or changed
+  changed = SetAttrIfChanged(header, "_msufPingInitVersion", PING_INIT_VERSION) or changed
+  if UF and type(UF.ForEachPingBindingAttribute) == "function" then
+    UF.ForEachPingBindingAttribute(function(attribute, key)
+      changed = SetAttrIfChanged(header, attribute, key) or changed
+    end)
+  end
   if initCfg then
     header:SetAttribute("initialConfigFunction", initCfg)
     changed = true
