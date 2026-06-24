@@ -64,13 +64,11 @@ function A.UnitframesRegistry.BuildStatusCoreContext(ctx)
             CallGlobal("MSUF_RequestStatusIconsRefreshForCurrent")
         end
         if level then
-            CallGlobal("MSUF_UpdateAllFonts_Immediate")
-            CallGlobal("MSUF_UpdateAllFonts")
             if unit == "boss" and _G.MSUF_BossTestMode and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
                 _G.MSUF_ApplyBossUnitframePreviewState(true, reason or "MSUF_ASSISTANT_STATUS")
             end
         end
-        ApplyUnit(unit, reason or "MSUF_ASSISTANT_STATUS", { preview = true, text = true })
+        ApplyUnit(unit, reason or "MSUF_ASSISTANT_STATUS", { preview = true, text = true, fonts = level })
     end
 
     local function ApplyStatusRefresh(unit, refresh, statusRuntime, level)

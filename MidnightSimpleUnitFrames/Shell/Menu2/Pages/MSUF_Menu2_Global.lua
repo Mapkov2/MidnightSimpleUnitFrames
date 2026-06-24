@@ -14,11 +14,10 @@ local W = M.Widgets
 local T = M.Theme
 local VTP = M.ValueTextPairs
 local function Call(name, ...)
+    local apply = M.ApplyService
+    if apply and type(apply.CallGlobal) == "function" then return apply.CallGlobal(name, ...) end
     local fn = _G[name]
-    if type(fn) == "function" then
-        fn(...)
-        return true
-    end
+    if type(fn) == "function" then fn(...); return true end
     return false
 end
 local function DB()
@@ -170,7 +169,7 @@ end
 local function FontScopeSet(key, value, reason, rootKey)
     local shared = rootKey and DB() or G()
     ScopeWrite(CurrentFontScope(), "fontOverride", shared, rootKey or key, value)
-    M.RequestGeneralApply(reason or "MSUF2_FONTS_SCOPE", { preview = true, applyAll = false })
+    M.RequestGeneralApply(reason or "MSUF2_FONTS_SCOPE", { preview = true, applyAll = false, fonts = true })
 end
 local function BarScopeGet(key, default)
     local scope = CurrentBarsScope()
@@ -179,14 +178,14 @@ end
 local function BarScopeSet(key, value, reason)
     local scope = CurrentBarsScope()
     ScopeWrite(scope, BarsFlagForKey(scope, key), G(), key, value)
-    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false })
+    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false, bars = true })
 end
 local function BarScopeGetBars(key, default)
     return ScopeRead(CurrentBarsScope(), "hlOverride", Bars(), key, default)
 end
 local function BarScopeSetBars(key, value, reason)
     ScopeWrite(CurrentBarsScope(), "hlOverride", Bars(), key, value)
-    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false })
+    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false, bars = true })
 end
 local function NormalizeFontKey(key)
     local fn = _G.MSUF_NormalizeFontKey or (MSUF and MSUF.MSUF_NormalizeFontKey)
@@ -517,34 +516,13 @@ end
 local SetControlEnabled = W.SetControlEnabled
 local SetControlsEnabled = W.SetControlsEnabled
 local function ApplyFonts(reason)
-    M.RequestGeneralApply(reason or "MSUF2_FONTS", { preview = true, applyAll = false })
-    Call("MSUF_UpdateAllFonts_Immediate")
-    Call("MSUF_RefreshAllIdentityColors")
-    Call("MSUF_RefreshAllPowerTextColors")
-    Call("MSUF_RefreshAllFrames")
-    local gf = MSUF and MSUF.GF
-    if gf then
-        if type(gf.RefreshFonts) == "function" then gf.RefreshFonts() end
-        if type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty((gf.DIRTY_FONT or 4) + (gf.DIRTY_LAYOUT or 32)) end
-    end
+    M.RequestGeneralApply(reason or "MSUF2_FONTS", { preview = true, applyAll = false, fonts = true })
 end
 function ApplyBars(reason)
-    M.RequestGeneralApply(reason or "MSUF2_BARS", { preview = true, applyAll = false })
-    Call("MSUF_UpdateAllBarTextures_Immediate")
-    Call("MSUF_UpdateAllBarTextures")
-    Call("MSUF_UpdateAbsorbBarTextures")
-    Call("MSUF_InvalidateAbsorbCache")
-    Call("MSUF_RefreshAllFrames")
-    local gf = MSUF and MSUF.GF
-    if gf then
-        if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals() end
-        if type(gf.MarkAllDirty) == "function" then gf.MarkAllDirty((gf.DIRTY_VISUAL or 2) + (gf.DIRTY_LAYOUT or 32)) end
-    end
+    M.RequestGeneralApply(reason or "MSUF2_BARS", { preview = true, applyAll = false, bars = true })
 end
 local function ApplyCastbars(reason)
-    M.RequestGeneralApply(reason or "MSUF2_CASTBARS", { castbar = true, preview = true, applyAll = false })
-    Call("MSUF_UpdateCastbarVisuals")
-    Call("MSUF_UpdateCastbarTextures_Immediate")
+    M.RequestGeneralApply(reason or "MSUF2_CASTBARS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
 end
 local GlobalPage = M.GlobalPage or {}
 M.GlobalPage = GlobalPage

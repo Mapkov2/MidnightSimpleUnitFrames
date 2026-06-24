@@ -423,7 +423,6 @@ local function BuildCastbar(ctx, builder, unit)
     end
     local function SetGeneralValue(key, value, reason)
         M.SetGeneralValue(key, value, reason, { castbar = true, preview = true, applyAll = false })
-        Call("MSUF_UpdateCastbarVisuals")
     end
     local function SetGeneralNumber(key, value, reason)
         value = tonumber(value)

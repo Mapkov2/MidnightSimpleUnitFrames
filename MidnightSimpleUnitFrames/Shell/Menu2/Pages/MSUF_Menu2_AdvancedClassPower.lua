@@ -203,9 +203,9 @@ local function BindBarsAlphaPercent(ctx, section, label, key, default, apply, st
     return slider
 end
 local APPLY_DETACHED_POWER = { preview = true, power = true, applyAll = false }
-local APPLY_DETACHED_POWER_TEXT = { preview = true, power = true, text = true, applyAll = false }
+local APPLY_DETACHED_POWER_TEXT = { preview = true, power = true, text = true, fonts = true, applyAll = false }
 local APPLY_PLAYER_HP = { preview = true, applyAll = false }
-local APPLY_PLAYER_HP_TEXT = { preview = true, text = true, applyAll = false }
+local APPLY_PLAYER_HP_TEXT = { preview = true, text = true, fonts = true, applyAll = false }
 local function ApplyClassPowerPage(reason, flags, ...)
     for i = 1, select("#", ...) do CallGlobal(select(i, ...)) end
     RefreshClassPowerInlinePreview()
@@ -217,7 +217,7 @@ local function ApplyDetachedPowerBar()
 end
 local function ApplyDetachedPowerText()
     ApplyClassPowerPage("MSUF2_DETACHED_POWER_TEXT", APPLY_DETACHED_POWER_TEXT,
-        "MSUF_DetachedPowerBar_RefreshTextures", "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_ClassPower_PlayerHP_Refresh", "MSUF_UpdateAllFonts_Immediate")
+        "MSUF_DetachedPowerBar_RefreshTextures", "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_ClassPower_PlayerHP_Refresh")
 end
 local function ApplyDetachedPowerBarOutline()
     CallGlobal("MSUF_ApplyBarOutlineThickness_All")
@@ -230,7 +230,7 @@ local function ApplyPlayerHPTextures()
     ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXTURES", APPLY_PLAYER_HP, "MSUF_ClassPower_PlayerHP_RefreshTextures")
 end
 local function ApplyPlayerHPText()
-    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXT", APPLY_PLAYER_HP_TEXT, "MSUF_ClassPower_PlayerHP_Refresh", "MSUF_UpdateAllFonts_Immediate")
+    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXT", APPLY_PLAYER_HP_TEXT, "MSUF_ClassPower_PlayerHP_Refresh")
 end
 local function Player()
     local db = M.EnsureDB()

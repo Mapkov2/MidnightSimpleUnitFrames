@@ -1055,7 +1055,8 @@ local function UpdateToggleProxyBounds(button)
     local labelWidth = label and label.GetWidth and tonumber(label:GetWidth()) or nil
     if labelWidth and labelWidth > 0 then textWidth = textWidth > 0 and min(textWidth, labelWidth) or labelWidth end
     textWidth = max(0, textWidth)
-    local hitWidth = max(36, floor(40 + textWidth + 0.5))
+    local baseWidth = tonumber(button._msuf2ProxyBaseWidth) or 40
+    local hitWidth = max(36, floor(baseWidth + textWidth + 0.5))
     local rowHover = button._msuf2ToggleRowHover
     if rowHover then
         rowHover:ClearAllPoints()
@@ -1243,6 +1244,18 @@ local SWITCH_LABEL_HOOKS = {
         btn._msuf2SwitchHovered = true
         RefreshSwitchVisual(btn, true)
         if btn.LockHighlight then btn:LockHighlight() end
+    end,
+    OnMouseDown = function(self)
+        local btn = LabelOwner(self, "_msuf2SwitchOwner", true)
+        if not btn then return end
+        btn._msuf2SwitchPressed = true
+        RefreshSwitchVisual(btn, true)
+    end,
+    OnMouseUp = function(self)
+        local btn = LabelOwner(self, "_msuf2SwitchOwner")
+        if not btn then return end
+        btn._msuf2SwitchPressed = nil
+        RefreshSwitchVisual(btn, btn._msuf2SwitchHovered)
     end,
     OnLeave = function(self)
         local btn = LabelOwner(self, "_msuf2SwitchOwner")
@@ -1443,6 +1456,8 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn._msuf2ControlKind = "toggle"
     btn:SetPoint("TOPLEFT", x or 14, y or -38)
     btn:SetSize(switchW, switchH)
+    if btn.RegisterForClicks then btn:RegisterForClicks("LeftButtonUp") end
+    if btn.EnableMouse then btn:EnableMouse(true) end
     if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -4, -4) end
     local edge = ControlTexture(btn, "_msuf2SwitchEdge", "BACKGROUND", 0, switchTrackTexture)
     edge:SetAllPoints(btn)
@@ -1459,6 +1474,8 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn._msuf2SwitchKnobSize = knobSize
     btn._msuf2SwitchKnobPad = knobPad
     btn._msuf2SwitchKnobTexture = switchKnobTexture
+    btn._msuf2ProxyBaseWidth = switchW + 14
+    btn._msuf2UpdateToggleProxyBounds = UpdateToggleProxyBounds
     local side = labelSide or "RIGHT"
     local labelFS = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     SetSearchText(labelFS, label)
@@ -1479,14 +1496,17 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     for script, handler in pairs(SWITCH_CONTROL_HOOKS) do btn:HookScript(script, handler) end
     if side ~= "HIDDEN" then
         local labelHit = CreateFrame("Button", nil, section)
+        labelHit:EnableMouse(true)
+        if labelHit.RegisterForClicks then labelHit:RegisterForClicks("LeftButtonUp") end
         labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
-        labelHit:SetPoint("TOPLEFT", labelFS, "TOPLEFT", -2, 2)
-        labelHit:SetPoint("BOTTOMRIGHT", labelFS, "BOTTOMRIGHT", 2, -2)
         labelHit._msuf2SwitchOwner = btn
         for script, handler in pairs(SWITCH_LABEL_HOOKS) do labelHit:SetScript(script, handler) end
         btn._msuf2LabelHit = labelHit
+        btn._msuf2UseProxyMouse = true
+        if btn.EnableMouse then btn:EnableMouse(false) end
     end
     btn:SetChecked(false)
+    UpdateToggleProxyBounds(btn)
     RegisterSearchObject(btn, label, "toggle", { anchor = side ~= "HIDDEN" and labelFS or btn })
     return btn
 end

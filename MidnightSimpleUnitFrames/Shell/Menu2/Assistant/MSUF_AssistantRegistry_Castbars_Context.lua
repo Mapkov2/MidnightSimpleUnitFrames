@@ -48,11 +48,6 @@ function A.CastbarsRegistry.BuildRegistryHelperContext(ctx)
     end
 
     local function ApplyCastbarTextures(reason)
-        CallGlobal("MSUF_UpdateCastbarTextures_Immediate")
-        CallGlobal("MSUF_UpdateCastbarTextures")
-        CallGlobal("MSUF_UpdateCastbarVisuals_Immediate")
-        CallGlobal("MSUF_UpdateCastbarVisuals")
-        CallGlobal("MSUF_UpdateBossCastbarPreview")
         ApplyCastbar(reason or "MSUF2_CASTBAR_TEXTURES")
     end
 

@@ -129,6 +129,14 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             AddGFAuraAliases(aliases, scope, lane, "stacks")
             RegisterGFAuraBoolean(scope, lane, "StackCount", "showStacks", laneInfo.label .. " Stack Count", true, aliases)
 
+            if lane == "debuff" then
+                aliases = {}
+                AddGFAuraAliases(aliases, scope, lane, "dispel type border")
+                AddGFAuraAliases(aliases, scope, lane, "debuff type border")
+                AddGFAuraAliases(aliases, scope, lane, "dispel border")
+                RegisterGFAuraBoolean(scope, lane, "DispelTypeBorder", "showDispelBorder", laneInfo.label .. " Dispel-type Border", false, aliases)
+            end
+
             aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "cooldown font")
             AddGFAuraAliases(aliases, scope, lane, "cooldown size")

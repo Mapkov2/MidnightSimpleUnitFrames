@@ -21,19 +21,21 @@ function A.RegistryCoreBuilders.BuildBarApplyHelpers(ctx)
     local MSUFRef = ctx.MSUF or MSUF
     if type(CallGlobal) ~= "function" or type(ApplyGeneral) ~= "function" then return nil end
     if type(ApplyColors) ~= "function" then return nil end
+    local ApplyService = _G.MSUF_Menu2_ApplyService
+
+    local function RequestBars(reason)
+        if ApplyService and type(ApplyService.RequestBars) == "function" then
+            return ApplyService.RequestBars(reason)
+        end
+        return ApplyGeneral(reason or "MSUF_ASSISTANT_BARS", { preview = true, applyAll = false, bars = true })
+    end
 
     local function ApplyBars(reason)
-        ApplyGeneral(reason or "MSUF_ASSISTANT_BARS", { preview = true, applyAll = false })
-        CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
-        CallGlobal("MSUF_UpdateAllBarTextures")
-        CallGlobal("MSUF_UpdateAbsorbBarTextures")
-        CallGlobal("MSUF_InvalidateAbsorbCache")
-        CallGlobal("MSUF_RefreshAllFrames")
-        CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "MSUF_ASSISTANT_BARS")
+        RequestBars(reason or "MSUF_ASSISTANT_BARS")
     end
 
     local function ApplyBarGradients(reason)
-        ApplyGeneral(reason or "MSUF_ASSISTANT_BAR_GRADIENT", { preview = true, applyAll = false, notify = false })
+        ApplyGeneral(reason or "MSUF_ASSISTANT_BAR_GRADIENT", { preview = true, applyAll = false, notify = false, bars = true })
         CallGlobal("MSUF_UpdateAllBarGradients")
     end
 
@@ -83,7 +85,6 @@ function A.RegistryCoreBuilders.BuildBarApplyHelpers(ctx)
     end
 
     local function ApplyAbsorbBars(reason)
-        CallGlobal("MSUF_InvalidateAbsorbCache")
         ApplyBars(reason or "MSUF_ASSISTANT_ABSORB_BARS")
     end
 

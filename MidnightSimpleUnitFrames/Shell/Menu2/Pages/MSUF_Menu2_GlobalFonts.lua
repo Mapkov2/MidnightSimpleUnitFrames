@@ -349,7 +349,6 @@ local function BuildFonts(ctx)
         function() return FontKeyGet() end,
         function(v)
             FontKeySet(v)
-            M.RequestGeneralApply("MSUF2_FONT_KEY", { preview = true, applyAll = false })
             if type(_G.MSUF_NormalizeStoredFontKeys) == "function" then _G.MSUF_NormalizeStoredFontKeys() end
             ApplyFonts("MSUF2_FONT_KEY")
             RefreshFontPreview()

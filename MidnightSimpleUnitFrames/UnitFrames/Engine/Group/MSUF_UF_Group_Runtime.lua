@@ -1055,16 +1055,4 @@ for i = 1, #GF_PUBLIC_ALIASES do
     return GF[method](...)
   end)
 end
-ExportPublic("MSUF_GF_InvalidateCooldownTextCurve", function()
-  local A3 = MSUF and MSUF.MSUF_Auras3
-  local CT = A3 and A3.CooldownText
-  if CT and CT.Invalidate then CT.Invalidate("group") end
-  return true
-end)
-ExportPublic("MSUF_GF_ForceCooldownTextRecolor", function()
-  local A3 = MSUF and MSUF.MSUF_Auras3
-  local CT = A3 and A3.CooldownText
-  if CT and CT.ForceRecolor then CT.ForceRecolor("group") end
-  return GF.RefreshVisuals(nil, GF.DIRTY_AURAS)
-end)
 ExportPublic("MSUF_GF_ForceAuraTextColorRefresh", function() return GF.RefreshVisuals(nil, GF.DIRTY_AURAS) end)

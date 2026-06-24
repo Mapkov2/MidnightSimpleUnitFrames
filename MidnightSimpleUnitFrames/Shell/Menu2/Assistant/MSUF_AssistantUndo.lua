@@ -48,9 +48,33 @@ local function DeepReplace(dst, src)
 end
 A.DeepReplace = A.DeepReplace or DeepReplace
 
-local function CallGlobal(name, ...)
-    local fn = _G[name]
-    if type(fn) == "function" then fn(...) end
+local function CurrentApplyService()
+    return (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+end
+
+local function RequestBroadRuntime(reason)
+    local opts = {
+        preview = true,
+        alpha = true,
+        castbar = true,
+        castbarTextures = true,
+        fonts = true,
+        bars = true,
+        colors = true,
+    }
+    if M and type(M.RequestGeneralApply) == "function" then
+        return M.RequestGeneralApply(reason, opts)
+    end
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestGeneral) == "function" then
+        return apply.RequestGeneral(reason, opts)
+    end
+    return false
+end
+
+local function FlushApplyService()
+    local apply = CurrentApplyService()
+    if apply and type(apply.Flush) == "function" then return apply.Flush() end
 end
 
 local function ScheduleNextFrame(key, fn)
@@ -71,19 +95,8 @@ local function BroadApply(reason)
     -- Undo may touch several domains at once. Use broad scheduled refreshers rather than
     -- guessing which specific runtime owned each restored DB key.
     reason = reason or "MSUF_ASSISTANT_UNDO"
-    if M and type(M.RequestGeneralApply) == "function" then
-        M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true })
-    end
-    CallGlobal("MSUF_UpdateAllFonts_Immediate")
-    CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
-    CallGlobal("MSUF_UpdateAllBarTextures")
-    CallGlobal("MSUF_UpdateCastbarVisuals_Immediate")
-    CallGlobal("MSUF_UpdateCastbarVisuals")
-    CallGlobal("MSUF_RefreshAllIdentityColors")
-    CallGlobal("MSUF_RefreshAllPowerTextColors")
-    CallGlobal("MSUF_RefreshAllUnitAlphas")
-    CallGlobal("MSUF_RefreshAllFrames")
-    CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
+    RequestBroadRuntime(reason)
+    FlushApplyService()
     if MSUF and MSUF.GF then
         if type(MSUF.GF.RebuildAll) == "function" then MSUF.GF.RebuildAll() end
         if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
@@ -100,25 +113,10 @@ local function BroadApplySteps(reason)
     reason = reason or "MSUF_ASSISTANT_UNDO"
     return {
         function()
-            if M and type(M.RequestGeneralApply) == "function" then
-                M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true })
-            end
+            RequestBroadRuntime(reason)
         end,
         function()
-            CallGlobal("MSUF_UpdateAllFonts_Immediate")
-            CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
-            CallGlobal("MSUF_UpdateAllBarTextures")
-        end,
-        function()
-            CallGlobal("MSUF_UpdateCastbarVisuals_Immediate")
-            CallGlobal("MSUF_UpdateCastbarVisuals")
-            CallGlobal("MSUF_RefreshAllIdentityColors")
-            CallGlobal("MSUF_RefreshAllPowerTextColors")
-            CallGlobal("MSUF_RefreshAllUnitAlphas")
-        end,
-        function()
-            CallGlobal("MSUF_RefreshAllFrames")
-            CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
+            FlushApplyService()
         end,
         function()
             if MSUF and MSUF.GF then

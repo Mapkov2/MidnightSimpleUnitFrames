@@ -11,11 +11,10 @@ local WL = M.WordList
 local AURA_LAYOUT_OVERRIDE_KEYS = WL "iconSize spacing cooldownTextSize stackTextSize reminderGrowth"
 local AURA_CAPS_OVERRIDE_KEYS = WL "maxBuffs maxDebuffs maxIcons perRow layoutMode growth buffGrowth debuffGrowth rowWrap buffRowWrap debuffRowWrap buffDebuffAnchor splitSpacing stackCountAnchor sortOrder"
 local function CallGlobal(name, ...)
+    local apply = M.ApplyService
+    if apply and type(apply.CallGlobal) == "function" then return apply.CallGlobal(name, ...) end
     local fn = _G[name]
-    if type(fn) == "function" then
-        fn(...)
-        return true
-    end
+    if type(fn) == "function" then fn(...); return true end
     return false
 end
 local function DB()

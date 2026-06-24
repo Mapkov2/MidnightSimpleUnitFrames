@@ -106,4 +106,37 @@ function A.AurasRegistry.RegisterGroupAuraLaneGeometrySettings(ctx, scope, lane,
     AddGFAuraAliases(aliases, scope, lane, "cooldown anchor")
     AddGFAuraAliases(aliases, scope, lane, "timer anchor")
     RegisterGFAuraEnum(scope, lane, "CooldownAnchor", "cooldownAnchor", laneInfo.label .. " Cooldown Anchor", GF_AURA_ANCHORS, ANCHOR_VALUE_ALIASES, "CENTER", aliases, "geometry")
+
+    aliases = {}
+    AddGFAuraAliases(aliases, scope, lane, "cooldown x")
+    AddGFAuraAliases(aliases, scope, lane, "cooldown x offset")
+    AddGFAuraAliases(aliases, scope, lane, "timer x")
+    AddGFAuraAliases(aliases, scope, lane, "timer x offset")
+    RegisterGFAuraNumber(scope, lane, "CooldownX", "cooldownX", laneInfo.label .. " Cooldown X Offset", 0, -40, 40, aliases, "geometry")
+
+    aliases = {}
+    AddGFAuraAliases(aliases, scope, lane, "cooldown y")
+    AddGFAuraAliases(aliases, scope, lane, "cooldown y offset")
+    AddGFAuraAliases(aliases, scope, lane, "timer y")
+    AddGFAuraAliases(aliases, scope, lane, "timer y offset")
+    RegisterGFAuraNumber(scope, lane, "CooldownY", "cooldownY", laneInfo.label .. " Cooldown Y Offset", 0, -40, 40, aliases, "geometry")
+
+    aliases = {}
+    AddGFAuraAliases(aliases, scope, lane, "stack anchor")
+    AddGFAuraAliases(aliases, scope, lane, "stack count anchor")
+    RegisterGFAuraEnum(scope, lane, "StackAnchor", "stackAnchor", laneInfo.label .. " Stack Anchor", GF_AURA_ANCHORS, ANCHOR_VALUE_ALIASES, "BOTTOMRIGHT", aliases, "geometry")
+
+    aliases = {}
+    AddGFAuraAliases(aliases, scope, lane, "stack x")
+    AddGFAuraAliases(aliases, scope, lane, "stack x offset")
+    AddGFAuraAliases(aliases, scope, lane, "stack count x")
+    AddGFAuraAliases(aliases, scope, lane, "stack count x offset")
+    RegisterGFAuraNumber(scope, lane, "StackX", "stackX", laneInfo.label .. " Stack X Offset", 0, -40, 40, aliases, "geometry")
+
+    aliases = {}
+    AddGFAuraAliases(aliases, scope, lane, "stack y")
+    AddGFAuraAliases(aliases, scope, lane, "stack y offset")
+    AddGFAuraAliases(aliases, scope, lane, "stack count y")
+    AddGFAuraAliases(aliases, scope, lane, "stack count y offset")
+    RegisterGFAuraNumber(scope, lane, "StackY", "stackY", laneInfo.label .. " Stack Y Offset", 0, -40, 40, aliases, "geometry")
 end

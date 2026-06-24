@@ -375,11 +375,11 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
         function(v) GFWriteGroupValue(scope, groupKey, key, v or defaultValue, mode or "visual") end)
 end
 local function RequestAuraTextRefresh()
-    local ct = A3 and A3.CooldownText
-    if ct and type(ct.Invalidate) == "function" then ct.Invalidate("unit") end
-    if ct and type(ct.ForceRecolor) == "function" then ct.ForceRecolor("unit") end
-    if type(_G.MSUF_GF_InvalidateCooldownTextCurve) == "function" then _G.MSUF_GF_InvalidateCooldownTextCurve() end
-    if type(_G.MSUF_GF_ForceCooldownTextRecolor) == "function" then _G.MSUF_GF_ForceCooldownTextRecolor() end
+    if A3 and type(A3.ApplyFontsFromGlobal) == "function" then
+        A3.ApplyFontsFromGlobal()
+    elseif A3 and type(A3.RefreshAll) == "function" then
+        A3.RefreshAll()
+    end
     QueueGroupScope("party", "visual")
     QueueGroupScope("raid", "visual")
     Model.Apply("shared", "AURAS3_TEXT_REFRESH")
@@ -472,7 +472,8 @@ local function BuildUnitStyle(ctx, b, scope)
     local unit = scope == "shared" and "shared" or scope
     local lane = CurrentLane("auraStyleGFLane", "debuff")
     local laneName = LanePlural(lane)
-    local section = b:Section("Unit Aura " .. LaneTitle(lane) .. " Style", 510)
+    local extraDebuffControls = lane == "debuff" and 32 or 0
+    local section = b:Section("Unit Aura " .. LaneTitle(lane) .. " Style", 590 + extraDebuffControls + (unit == "shared" and 0 or 42))
     local w = section._msuf2Width or b.width or 720
     local colW = max(300, floor((w - 66) / 2))
     local rightX = 32 + colW + 18
@@ -533,12 +534,15 @@ local function BuildUnitStyle(ctx, b, scope)
                 ApplyUnit(ctx, unit, reason)
             end))
     end
-    local text = Card(section, laneName .. " Text Features", "Stack-count and cooldown text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, topY, colW, 388)
+    local text = Card(section, laneName .. " Text Features", "Stack-count and cooldown text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, topY, colW, 388 + extraDebuffControls)
     BindStyleSwitch(text, "Show Stack Count", 16, -66, colW - 32, "showStackCount", true, "AURAS3_SHOW_STACKS")
     BindStyleSwitch(text, "Show Cooldown Text", 16, -98, colW - 32, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
     BindStyleSwitch(text, "Show Cooldown Swipe", 16, -130, colW - 32, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
-    W.LabelAt(text, "Stack Count", 16, -178, colW - 32, "GameFontNormalSmall", T.colors.accent)
-    AddStyleControl(BindDropdown(ctx, text, "Anchor", 16, -214, Model.StackAnchorValues(), colW - 32,
+    if lane == "debuff" then
+        BindStyleSwitch(text, "Dispel-type Border", 16, -162, colW - 32, "useDebuffTypeBorders", false, "AURAS3_DEBUFF_TYPE_BORDER")
+    end
+    W.LabelAt(text, "Stack Count", 16, -178 - extraDebuffControls, colW - 32, "GameFontNormalSmall", T.colors.accent)
+    AddStyleControl(BindDropdown(ctx, text, "Anchor", 16, -214 - extraDebuffControls, Model.StackAnchorValues(), colW - 32,
         function()
             if type(Model.ReadLaneStackAnchor) == "function" then return Model.ReadLaneStackAnchor(unit, lane) end
             return Model.ReadStackAnchor(unit)
@@ -551,16 +555,17 @@ local function BuildUnitStyle(ctx, b, scope)
             end
             ApplyUnit(ctx, unit, "AURAS3_STACK_ANCHOR")
         end))
-    BindStyleSlider(text, "Text Size", 16, -272, 6, 40, 1, colW - 32, "stackTextSize", 14, 6, 40, nil, nil, "AURAS3_STACK_SIZE")
+    BindStyleSlider(text, "Text Size", 16, -272 - extraDebuffControls, 6, 40, 1, colW - 32, "stackTextSize", 14, 6, 40, nil, nil, "AURAS3_STACK_SIZE")
     local smallW = max(120, floor((colW - 44) / 2))
-    BindStyleSlider(text, "X", 16, -332, -40, 40, 1, smallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
-    BindStyleSlider(text, "Y", 24 + smallW, -332, -40, 40, 1, smallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
-    local cooldown = Card(section, laneName .. " Cooldown Text", "Timer font size and center offset for " .. ScopeLabel(scope) .. " " .. laneName .. ".", rightX, topY, rightW, 268)
+    BindStyleSlider(text, "X", 16, -332 - extraDebuffControls, -40, 40, 1, smallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
+    BindStyleSlider(text, "Y", 24 + smallW, -332 - extraDebuffControls, -40, 40, 1, smallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
+    local cooldown = Card(section, laneName .. " Cooldown Text", "Timer font size, center offset, and tooltip behavior for " .. ScopeLabel(scope) .. " " .. laneName .. ".", rightX, topY, rightW, 316)
     BindStyleSlider(cooldown, "Text Size", 16, -62, 6, 40, 1, rightW - 32, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
     BindStyleSlider(cooldown, "X", 16, -122, -40, 40, 1, rightW - 32, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
     BindStyleSlider(cooldown, "Y", 16, -182, -40, 40, 1, rightW - 32, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
-    BuildMiniAuraPreview(ctx, section, unit, rightX, topY - 292, rightW, 118, lane)
-    local hint = W.Text(section, "", 24, topY - 424, w - 48, T.colors.muted)
+    BindStyleSwitch(cooldown, "Show Tooltip", 16, -242, rightW - 32, "showTooltip", true, "AURAS3_TOOLTIP")
+    BuildMiniAuraPreview(ctx, section, unit, rightX, topY - 340, rightW, 118, lane)
+    local hint = W.Text(section, "", 24, topY - 472, w - 48, T.colors.muted)
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
         W.SetControlsEnabled(styleControls, editable)
@@ -569,20 +574,30 @@ local function BuildUnitStyle(ctx, b, scope)
     end)
 end
 local function BuildGroupStyle(ctx, b, scope)
-    local section = b:Section("Group Aura Style", 548)
-    local w = section._msuf2Width or b.width or 720
     local lane = CurrentLane("auraStyleGFLane", "debuff")
+    local extraDebuffControls = lane == "debuff" and 32 or 0
+    local section = b:Section("Group Aura Style", 668 + extraDebuffControls)
+    local w = section._msuf2Width or b.width or 720
     local laneName = LanePlural(lane)
     local colW = max(300, floor((w - 66) / 2))
     local rightX = 32 + colW + 18
     local rightW = max(260, w - rightX - 24)
-    local text = Card(section, "Group Aura " .. LaneTitle(lane) .. " Text", "Cooldown and stack text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, -42, colW, 374)
+    local text = Card(section, "Group Aura " .. LaneTitle(lane) .. " Text", "Cooldown and stack text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, -42, colW, 548 + extraDebuffControls)
     BindGroupSwitch(ctx, text, "Show Cooldown Swipe", 16, -78, colW - 32, scope, lane, "showCooldownSwipe", true, "visual")
     BindGroupSwitch(ctx, text, "Show Cooldown Text", 16, -110, colW - 32, scope, lane, "showCooldown", true, "visual")
     BindGroupSwitch(ctx, text, "Show Stack Count", 16, -142, colW - 32, scope, lane, "showStacks", true, "visual")
-    BindGroupSlider(ctx, text, "Cooldown Font", 16, -198, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font")
-    BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -256, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry")
-    BindGroupSlider(ctx, text, "Stack Font", 16, -314, 6, 24, 1, colW - 32, scope, lane, "stackSize", 10, "font")
+    if lane == "debuff" then
+        BindGroupSwitch(ctx, text, "Dispel-type Border", 16, -174, colW - 32, scope, lane, "showDispelBorder", false, "visual")
+    end
+    BindGroupSlider(ctx, text, "Cooldown Font", 16, -198 - extraDebuffControls, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font")
+    BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -256 - extraDebuffControls, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry")
+    local textSmallW = max(120, floor((colW - 44) / 2))
+    BindGroupSlider(ctx, text, "Cooldown X", 16, -314 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "cooldownX", 0, "geometry")
+    BindGroupSlider(ctx, text, "Cooldown Y", 24 + textSmallW, -314 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "cooldownY", 0, "geometry")
+    BindGroupSlider(ctx, text, "Stack Font", 16, -374 - extraDebuffControls, 6, 24, 1, colW - 32, scope, lane, "stackSize", 10, "font")
+    BindGroupDropdown(ctx, text, "Stack Anchor", 16, -432 - extraDebuffControls, GFAnchorValues(), colW - 32, scope, lane, "stackAnchor", "BOTTOMRIGHT", "geometry")
+    BindGroupSlider(ctx, text, "Stack X", 16, -490 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "stackX", 0, "geometry")
+    BindGroupSlider(ctx, text, "Stack Y", 24 + textSmallW, -490 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "stackY", 0, "geometry")
     local behavior = Card(section, "Behavior", "Shared group-frame aura behavior for " .. ScopeLabel(scope) .. ".", rightX, -42, rightW, 306)
     BindGroupRootSwitch(ctx, behavior, "Show Tooltip", 16, -64, rightW - 32, scope, "showTooltip", true, "visual")
     BindGroupRootSwitch(ctx, behavior, "Sort by Duration", 16, -96, rightW - 32, scope, "sortByDuration", false, "visual")

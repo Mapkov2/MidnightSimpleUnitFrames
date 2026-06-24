@@ -20,6 +20,7 @@ function A.RegistryCoreBuilders.BuildDomainApplyHelpers(ctx)
     local CallGlobal = ctx.CallGlobal
     local ApplyGeneral = ctx.ApplyGeneral
     if type(CallGlobal) ~= "function" or type(ApplyGeneral) ~= "function" then return nil end
+    local ApplyService = (MRef and MRef.ApplyService) or _G.MSUF_Menu2_ApplyService
 
     local function ApplyClassPower(reason)
         CallGlobal("MSUF_ClassPower_Refresh")
@@ -51,9 +52,11 @@ function A.RegistryCoreBuilders.BuildDomainApplyHelpers(ctx)
     end
 
     local function ApplyCastbar(reason)
-        ApplyGeneral(reason or "MSUF_ASSISTANT_CASTBAR", { castbar = true, preview = true, applyAll = false })
+        if ApplyService and type(ApplyService.RequestCastbars) == "function" then
+            return ApplyService.RequestCastbars(reason or "MSUF_ASSISTANT_CASTBAR", "assistant")
+        end
+        ApplyGeneral(reason or "MSUF_ASSISTANT_CASTBAR", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
         CallGlobal("MSUF_Castbars_OnSettingsChanged", "assistant")
-        CallGlobal("MSUF_UpdateCastbarVisuals")
     end
 
     return {

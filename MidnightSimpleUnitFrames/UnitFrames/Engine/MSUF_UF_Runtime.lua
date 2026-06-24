@@ -1056,10 +1056,11 @@ function UF.NotifyConfigChanged(unit, applyNow, forceUpdate)
     return false
   end
   if applyNow ~= false then
-    UF.Apply(unit)
+    local applied = UF.Apply(unit) and true or false
     if ConfigTouchesDependentUnits(unit) then
       EnsureDependentUnitTicker()
     end
+    return applied
   elseif forceUpdate ~= false then
     if UF.Config then
       if unit and UF.Config.RefreshUnit then
@@ -1073,10 +1074,11 @@ function UF.NotifyConfigChanged(unit, applyNow, forceUpdate)
         UF.Config.Refresh()
       end
     end
-    UF.ForceUpdate(unit)
+    local updated = UF.ForceUpdate(unit) and true or false
     if ConfigTouchesDependentUnits(unit) then
       EnsureDependentUnitTicker()
     end
+    return updated
   end
   return true
 end

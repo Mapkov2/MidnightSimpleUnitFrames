@@ -878,9 +878,15 @@ local function NudgeTarget(dx, dy)
                 elseif a3 and type(a3.RefreshAll) == "function" then
                     a3.RefreshAll()
                 end
+                if a3 and type(a3.RefreshEditPreview) == "function" then
+                    a3.RefreshEditPreview(unitKey)
+                end
                 if auraPopupOpen and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
                 local syncFn = _G.MSUF_SyncAuras3PositionPopup
                 if type(syncFn) == "function" then syncFn(unitKey) end
+                if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+                    _G.MSUF_UFPreview_RequestRefresh("AURAS3_EDITMODE_NUDGE")
+                end
             end
         end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
@@ -1487,8 +1493,8 @@ function Ticker.BeginDrag(mover, key, cfg)
         bossAdjX     = bossAdjX,
         bossAdjY     = bossAdjY,
         popupSyncAcc = 0.05,
-        isGroupFrame = isGroupFrame,
         focusNotifyAcc = 0.05,
+        isGroupFrame = isGroupFrame,
         isCastbar    = isCastbar,
         castbarUnit  = castbarUnit,
         castbarXKey  = castbarXKey,

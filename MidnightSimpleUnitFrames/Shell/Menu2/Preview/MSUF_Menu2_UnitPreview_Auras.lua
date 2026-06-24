@@ -354,7 +354,6 @@ local function EnsureVisual(box, kind, baseLevel)
     local visual = box.auraPreviewVisuals[kind]
     if not visual then
         visual = CreateFrame("Frame", nil, box.canvas or box.mock)
-        visual:EnableMouse(false)
         visual._msufAuraVisualKind = kind
         visual._icons = {}
         box.auraPreviewVisuals[kind] = visual
@@ -364,7 +363,6 @@ local function EnsureVisual(box, kind, baseLevel)
 end
 local function CreateIcon(parent)
     local f = CreateFrame("Frame", nil, parent)
-    f:EnableMouse(false)
     f:SetSize(18, 18)
     f.bg = f:CreateTexture(nil, "BACKGROUND")
     f.bg:SetAllPoints()
@@ -382,6 +380,25 @@ local function CreateIcon(parent)
     f:Hide()
     return f
 end
+
+local function ForwardHandleScript(handle, scriptName, ...)
+    if not (handle and handle.GetScript) then return end
+    local script = handle:GetScript(scriptName)
+    if type(script) == "function" then return script(handle, ...) end
+end
+
+local function BindDragProxy(frame, handle)
+    if not (frame and handle) then return end
+    if frame.EnableMouse then frame:EnableMouse(true) end
+    if frame.RegisterForDrag then frame:RegisterForDrag("LeftButton") end
+    frame:SetScript("OnMouseDown", function(_, button) ForwardHandleScript(handle, "OnMouseDown", button) end)
+    frame:SetScript("OnMouseUp", function(_, button) ForwardHandleScript(handle, "OnMouseUp", button) end)
+    frame:SetScript("OnDragStart", function(_, button) ForwardHandleScript(handle, "OnDragStart", button) end)
+    frame:SetScript("OnDragStop", function(_, button) ForwardHandleScript(handle, "OnDragStop", button) end)
+    frame:SetScript("OnEnter", function() ForwardHandleScript(handle, "OnEnter") end)
+    frame:SetScript("OnLeave", function() ForwardHandleScript(handle, "OnLeave") end)
+end
+
 local function EnsureIcon(visual, index)
     visual._icons = visual._icons or {}
     local icon = visual._icons[index]
@@ -478,6 +495,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         HideHandle(handle)
         return
     end
+    BindDragProxy(visual, handle)
     local textures = AURA_TEXTURES[kind] or AURA_TEXTURES.buff
     local size = max(8, S(bounds.size))
     local step = S((bounds.size or 0) + (bounds.spacing or 0))
@@ -488,10 +506,12 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
     local laneX = S(bounds.laneLeft or ((bounds.baseX or 0) + (bounds.x or 0)))
     local laneY = S(bounds.laneBottom or ((bounds.baseY or 0) + (bounds.y or 0)))
-    local handleLeft = S((bounds.laneLeft or 0) + (bounds.iconMinX or 0))
-    local handleBottom = S((bounds.laneBottom or 0) + (bounds.iconMinY or 0))
-    local handleW = max(1, S((bounds.iconMaxX or 0) - (bounds.iconMinX or 0)))
-    local handleH = max(1, S((bounds.iconMaxY or 0) - (bounds.iconMinY or 0)))
+    local handleLeft = S(bounds.left or bounds.laneLeft or 0)
+    local handleBottom = S(bounds.bottom or bounds.laneBottom or 0)
+    local rawHandleW = bounds.left and bounds.right and (bounds.right - bounds.left) or bounds.laneW or 1
+    local rawHandleH = bounds.bottom and bounds.top and (bounds.top - bounds.bottom) or bounds.laneH or 1
+    local handleW = max(1, S(rawHandleW))
+    local handleH = max(1, S(rawHandleH))
     visual:SetSize(max(1, S(bounds.laneW)), max(1, S(bounds.laneH)))
     visual:ClearAllPoints()
     visual:SetPoint("BOTTOMLEFT", box.mock, "BOTTOMLEFT", laneX, laneY)
@@ -504,6 +524,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     handle:SetPoint("BOTTOMLEFT", box.mock, "BOTTOMLEFT", handleLeft - 4, handleBottom - 4)
     for i = 1, bounds.shown do
         local icon = EnsureIcon(visual, i)
+        BindDragProxy(icon, handle)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 0) + 1) end
         local col, row = IconGridCoord(i, bounds.perRow, bounds.verticalGrowth == true)
         icon:SetSize(size, size)
