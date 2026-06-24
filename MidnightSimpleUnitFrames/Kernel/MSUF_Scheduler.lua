@@ -29,9 +29,20 @@ Scheduler.head = Scheduler.head or 1
 Scheduler.tail = Scheduler.tail or 0
 
 local frame = Scheduler.frame
-if not frame then
+if not frame and _G.CreateFrame then
     frame = _G.CreateFrame("Frame", "MSUF_SchedulerFrame")
     Scheduler.frame = frame
+end
+
+local FlushNextFrame
+local function ArmNextFrame()
+    if frame then
+        frame:SetScript("OnUpdate", FlushNextFrame)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, FlushNextFrame)
+    else
+        FlushNextFrame()
+    end
 end
 
 --- PERF (4.22 Beta hotfix): Re-entry safety + leftover preservation.
@@ -50,12 +61,9 @@ end
 ---
 --- Net result: one schedule = one execution per frame, no re-entry storm,
 --- no lost work. Pure Lua state --- secret-safe by construction.
-local function FlushNextFrame()
+function FlushNextFrame()
     if frame then
         frame:SetScript("OnUpdate", nil)
-        if type(frame.SetOnUpdateMode) == "function" then
-            frame:SetOnUpdateMode("Disabled")
-        end
     end
     Scheduler.nextFrameActive = false
 
@@ -95,10 +103,7 @@ local function FlushNextFrame()
         Scheduler.tail = writeIdx
         if not Scheduler.nextFrameActive then
             Scheduler.nextFrameActive = true
-            if type(frame.SetOnUpdateMode) == "function" then
-                frame:SetOnUpdateMode("RunOnce")
-            end
-            frame:SetScript("OnUpdate", FlushNextFrame)
+            ArmNextFrame()
         end
     else
         Scheduler.head, Scheduler.tail = 1, 0
@@ -115,10 +120,7 @@ local function QueueNextFrame(key, fn)
 
     if not Scheduler.nextFrameActive then
         Scheduler.nextFrameActive = true
-        if type(frame.SetOnUpdateMode) == "function" then
-            frame:SetOnUpdateMode("RunOnce")
-        end
-        frame:SetScript("OnUpdate", FlushNextFrame)
+        ArmNextFrame()
     end
 end
 
@@ -139,11 +141,17 @@ function Scheduler.ScheduleDelayOnce(key, delay, fn)
     if pending[key] then return end
     pending[key] = fn
 
-    C_Timer.After(delay or 0, function()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay or 0, function()
+            local cb = pending[key]
+            pending[key] = nil
+            if type(cb) == "function" then SafeCall(cb) end
+        end)
+    else
         local cb = pending[key]
         pending[key] = nil
         if type(cb) == "function" then SafeCall(cb) end
-    end)
+    end
 end
 
 local ExportPublic = MSUF.ExportPublic or function(name, value)
