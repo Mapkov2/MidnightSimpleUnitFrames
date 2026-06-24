@@ -591,9 +591,6 @@ local function BuildSecurePingInitialConfig()
   UF.ForEachPingBindingAttribute(function(attribute)
     lines[#lines + 1] = string_format("self:SetAttribute(%q, msufPingHeader and msufPingHeader:GetAttribute(%q) or nil)", attribute, attribute)
   end)
-  lines[#lines + 1] = string_format("self:SetAttribute(%q, %q)", "_onenter", SECURE_PING_ONENTER)
-  lines[#lines + 1] = string_format("self:SetAttribute(%q, %q)", "_onleave", SECURE_PING_ONLEAVE)
-  lines[#lines + 1] = string_format("self:SetAttribute(%q, %q)", "_onhide", SECURE_PING_ONHIDE)
   return table_concat(lines, "\n")
 end
 
