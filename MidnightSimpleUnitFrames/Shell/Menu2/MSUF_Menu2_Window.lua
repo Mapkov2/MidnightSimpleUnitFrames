@@ -532,6 +532,7 @@ local function CreateContext(key, wrapper, entry)
         entry = entry,
         refreshers = entry.refreshers,
         width = CONTENT_W - 34,
+        hiddenBuild = entry.hiddenBuild == true,
     }
     function ctx:SetContentHeight(height)
         height = math.max(CONTENT_H, tonumber(height) or CONTENT_H)
@@ -576,6 +577,12 @@ local function BuildPageEntry(key, hidden)
             if cached.wrapper and cached.wrapper.SetParent then cached.wrapper:SetParent(nil) end
             M.cache[key] = nil
         end
+        cached = nil
+    end
+    if cached and cached.hiddenBuild == true and not hidden then
+        if cached.wrapper and cached.wrapper.Hide then cached.wrapper:Hide() end
+        if cached.wrapper and cached.wrapper.SetParent then cached.wrapper:SetParent(nil) end
+        M.cache[key] = nil
         cached = nil
     end
     if cached then return cached end

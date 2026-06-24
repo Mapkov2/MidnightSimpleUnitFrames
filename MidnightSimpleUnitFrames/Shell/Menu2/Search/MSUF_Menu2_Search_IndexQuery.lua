@@ -1138,7 +1138,7 @@ end
 
 local function GetSearchRecords()
     EnsureSearchLocaleFresh()
-    if SEARCH_STATE.indexing and SEARCH_STATE.records and not SEARCH_STATE.recordsDirty then
+    if SEARCH_STATE.indexing and SEARCH_STATE.records then
         return SEARCH_STATE.records
     end
     if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then

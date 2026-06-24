@@ -125,7 +125,13 @@ local function FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
     local entry = M.cache and M.cache[pageKey]
     local wrapper = entry and entry.wrapper
     if not wrapper then return nil end
-    if preferredAnchor and preferredAnchor.GetTop then return preferredAnchor end
+    if preferredAnchor and preferredAnchor.GetTop then
+        local node = preferredAnchor
+        while node do
+            if node == wrapper then return preferredAnchor end
+            node = node.GetParent and node:GetParent() or nil
+        end
+    end
 
     local candidates = {}
     CollectSearchAnchorCandidates(wrapper, candidates, 1)

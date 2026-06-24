@@ -18,6 +18,7 @@ local Call, G, ReadG, SetG, ReadGBool, SetGBool, TextureValues, SetControlEnable
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss"
 local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords "normal channel empowered"
+local CASTBAR_PREVIEW_REFRESH_INTERVAL = 1 / 30
 local function NormalizeCastbarPreviewUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit == "boss1" or unit == "bosses" or unit == "boss frames" then unit = "boss" end
@@ -78,6 +79,11 @@ local function BuildCastbars(ctx)
         ApplyCastbars(reason or "MSUF2_CASTBAR_TEXTURES")
     end
     local function BuildPreview()
+        if ctx and ctx.hiddenBuild then
+            local section = b:Section("Preview", 72)
+            W.Text(section, "Castbar preview is built when this page is opened.", 14, -42, ctx.width - 28, T.colors.muted)
+            return nil
+        end
         local section = b:Section("Preview", 132)
         local sectionW = section._msuf2Width or b.width or ctx.width or 720
         local innerW = max(360, sectionW - 28)
@@ -765,8 +771,13 @@ local function BuildCastbars(ctx)
                 if btn.SetActive then btn:SetActive(key == unit) end
             end
         end
-        box:SetScript("OnUpdate", function(_, elapsed)
+        box:SetScript("OnUpdate", function(self, elapsed)
+            if self.IsVisible and not self:IsVisible() then return end
             elapsed = tonumber(elapsed) or 0
+            preview._updateElapsed = (tonumber(preview._updateElapsed) or 0) + elapsed
+            if preview._updateElapsed < CASTBAR_PREVIEW_REFRESH_INTERVAL then return end
+            elapsed = preview._updateElapsed
+            preview._updateElapsed = 0
             preview.progress = (preview.progress or 0) + (elapsed / CastDuration(preview.castType or "normal"))
             if preview.progress > 1 then preview.progress = preview.progress - floor(preview.progress) end
             local now = GetTime and GetTime() or 0
