@@ -548,6 +548,8 @@ local function ApplyDragDelta(self, dx, dy)
         ApplyDragUnit(auras, baseUnit, moverKind, x, y)
     end
 
+    RefreshAffectedRuntimeUnits(baseUnit, shared)
+    RequestUnitFrameMenuPreview("AURAS3_EDITMODE_DRAG")
     local sync = _G.MSUF_SyncAuras3PositionPopup
     if type(sync) == "function" then sync(baseUnit) end
 end
@@ -624,14 +626,36 @@ local function SetRuntimeAuraHidden(unit, hidden)
     local frame = GetFrame(unit)
     local element = frame and frame.Auras
     if not element or not element.SetAlpha then return end
+    local function SetLaneMouseMotion(container, enabled)
+        if not container then return end
+        local laneKind = container._msufA3NativeLane
+        local laneCfg = element._msufA3Config and element._msufA3Config.lanes and element._msufA3Config.lanes[laneKind]
+        enabled = enabled == true and (not laneCfg or laneCfg.showTooltip ~= false)
+        local count = type(container.GetAuraFrameCount) == "function" and container:GetAuraFrameCount() or tonumber(container.createdButtons) or 0
+        for i = 1, count do
+            local ok, button
+            if type(container.GetAuraFrame) == "function" then
+                ok, button = pcall(container.GetAuraFrame, container, i)
+            end
+            if ok and button and type(button.SetMouseMotionEnabled) == "function" then
+                pcall(button.SetMouseMotionEnabled, button, enabled)
+            end
+        end
+    end
     if hidden then
         if element._msufA3EditModeAlpha == nil and element.GetAlpha then
             element._msufA3EditModeAlpha = element:GetAlpha()
         end
         element:SetAlpha(0)
+        SetLaneMouseMotion(element.Buffs, false)
+        SetLaneMouseMotion(element.Debuffs, false)
+        SetLaneMouseMotion(element.Externals, false)
     elseif element._msufA3EditModeAlpha ~= nil then
         element:SetAlpha(element._msufA3EditModeAlpha)
         element._msufA3EditModeAlpha = nil
+        SetLaneMouseMotion(element.Buffs, true)
+        SetLaneMouseMotion(element.Debuffs, true)
+        SetLaneMouseMotion(element.Externals, true)
     end
 end
 
@@ -706,8 +730,8 @@ local function CreateGroup(unit, kind)
     local safeUnit = tostring(unit):gsub("%W", "")
     local name = "MSUF_A3_" .. safeUnit .. "_" .. kind .. "Preview"
     local group = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
-    group:SetFrameStrata("DIALOG")
-    group:SetFrameLevel(160)
+    group:SetFrameStrata("TOOLTIP")
+    group:SetFrameLevel(900)
     group:SetClampedToScreen(false)
     group:EnableMouse(true)
     group:SetBackdrop({ bgFile = W8, edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
@@ -751,6 +775,7 @@ local function CreateGroup(unit, kind)
             return
         end
         if button ~= "LeftButton" or not IsEditModeActive() or IsConfigBlocked() then return end
+        if self.Raise then self:Raise() end
 
         local before = _G.MSUF_EM_UndoBeforeChange
         if type(before) == "function" and not _G.MSUF__UndoRestoring then
@@ -874,7 +899,7 @@ function EM.RefreshUnit(unit)
             PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)
             group:SetSize(laneW, laneH + HEADER_H)
             if group.Body then group.Body:SetSize(laneW, laneH) end
-            group:SetFrameLevel(160 + (tonumber(cfg.layer) or 5))
+            group:SetFrameLevel(900 + (tonumber(cfg.layer) or 5))
             if group.Label then
                 group.Label:SetText(UnitLabel(unit) .. " " .. spec.label)
                 StyleLabel(group.Label)
@@ -902,6 +927,7 @@ function EM.RefreshUnit(unit)
             end
 
             group:Show()
+            if group.Raise then group:Raise() end
         end
     end
 end

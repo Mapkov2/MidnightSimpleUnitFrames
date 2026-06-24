@@ -34,21 +34,6 @@ MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
 ExportPublic("MSUF_AuraCore", MSUF.AuraCore)
 MSUF.AuraCore.Auras3 = A3
 
-local CT = A3.CooldownText
-if type(CT) ~= "table" then
-    CT = {}
-    A3.CooldownText = CT
-end
-MSUF.AuraCore.CooldownText = CT
-
-local function NoopTrue()
-    return true
-end
-
-local function NoopFalse()
-    return false
-end
-
 local function EnsureRootDB()
     local db = _G.MSUF_DB
     if type(db) ~= "table" then
@@ -153,10 +138,3 @@ end
 function A3.BuildAuraLaneMetrics()
     return nil
 end
-
-CT.ApplyButtonStyle = CT.ApplyButtonStyle or NoopFalse
-CT.RegisterButton = CT.RegisterButton or NoopFalse
-CT.TouchButton = CT.TouchButton or NoopTrue
-CT.UnregisterButton = CT.UnregisterButton or NoopTrue
-CT.Invalidate = CT.Invalidate or NoopTrue
-CT.ForceRecolor = CT.ForceRecolor or NoopTrue
