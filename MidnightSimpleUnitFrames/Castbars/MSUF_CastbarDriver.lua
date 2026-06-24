@@ -755,7 +755,11 @@ local function CreateCastBar(frameName, unit)
             state = BuildState(self)
         end
 
-        self._msufApiNotInterruptibleRaw = state and state.apiNotInterruptibleRaw or nil
+        if state ~= nil then
+            self._msufApiNotInterruptibleRaw = state.apiNotInterruptibleRaw
+        else
+            self._msufApiNotInterruptibleRaw = nil
+        end
 
         local spellName, label, icon, startTimeMS, endTimeMS
         local isChannel = false
