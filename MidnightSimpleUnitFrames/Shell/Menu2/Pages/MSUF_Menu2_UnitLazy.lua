@@ -94,6 +94,16 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
             RefreshNewControls(refreshStart)
             local refresh = shellEntry._msuf2RefreshState
             if type(refresh) == "function" and refresh ~= LazyRefresh then refresh(shellEntry) end
+            local relayout = shellEntry.builder
+            if shellEntry.open and relayout and relayout.RelayoutCollapsibles then
+                if _G.C_Timer and _G.C_Timer.After then
+                    _G.C_Timer.After(0, function()
+                        if shellEntry.open and relayout.RelayoutCollapsibles then relayout:RelayoutCollapsibles() end
+                    end)
+                else
+                    relayout:RelayoutCollapsibles()
+                end
+            end
         end
     end
     LazyRefresh = function(entryArg)

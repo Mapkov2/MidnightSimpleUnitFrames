@@ -986,7 +986,7 @@ local function PrepareAuraButton(button, lane, index)
             border:SetAllPoints(button)
         end
         button._msufA3AuraBorder = border
-        auraBorderBound = CallButtonMethod(button, "SetAuraBorder", border, { showWhenHarmful = true, showWhenHelpful = false })
+        auraBorderBound = CallButtonMethod(button, "SetAuraBorder", border, { showIcon = true, showWhenHarmful = true, showWhenHelpful = false })
     else
         CallButtonMethod(button, "ClearAuraBorder")
         if button._msufA3AuraBorder and button._msufA3AuraBorder.Hide then button._msufA3AuraBorder:Hide() end

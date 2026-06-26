@@ -130,11 +130,15 @@ local COPY_FRAME_BASIC_FIELDS = WL [[enabled showName showHP showPower reverseFi
 local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha hpBgAlpha alphaExcludeTextPortrait rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
 local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondActive]]
 local COPY_LAYOUT_FIELDS = WL [[width height offsetX offsetY point relativePoint anchorFrameName anchorToUnitframe]]
+local AURA_COPY_UNITS = KSW("player target focus boss")
+local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss" }
+local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 local UF_COPY_CATEGORIES = {
     { key = "basics",       label = "Frame Basics",     default = true },
     { key = "text",         label = "Text",             default = true },
     { key = "portrait",     label = "Portrait",         default = true },
     { key = "power",        label = "Power Bar",        default = true },
+    { key = "auras",        label = "Auras",            default = true },
     { key = "castbar",      label = "Castbar",          default = true },
     { key = "status",       label = "Status Icons",     default = true },
     { key = "load",         label = "Load Conditions",  default = true },
@@ -279,6 +283,86 @@ local function CopyCastbar(g, src, dst)
         g[dstPrefix .. CASTBAR_COPY_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_COPY_SUFFIXES[i]]
     end
 end
+local function AuraRuntimeSource(unit)
+    unit = CanonUnitKey(unit)
+    return unit == "boss" and "boss1" or unit
+end
+local function ForEachAuraRuntimeTarget(unit, callback)
+    unit = CanonUnitKey(unit)
+    if unit == "boss" then
+        for i = 1, #AURA_BOSS_RUNTIME_UNITS do callback(AURA_BOSS_RUNTIME_UNITS[i]) end
+        return
+    end
+    callback(unit)
+end
+local function ApplyAuras3Unit(unit)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local model = a3 and a3.MenuModel
+    if model and type(model.Apply) == "function" then
+        model.Apply(unit, "MSUF2_COPY_UNIT_AURAS")
+        return true
+    end
+    if a3 and type(a3.RefreshUnit) == "function" then
+        a3.RefreshUnit(unit)
+        return true
+    end
+    if a3 and type(a3.RequestUnit) == "function" then
+        a3.RequestUnit(unit)
+        return true
+    end
+    if a3 and type(a3.RequestApply) == "function" then
+        a3.RequestApply("MSUF2_COPY_UNIT_AURAS")
+        return true
+    end
+    return false
+end
+local function EnsureAuras3CopyDB()
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local model = a3 and a3.MenuModel
+    local auras
+    if model and type(model.EnsureDB) == "function" then
+        auras = model.EnsureDB()
+    elseif a3 and type(a3.EnsureDB) == "function" then
+        auras = a3.EnsureDB()
+    else
+        local db = M.EnsureDB()
+        if type(db) ~= "table" then return nil end
+        if type(db.auras3) ~= "table" then db.auras3 = {} end
+        auras = db.auras3
+    end
+    if type(auras) ~= "table" then return nil end
+    if auras.enabled == nil then auras.enabled = true end
+    if auras.showPlayer == nil then auras.showPlayer = false end
+    if auras.showTarget == nil then auras.showTarget = true end
+    if auras.showFocus == nil then auras.showFocus = true end
+    if auras.showBoss == nil then auras.showBoss = true end
+    if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
+    return auras
+end
+local function CopyAuras3UnitSettings(src, dst)
+    src, dst = CanonUnitKey(src), CanonUnitKey(dst)
+    if not AURA_COPY_UNITS[src] or not AURA_COPY_UNITS[dst] then return false end
+    local auras = EnsureAuras3CopyDB()
+    if type(auras) ~= "table" then return false end
+
+    local srcFlag, dstFlag = AURA_COPY_FLAGS[src], AURA_COPY_FLAGS[dst]
+    if srcFlag and dstFlag then
+        local enabled = auras[srcFlag] == true
+        if enabled then auras.enabled = true end
+        auras[dstFlag] = enabled and true or false
+    end
+
+    local sourceConfig = auras.perUnit[AuraRuntimeSource(src)]
+    ForEachAuraRuntimeTarget(dst, function(runtimeUnit)
+        if type(sourceConfig) == "table" then
+            auras.perUnit[runtimeUnit] = DeepCopy(sourceConfig)
+        else
+            auras.perUnit[runtimeUnit] = nil
+        end
+    end)
+    ApplyAuras3Unit(dst)
+    return true
+end
 local function EnsureCopyDialog()
     M.InstallStaticPopup("MSUF2_COPY_TO_ALL_CONFIRM", {
         text = M.Tr("Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target."),
@@ -325,6 +409,7 @@ local function CopyUnitSettings(unit, target, scopes)
             dst.portraitDecoOverride = nil
         end
         if scopes.power then CopyPowerBarFields(dst, src, srcKey) end
+        local copiedAuras = scopes.auras and CopyAuras3UnitSettings(srcKey, dstKey) or false
         if scopes.status then
             CopyFields(dst, src, COPY_INDICATOR_FIELDS)
             CopyFields(dst, src, COPY_STATUSICON_FIELDS)
@@ -342,6 +427,7 @@ local function CopyUnitSettings(unit, target, scopes)
             power = scopes.power,
             alpha = scopes.transparency,
             castbar = scopes.castbar,
+            auras = copiedAuras,
         })
     end
     local function FinishCopy()
