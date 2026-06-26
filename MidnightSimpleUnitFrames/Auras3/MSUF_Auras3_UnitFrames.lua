@@ -376,11 +376,27 @@ local VALID_NATIVE_FILTER_TOKENS = {
     RAID = true,
     CANCELABLE = true,
     NOT_CANCELABLE = true,
+    MAW = true,
     INCLUDE_NAME_PLATE_ONLY = true,
+    EXTERNAL_DEFENSIVE = true,
+    CROWD_CONTROL = true,
+    RAID_IN_COMBAT = true,
+    RAID_PLAYER_DISPELLABLE = true,
+    BIG_DEFENSIVE = true,
+}
+
+local LEGACY_NATIVE_FILTER_TOKENS = {
+    ALL = false,
+    DISPELLABLE = "RAID_PLAYER_DISPELLABLE",
 }
 
 local function AddNativeFilterToken(out, seen, token, baseToken)
     token = tostring(token or ""):upper():gsub("^%s+", ""):gsub("%s+$", "")
+    local legacy = LEGACY_NATIVE_FILTER_TOKENS[token]
+    if legacy ~= nil then
+        if legacy == false then return end
+        token = legacy
+    end
     if token == "" or not VALID_NATIVE_FILTER_TOKENS[token] then return end
     if (token == "HELPFUL" or token == "HARMFUL") and token ~= baseToken then return end
     if seen[token] then return end
@@ -423,12 +439,19 @@ local function NativeFilter(baseFilter, filters)
     filters = type(filters) == "table" and filters or nil
     local filter = tostring(baseFilter or "")
     local helpful = filter:find("HELPFUL", 1, true) ~= nil
+    local harmful = filter:find("HARMFUL", 1, true) ~= nil
     if filters and filters.enabled ~= false then
         if filters.onlyMine == true then filter = filter .. "|PLAYER" end
-        if filters.onlyImportant == true or filters.exclusive == "important" then filter = filter .. "|RAID" end
+        if filters.exclusive == "raid" then filter = filter .. "|RAID" end
         if filters.raid == true then filter = filter .. "|RAID" end
         if filters.cancelable == true and helpful then filter = filter .. "|CANCELABLE" end
         if filters.notCancelable == true and helpful then filter = filter .. "|NOT_CANCELABLE" end
+        if filters.raidInCombat == true then filter = filter .. "|RAID_IN_COMBAT" end
+        if filters.includeDispellable == true and harmful then filter = filter .. "|RAID_PLAYER_DISPELLABLE" end
+        if filters.dispellable == true and harmful then filter = filter .. "|RAID_PLAYER_DISPELLABLE" end
+        if filters.crowdControl == true and harmful then filter = filter .. "|CROWD_CONTROL" end
+        if filters.externalDefensive == true and helpful then filter = filter .. "|EXTERNAL_DEFENSIVE" end
+        if filters.bigDefensive == true and helpful then filter = filter .. "|BIG_DEFENSIVE" end
     end
     return NormalizeNativeFilterString(filter, baseFilter)
 end

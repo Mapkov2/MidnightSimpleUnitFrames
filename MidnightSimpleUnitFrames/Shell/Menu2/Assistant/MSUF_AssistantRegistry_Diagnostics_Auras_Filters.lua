@@ -15,16 +15,14 @@ A.DiagnosticsRegistry = A.DiagnosticsRegistry or {}
 function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
     if type(ctx) ~= "table" then return nil end
 
-    local AuraModel = ctx.AuraModel
     local AuraFiltersEnabled = ctx.AuraFiltersEnabled
     local AuraReadFilter = ctx.AuraReadFilter
     local GFReadAuraValue = ctx.GFReadAuraValue
     local AddFixChoice = ctx.AddFixChoice
-    local AddActionChoice = ctx.AddActionChoice
     local AuraLaneLabel = ctx.AuraLaneLabel
     local SafeSettingValue = ctx.SafeSettingValue
 
-    if type(AddFixChoice) ~= "function" or type(AddActionChoice) ~= "function" then return nil end
+    if type(AddFixChoice) ~= "function" then return nil end
     if type(AuraLaneLabel) ~= "function" or type(SafeSettingValue) ~= "function" then return nil end
 
     local function FilterValueLabel(value)
@@ -37,27 +35,22 @@ function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
         return value:gsub("|", " "):gsub("_", " "):lower()
     end
 
-    local function SummaryHasHiddenAuraEntries(summary)
-        summary = tostring(summary or "")
-        if summary == "" then return false end
-        local lower = summary:lower()
-        if lower:find("no blacklisted", 1, true) or lower:find("no hidden", 1, true) then return false end
-        return true
-    end
-
     local UNIT_AURA_FILTER_WARNINGS = {
         buff = {
             { key = "onlyMine", label = "only your buffs" },
             { key = "raid", label = "only raid buffs" },
+            { key = "raidInCombat", label = "only raid-in-combat buffs" },
             { key = "cancelable", label = "only cancelable buffs" },
             { key = "notCancelable", label = "only non-cancelable buffs" },
+            { key = "externalDefensive", label = "only external defensive buffs" },
+            { key = "bigDefensive", label = "only big defensive buffs" },
         },
         debuff = {
             { key = "onlyMine", label = "only your debuffs" },
             { key = "raid", label = "only raid debuffs" },
+            { key = "raidInCombat", label = "only raid-in-combat debuffs" },
             { key = "includeDispellable", label = "only dispellable debuffs" },
-            { key = "notDispellable", label = "only non-dispellable debuffs" },
-            { key = "boss", label = "only boss debuffs" },
+            { key = "crowdControl", label = "only crowd-control debuffs" },
         },
     }
 
@@ -94,21 +87,9 @@ function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
     end
 
     local function AddUnitAuraBlacklistDiagnostics(scope, label, issues, choices)
-        local ignoreKey = "auras3." .. scope .. ".overrideIgnore"
-        if SafeSettingValue(ignoreKey) == true then
-            issues[#issues + 1] = label .. " uses a custom aura ignore list. A specific spell may be hidden there."
-            AddFixChoice(choices, ignoreKey, false, "Turn off " .. label .. " custom aura ignore list")
-        end
-
-        local Model = AuraModel and AuraModel() or nil
-        if not (Model and type(Model.BlacklistSummary) == "function") then return end
-        local ok, summary = pcall(Model.BlacklistSummary, scope)
-        summary = ok and tostring(summary or "") or ""
-        if SummaryHasHiddenAuraEntries(summary) then
-            issues[#issues + 1] = label .. " has hidden aura entries. A specific missing aura may be hidden there."
-            AddActionChoice(choices, "aura_blacklist_summary", { scope = scope }, "Show hidden " .. label .. " aura spells", "Shows the spells currently hidden for this aura scope.", nil, true)
-            AddActionChoice(choices, "aura_blacklist_clear_spells", { scope = scope }, "Allow all " .. label .. " aura spells", "Clears every hidden spell entry from this aura scope.", nil, true)
-        end
+        -- 12.1 native AuraContainers currently accept Blizzard filter strings,
+        -- not addon SpellID whitelist/blacklist predicates. Keep legacy profile
+        -- data out of diagnostics so it is not presented as an active cause.
     end
 
     local function GroupAuraDefaultMax(lane)
@@ -147,15 +128,8 @@ function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
             end
         end
 
-        if A and type(A.GroupAuraCategorySummary) == "function" then
-            local ok, summary = pcall(A.GroupAuraCategorySummary, scope, lane)
-            summary = ok and tostring(summary or "") or ""
-            if SummaryHasHiddenAuraEntries(summary) then
-                issues[#issues + 1] = label .. " " .. laneLabel .. " has hidden aura categories."
-                AddActionChoice(choices, "aura_group_category_blacklist_summary", { scope = scope, lane = lane }, "Show hidden " .. label .. " " .. laneLabel .. " categories", "Shows the aura categories currently hidden for this group.", nil, true)
-                AddActionChoice(choices, "aura_group_category_blacklist_clear", { scope = scope, lane = lane }, "Allow all " .. label .. " " .. laneLabel .. " categories", "Clears the hidden aura categories for this group and lane.", nil, true)
-            end
-        end
+        -- Group category blacklists are legacy read-only data in the native
+        -- container path and cannot hide auras without addon aura scans.
     end
 
     return {
