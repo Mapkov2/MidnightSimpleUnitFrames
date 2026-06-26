@@ -130,6 +130,7 @@ local MASK_TEXT_STATUS_RUNTIME = BuildNameSet("health power name status")
 local MASK_DISABLED = {}
 local MASK_CASTBAR_SYNC = BuildNameSet("health power name portrait status borders")
 local MASK_BARS_BORDERS = BuildNameSet("health power borders")
+local MASK_COLOR_CHANGE = BuildNameSet("health power name inline portrait status prediction borders")
 local MASK_UNIT_IDENTITY = BuildNameSet("load health power name inline portrait status prediction alpha borders auras")
 local MASK_UNIT_IDENTITY_FAST = BuildNameSet("load health power name")
 local MASK_UNIT_IDENTITY_VISUAL = BuildNameSet("inline portrait status prediction alpha borders")
@@ -165,6 +166,7 @@ AddRuntimeReasonMasks(runtimeReasonMasks, MASK_TEXT_STATUS_RUNTIME, "MSUF_GF_DIR
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BARS_BORDERS,
   "MSUF2_GRADIENT MSUF2_HP_GRADIENT MSUF2_POWER_GRADIENT " ..
   "MSUF2_GRADIENT_STRENGTH MSUF2_GRADIENT_DIRECTION")
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_COLOR_CHANGE, "MSUF_COLOR_CHANGE")
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_PREDICTION,
   "MSUF2_ABSORB_MODE MSUF2_ABSORB MSUF2_ABSORB_ANCHOR MSUF2_ABSORB_OPACITY " ..
   "MSUF2_ABSORB_TEXTURE MSUF2_ABSORB_TEST MSUF2_ABSORB_TEST_CLEAR " ..
@@ -192,6 +194,10 @@ Metadata.refreshElementGroups = {
     "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator RestingIndicator " ..
     "IncomingResIndicator PVPIndicator Alpha Borders RangeFade Auras"),
   powerText = BuildNameList("Power Text PowerText"),
+  colors = BuildNameList(
+    "Health Power Text NameText HealthText PowerText InlineToT Portrait " ..
+    "StatusIndicators LevelIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
+    "RestingIndicator IncomingResIndicator PVPIndicator Prediction Borders"),
   text = BuildNameList("Text NameText HealthText PowerText InlineToT"),
   borders = BuildNameList("Borders Power"),
   reverseFill = BuildNameList("Health Power Prediction"),

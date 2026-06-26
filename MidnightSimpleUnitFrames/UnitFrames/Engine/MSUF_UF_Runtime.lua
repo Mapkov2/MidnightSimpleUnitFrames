@@ -1038,6 +1038,7 @@ local REFRESH_ELEMENT_GROUPS = Metadata.refreshElementGroups or EMPTY_METADATA_S
 local HEALTH_TEXT_BORDER_ELEMENTS = REFRESH_ELEMENT_GROUPS.healthTextBorder or EMPTY_METADATA_SET
 local VISUAL_ELEMENTS = REFRESH_ELEMENT_GROUPS.visuals or EMPTY_METADATA_SET
 local POWER_TEXT_ELEMENTS = REFRESH_ELEMENT_GROUPS.powerText or EMPTY_METADATA_SET
+local COLOR_ELEMENTS = REFRESH_ELEMENT_GROUPS.colors or VISUAL_ELEMENTS
 local TEXT_ELEMENTS = REFRESH_ELEMENT_GROUPS.text or EMPTY_METADATA_SET
 local BORDER_ELEMENTS = REFRESH_ELEMENT_GROUPS.borders or EMPTY_METADATA_SET
 local REVERSE_FILL_ELEMENTS = REFRESH_ELEMENT_GROUPS.reverseFill or EMPTY_METADATA_SET
@@ -1111,6 +1112,10 @@ function UF.RefreshPowerTextColors()
   return UF.RefreshElements(nil, POWER_TEXT_ELEMENTS, "MSUF_POWER_TEXT_COLORS")
 end
 
+function UF.RefreshColors()
+  return UF.RefreshElements(nil, COLOR_ELEMENTS, "MSUF_COLOR_CHANGE")
+end
+
 function UF.RefreshAlphas()
   return UF.RefreshElements(nil, ALPHA_ELEMENTS, "MSUF_ALPHA")
 end
@@ -1156,6 +1161,7 @@ ExportPublic("MSUF_ApplyCachedUnitFrameScreenPosition", ApplyCachedUnitFrameScre
 ExportPublic("MSUF_UFCore_NotifyConfigChanged", UF.NotifyConfigChanged)
 ExportPublic("MSUF_RefreshAllFrames", UF.RefreshVisuals)
 MSUF.MSUF_RefreshAllFrames = UF.RefreshVisuals
+ExportPublic("MSUF_RefreshAllFrameColors", UF.RefreshColors)
 ExportPublic("MSUF_RefreshAllIdentityColors", UF.RefreshIdentityColors)
 ExportPublic("MSUF_RefreshAllPowerTextColors", UF.RefreshPowerTextColors)
 ExportPublic("MSUF_ForceTextLayoutForUnitKey", UF.RefreshTextLayout)

@@ -743,6 +743,9 @@ end
 if g.hideAdvancedMenu == nil then
     g.hideAdvancedMenu = true
 end
+if g.showNavigationIcons == nil then
+    g.showNavigationIcons = false
+end
     if g.editModeSnapToGrid == nil then
         g.editModeSnapToGrid = false --- Default: Snap OFF
     end
