@@ -14,6 +14,8 @@ L["Language"] = "Language"
 L["Menu language"] = "Menu language"
 L["Follow Blizzard"] = "Follow Blizzard"
 L["Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."] = "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus."
+L["Show navigation icons"] = "Show navigation icons"
+L["Navigation Icons"] = "Navigation Icons"
 
 --- MSUF 5.1 Beta 1
 L["Blizzard Renderer"] = "Blizzard Renderer"

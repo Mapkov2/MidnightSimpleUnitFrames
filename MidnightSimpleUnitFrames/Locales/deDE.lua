@@ -4,6 +4,8 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("deDE")) or (MSUF.L or {})
 
+L["Show navigation icons"] = "Navigationssymbole anzeigen"
+L["Navigation Icons"] = "Navigationssymbole"
 L["Absorb bar anchoring"] = "Absorptionsbalken-Verankerung"
 L["Absorb bar texture (SharedMedia)"] = "Textur des Absorptionsbalkens (SharedMedia)"
 L["Absorb Display"] = "Absorptionsanzeige"
