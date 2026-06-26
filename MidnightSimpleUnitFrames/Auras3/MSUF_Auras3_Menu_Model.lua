@@ -83,6 +83,12 @@ local STACK_ANCHORS = {
 }
 local STACK_ANCHOR_OK = { TOPRIGHT=true, TOPLEFT=true, BOTTOMRIGHT=true, BOTTOMLEFT=true }
 
+local DEBUFF_TYPE_BORDER_MODE_VALUES = {
+    { value = "OFF", text = "Off" },
+    { value = "BORDER", text = "Border" },
+    { value = "SYMBOL", text = "Border + Symbol" },
+}
+
 local AURA_ANCHORS = {
     { value = "TOPLEFT", text = "Top Left" },
     { value = "TOPRIGHT", text = "Top Right" },
@@ -149,6 +155,7 @@ local SHARED_LAYOUT_KEYS = {
     showCooldownSwipe = true,
     showCooldownText = true,
     showStackCount = true,
+    debuffTypeBorderMode = true,
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffShowCooldownText = true,
@@ -220,6 +227,7 @@ local LANE_STYLE_KEYS = {
         showCooldownSwipe = "debuffShowCooldownSwipe",
         showCooldownText = "debuffShowCooldownText",
         showStackCount = "debuffShowStackCount",
+        debuffTypeBorderMode = "debuffTypeBorderMode",
         useDebuffTypeBorders = "useDebuffTypeBorders",
         stackCountAnchor = "debuffStackCountAnchor",
         stackTextSize = "debuffStackTextSize",
@@ -243,6 +251,7 @@ local DEFAULT_SHARED = {
     showCooldownSwipe = true,
     showCooldownText = true,
     showStackCount = true,
+    debuffTypeBorderMode = "OFF",
     useDebuffTypeBorders = false,
     buffShowCooldownSwipe = true,
     buffShowCooldownText = true,
@@ -550,6 +559,19 @@ local function NormalizeKind(kind)
     return kind
 end
 
+local function NormalizeDebuffTypeBorderMode(value, fallback)
+    if value == true then return "SYMBOL" end
+    if value == false then return "OFF" end
+    value = tostring(value or ""):upper()
+    if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
+    if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
+        or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
+        return "SYMBOL"
+    end
+    if value == "OFF" or value == "NONE" or value == "DISABLED" then return "OFF" end
+    return fallback or "OFF"
+end
+
 local function NormalizeGroupScope(scope)
     scope = tostring(scope or "raid"):lower()
     if scope == "party" then return "party" end
@@ -850,6 +872,10 @@ function Model.EnsureDB()
     if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
     if type(shared) ~= "table" then shared = {}; auras.shared = shared end
     DefaultsInto(shared, DEFAULT_SHARED)
+    if shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
+        shared.debuffTypeBorderMode = shared.useDebuffTypeBorders == true and "SYMBOL" or NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
+        shared._msufA3_debuffTypeBorderModeMigrated_v1 = true
+    end
     return auras, shared
 end
 
@@ -967,6 +993,10 @@ end
 
 function Model.StackAnchorValues()
     return STACK_ANCHORS
+end
+
+function Model.DebuffTypeBorderModeValues()
+    return DEBUFF_TYPE_BORDER_MODE_VALUES
 end
 
 function Model.ScopeLabel(scope)
@@ -1220,6 +1250,34 @@ end
 
 function Model.WriteLaneStyleBool(unit, kind, key, value)
     Model.WriteValue(unit, LaneStyleKey(kind, key), value and true or false)
+end
+
+function Model.ReadDebuffTypeBorderMode(unit)
+    local auras, shared = Model.EnsureDB()
+    if type(shared) ~= "table" then return "OFF" end
+    if NormalizeScope(unit) ~= "shared" then
+        local _, sharedLayout = EffectiveLayoutTables(auras, unit)
+        if type(sharedLayout) == "table" then
+            if sharedLayout.debuffTypeBorderMode ~= nil then
+                local mode = NormalizeDebuffTypeBorderMode(sharedLayout.debuffTypeBorderMode, "OFF")
+                return (mode == "OFF" and sharedLayout.useDebuffTypeBorders == true) and "SYMBOL" or mode
+            end
+            if sharedLayout.useDebuffTypeBorders ~= nil then
+                return sharedLayout.useDebuffTypeBorders == true and "SYMBOL" or "OFF"
+            end
+        end
+    end
+    if shared.debuffTypeBorderMode ~= nil then
+        local mode = NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
+        return (mode == "OFF" and shared.useDebuffTypeBorders == true) and "SYMBOL" or mode
+    end
+    return shared.useDebuffTypeBorders == true and "SYMBOL" or "OFF"
+end
+
+function Model.WriteDebuffTypeBorderMode(unit, value)
+    value = NormalizeDebuffTypeBorderMode(value, "OFF")
+    Model.WriteValue(unit, "debuffTypeBorderMode", value)
+    Model.WriteValue(unit, "useDebuffTypeBorders", value ~= "OFF")
 end
 
 function Model.ReadLaneStyleNumber(unit, kind, key, defaultValue, minValue, maxValue)
@@ -1970,6 +2028,7 @@ function Model.ReadPreviewConfig(unit)
         debuffShowStackCount = Model.ReadLaneStyleBool(unit, "debuff", "showStackCount", true),
         debuffShowCooldownText = Model.ReadLaneStyleBool(unit, "debuff", "showCooldownText", true),
         debuffShowCooldownSwipe = Model.ReadLaneStyleBool(unit, "debuff", "showCooldownSwipe", true),
+        debuffTypeBorderMode = Model.ReadDebuffTypeBorderMode(unit),
         useDebuffTypeBorders = Model.ReadLaneStyleBool(unit, "debuff", "useDebuffTypeBorders", false),
         stackAnchor = (runtimeCfg and runtimeCfg.stackAnchor) or Model.ReadStackAnchor(unit),
         buffStackAnchor = Model.ReadLaneStackAnchor(unit, "buff"),

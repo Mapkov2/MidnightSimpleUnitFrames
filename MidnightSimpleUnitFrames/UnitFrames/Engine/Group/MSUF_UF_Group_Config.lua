@@ -792,6 +792,19 @@ local function CompileCoreAuras(kind, conf)
   local privateEnabled = private.enabled
   if privateEnabled == nil then privateEnabled = conf.privateAurasEnabled ~= false end
   local showPrivate = rootEnabled and privateEnabled ~= false
+  local function NormalizeDispelBorderMode(value, legacyEnabled)
+    if value == true then return "SYMBOL" end
+    if value == false then return "OFF" end
+    value = tostring(value or ""):upper()
+    if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
+    if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
+      or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
+      return "SYMBOL"
+    end
+    if value == "OFF" or value == "NONE" or value == "DISABLED" then return legacyEnabled == true and "SYMBOL" or "OFF" end
+    return legacyEnabled == true and "SYMBOL" or "OFF"
+  end
+  local debuffDispelBorderMode = NormalizeDispelBorderMode(debuff.dispelBorderMode, debuff.showDispelBorder == true)
   local buffGrowthX, buffGrowthY = SplitAuraGrowth(buff.growth, "LEFTUP")
   local debuffGrowthX, debuffGrowthY = SplitAuraGrowth(debuff.growth, "RIGHTDOWN")
   local externalGrowthX, externalGrowthY = SplitAuraGrowth(externals.growth, "RIGHTDOWN")
@@ -839,7 +852,9 @@ local function CompileCoreAuras(kind, conf)
     perRow = 4,
     growth = "RIGHT",
     rowWrap = "DOWN",
-    debuffShowDispelBorder = debuff.showDispelBorder == true,
+    debuffDispelBorderMode = debuffDispelBorderMode,
+    debuffShowDispelBorder = debuffDispelBorderMode ~= "OFF",
+    debuffShowDispelSymbol = debuffDispelBorderMode == "SYMBOL",
     showStealableBuffs = false,
     private = {
       enabled = showPrivate,

@@ -2120,6 +2120,7 @@ end
                 showDebuffs = true,
                 showCooldownSwipe = true,
                 showStackCount = true,
+                debuffTypeBorderMode = "OFF",
                 showTooltip = true,
                 showInEditMode = true,
                 stackCountAnchor = "TOPRIGHT",
@@ -2279,6 +2280,14 @@ filters = {
         if type(a3.bossHealAuras) ~= "table" then a3.bossHealAuras = {} end
         if a3.bossHealAuras.highlightOwn == nil then a3.bossHealAuras.highlightOwn = false end
         if a3.bossHealAuras.hideOthers == nil then a3.bossHealAuras.hideOthers = false end
+        if type(a3.shared) == "table" and a3.shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
+            if a3.shared.useDebuffTypeBorders == true then
+                a3.shared.debuffTypeBorderMode = "SYMBOL"
+            elseif a3.shared.debuffTypeBorderMode == nil then
+                a3.shared.debuffTypeBorderMode = "OFF"
+            end
+            a3.shared._msufA3_debuffTypeBorderModeMigrated_v1 = true
+        end
 
         local function EnsureImportantSplit(f)
             if not f then return end

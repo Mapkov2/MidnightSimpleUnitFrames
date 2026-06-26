@@ -30,6 +30,10 @@ local GROUP_RENDER_FALLBACKS = {
     ClassColor = DefaultClassColor, HealthColor = F.HealthRGB,
     SelectHandle = F.Noop, NudgeHandlePosition = F.Noop, AddIconPool = F.Noop, RefreshHandleSelection = F.Noop,
 }
+local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
+    BORDER = "ui-debuff-border-magic-noicon",
+    SYMBOL = "ui-debuff-border-magic-icon",
+}
 
 --- Installs the group preview renderer into the preview host. Native.lua owns
 --- frame creation and input handles; this function owns repeated composition
@@ -523,6 +527,61 @@ function Render.Install(box, ctx, deps)
             end
             return fallback or "CENTER"
         end
+        local function RuntimeAuraTextAnchor(anchor, fallback)
+            if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT"
+                or anchor == "LEFT" or anchor == "CENTER" or anchor == "RIGHT"
+                or anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
+                return anchor
+            end
+            return fallback or "CENTER"
+        end
+        local function NormalizeDispelBorderMode(value, legacyEnabled)
+            if value == true then return "SYMBOL" end
+            if value == false then return "OFF" end
+            value = tostring(value or ""):upper()
+            if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
+            if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
+                or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
+                return "SYMBOL"
+            end
+            if value == "OFF" or value == "NONE" or value == "DISABLED" then return legacyEnabled == true and "SYMBOL" or "OFF" end
+            return legacyEnabled == true and "SYMBOL" or "OFF"
+        end
+        local function PlaceAuraPreviewText(fs, relativeTo, anchor, x, y)
+            if not (fs and relativeTo) then return end
+            anchor = RuntimeAuraTextAnchor(anchor, "CENTER")
+            fs:ClearAllPoints()
+            fs:SetPoint(anchor, relativeTo, anchor, x or 0, y or 0)
+            if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
+                fs:SetJustifyH("LEFT")
+            elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
+                fs:SetJustifyH("RIGHT")
+            else
+                fs:SetJustifyH("CENTER")
+            end
+            if fs.SetJustifyV then
+                if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
+                    fs:SetJustifyV("TOP")
+                elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
+                    fs:SetJustifyV("BOTTOM")
+                else
+                    fs:SetJustifyV("MIDDLE")
+                end
+            end
+        end
+        local function LayoutAuraPreviewBorder(border, icon, size, mode)
+            local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
+            if not (border and icon and atlas and border.SetAtlas) then
+                if border then border:Hide() end
+                return
+            end
+            local pad = max(1, floor((tonumber(size) or 24) / 24 + 0.5))
+            border:ClearAllPoints()
+            border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
+            border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
+            border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
+            border:Show()
+        end
         local function RuntimeAuraGridShape(count, perRow, verticalGrowth)
             count = max(Round(count), 1)
             perRow = max(Round(perRow), 1)
@@ -546,6 +605,19 @@ function Render.Install(box, ctx, deps)
             local anchor = RuntimeAuraAnchor(cfg.anchor, defaults.anchor or "CENTER")
             if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaults.anchor or "CENTER" end
             if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = "CENTER" end
+            local textScale = cfg._compiled and previewScale or laneScale
+            local showCooldown = cfg.showCooldown ~= false
+            local showStacks = cfg.showStacks ~= false
+            local showSwipe = cfg.showCooldownSwipe ~= false
+            local cooldownSize = max(6, ScaleValue(cfg.cooldownSize or defaults.cooldownSize or 8, textScale, 6))
+            local stackSize = max(6, ScaleValue(cfg.stackSize or defaults.stackSize or 10, textScale, 6))
+            local cooldownAnchor = RuntimeAuraTextAnchor(cfg.cooldownAnchor, "CENTER")
+            local stackAnchor = RuntimeAuraTextAnchor(cfg.stackAnchor, "BOTTOMRIGHT")
+            local cooldownX = ConfigToOffset(cfg.cooldownX or 0, textScale)
+            local cooldownY = ConfigToOffset(cfg.cooldownY or 0, textScale)
+            local stackX = ConfigToOffset(cfg.stackX or 0, textScale)
+            local stackY = ConfigToOffset(cfg.stackY or 0, textScale)
+            local dispelMode = groupKey == "debuff" and NormalizeDispelBorderMode(cfg.dispelBorderMode, cfg.showDispelBorder == true or cfg.showDispelSymbol == true) or "OFF"
             local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
             local gv = AuraGrowth(growth)
             local anchorTarget = mock
@@ -630,6 +702,10 @@ function Render.Install(box, ctx, deps)
             end
             for i = 1, maxIcons do
                 local tex = handle._icons and handle._icons[i]
+                local swipe = handle._iconSwipes and handle._iconSwipes[i]
+                local border = handle._iconBorders and handle._iconBorders[i]
+                local stack = handle._iconStacks and handle._iconStacks[i]
+                local timer = handle._iconTimers and handle._iconTimers[i]
                 local rect = handle._previewRects[i]
                 if tex and rect then
                     tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
@@ -640,11 +716,36 @@ function Render.Install(box, ctx, deps)
                     else
                         tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", rect[1] + originX, rect[2] + originY)
                     end
+                    if swipe then
+                        swipe:ClearAllPoints()
+                        swipe:SetPoint("TOPLEFT", tex, "TOP", 0, 0)
+                        swipe:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, 0)
+                        swipe:SetShown(showSwipe)
+                    end
+                    LayoutAuraPreviewBorder(border, tex, size, dispelMode)
+                    if stack then
+                        SetPreviewFont(stack, stackSize)
+                        stack:SetTextColor(1, 1, 1, 1)
+                        PlaceAuraPreviewText(stack, tex, stackAnchor, stackX, stackY)
+                        stack:SetText(showStacks and (i % 3 == 1 and "2" or "") or "")
+                        stack:SetShown(showStacks)
+                    end
+                    if timer then
+                        SetPreviewFont(timer, cooldownSize)
+                        timer:SetTextColor(1, 1, 1, 1)
+                        PlaceAuraPreviewText(timer, tex, cooldownAnchor, cooldownX, cooldownY)
+                        timer:SetText(showCooldown and (i % 2 == 0 and "12" or "") or "")
+                        timer:SetShown(showCooldown)
+                    end
                     tex:Show()
                 end
             end
             for i = maxIcons + 1, #(handle._icons or {}) do
                 if handle._icons[i] then handle._icons[i]:Hide() end
+                if handle._iconSwipes and handle._iconSwipes[i] then handle._iconSwipes[i]:Hide() end
+                if handle._iconBorders and handle._iconBorders[i] then handle._iconBorders[i]:Hide() end
+                if handle._iconStacks and handle._iconStacks[i] then handle._iconStacks[i]:Hide() end
+                if handle._iconTimers and handle._iconTimers[i] then handle._iconTimers[i]:Hide() end
             end
             return size
         end

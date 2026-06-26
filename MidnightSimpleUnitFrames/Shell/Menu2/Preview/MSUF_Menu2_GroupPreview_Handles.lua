@@ -402,10 +402,28 @@ function Handles.Install(box, deps)
     end
     local function AddIconPool(handle, count)
         handle._icons = handle._icons or {}
+        handle._iconSwipes = handle._iconSwipes or {}
+        handle._iconBorders = handle._iconBorders or {}
+        handle._iconStacks = handle._iconStacks or {}
+        handle._iconTimers = handle._iconTimers or {}
         for i = 1, count do
             local tex = handle._icons[i] or handle:CreateTexture(nil, "ARTWORK")
             tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             handle._icons[i] = tex
+            local swipe = handle._iconSwipes[i] or handle:CreateTexture(nil, "ARTWORK")
+            swipe:SetTexture(WHITE8X8)
+            swipe:SetVertexColor(0, 0, 0, 0.28)
+            swipe:Hide()
+            handle._iconSwipes[i] = swipe
+            local border = handle._iconBorders[i] or handle:CreateTexture(nil, "OVERLAY")
+            border:Hide()
+            handle._iconBorders[i] = border
+            local stack = handle._iconStacks[i] or handle:CreateFontString(nil, "OVERLAY")
+            stack:Hide()
+            handle._iconStacks[i] = stack
+            local timer = handle._iconTimers[i] or handle:CreateFontString(nil, "OVERLAY")
+            timer:Hide()
+            handle._iconTimers[i] = timer
         end
     end
     local buffHandle = CreatePreviewHandle("buff", "buffs", { 0.36, 0.79, 0.36 }, "BUFFS", 86, 34, false)

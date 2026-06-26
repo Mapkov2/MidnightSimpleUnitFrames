@@ -28,6 +28,11 @@ local AURA_SCOPE_LABELS = { shared = "Shared", player = "Player", target = "Targ
 local AURA_SCOPE_VALID = M.KeySetFromWords "shared player target focus boss party raid"
 local AURA_GROUP_SCOPES = M.KeySetFromWords "party raid mythicraid"
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
+local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
+local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
+    BORDER = "ui-debuff-border-magic-noicon",
+    SYMBOL = "ui-debuff-border-magic-icon",
+}
 local BUFF_EXCLUSIVE = VTP "none=None"
 local DEBUFF_EXCLUSIVE = VTP "none=None|raid=Raid"
 local NATIVE_EXACT_AURA_FILTERS_ENABLED = false
@@ -54,6 +59,18 @@ local function Round(value)
     value = tonumber(value) or 0
     if value < 0 then return -floor((-value) + 0.5) end
     return floor(value + 0.5)
+end
+local function NormalizeDebuffTypeBorderMode(value, fallback)
+    if value == true then return "SYMBOL" end
+    if value == false then return "OFF" end
+    value = tostring(value or ""):upper()
+    if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
+    if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
+        or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
+        return "SYMBOL"
+    end
+    if value == "OFF" or value == "NONE" or value == "DISABLED" then return "OFF" end
+    return fallback or "OFF"
 end
 local function AddTooltip(widget, title, body)
     return M.AddTooltip(widget, title, body, { hook = true, titleAsLine = true })
@@ -388,6 +405,22 @@ end
 local function GFWriteGroupValue(scope, groupKey, key, value, mode)
     GFWriteScopeValue(scope, mode, function(kind) return GFAuraGroup(kind, groupKey) end, key, value)
 end
+local function GFWriteGroupValues(scope, groupKey, values, mode)
+    local changed
+    local a, b = GroupScopeKinds(scope)
+    local function write(kind)
+        local target = GFAuraGroup(kind, groupKey)
+        for key, value in pairs(values) do
+            if target[key] ~= value then
+                target[key] = value
+                changed = true
+            end
+        end
+    end
+    write(a)
+    if b then write(b) end
+    if changed then QueueGroupScope(scope, mode or "visual") end
+end
 local function GFWriteRootValue(scope, key, value, mode)
     GFWriteScopeValue(scope, mode, GFAurasRoot, key, value)
 end
@@ -479,6 +512,22 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
         end,
         function(v) GFWriteGroupValue(scope, groupKey, key, v or defaultValue, mode or "visual") end)
 end
+local function ReadGroupDebuffTypeBorderMode(scope, groupKey)
+    local group = GFReadGroup(scope, groupKey or "debuff")
+    if group.dispelBorderMode ~= nil then
+        local mode = NormalizeDebuffTypeBorderMode(group.dispelBorderMode, "OFF")
+        return (mode == "OFF" and group.showDispelBorder == true) and "SYMBOL" or mode
+    end
+    return group.showDispelBorder == true and "SYMBOL" or "OFF"
+end
+local function WriteGroupDebuffTypeBorderMode(scope, groupKey, value)
+    value = NormalizeDebuffTypeBorderMode(value, "OFF")
+    GFWriteGroupValues(scope, groupKey or "debuff", {
+        dispelBorderMode = value,
+        showDispelBorder = value ~= "OFF",
+        showDispelSymbol = value == "SYMBOL",
+    }, "visual")
+end
 local function RequestAuraTextRefresh()
     if auraTextRefreshQueued then return end
     auraTextRefreshQueued = true
@@ -511,6 +560,14 @@ local function CreateAuraPreviewIcon(parent)
     f.icon:SetPoint("TOPLEFT", f, "TOPLEFT", 1, -1)
     f.icon:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
     if f.icon.SetTexCoord then f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    f.swipe = f:CreateTexture(nil, "ARTWORK")
+    f.swipe:SetPoint("TOPLEFT", f, "TOP", 0, -1)
+    f.swipe:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
+    f.swipe:SetTexture(TEX_W8)
+    f.swipe:SetVertexColor(0, 0, 0, 0.28)
+    f.swipe:Hide()
+    f.dispelBorder = f:CreateTexture(nil, "OVERLAY")
+    f.dispelBorder:Hide()
     f.edge = {}
     if PreviewHelpers.LayoutEdgeLines then PreviewHelpers.LayoutEdgeLines(f, 1, AURA_PREVIEW_EDGE_OPTS) end
     f.stack = f:CreateFontString(nil, "OVERLAY")
@@ -520,6 +577,124 @@ local function CreateAuraPreviewIcon(parent)
     f.timer:SetFont(FONT, 8, "OUTLINE")
     f.timer:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 2, 1)
     return f
+end
+local function ApplyAuraPreviewFont(fs, size)
+    if not fs then return end
+    local fontPath, fontFlags, r, g, b, _, useShadow
+    if type(_G.MSUF_GetGlobalFontSettings) == "function" then fontPath, fontFlags, r, g, b, _, useShadow = _G.MSUF_GetGlobalFontSettings() end
+    if fs.SetFont then fs:SetFont(fontPath or FONT, max(7, tonumber(size) or 10), fontFlags or "OUTLINE") end
+    if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
+    if fs.SetShadowOffset then fs:SetShadowOffset(useShadow and 1 or 0, useShadow and -1 or 0) end
+end
+local function PlaceAuraPreviewText(fs, icon, anchor, x, y)
+    if not (fs and icon) then return end
+    anchor = tostring(anchor or "CENTER"):upper()
+    x = tonumber(x) or 0
+    y = tonumber(y) or 0
+    fs:ClearAllPoints()
+    fs:SetPoint(anchor, icon, anchor, x, y)
+    if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
+        fs:SetJustifyH("LEFT")
+    elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
+        fs:SetJustifyH("RIGHT")
+    else
+        fs:SetJustifyH("CENTER")
+    end
+    if fs.SetJustifyV then
+        if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
+            fs:SetJustifyV("TOP")
+        elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
+            fs:SetJustifyV("BOTTOM")
+        else
+            fs:SetJustifyV("MIDDLE")
+        end
+    end
+end
+local function GroupAuraPreviewDefaultSize(scope, lane)
+    if scope == "raid" or scope == "mythicraid" then return 16 end
+    return lane == "buff" and 22 or 20
+end
+local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
+    local isGroup = IsGroupScope(scope)
+    local cfg = {
+        size = 24,
+        spacing = 2,
+        perRow = 7,
+        maxIcons = 14,
+        showStacks = true,
+        showTimers = true,
+        showSwipe = true,
+        stackSize = 10,
+        stackAnchor = "TOPRIGHT",
+        stackX = -1,
+        stackY = -1,
+        cooldownSize = 9,
+        cooldownAnchor = "CENTER",
+        cooldownX = 0,
+        cooldownY = 0,
+        debuffBorderMode = "OFF",
+    }
+    if isGroup then
+        local group = GFReadGroup(scope, lane or "debuff")
+        cfg.size = tonumber(group.size) or GroupAuraPreviewDefaultSize(scope, lane)
+        cfg.spacing = tonumber(group.spacing) or 1
+        cfg.perRow = tonumber(group.perRow) or (lane == "buff" and 4 or 3)
+        cfg.maxIcons = tonumber(group.max) or cfg.perRow * 2
+        cfg.showStacks = group.showStacks ~= false
+        cfg.showTimers = group.showCooldown ~= false
+        cfg.showSwipe = group.showCooldownSwipe ~= false
+        cfg.stackSize = tonumber(group.stackSize) or 10
+        cfg.stackAnchor = group.stackAnchor or "BOTTOMRIGHT"
+        cfg.stackX = tonumber(group.stackX) or 0
+        cfg.stackY = tonumber(group.stackY) or 0
+        cfg.cooldownSize = tonumber(group.cooldownSize) or 8
+        cfg.cooldownAnchor = group.cooldownAnchor or "CENTER"
+        cfg.cooldownX = tonumber(group.cooldownX) or 0
+        cfg.cooldownY = tonumber(group.cooldownY) or 0
+        if lane == "debuff" then cfg.debuffBorderMode = ReadGroupDebuffTypeBorderMode(scope, "debuff") end
+    else
+        local readScope = scope or "shared"
+        cfg.size = Model.ReadNumber(readScope, lane and LaneSizeKey(lane) or "iconSize", 26, 10, 64)
+        cfg.spacing = Model.ReadNumber(readScope, "spacing", 2, 0, 12)
+        cfg.perRow = lane and Model.ReadLanePerRow(readScope, lane) or Model.ReadNumber(readScope, "perRow", 12, 1, 40)
+        cfg.maxIcons = lane and Model.ReadNumber(readScope, LaneMaxKey(lane), LaneDefaultMax(lane), 0, 80) or cfg.perRow * 2
+        if type(Model.ReadLaneStyleBool) == "function" and lane then
+            cfg.showStacks = Model.ReadLaneStyleBool(readScope, lane, "showStackCount", true)
+            cfg.showTimers = Model.ReadLaneStyleBool(readScope, lane, "showCooldownText", true)
+            cfg.showSwipe = Model.ReadLaneStyleBool(readScope, lane, "showCooldownSwipe", true)
+        else
+            cfg.showStacks = Model.ReadBool(readScope, "showStackCount", true)
+            cfg.showTimers = Model.ReadBool(readScope, "showCooldownText", true)
+            cfg.showSwipe = Model.ReadBool(readScope, "showCooldownSwipe", true)
+        end
+        cfg.stackSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)
+        cfg.stackAnchor = lane and type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(readScope, lane) or Model.ReadStackAnchor(readScope)
+        cfg.stackX = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetX", -1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetX", -1, -2000, 2000)
+        cfg.stackY = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetY", 1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetY", 1, -2000, 2000)
+        cfg.cooldownSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "cooldownTextSize", 14, 6, 40)
+        cfg.cooldownAnchor = "CENTER"
+        cfg.cooldownX = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetX", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetX", 0, -2000, 2000)
+        cfg.cooldownY = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetY", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetY", 0, -2000, 2000)
+        if lane == "debuff" then
+            if type(Model.ReadDebuffTypeBorderMode) == "function" then
+                cfg.debuffBorderMode = Model.ReadDebuffTypeBorderMode(readScope)
+            elseif type(Model.ReadLaneStyleBool) == "function" then
+                cfg.debuffBorderMode = Model.ReadLaneStyleBool(readScope, "debuff", "useDebuffTypeBorders", false) and "SYMBOL" or "OFF"
+            end
+        end
+    end
+    local maxSize = max(12, min(34, floor(((height or 104) - 44) * 0.55)))
+    cfg.size = min(maxSize, max(10, tonumber(cfg.size) or 24))
+    cfg.spacing = min(10, max(0, tonumber(cfg.spacing) or 2))
+    cfg.perRow = max(1, Round(cfg.perRow))
+    cfg.maxIcons = max(0, Round(cfg.maxIcons))
+    local maxCols = max(1, floor(((width or 300) - 20 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
+    cfg.columns = min(cfg.perRow, maxCols)
+    cfg.maxRows = max(1, floor(((height or 104) - 38 + cfg.spacing) / max(1, cfg.size + cfg.spacing)))
+    cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.maxRows)
+    cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
+    cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
+    return cfg
 end
 local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lane)
     if ctx and ctx.hiddenBuild then return nil end
@@ -533,53 +708,44 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     local buffTex = { 135987, 136116, 135932, 136085, 132333, 135981, 136048 }
     local debuffTex = { 136118, 136139, 136197, 135817, 132851, 136188, 136170 }
     M.TrackRefresh(ctx, function()
-        local readScope = IsGroupScope(scope) and "shared" or (scope or "shared")
-        local size = min(28, max(18, Model.ReadNumber(readScope, "iconSize", 26, 10, 64)))
-        local spacing = min(5, max(1, Model.ReadNumber(readScope, "spacing", 2, 0, 12)))
-        local count = min(14, max(4, Model.ReadNumber(readScope, "perRow", 12, 1, 40)))
-        local showStacks
-        local showTimers
-        local stackSize
-        local cooldownSize
-        if type(Model.ReadBool) == "function" then
-            if lane and type(Model.ReadLaneStyleBool) == "function" then
-                showStacks = Model.ReadLaneStyleBool(readScope, lane, "showStackCount", true)
-                showTimers = Model.ReadLaneStyleBool(readScope, lane, "showCooldownText", true)
-            else
-                showStacks = Model.ReadBool(readScope, "showStackCount", true)
-                showTimers = Model.ReadBool(readScope, "showCooldownText", true)
-            end
-        else
-            showStacks = Model.ReadSharedBool("showStackCount", true)
-            showTimers = Model.ReadSharedBool("showCooldownText", true)
-        end
-        if lane and type(Model.ReadLaneStyleNumber) == "function" then
-            stackSize = min(14, max(7, Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40)))
-            cooldownSize = min(14, max(7, Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40)))
-        else
-            stackSize = min(14, max(7, Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)))
-            cooldownSize = min(14, max(7, Model.ReadNumber(readScope, "cooldownTextSize", 14, 6, 40)))
-        end
+        local cfg = ReadMiniAuraPreviewConfig(scope, lane, width, height)
         for i = 1, #icons do
             local icon = icons[i]
-            if i <= count then
-                local col = (i - 1) % 7
-                local row = floor((i - 1) / 7)
-                icon:SetSize(size, size)
+            if i <= cfg.count then
+                local col = (i - 1) % cfg.columns
+                local row = floor((i - 1) / cfg.columns)
+                icon:SetSize(cfg.size, cfg.size)
                 icon:ClearAllPoints()
-                icon:SetPoint("TOPLEFT", box, "TOPLEFT", 10 + col * (size + spacing), -34 - row * (size + spacing))
+                icon:SetPoint("TOPLEFT", box, "TOPLEFT", 10 + col * (cfg.size + cfg.spacing), -34 - row * (cfg.size + cfg.spacing))
                 local isBuffIcon = lane and lane == "buff" or (not lane and i <= 7)
                 local tex = isBuffIcon and buffTex or debuffTex
                 icon.icon:SetTexture(tex[((i - 1) % #tex) + 1])
                 local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
-                for _, edge in pairs(icon.edge) do edge:SetVertexColor(r, g, b, 0.95) end
-                if icon.stack.SetFont then icon.stack:SetFont(FONT, stackSize, "OUTLINE") end
-                if icon.timer.SetFont then icon.timer:SetFont(FONT, cooldownSize, "OUTLINE") end
-                icon.stack:SetText(showStacks and (i % 3 == 1 and "2" or "") or "")
-                icon.timer:SetText(showTimers and (i % 2 == 0 and "12" or "") or "")
+                local borderAtlas = (not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
+                local showPreviewEdges = isBuffIcon == true
+                for _, edge in pairs(icon.edge) do edge:SetShown(showPreviewEdges); edge:SetVertexColor(r, g, b, 0.95) end
+                icon.swipe:SetShown(cfg.showSwipe ~= false)
+                if borderAtlas and icon.dispelBorder.SetAtlas then
+                    local pad = max(1, floor((cfg.size / 24) + 0.5))
+                    icon.dispelBorder:ClearAllPoints()
+                    icon.dispelBorder:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
+                    icon.dispelBorder:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
+                    icon.dispelBorder:SetAtlas(borderAtlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
+                    icon.dispelBorder:Show()
+                else
+                    icon.dispelBorder:Hide()
+                end
+                ApplyAuraPreviewFont(icon.stack, cfg.stackSize)
+                ApplyAuraPreviewFont(icon.timer, cfg.cooldownSize)
+                PlaceAuraPreviewText(icon.stack, icon, cfg.stackAnchor, cfg.stackX, cfg.stackY)
+                PlaceAuraPreviewText(icon.timer, icon, cfg.cooldownAnchor, cfg.cooldownX, cfg.cooldownY)
+                icon.stack:SetText(cfg.showStacks and (i % 3 == 1 and "2" or "") or "")
+                icon.timer:SetText(cfg.showTimers and (i % 2 == 0 and "12" or "") or "")
                 icon:Show()
             else
                 icon:Hide()
+                icon.swipe:Hide()
+                icon.dispelBorder:Hide()
             end
         end
     end)
@@ -589,7 +755,7 @@ local function BuildUnitStyle(ctx, b, scope)
     local unit = scope == "shared" and "shared" or scope
     local lane = CurrentLane("auraStyleGFLane", "debuff")
     local laneName = LanePlural(lane)
-    local extraDebuffControls = lane == "debuff" and 32 or 0
+    local extraDebuffControls = lane == "debuff" and 64 or 0
     local section = b:Section("Unit Aura " .. LaneTitle(lane) .. " Style", 590 + extraDebuffControls + (unit == "shared" and 0 or 42))
     local w = section._msuf2Width or b.width or 720
     local colW = max(300, floor((w - 66) / 2))
@@ -621,6 +787,18 @@ local function BuildUnitStyle(ctx, b, scope)
             Model.WriteSharedBool(key, value)
         end
     end
+    local function ReadScopeDebuffBorderMode()
+        if type(Model.ReadDebuffTypeBorderMode) == "function" then return Model.ReadDebuffTypeBorderMode(unit) end
+        return ReadScopeBool("useDebuffTypeBorders", false) and "SYMBOL" or "OFF"
+    end
+    local function WriteScopeDebuffBorderMode(value)
+        value = NormalizeDebuffTypeBorderMode(value, "OFF")
+        if type(Model.WriteDebuffTypeBorderMode) == "function" then
+            Model.WriteDebuffTypeBorderMode(unit, value)
+        else
+            WriteScopeBool("useDebuffTypeBorders", value ~= "OFF")
+        end
+    end
     local function ReadScopeNumber(key, defaultValue, minValue, maxValue)
         if type(Model.ReadLaneStyleNumber) == "function" then return Model.ReadLaneStyleNumber(unit, lane, key, defaultValue, minValue, maxValue) end
         return Model.ReadNumber(unit, key, defaultValue, minValue, maxValue)
@@ -641,6 +819,14 @@ local function BuildUnitStyle(ctx, b, scope)
                 ApplyUnit(ctx, unit, reason, true)
             end))
     end
+    local function BindStyleDropdown(parent, label, x, y, values, width, getValue, setValue, reason)
+        return AddStyleControl(BindDropdown(ctx, parent, label, x, y, values, width,
+            getValue,
+            function(v)
+                setValue(v)
+                ApplyUnit(ctx, unit, reason, true)
+            end))
+    end
     local function BindStyleSlider(parent, label, x, y, minVal, maxVal, step, width, key, defaultValue, readMin, readMax, writeMin, writeMax, reason)
         readMin, readMax = readMin or minVal, readMax or maxVal
         writeMin, writeMax = writeMin or readMin, writeMax or readMax
@@ -656,7 +842,9 @@ local function BuildUnitStyle(ctx, b, scope)
     BindStyleSwitch(text, "Show Cooldown Text", 16, -98, colW - 32, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
     BindStyleSwitch(text, "Show Cooldown Swipe", 16, -130, colW - 32, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
     if lane == "debuff" then
-        BindStyleSwitch(text, "Dispel-type Border", 16, -162, colW - 32, "useDebuffTypeBorders", false, "AURAS3_DEBUFF_TYPE_BORDER")
+        BindStyleDropdown(text, "Dispel-type Border", 16, -162,
+            type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
+            colW - 32, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
     end
     W.LabelAt(text, "Stack Count", 16, -178 - extraDebuffControls, colW - 32, "GameFontNormalSmall", T.colors.accent)
     AddStyleControl(BindDropdown(ctx, text, "Anchor", 16, -214 - extraDebuffControls, Model.StackAnchorValues(), colW - 32,
@@ -692,7 +880,7 @@ local function BuildUnitStyle(ctx, b, scope)
 end
 local function BuildGroupStyle(ctx, b, scope)
     local lane = CurrentLane("auraStyleGFLane", "debuff")
-    local extraDebuffControls = lane == "debuff" and 32 or 0
+    local extraDebuffControls = lane == "debuff" and 64 or 0
     local section = b:Section("Group Aura Style", 668 + extraDebuffControls)
     local w = section._msuf2Width or b.width or 720
     local laneName = LanePlural(lane)
@@ -704,7 +892,11 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupSwitch(ctx, text, "Show Cooldown Text", 16, -110, colW - 32, scope, lane, "showCooldown", true, "visual")
     BindGroupSwitch(ctx, text, "Show Stack Count", 16, -142, colW - 32, scope, lane, "showStacks", true, "visual")
     if lane == "debuff" then
-        BindGroupSwitch(ctx, text, "Dispel-type Border", 16, -174, colW - 32, scope, lane, "showDispelBorder", false, "visual")
+        BindDropdown(ctx, text, "Dispel-type Border", 16, -174,
+            type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
+            colW - 32,
+            function() return ReadGroupDebuffTypeBorderMode(scope, lane) end,
+            function(v) WriteGroupDebuffTypeBorderMode(scope, lane, v) end)
     end
     BindGroupSlider(ctx, text, "Cooldown Font", 16, -198 - extraDebuffControls, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font")
     BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -256 - extraDebuffControls, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry")
@@ -721,7 +913,7 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 16, -128, rightW - 32, scope, "preferPlayer", false, "visual")
     BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 16, -160, rightW - 32, scope, "dynamicScale", false, "geometry")
     BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 16, -202, rightW - 32, scope, "cooldownSwipeDarkenOnLoss", false, "visual")
-    BuildMiniAuraPreview(ctx, section, scope, rightX, -404, rightW, 92)
+    BuildMiniAuraPreview(ctx, section, scope, rightX, -404, rightW, 92, lane)
 end
 local function BuildSharedColors(ctx, b)
     local section = b:Section("Shared Aura Colors", 438)
@@ -1254,5 +1446,5 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
 end
 M.RegisterPage("auras3_buffs", { title = "MSUF Aura Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 9 })
 M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 9 })
-M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 26 })
+M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 27 })
 M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 20 })
