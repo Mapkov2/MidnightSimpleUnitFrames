@@ -389,6 +389,8 @@ function Preview.Refresh(box, reason)
     local R = D._RenderState or {}
     local PreviewInCombat = D.PreviewInCombat
     if PreviewInCombat() then return end
+    local profiling = MenuState.PerfProfile and MenuState.PerfProfile.enabled == true and MenuState.ProfileStart and MenuState.ProfileStop
+    local profileStarted = profiling and MenuState.ProfileStart() or nil
     local TR, PortraitStyleGet, max, min, abs, floor, format, TEX_W8, ApplyPreviewFont, CastbarEnabled, ReadCastbarSize, CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey, ClampPreviewLayer, SetTex, ReadPowerBarHeight, PlaceHandle, UnitPreviewText, UnitPreviewTextMovesTogether, SetShownSafe, ApplyPreviewLayerVisibility, ApplyPreviewTransparency, RefreshHandleSelectionVisuals, Auras = Pick(D, [[TR PortraitStyleGet max min abs floor format TEX_W8 ApplyPreviewFont CastbarEnabled ReadCastbarSize CastbarOffsetFields CastbarDetached CanDetachPowerBarKey ClampPreviewLayer SetTex ReadPowerBarHeight PlaceHandle UnitPreviewText UnitPreviewTextMovesTogether SetShownSafe ApplyPreviewLayerVisibility ApplyPreviewTransparency RefreshHandleSelectionVisuals Auras]])
     local panel = box._msufPanel
     local UNIT_DATA = D.UNIT_DATA or {}
@@ -1472,5 +1474,6 @@ function Preview.Refresh(box, reason)
     ApplyPreviewLayerVisibility(box)
     ApplyPreviewTransparency(box, conf)
     RefreshHandleSelectionVisuals(box)
+    if profiling then MenuState.ProfileStop("preview", "UnitPreview.Refresh", profileStarted) end
 end
 end

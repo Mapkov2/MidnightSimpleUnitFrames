@@ -20,6 +20,9 @@ OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
 OptionText = OptionText or M.OptionText
 local GF_DISPEL_OVERLAY_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", "Dispellable by me", "DISPEL_TYPE", "Any dispel-type debuff", "ANY_DEBUFF", "Any debuff")
+local function RequestGroupBarsRefresh(ctx, reason)
+    if M.RequestRefresh then M.RequestRefresh(ctx, reason or "gf-bars-ui") elseif M.Refresh then M.Refresh(ctx) end
+end
 local function ScopeNumberSlider(ctx, parent, label, minValue, maxValue, step, width, key, default, mode, x, y, placeWidth, justify)
     local control = W.Slider(parent, label, minValue, maxValue, step, width)
     M.BindNumberWidget(ctx, control,
@@ -55,7 +58,7 @@ local function BuildDispelOverlaySection(ctx, b)
         function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")) end,
         function(value)
             Set(CurrentScope(), "dispelOverlayTrigger", NormalizeGFDispelOverlayTrigger(value), "visual")
-            if M.Refresh then M.Refresh(ctx) end
+            RequestGroupBarsRefresh(ctx, "gf-bars-dispel-trigger")
         end)
     W.MoveWidget(dispelTrigger, dispelCard, 16, -74, min(300, dispelCardW - 32), "LEFT")
     local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -126, min(300, dispelCardW - 32))
@@ -120,7 +123,7 @@ local function BuildGFBars(ctx)
             conf.gfBarMode = (v == "GLOBAL") and nil or v
             if v == "CLASS" or v == "GRADIENT" then conf.healthColorMode = v end
             QueueGF(CurrentScope(), "visual")
-            if M.Refresh then M.Refresh(ctx) end
+            RequestGroupBarsRefresh(ctx, "gf-bars-health-mode")
         end)
     local color = W.Color(hcolor, "Health bar")
     local colorHint = W.Text(hcolor, "", 12, -116, hcolor._msuf2Width or 640, T.colors.muted)
@@ -226,7 +229,7 @@ local function BuildGFBars(ctx)
             local scope = CurrentScope()
             Set(scope, "powerBarEnabled", v and true or false, "geometry")
             if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry") end
-            if M.Refresh then M.Refresh(ctx) end
+            RequestGroupBarsRefresh(ctx, "gf-bars-power-enabled")
         end)
     local powerHeight = W.Slider(powerMainCard, "Power height", 1, 30, 1, powerSliderW)
     M.BindNumberWidget(ctx, powerHeight,
@@ -530,7 +533,7 @@ local function BuildGFBars(ctx)
                 SetMoveTogether(kind, v)
                 FocusGFPreviewText(kind, v and nil or CurrentSlot(kind), true)
                 if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
-                M.Refresh(ctx)
+                RequestGroupBarsRefresh(ctx, "gf-bars-text-move-together")
             end)
         controls.slot = W.Segment(tab, "Slot", SLOT_VALUES, hpSliderW)
         W.MoveWidget(controls.slot, position, 16, -220, textRightW - 32, "LEFT")
@@ -539,7 +542,7 @@ local function BuildGFBars(ctx)
             function(v)
                 SetCurrentSlot(kind, v)
                 FocusGFPreviewText(kind, v, true)
-                M.Refresh(ctx)
+                RequestGroupBarsRefresh(ctx, "gf-bars-text-slot")
             end)
         local function SlotAxis(axis)
             local slider = W.Slider(position, "Slot " .. axis, -100, 100, 1, hpSliderW)

@@ -169,7 +169,9 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     local previewCard = W.ControlCard(siconBasicTab, "Status Preview", nil, siconRightX, -38, siconRightW, 118)
     local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -174, siconRightW, 322)
     local function RefreshStatusIconMenu()
-        if M.Refresh then
+        if M.RequestRefresh then
+            M.RequestRefresh(ctx, "gf-indicators-status-icon")
+        elseif M.Refresh then
             M.Refresh(ctx)
         else
             RefreshPage()

@@ -20,6 +20,7 @@ local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, HEALTH_MODES, TEXT_
 local SIMPLE_TEXTURES = Specs.SimpleTextures or function() return {} end
 local pendingGF = {}
 local gfFlushQueued = false
+local GF_APPLY_DELAY = 0.04
 local SCOPE_LABELS = { party = "Party", raid = "Raid", mythicraid = "Mythic Raid" }
 local SCOPE_SHORT_LABELS = { mythicraid = "Mythic" }
 local GROUP_SECTION_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
@@ -28,13 +29,33 @@ local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, "pv
 local function GF()
     return MSUF and MSUF.GF
 end
-local function RefreshGFPreview()
+local function GroupProfileStart()
+    return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
+end
+local function GroupProfileStop(key, started, extraCount)
+    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then
+        M.ProfileStop("groupPage", key, started, extraCount)
+    end
+end
+local function RefreshGFPreview(kind)
     -- Preview and live group frames have separate render paths. Refresh both when controls
     -- change so the page does not hide a stale runtime configuration.
     local gf = GF()
-    if gf and type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout() end
-    if type(M.RefreshGFNativePreviews) == "function" then M.RefreshGFNativePreviews() end
-    if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
+    if gf and type(gf.RefreshPreviewLayout) == "function" then
+        local started = GroupProfileStart()
+        gf.RefreshPreviewLayout(kind)
+        GroupProfileStop("GF.RefreshPreviewLayout", started)
+    end
+    if type(M.RefreshGFNativePreviews) == "function" then
+        local started = GroupProfileStart()
+        M.RefreshGFNativePreviews("GF_PAGE_REFRESH")
+        GroupProfileStop("M.RefreshGFNativePreviews", started)
+    end
+    if type(M.SyncGFPagePreviewForKey) == "function" then
+        local started = GroupProfileStart()
+        M.SyncGFPagePreviewForKey(M.activeKey)
+        GroupProfileStop("M.SyncGFPagePreviewForKey", started)
+    end
 end
 local function Conf(kind)
     local gf = GF()
@@ -56,8 +77,12 @@ local function Val(kind, key, default)
 end
 local function FlushGF()
     gfFlushQueued = false
+    local started = GroupProfileStart()
     local gf = GF()
-    if not gf then return end
+    if not gf then
+        GroupProfileStop("FlushGF", started)
+        return
+    end
     local rebuild = pendingGF.rebuild
     local geometry = pendingGF.geometry
     local visual = pendingGF.visual
@@ -73,12 +98,14 @@ local function FlushGF()
         if rebuild and type(gf.RebuildAll) == "function" then gf.RebuildAll() end
         if geometry then gf._pendingRefreshGeometry = true end
         if font or visual then gf._pendingRefreshVisuals = true end
-        RefreshGFPreview()
+        RefreshGFPreview(kind)
+        GroupProfileStop("FlushGF", started)
         return
     end
     if rebuild and type(gf.RebuildAll) == "function" then
         gf.RebuildAll()
         RefreshGFPreview()
+        GroupProfileStop("FlushGF", started)
         return
     end
     if geometry then
@@ -88,7 +115,8 @@ local function FlushGF()
     if visual then
         if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind) end
     end
-    RefreshGFPreview()
+    RefreshGFPreview(kind)
+    GroupProfileStop("FlushGF", started)
 end
 local function QueueGF(kind, mode)
     if kind ~= nil then
@@ -101,13 +129,17 @@ local function QueueGF(kind, mode)
     if mode == "rebuild" then pendingGF.rebuild = true end
     if mode == "geometry" then pendingGF.geometry = true end
     if mode == "visual" then pendingGF.visual = true end
-    if mode == "font" then pendingGF.font = true; pendingGF.visual = true end
+    if mode == "font" then pendingGF.font = true end
     if gfFlushQueued then return end
     gfFlushQueued = true
-    if _G.MSUF_ScheduleOnce then
+    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
+        _G.MSUF_ScheduleDelayOnce("MSUF2_GF_APPLY", GF_APPLY_DELAY, FlushGF)
+    elseif type(_G.MSUF_ScheduleOnce) == "function" then
         _G.MSUF_ScheduleOnce("MSUF2_GF_APPLY", FlushGF)
+    elseif _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(GF_APPLY_DELAY, FlushGF)
     else
-        C_Timer.After(0, FlushGF)
+        FlushGF()
     end
 end
 local function Set(kind, key, value, mode)
@@ -203,6 +235,7 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
     return true
 end
 local function RefreshContext(ctx)
+    if M.RequestRefresh then return M.RequestRefresh(ctx, "gf-context") end
     if not (ctx and ctx.refreshers) then return end
     for i = 1, #ctx.refreshers do
         local fn = ctx.refreshers[i]

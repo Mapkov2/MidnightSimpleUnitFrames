@@ -36,6 +36,7 @@ A3.__editModeLoaded = true
 A3.EditMode = (type(A3.EditMode) == "table") and A3.EditMode or {}
 local EM = A3.EditMode
 
+local AURA_DRAG_RUNTIME_INTERVAL = 0.05
 local AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local GROUPS = {
@@ -134,6 +135,18 @@ end
 local function RequestUnitFrameMenuPreview(reason)
     local fn = _G.MSUF_UFPreview_RequestRefresh
     if type(fn) == "function" then fn(reason or "AURAS3_EDITMODE") end
+end
+
+local function ProfileStart()
+    local m = MSUF and MSUF.MSUF2
+    if m and m.PerfProfile and m.PerfProfile.enabled == true and m.ProfileStart then return m.ProfileStart() end
+end
+
+local function ProfileStop(bucket, key, started, count)
+    local m = MSUF and MSUF.MSUF2
+    if started and m and m.PerfProfile and m.PerfProfile.enabled == true and m.ProfileStop then
+        m.ProfileStop(bucket, key, started, count)
+    end
 end
 
 local function NormalizeKind(kind)
@@ -510,17 +523,43 @@ local function ApplyDragUnit(auras, unit, moverKind, x, y)
 end
 
 local function RefreshAffectedRuntimeUnits(unit, shared)
+    local started = ProfileStart()
+    local count = 0
     if BOSS_UNITS[unit] and shared and shared.bossEditTogether ~= false then
-        for i = 1, 5 do A3.RefreshUnit("boss" .. i) end
+        for i = 1, 5 do
+            count = count + 1
+            A3.RefreshUnit("boss" .. i)
+        end
     elseif unit then
+        count = 1
         A3.RefreshUnit(unit)
     end
+    ProfileStop("auraEditDrag", "RuntimeRefresh", started, count)
+end
+
+local function ShouldFlushDragRuntime(self, elapsed)
+    self._dragRuntimeElapsed = (tonumber(self._dragRuntimeElapsed) or AURA_DRAG_RUNTIME_INTERVAL) + (tonumber(elapsed) or 0)
+    if self._dragRuntimeElapsed < AURA_DRAG_RUNTIME_INTERVAL then
+        self._dragRuntimePending = true
+        return false
+    end
+    self._dragRuntimeElapsed = 0
+    self._dragRuntimePending = nil
+    return true
+end
+
+local function FlushDragRuntime(self, baseUnit, shared, reason, force)
+    if not force and not ShouldFlushDragRuntime(self, self and self._lastDragElapsed) then return end
+    RefreshAffectedRuntimeUnits(baseUnit, shared)
+    RequestUnitFrameMenuPreview(reason or "AURAS3_EDITMODE_DRAG")
+    local sync = _G.MSUF_SyncAuras3PositionPopup
+    if type(sync) == "function" then sync(baseUnit) end
 end
 
 --- Drag writes are throttled by value equality and blocked in combat. Boss aura
 --- lanes can be edited together, but the persisted value is still written to
 --- each boss unit so the runtime path stays simple.
-local function ApplyDragDelta(self, dx, dy)
+local function ApplyDragDelta(self, dx, dy, elapsed)
     if IsConfigBlocked() then return end
     local auras = self._dragAuras
     local shared = self._dragShared
@@ -537,9 +576,11 @@ local function ApplyDragDelta(self, dx, dy)
     if self._lastDragX == x and self._lastDragY == y then return end
     self._lastDragX = x
     self._lastDragY = y
+    self._lastDragElapsed = tonumber(elapsed) or 0
     local baseUnit = self._msufA3Unit
     local moverKind = self._msufA3MoverKind
 
+    local previewStarted = ProfileStart()
     if BOSS_UNITS[baseUnit] and shared.bossEditTogether ~= false then
         for i = 1, 5 do
             ApplyDragUnit(auras, "boss" .. i, moverKind, x, y)
@@ -547,14 +588,12 @@ local function ApplyDragDelta(self, dx, dy)
     elseif baseUnit then
         ApplyDragUnit(auras, baseUnit, moverKind, x, y)
     end
+    ProfileStop("auraEditDrag", "PreviewPosition", previewStarted)
 
-    RefreshAffectedRuntimeUnits(baseUnit, shared)
-    RequestUnitFrameMenuPreview("AURAS3_EDITMODE_DRAG")
-    local sync = _G.MSUF_SyncAuras3PositionPopup
-    if type(sync) == "function" then sync(baseUnit) end
+    FlushDragRuntime(self, baseUnit, shared, "AURAS3_EDITMODE_DRAG", false)
 end
 
-local function AuraGroupDragOnUpdate(me)
+local function AuraGroupDragOnUpdate(me, elapsed)
     if not me._dragging then
         me:SetScript("OnUpdate", nil)
         me:SetOnUpdateMode("Disabled")
@@ -579,7 +618,7 @@ local function AuraGroupDragOnUpdate(me)
     end
     local frameScale = tonumber(me._dragFrameScale) or tonumber(me._msufA3FrameScale) or 1
     if frameScale <= 0 then frameScale = 1 end
-    ApplyDragDelta(me, dx / frameScale, dy / frameScale)
+    ApplyDragDelta(me, dx / frameScale, dy / frameScale, elapsed)
 end
 
 local function ApplyGlobalFont(fs, size)
@@ -795,6 +834,9 @@ local function CreateGroup(unit, kind)
         self._dragging = true
         self._lastDragX = nil
         self._lastDragY = nil
+        self._dragRuntimeElapsed = AURA_DRAG_RUNTIME_INTERVAL
+        self._dragRuntimePending = nil
+        self._lastDragElapsed = 0
 
         local l, r, t, b = self:GetLeft() or 0, self:GetRight() or 0, self:GetTop() or 0, self:GetBottom() or 0
         self._snapStartCX = (l + r) * 0.5
@@ -813,6 +855,9 @@ local function CreateGroup(unit, kind)
         self:SetOnUpdateMode("Disabled")
         self._dragAuras = nil
         self._dragShared = nil
+        self._dragRuntimeElapsed = nil
+        self._dragRuntimePending = nil
+        self._lastDragElapsed = nil
         local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
         if Snap and Snap.HideGuides then Snap.HideGuides() end
 

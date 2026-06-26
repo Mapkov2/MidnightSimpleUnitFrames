@@ -14,11 +14,28 @@ local CastbarPreview = MSUF.UFPreviewCastbar or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
+local C_Timer = _G.C_Timer
 local Call, G, ReadG, SetG, ReadGBool, SetGBool, TextureValues, SetControlEnabled, SetControlsEnabled, ApplyCastbars = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool TextureValues SetControlEnabled SetControlsEnabled ApplyCastbars]])
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss"
 local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords "normal channel empowered"
+local CASTBAR_PAGE_WORK_DELAY = 0.04
 local CASTBAR_PREVIEW_REFRESH_INTERVAL = 1 / 30
+local function ProfileStart()
+    return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
+end
+local function ProfileStop(bucket, key, started)
+    if started and M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then M.ProfileStop(bucket, key, started) end
+end
+local function ScheduleCastbarPageWork(key, delay, fn)
+    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
+        _G.MSUF_ScheduleDelayOnce(key, delay or CASTBAR_PAGE_WORK_DELAY, fn)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(delay or CASTBAR_PAGE_WORK_DELAY, fn)
+    else
+        fn()
+    end
+end
 local function NormalizeCastbarPreviewUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit == "boss1" or unit == "bosses" or unit == "boss frames" then unit = "boss" end
@@ -390,6 +407,128 @@ local function BuildCastbars(ctx)
             p = p * p
             return r + ((1 - r) * p), g + ((1 - g) * p), b + ((1 - b) * p)
         end
+        local function Scaled(scale, value)
+            return floor(((tonumber(value) or 0) * (tonumber(scale) or 1)) + 0.5)
+        end
+        local function RefreshCastbarAnimation(frame, now)
+            local started = ProfileStart()
+            local state = frame and frame._msufCastbarPreviewAnim
+            if not (state and frame.fill and frame.bar) then
+                ProfileStop("preview", "CastbarPreview.Animation", started)
+                return false
+            end
+            local progress = tonumber(frame.progress) or 0
+            if progress < 0 then progress = 0 elseif progress > 1 then progress = progress - floor(progress) end
+            local kind = state.kind or frame.castType or "normal"
+            local duration = state.duration or CastDuration(kind)
+            local visual = (kind == "channel") and (1 - progress) or progress
+            visual = max(0.01, min(1, visual))
+            local barWLocal = max(1, tonumber(state.barW) or 1)
+            local barHLocal = max(1, tonumber(state.barH) or 1)
+            local statusX = tonumber(state.statusX) or 0
+            local fillW = max(1, floor(barWLocal * visual + 0.5))
+            local reverse = state.reverse == true
+            local baseR, baseG, baseB = state.baseR or 0.20, state.baseG or 0.78, state.baseB or 0.94
+            if (tonumber(now) or 0) < (tonumber(frame.interruptUntil) or 0) then baseR, baseG, baseB = 0.90, 0.14, 0.20 end
+            local ir, ig, ib = GlowBlend(baseR, baseG, baseB, progress)
+            if state.showTime and frame.time then
+                local remaining = max(0, (1 - progress) * duration)
+                frame.time:SetText(FormatPreviewTime(state.unit or frame.layoutUnit, state.g, remaining, duration))
+            end
+            if state.useEmpowerSegs then
+                frame.fill:SetShown(false)
+                for i = 1, #frame.empowerBands do
+                    local band = frame.empowerBands[i]
+                    if band and band.SetVertexColor then
+                        local er, eg, eb = GlowBlend(empowerColors[i][1], empowerColors[i][2], empowerColors[i][3], progress)
+                        band:SetVertexColor(er, eg, eb, 0.24)
+                    end
+                end
+                for i = 1, #frame.empowerFills do
+                    local seg = frame.empowerFills[i]
+                    if seg then
+                        local startPct = (i - 1) / 4
+                        local endPct = i / 4
+                        local visiblePct = max(0, min(visual, endPct) - startPct)
+                        if visiblePct > 0 then
+                            local segW = max(1, floor(barWLocal * visiblePct + 0.5))
+                            local x = floor(barWLocal * startPct + 0.5)
+                            if reverse then x = floor(barWLocal * (1 - endPct) + 0.5) end
+                            seg:ClearAllPoints()
+                            seg:SetPoint("TOPLEFT", frame.bar, "TOPLEFT", statusX + x, -1)
+                            seg:SetPoint("BOTTOMLEFT", frame.bar, "TOPLEFT", statusX + x, -1 - barHLocal)
+                            seg:SetWidth(segW)
+                            local er, eg, eb = GlowBlend(empowerColors[i][1], empowerColors[i][2], empowerColors[i][3], progress)
+                            seg:SetVertexColor(er, eg, eb, empowerColors[i][4])
+                            seg:Show()
+                        else
+                            seg:Hide()
+                        end
+                    end
+                end
+            else
+                frame.fill:SetShown(true)
+                frame.fill:SetVertexColor(ir, ig, ib, 1)
+                frame.fill:SetWidth(fillW)
+            end
+            if frame.spark then
+                frame.spark:SetShown(state.showSpark == true)
+                if state.showSpark == true then
+                    frame.spark:ClearAllPoints()
+                    frame.spark:SetPoint("CENTER", frame.bar, "LEFT", reverse and (statusX + barWLocal - fillW) or (statusX + fillW), 0)
+                end
+            end
+            local currentStageTick = min(#frame.stageTicks, max(0, floor(progress * 4)))
+            if kind ~= "empowered" then
+                if frame._lastEmpowerProgress or frame._lastEmpowerStageTick then ResetEmpowerBlinkState(frame) end
+            else
+                local blinkEnabled = state.blinkEnabled == true
+                local blinkTime = tonumber(state.blinkTime) or 0.25
+                frame._stageFlashStart = frame._stageFlashStart or {}
+                frame._stageFlashUntil = frame._stageFlashUntil or {}
+                if frame._lastEmpowerProgress and progress < (frame._lastEmpowerProgress - 0.001) then ResetEmpowerBlinkState(frame) end
+                if blinkEnabled and currentStageTick > 0 and currentStageTick ~= frame._lastEmpowerStageTick then
+                    frame._stageFlashStart[currentStageTick] = now
+                    frame._stageFlashUntil[currentStageTick] = now + blinkTime
+                end
+                frame._lastEmpowerStageTick = currentStageTick
+                frame._lastEmpowerProgress = progress
+                for i = 1, #frame.stageTicks do
+                    local tick = frame.stageTicks[i]
+                    local flash = tick and tick.MSUF_flash
+                    if tick then
+                        local flashStart = frame._stageFlashStart and frame._stageFlashStart[i]
+                        local flashUntil = frame._stageFlashUntil and frame._stageFlashUntil[i]
+                        local flashing = blinkEnabled and flashStart and flashUntil and now < flashUntil
+                        local baseW = max(1, Scaled(state.scale, tick.MSUF_baseWidth or 2))
+                        local flashTickW = max(baseW, Scaled(state.scale, 4))
+                        if flashing then
+                            local phase = max(0, min(1, (now - flashStart) / blinkTime))
+                            local flashAlpha = max(0, 1 - phase)
+                            tick:SetWidth(flashTickW)
+                            tick:SetVertexColor(1.0, 0.10, 0.10, 1.0)
+                            if flash then
+                                flash:ClearAllPoints()
+                                flash:SetPoint("CENTER", tick, "CENTER", 0, 0)
+                                flash:SetWidth(max(10, Scaled(state.scale, 12)))
+                                flash:SetHeight(barHLocal)
+                                flash:SetAlpha(flashAlpha)
+                                flash:Show()
+                            end
+                        else
+                            tick:SetWidth(baseW)
+                            tick:SetVertexColor(1, 1, 1, tick.MSUF_baseAlpha or 0.85)
+                            if flash then
+                                flash:SetAlpha(0)
+                                flash:Hide()
+                            end
+                        end
+                    end
+                end
+            end
+            ProfileStop("preview", "CastbarPreview.Animation", started)
+            return true
+        end
         local function KickReadyKey(unit)
             if unit == "player" then return "kickReadyShowPlayer" end
             if unit == "target" then return "kickReadyShowTarget" end
@@ -448,6 +587,7 @@ local function BuildCastbars(ctx)
             end
         end
         function preview:Refresh()
+            local profileStarted = ProfileStart()
             local now = GetTime and GetTime() or 0
             local kind = self.castType or "normal"
             local unit = self.layoutUnit or "player"
@@ -494,11 +634,12 @@ local function BuildCastbars(ctx)
             local visual = (kind == "channel") and (1 - progress) or progress
             visual = max(0.01, min(1, visual))
             local fillW = max(1, floor(barWLocal * visual + 0.5))
-            local ir, ig, ib = 0.20, 0.78, 0.94
+            local baseR, baseG, baseB = 0.20, 0.78, 0.94
             if type(_G.MSUF_ResolveCastbarColors) == "function" then
                 local r, g, b = _G.MSUF_ResolveCastbarColors()
-                if r then ir, ig, ib = r, g or ig, b or ib end
+                if r then baseR, baseG, baseB = r, g or baseG, b or baseB end
             end
+            local ir, ig, ib = baseR, baseG, baseB
             if now < (self.interruptUntil or 0) then ir, ig, ib = 0.90, 0.14, 0.20 end
             ir, ig, ib = GlowBlend(ir, ig, ib, progress)
             if self.bar.SetBackdropBorderColor then
@@ -612,7 +753,8 @@ local function BuildCastbars(ctx)
             end
             self.latency:SetWidth(max(6, floor(barWLocal * 0.12 + 0.5)))
             self.latency:SetShown(unit == "player" and kind ~= "empowered" and ReadGBool("castbarShowLatency", true))
-            self.spark:SetShown(ReadGBool("castbarShowSpark", false))
+            local showSpark = ReadGBool("castbarShowSpark", false)
+            self.spark:SetShown(showSpark)
             local kickKey = KickReadyKey(unit)
             self.kick:SetShown(kickKey and ReadGBool(kickKey, false) and ReadG("kickReadyStyle", "border") == "box")
             if self.kick:IsShown() then
@@ -700,6 +842,25 @@ local function BuildCastbars(ctx)
                 blinkEnabled = EmpowerBlinkEnabled()
                 blinkTime = EmpowerBlinkTime()
             end
+            self._msufCastbarPreviewAnim = {
+                kind = kind,
+                unit = unit,
+                g = g,
+                duration = duration,
+                reverse = reverse,
+                barW = barWLocal,
+                barH = barHLocal,
+                statusX = statusX,
+                scale = scale,
+                showTime = showTime,
+                showSpark = showSpark,
+                useEmpowerSegs = useEmpowerSegs,
+                baseR = baseR,
+                baseG = baseG,
+                baseB = baseB,
+                blinkEnabled = blinkEnabled,
+                blinkTime = blinkTime,
+            }
             local currentStageTick = min(#self.stageTicks, max(0, floor(progress * 4)))
             if kind ~= "empowered" then
                 if self._lastEmpowerProgress or self._lastEmpowerStageTick then ResetEmpowerBlinkState(self) end
@@ -765,8 +926,12 @@ local function BuildCastbars(ctx)
             for key, btn in pairs(unitButtons) do
                 if btn.SetActive then btn:SetActive(key == unit) end
             end
+            ProfileStop("preview", "CastbarPreview.Refresh", profileStarted)
         end
-        box:SetScript("OnUpdate", function(self, elapsed)
+        function preview:RefreshAnimation(now)
+            return RefreshCastbarAnimation(self, now or (GetTime and GetTime() or 0))
+        end
+        local function CastbarPreviewOnUpdate(self, elapsed)
             if self.IsVisible and not self:IsVisible() then return end
             elapsed = tonumber(elapsed) or 0
             preview._updateElapsed = (tonumber(preview._updateElapsed) or 0) + elapsed
@@ -784,8 +949,26 @@ local function BuildCastbars(ctx)
             else
                 preview:SetRowOffset(0)
             end
-            preview:Refresh()
+            if not (preview.RefreshAnimation and preview:RefreshAnimation(now)) then preview:Refresh() end
+        end
+        function preview:StartAnimationDriver()
+            if box._msufCastbarPreviewDriverActive then return end
+            box._msufCastbarPreviewDriverActive = true
+            if box.SetOnUpdateMode then box:SetOnUpdateMode("RunWhenVisible") end
+            box:SetScript("OnUpdate", CastbarPreviewOnUpdate)
+        end
+        function preview:StopAnimationDriver()
+            box._msufCastbarPreviewDriverActive = nil
+            box:SetScript("OnUpdate", nil)
+            if box.SetOnUpdateMode then box:SetOnUpdateMode("Disabled") end
+        end
+        box:SetScript("OnShow", function()
+            if preview.StartAnimationDriver then preview:StartAnimationDriver() end
         end)
+        box:SetScript("OnHide", function()
+            if preview.StopAnimationDriver then preview:StopAnimationDriver() end
+        end)
+        if not box.IsVisible or box:IsVisible() then preview:StartAnimationDriver() end
         M._msuf2CastbarPreview = preview
         if M._msuf2CastbarPreviewUnit then M.SetCastbarPreviewUnit(M._msuf2CastbarPreviewUnit) end
         if M._msuf2CastbarPreviewType then M.SetCastbarPreviewType(M._msuf2CastbarPreviewType) end
@@ -795,8 +978,26 @@ local function BuildCastbars(ctx)
     end
     local castPreview = BuildPreview()
     local function RefreshCastPreview() if castPreview and castPreview.Refresh then castPreview:Refresh() end end
+    local castPreviewRefreshQueued = false
+    local function RequestCastPreviewRefresh()
+        if castPreviewRefreshQueued then return end
+        castPreviewRefreshQueued = true
+        ScheduleCastbarPageWork("MSUF2_CASTBAR_PAGE_PREVIEW", CASTBAR_PREVIEW_REFRESH_INTERVAL, function()
+            castPreviewRefreshQueued = false
+            RefreshCastPreview()
+        end)
+    end
     local function ShakeCastPreview(strength) if castPreview and castPreview.PlayShake then castPreview:PlayShake(strength, false) end end
     local function ShowEmpoweredPreview() M.SetCastbarPreviewType("empowered", 0.62) end
+    local castbarOutlineQueued = false
+    local function RequestCastbarOutlineApply()
+        if castbarOutlineQueued then return end
+        castbarOutlineQueued = true
+        ScheduleCastbarPageWork("MSUF2_CASTBAR_OUTLINE_APPLY", CASTBAR_PAGE_WORK_DELAY, function()
+            castbarOutlineQueued = false
+            Call("MSUF_ApplyCastbarOutlineToAll", true)
+        end)
+    end
     local function MoveToggle(toggle, parent, x, y, labelWidth)
         W.MoveWidget(toggle, parent, x, y)
         if toggle and toggle._msuf2Label and toggle._msuf2Label.SetWidth then toggle._msuf2Label:SetWidth(max(40, tonumber(labelWidth) or 260)) end
@@ -810,7 +1011,7 @@ local function BuildCastbars(ctx)
             opts.getValue or function() return ReadGBool(key, default) end,
             opts.setValue or function(v)
                 SetGBool(key, v, reason, { castbar = true, preview = true })
-                if afterSet then afterSet(reason, v) end
+                if afterSet then afterSet(reason, v, true) end
             end)
         return toggle
     end
@@ -824,7 +1025,7 @@ local function BuildCastbars(ctx)
                 local fallback = opts.setDefault ~= nil and opts.setDefault or default
                 local nextValue = opts.precise and (tonumber(v) or fallback) or floor((tonumber(v) or fallback) + 0.5)
                 SetG(key, nextValue, reason, { castbar = true, preview = true })
-                if afterSet then afterSet(reason, nextValue) end
+                if afterSet then afterSet(reason, nextValue, true) end
             end,
             opts.setDefault ~= nil and opts.setDefault or default, { step = step, roundStep = not opts.precise })
         return slider
@@ -838,7 +1039,7 @@ local function BuildCastbars(ctx)
                 local normalize = opts.normalize
                 local nextValue = normalize and normalize(v, default) or (v or default)
                 SetG(key, nextValue, reason, { castbar = true, preview = true })
-                if afterSet then afterSet(reason, nextValue) end
+                if afterSet then afterSet(reason, nextValue, true) end
             end
         end
         local dropdown = W.Dropdown(parent, label, values, width or 260)
@@ -866,12 +1067,18 @@ local function BuildCastbars(ctx)
             end,
         })
     end
-    local function ApplyAndRefresh(reason) ApplyCastbars(reason); RefreshCastPreview() end
+    local function ApplyCastbarsIfNeeded(reason, _, applyQueued)
+        if applyQueued ~= true then ApplyCastbars(reason) end
+    end
+    local function ApplyAndRefresh(reason, _, applyQueued)
+        ApplyCastbarsIfNeeded(reason, nil, applyQueued)
+        RequestCastPreviewRefresh()
+    end
     local behavior = b:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 196, true)
     local leftX, rightX = 14, 392
     BuildCastControlSpecs(behavior, {
         { "toggle", "Shake on interrupt", leftX, -42, 260, "castbarInterruptShake", false, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh },
-        { "slider", "Shake strength", leftX, -72, 320, 0, 30, 1, "castbarShakeStrength", 8, "MSUF2_CASTBAR_SHAKE_STRENGTH", function(reason, value) ApplyCastbars(reason); ShakeCastPreview(value) end },
+        { "slider", "Shake strength", leftX, -72, 320, 0, 30, 1, "castbarShakeStrength", 8, "MSUF2_CASTBAR_SHAKE_STRENGTH", function(reason, value, applyQueued) ApplyCastbarsIfNeeded(reason, nil, applyQueued); ShakeCastPreview(value) end },
         { "toggle", "Always use fill direction for all casts", rightX, -42, 360, "castbarUnifiedDirection", false, "MSUF2_CASTBAR_UNIFIED_DIRECTION", ApplyAndRefresh },
         { "dropdown", "Castbar fill direction", rightX, -72, 300, VT("RTL", "Right to left (default)", "LTR", "Left to right"), "castbarFillDirection", "RTL", "MSUF2_CASTBAR_FILL_DIRECTION", ApplyAndRefresh },
         { "toggle", "Use opposite fill direction for target", rightX, -126, 360, "castbarOpositeDirectionTarget", false, "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh },
@@ -879,7 +1086,10 @@ local function BuildCastbars(ctx)
     })
     local textures = b:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
     local texLeftX, texRightX = 14, 392
-    local function ApplyTexturesAndPreview(reason) ApplyCastbarTextures(reason); RefreshCastPreview() end
+    local function ApplyTexturesAndPreview(reason, _, applyQueued)
+        if applyQueued ~= true then ApplyCastbarTextures(reason) end
+        RequestCastPreviewRefresh()
+    end
     BuildCastControlSpecs(textures, {
         { "dropdown", "Castbar texture", texLeftX, -42, 300, function() return TextureValues(nil) end, "castbarTexture", "Blizzard", "MSUF2_CASTBAR_TEXTURE", ApplyTexturesAndPreview },
         { "dropdown", "Castbar background texture", texLeftX, -96, 300, function() return TextureValues(nil) end, "castbarBackgroundTexture", "Blizzard", "MSUF2_CASTBAR_BG_TEXTURE", ApplyTexturesAndPreview, {
@@ -887,7 +1097,7 @@ local function BuildCastbars(ctx)
                 local v = ReadG("castbarBackgroundTexture", nil)
                 return (type(v) == "string" and v ~= "") and v or ReadG("castbarTexture", "Blizzard")
             end } },
-        { "slider", "Outline thickness", texRightX, -42, 320, 0, 6, 1, "castbarOutlineThickness", 1, "MSUF2_CASTBAR_OUTLINE", function(reason) Call("MSUF_ApplyCastbarOutlineToAll", true); ApplyTexturesAndPreview(reason) end },
+        { "slider", "Outline thickness", texRightX, -42, 320, 0, 6, 1, "castbarOutlineThickness", 1, "MSUF2_CASTBAR_OUTLINE", function(reason, value, applyQueued) RequestCastbarOutlineApply(); ApplyTexturesAndPreview(reason, value, applyQueued) end },
         { "toggle", "Show castbar glow effect", texRightX, -96, 360, "castbarShowGlow", false, "MSUF2_CASTBAR_GLOW", ApplyTexturesAndPreview },
         { "toggle", "Show latency indicator", texRightX, -120, 360, "castbarShowLatency", true, "MSUF2_CASTBAR_LATENCY", ApplyTexturesAndPreview },
         { "toggle", "Show spark (leading edge highlight)", texRightX, -144, 360, "castbarShowSpark", false, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview },
@@ -896,10 +1106,13 @@ local function BuildCastbars(ctx)
     local empowered = b:CollapsibleSection("castbar_empowered", "Empowered Casts", 130, false)
     local empoweredLeftX, empoweredRightX = 14, 392
     local syncEmpowered
-    local function ApplyEmpoweredPreview(reason) ApplyCastbars(reason); ShowEmpoweredPreview() end
+    local function ApplyEmpoweredPreview(reason, _, applyQueued)
+        ApplyCastbarsIfNeeded(reason, nil, applyQueued)
+        ShowEmpoweredPreview()
+    end
     local empoweredControls = BuildCastControlSpecs(empowered, {
         { "toggle", "Add color to stages (Empowered casts)", empoweredLeftX, -42, 300, "empowerColorStages", true, "MSUF2_CASTBAR_EMPOWER_COLOR", ApplyEmpoweredPreview },
-        { "toggle", "Add stage blink (Empowered casts)", empoweredLeftX, -68, 300, "empowerStageBlink", true, "MSUF2_CASTBAR_EMPOWER_BLINK", function(reason) ApplyEmpoweredPreview(reason); if syncEmpowered then syncEmpowered() end end },
+        { "toggle", "Add stage blink (Empowered casts)", empoweredLeftX, -68, 300, "empowerStageBlink", true, "MSUF2_CASTBAR_EMPOWER_BLINK", function(reason, value, applyQueued) ApplyEmpoweredPreview(reason, value, applyQueued); if syncEmpowered then syncEmpowered() end end },
         { "slider", "Stage blink time (sec)", empoweredRightX, -42, 320, 0.05, 1.00, 0.01, "empowerStageBlinkTime", 0.25, "MSUF2_CASTBAR_EMPOWER_TIME", ApplyEmpoweredPreview, { precise = true } },
     })
     local blinkControls = { empoweredControls.empowerStageBlinkTime }
@@ -913,8 +1126,7 @@ local function BuildCastbars(ctx)
         { "toggle", "Spell name shortening", textLeftX, -42, 260, nil, nil, nil, nil, { name = "shorten", switch = true, getValue = NameShorteningEnabled,
             setValue = function(v)
                 SetG("castbarSpellNameShortening", v and 1 or 0, "MSUF2_CASTBAR_NAME_SHORTEN", { castbar = true, preview = true })
-                ApplyCastbars("MSUF2_CASTBAR_NAME_SHORTEN")
-                RefreshCastPreview()
+                RequestCastPreviewRefresh()
                 if syncNameShortening then syncNameShortening() end
             end } },
         { "slider", "Max name length", textRightX, -42, 320, 6, 30, 1, "castbarSpellNameMaxLen", 30, "MSUF2_CASTBAR_NAME_MAX", ApplyAndRefresh },
@@ -929,7 +1141,24 @@ local function BuildCastbars(ctx)
     focusKick._msuf2CursorY = -68
     local focusLeftX, focusRightX = 14, 392
     local syncFocusKick
-    local function ApplyFocusKickOptions() Call("MSUF_UpdateFocusKickIconOptions") end
+    local focusKickOptionsQueued = false
+    local focusKickTextFontQueued = false
+    local function ApplyFocusKickOptions()
+        if focusKickOptionsQueued then return end
+        focusKickOptionsQueued = true
+        ScheduleCastbarPageWork("MSUF2_FOCUS_KICK_OPTIONS", CASTBAR_PAGE_WORK_DELAY, function()
+            focusKickOptionsQueued = false
+            Call("MSUF_UpdateFocusKickIconOptions")
+        end)
+    end
+    local function RequestFocusKickTextFont()
+        if focusKickTextFontQueued then return end
+        focusKickTextFontQueued = true
+        ScheduleCastbarPageWork("MSUF2_FOCUS_KICK_TEXT_FONT", CASTBAR_PAGE_WORK_DELAY, function()
+            focusKickTextFontQueued = false
+            Call("MSUF_FocusKick_ApplyTimeTextFont")
+        end)
+    end
     local focusControls = BuildCastControlSpecs(focusKick, {
         { "toggle", "Focus interrupt tracker", focusLeftX, -74, 260, "enableFocusKickIcon", false, "MSUF2_FOCUS_KICK_ENABLE", nil, { name = "enable", switch = true,
             afterSet = function(_, enabled) ApplyFocusKickOptions(); if not enabled then Call("MSUF_FocusKick_SetPreviewEnabled", false) end; if syncFocusKick then syncFocusKick() end end } },
@@ -949,7 +1178,7 @@ local function BuildCastbars(ctx)
             end,
             setValue = function(v)
                 SetG("focusKickTextSize", floor((tonumber(v) or 12) + 0.5), "MSUF2_FOCUS_KICK_TEXT", { castbar = true, preview = true })
-                Call("MSUF_FocusKick_ApplyTimeTextFont")
+                RequestFocusKickTextFont()
                 ApplyFocusKickOptions()
             end } },
         { "slider", "X offset", focusLeftX, -150, 320, -500, 500, 1, "focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_X", ApplyFocusKickOptions, { name = "x", setDefault = 0 } },
@@ -960,8 +1189,8 @@ local function BuildCastbars(ctx)
     resetFocus:SetScript("OnClick", function()
         SetG("focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
         SetG("focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_RESET", { castbar = true, preview = true })
-        Call("MSUF_UpdateFocusKickIconOptions")
-        if M.Refresh then M.Refresh(ctx) end
+        ApplyFocusKickOptions()
+        if M.RequestRefresh then M.RequestRefresh(ctx, "castbars-focus-kick-reset") elseif M.Refresh then M.Refresh(ctx) end
     end)
     local focusKickControls = { focusControls.preview, focusControls.width, focusControls.height, focusControls.text, focusControls.x, focusControls.y, resetFocus }
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
@@ -972,9 +1201,9 @@ local function BuildCastbars(ctx)
     W.LabelAt(kick, "Castbars", kickLeftX, -70, 160, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(kick, "Appearance", kickRightX, -70, 160, "GameFontNormalSmall", T.colors.accent)
     local syncKickReady
-    local function ApplyKickReady(reason)
-        ApplyCastbars(reason)
-        RefreshCastPreview()
+    local function ApplyKickReady(reason, _, applyQueued)
+        ApplyCastbarsIfNeeded(reason, nil, applyQueued)
+        RequestCastPreviewRefresh()
         if syncKickReady then syncKickReady() end
     end
     local kickControls = BuildCastControlSpecs(kick, {
@@ -988,9 +1217,9 @@ local function BuildCastbars(ctx)
     local colorHint = W.Text(kick, "Ready / cooldown colors: Colors menu > Interrupt Ready Indicator", kickRightX, -228, 370, T.colors.muted)
     W.LabelAt(kick, "Placement", kickLeftX, -178, 160, "GameFontNormalSmall", T.colors.accent)
     M.Assign(kickControls, BuildCastControlSpecs(kick, {
-        { "dropdown", "Anchor", kickLeftX, -196, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbars },
-        { "slider", "X offset", kickLeftX, -250, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbars },
-        { "slider", "Y offset", kickLeftX, -304, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbars },
+        { "dropdown", "Anchor", kickLeftX, -196, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
+        { "slider", "X offset", kickLeftX, -250, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
+        { "slider", "Y offset", kickLeftX, -304, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
     }))
     local style, size, auto = kickControls.kickReadyStyle, kickControls.kickReadySize, kickControls.kickReadyAutoSize
     local kickReadyControls = { style, auto, kickControls.kickReadyAnchor, kickControls.kickReadyOffsetX, kickControls.kickReadyOffsetY }

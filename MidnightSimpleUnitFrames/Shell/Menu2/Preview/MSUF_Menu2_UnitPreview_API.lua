@@ -13,9 +13,27 @@ local M = (MSUF and MSUF.MSUF2) or _G.MSUF2 or {}
 local WordList = M.WordList
 local InstallPreviewHooks
 local UninstallPreviewHooks
+local UNIT_PREVIEW_REFRESH_DELAY = 0.05
+local FAST_REFRESH_REASONS = {
+    SHOW = true,
+    COMBAT_ALPHA = true,
+    STATUS_PREVIEW_MODE = true,
+    STATUS_PREVIEW_SELECT = true,
+    MENU_TEXT_FOCUS = true,
+    MENU_TEXT_CLEAR_FOCUS = true,
+}
+local function PreviewRefreshDelay(reason)
+    return FAST_REFRESH_REASONS[tostring(reason or "")] and 0 or UNIT_PREVIEW_REFRESH_DELAY
+end
 local function PreviewInCombat()
     local fn = Preview._PreviewInCombat
     return type(fn) == "function" and fn() or false
+end
+local function CancelQueuedRefresh(box)
+    if not box then return end
+    box._refreshReason = nil
+    box._refreshQueued = nil
+    box._refreshSerial = (tonumber(box._refreshSerial) or 0) + 1
 end
 local function BoxOwnerInactive(box)
     local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
@@ -34,44 +52,49 @@ local function RequestRefreshForBox(box, reason)
     end
     if box.IsVisible and not box:IsVisible() then return end
     if BoxOwnerInactive(box) then
-        box._refreshReason = nil
-        box._refreshQueued = nil
+        CancelQueuedRefresh(box)
         if box.Hide then box:Hide() end
         if UninstallPreviewHooks then UninstallPreviewHooks() end
         return
     end
     local hostShown = box._msuf2UnitPageHostShown
     if not box._msuf2PinnedFloating and type(hostShown) == "function" and not hostShown() then
-        box._refreshReason = nil
-        box._refreshQueued = nil
+        CancelQueuedRefresh(box)
         if box.Hide then box:Hide() end
         return
     end
     if PreviewInCombat() then
-        box._refreshReason = nil
-        box._refreshQueued = nil
+        CancelQueuedRefresh(box)
         return
     end
     if InstallPreviewHooks then InstallPreviewHooks() end
     local refresh = Preview.Refresh
     if type(refresh) ~= "function" then return end
     if reason == "OPTIONS_APPLY_DB_IMMEDIATE" then
-        box._refreshQueued = nil
+        CancelQueuedRefresh(box)
         refresh(box, reason)
         return
     end
     box._refreshReason = reason or box._refreshReason
     if box._refreshQueued then return end
+    box._refreshSerial = (tonumber(box._refreshSerial) or 0) + 1
+    local serial = box._refreshSerial
     box._refreshQueued = true
     local function run()
         if not box then return end
+        if serial ~= box._refreshSerial then return end
         local refreshReason = box._refreshReason
         box._refreshReason = nil
         box._refreshQueued = nil
         local queuedRefresh = Preview.Refresh
         if type(queuedRefresh) == "function" and box:IsShown() and (not box.IsVisible or box:IsVisible()) then queuedRefresh(box, refreshReason) end
     end
-    C_Timer.After(0, run)
+    local delay = PreviewRefreshDelay(reason)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay, run)
+    else
+        run()
+    end
 end
 function Preview.RequestRefresh(reason)
     RequestRefreshForBox(Preview.active, reason)
@@ -103,7 +126,10 @@ MSUF_RequestStatusRestingIndicatorRefresh MSUF_RequestStatusIncomingResIndicator
 local wrappedNames = {}
 local wrappers = {}
 local lastPreviewHookScanAt = -100
-local unpack = table.unpack or unpack
+local function FinishPreviewHook(name, ...)
+    if not PreviewInCombat() then Preview.RequestRefresh(name) end
+    return ...
+end
 UninstallPreviewHooks = function()
     for name, original in pairs(wrappedNames) do
         if _G[name] == wrappers[name] then _G[name] = original end
@@ -130,9 +156,7 @@ InstallPreviewHooks = function()
                     UninstallPreviewHooks()
                     return original(...)
                 end
-                local results = { original(...) }
-                if not PreviewInCombat() then Preview.RequestRefresh(name) end
-                return unpack(results)
+                return FinishPreviewHook(name, original(...))
             end
             wrappedNames[name] = original
             wrappers[name] = wrapper

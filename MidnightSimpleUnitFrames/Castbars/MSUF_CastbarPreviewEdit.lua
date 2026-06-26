@@ -52,6 +52,7 @@ local UNIT_CONFIG = {
         test = "MSUF_SetBossCastbarTestMode",
     },
 }
+local CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL = 0.05
 
 local function GeneralDB()
     if type(EnsureDB) == "function" then
@@ -117,6 +118,40 @@ local function ApplyUnitAndSync(unit)
     if type(MSUF_SyncCastbarPositionPopup) == "function" then
         MSUF_SyncCastbarPositionPopup(unit)
     end
+end
+
+local function PreviewEditProfileStart()
+    local menu = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStart then
+        return menu.ProfileStart()
+    end
+    return nil
+end
+
+local function PreviewEditProfileStop(key, started)
+    if not started then return end
+    local menu = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStop then
+        menu.ProfileStop("castbarPreviewEdit", key, started)
+    end
+end
+
+local function PositionPreviewOnly(unit)
+    local position = _G.MSUF_PositionCastbarPreviewUnit
+    if type(position) == "function" then
+        return position(unit) and true or false
+    end
+    return false
+end
+
+local function ThrottledApplyUnitAndSync(frame, unit, elapsed, key)
+    frame._msufPreviewApplyAcc = (tonumber(frame._msufPreviewApplyAcc) or 0) + (tonumber(elapsed) or 0)
+    if frame._msufPreviewApplyAcc < CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL then return false end
+    frame._msufPreviewApplyAcc = 0
+    local started = PreviewEditProfileStart()
+    ApplyUnitAndSync(unit)
+    PreviewEditProfileStop(key or "ApplyUnitAndSync", started)
+    return true
 end
 
 local function ClampBossOffsets(general, config)
@@ -271,6 +306,7 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         self.isDragging = true
         self.dragMoved = false
         self._msufUndoFired = false
+        self._msufPreviewApplyAcc = CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL
 
         local uiScale = UIParent:GetEffectiveScale() or 1
         local cursorX, cursorY = GetCursorPosition()
@@ -305,10 +341,12 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         end
 
         self:SetOnUpdateMode("RunWhenVisible")
-        self:SetScript("OnUpdate", function(dragFrame)
+        self:SetScript("OnUpdate", function(dragFrame, elapsed)
+            local tickStarted = PreviewEditProfileStart()
             if not dragFrame.isDragging then
                 dragFrame:SetScript("OnUpdate", nil)
                 dragFrame:SetOnUpdateMode("Disabled")
+                PreviewEditProfileStop("DragTick", tickStarted)
                 return
             end
 
@@ -318,6 +356,7 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             local deltaY = currentCursorY / scale - (dragFrame.dragStartCursorY or currentCursorY / scale)
 
             if not dragFrame.dragMoved and math.abs(deltaX) + math.abs(deltaY) < 6 then
+                PreviewEditProfileStop("DragTick", tickStarted)
                 return
             end
 
@@ -362,7 +401,19 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
                 end
             end
 
-            ApplyUnitAndSync(unit)
+            if dragFrame.dragMode == "MOVE" and PositionPreviewOnly(unit) then
+                dragFrame._msufPreviewApplyAcc = CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL
+                if type(MSUF_SyncCastbarPositionPopup) == "function" then
+                    dragFrame._msufPopupSyncAcc = (tonumber(dragFrame._msufPopupSyncAcc) or 0) + (tonumber(elapsed) or 0)
+                    if dragFrame._msufPopupSyncAcc >= CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL then
+                        dragFrame._msufPopupSyncAcc = 0
+                        MSUF_SyncCastbarPositionPopup(unit)
+                    end
+                end
+            else
+                ThrottledApplyUnitAndSync(dragFrame, unit, elapsed, dragFrame.dragMode == "SIZE" and "SizeApply" or "MoveApplyFallback")
+            end
+            PreviewEditProfileStop("DragTick", tickStarted)
         end)
     end)
 
@@ -376,6 +427,8 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             self.isDragging = false
             self:SetScript("OnUpdate", nil)
             self:SetOnUpdateMode("Disabled")
+            self._msufPreviewApplyAcc = nil
+            self._msufPopupSyncAcc = nil
 
             local snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
             if snap and snap.HideGuides then
@@ -384,6 +437,11 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         end
 
         PulsePreview(unit)
+        if moved then
+            local started = PreviewEditProfileStart()
+            ApplyUnitAndSync(unit)
+            PreviewEditProfileStop("DragEndApply", started)
+        end
 
         if not moved
             and _G.MSUF_UnitEditModeActive

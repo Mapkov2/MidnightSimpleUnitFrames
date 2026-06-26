@@ -23,6 +23,8 @@ local max = math.max
 local min = math.min
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local PREVIEW_BORDER_COLOR = { 1.00, 0.02, 0.02, 1.00 }
+local CP_PREVIEW_REFRESH_DELAY = 0.05
+local CP_PREVIEW_ANIMATION_INTERVAL = 0.05
 local CP_SHAPES, POWER_SHAPES = CPPreview.CLASS_SHAPES, CPPreview.POWER_SHAPES
 local NormalizeClassShape, ResolvePowerShape = CPPreview.NormalizeClassShape, CPPreview.ResolvePowerShape
 local CP_OUTLINE_OPTS = {
@@ -35,6 +37,28 @@ local HP_TEXT_REVERSE = { CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURPERCENT = "PE
 local DELIMITERS = { [""] = " ", ["-"] = " - ", ["/"] = " / ", ["\\"] = " \\ ", ["|"] = " | ", ["<"] = " < ", [">"] = " > ", ["~"] = " ~ ", [":"] = " : " }
 local function TR(text)
     return (M.Tr and M.Tr(text)) or text
+end
+local function RequestClassPowerPreviewRefresh(box, reason)
+    if not (box and box.Refresh) then return end
+    box._msufCPRefreshReason = reason or box._msufCPRefreshReason
+    if box._msufCPRefreshQueued then return end
+    box._msufCPRefreshQueued = true
+    box._msufCPRefreshSerial = (tonumber(box._msufCPRefreshSerial) or 0) + 1
+    local serial = box._msufCPRefreshSerial
+    local function Run()
+        if not box or serial ~= box._msufCPRefreshSerial then return end
+        local refreshReason = box._msufCPRefreshReason
+        box._msufCPRefreshReason = nil
+        box._msufCPRefreshQueued = nil
+        if box.IsShown and not box:IsShown() then return end
+        if box.IsVisible and not box:IsVisible() then return end
+        box:Refresh(refreshReason or "CLASSPOWER_PREVIEW_REFRESH")
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(CP_PREVIEW_REFRESH_DELAY, Run)
+    else
+        Run()
+    end
 end
 local function SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
     if not (box and box.summary and box.summary.SetText) then return end
@@ -379,20 +403,21 @@ local function HideBarOutline(frame)
 end
 local function CallApply(handle, reason)
     local kind = handle and handle._applyKind
-    if kind == "class" or kind == "classText" then
-        if type(_G.MSUF_ClassPower_Refresh) == "function" then _G.MSUF_ClassPower_Refresh() end
-        if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
-        if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
-    elseif kind == "power" or kind == "powerText" then
-        if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
-        if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
-        if kind == "powerText" and type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then _G.MSUF_UpdateAllFonts_Immediate() end
-    elseif kind == "hp" or kind == "hpText" then
-        if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
-        if kind == "hpText" and type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then _G.MSUF_UpdateAllFonts_Immediate() end
+    local moveOnly = reason == "CLASSPOWER_PREVIEW_MOVE"
+    if not moveOnly then
+        if kind == "class" or kind == "classText" then
+            if type(_G.MSUF_ClassPower_Refresh) == "function" then _G.MSUF_ClassPower_Refresh() end
+            if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
+            if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
+        elseif kind == "power" or kind == "powerText" then
+            if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
+            if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
+        elseif kind == "hp" or kind == "hpText" then
+            if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
+        end
     end
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason or "CLASSPOWER_PREVIEW_MOVE") end
-    if type(M.RequestGeneralApply) == "function" then M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER_PREVIEW_MOVE", { preview = true, power = kind == "power" or kind == "powerText", text = kind == "powerText" or kind == "hpText", applyAll = false, notify = false }) end
+    if type(M.RequestGeneralApply) == "function" then M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER_PREVIEW_MOVE", { preview = true, power = kind == "power" or kind == "powerText", text = kind == "powerText" or kind == "hpText", applyAll = false, notify = false, history = false }) end
 end
 local function StoreForHandle(handle)
     if not handle then return nil end
@@ -415,7 +440,7 @@ local function WriteHandle(handle, x, y, skipApply)
     if not (store and handle and handle._xKey and handle._yKey) then return end
     store[handle._xKey] = Round(x)
     store[handle._yKey] = Round(y)
-    if handle._preview and handle._preview.Refresh then handle._preview:Refresh("DRAG", true) end
+    RequestClassPowerPreviewRefresh(handle._preview, "CLASSPOWER_PREVIEW_DRAG")
     if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_MOVE") end
 end
 local function RefreshHandleVisuals(preview)
@@ -528,6 +553,7 @@ local function StopHandleDrag(handle, button, skipApply)
         preview.dragFrame._handle = nil
         preview.dragFrame:Hide()
     end
+    RequestClassPowerPreviewRefresh(preview, "CLASSPOWER_PREVIEW_DRAG_END")
     if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_DRAG_END") end
     CommitHistory(handle)
     RefreshHandleVisuals(preview)
@@ -685,6 +711,10 @@ local function RenderMeter(frame, shapeInfo, opts)
     local h = max(1, floor(tonumber(opts.height) or 1))
     local frac = tonumber(opts.fraction) or 1
     if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+    frame._msufCPPreviewW = w
+    frame._msufCPPreviewH = h
+    frame._msufCPPreviewShapeAxis = shapeInfo and shapeInfo.axis or nil
+    frame._msufCPPreviewHasShape = shapeInfo ~= nil
     frame:SetSize(w, h)
     frame.bg:ClearAllPoints()
     frame.bg:SetAllPoints(frame)
@@ -733,6 +763,25 @@ local function RenderMeter(frame, shapeInfo, opts)
         frame.fill:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
         if frac > 0 then frame.fill:Show() else frame.fill:Hide() end
     end
+end
+local function UpdateMeterFill(frame, fraction)
+    if not (frame and frame.fill) then return false end
+    local w = max(1, floor(tonumber(frame._msufCPPreviewW) or (frame.GetWidth and frame:GetWidth()) or 1))
+    local h = max(1, floor(tonumber(frame._msufCPPreviewH) or (frame.GetHeight and frame:GetHeight()) or 1))
+    local frac = tonumber(fraction) or 0
+    if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+    local axis = frame._msufCPPreviewShapeAxis
+    if axis == "VERTICAL" then
+        local fillH = frac > 0 and max(1, floor(h * frac + 0.5)) or 0
+        frame.fill:SetTexCoord(0, 1, frac > 0 and (1 - frac) or 1, 1)
+        frame.fill:SetHeight(max(1, fillH))
+    else
+        local fillW = frac > 0 and max(1, floor(w * frac + 0.5)) or 0
+        frame.fill:SetTexCoord(0, frame._msufCPPreviewHasShape and frac or 1, 0, 1)
+        frame.fill:SetWidth(max(1, fillW))
+    end
+    if frac > 0 then frame.fill:Show() else frame.fill:Hide() end
+    return true
 end
 local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth)
     local shape = CP_SHAPES[NormalizeClassShape(bars and bars.classPowerShape)]
@@ -869,6 +918,9 @@ local function RenderClassPower(preview, bars, spec)
                 fill:SetTexCoord(0, shapeInfo and frac or 1, 0, 1)
             end
             fill:SetWidth(max(1, drawW))
+            fill._msufCPPreviewSegW = segW
+            fill._msufCPPreviewShape = shapeInfo ~= nil
+            fill._msufCPPreviewReverse = bars.classPowerFillReverse == true
             if drawW > 0 then fill:Show() else fill:Hide() end
             if shapeInfo and outline > 0 then
                 edge:ClearAllPoints()
@@ -902,6 +954,20 @@ local function RenderClassPower(preview, bars, spec)
             if runeText then runeText:Hide() end
         end
     end
+    frame._msufCPPreviewAnim = {
+        bars = bars,
+        spec = spec,
+        count = count,
+        token = token,
+        r = r,
+        g = g,
+        b = b,
+        filledA = filledA,
+        emptyA = emptyA,
+        textColorR = textColorR,
+        textColorG = textColorG,
+        textColorB = textColorB,
+    }
     if bars.classPowerShowText == true then
         local textSize = Clamp(bars.classPowerFontSize, 16, 6, 48)
         ApplyFont(frame.text, textSize)
@@ -1125,6 +1191,100 @@ local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spe
     PlaceHandle(preview.handleHP, frame, 5)
     return frame
 end
+local function UpdateClassPowerAnimation(preview, frame)
+    local state = frame and frame._msufCPPreviewAnim
+    local bars = state and state.bars
+    local spec = state and state.spec
+    if not (preview and frame and bars and spec) then return false end
+    if frame.IsShown and not frame:IsShown() then return true end
+    local elapsed = PreviewElapsed(preview)
+    local animatedValue = CPPreview.AnimatedValue and CPPreview.AnimatedValue(spec, elapsed) or nil
+    local runeOrder = spec.mode == "rune" and CPPreview.BuildRuneOrder and CPPreview.BuildRuneOrder({}, bars, spec, elapsed, true) or nil
+    for i = 1, state.count or 0 do
+        local fill = frame.segments and frame.segments[i]
+        if fill then
+            local rune = runeOrder and runeOrder[i]
+            local frac = rune and ((rune.elapsed or 0) / (rune.total or 1))
+                or (CPPreview.FillForSegment and CPPreview.FillForSegment(spec, i, animatedValue)
+                    or (i <= floor(tonumber(animatedValue or spec.value) or 0) and 1 or 0))
+            if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+            local sr, sg, sb = state.r, state.g, state.b
+            if CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
+                sr, sg, sb = CPColor("CHARGED", 0.60, 0.20, 0.80)
+            elseif state.token == "COMBO_POINTS" and CPPreview.ResolveComboColor then
+                sr, sg, sb = CPPreview.ResolveComboColor(bars, i, sr, sg, sb)
+            end
+            if spec.threshold and frac > 0 and i > spec.threshold and CPPreview.ResolveColor then
+                sr, sg, sb = CPColor(spec.thresholdToken, sr, sg, sb)
+            end
+            fill:SetVertexColor(sr, sg, sb, rune and state.filledA or (frac > 0 and state.filledA or state.emptyA))
+            local segW = max(1, floor(tonumber(fill._msufCPPreviewSegW) or 1))
+            local drawW = frac > 0 and max(1, floor(segW * frac + 0.5)) or 0
+            if fill._msufCPPreviewReverse then
+                fill:SetTexCoord(fill._msufCPPreviewShape and (1 - frac) or 0, 1, 0, 1)
+            else
+                fill:SetTexCoord(0, fill._msufCPPreviewShape and frac or 1, 0, 1)
+            end
+            fill:SetWidth(max(1, drawW))
+            if drawW > 0 then fill:Show() else fill:Hide() end
+            local runeText = frame.runeTexts and frame.runeTexts[i]
+            if runeText then
+                if rune and bars.runeShowTime ~= false and not rune.ready then
+                    local txt = CPPreview.FormatSeconds and CPPreview.FormatSeconds(rune.remaining) or ""
+                    runeText:SetText(txt)
+                    if txt ~= "" then runeText:Show() else runeText:Hide() end
+                else
+                    runeText:Hide()
+                end
+            end
+        end
+    end
+    if frame.text and bars.classPowerShowText == true then
+        frame.text:SetText(CPPreview.TextForValue and CPPreview.TextForValue(spec, animatedValue) or tostring(spec.previewText or "3"))
+        if LayerOn(preview, "classText") then frame.text:Show() end
+    end
+    return true
+end
+local function UpdateDetachedPowerAnimation(preview, frame, bars, player)
+    if not (preview and frame and bars and player) then return false end
+    if frame.IsShown and not frame:IsShown() then return true end
+    local fraction = AnimatedMeterFraction(preview, 0.72, 0.46, 0.08, 0.96)
+    UpdateMeterFill(frame, fraction)
+    if player.showPower ~= false and player.detachedPowerBarTextOnBar == true then
+        local leftMode = tostring(player.powerTextLeft or "NONE"):upper()
+        local centerMode = tostring(player.powerTextCenter or player.powerTextMode or "CURPERCENT"):upper()
+        local rightMode = tostring(player.powerTextRight or "NONE"):upper()
+        local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
+        local current = floor((fraction * 100) + 0.5)
+        if frame.left then frame.left:SetText(ModeText(leftMode, current, 100, delimiter)) end
+        if frame.center then frame.center:SetText(ModeText(centerMode, current, 100, delimiter)) end
+        if frame.right then frame.right:SetText(ModeText(rightMode, current, 100, delimiter)) end
+    end
+    return true
+end
+local function UpdatePlayerHPAnimation(preview, frame, bars, player)
+    if not (preview and frame and bars and player) then return false end
+    if frame.IsShown and not frame:IsShown() then return true end
+    local fraction = AnimatedMeterFraction(preview, 0.74, 0.34, 0.18, 1.00)
+    UpdateMeterFill(frame, fraction)
+    if bars.playerHPBarTextEnabled ~= false then
+        local leftMode, centerMode, rightMode, delimiter = HPTextConfig(bars, player)
+        local maxValue = 1000000
+        local current = floor((maxValue * fraction) + 0.5)
+        if frame.left then frame.left:SetText(ModeText(leftMode, current, maxValue, delimiter)) end
+        if frame.center then frame.center:SetText(ModeText(centerMode, current, maxValue, delimiter)) end
+        if frame.right then frame.right:SetText(ModeText(rightMode, current, maxValue, delimiter)) end
+    end
+    return true
+end
+local function RefreshClassPowerAnimation(preview)
+    local state = preview and preview._msufCPPreviewAnim
+    if not state then return false end
+    if state.classFrame and not UpdateClassPowerAnimation(preview, state.classFrame) then return false end
+    if state.powerFrame and not UpdateDetachedPowerAnimation(preview, state.powerFrame, state.bars, state.player) then return false end
+    if state.hpFrame and not UpdatePlayerHPAnimation(preview, state.hpFrame, state.bars, state.player) then return false end
+    return true
+end
 local function PaintPlayerReference(preview, spec)
     local player = preview.playerRef
     local parent = PreviewParent(preview)
@@ -1273,8 +1433,8 @@ local CP_LAYER_BUTTON_OPTS = {
         if not LayerAvailable(preview, self.key) then return end
         preview.layerVisibility[self.key] = preview.layerVisibility[self.key] == false
         if self.key == "guides" then SetPreviewGuidesEnabled(preview.layerVisibility[self.key] ~= false) end
-        if preview.Refresh then
-            preview:Refresh("CLASSPOWER_PREVIEW_LAYER")
+        if preview and preview.Refresh then
+            RequestClassPowerPreviewRefresh(preview, "CLASSPOWER_PREVIEW_LAYER")
         else
             ApplyLayerVisibility(preview)
             RefreshHandleVisuals(preview)
@@ -1319,6 +1479,7 @@ local function StopAnimationDriver(preview)
     local driver = preview and preview.animationDriver
     if not driver then return end
     driver:SetScript("OnUpdate", nil)
+    if driver.SetOnUpdateMode then driver:SetOnUpdateMode("Disabled") end
     driver:Hide()
 end
 local function AnimationOnUpdate(driver, elapsed)
@@ -1330,9 +1491,15 @@ local function AnimationOnUpdate(driver, elapsed)
     elapsed = tonumber(elapsed) or 0
     preview._animationElapsed = (tonumber(preview._animationElapsed) or 0) + elapsed
     preview._animationAccum = (tonumber(preview._animationAccum) or 0) + elapsed
-    if preview._animationAccum < 0.033 then return end
+    if preview._animationAccum < CP_PREVIEW_ANIMATION_INTERVAL then return end
     preview._animationAccum = 0
-    if preview.Refresh then preview:Refresh("CLASSPOWER_PREVIEW_ANIMATE") end
+    if preview.Refresh then
+        local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
+        local started = profiling and M.ProfileStart() or nil
+        local light = preview.RefreshAnimation and preview:RefreshAnimation("CLASSPOWER_PREVIEW_ANIMATE")
+        if not light then preview:Refresh("CLASSPOWER_PREVIEW_ANIMATE") end
+        if profiling then M.ProfileStop("preview", light and "ClassPowerPreview.AnimationLight" or "ClassPowerPreview.AnimationFallback", started) end
+    end
 end
 local function StartAnimationDriver(preview)
     if not (preview and preview._animationEnabled == true) then return end
@@ -1341,6 +1508,7 @@ local function StartAnimationDriver(preview)
         preview.animationDriver._preview = preview
     end
     preview.animationDriver._preview = preview
+    if preview.animationDriver.SetOnUpdateMode then preview.animationDriver:SetOnUpdateMode("RunWhenVisible") end
     preview.animationDriver:SetScript("OnUpdate", AnimationOnUpdate)
     preview.animationDriver:Show()
 end
@@ -1495,6 +1663,8 @@ function Preview.Create(ctx, builder)
     box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp")
     box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText")
     function section:Refresh()
+        local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
+        local profileStarted = profiling and M.ProfileStart() or nil
         local bars = Bars()
         local player = Player()
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
@@ -1503,6 +1673,14 @@ function Preview.Create(ctx, builder)
         if classFrame and classFrame.IsShown and classFrame:IsShown() then box.noResource:Hide() else box.noResource:Show() end
         local powerFrame = RenderDetachedPower(box, bars, player, classFrame)
         local hpFrame = RenderPlayerHP(box, bars, player, classFrame, powerFrame, spec)
+        box._msufCPPreviewAnim = {
+            bars = bars,
+            player = player,
+            spec = spec,
+            classFrame = classFrame,
+            powerFrame = powerFrame,
+            hpFrame = hpFrame,
+        }
         SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
         box.layerAvailable = {
             guides = true,
@@ -1523,11 +1701,18 @@ function Preview.Create(ctx, builder)
         RefreshHandleVisuals(box)
         RefreshAnimateButton(box)
         if box._animationEnabled == true then StartAnimationDriver(box) end
+        if profiling then M.ProfileStop("preview", "ClassPowerPreview.Refresh", profileStarted) end
     end
     function box:Refresh()
         section:Refresh()
     end
+    function box:RefreshAnimation()
+        return RefreshClassPowerAnimation(box)
+    end
     section:SetScript("OnHide", function()
+        box._msufCPRefreshSerial = (tonumber(box._msufCPRefreshSerial) or 0) + 1
+        box._msufCPRefreshQueued = nil
+        box._msufCPRefreshReason = nil
         StopAnimationDriver(box)
         SetArrowBindings(box, false)
         if box._msufCPPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == box._msufCPPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end

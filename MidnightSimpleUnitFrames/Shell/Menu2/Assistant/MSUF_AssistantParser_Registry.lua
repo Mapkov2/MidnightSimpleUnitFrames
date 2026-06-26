@@ -2936,6 +2936,8 @@ P.ParseMiscRegistryShortcut = function(text, raw)
         key = "general.hideAdvancedMenu"
     elseif ContainsAny(text, { "reduce motion", "menu motion", "reduce animations", "menu animations", "bewegung reduzieren", "menue bewegung reduzieren", "animationen reduzieren", "weniger bewegung", "weniger animationen", "reduzierte bewegung" }) then
         key = "general.reduceMotion"
+    elseif ContainsAny(text, { "navigation icons", "nav icons", "menu icons", "sidebar icons", "rail icons", "navigation symbols", "nav symbols", "menu symbols", "sidebar symbols", "rail symbols", "navi symbole", "navigationssymbole", "navigation symbole", "menue symbole", "menu symbole", "navi icons" }) then
+        key = "general.showNavigationIcons"
     elseif ContainsAny(text, { "welcome message", "startup welcome", "startup message", "start message", "willkommensnachricht", "willkommens nachricht", "willkommens meldung", "willkommen nachricht", "login nachricht", "start meldung" }) then
         key = "general.showWelcomeMessage"
     elseif ContainsAny(text, { "version check", "peer version check", "peer-to-peer version check", "update check", "versionscheck", "versions pruefung", "version pruefung", "versionspruefung", "peer versionspruefung", "update pruefung" }) then

@@ -15,10 +15,12 @@ local VTP = M.ValueTextPairs
 local PreviewHelpers = M.PreviewHelpers or {}
 if type(W) ~= "table" or type(T) ~= "table" or type(Model) ~= "table" then return end
 local CreateFrame = _G.CreateFrame
+local C_Timer = _G.C_Timer
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = TEX_W8, color = function() return 1, 1, 1, 0.95 end }
+local AURA_MENU_APPLY_DELAY = 0.04
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 local tonumber, tostring, type, ipairs, pairs = tonumber, tostring, type, ipairs, pairs
 local AURA_SCOPE_VALUES = VTP "shared=Shared|player=Player|target=Target|focus=Focus|boss=Boss|party=Party|raid=Raid / Mythic"
@@ -58,6 +60,8 @@ local function Rebuild(ctx)
         M.InvalidatePage(key)
         M.activeKey = nil
         M.SelectPage(key)
+    elseif M.RequestRefresh then
+        M.RequestRefresh(ctx, "auras-rebuild-fallback")
     elseif M.Refresh then
         M.Refresh(ctx)
     end
@@ -69,9 +73,85 @@ local function SelectPage(pageKey, scope)
     end
     if M.SelectPage then M.SelectPage(pageKey or "auras3") end
 end
+local pendingAuraUnits = {}
+local pendingAuraReasons = {}
+local pendingAuraGlobal
+local pendingAuraGlobalReason
+local pendingAuraRefreshCtx
+local pendingAuraRefreshReason
+local auraApplyQueued = false
+local auraTextRefreshQueued = false
+local function AurasProfileStart()
+    return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
+end
+local function AurasProfileStop(key, started, extraCount)
+    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then
+        M.ProfileStop("aurasPage", key, started, extraCount)
+    end
+end
+local function ScheduleAuraMenuWork(key, delay, fn)
+    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
+        _G.MSUF_ScheduleDelayOnce(key, delay or AURA_MENU_APPLY_DELAY, fn)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(delay or AURA_MENU_APPLY_DELAY, fn)
+    else
+        fn()
+    end
+end
+local function QueueAurasPageRefresh(ctx, reason)
+    if M.RequestRefresh then
+        M.RequestRefresh(ctx, reason or "auras-refresh")
+    elseif M.Refresh then
+        M.Refresh(ctx)
+    end
+end
+local function FlushAuraApply()
+    auraApplyQueued = false
+    local units, reasons = pendingAuraUnits, pendingAuraReasons
+    local global, globalReason = pendingAuraGlobal, pendingAuraGlobalReason
+    local refreshCtx, refreshReason = pendingAuraRefreshCtx, pendingAuraRefreshReason
+    pendingAuraUnits, pendingAuraReasons = {}, {}
+    pendingAuraGlobal, pendingAuraGlobalReason = nil, nil
+    pendingAuraRefreshCtx, pendingAuraRefreshReason = nil, nil
+
+    local started = AurasProfileStart()
+    local count = 0
+    if global then
+        Model.Apply("shared", globalReason or "AURAS3_MENU2_BATCH")
+        count = 1
+    else
+        for unit in pairs(units) do
+            Model.Apply(unit, reasons[unit] or "AURAS3_MENU2_BATCH")
+            count = count + 1
+        end
+    end
+    AurasProfileStop("FlushAuraApply", started, count)
+
+    if refreshCtx or refreshReason then
+        QueueAurasPageRefresh(refreshCtx, refreshReason or "auras-apply")
+    end
+end
+local function QueueAuraApply(ctx, unit, reason, refresh)
+    reason = reason or "AURAS3_MENU2"
+    unit = unit or "shared"
+    if unit == "shared" then
+        pendingAuraGlobal = true
+        pendingAuraGlobalReason = reason
+        pendingAuraUnits, pendingAuraReasons = {}, {}
+    elseif not pendingAuraGlobal then
+        pendingAuraUnits[unit] = true
+        pendingAuraReasons[unit] = reason
+    end
+    if refresh then
+        pendingAuraRefreshCtx = ctx or pendingAuraRefreshCtx
+        pendingAuraRefreshReason = reason
+    end
+    if auraApplyQueued then return end
+    auraApplyQueued = true
+    ScheduleAuraMenuWork("MSUF2_AURAS_PAGE_APPLY", AURA_MENU_APPLY_DELAY, FlushAuraApply)
+end
 local function ApplyUnit(ctx, unit, reason, refresh)
-    Model.Apply(unit, reason or "AURAS3_MENU2")
-    if refresh and M.Refresh then M.Refresh(ctx) end
+    QueueAuraApply(ctx, unit, reason or "AURAS3_MENU2", refresh == true)
 end
 local BindSwitch, BindToggle, BindSlider = M.BindSwitchAt, M.BindToggleAt, M.BindSliderAt
 local BindDropdown, BindTextInput, BindColor = M.BindDropdownAt, M.BindTextInputAt, M.BindColorAt
@@ -240,11 +320,15 @@ local function GroupConf(kind)
 end
 local function QueueGroupScope(scope, mode)
     local a, b = GroupScopeKinds(scope)
+    local queued = false
     if type(GP.QueueGF) == "function" then
         GP.QueueGF(a, mode or "visual")
         if b then GP.QueueGF(b, mode or "visual") end
+        queued = true
     end
-    RefreshGFPreview()
+    if not queued then
+        RefreshGFPreview()
+    end
 end
 local function GFAurasRoot(kind)
     local conf = GroupConf(kind)
@@ -375,14 +459,26 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
         function(v) GFWriteGroupValue(scope, groupKey, key, v or defaultValue, mode or "visual") end)
 end
 local function RequestAuraTextRefresh()
-    if A3 and type(A3.ApplyFontsFromGlobal) == "function" then
-        A3.ApplyFontsFromGlobal()
-    elseif A3 and type(A3.RefreshAll) == "function" then
-        A3.RefreshAll()
-    end
-    QueueGroupScope("party", "visual")
-    QueueGroupScope("raid", "visual")
-    Model.Apply("shared", "AURAS3_TEXT_REFRESH")
+    if auraTextRefreshQueued then return end
+    auraTextRefreshQueued = true
+    ScheduleAuraMenuWork("MSUF2_AURAS_TEXT_REFRESH", AURA_MENU_APPLY_DELAY, function()
+        auraTextRefreshQueued = false
+        local started = AurasProfileStart()
+        if A3 and type(A3.ApplyFontsFromGlobal) == "function" then
+            A3.ApplyFontsFromGlobal()
+        elseif A3 and type(A3.RefreshAll) == "function" then
+            A3.RefreshAll()
+        else
+            QueueAuraApply(nil, "shared", "AURAS3_TEXT_REFRESH", false)
+        end
+        if type(M.RefreshGFNativePreviews) == "function" then
+            M.RefreshGFNativePreviews("AURAS3_TEXT_REFRESH")
+        end
+        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+            _G.MSUF_UFPreview_RequestRefresh("AURAS3_TEXT_REFRESH")
+        end
+        AurasProfileStop("RequestAuraTextRefresh", started, 1)
+    end)
 end
 local function CreateAuraPreviewIcon(parent)
     local f = CreateFrame("Frame", nil, parent)
@@ -813,7 +909,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
         function(v)
             M.auraBlacklistPreset = v or "RAID_BUFFS"
             M.auraBlacklistSpell = nil
-            if M.Refresh then M.Refresh(ctx) end
+            QueueAurasPageRefresh(ctx, "auras-blacklist-preset")
         end)
     local spellDrop = W.Dropdown(preset, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, colW - 32)
     W.MoveWidget(spellDrop, preset, 16, -136, colW - 32)
@@ -1096,7 +1192,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     end
     local _, laneButtons = BuildActionTabs(ctx, top, LANE_VALUES, 74, -62, 200, CurrentTab, function(kind)
         M.unitAuraTabSelection[unit] = kind
-        if M.Refresh then M.Refresh(ctx) end
+        QueueAurasPageRefresh(ctx, "auras-unit-lane-tab")
     end, 8)
     local actionsX = max(360, sectionW - 206)
     local style = ActionButton(top, "Style", 72)

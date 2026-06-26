@@ -474,8 +474,11 @@ local function CurrentMenuDataRevision()
     return tonumber(M._msuf2MenuDataRevision) or 0
 end
 function M.MarkMenuDataDirty(reason)
+    local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
+    local started = profiling and M.ProfileStart() or nil
     M._msuf2MenuDataRevision = CurrentMenuDataRevision() + 1
     M._msuf2MenuDataDirtyReason = reason
+    if profiling then M.ProfileStop("dirty", tostring(reason or "unknown"), started) end
     return M._msuf2MenuDataRevision
 end
 local function RunRefreshers(entry, opts)
@@ -483,11 +486,16 @@ local function RunRefreshers(entry, opts)
     opts = opts or {}
     local revision = CurrentMenuDataRevision()
     if opts.force ~= true and entry._msuf2RefreshRevision == revision then return false end
+    local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
+    local started = profiling and M.ProfileStart() or nil
     for i = 1, #entry.refreshers do
+        local fnStart = profiling and M.ProfileStart() or nil
         local fn = entry.refreshers[i]
         if type(fn) == "function" then fn() end
+        if profiling then M.ProfileStop("refreshFn", tostring(entry.key or "page") .. "#" .. tostring(i), fnStart) end
     end
     entry._msuf2RefreshRevision = revision
+    if profiling then M.ProfileStop("refreshPage", entry.key or "page", started, #entry.refreshers) end
     return true
 end
 IsEditModeActive = M.IsMSUFEditModeActive
@@ -591,19 +599,26 @@ local function BuildPageEntry(key, hidden)
     wrapper:SetPoint("TOPLEFT", M.scrollChild, "TOPLEFT", 0, 0)
     wrapper:SetSize(CONTENT_W - 10, CONTENT_H)
     if hidden and wrapper.Hide then wrapper:Hide() end
-    local entry = { wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion, layoutVersion = layoutVersion, hiddenBuild = hidden and true or false }
+    local entry = { key = key, wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion, layoutVersion = layoutVersion, hiddenBuild = hidden and true or false }
     M.cache[key] = entry
     local ctx = CreateContext(key, wrapper, entry)
     local prevBuildKey = M._msuf2SearchBuildKey
     M._msuf2SearchBuildKey = key
+    local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
+    local buildStarted = profiling and M.ProfileStart() or nil
     if spec and type(spec.build) == "function" then
+        entry._msuf2Building = true
+        ctx._msuf2Building = true
         local result = spec.build(ctx)
+        ctx._msuf2Building = nil
+        entry._msuf2Building = nil
         if tonumber(result) then
             ctx:SetContentHeight(result)
         end
     else
         BuildPlaceholderPage(ctx, key)
     end
+    if profiling then M.ProfileStop("pageBuild", tostring(key) .. (hidden and ":hidden" or ""), buildStarted) end
     M._msuf2SearchBuildKey = prevBuildKey
     if hidden and wrapper.Hide then wrapper:Hide() end
     return entry

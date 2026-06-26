@@ -25,7 +25,8 @@ local SEARCH_KEYWORDS = SearchText.KEYWORDS or SearchData.KEYWORDS or {}
 
 local MIN_SEARCH_QUERY_LEN = 2
 local SEARCH_TEXT_MAX_LEN = 170
-local SEARCH_BACKGROUND_STEP_SEC = 0.22
+local SEARCH_BACKGROUND_STEP_SEC = 0.90
+local SEARCH_BACKGROUND_FIRST_STEP_SEC = 0.65
 local SEARCH_INPUT_DEBOUNCE_SEC = 0.10
 local SEARCH_MAX_RESULTS = 24
 local SEARCH_VISIBLE_RESULTS = 12
@@ -1013,6 +1014,8 @@ local SEARCH_FAQ = SearchData.BuildFAQ and SearchData.BuildFAQ({
 local SEARCH_EASTER_EGGS = SearchData.EASTER_EGGS or {}
 
 local function BuildSearchRecords()
+    local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
+    local started = profiling and M.ProfileStart() or nil
     local pageInfos, pageInfoByKey = BuildSearchPageInfos()
 
     local records, seenRecords = {}, {}
@@ -1067,6 +1070,7 @@ local function BuildSearchRecords()
         end
     end
 
+    if profiling then M.ProfileStop("search", "BuildSearchRecords", started, #records) end
     return records
 end
 
@@ -1122,7 +1126,10 @@ local function StartSearchBackgroundIndex()
 
         local key = table.remove(SEARCH_STATE.indexQueue, 1)
         if key then
+            local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
+            local started = profiling and M.ProfileStart() or nil
             if M.BuildPageEntry then M.BuildPageEntry(key, true) end
+            if profiling then M.ProfileStop("searchHiddenBuild", key, started) end
             MarkSearchIndexDirty()
         end
 
@@ -1133,7 +1140,7 @@ local function StartSearchBackgroundIndex()
         end
     end
 
-    _G.C_Timer.After(0, Step)
+    _G.C_Timer.After(SEARCH_BACKGROUND_FIRST_STEP_SEC, Step)
 end
 
 local function GetSearchRecords()

@@ -44,6 +44,7 @@ local DROPDOWN_ICON_SIZE = 18
 local DROPDOWN_ICON_LEFT = 10
 local DROPDOWN_ICON_TEXT_LEFT = 34
 local DROPDOWN_SCROLLBAR_W = 10
+local DROPDOWN_POSITION_INTERVAL = 0.10
 local CloseDropdown
 local IsDescendantOf
 local function PixelBarTexture(texture)
@@ -344,7 +345,7 @@ local function EnsureDropdownFrame()
     dropdownFrame:SetScript("OnUpdate", function(self, elapsed)
         if not dropdownOwner then return end
         self._msuf2PositionElapsed = (self._msuf2PositionElapsed or 0) + (elapsed or 0)
-        if self._msuf2PositionElapsed < 0.03 then return end
+        if self._msuf2PositionElapsed < DROPDOWN_POSITION_INTERVAL then return end
         self._msuf2PositionElapsed = 0
         PositionDropdown(dropdownOwner)
     end)

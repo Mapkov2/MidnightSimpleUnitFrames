@@ -887,7 +887,7 @@ function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     M.WireEditModeButton(ctx, edit, {
         afterClick = function()
             if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
-            if M.Refresh then M.Refresh() end
+            if M.RequestRefresh then M.RequestRefresh(nil, "edit-mode-header") elseif M.Refresh then M.Refresh() end
         end,
     })
     return head, edit
@@ -2453,11 +2453,27 @@ local function ColorPickerCancel(prev)
     if type(prev) == "table" then r, g, b = prev.r or r, prev.g or g, prev.b or b end
     ColorApply(btn, r, g, b)
 end
+local colorPickerHideHooked = false
+local function EnsureColorPickerHideHook()
+    if colorPickerHideHooked or not (ColorPickerFrame and ColorPickerFrame.HookScript) then return end
+    colorPickerHideHooked = true
+    ColorPickerFrame:HookScript("OnHide", function(self)
+        local btn = self and self._msuf2ColorOwner
+        if btn and type(btn._msuf2CommitColorInteraction) == "function" then
+            btn:_msuf2CommitColorInteraction()
+        end
+    end)
+end
 local function ColorButtonOnClick(self)
     if not ColorPickerFrame then return end
     local r, g, b = self:GetRGB()
     local picker = ColorPickerFrame
+    EnsureColorPickerHideHook()
+    if picker._msuf2ColorOwner and picker._msuf2ColorOwner ~= self and type(picker._msuf2ColorOwner._msuf2CommitColorInteraction) == "function" then
+        picker._msuf2ColorOwner:_msuf2CommitColorInteraction()
+    end
     picker._msuf2ColorOwner = self
+    if type(self._msuf2BeginColorInteraction) == "function" then self:_msuf2BeginColorInteraction() end
     self._msuf2PrevR, self._msuf2PrevG, self._msuf2PrevB = r, g, b
     if picker.SetupColorPickerAndShow then
         picker:SetupColorPickerAndShow({

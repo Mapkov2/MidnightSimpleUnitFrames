@@ -950,8 +950,11 @@ local function EnsureHUD()
         sh.showInEditMode = not (sh.showInEditMode and true or false)
         SetActive(auraBtn, sh.showInEditMode)
         local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.RefreshEditPreview) == "function" then a3.RefreshEditPreview() end
-        if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
+        if a3 and type(a3.RefreshAll) == "function" then
+            a3.RefreshAll()
+        elseif a3 and type(a3.RefreshEditPreview) == "function" then
+            a3.RefreshEditPreview()
+        end
         HUD.SetStatus(HelpText(sh.showInEditMode and "EM_AURAS_ON" or "EM_AURAS_OFF"), "info")
     end, "Toggle aura preview icons\nand aura mover boxes.")
 
@@ -1073,7 +1076,8 @@ function HUD.RefreshUnitSelector()
     HUD.RefreshControls()
 end
 
-function HUD.RefreshControls()
+function HUD.RefreshControls(force)
+    if not force and hudFrame and hudFrame.IsShown and not hudFrame:IsShown() then return end
     if selectionFS then
         local text = SelectionSummary()
         if selectionLastText ~= text then
@@ -1142,7 +1146,7 @@ function HUD.RefreshControls()
 end
 
 function HUD.Show()
-    EnsureHUD(); HUD.RefreshControls()
+    EnsureHUD(); HUD.RefreshControls(true)
     hudFrame:Show(); if row2Frame then row2Frame:Show() end
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Play() end
 

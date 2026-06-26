@@ -479,7 +479,7 @@ local function BuildFonts(ctx)
         names._msuf2CursorY = -72
         local shorten, side, chars, noEllipsis
         local function RefreshGFNameShorteningUI()
-            if M.Refresh then M.Refresh(ctx) end
+            if M.RequestRefresh then M.RequestRefresh(ctx, "fonts-gf-name-shortening") elseif M.Refresh then M.Refresh(ctx) end
         end
         local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -228,
             function()
