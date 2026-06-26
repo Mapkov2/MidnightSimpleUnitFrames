@@ -1099,9 +1099,14 @@ local function ApplyLane(root, lane, parentFrame, forceRecreate)
 end
 
 local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame)
-    SyncContainerGeometry(container, lane or (container and container._msufA3NativeLaneConfig), parentFrame)
+    lane = lane or (container and container._msufA3NativeLaneConfig)
+    SyncContainerGeometry(container, lane, parentFrame)
     if not RegisterNativeContainer(container) then return false end
     if not NativeContainerVisible(container) then return true end
+    if forceRefresh == true and lane and lane.nativeFilter and lane.max then
+        container:ClearAuraFilters()
+        container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
+    end
     return true
 end
 
@@ -1235,7 +1240,7 @@ end
 function A3.RenderFrame(frame, reason)
     if not frame then return false end
     if IDENTITY_AURA_REFRESH_REASONS[reason] == true then
-        if RefreshAppliedNativeAuras(frame, false) then return true end
+        if RefreshAppliedNativeAuras(frame, true) then return true end
         if InCombat() then return false end
     end
     if FrameAppliedConfigIsCurrent(frame, reason) then
