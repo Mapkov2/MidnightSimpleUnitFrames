@@ -30,14 +30,30 @@ local table_concat = table.concat
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
+local C_Timer = _G.C_Timer
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local EMPTY_EVENTS = {}
 local AURA_CONTAINER_ADDON = "Blizzard_AuraContainer"
+local AURA_BORDER_OPTIONS = {
+    showIcon = false,
+    showWhenHarmful = true,
+    showWhenHelpful = false,
+}
 local IDENTITY_AURA_REFRESH_REASONS = {
     MSUF_UNIT_IDENTITY_AURAS = true,
     MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
     MSUF_GF_UNIT_IDENTITY = true,
+}
+-- Identity reasons safe to coalesce and flush next tick. A target/focus swap
+-- keeps the same unit token, so the container's own UNIT_AURA full-update
+-- repopulates content on its own frame (the oUF/alpha1 approach) -- MSUF only
+-- needs to keep geometry/registration current, and can do that once per tick
+-- under swap spam instead of forcing a synchronous filter rebuild per event.
+-- Group identity is intentionally excluded so roster builds settle in one pass.
+local DEFERRED_IDENTITY_REASONS = {
+    MSUF_UNIT_IDENTITY_AURAS = true,
+    MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
 }
 local COLD_APPLY_REASONS = {
     MSUF_ELEMENT_REFRESH = true,
@@ -69,6 +85,7 @@ local DEFAULT_SHARED = {
     showCooldownSwipe = true,
     showCooldownText = true,
     showStackCount = true,
+    debuffTypeBorderMode = "OFF",
     useDebuffTypeBorders = false,
     iconSize = 26,
     spacing = 2,
@@ -272,6 +289,62 @@ local function ReadBool(primary, secondary, key, fallback)
     return value == true
 end
 
+local function NormalizeDebuffTypeBorderMode(value, fallback)
+    if value == true then return "SYMBOL" end
+    if value == false then return "OFF" end
+    value = tostring(value or ""):upper()
+    if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
+    if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
+        or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
+        return "SYMBOL"
+    end
+    if value == "OFF" or value == "NONE" or value == "DISABLED" then return "OFF" end
+    return fallback or "OFF"
+end
+
+local function ReadDebuffTypeBorderMode(primary, secondary)
+    local mode
+    if type(primary) == "table" then
+        mode = primary.debuffTypeBorderMode
+        if mode == nil then mode = primary.dispelBorderMode end
+        if mode == nil and primary.useDebuffTypeBorders ~= nil then
+            return primary.useDebuffTypeBorders == true and "SYMBOL" or "OFF"
+        end
+        if mode ~= nil and NormalizeDebuffTypeBorderMode(mode, "OFF") == "OFF" and primary.useDebuffTypeBorders == true then
+            return "SYMBOL"
+        end
+    end
+    if mode == nil and type(secondary) == "table" then
+        mode = secondary.debuffTypeBorderMode
+        if mode == nil then mode = secondary.dispelBorderMode end
+        if mode == nil and secondary.useDebuffTypeBorders ~= nil then
+            return secondary.useDebuffTypeBorders == true and "SYMBOL" or "OFF"
+        end
+        if mode ~= nil and NormalizeDebuffTypeBorderMode(mode, "OFF") == "OFF" and secondary.useDebuffTypeBorders == true then
+            return "SYMBOL"
+        end
+    end
+    return NormalizeDebuffTypeBorderMode(mode, "OFF")
+end
+
+local function ReadGroupDebuffTypeBorderMode(source)
+    local mode = source and (source.debuffDispelBorderMode or source.debuffTypeBorderMode or source.dispelBorderMode)
+    if mode == nil and source then
+        if source.debuffShowDispelSymbol ~= nil then return source.debuffShowDispelSymbol == true and "SYMBOL" or "BORDER" end
+        if source.debuffShowDispelBorder ~= nil then return source.debuffShowDispelBorder == true and "SYMBOL" or "OFF" end
+        if type(source.blizzard) == "table" and source.blizzard.dispelBorder == true then return "SYMBOL" end
+    end
+    if source and NormalizeDebuffTypeBorderMode(mode, "OFF") == "OFF" and source.debuffShowDispelBorder == true then
+        return "SYMBOL"
+    end
+    return NormalizeDebuffTypeBorderMode(mode, "OFF")
+end
+
+local function GetAuraBorderOptions(showIcon)
+    AURA_BORDER_OPTIONS.showIcon = showIcon == true
+    return AURA_BORDER_OPTIONS
+end
+
 local function ReadNumber(primary, secondary, key, fallback, minValue, maxValue)
     return ClampNumber(ReadRaw(primary, secondary, key), fallback, minValue, maxValue)
 end
@@ -469,7 +542,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
     local rowWrap = ReadRaw(shared, nil, spec.wrapKey) or ReadRaw(shared, nil, "rowWrap") or DEFAULT_SHARED.rowWrap
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(growth, rowWrap)
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
-    local useDebuffTypeBorders = kind == "debuff" and ReadBool(layout, shared, "useDebuffTypeBorders", false)
+    local debuffTypeBorderMode = kind == "debuff" and ReadDebuffTypeBorderMode(layout, shared) or "OFF"
     return FinalizeLane({
         kind = kind,
         rootKey = spec.rootKey,
@@ -500,8 +573,8 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
         showCooldownSwipe = ReadBool(layout, shared, spec.swipeKey, ReadBool(layout, shared, "showCooldownSwipe", true)),
         showStacks = ReadBool(layout, shared, spec.showStackKey, ReadBool(layout, shared, "showStackCount", true)),
         showTooltip = ReadBool(layout, shared, "showTooltip", DEFAULT_SHARED.showTooltip),
-        showAuraBorder = useDebuffTypeBorders == true,
-        showAuraSymbol = useDebuffTypeBorders == true,
+        showAuraBorder = debuffTypeBorderMode ~= "OFF",
+        showAuraSymbol = debuffTypeBorderMode == "SYMBOL",
         cooldownSize = ReadNumber(layout, shared, spec.cooldownSizeKey, ReadRaw(shared, nil, "cooldownTextSize") or DEFAULT_SHARED.cooldownTextSize, 6, 40),
         cooldownAnchor = "CENTER",
         cooldownX = ReadNumber(layout, shared, spec.cooldownXKey, ReadRaw(shared, nil, "cooldownTextOffsetX") or DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
@@ -523,9 +596,7 @@ local function CompileGroupLane(unit, source, kind)
     local enabled = source.enabled ~= false and source[spec.showKey] == true and maxCount > 0
     local growthX, growthY, xSign, ySign, verticalGrowth = GroupGrowthParts(source[spec.growthXKey], source[spec.growthYKey])
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
-    local useDispelBorder = kind == "debuff"
-        and (source.debuffShowDispelBorder == true
-            or (type(source.blizzard) == "table" and source.blizzard.dispelBorder == true))
+    local debuffTypeBorderMode = kind == "debuff" and ReadGroupDebuffTypeBorderMode(source) or "OFF"
     return FinalizeLane({
         kind = kind,
         rootKey = spec.rootKey,
@@ -556,8 +627,8 @@ local function CompileGroupLane(unit, source, kind)
         showCooldownSwipe = source[spec.swipeKey] ~= false,
         showStacks = source[spec.showStackKey] ~= false,
         showTooltip = source.showTooltip ~= false,
-        showAuraBorder = useDispelBorder == true,
-        showAuraSymbol = useDispelBorder == true,
+        showAuraBorder = debuffTypeBorderMode ~= "OFF",
+        showAuraSymbol = debuffTypeBorderMode == "SYMBOL",
         cooldownSize = ClampNumber(source[spec.cooldownSizeKey] or source.cooldownSize, DEFAULT_SHARED.cooldownTextSize, 6, 40),
         cooldownAnchor = ReadAnchor(source, nil, spec.cooldownAnchorKey, "CENTER"),
         cooldownX = ClampNumber(source[spec.cooldownXKey] or source.cooldownX, 0, -2000, 2000),
@@ -867,6 +938,14 @@ local function LayoutButton(button, lane, index)
     button:SetSize(lane.size, lane.size)
 end
 
+local function LayoutAuraBorder(button, border, lane)
+    local size = tonumber(lane and lane.size) or DEFAULT_SHARED.iconSize
+    local pad = math_max(1, math_floor((size / 24) + 0.5))
+    border:ClearAllPoints()
+    border:SetPoint("TOPLEFT", button, "TOPLEFT", -pad, pad)
+    border:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", pad, -pad)
+end
+
 local function SyncButtonGeometry(button, lane, index)
     if not (button and lane) then return false end
     LayoutButton(button, lane, index)
@@ -879,8 +958,7 @@ local function SyncButtonGeometry(button, lane, index)
         button._msufA3Cooldown:SetAllPoints(button)
     end
     if button._msufA3AuraBorder then
-        button._msufA3AuraBorder:ClearAllPoints()
-        button._msufA3AuraBorder:SetAllPoints(button)
+        LayoutAuraBorder(button, button._msufA3AuraBorder, lane)
     end
     return true
 end
@@ -983,10 +1061,10 @@ local function PrepareAuraButton(button, lane, index)
         local border = button._msufA3AuraBorder or button.AuraBorder or button.Border
         if not border then
             border = button:CreateTexture(nil, "OVERLAY")
-            border:SetAllPoints(button)
         end
+        LayoutAuraBorder(button, border, lane)
         button._msufA3AuraBorder = border
-        auraBorderBound = CallButtonMethod(button, "SetAuraBorder", border, { showIcon = true, showWhenHarmful = true, showWhenHelpful = false })
+        auraBorderBound = CallButtonMethod(button, "SetAuraBorder", border, GetAuraBorderOptions(lane.showAuraSymbol))
     else
         CallButtonMethod(button, "ClearAuraBorder")
         if button._msufA3AuraBorder and button._msufA3AuraBorder.Hide then button._msufA3AuraBorder:Hide() end
@@ -1038,6 +1116,15 @@ local function RegisterNativeContainer(container, forceRefresh)
         return true
     end
 
+    -- Enable the container so Blizzard registers it for UNIT_AURA on this unit
+    -- (ShouldRegisterForEvents = IsVisible() and IsEnabled()). Without this the
+    -- container never self-updates: a hidden->shown transition reparses via
+    -- OnShow, but a same-token target swap or an aura expiring/refreshing does
+    -- not, so content goes stale. Enabling routes all steady-state updates
+    -- through the container's cheap incremental delta path (added/updated/
+    -- removed) instead of an MSUF forced reparse. SetEnabled is a secure
+    -- delegate (safe to call directly) and is idempotent.
+    if type(container.SetEnabled) == "function" then container:SetEnabled(true) end
     container._msufA3NativeRegistered = true
     container._msufA3NativeRegistrationPending = nil
     return true
@@ -1166,6 +1253,35 @@ EnsureNativeAuraRefreshDriver = function()
     return true
 end
 
+-- Deferred, coalesced identity flush. On a same-token target/focus swap the
+-- container does NOT self-refresh: UNIT_AURA does not fire just because the
+-- "target" token repoints to a new GUID, and SetUnit() is a no-op when the token
+-- is unchanged -- so the new unit's auras would otherwise never load. We
+-- therefore trigger a content reparse here, but keep it off the synchronous
+-- identity tick and coalesce it: enqueue the frame in a frame-keyed set and run
+-- one forced refresh next tick (vs the old path's synchronous reparse on every
+-- identity event). Frame-keyed => natural coalescing under swap spam; the unit is
+-- re-read at flush so the latest identity wins. Steady-state aura changes
+-- (expiry/refresh/stacks) on the current target are handled separately by the
+-- container's own UNIT_AURA once it is enabled (see RegisterNativeContainer).
+local _identityQueue
+local _identityFlushScheduled = false
+
+local function FlushIdentityQueue()
+    _identityFlushScheduled = false
+    local queue = _identityQueue
+    _identityQueue = nil
+    if not queue then return end
+    for frame in pairs(queue) do
+        local root = frame and frame.Auras
+        -- Only touch frames that still own applied native auras; a frame disabled
+        -- between enqueue and flush must not be resurrected here.
+        if root and root._msufA3NativeRoot == true and root._msufA3Applied == true then
+            RefreshAppliedNativeAuras(frame, true)
+        end
+    end
+end
+
 local function HideState(frame)
     local root = frame and frame.Auras
     if not (root and root._msufA3NativeRoot) then return end
@@ -1262,8 +1378,17 @@ end
 
 function A3.RenderFrame(frame, reason)
     if not frame then return false end
+    if DEFERRED_IDENTITY_REASONS[reason] == true then
+        -- Coalesce target/focus swaps off the tick; the container's own
+        -- UNIT_AURA full-update repopulates content. See FlushIdentityQueue.
+        return A3.QueueIdentityAuraRebuild(frame)
+    end
     if IDENTITY_AURA_REFRESH_REASONS[reason] == true then
-        if RefreshAppliedNativeAuras(frame, true) then return true end
+        -- Group identity stays synchronous so roster builds settle in one pass,
+        -- but never forces a filter rebuild: keep geometry/registration current
+        -- (no ClearAuraFilters/AddAuraFilter) and let the container's UNIT_AURA
+        -- own aura content.
+        if RefreshAppliedNativeAuras(frame, false) then return true end
         if InCombat() then return false end
     end
     if FrameAppliedConfigIsCurrent(frame, reason) then
@@ -1278,7 +1403,18 @@ A3.ForceUpdateFrame = A3.RenderFrame
 A3.RenderCachedFrame = A3.RenderFrame
 
 function A3.QueueIdentityAuraRebuild(frame)
-    return A3.RenderFrame(frame, "MSUF_UNIT_IDENTITY_AURAS")
+    if not frame then return false end
+    _identityQueue = _identityQueue or {}
+    _identityQueue[frame] = true
+    if not _identityFlushScheduled then
+        if C_Timer and C_Timer.After then
+            _identityFlushScheduled = true
+            C_Timer.After(0, FlushIdentityQueue)
+        else
+            FlushIdentityQueue()
+        end
+    end
+    return true
 end
 
 function A3.RuntimeOwnsUnit(unit)

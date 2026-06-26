@@ -29,6 +29,10 @@ local AURA_TEXTURES = {
     buff = { 135987, 136116, 135932, 136085, 132333, 135981, 136048, 135964 },
     debuff = { 136118, 136139, 136197, 135817, 132851, 136188, 136170, 135813 },
 }
+local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
+    BORDER = "ui-debuff-border-magic-noicon",
+    SYMBOL = "ui-debuff-border-magic-icon",
+}
 local function MenuModel()
     local a3 = MSUF and MSUF.MSUF_Auras3
     return type(a3) == "table" and a3.MenuModel or nil
@@ -371,10 +375,18 @@ local function CreateIcon(parent)
     f.tex = f:CreateTexture(nil, "ARTWORK")
     f.tex:SetAllPoints(f)
     if f.tex.SetTexCoord then f.tex:SetTexCoord(0, 1, 0, 1) end
+    f.swipe = f:CreateTexture(nil, "ARTWORK")
+    f.swipe:SetPoint("TOPLEFT", f, "TOP", 0, 0)
+    f.swipe:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+    f.swipe:SetTexture(TEX_W8)
+    f.swipe:SetVertexColor(0, 0, 0, 0.28)
+    f.swipe:Hide()
     f.edge = f:CreateTexture(nil, "BORDER")
     f.edge:SetAllPoints(f)
     f.edge:SetTexture(TEX_W8)
     f.edge:SetVertexColor(0, 0, 0, 0)
+    f.dispelBorder = f:CreateTexture(nil, "OVERLAY")
+    f.dispelBorder:Hide()
     f.stack = MakeFS(f, "OVERLAY", 8)
     f.timer = MakeFS(f, "OVERLAY", 7)
     f:Hide()
@@ -436,6 +448,7 @@ local function LaneTextConfig(cfg, kind)
         return {
             showStackCount = cfg.buffShowStackCount,
             showCooldownText = cfg.buffShowCooldownText,
+            showCooldownSwipe = cfg.buffShowCooldownSwipe,
             stackAnchor = cfg.buffStackAnchor or cfg.stackAnchor,
             stackSize = cfg.buffStackSize or cfg.stackSize,
             stackX = cfg.buffStackX or cfg.stackX,
@@ -448,6 +461,7 @@ local function LaneTextConfig(cfg, kind)
     return {
         showStackCount = cfg.debuffShowStackCount,
         showCooldownText = cfg.debuffShowCooldownText,
+        showCooldownSwipe = cfg.debuffShowCooldownSwipe,
         stackAnchor = cfg.debuffStackAnchor or cfg.stackAnchor,
         stackSize = cfg.debuffStackSize or cfg.stackSize,
         stackX = cfg.debuffStackX or cfg.stackX,
@@ -481,6 +495,33 @@ local function PlaceStack(fs, icon, cfg, S)
         if fs.SetJustifyV then fs:SetJustifyV("TOP") end
     end
 end
+local function PreviewDebuffBorderMode(cfg)
+    local mode = cfg and cfg.debuffTypeBorderMode
+    if mode == true then return "SYMBOL" end
+    if mode == false then return "OFF" end
+    mode = tostring(mode or ""):upper()
+    if mode == "BORDER" or mode == "COLOR" or mode == "ON" then return "BORDER" end
+    if mode == "SYMBOL" or mode == "BORDER_SYMBOL" or mode == "BORDER_SYMBOLS"
+        or mode == "BORDER+SYMBOL" or mode == "ICON" or mode == "WITH_SYMBOL" then
+        return "SYMBOL"
+    end
+    if cfg and cfg.useDebuffTypeBorders == true then return "SYMBOL" end
+    return "OFF"
+end
+local function LayoutPreviewDispelBorder(icon, size, mode)
+    local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
+    local border = icon and icon.dispelBorder
+    if not (atlas and border and border.SetAtlas) then
+        if border then border:Hide() end
+        return
+    end
+    local pad = max(1, floor((tonumber(size) or 24) / 24 + 0.5))
+    border:ClearAllPoints()
+    border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
+    border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
+    border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
+    border:Show()
+end
 local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local bounds = state and state[kind]
     if not (handle and bounds) then
@@ -504,6 +545,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local cooldownX = S(textCfg.cooldownX or 0)
     local cooldownY = S(textCfg.cooldownY or 0)
     local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
+    local debuffBorderMode = kind == "debuff" and PreviewDebuffBorderMode(cfg) or "OFF"
     local laneX = S(bounds.laneLeft or ((bounds.baseX or 0) + (bounds.x or 0)))
     local laneY = S(bounds.laneBottom or ((bounds.baseY or 0) + (bounds.y or 0)))
     local handleLeft = S(bounds.left or bounds.laneLeft or 0)
@@ -532,6 +574,8 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX, row * step * bounds.growthY)
         icon.tex:SetTexture(textures[((i - 1) % #textures) + 1])
         icon.edge:SetVertexColor(0, 0, 0, 0)
+        if icon.swipe then icon.swipe:SetShown(textCfg.showCooldownSwipe ~= false) end
+        LayoutPreviewDispelBorder(icon, size, debuffBorderMode)
         ApplyAuraFont(icon.stack, stackSize)
         PlaceStack(icon.stack, icon, textCfg, S)
         icon.stack:SetText(textCfg.showStackCount ~= false and (i % 3 == 1 and "2" or "") or "")
@@ -543,7 +587,10 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         icon:Show()
     end
     for i = bounds.shown + 1, #(visual._icons or {}) do
-        visual._icons[i]:Hide()
+        local icon = visual._icons[i]
+        if icon.swipe then icon.swipe:Hide() end
+        if icon.dispelBorder then icon.dispelBorder:Hide() end
+        icon:Hide()
     end
     handle:Show()
 end
