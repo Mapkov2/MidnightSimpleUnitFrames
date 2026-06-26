@@ -1080,7 +1080,32 @@ end
 
 local tickerFrame
 local activeDrag
-local idleSyncAcc = 0
+local idleMoverSyncAcc = 0
+local idleHUDSyncAcc = 0
+local idleMoverDirty = true
+local idleHUDDirty = true
+local EDIT_IDLE_MOVER_SYNC_INTERVAL = 5.00
+local EDIT_IDLE_HUD_SYNC_INTERVAL = 3.00
+local C_Timer = _G.C_Timer
+local idleTickerScheduled = false
+local lastIdleTickTime
+local idleTickerGeneration = 0
+
+local function EditPerfStart()
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStart then
+        return menu.ProfileStart()
+    end
+    return nil
+end
+
+local function EditPerfStop(key, started, extraCount)
+    if not started then return end
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStop then
+        menu.ProfileStop("editDrag", key, started, extraCount)
+    end
+end
 
 local function SyncUnitPopupDuringDrag(d, elapsed)
     if not d then return end
@@ -1113,6 +1138,7 @@ local function CastbarDefaultOffsets(unit)
 end
 
 local function ApplyCastbarDragPosition(d, centerX, centerY)
+    local profileStarted = EditPerfStart()
     if not (d and d.conf and d.castbarXKey and d.castbarYKey) then return false end
     local g = d.conf
     local dx = (centerX or d.startCX or 0) - (d.startCX or 0)
@@ -1129,6 +1155,7 @@ local function ApplyCastbarDragPosition(d, centerX, centerY)
     end
 
     if g[d.castbarXKey] == nextX and g[d.castbarYKey] == nextY then
+        EditPerfStop("Castbar.Position", profileStarted)
         return false
     end
 
@@ -1151,10 +1178,12 @@ local function ApplyCastbarDragPosition(d, centerX, centerY)
         end
     end
 
+    EditPerfStop("Castbar.Position", profileStarted)
     return true
 end
 
 local function ApplyGroupDragPosition(d, centerX, centerY)
+    local profileStarted = EditPerfStart()
     if not (d and d.conf and d.bar) then return false end
     if IsConfigCombatLocked() then return false end
     local bar = d.bar
@@ -1192,6 +1221,7 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
             anchor:SetPoint("CENTER", UIParent, "BOTTOMLEFT", anchorCX, anchorCY)
         end
     end
+    EditPerfStop("Group.Position", profileStarted)
     return changed
 end
 
@@ -1213,6 +1243,56 @@ local function NotifyFocusDuringDrag(d, elapsed)
     if d.focusNotifyAcc < 0.05 then return end
     d.focusNotifyAcc = 0
     EM2.Focus.NotifyPositionChanged(d.key, false)
+end
+
+local ScheduleIdleTick
+local function RunIdleWork(elapsed)
+    elapsed = tonumber(elapsed) or 0
+    idleMoverSyncAcc = idleMoverSyncAcc + elapsed
+    idleHUDSyncAcc = idleHUDSyncAcc + elapsed
+    if idleMoverDirty or idleMoverSyncAcc >= EDIT_IDLE_MOVER_SYNC_INTERVAL then
+        idleMoverDirty = false
+        idleMoverSyncAcc = 0
+        local profiling = MSUF and MSUF.MSUF2 and MSUF.MSUF2.PerfProfile and MSUF.MSUF2.PerfProfile.enabled == true
+            and MSUF.MSUF2.ProfileStart and MSUF.MSUF2.ProfileStop
+        local started = profiling and MSUF.MSUF2.ProfileStart() or nil
+        if EM2.Movers and EM2.Movers.SyncAll and (not EM2.Movers.IsShown or EM2.Movers.IsShown()) then EM2.Movers.SyncAll() end
+        if profiling then MSUF.MSUF2.ProfileStop("editIdle", "Movers.SyncAll", started) end
+    end
+    if idleHUDDirty or idleHUDSyncAcc >= EDIT_IDLE_HUD_SYNC_INTERVAL then
+        idleHUDDirty = false
+        idleHUDSyncAcc = 0
+        local profiling = MSUF and MSUF.MSUF2 and MSUF.MSUF2.PerfProfile and MSUF.MSUF2.PerfProfile.enabled == true
+            and MSUF.MSUF2.ProfileStart and MSUF.MSUF2.ProfileStop
+        local started = profiling and MSUF.MSUF2.ProfileStart() or nil
+        if EM2.HUD and EM2.HUD.RefreshControls and (not EM2.HUD.IsShown or EM2.HUD.IsShown()) then EM2.HUD.RefreshControls() end
+        if profiling then MSUF.MSUF2.ProfileStop("editIdle", "HUD.RefreshControls", started) end
+    end
+end
+
+local function RunIdleTick()
+    idleTickerScheduled = false
+    if not (tickerFrame and tickerFrame.IsShown and tickerFrame:IsShown()) then return end
+    if activeDrag then
+        ScheduleIdleTick(EDIT_IDLE_HUD_SYNC_INTERVAL)
+        return
+    end
+    local now = (_G.GetTime and _G.GetTime()) or 0
+    local elapsed = lastIdleTickTime and max(0, now - lastIdleTickTime) or 0
+    lastIdleTickTime = now
+    RunIdleWork(elapsed)
+    ScheduleIdleTick(min(EDIT_IDLE_HUD_SYNC_INTERVAL, EDIT_IDLE_MOVER_SYNC_INTERVAL))
+end
+
+ScheduleIdleTick = function(delay)
+    if idleTickerScheduled or not (C_Timer and C_Timer.After) then return end
+    if not (tickerFrame and tickerFrame.IsShown and tickerFrame:IsShown()) then return end
+    idleTickerScheduled = true
+    local generation = idleTickerGeneration
+    C_Timer.After(delay or min(EDIT_IDLE_HUD_SYNC_INTERVAL, EDIT_IDLE_MOVER_SYNC_INTERVAL), function()
+        if generation ~= idleTickerGeneration then return end
+        RunIdleTick()
+    end)
 end
 
 local function OnUpdate(self, elapsed)
@@ -1273,6 +1353,7 @@ local function OnUpdate(self, elapsed)
             return
         end
 
+        local unitProfileStarted = (not d.isGroupFrame) and EditPerfStart() or nil
         local bar = d.bar
         if bar and not IsConfigCombatLocked() then
             bar._msufDragActive = true
@@ -1347,6 +1428,7 @@ local function OnUpdate(self, elapsed)
                 end
             end
         end
+        EditPerfStop("Unit.Position", unitProfileStarted)
 
         if d.isGroupFrame then
             SyncGFPopupDuringDrag(d, elapsed)
@@ -1355,16 +1437,20 @@ local function OnUpdate(self, elapsed)
         end
         NotifyFocusDuringDrag(d, elapsed)
     else
-        idleSyncAcc = idleSyncAcc + elapsed
-        if idleSyncAcc >= 0.2 then
-            idleSyncAcc = 0
-            if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            if EM2.HUD and EM2.HUD.RefreshControls then EM2.HUD.RefreshControls() end
+        if C_Timer and C_Timer.After then
+            self:SetScript("OnUpdate", nil)
+            ScheduleIdleTick(min(EDIT_IDLE_HUD_SYNC_INTERVAL, EDIT_IDLE_MOVER_SYNC_INTERVAL))
+        else
+            RunIdleWork(elapsed)
         end
     end
 end
 
 function Ticker.BeginDrag(mover, key, cfg)
+    if tickerFrame then
+        tickerFrame:SetScript("OnUpdate", OnUpdate)
+        tickerFrame:Show()
+    end
     local bar = cfg.getFrame and cfg.getFrame()
     if bar then bar._msufDragActive = true end
 
@@ -1584,8 +1670,16 @@ function Ticker.EndDrag()
             if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
             RefreshUFPreview("EM2_CASTBAR_DRAG_END", d.castbarUnit)
         elseif d.isGroupFrame then
-            if type(_G.MSUF_GF_RefreshAll) == "function" and not IsConfigCombatLocked() then
-                _G.MSUF_GF_RefreshAll()
+            if not IsConfigCombatLocked() then
+                local profileStarted = EditPerfStart()
+                if type(_G.MSUF_GF_RebuildAll) == "function" then
+                    _G.MSUF_GF_RebuildAll()
+                elseif MSUF and MSUF.GF and type(MSUF.GF.RefreshGeometry) == "function" then
+                    MSUF.GF.RefreshGeometry()
+                elseif type(_G.MSUF_GF_RefreshAll) == "function" then
+                    _G.MSUF_GF_RefreshAll()
+                end
+                EditPerfStop("Group.DragEndGeometry", profileStarted)
             end
             C_Timer.After(0.06, function()
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
@@ -1606,23 +1700,54 @@ function Ticker.EndDrag()
         end
     end
 
+    if tickerFrame and C_Timer and C_Timer.After then
+        tickerFrame:SetScript("OnUpdate", nil)
+        ScheduleIdleTick(0.06)
+    end
     return moved
 end
 
 function Ticker.IsDragging() return activeDrag ~= nil end
+
+function Ticker.RequestIdleSync(kind)
+    if kind == "mover" then
+        idleMoverDirty = true
+        ScheduleIdleTick(0.04)
+        return
+    elseif kind == "hud" then
+        idleHUDDirty = true
+        ScheduleIdleTick(0.04)
+        return
+    end
+    idleMoverDirty = true
+    idleHUDDirty = true
+    ScheduleIdleTick(0.04)
+end
 
 function Ticker.Start()
     if not tickerFrame then
         tickerFrame = CreateFrame("Frame", "MSUF_EM2_TickerFrame", UIParent)
         tickerFrame:Hide()
     end
-    idleSyncAcc = 0; activeDrag = nil
-    tickerFrame:SetScript("OnUpdate", OnUpdate)
+    idleMoverSyncAcc = 0; idleHUDSyncAcc = 0; activeDrag = nil
+    idleMoverDirty = true; idleHUDDirty = true
+    idleTickerGeneration = idleTickerGeneration + 1
     tickerFrame:Show()
+    if C_Timer and C_Timer.After then
+        tickerFrame:SetScript("OnUpdate", nil)
+        lastIdleTickTime = (_G.GetTime and _G.GetTime()) or 0
+        ScheduleIdleTick(0)
+    else
+        tickerFrame:SetScript("OnUpdate", OnUpdate)
+    end
 end
 
 function Ticker.Stop()
     activeDrag = nil
+    idleMoverDirty = true; idleHUDDirty = true
+    idleTickerScheduled = false
+    lastIdleTickTime = nil
+    idleTickerGeneration = idleTickerGeneration + 1
     if tickerFrame then
         tickerFrame:SetScript("OnUpdate", nil)
         tickerFrame:Hide()

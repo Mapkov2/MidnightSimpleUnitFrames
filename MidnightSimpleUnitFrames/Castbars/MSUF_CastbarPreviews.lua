@@ -393,7 +393,8 @@ local function ForEachBossPreview(callback)
     local maxBossFrames = tonumber(_G.MAX_BOSS_FRAMES) or 5
     if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
 
-    if _G.MSUF_BossCastbarPreview then callback(_G.MSUF_BossCastbarPreview, 1) end
+    local first = _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1
+    if first then callback(first, 1) end
     for index = 2, maxBossFrames do
         local frame = _G["MSUF_BossCastbarPreview" .. index]
         if frame then callback(frame, index) end
@@ -577,10 +578,20 @@ local function PositionCastbarPreviewUnit(unit)
 
     if (unit == "boss" or tostring(unit):match("^boss%d*$"))
         and not IsInCombat()
-        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
     then
-        _G.MSUF_UpdateBossCastbarPreview()
-        return true
+        local positioned = false
+        local positionBoss = _G.MSUF_PositionBossCastbarPreview
+        if type(positionBoss) == "function" then
+            ForEachBossPreview(function(frame, index)
+                positionBoss(frame, index)
+                positioned = true
+            end)
+        end
+        if positioned then return true end
+        if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            _G.MSUF_UpdateBossCastbarPreview()
+            return true
+        end
     end
 
     return false

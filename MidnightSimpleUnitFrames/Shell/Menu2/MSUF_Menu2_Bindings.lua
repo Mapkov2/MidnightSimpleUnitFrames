@@ -25,7 +25,20 @@ local historySessionSnapshot
 local historySessionDirty = false
 local historyTransaction
 local refreshQueued = false
+local MENU_REFRESH_DELAY = 0.04
+local C_Timer = _G.C_Timer
 local UNIT_KEYS = KS("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
+
+local function BindingProfileStart()
+    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart then return M.ProfileStart() end
+end
+
+local function BindingProfileStop(key, started)
+    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then
+        M.ProfileStop("binding", key, started)
+    end
+end
+
 local function WipeTable(t)
     for k in pairs(t) do t[k] = nil end
 end
@@ -126,8 +139,10 @@ local function QueueMenuRefresh()
         refreshQueued = false
         if M.frame and M.frame.IsShown and M.frame:IsShown() and M.Refresh then M.Refresh() end
     end
-    if _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, Run)
+    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
+        _G.MSUF_ScheduleDelayOnce("MSUF2_MENU_HISTORY_REFRESH", MENU_REFRESH_DELAY, Run)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(MENU_REFRESH_DELAY, Run)
     else
         Run()
     end
@@ -216,9 +231,13 @@ local function ApplyHistorySnapshot(snapshot, reason)
         ApplyService.ApplyProfileFanout("MSUF2_PROFILE_APPLY")
     end
     if MSUF and MSUF.GF then
-        if type(MSUF.GF.RebuildAll) == "function" then SafeInvoke(MSUF.GF.RebuildAll) end
+        if type(MSUF.GF.RefreshAll) == "function" then
+            SafeInvoke(MSUF.GF.RefreshAll)
+        else
+            if type(MSUF.GF.RebuildAll) == "function" then SafeInvoke(MSUF.GF.RebuildAll) end
+            if type(MSUF.GF.RefreshVisuals) == "function" then SafeInvoke(MSUF.GF.RefreshVisuals) end
+        end
         if type(MSUF.GF.RefreshPreviewLayout) == "function" then SafeInvoke(MSUF.GF.RefreshPreviewLayout) end
-        if type(MSUF.GF.RefreshVisuals) == "function" then SafeInvoke(MSUF.GF.RefreshVisuals) end
     end
     M.CallIf(M.ApplyLocaleSelection)
     M.CallIf(M.MarkMenuDataDirty, reason or "history")
@@ -234,7 +253,13 @@ function M.CaptureHistory(label, source, fn)
     if historyDepth > 0 or historyRestoring then
         local ok, result = SafeInvoke(fn)
         if not ok then return nil end
-        if result ~= false and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
+        if result ~= false then
+            if historyTransaction then
+                historyTransaction.dirty = true
+            elseif M.MarkMenuDataDirty then
+                M.MarkMenuDataDirty("history")
+            end
+        end
         return result
     end
     local before = CurrentHistorySnapshot()
@@ -384,7 +409,11 @@ local function WidgetHistorySource(ctx, widget, suffix)
 end
 local function CaptureWidgetChange(ctx, widget, label, fn)
     label = label or WidgetHistoryLabel(ctx, widget)
-    return M.CaptureHistory(label, WidgetHistorySource(ctx, widget, label), fn)
+    local kind = widget and (widget._msuf2ControlKind or widget.GetObjectType and widget:GetObjectType()) or "control"
+    local started = BindingProfileStart()
+    local result = M.CaptureHistory(label, WidgetHistorySource(ctx, widget, label), fn)
+    BindingProfileStop("CaptureWidget:" .. tostring((ctx and ctx.key) or "page") .. ":" .. tostring(kind), started)
+    return result
 end
 function M.RequestUnitApply(unit, reason, opts)
     if M.BlockCombatAction() then return false end
@@ -395,9 +424,14 @@ function M.RequestUnitApply(unit, reason, opts)
         unit = (unit == "focus_target" or unit == "focustargettarget") and "focustarget" or unit
     end
     if not UNIT_KEYS[unit] then return end
-    M.CheckpointHistory(reason or ("MSUF2_" .. tostring(unit)), "apply:unit:" .. tostring(unit) .. ":" .. tostring(reason or "change"))
-    if ApplyService.RequestUnit then return ApplyService.RequestUnit(unit, reason, opts) end
-    return false
+    local started = BindingProfileStart()
+    if not (opts and opts.history == false) then
+        M.CheckpointHistory(reason or ("MSUF2_" .. tostring(unit)), "apply:unit:" .. tostring(unit) .. ":" .. tostring(reason or "change"))
+    end
+    local result = false
+    if ApplyService.RequestUnit then result = ApplyService.RequestUnit(unit, reason, opts) end
+    BindingProfileStop("RequestUnitApply:" .. tostring(unit), started)
+    return result
 end
 function M.SetUnitValue(unit, key, value, reason, opts)
     if M.BlockCombatAction() then return false end
@@ -414,9 +448,14 @@ function M.SetUnitValue(unit, key, value, reason, opts)
 end
 function M.RequestGeneralApply(reason, opts)
     if M.BlockCombatAction() then return false end
-    M.CheckpointHistory(reason or "MSUF2_GENERAL", "apply:general:" .. tostring(reason or "change"))
-    if ApplyService.RequestGeneral then return ApplyService.RequestGeneral(reason, opts) end
-    return false
+    local started = BindingProfileStart()
+    if not (opts and opts.history == false) then
+        M.CheckpointHistory(reason or "MSUF2_GENERAL", "apply:general:" .. tostring(reason or "change"))
+    end
+    local result = false
+    if ApplyService.RequestGeneral then result = ApplyService.RequestGeneral(reason, opts) end
+    BindingProfileStop("RequestGeneralApply", started)
+    return result
 end
 function M.SetGeneralValue(key, value, reason, opts)
     if M.BlockCombatAction() then return false end
@@ -513,7 +552,7 @@ local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier
     disableBlizzardUnitFrames hardKillBlizzardPlayerFrame
-    showMinimapIcon playTargetSelectLostSounds
+    showMinimapIcon showNavigationIcons playTargetSelectLostSounds
 ]]
 local MISC_UNIT_KEYS = {}
 local MISC_UNIT_RESET_KEYS = WL [[target focus boss]]
@@ -731,7 +770,7 @@ local PAGE_RESET_HANDLERS = {
 local function ApplyAfterPageReset(pageKey, info)
     local reason = "MSUF2_RESET_" .. tostring(pageKey or "PAGE")
     if info and info.unit and M.RequestUnitApply then M.RequestUnitApply(info.unit, reason, { preview = true, text = true, power = true, alpha = true, castbar = true }) end
-    if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true }) end
+    if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true, frames = true }) end
     if info and info.kind == "gameplay" then M.CallIf(M.ApplyGameplay) end
     local auras = MSUF and MSUF.MSUF_Auras3
     -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
@@ -745,8 +784,17 @@ local function ApplyAfterPageReset(pageKey, info)
         local gf = MSUF and MSUF.GF
         if gf then
             if type(gf.InvalidateConfCache) == "function" then SafeInvoke(gf.InvalidateConfCache) end
-            if type(gf.RefreshVisuals) == "function" then SafeInvoke(gf.RefreshVisuals) end
-            if type(gf.RebuildAll) == "function" then SafeInvoke(gf.RebuildAll) end
+            if info.kind == "group" and type(gf.RefreshAll) == "function" then
+                SafeInvoke(gf.RefreshAll)
+            elseif info.kind == "fonts" and type(gf.RefreshFonts) == "function" then
+                SafeInvoke(gf.RefreshFonts)
+            elseif info.kind == "colors" and type(gf.RefreshColors) == "function" then
+                SafeInvoke(gf.RefreshColors)
+            elseif type(gf.RefreshVisuals) == "function" then
+                SafeInvoke(gf.RefreshVisuals, nil, gf.DIRTY_VISUAL or 2)
+            elseif type(gf.RebuildAll) == "function" then
+                SafeInvoke(gf.RebuildAll)
+            end
             if type(gf.RequestAuraRefresh) == "function" then SafeInvoke(gf.RequestAuraRefresh) end
         end
     end
@@ -898,10 +946,10 @@ local function RunRefreshList(refreshers)
     end
 end
 function M.RequestRefresh(ctx, reason)
-    M.CallIf(M.MarkMenuDataDirty, reason or "request-refresh")
     local entry = ResolveRefreshEntry(ctx)
     if entry then
         if entry._msuf2RefreshQueued then return true end
+        M.CallIf(M.MarkMenuDataDirty, reason or "request-refresh")
         entry._msuf2RefreshQueued = true
         -- Refreshers are entry-local and de-duplicated, so rebuilding one page does not force
         -- all Menu2 controls to resync.
@@ -914,10 +962,15 @@ function M.RequestRefresh(ctx, reason)
                 RunRefreshList(entry.refreshers)
             end
         end
-        if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, Run) else Run() end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(MENU_REFRESH_DELAY, Run)
+        else
+            Run()
+        end
         return true
     end
     if M._msuf2RefreshQueued then return true end
+    M.CallIf(M.MarkMenuDataDirty, reason or "request-refresh")
     M._msuf2RefreshQueued = true
     local function Run()
         M._msuf2RefreshQueued = nil
@@ -926,7 +979,11 @@ function M.RequestRefresh(ctx, reason)
             if M.RunEntryRefreshers then SafeInvoke(M.RunEntryRefreshers, active) else RunRefreshList(active.refreshers) end
         end
     end
-    if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, Run) else Run() end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(MENU_REFRESH_DELAY, Run)
+    else
+        Run()
+    end
     return true
 end
 function M.Refresh(ctx)
@@ -1115,6 +1172,20 @@ end
 function M.BindColor(ctx, colorButton, getRGB, setRGB)
     if not colorButton then return end
     AttachCommandAction(ctx, colorButton, "color", getRGB, setRGB)
+    local function BeginColorHistory(self)
+        if BlockCombatAndRefresh(ctx) then return end
+        if self._msuf2ColorHistoryTransaction then return end
+        if not M.BeginHistoryTransaction then return end
+        local label = WidgetHistoryLabel(ctx, self)
+        if M.BeginHistoryTransaction(label, WidgetHistorySource(ctx, self, label)) then self._msuf2ColorHistoryTransaction = true end
+    end
+    local function CommitColorHistory(self)
+        if not self._msuf2ColorHistoryTransaction then return end
+        self._msuf2ColorHistoryTransaction = nil
+        M.CallIf(M.CommitHistoryTransaction)
+    end
+    colorButton._msuf2BeginColorInteraction = BeginColorHistory
+    colorButton._msuf2CommitColorInteraction = CommitColorHistory
     local function RefreshColor()
         if type(getRGB) ~= "function" then return end
         local r, g, b = getRGB()
@@ -1140,5 +1211,6 @@ function M.BindColor(ctx, colorButton, getRGB, setRGB)
         end)
         RefreshColor()
     end)
+    colorButton:HookScript("OnHide", CommitColorHistory)
     M.AddRefresher(ctx, RefreshColor)
 end

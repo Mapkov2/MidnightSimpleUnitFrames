@@ -747,34 +747,64 @@ function T.ApplyMenuAtmosphere(frame, host, nav)
     if logo.SetBlendMode then logo:SetBlendMode("ADD") end
     if nav then CreateAtmosphereTexture(nav, "BORDER", 1, T.media.bgSmooth, { 0.06, 0.08, 0.18, 0.085 }, 3, { 0, 0, 1, 0, 0, 1, 1, 1 }) end
 end
-function T.AttachNavIcon(btn, navKey, isChild)
+local function LayoutNavButtonLabel(btn, isChild, hasIcon)
+    if not (btn and btn._msuf2Label) then return end
+    btn._msuf2Label:ClearAllPoints()
+    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", hasIcon and (isChild and 24 or 26) or 10, 0)
+    btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
+    btn._msuf2Label:SetJustifyH("LEFT")
+end
+function T.SetNavIconVisible(btn, visible)
+    if not btn then return end
+    visible = visible and true or false
+    btn._msuf2NavIconVisible = visible
+    if btn._msuf2NavIcon then
+        if btn._msuf2NavIcon.SetShown then
+            btn._msuf2NavIcon:SetShown(visible)
+        elseif visible then
+            btn._msuf2NavIcon:Show()
+        else
+            btn._msuf2NavIcon:Hide()
+        end
+    end
+    LayoutNavButtonLabel(btn, btn._msuf2NavIconIsChild, visible and btn._msuf2NavIcon ~= nil)
+    if btn.RefreshVisual then btn:RefreshVisual() end
+end
+function T.AttachNavIcon(btn, navKey, isChild, visible)
     if not (btn and btn.CreateTexture and navKey) then return end
+    btn._msuf2NavIconKey = navKey
+    btn._msuf2NavIconIsChild = isChild and true or false
     local grid = T.navIconGrid and T.navIconGrid[navKey]
     local color = T.navIconColors and T.navIconColors[navKey]
-    if not (grid and color) then return end
-    local icon = btn:CreateTexture(nil, "ARTWORK", nil, 3)
-    icon:SetSize(14, 14)
-    icon:SetTexture(T.media.navIcons)
+    if not (grid and color) then
+        LayoutNavButtonLabel(btn, isChild, false)
+        return
+    end
+    local icon = btn._msuf2NavIcon
+    if not icon then
+        icon = btn:CreateTexture(nil, "ARTWORK", nil, 3)
+        icon:SetSize(14, 14)
+        icon:SetTexture(T.media.navIcons)
+        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
+        btn._msuf2NavIcon = icon
+    else
+        icon:ClearAllPoints()
+        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
+    end
     local col, row = grid[1], grid[2]
     icon:SetTexCoord(col / 8, (col + 1) / 8, row / 8, (row + 1) / 8)
-    icon:SetVertexColor(color[1], color[2], color[3], 0.50)
-    icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
-    btn._msuf2NavIcon = icon
     btn._msuf2NavIconColor = color
-    local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
-    stripe:SetTexture("Interface\\Buttons\\WHITE8X8")
-    stripe:SetWidth(3)
-    stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -4)
-    stripe:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 1, 4)
-    stripe:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1.00)
-    stripe:Hide()
-    btn._msuf2NavStripe = stripe
-    if btn._msuf2Label then
-        btn._msuf2Label:ClearAllPoints()
-        btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", isChild and 24 or 26, 0)
-        btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
-        btn._msuf2Label:SetJustifyH("LEFT")
+    if not btn._msuf2NavStripe then
+        local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
+        stripe:SetTexture("Interface\\Buttons\\WHITE8X8")
+        stripe:SetWidth(3)
+        stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -4)
+        stripe:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 1, 4)
+        stripe:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1.00)
+        stripe:Hide()
+        btn._msuf2NavStripe = stripe
     end
+    T.SetNavIconVisible(btn, visible ~= false)
 end
 local function HideNativeSliderTexture(region, keep)
     if not region or region == keep then return end

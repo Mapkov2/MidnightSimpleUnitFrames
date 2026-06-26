@@ -631,7 +631,7 @@ castbar_interrupt_ready=interrupt ready|demon hunter|devour|consume magic|disrup
 ]],
     opt_misc = [[
 misc_language=language|locale|translation|localization|localisation
-misc_menu_behavior=menu behavior|menu snap|edge snap|window snap|menu resize
+misc_menu_behavior=menu behavior|menu snap|edge snap|window snap|menu resize|navigation icons|nav icons|navigation symbols|nav symbols|navi symbole|navigationssymbole
 misc_startup=startup|welcome|welcome message|version check|versioncheck|notices
 misc_tooltips=tooltips|tooltip|unitframe tooltips|group frame tooltips|mouseover tooltip|modifier tooltip
 misc_blizzard_frames=blizzard frames|default frames|hide blizzard|disable blizzard

@@ -46,10 +46,12 @@ local pendingCastbar = Apply.pendingCastbar == true
 Apply.pendingUnits = pendingUnits
 Apply.pendingOpts = pendingOpts
 
+local debugprofilestop = _G.debugprofilestop
+local APPLY_FLUSH_DELAY = 0.04
 local UNIT_KEYS = KeySet("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
 
 local PROFILE_APPLY_GLOBALS = Apply.PROFILE_APPLY_GLOBALS or WordList [[
-    MSUF_GF_InvalidateCooldownTextCurve MSUF_GF_ForceCooldownTextRecolor MSUF_RefreshAllIdentityColors
+    MSUF_GF_InvalidateCooldownTextCurve MSUF_GF_ForceCooldownTextRecolor MSUF_RefreshAllFrameColors MSUF_RefreshAllIdentityColors
     MSUF_RefreshAllPowerTextColors MSUF_RefreshAllFrames MSUF_UpdateAllBarTextures_Immediate
     MSUF_UpdateAllBarTextures MSUF_UpdateCastbarVisuals_Immediate MSUF_ClassPower_Refresh MSUF_ClassPower_RefreshTextures
 ]]
@@ -74,6 +76,123 @@ local function ReportError(err)
     end
 end
 
+local perf = M.PerfProfile or Apply.perfProfile or { enabled = false, buckets = {} }
+perf.buckets = perf.buckets or {}
+M.PerfProfile = perf
+Apply.perfProfile = perf
+
+local function ResetPerfProfile()
+    perf.buckets = {}
+    perf.startedAt = debugprofilestop and debugprofilestop() or nil
+end
+
+local function ProfileStart()
+    if not perf.enabled then return nil end
+    return debugprofilestop and debugprofilestop() or false
+end
+
+local function RecordPerf(bucketName, key, elapsed, extraCount)
+    if not perf.enabled then return end
+    bucketName = tostring(bucketName or "misc")
+    key = tostring(key or "unknown")
+    local buckets = perf.buckets
+    local bucket = buckets[bucketName]
+    if not bucket then
+        bucket = {}
+        buckets[bucketName] = bucket
+    end
+    local rec = bucket[key]
+    if not rec then
+        rec = { count = 0, total = 0, max = 0, extra = 0 }
+        bucket[key] = rec
+    end
+    elapsed = tonumber(elapsed) or 0
+    rec.count = rec.count + 1
+    rec.total = rec.total + elapsed
+    if elapsed > rec.max then rec.max = elapsed end
+    rec.extra = rec.extra + (tonumber(extraCount) or 0)
+end
+
+local function ProfileStop(bucketName, key, started, extraCount)
+    if not perf.enabled then return end
+    local elapsed = 0
+    if type(started) == "number" and debugprofilestop then
+        elapsed = debugprofilestop() - started
+    end
+    RecordPerf(bucketName, key, elapsed, extraCount)
+end
+
+function Apply.SetProfiling(enabled, reset)
+    perf.enabled = enabled == true
+    if reset ~= false then ResetPerfProfile() end
+    return perf.enabled
+end
+
+function Apply.ResetProfiling()
+    ResetPerfProfile()
+end
+
+function Apply.GetProfile()
+    return perf
+end
+
+function M.RecordPerf(bucketName, key, elapsed, extraCount)
+    RecordPerf(bucketName, key, elapsed, extraCount)
+end
+
+function M.ProfileStart()
+    return ProfileStart()
+end
+
+function M.ProfileStop(bucketName, key, started, extraCount)
+    ProfileStop(bucketName, key, started, extraCount)
+end
+
+function M.SetPerfProfiling(enabled, reset)
+    return Apply.SetProfiling(enabled, reset)
+end
+
+function M.GetPerfProfile()
+    return perf
+end
+
+function M.ResetPerfProfile()
+    ResetPerfProfile()
+end
+
+function M.PrintPerfProfile(limit)
+    limit = tonumber(limit) or 8
+    if not print then return perf end
+    local allRows = {}
+    for bucketName, bucket in pairs(perf.buckets or {}) do
+        for key, rec in pairs(bucket) do
+            allRows[#allRows + 1] = { bucket = bucketName, key = key, rec = rec }
+        end
+    end
+    table.sort(allRows, function(a, b) return (a.rec.total or 0) > (b.rec.total or 0) end)
+    print("MSUF2 perf profile top:")
+    for i = 1, math.min(limit, #allRows) do
+        local row = allRows[i]
+        local rec = row.rec
+        local avg = (rec.count and rec.count > 0) and ((rec.total or 0) / rec.count) or 0
+        print(string.format("  %s %s: %.2fms total, %.2fms max, %.2fms avg, %d calls", row.bucket, row.key, rec.total or 0, rec.max or 0, avg, rec.count or 0))
+    end
+    print("MSUF2 perf profile by bucket:")
+    for bucketName, bucket in pairs(perf.buckets or {}) do
+        local rows = {}
+        for key, rec in pairs(bucket) do
+            rows[#rows + 1] = { key = key, rec = rec }
+        end
+        table.sort(rows, function(a, b) return (a.rec.total or 0) > (b.rec.total or 0) end)
+        for i = 1, math.min(limit, #rows) do
+            local rec = rows[i].rec
+            local avg = (rec.count and rec.count > 0) and ((rec.total or 0) / rec.count) or 0
+            print(string.format("  %s %s: %.2fms total, %.2fms max, %.2fms avg, %d calls", bucketName, rows[i].key, rec.total or 0, rec.max or 0, avg, rec.count or 0))
+        end
+    end
+    return perf
+end
+
 function Apply.SafeInvoke(fn, ...)
     if type(fn) ~= "function" then return false end
     local ok, r1, r2, r3, r4 = pcall(fn, ...)
@@ -86,14 +205,24 @@ end
 
 function Apply.CallGlobal(name, ...)
     local fn = _G[name]
-    if type(fn) == "function" then return Apply.SafeInvoke(fn, ...) end
+    if type(fn) == "function" then
+        if perf.enabled ~= true then return Apply.SafeInvoke(fn, ...) end
+        local started = ProfileStart()
+        local ok, r1, r2, r3, r4 = Apply.SafeInvoke(fn, ...)
+        ProfileStop("global", name, started)
+        return ok, r1, r2, r3, r4
+    end
     return false
 end
 
 function Apply.CallGlobalResult(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then
-        return Apply.SafeInvoke(fn, ...)
+        if perf.enabled ~= true then return Apply.SafeInvoke(fn, ...) end
+        local started = ProfileStart()
+        local ok, r1, r2, r3, r4 = Apply.SafeInvoke(fn, ...)
+        ProfileStop("global", name, started)
+        return ok, r1, r2, r3, r4
     end
     return false, nil
 end
@@ -143,10 +272,24 @@ local function RefreshTargetedGeneral(reason, opt)
     if alphaish then
         Apply.CallGlobal("MSUF_RefreshAllUnitAlphas")
     end
-    if opt.visual ~= false then
+    if opt.visual == true or opt.frames == true then
         return Apply.CallGlobal("MSUF_RefreshAllFrames")
     end
     return textish or powerish or alphaish or false
+end
+
+local function HasTargetedGeneralRuntime(opts)
+    return opts.text == true
+        or opts.power == true
+        or opts.alpha == true
+        or opts.fonts == true
+        or opts.bars == true
+        or opts.castbar == true
+        or opts.castbarTextures == true
+        or opts.classpower == true
+        or opts.colors == true
+        or opts.frames == true
+        or opts.visual ~= nil
 end
 
 local function RefreshActiveBossPreview(reason)
@@ -158,22 +301,43 @@ local function RefreshActiveBossPreview(reason)
     Apply.CallGlobal("MSUF_SyncBossUnitframePreviewWithUnitEdit")
 end
 
+local function ProfiledGroupInvoke(label, fn, ...)
+    local started = ProfileStart()
+    local ok, r1, r2, r3, r4 = Apply.SafeInvoke(fn, ...)
+    ProfileStop("groupApply", label, started)
+    return ok, r1, r2, r3, r4
+end
+
 local function RefreshGroupFonts()
     local gf = MSUF and MSUF.GF
     if not gf then return end
-    if type(gf.RefreshFonts) == "function" then Apply.SafeInvoke(gf.RefreshFonts) end
+    local dirty = gf.DIRTY_FONT or 4
+    if type(gf.RefreshFonts) == "function" then return ProfiledGroupInvoke("RefreshFonts", gf.RefreshFonts) end
     if type(gf.MarkAllDirty) == "function" then
-        Apply.SafeInvoke(gf.MarkAllDirty, (gf.DIRTY_FONT or 4) + (gf.DIRTY_LAYOUT or 32))
+        return ProfiledGroupInvoke("MarkAllDirty:FONT", gf.MarkAllDirty, dirty)
+    end
+    if type(gf.RefreshVisuals) == "function" then
+        return ProfiledGroupInvoke("RefreshVisuals:FONT", gf.RefreshVisuals, nil, dirty)
     end
 end
 
-local function RefreshGroupVisuals()
+local function RefreshGroupVisuals(mask, label)
     local gf = MSUF and MSUF.GF
     if not gf then return end
-    if type(gf.RefreshVisuals) == "function" then Apply.SafeInvoke(gf.RefreshVisuals) end
+    local dirty = mask or gf.DIRTY_VISUAL or 2
+    label = label or "RefreshVisuals"
+    if type(gf.RefreshVisuals) == "function" then return ProfiledGroupInvoke(label, gf.RefreshVisuals, nil, dirty) end
     if type(gf.MarkAllDirty) == "function" then
-        Apply.SafeInvoke(gf.MarkAllDirty, (gf.DIRTY_VISUAL or 2) + (gf.DIRTY_LAYOUT or 32))
+        return ProfiledGroupInvoke("MarkAllDirty:" .. label, gf.MarkAllDirty, dirty)
     end
+end
+
+local function RefreshGroupColors()
+    local gf = MSUF and MSUF.GF
+    if not gf then return end
+    local dirty = gf.DIRTY_COLOR or 8
+    if type(gf.RefreshColors) == "function" then return ProfiledGroupInvoke("RefreshColors", gf.RefreshColors) end
+    return RefreshGroupVisuals(dirty, "RefreshVisuals:COLOR")
 end
 
 local function PushVisualUpdates()
@@ -195,7 +359,7 @@ local function ApplyBarRuntime()
     Apply.CallGlobal("MSUF_UpdateAllBarTextures")
     Apply.CallGlobal("MSUF_UpdateAbsorbBarTextures")
     Apply.CallGlobal("MSUF_InvalidateAbsorbCache")
-    RefreshGroupVisuals()
+    RefreshGroupVisuals(nil, "RefreshVisuals:BARS")
 end
 
 local function ApplyCastbarRuntime(opt)
@@ -207,17 +371,18 @@ local function ApplyCastbarRuntime(opt)
 end
 
 local function ApplyColorRuntime(opt)
-    Apply.CallGlobal("MSUF_RefreshAllIdentityColors")
-    Apply.CallGlobal("MSUF_RefreshAllPowerTextColors")
+    if not Apply.CallGlobal("MSUF_RefreshAllFrameColors") then
+        Apply.CallGlobal("MSUF_RefreshAllIdentityColors")
+        Apply.CallGlobal("MSUF_RefreshAllPowerTextColors")
+    end
     if not (opt and opt.bars) then Apply.CallGlobal("MSUF_UpdateAllBarTextures_Immediate") end
     Apply.CallGlobal("MSUF_PrioRows_Reinit")
     if type(M.ApplyGameplay) == "function" then Apply.SafeInvoke(M.ApplyGameplay) end
-    local gf = MSUF and MSUF.GF
-    if gf and type(gf.RefreshColors) == "function" then Apply.SafeInvoke(gf.RefreshColors) end
-    RefreshGroupVisuals()
+    RefreshGroupColors()
 end
 
 local function FlushApply()
+    local flushStarted = perf.enabled == true and ProfileStart() or nil
     flushQueued = false
     Apply.flushQueued = false
 
@@ -267,7 +432,7 @@ local function FlushApply()
         if opt.fonts then ApplyFontRuntime(opt) end
         if opt.bars then ApplyBarRuntime() end
         if opt.castbarTextures then ApplyCastbarRuntime(opt) end
-        if opt.colors then ApplyColorRuntime(opt) end
+        if opt.colors and not opt.colorsPushed then ApplyColorRuntime(opt) end
         if applyAll and not applied then ApplyUnitFrame(nil) end
         if not applyAll then RefreshTargetedGeneral(opt.reason or "MSUF2_GENERAL", opt) end
     end
@@ -282,16 +447,19 @@ local function FlushApply()
         Apply.CallGlobal("MSUF_UFPreview_RequestRefresh", wantPreview)
         RefreshActiveBossPreview(wantPreview)
     end
+    if perf.enabled == true then ProfileStop("apply", "FlushApply", flushStarted) end
 end
 
 function Apply.QueueFlush()
     if flushQueued then return true end
     flushQueued = true
     Apply.flushQueued = true
-    if type(_G.MSUF_ScheduleOnce) == "function" then
+    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
+        _G.MSUF_ScheduleDelayOnce("MSUF2_APPLY", APPLY_FLUSH_DELAY, FlushApply)
+    elseif type(_G.MSUF_ScheduleOnce) == "function" then
         _G.MSUF_ScheduleOnce("MSUF2_APPLY", FlushApply)
     elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, FlushApply)
+        C_Timer.After(APPLY_FLUSH_DELAY, FlushApply)
     else
         FlushApply()
     end
@@ -348,10 +516,13 @@ function Apply.RequestGeneral(reason, opts)
         if opts.bars then pendingGeneral.bars = true end
         if opts.castbarTextures then pendingGeneral.castbarTextures = true end
         if opts.colors then pendingGeneral.colors = true end
+        if opts.colorsPushed then pendingGeneral.colorsPushed = true end
         if opts.alpha then pendingGeneral.alpha = true; pendingAlpha = true; Apply.pendingAlpha = true end
         if opts.castbar then pendingCastbar = true; Apply.pendingCastbar = true end
         if opts.preview ~= false then pendingPreview = opts.previewReason or reason or "MSUF2_GENERAL"; Apply.pendingPreview = pendingPreview end
-        if opts.visual == false then pendingGeneral.visual = false end
+        if opts.visual ~= nil then pendingGeneral.visual = opts.visual and true or false end
+        if opts.frames then pendingGeneral.frames = true end
+        if opts.applyAll == false and not HasTargetedGeneralRuntime(opts) and pendingGeneral.visual ~= true then pendingGeneral.visual = true end
     else
         pendingPreview = reason or "MSUF2_GENERAL"
         Apply.pendingPreview = pendingPreview
@@ -377,6 +548,7 @@ function Apply.RequestColors(reason)
         fonts = true,
         bars = true,
         colors = true,
+        colorsPushed = true,
     })
 end
 
@@ -421,3 +593,7 @@ Apply.RefreshTargetedGeneral = RefreshTargetedGeneral
 Apply.RefreshActiveBossPreview = RefreshActiveBossPreview
 
 ExportPublic("MSUF_Menu2_ApplyService", Apply)
+ExportPublic("MSUF_Menu2_SetPerfProfiling", M.SetPerfProfiling)
+ExportPublic("MSUF_Menu2_GetPerfProfile", M.GetPerfProfile)
+ExportPublic("MSUF_Menu2_ResetPerfProfile", M.ResetPerfProfile)
+ExportPublic("MSUF_Menu2_PrintPerfProfile", M.PrintPerfProfile)

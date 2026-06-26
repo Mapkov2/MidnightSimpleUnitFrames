@@ -74,6 +74,8 @@ function Render.Install(box, ctx, deps)
     --- group frame and must not rebuild secure headers or subscribe to roster
     --- events.
     function box:Refresh()
+        local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
+        local profileStarted = profiling and M.ProfileStart() or nil
         local textHandles = self._textHandles or {}
         local kind = H.CurrentScope()
         local label = H.PreviewScopeLabel(kind)
@@ -873,6 +875,7 @@ function Render.Install(box, ctx, deps)
         end
         if self._selectedHandle and self._selectedHandle.IsShown and not self._selectedHandle:IsShown() then SelectHandle(nil) end
         RefreshHandleSelection(self)
+        if profiling then M.ProfileStop("preview", "GroupPreview.Refresh", profileStarted) end
     end
     box:EnableKeyboard(true)
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end

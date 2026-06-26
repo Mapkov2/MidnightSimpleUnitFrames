@@ -67,6 +67,8 @@ local function RegisterGeneralBoolean(dbKey, attr, label, defaultValue, aliases,
                 if GeneralDB().playTargetSelectLostSounds == true then CallGlobal("MSUF_TargetSoundDriver_Ensure") end
             elseif dbKey == "hideAdvancedMenu" and M and type(M.RefreshAdvancedNavVisibility) == "function" then
                 M.RefreshAdvancedNavVisibility()
+            elseif dbKey == "showNavigationIcons" and M and type(M.RefreshNavIconVisibility) == "function" then
+                M.RefreshNavIconVisibility()
             end
         end,
         combatSafe = opts.combatSafe == true,

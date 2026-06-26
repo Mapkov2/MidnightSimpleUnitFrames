@@ -20,6 +20,7 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
+local GROUP_PREVIEW_REFRESH_DELAY = 0.05
 local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
 local LAYER_TEXT_OFF = { 0.30, 0.30, 0.36, 0.55 }
@@ -39,6 +40,14 @@ local function ShallowCopy(src)
 end
 local function SetFSColor(fs, color)
     if fs and fs.SetTextColor and color then fs:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
+end
+local function ScheduleNativePreviewRefresh(box, fn)
+    if type(fn) ~= "function" then return end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(GROUP_PREVIEW_REFRESH_DELAY, fn)
+    else
+        fn()
+    end
 end
 local function LayerFont(parent, text, color)
     local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -856,7 +865,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
                     M.gfPreviewLayerVisible[key] = M.gfPreviewLayerVisible[key] == false
                 end
             end
-            if box.Refresh then box:Refresh() end
+            if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_LAYER") elseif box.Refresh then box:Refresh() end
         end)
         box._layerButtons[#box._layerButtons + 1] = btn
     end
@@ -967,7 +976,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if self.Refresh then self:Refresh(self._msufGFRefreshReason) end
             self._msufGFRefreshReason = nil
         end
-        C_Timer.After(0, RunRefresh)
+        ScheduleNativePreviewRefresh(self, RunRefresh)
     end
     function box:ReleaseRuntimePreview()
         self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1

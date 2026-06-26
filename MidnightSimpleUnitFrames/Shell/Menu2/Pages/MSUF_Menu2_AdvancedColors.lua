@@ -15,23 +15,55 @@ local min = math.min
 local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled]])
 local KLR, WL, ColorRows, KeyLabelMap, ValueTextPairs, SetControlsEnabled = M.KeyLabelRows, M.WordList, M.ColorRows, M.KeyLabelMap, M.ValueTextPairs, W.SetControlsEnabled
 local colorApplyQueued = false
+local auraColorFanoutQueued = false
+local classPowerColorFanoutQueued = false
+local portraitColorFanoutQueued = false
 local unitframeColorReloadPromptQueued = false
+local COLOR_APPLY_DELAY = 0.04
 -- Multiple color sliders can fire in one frame while dragging. Queue a single apply so live
 -- frames repaint once per frame instead of per slider event.
 local ColorValueAt
 local function FlushColorApply()
     colorApplyQueued = false
     local api = MSUF and MSUF._colorsAPI
-    if api and type(api.PushVisualUpdates) == "function" then api.PushVisualUpdates() end
-    M.RequestGeneralApply("MSUF2_COLORS", { preview = true, applyAll = false, colors = true })
+    local pushed = api and type(api.PushVisualUpdates) == "function"
+    if pushed then api.PushVisualUpdates() end
+    M.RequestGeneralApply("MSUF2_COLORS", { preview = true, applyAll = false, colors = true, colorsPushed = pushed })
 end
 local function ApplyColors()
     if colorApplyQueued then return end
     colorApplyQueued = true
     if type(_G.MSUF_ScheduleOnce) == "function" then
-        _G.MSUF_ScheduleOnce("MSUF2_COLORS_APPLY", FlushColorApply)
+        if type(_G.MSUF_ScheduleDelayOnce) == "function" then
+            _G.MSUF_ScheduleDelayOnce("MSUF2_COLORS_APPLY", COLOR_APPLY_DELAY, FlushColorApply)
+        else
+            _G.MSUF_ScheduleOnce("MSUF2_COLORS_APPLY", FlushColorApply)
+        end
     else
-        _G.C_Timer.After(0, FlushColorApply)
+        _G.C_Timer.After(COLOR_APPLY_DELAY, FlushColorApply)
+    end
+end
+local function ScheduleColorFanout(key, flagName, fn)
+    if flagName == "auras" then
+        if auraColorFanoutQueued then return end
+        auraColorFanoutQueued = true
+    elseif flagName == "classpower" then
+        if classPowerColorFanoutQueued then return end
+        classPowerColorFanoutQueued = true
+    elseif flagName == "portrait" then
+        if portraitColorFanoutQueued then return end
+        portraitColorFanoutQueued = true
+    end
+    local function Run()
+        if flagName == "auras" then auraColorFanoutQueued = false
+        elseif flagName == "classpower" then classPowerColorFanoutQueued = false
+        elseif flagName == "portrait" then portraitColorFanoutQueued = false end
+        fn()
+    end
+    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
+        _G.MSUF_ScheduleDelayOnce(key, COLOR_APPLY_DELAY, Run)
+    else
+        _G.C_Timer.After(COLOR_APPLY_DELAY, Run)
     end
 end
 local function ShowUnitframeColorReloadPrompt()
@@ -62,20 +94,24 @@ end
 local function ApplyAuraColors()
     ApplyAuras()
     ApplyColors()
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
-    CallGlobal("MSUF_GF_ForceAuraTextColorRefresh")
+    ScheduleColorFanout("MSUF2_AURA_COLOR_FANOUT", "auras", function()
+        CallGlobal("MSUF_GF_ForceAuraTextColorRefresh")
+    end)
 end
 local function ApplyClassPowerColors()
     ApplyColors()
-    CallGlobal("MSUF_ClassPower_InvalidateColors")
-    CallGlobal("MSUF_ClassPower_Refresh")
-    CallGlobal("MSUF_ClassPower_RefreshTextures")
+    ScheduleColorFanout("MSUF2_CLASSPOWER_COLOR_FANOUT", "classpower", function()
+        CallGlobal("MSUF_ClassPower_InvalidateColors")
+        CallGlobal("MSUF_ClassPower_Refresh")
+        CallGlobal("MSUF_ClassPower_RefreshTextures")
+    end)
 end
 local function ApplyPortraitColors(reason)
     ApplyColors()
-    CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason or "PORTRAIT_COLORS")
-    CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "PORTRAIT_COLORS")
+    ScheduleColorFanout("MSUF2_PORTRAIT_COLOR_FANOUT", "portrait", function()
+        CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason or "PORTRAIT_COLORS")
+        CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "PORTRAIT_COLORS")
+    end)
 end
 local COLOR_CLASS_TOKENS = WL [[WARRIOR PALADIN HUNTER ROGUE PRIEST DEATHKNIGHT SHAMAN MAGE WARLOCK MONK DRUID DEMONHUNTER EVOKER]]
 local COLOR_CLASS_LABELS = KeyLabelMap [[WARRIOR=Warrior|PALADIN=Paladin|HUNTER=Hunter|ROGUE=Rogue|PRIEST=Priest|DEATHKNIGHT=Death Knight|SHAMAN=Shaman|MAGE=Mage|WARLOCK=Warlock|MONK=Monk|DRUID=Druid|DEMONHUNTER=Demon Hunter|EVOKER=Evoker]]
@@ -271,7 +307,7 @@ local function ButtonAt(parent, label, x, y, width, onClick)
     if type(onClick) == "function" then
         btn:SetScript("OnClick", function(self, ...)
             onClick(self, ...)
-            if M.Refresh then M.Refresh() end
+            if M.RequestRefresh then M.RequestRefresh(nil, "advanced-colors-button") elseif M.Refresh then M.Refresh() end
         end)
     end
     return btn

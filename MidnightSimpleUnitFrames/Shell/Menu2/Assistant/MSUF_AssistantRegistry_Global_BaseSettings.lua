@@ -56,6 +56,12 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         "reduce motion", "menu motion", "animations", "reduce animations", "reduce menu motion", "menu animations", "bewegung reduzieren",
         "menue bewegung reduzieren", "animationen reduzieren", "weniger bewegung", "weniger animationen", "reduzierte bewegung",
     }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_REDUCE_MOTION" })
+    RegisterGeneralBoolean("showNavigationIcons", "navigationIcons", "Navigation Icons", false, {
+        "navigation icons", "nav icons", "menu icons", "sidebar icons", "rail icons", "show navigation icons", "hide navigation icons",
+        "navigation symbols", "nav symbols", "menu symbols", "sidebar symbols", "rail symbols", "navi symbole", "navigationssymbole",
+        "navigation symbole", "menue symbole", "menu symbole", "seitenleisten symbole", "navi icons", "navi symbole anzeigen",
+        "navigationssymbole anzeigen", "navigationssymbole ausblenden",
+    }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_NAV_ICONS" })
     RegisterGeneralBoolean("showWelcomeMessage", "welcomeMessage", "Welcome Message", true, {
         "welcome message", "startup welcome", "start message", "show welcome message", "login welcome message", "startup message", "willkommensnachricht",
         "willkommens nachricht", "willkommens meldung", "willkommen nachricht", "login nachricht", "start meldung",

@@ -176,6 +176,16 @@ local function ApplyCastbarRuntimeForKey(key)
     end
     if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup(key) end
 end
+local function RequestPreviewLayoutRefresh(box, reason)
+    if not box then return end
+    if type(Preview.RequestRefreshForBox) == "function" then
+        Preview.RequestRefreshForBox(box, reason)
+    elseif type(Preview.RequestRefresh) == "function" and (not Preview.active or Preview.active == box) then
+        Preview.RequestRefresh(reason)
+    elseif type(Preview.Refresh) == "function" then
+        Preview.Refresh(box, reason)
+    end
+end
 local function CommitHandleMove(handle, reason)
     if not handle then return end
     local box = handle._preview
@@ -194,7 +204,7 @@ local function CommitHandleMove(handle, reason)
         if type(fn) == "function" then fn() end
     end
     ApplyPanelUnit(box and box._msufPanel, key, reason or "UNIT_PREVIEW_MOVE")
-    Preview.Refresh(box)
+    RequestPreviewLayoutRefresh(box, reason or "UNIT_PREVIEW_MOVE")
     RefreshHandleSelectionVisuals(box)
 end
 local function EnsureBarsDB()
@@ -306,7 +316,7 @@ local function WriteHandleOffsets(handle, x, y, reason)
             and fields.visualOnly == true
             and type(fields.dragOffsets) == "function"
             and fields.dragOffsets(handle, x, y) == true
-        if not fastDrag then Preview.Refresh(box, reason or "UNIT_PREVIEW_MOVE") end
+        if not fastDrag then RequestPreviewLayoutRefresh(box, reason or "UNIT_PREVIEW_MOVE") end
         RefreshHandleSelectionVisuals(box)
         if not handle._msuf2PreviewHistoryTx then CheckpointMenuHistory(handle, reason == "UNIT_PREVIEW_NUDGE" and "Nudge" or "Move") end
         return true
@@ -627,7 +637,7 @@ local function MakeHandle(preview, key, fields, label, color)
         self._dragOffsetX = nil
         self._dragOffsetY = nil
         RefreshHandleSelectionVisuals(preview)
-        if hadFrozenScale and not preview._manualZoom and Preview.Refresh then Preview.Refresh(preview, "UNIT_PREVIEW_DRAG_END") end
+        if hadFrozenScale and not preview._manualZoom then RequestPreviewLayoutRefresh(preview, "UNIT_PREVIEW_DRAG_END") end
     end
     h:SetScript("OnMouseDown", StartHandleDrag)
     h:SetScript("OnMouseUp", StopHandleDrag)
@@ -733,7 +743,7 @@ local function BuildPreview(parent, panel, width, height)
             owner.layerVisibility[self.key] = owner.layerVisibility[self.key] == false
             if self.key == "guides" then SetPreviewGuidesEnabled(owner.layerVisibility[self.key] ~= false) end
             for j = 1, #owner.layerButtons do owner.layerButtons[j]:refresh() end
-            Preview.Refresh(owner)
+            RequestPreviewLayoutRefresh(owner, "UNIT_PREVIEW_LAYER")
             RefreshHandleSelectionVisuals(owner)
         end,
         OnEnter = function(self, owner, available, on, tr)
@@ -989,6 +999,9 @@ local function BuildPreview(parent, panel, width, height)
         Preview.RequestRefresh("SHOW")
     end)
     box:SetScript("OnHide", function(self)
+        self._refreshSerial = (tonumber(self._refreshSerial) or 0) + 1
+        self._refreshQueued = nil
+        self._refreshReason = nil
         if self.UnregisterEvent then
             self:UnregisterEvent("PLAYER_REGEN_ENABLED")
             self:UnregisterEvent("PLAYER_REGEN_DISABLED")

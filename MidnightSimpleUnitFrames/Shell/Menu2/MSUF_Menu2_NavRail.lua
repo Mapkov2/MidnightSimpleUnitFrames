@@ -28,6 +28,10 @@ local function IsAdvancedNavHidden()
     if type(g) ~= "table" then return true end
     return g.hideAdvancedMenu ~= false
 end
+local function NavIconsEnabled()
+    local g = M.GetGeneralDB and M.GetGeneralDB()
+    return type(g) == "table" and g.showNavigationIcons == true
+end
 local function TrimText(text)
     text = tostring(text or "")
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
@@ -140,10 +144,20 @@ local function CreateNavButton(parent, key, label, indent)
     btn._msuf2NavItem = true
     btn._msuf2NavIndent = indent or 0
     btn._msuf2RawLabel = label
-    M.CallIf(T.AttachNavIcon, btn, key, (indent or 0) > 0)
+    M.CallIf(T.AttachNavIcon, btn, key, (indent or 0) > 0, NavIconsEnabled())
     M.navButtons[key] = btn
     M.CallIf(btn.RefreshVisual, btn)
     return btn
+end
+function M.RefreshNavIconVisibility()
+    local buttons = M.navButtons
+    if type(buttons) ~= "table" then return end
+    local visible = NavIconsEnabled()
+    for key, btn in pairs(buttons) do
+        if btn and btn._msuf2NavItem then
+            M.CallIf(T.AttachNavIcon, btn, key, (btn._msuf2NavIndent or 0) > 0, visible)
+        end
+    end
 end
 local function ApplyNavHeaderVisual(btn, open)
     if not btn then return end
@@ -280,9 +294,20 @@ local function BuildNavRail(parent)
     M.navHeaders = {}
     M.navGroupForKey = {}
     M.navHeaderState = M.navHeaderState or {}
+    local brandIcon = parent:CreateTexture(nil, "ARTWORK")
+    brandIcon:SetSize(22, 22)
+    brandIcon:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -9)
+    brandIcon:SetTexture((T.media and T.media.logo) or "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\MSUF_MinimapIcon.tga")
+    brandIcon:SetVertexColor(1, 1, 1, 0.96)
+    local brand = T.Font(parent, "GameFontHighlightSmall", "MSUF", T.colors.title or T.colors.text)
+    brand:SetPoint("LEFT", brandIcon, "RIGHT", 8, 0)
+    brand:SetPoint("RIGHT", parent, "RIGHT", -12, 0)
+    brand:SetJustifyH("LEFT")
+    parent._msuf2BrandIcon = brandIcon
+    parent._msuf2BrandTitle = brand
     local search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    search:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -8)
-    search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -10, -8)
+    search:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -38)
+    search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -10, -38)
     search:SetHeight(18)
     search:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 1) + 20)
     search:EnableMouse(true)
@@ -444,7 +469,7 @@ local function BuildNavRail(parent)
         clear:SetShown(TrimText(self:GetText() or "") ~= "")
     end)
     local listScroll = CreateFrame("ScrollFrame", nil, parent)
-    listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -34)
+    listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -66)
     listScroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -14, 6)
     local list = CreateFrame("Frame", nil, listScroll)
     list:SetSize(NAV_W - 18, 1)
@@ -489,6 +514,7 @@ local function BuildNavRail(parent)
         end
     end
     function parent:_msuf2NavReflow()
+        M.CallIf(M.RefreshNavIconVisibility)
         local y = -4
         local advancedHidden = IsAdvancedNavHidden()
         for i = 1, #created do

@@ -256,7 +256,7 @@ local function BuildGameplay(ctx)
         g.playerTotemsAnchorFrom = "TOPLEFT"
         g.playerTotemsAnchorTo = "BOTTOMLEFT"
         ApplyGameplayUI()
-        if M.Refresh then M.Refresh(ctx) end
+        if M.RequestRefresh then M.RequestRefresh(ctx, "advanced-gameplay-totems-reset") elseif M.Refresh then M.Refresh(ctx) end
     end)
     local totemActionControls = { previewBtn, resetTotemBtn }
     local crossStacked = GameplayStacked()

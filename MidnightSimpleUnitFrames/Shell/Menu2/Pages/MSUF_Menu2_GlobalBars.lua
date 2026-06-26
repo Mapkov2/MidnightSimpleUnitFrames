@@ -17,6 +17,8 @@ local VT = M.ValueTextList
 local floor = math.floor
 local max = math.max
 local min = math.min
+local C_Timer = _G.C_Timer
+local BARS_PAGE_WORK_DELAY = 0.04
 local ROUNDED_PREVIEW_WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local ROUNDED_PREVIEW_MASK = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_4x.tga"
@@ -24,6 +26,23 @@ local ROUNDED_PREVIEW_EDGE = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_edge_4x.t
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
 local Call, DB, G, Bars, Unit, ReadG, SetG, ReadGBool, SetGBool, ReadB, SetB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, SetPriorityOrder, NormalizePriorityKey, RefreshBorderTestModes, SetAbsorbTextureTest, ClearAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars = M.Pick(GP, [[Call DB G Bars Unit ReadG SetG ReadGBool SetGBool ReadB SetB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor SetPriorityOrder NormalizePriorityKey RefreshBorderTestModes SetAbsorbTextureTest ClearAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars]])
 NormalizePriorityKey = NormalizePriorityKey or function(key) return key end
+local function ScheduleBarsPageWork(key, delay, fn)
+    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
+        _G.MSUF_ScheduleDelayOnce(key, delay or BARS_PAGE_WORK_DELAY, fn)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(delay or BARS_PAGE_WORK_DELAY, fn)
+    else
+        fn()
+    end
+end
+local function BarsProfileStart()
+    return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
+end
+local function BarsProfileStop(key, started, extraCount)
+    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then
+        M.ProfileStop("barsPage", key, started, extraCount)
+    end
+end
 local function BuildBars(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Bars", "Textures, gradients, outlines and highlight borders.", 72)
@@ -100,6 +119,17 @@ local function BuildBars(ctx)
         Call("MSUF_ApplyRoundedUnitframes")
         Call("MSUF_UFPreview_RequestRefresh", "MSUF2_BAR_OUTLINE")
     end
+    local outlineRuntimeQueued = false
+    local function RequestOutlineRuntime()
+        if outlineRuntimeQueued then return end
+        outlineRuntimeQueued = true
+        ScheduleBarsPageWork("MSUF2_BARS_OUTLINE_RUNTIME", BARS_PAGE_WORK_DELAY, function()
+            outlineRuntimeQueued = false
+            local started = BarsProfileStart()
+            ApplyOutlineRuntime()
+            BarsProfileStop("OutlineRuntime", started)
+        end)
+    end
     local function ApplyAggroBorderRuntime()
         Call("MSUF_UFCore_RefreshSettingsCache", "MSUF2_AGGRO_BORDER_RUNTIME")
         Call("MSUF_ApplyBarOutlineThickness_All")
@@ -133,6 +163,61 @@ local function BuildBars(ctx)
         ApplyAggroBorderRuntime()
         ApplyDispelPurgeBorderRuntime()
         ApplyBossTargetBorderRuntime()
+    end
+    local aggroBorderRuntimeQueued = false
+    local dispelPurgeBorderRuntimeQueued = false
+    local bossTargetBorderRuntimeQueued = false
+    local highlightPriorityRuntimeQueued = false
+    local allHighlightBorderRuntimeQueued = false
+    local function RequestAggroBorderRuntime()
+        if aggroBorderRuntimeQueued then return end
+        aggroBorderRuntimeQueued = true
+        ScheduleBarsPageWork("MSUF2_AGGRO_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
+            aggroBorderRuntimeQueued = false
+            local started = BarsProfileStart()
+            ApplyAggroBorderRuntime()
+            BarsProfileStop("AggroBorderRuntime", started)
+        end)
+    end
+    local function RequestDispelPurgeBorderRuntime()
+        if dispelPurgeBorderRuntimeQueued then return end
+        dispelPurgeBorderRuntimeQueued = true
+        ScheduleBarsPageWork("MSUF2_DISPEL_PURGE_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
+            dispelPurgeBorderRuntimeQueued = false
+            local started = BarsProfileStart()
+            ApplyDispelPurgeBorderRuntime()
+            BarsProfileStop("DispelPurgeBorderRuntime", started)
+        end)
+    end
+    local function RequestBossTargetBorderRuntime()
+        if bossTargetBorderRuntimeQueued then return end
+        bossTargetBorderRuntimeQueued = true
+        ScheduleBarsPageWork("MSUF2_BOSS_TARGET_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
+            bossTargetBorderRuntimeQueued = false
+            local started = BarsProfileStart()
+            ApplyBossTargetBorderRuntime()
+            BarsProfileStop("BossTargetBorderRuntime", started)
+        end)
+    end
+    local function RequestHighlightPriorityRuntime()
+        if highlightPriorityRuntimeQueued then return end
+        highlightPriorityRuntimeQueued = true
+        ScheduleBarsPageWork("MSUF2_HIGHLIGHT_PRIORITY_RUNTIME", BARS_PAGE_WORK_DELAY, function()
+            highlightPriorityRuntimeQueued = false
+            local started = BarsProfileStart()
+            ApplyHighlightPriorityRuntime()
+            BarsProfileStop("HighlightPriorityRuntime", started)
+        end)
+    end
+    local function RequestAllHighlightBorderRuntime()
+        if allHighlightBorderRuntimeQueued then return end
+        allHighlightBorderRuntimeQueued = true
+        ScheduleBarsPageWork("MSUF2_ALL_HIGHLIGHT_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
+            allHighlightBorderRuntimeQueued = false
+            local started = BarsProfileStart()
+            ApplyAllHighlightBorderRuntime()
+            BarsProfileStop("AllHighlightBorderRuntime", started)
+        end)
     end
     local function ApplyRoundedRuntime()
         Call("MSUF_ApplyRoundedUnitframes")
@@ -408,7 +493,11 @@ local function BuildBars(ctx)
             if not (strength and strength > 0) then GradientScopeSet("gradientStrength", 0.45) end
         end
         M.RequestGeneralApply(reason or "MSUF2_GRADIENT", { preview = true, applyAll = false, notify = false, bars = true })
-        Call("MSUF_UpdateAllBarGradients")
+        ScheduleBarsPageWork("MSUF2_BARS_GRADIENT_RUNTIME", BARS_PAGE_WORK_DELAY, function()
+            local started = BarsProfileStart()
+            Call("MSUF_UpdateAllBarGradients")
+            BarsProfileStop("GradientRuntime", started)
+        end)
     end
     local function SetOutlineRGB(entry, r, g, b)
         if entry.barOutlineColorR == r and entry.barOutlineColorG == g and entry.barOutlineColorB == b
@@ -742,7 +831,7 @@ local function BuildBars(ctx)
         function(v)
             BarScopeSetBars("barOutlineThickness", floor((tonumber(v) or 1) + 0.5), "MSUF2_BAR_OUTLINE")
             ApplyBars("MSUF2_BAR_OUTLINE")
-            ApplyOutlineRuntime()
+            RequestOutlineRuntime()
         end,
         1, { step = 1, roundStep = true })
     local outlineColor = W.Color(outline, "Outline color")
@@ -756,7 +845,7 @@ local function BuildBars(ctx)
         function(r, g, b)
             if SetOutlineColorForScope(r, g, b) then
                 ApplyBars("MSUF2_BAR_OUTLINE_COLOR")
-                ApplyOutlineRuntime()
+                RequestOutlineRuntime()
             end
         end)
     M.BindGateGroup(ctx, nil, {
@@ -835,7 +924,7 @@ local function BuildBars(ctx)
             BarScopeSet("highlightBorderThickness", n, "MSUF2_HIGHLIGHT_BORDER")
             BarScopeSet("hlAggroSize", n, "MSUF2_HIGHLIGHT_BORDER")
             ApplyBars("MSUF2_HIGHLIGHT_BORDER")
-            ApplyAllHighlightBorderRuntime()
+            RequestAllHighlightBorderRuntime()
         end,
         2, { step = 1, roundStep = true })
     W.MoveWidget(highlight, modesFrame, hlLeftX, -70, hlLeftW, "LEFT")
@@ -863,17 +952,17 @@ local function BuildBars(ctx)
             end)
     end
     local aggro = BindBorderModeDropdown("Aggro border", "aggroOutlineMode", 1, "MSUF2_AGGRO_BORDER", -136,
-        "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", ApplyAggroBorderRuntime)
+        "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", RequestAggroBorderRuntime)
     local dispelBorder = BindBorderModeDropdown("Dispel border", "dispelOutlineMode", 1, "MSUF2_DISPEL_BORDER", -190,
-        "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", ApplyDispelPurgeBorderRuntime)
+        "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", RequestDispelPurgeBorderRuntime)
     local dispelTrigger = BindHighlightDropdown("Dispel border detects", dispelTriggers, -244,
         function() return NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "BY_ME")) end,
         function(v)
             BarScopeSet("dispelBorderTrigger", NormalizeDispelTrigger(v), "MSUF2_DISPEL_TRIGGER")
-            ApplyDispelPurgeBorderRuntime()
+            RequestDispelPurgeBorderRuntime()
         end)
     local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -298,
-        "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", ApplyDispelPurgeBorderRuntime)
+        "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", RequestDispelPurgeBorderRuntime)
     local bossTarget = BindHighlightDropdown("Boss target border", borderModes, -352,
         function()
             local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
@@ -885,7 +974,7 @@ local function BuildBars(ctx)
             SetGBool("bossTargetHighlightEnabled", value == 1, "MSUF2_BOSS_TARGET_BORDER", { preview = true })
             StopBorderTest("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", value)
             ApplyBars("MSUF2_BOSS_TARGET_BORDER")
-            ApplyBossTargetBorderRuntime()
+            RequestBossTargetBorderRuntime()
         end)
     local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -414, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
@@ -899,7 +988,10 @@ local function BuildBars(ctx)
         M.BindBoolWidget(ctx, control,
             function() return _G[flagName] and true or false end,
             function(v)
-                if v and not enabledFn() then M.Refresh(ctx); return end
+                if v and not enabledFn() then
+                    if M.RequestRefresh then M.RequestRefresh(ctx, "bars-border-test-disabled") elseif M.Refresh then M.Refresh(ctx) end
+                    return
+                end
                 local fn = _G[setterName]
                 if type(fn) == "function" then
                     if noScope then fn(v and true or false)
@@ -975,7 +1067,7 @@ local function BuildBars(ctx)
             end,
             function(value)
                 BarScopeSet(key, normalizer and normalizer(value) or (value or defaultValue), reason)
-                ApplyDispelPurgeBorderRuntime()
+                RequestDispelPurgeBorderRuntime()
             end)
         W.MoveWidget(dropdown, ufOverlayCard, 16, y, min(280, ufOverlayCardW - 32), "LEFT")
         return dropdown
@@ -987,7 +1079,7 @@ local function BuildBars(ctx)
             function() return BarScopeGet(key, defaultOn) ~= false end,
             function(value)
                 BarScopeSet(key, value and true or false, reason)
-                ApplyDispelPurgeBorderRuntime()
+                RequestDispelPurgeBorderRuntime()
                 SyncUFOverlayControls()
             end)
         return toggle
@@ -998,7 +1090,7 @@ local function BuildBars(ctx)
             function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
             function(value)
                 BarScopeSet(key, tonumber(value) or defaultValue, reason)
-                ApplyDispelPurgeBorderRuntime()
+                RequestDispelPurgeBorderRuntime()
             end,
             defaultValue)
         W.MoveWidget(slider, ufOverlayCard, 16, y, min(360, ufOverlayCardW - 72), "CENTER")
@@ -1010,7 +1102,7 @@ local function BuildBars(ctx)
         function(v)
             BarScopeSet("unitDispelOverlayEnabled", v and true or false, "MSUF2_UF_DISPEL_OVERLAY")
             ApplyBars("MSUF2_UF_DISPEL_OVERLAY")
-            ApplyDispelPurgeBorderRuntime()
+            RequestDispelPurgeBorderRuntime()
             SyncUFOverlayControls()
         end)
     local ufOverlayTrigger = BindUFOverlayDropdown("Overlay detects", unitDispelOverlayTriggers, "unitDispelOverlayTrigger", "BORDER", NormalizeUnitDispelOverlayTrigger, "MSUF2_UF_DISPEL_OVERLAY_TRIGGER", -74)
@@ -1036,7 +1128,7 @@ local function BuildBars(ctx)
             local on = v and true or false
             BarScopeSet("hlPrioEnabled", on, "MSUF2_HIGHLIGHT_PRIORITY")
             if CurrentBarsScope() == "shared" then G().highlightPrioEnabled = on and 1 or 0 end
-            ApplyHighlightPriorityRuntime()
+            RequestHighlightPriorityRuntime()
         end)
     local rowMax = 4
     local prioContainer, prioRows, prioCount
@@ -1048,7 +1140,7 @@ local function BuildBars(ctx)
             local order = {}
             for i = 1, prioCount do order[i] = sorted[i].key end
             SetPriorityOrder(order)
-            ApplyHighlightPriorityRuntime()
+            RequestHighlightPriorityRuntime()
         end
         M.RunWithHistory("Highlight Priority Order", "global:highlightPriorityOrder", WritePriorityRows)
     end

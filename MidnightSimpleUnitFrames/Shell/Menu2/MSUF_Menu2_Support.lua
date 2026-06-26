@@ -903,7 +903,12 @@ end
 function M.TrackRefresh(ctx, refresh)
     if type(refresh) ~= "function" then return nil end
     if type(M.AddRefresher) == "function" then M.AddRefresher(ctx, refresh) end
-    if ctx and ((ctx.hiddenBuild == true) or (ctx.entry and ctx.entry.hiddenBuild == true)) then return refresh end
+    if ctx and (
+        ctx._msuf2Building == true
+        or (ctx.entry and ctx.entry._msuf2Building == true)
+        or (ctx.hiddenBuild == true)
+        or (ctx.entry and ctx.entry.hiddenBuild == true)
+    ) then return refresh end
     refresh()
     return refresh
 end

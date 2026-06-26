@@ -106,6 +106,7 @@ local function BindValueDropdown(ctx, section, label, values, width, getValue, s
     return BindDropdownControl(ctx, W.Dropdown(section, label, values, width or 220), getValue, setValue)
 end
 local A3_APPLY_QUEUED = false
+local A3_APPLY_DELAY = 0.04
 local function ApplyAuras()
     if A3_APPLY_QUEUED then return end
     A3_APPLY_QUEUED = true
@@ -118,7 +119,11 @@ local function ApplyAuras()
             api.RequestApply()
         end
     end
-    C_Timer.After(0, Run)
+    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
+        _G.MSUF_ScheduleDelayOnce("MSUF2_AURAS_APPLY", A3_APPLY_DELAY, Run)
+    else
+        C_Timer.After(A3_APPLY_DELAY, Run)
+    end
 end
 local function AurasDB()
     local db = DB()
@@ -279,7 +284,7 @@ local function BuildTableControlSpecs(ctx, parent, getTable, defaultApply, specs
 end
 local SetControlEnabled = W.SetControlEnabled
 local function RefreshAurasPage(ctx)
-    if M.Refresh then M.Refresh(ctx) end
+    if M.RequestRefresh then M.RequestRefresh(ctx, "advanced-auras-ui") elseif M.Refresh then M.Refresh(ctx) end
 end
 local AURA_QUICK_PRESETS = {
     clean = {

@@ -32,7 +32,7 @@ local function ApplyClassPower()
     CallGlobal("MSUF_ClassPower_RefreshTextures")
     CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
     RefreshClassPowerInlinePreview()
-    M.RequestGeneralApply("MSUF2_CLASSPOWER", { preview = true, applyAll = false })
+    M.RequestGeneralApply("MSUF2_CLASSPOWER", { preview = true, applyAll = false, classpower = true })
 end
 local TextureValues = M.StatusBarTextureItems
 local VT, VTP = M.ValueTextList, M.ValueTextPairs
@@ -159,7 +159,7 @@ local function RequestClassPowerPreviewRefresh()
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
         _G.MSUF_UFPreview_RequestRefresh("MSUF2_CLASSPOWER_PREVIEW_SPEC")
     elseif type(M.RequestGeneralApply) == "function" then
-        M.RequestGeneralApply("MSUF2_CLASSPOWER_PREVIEW_SPEC", { preview = true, applyAll = false, notify = false })
+        M.RequestGeneralApply("MSUF2_CLASSPOWER_PREVIEW_SPEC", { preview = true, applyAll = false, notify = false, classpower = true })
     end
 end
 function M.GetClassPowerPreviewSpecKey()
@@ -204,7 +204,7 @@ local function BindBarsAlphaPercent(ctx, section, label, key, default, apply, st
 end
 local APPLY_DETACHED_POWER = { preview = true, power = true, applyAll = false }
 local APPLY_DETACHED_POWER_TEXT = { preview = true, power = true, text = true, fonts = true, applyAll = false }
-local APPLY_PLAYER_HP = { preview = true, applyAll = false }
+local APPLY_PLAYER_HP = { preview = true, applyAll = false, classpower = true }
 local APPLY_PLAYER_HP_TEXT = { preview = true, text = true, fonts = true, applyAll = false }
 local function ApplyClassPowerPage(reason, flags, ...)
     for i = 1, select("#", ...) do CallGlobal(select(i, ...)) end

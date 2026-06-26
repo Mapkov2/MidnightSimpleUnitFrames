@@ -98,15 +98,21 @@ local function BroadApply(reason)
     RequestBroadRuntime(reason)
     FlushApplyService()
     if MSUF and MSUF.GF then
-        if type(MSUF.GF.RebuildAll) == "function" then MSUF.GF.RebuildAll() end
-        if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
+        if type(MSUF.GF.RefreshAll) == "function" then
+            MSUF.GF.RefreshAll()
+        else
+            if type(MSUF.GF.RebuildAll) == "function" then MSUF.GF.RebuildAll() end
+            if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
+        end
         if type(MSUF.GF.RefreshPreviewLayout) == "function" then MSUF.GF.RefreshPreviewLayout() end
     end
     if MSUF and MSUF.MSUF_Auras3 and type(MSUF.MSUF_Auras3.RequestApply) == "function" then
         MSUF.MSUF_Auras3.RequestApply()
     end
     if M and type(M.MarkMenuDataDirty) == "function" then M.MarkMenuDataDirty(reason) end
-    if M and M.frame and M.frame.IsShown and M.frame:IsShown() and type(M.Refresh) == "function" then M.Refresh() end
+    if M and M.frame and M.frame.IsShown and M.frame:IsShown() then
+        if type(M.RequestRefresh) == "function" then M.RequestRefresh(nil, reason) elseif type(M.Refresh) == "function" then M.Refresh() end
+    end
 end
 
 local function BroadApplySteps(reason)
@@ -120,8 +126,12 @@ local function BroadApplySteps(reason)
         end,
         function()
             if MSUF and MSUF.GF then
-                if type(MSUF.GF.RebuildAll) == "function" then MSUF.GF.RebuildAll() end
-                if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
+                if type(MSUF.GF.RefreshAll) == "function" then
+                    MSUF.GF.RefreshAll()
+                else
+                    if type(MSUF.GF.RebuildAll) == "function" then MSUF.GF.RebuildAll() end
+                    if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
+                end
                 if type(MSUF.GF.RefreshPreviewLayout) == "function" then MSUF.GF.RefreshPreviewLayout() end
             end
         end,
@@ -130,7 +140,9 @@ local function BroadApplySteps(reason)
                 MSUF.MSUF_Auras3.RequestApply()
             end
             if M and type(M.MarkMenuDataDirty) == "function" then M.MarkMenuDataDirty(reason) end
-            if M and M.frame and M.frame.IsShown and M.frame:IsShown() and type(M.Refresh) == "function" then M.Refresh() end
+            if M and M.frame and M.frame.IsShown and M.frame:IsShown() then
+                if type(M.RequestRefresh) == "function" then M.RequestRefresh(nil, reason) elseif type(M.Refresh) == "function" then M.Refresh() end
+            end
         end,
     }
 end

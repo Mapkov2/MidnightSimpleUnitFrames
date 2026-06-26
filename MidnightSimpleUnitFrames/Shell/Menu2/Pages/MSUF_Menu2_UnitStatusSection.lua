@@ -78,7 +78,9 @@ local function BuildStatus(ctx, builder, unit)
         T.CenterButtonLabel(control)
     end
     local function RefreshStatusMenu()
-        if M.Refresh then
+        if M.RequestRefresh then
+            M.RequestRefresh(ctx, "unit-status-menu")
+        elseif M.Refresh then
             M.Refresh(ctx)
         elseif M.SelectPage then
             M.SelectPage(ctx.key)
@@ -102,7 +104,7 @@ local function BuildStatus(ctx, builder, unit)
         value = value and true or false
         if state[key] == value then return end
         state[key] = value
-        if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_STATUS_TEXT_STATE", { preview = true, applyAll = true }) end
+        if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_STATUS_TEXT_STATE", { preview = true, applyAll = false, notify = false }) end
         Call("MSUF_RequestStatusTextRefresh")
         RefreshStatusMenu()
     end

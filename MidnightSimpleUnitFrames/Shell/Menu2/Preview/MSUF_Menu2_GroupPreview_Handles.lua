@@ -79,7 +79,11 @@ function Handles.Install(box, deps)
         elseif gf and gf.MarkAllDirty then
             gf.MarkAllDirty(gf.DIRTY_VISUAL or 0x02)
         end
-        box:Refresh()
+        if box.RequestRefresh then
+            box:RequestRefresh("GROUP_PREVIEW_HANDLE_MOVE")
+        elseif box.Refresh then
+            box:Refresh()
+        end
         RefreshHandleSelection(box)
     end
     local function WriteTextHandleOffsets(handle, x, y, action, checkpoint)
@@ -242,7 +246,9 @@ function Handles.Install(box, deps)
         else
             RefreshHandleSelection(box)
         end
-        if hadFrozenScale and not box._manualZoom and not didFinalRefresh and box.Refresh then box:Refresh() end
+        if hadFrozenScale and not box._manualZoom and not didFinalRefresh then
+            if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_DRAG_END") elseif box.Refresh then box:Refresh() end
+        end
     end
     box._dragFrame:SetScript("OnMouseUp", function(_, button)
         StopHandleDrag(nil, button)

@@ -48,7 +48,7 @@ local function GetSpecMeta()
 end
 local function RefreshAfterProfileChange(ctx)
     if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
-    if M.Refresh then M.Refresh(ctx) end
+    if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-change") elseif M.Refresh then M.Refresh(ctx) end
 end
 local function ActiveProfileName() return _G.MSUF_ActiveProfile or "Default" end
 local function CallMSUF(name, ...)
@@ -486,7 +486,7 @@ local function BuildProfiles(ctx)
         M.SetMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
         self:SetChecked(M.profileImportCreateNew == true)
         if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2) end
-        if M.Refresh then M.Refresh(ctx) end
+        if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
     end)
     local legacy = ProfileButton(io, "Import Legacy", function()
         if BlockCombatAction() then return end

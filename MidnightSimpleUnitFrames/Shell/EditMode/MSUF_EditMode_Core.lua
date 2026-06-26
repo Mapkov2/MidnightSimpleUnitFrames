@@ -24,15 +24,39 @@ local Util = EM2.Util
 if type(Util) ~= "table" then Util = {} end
 EM2.Util = Util
 
+local function EditCoreProfileStart()
+    local menu = MSUF and MSUF.MSUF2
+    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStart then
+        return menu.ProfileStart()
+    end
+end
+
+local function EditCoreProfileStop(bucket, key, started)
+    local menu = MSUF and MSUF.MSUF2
+    if menu and menu.PerfProfile and menu.PerfProfile.enabled == true and menu.ProfileStop then
+        menu.ProfileStop(bucket, key, started)
+    end
+end
+
 function Util.ApplyAllSettingsSafe()
     local UF = MSUF and MSUF.UF
-    if UF and UF.Apply then UF.Apply(nil); return true end
+    if UF and UF.Apply then
+        local started = EditCoreProfileStart()
+        UF.Apply(nil)
+        EditCoreProfileStop("editApply", "UF.ApplyAll", started)
+        return true
+    end
     return false
 end
 
 function Util.ApplySettingsForKeySafe(key)
     local UF = MSUF and MSUF.UF
-    if UF and UF.Apply then return UF.Apply(key) == true end
+    if UF and UF.Apply then
+        local started = EditCoreProfileStart()
+        local ok = UF.Apply(key) == true
+        EditCoreProfileStop("editApply", "UF.Apply:" .. tostring(key or "nil"), started)
+        return ok
+    end
     return false
 end
 
@@ -92,7 +116,11 @@ function Util.RefreshUFPreview(reason)
 end
 
 function Util.SyncMovers()
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    if EM2.Movers and EM2.Movers.SyncAll then
+        local started = EditCoreProfileStart()
+        EM2.Movers.SyncAll()
+        EditCoreProfileStop("editApply", "Movers.SyncAll", started)
+    end
 end
 
 function Util.NotifyPositionChanged(key, immediate)
@@ -492,11 +520,13 @@ local function RestoreAfterCombatExit()
     pendingCombatExitApply = false
     ApplyAllSettingsSafe()
     PublishCompat("MSUF_UnitPreviewActive", false)
+    local didPreviewSync = false
     if _G.MSUF_SyncAllUnitPreviews then
         _G.MSUF_SyncAllUnitPreviews()
+        didPreviewSync = true
     end
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.RefreshAll) == "function" then
+    if not didPreviewSync and a3 and type(a3.RefreshAll) == "function" then
         a3.RefreshAll()
     end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
@@ -662,10 +692,12 @@ function State.Exit(source)
 
     --- Preview: disable all previews, restore visibility
     PublishCompat("MSUF_UnitPreviewActive", false)
+    local didPreviewSync = false
     if combatLocked then
         HardHideEditModePreviews()
     elseif _G.MSUF_SyncAllUnitPreviews then
         _G.MSUF_SyncAllUnitPreviews()
+        didPreviewSync = true
     end
     if not combatLocked
         and _G.MSUF_UpdateBossCastbarPreview
@@ -675,7 +707,7 @@ function State.Exit(source)
 
     --- Refresh Auras3
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if not combatLocked and a3 and type(a3.RefreshAll) == "function" then
+    if not combatLocked and not didPreviewSync and a3 and type(a3.RefreshAll) == "function" then
         a3.RefreshAll()
     end
 
@@ -734,10 +766,14 @@ function State.CancelAll()
     end
 
     PublishCompat("MSUF_UnitPreviewActive", false)
-    if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
+    local didPreviewSync = false
+    if _G.MSUF_SyncAllUnitPreviews then
+        _G.MSUF_SyncAllUnitPreviews()
+        didPreviewSync = true
+    end
     do
         local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
+        if not didPreviewSync and a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
     end
 
     NotifyListeners()

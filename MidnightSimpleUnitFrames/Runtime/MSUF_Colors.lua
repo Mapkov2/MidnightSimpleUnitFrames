@@ -24,10 +24,12 @@ local C_Timer               = C_Timer
 local _G                    = _G
 local type                  = type
 local tonumber              = tonumber
+local debugprofilestop      = _G.debugprofilestop
 local RunNextFrame          = _G.MSUF_RunNextFrame or _G.MSUF_Core_RunNextFrame or function(fn)
     if type(fn) ~= "function" then return end
     C_Timer.After(0, fn)
 end
+local COLOR_PUSH_DELAY      = 0.04
 
 ---
 --- P0 perf: Cached DB resolver.
@@ -63,6 +65,36 @@ end
 --- We batch into a single C_Timer.After(0) flush.
 ---
 local _pushPending = false
+local function _ProfileStart()
+    local profiler = MSUF and MSUF.MSUF2
+    if profiler and type(profiler.ProfileStart) == "function" then
+        return profiler.ProfileStart()
+    end
+    return debugprofilestop and debugprofilestop() or nil
+end
+
+local function _ProfileStop(key, started)
+    local profiler = MSUF and MSUF.MSUF2
+    if profiler and type(profiler.ProfileStop) == "function" then
+        profiler.ProfileStop("colorPush", key, started)
+    end
+end
+
+local function _ProfiledCall(key, fn, ...)
+    if type(fn) ~= "function" then return false end
+    local started = _ProfileStart()
+    fn(...)
+    _ProfileStop(key, started)
+    return true
+end
+
+local function _RefreshUnitFrameColors()
+    if _ProfiledCall("UF.RefreshColors", _G.MSUF_RefreshAllFrameColors) then return end
+    if _ProfiledCall("UF.RefreshColors", MSUF and MSUF.UF and MSUF.UF.RefreshColors) then return end
+    _ProfiledCall("UF.RefreshIdentityColors", _G.MSUF_RefreshAllIdentityColors)
+    _ProfiledCall("UF.RefreshPowerTextColors", _G.MSUF_RefreshAllPowerTextColors)
+end
+
 local function _RefreshAllBarBackgroundVisuals()
     local applyBg = _G.MSUF_ApplyBarBackgroundVisual
     local refreshHP = _G.MSUF_UFCore_RefreshHealthBarColor
@@ -85,6 +117,7 @@ local function _RefreshAllBarBackgroundVisuals()
 end
 
 local function _PushVisualUpdates_Flush()
+    local flushStarted = _ProfileStart()
     --- PERF (4.22 Beta hotfix): pending flag stays TRUE during the entire
     --- flush body. The fallback path's pending dedup remains correct: any
     --- PushVisualUpdates() call during this flush is dropped, and the next
@@ -95,36 +128,21 @@ local function _PushVisualUpdates_Flush()
     ExportPublic("MSUF_ColorStyleRevision", (_G.MSUF_ColorStyleRevision or 0) + 1)
     --- Invalidate settings cache so color tint fields (powerBgTint, barBgTint,
     --- aggro/dispel/purge, etc.) are re-read from DB before frames refresh.
-    if _G.MSUF_UFCore_RefreshSettingsCache then
-        _G.MSUF_UFCore_RefreshSettingsCache("COLOR_CHANGE")
-    end
-    _RefreshAllBarBackgroundVisuals()
+    _ProfiledCall("UF.RefreshSettingsCache", _G.MSUF_UFCore_RefreshSettingsCache, "COLOR_CHANGE")
+    _ProfiledCall("BarBackgroundVisuals", _RefreshAllBarBackgroundVisuals)
 
     --- Rebuild the shared dispel color curve from the DB (per-type Magic /
     --- Curse / Disease / Poison / Bleed swatches from the Colors panel).
     --- Consumed by GF overlay, UF border highlight, and corner indicators -
     --- all of which pass curve output straight to C-side texture sinks.
     if MSUF and MSUF.GF and type(MSUF.GF.RebuildDispelColorCurve) == "function" then
-        MSUF.GF.RebuildDispelColorCurve()
+        _ProfiledCall("GF.RebuildDispelColorCurve", MSUF.GF.RebuildDispelColorCurve)
     end
 
-    local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or MSUF.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts
-    if type(fnFonts) == "function" then
-        fnFonts()
-    end
-    if _G.MSUF_RefreshAllIdentityColors then
-        _G.MSUF_RefreshAllIdentityColors()
-    end
-    if _G.MSUF_RefreshAllPowerTextColors then
-        _G.MSUF_RefreshAllPowerTextColors()
-    end
+    _RefreshUnitFrameColors()
+    _ProfiledCall("CastbarVisuals", _G.MSUF_UpdateCastbarVisuals)
     if MSUF.MSUF_ApplyGameplayVisuals then
-        MSUF.MSUF_ApplyGameplayVisuals()
-    end
-    if MSUF.MSUF_RefreshAllFrames then
-        MSUF.MSUF_RefreshAllFrames()
-    elseif _G.MSUF_RefreshAllFrames then
-        _G.MSUF_RefreshAllFrames()
+        _ProfiledCall("GameplayVisuals", MSUF.MSUF_ApplyGameplayVisuals)
     end
     --- Group Frames have their own render/dirty pipeline; refresh it explicitly
     --- so shared bar-color swatches (absorb/heal-absorb, borders, etc.) live-apply.
@@ -132,38 +150,37 @@ local function _PushVisualUpdates_Flush()
         local gf = MSUF and MSUF.GF
         local refreshGFColors = (gf and gf.RefreshColors) or _G.MSUF_GF_RefreshColors
         if type(refreshGFColors) == "function" then
-            refreshGFColors()
+            _ProfiledCall("GF.RefreshColors", refreshGFColors)
         end
     end
 
     --- Sync highlight priority stripe colors when border colors change.
-    local reinit = _G.MSUF_PrioRows_Reinit
-    if type(reinit) == "function" then reinit() end
+    _ProfiledCall("PrioRows.Reinit", _G.MSUF_PrioRows_Reinit)
 
     --- Live-update static bar outlines and highlight test border colors.
     do
         local applyAll = _G.MSUF_ApplyBarOutlineThickness_All
-        if type(applyAll) == "function" then applyAll() end
+        _ProfiledCall("BarOutline.Refresh", applyAll)
     end
-    if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then
-        _G.MSUF_ApplyRoundedUnitframes()
-    end
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-        _G.MSUF_UFPreview_RequestRefresh("MSUF_COLOR_CHANGE")
-    end
+    _ProfiledCall("RoundedFrames.Refresh", _G.MSUF_ApplyRoundedUnitframes)
+    _ProfiledCall("UnitPreview.RequestRefresh", _G.MSUF_UFPreview_RequestRefresh, "MSUF_COLOR_CHANGE")
 
     --- Repaint the mouseover highlight cache so colour/size edits apply live.
-    if _G.MSUF_RefreshMouseoverHighlight then
-        _G.MSUF_RefreshMouseoverHighlight()
-    end
+    _ProfiledCall("MouseoverHighlight.Refresh", _G.MSUF_RefreshMouseoverHighlight)
 
     --- Pending flag cleared at END (see header comment for rationale).
     _pushPending = false
+    _ProfileStop("Flush", flushStarted)
 end
 
 local function PushVisualUpdates()
+    local delay = _G.MSUF_ScheduleDelayOnce
+    if type(delay) == "function" then
+        delay("COLOR_PUSH_VISUALS", COLOR_PUSH_DELAY, _PushVisualUpdates_Flush)
+        return
+    end
     local sched = _G.MSUF_ScheduleOnce
-    if sched then
+    if type(sched) == "function" then
         sched("COLOR_PUSH_VISUALS", _PushVisualUpdates_Flush)
         return
     end
