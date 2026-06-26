@@ -110,7 +110,7 @@ function A.DiagnosticsRegistry.BuildAuraDiagnostic(ctx)
                 AddGroupAuraFilterDiagnostics(scope, label, lane, issues, choices)
             end
             if #issues == 0 then
-                return label .. " group aura check: the requested aura lanes are enabled, max icon counts are above zero, and The category and filter settings look OK. If they are still missing, check the active group context and whether the aura exists on party or raid members."
+                return label .. " group aura check: the requested aura lanes are enabled, max icon counts are above zero, and native filter settings look OK. If they are still missing, check the active group context and whether the aura exists on party or raid members."
             end
             return AppendFixChoices(label .. " group aura check:\n" .. table.concat(issues, "\n"), choices)
         end
@@ -149,7 +149,7 @@ function A.DiagnosticsRegistry.BuildAuraDiagnostic(ctx)
         end
         AddUnitAuraBlacklistDiagnostics(scope, label, issues, choices)
         if #issues == 0 then
-            return label .. " aura check: the requested aura lanes are enabled, and the filter, custom ignore, and hidden-aura settings look OK. If a specific aura is still missing, check whether that aura is currently active and allowed by Blizzard or unit ownership rules."
+            return label .. " aura check: the requested aura lanes are enabled, and native filter settings look OK. If a specific aura is still missing, check whether that aura is currently active and allowed by Blizzard or unit ownership rules."
         end
         return AppendFixChoices(label .. " aura check:\n" .. table.concat(issues, "\n"), choices)
     end

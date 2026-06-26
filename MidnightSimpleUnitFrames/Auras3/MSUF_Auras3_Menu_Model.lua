@@ -232,8 +232,8 @@ local LANE_STYLE_KEYS = {
 }
 
 local RUNTIME_FILTER_KEYS = {
-    buffs = { "onlyMine", "onlyImportant", "includeStealable", "exclusive" },
-    debuffs = { "onlyMine", "onlyImportant", "exclusive" },
+    buffs = { "onlyMine", "raid", "raidInCombat", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "exclusive" },
+    debuffs = { "onlyMine", "raid", "raidInCombat", "includeDispellable", "crowdControl", "exclusive" },
 }
 
 local DEFAULT_SHARED = {
@@ -297,21 +297,20 @@ local DEFAULT_SHARED = {
         enabled = true,
         buffs = {
             onlyMine = false,
-            onlyImportant = false,
-            includeStealable = false,
             raid = false,
+            raidInCombat = false,
             cancelable = false,
             notCancelable = false,
+            externalDefensive = false,
+            bigDefensive = false,
             exclusive = "none",
         },
         debuffs = {
             onlyMine = false,
-            onlyImportant = false,
             includeDispellable = false,
             raid = false,
-            boss = false,
-            dispellable = false,
-            notDispellable = false,
+            raidInCombat = false,
+            crowdControl = false,
             exclusive = "none",
         },
     },
@@ -701,6 +700,42 @@ GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPELLS = GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPE
 GF_AURA_FILTER.PUBLIC_AURA_PRESET_META = GF_AURA_FILTER.PUBLIC_AURA_PRESET_META or FALLBACK_PUBLIC_AURA_META
 GF_AURA_FILTER.DECLASSIFIED_SPELLS = GF_AURA_FILTER.DECLASSIFIED_SPELLS or GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPELLS
 GF_AURA_FILTER.DECLASSIFIED_META = GF_AURA_FILTER.DECLASSIFIED_META or GF_AURA_FILTER.PUBLIC_AURA_PRESET_META
+GF_AURA_FILTER.BUFF_FILTER_ITEMS = {
+    { value = "ALL", text = "All Buffs" },
+    { value = "PLAYER", text = "My Buffs Only" },
+    { value = "RAID", text = "Raid Buffs" },
+    { value = "RAID_IN_COMBAT", text = "Raid In Combat" },
+    { value = "EXTERNAL_DEFENSIVE", text = "External Defensive" },
+    { value = "BIG_DEFENSIVE", text = "Big Defensive" },
+}
+GF_AURA_FILTER.DEBUFF_FILTER_ITEMS = {
+    { value = "ALL", text = "All Debuffs" },
+    { value = "PLAYER", text = "My Debuffs Only" },
+    { value = "RAID", text = "Raid Debuffs" },
+    { value = "RAID_IN_COMBAT", text = "Raid In Combat" },
+    { value = "RAID_PLAYER_DISPELLABLE", text = "Dispellable" },
+    { value = "CROWD_CONTROL", text = "Crowd Control" },
+}
+local GF_NATIVE_BUFF_TOKENS = {
+    PLAYER = true, RAID = true, RAID_IN_COMBAT = true, EXTERNAL_DEFENSIVE = true, BIG_DEFENSIVE = true,
+}
+local GF_NATIVE_DEBUFF_TOKENS = {
+    PLAYER = true, RAID = true, RAID_IN_COMBAT = true, RAID_PLAYER_DISPELLABLE = true, CROWD_CONTROL = true,
+}
+local function ResolveGFNativeFilter(token, baseFilter, validTokens)
+    token = tostring(token or "ALL"):upper()
+    if token == "DISPELLABLE" then token = "RAID_PLAYER_DISPELLABLE" end
+    if token == "ALL" or token == "" then return baseFilter end
+    if validTokens[token] then return baseFilter .. "|" .. token end
+    return baseFilter
+end
+GF_AURA_FILTER.ResolveBuffFilter = function(token)
+    return ResolveGFNativeFilter(token, "HELPFUL", GF_NATIVE_BUFF_TOKENS)
+end
+GF_AURA_FILTER.ResolveDebuffFilter = function(token)
+    return ResolveGFNativeFilter(token, "HARMFUL", GF_NATIVE_DEBUFF_TOKENS)
+end
+GF_AURA_FILTER.EXTERNALS_TOKEN = "HELPFUL|BIG_DEFENSIVE"
 GF_AURA_FILTER.BuildBlacklistHash = GF_AURA_FILTER.BuildBlacklistHash or BuildGroupBlacklistHash
 GF_AURA_FILTER.InvalidateBlacklistHash = GF_AURA_FILTER.InvalidateBlacklistHash or function(group)
     if type(group) == "table" then _gfBlacklistHashCache[group] = nil end
@@ -1293,6 +1328,7 @@ function Model.ReadFilter(scope, kind, key, defaultValue)
     local group = filters and filters[tableKey]
     if type(group) ~= "table" then return defaultValue end
     local value = group[key]
+    if key == "exclusive" and value == "important" then return "none" end
     if value ~= nil then return value end
     return defaultValue
 end
@@ -1302,14 +1338,8 @@ function Model.WriteFilter(scope, kind, key, value)
     kind = NormalizeKind(kind)
     local tableKey = kind == "buff" and "buffs" or "debuffs"
     if type(filters[tableKey]) ~= "table" then filters[tableKey] = {} end
+    if key == "exclusive" and value == "important" then value = "none" end
     filters[tableKey][key] = value
-    if key == "exclusive" then
-        filters[tableKey].onlyImportant = value == "important"
-    elseif key == "onlyImportant" and value == true then
-        filters[tableKey].exclusive = "important"
-    elseif key == "onlyImportant" and value ~= true and filters[tableKey].exclusive == "important" then
-        filters[tableKey].exclusive = "none"
-    end
 end
 
 function Model.ScopeFiltersEnabled(scope)
@@ -1367,13 +1397,20 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
 
     if type(filters.buffs) == "table" then
         filters.buffs.onlyMine = false
-        filters.buffs.onlyImportant = false
-        filters.buffs.includeStealable = false
+        filters.buffs.raid = false
+        filters.buffs.raidInCombat = false
+        filters.buffs.cancelable = false
+        filters.buffs.notCancelable = false
+        filters.buffs.externalDefensive = false
+        filters.buffs.bigDefensive = false
         filters.buffs.exclusive = "none"
     end
     if type(filters.debuffs) == "table" then
         filters.debuffs.onlyMine = false
-        filters.debuffs.onlyImportant = false
+        filters.debuffs.raid = false
+        filters.debuffs.raidInCombat = false
+        filters.debuffs.includeDispellable = false
+        filters.debuffs.crowdControl = false
         filters.debuffs.exclusive = "none"
     end
     if NormalizeScope(scope) == "shared" and type(shared) == "table" then

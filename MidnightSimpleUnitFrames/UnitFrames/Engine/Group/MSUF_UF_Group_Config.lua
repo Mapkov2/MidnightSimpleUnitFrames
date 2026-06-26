@@ -703,7 +703,13 @@ function GF.GetBlizzardAuraTypeFlags(conf)
     IsBlizzardAuraTypeEnabled(conf, "privateAuras")
 end
 
+local NATIVE_AURA_BLACKLIST_HASHES_ENABLED = false
+
 local function AuraBlacklistHash(kind, groupKey, group)
+  -- 12.1 native AuraContainers cannot consume addon SpellID/category
+  -- blacklist hashes. Keep saved legacy data out of compiled group specs.
+  if not NATIVE_AURA_BLACKLIST_HASHES_ENABLED then return nil end
+
   local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
   if filter and filter.GetBlacklistHashForGroup then
     return filter.GetBlacklistHashForGroup(kind, groupKey)

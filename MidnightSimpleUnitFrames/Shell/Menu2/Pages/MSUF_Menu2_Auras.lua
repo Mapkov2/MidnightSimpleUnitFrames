@@ -28,8 +28,24 @@ local AURA_SCOPE_LABELS = { shared = "Shared", player = "Player", target = "Targ
 local AURA_SCOPE_VALID = M.KeySetFromWords "shared player target focus boss party raid"
 local AURA_GROUP_SCOPES = M.KeySetFromWords "party raid mythicraid"
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
-local BUFF_EXCLUSIVE = VTP "none=None|important=Important"
-local DEBUFF_EXCLUSIVE = VTP "none=None|important=Important|raid=Raid|all=All"
+local BUFF_EXCLUSIVE = VTP "none=None"
+local DEBUFF_EXCLUSIVE = VTP "none=None|raid=Raid"
+local NATIVE_EXACT_AURA_FILTERS_ENABLED = false
+local NATIVE_EXACT_AURA_FILTERS_DISABLED_TEXT = "Temporarily disabled for 12.1 native AuraContainers. Blizzard currently exposes filter strings only, not SpellID whitelist/blacklist predicates."
+local GROUP_NATIVE_FILTER_LABELS = {
+    ALL = "All",
+    PLAYER = "Player",
+    RAID = "Raid",
+    RAID_IN_COMBAT = "Raid In Combat",
+    RAID_PLAYER_DISPELLABLE = "Dispellable",
+    EXTERNAL_DEFENSIVE = "External Defensive",
+    BIG_DEFENSIVE = "Big Defensive",
+    CROWD_CONTROL = "Crowd Control",
+}
+local GROUP_NATIVE_FILTER_ALLOWED = {
+    buff = M.KeySetFromWords "ALL PLAYER RAID RAID_IN_COMBAT EXTERNAL_DEFENSIVE BIG_DEFENSIVE",
+    debuff = M.KeySetFromWords "ALL PLAYER RAID RAID_IN_COMBAT RAID_PLAYER_DISPELLABLE CROWD_CONTROL",
+}
 local function Tr(text)
     if type(M.Tr) == "function" then return M.Tr(text) end
     return text
@@ -385,21 +401,26 @@ end
 local function GroupFilterValues(groupKey)
     local af = AuraFilter()
     local source = groupKey == "debuff" and af and af.DEBUFF_FILTER_ITEMS or af and af.BUFF_FILTER_ITEMS
+    local allowed = GROUP_NATIVE_FILTER_ALLOWED[groupKey == "debuff" and "debuff" or "buff"]
     local out = {}
     if type(source) == "table" then
         for i = 1, #source do
             local item = source[i]
-            if item then
+            local value = item and tostring(item.value or item.key or ""):upper()
+            if value == "DISPELLABLE" then value = "RAID_PLAYER_DISPELLABLE" end
+            if allowed[value] then
                 out[#out + 1] = {
-                    value = item.value or item.key,
-                    text = item.text or item.label or tostring(item.value or item.key or ""),
+                    value = value,
+                    text = GROUP_NATIVE_FILTER_LABELS[value] or item.text or item.label or value,
                 }
             end
         end
     end
     if #out > 0 then return out end
-    if groupKey == "buff" then return VT("ALL", "All Buffs", "PLAYER", "My Buffs Only", "RAID", "Raid Buffs", "IMPORTANT", "Important") end
-    return VT("ALL", "All Debuffs", "PLAYER", "My Debuffs Only", "RAID", "Boss / Raid", "DISPELLABLE", "Dispellable", "IMPORTANT", "Important")
+    if groupKey == "buff" then
+        return VT("ALL", "All Buffs", "PLAYER", "My Buffs Only", "RAID", "Raid Buffs", "RAID_IN_COMBAT", "Raid In Combat", "EXTERNAL_DEFENSIVE", "External Defensive", "BIG_DEFENSIVE", "Big Defensive")
+    end
+    return VT("ALL", "All Debuffs", "PLAYER", "My Debuffs Only", "RAID", "Raid Debuffs", "RAID_IN_COMBAT", "Raid In Combat", "RAID_PLAYER_DISPELLABLE", "Dispellable", "CROWD_CONTROL", "Crowd Control")
 end
 local function GFAnchorValues()
     local values = GP.STATUS_ICON_ANCHORS or GP.AURA_ANCHORS
@@ -666,7 +687,7 @@ local function BuildUnitStyle(ctx, b, scope)
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
         W.SetControlsEnabled(styleControls, editable)
         if useShared then W.SetControlEnabled(useShared, true) end
-        hint:SetText(editable and "Font family follows Global Style > Fonts. Filters and blacklists live on Filters." or "This scope inherits the Shared aura style.")
+        hint:SetText(editable and "Font family follows Global Style > Fonts. Legacy blacklists are read-only on Filters." or "This scope inherits the Shared aura style.")
     end)
 end
 local function BuildGroupStyle(ctx, b, scope)
@@ -808,7 +829,7 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
         end)
     W.LabelAt(section, "Filter Type", 24, -108, 90, "GameFontNormalSmall", T.colors.accent)
     BuildLaneTabs(ctx, section, "auraFilterLane", 118, -104, min(280, w - 160))
-    local card = Card(section, laneTitle, "Rules for " .. ScopeLabel(scope) .. ".", 24, -152, w - 48, 286)
+    local card = Card(section, laneTitle, "Rules for " .. ScopeLabel(scope) .. ".", 24, -152, w - 48, 336)
     local colW = max(280, floor(((w - 48) - 46) / 2))
     local rightX = 24 + colW
     local function FilterToggle(label, key, x, y, tip)
@@ -826,28 +847,30 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
     local filterSpecs = lane == "buff" and {
         { "Player", "onlyMine", 1, 1, "Auras applied by the player." },
         { "Raid", "raid", 1, 2, "Raid-useful public Buffs." },
-        { "Cancelable", "cancelable", 1, 3, "Buffs that can be cancelled." },
-        { "Not Cancelable", "notCancelable", 2, 1, "Buffs that cannot be cancelled." },
-        { "Stealable", "includeStealable", 2, 2, "Stealable Buff marker." },
+        { "Raid In Combat", "raidInCombat", 1, 3, "Buffs Blizzard flags for raid frames while in combat." },
+        { "External Defensive", "externalDefensive", 1, 4, "External defensive Buffs from Blizzard's native filter." },
+        { "Big Defensive", "bigDefensive", 2, 1, "Major defensive Buffs from Blizzard's native filter." },
+        { "Cancelable", "cancelable", 2, 2, "Buffs that can be cancelled." },
+        { "Not Cancelable", "notCancelable", 2, 3, "Buffs that cannot be cancelled." },
     } or {
         { "Player", "onlyMine", 1, 1, "Debuffs applied by the player." },
         { "Raid", "raid", 1, 2, "Raid and encounter Debuffs." },
-        { "Dispellable", "includeDispellable", 1, 3, "Dispellable Debuffs." },
-        { "Not Dispellable", "notDispellable", 2, 1, "Non-dispellable Debuffs." },
-        { "Boss", "boss", 2, 2, "Boss Debuffs." },
+        { "Raid In Combat", "raidInCombat", 1, 3, "Debuffs Blizzard flags for raid frames while in combat." },
+        { "Dispellable", "includeDispellable", 2, 1, "Debuffs Blizzard marks as dispellable by the player." },
+        { "Crowd Control", "crowdControl", 2, 2, "Crowd-control Debuffs from Blizzard's native filter." },
     }
     M.BuildControlSpecs(filterSpecs, {
         ["*"] = function(s) return FilterToggle(s[1], s[2], s[3] == 2 and rightX or 16, -100 - ((s[4] - 1) * 34), s[5]) end,
     })
     local exclusiveValues = lane == "buff" and BUFF_EXCLUSIVE or DEBUFF_EXCLUSIVE
     local exclusiveEvent = lane == "buff" and "AURAS3_FILTER_BUFF_EXCLUSIVE" or "AURAS3_FILTER_DEBUFF_EXCLUSIVE"
-    filterControls[#filterControls + 1] = BindDropdown(ctx, card, "Exclusive Filter", rightX, -204, exclusiveValues, min(250, colW - 32),
+    filterControls[#filterControls + 1] = BindDropdown(ctx, card, "Exclusive Filter", rightX, -250, exclusiveValues, min(250, colW - 32),
         function() return Model.ReadFilter(scope, lane, "exclusive", "none") end,
         function(v)
             Model.WriteFilter(scope, lane, "exclusive", v or "none")
             ApplyUnit(ctx, scope, exclusiveEvent, true)
         end)
-    W.Text(section, "Blacklist entries below apply to both Buff and Debuff preparation for the selected unit-frame scope.", 24, -456, w - 48, T.colors.muted)
+    W.Text(section, "Native 12.1 AuraContainers currently support Blizzard filter tokens only. Exact SpellID whitelist/blacklist data is shown below as read-only legacy data.", 24, -506, w - 48, T.colors.muted)
     M.TrackRefresh(ctx, function()
         local customRules = scope == "shared" or not Model.UseSharedRules(scope)
         local filtersOn = customRules and Model.ScopeFiltersEnabled(scope)
@@ -861,7 +884,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
     local w = section._msuf2Width or b.width or 720
     local colW = max(310, floor((w - 68) / 2))
     local rightX = 36 + colW + 24
-    local editEnabled = scope == "shared" or not Model.UseSharedBlacklist(scope)
+    local editEnabled = NATIVE_EXACT_AURA_FILTERS_ENABLED and (scope == "shared" or not Model.UseSharedBlacklist(scope))
     local useShared
     if scope ~= "shared" then
         useShared = BindSwitch(ctx, section, "Use Shared Blacklist", 24, -42, 210,
@@ -871,8 +894,8 @@ local function BuildUnitBlacklist(ctx, b, scope)
                 ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_INHERIT", true)
             end)
     end
-    local manual = Card(section, "Blacklist", "Prepared spell-ID list for Buff and Debuff filtering.", 24, -72, colW, 222)
-    local preset = Card(section, "Blacklist Presets", "Curated aura ID groups that can be added to the blacklist.", rightX, -72, colW, 222)
+    local manual = Card(section, "Blacklist", "Read-only legacy SpellID list for Buff and Debuff filtering.", 24, -72, colW, 222)
+    local preset = Card(section, "Blacklist Presets", "Read-only legacy aura ID groups.", rightX, -72, colW, 222)
     local inputValue = ""
     local input = BindTextInput(ctx, manual, "Spell ID, spell link, or resolvable spell name", 16, -82, colW - 32,
         function() return inputValue end,
@@ -893,7 +916,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
         Model.RemoveBlacklistSpell(scope, value)
         ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_REMOVE", true)
     end)
-    W.Text(manual, "Names must resolve to a spell ID before they can be prepared.", 16, -176, colW - 32, T.colors.muted)
+    W.Text(manual, NATIVE_EXACT_AURA_FILTERS_DISABLED_TEXT, 16, -176, colW - 32, T.colors.muted)
     local function CurrentPreset()
         local key = M.auraBlacklistPreset or "RAID_BUFFS"
         local values = Model.BlacklistPresetValues()
@@ -941,7 +964,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
     local current = Card(section, "Current List", nil, 24, -318, w - 48, 184)
     local prepared = W.Text(current, "", 16, -18, w - 80, T.colors.accent)
     local emptyText = W.Text(current, "No blacklisted spells.", 16, -48, w - 80, T.colors.muted)
-    local moreText = W.Text(current, "Click an entry to remove it.", 16, -164, w - 80, T.colors.muted)
+    local moreText = W.Text(current, "Read-only while the 12.1 native backend is active.", 16, -164, w - 80, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, current, "UIPanelScrollFrameTemplate")
     listScroll:SetPoint("TOPLEFT", current, "TOPLEFT", 16, -42)
     listScroll:SetSize(w - 82, 116)
@@ -987,8 +1010,8 @@ local function BuildUnitBlacklist(ctx, b, scope)
         return row
     end
     M.TrackRefresh(ctx, function()
-        editEnabled = scope == "shared" or not Model.UseSharedBlacklist(scope)
-        if useShared then W.SetControlEnabled(useShared, scope ~= "shared") end
+        editEnabled = NATIVE_EXACT_AURA_FILTERS_ENABLED and (scope == "shared" or not Model.UseSharedBlacklist(scope))
+        if useShared then W.SetControlEnabled(useShared, false) end
         W.SetControlsEnabled(blacklistEditControls, editEnabled)
         local count = Model.BlacklistPreparedCount(scope)
         prepared:SetText(count == 1 and "1 prepared blacklist entry" or (tostring(count) .. " prepared blacklist entries"))
@@ -1022,6 +1045,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
                 row.text:SetPoint("RIGHT", row, "RIGHT", -8, 0)
                 row.text:SetText(item.text or item.value or "")
                 row:SetAlpha(editEnabled and 1 or 0.55)
+                if row.EnableMouse then row:EnableMouse(editEnabled) end
                 row:Show()
             elseif row then
                 row._msufValue = nil
@@ -1081,10 +1105,11 @@ local function BuildGroupFilters(ctx, b, scope)
     BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180))
     local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
     BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
-    W.Text(filter, "Use category blacklist below to exclude public " .. laneText .. " groups.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
-    local blacklist = Card(section, "Category Blacklist", "Checked categories are hidden for " .. ScopeLabel(scope) .. ".", 24, -304, w - 48, 324)
+    W.Text(filter, "Category blacklist data below is read-only in the native 12.1 backend.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
+    local blacklist = Card(section, "Category Blacklist", "Read-only legacy category data for " .. ScopeLabel(scope) .. ".", 24, -304, w - 48, 324)
     W.LabelAt(blacklist, "Active", 16, -50, 70, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(blacklist, lane == "buff" and "Buff category blacklist" or "Debuff category blacklist", 86, -50, 260, "GameFontHighlightSmall", T.colors.text)
+    W.Text(blacklist, NATIVE_EXACT_AURA_FILTERS_DISABLED_TEXT, 16, -72, w - 96, T.colors.muted)
     local af = AuraFilter()
     local meta = af and af.DECLASSIFIED_META
     if not (type(meta) == "table" and #meta > 0) then
@@ -1094,7 +1119,8 @@ local function BuildGroupFilters(ctx, b, scope)
     local half = ceil(#meta / 2)
     local catColW = max(230, floor((w - 104) / 2))
     local x2 = 16 + catColW + 24
-    local startY = -98
+    local startY = -120
+    local categoryControls = {}
     for i = 1, #meta do
         local cat = meta[i]
         local col = i <= half and 0 or 1
@@ -1104,11 +1130,15 @@ local function BuildGroupFilters(ctx, b, scope)
             function() return GFReadBlacklistCat(scope, lane, cat.key) end,
             function(v) GFWriteBlacklistCat(scope, lane, cat.key, v) end)
         if cat.tooltip then AddTooltip(toggle, CategoryLabel(cat), cat.tooltip) end
+        categoryControls[#categoryControls + 1] = toggle
     end
+    M.TrackRefresh(ctx, function()
+        W.SetControlsEnabled(categoryControls, NATIVE_EXACT_AURA_FILTERS_ENABLED)
+    end)
 end
 local function BuildAuraFiltersPage(ctx)
     local b = W.PageBuilder(ctx)
-    local scope = BuildAuraChrome(ctx, b, "Aura Filters", "Buff and Debuff filters, blacklists and group-frame category hiding.")
+    local scope = BuildAuraChrome(ctx, b, "Aura Filters", "Native 12.1 Buff and Debuff filters; legacy whitelist/blacklist data is read-only.")
     if IsGroupScope(scope) then
         BuildGroupFilters(ctx, b, scope)
     else

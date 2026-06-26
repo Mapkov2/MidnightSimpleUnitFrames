@@ -291,7 +291,7 @@ local AURA_QUICK_PRESETS = {
         label = "Clean",
         maxBuffs = 6, maxDebuffs = 12, perRow = 10, splitSpacing = 4, iconSize = 24, spacing = 2, sortOrder = 0,
         layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
-        hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = true,
+        hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true,
         includeDispellable = true, onlyMineBuffs = false, onlyMineDebuffs = false,
         highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
     },
@@ -299,7 +299,7 @@ local AURA_QUICK_PRESETS = {
         label = "Focused",
         maxBuffs = 10, maxDebuffs = 16, perRow = 10, splitSpacing = 6, iconSize = 26, spacing = 2, sortOrder = 3,
         layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
-        hidePermanent = false, buffIncludeBoss = true, debuffIncludeBoss = true, includeStealable = true,
+        hidePermanent = false, buffIncludeBoss = true, debuffIncludeBoss = true,
         includeDispellable = true, onlyMineBuffs = true, onlyMineDebuffs = true,
         highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
     },
@@ -307,7 +307,7 @@ local AURA_QUICK_PRESETS = {
         label = "Fast",
         maxBuffs = 4, maxDebuffs = 8, perRow = 8, splitSpacing = 2, iconSize = 22, spacing = 1, sortOrder = 0,
         layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
-        hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = false,
+        hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true,
         includeDispellable = false, onlyMineBuffs = false, onlyMineDebuffs = false,
         highlightOwnBuffs = false, highlightOwnDebuffs = false, showCooldownSwipe = false, showCooldownText = true, showStackCount = false, useBlizzardTimerText = true,
     },
@@ -337,7 +337,7 @@ function M.ApplyAuraQuickPreset(scope, name, opts)
     layout.iconSize, layout.spacing = p.iconSize, p.spacing
     filters.hidePermanent = p.hidePermanent
     buffs.includeBoss, debuffs.includeBoss = p.buffIncludeBoss, p.debuffIncludeBoss
-    buffs.includeStealable, debuffs.includeDispellable = p.includeStealable, p.includeDispellable
+    debuffs.includeDispellable = p.includeDispellable
     buffs.onlyMine, debuffs.onlyMine = p.onlyMineBuffs, p.onlyMineDebuffs
     if sharedScope then
         local shared = AuraShared()

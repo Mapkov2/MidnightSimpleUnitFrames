@@ -2272,9 +2272,8 @@ filters = {
             }
         end
     end
-    --- Auras3: ensure curated IMPORTANT filter keys exist for existing profiles
-    --- IMPORTANT = Blizzard curated "important" aura list for unitframe aura APIs.
-    --- Split toggles: Buffs + Debuffs have their own IMPORTANT toggle (like Unhalted).
+    --- Auras3: keep legacy Important filter keys inert for existing profiles.
+    --- 12.1 native AuraContainers do not expose an IMPORTANT filter token.
     if MSUF_DB and MSUF_DB.auras3 then
         local a3 = MSUF_DB.auras3
         if type(a3.bossHealAuras) ~= "table" then a3.bossHealAuras = {} end
@@ -2287,19 +2286,15 @@ filters = {
             f.debuffs = (type(f.debuffs) == "table") and f.debuffs or {}
             local b, d = f.buffs, f.debuffs
 
-            --- One-time migration: legacy onlyImportantAuras -> per-type toggles
+            --- One-time migration: legacy onlyImportantAuras is retired.
             if f._msufA3_onlyImportantSplitMigrated_v1 ~= true then
-                if f.onlyImportantAuras == true then
-                    if b.onlyImportant == nil then b.onlyImportant = true end
-                    if d.onlyImportant == nil then d.onlyImportant = true end
-                    f.onlyImportantAuras = false
-                end
+                f.onlyImportantAuras = false
                 f._msufA3_onlyImportantSplitMigrated_v1 = true
             end
 
-            if f.onlyImportantAuras == nil then f.onlyImportantAuras = false end
-            if b.onlyImportant == nil then b.onlyImportant = false end
-            if d.onlyImportant == nil then d.onlyImportant = false end
+            f.onlyImportantAuras = false
+            b.onlyImportant = false
+            d.onlyImportant = false
         end
 
         if a3.shared and a3.shared.filters then
