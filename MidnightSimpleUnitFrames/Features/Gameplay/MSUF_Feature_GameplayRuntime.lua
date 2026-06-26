@@ -7,8 +7,8 @@ end
 
 -- Gameplay feature runtime.
 -- Coordinates optional gameplay overlays such as combat timer, crosshair, totem/statue
--- helpers, and First Dance tracking. Config writes are scheduled through the gameplay apply
--- queue so UI updates coalesce instead of rebuilding several feature frames per setting edit.
+-- helpers. Config writes are scheduled through the gameplay apply queue so UI updates coalesce
+-- instead of rebuilding several feature frames per setting edit.
 local CreateFrame   = CreateFrame
 local UIParent      = UIParent
 local C_Spell       = C_Spell
@@ -23,36 +23,12 @@ local math_min     = math.min
 local math_max     = math.max
 local IsAltKeyDown  = IsAltKeyDown
 local tonumber            = tonumber
-local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
-
-local function Tr(text)
-    if type(text) ~= "string" then return text end
-    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
-    local locale = MSUF.L or _G.MSUF_L
-    return (type(locale) == "table" and rawget(locale, text)) or text
-end
-
-local L_FIRST_DANCE_READY
-local L_FIRST_DANCE_FORMAT
-
-local function RefreshLocaleText()
-    L_FIRST_DANCE_READY = Tr("First Dance!")
-    L_FIRST_DANCE_FORMAT = Tr("First Dance: %.1f")
-end
-
-RefreshLocaleText()
-if type(MSUF.RegisterLocaleCallback) == "function" then
-    MSUF.RegisterLocaleCallback("MSUF_Gameplay", RefreshLocaleText)
-end
 
 local GameplayHelpers = MSUF.Gameplay or {}
-local GetPlayerSpecID, UpdateSubRogueCache = GameplayHelpers.GetPlayerSpecID, GameplayHelpers.UpdateSubRogueCache
+local GetPlayerSpecID = GameplayHelpers.GetPlayerSpecID
 local Clamp, RoundInt = GameplayHelpers.Clamp or _G._MSUF_Clamp, GameplayHelpers.RoundInt or _G._MSUF_RoundInt
 local CheckpointHistory, BeginHistory, CommitHistory = GameplayHelpers.CheckpointHistory, GameplayHelpers.BeginHistory, GameplayHelpers.CommitHistory
 local SelectNudgeFrame, SetupArrowNudge = GameplayHelpers.SelectNudgeFrame, GameplayHelpers.SetupArrowNudge
-local function MSUF_IsSubRogueCached()
-    return GameplayHelpers.IsSubRogueCached and GameplayHelpers.IsSubRogueCached() or false
-end
 
 local ScheduleOnce = _G.MSUF_ScheduleOnce
 local EventBus_Register = _G.MSUF_EventBus_Register
@@ -93,8 +69,6 @@ end
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local GetCameraZoom = GetCameraZoom
 
-local LibStub       = LibStub
-
 local GameplayDefaults = MSUF.MSUF_EnsureGameplayDefaults
 local GetGameplayDB = MSUF.MSUF_GetGameplayDBFast
 local GetGameplayFont = MSUF.MSUF_GetGameplayFontSettings
@@ -102,8 +76,6 @@ local NormalizeRGB = MSUF.MSUF_NormalizeRGB
 local MSUF_GetCombatStateColors = MSUF.MSUF_GetCombatStateColors
 
 local ApplyCombatStateDynamicColor
-local StartFirstDanceWindow
-local ApplyFirstDanceMasque
 
 local function GlobalFontTextAlpha()
     local g = _G.MSUF_DB and _G.MSUF_DB.general
@@ -213,13 +185,6 @@ local stateText
 local CombatStateOnEvent
 local crosshairFrame
 local crosshairEventFrame
-local danceFrame
-local danceText
-local danceIcon
-local danceCooldown
-local danceCDText
-
-local _FIRST_DANCE_ICON_ID = 236279
 
 local RequestCrosshairRangeRefresh
 local function ResolveCrosshairRangeSpellID(g)
@@ -333,67 +298,6 @@ local function _StopCombatTimerTick()
     MSUF._MSUF_CombatTimerLoopActive = nil
 end
 
-local FIRST_DANCE_WINDOW = 6
-local firstDanceActive = false
-local firstDanceEndTime = 0
-local firstDanceLastText = nil
-local firstDanceReady = false
-local firstDanceTickElapsed = 0
-
-local _TickFirstDance
-local UnregisterShadowDanceWatch
-
-local function ResetFirstDanceDisplay()
-    if danceText then danceText:SetText("") end
-    if danceCDText then danceCDText:SetText("") end
-    if danceCooldown and danceCooldown.SetCooldown then danceCooldown:SetCooldown(0, 0) end
-end
-
-local function StopFirstDanceTick()
-    firstDanceActive = false
-    firstDanceEndTime = 0
-    firstDanceLastText = nil
-    firstDanceTickElapsed = 0
-    if danceFrame then danceFrame:SetScript("OnUpdate", nil); danceFrame:SetOnUpdateMode("Disabled") end
-    ResetFirstDanceDisplay()
-end
-
-local function HideFirstDanceReady()
-    if UnregisterShadowDanceWatch then UnregisterShadowDanceWatch() end
-    firstDanceReady = false
-    if danceFrame then danceFrame:Hide() end
-    ResetFirstDanceDisplay()
-end
-
-local _SHADOW_DANCE_SPELL_ID = 185313
-local _fdShadowDanceFrame
-
-UnregisterShadowDanceWatch = function()
-    if _fdShadowDanceFrame then
-        _fdShadowDanceFrame:UnregisterAllEvents()
-    end
-end
-
-local function RegisterShadowDanceWatch()
-    if not MSUF_IsSubRogueCached() then return end
-    if not _fdShadowDanceFrame then
-        _fdShadowDanceFrame = CreateFrame("Frame")
-        _fdShadowDanceFrame:SetScript("OnEvent", function(_, _, _, _, spellID)
-            if spellID == _SHADOW_DANCE_SPELL_ID then
-                UnregisterShadowDanceWatch()
-                HideFirstDanceReady()
-                if not UnitAffectingCombat("player") then
-                    local gd = GetGameplayDB()
-                    if gd and gd.enableFirstDanceTimer then
-                        StartFirstDanceWindow()
-                    end
-                end
-            end
-        end)
-    end
-    _fdShadowDanceFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
-end
-
 local function SetCombatStateClickThrough(active)
     if not stateFrame then return end
 
@@ -452,167 +356,6 @@ local function ScheduleCombatStateClear(duration)
     end)
 end
 
-local function ApplyFirstDanceLockState()
-    if not danceFrame then return end
-    local g = GetGameplayDB()
-    SetAltDragMouse(danceFrame, g and g.enableFirstDanceTimer, g and g.lockFirstDance, g and g.firstDanceClickThrough)
-end
-
-local function EnsureFirstDanceFrame()
-    if danceFrame then return danceFrame end
-    local g = GameplayDefaults()
-
-    danceFrame = CreateMovableGameplayFrame("MSUF_FirstDanceFrame", 220, 60)
-    local startX, startY = tonumber(g.firstDanceOffsetX) or 0, tonumber(g.firstDanceOffsetY) or 80
-    danceFrame:SetPoint("CENTER", UIParent, "CENTER", startX, startY)
-    danceFrame._msufAppliedPositionX = startX
-    danceFrame._msufAppliedPositionY = startY
-    SetupArrowNudge(danceFrame,
-        function(self, dx, dy)
-            local db = GameplayDefaults()
-            if db.lockFirstDance then return false end
-            db.firstDanceOffsetX = Clamp(RoundInt((tonumber(db.firstDanceOffsetX) or 0) + (dx or 0)), -800, 800)
-            db.firstDanceOffsetY = Clamp(RoundInt((tonumber(db.firstDanceOffsetY) or 80) + (dy or 0)), -800, 800)
-            self:ClearAllPoints()
-            self:SetPoint("CENTER", UIParent, "CENTER", db.firstDanceOffsetX, db.firstDanceOffsetY)
-            self._msufAppliedPositionX = db.firstDanceOffsetX
-            self._msufAppliedPositionY = db.firstDanceOffsetY
-            SyncGameplayPanel("MSUF_SyncFirstDanceOffsetSliders")
-            ApplyFirstDanceLockState()
-            CheckpointHistory("First Dance position", "gameplay:firstDance:position")
-            return true
-        end,
-        function(self)
-            local gd = GameplayDefaults()
-            return gd.enableFirstDanceTimer and not gd.lockFirstDance and self.IsShown and self:IsShown()
-        end)
-
-    danceFrame:SetScript("OnDragStart", function(self)
-        local gd = GameplayDefaults()
-        if CanAltDrag(gd, "lockFirstDance", "firstDanceClickThrough") then
-            BeginGameplayDrag(self, "First Dance position", "gameplay:firstDance:position")
-        end
-    end)
-
-    danceFrame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        self._msufDragging = nil
-        local db = GameplayDefaults()
-        StoreCenteredOffset(self, db, "firstDanceOffsetX", "firstDanceOffsetY")
-        SyncGameplayPanel("MSUF_SyncFirstDanceOffsetSliders")
-        SelectNudgeFrame(self, true)
-        ApplyFirstDanceLockState()
-        CommitHistory(self)
-    end)
-
-    danceText = danceFrame:CreateFontString(nil, "OVERLAY")
-    danceText:SetPoint("CENTER")
-
-    local iconSz = g.firstDanceIconSize or 40
-    danceIcon = danceFrame:CreateTexture(nil, "ARTWORK")
-    MSUF_SetIconTexture(danceIcon, _FIRST_DANCE_ICON_ID, "")
-    danceIcon:SetSize(iconSz, iconSz)
-    danceIcon:SetPoint("CENTER")
-
-    danceCooldown = CreateFrame("Cooldown", "MSUF_FirstDanceCooldown", danceFrame, "CooldownFrameTemplate")
-    danceCooldown:SetAllPoints(danceIcon)
-    danceCooldown:SetDrawEdge(true)
-    danceCooldown:SetDrawSwipe(true)
-    danceCooldown:SetReverse(true)
-    danceCooldown:SetHideCountdownNumbers(true)
-
-    danceCDText = danceCooldown:CreateFontString(nil, "OVERLAY")
-    danceCDText:SetPoint("CENTER", danceCooldown, "CENTER", 0, 0)
-
-    ApplyFirstDanceLockState()
-
-    EnsureAltDragWatcher("_MSUF_FirstDanceModifierFrame", danceFrame, "enableFirstDanceTimer", "lockFirstDance", "firstDanceClickThrough")
-
-    return danceFrame
-end
-
-local function ApplyFirstDancePosition(g)
-    if not danceFrame or danceFrame._msufDragging then return end
-    g = g or GameplayDefaults()
-    local x, y = tonumber(g.firstDanceOffsetX) or 0, tonumber(g.firstDanceOffsetY) or 80
-    if danceFrame._msufAppliedPositionX == x and danceFrame._msufAppliedPositionY == y then return end
-    danceFrame:ClearAllPoints()
-    danceFrame:SetPoint("CENTER", UIParent, "CENTER", x, y)
-    danceFrame._msufAppliedPositionX = x
-    danceFrame._msufAppliedPositionY = y
-end
-
-local function ApplyFirstDanceDisplayMode()
-    if not danceFrame then return end
-    local g = GetGameplayDB()
-    local iconMode = (g.firstDanceShowIcon ~= false)
-    local iconSz = g.firstDanceIconSize or 40
-
-    if iconMode then
-        danceText:Hide()
-        danceIcon:SetSize(iconSz, iconSz)
-        danceIcon:Show()
-        danceCooldown:Show()
-        danceCDText:Show()
-        danceFrame:SetSize(iconSz + 4, iconSz + 4)
-        local applyMasque = MSUF.MSUF_FirstDance_ApplyMasque or ApplyFirstDanceMasque
-        if applyMasque then applyMasque() end
-    else
-        danceIcon:Hide()
-        danceCooldown:Hide()
-        danceCDText:Hide()
-        danceText:Show()
-        danceFrame:SetSize(220, 60)
-    end
-end
-
-do
-    local _fdMasqueGroup
-    local _fdMasqueRegistered = false
-
-    local function _FD_IsMasqueEnabled()
-        local shared = MSUF_DB and MSUF_DB.auras3 and MSUF_DB.auras3.shared
-        return shared and shared.masqueEnabled == true
-    end
-
-    local function _FD_EnsureMasqueGroup()
-        if _fdMasqueGroup then return _fdMasqueGroup end
-        local lib = LibStub("Masque", true)
-        if not lib then return nil end
-        local grp = lib:Group("Midnight Simple Unit Frames", "First Dance")
-        if not grp then return nil end
-        _fdMasqueGroup = grp
-        return grp
-    end
-
-    ApplyFirstDanceMasque = function()
-        if not _FD_IsMasqueEnabled() then
-            if _fdMasqueRegistered and _fdMasqueGroup then
-                _fdMasqueGroup:RemoveButton(danceFrame)
-                _fdMasqueRegistered = false
-            end
-            return
-        end
-
-        local grp = _FD_EnsureMasqueGroup()
-        if not grp then return end
-
-        if _fdMasqueRegistered then return end
-
-        grp:AddButton(danceFrame, { Icon = danceIcon, Cooldown = danceCooldown })
-        _fdMasqueRegistered = true
-        if grp.ReSkin then grp:ReSkin() end
-        local base = danceCooldown.GetFrameLevel and danceCooldown:GetFrameLevel() or 0
-        local overlay = CreateFrame("Frame", nil, danceCooldown)
-        overlay:SetAllPoints()
-        overlay:SetFrameLevel(base + 5)
-        danceCDText:SetParent(overlay)
-        danceCDText:ClearAllPoints()
-        danceCDText:SetPoint("CENTER")
-    end
-    MSUF.MSUF_FirstDance_ApplyMasque = ApplyFirstDanceMasque
-end
-
 local GAMEPLAY_FALLBACK_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local function ApplyGameplayFont(fs, path, size, flags)
@@ -629,24 +372,8 @@ local function ApplyGameplayFont(fs, path, size, flags)
     return false
 end
 
-local function ApplyFirstDanceFont()
-    local path, flags, r, gCol, bCol, size, useShadow = GetGameplayFont("state")
-    local g = GetGameplayDB()
-    local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
-
-    if not danceText then return end
-    ApplyGameplayFont(danceText, path, (size or 24), flags or "OUTLINE")
-    danceText:SetTextColor(lr, lg, lb, GlobalFontTextAlpha())
-    SetTextShadow(danceText, useShadow)
-
-    local iconSz = (g and g.firstDanceIconSize) or 40
-    ApplyGameplayFont(danceCDText, path, math_max(10, math.floor(iconSz * 0.45 + 0.5)), "OUTLINE")
-    danceCDText:SetTextColor(1, 1, 1, GlobalFontTextAlpha())
-    SetTextShadow(danceCDText, useShadow)
-end
-
 local function ApplyFontToCounter()
-    if not timerText and not stateText and not danceText then return end
+    if not timerText and not stateText then return end
     if timerText then
         local path, flags, r, g, b, size, useShadow = GetGameplayFont("timer")
         ApplyGameplayFont(timerText, path, size or 20, flags or "OUTLINE")
@@ -663,8 +390,6 @@ local function ApplyFontToCounter()
         SetTextShadow(stateText, useShadow)
         ApplyCombatStateDynamicColor()
     end
-
-    ApplyFirstDanceFont()
 end
 
 local EnsureCombatStateText
@@ -677,71 +402,25 @@ ApplyCombatStateDynamicColor = function()
     local er, eg, eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
 
     local st = stateText._msufLastState
-    if st == "leave" or st == "dance" then
+    if st == "leave" then
         stateText:SetTextColor(lr, lg, lb, GlobalFontTextAlpha())
     else
         stateText:SetTextColor(er, eg, eb, GlobalFontTextAlpha())
     end
 end
 
-StartFirstDanceWindow = function()
-    if not MSUF_IsSubRogueCached() then return end
-    local g = GetGameplayDB()
-
-    if not g or not g.enableFirstDanceTimer then
-        StopFirstDanceTick()
-        HideFirstDanceReady()
-        return
-    end
-
-    if not danceFrame then EnsureFirstDanceFrame() end
-
-    firstDanceEndTime = GetTime() + FIRST_DANCE_WINDOW
-    firstDanceActive = true
-    firstDanceReady = false
-    firstDanceLastText = nil
-    firstDanceTickElapsed = 0
-
-    ApplyFirstDanceFont()
-    ApplyFirstDanceDisplayMode()
-    ApplyFirstDancePosition(g)
-
-    if g.firstDanceShowIcon ~= false then
-        danceCooldown:SetCooldown(GetTime(), FIRST_DANCE_WINDOW)
-    end
-
-    danceFrame:Show()
-
-    danceFrame:SetOnUpdateMode("RunWhenVisible")
-    danceFrame:SetScript("OnUpdate", function(self, elapsed)
-        firstDanceTickElapsed = firstDanceTickElapsed + (elapsed or 0)
-        if firstDanceTickElapsed < 0.05 then return end
-        firstDanceTickElapsed = 0
-        _TickFirstDance()
-    end)
-
-end
-MSUF._MSUF_StartFirstDanceWindow = StartFirstDanceWindow
-
 CombatStateOnEvent = function(event)
     local g = GetGameplayDB()
-    if not g or (not g.enableCombatStateText and not (g.enableFirstDanceTimer and MSUF_IsSubRogueCached())) then
+    if not g or not g.enableCombatStateText then
         ClearCombatStateText()
         SetCombatStateClickThrough(false)
-        StopFirstDanceTick()
-        HideFirstDanceReady()
         return
     end
 
     local wantState = (g.enableCombatStateText == true)
-    local wantDance = (g.enableFirstDanceTimer == true) and MSUF_IsSubRogueCached()
     local duration = math_max(g.combatStateDuration or 1.5, 0.1)
 
     if event == "PLAYER_REGEN_DISABLED" then
-        local wasActive = firstDanceActive
-        StopFirstDanceTick()
-        if wasActive and not firstDanceReady and danceFrame then danceFrame:Hide() end
-
         if not wantState then
             ClearCombatStateText()
             SetCombatStateClickThrough(false)
@@ -752,9 +431,6 @@ CombatStateOnEvent = function(event)
         ShowCombatStateText("enter", TextOrDefault(g.combatStateEnterText, "+Combat"), er, eg, eb, true)
         ScheduleCombatStateClear(duration)
     elseif event == "PLAYER_REGEN_ENABLED" then
-        StopFirstDanceTick()
-        if wantDance and not firstDanceReady then StartFirstDanceWindow() end
-
         if not wantState then
             ClearCombatStateText()
             SetCombatStateClickThrough(false)
@@ -818,7 +494,7 @@ EnsureCombatStateText = function()
     local path, flags, r, gCol, bCol, size, useShadow = GetGameplayFont("state")
     ApplyGameplayFont(stateText, path, (size or 24), flags or "OUTLINE")
     local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
-    stateText._msufLastState = "dance"
+    stateText._msufLastState = "leave"
     stateText:SetTextColor(lr, lg, lb, GlobalFontTextAlpha())
     SetTextShadow(stateText, useShadow)
 
@@ -834,56 +510,6 @@ local function ApplyCombatStatePosition(g)
     stateFrame:SetPoint("CENTER", UIParent, "CENTER", x, y)
     stateFrame._msufAppliedPositionX = x
     stateFrame._msufAppliedPositionY = y
-end
-
-_TickFirstDance = function()
-    if not firstDanceActive then return end
-
-    local gFD = GetGameplayDB()
-    if not gFD or not gFD.enableFirstDanceTimer then
-        StopFirstDanceTick()
-        HideFirstDanceReady()
-        return
-    end
-
-    if not danceFrame then EnsureFirstDanceFrame() end
-
-    local now = GetTime()
-    local remaining = firstDanceEndTime - now
-    if remaining <= 0 then
-        StopFirstDanceTick()
-
-        if gFD.firstDanceShowReady then
-            firstDanceReady = true
-            RegisterShadowDanceWatch()
-            local iconMode = (gFD.firstDanceShowIcon ~= false)
-            if iconMode then
-                danceCDText:SetText("")
-                danceCooldown:SetCooldown(0, 0)
-                danceIcon:SetDesaturated(false)
-            else
-                danceText:SetText(L_FIRST_DANCE_READY)
-            end
-        else
-            if danceFrame then danceFrame:Hide() end
-        end
-        return
-    end
-
-    local iconMode = (gFD.firstDanceShowIcon ~= false)
-    if iconMode then
-        local text = string_format("%.1f", remaining)
-        if text ~= firstDanceLastText then
-            firstDanceLastText = text
-            danceCDText:SetText(text)
-        end
-    else
-        local text = string_format(L_FIRST_DANCE_FORMAT, remaining)
-        if text ~= firstDanceLastText then
-            firstDanceLastText = text
-            danceText:SetText(text)
-        end
-    end
 end
 
 local function MSUF_ShouldCrosshairFollowCamera()
@@ -1049,8 +675,6 @@ local function ApplyLockState()
             stateFrame:EnableMouse(false)
         end
     end
-
-    ApplyFirstDanceLockState()
 end
 
 local function ValidateCombatTimerAnchor(v)
@@ -1294,15 +918,13 @@ UpdateCrosshairRangeColor = function()
 end
 
 local function ApplyCombatStateText(g)
-    UpdateSubRogueCache()
     local wantState = (g.enableCombatStateText == true)
-    local wantDance = (g.enableFirstDanceTimer == true) and MSUF_IsSubRogueCached()
 
     if wantState then
         EnsureCombatStateText()
     end
 
-    if wantState or wantDance then
+    if wantState then
         BusRegister("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_STATE", CombatStateOnEvent)
         BusRegister("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_STATE", CombatStateOnEvent)
     else
@@ -1324,31 +946,6 @@ local function ApplyCombatStateText(g)
     else
         ClearCombatStateText()
         SetCombatStateClickThrough(false)
-    end
-
-    if wantDance then
-        EnsureFirstDanceFrame()
-        ApplyFirstDanceFont()
-        ApplyFirstDanceDisplayMode()
-        ApplyFirstDancePosition(g)
-
-        if not g.lockFirstDance and danceFrame and not firstDanceActive and not firstDanceReady then
-            local iconMode = (g.firstDanceShowIcon ~= false)
-            if iconMode then
-                danceCDText:SetText("6.0")
-            else
-                danceText:SetText(string_format(L_FIRST_DANCE_FORMAT, 6.0))
-            end
-            danceFrame:Show()
-        elseif danceFrame and not firstDanceActive and not firstDanceReady then
-            danceText:SetText("")
-            danceCDText:SetText("")
-            danceFrame:Hide()
-        end
-        ApplyFirstDanceLockState()
-    else
-        StopFirstDanceTick()
-        HideFirstDanceReady()
     end
 end
 
@@ -1505,10 +1102,6 @@ do
     MSUF.MSUF_SetEnabledMeleeRangeCheck = SetEnabledMeleeRangeCheck
     MSUF.MSUF_BuildMeleeSpellCache = function() end
     MSUF.MSUF_GetMeleeSpellCache = function() return meleeCache end
-    MSUF.MSUF_GetFirstDanceFrame = function() return danceFrame end
-    MSUF.MSUF_ApplyFirstDancePosition = ApplyFirstDancePosition
-    MSUF.MSUF_ApplyFirstDanceLockState = ApplyFirstDanceLockState
-    MSUF.MSUF_ApplyFirstDanceDisplayMode = ApplyFirstDanceDisplayMode
 end
 
 do
@@ -1517,7 +1110,6 @@ do
     _specChangeFrame:RegisterEvent("PLAYER_LOGIN")
     _specChangeFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     _specChangeFrame:SetScript("OnEvent", function()
-        if UpdateSubRogueCache then UpdateSubRogueCache() end
         if MSUF.MSUF_RequestGameplayApply then MSUF.MSUF_RequestGameplayApply() end
     end)
 end
@@ -1533,7 +1125,6 @@ do
             ExportPublic("MSUF_RequestGameplayApply", MSUF.MSUF_RequestGameplayApply)
         end
         if type(GameplayDefaults) == "function" then GameplayDefaults() end
-        if UpdateSubRogueCache then UpdateSubRogueCache() end
         if MSUF.MSUF_RequestGameplayApply then MSUF.MSUF_RequestGameplayApply() end
     end
 

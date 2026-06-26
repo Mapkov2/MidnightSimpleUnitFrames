@@ -2070,7 +2070,6 @@ end
     if gp.crosshairSize == nil then gp.crosshairSize = 40 end
     if gp.crosshairThickness == nil then gp.crosshairThickness = 2 end
     if gp.cooldownIcons == nil then gp.cooldownIcons = false end
-    if gp.enableFirstDanceTimer == nil then gp.enableFirstDanceTimer = false end
     if gp.nameplateMeleeSpellID == nil then gp.nameplateMeleeSpellID = 0 end
     --- Unitframe range-fade defaults are assigned with the unitframe defaults below.
 --- Gameplay: Crosshair melee range spell can optionally be stored per class.

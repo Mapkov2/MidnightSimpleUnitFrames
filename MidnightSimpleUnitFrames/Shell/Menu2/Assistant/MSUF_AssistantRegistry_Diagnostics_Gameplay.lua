@@ -56,7 +56,6 @@ function A.DiagnosticsRegistry.BuildGameplayDiagnostic(ctx)
         if feature == "combatTimer" then return "Combat Timer" end
         if feature == "combatState" then return "Combat Enter/Leave Text" end
         if feature == "playerTotems" then return "Totem Frame" end
-        if feature == "firstDance" then return "First Dance Tracker" end
         if feature == "combatCrosshair" then return "Combat Crosshair" end
         return "Gameplay features"
     end
@@ -71,7 +70,6 @@ function A.DiagnosticsRegistry.BuildGameplayDiagnostic(ctx)
             "Combat Timer: " .. OnOff(g.enableCombatTimer) .. ", size=" .. tostring(g.combatFontSize or 24) .. ", anchor=" .. tostring(g.combatTimerAnchor or "none"),
             "Combat Enter/Leave Text: " .. OnOff(g.enableCombatStateText) .. ", size=" .. tostring(g.combatStateFontSize or 24) .. ", duration=" .. tostring(g.combatStateDuration or 1.5),
             "Totem Frame: " .. OnOff(g.enablePlayerTotems) .. ", icon size=" .. tostring(g.playerTotemsIconSize or 24),
-            "First Dance Tracker: " .. OnOff(g.enableFirstDanceTimer) .. ", ready=" .. OnOff(g.firstDanceShowReady ~= false),
             "Combat Crosshair: " .. OnOff(g.enableCombatCrosshair) .. ", size=" .. tostring(g.crosshairSize or 40) .. ", thickness=" .. tostring(g.crosshairThickness or 3) .. ", melee spell=" .. tostring(g.nameplateMeleeSpellID or 0),
         }
         local issues = {}
@@ -108,19 +106,6 @@ function A.DiagnosticsRegistry.BuildGameplayDiagnostic(ctx)
                 issues[#issues + 1] = "Totem Frame icon size is extremely small."
                 AddFixChoice(choices, "gameplay.playerTotemsIconSize", 24, "Set Totem Frame icon size to 24")
             end
-        elseif focus == "firstDance" then
-            if g.enableFirstDanceTimer ~= true then
-                issues[#issues + 1] = "First Dance Tracker is disabled. It is a Rogue feature and is only useful for that gameplay."
-                AddFixChoice(choices, "gameplay.enableFirstDanceTimer", true, "Turn on First Dance Tracker")
-            end
-            if g.firstDanceShowReady == false then
-                issues[#issues + 1] = "First Dance ready state is hidden, so the tracker can disappear while ready or inactive."
-                AddFixChoice(choices, "gameplay.firstDanceShowReady", true, "Show First Dance ready state")
-            end
-            if tonumber(g.firstDanceIconSize) ~= nil and tonumber(g.firstDanceIconSize) < 16 then
-                issues[#issues + 1] = "First Dance icon size is extremely small."
-                AddFixChoice(choices, "gameplay.firstDanceIconSize", 40, "Set First Dance icon size to 40")
-            end
         elseif focus == "combatCrosshair" then
             if g.enableCombatCrosshair ~= true then
                 issues[#issues + 1] = "Combat Crosshair is disabled."
@@ -142,9 +127,8 @@ function A.DiagnosticsRegistry.BuildGameplayDiagnostic(ctx)
             if g.enableCombatTimer == true then enabledCount = enabledCount + 1 end
             if g.enableCombatStateText == true then enabledCount = enabledCount + 1 end
             if g.enablePlayerTotems == true then enabledCount = enabledCount + 1 end
-            if g.enableFirstDanceTimer == true then enabledCount = enabledCount + 1 end
             if g.enableCombatCrosshair == true then enabledCount = enabledCount + 1 end
-            lines[#lines + 1] = "Enabled optional features: " .. tostring(enabledCount) .. " of 5."
+            lines[#lines + 1] = "Enabled optional features: " .. tostring(enabledCount) .. " of 4."
             if enabledCount == 0 then
                 issues[#issues + 1] = "All optional Gameplay features are off. That is valid if you do not use them; ask me to check a feature such as 'check combat timer' if one should be visible."
             end

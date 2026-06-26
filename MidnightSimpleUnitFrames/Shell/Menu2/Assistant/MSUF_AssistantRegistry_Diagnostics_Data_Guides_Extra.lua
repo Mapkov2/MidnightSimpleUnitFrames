@@ -87,13 +87,12 @@ Guides.gameplay = {
         },
         {
             key = "gameplay_frames",
-            title = "Totem, First Dance, and Crosshair",
+            title = "Totem and Crosshair",
             page = "gameplay",
             goal = "Enable only the gameplay frames that match your class or role.",
             body = "When MSUF has no control for something, I say so clearly.",
             examples = {
                 "turn on totem frame",
-                "turn on first dance",
                 "turn on combat crosshair",
             },
         },

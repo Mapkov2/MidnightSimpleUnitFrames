@@ -5,14 +5,14 @@ MSUF.MSUF2 = M
 
 -- Advanced Gameplay page.
 -- Builds controls for optional gameplay helpers such as combat timer, crosshair, melee range,
--- totem/statue frames, and First Dance tracking. Live frame work belongs to GameplayRuntime.
+-- and totem/statue frames. Live frame work belongs to GameplayRuntime.
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
-local Gameplay, MoveWidget, LabelAt, DividerAt, SwitchAt, AddTableControlSpecs = M.Pick(AP, [[Gameplay MoveWidget LabelAt DividerAt SwitchAt AddTableControlSpecs]])
+local Gameplay, MoveWidget, LabelAt, SwitchAt, AddTableControlSpecs = M.Pick(AP, [[Gameplay MoveWidget LabelAt SwitchAt AddTableControlSpecs]])
 local ApplyGameplay = M.ApplyGameplay
 local VT = M.ValueTextList
 local function BuildGameplay(ctx)
@@ -53,7 +53,7 @@ local function BuildGameplay(ctx)
         Gameplay().nameplateMeleeSpellID = floor((tonumber(value) or 0) + 0.5)
     end
     local timerControls, stateControls, totemControls = {}, {}, {}
-    local firstDanceControls, crossControls, meleeControls = {}, {}, {}
+    local crossControls, meleeControls = {}, {}, {}
     local selectedSpellText
     local noSpellWarn
     local function AddControls(list, section, specs) return AddTableControlSpecs(ctx, list, section, Gameplay, specs, ApplyGameplayUI) end
@@ -168,7 +168,7 @@ local function BuildGameplay(ctx)
     AddGameplayTextInput(stateControls, enterInput, "combatStateEnterText", "+Combat")
     AddGameplayTextInput(stateControls, leaveInput, "combatStateLeaveText", "-Combat")
     local classStacked = GameplayStacked()
-    local classSec = b:CollapsibleSection("gameplay_class_specific", "Class-specific toggles", classStacked and 1120 or 736, false)
+    local classSec = b:CollapsibleSection("gameplay_class_specific", "Class-specific toggles", classStacked and 620 or 390, false)
     local classW = classSec._msuf2Width or ctx.width or 900
     local classCardW = SectionCardWidth(classSec, 700)
     local classControlW = SectionControlWidth(classSec, 300, 120)
@@ -179,13 +179,11 @@ local function BuildGameplay(ctx)
         classToken = token
     end
     local hasTotemFrame = classToken == "SHAMAN" or classToken == "MONK"
-    local isRogue = classToken == "ROGUE"
     local totemEnable
     local previewBtn
     local resetTotemBtn
-    local firstDanceEnable
     if classStacked then
-        AddBackdrops(classSec, { { -38, classCardW, 520 }, { -590, classCardW, 430 } })
+        AddBackdrops(classSec, { { -38, classCardW, 520 } })
         LabelAt(classSec, hasTotemFrame and "Totem / Statue frame" or "(Totem/Statue frame is Shaman/Monk-only)", 30, -38, min(360, classW - 60), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", 30, -60, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", 30, -92, min(300, classControlW), Gameplay, "enablePlayerTotems", false, ApplyGameplayUI)
@@ -201,21 +199,8 @@ local function BuildGameplay(ctx)
             { "dropdown", "From", 30, -448, frameAnchors, min(220, classControlW), "playerTotemsAnchorFrom", "TOPLEFT" },
             { "dropdown", "To", 30, -502, frameAnchors, min(220, classControlW), "playerTotemsAnchorTo", "BOTTOMLEFT" },
         })
-        DividerAt(classSec, -570)
-        LabelAt(classSec, "Rogue: First Dance tracker", 30, -596, min(360, classW - 60), "GameFontNormalSmall", T.colors.text)
-        LabelAt(classSec, "Optional helper. Shows a 6s timer after leaving combat.", 30, -618, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
-        firstDanceEnable = SwitchAt(ctx, classSec, "First Dance tracker", 30, -652, min(340, classControlW), Gameplay, "enableFirstDanceTimer", false, ApplyGameplayUI)
-        AddControls(firstDanceControls, classSec, {
-            { "toggle", "Lock position", 30, -686, "lockFirstDance", false },
-            { "toggle", "Click-through (ALT to drag when unlocked)", 30, -720, "firstDanceClickThrough", false },
-            { "toggle", "Show as icon with cooldown swipe", 30, -754, "firstDanceShowIcon", true },
-            { "toggle", "Keep visible when ready (hide on combat enter)", 30, -788, "firstDanceShowReady", false },
-            { "slider", "Icon size", 30, -836, 16, 96, 1, classControlW, "firstDanceIconSize", 40 },
-            { "slider", "X offset", 30, -906, -800, 800, 1, classControlW, "firstDanceOffsetX", 0 },
-            { "slider", "Y offset", 30, -976, -800, 800, 1, classControlW, "firstDanceOffsetY", 80 },
-        })
     else
-        AddBackdrops(classSec, { { -38, classCardW, 276 }, { -348, classCardW, 318 } })
+        AddBackdrops(classSec, { { -38, classCardW, 276 } })
         LabelAt(classSec, hasTotemFrame and "Totem / Statue frame" or "(Totem/Statue frame is Shaman/Monk-only)", classLeftX, -38, min(360, classColW), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", classLeftX, -60, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", classLeftX, -92, classColW, Gameplay, "enablePlayerTotems", false, ApplyGameplayUI)
@@ -230,19 +215,6 @@ local function BuildGameplay(ctx)
             { "slider", "Y offset", classRightX, -252, -200, 200, 1, classColW, "playerTotemsOffsetY", -6 },
             { "dropdown", "From", classLeftX, -202, frameAnchors, min(180, classColW), "playerTotemsAnchorFrom", "TOPLEFT" },
             { "dropdown", "To", classLeftX + min(196, classColW * 0.55), -202, frameAnchors, min(180, classColW), "playerTotemsAnchorTo", "BOTTOMLEFT" },
-        })
-        DividerAt(classSec, -330)
-        LabelAt(classSec, "Rogue: First Dance tracker", classLeftX, -354, min(360, classColW), "GameFontNormalSmall", T.colors.text)
-        LabelAt(classSec, "Optional helper. Shows a 6s timer after leaving combat.", classLeftX, -376, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
-        firstDanceEnable = SwitchAt(ctx, classSec, "First Dance tracker", classLeftX, -410, classColW, Gameplay, "enableFirstDanceTimer", false, ApplyGameplayUI)
-        AddControls(firstDanceControls, classSec, {
-            { "toggle", "Lock position", classRightX, -410, "lockFirstDance", false },
-            { "toggle", "Click-through (ALT to drag when unlocked)", classLeftX, -444, "firstDanceClickThrough", false },
-            { "toggle", "Show as icon with cooldown swipe", classLeftX, -478, "firstDanceShowIcon", true },
-            { "toggle", "Keep visible when ready (hide on combat enter)", classRightX, -444, "firstDanceShowReady", false },
-            { "slider", "Icon size", classLeftX, -524, 16, 96, 1, classColW, "firstDanceIconSize", 40 },
-            { "slider", "X offset", classRightX, -524, -800, 800, 1, classColW, "firstDanceOffsetX", 0 },
-            { "slider", "Y offset", classLeftX, -608, -800, 800, 1, classColW, "firstDanceOffsetY", 80 },
         })
     end
     previewBtn:SetScript("OnClick", function()
@@ -383,15 +355,13 @@ local function BuildGameplay(ctx)
         for i = 1, 4 do bars[i]:SetVertexColor(r or 1, gr or 0, b or 0, g.enableCombatCrosshair and 1 or 0.35) end
     end
     -- Each row gates a dependent control group by its master toggle. totemActionControls and
-    -- the totem/first-dance enables also depend on class availability (hasTotemFrame/isRogue).
+    -- the totem enable also depend on class availability (hasTotemFrame).
     disabledRefresh = M.BindGateGroup(ctx, Gameplay, {
         { enable = timerEnable, controls = timerControls, on = function(g) return g.enableCombatTimer == true end },
         { enable = stateEnable, controls = stateControls, on = function(g) return g.enableCombatStateText == true end },
         { enable = totemEnable, enableOn = function() return hasTotemFrame end,
           controls = totemActionControls, on = function() return hasTotemFrame end },
         { controls = totemControls, on = function(g) return hasTotemFrame and g.enablePlayerTotems == true end },
-        { enable = firstDanceEnable, enableOn = function() return isRogue end,
-          controls = firstDanceControls, on = function(g) return isRogue and g.enableFirstDanceTimer == true end },
         { enable = crossEnable, controls = crossControls, on = function(g) return g.enableCombatCrosshair == true end },
         { controls = meleeControls, on = function(g)
             return g.enableCombatCrosshair == true and g.enableCombatCrosshairMeleeRangeColor == true

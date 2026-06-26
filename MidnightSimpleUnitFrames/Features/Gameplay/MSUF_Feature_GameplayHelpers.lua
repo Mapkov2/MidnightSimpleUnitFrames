@@ -5,7 +5,7 @@ local Gameplay = MSUF.Gameplay or {}
 MSUF.Gameplay = Gameplay
 
 -- Shared gameplay helper bundle.
--- Provides spec caching, clamping, nudge/history helpers, and lightweight predicates used by
+-- Provides spec lookup, clamping, nudge/history helpers, and lightweight predicates used by
 -- gameplay config, runtime, and preview modules. No frames should be created here.
 local InCombatLockdown = InCombatLockdown
 local IsShiftKeyDown = IsShiftKeyDown
@@ -14,10 +14,6 @@ local GetCurrentKeyBoardFocus = GetCurrentKeyBoardFocus
 local tonumber = tonumber
 local GetSpecialization = GetSpecialization
 local GetSpecializationInfo = GetSpecializationInfo
-local UnitClass = UnitClass
-
-local SUB_ROGUE_SPEC_ID = 261
-local isSubRogue = false
 
 local function MSUF_Gameplay_GetPlayerSpecID()
     -- Spec lookup can be nil during early login/reload. Callers use the cached helper when
@@ -29,20 +25,6 @@ local function MSUF_Gameplay_GetPlayerSpecID()
     local specID = GetSpecializationInfo(specIndex)
     if not specID or specID <= 0 then return nil end
     return specID
-end
-
-local function MSUF_Gameplay_IsSubRogue()
-    if not UnitClass then return false end
-    local _, cls = UnitClass("player")
-    return cls == "ROGUE" and MSUF_Gameplay_GetPlayerSpecID() == SUB_ROGUE_SPEC_ID
-end
-
-local function MSUF_Gameplay_UpdateSubRogueCache()
-    isSubRogue = MSUF_Gameplay_IsSubRogue()
-end
-
-local function MSUF_Gameplay_IsSubRogueCached()
-    return isSubRogue == true
 end
 
 local _MSUF_Clamp = _G._MSUF_Clamp
@@ -200,9 +182,6 @@ end
 
 Gameplay.GetPlayerSpecID = MSUF_Gameplay_GetPlayerSpecID
 MSUF.MSUF_GetPlayerSpecID = MSUF_Gameplay_GetPlayerSpecID
-Gameplay.IsSubRogue = MSUF_Gameplay_IsSubRogue
-Gameplay.UpdateSubRogueCache = MSUF_Gameplay_UpdateSubRogueCache
-Gameplay.IsSubRogueCached = MSUF_Gameplay_IsSubRogueCached
 Gameplay.Clamp = _MSUF_Clamp
 Gameplay.RoundInt = _MSUF_RoundInt
 Gameplay.IsTextInputFocused = MSUF_Gameplay_IsTextInputFocused

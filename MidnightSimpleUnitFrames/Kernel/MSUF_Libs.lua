@@ -1057,7 +1057,6 @@ do
         local need = false
         if g.enableCombatTimer == true then need = true end
         if g.enableCombatStateText == true then need = true end
-        if g.enableFirstDanceTimer == true then need = true end
         if g.enableCombatCrosshair == true then need = true end
 
         if need then
