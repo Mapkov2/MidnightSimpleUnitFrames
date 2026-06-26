@@ -295,6 +295,46 @@ local function ClearMasks(f, maskKey, maskedKey)
   f[maskedKey] = nil
 end
 
+local function BeginMaskRefresh(f, maskedKey)
+  if not f then return nil end
+  local seenKey = maskedKey .. "RefreshSeen"
+  local seen = f[seenKey]
+  if not seen then
+    seen = {}
+    f[seenKey] = seen
+  else
+    for tex in pairs(seen) do seen[tex] = nil end
+  end
+  f[maskedKey .. "Refreshing"] = seen
+  return seen
+end
+
+local function EndMaskRefresh(f, maskKey, maskedKey)
+  if not f then return end
+  local refreshKey = maskedKey .. "Refreshing"
+  local seen = f[refreshKey]
+  f[refreshKey] = nil
+  local masked = f[maskedKey]
+  if masked then
+    for tex, mask in pairs(masked) do
+      if not (seen and seen[tex]) then
+        if tex and type(tex.RemoveMaskTexture) == "function" then
+          if mask and mask ~= true then
+            tex:RemoveMaskTexture(mask)
+          elseif f[maskKey] then
+            tex:RemoveMaskTexture(f[maskKey])
+          end
+        end
+        masked[tex] = nil
+      end
+    end
+    if not next(masked) then f[maskedKey] = nil end
+  end
+  if seen then
+    for tex in pairs(seen) do seen[tex] = nil end
+  end
+end
+
 local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
   if not (f and tex) then return end
   if type(tex.AddMaskTexture) ~= "function" then return end
@@ -311,7 +351,18 @@ local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
   if not m then return end
 
   f[maskedKey] = f[maskedKey] or {}
-  if f[maskedKey][tex] then return end
+  local seen = f[maskedKey .. "Refreshing"]
+  if seen then seen[tex] = true end
+
+  local old = f[maskedKey][tex]
+  if old == m then return end
+  if old and tex.RemoveMaskTexture then
+    if old ~= true then
+      tex:RemoveMaskTexture(old)
+    elseif f[maskKey] then
+      tex:RemoveMaskTexture(f[maskKey])
+    end
+  end
 
   tex:AddMaskTexture(m)
   f[maskedKey][tex] = m
@@ -949,7 +1000,7 @@ local function ApplyToUnitFrame(f)
   SuppressNativeOutlineNow(f)
   f._msufRUF_SuppressMouseover = RoundedMouseoverEnabled() and true or nil
 
-  ClearAllMasks(f)
+  BeginMaskRefresh(f, "_msufRUF_MaskedTextures")
   ApplyUnitRoundedEdge(f, true)
   ApplyUnitRoundedHoverEdge(f, RoundedMouseoverEnabled())
   ApplyDetachedPowerRoundedEdge(f, roundPower)
@@ -990,6 +1041,7 @@ local function ApplyToUnitFrame(f)
   if f.portrait then
     MaskTexture(f, f.portrait, f.portrait, MASK_PATH_1X)
   end
+  EndMaskRefresh(f, "_msufRUF_Mask", "_msufRUF_MaskedTextures")
 end
 
 ApplyToGroupFrame = function(f, kind)
@@ -1043,7 +1095,7 @@ ApplyToGroupFrame = function(f, kind)
     return
   end
 
-  ClearGroupMasks(f)
+  BeginMaskRefresh(f, "_msufRGF_MaskedTextures")
   ApplyGroupRoundedEdge(f, true)
   if f._msufRGF_Background then MaskGroupTexture(f, f._msufRGF_Background, f.barGroup) end
   if f.healthBg then MaskGroupTexture(f, f.healthBg, f.health or f.healthBg) end
@@ -1058,6 +1110,7 @@ ApplyToGroupFrame = function(f, kind)
 
   MaskGFGradientTable(f, f.health)
   if roundPower then MaskGFGradientTable(f, f.power) end
+  EndMaskRefresh(f, "_msufRGF_Mask", "_msufRGF_MaskedTextures")
 end
 
 local function ForEachUnitFrame(fn)

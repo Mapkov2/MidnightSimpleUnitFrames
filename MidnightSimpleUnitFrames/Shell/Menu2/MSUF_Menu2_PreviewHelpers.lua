@@ -931,9 +931,13 @@ function H.EnsureRoundedMask(mock, key, anchor, tex, maskStoreKey, maskTexture, 
         snap(mask)
         bucket[ownerKey] = mask
     end
-    mask:ClearAllPoints()
-    mask:SetTexture(maskTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    mask:SetAllPoints(anchor)
+    if mask._msufPreviewRoundedAnchor ~= anchor or mask._msufPreviewRoundedTexture ~= maskTexture then
+        mask._msufPreviewRoundedAnchor = anchor
+        mask._msufPreviewRoundedTexture = maskTexture
+        mask:ClearAllPoints()
+        mask:SetTexture(maskTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetAllPoints(anchor)
+    end
     return mask
 end
 function H.SetMask(mock, tex, mask, maskedStoreKey)
@@ -1028,7 +1032,10 @@ function H.EnsureRoundedVisuals(mock, opts)
         mock[edgeKey] = mock:CreateTexture(nil, opts.edgeLayer or "OVERLAY", nil, opts.edgeSubLevel)
         snap(mock[edgeKey])
     end
-    mock[edgeKey]:SetTexture(opts.edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    if mock[edgeKey]._msufPreviewRoundedEdgeTexture ~= opts.edgeTexture then
+        mock[edgeKey]._msufPreviewRoundedEdgeTexture = opts.edgeTexture
+        mock[edgeKey]:SetTexture(opts.edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    end
     return true
 end
 function H.ForEachRoundedEdge(mock, opts, fn)
@@ -1091,11 +1098,25 @@ function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
             snap(edge)
             mock[stackKey][i] = edge
         end
-        edge:SetTexture(edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        edge:ClearAllPoints()
-        edge:SetPoint("TOPLEFT", mock, "TOPLEFT", -i, i)
-        edge:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", i, -i)
-        edge:SetVertexColor(r, g, b, a)
+        if edge._msufPreviewRoundedEdgeTexture ~= edgeTexture then
+            edge._msufPreviewRoundedEdgeTexture = edgeTexture
+            edge:SetTexture(edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        end
+        if edge._msufPreviewRoundedAnchor ~= mock or edge._msufPreviewRoundedPad ~= i then
+            edge._msufPreviewRoundedAnchor = mock
+            edge._msufPreviewRoundedPad = i
+            edge:ClearAllPoints()
+            edge:SetPoint("TOPLEFT", mock, "TOPLEFT", -i, i)
+            edge:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", i, -i)
+        end
+        if edge._msufPreviewRoundedR ~= r or edge._msufPreviewRoundedG ~= g
+            or edge._msufPreviewRoundedB ~= b or edge._msufPreviewRoundedA ~= a then
+            edge._msufPreviewRoundedR = r
+            edge._msufPreviewRoundedG = g
+            edge._msufPreviewRoundedB = b
+            edge._msufPreviewRoundedA = a
+            edge:SetVertexColor(r, g, b, a)
+        end
         edge:Show()
     end
     H.SetRoundedEdgeStackShown(mock, true, opts)
