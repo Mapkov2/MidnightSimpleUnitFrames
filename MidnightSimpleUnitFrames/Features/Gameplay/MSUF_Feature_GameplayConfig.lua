@@ -80,15 +80,6 @@ local function EnsureGameplayDefaults()
     if g.combatStateLeaveColor == nil then g.combatStateLeaveColor = { 0.7, 0.7, 0.7 } end
     ClampPositive(g, "combatStateFontSize", 24, 10, 64)
 
-    Default(g, "enableFirstDanceTimer", false)
-    Default(g, "firstDanceOffsetX", 0)
-    Default(g, "firstDanceOffsetY", 80)
-    Default(g, "lockFirstDance", false)
-    Default(g, "firstDanceClickThrough", true)
-    Default(g, "firstDanceShowIcon", true)
-    Default(g, "firstDanceShowReady", true)
-    ClampPositive(g, "firstDanceIconSize", 40, 16, 96)
-
     Default(g, "enableCombatCrosshair", false)
     Default(g, "crosshairThickness", 2)
     Default(g, "crosshairSize", 40)

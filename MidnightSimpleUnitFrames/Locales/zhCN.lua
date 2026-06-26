@@ -982,9 +982,7 @@ local T = {
     ["Timer position (offset)"] = "计时器位置 (偏移)",
     ["Click-through (ALT to drag when unlocked)"]   = "点击穿透 (解锁时ALT拖动)",
 
-    ["Rogue: First Dance tracker"] = "潜行者: 第一支舞追踪器",
     ["Optional helper. Shows a 6s timer after leaving combat."] = "可选助手. 在离开战斗后显示6秒计时器.",
-    ["Track 'The First Dance' (6s after leaving combat)"] = "追踪'第一支舞'(离开战斗后6秒)",
 
     ["Combat crosshair"] = "战斗十字准星",
     ["Show green combat crosshair under player (in combat)"] = "战斗中在玩家脚下显示绿色战斗准星定位玩家位置",
@@ -2702,8 +2700,6 @@ L["Export backup"] = "导出备份"
 L["Factory reset affects every MSUF setting."] = "恢复出厂设置会影响所有 MSUF 设置。"
 L["Factory Reset All"] = "全部恢复出厂"
 L["Factory reset hidden"] = "出厂重置已隐藏"
-L["First Dance!"] = "第一支舞！"
-L["First Dance: %.1f"] = "第一支舞：%.1f"
 L["Fixed and refined raid group menu behavior."] = "修复并优化团队小组菜单行为。"
 L["Fixed detached unit frame outline border not working correctly."] = "修复分离单位框体外框边框工作不正确的问题。"
 L["Fixed Group Frame mouseover behavior."] = "修复团队框体鼠标悬停行为。"

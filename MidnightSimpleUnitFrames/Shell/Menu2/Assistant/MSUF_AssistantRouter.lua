@@ -464,8 +464,8 @@ R.SCOPED_HELP_SCOPE_TERMS = {    "player", "player frame", "target", "target fra
     "class resource", "class resources", "class power", "gameplay", "status icon",
     "status icons", "module", "modules", "style module", "dropdown style",
     "text slot", "text slots", "copy", "export", "import",
-    "combat timer", "combat state", "combat enter", "combat leave", "first dance",
-    "first dance tracker", "totem frame", "totems", "statue frame", "combat crosshair",
+    "combat timer", "combat state", "combat enter", "combat leave",
+    "totem frame", "totems", "statue frame", "combat crosshair",
     "crosshair", "target sound", "detached power", "detached power bar", "alternative mana",
     "alt mana", "menu scale", "ui scale", "display recovery", "recovery",
     "spieler", "ziel", "fokus", "begleiter", "gruppe", "gruppenframe", "gruppenframes",
@@ -821,7 +821,7 @@ R.NATURAL_CONCRETE_VISIBILITY_TOPICS = {    "player", "target", "focus", "pet", 
     "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs",
     "castbar", "cast bar", "zauberleiste",
     "class resource", "class resources", "class power", "combo point", "combo points",
-    "holy power", "alternative mana", "alt mana", "combat timer", "first dance",
+    "holy power", "alternative mana", "alt mana", "combat timer",
     "totem", "totems", "totem frame", "statue frame", "combat crosshair", "crosshair",
     "target sound", "target sounds",
 }
@@ -1258,7 +1258,6 @@ R.VISIBILITY_ALTMANA_TERMS = {    "alternative mana", "alt mana", "secondary man
 
 R.VISIBILITY_GAMEPLAY_FEATURE_TERMS = {    { query = "check combat timer", terms = { "combat timer" } },
     { query = "check totem frame", terms = { "totem", "totems", "totem frame", "statue frame", "statue" } },
-    { query = "check first dance", terms = { "first dance", "first dance tracker" } },
     { query = "check combat crosshair", terms = { "combat crosshair", "crosshair" } },
 }
 
@@ -2052,7 +2051,7 @@ R.UNIT_FRAME_MOVEMENT_EXCLUDED_TOPICS = {
     "power bar", "power text", "health bar", "health text", "name text",
     "class resource", "class resources", "class power", "combo point", "combo points",
     "holy power", "soul shard", "soul shards", "rune", "runes", "totem",
-    "combat timer", "combat crosshair", "first dance tracker",
+    "combat timer", "combat crosshair",
 }
 
 function R.MovementSettingReply(title, body, examples, actions, status)
@@ -2209,7 +2208,7 @@ R.UNIT_FRAME_SETTING_EXCLUDED_TOPICS = {
     "border", "border color", "outline",
     "raid marker", "role icon", "ready check", "leader icon", "pvp icon", "resting icon",
     "focus kick", "kick tracker", "interrupt tracker",
-    "combat timer", "combat crosshair", "totem", "first dance",
+    "combat timer", "combat crosshair", "totem",
 }
 
 function A.RouterLooksLikeUnitFrameSettingTopic(text)
@@ -3994,7 +3993,6 @@ A.RouterGameplayProblemTerms = A.RouterGameplayProblemTerms or {
     combatTimer = { "combat timer", "combat status", "combat enter", "combat leave" },
     crosshair = { "combat crosshair", "crosshair" },
     totem = { "totem", "totems", "totem frame", "totem icons", "statue", "statue frame" },
-    firstDance = { "first dance", "first dance tracker", "first dance icon" },
     position = {
         "wrong position", "position is wrong", "wrong place", "not moving",
         "does not move", "doesn't move", "cannot move", "can't move", "cant move",
@@ -4026,11 +4024,11 @@ function R.GameplaySettingFollowupResults(settingLabel)
         or R.PageFollowupResults("gameplay", "Gameplay", settingLabel .. " lives in Gameplay.")
 end
 
-A.RouterTryGameplaySettingShortcut = function(norm, isCombatTimer, isCrosshair, isTotem, isFirstDance)
+A.RouterTryGameplaySettingShortcut = function(norm, isCombatTimer, isCrosshair, isTotem)
     if not R.AsksSettingLocation(norm) then return nil end
 
-    local label = isCombatTimer and "Combat Timer" or (isCrosshair and "Combat Crosshair" or (isTotem and "Totem Frame" or "First Dance Tracker"))
-    local noun = isCombatTimer and "combat timer" or (isCrosshair and "combat crosshair" or (isTotem and "totem frame" or "first dance tracker"))
+    local label = isCombatTimer and "Combat Timer" or (isCrosshair and "Combat Crosshair" or "Totem Frame")
+    local noun = isCombatTimer and "combat timer" or (isCrosshair and "combat crosshair" or "totem frame")
     local settingLabel = label
     if R.ContainsAny(norm, { "position", "move", "anchor", "offset", "wrong place" }) then
         settingLabel = label .. " Position"
@@ -4065,17 +4063,16 @@ A.RouterTryGameplayProblemShortcut = function(text, coreHandler)
     local isCombatTimer = R.ContainsAny(norm, terms.combatTimer)
     local isCrosshair = R.ContainsAny(norm, terms.crosshair)
     local isTotem = R.ContainsAny(norm, terms.totem)
-    local isFirstDance = R.ContainsAny(norm, terms.firstDance)
-    if not isCombatTimer and not isCrosshair and not isTotem and not isFirstDance then return nil end
+    if not isCombatTimer and not isCrosshair and not isTotem then return nil end
 
-    local settingResult = A.RouterTryGameplaySettingShortcut and A.RouterTryGameplaySettingShortcut(norm, isCombatTimer, isCrosshair, isTotem, isFirstDance)
+    local settingResult = A.RouterTryGameplaySettingShortcut and A.RouterTryGameplaySettingShortcut(norm, isCombatTimer, isCrosshair, isTotem)
     if settingResult then return settingResult end
 
     local wantsOff = R.WantsVisibilityOff(norm)
     local wantsOn = R.WantsVisibilityOn(norm)
     if (wantsOff or wantsOn) and type(coreHandler) == "function" then
-        local noun = isCombatTimer and "combat timer" or (isCrosshair and "combat crosshair" or (isTotem and "totem frame" or "first dance tracker"))
-        local label = isCombatTimer and "Combat Timer" or (isCrosshair and "Combat Crosshair" or (isTotem and "Totem Frame" or "First Dance Tracker"))
+        local noun = isCombatTimer and "combat timer" or (isCrosshair and "combat crosshair" or "totem frame")
+        local label = isCombatTimer and "Combat Timer" or (isCrosshair and "Combat Crosshair" or "Totem Frame")
         local verb = wantsOff and "turn off " or "turn on "
         return R.CoreControl(
             coreHandler,
@@ -4086,7 +4083,7 @@ A.RouterTryGameplayProblemShortcut = function(text, coreHandler)
     end
 
     if type(coreHandler) == "function" then
-        local noun = isCombatTimer and "combat timer" or (isCrosshair and "combat crosshair" or (isTotem and "totem frame" or "first dance tracker"))
+        local noun = isCombatTimer and "combat timer" or (isCrosshair and "combat crosshair" or "totem frame")
         local amount = norm:match("[-+]?%d+")
         local direction
         if R.ContainsAny(norm, { "down" }) then direction = "down"
@@ -4111,17 +4108,17 @@ A.RouterTryGameplayProblemShortcut = function(text, coreHandler)
     end
 
     if R.ContainsAny(norm, terms.position) then
-        local label = isCombatTimer and "Combat Timer" or (isCrosshair and "Combat Crosshair" or (isTotem and "Totem Frame" or "First Dance Tracker"))
+        local label = isCombatTimer and "Combat Timer" or (isCrosshair and "Combat Crosshair" or "Totem Frame")
         return A.RouterGameplayProblemReply(
             label .. " position help",
             label .. " placement is controlled in Gameplay through lock, click-through, anchor, and X/Y offset options where that helper exposes them. Unlock or disable click-through when you need to drag or inspect it.",
-            "open gameplay; move combat timer down 8; move first dance icon right 5; move totem icons right 6.",
+            "open gameplay; move combat timer down 8; move totem icons right 6.",
             "Open Gameplay | Run Checks"
         )
     end
 
     if R.ContainsAny(norm, terms.color) then
-        local label = isCrosshair and "Combat Crosshair" or (isCombatTimer and "Combat Timer" or (isTotem and "Totem Frame" or "First Dance Tracker"))
+        local label = isCrosshair and "Combat Crosshair" or (isCombatTimer and "Combat Timer" or "Totem Frame")
         return A.RouterGameplayProblemReply(
             label .. " color help",
             label .. " color options live in Gameplay when MSUF exposes them. For the crosshair, check in-range and out-of-range colors; for other helpers, check the exposed icon/text color options before changing global colors.",
@@ -4131,11 +4128,11 @@ A.RouterTryGameplayProblemShortcut = function(text, coreHandler)
     end
 
     if R.ContainsAny(norm, terms.size) then
-        local label = isCrosshair and "Combat Crosshair" or (isTotem and "Totem Frame" or (isFirstDance and "First Dance Tracker" or "Combat Timer"))
+        local label = isCrosshair and "Combat Crosshair" or (isTotem and "Totem Frame" or "Combat Timer")
         return A.RouterGameplayProblemReply(
             label .. " size help",
             label .. " size is controlled in Gameplay through size, thickness, text size, or icon size options depending on the helper.",
-            "set crosshair size to 60; set totem icon size to 40; set first dance icon size to 40; open gameplay.",
+            "set crosshair size to 60; set totem icon size to 40; open gameplay.",
             "Open Gameplay"
         )
     end
@@ -5572,10 +5569,10 @@ function R.ClassGuidanceReply(text)    local norm = R.Normalize(text)
     local detail, focus, examples, actions
 
     if classSpec.key == "rogue" then
-        detail = "For Rogue UI, prioritize Class Resources, the First Dance Tracker when relevant, Target/Focus cast bars, important buffs/debuffs, and compact group visibility."
-        focus = "Start in Class Resources, Gameplay, Cast Bars, Aura Filters, Target, and Focus."
-        examples = "open class resources; show first dance; show focus kick tracker; set target debuff icon size to 30."
-        actions = "Open Class Resources | Open Gameplay | Open Cast Bars | Open Aura Filters"
+        detail = "For Rogue UI, prioritize Class Resources, Target/Focus cast bars, important buffs/debuffs, and compact group visibility."
+        focus = "Start in Class Resources, Cast Bars, Aura Filters, Target, and Focus."
+        examples = "open class resources; show focus kick tracker; set target debuff icon size to 30."
+        actions = "Open Class Resources | Open Cast Bars | Open Aura Filters"
     elseif classSpec.key == "shaman" then
         detail = "For Shaman UI, prioritize the Totem/Statue frame, Class Resources, Target/Focus cast bars, important buffs/debuffs, and group status if you heal."
         focus = "Start in Gameplay, Class Resources, Cast Bars, Aura Filters, and Group Health & Text."
@@ -5750,7 +5747,7 @@ R.PAGE_LOCATION_TERMS = {    { label = "Support Links", terms = { "support link"
     { label = "Auras", terms = { "aura", "auras", "buff", "buffs", "debuff", "debuffs" } },
     { label = "Miscellaneous", terms = { "misc", "miscellaneous", "tooltip", "tooltips", "minimap", "menu language", "blizzard frames" } },
     { label = "Modules", terms = { "module", "modules", "advanced", "style module", "msuf style", "dropdown style" } },
-    { label = "Gameplay", terms = { "gameplay", "combat timer", "combat crosshair", "first dance", "totem frame", "totem", "totems", "statue frame" } },
+    { label = "Gameplay", terms = { "gameplay", "combat timer", "combat crosshair", "totem frame", "totem", "totems", "statue frame" } },
     { label = "Profiles", terms = { "profile", "profiles", "profile import", "profile export", "spec profiles" } },
     { label = "Player", terms = { "player", "player frame", "self frame" } },
     { label = "Target", terms = { "target", "target frame" } },

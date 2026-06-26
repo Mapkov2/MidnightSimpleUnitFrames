@@ -760,22 +760,6 @@ A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
         anchorTo = "gameplay.playerTotemsAnchorTo",
     },
     {
-        id = "firstDance",
-        label = "First Dance Tracker",
-        terms = { "first dance", "first dance tracker", "erster tanz", "der erste tanz" },
-        pageTerms = { "dance tracker", "first dance tracker", "erster tanz", "der erste tanz" },
-        enable = "gameplay.enableFirstDanceTimer",
-        x = "gameplay.firstDanceOffsetX",
-        y = "gameplay.firstDanceOffsetY",
-        size = "gameplay.firstDanceIconSize",
-        booleans = {
-            { key = "gameplay.lockFirstDance", terms = { "lock", "locked", "unlock", "unlocked", "lock position", "sperren", "entsperren", "position sperren" } },
-            { key = "gameplay.firstDanceClickThrough", terms = { "click through", "click-through", "clickable", "mouse input", "accept clicks", "durchklickbar", "klick durch", "mauseingabe" } },
-            { key = "gameplay.firstDanceShowIcon", terms = { "icon", "icon mode", "cooldown swipe", "symbol", "icon modus" } },
-            { key = "gameplay.firstDanceShowReady", terms = { "show ready", "ready visible", "keep visible", "ready", "bereit sichtbar", "sichtbar wenn bereit", "bereit anzeigen" } },
-        },
-    },
-    {
         id = "combatCrosshair",
         label = "Combat Crosshair",
         terms = { "combat crosshair", "crosshair", "fadenkreuz" },
@@ -802,7 +786,7 @@ function A._GameplayShortcutSpec(text)
             local spec = specs[i]
             if ContainsAny(text, spec.pageTerms) then return spec end
         end
-        if ContainsAny(text, { "timer" }) and not ContainsAny(text, { "first dance", "dance", "enter", "leave", "state" }) then
+        if ContainsAny(text, { "timer" }) and not ContainsAny(text, { "enter", "leave", "state" }) then
             return specs[1]
         end
     end
@@ -909,7 +893,6 @@ end
 local GAMEPLAY_PRESET_BOUNDS = {
     combatTimer = { width = 180, height = 42 },
     combatState = { width = 220, height = 42 },
-    firstDance = { width = 220, height = 60 },
 }
 
 local UNIT_PRESET_DEFAULTS = {
@@ -1039,7 +1022,7 @@ function A._ParseGameplayPositionPreset(text)
     if not placement then return nil end
     local spec = A._GameplayShortcutSpec(text)
     if not spec or not spec.x or not spec.y then return nil end
-    if spec.id ~= "combatTimer" and spec.id ~= "combatState" and spec.id ~= "firstDance" then
+    if spec.id ~= "combatTimer" and spec.id ~= "combatState" then
         return {
             kind = "unknown",
             text = tostring(spec.label or "That Gameplay element") .. " uses its own anchoring. I can still move it with pixel nudges or change its anchor options.",
@@ -1388,8 +1371,6 @@ local function ParseDiagnostic(text)
         gameplayFeature = "combatState"
     elseif ContainsAny(text, { "totem", "totem frame", "statue", "statue frame" }) then
         gameplayFeature = "playerTotems"
-    elseif ContainsAny(text, { "first dance", "first dance tracker", "first dancer", "erster tanz", "der erste tanz" }) then
-        gameplayFeature = "firstDance"
     elseif ContainsAny(text, { "crosshair", "combat crosshair", "fadenkreuz" }) then
         gameplayFeature = "combatCrosshair"
     elseif ContainsAny(text, { "gameplay", "gameplay helper", "gameplay helpers", "spielhilfe", "spielhilfen" }) then
@@ -2271,12 +2252,6 @@ local GAMEPLAY_ROOT_TOGGLES = {
         label = "Blizzard Totem Frame",
         terms = { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem", "totems", "totem rahmen", "statuen rahmen", "statue rahmen" },
         details = { "icon", "symbol", "size", "groesse", "x", "y", "offset", "anchor", "anker", "from", "to", "preview", "vorschau", "reset", "zuruecksetzen", "zurucksetzen", "layout", "move", "verschiebe" },
-    },
-    {
-        key = "gameplay.enableFirstDanceTimer",
-        label = "First Dance Tracker",
-        terms = { "first dance", "first dance tracker", "erster tanz", "der erste tanz" },
-        details = { "icon", "symbol", "ready", "bereit", "size", "groesse", "lock", "locked", "sperren", "click through", "click-through", "durchklickbar", "x", "y", "offset", "move", "verschiebe" },
     },
     {
         key = "gameplay.enableCombatCrosshair",

@@ -83,7 +83,6 @@ local function Normalize(text)
     text = text:gsub("%f[%w]yuo%f[%W]", "you")
     text = text:gsub("interupt", "interrupt")
     text = text:gsub("%f[%w]turn%s+of%f[%W]", "turn off")
-    text = text:gsub("first%s+dancer", "first dance")
     text = text:gsub("trennzeichen", "separator")
     text = text:gsub("trenner", "separator")
     text = text:gsub("[\"'`]", "")
@@ -326,7 +325,7 @@ local GAMEPLAY_TERMS = {
     "gameplay", "spielhilfe", "combat timer", "combat state", "combat enter", "combat leave",
     "kampf timer", "kampftimer", "kampf text", "kampfstatus", "kampfanzeige",
     "totem frame", "totemframe", "blizzard totem", "statue frame", "totem rahmen", "totemrahmen",
-    "statuen rahmen", "statuenrahmen", "first dance", "erster tanz", "combat crosshair",
+    "statuen rahmen", "statuenrahmen", "combat crosshair",
     "crosshair", "fadenkreuz", "melee range spell", "nahkampf zauber", "reichweiten zauber",
 }
 local GLOBAL_BARS_TERMS = { "bar texture", "bar background", "bar gradient", "gradient direction", "absorb bar", "absorb bars", "heal prediction", "heal absorb", "bar outline", "rounded frames", "rounded frame", "rounded texture", "highlight border", "aggro border", "dispel border", "purge border", "boss target border", "dispel overlay", "power text" }
@@ -668,7 +667,6 @@ local function DetectFrameType(text, ctx)
     if ContainsAny(text, { "combat timer" }) then return "combatTimer" end
     if ContainsAny(text, { "combat state", "combat enter", "combat leave", "combat enter leave" }) then return "combatState" end
     if ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem rahmen", "totemrahmen", "statuen rahmen", "statuenrahmen", "statue rahmen" }) then return "playerTotems" end
-    if ContainsAny(text, { "first dance", "erster tanz", "der erste tanz" }) then return "firstDance" end
     if ContainsAny(text, { "combat crosshair", "crosshair", "fadenkreuz", "melee range spell" }) then return "combatCrosshair" end
     if HasPhrase(text, "castbar") or HasPhrase(text, "zauberleiste") then return "castbar" end
     if ContainsAny(text, { "raid marker", "raidmarker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker" })

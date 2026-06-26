@@ -41,7 +41,7 @@ local function GuidedSetupGuideKey(style)
     if SetupHasAny(text, { "castbar", "castbars", "cast bar", "cast bars", "zauberleiste", "kick bar", "focus kick" }) then return "castbars" end
     if SetupHasAny(text, { "profile", "profiles", "profil", "profile setup", "profile guide", "spec profile", "import profile", "export profile" }) then return "profiles" end
     if SetupHasAny(text, { "class resource", "class resources", "class power", "class bar", "resource bar", "klassenressource", "klassenressourcen" }) then return "class_resources" end
-    if SetupHasAny(text, { "gameplay", "combat timer", "combat text", "totem", "first dance", "crosshair", "spielhilfe" }) then return "gameplay" end
+    if SetupHasAny(text, { "gameplay", "combat timer", "combat text", "totem", "crosshair", "spielhilfe" }) then return "gameplay" end
     if SetupHasAny(text, { "appearance", "bars and fonts", "fonts and bars", "global bars", "global fonts", "font setup", "bar setup", "color setup", "farben", "schrift" }) then return "appearance" end
     return "main"
 end

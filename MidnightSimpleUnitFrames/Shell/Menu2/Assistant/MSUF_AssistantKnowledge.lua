@@ -136,7 +136,7 @@ local PAGE_FRAME_TYPES = {
     opt_misc = { misc = true },
     modules = { modules = true },
     classpower = { classPower = true, classPowerPlayerHP = true, detachedPowerBar = true, altMana = true },
-    gameplay = { gameplay = true, combatTimer = true, combatState = true, playerTotems = true, firstDance = true, combatCrosshair = true },
+    gameplay = { gameplay = true, combatTimer = true, combatState = true, playerTotems = true, combatCrosshair = true },
     profiles = { profiles = true },
     gf_layout = { group = true },
     gf_bars = { group = true },
@@ -158,7 +158,7 @@ local PAGE_CATEGORY_TERMS = {
     opt_misc = { "misc", "dashboard", "minimap", "tooltip" },
     modules = { "modules", "module", "style module", "msuf style", "dropdown style" },
     classpower = { "class resource", "class power", "resource", "detached power", "alternative mana", "player hp" },
-    gameplay = { "gameplay", "combat timer", "combat enter", "combat leave", "combat state", "target sound", "totem", "first dance", "crosshair" },
+    gameplay = { "gameplay", "combat timer", "combat enter", "combat leave", "combat state", "target sound", "totem", "crosshair" },
     profiles = { "profile", "profiles" },
     gf_layout = { "group", "layout", "party", "raid", "mythic" },
     gf_bars = { "group", "health", "text", "bars" },
@@ -327,7 +327,7 @@ local function SettingLikelyPage(setting)
     if ft == "fonts" then return "opt_fonts" end
     if ft == "bars" or ft == "globalBars" then return "opt_bars" end
     if ft == "classPower" or ft == "classPowerPlayerHP" or ft == "detachedPowerBar" or ft == "altMana" then return "classpower" end
-    if ft == "gameplay" or ft == "combatTimer" or ft == "combatState" or ft == "playerTotems" or ft == "firstDance" or ft == "combatCrosshair" then return "gameplay" end
+    if ft == "gameplay" or ft == "combatTimer" or ft == "combatState" or ft == "playerTotems" or ft == "combatCrosshair" then return "gameplay" end
     if ft == "modules" then return "modules" end
     if ft == "group" then return GroupSettingLikelyPage(setting) end
     if ft == "groupAura" then return "gf_auras" end
@@ -1168,7 +1168,7 @@ local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "opt_castbar", terms = { "cast bar", "cast bars", "castbar", "castbars", "target cast", "focus cast", "boss cast" } },
     { page = "classpower", terms = { "class resource", "class resources", "class power", "class powers", "combo point", "combo points", "holy power" } },
     { page = "profiles", terms = { "profile", "profiles", "profile import", "profile export", "spec profile", "spec profiles" } },
-    { page = "gameplay", terms = { "gameplay", "combat timer", "combat crosshair", "totem", "totems", "totem frame", "first dance" } },
+    { page = "gameplay", terms = { "gameplay", "combat timer", "combat crosshair", "totem", "totems", "totem frame" } },
     { page = "opt_colors", terms = { "color", "colors", "class colors", "bar colors", "font color" } },
     { page = "opt_fonts", terms = { "font", "fonts", "font outline", "font shadow" } },
     { page = "opt_bars", terms = { "bar texture", "bar textures", "health bar", "power bar", "bars", "bar", "absorb bar", "dispel overlay", "rounded bars" } },
@@ -1618,7 +1618,7 @@ local function DirectHelpAnswer(query, opts)
         }
     end
     if ContainsAny(norm, { "anchor", "anchors", "anchoring", "anchor point", "anchor points", "attach point", "attach points" })
-        and not ContainsAny(norm, { "cooldown manager", "cooldownmanager", "essential cooldown", "combat timer", "totem", "statue", "first dance", "interrupt ready", "kick ready" })
+        and not ContainsAny(norm, { "cooldown manager", "cooldownmanager", "essential cooldown", "combat timer", "totem", "statue", "interrupt ready", "kick ready" })
         and HasConceptDefinitionIntent(norm)
     then
         return {
@@ -1699,7 +1699,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptDefinitionIntent(norm)
     then
         return {
-            text = "Click-through and lock help\nLocked means a widget should not be moved accidentally. Click-through means the widget ignores mouse clicks so you can click the game world or frames behind it. MSUF uses these ideas for gameplay helpers and movable UI elements.\nExamples: lock combat timer; make combat timer click through; unlock first dance; open gameplay.\nYou can ask: Open Gameplay | Enter Edit Mode",
+            text = "Click-through and lock help\nLocked means a widget should not be moved accidentally. Click-through means the widget ignores mouse clicks so you can click the game world or frames behind it. MSUF uses these ideas for gameplay helpers and movable UI elements.\nExamples: lock combat timer; make combat timer click through; open gameplay.\nYou can ask: Open Gameplay | Enter Edit Mode",
             status = "applied",
             summary = "Assistant click-through lock help",
         }
@@ -2016,15 +2016,6 @@ local function DirectHelpAnswer(query, opts)
             text = "Combat Crosshair help\nIn Gameplay, I can help with Combat Crosshair options. You can enable it, set size and thickness, configure in-range/out-of-range colors, and set the melee range spell used for range checks.\nExamples: show combat crosshair; make combat crosshair thicker; set crosshair size to 60; set crosshair melee spell 100780.\nYou can ask: Open Gameplay",
             status = "applied",
             summary = "Assistant combat crosshair help",
-        }
-    end
-    if ContainsAny(norm, { "first dance", "first dance tracker", "first dancer", "erster tanz", "der erste tanz" })
-        and ContainsAny(norm, { "explain", "what is", "what does", "where", "where is", "where do", "help", "tracker", "icon", "ready", "hilfe", "erklaeren", "erklaer", "wo", "symbol", "bereit" })
-    then
-        return {
-            text = "First Dance Tracker help\nFirst Dance is a Gameplay tracker for the Rogue First Dance buff. Options include visibility, lock, click-through, icon mode, ready visibility, size, and X/Y offsets.\nExamples: show first dance; move first dance icon right 5; set first dance icon size to 40; hide first dance ready.\nYou can ask: Open Gameplay",
-            status = "applied",
-            summary = "Assistant first dance help",
         }
     end
     if ContainsAny(norm, { "role sorting", "role sort", "sort by role", "group role sorting", "group frame role sorting", "party role sort", "raid role sort" })

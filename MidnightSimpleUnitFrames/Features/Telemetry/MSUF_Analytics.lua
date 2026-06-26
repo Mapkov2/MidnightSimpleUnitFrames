@@ -295,7 +295,6 @@ local function CollectSessionSnapshot(target)
 
     GameplaySwitch("Gameplay_CombatTimer", gameplay.enableCombatTimer)
     GameplaySwitch("Gameplay_CombatStateText", gameplay.enableCombatStateText)
-    GameplaySwitch("Gameplay_FirstDance", gameplay.enableFirstDanceTimer)
     GameplaySwitch("Gameplay_CombatCrosshair", gameplay.enableCombatCrosshair)
     GameplaySwitch("Gameplay_CrosshairRangeColor", gameplay.enableCombatCrosshairMeleeRangeColor)
     GameplaySwitch("Gameplay_PlayerTotems", gameplay.enablePlayerTotems)
