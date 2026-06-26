@@ -38,6 +38,7 @@ local function NormalizeCastbarTabKey(key)
     return key
 end
 local function CurrentCastbarTab(unit)
+    if unit == nil then return "general" end
     M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
     local key = NormalizeCastbarTabKey(M.unitCastbarTabSelection[unit])
     M.unitCastbarTabSelection[unit] = key
@@ -545,8 +546,11 @@ local function BuildCastbar(ctx, builder, unit)
     W.SegmentTabs(ctx, sec, {
         label = "Castbar area", values = CASTBAR_TAB_VALUES, width = min(620, sectionW - 48),
         frames = tabFrames, defaultTab = "general",
-        get = CurrentCastbarTab,
-        set = function(v) M.unitCastbarTabSelection[unit] = v or "general" end,
+        get = function() return CurrentCastbarTab(unit) end,
+        set = function(v)
+            M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
+            M.unitCastbarTabSelection[unit] = NormalizeCastbarTabKey(v)
+        end,
         afterRefresh = function(tab) SetCastbarSectionHeight(CASTBAR_TAB_HEIGHTS[tab] or CASTBAR_TAB_HEIGHTS.general) end,
         x = 20, y = -58,
     })
