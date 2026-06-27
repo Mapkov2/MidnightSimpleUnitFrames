@@ -95,6 +95,11 @@ end
 local function ApplyAuraColors()
     ApplyAuras()
     ApplyColors()
+    -- Aura timer bucket coloring is baked into a C-side formatter at button-create
+    -- time, so a plain RefreshAll (which reuses lanes) would not pick up new
+    -- colors/thresholds. Bump the native visual generation to force lane recreate.
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.ApplyFontsFromGlobal) == "function" then a3.ApplyFontsFromGlobal() end
     ScheduleColorFanout("MSUF2_AURA_COLOR_FANOUT", "auras", function()
         CallGlobal("MSUF_GF_ForceAuraTextColorRefresh")
     end)
