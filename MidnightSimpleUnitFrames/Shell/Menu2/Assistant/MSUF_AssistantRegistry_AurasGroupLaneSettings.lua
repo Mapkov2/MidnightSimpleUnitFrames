@@ -21,6 +21,8 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     local RegisterGFAuraNumber = ctx.RegisterGFAuraNumber
     local RegisterGFAuraEnum = ctx.RegisterGFAuraEnum
     local RegisterGroupAuraRootSettings = ctx.RegisterGroupAuraRootSettings
+    local GFReadAuraValue = ctx.GFReadAuraValue
+    local GFWriteAuraValue = ctx.GFWriteAuraValue
     local GFReadConfValue = ctx.GFReadConfValue
     local GFWriteConfValue = ctx.GFWriteConfValue
     local ApplyGroup = ctx.ApplyGroup
@@ -28,6 +30,8 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     local GF_AURA_GROUPS = ctx.GF_AURA_GROUPS or {}
     local GF_AURA_FILTER_VALUES = ctx.GF_AURA_FILTER_VALUES or {}
     local GF_AURA_FILTER_ALIASES = ctx.GF_AURA_FILTER_ALIASES
+    local AURA_DEBUFF_TYPE_BORDER_VALUES = ctx.AURA_DEBUFF_TYPE_BORDER_VALUES or {}
+    local AURA_DEBUFF_TYPE_BORDER_ALIASES = ctx.AURA_DEBUFF_TYPE_BORDER_ALIASES or {}
     local AURA_LANES = ctx.AURA_LANES or {}
 
     if type(AddAliasesForUnit) ~= "function" then return end
@@ -42,6 +46,34 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
         GFAurasRoot = ctx.GFAurasRoot,
         ApplyGroup = ctx.ApplyGroup,
     }
+
+    if #AURA_DEBUFF_TYPE_BORDER_VALUES == 0 then
+        AURA_DEBUFF_TYPE_BORDER_VALUES = { "OFF", "BORDER", "SYMBOL" }
+    end
+    local debuffBorderAllowed = {}
+    for i = 1, #AURA_DEBUFF_TYPE_BORDER_VALUES do debuffBorderAllowed[AURA_DEBUFF_TYPE_BORDER_VALUES[i]] = true end
+
+    local function NormalizeDebuffTypeBorderMode(value)
+        value = tostring(value or "OFF")
+        return debuffBorderAllowed[value] and value or "OFF"
+    end
+
+    local function ReadGFDebuffTypeBorderMode(scope, lane)
+        if type(GFReadAuraValue) ~= "function" then return "OFF" end
+        local value = GFReadAuraValue(scope, lane, "dispelBorderMode", nil)
+        if value ~= nil then
+            local mode = NormalizeDebuffTypeBorderMode(value)
+            return (mode == "OFF" and GFReadAuraValue(scope, lane, "showDispelBorder", false) == true) and "SYMBOL" or mode
+        end
+        return GFReadAuraValue(scope, lane, "showDispelBorder", false) == true and "SYMBOL" or "OFF"
+    end
+
+    local function WriteGFDebuffTypeBorderMode(scope, lane, value)
+        if type(GFWriteAuraValue) ~= "function" then return end
+        value = NormalizeDebuffTypeBorderMode(value)
+        GFWriteAuraValue(scope, lane, "dispelBorderMode", value)
+        GFWriteAuraValue(scope, lane, "showDispelBorder", value ~= "OFF")
+    end
 
     for _, scope in ipairs(GF_AURA_GROUPS) do
         for _, laneInfo in ipairs(AURA_LANES) do
@@ -146,12 +178,48 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
                 AddGFAuraAliases(aliases, scope, lane, "debuff type border")
                 AddGFAuraAliases(aliases, scope, lane, "dispel border")
                 RegisterGFAuraBoolean(scope, lane, "DispelTypeBorder", "showDispelBorder", laneInfo.label .. " Dispel-type Border", false, aliases)
+
+                aliases = {}
+                AddGFAuraAliases(aliases, scope, lane, "dispel type border mode")
+                AddGFAuraAliases(aliases, scope, lane, "debuff type border mode")
+                AddGFAuraAliases(aliases, scope, lane, "dispel border mode")
+                AddGFAuraAliases(aliases, scope, lane, "debuff border mode")
+                AddGFAuraAliases(aliases, scope, lane, "dispel type border")
+                AddGFAuraAliases(aliases, scope, lane, "debuff type border")
+                AddGFAuraAliases(aliases, scope, lane, "dispel border")
+                Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "dispel type border mode", "debuff type border mode", "dispel border mode", "debuff border mode" })
+                Registry:RegisterSetting({
+                    key = "gf_" .. scope .. ".auras." .. lane .. ".dispelBorderMode",
+                    label = UNIT_LABELS[scope] .. " " .. laneInfo.label .. " Dispel-type Border Mode",
+                    category = UNIT_LABELS[scope] .. " / Group Auras",
+                    unit = scope,
+                    frameType = "groupAura",
+                    attribute = "gfAura" .. lane .. "DispelBorderMode",
+                    type = "enum",
+                    aliases = aliases,
+                    exactAliases = aliases,
+                    values = AURA_DEBUFF_TYPE_BORDER_VALUES,
+                    valueAliases = AURA_DEBUFF_TYPE_BORDER_ALIASES,
+                    get = function() return ReadGFDebuffTypeBorderMode(scope, lane) end,
+                    set = function(value) WriteGFDebuffTypeBorderMode(scope, lane, value) end,
+                    apply = function() ApplyGroup(scope, "visual") end,
+                    combatSafe = false,
+                })
             end
 
             aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "cooldown font")
             AddGFAuraAliases(aliases, scope, lane, "cooldown size")
             RegisterGFAuraNumber(scope, lane, "CooldownSize", "cooldownSize", laneInfo.label .. " Cooldown Font Size", 8, 6, 24, aliases, "font")
+
+            aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "cooldown decimals")
+            AddGFAuraAliases(aliases, scope, lane, "cooldown decimal")
+            AddGFAuraAliases(aliases, scope, lane, "timer decimals")
+            AddGFAuraAliases(aliases, scope, lane, "decimal threshold")
+            AddGFAuraAliases(aliases, scope, lane, "decimals below sec")
+            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "cooldown decimals", "cooldown decimal", "timer decimals", "decimal threshold", "decimals below sec" })
+            RegisterGFAuraNumber(scope, lane, "CooldownDecimalSeconds", "cooldownDecimalSeconds", laneInfo.label .. " Cooldown Decimal Threshold", 3, 0, 30, aliases, "visual")
 
             aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "stack font")

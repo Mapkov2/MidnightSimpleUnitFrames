@@ -108,6 +108,8 @@ if type(RegisterGroupAuraLaneSettings) == "function" then
         RegisterGFAuraEnum = RegisterGFAuraEnum,
         RegisterGroupAuraRootSettings = A.AurasRegistry and A.AurasRegistry.RegisterGroupAuraRootSettings,
         GFAurasRoot = GFAurasRoot,
+        GFReadAuraValue = GFReadAuraValue,
+        GFWriteAuraValue = GFWriteAuraValue,
         GFReadConfValue = GFReadConfValue,
         GFWriteConfValue = GFWriteConfValue,
         ApplyGroup = ApplyGroup,
@@ -116,6 +118,8 @@ if type(RegisterGroupAuraLaneSettings) == "function" then
         GF_AURA_GROWTH = GF_AURA_GROWTH,
         GF_AURA_FILTER_VALUES = GF_AURA_FILTER_VALUES,
         GF_AURA_FILTER_ALIASES = GF_AURA_FILTER_ALIASES,
+        AURA_DEBUFF_TYPE_BORDER_VALUES = AurasData.AURA_DEBUFF_TYPE_BORDER_VALUES or {},
+        AURA_DEBUFF_TYPE_BORDER_ALIASES = AurasData.AURA_DEBUFF_TYPE_BORDER_ALIASES or {},
         AURA_LANES = AURA_LANES,
     })
 end
