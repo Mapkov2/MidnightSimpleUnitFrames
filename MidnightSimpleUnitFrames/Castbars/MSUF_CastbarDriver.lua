@@ -245,11 +245,10 @@ local function SetSafetyOnUpdate(frame, enabled)
     if not frame then return end
 
     if enabled then
-        if frame._msufSafetyOnUpdate then return end
-        frame._msufSafetyNext = 0
-        frame._msufSafetyOnUpdate = true
-        SetFrameOnUpdateMode(frame, "RunWhenVisible")
-        frame:SetScript("OnUpdate", frame._msufSafetyOnUpdateFn)
+        frame._msufSafetyNext = nil
+        frame._msufSafetyOnUpdate = nil
+        frame:SetScript("OnUpdate", nil)
+        SetFrameOnUpdateMode(frame, "Disabled")
         return
     end
 
@@ -257,47 +256,6 @@ local function SetSafetyOnUpdate(frame, enabled)
     frame._msufSafetyNext = nil
     frame:SetScript("OnUpdate", nil)
     SetFrameOnUpdateMode(frame, "Disabled")
-end
-
-local function SafetyOnUpdate(frame)
-    if not (frame and frame.unit) then return end
-    if not frame:IsShown() then
-        SetSafetyOnUpdate(frame, false)
-        return
-    end
-    if frame.interrupted then return end
-
-    local now = GetTime()
-    local nextSafety = frame._msufSafetyNext or 0
-    if now < nextSafety then return end
-    frame._msufSafetyNext = now + 0.25
-
-    local unit = frame.unit
-    if not UnitExists(unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)) then
-        SetSafetyOnUpdate(frame, false)
-        _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
-        return
-    end
-
-    local endTime = frame._msufPlainEndTime
-    if not endTime then return end
-
-    local remaining = endTime - now
-    if remaining > 0 then
-        frame._msufZeroCount = nil
-        return
-    end
-
-    frame._msufZeroCount = (frame._msufZeroCount or 0) + 1
-    if frame._msufZeroCount < 2 then return end
-
-    frame._msufZeroCount = nil
-    SetSafetyOnUpdate(frame, false)
-    if frame.SetSucceeded then
-        frame:SetSucceeded()
-    else
-        _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
-    end
 end
 
 local function BuildState(frame)
@@ -718,8 +676,6 @@ local function CreateCastBar(frameName, unit)
     frame:SetClampedToScreen(true)
     frame.unit = unit
     frame.reverseFill = false
-    frame._msufSafetyOnUpdateFn = SafetyOnUpdate
-
     function frame:UpdateColorForInterruptible()
         if not (self and self.statusBar and self.statusBar.SetStatusBarColor) then
             return
