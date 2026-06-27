@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0 Alpha 2",
+    currentVersion = "6.0 Alpha 3",
     previousVersion = "6.0 Alpha 1",
     rangeLabel = "6.0 Alpha 1 -> 6.0 Alpha 2",
     entries = {
