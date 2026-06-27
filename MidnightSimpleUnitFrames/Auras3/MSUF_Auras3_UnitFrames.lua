@@ -1234,8 +1234,20 @@ local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame
     if not RegisterNativeContainer(container) then return false end
     if not NativeContainerVisible(container) then return true end
     if forceRefresh == true and lane and lane.nativeFilter and lane.max then
-        container:ClearAuraFilters()
-        container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
+        -- Swap reparse. ClearAuraFilters()+AddAuraFilter() is two RefreshAuraFrames
+        -- passes: clear every button, then repopulate every button (~2x
+        -- ApplyAuraInstance per visible aura). Blizzard exposes UpdateAllAuras()
+        -- specifically for target changes -- one parse + one populate, ~half the
+        -- cost -- but a prior PTR build taint-failed on it (see note at top of
+        -- file). Default stays on the safe Clear+Add path; set
+        -- A3.swapUseUpdateAllAuras = true in-game to A/B test the cheaper path on
+        -- the current build (confirm swap content updates AND no taint first).
+        if A3.swapUseUpdateAllAuras == true and type(container.UpdateAllAuras) == "function" then
+            container:UpdateAllAuras()
+        else
+            container:ClearAuraFilters()
+            container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
+        end
     end
     return true
 end
