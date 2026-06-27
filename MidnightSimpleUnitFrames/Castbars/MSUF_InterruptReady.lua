@@ -41,6 +41,13 @@ local SPECIALIZATION_KEYS = {
 local state = {}
 local cooldownTimerGeneration = 0
 local cooldownTimerEndTime
+local eventFrame
+local cooldownEventRegistered = false
+local activeIndicatorFrames = {}
+local activeIndicatorFrameCount = 0
+local fillActiveFrames = {}
+local fillActiveFrameCount = 0
+local UpdateCooldownEventRegistration
 
 local function GeneralDB()
     if type(_G.MSUF_EnsureDB) == "function" then
@@ -162,6 +169,15 @@ local function InterruptRemaining()
     return CooldownRemaining(InterruptCooldown())
 end
 
+local function InterruptReadyBoolForTint()
+    local cooldown = InterruptCooldown()
+    if cooldown and cooldown.IsZero then
+        return cooldown:IsZero()
+    end
+
+    return InterruptReady()
+end
+
 local function ColorFromDB(general, key, defaultR, defaultG, defaultB)
     local color = general[key]
     if type(color) == "table" then
@@ -239,7 +255,27 @@ local function ShouldShow(general, unit)
     return false
 end
 
+local function UnitSupportsFillStyle(general, unit)
+    if unit == "target" then
+        return general.kickReadyShowTarget == true
+    end
+
+    if unit == "focus" then
+        return general.kickReadyShowFocus == true
+    end
+
+    if unit == "boss" or (type(unit) == "string" and unit:match("^boss%d+$")) then
+        return general.kickReadyShowBoss == true
+    end
+
+    return false
+end
+
 local function IndicatorStyle(general)
+    if general.kickReadyStyle == "fill" then
+        return "fill"
+    end
+
     return (general.kickReadyStyle == "border") and "border" or "box"
 end
 
@@ -352,6 +388,44 @@ local function NotInterruptibleColor()
     return state.notInterruptibleColor
 end
 
+local function MarkActiveIndicatorFrame(frame)
+    if not frame or activeIndicatorFrames[frame] then return end
+    activeIndicatorFrames[frame] = true
+    activeIndicatorFrameCount = activeIndicatorFrameCount + 1
+    if UpdateCooldownEventRegistration then
+        UpdateCooldownEventRegistration()
+    end
+end
+
+local function MarkInactiveIndicatorFrame(frame)
+    if not frame or not activeIndicatorFrames[frame] then return end
+    activeIndicatorFrames[frame] = nil
+    activeIndicatorFrameCount = activeIndicatorFrameCount - 1
+    if activeIndicatorFrameCount < 0 then activeIndicatorFrameCount = 0 end
+    if UpdateCooldownEventRegistration then
+        UpdateCooldownEventRegistration()
+    end
+end
+
+local function MarkActiveFillFrame(frame)
+    if not frame or fillActiveFrames[frame] then return end
+    fillActiveFrames[frame] = true
+    fillActiveFrameCount = fillActiveFrameCount + 1
+    if UpdateCooldownEventRegistration then
+        UpdateCooldownEventRegistration()
+    end
+end
+
+local function MarkInactiveFillFrame(frame)
+    if not frame or not fillActiveFrames[frame] then return end
+    fillActiveFrames[frame] = nil
+    fillActiveFrameCount = fillActiveFrameCount - 1
+    if fillActiveFrameCount < 0 then fillActiveFrameCount = 0 end
+    if UpdateCooldownEventRegistration then
+        UpdateCooldownEventRegistration()
+    end
+end
+
 local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
     local color = ColorForReady(isReady, general)
 
@@ -370,7 +444,7 @@ local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
     return isReady and 0 or 1, isReady and 1 or 0, 0, 1
 end
 
-local function HideIndicator(frame)
+local function HideIndicatorVisual(frame)
     if not frame then
         return
     end
@@ -383,32 +457,75 @@ local function HideIndicator(frame)
     RestoreOutline(frame)
 end
 
+local function HideIndicator(frame)
+    MarkInactiveIndicatorFrame(frame)
+    MarkInactiveFillFrame(frame)
+    HideIndicatorVisual(frame)
+end
+
 --- Per-frame decorator entry. It never starts or stops casts; it only shows,
 --- hides, or recolors the indicator on frames that are already active.
-local function RefreshFrame(frame, castState, status, general)
-    if not (frame and frame.statusBar) then
+local function RefreshFrame(frame, castState, status, general, updateFillColor)
+    if not frame then
+        return
+    end
+
+    if not frame.statusBar then
+        HideIndicator(frame)
         return
     end
 
     general = general or GeneralDB()
-    if not ShouldShow(general, frame.unit) or not (frame.MSUF_castActive or (castState and castState.active)) then
+
+    local castStateTable = type(castState) == "table" and castState or nil
+    local active = frame.MSUF_castActive or (castStateTable and castStateTable.active)
+    local style = IndicatorStyle(general)
+
+    if style == "fill" then
+        MarkInactiveIndicatorFrame(frame)
+        HideIndicatorVisual(frame)
+
+        if not UnitSupportsFillStyle(general, frame.unit) or not active then
+            MarkInactiveFillFrame(frame)
+            return
+        end
+
+        if frame.isNotInterruptible == true
+            or frame.MSUF_kickInterruptibleConfirmed == false
+            or (castStateTable and castStateTable.isNotInterruptible == true)
+        then
+            MarkInactiveFillFrame(frame)
+            return
+        end
+
+        MarkActiveFillFrame(frame)
+        if updateFillColor == true and frame.UpdateColorForInterruptible then
+            frame:UpdateColorForInterruptible()
+        end
+        return
+    end
+
+    MarkInactiveFillFrame(frame)
+    if not ShouldShow(general, frame.unit) or not active then
         HideIndicator(frame)
         return
     end
 
     if frame.isNotInterruptible == true
         or frame.MSUF_kickInterruptibleConfirmed == false
-        or (castState and castState.isNotInterruptible == true)
+        or (castStateTable and castStateTable.isNotInterruptible == true)
     then
         HideIndicator(frame)
         return
     end
 
+    MarkActiveIndicatorFrame(frame)
+
     local isReady = ResolveStatus(status)
-    local rawNotInterruptible = ResolveRawNotInterruptible(frame, castState)
+    local rawNotInterruptible = ResolveRawNotInterruptible(frame, castStateTable)
     local red, green, blue, alpha = EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
 
-    if IndicatorStyle(general) == "border" then
+    if style == "border" then
         if frame.kickReadyBox then
             frame.kickReadyBox:Hide()
             frame.kickReadyBox._kickReadyShown = nil
@@ -445,13 +562,18 @@ local function ForEachCastbar(callback)
     end
 end
 
-local function RefreshAll()
+local function RefreshAll(updateFillColor)
     local status = {}
     local general = GeneralDB()
 
     ForEachCastbar(function(frame)
-        RefreshFrame(frame, nil, status, general)
+        RefreshFrame(frame, nil, status, general, updateFillColor)
     end)
+
+    if not status.resolved and fillActiveFrameCount > 0 then
+        status.remaining = InterruptRemaining()
+        status.resolved = status.remaining ~= nil
+    end
 
     return status.remaining, status.resolved == true
 end
@@ -493,7 +615,7 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved)
     TimerAPI.After(delay, function()
         if generation == cooldownTimerGeneration then
             cooldownTimerEndTime = nil
-            local remaining, resolved = RefreshAll()
+            local remaining, resolved = RefreshAll(true)
             if resolved then
                 ScheduleCooldownRefresh(remaining, true)
             end
@@ -512,12 +634,25 @@ local function KickReady_IsReady()
     return ready
 end
 
+local function KickReady_GetSpellID()
+    return state.spellID or ResolveInterruptSpellID()
+end
+
+local function KickReady_GetReadyBoolForTint()
+    return InterruptReadyBoolForTint()
+end
+
 local function KickReady_EvaluateColor(ready)
     return ColorForReady(ready)
 end
 
 local function KickReady_ApplyLayout(frame)
     local general = GeneralDB()
+    if IndicatorStyle(general) == "fill" then
+        HideIndicatorVisual(frame)
+        return
+    end
+
     if frame and ShouldShow(general, frame.unit) then
         ApplyBoxLayout(frame, general)
     end
@@ -528,24 +663,59 @@ local function KickReady_RefreshFrame(frame, castState)
     RefreshFrame(frame, castState, status)
     if status.resolved then
         ScheduleCooldownRefresh(status.remaining, true)
+    elseif frame and fillActiveFrames[frame] then
+        ScheduleCooldownRefresh(InterruptRemaining(), true)
     end
+end
+
+local function KickReady_RefreshAll()
+    ResolveInterruptSpellID()
+    local remaining, resolved = RefreshAll(true)
+    if resolved then
+        ScheduleCooldownRefresh(remaining, true)
+    end
+    if UpdateCooldownEventRegistration then
+        UpdateCooldownEventRegistration()
+    end
+    return remaining, resolved
 end
 
 ExportPublic("MSUF_KickReady_Init", KickReady_Init)
 ExportPublic("MSUF_KickReady_IsReady", KickReady_IsReady)
+ExportPublic("MSUF_KickReady_GetSpellID", KickReady_GetSpellID)
+ExportPublic("MSUF_KickReady_GetReadyBoolForTint", KickReady_GetReadyBoolForTint)
 ExportPublic("MSUF_KickReady_EvaluateColor", KickReady_EvaluateColor)
 ExportPublic("MSUF_KickReady_ApplyLayout", KickReady_ApplyLayout)
 ExportPublic("MSUF_KickReady_RefreshFrame", KickReady_RefreshFrame)
+ExportPublic("MSUF_KickReady_RefreshAll", KickReady_RefreshAll)
 
-local eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
+UpdateCooldownEventRegistration = function()
+    if not eventFrame then
+        return
+    end
+
+    local shouldRegister = activeIndicatorFrameCount > 0 or fillActiveFrameCount > 0
+    if shouldRegister and not cooldownEventRegistered then
+        eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+        cooldownEventRegistered = true
+    elseif not shouldRegister and cooldownEventRegistered then
+        eventFrame:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
+        cooldownEventRegistered = false
+    end
+end
+
+eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-eventFrame:SetScript("OnEvent", function()
-    ResolveInterruptSpellID()
-    local remaining, resolved = RefreshAll()
+eventFrame:SetScript("OnEvent", function(_, event)
+    if event ~= "SPELL_UPDATE_COOLDOWN" then
+        ResolveInterruptSpellID()
+    end
+
+    local remaining, resolved = RefreshAll(true)
     if resolved then
         ScheduleCooldownRefresh(remaining, true)
     end
+    UpdateCooldownEventRegistration()
 end)

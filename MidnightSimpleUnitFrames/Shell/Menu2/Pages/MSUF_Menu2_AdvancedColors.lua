@@ -87,6 +87,7 @@ end
 local function ApplyCastbarColors()
     ApplyColors()
     M.RequestGeneralApply("MSUF2_CASTBAR_COLORS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
+    CallGlobal("MSUF_KickReady_RefreshAll")
 end
 local function ApplyGameplayColors()
     ApplyColors()
@@ -836,12 +837,14 @@ local function BuildColors(ctx)
         { "Ready color (kick available)", 12, -274, "kickReadyColor", 0, 1, 0 },
         { "Not ready color (kick on cooldown)", 12, -310, "kickNotReadyColor", 1, 0, 0 },
     }, ApplyCastbarColors)
+    CH.ApiColorAt(ctx, castbar, "Unavailable fill color", 12, -346, "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor", 1.0, 0.494117647, 0.137254902, ApplyCastbarColors)
     CH.ButtonAt(castbar, "Reset castbar colors", 12, -470, 170, function()
         ApiCall("ResetCastbarTextColorToGlobal")
         ApiCall("ResetCastbarBorderColor")
         ApiCall("ResetCastbarBackgroundColor")
         local g = G()
-        ClearRGBs(g, "castbarInterruptible", "castbarNonInterruptible", "castbarInterruptFeedback")
+        ClearRGBs(g, "castbarInterruptible", "castbarNonInterruptible", "castbarInterruptFeedback", "castbarInterruptUnavailable")
+        g.castbarInterruptUnavailableColor = nil
         g.playerCastbarOverrideEnabled = false
         g.playerCastbarOverrideMode = "CLASS"
         ClearRGB(g, "playerCastbarOverride")

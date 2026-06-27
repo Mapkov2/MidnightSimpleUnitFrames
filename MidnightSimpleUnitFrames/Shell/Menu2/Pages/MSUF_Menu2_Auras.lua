@@ -131,7 +131,13 @@ local function ScheduleAuraMenuWork(key, delay, fn)
         fn()
     end
 end
+local function AurasMenuCombatLocked()
+    if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() and true or false end
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then return _G.MSUF_IsConfigCombatLocked() and true or false end
+    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+end
 local function QueueAurasPageRefresh(ctx, reason)
+    if AurasMenuCombatLocked() then return false end
     if M.RequestRefresh then
         M.RequestRefresh(ctx, reason or "auras-refresh")
     elseif M.Refresh then
@@ -160,7 +166,7 @@ local function FlushAuraApply()
     end
     AurasProfileStop("FlushAuraApply", started, count)
 
-    if refreshCtx or refreshReason then
+    if (refreshCtx or refreshReason) and not AurasMenuCombatLocked() then
         QueueAurasPageRefresh(refreshCtx, refreshReason or "auras-apply")
     end
 end
@@ -460,7 +466,7 @@ local function GFAnchorValues()
     if type(values) == "table" and #values > 0 then return values end
     return VT("CENTER", "Center", "TOPLEFT", "Top Left", "TOPRIGHT", "Top Right", "BOTTOMLEFT", "Bottom Left", "BOTTOMRIGHT", "Bottom Right")
 end
-local function BindGroupSwitch(ctx, parent, label, x, y, width, scope, groupKey, key, defaultValue, mode)
+local function BindGroupSwitch(ctx, parent, label, x, y, width, scope, groupKey, key, defaultValue, mode, afterSet)
     return BindSwitch(ctx, parent, label, x, y, width,
         function()
             local group = GFReadGroup(scope, groupKey)
@@ -468,9 +474,12 @@ local function BindGroupSwitch(ctx, parent, label, x, y, width, scope, groupKey,
             if value == nil then value = defaultValue end
             return value and true or false
         end,
-        function(v) GFWriteGroupValue(scope, groupKey, key, v and true or false, mode or "visual") end)
+        function(v)
+            GFWriteGroupValue(scope, groupKey, key, v and true or false, mode or "visual")
+            if afterSet then afterSet(v and true or false) end
+        end)
 end
-local function BindGroupRootSwitch(ctx, parent, label, x, y, width, scope, key, defaultValue, mode)
+local function BindGroupRootSwitch(ctx, parent, label, x, y, width, scope, key, defaultValue, mode, afterSet)
     return BindSwitch(ctx, parent, label, x, y, width,
         function()
             local root = GFReadRoot(scope)
@@ -478,7 +487,10 @@ local function BindGroupRootSwitch(ctx, parent, label, x, y, width, scope, key, 
             if value == nil then value = defaultValue end
             return value and true or false
         end,
-        function(v) GFWriteRootValue(scope, key, v and true or false, mode or "visual") end)
+        function(v)
+            GFWriteRootValue(scope, key, v and true or false, mode or "visual")
+            if afterSet then afterSet(v and true or false) end
+        end)
 end
 local function BindGroupConfSwitch(ctx, parent, label, x, y, width, scope, key, defaultValue, mode, afterSet)
     return BindSwitch(ctx, parent, label, x, y, width,
@@ -493,7 +505,7 @@ local function BindGroupConfSwitch(ctx, parent, label, x, y, width, scope, key, 
             if afterSet then afterSet(v and true or false) end
         end)
 end
-local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, scope, groupKey, key, defaultValue, mode)
+local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, scope, groupKey, key, defaultValue, mode, afterSet)
     return BindSlider(ctx, parent, label, x, y, minVal, maxVal, step, width,
         function()
             local group = GFReadGroup(scope, groupKey)
@@ -502,15 +514,19 @@ local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, w
         function(v)
             v = Round(v)
             GFWriteGroupValue(scope, groupKey, key, v, mode or "visual")
+            if afterSet then afterSet(v) end
         end)
 end
-local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope, groupKey, key, defaultValue, mode)
+local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope, groupKey, key, defaultValue, mode, afterSet)
     return BindDropdown(ctx, parent, label, x, y, values, width,
         function()
             local group = GFReadGroup(scope, groupKey)
             return group[key] or defaultValue
         end,
-        function(v) GFWriteGroupValue(scope, groupKey, key, v or defaultValue, mode or "visual") end)
+        function(v)
+            GFWriteGroupValue(scope, groupKey, key, v or defaultValue, mode or "visual")
+            if afterSet then afterSet(v or defaultValue) end
+        end)
 end
 local function ReadGroupDebuffTypeBorderMode(scope, groupKey)
     local group = GFReadGroup(scope, groupKey or "debuff")
@@ -610,6 +626,10 @@ local function PlaceAuraPreviewText(fs, icon, anchor, x, y)
         end
     end
 end
+local function RefreshMiniAuraPreviewNow(refreshPreview)
+    if AurasMenuCombatLocked() then return end
+    if type(refreshPreview) == "function" then refreshPreview() end
+end
 local function GroupAuraPreviewDefaultSize(scope, lane)
     if scope == "raid" or scope == "mythicraid" then return 16 end
     return lane == "buff" and 22 or 20
@@ -654,10 +674,21 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         if lane == "debuff" then cfg.debuffBorderMode = ReadGroupDebuffTypeBorderMode(scope, "debuff") end
     else
         local readScope = scope or "shared"
-        cfg.size = Model.ReadNumber(readScope, lane and LaneSizeKey(lane) or "iconSize", 26, 10, 64)
-        cfg.spacing = Model.ReadNumber(readScope, "spacing", 2, 0, 12)
-        cfg.perRow = lane and Model.ReadLanePerRow(readScope, lane) or Model.ReadNumber(readScope, "perRow", 12, 1, 40)
-        cfg.maxIcons = lane and Model.ReadNumber(readScope, LaneMaxKey(lane), LaneDefaultMax(lane), 0, 80) or cfg.perRow * 2
+        local runtimePreview = (readScope ~= "shared" and type(Model.ReadPreviewConfig) == "function") and Model.ReadPreviewConfig(readScope) or nil
+        if lane == "buff" then
+            cfg.size = tonumber(runtimePreview and runtimePreview.buffSize) or Model.ReadNumber(readScope, LaneSizeKey(lane), 26, 10, 128)
+            cfg.perRow = tonumber(runtimePreview and runtimePreview.buffPerRow) or Model.ReadLanePerRow(readScope, lane)
+            cfg.maxIcons = tonumber(runtimePreview and runtimePreview.maxBuffs) or Model.ReadNumber(readScope, LaneMaxKey(lane), LaneDefaultMax(lane), 0, 80)
+        elseif lane == "debuff" then
+            cfg.size = tonumber(runtimePreview and runtimePreview.debuffSize) or Model.ReadNumber(readScope, LaneSizeKey(lane), 26, 10, 128)
+            cfg.perRow = tonumber(runtimePreview and runtimePreview.debuffPerRow) or Model.ReadLanePerRow(readScope, lane)
+            cfg.maxIcons = tonumber(runtimePreview and runtimePreview.maxDebuffs) or Model.ReadNumber(readScope, LaneMaxKey(lane), LaneDefaultMax(lane), 0, 80)
+        else
+            cfg.size = Model.ReadNumber(readScope, "iconSize", 26, 10, 128)
+            cfg.perRow = tonumber(runtimePreview and runtimePreview.perRow) or Model.ReadNumber(readScope, "perRow", 12, 1, 40)
+            cfg.maxIcons = cfg.perRow * 2
+        end
+        cfg.spacing = tonumber(runtimePreview and runtimePreview.spacing) or Model.ReadNumber(readScope, "spacing", 2, 0, 12)
         if type(Model.ReadLaneStyleBool) == "function" and lane then
             cfg.showStacks = Model.ReadLaneStyleBool(readScope, lane, "showStackCount", true)
             cfg.showTimers = Model.ReadLaneStyleBool(readScope, lane, "showCooldownText", true)
@@ -683,7 +714,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             end
         end
     end
-    local maxSize = max(12, min(34, floor(((height or 104) - 44) * 0.55)))
+    local maxSize = max(12, min(128, floor((height or 104) - 38), floor((width or 300) - 20)))
     cfg.size = min(maxSize, max(10, tonumber(cfg.size) or 24))
     cfg.spacing = min(10, max(0, tonumber(cfg.spacing) or 2))
     cfg.perRow = max(1, Round(cfg.perRow))
@@ -707,7 +738,8 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     for i = 1, 14 do icons[i] = CreateAuraPreviewIcon(box) end
     local buffTex = { 135987, 136116, 135932, 136085, 132333, 135981, 136048 }
     local debuffTex = { 136118, 136139, 136197, 135817, 132851, 136188, 136170 }
-    M.TrackRefresh(ctx, function()
+    local function RefreshPreview()
+        if AurasMenuCombatLocked() then return end
         local cfg = ReadMiniAuraPreviewConfig(scope, lane, width, height)
         for i = 1, #icons do
             local icon = icons[i]
@@ -748,8 +780,9 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
                 icon.dispelBorder:Hide()
             end
         end
-    end)
-    return box
+    end
+    M.TrackRefresh(ctx, RefreshPreview)
+    return box, RefreshPreview
 end
 local function BuildUnitStyle(ctx, b, scope)
     local unit = scope == "shared" and "shared" or scope
@@ -762,6 +795,10 @@ local function BuildUnitStyle(ctx, b, scope)
     local rightX = 32 + colW + 18
     local rightW = max(260, w - rightX - 24)
     local styleControls = {}
+    local refreshMiniPreview
+    local function RefreshStylePreview()
+        RefreshMiniAuraPreviewNow(refreshMiniPreview)
+    end
     local topY = -42
     local useShared
     if unit ~= "shared" then
@@ -770,6 +807,7 @@ local function BuildUnitStyle(ctx, b, scope)
             function(v)
                 Model.SetUseSharedVisuals(unit, v)
                 ApplyUnit(ctx, unit, "AURAS3_STYLE_INHERIT", true)
+                RefreshStylePreview()
             end)
         topY = -84
     end
@@ -816,7 +854,8 @@ local function BuildUnitStyle(ctx, b, scope)
             function() return ReadScopeBool(key, defaultValue) end,
             function(v)
                 WriteScopeBool(key, v)
-                ApplyUnit(ctx, unit, reason, true)
+                ApplyUnit(ctx, unit, reason)
+                RefreshStylePreview()
             end))
     end
     local function BindStyleDropdown(parent, label, x, y, values, width, getValue, setValue, reason)
@@ -824,7 +863,8 @@ local function BuildUnitStyle(ctx, b, scope)
             getValue,
             function(v)
                 setValue(v)
-                ApplyUnit(ctx, unit, reason, true)
+                ApplyUnit(ctx, unit, reason)
+                RefreshStylePreview()
             end))
     end
     local function BindStyleSlider(parent, label, x, y, minVal, maxVal, step, width, key, defaultValue, readMin, readMax, writeMin, writeMax, reason)
@@ -835,6 +875,7 @@ local function BuildUnitStyle(ctx, b, scope)
             function(v)
                 WriteScopeNumber(key, v, writeMin, writeMax)
                 ApplyUnit(ctx, unit, reason)
+                RefreshStylePreview()
             end))
     end
     local text = Card(section, laneName .. " Text Features", "Stack-count and cooldown text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, topY, colW, 388 + extraDebuffControls)
@@ -859,6 +900,7 @@ local function BuildUnitStyle(ctx, b, scope)
                 Model.WriteStackAnchor(unit, v)
             end
             ApplyUnit(ctx, unit, "AURAS3_STACK_ANCHOR")
+            RefreshStylePreview()
         end))
     BindStyleSlider(text, "Text Size", 16, -272 - extraDebuffControls, 6, 40, 1, colW - 32, "stackTextSize", 14, 6, 40, nil, nil, "AURAS3_STACK_SIZE")
     local smallW = max(120, floor((colW - 44) / 2))
@@ -869,7 +911,7 @@ local function BuildUnitStyle(ctx, b, scope)
     BindStyleSlider(cooldown, "X", 16, -122, -40, 40, 1, rightW - 32, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
     BindStyleSlider(cooldown, "Y", 16, -182, -40, 40, 1, rightW - 32, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
     BindStyleSwitch(cooldown, "Show Tooltip", 16, -242, rightW - 32, "showTooltip", true, "AURAS3_TOOLTIP")
-    BuildMiniAuraPreview(ctx, section, unit, rightX, topY - 340, rightW, 118, lane)
+    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, section, unit, rightX, topY - 340, rightW, 118, lane))
     local hint = W.Text(section, "", 24, topY - 472, w - 48, T.colors.muted)
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
@@ -887,33 +929,40 @@ local function BuildGroupStyle(ctx, b, scope)
     local colW = max(300, floor((w - 66) / 2))
     local rightX = 32 + colW + 18
     local rightW = max(260, w - rightX - 24)
+    local refreshMiniPreview
+    local function RefreshStylePreview()
+        RefreshMiniAuraPreviewNow(refreshMiniPreview)
+    end
     local text = Card(section, "Group Aura " .. LaneTitle(lane) .. " Text", "Cooldown and stack text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, -42, colW, 548 + extraDebuffControls)
-    BindGroupSwitch(ctx, text, "Show Cooldown Swipe", 16, -78, colW - 32, scope, lane, "showCooldownSwipe", true, "visual")
-    BindGroupSwitch(ctx, text, "Show Cooldown Text", 16, -110, colW - 32, scope, lane, "showCooldown", true, "visual")
-    BindGroupSwitch(ctx, text, "Show Stack Count", 16, -142, colW - 32, scope, lane, "showStacks", true, "visual")
+    BindGroupSwitch(ctx, text, "Show Cooldown Swipe", 16, -78, colW - 32, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, text, "Show Cooldown Text", 16, -110, colW - 32, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, text, "Show Stack Count", 16, -142, colW - 32, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
     if lane == "debuff" then
         BindDropdown(ctx, text, "Dispel-type Border", 16, -174,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             colW - 32,
             function() return ReadGroupDebuffTypeBorderMode(scope, lane) end,
-            function(v) WriteGroupDebuffTypeBorderMode(scope, lane, v) end)
+            function(v)
+                WriteGroupDebuffTypeBorderMode(scope, lane, v)
+                RefreshStylePreview()
+            end)
     end
-    BindGroupSlider(ctx, text, "Cooldown Font", 16, -198 - extraDebuffControls, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font")
-    BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -256 - extraDebuffControls, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry")
+    BindGroupSlider(ctx, text, "Cooldown Font", 16, -198 - extraDebuffControls, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font", RefreshStylePreview)
+    BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -256 - extraDebuffControls, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry", RefreshStylePreview)
     local textSmallW = max(120, floor((colW - 44) / 2))
-    BindGroupSlider(ctx, text, "Cooldown X", 16, -314 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "cooldownX", 0, "geometry")
-    BindGroupSlider(ctx, text, "Cooldown Y", 24 + textSmallW, -314 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "cooldownY", 0, "geometry")
-    BindGroupSlider(ctx, text, "Stack Font", 16, -374 - extraDebuffControls, 6, 24, 1, colW - 32, scope, lane, "stackSize", 10, "font")
-    BindGroupDropdown(ctx, text, "Stack Anchor", 16, -432 - extraDebuffControls, GFAnchorValues(), colW - 32, scope, lane, "stackAnchor", "BOTTOMRIGHT", "geometry")
-    BindGroupSlider(ctx, text, "Stack X", 16, -490 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "stackX", 0, "geometry")
-    BindGroupSlider(ctx, text, "Stack Y", 24 + textSmallW, -490 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "stackY", 0, "geometry")
+    BindGroupSlider(ctx, text, "Cooldown X", 16, -314 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "cooldownX", 0, "geometry", RefreshStylePreview)
+    BindGroupSlider(ctx, text, "Cooldown Y", 24 + textSmallW, -314 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "cooldownY", 0, "geometry", RefreshStylePreview)
+    BindGroupSlider(ctx, text, "Stack Font", 16, -374 - extraDebuffControls, 6, 24, 1, colW - 32, scope, lane, "stackSize", 10, "font", RefreshStylePreview)
+    BindGroupDropdown(ctx, text, "Stack Anchor", 16, -432 - extraDebuffControls, GFAnchorValues(), colW - 32, scope, lane, "stackAnchor", "BOTTOMRIGHT", "geometry", RefreshStylePreview)
+    BindGroupSlider(ctx, text, "Stack X", 16, -490 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
+    BindGroupSlider(ctx, text, "Stack Y", 24 + textSmallW, -490 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
     local behavior = Card(section, "Behavior", "Shared group-frame aura behavior for " .. ScopeLabel(scope) .. ".", rightX, -42, rightW, 306)
     BindGroupRootSwitch(ctx, behavior, "Show Tooltip", 16, -64, rightW - 32, scope, "showTooltip", true, "visual")
     BindGroupRootSwitch(ctx, behavior, "Sort by Duration", 16, -96, rightW - 32, scope, "sortByDuration", false, "visual")
     BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 16, -128, rightW - 32, scope, "preferPlayer", false, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 16, -160, rightW - 32, scope, "dynamicScale", false, "geometry")
-    BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 16, -202, rightW - 32, scope, "cooldownSwipeDarkenOnLoss", false, "visual")
-    BuildMiniAuraPreview(ctx, section, scope, rightX, -404, rightW, 92, lane)
+    BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 16, -160, rightW - 32, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
+    BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 16, -202, rightW - 32, scope, "cooldownSwipeDarkenOnLoss", false, "visual", RefreshStylePreview)
+    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, section, scope, rightX, -404, rightW, 118, lane))
 end
 local function BuildSharedColors(ctx, b)
     local section = b:Section("Shared Aura Colors", 438)

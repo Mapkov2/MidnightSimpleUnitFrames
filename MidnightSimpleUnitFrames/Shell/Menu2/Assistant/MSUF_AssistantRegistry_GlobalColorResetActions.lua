@@ -140,6 +140,8 @@ Registry:RegisterAction({
         g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB = nil, nil, nil
         g.castbarNonInterruptibleR, g.castbarNonInterruptibleG, g.castbarNonInterruptibleB = nil, nil, nil
         g.castbarInterruptFeedbackR, g.castbarInterruptFeedbackG, g.castbarInterruptFeedbackB = nil, nil, nil
+        g.castbarInterruptUnavailableR, g.castbarInterruptUnavailableG, g.castbarInterruptUnavailableB = nil, nil, nil
+        g.castbarInterruptUnavailableColor = nil
         g.playerCastbarOverrideEnabled = false
         g.playerCastbarOverrideMode = "CLASS"
         g.playerCastbarOverrideR, g.playerCastbarOverrideG, g.playerCastbarOverrideB = nil, nil, nil

@@ -31,7 +31,6 @@ local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
 local C_Timer = _G.C_Timer
-local UnitGUID = _G.UnitGUID
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local EMPTY_EVENTS = {}
@@ -856,13 +855,8 @@ local function EnsureRoot(frame)
     root:SetAllPoints(frame)
     root:SetScript("OnShow", function(self)
         -- Re-show needs a content reparse: while hidden the container is
-        -- unregistered from UNIT_AURA, so it missed any changes. Record the GUID
-        -- it parsed for so a following identity flush does not reparse again.
-        if RefreshAppliedNativeRoot and RefreshAppliedNativeRoot(self, true) then
-            local owner = self:GetParent()
-            local unit = owner and owner.unit
-            self._msufA3ParsedGUID = unit and UnitGUID and UnitGUID(unit) or nil
-        end
+        -- unregistered from UNIT_AURA, so it missed any aura changes.
+        if RefreshAppliedNativeRoot then RefreshAppliedNativeRoot(self, true) end
     end)
     root:Hide()
     frame.Auras = root
@@ -1174,7 +1168,18 @@ local function CreateNativeLane(root, lane, parentFrame)
     ConfigureContainer(container, lane, parentFrame)
     container:Show()
     container:SetUnit(lane.unit)
-    container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
+    -- Enable before the filter and frames so the container registers for UNIT_AURA
+    -- and its setup parses run over zero filters (cheap). The one populating parse
+    -- then happens once, on AddAuraFilter below, against the already-built pool --
+    -- instead of AddAuraFilter parsing empty, then re-parsing on SetEnabled.
+    if type(container.SetEnabled) == "function" then container:SetEnabled(true) end
+    -- Add buttons one at a time. The batch AddAuraFramesFromTable() TAINTS on 12.1:
+    -- it ipairs/indexes the addon-owned table inside the secure delegate and throws
+    -- "cannot be accessed while tainted" (unlike AddAuraFilter, which securecopies
+    -- its options). Per-frame AddAuraFrame only ever passes a single forbidden
+    -- object, so it is safe -- and because the filter is added afterwards, each
+    -- AddAuraFrame here re-walks over zero filters (cheap); the one populating parse
+    -- happens on AddAuraFilter below.
     for i = 1, lane.max do
         local button = CreateFrame("AuraButton", nil, container, "CustomAuraButtonTemplate")
         if not button then
@@ -1187,6 +1192,7 @@ local function CreateNativeLane(root, lane, parentFrame)
         container[i] = button
         container:AddAuraFrame(button)
     end
+    container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
     if not RegisterNativeContainer(container) then
         if container.Hide then container:Hide() end
         return nil
@@ -1309,17 +1315,11 @@ local function FlushIdentityQueue()
         -- Only touch frames that still own applied native auras; a frame disabled
         -- between enqueue and flush must not be resurrected here.
         if root and root._msufA3NativeRoot == true and root._msufA3Applied == true then
-            -- Reparse only when the unit behind the token actually changed.
-            -- Identity also fires for spurious/soft-target churn that does not move
-            -- the displayed GUID; skipping those keeps the (expensive) reparse to
-            -- one per real swap. A matching GUID means content is already current
-            -- and the container's own UNIT_AURA keeps it fresh.
-            local unit = frame.unit
-            local guid = unit and UnitGUID and UnitGUID(unit) or nil
-            if guid == nil or guid ~= root._msufA3ParsedGUID then
-                root._msufA3ParsedGUID = guid
-                RefreshAppliedNativeAuras(frame, true)
-            end
+            -- One coalesced reparse per settled identity tick. (UnitGUID is a secret
+            -- value on 12.1 and errors when compared while tainted, so we cannot gate
+            -- on whether the GUID changed -- the deferral + frame-keyed coalescing
+            -- already collapse swap spam to one reparse per tick, which is the win.)
+            RefreshAppliedNativeAuras(frame, true)
         end
     end
 end
@@ -1376,10 +1376,6 @@ local function ApplyConfig(frame, cfg, reason)
     root._msufA3VisualGen = VisualGen(cfg)
     root._msufA3AppliedUnit = cfg.unit or frame.unit
     root._msufA3FrameSpec = frame.MSUFSpec
-    -- Lanes were just (re)built and populated for the current unit; record its
-    -- GUID so the identity flush after an acquire/config change skips the
-    -- otherwise-redundant reparse (the GUID gate in FlushIdentityQueue).
-    root._msufA3ParsedGUID = UnitGUID and UnitGUID(cfg.unit or frame.unit) or nil
     root.needFullUpdate = nil
     root:Show()
     return ok == true

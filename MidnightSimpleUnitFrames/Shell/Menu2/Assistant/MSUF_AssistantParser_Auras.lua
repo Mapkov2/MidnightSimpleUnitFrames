@@ -230,7 +230,13 @@ local function AuraGeometryAttribute(text, direction)
     if ContainsAny(text, { "anchor", "anchor point", "position anchor", "bottom left", "bottom right", "top left", "top right", "bottomleft", "bottomright", "topleft", "topright" }) then
         return "anchor"
     end
-    if ContainsAny(text, { "max icons", "maximum icons", "icon count", "aura count", "buff count", "debuff count", "count" }) then
+    local hasSizeIntent = ContainsAny(text, { "icon size", "icons size", "size", "bigger", "larger", "smaller", "shrink", "groesse", "grosse" })
+    if not hasSizeIntent and ContainsAny(text, {
+        "max", "maximum", "max icons", "maximum icons", "max count", "maximum count",
+        "icon count", "aura count", "buff count", "debuff count", "count",
+        "cap", "caps", "capped", "aura cap", "buff cap", "debuff cap",
+        "limit", "limits", "limited", "icon limit", "aura limit", "buff limit", "debuff limit",
+    }) then
         return "max"
     end
     if ContainsAny(text, { "per row", "icons per row", "wrap count", "row count" }) then
@@ -239,10 +245,10 @@ local function AuraGeometryAttribute(text, direction)
     if ContainsAny(text, { "spacing", "gap", "icon gap" }) then
         return "spacing"
     end
-    if ContainsAny(text, { "layer", "z order", "z-order", "frame level" }) then
+    if ContainsAny(text, { "layer", "z", "z layer", "z level", "z-level", "z order", "z-order", "z index", "z-index", "draw layer", "frame level", "strata", "frame strata" }) then
         return "layer"
     end
-    if ContainsAny(text, { "icon size", "icons size", "size", "bigger", "larger", "smaller", "shrink", "groesse", "grosse" }) then
+    if hasSizeIntent then
         return "size"
     end
     if ContainsAny(text, { "move", "nudge", "shift", "offset", "left", "right", "up", "down", "verschiebe", "links", "rechts", "oben", "unten" }) then

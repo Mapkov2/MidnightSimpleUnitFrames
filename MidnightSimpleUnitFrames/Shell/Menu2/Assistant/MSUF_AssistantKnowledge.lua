@@ -1010,14 +1010,15 @@ local PAGE_HELP = {
         lines = {
             "You can summarize, export, import, create, copy, switch, delete, reset, and assign profiles to specs where the Profiles page offers those actions.",
             "Examples: export current profile; import profile; copy current profile to Raid; switch profile Healer; enable spec auto-switch.",
+            "Wago is a community site often used for WoW addon import strings. Export an MSUF profile string first, then paste it on Wago if you want a web backup or want to share the profile with someone else.",
             "Safety: I ask before importing, deleting, resetting, or copying profiles. For imports, you can export or copy the current profile first.",
         },
-        actions = { "Export Current Profile", "Import Profile", "Create Profile" },
+        actions = { "Export Current Profile", "Copy Wago Profiles Link", "Import Profile" },
     },
-    auras3 = { title = "Auras help", lines = { "You can change Aura and Group Aura options such as visibility, icon size, count, per-row layout, growth, offsets, cooldown text, stack text, filters, hidden auras, and quick presets.", "Examples: set target buff icon size to 30; turn on shared buff raid filter; apply clean aura preset." }, actions = { "Open Auras", "Open Aura Filters" } },
+    auras3 = { title = "Auras help", lines = { "You can change Aura and Group Aura options such as visibility, icon size, caps/count, per-row layout, growth, X/Y offsets, layer, cooldown text, stack text, filters, hidden auras, and quick presets.", "Examples: cap player buffs at 2; set target buff icon size to 30; set raid debuff layer to 7." }, actions = { "Open Auras", "Open Aura Filters" } },
     auras3_styling = { title = "Aura Style help", lines = { "You can change aura visual styling such as colors, borders, cooldown text, stack text, and related rendering details.", "Examples: set aura cooldown text size to 14; change aura border color; open Aura Style." }, actions = { "Open Aura Style", "Open Aura Filters" } },
-    auras3_buffs = { title = "Aura Buffs help", lines = { "You can change buff options for unit and group frames, including icon size, max buffs, layout, stack text, cooldown text, and filters.", "Examples: set player buff max to 8; set party buff icon size to 24; turn on target buff player filter." }, actions = { "Open Aura Buffs" } },
-    auras3_debuffs = { title = "Aura Debuffs help", lines = { "You can change debuff options for unit and group frames, including icon size, max debuffs, layout, cooldown text, and debuff filters.", "Examples: set focus debuff icon size to 28; turn on shared debuff raid filter." }, actions = { "Open Aura Debuffs" } },
+    auras3_buffs = { title = "Aura Buffs help", lines = { "You can change buff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, stack text, cooldown text, and filters.", "Examples: set player buff max to 8; cap player buffs at 2; set party buff icon size to 24." }, actions = { "Open Aura Buffs" } },
+    auras3_debuffs = { title = "Aura Debuffs help", lines = { "You can change debuff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, cooldown text, and debuff filters.", "Examples: set focus debuff icon size to 28; limit raid debuffs to 4; set target debuff z layer to 7." }, actions = { "Open Aura Debuffs" } },
     auras3_filters = { title = "Aura Filters help", lines = { "You can change Aura filter toggles, hidden-aura entries, hidden group-aura categories, Aura quick presets, and Group Aura copy through Group Copy categories.", "Examples: hide spell 12345 for player auras; show hidden raid buff categories; apply performance aura preset; copy raid auras to party." }, actions = { "Open Aura Filters" } },
     gf_layout = { title = "Group Layout help", lines = { "You can change group frame layout, spacing, growth, anchoring, reverse health fill, scaling breakpoints, party/raid/mythic raid options, Blizzard fallback behavior, and visibility options.", "Examples: 'set raid scale for 20 players to 80', 'make raid frames fill backwards', 'move raid frame closer to player', 'set party growth direction to down', or 'show Blizzard party frames when Party is disabled'." }, actions = { "Open Group Layout" } },
     gf_bars = {
@@ -1029,7 +1030,7 @@ local PAGE_HELP = {
         actions = { "Open Group Health & Text" },
     },
     gf_indicators = { title = "Group Indicators help", lines = { "You can change group status indicators, role/ready/summon icons, corner indicators, and related editor choices available in MSUF." }, actions = { "Open Group Indicators" } },
-    gf_auras = { title = "Group Auras help", lines = { "You can change Party, Raid, and Mythic Raid aura visibility, icon size, count, layout, filters, hidden group-aura categories, and group aura copy behavior.", "Examples: set raid buff icon size to 24; show only dispellable debuffs; hide raid buff category long term buffs; copy raid auras to party." }, actions = { "Open Group Auras", "Open Aura Filters" } },
+    gf_auras = { title = "Group Auras help", lines = { "You can change Party, Raid, and Mythic Raid aura visibility, icon size, caps/count, layout, X/Y offsets, layer, filters, hidden group-aura categories, and group aura copy behavior.", "Examples: set raid buff icon size to 24; cap party buffs at 4; set mythic raid debuff layer to 8; copy raid auras to party." }, actions = { "Open Group Auras", "Open Aura Filters" } },
     classpower = { title = "Class Resources help", lines = { "You can change class resource mode, size, position, colors, and gameplay-specific class resource options available in MSUF." }, actions = { "Open Class Resources" } },
     gameplay = { title = "Gameplay help", lines = { "You can change gameplay features such as combat timer, sounds, totem/statue frame behavior, and related options." }, actions = { "Open Gameplay" } },
 }
@@ -1044,7 +1045,7 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "bar help", "bars help", "help bar", "help bars", "texture help", "help texture" }, page = "opt_bars" },
     { terms = { "color help", "colors help", "help color", "help colors", "farbe hilfe", "farben hilfe" }, page = "opt_colors" },
     { terms = { "font help", "fonts help", "help font", "help fonts", "schrift hilfe" }, page = "opt_fonts" },
-    { terms = { "profile help", "profiles help", "help profile", "help profiles", "profil hilfe", "profile hilfe", "hilfe profile", "hilfe profil", "wie funktionieren profile", "how do profiles work" }, page = "profiles" },
+    { terms = { "profile help", "profiles help", "help profile", "help profiles", "wago help", "what is wago", "wago profiles help", "profile sharing help", "profil hilfe", "profile hilfe", "hilfe profile", "hilfe profil", "wie funktionieren profile", "how do profiles work" }, page = "profiles" },
     { terms = { "misc help", "miscellaneous help", "help misc", "help miscellaneous", "tooltip help", "tooltips help", "minimap help", "sprache hilfe", "tooltip hilfe", "misc hilfe", "menue sprache hilfe", "blizzard frames hilfe" }, page = "opt_misc" },
     { terms = { "modules help", "module help", "help modules", "help module", "style module help", "msuf style help", "module hilfe", "stil modul hilfe", "module hilfe", "msuf stil hilfe", "dropdown stil hilfe" }, page = "modules" },
     { terms = { "aura style help", "aura styling help", "help aura style", "help aura styling" }, page = "auras3_styling" },
@@ -1535,7 +1536,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Auras, buffs, and debuffs help\nAuras are buffs and debuffs shown on unit or group frames. Buffs are usually helpful effects; debuffs are usually harmful effects. MSUF can change aura visibility, icon size, layout, cooldown text, stack text, hidden aura filters, dispellable-debuff behavior, and group aura categories.\nExamples: open auras; set target buff icon size to 30; hide spell 12345 for player auras; show only dispellable debuffs.\nYou can ask: Open Auras | Open Aura Filters | Open Group Auras",
+            text = "Auras, buffs, and debuffs help\nAuras are buffs and debuffs shown on unit or group frames. Buffs are usually helpful effects; debuffs are usually harmful effects. MSUF can change aura visibility, icon size, caps/count, layout, X/Y offsets, layer, cooldown text, stack text, hidden aura filters, dispellable-debuff behavior, and group aura categories.\nExamples: open auras; cap player buffs at 2; set target buff icon size to 30; set raid debuff layer to 7.\nYou can ask: Open Auras | Open Aura Filters | Open Group Auras",
             status = "applied",
             summary = "Assistant auras help",
         }

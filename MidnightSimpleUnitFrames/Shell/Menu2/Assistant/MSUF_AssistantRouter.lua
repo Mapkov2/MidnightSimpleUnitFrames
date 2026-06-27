@@ -81,7 +81,8 @@ R.AURA_BUFF_TERMS = { "buff", "buffs", "debuff", "debuffs" }
 R.AURA_BUFF_CONTEXT_TERMS = {    "filter", "filters", "blacklist", "whitelist", "preset", "quick setup", "setup",
     "hidden", "hide", "show", "open", "help", "why", "where", "settings",
     "turn", "turn on", "turn off", "on", "off", "enable", "disable", "enabled", "disabled",
-    "set", "change", "make", "size", "count", "max", "icon", "icons", "per row", "growth",
+    "set", "change", "make", "size", "count", "max", "maximum", "cap", "caps", "limit", "limits",
+    "icon", "icons", "per row", "growth", "spacing", "gap", "x offset", "y offset", "layer", "z layer", "frame level",
     "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen",
     "own", "mine", "only mine", "only player", "raid filter", "player filter",
     "stack", "cooldown", "pandemic",
@@ -792,7 +793,7 @@ function R.UnsupportedAuraReply(text)    local norm = R.Normalize(text)
         kind = "unsupported",
         status = "info",
         summary = "Aura option fallback.",
-        text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, count, growth, cooldown and stack text, filters, hidden aura lists, quick presets, and group aura copy when those options exist in MSUF. Aura areas I can't match will stay as they are.",
+        text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown and stack text, filters, hidden aura lists, quick presets, and group aura copy when those options exist in MSUF. Aura areas I can't match will stay as they are.",
     }
 end
 
@@ -983,7 +984,7 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.READABILITY_AURA_TERMS) then
         return R.ReadabilityReply(
             "Aura readability help",
-            "For aura size and overlap, I can change icon size, icon count, spacing, growth direction, anchors, cooldown text, and stack text when the scope is clear.",
+            "For aura size and overlap, I can change icon size, caps/count, spacing, growth direction, anchors, X/Y offsets, layer, cooldown text, and stack text when the scope is clear.",
             "set target buff icon size to 30; set party aura spacing to 4; make raid buffs grow up.",
             "Open Auras | Check target buffs"
         )
@@ -1530,6 +1531,13 @@ A.RouterProfileProblemTerms = A.RouterProfileProblemTerms or {
         "copy profile string", "profile string",
         "profile backup", "profile backup help", "profile export help", "export help",
     },
+    wago = {
+        "wago", "wago.io", "what is wago", "what's wago", "what are wago profiles", "wago help",
+        "wago profile", "wago profiles", "wago backup", "backup on wago",
+        "backup profile on wago", "share on wago", "share profile on wago",
+        "share msuf profile on wago", "upload to wago", "upload profile to wago", "post on wago",
+        "profile hub", "community profiles",
+    },
     copy = {
         "copy my profile", "copy current profile", "copy my current profile",
         "duplicate profile", "backup current profile",
@@ -1573,7 +1581,8 @@ A.RouterTryProfileProblemShortcut = function(text, coreHandler)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
     local terms = A.RouterProfileProblemTerms
-    local mentionsProfile = R.ContainsAny(norm, terms.profile) or R.ContainsAny(norm, terms.settingsLost)
+    local mentionsWago = R.ContainsAny(norm, terms.wago)
+    local mentionsProfile = mentionsWago or R.ContainsAny(norm, terms.profile) or R.ContainsAny(norm, terms.settingsLost)
     if not mentionsProfile then return nil end
     local asksProfileInfo = R.AsksSettingLocation(norm)
         or norm:match("^can%s+i%s+") ~= nil
@@ -1590,6 +1599,25 @@ A.RouterTryProfileProblemShortcut = function(text, coreHandler)
         and not R.ContainsAny(norm, { "profile export help", "profile backup help", "export my profile", "how do i", "how can i" })
     then
         return nil
+    end
+
+    if mentionsWago and (asksProfileInfo
+        or R.ContainsAny(norm, {
+            "wago help", "why wago", "wago backup", "backup on wago",
+            "backup profile on wago", "share on wago", "share profile on wago",
+            "share msuf profile on wago", "upload to wago", "upload profile to wago", "post on wago",
+            "how to use wago", "how do i use wago", "how can i use wago",
+            "what do i do with wago", "what am i supposed to do",
+        }))
+    then
+        local reply = A.RouterProfileReply(
+            "Wago profile sharing help",
+            "Wago is a community website many WoW players use to find, share, and store addon import strings. For MSUF, export your current profile first, copy the MSUF profile string, then paste that string into Wago if you want an off-game backup or want to share the layout with someone else. MSUF can create the export string and copy the Wago profiles link, but it does not upload to Wago automatically or manage a Wago account.",
+            "export current profile; copy Wago profiles link; open profiles.",
+            "Export Current Profile | Copy Wago Profiles Link | Open Profiles"
+        )
+        reply.searchResults = R.PageFollowupResults("profiles", "Profiles", "Use Profiles export before sharing or backing up an MSUF profile on Wago.")
+        return reply
     end
 
     if R.ContainsAny(norm, terms.restore) then
@@ -2033,7 +2061,7 @@ function R.UnitFrameScopeFromText(norm)
 end
 
 R.UNIT_FRAME_MOVEMENT_TERMS = {
-    "move", "drag", "position", "place", "placement", "x position", "y position",
+    "move", "moved", "moving", "movable", "drag", "dragged", "dragging", "position", "place", "placement", "x position", "y position",
     "x offset", "y offset", "offset", "anchor", "anchor to", "anchor point",
     "custom anchor", "custom anchor frame", "reset position", "reset frame position",
     "default position", "lock frames", "unlock frames", "frame lock",
@@ -2044,6 +2072,15 @@ R.UNIT_FRAME_MOVEMENT_PROBLEM_TERMS = {
     "cannot drag", "can't drag", "cant drag", "wrong position", "position is wrong",
     "wrong place", "anchor is wrong", "offset is wrong", "offset wrong", "stuck",
     "off screen", "offscreen",
+}
+
+R.UNIT_FRAME_MOVEMENT_CAPABILITY_TERMS = {
+    "can you move", "could you move", "can you drag", "could you drag",
+    "can i move", "could i move", "can i drag", "could i drag",
+    "can this be moved", "can these be moved", "can the frame be moved", "can frames be moved",
+    "can this be dragged", "can these be dragged", "can the frame be dragged", "can frames be dragged",
+    "is there a way to move", "is there a way to drag",
+    "is it possible to move", "is it possible to drag",
 }
 
 R.UNIT_FRAME_MOVEMENT_EXCLUDED_TOPICS = {
@@ -2083,10 +2120,40 @@ function R.LooksLikeFrameCombatMovementQuestion(norm)
     return R.ContainsAny(norm, { "frame", "frames", "unit frame", "unit frames", "edit mode", "editmode", "layout", "anchor", "position", "drag", "move" })
 end
 
+function R.LooksLikeMovementCapabilityQuestion(norm)
+    norm = R.Normalize(norm)
+    if norm == "" then return false end
+    if R.ContainsAny(norm, R.UNIT_FRAME_MOVEMENT_EXCLUDED_TOPICS) then return false end
+    if not R.ContainsAny(norm, R.UNIT_FRAME_MOVEMENT_TERMS) then return false end
+    return R.ContainsAny(norm, R.UNIT_FRAME_MOVEMENT_CAPABILITY_TERMS)
+        or norm:match("^can%s+you%s+") ~= nil
+        or norm:match("^could%s+you%s+") ~= nil
+        or norm:match("^can%s+i%s+") ~= nil
+        or norm:match("^could%s+i%s+") ~= nil
+        or norm:match("^can%s+.+%s+be%s+moved") ~= nil
+        or norm:match("^could%s+.+%s+be%s+moved") ~= nil
+        or norm:match("^can%s+.+%s+be%s+dragged") ~= nil
+        or norm:match("^could%s+.+%s+be%s+dragged") ~= nil
+        or norm:match("^is%s+there%s+a%s+way") ~= nil
+        or norm:match("^is%s+it%s+possible") ~= nil
+end
+
+function R.HasConcreteMovementChangeDetail(norm)
+    norm = R.Normalize(norm)
+    if norm == "" then return false end
+    if norm:match("[-+]?%d+%.?%d*") then return true end
+    return R.ContainsAny(norm, {
+        "left", "right", "up", "down", "x position", "y position",
+        "x offset", "y offset", "x pos", "y pos",
+        "links", "rechts", "hoch", "runter", "oben", "unten",
+    })
+end
+
 function A.RouterLooksLikeMovementSettingTopic(text)
     local norm = R.Normalize(text)
     if norm == "" then return false end
     if R.LooksLikeFrameCombatMovementQuestion(norm) then return true end
+    if R.LooksLikeMovementCapabilityQuestion(norm) then return true end
     if R.ContainsAny(norm, R.UNIT_FRAME_MOVEMENT_EXCLUDED_TOPICS) then return false end
     if A.RouterIndicatorProblemTerms and R.ContainsAny(norm, A.RouterIndicatorProblemTerms.indicator) then return false end
     if R.ContainsAny(norm, { "lock frames", "unlock frames", "frame lock", "lock unit frames", "unlock unit frames" }) then return true end
@@ -2122,9 +2189,10 @@ A.RouterTryMovementSettingShortcut = function(text, coreHandler)
     local hasProblem = R.ContainsAny(norm, R.UNIT_FRAME_MOVEMENT_PROBLEM_TERMS)
         or (R.ContainsAny(norm, { "why can't", "why cant", "why can not", "why cannot", "why won't", "why wont" })
             and R.ContainsAny(norm, { "move", "drag", "anchor", "position" }))
-    local hasMovementTopic = R.ContainsAny(norm, R.UNIT_FRAME_MOVEMENT_TERMS) or hasProblem
+    local asksCapability = R.LooksLikeMovementCapabilityQuestion(norm)
+    local hasMovementTopic = R.ContainsAny(norm, R.UNIT_FRAME_MOVEMENT_TERMS) or hasProblem or asksCapability
     if not hasMovementTopic then return nil end
-    if not asksLocation and not hasProblem then return nil end
+    if not asksLocation and not hasProblem and not (asksCapability and not R.HasConcreteMovementChangeDetail(norm)) then return nil end
 
     if R.ContainsAny(norm, { "lock frames", "unlock frames", "frame lock", "lock unit frames", "unlock unit frames" })
         and not R.UnitFrameScopeFromText(norm)
@@ -2165,6 +2233,12 @@ A.RouterTryMovementSettingShortcut = function(text, coreHandler)
             body = unitLabel .. " frame position can be restored with the reset-position action, while exact placement lives on the " .. unitLabel .. " page as " .. unitLabel .. " X Position, " .. unitLabel .. " Y Position, Anchor to, Anchor Point, and Custom Anchor Frame. I do not reset it from a location question."
             examples = "open " .. unit .. "; reset " .. unit .. " frame position; move " .. unit .. " frame down 10."
             actions = "Open " .. unitLabel .. " | reset " .. unit .. " frame position | Enter Edit Mode"
+        elseif asksCapability and not R.HasConcreteMovementChangeDetail(norm) then
+            title = unitLabel .. " frame movement help"
+            body = "Yes. I can help move the " .. unitLabel .. " frame. Use MSUF Edit Mode for visual dragging, or give me an exact direction/amount or X/Y position. I will not guess a new position from only 'move it'."
+            examples = "enter MSUF edit mode; move " .. unit .. " frame right 10; set " .. unit .. " x position to 240; open " .. unit .. "."
+            actions = "Enter Edit Mode | Open " .. unitLabel .. " | Open Anchor Picker"
+            return R.MovementSettingReply(title, body, examples, actions, "info")
         elseif hasProblem and not asksLocation then
             title = unitLabel .. " frame movement help"
             body = "Unit frame position help: " .. unitLabel .. " frame dragging depends on MSUF Edit Mode, WoW combat lockdown, and the frame's X/Y Position plus Anchor settings. Leave combat, enter MSUF Edit Mode for visual dragging, or use a direct move command for exact placement."
@@ -2181,6 +2255,15 @@ A.RouterTryMovementSettingShortcut = function(text, coreHandler)
 
     local groupScope, groupLabel = R.GroupScopeFromText(norm)
     if groupScope then
+        if asksCapability and not R.HasConcreteMovementChangeDetail(norm) then
+            return R.MovementSettingReply(
+                groupLabel .. " frame movement help",
+                "Yes. I can help move " .. groupLabel .. " frames. Use MSUF Edit Mode for visual dragging, or use Group Layout for exact X/Y position and anchor settings.",
+                "enter MSUF edit mode; move " .. groupScope .. " frames down 10; set " .. groupScope .. " x position to 100; open group layout.",
+                "Enter Edit Mode | Open Group Layout",
+                "info"
+            )
+        end
         return R.MovementSettingReply(
             groupLabel .. " Frame Position setting location",
             groupLabel .. " frame placement lives in Group Layout and the group frame anchor settings. Use " .. groupLabel .. " X Position, " .. groupLabel .. " Y Position, Anchor to, Anchor Point, and Custom Anchor Frame for exact placement; use MSUF Edit Mode when you want visual dragging.",
@@ -2195,6 +2278,16 @@ A.RouterTryMovementSettingShortcut = function(text, coreHandler)
             "Frame movement depends on MSUF Edit Mode, each frame's X/Y Position and Anchor settings, and WoW combat lockdown. Leave combat, enter MSUF Edit Mode for dragging, or name a frame plus direction for an exact move.",
             "enter MSUF edit mode; move player frame down 10; open anchor picker; run checks.",
             "Enter Edit Mode | Open Anchor Picker | Run Checks",
+            "info"
+        )
+    end
+
+    if asksCapability and not R.HasConcreteMovementChangeDetail(norm) then
+        return R.MovementSettingReply(
+            "Frame movement help",
+            "Yes. I can help move MSUF frames. Use MSUF Edit Mode for visual dragging, or name a frame plus a direction/amount for an exact move.",
+            "enter MSUF edit mode; move player frame down 10; move raid frames right 20; open anchor picker.",
+            "Enter Edit Mode | Open Anchor Picker",
             "info"
         )
     end
@@ -4238,7 +4331,18 @@ function A.RouterIsAmbiguousResult(result)
     return type(result) == "table" and (result.kind == "ambiguous" or result.status == "ambiguous")
 end
 
+local function ClearStaleContextPendingConfirmation()
+    if A.pendingConfirmation ~= nil then return false end
+    local ctx = A.GetContext and A.GetContext()
+    if type(ctx) == "table" and ctx.pendingConfirmation ~= nil then
+        ctx.pendingConfirmation = nil
+        return true
+    end
+    return false
+end
+
 function A.RouterSnapshotPendingState()
+    ClearStaleContextPendingConfirmation()
     local ctx = A.GetContext and A.GetContext()
     return {
         pendingConfirmation = A.pendingConfirmation,
@@ -4275,11 +4379,11 @@ end
 
 function A.RouterHasPendingAssistantState()
     if A.pendingConfirmation ~= nil then return true end
+    ClearStaleContextPendingConfirmation()
     if type(A.pendingChoices) == "table" and #A.pendingChoices > 0 then return true end
     if type(A.pendingFlow) == "table" then return true end
     local ctx = A.GetContext and A.GetContext()
     if type(ctx) == "table" then
-        if ctx.pendingConfirmation ~= nil then return true end
         if type(ctx.pendingChoices) == "table" and #ctx.pendingChoices > 0 then return true end
         if ctx.pendingFlow ~= nil then return true end
         if type(ctx.guidedSetup) == "table" then return true end
@@ -4311,10 +4415,10 @@ end
 
 function A.RouterHasPendingConfirmationOrFlow()
     if A.pendingConfirmation ~= nil then return true end
+    ClearStaleContextPendingConfirmation()
     if type(A.pendingFlow) == "table" then return true end
     local ctx = A.GetContext and A.GetContext()
     if type(ctx) == "table" then
-        if ctx.pendingConfirmation ~= nil then return true end
         if ctx.pendingFlow ~= nil then return true end
     end
     return false
@@ -4322,11 +4426,11 @@ end
 
 function A.RouterHasBlockingPendingAssistantState()
     if A.pendingConfirmation ~= nil then return true end
+    ClearStaleContextPendingConfirmation()
     if type(A.pendingChoices) == "table" and #A.pendingChoices > 0 then return true end
     if type(A.pendingFlow) == "table" then return true end
     local ctx = A.GetContext and A.GetContext()
     if type(ctx) == "table" then
-        if ctx.pendingConfirmation ~= nil then return true end
         if type(ctx.pendingChoices) == "table" and #ctx.pendingChoices > 0 then return true end
         if ctx.pendingFlow ~= nil then return true end
     end
@@ -4409,13 +4513,16 @@ function R.LooksLikePendingResultReply(text)    local norm = R.Normalize(text)
     if norm == "explain" or norm == "details" or norm == "describe"
         or norm == "open" or norm == "show me"
         or norm == "current value" or norm == "value now"
-        or norm == "why" or norm == "related" or norm == "more" then
+        or norm == "why" or norm == "related" then
         return true
     end
     if R.ContainsAny(norm, {
         "open it", "open that", "open this",
         "show me where", "take me there", "go there",
         "tell me more", "more details",
+        "more options", "more settings", "more like this",
+        "other options", "other settings", "related options", "related settings",
+        "similar options", "similar settings", "what else",
         "why would i use it", "why would i use this", "why would i use that",
         "why should i use it", "why should i use this", "why should i use that",
         "what is it for", "what is this for", "what is that for",

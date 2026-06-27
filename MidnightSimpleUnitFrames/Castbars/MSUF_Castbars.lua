@@ -910,9 +910,13 @@ local function InferRemainingFromStatusBar(frame)
     local total = maxValue - minValue
     local assumeCountdown = frame._msufTimerAssumeCountdown
     if assumeCountdown == nil then
-        local fromMin = math.abs(value - minValue)
-        local fromMax = math.abs(maxValue - value)
-        assumeCountdown = fromMax < fromMin
+        if frame.MSUF_timerDriven == true then
+            assumeCountdown = frame.MSUF_isChanneled == true
+        else
+            local fromMin = math.abs(value - minValue)
+            local fromMax = math.abs(maxValue - value)
+            assumeCountdown = fromMax < fromMin
+        end
         frame._msufTimerAssumeCountdown = assumeCountdown
     end
 
@@ -984,8 +988,17 @@ local function UpdateDurationObjectFrame(frame, now)
         frame._msufRemaining = remaining
     end
 
+    local needsTotal = applyGlowFade or (frame.timeText and frame._msufCastTimeEnabled ~= false)
+    local total
+    if needsTotal then
+        total = ResolveDurationTotal(frame, durationObj, inferredTotal)
+    end
+
+    if frame.timeText and frame._msufCastTimeEnabled ~= false then
+        SetCastTimeTextIfChanged(frame, remaining, total)
+    end
+
     if applyGlowFade then
-        local total = ResolveDurationTotal(frame, durationObj, inferredTotal)
         if total and total > 0 then applyGlowFade(frame, remaining, total) end
     end
 

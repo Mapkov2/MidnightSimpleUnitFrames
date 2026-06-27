@@ -31,6 +31,7 @@ local RelativeNumberDeltaForText = P.RelativeNumberDeltaForText
 local PowerColorTokenForText = P.PowerColorTokenForText
 local ClassPowerColorTokenForText = P.ClassPowerColorTokenForText
 local BuildChanges = P.BuildChanges
+local Compact = P.Compact
 
 local function ContextUnits(ctx)
     local units = {}
@@ -367,6 +368,28 @@ local function BuildFollowup(text, ctx)
         "create", "select", "use", "reset", "copy", "open", "import", "export", "rename", "delete", "remove", "switch", "assign",
         "setze", "stelle", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken", "einblenden", "ausblenden", "verschiebe", "verschieben",
     })
+    local auraLaneObjectIntent = ContainsAny(text, {
+        "them", "those", "these", "their",
+        "the icon", "the icons", "icons", "aura icon", "aura icons",
+        "buff icon", "buff icons", "debuff icon", "debuff icons",
+        "buffs", "debuffs", "auras",
+    }) and ContainsAny(text, {
+        "move", "nudge", "shift", "offset", "position", "left", "right", "up", "down",
+        "x offset", "y offset", "per row", "icons per row", "spacing", "gap",
+        "layer", "z", "z layer", "frame level", "cap", "limit", "max", "maximum", "count",
+        "size", "bigger", "larger", "smaller", "shrink", "growth", "grow", "anchor",
+    })
+    local genericObjectIntent = ContainsAny(text, {
+        "it", "its", "that", "this", "them", "those", "these", "their",
+        "the frame", "the frames", "the bar", "the bars", "the text", "the icon", "the icons",
+        "same object", "same option area",
+    }) and ContainsAny(text, {
+        "move", "nudge", "shift", "offset", "position", "left", "right", "up", "down",
+        "x offset", "y offset", "width", "height", "wider", "narrower", "taller", "shorter",
+        "size", "bigger", "larger", "smaller", "shrink",
+        "layer", "z", "z layer", "frame level", "anchor", "growth", "grow",
+        "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off",
+    })
     local explicitFollowupReference = ContainsAny(text, { "it", "that", "this", "same", "do it", "do that", "again", "more", "less", "opposite", "other way" })
     local wordCount = 0
     for _ in tostring(text or ""):gmatch("%S+") do wordCount = wordCount + 1 end
@@ -379,6 +402,8 @@ local function BuildFollowup(text, ctx)
     local hasIntent = positiveIntent or negativeIntent or neutralIntent or oppositeIntent or reverseCorrectionIntent
         or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or exactValueIntent
         or leftIntent or rightIntent or targetReplayIntent
+        or auraLaneObjectIntent
+        or genericObjectIntent
         or ContainsAny(text, { "hide it", "clear it", "remove it", "empty it", "turn it off", "disable it", "hide that", "clear that", "remove that" })
     if not hasIntent then return nil end
     local units = DetectUnits(text)
@@ -423,6 +448,415 @@ local function BuildFollowup(text, ctx)
         end
         if setting and setting.percent == true and amount > 1 then amount = amount / 100 end
         return amount
+    end
+
+    local function AddUniqueValue(out, seen, value)
+        value = tostring(value or "")
+        if value == "" or seen[value] then return end
+        seen[value] = true
+        out[#out + 1] = value
+    end
+
+    local function HasGenericObjectFollowupReference(textValue)
+        return ContainsAny(textValue, {
+            "it", "its", "that", "this", "them", "those", "these", "their",
+            "the frame", "the frames", "the bar", "the bars", "the text", "the icon", "the icons",
+            "same", "same object", "same option area",
+        })
+    end
+
+    local function GenericFollowupTargetAttr(textValue, direction)
+        if ContainsAny(textValue, { "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off" }) then return "enabled" end
+        if ContainsAny(textValue, { "growth direction", "grow direction", "growth", "grow", "grows" }) then return "growth" end
+        if ContainsAny(textValue, { "anchor", "anchor point", "position anchor", "bottom left", "bottom right", "top left", "top right", "bottomleft", "bottomright", "topleft", "topright" }) then return "anchor" end
+        if direction and ContainsAny(textValue, { "move", "nudge", "shift", "offset", "position", "left", "right", "up", "down", "links", "rechts", "hoch", "runter", "oben", "unten" }) then
+            if direction == "left" or direction == "right" then return "offsetX" end
+            if direction == "up" or direction == "down" then return "offsetY" end
+        end
+        if ContainsAny(textValue, { "x offset", "offset x", "horizontal offset" }) then return "offsetX" end
+        if ContainsAny(textValue, { "y offset", "offset y", "vertical offset" }) then return "offsetY" end
+        if ContainsAny(textValue, { "width", "wider", "narrower", "wide", "breite", "breiter", "schmaler" }) then return "width" end
+        if ContainsAny(textValue, { "height", "taller", "shorter", "tall", "hoehe", "hoeher" }) then return "height" end
+        if ContainsAny(textValue, { "layer", "z", "z layer", "z level", "z-level", "z order", "z-order", "z index", "z-index", "draw layer", "frame level", "strata" }) then return "layer" end
+        if ContainsAny(textValue, { "icon size", "text size", "font size", "size", "bigger", "larger", "smaller", "shrink", "groesse", "grosse", "groesser", "kleiner" }) then return "size" end
+        return nil
+    end
+
+    local function RelatedPrefixAliases(prefix)
+        local out, seen = {}, {}
+        AddUniqueValue(out, seen, prefix)
+        if prefix == "hp" then
+            AddUniqueValue(out, seen, "healthText")
+        elseif prefix == "healthText" then
+            AddUniqueValue(out, seen, "hp")
+        elseif prefix == "power" then
+            AddUniqueValue(out, seen, "powerText")
+        elseif prefix == "powerText" then
+            AddUniqueValue(out, seen, "power")
+        elseif prefix == "name" then
+            AddUniqueValue(out, seen, "nameText")
+        elseif prefix == "nameText" then
+            AddUniqueValue(out, seen, "name")
+        elseif prefix == "spellName" then
+            AddUniqueValue(out, seen, "text")
+        elseif prefix == "text" then
+            AddUniqueValue(out, seen, "spellName")
+        end
+        return out
+    end
+
+    local relatedPrefixSuffixes = {
+        "OffsetX", "OffsetY", "MaxWidth", "FontSize", "TextLayer", "TextAnchor",
+        "Width", "Height", "Size", "Layer", "Anchor", "Enabled", "X", "Y",
+    }
+    local relatedDirectAttributes = {
+        "offsetX", "offsetY", "width", "height", "size", "layer", "anchor", "enabled",
+    }
+
+    local function RelatedPrefixFromAttribute(attribute)
+        local attr = tostring(attribute or "")
+        if attr == "" then return "" end
+        for i = 1, #relatedPrefixSuffixes do
+            local suffix = relatedPrefixSuffixes[i]
+            if attr:sub(-#suffix) == suffix then return attr:sub(1, #attr - #suffix) end
+        end
+        for i = 1, #relatedDirectAttributes do
+            local suffix = relatedDirectAttributes[i]
+            if attr == suffix then return "" end
+        end
+        return attr
+    end
+
+    local function GenericRelatedAttributeCandidates(previousAttr, targetAttr)
+        local out, seen = {}, {}
+        local prefix = RelatedPrefixFromAttribute(previousAttr)
+        local prefixes = RelatedPrefixAliases(prefix)
+        local function addForPrefix(suffix)
+            for i = 1, #prefixes do
+                local p = prefixes[i]
+                if p == "" then
+                    AddUniqueValue(out, seen, suffix)
+                else
+                    AddUniqueValue(out, seen, p .. suffix)
+                end
+            end
+        end
+
+        if targetAttr == "offsetX" then
+            addForPrefix("OffsetX")
+            addForPrefix("X")
+            AddUniqueValue(out, seen, "offsetX")
+        elseif targetAttr == "offsetY" then
+            addForPrefix("OffsetY")
+            addForPrefix("Y")
+            AddUniqueValue(out, seen, "offsetY")
+        elseif targetAttr == "size" then
+            addForPrefix("Size")
+            addForPrefix("FontSize")
+            AddUniqueValue(out, seen, "size")
+        elseif targetAttr == "layer" then
+            addForPrefix("Layer")
+            addForPrefix("TextLayer")
+            AddUniqueValue(out, seen, "layer")
+        elseif targetAttr == "anchor" then
+            addForPrefix("Anchor")
+            addForPrefix("TextAnchor")
+            AddUniqueValue(out, seen, "anchor")
+        elseif targetAttr == "enabled" then
+            addForPrefix("Enabled")
+            AddUniqueValue(out, seen, "enabled")
+        else
+            AddUniqueValue(out, seen, targetAttr)
+        end
+        return out
+    end
+
+    local function PickGenericRelatedCandidate(candidates, previousSetting)
+        if type(candidates) ~= "table" or #candidates == 0 then return nil end
+        if #candidates == 1 then return candidates[1] end
+        local previousCategory = tostring(previousSetting and previousSetting.category or "")
+        local categoryMatch
+        for i = 1, #candidates do
+            local candidate = candidates[i]
+            if previousCategory ~= "" and tostring(candidate and candidate.category or "") == previousCategory then
+                if categoryMatch then return nil end
+                categoryMatch = candidate
+            end
+        end
+        return categoryMatch
+    end
+
+    local function FindGenericRelatedSetting(prev, targetAttr)
+        if not (Registry and type(Registry.FindSettings) == "function") then return nil end
+        local previousSetting = prev and prev.key and Registry:GetSetting(prev.key) or nil
+        local unit = (prev and prev.unit) or (previousSetting and previousSetting.unit)
+        local frameType = (prev and prev.frameType) or (previousSetting and previousSetting.frameType)
+        local attribute = (prev and prev.attribute) or (previousSetting and previousSetting.attribute)
+        if type(frameType) ~= "string" or frameType == "" then return nil end
+        local attrCandidates = GenericRelatedAttributeCandidates(attribute, targetAttr)
+        for i = 1, #attrCandidates do
+            local filter = { frameType = frameType, attribute = attrCandidates[i] }
+            if type(unit) == "string" and unit ~= "" then filter.unit = unit end
+            local setting = PickGenericRelatedCandidate(Registry:FindSettings(filter), previousSetting)
+            if setting then return setting end
+        end
+        return nil
+    end
+
+    local function GenericEnumFollowupValue(setting, targetAttr, direction)
+        if not (setting and setting.type == "enum") then return nil end
+        local compactText = Compact and Compact(text) or Normalize(text):gsub("%s+", "")
+        local aliases = setting.valueAliases
+        local bestValue, bestLen
+        if type(aliases) == "table" then
+            for alias, value in pairs(aliases) do
+                local compactAlias = Compact and Compact(alias) or Normalize(alias):gsub("%s+", "")
+                if compactAlias ~= "" and compactText:find(compactAlias, 1, true) and (not bestLen or #compactAlias > bestLen) then
+                    bestValue, bestLen = value, #compactAlias
+                end
+            end
+        end
+        if bestValue ~= nil then return bestValue end
+        if targetAttr == "growth" and direction then
+            local dir = tostring(direction):upper()
+            if setting.values then
+                for i = 1, #setting.values do
+                    if setting.values[i] == dir then return dir end
+                end
+            end
+            if dir == "LEFT" then return "LEFTDOWN" end
+            if dir == "UP" then return "RIGHTUP" end
+            if dir == "RIGHT" or dir == "DOWN" then return "RIGHTDOWN" end
+        end
+        return nil
+    end
+
+    local function GenericNumberFollowupValue(setting, targetAttr, direction)
+        if not (setting and setting.type == "number") then return nil, nil end
+        local attr = tostring(setting.attribute or "")
+        local movementTarget = targetAttr == "offsetX" or targetAttr == "offsetY"
+            or attr:find("OffsetX$") or attr:find("OffsetY$") or attr:find("X$") or attr:find("Y$")
+        if movementTarget and direction then
+            local relative = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 10) or nil
+            if relative ~= nil then return nil, relative end
+            local amount = A._RelativeNumberAmountForText(text)
+                or tonumber(setting.moveStep)
+                or tonumber(setting.moveAmount)
+                or tonumber(setting.step)
+                or 10
+            if direction == "left" or direction == "down" then amount = -amount end
+            return nil, amount
+        end
+
+        local relative = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text) or nil
+        if relative ~= nil then return nil, relative end
+        local value = A._ExplicitNumberValue and A._ExplicitNumberValue(text) or nil
+        if value == nil then value = FirstNumber(text) end
+        if value ~= nil then return value, nil end
+        return nil, nil
+    end
+
+    local function GenericRelatedFollowupValue(setting, targetAttr, direction)
+        if not setting then return nil, nil end
+        if setting.type == "boolean" then
+            return DetectBoolean(text), nil
+        elseif setting.type == "enum" then
+            return GenericEnumFollowupValue(setting, targetAttr, direction), nil
+        elseif setting.type == "number" then
+            return GenericNumberFollowupValue(setting, targetAttr, direction)
+        end
+        return nil, nil
+    end
+
+    local genericObjectFollowupReference = HasGenericObjectFollowupReference(text) or bareDirectionalFollowup
+    if #units == 0 and #groups == 0 and genericObjectFollowupReference then
+        local targetAttr = GenericFollowupTargetAttr(text, followDirection)
+        if targetAttr then
+            local genericChanges = {}
+            local seenGenericKeys = {}
+            for i = 1, #ctx.lastChangeBundle do
+                local prev = ctx.lastChangeBundle[i]
+                local setting = FindGenericRelatedSetting(prev, targetAttr)
+                if setting and not seenGenericKeys[setting.key] then
+                    local value, relativeDelta = GenericRelatedFollowupValue(setting, targetAttr, followDirection)
+                    if value ~= nil or relativeDelta ~= nil then
+                        seenGenericKeys[setting.key] = true
+                        genericChanges[#genericChanges + 1] = {
+                            setting = setting,
+                            value = value,
+                            relativeDelta = relativeDelta,
+                            direction = followDirection,
+                        }
+                    end
+                end
+            end
+            if #genericChanges > 0 then
+                return {
+                    kind = "changes",
+                    changes = genericChanges,
+                    label = "Adjust previous MSUF area",
+                    summary = "Continues from the last Assistant change.",
+                }
+            end
+        end
+    end
+
+    local function AuraLaneInfoFromPrevious(prev)
+        local key = tostring((prev and prev.key) or "")
+        local unit, lane, attr = key:match("^auras3%.([^%.]+)%.([^%.]+)%.([^%.]+)$")
+        if unit and (lane == "buff" or lane == "debuff") then
+            return {
+                key = key,
+                kind = "unit",
+                scope = unit,
+                lane = lane,
+                attr = attr,
+            }
+        end
+
+        local group, groupLane, groupAttr = key:match("^gf_([^%.]+)%.auras%.([^%.]+)%.([^%.]+)$")
+        if group and (groupLane == "buff" or groupLane == "debuff") then
+            return {
+                key = key,
+                kind = "group",
+                scope = group,
+                lane = groupLane,
+                attr = groupAttr,
+            }
+        end
+        return nil
+    end
+
+    local function HasAuraObjectFollowupReference(textValue)
+        return ContainsAny(textValue, {
+            "it", "that", "this", "them", "those", "these", "their",
+            "the icon", "the icons", "icons", "aura icon", "aura icons",
+            "buff icon", "buff icons", "debuff icon", "debuff icons",
+            "buffs", "debuffs", "auras", "same",
+        })
+    end
+
+    local function AuraLaneFollowupTargetAttr(textValue, direction)
+        if ContainsAny(textValue, { "growth direction", "grow direction", "growth", "grow", "grows" }) then return "growth" end
+        if ContainsAny(textValue, { "anchor", "anchor point", "position anchor", "bottom left", "bottom right", "top left", "top right", "bottomleft", "bottomright", "topleft", "topright" }) then return "anchor" end
+        if direction and ContainsAny(textValue, { "move", "nudge", "shift", "offset", "position", "left", "right", "up", "down", "links", "rechts", "hoch", "runter", "oben", "unten" }) then
+            if direction == "left" or direction == "right" then return "offsetX" end
+            if direction == "up" or direction == "down" then return "offsetY" end
+        end
+        if ContainsAny(textValue, { "x offset", "offset x", "horizontal offset" }) then return "offsetX" end
+        if ContainsAny(textValue, { "y offset", "offset y", "vertical offset" }) then return "offsetY" end
+        if ContainsAny(textValue, { "per row", "icons per row", "wrap count", "row count" }) then return "perRow" end
+        if ContainsAny(textValue, { "spacing", "gap", "icon gap", "space them", "space out" }) then return "spacing" end
+        if ContainsAny(textValue, { "layer", "z", "z layer", "z level", "z-level", "z order", "z-order", "z index", "z-index", "draw layer", "frame level", "strata" }) then return "layer" end
+        if ContainsAny(textValue, {
+            "max", "maximum", "max icons", "maximum icons", "max count", "maximum count",
+            "icon count", "aura count", "buff count", "debuff count", "count",
+            "cap", "caps", "capped", "aura cap", "buff cap", "debuff cap",
+            "limit", "limits", "limited", "icon limit", "aura limit", "buff limit", "debuff limit",
+        }) then return "max" end
+        if ContainsAny(textValue, { "icon size", "icons size", "size", "bigger", "larger", "smaller", "shrink", "groesse", "grosse", "groesser", "kleiner" }) then return "size" end
+        return nil
+    end
+
+    local function AuraLaneFollowupSettingKey(info, targetAttr)
+        if not (info and targetAttr) then return nil end
+        if info.kind == "group" then
+            local groupAttr = targetAttr == "offsetX" and "x" or targetAttr == "offsetY" and "y" or targetAttr
+            return "gf_" .. tostring(info.scope) .. ".auras." .. tostring(info.lane) .. "." .. tostring(groupAttr)
+        end
+        return "auras3." .. tostring(info.scope) .. "." .. tostring(info.lane) .. "." .. tostring(targetAttr)
+    end
+
+    local function AuraLaneEnumFollowupValue(setting, targetAttr, direction)
+        if not (setting and setting.type == "enum") then return nil end
+        local compactText = Compact and Compact(text) or Normalize(text):gsub("%s+", "")
+        local aliases = setting.valueAliases
+        local bestValue, bestLen
+        if type(aliases) == "table" then
+            for alias, value in pairs(aliases) do
+                local compactAlias = Compact and Compact(alias) or Normalize(alias):gsub("%s+", "")
+                if compactAlias ~= "" and compactText:find(compactAlias, 1, true) and (not bestLen or #compactAlias > bestLen) then
+                    bestValue, bestLen = value, #compactAlias
+                end
+            end
+        end
+        if bestValue ~= nil then return bestValue end
+        if targetAttr == "growth" and direction then
+            local dir = tostring(direction):upper()
+            if setting.values then
+                for i = 1, #setting.values do
+                    if setting.values[i] == dir then return dir end
+                end
+            end
+            if dir == "LEFT" then return "LEFTDOWN" end
+            if dir == "UP" then return "RIGHTUP" end
+            if dir == "RIGHT" or dir == "DOWN" then return "RIGHTDOWN" end
+        end
+        return nil
+    end
+
+    local function AuraLaneNumberFollowupValue(setting, targetAttr, direction)
+        if not (setting and setting.type == "number") then return nil, nil end
+        if targetAttr == "offsetX" or targetAttr == "offsetY" then
+            local relative = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 10) or nil
+            if relative ~= nil then return nil, relative end
+            if direction then
+                local amount = A._RelativeNumberAmountForText(text)
+                    or tonumber(setting.moveStep)
+                    or tonumber(setting.moveAmount)
+                    or tonumber(setting.step)
+                    or 10
+                if direction == "left" or direction == "down" then amount = -amount end
+                return nil, amount
+            end
+            return nil, nil
+        end
+
+        local relative = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text) or nil
+        if relative ~= nil then return nil, relative end
+        local value = A._ExplicitNumberValue and A._ExplicitNumberValue(text) or nil
+        if value == nil then value = FirstNumber(text) end
+        if value ~= nil then return value, nil end
+        return nil, nil
+    end
+
+    local auraObjectFollowupReference = HasAuraObjectFollowupReference(text) or bareDirectionalFollowup
+    if #units == 0 and #groups == 0 and auraObjectFollowupReference then
+        local targetAttr = AuraLaneFollowupTargetAttr(text, followDirection)
+        if targetAttr then
+            local auraChanges = {}
+            local seenAuraKeys = {}
+            for i = 1, #ctx.lastChangeBundle do
+                local info = AuraLaneInfoFromPrevious(ctx.lastChangeBundle[i])
+                local key = AuraLaneFollowupSettingKey(info, targetAttr)
+                local setting = key and Registry:GetSetting(key) or nil
+                if setting and not seenAuraKeys[setting.key] then
+                    local value, relativeDelta
+                    if setting.type == "enum" then
+                        value = AuraLaneEnumFollowupValue(setting, targetAttr, followDirection)
+                    else
+                        value, relativeDelta = AuraLaneNumberFollowupValue(setting, targetAttr, followDirection)
+                    end
+                    if value ~= nil or relativeDelta ~= nil then
+                        seenAuraKeys[setting.key] = true
+                        auraChanges[#auraChanges + 1] = {
+                            setting = setting,
+                            value = value,
+                            relativeDelta = relativeDelta,
+                            direction = followDirection,
+                        }
+                    end
+                end
+            end
+            if #auraChanges > 0 then
+                return {
+                    kind = "changes",
+                    changes = auraChanges,
+                    label = "Adjust previous aura lane",
+                    summary = "Continues from the last aura lane change.",
+                }
+            end
+        end
     end
 
     local function TextSlotInfoFromPrevious(prev)
