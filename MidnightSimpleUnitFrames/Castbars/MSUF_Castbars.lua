@@ -484,24 +484,28 @@ local activeCount = 0
 local highFrequencyCount = 0
 local lowFrequencyInterval = 0.10
 local managerTime = 0
+local lowFrequencyTicker
+local lowFrequencyLastTime
 
-local function StopBossCastbarIfMissing(frame)
-    if not frame._msufIsBossCastbar then return false end
+local function StopCastbarIfUnitMissing(frame)
+    if not frame or frame.unit == "player" or frame.interrupted then return false end
 
-    local nextCheck = frame._msufBossExistNext
+    local nextCheck = frame._msufUnitExistNext
     if nextCheck and managerTime < nextCheck then return false end
-    frame._msufBossExistNext = managerTime + 0.25
+    frame._msufUnitExistNext = managerTime + 0.25
 
     local unit = frame.unit
-    local missing = unit
+    local missing = unit and unit ~= ""
         and (
             (type(UnitExists) == "function" and not UnitExists(unit))
             or (type(UnitIsDeadOrGhost) == "function" and UnitIsDeadOrGhost(unit))
         )
     if not missing then return false end
 
-    if type(_G.MSUF_BossCastbar_Stop) == "function" then
+    if frame._msufIsBossCastbar and type(_G.MSUF_BossCastbar_Stop) == "function" then
         _G.MSUF_BossCastbar_Stop(frame)
+    elseif type(_G.MSUF_CB_ResetStateOnStop) == "function" then
+        _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
     else
         if UnregisterCastbar then UnregisterCastbar(frame) end
         if frame.Hide then frame:Hide() end
@@ -579,7 +583,7 @@ local function UpdateBucket(bucket, elapsed)
     local frame = next(bucket)
     while frame do
         local nextFrame = next(bucket, frame)
-        local stopped = StopBossCastbarIfMissing(frame)
+        local stopped = StopCastbarIfUnitMissing(frame)
         if not stopped and not UpdateFastTextFrame(frame, elapsed) then
             UpdateHeavyFrame(frame, elapsed)
         end
@@ -587,8 +591,46 @@ local function UpdateBucket(bucket, elapsed)
     end
 end
 
+local RefreshManagerOnUpdate
+
+local function StopLowFrequencyTicker()
+    if lowFrequencyTicker then
+        lowFrequencyTicker:Cancel()
+        lowFrequencyTicker = nil
+    end
+    lowFrequencyLastTime = nil
+end
+
+local function LowFrequencyTicker()
+    if activeCount <= 0 then
+        StopLowFrequencyTicker()
+        CastbarManager:SetScript("OnUpdate", nil)
+        if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("Disabled") end
+        CastbarManager:Hide()
+        return
+    end
+
+    if highFrequencyCount > 0 then
+        StopLowFrequencyTicker()
+        if RefreshManagerOnUpdate then RefreshManagerOnUpdate() end
+        return
+    end
+
+    local now = Now()
+    local elapsed = lowFrequencyLastTime and (now - lowFrequencyLastTime) or lowFrequencyInterval
+    lowFrequencyLastTime = now
+
+    if elapsed <= 0 or elapsed > 0.5 then
+        elapsed = lowFrequencyInterval
+    end
+
+    managerTime = managerTime + elapsed
+    UpdateBucket(CastbarManager.low, elapsed)
+end
+
 local function ManagerOnUpdate(manager, elapsed)
     if activeCount <= 0 then
+        StopLowFrequencyTicker()
         manager._msufLowTickAccum = 0
         manager:Hide()
         return
@@ -615,8 +657,9 @@ local function ManagerOnUpdate(manager, elapsed)
     end
 end
 
-local function RefreshManagerOnUpdate()
+RefreshManagerOnUpdate = function()
     if activeCount <= 0 then
+        StopLowFrequencyTicker()
         CastbarManager:SetScript("OnUpdate", nil)
         if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("Disabled") end
         CastbarManager:Hide()
@@ -624,17 +667,34 @@ local function RefreshManagerOnUpdate()
     end
 
     CastbarManager:Show()
-    if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("RunWhenVisible") end
-    CastbarManager:SetScript("OnUpdate", ManagerOnUpdate)
 
-    if highFrequencyCount <= 0 then
+    if highFrequencyCount > 0 then
+        StopLowFrequencyTicker()
+        if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("RunWhenVisible") end
+        CastbarManager:SetScript("OnUpdate", ManagerOnUpdate)
+        return false
+    end
+
+    CastbarManager:SetScript("OnUpdate", nil)
+    if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("Disabled") end
+
+    if C_Timer and C_Timer.NewTicker then
+        if not lowFrequencyTicker then
+            lowFrequencyLastTime = Now()
+            lowFrequencyTicker = C_Timer.NewTicker(lowFrequencyInterval, LowFrequencyTicker)
+        end
         UpdateBucket(CastbarManager.low, 0)
         return true
     end
-    return false
+
+    if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("RunWhenVisible") end
+    CastbarManager:SetScript("OnUpdate", ManagerOnUpdate)
+    UpdateBucket(CastbarManager.low, 0)
+    return true
 end
 
 CastbarManager:SetScript("OnHide", function(manager)
+    StopLowFrequencyTicker()
     manager:SetScript("OnUpdate", nil)
     if manager.SetOnUpdateMode then manager:SetOnUpdateMode("Disabled") end
 end)
@@ -746,6 +806,7 @@ UnregisterCastbar = function(frame)
     frame._msufNextTick = nil
     frame._msufHeavyIn = nil
     frame._msufHardStopNext = nil
+    frame._msufUnitExistNext = nil
     frame._msufZeroCount = nil
     frame._msufLastTimeDecimal = nil
     frame._msufLastTimeTotalDecimal = nil
