@@ -27,11 +27,16 @@ local FirstNumber = P.FirstNumber
 local DetectFrameType = P.DetectFrameType
 local DetectDirection = P.DetectDirection
 local DetectAttribute = P.DetectAttribute
-local RelativeNumberDeltaForText = P.RelativeNumberDeltaForText
 local PowerColorTokenForText = P.PowerColorTokenForText
 local ClassPowerColorTokenForText = P.ClassPowerColorTokenForText
 local BuildChanges = P.BuildChanges
 local Compact = P.Compact
+
+local function RelativeNumberDeltaForText(setting, text, fallbackAmount)
+    local fn = P and P.RelativeNumberDeltaForText
+    if type(fn) == "function" then return fn(setting, text, fallbackAmount) end
+    return nil
+end
 
 local function ContextUnits(ctx)
     local units = {}
@@ -356,6 +361,12 @@ local function BuildFollowup(text, ctx)
     local notEnoughIntent = ContainsAny(text, notEnoughTerms)
     local targetReplayIntent = ContainsAny(text, replayTerms)
     local pureNumberIntent = tostring(text or ""):match("^[-+]?%d+%.?%d*$") ~= nil
+    local bareExactValueIntent = tostring(text or ""):match("^to%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^move%s+to%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^set%s+to%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^change%s+to%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^auf%s+[-+]?%d+%.?%d*$") ~= nil
+        or tostring(text or ""):match("^zu%s+[-+]?%d+%.?%d*$") ~= nil
     local exactValueReference = ContainsAny(text, {
         "it", "that", "this",
         "last setting", "last value", "actually", "instead", "rather",
@@ -368,6 +379,7 @@ local function BuildFollowup(text, ctx)
         "use",
     })
     local exactValueIntent = pureNumberIntent
+        or bareExactValueIntent
         or ContainsAny(text, { "min", "minimum", "max", "maximum" })
         or (exactValueReference and FirstNumber(text) ~= nil)
     local commandIntent = ContainsAny(text, {
@@ -673,6 +685,78 @@ local function BuildFollowup(text, ctx)
             return GenericNumberFollowupValue(setting, targetAttr, direction)
         end
         return nil, nil
+    end
+
+    local function TextAreaTargetPrefixes(textValue)
+        local prefixes = {}
+        if ContainsAny(textValue, { "power text", "mana text", "power number", "mana number", "power value", "mana value" }) then
+            prefixes[#prefixes + 1] = "power"
+            prefixes[#prefixes + 1] = "powerText"
+        elseif ContainsAny(textValue, { "hp text", "health text", "health number", "hp number", "health value", "hp value" }) then
+            prefixes[#prefixes + 1] = "hp"
+            prefixes[#prefixes + 1] = "healthText"
+            prefixes[#prefixes + 1] = "text"
+        elseif ContainsAny(textValue, { "name text", "name" }) then
+            prefixes[#prefixes + 1] = "name"
+            prefixes[#prefixes + 1] = "nameText"
+        end
+        return prefixes
+    end
+
+    local function TextAreaSuffixFromAttribute(attribute)
+        local attr = tostring(attribute or "")
+        if attr == "" then return nil end
+        for i = 1, #relatedPrefixSuffixes do
+            local suffix = relatedPrefixSuffixes[i]
+            if attr:sub(-#suffix) == suffix then return suffix end
+        end
+        return nil
+    end
+
+    local function FindTextAreaFollowupSetting(prev, targetPrefixes)
+        if not (prev and type(targetPrefixes) == "table" and #targetPrefixes > 0) then return nil end
+        if not (Registry and type(Registry.FindSettings) == "function") then return nil end
+        local previousSetting = prev.key and Registry:GetSetting(prev.key) or nil
+        local unit = prev.unit or (previousSetting and previousSetting.unit)
+        local frameType = prev.frameType or (previousSetting and previousSetting.frameType)
+        local suffix = TextAreaSuffixFromAttribute(prev.attribute or (previousSetting and previousSetting.attribute))
+        if type(unit) ~= "string" or unit == "" or type(frameType) ~= "string" or frameType == "" or not suffix then return nil end
+
+        for i = 1, #targetPrefixes do
+            local targetAttr = tostring(targetPrefixes[i]) .. suffix
+            local filter = { unit = unit, frameType = frameType, attribute = targetAttr }
+            local setting = PickGenericRelatedCandidate(Registry:FindSettings(filter), previousSetting)
+            if setting then return setting end
+        end
+        return nil
+    end
+
+    local textAreaTargetPrefixes = TextAreaTargetPrefixes(text)
+    if #units == 0 and #groups == 0 and targetReplayIntent and #textAreaTargetPrefixes > 0 then
+        local textAreaChanges = {}
+        local seenTextAreaKeys = {}
+        for i = 1, #ctx.lastChangeBundle do
+            local prev = ctx.lastChangeBundle[i]
+            local setting = FindTextAreaFollowupSetting(prev, textAreaTargetPrefixes)
+            if setting and not seenTextAreaKeys[setting.key] then
+                local relativeDelta = tonumber(prev and prev.relativeDelta)
+                if relativeDelta ~= nil and setting.type == "number" then
+                    seenTextAreaKeys[setting.key] = true
+                    textAreaChanges[#textAreaChanges + 1] = { setting = setting, relativeDelta = relativeDelta, direction = prev.direction }
+                elseif prev and prev.value ~= nil then
+                    seenTextAreaKeys[setting.key] = true
+                    textAreaChanges[#textAreaChanges + 1] = { setting = setting, value = prev.value }
+                end
+            end
+        end
+        if #textAreaChanges > 0 then
+            return {
+                kind = "changes",
+                changes = textAreaChanges,
+                label = "Apply previous text adjustment",
+                summary = "Continues the last text change on another text area.",
+            }
+        end
     end
 
     local genericObjectFollowupReference = HasGenericObjectFollowupReference(text) or bareDirectionalFollowup

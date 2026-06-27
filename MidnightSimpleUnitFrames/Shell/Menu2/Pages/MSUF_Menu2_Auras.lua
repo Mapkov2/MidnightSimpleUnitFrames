@@ -27,6 +27,14 @@ local AURA_SCOPE_VALUES = VTP "shared=Shared|player=Player|target=Target|focus=F
 local AURA_SCOPE_LABELS = { shared = "Shared", player = "Player", target = "Target", focus = "Focus", boss = "Boss", party = "Party", raid = "Raid / Mythic" }
 local AURA_SCOPE_VALID = M.KeySetFromWords "shared player target focus boss party raid"
 local AURA_GROUP_SCOPES = M.KeySetFromWords "party raid mythicraid"
+local SHARED_PREVIEW_SCOPES = {
+    { scope = "player", label = "Player" },
+    { scope = "target", label = "Target" },
+    { scope = "focus", label = "Focus" },
+    { scope = "boss", label = "Boss" },
+    { scope = "party", label = "Party" },
+    { scope = "raid", label = "Raid" },
+}
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
 local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
@@ -671,6 +679,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.cooldownAnchor = group.cooldownAnchor or "CENTER"
         cfg.cooldownX = tonumber(group.cooldownX) or 0
         cfg.cooldownY = tonumber(group.cooldownY) or 0
+        cfg.cooldownDecimalSeconds = tonumber(group.cooldownDecimalSeconds) or 3
         if lane == "debuff" then cfg.debuffBorderMode = ReadGroupDebuffTypeBorderMode(scope, "debuff") end
     else
         local readScope = scope or "shared"
@@ -703,9 +712,16 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.stackX = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetX", -1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetX", -1, -2000, 2000)
         cfg.stackY = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetY", 1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetY", 1, -2000, 2000)
         cfg.cooldownSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "cooldownTextSize", 14, 6, 40)
-        cfg.cooldownAnchor = "CENTER"
+        if lane and type(Model.ReadLaneCooldownAnchor) == "function" then
+            cfg.cooldownAnchor = Model.ReadLaneCooldownAnchor(readScope, lane)
+        elseif type(Model.ReadCooldownAnchor) == "function" then
+            cfg.cooldownAnchor = Model.ReadCooldownAnchor(readScope)
+        elseif runtimePreview and runtimePreview.cooldownAnchor then
+            cfg.cooldownAnchor = runtimePreview.cooldownAnchor
+        end
         cfg.cooldownX = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetX", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetX", 0, -2000, 2000)
         cfg.cooldownY = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetY", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetY", 0, -2000, 2000)
+        cfg.cooldownDecimalSeconds = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownDecimalSeconds", 3, 0, 30) or Model.ReadNumber(readScope, "cooldownDecimalSeconds", 3, 0, 30)
         if lane == "debuff" then
             if type(Model.ReadDebuffTypeBorderMode) == "function" then
                 cfg.debuffBorderMode = Model.ReadDebuffTypeBorderMode(readScope)
@@ -715,7 +731,8 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         end
     end
     local maxSize = max(12, min(128, floor((height or 104) - 38), floor((width or 300) - 20)))
-    cfg.size = min(maxSize, max(10, tonumber(cfg.size) or 24))
+    cfg.actualSize = max(10, tonumber(cfg.size) or 24)
+    cfg.size = min(maxSize, cfg.actualSize)
     cfg.spacing = min(10, max(0, tonumber(cfg.spacing) or 2))
     cfg.perRow = max(1, Round(cfg.perRow))
     cfg.maxIcons = max(0, Round(cfg.maxIcons))
@@ -725,7 +742,51 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     cfg.count = min(14, cfg.maxIcons, cfg.columns * cfg.maxRows)
     cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
     cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
+    cfg.cooldownDecimalSeconds = min(30, max(0, tonumber(cfg.cooldownDecimalSeconds) or 3))
     return cfg
+end
+local function FormatAuraPreviewTimer(seconds, cfg)
+    seconds = tonumber(seconds) or 0
+    local decimalSec = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
+    if decimalSec > 0 and seconds < decimalSec then return string.format("%.1f", seconds) end
+    return tostring(Round(seconds))
+end
+local function SharedAuraPreviewLabel(cfg)
+    local labels = cfg and cfg._labels
+    local count = labels and #labels or 0
+    local name = cfg and cfg._label or "Frame"
+    if count == #SHARED_PREVIEW_SCOPES then
+        name = "All Frames"
+    elseif count == 2 then
+        name = labels[1] .. " / " .. labels[2]
+    elseif count > 2 then
+        name = labels[1] .. " +" .. tostring(count - 1)
+    end
+    local size = cfg and (cfg.actualSize or cfg.size) or 0
+    return name .. "\n" .. tostring(Round(size)) .. "px"
+end
+local function BuildSharedAuraPreviewSamples(lane, width, height)
+    local samples, bySize = {}, {}
+    for i = 1, #SHARED_PREVIEW_SCOPES do
+        local spec = SHARED_PREVIEW_SCOPES[i]
+        local cfg = ReadMiniAuraPreviewConfig(spec.scope, lane, width, height)
+        local size = Round(cfg.actualSize or cfg.size or 0)
+        if size > 0 then
+            local existing = bySize[size]
+            if existing then
+                existing._labels[#existing._labels + 1] = spec.label
+                existing.previewLabel = SharedAuraPreviewLabel(existing)
+            else
+                cfg.actualSize = size
+                cfg._label = spec.label
+                cfg._labels = { spec.label }
+                cfg.previewLabel = SharedAuraPreviewLabel(cfg)
+                samples[#samples + 1] = cfg
+                bySize[size] = cfg
+            end
+        end
+    end
+    return samples
 end
 local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lane)
     if ctx and ctx.hiddenBuild then return nil end
@@ -736,48 +797,99 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     W.LabelAt(box, "Preview", 10, -10, 100, "GameFontNormalSmall", T.colors.text)
     local icons = {}
     for i = 1, 14 do icons[i] = CreateAuraPreviewIcon(box) end
+    local labels = {}
+    for i = 1, 14 do
+        local label = T.Font(box, "GameFontDisableSmall", "", T.colors.muted)
+        label:SetJustifyH("CENTER")
+        if label.SetJustifyV then label:SetJustifyV("TOP") end
+        label:Hide()
+        labels[i] = label
+    end
     local buffTex = { 135987, 136116, 135932, 136085, 132333, 135981, 136048 }
     local debuffTex = { 136118, 136139, 136197, 135817, 132851, 136188, 136170 }
+    local function HidePreviewIcon(icon)
+        icon:Hide()
+        icon.swipe:Hide()
+        icon.dispelBorder:Hide()
+    end
+    local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText)
+        icon:SetSize(cfg.size, cfg.size)
+        local tex = isBuffIcon and buffTex or debuffTex
+        icon.icon:SetTexture(tex[((index - 1) % #tex) + 1])
+        local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
+        local borderAtlas = (not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
+        local showPreviewEdges = isBuffIcon == true
+        for _, edge in pairs(icon.edge) do edge:SetShown(showPreviewEdges); edge:SetVertexColor(r, g, b, 0.95) end
+        icon.swipe:SetShown(cfg.showSwipe ~= false)
+        if borderAtlas and icon.dispelBorder.SetAtlas then
+            local pad = max(1, floor((cfg.size / 24) + 0.5))
+            icon.dispelBorder:ClearAllPoints()
+            icon.dispelBorder:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
+            icon.dispelBorder:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
+            icon.dispelBorder:SetAtlas(borderAtlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
+            icon.dispelBorder:Show()
+        else
+            icon.dispelBorder:Hide()
+        end
+        ApplyAuraPreviewFont(icon.stack, cfg.stackSize)
+        ApplyAuraPreviewFont(icon.timer, cfg.cooldownSize)
+        PlaceAuraPreviewText(icon.stack, icon, cfg.stackAnchor, cfg.stackX, cfg.stackY)
+        PlaceAuraPreviewText(icon.timer, icon, cfg.cooldownAnchor, cfg.cooldownX, cfg.cooldownY)
+        icon.stack:SetText(cfg.showStacks and ((forceText or index % 3 == 1) and "2" or "") or "")
+        local sampleSeconds = forceText and 2.7 or (index % 2 == 0 and 12 or nil)
+        icon.timer:SetText(cfg.showTimers and sampleSeconds and FormatAuraPreviewTimer(sampleSeconds, cfg) or "")
+        icon:Show()
+    end
     local function RefreshPreview()
         if AurasMenuCombatLocked() then return end
+        if scope == "shared" then
+            local samples = BuildSharedAuraPreviewSamples(lane, width, height)
+            local count = min(#samples, #icons)
+            local boxW, boxH = width or 300, height or 104
+            local contentW = max(1, boxW - 20)
+            local columns = min(count, max(1, floor(contentW / 86)))
+            local rows = max(1, ceil(count / max(1, columns)))
+            local cellW = max(56, floor(contentW / max(1, columns)))
+            local cellH = max(44, floor((boxH - 42) / rows))
+            local maxIconSize = max(12, min(80, cellW - 8, cellH - 24))
+            for i = 1, #icons do
+                local icon, label = icons[i], labels[i]
+                if i <= count then
+                    local cfg = samples[i]
+                    local col = (i - 1) % columns
+                    local row = floor((i - 1) / columns)
+                    cfg.size = min(maxIconSize, max(10, tonumber(cfg.actualSize) or tonumber(cfg.size) or 24))
+                    icon:ClearAllPoints()
+                    icon:SetPoint("TOPLEFT", box, "TOPLEFT",
+                        10 + col * cellW + floor((cellW - cfg.size) / 2),
+                        -34 - row * cellH)
+                    RenderPreviewIcon(icon, i, cfg, lane ~= "debuff", true)
+                    label:ClearAllPoints()
+                    label:SetWidth(cellW)
+                    label:SetHeight(28)
+                    label:SetPoint("TOP", icon, "BOTTOM", 0, -4)
+                    label:SetText(cfg.previewLabel or SharedAuraPreviewLabel(cfg))
+                    label:Show()
+                else
+                    HidePreviewIcon(icon)
+                    label:Hide()
+                end
+            end
+            return
+        end
         local cfg = ReadMiniAuraPreviewConfig(scope, lane, width, height)
         for i = 1, #icons do
             local icon = icons[i]
+            labels[i]:Hide()
             if i <= cfg.count then
                 local col = (i - 1) % cfg.columns
                 local row = floor((i - 1) / cfg.columns)
-                icon:SetSize(cfg.size, cfg.size)
                 icon:ClearAllPoints()
                 icon:SetPoint("TOPLEFT", box, "TOPLEFT", 10 + col * (cfg.size + cfg.spacing), -34 - row * (cfg.size + cfg.spacing))
                 local isBuffIcon = lane and lane == "buff" or (not lane and i <= 7)
-                local tex = isBuffIcon and buffTex or debuffTex
-                icon.icon:SetTexture(tex[((i - 1) % #tex) + 1])
-                local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
-                local borderAtlas = (not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
-                local showPreviewEdges = isBuffIcon == true
-                for _, edge in pairs(icon.edge) do edge:SetShown(showPreviewEdges); edge:SetVertexColor(r, g, b, 0.95) end
-                icon.swipe:SetShown(cfg.showSwipe ~= false)
-                if borderAtlas and icon.dispelBorder.SetAtlas then
-                    local pad = max(1, floor((cfg.size / 24) + 0.5))
-                    icon.dispelBorder:ClearAllPoints()
-                    icon.dispelBorder:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
-                    icon.dispelBorder:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
-                    icon.dispelBorder:SetAtlas(borderAtlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
-                    icon.dispelBorder:Show()
-                else
-                    icon.dispelBorder:Hide()
-                end
-                ApplyAuraPreviewFont(icon.stack, cfg.stackSize)
-                ApplyAuraPreviewFont(icon.timer, cfg.cooldownSize)
-                PlaceAuraPreviewText(icon.stack, icon, cfg.stackAnchor, cfg.stackX, cfg.stackY)
-                PlaceAuraPreviewText(icon.timer, icon, cfg.cooldownAnchor, cfg.cooldownX, cfg.cooldownY)
-                icon.stack:SetText(cfg.showStacks and (i % 3 == 1 and "2" or "") or "")
-                icon.timer:SetText(cfg.showTimers and (i % 2 == 0 and "12" or "") or "")
-                icon:Show()
+                RenderPreviewIcon(icon, i, cfg, isBuffIcon, false)
             else
-                icon:Hide()
-                icon.swipe:Hide()
-                icon.dispelBorder:Hide()
+                HidePreviewIcon(icon)
             end
         end
     end
@@ -789,28 +901,12 @@ local function BuildUnitStyle(ctx, b, scope)
     local lane = CurrentLane("auraStyleGFLane", "debuff")
     local laneName = LanePlural(lane)
     local extraDebuffControls = lane == "debuff" and 64 or 0
-    local section = b:Section("Unit Aura " .. LaneTitle(lane) .. " Style", 590 + extraDebuffControls + (unit == "shared" and 0 or 42))
-    local w = section._msuf2Width or b.width or 720
-    local colW = max(300, floor((w - 66) / 2))
-    local rightX = 32 + colW + 18
-    local rightW = max(260, w - rightX - 24)
     local styleControls = {}
     local refreshMiniPreview
     local function RefreshStylePreview()
         RefreshMiniAuraPreviewNow(refreshMiniPreview)
     end
-    local topY = -42
     local useShared
-    if unit ~= "shared" then
-        useShared = BindSwitch(ctx, section, "Use Shared Style", 24, -40, 220,
-            function() return Model.UseSharedVisuals(unit) end,
-            function(v)
-                Model.SetUseSharedVisuals(unit, v)
-                ApplyUnit(ctx, unit, "AURAS3_STYLE_INHERIT", true)
-                RefreshStylePreview()
-            end)
-        topY = -84
-    end
     local function ReadScopeBool(key, defaultValue)
         if type(Model.ReadLaneStyleBool) == "function" then return Model.ReadLaneStyleBool(unit, lane, key, defaultValue) end
         if type(Model.ReadBool) == "function" then return Model.ReadBool(unit, key, defaultValue) end
@@ -848,6 +944,18 @@ local function BuildUnitStyle(ctx, b, scope)
             Model.WriteNumber(unit, key, value, minValue, maxValue)
         end
     end
+    local function ReadScopeCooldownAnchor()
+        if type(Model.ReadLaneCooldownAnchor) == "function" then return Model.ReadLaneCooldownAnchor(unit, lane) end
+        if type(Model.ReadCooldownAnchor) == "function" then return Model.ReadCooldownAnchor(unit) end
+        return "CENTER"
+    end
+    local function WriteScopeCooldownAnchor(value)
+        if type(Model.WriteLaneCooldownAnchor) == "function" then
+            Model.WriteLaneCooldownAnchor(unit, lane, value)
+        elseif type(Model.WriteCooldownAnchor) == "function" then
+            Model.WriteCooldownAnchor(unit, value)
+        end
+    end
     local function AddStyleControl(control) M.AppendValues(styleControls, control); return control end
     local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason)
         return AddStyleControl(BindSwitch(ctx, parent, label, x, y, width,
@@ -878,17 +986,47 @@ local function BuildUnitStyle(ctx, b, scope)
                 RefreshStylePreview()
             end))
     end
-    local text = Card(section, laneName .. " Text Features", "Stack-count and cooldown text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, topY, colW, 388 + extraDebuffControls)
-    BindStyleSwitch(text, "Show Stack Count", 16, -66, colW - 32, "showStackCount", true, "AURAS3_SHOW_STACKS")
-    BindStyleSwitch(text, "Show Cooldown Text", 16, -98, colW - 32, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
-    BindStyleSwitch(text, "Show Cooldown Swipe", 16, -130, colW - 32, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
-    if lane == "debuff" then
-        BindStyleDropdown(text, "Dispel-type Border", 16, -162,
-            type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
-            colW - 32, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
+    local function BodyWidth(body)
+        return body and (body._msuf2Width or body.GetWidth and body:GetWidth()) or b.width or 720
     end
-    W.LabelAt(text, "Stack Count", 16, -178 - extraDebuffControls, colW - 32, "GameFontNormalSmall", T.colors.accent)
-    AddStyleControl(BindDropdown(ctx, text, "Anchor", 16, -214 - extraDebuffControls, Model.StackAnchorValues(), colW - 32,
+    local scopeLabel = ScopeLabel(scope)
+    local baseId = "aura_style_" .. tostring(scope or "shared") .. "_" .. lane
+
+    local previewH = unit == "shared" and 244 or 204
+    local previewBoxH = unit == "shared" and 158 or 118
+    local previewHintY = unit == "shared" and -210 or -170
+    local preview = b:Section(LaneTitle(lane) .. " Preview", previewH)
+    local pw = BodyWidth(preview)
+    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, unit, 24, -34, pw - 48, previewBoxH, lane))
+    local hint = W.Text(preview, "", 24, previewHintY, pw - 48, T.colors.muted)
+
+    local featuresH = (unit == "shared" and 170 or 216) + extraDebuffControls
+    local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Text Features", featuresH, true)
+    local fw = BodyWidth(features)
+    local featuresY = -44
+    if unit ~= "shared" then
+        useShared = BindSwitch(ctx, features, "Use Shared Style", 24, featuresY, 220,
+            function() return Model.UseSharedVisuals(unit) end,
+            function(v)
+                Model.SetUseSharedVisuals(unit, v)
+                ApplyUnit(ctx, unit, "AURAS3_STYLE_INHERIT", true)
+                RefreshStylePreview()
+            end)
+        featuresY = featuresY - 48
+    end
+    W.Text(features, "Stack-count and cooldown text for " .. scopeLabel .. " " .. laneName .. ".", 24, featuresY, fw - 48, T.colors.muted)
+    BindStyleSwitch(features, "Show Stack Count", 24, featuresY - 44, fw - 48, "showStackCount", true, "AURAS3_SHOW_STACKS")
+    BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 76, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
+    BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 108, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
+    if lane == "debuff" then
+        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 158,
+            type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
+            fw - 48, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
+    end
+
+    local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 258, false)
+    local sw = BodyWidth(stack)
+    AddStyleControl(BindDropdown(ctx, stack, "Anchor", 24, -54, Model.StackAnchorValues(), sw - 48,
         function()
             if type(Model.ReadLaneStackAnchor) == "function" then return Model.ReadLaneStackAnchor(unit, lane) end
             return Model.ReadStackAnchor(unit)
@@ -902,70 +1040,99 @@ local function BuildUnitStyle(ctx, b, scope)
             ApplyUnit(ctx, unit, "AURAS3_STACK_ANCHOR")
             RefreshStylePreview()
         end))
-    BindStyleSlider(text, "Text Size", 16, -272 - extraDebuffControls, 6, 40, 1, colW - 32, "stackTextSize", 14, 6, 40, nil, nil, "AURAS3_STACK_SIZE")
-    local smallW = max(120, floor((colW - 44) / 2))
-    BindStyleSlider(text, "X", 16, -332 - extraDebuffControls, -40, 40, 1, smallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
-    BindStyleSlider(text, "Y", 24 + smallW, -332 - extraDebuffControls, -40, 40, 1, smallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
-    local cooldown = Card(section, laneName .. " Cooldown Text", "Timer font size, center offset, and tooltip behavior for " .. ScopeLabel(scope) .. " " .. laneName .. ".", rightX, topY, rightW, 316)
-    BindStyleSlider(cooldown, "Text Size", 16, -62, 6, 40, 1, rightW - 32, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
-    BindStyleSlider(cooldown, "X", 16, -122, -40, 40, 1, rightW - 32, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
-    BindStyleSlider(cooldown, "Y", 16, -182, -40, 40, 1, rightW - 32, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
-    BindStyleSwitch(cooldown, "Show Tooltip", 16, -242, rightW - 32, "showTooltip", true, "AURAS3_TOOLTIP")
-    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, section, unit, rightX, topY - 340, rightW, 118, lane))
-    local hint = W.Text(section, "", 24, topY - 472, w - 48, T.colors.muted)
+    BindStyleSlider(stack, "Text Size", 24, -112, 6, 40, 1, sw - 48, "stackTextSize", 14, 6, 40, nil, nil, "AURAS3_STACK_SIZE")
+    local stackSmallW = max(120, floor((sw - 72) / 2))
+    BindStyleSlider(stack, "X", 24, -172, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
+    BindStyleSlider(stack, "Y", 32 + stackSmallW, -172, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
+
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 414, true)
+    local cw = BodyWidth(cooldown)
+    W.Text(cooldown, "Timer font size, anchor, offset, and tooltip behavior for " .. scopeLabel .. " " .. laneName .. ".", 24, -42, cw - 48, T.colors.muted)
+    BindStyleSlider(cooldown, "Text Size", 24, -82, 6, 40, 1, cw - 48, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
+    BindStyleDropdown(cooldown, "Anchor", 24, -140, type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues(), cw - 48, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, "AURAS3_COOLDOWN_ANCHOR")
+    BindStyleSlider(cooldown, "X", 24, -198, -40, 40, 1, cw - 48, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
+    BindStyleSlider(cooldown, "Y", 24, -258, -40, 40, 1, cw - 48, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
+    BindStyleSwitch(cooldown, "Show Tooltip", 24, -306, cw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
+    local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -354, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
+    AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. At and above it, timers show whole seconds. Set 0 for whole seconds only.")
+    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added.", 24, -398, cw - 48, T.colors.muted)
+
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
         W.SetControlsEnabled(styleControls, editable)
         if useShared then W.SetControlEnabled(useShared, true) end
-        hint:SetText(editable and "Font family follows Global Style > Fonts. Legacy blacklists are read-only on Filters." or "This scope inherits the Shared aura style.")
+        if unit == "shared" then
+            hint:SetText("Shared preview groups frames by identical icon size; labels show the actual frame icon size. Font family follows Global Style > Fonts.")
+        else
+            hint:SetText(editable and "Font family follows Global Style > Fonts. Legacy blacklists are read-only on Filters." or "This scope inherits the Shared aura style.")
+        end
     end)
 end
 local function BuildGroupStyle(ctx, b, scope)
     local lane = CurrentLane("auraStyleGFLane", "debuff")
     local extraDebuffControls = lane == "debuff" and 64 or 0
-    local section = b:Section("Group Aura Style", 668 + extraDebuffControls)
-    local w = section._msuf2Width or b.width or 720
     local laneName = LanePlural(lane)
-    local colW = max(300, floor((w - 66) / 2))
-    local rightX = 32 + colW + 18
-    local rightW = max(260, w - rightX - 24)
     local refreshMiniPreview
     local function RefreshStylePreview()
         RefreshMiniAuraPreviewNow(refreshMiniPreview)
     end
-    local text = Card(section, "Group Aura " .. LaneTitle(lane) .. " Text", "Cooldown and stack text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, -42, colW, 548 + extraDebuffControls)
-    BindGroupSwitch(ctx, text, "Show Cooldown Swipe", 16, -78, colW - 32, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
-    BindGroupSwitch(ctx, text, "Show Cooldown Text", 16, -110, colW - 32, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
-    BindGroupSwitch(ctx, text, "Show Stack Count", 16, -142, colW - 32, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
+    local function BodyWidth(body)
+        return body and (body._msuf2Width or body.GetWidth and body:GetWidth()) or b.width or 720
+    end
+    local scopeLabel = ScopeLabel(scope)
+    local baseId = "aura_style_group_" .. tostring(scope or "group") .. "_" .. lane
+
+    local preview = b:Section("Group " .. LaneTitle(lane) .. " Preview", 160)
+    local pw = BodyWidth(preview)
+    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, scope, 24, -34, pw - 48, 118, lane))
+
+    local features = b:CollapsibleSection(baseId .. "_features", "Group " .. LaneTitle(lane) .. " Text Features", 170 + extraDebuffControls, true)
+    local fw = BodyWidth(features)
+    W.Text(features, "Cooldown and stack text for " .. scopeLabel .. " " .. laneName .. ".", 24, -42, fw - 48, T.colors.muted)
+    BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -82, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -114, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, features, "Show Stack Count", 24, -146, fw - 48, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
     if lane == "debuff" then
-        BindDropdown(ctx, text, "Dispel-type Border", 16, -174,
+        BindDropdown(ctx, features, "Dispel-type Border", 24, -198,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
-            colW - 32,
+            fw - 48,
             function() return ReadGroupDebuffTypeBorderMode(scope, lane) end,
             function(v)
                 WriteGroupDebuffTypeBorderMode(scope, lane, v)
                 RefreshStylePreview()
             end)
     end
-    BindGroupSlider(ctx, text, "Cooldown Font", 16, -198 - extraDebuffControls, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font", RefreshStylePreview)
-    BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -256 - extraDebuffControls, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry", RefreshStylePreview)
-    local textSmallW = max(120, floor((colW - 44) / 2))
-    BindGroupSlider(ctx, text, "Cooldown X", 16, -314 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "cooldownX", 0, "geometry", RefreshStylePreview)
-    BindGroupSlider(ctx, text, "Cooldown Y", 24 + textSmallW, -314 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "cooldownY", 0, "geometry", RefreshStylePreview)
-    BindGroupSlider(ctx, text, "Stack Font", 16, -374 - extraDebuffControls, 6, 24, 1, colW - 32, scope, lane, "stackSize", 10, "font", RefreshStylePreview)
-    BindGroupDropdown(ctx, text, "Stack Anchor", 16, -432 - extraDebuffControls, GFAnchorValues(), colW - 32, scope, lane, "stackAnchor", "BOTTOMRIGHT", "geometry", RefreshStylePreview)
-    BindGroupSlider(ctx, text, "Stack X", 16, -490 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
-    BindGroupSlider(ctx, text, "Stack Y", 24 + textSmallW, -490 - extraDebuffControls, -40, 40, 1, textSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
-    local behavior = Card(section, "Behavior", "Shared group-frame aura behavior for " .. ScopeLabel(scope) .. ".", rightX, -42, rightW, 306)
-    BindGroupRootSwitch(ctx, behavior, "Show Tooltip", 16, -64, rightW - 32, scope, "showTooltip", true, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Sort by Duration", 16, -96, rightW - 32, scope, "sortByDuration", false, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 16, -128, rightW - 32, scope, "preferPlayer", false, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 16, -160, rightW - 32, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
-    BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 16, -202, rightW - 32, scope, "cooldownSwipeDarkenOnLoss", false, "visual", RefreshStylePreview)
-    refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, section, scope, rightX, -404, rightW, 118, lane))
+
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Group " .. LaneTitle(lane) .. " Cooldown Text", 324, true)
+    local cw = BodyWidth(cooldown)
+    BindGroupSlider(ctx, cooldown, "Cooldown Font", 24, -54, 6, 24, 1, cw - 48, scope, lane, "cooldownSize", 8, "font", RefreshStylePreview)
+    BindGroupDropdown(ctx, cooldown, "Cooldown Anchor", 24, -112, GFAnchorValues(), cw - 48, scope, lane, "cooldownAnchor", "CENTER", "geometry", RefreshStylePreview)
+    local cooldownSmallW = max(120, floor((cw - 72) / 2))
+    BindGroupSlider(ctx, cooldown, "Cooldown X", 24, -170, -40, 40, 1, cooldownSmallW, scope, lane, "cooldownX", 0, "geometry", RefreshStylePreview)
+    BindGroupSlider(ctx, cooldown, "Cooldown Y", 32 + cooldownSmallW, -170, -40, 40, 1, cooldownSmallW, scope, lane, "cooldownY", 0, "geometry", RefreshStylePreview)
+    local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -230, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual", RefreshStylePreview)
+    AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. At and above it, timers show whole seconds. Set 0 for whole seconds only.")
+    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added.", 24, -282, cw - 48, T.colors.muted)
+
+    local stack = b:CollapsibleSection(baseId .. "_stack", "Group " .. LaneTitle(lane) .. " Stack Count", 238, false)
+    local sw = BodyWidth(stack)
+    BindGroupSlider(ctx, stack, "Stack Font", 24, -54, 6, 24, 1, sw - 48, scope, lane, "stackSize", 10, "font", RefreshStylePreview)
+    BindGroupDropdown(ctx, stack, "Stack Anchor", 24, -112, GFAnchorValues(), sw - 48, scope, lane, "stackAnchor", "BOTTOMRIGHT", "geometry", RefreshStylePreview)
+    local stackSmallW = max(120, floor((sw - 72) / 2))
+    BindGroupSlider(ctx, stack, "Stack X", 24, -170, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
+    BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -170, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
+
+    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Group " .. LaneTitle(lane) .. " Behavior", 252, false)
+    local bw = BodyWidth(behavior)
+    W.Text(behavior, "Shared group-frame aura behavior for " .. scopeLabel .. ".", 24, -42, bw - 48, T.colors.muted)
+    BindGroupRootSwitch(ctx, behavior, "Show Tooltip", 24, -82, bw - 48, scope, "showTooltip", true, "visual")
+    BindGroupRootSwitch(ctx, behavior, "Sort by Duration", 24, -114, bw - 48, scope, "sortByDuration", false, "visual")
+    BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 24, -146, bw - 48, scope, "preferPlayer", false, "visual")
+    BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 24, -178, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
+    BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 24, -220, bw - 48, scope, "cooldownSwipeDarkenOnLoss", false, "visual", RefreshStylePreview)
 end
 local function BuildSharedColors(ctx, b)
-    local section = b:Section("Shared Aura Colors", 480)
+    local section = b:CollapsibleSection("aura_shared_colors", "Shared Aura Colors", 480, false)
     local w = section._msuf2Width or b.width or 720
     local colW = max(310, floor((w - 58) / 2))
     local rightX = 24 + colW + 18

@@ -79,6 +79,7 @@ local GROUPS = {
 local LANE_STYLE_KEYS = {
     buff = {
         stackCountAnchor = "buffStackCountAnchor",
+        cooldownTextAnchor = "buffCooldownTextAnchor",
         stackTextSize = "buffStackTextSize",
         stackTextOffsetX = "buffStackTextOffsetX",
         stackTextOffsetY = "buffStackTextOffsetY",
@@ -88,6 +89,7 @@ local LANE_STYLE_KEYS = {
     },
     debuff = {
         stackCountAnchor = "debuffStackCountAnchor",
+        cooldownTextAnchor = "debuffCooldownTextAnchor",
         stackTextSize = "debuffStackTextSize",
         stackTextOffsetX = "debuffStackTextOffsetX",
         stackTextOffsetY = "debuffStackTextOffsetY",
@@ -100,6 +102,39 @@ local LANE_STYLE_KEYS = {
 local W8 = "Interface\\Buttons\\WHITE8X8"
 local HEADER_H = 18
 local PREVIEW_ICONS = 4
+local TEXT_STYLE_LAYOUT_KEYS = {
+    stackTextSize = true,
+    stackTextOffsetX = true,
+    stackTextOffsetY = true,
+    cooldownTextSize = true,
+    cooldownTextOffsetX = true,
+    cooldownTextOffsetY = true,
+    buffStackTextSize = true,
+    buffStackTextOffsetX = true,
+    buffStackTextOffsetY = true,
+    buffCooldownTextSize = true,
+    buffCooldownTextOffsetX = true,
+    buffCooldownTextOffsetY = true,
+    debuffStackTextSize = true,
+    debuffStackTextOffsetX = true,
+    debuffStackTextOffsetY = true,
+    debuffCooldownTextSize = true,
+    debuffCooldownTextOffsetX = true,
+    debuffCooldownTextOffsetY = true,
+}
+local TEXT_STYLE_SHARED_KEYS = {
+    stackCountAnchor = true,
+    cooldownTextAnchor = true,
+    buffStackCountAnchor = true,
+    buffCooldownTextAnchor = true,
+    debuffStackCountAnchor = true,
+    debuffCooldownTextAnchor = true,
+}
+local AURA_TEXT_ANCHOR_OK = {
+    TOPLEFT = true, TOP = true, TOPRIGHT = true,
+    LEFT = true, CENTER = true, RIGHT = true,
+    BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+}
 
 local function Clamp(v, defaultValue, minValue, maxValue)
     v = tonumber(v)
@@ -250,6 +285,20 @@ local function GetSharedLayout(auras, unit)
     return nil
 end
 
+local function TableHasAnyKey(tbl, keys)
+    if type(tbl) ~= "table" or type(keys) ~= "table" then return false end
+    for key in pairs(keys) do
+        if tbl[key] ~= nil then return true end
+    end
+    return false
+end
+
+local function UnitStyleOverrideActive(pu)
+    if type(pu) ~= "table" then return false end
+    if pu.overrideStyle ~= nil then return pu.overrideStyle == true end
+    return TableHasAnyKey(pu.layout, TEXT_STYLE_LAYOUT_KEYS) or TableHasAnyKey(pu.layoutShared, TEXT_STYLE_SHARED_KEYS)
+end
+
 local function ReadNumber(shared, layout, key, defaultValue, minValue, maxValue)
     local v = shared and shared[key]
     if layout and layout[key] ~= nil then v = layout[key] end
@@ -281,10 +330,22 @@ local function ReadLaneTextAnchor(shared, layoutShared, kind)
     return anchor
 end
 
+local function ReadLaneCooldownTextAnchor(shared, layoutShared, kind)
+    kind = NormalizeKind(kind)
+    local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind].cooldownTextAnchor
+    local anchor = laneKey and ((layoutShared and layoutShared[laneKey]) or (shared and shared[laneKey])) or nil
+    anchor = anchor or (layoutShared and layoutShared.cooldownTextAnchor) or (shared and shared.cooldownTextAnchor) or "CENTER"
+    return AURA_TEXT_ANCHOR_OK[anchor] and anchor or "CENTER"
+end
+
 local function ReadTextConfig(unit, kind)
     local auras, shared = EnsureDB()
-    local layout = GetLayout(auras, unit, false)
+    local layout, pu = GetLayout(auras, unit, false)
     local ls = GetSharedLayout(auras, unit)
+    if not UnitStyleOverrideActive(pu) then
+        layout = nil
+        ls = nil
+    end
     return {
         stackSize = ReadLaneTextNumber(shared, layout, kind, "stackTextSize", 14, 6, 40),
         stackX = ReadLaneTextNumber(shared, layout, kind, "stackTextOffsetX", -1, -2000, 2000),
@@ -293,6 +354,7 @@ local function ReadTextConfig(unit, kind)
         cooldownX = ReadLaneTextNumber(shared, layout, kind, "cooldownTextOffsetX", 0, -2000, 2000),
         cooldownY = ReadLaneTextNumber(shared, layout, kind, "cooldownTextOffsetY", 0, -2000, 2000),
         stackAnchor = ReadLaneTextAnchor(shared, ls, kind),
+        cooldownAnchor = ReadLaneCooldownTextAnchor(shared, ls, kind),
     }
 end
 
@@ -661,6 +723,27 @@ local function PlaceStackText(fs, owner, cfg)
     end
 end
 
+local function PlaceCooldownText(fs, owner, cfg)
+    if not fs or not owner or not cfg then return end
+    fs:ClearAllPoints()
+    local anchor = AURA_TEXT_ANCHOR_OK[cfg.cooldownAnchor] and cfg.cooldownAnchor or "CENTER"
+    fs:SetPoint(anchor, owner, anchor, cfg.cooldownX or 0, cfg.cooldownY or 0)
+    if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
+        fs:SetJustifyH("LEFT")
+    elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
+        fs:SetJustifyH("RIGHT")
+    else
+        fs:SetJustifyH("CENTER")
+    end
+    if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
+        fs:SetJustifyV("TOP")
+    elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
+        fs:SetJustifyV("BOTTOM")
+    else
+        fs:SetJustifyV("MIDDLE")
+    end
+end
+
 local function SetRuntimeAuraHidden(unit, hidden)
     local frame = GetFrame(unit)
     local element = frame and frame.Auras
@@ -750,8 +833,7 @@ local function ApplyPreviewIconText(icon, unit, cfg)
     end
     if icon.CooldownText then
         ApplyGlobalFont(icon.CooldownText, cfg.cooldownSize)
-        icon.CooldownText:ClearAllPoints()
-        icon.CooldownText:SetPoint("CENTER", icon, "CENTER", cfg.cooldownX, cfg.cooldownY)
+        PlaceCooldownText(icon.CooldownText, icon, cfg)
     end
 end
 

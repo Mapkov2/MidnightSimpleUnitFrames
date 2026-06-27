@@ -28,6 +28,8 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
     local AuraWriteNumber = ctx.AuraWriteNumber
     local AuraReadStackAnchor = ctx.AuraReadStackAnchor
     local AuraWriteStackAnchor = ctx.AuraWriteStackAnchor
+    local AuraReadCooldownAnchor = ctx.AuraReadCooldownAnchor
+    local AuraWriteCooldownAnchor = ctx.AuraWriteCooldownAnchor
     local AuraLaneShown = ctx.AuraLaneShown
     local SetAuraLaneShown = ctx.SetAuraLaneShown
     local AURA_ANCHOR_VALUES = ctx.AURA_ANCHOR_VALUES or {}
@@ -39,6 +41,7 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
     if type(AuraSharedBool) ~= "function" or type(SetAuraSharedBool) ~= "function" then return nil end
     if type(AuraReadNumber) ~= "function" or type(AuraWriteNumber) ~= "function" then return nil end
     if type(AuraReadStackAnchor) ~= "function" or type(AuraWriteStackAnchor) ~= "function" then return nil end
+    if type(AuraReadCooldownAnchor) ~= "function" or type(AuraWriteCooldownAnchor) ~= "function" then return nil end
     if type(AuraLaneShown) ~= "function" or type(SetAuraLaneShown) ~= "function" then return nil end
 
     local BuildUnitLaneRegistrationHelpers = A.AurasRegistry and A.AurasRegistry.BuildUnitLaneRegistrationHelpers
@@ -93,6 +96,8 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
         AuraWriteNumber = AuraWriteNumber,
         AuraReadStackAnchor = AuraReadStackAnchor,
         AuraWriteStackAnchor = AuraWriteStackAnchor,
+        AuraReadCooldownAnchor = AuraReadCooldownAnchor,
+        AuraWriteCooldownAnchor = AuraWriteCooldownAnchor,
         AURA_ANCHOR_VALUES = AURA_ANCHOR_VALUES,
     }) or nil
     if type(LaneRegistrationHelpers) ~= "table" then return nil end
@@ -112,6 +117,8 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
     local AuraWriteLaneStyleNumber = LaneRegistrationHelpers.AuraWriteLaneStyleNumber
     local AuraReadLaneStackAnchor = LaneRegistrationHelpers.AuraReadLaneStackAnchor
     local AuraWriteLaneStackAnchor = LaneRegistrationHelpers.AuraWriteLaneStackAnchor
+    local AuraReadLaneCooldownAnchor = LaneRegistrationHelpers.AuraReadLaneCooldownAnchor
+    local AuraWriteLaneCooldownAnchor = LaneRegistrationHelpers.AuraWriteLaneCooldownAnchor
 
     return {
         RegisterAuraUnitLaneBoolean = RegisterAuraUnitLaneBoolean,
@@ -138,5 +145,7 @@ function A.AurasRegistry.BuildRegistrationHelpers(ctx)
         AuraWriteLaneStyleNumber = AuraWriteLaneStyleNumber,
         AuraReadLaneStackAnchor = AuraReadLaneStackAnchor,
         AuraWriteLaneStackAnchor = AuraWriteLaneStackAnchor,
+        AuraReadLaneCooldownAnchor = AuraReadLaneCooldownAnchor,
+        AuraWriteLaneCooldownAnchor = AuraWriteLaneCooldownAnchor,
     }
 end

@@ -136,18 +136,45 @@ local LAYOUT_KEYS = {
     cooldownTextSize = true,
     cooldownTextOffsetX = true,
     cooldownTextOffsetY = true,
+    cooldownDecimalSeconds = true,
     buffStackTextSize = true,
     buffStackTextOffsetX = true,
     buffStackTextOffsetY = true,
     buffCooldownTextSize = true,
     buffCooldownTextOffsetX = true,
     buffCooldownTextOffsetY = true,
+    buffCooldownDecimalSeconds = true,
     debuffStackTextSize = true,
     debuffStackTextOffsetX = true,
     debuffStackTextOffsetY = true,
     debuffCooldownTextSize = true,
     debuffCooldownTextOffsetX = true,
     debuffCooldownTextOffsetY = true,
+    debuffCooldownDecimalSeconds = true,
+}
+
+local STYLE_LAYOUT_KEYS = {
+    stackTextSize = true,
+    stackTextOffsetX = true,
+    stackTextOffsetY = true,
+    cooldownTextSize = true,
+    cooldownTextOffsetX = true,
+    cooldownTextOffsetY = true,
+    cooldownDecimalSeconds = true,
+    buffStackTextSize = true,
+    buffStackTextOffsetX = true,
+    buffStackTextOffsetY = true,
+    buffCooldownTextSize = true,
+    buffCooldownTextOffsetX = true,
+    buffCooldownTextOffsetY = true,
+    buffCooldownDecimalSeconds = true,
+    debuffStackTextSize = true,
+    debuffStackTextOffsetX = true,
+    debuffStackTextOffsetY = true,
+    debuffCooldownTextSize = true,
+    debuffCooldownTextOffsetX = true,
+    debuffCooldownTextOffsetY = true,
+    debuffCooldownDecimalSeconds = true,
 }
 
 local SHARED_LAYOUT_KEYS = {
@@ -161,10 +188,12 @@ local SHARED_LAYOUT_KEYS = {
     buffShowCooldownText = true,
     buffShowStackCount = true,
     buffStackCountAnchor = true,
+    buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
     debuffStackCountAnchor = true,
+    debuffCooldownTextAnchor = true,
     perRow = true,
     buffPerRow = true,
     debuffPerRow = true,
@@ -177,6 +206,34 @@ local SHARED_LAYOUT_KEYS = {
     debuffGrowthX = true,
     debuffGrowthY = true,
     stackCountAnchor = true,
+    cooldownTextAnchor = true,
+    cooldownDecimalSeconds = true,
+    buffCooldownDecimalSeconds = true,
+    debuffCooldownDecimalSeconds = true,
+}
+
+local STYLE_SHARED_LAYOUT_KEYS = {
+    showTooltip = true,
+    showCooldownSwipe = true,
+    showCooldownText = true,
+    showStackCount = true,
+    debuffTypeBorderMode = true,
+    useDebuffTypeBorders = true,
+    buffShowCooldownSwipe = true,
+    buffShowCooldownText = true,
+    buffShowStackCount = true,
+    buffStackCountAnchor = true,
+    buffCooldownTextAnchor = true,
+    debuffShowCooldownSwipe = true,
+    debuffShowCooldownText = true,
+    debuffShowStackCount = true,
+    debuffStackCountAnchor = true,
+    debuffCooldownTextAnchor = true,
+    stackCountAnchor = true,
+    cooldownTextAnchor = true,
+    cooldownDecimalSeconds = true,
+    buffCooldownDecimalSeconds = true,
+    debuffCooldownDecimalSeconds = true,
 }
 
 local GROUPS = {
@@ -216,12 +273,14 @@ local LANE_STYLE_KEYS = {
         showCooldownText = "buffShowCooldownText",
         showStackCount = "buffShowStackCount",
         stackCountAnchor = "buffStackCountAnchor",
+        cooldownTextAnchor = "buffCooldownTextAnchor",
         stackTextSize = "buffStackTextSize",
         stackTextOffsetX = "buffStackTextOffsetX",
         stackTextOffsetY = "buffStackTextOffsetY",
         cooldownTextSize = "buffCooldownTextSize",
         cooldownTextOffsetX = "buffCooldownTextOffsetX",
         cooldownTextOffsetY = "buffCooldownTextOffsetY",
+        cooldownDecimalSeconds = "buffCooldownDecimalSeconds",
     },
     debuff = {
         showCooldownSwipe = "debuffShowCooldownSwipe",
@@ -230,12 +289,14 @@ local LANE_STYLE_KEYS = {
         debuffTypeBorderMode = "debuffTypeBorderMode",
         useDebuffTypeBorders = "useDebuffTypeBorders",
         stackCountAnchor = "debuffStackCountAnchor",
+        cooldownTextAnchor = "debuffCooldownTextAnchor",
         stackTextSize = "debuffStackTextSize",
         stackTextOffsetX = "debuffStackTextOffsetX",
         stackTextOffsetY = "debuffStackTextOffsetY",
         cooldownTextSize = "debuffCooldownTextSize",
         cooldownTextOffsetX = "debuffCooldownTextOffsetX",
         cooldownTextOffsetY = "debuffCooldownTextOffsetY",
+        cooldownDecimalSeconds = "debuffCooldownDecimalSeconds",
     },
 }
 
@@ -284,24 +345,30 @@ local DEFAULT_SHARED = {
     stackCountAnchor = "TOPRIGHT",
     buffStackCountAnchor = "TOPRIGHT",
     debuffStackCountAnchor = "TOPRIGHT",
+    cooldownTextAnchor = "CENTER",
+    buffCooldownTextAnchor = "CENTER",
+    debuffCooldownTextAnchor = "CENTER",
     stackTextSize = 14,
     stackTextOffsetX = -1,
     stackTextOffsetY = 1,
     cooldownTextSize = 14,
     cooldownTextOffsetX = 0,
     cooldownTextOffsetY = 0,
+    cooldownDecimalSeconds = 3,
     buffStackTextSize = 14,
     buffStackTextOffsetX = -1,
     buffStackTextOffsetY = 1,
     buffCooldownTextSize = 14,
     buffCooldownTextOffsetX = 0,
     buffCooldownTextOffsetY = 0,
+    buffCooldownDecimalSeconds = 3,
     debuffStackTextSize = 14,
     debuffStackTextOffsetX = -1,
     debuffStackTextOffsetY = 1,
     debuffCooldownTextSize = 14,
     debuffCooldownTextOffsetX = 0,
     debuffCooldownTextOffsetY = 0,
+    debuffCooldownDecimalSeconds = 3,
     filters = {
         enabled = true,
         buffs = {
@@ -848,6 +915,8 @@ local function SpellLabel(spellID)
     return name .. " (#" .. tostring(id) .. ")"
 end
 
+local NormalizeSparseVisualOverrides
+
 --- Ensure the Auras3 DB shape for menu operations. This is coldpath and may
 --- seed defaults; live native aura rendering consumes compiled config from the
 --- UnitFrames backend after Model.Apply invalidates it.
@@ -876,6 +945,7 @@ function Model.EnsureDB()
         shared.debuffTypeBorderMode = shared.useDebuffTypeBorders == true and "SYMBOL" or NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
         shared._msufA3_debuffTypeBorderModeMigrated_v1 = true
     end
+    NormalizeSparseVisualOverrides(auras, shared)
     return auras, shared
 end
 
@@ -941,12 +1011,86 @@ local function EffectiveLayoutTables(auras, unit)
     return layout, sharedLayout, pu
 end
 
+local function TableHasAny(tbl)
+    if type(tbl) ~= "table" then return false end
+    return next(tbl) ~= nil
+end
+
+local function TableHasAnyKey(tbl, keys)
+    if type(tbl) ~= "table" or type(keys) ~= "table" then return false end
+    for key in pairs(keys) do
+        if tbl[key] ~= nil then return true end
+    end
+    return false
+end
+
+local function ClearKeys(tbl, keys)
+    if type(tbl) ~= "table" or type(keys) ~= "table" then return end
+    for key in pairs(keys) do tbl[key] = nil end
+end
+
+local function UnitHasStyleOverride(pu)
+    return type(pu) == "table"
+        and (TableHasAnyKey(pu.layout, STYLE_LAYOUT_KEYS) or TableHasAnyKey(pu.layoutShared, STYLE_SHARED_LAYOUT_KEYS))
+end
+
+local function UnitStyleOverrideActive(pu)
+    if type(pu) ~= "table" then return false end
+    if pu.overrideStyle ~= nil then return pu.overrideStyle == true end
+    return UnitHasStyleOverride(pu)
+end
+
+local function RefreshLayoutOverrideFlags(pu)
+    if type(pu) ~= "table" then return end
+    pu.overrideLayout = TableHasAny(pu.layout) and true or false
+    pu.overrideSharedLayout = TableHasAny(pu.layoutShared) and true or false
+end
+
+local function LooksLikeLegacySeededVisualLayout(layout)
+    if type(layout) ~= "table" then return false end
+    if layout.iconSize == nil or layout.buffGroupIconSize == nil or layout.debuffGroupIconSize == nil then return false end
+    local hits = 0
+    for key in pairs(LAYOUT_KEYS) do
+        if layout[key] ~= nil then hits = hits + 1 end
+    end
+    return hits >= 10
+end
+
+local function ClearInheritedLayoutKey(layout, shared, key)
+    if type(layout) ~= "table" or type(shared) ~= "table" then return end
+    if layout[key] ~= nil and layout[key] == shared[key] then layout[key] = nil end
+end
+
+local function ClearInheritedBasicLayoutKeys(layout, shared, keys, styleKeys)
+    if type(keys) ~= "table" then return end
+    for key in pairs(keys) do
+        if not (styleKeys and styleKeys[key]) then ClearInheritedLayoutKey(layout, shared, key) end
+    end
+end
+
+NormalizeSparseVisualOverrides = function(auras, shared)
+    local perUnit = type(auras) == "table" and auras.perUnit or nil
+    if type(perUnit) ~= "table" then return end
+    for _, pu in pairs(perUnit) do
+        if type(pu) == "table" and pu._msufA3SparseVisualOverrides_v2 ~= true then
+            if pu.overrideStyle == nil and UnitHasStyleOverride(pu) then pu.overrideStyle = true end
+            if pu.overrideLayout == true and pu.overrideSharedLayout == true and LooksLikeLegacySeededVisualLayout(pu.layout) then
+                ClearInheritedBasicLayoutKeys(pu.layout, shared, LAYOUT_KEYS, STYLE_LAYOUT_KEYS)
+                ClearInheritedBasicLayoutKeys(pu.layoutShared, shared, SHARED_LAYOUT_KEYS, STYLE_SHARED_LAYOUT_KEYS)
+                RefreshLayoutOverrideFlags(pu)
+            end
+            pu._msufA3SparseVisualOverrides_v2 = true
+        end
+    end
+end
+
 local function ReadKeyRaw(auras, shared, unit, key)
-    local layout, sharedLayout = EffectiveLayoutTables(auras, unit)
+    local layout, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
+    local styleActive = UnitStyleOverrideActive(pu)
     if LAYOUT_KEYS[key] then
-        if layout and layout[key] ~= nil then return layout[key] end
+        if layout and layout[key] ~= nil and (not STYLE_LAYOUT_KEYS[key] or styleActive) then return layout[key] end
     elseif SHARED_LAYOUT_KEYS[key] then
-        if sharedLayout and sharedLayout[key] ~= nil then return sharedLayout[key] end
+        if sharedLayout and sharedLayout[key] ~= nil and (not STYLE_SHARED_LAYOUT_KEYS[key] or styleActive) then return sharedLayout[key] end
     end
     return shared and shared[key]
 end
@@ -959,10 +1103,12 @@ local function WriteUnitLayoutValue(auras, shared, unit, key, value)
             if type(pu.layoutShared) ~= "table" then pu.layoutShared = {} end
             pu.overrideSharedLayout = true
             pu.layoutShared[key] = value
+            if STYLE_SHARED_LAYOUT_KEYS[key] then pu.overrideStyle = true end
         else
             if type(pu.layout) ~= "table" then pu.layout = {} end
             pu.overrideLayout = true
             pu.layout[key] = value
+            if STYLE_LAYOUT_KEYS[key] then pu.overrideStyle = true end
         end
     end)
 end
@@ -1030,33 +1176,15 @@ end
 function Model.UseSharedVisuals(unit)
     local auras = Model.EnsureDB()
     local pu = PerUnit(auras, unit, false)
-    return not (pu and (pu.overrideLayout == true or pu.overrideSharedLayout == true))
+    return not UnitStyleOverrideActive(pu)
 end
 
-local function SeedUnitVisuals(auras, shared, runtimeUnit)
+local function EnsureUnitStyleOverrides(auras, runtimeUnit)
     local pu = PerUnit(auras, runtimeUnit, true)
     if not pu then return end
-    local layout, sharedLayout = EffectiveLayoutTables(auras, runtimeUnit)
-    local seededLayout = {}
-    local seededShared = {}
-    for key in pairs(LAYOUT_KEYS) do
-        if layout and layout[key] ~= nil then
-            seededLayout[key] = layout[key]
-        elseif shared then
-            seededLayout[key] = shared[key]
-        end
-    end
-    for key in pairs(SHARED_LAYOUT_KEYS) do
-        if sharedLayout and sharedLayout[key] ~= nil then
-            seededShared[key] = sharedLayout[key]
-        elseif shared then
-            seededShared[key] = shared[key]
-        end
-    end
-    pu.layout = seededLayout
-    pu.layoutShared = seededShared
-    pu.overrideLayout = true
-    pu.overrideSharedLayout = true
+    pu.layout = type(pu.layout) == "table" and pu.layout or {}
+    pu.layoutShared = type(pu.layoutShared) == "table" and pu.layoutShared or {}
+    pu.overrideStyle = true
 end
 
 function Model.SetUseSharedVisuals(unit, useShared)
@@ -1066,10 +1194,12 @@ function Model.SetUseSharedVisuals(unit, useShared)
         local pu = PerUnit(auras, runtimeUnit, true)
         if not pu then return end
         if useShared then
-            pu.overrideLayout = false
-            pu.overrideSharedLayout = false
+            pu.overrideStyle = false
+            ClearKeys(pu.layout, STYLE_LAYOUT_KEYS)
+            ClearKeys(pu.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
+            RefreshLayoutOverrideFlags(pu)
         else
-            SeedUnitVisuals(auras, shared, runtimeUnit)
+            EnsureUnitStyleOverrides(auras, runtimeUnit)
         end
     end)
 end
@@ -1256,8 +1386,8 @@ function Model.ReadDebuffTypeBorderMode(unit)
     local auras, shared = Model.EnsureDB()
     if type(shared) ~= "table" then return "OFF" end
     if NormalizeScope(unit) ~= "shared" then
-        local _, sharedLayout = EffectiveLayoutTables(auras, unit)
-        if type(sharedLayout) == "table" then
+        local _, sharedLayout, pu = EffectiveLayoutTables(auras, unit)
+        if UnitStyleOverrideActive(pu) and type(sharedLayout) == "table" then
             if sharedLayout.debuffTypeBorderMode ~= nil then
                 local mode = NormalizeDebuffTypeBorderMode(sharedLayout.debuffTypeBorderMode, "OFF")
                 return (mode == "OFF" and sharedLayout.useDebuffTypeBorders == true) and "SYMBOL" or mode
@@ -1302,6 +1432,29 @@ end
 function Model.WriteLaneStackAnchor(unit, kind, value)
     value = STACK_ANCHOR_OK[value] and value or "TOPRIGHT"
     Model.WriteValue(unit, LaneStyleKey(kind, "stackCountAnchor"), value)
+end
+
+function Model.ReadCooldownAnchor(unit)
+    local v = tostring(Model.ReadValue(unit, "cooldownTextAnchor", "CENTER") or "CENTER")
+    return AURA_ANCHOR_OK[v] and v or "CENTER"
+end
+
+function Model.WriteCooldownAnchor(unit, value)
+    value = AURA_ANCHOR_OK[value] and value or "CENTER"
+    Model.WriteValue(unit, "cooldownTextAnchor", value)
+end
+
+function Model.ReadLaneCooldownAnchor(unit, kind)
+    local laneKey = LaneStyleKey(kind, "cooldownTextAnchor")
+    local value = tostring(Model.ReadValue(unit, laneKey, nil) or "")
+    if AURA_ANCHOR_OK[value] then return value end
+    value = tostring(Model.ReadValue(unit, "cooldownTextAnchor", "CENTER") or "CENTER")
+    return AURA_ANCHOR_OK[value] and value or "CENTER"
+end
+
+function Model.WriteLaneCooldownAnchor(unit, kind, value)
+    value = AURA_ANCHOR_OK[value] and value or "CENTER"
+    Model.WriteValue(unit, LaneStyleKey(kind, "cooldownTextAnchor"), value)
 end
 
 function Model.GroupShown(unit, kind)
@@ -2037,20 +2190,25 @@ function Model.ReadPreviewConfig(unit)
         stackX = Model.ReadNumber(unit, "stackTextOffsetX", -1, -2000, 2000),
         stackY = Model.ReadNumber(unit, "stackTextOffsetY", 1, -2000, 2000),
         cooldownSize = Model.ReadNumber(unit, "cooldownTextSize", 14, 6, 40),
+        cooldownAnchor = Model.ReadCooldownAnchor(unit),
         cooldownX = Model.ReadNumber(unit, "cooldownTextOffsetX", 0, -2000, 2000),
         cooldownY = Model.ReadNumber(unit, "cooldownTextOffsetY", 0, -2000, 2000),
         buffStackSize = Model.ReadLaneStyleNumber(unit, "buff", "stackTextSize", 14, 6, 40),
         buffStackX = Model.ReadLaneStyleNumber(unit, "buff", "stackTextOffsetX", -1, -2000, 2000),
         buffStackY = Model.ReadLaneStyleNumber(unit, "buff", "stackTextOffsetY", 1, -2000, 2000),
         buffCooldownSize = Model.ReadLaneStyleNumber(unit, "buff", "cooldownTextSize", 14, 6, 40),
+        buffCooldownAnchor = Model.ReadLaneCooldownAnchor(unit, "buff"),
         buffCooldownX = Model.ReadLaneStyleNumber(unit, "buff", "cooldownTextOffsetX", 0, -2000, 2000),
         buffCooldownY = Model.ReadLaneStyleNumber(unit, "buff", "cooldownTextOffsetY", 0, -2000, 2000),
+        buffCooldownDecimalSeconds = Model.ReadLaneStyleNumber(unit, "buff", "cooldownDecimalSeconds", 3, 0, 30),
         debuffStackSize = Model.ReadLaneStyleNumber(unit, "debuff", "stackTextSize", 14, 6, 40),
         debuffStackX = Model.ReadLaneStyleNumber(unit, "debuff", "stackTextOffsetX", -1, -2000, 2000),
         debuffStackY = Model.ReadLaneStyleNumber(unit, "debuff", "stackTextOffsetY", 1, -2000, 2000),
         debuffCooldownSize = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownTextSize", 14, 6, 40),
+        debuffCooldownAnchor = Model.ReadLaneCooldownAnchor(unit, "debuff"),
         debuffCooldownX = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownTextOffsetX", 0, -2000, 2000),
         debuffCooldownY = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownTextOffsetY", 0, -2000, 2000),
+        debuffCooldownDecimalSeconds = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownDecimalSeconds", 3, 0, 30),
     }
 end
 

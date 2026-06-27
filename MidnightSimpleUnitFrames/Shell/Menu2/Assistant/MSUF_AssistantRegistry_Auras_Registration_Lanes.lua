@@ -23,6 +23,8 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
     local AuraWriteNumber = ctx.AuraWriteNumber
     local AuraReadStackAnchor = ctx.AuraReadStackAnchor
     local AuraWriteStackAnchor = ctx.AuraWriteStackAnchor
+    local AuraReadCooldownAnchor = ctx.AuraReadCooldownAnchor
+    local AuraWriteCooldownAnchor = ctx.AuraWriteCooldownAnchor
     local AURA_ANCHOR_VALUES = ctx.AURA_ANCHOR_VALUES or {}
     local BuildLaneStyleRegistrationHelpers = A.AurasRegistry and A.AurasRegistry.BuildLaneStyleRegistrationHelpers
 
@@ -30,6 +32,7 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
     if type(AuraSharedBool) ~= "function" or type(SetAuraSharedBool) ~= "function" then return nil end
     if type(AuraReadNumber) ~= "function" or type(AuraWriteNumber) ~= "function" then return nil end
     if type(AuraReadStackAnchor) ~= "function" or type(AuraWriteStackAnchor) ~= "function" then return nil end
+    if type(AuraReadCooldownAnchor) ~= "function" or type(AuraWriteCooldownAnchor) ~= "function" then return nil end
     if type(BuildLaneStyleRegistrationHelpers) ~= "function" then return nil end
 
     local StyleHelpers = BuildLaneStyleRegistrationHelpers({
@@ -40,6 +43,8 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
         AuraWriteNumber = AuraWriteNumber,
         AuraReadStackAnchor = AuraReadStackAnchor,
         AuraWriteStackAnchor = AuraWriteStackAnchor,
+        AuraReadCooldownAnchor = AuraReadCooldownAnchor,
+        AuraWriteCooldownAnchor = AuraWriteCooldownAnchor,
     })
     if type(StyleHelpers) ~= "table" then return nil end
 
@@ -146,5 +151,7 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
         AuraWriteLaneStyleNumber = StyleHelpers.AuraWriteLaneStyleNumber,
         AuraReadLaneStackAnchor = StyleHelpers.AuraReadLaneStackAnchor,
         AuraWriteLaneStackAnchor = StyleHelpers.AuraWriteLaneStackAnchor,
+        AuraReadLaneCooldownAnchor = StyleHelpers.AuraReadLaneCooldownAnchor,
+        AuraWriteLaneCooldownAnchor = StyleHelpers.AuraWriteLaneCooldownAnchor,
     }
 end

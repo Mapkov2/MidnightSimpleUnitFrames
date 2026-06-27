@@ -18,6 +18,8 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local Registry = ctx.Registry
     local AURA_SCOPES = ctx.AURA_SCOPES or {}
     local AURA_LANES = ctx.AURA_LANES or {}
+    local AURA_ANCHOR_VALUES = ctx.AURA_ANCHOR_VALUES or {}
+    local AURA_ANCHOR_ALIASES = ctx.AURA_ANCHOR_ALIASES or {}
     local AURA_STACK_ANCHOR_VALUES = ctx.AURA_STACK_ANCHOR_VALUES or {}
     local AURA_STACK_ANCHOR_ALIASES = ctx.AURA_STACK_ANCHOR_ALIASES or {}
     local AURA_LANE_STYLE_BOOLEAN_SPECS = ctx.AURA_LANE_STYLE_BOOLEAN_SPECS or {}
@@ -37,12 +39,16 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AuraWriteNumber = ctx.AuraWriteNumber
     local AuraReadStackAnchor = ctx.AuraReadStackAnchor
     local AuraWriteStackAnchor = ctx.AuraWriteStackAnchor
+    local AuraReadCooldownAnchor = ctx.AuraReadCooldownAnchor
+    local AuraWriteCooldownAnchor = ctx.AuraWriteCooldownAnchor
     local AuraReadLaneStyleBool = ctx.AuraReadLaneStyleBool
     local AuraWriteLaneStyleBool = ctx.AuraWriteLaneStyleBool
     local AuraReadLaneStyleNumber = ctx.AuraReadLaneStyleNumber
     local AuraWriteLaneStyleNumber = ctx.AuraWriteLaneStyleNumber
     local AuraReadLaneStackAnchor = ctx.AuraReadLaneStackAnchor
     local AuraWriteLaneStackAnchor = ctx.AuraWriteLaneStackAnchor
+    local AuraReadLaneCooldownAnchor = ctx.AuraReadLaneCooldownAnchor
+    local AuraWriteLaneCooldownAnchor = ctx.AuraWriteLaneCooldownAnchor
     local AuraUseSharedVisuals = ctx.AuraUseSharedVisuals
     local AuraSetUseSharedVisuals = ctx.AuraSetUseSharedVisuals
     local AuraUseSharedRules = ctx.AuraUseSharedRules
@@ -86,6 +92,15 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             true)
 
         aliases = {}
+        AddAliasesForAuraScope(aliases, scope, "cooldown anchor")
+        AddAliasesForAuraScope(aliases, scope, "cooldown text anchor")
+        AddAliasesForAuraScope(aliases, scope, "timer text anchor")
+        RegisterAuraScopeEnum(scope, "cooldownAnchor", "Cooldown Anchor", AURA_ANCHOR_VALUES, AURA_ANCHOR_ALIASES, aliases,
+            function() return AuraReadCooldownAnchor(scope) end,
+            function(value) AuraWriteCooldownAnchor(scope, value) end,
+            true)
+
+        aliases = {}
         AddAliasesForAuraScope(aliases, scope, "stack size")
         AddAliasesForAuraScope(aliases, scope, "stack text size")
         RegisterAuraScopeNumber(scope, "stackTextSize", "Stack Text Size", 14, 6, 40, aliases,
@@ -120,6 +135,15 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             RegisterAuraScopeLaneEnum(settingScope, settingLane, "stackAnchor", "Stack Count Anchor", AURA_STACK_ANCHOR_VALUES, AURA_STACK_ANCHOR_ALIASES, aliases,
                 function() return AuraReadLaneStackAnchor(settingScope, settingLane) end,
                 function(value) AuraWriteLaneStackAnchor(settingScope, settingLane, value) end,
+                true)
+
+            aliases = {}
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "cooldown anchor")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "cooldown text anchor")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "timer text anchor")
+            RegisterAuraScopeLaneEnum(settingScope, settingLane, "cooldownAnchor", "Cooldown Anchor", AURA_ANCHOR_VALUES, AURA_ANCHOR_ALIASES, aliases,
+                function() return AuraReadLaneCooldownAnchor(settingScope, settingLane) end,
+                function(value) AuraWriteLaneCooldownAnchor(settingScope, settingLane, value) end,
                 true)
 
             for i = 1, #AURA_LANE_STYLE_NUMBER_SPECS do

@@ -190,7 +190,7 @@ local function BuildPreview(ctx, builder, unit)
     elseif unit == "focustarget" then
         previewNote = previewNote .. " Focus Target only appears when Focus is enabled and your focus has a target."
     elseif unit == "boss" then
-        previewNote = previewNote .. " Boss frames only appear during encounters with boss units."
+        previewNote = previewNote .. " Boss Frames can be previewed here and in MSUF Edit Mode outside encounters."
     end
     W.Text(sec, previewNote, 14, -38, ctx.width - 28, T.colors.muted)
     local createPreview = MSUF.MSUF_Menu2_CreateUnitPreviewBox or _G.MSUF_Menu2_CreateUnitPreviewBox

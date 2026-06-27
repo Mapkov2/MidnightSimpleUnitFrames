@@ -92,6 +92,8 @@ function A.RegistryCoreBuilders.BuildUnitAuraHelpers(ctx)
     local AuraWriteLaneGrowth = LaneHelpers.AuraWriteLaneGrowth
     local AuraReadStackAnchor = LaneHelpers.AuraReadStackAnchor
     local AuraWriteStackAnchor = LaneHelpers.AuraWriteStackAnchor
+    local AuraReadCooldownAnchor = LaneHelpers.AuraReadCooldownAnchor
+    local AuraWriteCooldownAnchor = LaneHelpers.AuraWriteCooldownAnchor
     local AuraLaneShown = LaneHelpers.AuraLaneShown
     local SetAuraLaneShown = LaneHelpers.SetAuraLaneShown
     if type(AuraLaneShown) ~= "function" or type(SetAuraLaneShown) ~= "function" then return nil end
@@ -131,6 +133,8 @@ function A.RegistryCoreBuilders.BuildUnitAuraHelpers(ctx)
         AuraWriteLaneGrowth = AuraWriteLaneGrowth,
         AuraReadStackAnchor = AuraReadStackAnchor,
         AuraWriteStackAnchor = AuraWriteStackAnchor,
+        AuraReadCooldownAnchor = AuraReadCooldownAnchor,
+        AuraWriteCooldownAnchor = AuraWriteCooldownAnchor,
         AuraLaneShown = AuraLaneShown,
         SetAuraLaneShown = SetAuraLaneShown,
         AuraUseSharedVisuals = AuraUseSharedVisuals,
