@@ -1,5 +1,49 @@
 # Midnight Simple Unit Frames Changelog
 
+
+
+
+## 6.0-alpha3 - 2026-06-27
+
+### Highlights
+- No code changes detected for this changelog range.
+
+## 6.0-alpha3 - 2026-06-27
+
+### Highlights
+- Assistant: assistant commands work across 17 files.
+- Castbars: visual behavior work across 5 files.
+- Menu And Edit Mode: visual behavior work across 5 files.
+- Auras: performance work across 1 file.
+
+### Fixed
+- Assistant: improved profile/default handling across 17 files (+864/-90); touched MSUF_Assistant, MSUF_AssistantDashboard, MSUF_AssistantKnowledge, +14 more; key code: A._PendingResultRelatedIntent, BuildChangeBundle, PushAndRememberChangeBundle.
+- Menu And Edit Mode: tightened combat-safe frame handling across 5 files (+144/-55); touched MSUF_Menu2_AdvancedColors, MSUF_Menu2_Auras, MSUF_Menu2_GlobalCastbars, +2 more; key code: ApplyCastbarColors, ApplyAuraColors, BuildColors.
+- Profiles And Defaults: improved profile/default handling across 1 file (+1/-0); touched MSUF_Defaults.
+- Runtime And Media: improved profile/default handling across 1 file (+5/-0); touched MSUF_Colors; key code: SetInterruptFeedbackCastColor, GetInterruptUnavailableCastColor, SetInterruptUnavailableCastColor.
+
+### Performance
+- Auras: improved runtime/performance-sensitive paths across 1 file (+112/-25); touched MSUF_Auras3_UnitFrames; key code: ColorEscape, BuildAuraDurationFormatter, EnsureRoot.
+- Castbars: improved runtime/performance-sensitive paths across 5 files (+426/-86); touched MSUF_CastbarDriver, MSUF_CastbarRuntime, MSUF_CastbarUtils, +2 more; key code: GetRemainingFromStatusBar, SetSafetyOnUpdate, SafetyOnUpdate.
+
+## 6.0-alpha3 - 2026-06-27
+
+### Highlights
+- Assistant: assistant commands work across 17 files.
+- Castbars: visual behavior work across 5 files.
+- Menu And Edit Mode: visual behavior work across 5 files.
+- Auras: visual behavior work across 1 file.
+
+### Fixed
+- Assistant: improved profile/default handling across 17 files (+864/-90); touched MSUF_Assistant, MSUF_AssistantDashboard, MSUF_AssistantKnowledge, +14 more; key code: A._PendingResultRelatedIntent, BuildChangeBundle, PushAndRememberChangeBundle.
+- Menu And Edit Mode: tightened combat-safe frame handling across 5 files (+144/-55); touched MSUF_Menu2_AdvancedColors, MSUF_Menu2_Auras, MSUF_Menu2_GlobalCastbars, +2 more; key code: ApplyCastbarColors, ApplyAuraColors, BuildColors.
+- Profiles And Defaults: improved profile/default handling across 1 file (+1/-0); touched MSUF_Defaults.
+- Runtime And Media: improved profile/default handling across 1 file (+5/-0); touched MSUF_Colors; key code: SetInterruptFeedbackCastColor, GetInterruptUnavailableCastColor, SetInterruptUnavailableCastColor.
+
+### Performance
+- Auras: improved runtime/performance-sensitive paths across 1 file (+112/-25); touched MSUF_Auras3_UnitFrames; key code: ColorEscape, BuildAuraDurationFormatter, EnsureRoot.
+- Castbars: improved runtime/performance-sensitive paths across 5 files (+426/-86); touched MSUF_CastbarDriver, MSUF_CastbarRuntime, MSUF_CastbarUtils, +2 more; key code: GetRemainingFromStatusBar, SetSafetyOnUpdate, SafetyOnUpdate.
+
 ## 6.0 Alpha 2 - 2026-06-27
 
 ### Highlights
