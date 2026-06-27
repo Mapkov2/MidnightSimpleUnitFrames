@@ -8,10 +8,74 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0 Alpha 3",
-    previousVersion = "6.0 Alpha 1",
-    rangeLabel = "6.0 Alpha 1 -> 6.0 Alpha 2",
+    currentVersion = "6.0-alpha4",
+    previousVersion = "6.0 Alpha 3",
+    rangeLabel = "6.0 Alpha 3 -> 6.0-alpha4",
     entries = {
+        {
+            version = "6.0-alpha4",
+            date = "2026-06-27",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Release name: MSUF_6.0A4.",
+                        "Aura style editing now separates shared layout inheritance from per-unit text style overrides, so individual frames can adjust aura text without cloning all aura layout data.",
+                        "Unit, group, and shared aura previews now show cooldown and stack text placement more accurately, including per-lane cooldown anchors.",
+                        "Assistant followups and aura registries now cover more natural language commands for aura lanes, unit aura settings, and text-area adjustments.",
+                        "Boss frame previews refresh more reliably outside encounters, including when reopening the unit-frame page.",
+                    },
+                },
+                {
+                    title = "Aura Style And Preview",
+                    bullets = {
+                        "Added cooldown text anchor support for shared, buff, and debuff aura lanes in the Auras3 model, edit-mode preview path, live unit-frame compiler, and Auras menu controls.",
+                        "Added sparse visual override normalization so inherited aura layout keys are not treated as per-unit style overrides unless the scope actually customizes text or style behavior.",
+                        "Rebuilt unit and group aura style controls into focused preview, text feature, stack-count, cooldown text, and behavior sections.",
+                        "Shared aura previews now group frame samples by actual configured icon size and label the affected frame group instead of showing one generic preview.",
+                        "Group aura style controls now expose cooldown and stack text anchors, offsets, dynamic scaling, tooltip, sorting, and player-aura preference in collapsible sections.",
+                    },
+                },
+                {
+                    title = "Assistant And Menu",
+                    bullets = {
+                        "Improved followup parsing for bare exact-number edits such as \"set to 12\" and for applying the previous HP/name/power text adjustment to another text area.",
+                        "Expanded aura assistant registry coverage for cooldown text anchors, lane style values, use-shared-style behavior, and unit aura lane commands.",
+                        "Added larger change/reload guidance for assistant-driven changes that may need a UI reload.",
+                        "Refined assistant context handling from the previous local commit, including no-match resolution, geometry followups, edit-mode previews, and registry exact aliases.",
+                        "Updated the Boss frame preview copy and refresh logic so previewed boss frames are not left hidden after menu navigation.",
+                    },
+                },
+                {
+                    title = "Release And Notes",
+                    bullets = {
+                        "Bumped addon metadata from 6.0-alpha3 to 6.0-alpha4 and VERSION from 6.0-alpha2 to 6.0-alpha4.",
+                        "Regenerated the in-game changelog data from this changelog for the A4 package.",
+                        "Kept the existing release automation path compatible with alpha publishing by using the 6.0-alpha4 publish tag and MSUF_6.0A4 as the release name.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.0 Alpha 3",
+            date = "2026-06-27",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added timer-based aura color work after Alpha 2.",
+                        "Improved assistant context, geometry followups, exact alias handling, edit-mode controls, and preview routing.",
+                        "Updated castbar, aura, and assistant release notes after the Alpha 3 packaging pass.",
+                    },
+                },
+                {
+                    title = "Notes",
+                    bullets = {
+                        "Alpha 3 was an interim alpha build on the 6.0 branch before the A4 aura style and assistant followup pass.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0 Alpha 2",
             date = "2026-06-27",

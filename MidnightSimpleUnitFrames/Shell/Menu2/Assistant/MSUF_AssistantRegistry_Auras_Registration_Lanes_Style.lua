@@ -22,11 +22,14 @@ function A.AurasRegistry.BuildLaneStyleRegistrationHelpers(ctx)
     local AuraWriteNumber = ctx.AuraWriteNumber
     local AuraReadStackAnchor = ctx.AuraReadStackAnchor
     local AuraWriteStackAnchor = ctx.AuraWriteStackAnchor
+    local AuraReadCooldownAnchor = ctx.AuraReadCooldownAnchor
+    local AuraWriteCooldownAnchor = ctx.AuraWriteCooldownAnchor
 
     if type(AuraModel) ~= "function" then return nil end
     if type(AuraSharedBool) ~= "function" or type(SetAuraSharedBool) ~= "function" then return nil end
     if type(AuraReadNumber) ~= "function" or type(AuraWriteNumber) ~= "function" then return nil end
     if type(AuraReadStackAnchor) ~= "function" or type(AuraWriteStackAnchor) ~= "function" then return nil end
+    if type(AuraReadCooldownAnchor) ~= "function" or type(AuraWriteCooldownAnchor) ~= "function" then return nil end
 
     local function AuraReadLaneStyleBool(scope, lane, key, defaultValue)
         local Model = AuraModel()
@@ -73,6 +76,21 @@ function A.AurasRegistry.BuildLaneStyleRegistrationHelpers(ctx)
         AuraWriteStackAnchor(scope, value)
     end
 
+    local function AuraReadLaneCooldownAnchor(scope, lane)
+        local Model = AuraModel()
+        if Model and type(Model.ReadLaneCooldownAnchor) == "function" then return Model.ReadLaneCooldownAnchor(scope, lane) end
+        return AuraReadCooldownAnchor(scope)
+    end
+
+    local function AuraWriteLaneCooldownAnchor(scope, lane, value)
+        local Model = AuraModel()
+        if Model and type(Model.WriteLaneCooldownAnchor) == "function" then
+            Model.WriteLaneCooldownAnchor(scope, lane, value)
+            return
+        end
+        AuraWriteCooldownAnchor(scope, value)
+    end
+
     return {
         AuraReadLaneStyleBool = AuraReadLaneStyleBool,
         AuraWriteLaneStyleBool = AuraWriteLaneStyleBool,
@@ -80,5 +98,7 @@ function A.AurasRegistry.BuildLaneStyleRegistrationHelpers(ctx)
         AuraWriteLaneStyleNumber = AuraWriteLaneStyleNumber,
         AuraReadLaneStackAnchor = AuraReadLaneStackAnchor,
         AuraWriteLaneStackAnchor = AuraWriteLaneStackAnchor,
+        AuraReadLaneCooldownAnchor = AuraReadLaneCooldownAnchor,
+        AuraWriteLaneCooldownAnchor = AuraWriteLaneCooldownAnchor,
     }
 end

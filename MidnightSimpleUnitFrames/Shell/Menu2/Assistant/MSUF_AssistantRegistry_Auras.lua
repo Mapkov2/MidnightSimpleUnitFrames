@@ -32,6 +32,8 @@ local AuraReadNumber = C.AuraReadNumber
 local AuraWriteNumber = C.AuraWriteNumber
 local AuraReadStackAnchor = C.AuraReadStackAnchor
 local AuraWriteStackAnchor = C.AuraWriteStackAnchor
+local AuraReadCooldownAnchor = C.AuraReadCooldownAnchor
+local AuraWriteCooldownAnchor = C.AuraWriteCooldownAnchor
 local AuraLaneShown = C.AuraLaneShown
 local SetAuraLaneShown = C.SetAuraLaneShown
 
@@ -96,6 +98,8 @@ local AuraRegistrationHelpers = type(BuildAuraRegistrationHelpers) == "function"
     AuraWriteNumber = AuraWriteNumber,
     AuraReadStackAnchor = AuraReadStackAnchor,
     AuraWriteStackAnchor = AuraWriteStackAnchor,
+    AuraReadCooldownAnchor = AuraReadCooldownAnchor,
+    AuraWriteCooldownAnchor = AuraWriteCooldownAnchor,
     AuraLaneShown = AuraLaneShown,
     SetAuraLaneShown = SetAuraLaneShown,
     AURA_ANCHOR_VALUES = AURA_ANCHOR_VALUES,

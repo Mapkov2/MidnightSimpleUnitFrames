@@ -3565,11 +3565,18 @@ local function DescribeChange(setting, undo)
 end
 
 local UNDO_FOLLOWUP_HINT = "Next: ask for 'undo' to revert, or describe another follow-up change."
+local LARGE_CHANGE_RELOAD_HINT = "Large visual changes can take a moment to settle; /reload is recommended after checking the result."
 
 local function AppendUndoFollowupHint(text)
     text = tostring(text or "")
     if text:find(UNDO_FOLLOWUP_HINT, 1, true) then return text end
     return text .. "\n" .. UNDO_FOLLOWUP_HINT
+end
+
+local function AppendLargeChangeReloadHint(text)
+    text = tostring(text or "")
+    if text:find(LARGE_CHANGE_RELOAD_HINT, 1, true) then return text end
+    return text .. "\n" .. LARGE_CHANGE_RELOAD_HINT
 end
 
 local function ChangedResponse(changedSettings, undoChanges)
@@ -3724,6 +3731,7 @@ local function ExecuteChanges(plan)
 
     local text = ChangedResponse(changedSettings, undoChanges)
     if requiresReload then text = text .. " Reload the UI for this change to fully take effect." end
+    if not requiresReload and #undoChanges >= 6 then text = AppendLargeChangeReloadHint(text) end
     RunApplies(changedSettings)
     text = AppendUndoFollowupHint(text)
     return { text = text, result = "applied", summary = plan.summary }

@@ -85,6 +85,8 @@ function A.RegistryCoreBuilders.InstallRegistryCoreContext(ctx)
         AuraWriteLaneGrowth = UnitAura.AuraWriteLaneGrowth,
         AuraReadStackAnchor = UnitAura.AuraReadStackAnchor,
         AuraWriteStackAnchor = UnitAura.AuraWriteStackAnchor,
+        AuraReadCooldownAnchor = UnitAura.AuraReadCooldownAnchor,
+        AuraWriteCooldownAnchor = UnitAura.AuraWriteCooldownAnchor,
         AuraLaneShown = UnitAura.AuraLaneShown,
         SetAuraLaneShown = UnitAura.SetAuraLaneShown,
         AuraUseSharedVisuals = UnitAura.AuraUseSharedVisuals,

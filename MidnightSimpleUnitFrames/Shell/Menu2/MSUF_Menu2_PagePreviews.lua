@@ -23,6 +23,18 @@ local function ApplyBossPagePreviewFallback(active, reason)
     end
     if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncBossUnitframePreviewWithUnitEdit() end
 end
+local function BossPreviewFramesVisible()
+    local frames = _G.MSUF_UnitFrames
+    local sawFrame = false
+    for i = 1, 5 do
+        local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
+        if frame then
+            sawFrame = true
+            if frame.IsShown and not frame:IsShown() then return false end
+        end
+    end
+    return sawFrame
+end
 local lastBossPreviewActive
 local lastBossPreviewFn
 local function SyncBossPagePreviewForKey(key, force)
@@ -35,7 +47,8 @@ local function SyncBossPagePreviewForKey(key, force)
     end
     local fn = M.UnitPage and M.UnitPage.SetBossPagePreviewActive
     local globalActive = (_G.MSUF2_BossUnitframePreviewActive == true)
-    if not force and lastBossPreviewActive == active and lastBossPreviewFn == fn and globalActive == (active == true) then return end
+    local visible = (not active) or BossPreviewFramesVisible()
+    if not force and lastBossPreviewActive == active and lastBossPreviewFn == fn and globalActive == (active == true) and visible then return end
     lastBossPreviewActive = active
     lastBossPreviewFn = fn
     if type(fn) == "function" then

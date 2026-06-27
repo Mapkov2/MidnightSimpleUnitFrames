@@ -27,6 +27,7 @@ A3.__unitFrameBackendLoaded = true
 
 local type, tostring, tonumber, pairs, next = type, tostring, tonumber, pairs, next
 local table_concat = table.concat
+local table_sort = table.sort
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
@@ -105,12 +106,14 @@ local DEFAULT_SHARED = {
     buffLayer = 5,
     debuffLayer = 6,
     stackCountAnchor = "TOPRIGHT",
+    cooldownTextAnchor = "CENTER",
     stackTextSize = 14,
     stackTextOffsetX = -1,
     stackTextOffsetY = 1,
     cooldownTextSize = 14,
     cooldownTextOffsetX = 0,
     cooldownTextOffsetY = 0,
+    cooldownDecimalSeconds = 3,
 }
 
 local LANE_SPECS = {
@@ -136,8 +139,10 @@ local LANE_SPECS = {
         stackXKey = "buffStackTextOffsetX",
         stackYKey = "buffStackTextOffsetY",
         cooldownSizeKey = "buffCooldownTextSize",
+        cooldownAnchorKey = "buffCooldownTextAnchor",
         cooldownXKey = "buffCooldownTextOffsetX",
         cooldownYKey = "buffCooldownTextOffsetY",
+        cooldownDecimalKey = "buffCooldownDecimalSeconds",
         defaultAnchor = "BOTTOMRIGHT",
         defaultLayer = 5,
     },
@@ -163,11 +168,61 @@ local LANE_SPECS = {
         stackXKey = "debuffStackTextOffsetX",
         stackYKey = "debuffStackTextOffsetY",
         cooldownSizeKey = "debuffCooldownTextSize",
+        cooldownAnchorKey = "debuffCooldownTextAnchor",
         cooldownXKey = "debuffCooldownTextOffsetX",
         cooldownYKey = "debuffCooldownTextOffsetY",
+        cooldownDecimalKey = "debuffCooldownDecimalSeconds",
         defaultAnchor = "TOPLEFT",
         defaultLayer = 6,
     },
+}
+
+local STYLE_LAYOUT_KEYS = {
+    stackTextSize = true,
+    stackTextOffsetX = true,
+    stackTextOffsetY = true,
+    cooldownTextSize = true,
+    cooldownTextOffsetX = true,
+    cooldownTextOffsetY = true,
+    cooldownDecimalSeconds = true,
+    buffStackTextSize = true,
+    buffStackTextOffsetX = true,
+    buffStackTextOffsetY = true,
+    buffCooldownTextSize = true,
+    buffCooldownTextOffsetX = true,
+    buffCooldownTextOffsetY = true,
+    buffCooldownDecimalSeconds = true,
+    debuffStackTextSize = true,
+    debuffStackTextOffsetX = true,
+    debuffStackTextOffsetY = true,
+    debuffCooldownTextSize = true,
+    debuffCooldownTextOffsetX = true,
+    debuffCooldownTextOffsetY = true,
+    debuffCooldownDecimalSeconds = true,
+}
+
+local STYLE_SHARED_LAYOUT_KEYS = {
+    showTooltip = true,
+    showCooldownSwipe = true,
+    showCooldownText = true,
+    showStackCount = true,
+    debuffTypeBorderMode = true,
+    useDebuffTypeBorders = true,
+    buffShowCooldownSwipe = true,
+    buffShowCooldownText = true,
+    buffShowStackCount = true,
+    buffStackCountAnchor = true,
+    buffCooldownTextAnchor = true,
+    debuffShowCooldownSwipe = true,
+    debuffShowCooldownText = true,
+    debuffShowStackCount = true,
+    debuffStackCountAnchor = true,
+    debuffCooldownTextAnchor = true,
+    stackCountAnchor = true,
+    cooldownTextAnchor = true,
+    cooldownDecimalSeconds = true,
+    buffCooldownDecimalSeconds = true,
+    debuffCooldownDecimalSeconds = true,
 }
 
 local GROUP_LANE_SPECS = {
@@ -181,6 +236,7 @@ local GROUP_LANE_SPECS = {
         cooldownSizeKey = "buffCooldownSize", stackSizeKey = "buffStackSize",
         cooldownAnchorKey = "buffCooldownAnchor", cooldownXKey = "buffCooldownX",
         cooldownYKey = "buffCooldownY", stackAnchorKey = "buffStackAnchor",
+        cooldownDecimalKey = "cooldownDecimalSeconds",
         stackXKey = "buffStackX", stackYKey = "buffStackY",
         defaultSize = 22, defaultMax = 4, defaultPerRow = 4, defaultAnchor = "BOTTOMRIGHT",
         defaultLayer = 5,
@@ -195,6 +251,7 @@ local GROUP_LANE_SPECS = {
         cooldownSizeKey = "debuffCooldownSize", stackSizeKey = "debuffStackSize",
         cooldownAnchorKey = "debuffCooldownAnchor", cooldownXKey = "debuffCooldownX",
         cooldownYKey = "debuffCooldownY", stackAnchorKey = "debuffStackAnchor",
+        cooldownDecimalKey = "cooldownDecimalSeconds",
         stackXKey = "debuffStackX", stackYKey = "debuffStackY",
         defaultSize = 20, defaultMax = 3, defaultPerRow = 3, defaultAnchor = "TOPLEFT",
         defaultLayer = 6,
@@ -394,6 +451,27 @@ local function UnitAuraIconsEnabled(auras, unit)
     return flag and auras[flag] == true or false
 end
 
+local function TableHasAnyKey(tbl, keys)
+    if type(tbl) ~= "table" or type(keys) ~= "table" then return false end
+    for key in pairs(keys) do
+        if tbl[key] ~= nil then return true end
+    end
+    return false
+end
+
+local function UnitStyleOverrideActive(unitCfg)
+    if type(unitCfg) ~= "table" then return false end
+    if unitCfg.overrideStyle ~= nil then return unitCfg.overrideStyle == true end
+    return TableHasAnyKey(unitCfg.layout, STYLE_LAYOUT_KEYS) or TableHasAnyKey(unitCfg.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
+end
+
+local function UnitLayoutValue(layout, styleKeys, styleActive, key)
+    if type(layout) ~= "table" then return nil end
+    local value = layout[key]
+    if value ~= nil and (not styleKeys[key] or styleActive) then return value end
+    return nil
+end
+
 local function EffectiveUnitTables(auras, unit)
     local shared = type(auras.shared) == "table" and auras.shared or {}
     local perUnit = type(auras.perUnit) == "table" and auras.perUnit or nil
@@ -401,14 +479,18 @@ local function EffectiveUnitTables(auras, unit)
     local layout = unitCfg and unitCfg.overrideLayout == true and type(unitCfg.layout) == "table" and unitCfg.layout or nil
     local layoutShared = unitCfg and unitCfg.overrideSharedLayout == true and type(unitCfg.layoutShared) == "table" and unitCfg.layoutShared or nil
     local filters = unitCfg and unitCfg.overrideFilters == true and type(unitCfg.filters) == "table" and unitCfg.filters or nil
+    local styleActive = UnitStyleOverrideActive(unitCfg)
+    local effectiveLayout = layout and setmetatable({}, { __index = function(_, key)
+        return UnitLayoutValue(layout, STYLE_LAYOUT_KEYS, styleActive, key)
+    end }) or {}
     if layoutShared then
-        return layout or {}, setmetatable({}, { __index = function(_, key)
-            local value = layoutShared[key]
+        return effectiveLayout, setmetatable({}, { __index = function(_, key)
+            local value = UnitLayoutValue(layoutShared, STYLE_SHARED_LAYOUT_KEYS, styleActive, key)
             if value ~= nil then return value end
             return shared[key]
         end }), filters or shared.filters
     end
-    return layout or {}, shared, filters or shared.filters
+    return effectiveLayout, shared, filters or shared.filters
 end
 
 local function GrowthParts(growth, rowWrap)
@@ -543,6 +625,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
     local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(growth, rowWrap)
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
     local debuffTypeBorderMode = kind == "debuff" and ReadDebuffTypeBorderMode(layout, shared) or "OFF"
+    local cooldownAnchor = ReadAnchor(shared, nil, "cooldownTextAnchor", DEFAULT_SHARED.cooldownTextAnchor)
     return FinalizeLane({
         kind = kind,
         rootKey = spec.rootKey,
@@ -576,9 +659,10 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
         showAuraBorder = debuffTypeBorderMode ~= "OFF",
         showAuraSymbol = debuffTypeBorderMode == "SYMBOL",
         cooldownSize = ReadNumber(layout, shared, spec.cooldownSizeKey, ReadRaw(shared, nil, "cooldownTextSize") or DEFAULT_SHARED.cooldownTextSize, 6, 40),
-        cooldownAnchor = "CENTER",
+        cooldownAnchor = ReadAnchor(shared, nil, spec.cooldownAnchorKey, cooldownAnchor),
         cooldownX = ReadNumber(layout, shared, spec.cooldownXKey, ReadRaw(shared, nil, "cooldownTextOffsetX") or DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
         cooldownY = ReadNumber(layout, shared, spec.cooldownYKey, ReadRaw(shared, nil, "cooldownTextOffsetY") or DEFAULT_SHARED.cooldownTextOffsetY, -2000, 2000),
+        cooldownDecimalSeconds = ReadNumber(layout, shared, spec.cooldownDecimalKey, ReadRaw(shared, nil, "cooldownDecimalSeconds") or DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30),
         stackAnchor = ReadAnchor(shared, nil, spec.stackAnchorKey, ReadRaw(shared, nil, "stackCountAnchor") or DEFAULT_SHARED.stackCountAnchor),
         stackSize = ReadNumber(layout, shared, spec.stackSizeKey, ReadRaw(shared, nil, "stackTextSize") or DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = ReadNumber(layout, shared, spec.stackXKey, ReadRaw(shared, nil, "stackTextOffsetX") or DEFAULT_SHARED.stackTextOffsetX, -2000, 2000),
@@ -633,6 +717,7 @@ local function CompileGroupLane(unit, source, kind)
         cooldownAnchor = ReadAnchor(source, nil, spec.cooldownAnchorKey, "CENTER"),
         cooldownX = ClampNumber(source[spec.cooldownXKey] or source.cooldownX, 0, -2000, 2000),
         cooldownY = ClampNumber(source[spec.cooldownYKey] or source.cooldownY, 0, -2000, 2000),
+        cooldownDecimalSeconds = ClampNumber(source[spec.cooldownDecimalKey] or source.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30),
         stackAnchor = ReadAnchor(source, nil, spec.stackAnchorKey, "BOTTOMRIGHT"),
         stackSize = ClampNumber(source[spec.stackSizeKey] or source.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = ClampNumber(source[spec.stackXKey] or source.stackX, 0, -2000, 2000),
@@ -785,24 +870,22 @@ local function ApplyFont(fs, size)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
 end
 
--- "Color aura timers by remaining time": a C-side NumericRuleFormatter that
--- colors the duration text by remaining seconds. Blizzard's DurationTextBinding
--- evaluates the formatter against the (secret) aura duration object every update
--- entirely C-side, so there is zero addon timer/OnUpdate cost (see SetDurationText
--- in Blizzard_CustomAuraButton). The formatter is rebuilt only when the shared
--- bucket settings change; that change bumps _nativeVisualGen (ApplyFontsFromGlobal),
--- which recreates every lane and re-runs PrepareAuraButton with the fresh formatter.
+-- Aura timer text format/color: a C-side NumericRuleFormatter evaluated by
+-- Blizzard's DurationTextBinding against the secret aura duration object. MSUF
+-- only builds/caches formatter objects when style config changes; there is no
+-- addon timer or OnUpdate work per aura.
 local function ColorEscape(r, g, b)
     return string.format("|cff%02x%02x%02x", Round(Clamp01(r, 1) * 255), Round(Clamp01(g, 1) * 255), Round(Clamp01(b, 1) * 255))
 end
 
 local _durationFormatterCache
-local _durationFormatterSig
 
-local function BuildAuraDurationFormatter()
+local function BuildAuraDurationFormatter(lane)
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     if not general then return nil end
-    if general.aurasCooldownTextUseBuckets ~= true then return nil end
+    local buckets = general.aurasCooldownTextUseBuckets == true
+    local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
+    if not buckets and decimalSec <= 0 then return nil end
 
     local C_StringUtil = _G.C_StringUtil
     if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then return nil end
@@ -837,27 +920,42 @@ local function BuildAuraDurationFormatter()
     if safeSec < warningSec then safeSec = warningSec end
 
     local sig = table_concat({
-        sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
+        buckets and 1 or 0, decimalSec, sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
     }, "\030")
-    if _durationFormatterCache and _durationFormatterSig == sig then
-        return _durationFormatterCache
-    end
+    if _durationFormatterCache and _durationFormatterCache[sig] then return _durationFormatterCache[sig] end
 
     local formatter = C_StringUtil.CreateNumericRuleFormatter()
-    formatter:AddBreakpoint({ threshold = 0, format = ColorEscape(ur, ug, ub) .. "%.1f|r" })
-    if warningSec > urgentSec then
-        formatter:AddBreakpoint({ threshold = urgentSec, format = ColorEscape(wr, wg, wb) .. "%.1f|r" })
+    local thresholds, seen = {}, {}
+    local function AddThreshold(value)
+        value = ClampNumber(value, 0, 0, 600)
+        if seen[value] then return end
+        seen[value] = true
+        thresholds[#thresholds + 1] = value
     end
-    if safeSec > warningSec then
-        formatter:AddBreakpoint({ threshold = warningSec, format = ColorEscape(sr, sg, sb) .. "%.1f|r" })
-        formatter:AddBreakpoint({ threshold = safeSec, format = "%.1f" })
-    else
-        -- Safe boundary collapsed onto Warning: Safe-colored from warningSec up.
-        formatter:AddBreakpoint({ threshold = warningSec, format = ColorEscape(sr, sg, sb) .. "%.1f|r" })
+    AddThreshold(0)
+    if decimalSec > 0 then AddThreshold(decimalSec) end
+    if buckets then
+        AddThreshold(urgentSec)
+        AddThreshold(warningSec)
+        AddThreshold(safeSec)
+    end
+    table_sort(thresholds)
+
+    local function FormatAt(threshold)
+        local format = threshold < decimalSec and "%.1f" or "%.0f"
+        if not buckets then return format end
+        if safeSec > warningSec and threshold >= safeSec then return format end
+        if threshold >= warningSec then return ColorEscape(sr, sg, sb) .. format .. "|r" end
+        if threshold >= urgentSec then return ColorEscape(wr, wg, wb) .. format .. "|r" end
+        return ColorEscape(ur, ug, ub) .. format .. "|r"
+    end
+    for i = 1, #thresholds do
+        local threshold = thresholds[i]
+        formatter:AddBreakpoint({ threshold = threshold, format = FormatAt(threshold) })
     end
 
-    _durationFormatterCache = formatter
-    _durationFormatterSig = sig
+    _durationFormatterCache = _durationFormatterCache or {}
+    _durationFormatterCache[sig] = formatter
     return formatter
 end
 
@@ -995,7 +1093,7 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.verticalGrowth) .. "\030" .. tostring(lane.initialAnchor)
         .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.showCooldownSwipe) .. "\030" .. tostring(lane.cooldownSize)
         .. "\030" .. tostring(lane.cooldownAnchor) .. "\030" .. tostring(lane.cooldownX)
-        .. "\030" .. tostring(lane.cooldownY)
+        .. "\030" .. tostring(lane.cooldownY) .. "\030" .. tostring(lane.cooldownDecimalSeconds)
         .. "\030" .. tostring(lane.showStacks) .. "\030" .. tostring(lane.stackAnchor)
         .. "\030" .. tostring(lane.stackSize) .. "\030" .. tostring(lane.stackX)
         .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(lane.showTooltip)
@@ -1134,7 +1232,7 @@ local function PrepareAuraButton(button, lane, index)
         -- NumericRuleFormatter so the duration text is colored/formatted from the
         -- secret duration object with no addon cost. When off, pass no options and
         -- the binding uses Blizzard's DefaultAuraDurationFormatter (plain seconds).
-        local formatter = BuildAuraDurationFormatter()
+        local formatter = BuildAuraDurationFormatter(lane)
         if formatter then
             _durationTextOptions.formatter = formatter
             CallButtonMethod(button, "SetDurationText", duration, _durationTextOptions)

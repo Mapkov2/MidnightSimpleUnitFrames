@@ -110,6 +110,26 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
         shared.stackCountAnchor = value
     end
 
+    local function AuraReadCooldownAnchor(scope)
+        local Model = AuraModel()
+        if Model and type(Model.ReadCooldownAnchor) == "function" then return Model.ReadCooldownAnchor(scope) end
+        local _, shared = EnsureAuraFallbackDB()
+        local value = shared.cooldownTextAnchor or "CENTER"
+        if value == "TOPLEFT" or value == "TOPRIGHT" or value == "BOTTOMLEFT" or value == "BOTTOMRIGHT" then return value end
+        return "CENTER"
+    end
+
+    local function AuraWriteCooldownAnchor(scope, value)
+        if value ~= "TOPLEFT" and value ~= "TOPRIGHT" and value ~= "BOTTOMLEFT" and value ~= "BOTTOMRIGHT" then value = "CENTER" end
+        local Model = AuraModel()
+        if Model and type(Model.WriteCooldownAnchor) == "function" then
+            Model.WriteCooldownAnchor(scope, value)
+            return
+        end
+        local _, shared = EnsureAuraFallbackDB()
+        shared.cooldownTextAnchor = value
+    end
+
     local function AuraLaneShown(unit, kind)
         local Model = AuraModel()
         if Model and type(Model.GroupShown) == "function" then
@@ -155,6 +175,8 @@ function A.RegistryCoreBuilders.BuildUnitAuraLaneHelpers(ctx)
         AuraWriteLaneGrowth = AuraWriteLaneGrowth,
         AuraReadStackAnchor = AuraReadStackAnchor,
         AuraWriteStackAnchor = AuraWriteStackAnchor,
+        AuraReadCooldownAnchor = AuraReadCooldownAnchor,
+        AuraWriteCooldownAnchor = AuraWriteCooldownAnchor,
         AuraLaneShown = AuraLaneShown,
         SetAuraLaneShown = SetAuraLaneShown,
     }
