@@ -147,8 +147,7 @@ end
 local function GuardedSettingResponse(setting, text, raw)
     local guard = type(setting) == "table" and setting.intentGuard or nil
     if type(guard) ~= "function" then return nil end
-    local ok, result, status, message = pcall(guard, setting, text, raw)
-    if not ok then return nil end
+    local result, status, message = guard(setting, text, raw)
     if type(result) == "table" then return result end
     if result == false then
         return {
@@ -173,16 +172,12 @@ end
 local function ResolveCompanionValue(spec, companionSetting, text, primaryValue)
     local value = spec and spec.value
     if type(value) == "function" then
-        local ok, result = pcall(value, spec, companionSetting, text, primaryValue)
-        if not ok then return nil, nil end
-        value = result
+        value = value(spec, companionSetting, text, primaryValue)
     end
 
     local relativeDelta = spec and spec.relativeDelta
     if type(relativeDelta) == "function" then
-        local ok, result = pcall(relativeDelta, spec, companionSetting, text, primaryValue)
-        if not ok then return value, nil end
-        relativeDelta = result
+        relativeDelta = relativeDelta(spec, companionSetting, text, primaryValue)
     end
     return value, relativeDelta
 end

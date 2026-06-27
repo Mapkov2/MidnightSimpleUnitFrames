@@ -57,9 +57,7 @@ function A.DiagnosticsRegistry.BuildAuraDiagnostic(ctx)
     local function SafeSettingValue(key)
         local setting = Registry:GetSetting(key)
         if not (setting and type(setting.get) == "function") then return nil end
-        local ok, value = pcall(setting.get)
-        if ok then return value end
-        return nil
+        return setting.get()
     end
 
     local BuildAuraDiagnosticFilterHelpers = A.DiagnosticsRegistry and A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers

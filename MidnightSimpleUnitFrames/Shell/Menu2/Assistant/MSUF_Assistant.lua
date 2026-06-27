@@ -84,7 +84,7 @@ local function ScheduleAfterCombat(key, fn)
                 afterCombatOrder = {}
                 for i = 1, #order do
                     local callback = pending[order[i]]
-                    if type(callback) == "function" then pcall(callback) end
+                    if type(callback) == "function" then callback() end
                 end
                 if afterCombatPending and afterCombatOrder and #afterCombatOrder > 0
                     and self and type(self.RegisterEvent) == "function" then
@@ -518,9 +518,9 @@ local function NoMatchResolution(entry)
     if A._noMatchResolutionInProgress then return tostring(entry.resolution or "unknown"), tostring(entry.resolvedBy or "") end
 
     A._noMatchResolutionInProgress = true
-    local ok, parsed = pcall(A.Parse, text)
+    local parsed = A.Parse(text)
     A._noMatchResolutionInProgress = nil
-    if not ok or type(parsed) ~= "table" then return "unresolved", "" end
+    if type(parsed) ~= "table" then return "unresolved", "" end
 
     local kind = tostring(parsed.kind or "")
     local status = tostring(parsed.status or "")
@@ -1130,28 +1130,16 @@ function A._RunJobPump()
         local step = job and job.steps and job.steps[job.index]
         if type(step) ~= "function" then
             table.remove(jobs, 1)
-            if type(job.callback) == "function" then pcall(job.callback, job.result, job) end
+            if type(job.callback) == "function" then job.callback(job.result, job) end
         else
             local stepStart = PerfNowMs()
-            local ok, result, stopResult = pcall(step, job)
+            local result, stopResult = step(job)
             A.RecordPerfSample("assistant.job.step", stepStart, tostring(job.label or "assistant.job") .. "#" .. tostring(job.index))
             stepsRun = stepsRun + 1
-            if not ok then
-                local failed = {
-                    text = "Something went wrong while MSUF processed that request: " .. tostring(result),
-                    status = "failed",
-                }
-                job.result = failed
-                table.remove(jobs, 1)
-                if type(job.callback) == "function" then
-                    pcall(job.callback, failed, job)
-                elseif type(A.AddHistory) == "function" then
-                    A.AddHistory("assistant", failed.text, failed.status)
-                end
-            elseif result == false then
+            if result == false then
                 table.remove(jobs, 1)
                 if stopResult ~= nil then job.result = stopResult end
-                if type(job.callback) == "function" then pcall(job.callback, job.result, job) end
+                if type(job.callback) == "function" then job.callback(job.result, job) end
             elseif result == A.JOB_YIELD then
                 break
             else
@@ -1216,7 +1204,7 @@ end
 
 function A.StartJob(label, steps, callback, opts)
     if type(steps) ~= "table" or #steps == 0 then
-        if type(callback) == "function" then pcall(callback, nil) end
+        if type(callback) == "function" then callback(nil) end
         return nil
     end
     opts = type(opts) == "table" and opts or {}
@@ -1271,8 +1259,8 @@ end
 local function SettingValueLabel(setting, value)
     if value == nil then return "not set" end
     if A.Parser and type(A.Parser.ValueDisplay) == "function" then
-        local ok, label = pcall(A.Parser.ValueDisplay, setting, value)
-        if ok and label ~= nil then return tostring(label) end
+        local label = A.Parser.ValueDisplay(setting, value)
+        if label ~= nil then return tostring(label) end
     end
     if setting and setting.type == "boolean" then return value and "enabled" or "disabled" end
     if setting and setting.type == "color" and type(value) == "table" then
@@ -4392,7 +4380,7 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
         AP.RecordAssistantResult(finalResult)
         A.RecordPerfSample("assistant.submit.deferred", startedMs, text)
         A.SetBusy(false)
-        if type(callback) == "function" then pcall(callback, finalResult) end
+        if type(callback) == "function" then callback(finalResult) end
     end
 
     if opts.userHistoryRecorded ~= true then

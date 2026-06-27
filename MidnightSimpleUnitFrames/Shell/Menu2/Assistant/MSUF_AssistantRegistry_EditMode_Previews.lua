@@ -60,6 +60,50 @@ function A.EditModeRegistry.BuildPreviewControls(ctx)
         return true, StateMessage("Edit Mode Preview", value, changed)
     end
 
+    local function BossPreviewCombatLocked()
+        return (_G.InCombatLockdown and _G.InCombatLockdown())
+            or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+    end
+
+    local function SetBossPreview(value)
+        if BossPreviewCombatLocked() then
+            return false, "Boss Frames preview has to wait until combat ends."
+        end
+
+        local current = _G.MSUF2_BossUnitframePreviewActive == true
+        value = ToggleValue(current, value)
+        local changed = current ~= value
+
+        if value and Menu and type(Menu.SelectPage) == "function" then
+            Menu.SelectPage("uf_boss")
+        end
+
+        _G.MSUF2_BossUnitframePreviewActive = value and true or nil
+
+        local attempted
+        local applied
+        if type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
+            attempted = true
+            applied = _G.MSUF_ApplyBossUnitframePreviewState(value and true or false, value and "MSUF_ASSISTANT_BOSS_PREVIEW" or "MSUF_ASSISTANT_BOSS_PREVIEW_OFF") ~= false
+        elseif type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then
+            attempted = true
+            applied = _G.MSUF_SyncBossUnitframePreviewWithUnitEdit() ~= false
+        end
+
+        if value and Menu and type(Menu.SyncBossPagePreviewForKey) == "function" then
+            Menu.SyncBossPagePreviewForKey("uf_boss", true)
+        end
+
+        Refresh()
+        RefreshHUDControls()
+
+        if value and (not attempted or not applied) then
+            return false, "Boss Frames preview is not available yet. Open Boss Frames and try again."
+        end
+        if changed then return true, "Done. Boss Frames preview " .. StateWord(value) .. "." end
+        return true, "Already set. Boss Frames preview is " .. StateWord(value) .. "."
+    end
+
     local function SetAuraPreview(value)
         local db = EnsureDB()
         local auras = db and db.auras3
@@ -137,6 +181,7 @@ function A.EditModeRegistry.BuildPreviewControls(ctx)
 
     return {
         SetPreview = SetPreview,
+        SetBossPreview = SetBossPreview,
         SetAuraPreview = SetAuraPreview,
         SetGroupPreview = SetGroupPreview,
     }

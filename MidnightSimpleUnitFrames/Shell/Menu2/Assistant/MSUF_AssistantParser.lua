@@ -172,6 +172,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     result = ParseCopy(normalized); if result then return result end
     result = ParseProfileStagingState(normalized, raw); if result then return result end
     result = ParseProfile(normalized, raw); if result then return result end
+    result = P.ParseBossFramePreviewShortcut and P.ParseBossFramePreviewShortcut(normalized); if result then return result end
     result = P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw); if result then return result end
     result = P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw); if result then return result end
     result = P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw); if result then return result end
@@ -236,6 +237,7 @@ function A._ParsePipelineGeometry(normalized, raw)
     result = P.ParseFrameResizeShortcut and P.ParseFrameResizeShortcut(normalized); if result then return result end
     result = P.ParseUnitSizeMatchShortcut(normalized); if result then return result end
     result = P.ParseDetachedPowerBarMoveShortcut and P.ParseDetachedPowerBarMoveShortcut(normalized); if result then return result end
+    result = P.ParseBossFrameSpacingShortcut and P.ParseBossFrameSpacingShortcut(normalized); if result then return result end
     result = P.ParsePairwiseFrameSpacingShortcut and P.ParsePairwiseFrameSpacingShortcut(normalized); if result then return result end
     result = P.ParseGroupFrameSpacingShortcut and P.ParseGroupFrameSpacingShortcut(normalized); if result then return result end
     result = ParseUnitDetailMove(normalized); if result then return result end

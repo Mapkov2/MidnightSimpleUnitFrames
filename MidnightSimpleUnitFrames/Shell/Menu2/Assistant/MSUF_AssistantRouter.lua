@@ -1482,7 +1482,14 @@ A.RouterTryEditModeProblemShortcut = function(text, coreHandler)
     end
 
     if R.ContainsAny(norm, terms.preview) and type(coreHandler) == "function" then
-        local result = coreHandler("turn on edit mode previews")
+        local bossPreview = R.ContainsAny(norm, {
+            "boss preview", "boss frame preview", "boss frames preview",
+            "boss unit preview", "boss unitframe preview", "boss unit frame preview",
+        }) and not R.ContainsAny(norm, {
+            "castbar", "cast bar", "castbars", "cast bars", "boss target",
+            "target border", "target highlight",
+        })
+        local result = coreHandler(bossPreview and "show boss frame preview" or "turn on edit mode previews")
         if result and not (type(result) == "table" and result.kind == "unknown") and result.status ~= "failed" then return result end
     end
 
@@ -6479,8 +6486,7 @@ end
 function R.RegistryCurrentValueLine(item)
     local setting = item and item.setting
     if not setting or type(setting.get) ~= "function" then return nil end
-    local ok, value = pcall(setting.get)
-    if not ok then return nil end
+    local value = setting.get()
     local label = R.RegistryValueLabel(setting, value)
     if label == nil or label == "" then return nil end
     return "Current value: " .. tostring(label) .. "."

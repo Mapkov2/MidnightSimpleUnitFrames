@@ -39,6 +39,28 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "assistant.action.editMode.bossPreview",
+    label = "Toggle Boss Frames Preview",
+    aliases = {
+        "boss preview", "boss frame preview", "boss frames preview",
+        "show boss frame preview", "show boss frames preview",
+        "hide boss frame preview", "hide boss frames preview",
+        "boss unitframe preview", "boss unit frame preview",
+    },
+    type = "setup",
+    combatSafe = false,
+    sourceFile = SOURCE_FILE,
+    sourceControl = "UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua Boss Preview",
+    lifecycle = LIFECYCLE,
+    run = function(args)
+        if type(EditMode.SetBossPreview) ~= "function" then
+            return false, "Boss Frames preview is not available from here."
+        end
+        return EditMode.SetBossPreview(args and args.value)
+    end,
+})
+
+Registry:RegisterAction({
     key = "assistant.action.editMode.auras",
     label = "Toggle Edit Mode Auras Preview",
     type = "setup",

@@ -69,8 +69,8 @@ end
 
 local function DisplayValueLabel(setting, value)
     if P and type(P.ValueDisplay) == "function" then
-        local ok, label = pcall(P.ValueDisplay, setting, value)
-        if ok and label ~= nil then return tostring(label) end
+        local label = P.ValueDisplay(setting, value)
+        if label ~= nil then return tostring(label) end
     end
     if setting and (setting.type == "enum" or type(setting.values) == "table") and type(A.HumanizeDisplayKey) == "function" then
         return A.HumanizeDisplayKey(value)
@@ -1617,6 +1617,24 @@ local function EditModeAction(actionKey, args, label, summary)
     } or nil
 end
 
+local function IsBossFramePreviewText(text)
+    return ContainsAny(text, {
+        "boss preview", "boss previews", "boss frame preview", "boss frame previews",
+        "boss frames preview", "boss frames previews", "boss unit preview",
+        "boss unit previews", "boss unitframe preview", "boss unitframe previews",
+        "boss unit frame preview", "boss unit frame previews", "boss vorschau",
+        "boss frames vorschau", "boss frame vorschau",
+    }) and not ContainsAny(text, {
+        "castbar", "cast bar", "castbars", "cast bars", "zauberleiste",
+        "boss target", "target border", "target highlight",
+    })
+end
+
+local function ParseBossFramePreviewShortcut(text)
+    if not IsBossFramePreviewText(text) then return nil end
+    return EditModeAction("assistant.action.editMode.bossPreview", { value = DetectBoolean(text) }, "Set Boss Frames Preview", "Shows or hides the Boss Frames unit preview outside encounters.")
+end
+
 local function GroupPreviewScopeForText(text)
     if ContainsAny(text, { "mythic raid", "mythicraid", "mythic raid frame", "mythic raid frames", "mythicraid frame", "mythicraid frames" }) then
         return "mythicraid"
@@ -1677,6 +1695,7 @@ local function ParseEditModeHUDControl(text)
         "raid", "raid frame", "raid frames", "mythic raid", "mythicraid",
     }))
         or (hasEditContext and ContainsAny(text, { "gf" }) and (DetectBoolean(text) ~= nil or ContainsAny(text, { "toggle", "umschalten" })))
+    local hasBossPreview = previewWord and IsBossFramePreviewText(text)
     local hasUnitPreview = ContainsAny(text, {
         "edit mode preview", "edit mode previews", "unit preview", "unit previews",
         "unit frame preview", "unit frame previews", "unitframe preview", "unitframe previews",
@@ -1748,6 +1767,9 @@ local function ParseEditModeHUDControl(text)
     end
     if hasGroupPreview then
         return EditModeAction("assistant.action.editMode.groupPreview", { value = value, scope = GroupPreviewScopeForText(text) }, "Set Group Frames Preview")
+    end
+    if hasBossPreview then
+        return EditModeAction("assistant.action.editMode.bossPreview", { value = value }, "Set Boss Frames Preview")
     end
     if hasUnitPreview then
         return EditModeAction("assistant.action.editMode.preview", { value = value }, "Set Edit Mode Preview")
@@ -3089,6 +3111,7 @@ P.SupportLinkForText = SupportLinkForText
 P.ParseSupportWorkflow = ParseSupportWorkflow
 P.GlobalScalePresetForText = GlobalScalePresetForText
 P.ParsePresetWorkflow = ParsePresetWorkflow
+P.ParseBossFramePreviewShortcut = ParseBossFramePreviewShortcut
 P.ParseDashboardScaleShortcut = ParseDashboardScaleShortcut
 P.ParseScopedOverrideReset = ParseScopedOverrideReset
 P.ParseClassPowerAction = ParseClassPowerAction

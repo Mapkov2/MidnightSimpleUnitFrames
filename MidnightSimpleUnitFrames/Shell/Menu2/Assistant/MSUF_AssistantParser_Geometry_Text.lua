@@ -27,8 +27,8 @@ local GroupScopesOrCurrentPage = P.GroupScopesOrCurrentPage
 
 local function DisplayValue(setting, value)
     if P and type(P.ValueDisplay) == "function" then
-        local ok, label = pcall(P.ValueDisplay, setting, value)
-        if ok and label ~= nil then return tostring(label) end
+        local label = P.ValueDisplay(setting, value)
+        if label ~= nil then return tostring(label) end
     end
     if value == "NONE" then return "none" end
     if setting and (setting.type == "enum" or type(setting.values) == "table") and type(A.HumanizeDisplayKey) == "function" then
@@ -324,8 +324,7 @@ end
 
 local function ReadSettingValue(setting)
     if setting and type(setting.get) == "function" then
-        local ok, value = pcall(setting.get)
-        if ok then return value end
+        return setting.get()
     end
     return nil
 end
