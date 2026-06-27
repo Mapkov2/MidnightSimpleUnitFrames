@@ -8,10 +8,60 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-alpha4",
-    previousVersion = "6.0 Alpha 3",
-    rangeLabel = "6.0 Alpha 3 -> 6.0-alpha4",
+    currentVersion = "6.0-alpha5",
+    previousVersion = "6.0-alpha4",
+    rangeLabel = "6.0-alpha4 -> 6.0-alpha5",
     entries = {
+        {
+            version = "6.0-alpha5",
+            date = "2026-06-28",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added reverse cooldown swipe options for aura icons, including defaults, profile export normalization, previews, and Assistant/menu registry coverage.",
+                        "Improved Aura Style and Aura Filters menu scope handling with clearer shared-vs-custom override controls for unit frames and group frames.",
+                        "Fixed castbar channel and empowered preview/runtime behavior after the Alpha 4 castbar pass.",
+                        "Fixed castbar previews so player/target/focus/boss preview refreshes and Blizzard player castbar suppression behave more reliably.",
+                    },
+                },
+                {
+                    title = "Aura Menu And Assistant",
+                    bullets = {
+                        "Added cooldown swipe direction controls for unit and group aura lanes.",
+                        "Updated shared aura previews to distinguish normal and reverse swipe samples instead of grouping them only by icon size.",
+                        "Added shared/custom override bars for aura style and filter pages so inherited settings are easier to see and reset.",
+                        "Expanded Assistant coverage for aura style/filter settings and group aura lane controls.",
+                    },
+                },
+                {
+                    title = "Castbars",
+                    bullets = {
+                        "Hardened castbar preview refreshes and removed fragile preview driver state.",
+                        "Fixed channel and empowered castbar preview updates, including stage blink handling and safer color/option lookups.",
+                        "Stopped writing addon-owned suppression fields onto Blizzard castbar frames; MSUF now suppresses Blizzard player castbar events directly when MSUF owns the player castbar.",
+                        "Removed unsafe SetOnUpdateMode calls from castbar runtime paths.",
+                    },
+                },
+                {
+                    title = "Release And Notes",
+                    bullets = {
+                        "Release name: MSUF_6.0A5.",
+                        "Bumped VERSION and addon metadata to 6.0-alpha5.",
+                        "Regenerated the in-game dashboard changelog data for Alpha 5.",
+                        "This tag is intentionally an alpha build; the release workflow maps alpha tags to Wago alpha stability, CurseForge alpha release type, and GitHub prerelease.",
+                    },
+                },
+                {
+                    title = "Alpha Testing Notes",
+                    bullets = {
+                        "This is an alpha build for the 6.0 branch. Export important profiles before testing.",
+                        "Please test aura cooldown swipe direction on player, target, focus, boss, party, and raid frames.",
+                        "Please test normal casts, channels, empowered casts, castbar previews, and switching between Blizzard and MSUF player castbar ownership.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-alpha4",
             date = "2026-06-27",
@@ -33,6 +83,7 @@ local data = {
                         "Added sparse visual override normalization so inherited aura layout keys are not treated as per-unit style overrides unless the scope actually customizes text or style behavior.",
                         "Rebuilt unit and group aura style controls into focused preview, text feature, stack-count, cooldown text, and behavior sections.",
                         "Shared aura previews now group frame samples by actual configured icon size and label the affected frame group instead of showing one generic preview.",
+                        "Added scope-aware cooldown timer formatting so Shared, unit, and group aura styles can choose below how many remaining seconds decimal text is shown; live aura text still uses Blizzard's C-side DurationTextBinding/NumericRuleFormatter path.",
                         "Group aura style controls now expose cooldown and stack text anchors, offsets, dynamic scaling, tooltip, sorting, and player-aura preference in collapsible sections.",
                     },
                 },
@@ -134,20 +185,6 @@ local data = {
                         "Please test auras on player, target, focus, boss, party, raid, and mythic raid frames.",
                         "Please test target switching, focus switching, entering/leaving groups, raid conversion, combat lockdown, dispel visuals, stack counts, cooldown text, and tooltip behavior.",
                         "If an old aura blacklist or exact spell filter no longer behaves like Alpha 1, report it with the spell name, SpellID, unit frame, and aura lane.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0 Alpha 1",
-            date = "2026-06-24",
-            sections = {
-                {
-                    title = "Alpha 1 Baseline",
-                    bullets = {
-                        "First public 6.0 alpha package for the rewritten MSUF 6.x core.",
-                        "Introduced the rebuilt Menu2 configuration UI, expanded previews, integrated castbars, class resource updates, group-frame runtime work, profile import/export work, and the first Auras3 alpha path.",
-                        "This build is the comparison baseline used for the Alpha 2 notes above.",
                     },
                 },
             },
