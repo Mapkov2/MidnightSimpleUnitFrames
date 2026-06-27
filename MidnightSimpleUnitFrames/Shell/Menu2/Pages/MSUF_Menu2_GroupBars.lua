@@ -14,6 +14,8 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
+local DISPEL_OVERLAY_121_PTR_DISABLED = true
+local DISPEL_OVERLAY_121_PTR_MESSAGE = "Disabled for 12.1 PTR; currently not working."
 local SCOPE_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, GF_BAR_MODES, SIMPLE_TEXTURES, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(GP, [[SCOPE_VALUES HEALTH_MODES TEXT_MODES DELIMITER_VALUES ANCHORS GF_BAR_MODES SIMPLE_TEXTURES DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES]])
 local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeDropdown, ScopeDropdown, ScopeSlider, ScopeColor, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeDropdown ScopeDropdown ScopeSlider ScopeColor SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
@@ -53,6 +55,8 @@ local function BuildDispelOverlaySection(ctx, b)
     local dispelCardH = wide and 296 or 406
     local dispelCard = W.ControlCard(dispel, "Dispel Overlay", "Tints the health bar when a configured debuff condition is active.", 20, -38, dispelCardW, dispelCardH)
     local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", dispelCardW - 62, -24, 0, "HIDDEN"), "dispelOverlayEnabled", false, "visual")
+    local dispelPtrNotice = W.Text(dispelCard, DISPEL_OVERLAY_121_PTR_MESSAGE, 16, -58, min(420, dispelCardW - 32), T.colors.dim)
+    if dispelPtrNotice and dispelPtrNotice.SetWordWrap then dispelPtrNotice:SetWordWrap(false) end
     local dispelTrigger = W.Dropdown(dispelCard, "Overlay detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
     M.BindDropdownWidget(ctx, dispelTrigger,
         function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")) end,
@@ -60,19 +64,24 @@ local function BuildDispelOverlaySection(ctx, b)
             Set(CurrentScope(), "dispelOverlayTrigger", NormalizeGFDispelOverlayTrigger(value), "visual")
             RequestGroupBarsRefresh(ctx, "gf-bars-dispel-trigger")
         end)
-    W.MoveWidget(dispelTrigger, dispelCard, 16, -74, min(300, dispelCardW - 32), "LEFT")
-    local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -126, min(300, dispelCardW - 32))
-    local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -174, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
-    local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -218, min(360, dispelCardW - 72)); local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha }
+    W.MoveWidget(dispelTrigger, dispelCard, 16, -88, min(300, dispelCardW - 32), "LEFT")
+    local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -140, min(300, dispelCardW - 32))
+    local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -188, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
+    local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -232, min(360, dispelCardW - 72)); local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha }
     local function RefreshDispelState()
-        local overlayOn = Bool(CurrentScope(), "dispelOverlayEnabled", false)
+        if DISPEL_OVERLAY_121_PTR_DISABLED and Bool(CurrentScope(), "dispelOverlayEnabled", false) then
+            Set(CurrentScope(), "dispelOverlayEnabled", false, "visual")
+        end
+        local overlayOn = (not DISPEL_OVERLAY_121_PTR_DISABLED) and Bool(CurrentScope(), "dispelOverlayEnabled", false)
         SetOptionsEnabled(dispelControls, overlayOn)
-        SetOptionEnabled(dispelToggle, true)
-        SetSectionBadgesAndStatus(dispel, {
+        SetOptionEnabled(dispelToggle, not DISPEL_OVERLAY_121_PTR_DISABLED)
+        local badges = {
             OnOffBadge(overlayOn, "Active", "Off"),
-            { text = OptionText(GF_DISPEL_OVERLAY_TRIGGERS, NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")), "Border"), kind = overlayOn and "info" or "muted" },
-            { text = OptionText(DISPEL_OVERLAY_STYLES, Val(CurrentScope(), "dispelOverlayStyle", "FULL"), "Full Frame"), kind = overlayOn and "accent" or "muted" },
-        })
+        }
+        if DISPEL_OVERLAY_121_PTR_DISABLED then badges[#badges + 1] = { text = "12.1 PTR", kind = "muted", important = true } end
+        badges[#badges + 1] = { text = OptionText(GF_DISPEL_OVERLAY_TRIGGERS, NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")), "Border"), kind = overlayOn and "info" or "muted" }
+        badges[#badges + 1] = { text = OptionText(DISPEL_OVERLAY_STYLES, Val(CurrentScope(), "dispelOverlayStyle", "FULL"), "Full Frame"), kind = overlayOn and "accent" or "muted" }
+        SetSectionBadgesAndStatus(dispel, badges)
     end
     TrackSectionRefresh(ctx, dispel, RefreshDispelState)
 end

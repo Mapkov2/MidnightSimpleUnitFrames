@@ -340,12 +340,10 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             self._snapHH = (top - bottom) * 0.5 * frameScale / uiScale
         end
 
-        self:SetOnUpdateMode("RunWhenVisible")
         self:SetScript("OnUpdate", function(dragFrame, elapsed)
             local tickStarted = PreviewEditProfileStart()
             if not dragFrame.isDragging then
                 dragFrame:SetScript("OnUpdate", nil)
-                dragFrame:SetOnUpdateMode("Disabled")
                 PreviewEditProfileStop("DragTick", tickStarted)
                 return
             end
@@ -426,7 +424,6 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         if self.isDragging then
             self.isDragging = false
             self:SetScript("OnUpdate", nil)
-            self:SetOnUpdateMode("Disabled")
             self._msufPreviewApplyAcc = nil
             self._msufPopupSyncAcc = nil
 

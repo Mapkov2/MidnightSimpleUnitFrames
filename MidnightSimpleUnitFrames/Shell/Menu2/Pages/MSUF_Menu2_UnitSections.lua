@@ -818,9 +818,169 @@ local function BuildLoadConditions(ctx, builder, unit)
     end
     M.TrackCollapsibleRefresh(ctx, sec, RefreshLoadConditionState)
 end
+local BOSS_LAYOUT_TILE_VALUES = {
+    { value = "VERTICAL_DOWN", text = "Down", tooltip = "Vertical (top -> bottom)", dx = 0, dy = -1, arrow = "v" },
+    { value = "VERTICAL_UP", text = "Up", tooltip = "Vertical (bottom -> top)", dx = 0, dy = 1, arrow = "^" },
+    { value = "HORIZONTAL_RIGHT", text = "Right", tooltip = "Horizontal (left -> right)", dx = 1, dy = 0, arrow = ">" },
+    { value = "HORIZONTAL_LEFT", text = "Left", tooltip = "Horizontal (right -> left)", dx = -1, dy = 0, arrow = "<" },
+}
+local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap)
+    if not parent then return nil end
+    tileW, tileH, gap = tileW or 64, tileH or 70, gap or 8
+    local control = CreateFrame("Frame", nil, parent)
+    control:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 14, y or -42)
+    control:SetSize((tileW * #BOSS_LAYOUT_TILE_VALUES) + (gap * (#BOSS_LAYOUT_TILE_VALUES - 1)), tileH + 20)
+    control._msuf2ControlKind = "segment"
+    control.values = BOSS_LAYOUT_OPTIONS
+    control.buttons = {}
+
+    local title = T.Font(control, "GameFontNormalSmall", M.Tr("Boss frame layout"), T.colors.accent)
+    title:SetPoint("TOPLEFT", control, "TOPLEFT", 0, 0)
+    control._msuf2Title = title
+
+    local function SetTileVisual(btn, active, hover)
+        if not btn then return end
+        if btn.SetBackdropColor then
+            if active then
+                btn:SetBackdropColor(0.100, 0.180, 0.300, hover and 0.98 or 0.92)
+                btn:SetBackdropBorderColor(0.260, 0.620, 1.000, 1.00)
+            elseif hover then
+                btn:SetBackdropColor(0.115, 0.135, 0.185, 0.95)
+                btn:SetBackdropBorderColor(0.380, 0.450, 0.620, 0.95)
+            else
+                btn:SetBackdropColor(0.045, 0.052, 0.076, 0.92)
+                btn:SetBackdropBorderColor(0.190, 0.220, 0.310, 0.85)
+            end
+        end
+        if btn._label then
+            if active then
+                btn._label:SetTextColor(0.95, 1.00, 1.00, 1)
+            else
+                btn._label:SetTextColor(0.74, 0.80, 0.90, 0.95)
+            end
+        end
+    end
+
+    local function DrawMiniBossPreview(btn, info)
+        if not (btn and info) then return end
+        btn._frames = btn._frames or {}
+        local count = 5
+        local pad = 6
+        local labelH = 13
+        local innerW = tileW - (pad * 2)
+        local innerH = tileH - pad - labelH
+        local frameGap = 2
+        local frameW, frameH
+        if info.dy ~= 0 then
+            frameW = math.max(18, math.floor(innerW * 0.82))
+            frameH = math.max(4, math.floor((innerH - ((count - 1) * frameGap)) / count))
+        else
+            frameW = math.max(6, math.floor((innerW - ((count - 1) * frameGap)) / count))
+            frameH = math.max(14, math.floor(innerH * 0.56))
+        end
+        local totalW = (info.dy ~= 0) and frameW or ((count * frameW) + ((count - 1) * frameGap))
+        local totalH = (info.dy ~= 0) and ((count * frameH) + ((count - 1) * frameGap)) or frameH
+        local originX = pad + math.floor((innerW - totalW) * 0.5 + 0.5)
+        local originY = -pad - math.floor((innerH - totalH) * 0.5 + 0.5)
+        for i = 1, count do
+            local tex = btn._frames[i]
+            if not tex then
+                tex = btn:CreateTexture(nil, "ARTWORK")
+                btn._frames[i] = tex
+            end
+            local orderIndex = i - 1
+            local visualIndex = orderIndex
+            if info.dy == 1 or info.dx == -1 then visualIndex = count - i end
+            local px = originX
+            local py = originY
+            if info.dy == 0 then px = originX + (visualIndex * (frameW + frameGap)) end
+            if info.dy ~= 0 then py = originY - (visualIndex * (frameH + frameGap)) end
+            tex:ClearAllPoints()
+            tex:SetPoint("TOPLEFT", btn, "TOPLEFT", px, py)
+            tex:SetSize(frameW, frameH)
+            if i == 1 then
+                tex:SetColorTexture(0.120, 0.950, 0.620, 0.98)
+            elseif i <= 3 then
+                tex:SetColorTexture(0.220, 0.580, 0.940, 0.76)
+            else
+                tex:SetColorTexture(0.160, 0.360, 0.640, 0.42)
+            end
+            tex:Show()
+        end
+        if not btn._firstText then
+            btn._firstText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", 7, "OUTLINE") end
+            btn._firstText:SetText("1")
+            btn._firstText:SetTextColor(0, 0, 0, 1)
+        end
+        local firstVisualIndex = (info.dy == 1 or info.dx == -1) and (count - 1) or 0
+        btn._firstText:ClearAllPoints()
+        btn._firstText:SetPoint("CENTER", btn, "TOPLEFT",
+            originX + ((info.dy == 0 and firstVisualIndex or 0) * (frameW + frameGap)) + (frameW * 0.5),
+            originY - ((info.dy ~= 0 and firstVisualIndex or 0) * (frameH + frameGap)) - (frameH * 0.5))
+        btn._firstText:Show()
+
+        if not btn._arrow then
+            btn._arrow = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE") end
+            btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
+        end
+        btn._arrow:SetText(info.arrow)
+        btn._arrow:ClearAllPoints()
+        if info.dy == -1 then
+            btn._arrow:SetPoint("BOTTOM", btn, "BOTTOM", 0, labelH + 1)
+        elseif info.dy == 1 then
+            btn._arrow:SetPoint("TOP", btn, "TOP", 0, -4)
+        elseif info.dx == 1 then
+            btn._arrow:SetPoint("RIGHT", btn, "RIGHT", -4, labelH * 0.5)
+        else
+            btn._arrow:SetPoint("LEFT", btn, "LEFT", 4, labelH * 0.5)
+        end
+        btn._arrow:Show()
+    end
+
+    function control:SetValue(value)
+        local current = NormalizeBossLayoutMode(value)
+        self._msuf2Value = current
+        for i = 1, #BOSS_LAYOUT_TILE_VALUES do
+            local btn = self.buttons[i]
+            local info = BOSS_LAYOUT_TILE_VALUES[i]
+            if btn then
+                DrawMiniBossPreview(btn, info)
+                SetTileVisual(btn, current == info.value, btn.IsMouseOver and btn:IsMouseOver())
+            end
+        end
+    end
+
+    for i = 1, #BOSS_LAYOUT_TILE_VALUES do
+        local info = BOSS_LAYOUT_TILE_VALUES[i]
+        local btn = CreateFrame("Button", nil, control, T.Template and T.Template() or nil)
+        btn:SetSize(tileW, tileH)
+        btn:SetPoint("TOPLEFT", control, "TOPLEFT", (i - 1) * (tileW + gap), -20)
+        btn._msuf2Value = info.value
+        if btn.SetBackdrop then
+            btn:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Buttons\\WHITE8X8",
+                edgeSize = 1,
+            })
+        end
+        local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE") end
+        text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
+        text:SetText(M.Tr(info.text or ""))
+        btn._label = text
+        btn:SetScript("OnEnter", function(self) SetTileVisual(self, control._msuf2Value == info.value, true) end)
+        btn:SetScript("OnLeave", function(self) SetTileVisual(self, control._msuf2Value == info.value, false) end)
+        M.AddTooltip(btn, function() return M.Format(M.Tr("Boss frame layout: %s"), M.Tr(info.tooltip or info.text or "")) end, "Click to set how boss frames are arranged.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
+        control.buttons[i] = btn
+    end
+    control:SetValue("VERTICAL_DOWN")
+    return control
+end
 local function BuildBossLayout(ctx, builder, unit)
     if unit ~= "boss" then return end
-    local sec = builder:CollapsibleSection("boss_layout", "Boss Layout", 152, false)
+    local sec = builder:CollapsibleSection("boss_layout", "Boss Layout", 204, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 14
     local rightX = math.max(350, floor(sectionW * 0.50) + 8)
@@ -831,9 +991,8 @@ local function BuildBossLayout(ctx, builder, unit)
         function() return ReadNumber(unit, "spacing", -36) end,
         function(v) SetNumber(unit, "spacing", v, "MSUF2_BOSS_SPACING", { preview = true }) end,
         -36, { step = 1, roundStep = true })
-    local layout = W.Dropdown(sec, "Boss frame layout", BOSS_LAYOUT_OPTIONS, 220)
-    UnitSectionShared.PlaceDropdown(sec, layout, rightX, -42, 220)
-    M.BindDropdownWidget(ctx, layout,
+    local layout = BuildBossLayoutTiles(sec, rightX, -42, 60, 70, 8)
+    M.BindSegment(ctx, layout,
         function()
             local conf = GetConf(unit)
             return NormalizeBossLayoutMode(conf.bossLayoutMode, conf.invertBossOrder)
@@ -844,7 +1003,7 @@ local function BuildBossLayout(ctx, builder, unit)
             conf.invertBossOrder = nil
             M.RequestUnitApply(unit, "MSUF2_BOSS_LAYOUT_MODE", { preview = true })
         end)
-    local highlight = W.ToggleAt(sec, "Boss target highlight", leftX, -116, 260)
+    local highlight = W.ToggleAt(sec, "Boss target highlight", leftX, -156, 260)
     M.BindBoolWidget(ctx, highlight,
         function() return ReadGeneralBool("bossTargetHighlightEnabled", true) end,
         function(v)
@@ -929,7 +1088,7 @@ local function BuildUnitPage(info)
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_inline_text") end
         BuildStatus(ctx, builder, info.unit)
         if info.unit == "boss" then
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 152 })
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 204 })
         end
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 148 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end

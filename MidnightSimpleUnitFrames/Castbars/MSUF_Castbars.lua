@@ -144,7 +144,6 @@ local function HardHidePlayerCastbar(frame)
     if frame.hideTimer and frame.hideTimer.Cancel then frame.hideTimer:Cancel() end
     frame.hideTimer = nil
     if frame.SetScript then frame:SetScript("OnUpdate", nil) end
-    if frame.SetOnUpdateMode then frame:SetOnUpdateMode("Disabled") end
 
     frame.interruptFeedbackEndTime = nil
     frame.MSUF_castActive = false
@@ -467,7 +466,6 @@ local oldManager = _G.MSUF_CastbarManager
 if oldManager then
     if oldManager.SetScript then
         oldManager:SetScript("OnUpdate", nil)
-        if oldManager.SetOnUpdateMode then oldManager:SetOnUpdateMode("Disabled") end
     end
     if oldManager.Hide then oldManager:Hide() end
     if oldManager.active and wipe then wipe(oldManager.active) end
@@ -605,7 +603,6 @@ local function LowFrequencyTicker()
     if activeCount <= 0 then
         StopLowFrequencyTicker()
         CastbarManager:SetScript("OnUpdate", nil)
-        if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("Disabled") end
         CastbarManager:Hide()
         return
     end
@@ -661,7 +658,6 @@ RefreshManagerOnUpdate = function()
     if activeCount <= 0 then
         StopLowFrequencyTicker()
         CastbarManager:SetScript("OnUpdate", nil)
-        if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("Disabled") end
         CastbarManager:Hide()
         return
     end
@@ -670,13 +666,11 @@ RefreshManagerOnUpdate = function()
 
     if highFrequencyCount > 0 then
         StopLowFrequencyTicker()
-        if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("RunWhenVisible") end
         CastbarManager:SetScript("OnUpdate", ManagerOnUpdate)
         return false
     end
 
     CastbarManager:SetScript("OnUpdate", nil)
-    if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("Disabled") end
 
     if C_Timer and C_Timer.NewTicker then
         if not lowFrequencyTicker then
@@ -687,7 +681,6 @@ RefreshManagerOnUpdate = function()
         return true
     end
 
-    if CastbarManager.SetOnUpdateMode then CastbarManager:SetOnUpdateMode("RunWhenVisible") end
     CastbarManager:SetScript("OnUpdate", ManagerOnUpdate)
     UpdateBucket(CastbarManager.low, 0)
     return true
@@ -696,7 +689,6 @@ end
 CastbarManager:SetScript("OnHide", function(manager)
     StopLowFrequencyTicker()
     manager:SetScript("OnUpdate", nil)
-    if manager.SetOnUpdateMode then manager:SetOnUpdateMode("Disabled") end
 end)
 
 local function FrameHasRuntimeWork(frame)

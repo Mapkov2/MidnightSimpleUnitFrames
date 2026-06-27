@@ -23,6 +23,7 @@ local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = T
 local AURA_MENU_APPLY_DELAY = 0.04
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 local tonumber, tostring, type, ipairs, pairs = tonumber, tostring, type, ipairs, pairs
+local table_concat = table.concat
 local AURA_SCOPE_VALUES = VTP "shared=Shared|player=Player|target=Target|focus=Focus|boss=Boss|party=Party|raid=Raid / Mythic"
 local AURA_SCOPE_LABELS = { shared = "Shared", player = "Player", target = "Target", focus = "Focus", boss = "Boss", party = "Party", raid = "Raid / Mythic" }
 local AURA_SCOPE_VALID = M.KeySetFromWords "shared player target focus boss party raid"
@@ -37,6 +38,7 @@ local SHARED_PREVIEW_SCOPES = {
 }
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
+local COOLDOWN_SWIPE_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reverse"
 local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
     SYMBOL = "ui-debuff-border-magic-icon",
@@ -243,18 +245,191 @@ end
 local function ScopeLabel(scope)
     return AURA_SCOPE_LABELS[scope] or "Raid / Mythic"
 end
-local function BuildScopeTabs(ctx, section, x, y, width)
-    return BuildActionTabs(ctx, section, AURA_SCOPE_VALUES, x, y, width, CurrentScope, function(value)
-        SetCurrentScope(value)
+local AURA_STYLE_UNIT_SCOPES = {
+    { value = "player", text = "Player" },
+    { value = "target", text = "Target" },
+    { value = "focus", text = "Focus" },
+    { value = "boss", text = "Boss" },
+}
+local function AuraStyleUnitOverrideLabels()
+    local out = {}
+    for i = 1, #AURA_STYLE_UNIT_SCOPES do
+        local item = AURA_STYLE_UNIT_SCOPES[i]
+        if not Model.UseSharedVisuals(item.value) then out[#out + 1] = item.text end
+    end
+    return out
+end
+local function AuraStyleVisibleOverrideLabels(unitLabels)
+    local out = {}
+    unitLabels = unitLabels or AuraStyleUnitOverrideLabels()
+    for i = 1, #unitLabels do out[#out + 1] = unitLabels[i] end
+    out[#out + 1] = "Party"
+    out[#out + 1] = "Raid / Mythic"
+    return out
+end
+local function AuraStyleScopeHasOverride(scope)
+    if scope == "shared" then return false end
+    if IsGroupScope(scope) then return true end
+    return not Model.UseSharedVisuals(scope)
+end
+local function BuildAuraStyleScopeOverrideSection(ctx, b)
+    local values = AURA_SCOPE_VALUES
+    local scopeOpts = {
+        values = values,
+        width = ctx.width,
+        getValue = CurrentScope,
+        setValue = function(value)
+            SetCurrentScope(value)
+            Rebuild(ctx)
+        end,
+        hasOverride = AuraStyleScopeHasOverride,
+    }
+    local metrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(values, scopeOpts)
+    local overrideY = min(-58, ((metrics and metrics.bottomY) or -40) - 18)
+    local hintY = overrideY - 34
+    local section = b:Section("", max(128, abs(hintY) + 42))
+    if section.title then section.title:Hide() end
+    local segment = W.ScopeOverrideBar(ctx, section, scopeOpts)
+    local override = W.ToggleAt(section, "Use custom aura style for this scope", 14, overrideY, 300)
+    AddTooltip(override, "Aura style override", "On: this scope keeps local aura style settings. Off: this scope follows Shared aura style.")
+    M.BindBoolWidget(ctx, override,
+        function()
+            local current = CurrentScope()
+            return current ~= "shared" and not IsGroupScope(current) and not Model.UseSharedVisuals(current)
+        end,
+        function(enabled)
+            local current = CurrentScope()
+            if current == "shared" or IsGroupScope(current) then return end
+            Model.SetUseSharedVisuals(current, not enabled)
+            ApplyUnit(ctx, current, "AURAS3_STYLE_OVERRIDE", true)
+            Rebuild(ctx)
+        end)
+    local overrideInfo = W.Text(section, "", 14, overrideY, ctx.width - 130, T.colors.text)
+    local reset = T.Button(section, "Reset", 76, 22)
+    reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, overrideY + 8)
+    T.CenterButtonLabel(reset)
+    reset:SetScript("OnClick", function()
+        for i = 1, #AURA_STYLE_UNIT_SCOPES do
+            Model.SetUseSharedVisuals(AURA_STYLE_UNIT_SCOPES[i].value, true)
+            ApplyUnit(ctx, AURA_STYLE_UNIT_SCOPES[i].value, "AURAS3_STYLE_RESET", false)
+        end
         Rebuild(ctx)
     end)
+    local hint = W.Text(section, "", 14, hintY, ctx.width - 28, T.colors.muted)
+    M.TrackRefresh(ctx, function()
+        local current = CurrentScope()
+        local shared = current == "shared"
+        local group = IsGroupScope(current)
+        local active = AuraStyleUnitOverrideLabels()
+        local visibleActive = AuraStyleVisibleOverrideLabels(active)
+        W.SetControlShown(override, not shared and not group)
+        overrideInfo:SetShown(shared or group)
+        reset:SetShown(shared and #active > 0)
+        if shared then
+            overrideInfo:SetText("|cffffffff" .. Tr("Overrides:") .. "|r " .. (#visibleActive > 0 and table_concat(visibleActive, ", ") or Tr("None")))
+            hint:SetText("Shared aura style is the baseline for unit-frame aura text, swipe, border, and timer settings. Party and Raid are group-frame style scopes with their own settings.")
+        elseif group then
+            overrideInfo:SetText("|cffffffff" .. Tr("Group style scope:") .. "|r " .. ScopeLabel(current))
+            hint:SetText(ScopeLabel(current) .. " uses group-frame aura style settings. These controls are scoped here and do not change unit-frame Shared style.")
+        elseif not Model.UseSharedVisuals(current) then
+            hint:SetText("Override active: this scope keeps its own aura style. Shared style changes will not replace it until the override is reset.")
+        else
+            hint:SetText("Inherited: this scope follows Shared aura style. Enable custom aura style only when this scope needs different text, swipe, border, or timer settings.")
+        end
+        if segment and segment.Refresh then segment:Refresh() end
+        hint:SetWidth(ctx.width - 28)
+    end)
+    return CurrentScope()
 end
-local function BuildAuraChrome(ctx, b, title, subtitle)
-    Model.EnsureDB()
-    b:GlobalStyleHeader(title, subtitle, 72)
-    local scope = b:Section("Scope", 78)
-    local w = scope._msuf2Width or b.width or 720
-    BuildScopeTabs(ctx, scope, 16, -34, w - 32)
+local AURA_FILTER_UNIT_SCOPES = AURA_STYLE_UNIT_SCOPES
+local function AuraFilterUnitOverrideLabels()
+    local out = {}
+    for i = 1, #AURA_FILTER_UNIT_SCOPES do
+        local item = AURA_FILTER_UNIT_SCOPES[i]
+        if not Model.UseSharedRules(item.value) then out[#out + 1] = item.text end
+    end
+    return out
+end
+local function AuraFilterVisibleOverrideLabels(unitLabels)
+    local out = {}
+    unitLabels = unitLabels or AuraFilterUnitOverrideLabels()
+    for i = 1, #unitLabels do out[#out + 1] = unitLabels[i] end
+    out[#out + 1] = "Party"
+    out[#out + 1] = "Raid / Mythic"
+    return out
+end
+local function AuraFilterScopeHasOverride(scope)
+    if scope == "shared" then return false end
+    if IsGroupScope(scope) then return true end
+    return not Model.UseSharedRules(scope)
+end
+local function BuildAuraFilterScopeOverrideSection(ctx, b)
+    local values = AURA_SCOPE_VALUES
+    local scopeOpts = {
+        values = values,
+        width = ctx.width,
+        getValue = CurrentScope,
+        setValue = function(value)
+            SetCurrentScope(value)
+            Rebuild(ctx)
+        end,
+        hasOverride = AuraFilterScopeHasOverride,
+    }
+    local metrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(values, scopeOpts)
+    local overrideY = min(-58, ((metrics and metrics.bottomY) or -40) - 18)
+    local hintY = overrideY - 34
+    local section = b:Section("", max(128, abs(hintY) + 42))
+    if section.title then section.title:Hide() end
+    local segment = W.ScopeOverrideBar(ctx, section, scopeOpts)
+    local override = W.ToggleAt(section, "Use custom aura filters for this scope", 14, overrideY, 310)
+    AddTooltip(override, "Aura filter override", "On: this scope keeps local aura filter rules. Off: this scope follows Shared aura filters.")
+    M.BindBoolWidget(ctx, override,
+        function()
+            local current = CurrentScope()
+            return current ~= "shared" and not IsGroupScope(current) and not Model.UseSharedRules(current)
+        end,
+        function(enabled)
+            local current = CurrentScope()
+            if current == "shared" or IsGroupScope(current) then return end
+            Model.SetUseSharedRules(current, not enabled)
+            ApplyUnit(ctx, current, "AURAS3_FILTER_OVERRIDE", true)
+            Rebuild(ctx)
+        end)
+    local overrideInfo = W.Text(section, "", 14, overrideY, ctx.width - 130, T.colors.text)
+    local reset = T.Button(section, "Reset", 76, 22)
+    reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, overrideY + 8)
+    T.CenterButtonLabel(reset)
+    reset:SetScript("OnClick", function()
+        for i = 1, #AURA_FILTER_UNIT_SCOPES do
+            Model.SetUseSharedRules(AURA_FILTER_UNIT_SCOPES[i].value, true)
+            ApplyUnit(ctx, AURA_FILTER_UNIT_SCOPES[i].value, "AURAS3_FILTER_RESET", false)
+        end
+        Rebuild(ctx)
+    end)
+    local hint = W.Text(section, "", 14, hintY, ctx.width - 28, T.colors.muted)
+    M.TrackRefresh(ctx, function()
+        local current = CurrentScope()
+        local shared = current == "shared"
+        local group = IsGroupScope(current)
+        local active = AuraFilterUnitOverrideLabels()
+        local visibleActive = AuraFilterVisibleOverrideLabels(active)
+        W.SetControlShown(override, not shared and not group)
+        overrideInfo:SetShown(shared or group)
+        reset:SetShown(shared and #active > 0)
+        if shared then
+            overrideInfo:SetText("|cffffffff" .. Tr("Overrides:") .. "|r " .. (#visibleActive > 0 and table_concat(visibleActive, ", ") or Tr("None")))
+            hint:SetText("Shared aura filters are the baseline for unit-frame buff and debuff rules. Party and Raid are group-frame filter scopes with their own settings.")
+        elseif group then
+            overrideInfo:SetText("|cffffffff" .. Tr("Group filter scope:") .. "|r " .. ScopeLabel(current))
+            hint:SetText(ScopeLabel(current) .. " uses group-frame aura filter settings. These controls are scoped here and do not change unit-frame Shared filters.")
+        elseif not Model.UseSharedRules(current) then
+            hint:SetText("Override active: this scope keeps its own aura filter rules. Shared filter changes will not replace it until the override is reset.")
+        else
+            hint:SetText("Inherited: this scope follows Shared aura filters. Enable custom aura filters only when this scope needs different buff or debuff rules.")
+        end
+        if segment and segment.Refresh then segment:Refresh() end
+        hint:SetWidth(ctx.width - 28)
+    end)
     return CurrentScope()
 end
 local function FinishPage(ctx, b)
@@ -652,6 +827,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         showStacks = true,
         showTimers = true,
         showSwipe = true,
+        cooldownSwipeReverse = false,
         stackSize = 10,
         stackAnchor = "TOPRIGHT",
         stackX = -1,
@@ -671,6 +847,7 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.showStacks = group.showStacks ~= false
         cfg.showTimers = group.showCooldown ~= false
         cfg.showSwipe = group.showCooldownSwipe ~= false
+        cfg.cooldownSwipeReverse = group.cooldownSwipeReverse == true
         cfg.stackSize = tonumber(group.stackSize) or 10
         cfg.stackAnchor = group.stackAnchor or "BOTTOMRIGHT"
         cfg.stackX = tonumber(group.stackX) or 0
@@ -702,10 +879,12 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             cfg.showStacks = Model.ReadLaneStyleBool(readScope, lane, "showStackCount", true)
             cfg.showTimers = Model.ReadLaneStyleBool(readScope, lane, "showCooldownText", true)
             cfg.showSwipe = Model.ReadLaneStyleBool(readScope, lane, "showCooldownSwipe", true)
+            cfg.cooldownSwipeReverse = Model.ReadLaneStyleBool(readScope, lane, "cooldownSwipeReverse", false)
         else
             cfg.showStacks = Model.ReadBool(readScope, "showStackCount", true)
             cfg.showTimers = Model.ReadBool(readScope, "showCooldownText", true)
             cfg.showSwipe = Model.ReadBool(readScope, "showCooldownSwipe", true)
+            cfg.cooldownSwipeReverse = Model.ReadBool(readScope, "cooldownSwipeReverse", false)
         end
         cfg.stackSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)
         cfg.stackAnchor = lane and type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(readScope, lane) or Model.ReadStackAnchor(readScope)
@@ -763,7 +942,8 @@ local function SharedAuraPreviewLabel(cfg)
         name = labels[1] .. " +" .. tostring(count - 1)
     end
     local size = cfg and (cfg.actualSize or cfg.size) or 0
-    return name .. "\n" .. tostring(Round(size)) .. "px"
+    local direction = cfg and cfg.cooldownSwipeReverse == true and "Reverse" or "Normal"
+    return name .. "\n" .. tostring(Round(size)) .. "px " .. direction
 end
 local function BuildSharedAuraPreviewSamples(lane, width, height)
     local samples, bySize = {}, {}
@@ -772,7 +952,8 @@ local function BuildSharedAuraPreviewSamples(lane, width, height)
         local cfg = ReadMiniAuraPreviewConfig(spec.scope, lane, width, height)
         local size = Round(cfg.actualSize or cfg.size or 0)
         if size > 0 then
-            local existing = bySize[size]
+            local sampleKey = tostring(size) .. (cfg.cooldownSwipeReverse == true and ":R" or ":N")
+            local existing = bySize[sampleKey]
             if existing then
                 existing._labels[#existing._labels + 1] = spec.label
                 existing.previewLabel = SharedAuraPreviewLabel(existing)
@@ -782,7 +963,7 @@ local function BuildSharedAuraPreviewSamples(lane, width, height)
                 cfg._labels = { spec.label }
                 cfg.previewLabel = SharedAuraPreviewLabel(cfg)
                 samples[#samples + 1] = cfg
-                bySize[size] = cfg
+                bySize[sampleKey] = cfg
             end
         end
     end
@@ -821,6 +1002,14 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
         local showPreviewEdges = isBuffIcon == true
         for _, edge in pairs(icon.edge) do edge:SetShown(showPreviewEdges); edge:SetVertexColor(r, g, b, 0.95) end
         icon.swipe:SetShown(cfg.showSwipe ~= false)
+        icon.swipe:ClearAllPoints()
+        if cfg.cooldownSwipeReverse == true then
+            icon.swipe:SetPoint("TOPRIGHT", icon, "TOP", 0, -1)
+            icon.swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 1, 1)
+        else
+            icon.swipe:SetPoint("TOPLEFT", icon, "TOP", 0, -1)
+            icon.swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -1, 1)
+        end
         if borderAtlas and icon.dispelBorder.SetAtlas then
             local pad = max(1, floor((cfg.size / 24) + 0.5))
             icon.dispelBorder:ClearAllPoints()
@@ -906,7 +1095,6 @@ local function BuildUnitStyle(ctx, b, scope)
     local function RefreshStylePreview()
         RefreshMiniAuraPreviewNow(refreshMiniPreview)
     end
-    local useShared
     local function ReadScopeBool(key, defaultValue)
         if type(Model.ReadLaneStyleBool) == "function" then return Model.ReadLaneStyleBool(unit, lane, key, defaultValue) end
         if type(Model.ReadBool) == "function" then return Model.ReadBool(unit, key, defaultValue) end
@@ -956,6 +1144,12 @@ local function BuildUnitStyle(ctx, b, scope)
             Model.WriteCooldownAnchor(unit, value)
         end
     end
+    local function ReadScopeSwipeDirection()
+        return ReadScopeBool("cooldownSwipeReverse", false) and "REVERSE" or "NORMAL"
+    end
+    local function WriteScopeSwipeDirection(value)
+        WriteScopeBool("cooldownSwipeReverse", value == "REVERSE")
+    end
     local function AddStyleControl(control) M.AppendValues(styleControls, control); return control end
     local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason)
         return AddStyleControl(BindSwitch(ctx, parent, label, x, y, width,
@@ -1000,21 +1194,11 @@ local function BuildUnitStyle(ctx, b, scope)
     refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, unit, 24, -34, pw - 48, previewBoxH, lane))
     local hint = W.Text(preview, "", 24, previewHintY, pw - 48, T.colors.muted)
 
-    local featuresH = (unit == "shared" and 170 or 216) + extraDebuffControls
+    local featuresH = 170 + extraDebuffControls
     local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Text Features", featuresH, true)
     local fw = BodyWidth(features)
     local featuresY = -44
-    if unit ~= "shared" then
-        useShared = BindSwitch(ctx, features, "Use Shared Style", 24, featuresY, 220,
-            function() return Model.UseSharedVisuals(unit) end,
-            function(v)
-                Model.SetUseSharedVisuals(unit, v)
-                ApplyUnit(ctx, unit, "AURAS3_STYLE_INHERIT", true)
-                RefreshStylePreview()
-            end)
-        featuresY = featuresY - 48
-    end
-    W.Text(features, "Stack-count and cooldown text for " .. scopeLabel .. " " .. laneName .. ".", 24, featuresY, fw - 48, T.colors.muted)
+    local featuresIntro = W.Text(features, "Stack-count and cooldown text for " .. scopeLabel .. " " .. laneName .. ".", 24, featuresY, fw - 48, T.colors.muted)
     BindStyleSwitch(features, "Show Stack Count", 24, featuresY - 44, fw - 48, "showStackCount", true, "AURAS3_SHOW_STACKS")
     BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 76, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
     BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 108, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
@@ -1045,7 +1229,7 @@ local function BuildUnitStyle(ctx, b, scope)
     BindStyleSlider(stack, "X", 24, -172, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
     BindStyleSlider(stack, "Y", 32 + stackSmallW, -172, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 414, true)
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 474, true)
     local cw = BodyWidth(cooldown)
     W.Text(cooldown, "Timer font size, anchor, offset, and tooltip behavior for " .. scopeLabel .. " " .. laneName .. ".", 24, -42, cw - 48, T.colors.muted)
     BindStyleSlider(cooldown, "Text Size", 24, -82, 6, 40, 1, cw - 48, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
@@ -1053,16 +1237,35 @@ local function BuildUnitStyle(ctx, b, scope)
     BindStyleSlider(cooldown, "X", 24, -198, -40, 40, 1, cw - 48, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
     BindStyleSlider(cooldown, "Y", 24, -258, -40, 40, 1, cw - 48, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
     BindStyleSwitch(cooldown, "Show Tooltip", 24, -306, cw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
-    local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -354, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
+    local swipeDirection = BindStyleDropdown(cooldown, "Swipe Direction", 24, -354, COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48, ReadScopeSwipeDirection, WriteScopeSwipeDirection, "AURAS3_COOLDOWN_SWIPE_DIRECTION")
+    AddTooltip(swipeDirection, "Cooldown swipe direction", "Selects the Blizzard cooldown swipe direction with Cooldown:SetReverse. This only affects the swipe overlay, not icon size or position.")
+    local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -412, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. At and above it, timers show whole seconds. Set 0 for whole seconds only.")
-    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added.", 24, -398, cw - 48, T.colors.muted)
+    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added.", 24, -456, cw - 48, T.colors.muted)
 
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
         W.SetControlsEnabled(styleControls, editable)
-        if useShared then W.SetControlEnabled(useShared, true) end
+        if W.SetCollapsibleBadges then
+            if unit == "shared" then
+                W.SetCollapsibleBadges(features, {
+                    { text = "Shared baseline", kind = "info", showWhenClosed = true },
+                })
+            else
+                W.SetCollapsibleBadges(features, {
+                    { text = editable and "Override active" or "Inherited", kind = editable and "accent" or "muted", showWhenClosed = true },
+                })
+            end
+        end
+        if featuresIntro then
+            if unit == "shared" then
+                featuresIntro:SetText("Shared aura style is the baseline. Unit scopes can override these text, swipe, border, and timer settings.")
+            else
+                featuresIntro:SetText("These controls affect only " .. scopeLabel .. " " .. laneName .. " when the local style override is active.")
+            end
+        end
         if unit == "shared" then
-            hint:SetText("Shared preview groups frames by identical icon size; labels show the actual frame icon size. Font family follows Global Style > Fonts.")
+            hint:SetText("Shared preview groups frames by identical icon size and swipe direction; labels show the actual frame icon size. Font family follows Global Style > Fonts.")
         else
             hint:SetText(editable and "Font family follows Global Style > Fonts. Legacy blacklists are read-only on Filters." or "This scope inherits the Shared aura style.")
         end
@@ -1103,16 +1306,26 @@ local function BuildGroupStyle(ctx, b, scope)
             end)
     end
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Group " .. LaneTitle(lane) .. " Cooldown Text", 324, true)
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Group " .. LaneTitle(lane) .. " Cooldown Text", 382, true)
     local cw = BodyWidth(cooldown)
     BindGroupSlider(ctx, cooldown, "Cooldown Font", 24, -54, 6, 24, 1, cw - 48, scope, lane, "cooldownSize", 8, "font", RefreshStylePreview)
     BindGroupDropdown(ctx, cooldown, "Cooldown Anchor", 24, -112, GFAnchorValues(), cw - 48, scope, lane, "cooldownAnchor", "CENTER", "geometry", RefreshStylePreview)
     local cooldownSmallW = max(120, floor((cw - 72) / 2))
     BindGroupSlider(ctx, cooldown, "Cooldown X", 24, -170, -40, 40, 1, cooldownSmallW, scope, lane, "cooldownX", 0, "geometry", RefreshStylePreview)
     BindGroupSlider(ctx, cooldown, "Cooldown Y", 32 + cooldownSmallW, -170, -40, 40, 1, cooldownSmallW, scope, lane, "cooldownY", 0, "geometry", RefreshStylePreview)
-    local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -230, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual", RefreshStylePreview)
+    local groupSwipeDirection = BindDropdown(ctx, cooldown, "Swipe Direction", 24, -230, COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48,
+        function()
+            local group = GFReadGroup(scope, lane)
+            return group.cooldownSwipeReverse == true and "REVERSE" or "NORMAL"
+        end,
+        function(v)
+            GFWriteGroupValue(scope, lane, "cooldownSwipeReverse", v == "REVERSE", "visual")
+            RefreshStylePreview()
+        end)
+    AddTooltip(groupSwipeDirection, "Cooldown swipe direction", "Selects the Blizzard cooldown swipe direction with Cooldown:SetReverse. This only affects the swipe overlay, not icon size or position.")
+    local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -288, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual", RefreshStylePreview)
     AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. At and above it, timers show whole seconds. Set 0 for whole seconds only.")
-    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added.", 24, -282, cw - 48, T.colors.muted)
+    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added.", 24, -340, cw - 48, T.colors.muted)
 
     local stack = b:CollapsibleSection(baseId .. "_stack", "Group " .. LaneTitle(lane) .. " Stack Count", 238, false)
     local sw = BodyWidth(stack)
@@ -1202,7 +1415,9 @@ local function BuildSharedColors(ctx, b)
 end
 local function BuildAuraStylePage(ctx)
     local b = W.PageBuilder(ctx)
-    local scope = BuildAuraChrome(ctx, b, "Aura Style", "Text, cooldown, stack and marker styling.")
+    Model.EnsureDB()
+    b:GlobalStyleHeader("Aura Style", "Text, cooldown, stack and marker styling.", 72)
+    local scope = BuildAuraStyleScopeOverrideSection(ctx, b)
     BuildAuraStyleNav(ctx, b)
     if IsGroupScope(scope) then
         BuildGroupStyle(ctx, b, scope)
@@ -1222,17 +1437,7 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
     local lane = CurrentLane("auraFilterLane", "buff")
     local laneTitle = lane == "buff" and "Buff Filters" or "Debuff Filters"
     local filterControls = {}
-    local useShared
-    if scope ~= "shared" then
-        useShared = BindSwitch(ctx, section, "Use Shared Rules", 24, -48, 190,
-            function() return Model.UseSharedRules(scope) end,
-            function(v)
-                Model.SetUseSharedRules(scope, v)
-                ApplyUnit(ctx, scope, "AURAS3_FILTER_INHERIT", true)
-            end)
-    end
-    local enableX = scope == "shared" and 24 or 234
-    local enableFilters = BindSwitch(ctx, section, "Enable Filters", enableX, -48, 180,
+    local enableFilters = BindSwitch(ctx, section, "Enable Filters", 24, -48, 180,
         function() return Model.ScopeFiltersEnabled(scope) end,
         function(v)
             Model.SetScopeFiltersEnabled(scope, v)
@@ -1287,7 +1492,6 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
         local filtersOn = customRules and Model.ScopeFiltersEnabled(scope)
         W.SetControlEnabled(enableFilters, customRules)
         W.SetControlsEnabled(filterControls, filtersOn)
-        if useShared then W.SetControlEnabled(useShared, scope ~= "shared") end
     end)
 end
 local function BuildUnitBlacklist(ctx, b, scope)
@@ -1549,7 +1753,9 @@ local function BuildGroupFilters(ctx, b, scope)
 end
 local function BuildAuraFiltersPage(ctx)
     local b = W.PageBuilder(ctx)
-    local scope = BuildAuraChrome(ctx, b, "Aura Filters", "Native 12.1 Buff and Debuff filters; legacy whitelist/blacklist data is read-only.")
+    Model.EnsureDB()
+    b:GlobalStyleHeader("Aura Filters", "Native 12.1 Buff and Debuff filters; legacy whitelist/blacklist data is read-only.", 72)
+    local scope = BuildAuraFilterScopeOverrideSection(ctx, b)
     if IsGroupScope(scope) then
         BuildGroupFilters(ctx, b, scope)
     else
@@ -1665,5 +1871,5 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
 end
 M.RegisterPage("auras3_buffs", { title = "MSUF Aura Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 9 })
 M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 9 })
-M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 27 })
-M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 20 })
+M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 30 })
+M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 21 })

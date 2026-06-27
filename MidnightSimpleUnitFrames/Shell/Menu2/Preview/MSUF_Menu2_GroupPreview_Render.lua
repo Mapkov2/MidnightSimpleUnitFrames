@@ -609,6 +609,7 @@ function Render.Install(box, ctx, deps)
             local showCooldown = cfg.showCooldown ~= false
             local showStacks = cfg.showStacks ~= false
             local showSwipe = cfg.showCooldownSwipe ~= false
+            local cooldownSwipeReverse = cfg.cooldownSwipeReverse == true
             local cooldownSize = max(6, ScaleValue(cfg.cooldownSize or defaults.cooldownSize or 8, textScale, 6))
             local stackSize = max(6, ScaleValue(cfg.stackSize or defaults.stackSize or 10, textScale, 6))
             local cooldownAnchor = RuntimeAuraTextAnchor(cfg.cooldownAnchor, "CENTER")
@@ -718,8 +719,13 @@ function Render.Install(box, ctx, deps)
                     end
                     if swipe then
                         swipe:ClearAllPoints()
-                        swipe:SetPoint("TOPLEFT", tex, "TOP", 0, 0)
-                        swipe:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, 0)
+                        if cooldownSwipeReverse then
+                            swipe:SetPoint("TOPRIGHT", tex, "TOP", 0, 0)
+                            swipe:SetPoint("BOTTOMLEFT", tex, "BOTTOMLEFT", 0, 0)
+                        else
+                            swipe:SetPoint("TOPLEFT", tex, "TOP", 0, 0)
+                            swipe:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, 0)
+                        end
                         swipe:SetShown(showSwipe)
                     end
                     LayoutAuraPreviewBorder(border, tex, size, dispelMode)

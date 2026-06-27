@@ -14,6 +14,7 @@
 - Added sparse visual override normalization so inherited aura layout keys are not treated as per-unit style overrides unless the scope actually customizes text or style behavior.
 - Rebuilt unit and group aura style controls into focused preview, text feature, stack-count, cooldown text, and behavior sections.
 - Shared aura previews now group frame samples by actual configured icon size and label the affected frame group instead of showing one generic preview.
+- Added scope-aware cooldown timer formatting so Shared, unit, and group aura styles can choose below how many remaining seconds decimal text is shown; live aura text still uses Blizzard's C-side DurationTextBinding/NumericRuleFormatter path.
 - Group aura style controls now expose cooldown and stack text anchors, offsets, dynamic scaling, tooltip, sorting, and player-aura preference in collapsible sections.
 
 ### Assistant And Menu

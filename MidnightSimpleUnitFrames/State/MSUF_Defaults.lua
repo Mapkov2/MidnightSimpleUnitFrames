@@ -231,6 +231,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         auras.blizzardContainerY = 0
         for _, key in pairs({ "buff", "debuff", "externals" }) do
             if type(auras[key]) ~= "table" then auras[key] = {} end
+            if auras[key].cooldownSwipeReverse == nil then auras[key].cooldownSwipeReverse = false end
             if type(auras[key].blacklist) ~= "table" then auras[key].blacklist = {} end
             if type(auras[key].blacklist.spells) ~= "table" then auras[key].blacklist.spells = {} end
         end
@@ -2120,6 +2121,7 @@ end
                 showBuffs = true,
                 showDebuffs = true,
                 showCooldownSwipe = true,
+                cooldownSwipeReverse = false,
                 showStackCount = true,
                 debuffTypeBorderMode = "OFF",
                 showTooltip = true,

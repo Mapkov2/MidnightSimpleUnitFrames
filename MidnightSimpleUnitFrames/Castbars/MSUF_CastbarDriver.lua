@@ -27,12 +27,6 @@ local tostring = tostring
 
 ExportPublic("MSUF_INTERRUPT_FEEDBACK_DURATION", _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5)
 
-local function SetFrameOnUpdateMode(frame, mode)
-    if frame and type(frame.SetOnUpdateMode) == "function" then
-        frame:SetOnUpdateMode(mode)
-    end
-end
-
 local function IsCastbarEnabledForUnit(unit)
     unit = unit or ""
 
@@ -248,14 +242,12 @@ local function SetSafetyOnUpdate(frame, enabled)
         frame._msufSafetyNext = nil
         frame._msufSafetyOnUpdate = nil
         frame:SetScript("OnUpdate", nil)
-        SetFrameOnUpdateMode(frame, "Disabled")
         return
     end
 
     frame._msufSafetyOnUpdate = nil
     frame._msufSafetyNext = nil
     frame:SetScript("OnUpdate", nil)
-    SetFrameOnUpdateMode(frame, "Disabled")
 end
 
 local function BuildState(frame)
@@ -1048,7 +1040,6 @@ local function HardHideDriverFrame(frame)
     end
     if frame.SetScript then
         frame:SetScript("OnUpdate", nil)
-        SetFrameOnUpdateMode(frame, "Disabled")
     end
     if frame.Hide then
         frame:Hide()

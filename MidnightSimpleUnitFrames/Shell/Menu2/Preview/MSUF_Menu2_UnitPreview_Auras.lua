@@ -449,6 +449,7 @@ local function LaneTextConfig(cfg, kind)
             showStackCount = cfg.buffShowStackCount,
             showCooldownText = cfg.buffShowCooldownText,
             showCooldownSwipe = cfg.buffShowCooldownSwipe,
+            cooldownSwipeReverse = cfg.buffCooldownSwipeReverse,
             stackAnchor = cfg.buffStackAnchor or cfg.stackAnchor,
             stackSize = cfg.buffStackSize or cfg.stackSize,
             stackX = cfg.buffStackX or cfg.stackX,
@@ -462,6 +463,7 @@ local function LaneTextConfig(cfg, kind)
         showStackCount = cfg.debuffShowStackCount,
         showCooldownText = cfg.debuffShowCooldownText,
         showCooldownSwipe = cfg.debuffShowCooldownSwipe,
+        cooldownSwipeReverse = cfg.debuffCooldownSwipeReverse,
         stackAnchor = cfg.debuffStackAnchor or cfg.stackAnchor,
         stackSize = cfg.debuffStackSize or cfg.stackSize,
         stackX = cfg.debuffStackX or cfg.stackX,
@@ -574,7 +576,17 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX, row * step * bounds.growthY)
         icon.tex:SetTexture(textures[((i - 1) % #textures) + 1])
         icon.edge:SetVertexColor(0, 0, 0, 0)
-        if icon.swipe then icon.swipe:SetShown(textCfg.showCooldownSwipe ~= false) end
+        if icon.swipe then
+            icon.swipe:ClearAllPoints()
+            if textCfg.cooldownSwipeReverse == true then
+                icon.swipe:SetPoint("TOPRIGHT", icon, "TOP", 0, 0)
+                icon.swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+            else
+                icon.swipe:SetPoint("TOPLEFT", icon, "TOP", 0, 0)
+                icon.swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+            end
+            icon.swipe:SetShown(textCfg.showCooldownSwipe ~= false)
+        end
         LayoutPreviewDispelBorder(icon, size, debuffBorderMode)
         ApplyAuraFont(icon.stack, stackSize)
         PlaceStack(icon.stack, icon, textCfg, S)

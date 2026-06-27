@@ -98,8 +98,16 @@ end
 ExportPublic("MSUF_IsCastTimeEnabled", IsCastTimeEnabled)
 
 --- Blizzard only has a native player castbar path. When MSUF owns the player
---- castbar, mark Blizzard's frames as suppressed and hook show attempts.
+--- castbar, stop Blizzard's event stream without writing addon-owned state onto
+--- the protected CastingBarFrame objects.
+local blizzardPlayerCastbarAllowed = true
+
 local function SetBlizzardPlayerCastbarAllowed(allowed)
+    blizzardPlayerCastbarAllowed = allowed and true or false
+    ns.UF.blizzardCastbarOwner = blizzardPlayerCastbarAllowed and "Blizzard" or "MSUF"
+end
+
+local function ForEachBlizzardPlayerCastbar(callback)
     local frames = {
         rawget(_G, "PlayerCastingBarFrame"),
         rawget(_G, "CastingBarFrame"),
@@ -108,16 +116,13 @@ local function SetBlizzardPlayerCastbarAllowed(allowed)
     for index = 1, #frames do
         local frame = frames[index]
         if frame then
-            frame.MSUF_PlayerCastbarAllowShown = allowed and true or false
-            frame.showCastbar = allowed and true or false
+            callback(frame)
         end
     end
-
-    ns.UF.blizzardCastbarOwner = allowed and "Blizzard" or "MSUF"
 end
 
 local function HideIfSuppressed(frame)
-    if frame and not frame.MSUF_PlayerCastbarAllowShown and frame.Hide then
+    if frame and not blizzardPlayerCastbarAllowed and frame.Hide then
         frame:Hide()
     end
 end
@@ -131,36 +136,13 @@ local function SuppressBlizzardPlayerCastbars()
     SetBlizzardPlayerCastbarAllowed(false)
 
     local hookedAny = false
-    local frames = {
-        rawget(_G, "PlayerCastingBarFrame"),
-        rawget(_G, "CastingBarFrame"),
-    }
-
-    for index = 1, #frames do
-        local frame = frames[index]
-        if frame then
-            hookedAny = true
-
-            if not frame.MSUF_HideHooked and hooksecurefunc then
-                frame.MSUF_HideHooked = true
-                hooksecurefunc(frame, "Show", HideIfSuppressed)
-
-                if frame.SetShown then
-                    hooksecurefunc(frame, "SetShown", function(hookedFrame, shown)
-                        if shown then
-                            HideIfSuppressed(hookedFrame)
-                        end
-                    end)
-                end
-
-                if frame.HookScript then
-                    frame:HookScript("OnShow", HideIfSuppressed)
-                end
-            end
-
-            HideIfSuppressed(frame)
+    ForEachBlizzardPlayerCastbar(function(frame)
+        hookedAny = true
+        if frame.UnregisterAllEvents then
+            frame:UnregisterAllEvents()
         end
-    end
+        HideIfSuppressed(frame)
+    end)
 
     return hookedAny
 end
