@@ -16,6 +16,8 @@ local min = math.min
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local VT = M.ValueTextList
 local WHITE_RGB = { 1, 1, 1 }
+local SPELL_INDICATORS_121_PTR_DISABLED = true
+local SPELL_INDICATORS_121_PTR_MESSAGE = "Disabled for 12.1 PTR; currently not working."
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle"
 local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
 local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText]])
@@ -430,13 +432,24 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local siEnable = W.SwitchAt(spells, Tr("Spell Indicators"), siLeftX, -72, siLeftW)
     siEnable._msuf2GroupFrameGateAlwaysEnabled = true
     M.BindBoolWidget(ctx, siEnable,
-        function() return SpellIndicators(CurrentScope()).enabled == true end,
+        function()
+            if SPELL_INDICATORS_121_PTR_DISABLED then return false end
+            return SpellIndicators(CurrentScope()).enabled == true
+        end,
         function(value)
+            if SPELL_INDICATORS_121_PTR_DISABLED then
+                SpellIndicators(CurrentScope()).enabled = false
+                QueueSpellIndicators(CurrentScope())
+                RefreshSpellIndicatorState()
+                return
+            end
             SpellIndicators(CurrentScope()).enabled = value and true or false
             EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
             QueueSpellIndicators(CurrentScope())
             RefreshSpellIndicatorState()
         end)
+    local siPtrNotice = W.Text(spells, Tr(SPELL_INDICATORS_121_PTR_MESSAGE), siLeftX, -96, siLeftW, T.colors.dim)
+    if siPtrNotice and siPtrNotice.SetWordWrap then siPtrNotice:SetWordWrap(false) end
     local siLayer = BindNestedSlider(ctx, W.Slider(spells, Tr("Layer"), 1, 15, 1, siRightW), function() return SpellIndicators(CurrentScope()) end, "layer", 9, "visual")
     W.MoveWidget(siLayer, spells, siRightX, -72, siRightW, "LEFT")
     local specDrop = W.Dropdown(spells, Tr("Spec"), SpellSpecValues, siLeftW)
@@ -451,7 +464,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             QueueSpellIndicators(kind)
             RefreshPage()
         end)
-    W.MoveWidget(specDrop, spells, siLeftX, -108, siLeftW, "LEFT")
+    W.MoveWidget(specDrop, spells, siLeftX, -116, siLeftW, "LEFT")
     local multiSpecDrop = W.Dropdown(spells, Tr("Multi-Spec Entry"), function() return SpellTrackedSpecValues() end, siRightW)
     M.BindDropdownWidget(ctx, multiSpecDrop,
         function() return CurrentSpellMultiSpec(CurrentScope()) end,
@@ -869,10 +882,14 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -754)
     local placedCooldownSize = BindConfigSlider(PlacedConfig, siRightX, siRightW, "Cooldown Text Size", 6, 24, 1, "cooldownSize", 8, -786)
     RefreshSpellIndicatorState = RefreshSpellIndicatorState(function()
+        if SPELL_INDICATORS_121_PTR_DISABLED and SpellIndicators(CurrentScope()).enabled ~= false then
+            SpellIndicators(CurrentScope()).enabled = false
+            QueueSpellIndicators(CurrentScope())
+        end
         EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
         RefreshSpellTiles()
         local spellCfg = SpellIndicators(CurrentScope())
-        local indicatorsOn = spellCfg.enabled == true
+        local indicatorsOn = (not SPELL_INDICATORS_121_PTR_DISABLED) and spellCfg.enabled == true
         local multi = spellCfg.spec == "multi"
         if W.SetControlShown then
             W.SetControlShown(multiSpecDrop, multi)
@@ -889,7 +906,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local hasFrame = hasSpell and frameKind ~= "none"
         local cdRelevant = placedEnabled and placed.type == "icon"
         local barRelevant = placedEnabled and placed.type == "bar"
-        SetOptionEnabled(siEnable, true)
+        SetOptionEnabled(siEnable, not SPELL_INDICATORS_121_PTR_DISABLED)
         SetManyEnabled(indicatorsOn, siLayer, specDrop)
         SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
         SetOptionEnabled(multiSpecEnabled, indicatorsOn and multi and CurrentSpellMultiSpec(CurrentScope()) ~= "")
@@ -901,11 +918,13 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetManyEnabled(hasFrame, frameColor, framePriority)
         SetOptionEnabled(frameAlpha, hasFrame and (frameKind == "healthtint" or frameKind == "pulse"))
         SetOptionEnabled(frameThickness, hasFrame and (frameKind == "border" or frameKind == "glow"))
-        SetSectionBadgesAndStatus(spells, {
+        local badges = {
             OnOffBadge(indicatorsOn, "Enabled", "Disabled"),
-            { text = OptionText(SpellSpecValues, SpellIndicators(CurrentScope()).spec or "auto", "Auto"), kind = indicatorsOn and "info" or "muted" },
-            { text = hasSpell and tostring(CurrentSpellAura(CurrentScope()) or "") or "No spell", kind = hasSpell and "accent" or "muted" },
-        })
+        }
+        if SPELL_INDICATORS_121_PTR_DISABLED then badges[#badges + 1] = { text = "12.1 PTR", kind = "muted", important = true } end
+        badges[#badges + 1] = { text = OptionText(SpellSpecValues, SpellIndicators(CurrentScope()).spec or "auto", "Auto"), kind = indicatorsOn and "info" or "muted" }
+        badges[#badges + 1] = { text = hasSpell and tostring(CurrentSpellAura(CurrentScope()) or "") or "No spell", kind = hasSpell and "accent" or "muted" }
+        SetSectionBadgesAndStatus(spells, badges)
     end)
     TrackSectionRefresh(ctx, spells, RefreshSpellIndicatorState)
 end

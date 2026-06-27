@@ -52,6 +52,7 @@ local NormalizeDispelOverlayStyle = UF.NormalizeDispelOverlayStyle or function(v
   if value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT" then return value end
   return "FULL"
 end
+local DISPEL_OVERLAY_121_PTR_DISABLED = true
 local NormalizeRangeFadeLayerMode = UF.NormalizeRangeFadeLayerMode or function(value)
   if value == "health" or value == "hp" or value == "hpbar" or value == "HP" or value == 2 then return "health" end
   return "frame"
@@ -654,7 +655,7 @@ local function CompileGroupVisuals(kind, conf)
     focusB = Num(conf.hlFocusColorB, 1),
     focusSize = Num(conf.hlFocusSize, 2),
     focusOffset = Num(conf.hlFocusOffset, 0),
-    dispelOverlayEnabled = conf.dispelOverlayEnabled == true,
+    dispelOverlayEnabled = (not DISPEL_OVERLAY_121_PTR_DISABLED) and conf.dispelOverlayEnabled == true,
     dispelOverlayStyle = NormalizeDispelOverlayStyle(conf.dispelOverlayStyle),
     dispelOverlayAlpha = Clamp01(conf.dispelOverlayAlpha, 0.35),
     dispelOverlayTrigger = NormalizeDispelOverlayTrigger(conf.dispelOverlayTrigger),
@@ -764,6 +765,7 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "Alpha"] = group.behindBar == true and LaneAlpha(group) or 1
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
   out[prefix .. "ShowCooldownSwipe"] = group.showCooldownSwipe ~= false
+  out[prefix .. "CooldownSwipeReverse"] = group.cooldownSwipeReverse == true
   out[prefix .. "ShowCooldown"] = group.showCooldown ~= false
   out[prefix .. "ShowStacks"] = defaults[7] ~= false and group.showStacks ~= false or group.showStacks == true
   out[prefix .. "CooldownSize"] = scale(group.cooldownSize, defaults[5], 6)

@@ -45,6 +45,11 @@ local REASON_HARDHIDE = "HARDHIDE"
 local EMPTY_OPTIONS = {}
 local STOP_TIMERS = { "hideTimer", "succeededTimer", "timer" }
 
+local function DisableFrameOnUpdate(frame)
+    if not frame or not frame.SetScript then return end
+    frame:SetScript("OnUpdate", nil)
+end
+
 local function CancelTimerHandle(timer)
     local timerType = type(timer)
     if timerType ~= "table" and timerType ~= "userdata" then
@@ -370,10 +375,7 @@ function Runtime:Stop(frame, reasonOrOptions)
         reason = REASON_STOPPED
     end
 
-    if frame.SetScript then
-        frame:SetScript("OnUpdate", nil)
-        frame:SetOnUpdateMode("Disabled")
-    end
+    DisableFrameOnUpdate(frame)
 
     if type(_G.MSUF_UnregisterCastbar) == "function" then
         _G.MSUF_UnregisterCastbar(frame)

@@ -268,7 +268,6 @@ local function ClearPreviewTest(frame, unit)
     frame.MSUF_testDur = nil
 
     if frame.SetScript then frame:SetScript("OnUpdate", nil) end
-    if frame.SetOnUpdateMode then frame:SetOnUpdateMode("Disabled") end
 
     if frame.statusBar and frame.statusBar.SetMinMaxValues then
         frame.statusBar:SetMinMaxValues(0, 1)
@@ -337,7 +336,6 @@ local function StartPreviewTest(frame)
     end
 
     frame:Show()
-    if frame.SetOnUpdateMode then frame:SetOnUpdateMode("RunWhenVisible") end
     frame:SetScript("OnUpdate", UpdatePreviewTest)
 end
 
@@ -651,7 +649,6 @@ local function HideCastbarPreviewFrame(frame)
     frame.MSUF_testDur = nil
 
     if frame.SetScript then frame:SetScript("OnUpdate", nil) end
-    if frame.SetOnUpdateMode then frame:SetOnUpdateMode("Disabled") end
 
     if frame.statusBar then
         if frame.statusBar.SetMinMaxValues then frame.statusBar:SetMinMaxValues(0, 1) end

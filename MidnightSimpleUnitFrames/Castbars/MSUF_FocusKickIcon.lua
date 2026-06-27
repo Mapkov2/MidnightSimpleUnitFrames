@@ -76,7 +76,6 @@ local function StopTimeUpdater(frame)
     frame.MSUF_timeUpdater = nil
     frame.MSUF_timeAccum = nil
     if frame.SetScript then frame:SetScript("OnUpdate", nil) end
-    if frame.SetOnUpdateMode then frame:SetOnUpdateMode("Disabled") end
 end
 
 local function SyncTimeText()
@@ -113,7 +112,6 @@ local function StartTimeUpdater()
 
     iconFrame.MSUF_timeUpdater = true
     iconFrame.MSUF_timeAccum = 0
-    if iconFrame.SetOnUpdateMode then iconFrame:SetOnUpdateMode("RunWhenVisible") end
     iconFrame:SetScript("OnUpdate", OnTimeUpdate)
     SyncTimeText()
 end

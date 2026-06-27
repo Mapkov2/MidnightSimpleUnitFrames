@@ -1308,6 +1308,7 @@ local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, def
     if type(group.blacklistCats) ~= "table" then
         group.blacklistCats = MSUF_ProfileIO_CopyDefaultBlacklistCats(groupKey)
     end
+    if group.cooldownSwipeReverse == nil then group.cooldownSwipeReverse = false end
     if type(group.blacklist) ~= "table" then group.blacklist = {} end
     if type(group.blacklist.spells) ~= "table" then group.blacklist.spells = {} end
 end

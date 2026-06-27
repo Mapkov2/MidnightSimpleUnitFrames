@@ -588,7 +588,6 @@ local function PlayerCastbarEmpowerStart(frame)
     end
 
     frame:SetScript("OnUpdate", nil)
-    frame:SetOnUpdateMode("Disabled")
     if type(_G.MSUF_EnsureCastbarManager) == "function" then _G.MSUF_EnsureCastbarManager() end
     if type(_G.MSUF_RegisterCastbar) == "function" then _G.MSUF_RegisterCastbar(frame) end
     if type(_G.MSUF_UpdateCastbarFrame) == "function" then _G.MSUF_UpdateCastbarFrame(frame, 0) end
@@ -638,7 +637,6 @@ local function PlayerCastbarClearEmpower(frame, hideFrame)
 
     if frame.SetScript then
         frame:SetScript("OnUpdate", nil)
-        frame:SetOnUpdateMode("Disabled")
     end
     if type(_G.MSUF_UnregisterCastbar) == "function" then
         _G.MSUF_UnregisterCastbar(frame)

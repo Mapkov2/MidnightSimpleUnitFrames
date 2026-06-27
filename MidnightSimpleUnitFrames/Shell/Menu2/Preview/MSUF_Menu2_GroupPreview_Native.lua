@@ -303,6 +303,7 @@ local function CompiledAuraLane(auras, key, fallback)
         y = auras[prefix .. "OffsetY"],
         layer = auras[prefix .. "Layer"],
         showCooldownSwipe = auras[prefix .. "ShowCooldownSwipe"],
+        cooldownSwipeReverse = auras[prefix .. "CooldownSwipeReverse"],
         showCooldown = auras[prefix .. "ShowCooldown"],
         showStacks = auras[prefix .. "ShowStacks"],
         cooldownSize = auras[prefix .. "CooldownSize"],

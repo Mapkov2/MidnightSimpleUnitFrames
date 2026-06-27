@@ -84,6 +84,7 @@ local DEFAULT_SHARED = {
     showDebuffs = true,
     showTooltip = true,
     showCooldownSwipe = true,
+    cooldownSwipeReverse = false,
     showCooldownText = true,
     showStackCount = true,
     debuffTypeBorderMode = "OFF",
@@ -133,6 +134,7 @@ local LANE_SPECS = {
         wrapKey = "buffGrowthY",
         showTextKey = "buffShowCooldownText",
         swipeKey = "buffShowCooldownSwipe",
+        swipeReverseKey = "buffCooldownSwipeReverse",
         showStackKey = "buffShowStackCount",
         stackAnchorKey = "buffStackCountAnchor",
         stackSizeKey = "buffStackTextSize",
@@ -162,6 +164,7 @@ local LANE_SPECS = {
         wrapKey = "debuffGrowthY",
         showTextKey = "debuffShowCooldownText",
         swipeKey = "debuffShowCooldownSwipe",
+        swipeReverseKey = "debuffCooldownSwipeReverse",
         showStackKey = "debuffShowStackCount",
         stackAnchorKey = "debuffStackCountAnchor",
         stackSizeKey = "debuffStackTextSize",
@@ -204,16 +207,19 @@ local STYLE_LAYOUT_KEYS = {
 local STYLE_SHARED_LAYOUT_KEYS = {
     showTooltip = true,
     showCooldownSwipe = true,
+    cooldownSwipeReverse = true,
     showCooldownText = true,
     showStackCount = true,
     debuffTypeBorderMode = true,
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
+    buffCooldownSwipeReverse = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
     buffStackCountAnchor = true,
     buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
+    debuffCooldownSwipeReverse = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
     debuffStackCountAnchor = true,
@@ -233,6 +239,7 @@ local GROUP_LANE_SPECS = {
         growthYKey = "buffGrowthY", anchorKey = "buffAnchor", xKey = "buffOffsetX",
         yKey = "buffOffsetY", layerKey = "buffLayer", filterKey = "buffFilter",
         showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
+        swipeReverseKey = "buffCooldownSwipeReverse",
         cooldownSizeKey = "buffCooldownSize", stackSizeKey = "buffStackSize",
         cooldownAnchorKey = "buffCooldownAnchor", cooldownXKey = "buffCooldownX",
         cooldownYKey = "buffCooldownY", stackAnchorKey = "buffStackAnchor",
@@ -248,6 +255,7 @@ local GROUP_LANE_SPECS = {
         growthYKey = "debuffGrowthY", anchorKey = "debuffAnchor", xKey = "debuffOffsetX",
         yKey = "debuffOffsetY", layerKey = "debuffLayer", filterKey = "debuffFilter",
         showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
+        swipeReverseKey = "debuffCooldownSwipeReverse",
         cooldownSizeKey = "debuffCooldownSize", stackSizeKey = "debuffStackSize",
         cooldownAnchorKey = "debuffCooldownAnchor", cooldownXKey = "debuffCooldownX",
         cooldownYKey = "debuffCooldownY", stackAnchorKey = "debuffStackAnchor",
@@ -263,6 +271,7 @@ local GROUP_LANE_SPECS = {
         growthYKey = "externalGrowthY", anchorKey = "externalAnchor", xKey = "externalOffsetX",
         yKey = "externalOffsetY", layerKey = "externalLayer", filterKey = "externalFilter",
         showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks", swipeKey = "externalShowCooldownSwipe",
+        swipeReverseKey = "externalCooldownSwipeReverse",
         cooldownSizeKey = "externalCooldownSize", stackSizeKey = "externalStackSize",
         cooldownAnchorKey = "externalCooldownAnchor", cooldownXKey = "externalCooldownX",
         cooldownYKey = "externalCooldownY", stackAnchorKey = "externalStackAnchor",
@@ -654,6 +663,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
         initialAnchor = ButtonAnchor(xSign, ySign),
         showCooldownText = ReadBool(layout, shared, spec.showTextKey, ReadBool(layout, shared, "showCooldownText", true)),
         showCooldownSwipe = ReadBool(layout, shared, spec.swipeKey, ReadBool(layout, shared, "showCooldownSwipe", true)),
+        cooldownSwipeReverse = ReadBool(layout, shared, spec.swipeReverseKey, ReadBool(layout, shared, "cooldownSwipeReverse", false)),
         showStacks = ReadBool(layout, shared, spec.showStackKey, ReadBool(layout, shared, "showStackCount", true)),
         showTooltip = ReadBool(layout, shared, "showTooltip", DEFAULT_SHARED.showTooltip),
         showAuraBorder = debuffTypeBorderMode ~= "OFF",
@@ -681,6 +691,8 @@ local function CompileGroupLane(unit, source, kind)
     local growthX, growthY, xSign, ySign, verticalGrowth = GroupGrowthParts(source[spec.growthXKey], source[spec.growthYKey])
     local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
     local debuffTypeBorderMode = kind == "debuff" and ReadGroupDebuffTypeBorderMode(source) or "OFF"
+    local cooldownSwipeReverse = source[spec.swipeReverseKey]
+    if cooldownSwipeReverse == nil then cooldownSwipeReverse = source.cooldownSwipeReverse end
     return FinalizeLane({
         kind = kind,
         rootKey = spec.rootKey,
@@ -709,6 +721,7 @@ local function CompileGroupLane(unit, source, kind)
         initialAnchor = ButtonAnchor(xSign, ySign),
         showCooldownText = source[spec.showTextKey] ~= false,
         showCooldownSwipe = source[spec.swipeKey] ~= false,
+        cooldownSwipeReverse = cooldownSwipeReverse == true,
         showStacks = source[spec.showStackKey] ~= false,
         showTooltip = source.showTooltip ~= false,
         showAuraBorder = debuffTypeBorderMode ~= "OFF",
@@ -1091,7 +1104,8 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.y) .. "\030" .. tostring(lane.layer)
         .. "\030" .. tostring(lane.xSign) .. "\030" .. tostring(lane.ySign)
         .. "\030" .. tostring(lane.verticalGrowth) .. "\030" .. tostring(lane.initialAnchor)
-        .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.showCooldownSwipe) .. "\030" .. tostring(lane.cooldownSize)
+        .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.showCooldownSwipe)
+        .. "\030" .. tostring(lane.cooldownSwipeReverse) .. "\030" .. tostring(lane.cooldownSize)
         .. "\030" .. tostring(lane.cooldownAnchor) .. "\030" .. tostring(lane.cooldownX)
         .. "\030" .. tostring(lane.cooldownY) .. "\030" .. tostring(lane.cooldownDecimalSeconds)
         .. "\030" .. tostring(lane.showStacks) .. "\030" .. tostring(lane.stackAnchor)
@@ -1210,6 +1224,7 @@ local function PrepareAuraButton(button, lane, index)
             cooldown = cd
         end
         if cooldown then
+            if type(cooldown.SetReverse) == "function" then cooldown:SetReverse(lane.cooldownSwipeReverse == true) end
             cooldown:Show()
             CallButtonMethod(button, "SetDurationCooldown", cooldown)
         end

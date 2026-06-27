@@ -23,6 +23,17 @@ local math_max = math.max
 local math_abs = math.abs
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
+local function DisableFrameOnUpdate(frame)
+    if not frame or not frame.SetScript then return end
+    frame:SetScript("OnUpdate", nil)
+end
+
+local function ClearFrameOnUpdateScript(frame)
+    if frame and frame.SetScript then
+        frame:SetScript("OnUpdate", nil)
+    end
+end
+
 local function EnsureDBLazy()
     local fn = _G.MSUF_EnsureDBLazy
     if type(fn) == "function" then
@@ -512,8 +523,7 @@ local function ApplyActiveCast(
     end
 
     UpdateLatencyZone(frame, isChannel, totalDuration)
-    frame:SetScript("OnUpdate", nil)
-    frame:SetOnUpdateMode("Disabled")
+    ClearFrameOnUpdateScript(frame)
     frame.MSUF_durationObj = durationObj
     frame.MSUF_timerDriven = timerDriven and true or nil
 
@@ -561,8 +571,7 @@ local function StopPlayerCastbar(frame)
     if _G.MSUF_CB_ResetStateOnStop then
         _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
     else
-        frame:SetScript("OnUpdate", nil)
-        frame:SetOnUpdateMode("Disabled")
+        DisableFrameOnUpdate(frame)
         if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
         if frame.latencyBar then frame.latencyBar:Hide() end
         if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
@@ -710,8 +719,7 @@ local function HideIfNoLongerCasting(owner)
         return
     end
 
-    frame:SetScript("OnUpdate", nil)
-    frame:SetOnUpdateMode("Disabled")
+    DisableFrameOnUpdate(frame)
     if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
     if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
     frame._msufActiveCastGUID = nil
@@ -727,8 +735,7 @@ local function ShowInterruptFeedback(frame, label)
     EnsureDBLazy()
     local playerDB = (_G.MSUF_DB and _G.MSUF_DB.player) or {}
     if playerDB.showInterrupt == false then
-        frame:SetScript("OnUpdate", nil)
-        frame:SetOnUpdateMode("Disabled")
+        DisableFrameOnUpdate(frame)
         frame.interruptFeedbackEndTime = nil
         if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
         if frame.statusBar and frame.statusBar.SetValue then frame.statusBar:SetValue(0) end
@@ -741,8 +748,7 @@ local function ShowInterruptFeedback(frame, label)
         frame.hideTimer = nil
     end
 
-    frame:SetScript("OnUpdate", nil)
-    frame:SetOnUpdateMode("Disabled")
+    DisableFrameOnUpdate(frame)
     if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
     frame.MSUF_durationObj = nil
     frame.MSUF_channelDirect = nil
@@ -782,8 +788,7 @@ local function ShowInterruptFeedback(frame, label)
 end
 
 local function DisablePlayerCastbar(frame)
-    frame:SetScript("OnUpdate", nil)
-    frame:SetOnUpdateMode("Disabled")
+    DisableFrameOnUpdate(frame)
     if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
     frame.interruptFeedbackEndTime = nil
     ClearActiveCastIdentity(frame)

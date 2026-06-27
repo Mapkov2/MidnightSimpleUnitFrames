@@ -793,7 +793,6 @@ end
 local function HideCastbar(frame, preview)
     if frame then
         frame:SetScript("OnUpdate", nil)
-        frame:SetOnUpdateMode("Disabled")
         if frame.timeText and _G.MSUF_IsCastTimeEnabled(frame) then
             _G.MSUF_SetTextIfChanged(frame.timeText, "")
         end
