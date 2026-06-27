@@ -31,6 +31,7 @@ local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
 local C_Timer = _G.C_Timer
+local UnitGUID = _G.UnitGUID
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local EMPTY_EVENTS = {}
@@ -854,7 +855,14 @@ local function EnsureRoot(frame)
     root._msufA3NativeRoot = true
     root:SetAllPoints(frame)
     root:SetScript("OnShow", function(self)
-        if RefreshAppliedNativeRoot then RefreshAppliedNativeRoot(self, true) end
+        -- Re-show needs a content reparse: while hidden the container is
+        -- unregistered from UNIT_AURA, so it missed any changes. Record the GUID
+        -- it parsed for so a following identity flush does not reparse again.
+        if RefreshAppliedNativeRoot and RefreshAppliedNativeRoot(self, true) then
+            local owner = self:GetParent()
+            local unit = owner and owner.unit
+            self._msufA3ParsedGUID = unit and UnitGUID and UnitGUID(unit) or nil
+        end
     end)
     root:Hide()
     frame.Auras = root
@@ -968,6 +976,18 @@ local function SyncContainerGeometry(container, lane, parentFrame)
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     container._msufA3NativeLaneConfig = lane
     container._msufA3ParentFrame = parentFrame
+    -- Geometry depends only on the lane's layout signature (size/spacing/anchor/
+    -- offsets/level/growth/visual gen) and the parent frame. Content-only
+    -- refreshes -- swaps, identity, UNIT_AURA -- reuse the same lane, so skip the
+    -- container resize + per-button re-layout when nothing geometric changed. A
+    -- changed icon count or filter alters the tracking signature instead, which
+    -- recreates the container, so a stale skip here is not possible.
+    local sig = lane._msufA3LayoutSignature
+    if sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
+        return true
+    end
+    container._msufA3GeomSig = sig
+    container._msufA3GeomParent = parentFrame
     container.createdButtons = lane.max
     container:SetSize(lane.width, lane.height)
     if parentFrame then
@@ -1277,7 +1297,17 @@ local function FlushIdentityQueue()
         -- Only touch frames that still own applied native auras; a frame disabled
         -- between enqueue and flush must not be resurrected here.
         if root and root._msufA3NativeRoot == true and root._msufA3Applied == true then
-            RefreshAppliedNativeAuras(frame, true)
+            -- Reparse only when the unit behind the token actually changed.
+            -- Identity also fires for spurious/soft-target churn that does not move
+            -- the displayed GUID; skipping those keeps the (expensive) reparse to
+            -- one per real swap. A matching GUID means content is already current
+            -- and the container's own UNIT_AURA keeps it fresh.
+            local unit = frame.unit
+            local guid = unit and UnitGUID and UnitGUID(unit) or nil
+            if guid == nil or guid ~= root._msufA3ParsedGUID then
+                root._msufA3ParsedGUID = guid
+                RefreshAppliedNativeAuras(frame, true)
+            end
         end
     end
 end
@@ -1334,6 +1364,10 @@ local function ApplyConfig(frame, cfg, reason)
     root._msufA3VisualGen = VisualGen(cfg)
     root._msufA3AppliedUnit = cfg.unit or frame.unit
     root._msufA3FrameSpec = frame.MSUFSpec
+    -- Lanes were just (re)built and populated for the current unit; record its
+    -- GUID so the identity flush after an acquire/config change skips the
+    -- otherwise-redundant reparse (the GUID gate in FlushIdentityQueue).
+    root._msufA3ParsedGUID = UnitGUID and UnitGUID(cfg.unit or frame.unit) or nil
     root.needFullUpdate = nil
     root:Show()
     return ok == true
