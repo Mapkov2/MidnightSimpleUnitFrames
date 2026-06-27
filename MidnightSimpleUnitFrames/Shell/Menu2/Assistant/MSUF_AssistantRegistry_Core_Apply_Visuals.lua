@@ -94,8 +94,15 @@ function A.RegistryCoreBuilders.BuildVisualApplyHelpers(ctx)
         RequestColors(reason or "MSUF_ASSISTANT_AURA_COLORS")
         CallGlobal("MSUF_GF_InvalidateCooldownTextCurve")
         CallGlobal("MSUF_GF_ForceCooldownTextRecolor")
+        -- Aura timer bucket coloring is baked into a C-side formatter at button-create
+        -- time; ApplyFontsFromGlobal bumps the native visual generation so lanes
+        -- recreate and pick up new colors/thresholds (a plain RefreshAll reuses lanes).
         local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
+        if a3 and type(a3.ApplyFontsFromGlobal) == "function" then
+            a3.ApplyFontsFromGlobal()
+        elseif a3 and type(a3.RefreshAll) == "function" then
+            a3.RefreshAll()
+        end
         CallGlobal("MSUF_GF_ForceAuraTextColorRefresh")
     end
 

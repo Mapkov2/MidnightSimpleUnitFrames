@@ -965,12 +965,12 @@ local function BuildGroupStyle(ctx, b, scope)
     refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, section, scope, rightX, -404, rightW, 118, lane))
 end
 local function BuildSharedColors(ctx, b)
-    local section = b:Section("Shared Aura Colors", 438)
+    local section = b:Section("Shared Aura Colors", 480)
     local w = section._msuf2Width or b.width or 720
     local colW = max(310, floor((w - 58) / 2))
     local rightX = 24 + colW + 18
-    local cooldown = Card(section, "Cooldown Timer Colors", nil, 24, -42, colW, 338)
-    local markers = Card(section, "Stack & Highlights", nil, rightX, -42, colW, 338)
+    local cooldown = Card(section, "Cooldown Timer Colors", nil, 24, -42, colW, 380)
+    local markers = Card(section, "Stack & Highlights", nil, rightX, -42, colW, 380)
     local preview = T.Panel(cooldown, nil, { 0.014, 0.020, 0.040, 0.82 }, T.colors.borderSoft)
     preview:SetPoint("TOPLEFT", cooldown, "TOPLEFT", 16, -60)
     preview:SetSize(colW - 32, 88)
@@ -1023,11 +1023,14 @@ local function BuildSharedColors(ctx, b)
     BindGeneralColor(markers, "Own Debuff", -142, "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30)
     BindSlider(ctx, markers, "Safe seconds", 16, -196, 0, 600, 1, colW - 32,
         function() return Model.ReadGeneralNumber("aurasCooldownTextSafeSeconds", 60, 0, 600) end,
-        function(v) Model.WriteGeneralNumber("aurasCooldownTextSafeSeconds", v, 0, 600) end)
+        function(v) Model.WriteGeneralNumber("aurasCooldownTextSafeSeconds", v, 0, 600); RequestAuraTextRefresh() end)
     BindSlider(ctx, markers, "Warning <= sec", 16, -256, 0, 60, 1, colW - 32,
         function() return Model.ReadGeneralNumber("aurasCooldownTextWarningSeconds", 15, 0, 60) end,
-        function(v) Model.WriteGeneralNumber("aurasCooldownTextWarningSeconds", v, 0, 60) end)
-    W.Text(section, "Timer and marker colors are shared by unit and group aura previews.", 24, -398, w - 48, T.colors.muted)
+        function(v) Model.WriteGeneralNumber("aurasCooldownTextWarningSeconds", v, 0, 60); RequestAuraTextRefresh() end)
+    BindSlider(ctx, markers, "Urgent <= sec", 16, -316, 0, 30, 1, colW - 32,
+        function() return Model.ReadGeneralNumber("aurasCooldownTextUrgentSeconds", 5, 0, 30) end,
+        function(v) Model.WriteGeneralNumber("aurasCooldownTextUrgentSeconds", v, 0, 30); RequestAuraTextRefresh() end)
+    W.Text(section, "Timer and marker colors are shared by unit and group aura previews.", 24, -440, w - 48, T.colors.muted)
     M.TrackRefresh(ctx, RefreshColorSamples)
 end
 local function BuildAuraStylePage(ctx)

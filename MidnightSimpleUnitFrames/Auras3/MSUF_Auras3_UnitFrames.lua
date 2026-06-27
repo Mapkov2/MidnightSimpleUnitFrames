@@ -785,6 +785,87 @@ local function ApplyFont(fs, size)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
 end
 
+-- "Color aura timers by remaining time": a C-side NumericRuleFormatter that
+-- colors the duration text by remaining seconds. Blizzard's DurationTextBinding
+-- evaluates the formatter against the (secret) aura duration object every update
+-- entirely C-side, so there is zero addon timer/OnUpdate cost (see SetDurationText
+-- in Blizzard_CustomAuraButton). The formatter is rebuilt only when the shared
+-- bucket settings change; that change bumps _nativeVisualGen (ApplyFontsFromGlobal),
+-- which recreates every lane and re-runs PrepareAuraButton with the fresh formatter.
+local function ColorEscape(r, g, b)
+    return string.format("|cff%02x%02x%02x", Round(Clamp01(r, 1) * 255), Round(Clamp01(g, 1) * 255), Round(Clamp01(b, 1) * 255))
+end
+
+local _durationFormatterCache
+local _durationFormatterSig
+
+local function BuildAuraDurationFormatter()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    if not general then return nil end
+    if general.aurasCooldownTextUseBuckets ~= true then return nil end
+
+    local C_StringUtil = _G.C_StringUtil
+    if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then return nil end
+
+    -- Safe color falls back to the configured global font color when the user has
+    -- not picked one, matching the menu's Safe swatch behavior.
+    local safe = general.aurasCooldownTextSafeColor
+    local sr, sg, sb
+    if type(safe) == "table" then
+        sr, sg, sb = safe[1] or safe.r, safe[2] or safe.g, safe[3] or safe.b
+    elseif type(_G.MSUF_GetConfiguredFontColor) == "function" then
+        sr, sg, sb = _G.MSUF_GetConfiguredFontColor()
+    end
+    sr, sg, sb = Clamp01(sr, 1), Clamp01(sg, 1), Clamp01(sb, 1)
+
+    local warn = general.aurasCooldownTextWarningColor
+    local wr, wg, wb = 1, 0.85, 0.20
+    if type(warn) == "table" then wr, wg, wb = warn[1] or warn.r or wr, warn[2] or warn.g or wg, warn[3] or warn.b or wb end
+
+    local urgent = general.aurasCooldownTextUrgentColor
+    local ur, ug, ub = 1, 0.55, 0.10
+    if type(urgent) == "table" then ur, ug, ub = urgent[1] or urgent.r or ur, urgent[2] or urgent.g or ug, urgent[3] or urgent.b or ub end
+
+    -- Three boundaries in seconds, ascending: Urgent < Warning < Safe. A breakpoint's
+    -- threshold is the minimum input value it applies to; the highest threshold
+    -- <= remaining seconds wins. Above the Safe boundary we emit no color escape so
+    -- the text keeps its base font color (the fontstring's own SetTextColor).
+    local urgentSec = ClampNumber(general.aurasCooldownTextUrgentSeconds, 5, 0, 600)
+    local warningSec = ClampNumber(general.aurasCooldownTextWarningSeconds, 15, 0, 600)
+    local safeSec = ClampNumber(general.aurasCooldownTextSafeSeconds, 60, 0, 600)
+    if warningSec < urgentSec then warningSec = urgentSec end
+    if safeSec < warningSec then safeSec = warningSec end
+
+    local sig = table_concat({
+        sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
+    }, "\030")
+    if _durationFormatterCache and _durationFormatterSig == sig then
+        return _durationFormatterCache
+    end
+
+    local formatter = C_StringUtil.CreateNumericRuleFormatter()
+    formatter:AddBreakpoint({ threshold = 0, format = ColorEscape(ur, ug, ub) .. "%.1f|r" })
+    if warningSec > urgentSec then
+        formatter:AddBreakpoint({ threshold = urgentSec, format = ColorEscape(wr, wg, wb) .. "%.1f|r" })
+    end
+    if safeSec > warningSec then
+        formatter:AddBreakpoint({ threshold = warningSec, format = ColorEscape(sr, sg, sb) .. "%.1f|r" })
+        formatter:AddBreakpoint({ threshold = safeSec, format = "%.1f" })
+    else
+        -- Safe boundary collapsed onto Warning: Safe-colored from warningSec up.
+        formatter:AddBreakpoint({ threshold = warningSec, format = ColorEscape(sr, sg, sb) .. "%.1f|r" })
+    end
+
+    _durationFormatterCache = formatter
+    _durationFormatterSig = sig
+    return formatter
+end
+
+-- Reusable options table for SetDurationText. Blizzard securecopies options on
+-- each call, so a single mutated table is safe across buttons and avoids per-button
+-- garbage; we only ever set .formatter on it.
+local _durationTextOptions = {}
+
 local function PlaceStackText(fs, owner, lane)
     if not (fs and owner and lane) then return end
     fs:ClearAllPoints()
@@ -1049,7 +1130,17 @@ local function PrepareAuraButton(button, lane, index)
         ApplyFont(duration, lane.cooldownSize)
         PlaceCooldownText(duration, button, lane)
         duration:Show()
-        CallButtonMethod(button, "SetDurationText", duration)
+        -- When "Color aura timers by remaining time" is on, hand Blizzard a C-side
+        -- NumericRuleFormatter so the duration text is colored/formatted from the
+        -- secret duration object with no addon cost. When off, pass no options and
+        -- the binding uses Blizzard's DefaultAuraDurationFormatter (plain seconds).
+        local formatter = BuildAuraDurationFormatter()
+        if formatter then
+            _durationTextOptions.formatter = formatter
+            CallButtonMethod(button, "SetDurationText", duration, _durationTextOptions)
+        else
+            CallButtonMethod(button, "SetDurationText", duration)
+        end
     else
         CallButtonMethod(button, "ClearDurationText")
     end
