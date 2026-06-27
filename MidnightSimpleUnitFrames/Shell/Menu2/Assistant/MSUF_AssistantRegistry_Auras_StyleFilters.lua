@@ -24,6 +24,8 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AURA_STACK_ANCHOR_ALIASES = ctx.AURA_STACK_ANCHOR_ALIASES or {}
     local AURA_LANE_STYLE_BOOLEAN_SPECS = ctx.AURA_LANE_STYLE_BOOLEAN_SPECS or {}
     local AURA_LANE_STYLE_NUMBER_SPECS = ctx.AURA_LANE_STYLE_NUMBER_SPECS or {}
+    local AURA_DEBUFF_TYPE_BORDER_VALUES = ctx.AURA_DEBUFF_TYPE_BORDER_VALUES or {}
+    local AURA_DEBUFF_TYPE_BORDER_ALIASES = ctx.AURA_DEBUFF_TYPE_BORDER_ALIASES or {}
     local AddAliasesForAuraScope = ctx.AddAliasesForAuraScope
     local AddAuraLaneAliases = ctx.AddAuraLaneAliases
     local AuraScopeLabel = ctx.AuraScopeLabel
@@ -53,10 +55,56 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AuraSetUseSharedVisuals = ctx.AuraSetUseSharedVisuals
     local AuraUseSharedRules = ctx.AuraUseSharedRules
     local AuraSetUseSharedRules = ctx.AuraSetUseSharedRules
+    local AuraModel = ctx.AuraModel
+    local ApplyAura = ctx.ApplyAura
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(AddAliasesForAuraScope) ~= "function" or type(AddAuraLaneAliases) ~= "function" then return end
     if type(AuraScopeLabel) ~= "function" or type(RegisterAuraScopeBoolean) ~= "function" then return end
+
+    if #AURA_DEBUFF_TYPE_BORDER_VALUES == 0 then
+        AURA_DEBUFF_TYPE_BORDER_VALUES = { "OFF", "BORDER", "SYMBOL" }
+    end
+    local debuffBorderAllowed = {}
+    for i = 1, #AURA_DEBUFF_TYPE_BORDER_VALUES do debuffBorderAllowed[AURA_DEBUFF_TYPE_BORDER_VALUES[i]] = true end
+
+    local function NormalizeDebuffTypeBorderMode(value)
+        value = tostring(value or "OFF")
+        return debuffBorderAllowed[value] and value or "OFF"
+    end
+
+    local function AuraReadStyleBool(scope, key, defaultValue)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.ReadBool) == "function" then return Model.ReadBool(scope, key, defaultValue) end
+        return AuraSharedBool(key, defaultValue)
+    end
+
+    local function AuraWriteStyleBool(scope, key, value)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.WriteBool) == "function" then
+            Model.WriteBool(scope, key, value)
+            return
+        end
+        SetAuraSharedBool(key, value)
+    end
+
+    local function AuraReadDebuffTypeBorderMode(scope)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.ReadDebuffTypeBorderMode) == "function" then
+            return NormalizeDebuffTypeBorderMode(Model.ReadDebuffTypeBorderMode(scope))
+        end
+        return AuraReadLaneStyleBool(scope, "debuff", "useDebuffTypeBorders", false) and "SYMBOL" or "OFF"
+    end
+
+    local function AuraWriteDebuffTypeBorderMode(scope, value)
+        value = NormalizeDebuffTypeBorderMode(value)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.WriteDebuffTypeBorderMode) == "function" then
+            Model.WriteDebuffTypeBorderMode(scope, value)
+            return
+        end
+        AuraWriteLaneStyleBool(scope, "debuff", "useDebuffTypeBorders", value ~= "OFF")
+    end
 
     for _, scope in ipairs(AURA_SCOPES) do
         local aliases = {}
@@ -82,6 +130,43 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             function() return AuraSharedBool("showCooldownSwipe", true) end,
             function(value) SetAuraSharedBool("showCooldownSwipe", value) end,
             true)
+
+        if scope ~= "shared" then
+            aliases = {}
+            AddAliasesForAuraScope(aliases, scope, "show tooltip")
+            AddAliasesForAuraScope(aliases, scope, "tooltip")
+            AddAliasesForAuraScope(aliases, scope, "aura tooltip")
+            AddAliasesForAuraScope(aliases, scope, "aura tooltips")
+            RegisterAuraScopeBoolean(scope, "showTooltip", "Aura Tooltips", true, aliases,
+                function() return AuraReadStyleBool(scope, "showTooltip", true) end,
+                function(value) AuraWriteStyleBool(scope, "showTooltip", value) end,
+                true)
+        end
+
+        aliases = {}
+        AddAliasesForAuraScope(aliases, scope, "debuff type border")
+        AddAliasesForAuraScope(aliases, scope, "debuff border mode")
+        AddAliasesForAuraScope(aliases, scope, "dispel type border")
+        AddAliasesForAuraScope(aliases, scope, "dispel border mode")
+        AddAliasesForAuraScope(aliases, scope, "aura debuff border")
+        Registry:RegisterSetting({
+            key = "auras3." .. scope .. ".debuffTypeBorderMode",
+            label = AuraScopeLabel(scope) .. " Debuff Type Border",
+            category = AuraScopeLabel(scope) .. " / Aura Style",
+            unit = scope,
+            frameType = "aura",
+            attribute = "auraDebuffTypeBorderMode",
+            type = "enum",
+            aliases = aliases,
+            values = AURA_DEBUFF_TYPE_BORDER_VALUES,
+            valueAliases = AURA_DEBUFF_TYPE_BORDER_ALIASES,
+            get = function() return AuraReadDebuffTypeBorderMode(scope) end,
+            set = function(value) AuraWriteDebuffTypeBorderMode(scope, value) end,
+            apply = function()
+                if type(ApplyAura) == "function" then ApplyAura(scope, "MSUF_ASSISTANT_AURA_STYLE") end
+            end,
+            combatSafe = false,
+        })
 
         aliases = {}
         AddAliasesForAuraScope(aliases, scope, "stack anchor")

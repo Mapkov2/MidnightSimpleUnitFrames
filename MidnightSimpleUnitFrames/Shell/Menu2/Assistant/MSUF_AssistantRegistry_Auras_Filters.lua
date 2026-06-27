@@ -65,6 +65,14 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
     for _, laneInfo in ipairs(AURA_LANES) do
         local lane = laneInfo.key
         local settingScope, settingLane = scope, lane
+        local values = AURA_EXCLUSIVE_FILTER_VALUES[settingLane] or { "none" }
+        local defaultValue = values[1] or "none"
+        local allowed = {}
+        for i = 1, #values do allowed[values[i]] = true end
+        local valueAliases = {}
+        for alias, value in pairs(AURA_EXCLUSIVE_FILTER_ALIASES) do
+            if allowed[value] then valueAliases[alias] = value end
+        end
         aliases = {}
         AddAuraLaneAliases(aliases, settingScope, settingLane, "exclusive filter")
         AddAuraLaneAliases(aliases, settingScope, settingLane, "exclusive")
@@ -77,10 +85,16 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
             attribute = "aura" .. settingLane .. "FilterExclusive",
             type = "enum",
             aliases = aliases,
-            values = AURA_EXCLUSIVE_FILTER_VALUES[settingLane],
-            valueAliases = AURA_EXCLUSIVE_FILTER_ALIASES,
-            get = function() return tostring(AuraReadFilter(settingScope, settingLane, "exclusive", "none") or "none") end,
-            set = function(value) AuraWriteFilter(settingScope, settingLane, "exclusive", value or "none") end,
+            values = values,
+            valueAliases = valueAliases,
+            get = function()
+                local value = tostring(AuraReadFilter(settingScope, settingLane, "exclusive", defaultValue) or defaultValue)
+                return allowed[value] and value or defaultValue
+            end,
+            set = function(value)
+                value = tostring(value or defaultValue)
+                AuraWriteFilter(settingScope, settingLane, "exclusive", allowed[value] and value or defaultValue)
+            end,
             apply = function() ApplyAura(settingScope, "MSUF_ASSISTANT_AURA_FILTER_EXCLUSIVE") end,
             combatSafe = false,
         })

@@ -26,6 +26,7 @@ Data.AURA_LANE_STYLE_NUMBER_SPECS = {
     { key = "cooldownTextSize", label = "Cooldown Text Size", defaultValue = 14, minValue = 6, maxValue = 40, words = { "cooldown size", "cooldown text size", "timer text size" } },
     { key = "cooldownTextOffsetX", label = "Cooldown Text X Offset", defaultValue = 0, minValue = -2000, maxValue = 2000, words = { "cooldown x", "cooldown x offset", "cooldown text x", "timer text x offset" } },
     { key = "cooldownTextOffsetY", label = "Cooldown Text Y Offset", defaultValue = 0, minValue = -2000, maxValue = 2000, words = { "cooldown y", "cooldown y offset", "cooldown text y", "timer text y offset" } },
+    { key = "cooldownDecimalSeconds", label = "Cooldown Decimal Threshold", defaultValue = 3, minValue = 0, maxValue = 30, words = { "cooldown decimals", "cooldown decimal", "cooldown decimal threshold", "timer decimals", "timer decimal threshold", "decimals below sec", "decimals below seconds", "decimal seconds" } },
 }
 
 Data.AURA_FILTER_BOOLEAN_SPECS = {
@@ -44,20 +45,39 @@ Data.AURA_FILTER_BOOLEAN_SPECS = {
 }
 
 Data.AURA_EXCLUSIVE_FILTER_VALUES = {
-    buff = { "none", "important" },
-    debuff = { "none", "important", "raid" },
+    buff = { "none" },
+    debuff = { "none", "raid" },
 }
 
 Data.AURA_EXCLUSIVE_FILTER_ALIASES = {
     none = "none",
     off = "none",
     disabled = "none",
-    important = "important",
-    importantonly = "important",
-    ["important only"] = "important",
     raid = "raid",
     boss = "raid",
     encounter = "raid",
     all = "none",
     everything = "none",
+}
+
+Data.AURA_DEBUFF_TYPE_BORDER_VALUES = { "OFF", "BORDER", "SYMBOL" }
+Data.AURA_DEBUFF_TYPE_BORDER_ALIASES = {
+    off = "OFF",
+    none = "OFF",
+    disabled = "OFF",
+    hide = "OFF",
+    hidden = "OFF",
+    border = "BORDER",
+    ["border only"] = "BORDER",
+    ["just border"] = "BORDER",
+    outline = "BORDER",
+    ["outline only"] = "BORDER",
+    symbol = "SYMBOL",
+    icon = "SYMBOL",
+    ["border symbol"] = "SYMBOL",
+    ["border and symbol"] = "SYMBOL",
+    ["border plus symbol"] = "SYMBOL",
+    ["border + symbol"] = "SYMBOL",
+    ["with symbol"] = "SYMBOL",
+    ["with icon"] = "SYMBOL",
 }
