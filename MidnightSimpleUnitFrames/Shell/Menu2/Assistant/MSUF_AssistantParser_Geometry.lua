@@ -661,8 +661,7 @@ end
 
 function OM.ReadValue(setting)
     if setting and type(setting.get) == "function" then
-        local ok, value = pcall(setting.get)
-        if ok then return value end
+        return setting.get()
     end
     return nil
 end
@@ -882,8 +881,7 @@ end
 function P.UnitPowerBarIsDetached(unit)
     local setting = Registry and Registry:GetSetting(tostring(unit or "") .. ".powerBarDetached")
     if setting and type(setting.get) == "function" then
-        local ok, value = pcall(setting.get)
-        if ok then return value == true end
+        return setting.get() == true
     end
     return false
 end
@@ -1089,6 +1087,48 @@ function P.ParsePairwiseFrameSpacingShortcut(text)
         bulkSafe = true,
         compoundComplete = true,
         summary = "Moves two frame root offsets along their strongest separation axis.",
+    }
+end
+
+function P.ParseBossFrameSpacingShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, CLASS_POWER_TERMS) then return nil end
+    if not ContainsAny(text, { "boss", "boss frame", "boss frames", "bossframe", "bossframes" }) then return nil end
+
+    local mode
+    if ContainsAny(text, {
+        "closer together", "closer to each other", "nearer together", "bring together",
+        "less space", "less spacing", "reduce spacing", "decrease spacing", "tighten spacing",
+        "smaller spacing", "smaller gap", "less gap", "compact spacing",
+        "tighter", "tighter spacing", "more compact", "too far apart",
+    }) then
+        mode = "closer"
+    elseif ContainsAny(text, {
+        "farther apart", "further apart", "spread apart", "spread out", "space out",
+        "more space", "more spacing", "more distance", "increase spacing", "add spacing",
+        "add space between", "bigger spacing", "larger spacing", "bigger gap", "larger gap",
+        "looser", "looser spacing", "too close",
+    }) or (ContainsAny(text, { "spread", "space" }) and ContainsAny(text, { "apart", "out" })) then
+        mode = "apart"
+    else
+        return nil
+    end
+
+    local setting = Registry and Registry:GetSetting("boss.spacing")
+    if not setting then return nil end
+    local amount = FirstNumber(text) or 10
+    if mode == "apart" then amount = -amount end
+    return {
+        kind = "changes",
+        changes = {
+            {
+                setting = setting,
+                relativeDelta = amount,
+                direction = mode == "closer" and "closer" or "apart",
+            },
+        },
+        label = mode == "closer" and "Move boss frames closer together" or "Move boss frames farther apart",
+        summary = "Adjusts boss-frame stack spacing.",
     }
 end
 

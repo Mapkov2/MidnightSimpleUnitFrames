@@ -193,10 +193,8 @@ local function SimpleParse(text)
         P._compoundDepth = math.max(0, (tonumber(P._compoundDepth) or 1) - 1)
     else
         P._compoundDepth = (tonumber(P._compoundDepth) or 0) + 1
-        local ok
-        ok, parsed = pcall(A.Parse, text)
+        parsed = A.Parse(text)
         P._compoundDepth = math.max(0, (tonumber(P._compoundDepth) or 1) - 1)
-        if not ok then parsed = nil end
     end
     if type(cache) == "table" and cacheKey then cache[cacheKey] = parsed or false end
     return parsed

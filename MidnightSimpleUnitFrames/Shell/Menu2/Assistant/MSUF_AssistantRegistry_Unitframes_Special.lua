@@ -249,7 +249,7 @@ Registry:RegisterSetting({
     combatSafe = false,
     description = "Controls the Boss Layout toggle that highlights the unit targeted by boss frames.",
 })
-RegisterUnitNumberSetting("boss", "spacing", "spacing", "Boss Spacing", -36, -400, 0, MakeAliases("boss", "spacing", "frame spacing"), {
+RegisterUnitNumberSetting("boss", "spacing", "spacing", "Boss Spacing", -36, -400, 0, MakeAliases("boss", "spacing", "frame spacing", "closer together", "farther apart", "gap between frames", "distance between frames"), {
     category = "Boss Layout",
     applyOpts = { preview = true },
 })

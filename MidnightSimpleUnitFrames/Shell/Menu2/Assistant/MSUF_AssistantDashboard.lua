@@ -128,8 +128,7 @@ local function IsUUFImportString(value)
     -- cannot promise one-to-one aura or unsupported-setting mapping.
     local fn = _G.MSUF_IsUUFImportString
     if type(fn) == "function" then
-        local ok, result = pcall(fn, value)
-        if ok then return result == true end
+        return fn(value) == true
     end
     return type(value) == "string" and value:match("^%s*!UUF_") ~= nil
 end

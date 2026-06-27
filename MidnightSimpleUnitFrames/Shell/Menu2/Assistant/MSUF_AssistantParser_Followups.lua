@@ -61,8 +61,8 @@ end
 
 local function FollowupValueDisplay(setting, value)
     if P and type(P.ValueDisplay) == "function" then
-        local ok, label = pcall(P.ValueDisplay, setting, value)
-        if ok and label ~= nil then return tostring(label) end
+        local label = P.ValueDisplay(setting, value)
+        if label ~= nil then return tostring(label) end
     end
     if value == nil then return "not set" end
     if setting and setting.type == "boolean" then return value and "enabled" or "disabled" end
@@ -357,8 +357,15 @@ local function BuildFollowup(text, ctx)
     local targetReplayIntent = ContainsAny(text, replayTerms)
     local pureNumberIntent = tostring(text or ""):match("^[-+]?%d+%.?%d*$") ~= nil
     local exactValueReference = ContainsAny(text, {
-        "it", "that", "this", "last setting", "last value", "actually", "instead", "rather",
-        "no", "nope", "wait", "oops", "set it", "make it", "change it", "use",
+        "it", "that", "this",
+        "last setting", "last value", "actually", "instead", "rather",
+        "no", "nope", "wait", "oops",
+        "set it", "set them", "set those", "set these",
+        "make it", "make them", "make those", "make these",
+        "change it", "change them", "change those", "change these",
+        "move it to", "move them to", "move those to", "move these to",
+        "them to", "those to", "these to",
+        "use",
     })
     local exactValueIntent = pureNumberIntent
         or ContainsAny(text, { "min", "minimum", "max", "maximum" })
@@ -390,7 +397,7 @@ local function BuildFollowup(text, ctx)
         "layer", "z", "z layer", "frame level", "anchor", "growth", "grow",
         "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off",
     })
-    local explicitFollowupReference = ContainsAny(text, { "it", "that", "this", "same", "do it", "do that", "again", "more", "less", "opposite", "other way" })
+    local explicitFollowupReference = ContainsAny(text, { "it", "that", "this", "them", "those", "these", "same", "do it", "do that", "again", "more", "less", "opposite", "other way" })
     local wordCount = 0
     for _ in tostring(text or ""):gmatch("%S+") do wordCount = wordCount + 1 end
     local bareDirectionalFollowup = ContainsAny(text, {

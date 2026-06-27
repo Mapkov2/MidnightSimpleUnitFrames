@@ -65,6 +65,7 @@ local PreviewControls = type(BuildPreviewControls) == "function" and BuildPrevie
     Status = Status,
 }) or {}
 EditMode.SetPreview = PreviewControls.SetPreview
+EditMode.SetBossPreview = PreviewControls.SetBossPreview
 EditMode.SetAuraPreview = PreviewControls.SetAuraPreview
 EditMode.SetGroupPreview = PreviewControls.SetGroupPreview
 

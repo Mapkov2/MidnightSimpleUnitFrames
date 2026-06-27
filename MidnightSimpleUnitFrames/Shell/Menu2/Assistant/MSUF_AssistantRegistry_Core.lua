@@ -239,8 +239,8 @@ function A.DisplayEnumLabel(label, value)
     end
     local parser = A.Parser
     if parser and type(parser.ValueDisplay) == "function" then
-        local ok, display = pcall(parser.ValueDisplay, { type = "enum" }, value)
-        if ok and display ~= nil and tostring(display) ~= "" then return tostring(display) end
+        local display = parser.ValueDisplay({ type = "enum" }, value)
+        if display ~= nil and tostring(display) ~= "" then return tostring(display) end
     end
     return HumanizeKeyLabel(value)
 end

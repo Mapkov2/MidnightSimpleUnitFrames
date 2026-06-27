@@ -175,7 +175,7 @@ function A.RequestBroadApply(reason, opts, callback)
             if type(result) == "table" and result.status == "failed" and type(A.AddHistory) == "function" then
                 A.AddHistory("assistant", result.text or "Some affected MSUF views still need a refresh.", result.status)
             end
-            for i = 1, #callbacks do pcall(callbacks[i], result) end
+            for i = 1, #callbacks do callbacks[i](result) end
             if state.reason and not state.scheduled then
                 A.RequestBroadApply(state.reason)
             end

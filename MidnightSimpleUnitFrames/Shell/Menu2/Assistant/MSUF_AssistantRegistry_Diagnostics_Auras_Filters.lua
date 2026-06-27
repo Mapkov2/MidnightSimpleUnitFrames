@@ -57,16 +57,14 @@ function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
     local function AddUnitAuraFilterDiagnostics(scope, label, lane, issues, choices)
         local filtersOn = true
         if AuraFiltersEnabled then
-            local ok, value = pcall(AuraFiltersEnabled, scope)
-            if ok and value == false then filtersOn = false end
+            if AuraFiltersEnabled(scope) == false then filtersOn = false end
         end
         if filtersOn == false then return end
 
         local laneLabel = AuraLaneLabel(lane)
         local exclusive
         if AuraReadFilter then
-            local ok, value = pcall(AuraReadFilter, scope, lane, "exclusive", "none")
-            if ok then exclusive = value end
+            exclusive = AuraReadFilter(scope, lane, "exclusive", "none")
         end
         if exclusive == nil then exclusive = SafeSettingValue("auras3." .. scope .. "." .. lane .. ".filter.exclusive") end
         exclusive = tostring(exclusive or "none")
@@ -120,8 +118,7 @@ function A.DiagnosticsRegistry.BuildAuraDiagnosticFilterHelpers(ctx)
             issues[#issues + 1] = label .. " " .. laneLabel .. " filter is set to " .. FilterValueLabel(token) .. ", so normal auras outside that filter may be hidden."
             AddFixChoice(choices, tokenKey, "ALL", "Show all " .. label .. " " .. laneLabel)
         elseif GFReadAuraValue then
-            local ok, raw = pcall(GFReadAuraValue, scope, lane, "filterToken", nil)
-            raw = ok and raw or nil
+            local raw = GFReadAuraValue(scope, lane, "filterToken", nil)
             if raw ~= nil and tostring(raw) ~= "ALL" then
                 issues[#issues + 1] = label .. " " .. laneLabel .. " filter is set to " .. FilterValueLabel(raw) .. ", so normal auras outside that filter may be hidden."
                 AddFixChoice(choices, tokenKey, "ALL", "Show all " .. label .. " " .. laneLabel)

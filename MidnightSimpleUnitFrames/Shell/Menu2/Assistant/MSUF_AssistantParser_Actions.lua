@@ -1961,8 +1961,8 @@ function P.ParseRegistryActionAliasShortcut(text, raw)
         if score > 0 and (not bestScore or score > bestScore) then
             local args, meta
             if type(action.parseAliasArgs) == "function" then
-                local ok, parsedArgs, parsedMeta = pcall(action.parseAliasArgs, text, raw, action)
-                if ok and parsedArgs ~= false then
+                local parsedArgs, parsedMeta = action.parseAliasArgs(text, raw, action)
+                if parsedArgs ~= false then
                     args = type(parsedArgs) == "table" and parsedArgs or {}
                     meta = type(parsedMeta) == "table" and parsedMeta or nil
                 end
