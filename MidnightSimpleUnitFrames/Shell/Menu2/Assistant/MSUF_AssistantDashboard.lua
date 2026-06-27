@@ -34,6 +34,89 @@ local function SetAssistantText(region, text)
     end
 end
 
+local URL_LINK_PREFIX = "msufurl:"
+local URL_LINK_COLOR = "4fb5ff"
+
+local function StripURLTrailingPunctuation(url)
+    url = tostring(url or "")
+    local trailing = ""
+    while url ~= "" do
+        local last = url:sub(-1)
+        if last == "." or last == "," or last == ";" or last == ":" or last == "!" or last == "?"
+            or last == ")" or last == "]" or last == "}" then
+            trailing = last .. trailing
+            url = url:sub(1, -2)
+        else
+            break
+        end
+    end
+    return url, trailing
+end
+
+local function LinkifyAssistantURLs(text)
+    text = Tr(text)
+    return (text:gsub("https?://%S+", function(url)
+        local clean, trailing = StripURLTrailingPunctuation(url)
+        if clean == "" then return url end
+        return "|cff" .. URL_LINK_COLOR .. "|H" .. URL_LINK_PREFIX .. clean .. "|h" .. clean .. "|h|r" .. trailing
+    end))
+end
+
+local function URLTitle(url)
+    url = tostring(url or "")
+    local host = url:match("^https?://([^/%?#]+)") or "Link"
+    if host == "" then host = "Link" end
+    return host
+end
+
+local function CopyAssistantURL(url)
+    url = tostring(url or "")
+    if url == "" then return end
+    if type(_G.MSUF_ShowCopyLink) == "function" then
+        _G.MSUF_ShowCopyLink(URLTitle(url), url)
+    elseif A and type(A.ShowLargeTextPanel) == "function" then
+        A.ShowLargeTextPanel({
+            kind = "export",
+            title = URLTitle(url),
+            help = "Copy this link.",
+            text = url,
+            status = "Click Copy text, press Ctrl+C, then Close.",
+        })
+    end
+end
+
+local function EnableAssistantURLLinks(row)
+    if not row or row._msufAssistantURLLinksEnabled then return end
+    row._msufAssistantURLLinksEnabled = true
+    if row.EnableMouse then row:EnableMouse(true) end
+    if row.SetHyperlinksEnabled then row:SetHyperlinksEnabled(true) end
+    if row.SetScript then
+        row:SetScript("OnHyperlinkClick", function(_, link)
+            local url = type(link) == "string" and link:match("^" .. URL_LINK_PREFIX .. "(.+)$") or nil
+            if url then CopyAssistantURL(url) end
+        end)
+        row:SetScript("OnHyperlinkEnter", function(_, link)
+            local url = type(link) == "string" and link:match("^" .. URL_LINK_PREFIX .. "(.+)$") or nil
+            if not (url and _G.GameTooltip) then return end
+            _G.GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+            _G.GameTooltip:AddLine(URLTitle(url), 1, 1, 1, true)
+            _G.GameTooltip:AddLine("Click to copy this link.", 0.80, 0.86, 1.00, true)
+            _G.GameTooltip:AddLine(url, 0.45, 0.75, 1.00, true)
+            _G.GameTooltip:Show()
+        end)
+        row:SetScript("OnHyperlinkLeave", function()
+            if _G.GameTooltip then _G.GameTooltip:Hide() end
+        end)
+    end
+end
+
+local function SetAssistantHistoryText(row, region, text)
+    if not region then return end
+    EnableAssistantURLLinks(row)
+    if region.SetHyperlinksEnabled then region:SetHyperlinksEnabled(true) end
+    SetAssistantText(region, LinkifyAssistantURLs(text))
+end
+
 local function Trim(text)
     if A.Trim then return A.Trim(text) end
     text = tostring(text or "")
@@ -205,7 +288,7 @@ local function RenderHistory(ui)
         row.text:SetWidth(width - 12)
         row.text:SetJustifyH("LEFT")
         if row.text.SetWordWrap then row.text:SetWordWrap(true) end
-        SetAssistantText(row.text, "Examples: what can you do, hide player name, move target cast bar down, copy player layout to target, export current profile.")
+        SetAssistantHistoryText(row, row.text, "Examples: what can you do, hide player name, move target cast bar down, what is Wago, export current profile.")
         y = y - 90
     else
         for i = 1, #history do
@@ -232,7 +315,7 @@ local function RenderHistory(ui)
             if row.text.SetWordWrap then row.text:SetWordWrap(true) end
             local c = MessageColor(item.role, item.status)
             if row.text.SetTextColor then row.text:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
-            SetAssistantText(row.text, item.text)
+            SetAssistantHistoryText(row, row.text, item.text)
 
             local h = max(30, floor((row.text.GetStringHeight and row.text:GetStringHeight() or 20) + 12))
             row:SetHeight(h)
@@ -263,7 +346,7 @@ local function RenderHistory(ui)
         if row.text.SetWordWrap then row.text:SetWordWrap(true) end
         local c = MessageColor("assistant", "queued")
         if row.text.SetTextColor then row.text:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
-        SetAssistantText(row.text, BusyText(ui))
+        SetAssistantHistoryText(row, row.text, BusyText(ui))
         ui._msufAssistantBusyText = row.text
 
         local h = max(30, floor((row.text.GetStringHeight and row.text:GetStringHeight() or 20) + 12))
@@ -310,6 +393,47 @@ local function RefreshInputState(ui)
     end
 end
 
+local function UpdateLargeTextBoxScroll(panel)
+    if not (panel and panel.box and panel.boxScroll) then return end
+    local scrollW = (panel.boxScroll.GetWidth and panel.boxScroll:GetWidth()) or 0
+    local scrollH = (panel.boxScroll.GetHeight and panel.boxScroll:GetHeight()) or 0
+    panel.box:SetWidth(max(80, scrollW - 2))
+    local textH = panel.box.GetStringHeight and panel.box:GetStringHeight() or 0
+    if textH <= 0 and panel.box.GetNumLines then
+        textH = (tonumber(panel.box:GetNumLines()) or 1) * 14
+    end
+    panel.box:SetHeight(max(48, scrollH, textH + 12))
+    if panel.boxScroll.UpdateScrollChildRect then panel.boxScroll:UpdateScrollChildRect() end
+    if panel.boxScroll._msuf2RefreshScrollBar then panel.boxScroll:_msuf2RefreshScrollBar() end
+end
+
+local function LayoutLargeTextPanel(panel, kind)
+    if not panel then return end
+    local panelW = tonumber(panel._msufAssistantPanelW) or 420
+    local maxH = tonumber(panel._msufAssistantConversationH) or 240
+    local targetH = kind == "import" and 310 or 250
+    local panelH = min(maxH, targetH)
+    if panelH < 128 then panelH = maxH end
+    local footerH = 32
+    local boxH = max(58, panelH - 50 - footerH)
+
+    panel:SetSize(panelW, panelH)
+    panel.title:SetWidth(max(120, panelW - 76))
+    panel.help:SetWidth(panelW)
+    panel.boxFrame:SetSize(panelW, boxH)
+    panel.boxScroll:SetSize(max(80, panelW - 26), max(42, boxH - 14))
+    if panel.status.ClearAllPoints then panel.status:ClearAllPoints() end
+    panel.status:SetPoint("TOPLEFT", panel.boxFrame, "BOTTOMLEFT", 0, -7)
+    panel.status:SetWidth(max(120, panelW - 184))
+    if panel.primary.ClearAllPoints then panel.primary:ClearAllPoints() end
+    panel.primary:SetPoint("TOPRIGHT", panel.boxFrame, "BOTTOMRIGHT", -74, -5)
+    if panel.close.ClearAllPoints then panel.close:ClearAllPoints() end
+    panel.close:SetPoint("TOPRIGHT", panel.boxFrame, "BOTTOMRIGHT", 0, -5)
+    if panel.headerClose.ClearAllPoints then panel.headerClose:ClearAllPoints() end
+    panel.headerClose:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -1)
+    UpdateLargeTextBoxScroll(panel)
+end
+
 local function RenderLargeTextPanel(ui)
     if not ui then return end
     local panel = ui.largePanel
@@ -324,21 +448,26 @@ local function RenderLargeTextPanel(ui)
     panel:Show()
     if ui.scroll then ui.scroll:Hide() end
 
+    local kind = spec.kind or "export"
+    LayoutLargeTextPanel(panel, kind)
+
     SetAssistantText(panel.title, spec.title or "Assistant")
     SetAssistantText(panel.help, spec.help or "")
     SetAssistantText(panel.status, spec.status or "")
+    SetButtonText(panel.headerClose, kind == "import" and "Cancel" or "Close")
 
-    local kind = spec.kind or "export"
     local text = tostring(spec.text or "")
-    if panel._msufAssistantRenderedText ~= text or panel._msufAssistantRenderedKind ~= kind then
+    local textChanged = panel._msufAssistantRenderedText ~= text or panel._msufAssistantRenderedKind ~= kind
+    if textChanged then
         panel.box:SetText(text)
         panel.box:SetCursorPosition(0)
         panel._msufAssistantRenderedText = text
         panel._msufAssistantRenderedKind = kind
     end
     panel.box:SetAutoFocus(false)
-    panel.box:SetEnabled(true)
-    if kind == "export" and panel.box.HighlightText then panel.box:HighlightText() end
+    SetControlEnabled(panel.box, true)
+    UpdateLargeTextBoxScroll(panel)
+    if kind == "export" and textChanged and panel.box.HighlightText then panel.box:HighlightText() end
 
     if kind == "import" then
         SetButtonText(panel.primary, "Import")
@@ -375,12 +504,12 @@ local function RenderLargeTextPanel(ui)
             end
         end)
     else
-        SetButtonText(panel.primary, "Select all")
+        SetButtonText(panel.primary, "Copy text")
         SetButtonText(panel.close, "Close")
         panel.primary:SetScript("OnClick", function()
             panel.box:SetFocus()
             if panel.box.HighlightText then panel.box:HighlightText() end
-            SetAssistantText(panel.status, "Selected. Press Ctrl+C to copy.")
+            SetAssistantText(panel.status, "Selected. Press Ctrl+C, then Close.")
         end)
     end
 end
@@ -433,40 +562,64 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     local panel = CreateFrame("Frame", nil, parent)
     panel:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, conversationTop)
     panel:SetSize(cardW - 44, conversationH)
+    panel._msufAssistantPanelW = cardW - 44
+    panel._msufAssistantConversationH = conversationH
     panel:Hide()
     panel.title = Font(panel, "GameFontNormal", "", T.colors and T.colors.text or { 1, 1, 1, 1 })
     panel.title:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -2)
-    panel.title:SetWidth(cardW - 44)
+    panel.title:SetWidth(max(120, cardW - 120))
     panel.title:SetJustifyH("LEFT")
+    panel.headerClose = Button(panel, "Close", 64, 22)
+    panel.headerClose:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -1)
+    AddTooltip(panel.headerClose, "Close panel", "Closes this Assistant text panel and returns to the chat.")
     panel.help = Font(panel, "GameFontDisableSmall", "", T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
     panel.help:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -24)
     panel.help:SetWidth(cardW - 44)
     panel.help:SetJustifyH("LEFT")
     if panel.help.SetWordWrap then panel.help:SetWordWrap(true) end
-    local boxH = max(76, conversationH - 86)
-    panel.box = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    panel.box:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -48)
-    panel.box:SetSize(cardW - 44, boxH)
+
+    local boxH = max(76, min(conversationH, 250) - 82)
+    panel.boxFrame = T.Panel and T.Panel(panel, nil, { 0.020, 0.024, 0.046, 0.96 }, T.colors and T.colors.borderSoft or { 0.16, 0.20, 0.30, 0.80 }) or CreateFrame("Frame", nil, panel)
+    panel.boxFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -50)
+    panel.boxFrame:SetSize(cardW - 44, boxH)
+    panel.boxScroll = CreateFrame("ScrollFrame", nil, panel.boxFrame)
+    panel.boxScroll:SetPoint("TOPLEFT", panel.boxFrame, "TOPLEFT", 8, -7)
+    panel.boxScroll:SetSize(max(80, cardW - 70), max(42, boxH - 14))
+    panel.box = CreateFrame("EditBox", nil, panel.boxScroll)
+    panel.box:SetPoint("TOPLEFT", panel.boxScroll, "TOPLEFT", 0, 0)
+    panel.boxScroll:SetScrollChild(panel.box)
+    if T.StyleScrollFrame then T.StyleScrollFrame(panel.boxScroll, panel.boxFrame) end
     panel.box:SetMultiLine(true)
     panel.box:SetMaxLetters(200000)
     panel.box:SetAutoFocus(false)
-    panel.box:SetTextInsets(10, 10, 8, 8)
+    panel.box:SetTextInsets(0, 0, 0, 0)
     panel.box:SetJustifyH("LEFT")
     panel.box:SetJustifyV("TOP")
     panel.box:EnableMouse(true)
-    if T.SkinEditBox then T.SkinEditBox(panel.box) end
+    if panel.box.SetFontObject then panel.box:SetFontObject(_G.GameFontHighlightSmall) end
+    if panel.box.SetTextColor then
+        local c = T.colors and T.colors.text or { 1, 1, 1, 1 }
+        panel.box:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+    end
+    panel.box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    panel.box:SetScript("OnTextChanged", function()
+        UpdateLargeTextBoxScroll(panel)
+    end)
     panel.status = Font(panel, "GameFontDisableSmall", "", T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
-    panel.status:SetPoint("TOPLEFT", panel.box, "BOTTOMLEFT", 0, -7)
+    panel.status:SetPoint("TOPLEFT", panel.boxFrame, "BOTTOMLEFT", 0, -7)
     panel.status:SetWidth(max(120, cardW - 44 - 172))
     panel.status:SetJustifyH("LEFT")
-    panel.primary = Button(panel, "Select all", 92, 24, "primary")
-    panel.primary:SetPoint("TOPRIGHT", panel.box, "BOTTOMRIGHT", -74, -4)
+    panel.primary = Button(panel, "Copy text", 92, 24, "primary")
+    panel.primary:SetPoint("TOPRIGHT", panel.boxFrame, "BOTTOMRIGHT", -74, -5)
+    AddTooltip(panel.primary, "Copy text", "Selects the full text so it can be copied with Ctrl+C.")
     panel.close = Button(panel, "Close", 64, 24)
-    panel.close:SetPoint("TOPRIGHT", panel.box, "BOTTOMRIGHT", 0, -4)
-    panel.close:SetScript("OnClick", function()
+    panel.close:SetPoint("TOPRIGHT", panel.boxFrame, "BOTTOMRIGHT", 0, -5)
+    local function CloseLargePanel()
         if panel.box.ClearFocus then panel.box:ClearFocus() end
         if A.CloseLargeTextPanel then A.CloseLargeTextPanel() end
-    end)
+    end
+    panel.headerClose:SetScript("OnClick", CloseLargePanel)
+    panel.close:SetScript("OnClick", CloseLargePanel)
 
     local chipPrompts = {
         { "What can I ask", "what can you do" },

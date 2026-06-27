@@ -81,7 +81,7 @@ function A.Workflow.CopyText(title, value, help)
             title = title or "MSUF",
             help = help or "Copy this value.",
             text = value,
-            status = "Select all, then press Ctrl+C.",
+            status = "Click Copy text, press Ctrl+C, then Close.",
         })
         return true
     end

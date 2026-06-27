@@ -627,7 +627,7 @@ castbar_textures=textures|texture|outline|castbar texture
 castbar_empowered=empowered casts|evoker|empower|stage blink|hold cast|release cast
 castbar_name_shortening=name shortening|spell name|cast name|max name length
 castbar_focus_kick=focus kick|target kick|interrupt focus|kick cooldown
-castbar_interrupt_ready=interrupt ready|demon hunter|devour|consume magic|disrupt|kick ready
+castbar_interrupt_ready=interrupt ready|demon hunter|devour|consume magic|disrupt|kick ready|unavailable fill|unavailable cast fill|kick unavailable|interrupt cooldown fill
 ]],
     opt_misc = [[
 misc_language=language|locale|translation|localization|localisation

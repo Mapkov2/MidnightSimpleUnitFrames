@@ -542,6 +542,27 @@ local function BuildCastbars(ctx)
                    tonumber(tbl["2"]) or tonumber(tbl[2]) or dg,
                    tonumber(tbl["3"]) or tonumber(tbl[3]) or db
         end
+        local function ResolveUnavailablePreviewColor(gdb)
+            if type(_G.MSUF_ResolveInterruptUnavailableCastColor) == "function" then
+                local r, g, b = _G.MSUF_ResolveInterruptUnavailableCastColor()
+                if r and g and b then return r, g, b end
+            end
+
+            gdb = gdb or {}
+            local r = tonumber(gdb.castbarInterruptUnavailableR)
+            local g = tonumber(gdb.castbarInterruptUnavailableG)
+            local b = tonumber(gdb.castbarInterruptUnavailableB)
+            if r and g and b then return r, g, b end
+
+            local key = gdb.castbarInterruptUnavailableColor
+            local color = key and type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+            if color and color.GetRGB then
+                r, g, b = color:GetRGB()
+                if r and g and b then return r, g, b end
+            end
+
+            return 1.0, 0.494117647, 0.137254902
+        end
         local function LayoutOutline(frame, scale)
             local holder = frame and frame.outlineFrame
             local edges = holder and holder.edges
@@ -639,13 +660,18 @@ local function BuildCastbars(ctx)
                 local r, g, b = _G.MSUF_ResolveCastbarColors()
                 if r then baseR, baseG, baseB = r, g or baseG, b or baseB end
             end
-            local ir, ig, ib = baseR, baseG, baseB
-            if now < (self.interruptUntil or 0) then ir, ig, ib = 0.90, 0.14, 0.20 end
-            ir, ig, ib = GlowBlend(ir, ig, ib, progress)
+            local kickKey = KickReadyKey(unit)
+            local kickEnabled = kickKey and ReadGBool(kickKey, false)
+            local kickStyle = ReadG("kickReadyStyle", "border")
+            if now < (self.interruptUntil or 0) then
+                baseR, baseG, baseB = 0.90, 0.14, 0.20
+            elseif kickEnabled and kickStyle == "fill" then
+                baseR, baseG, baseB = ResolveUnavailablePreviewColor(g)
+            end
+            local ir, ig, ib = GlowBlend(baseR, baseG, baseB, progress)
             if self.bar.SetBackdropBorderColor then
                 self.bar:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 0.7)
-                local kickKey = KickReadyKey(unit)
-                if kickKey and ReadGBool(kickKey, false) and ReadG("kickReadyStyle", "border") == "border" then self.bar:SetBackdropBorderColor(0.24, 0.86, 0.46, 0.95) end
+                if kickEnabled and kickStyle == "border" then self.bar:SetBackdropBorderColor(0.24, 0.86, 0.46, 0.95) end
             end
             self.barBg:SetTexture(bgTexture)
             self.barBg:ClearAllPoints()
@@ -755,8 +781,7 @@ local function BuildCastbars(ctx)
             self.latency:SetShown(unit == "player" and kind ~= "empowered" and ReadGBool("castbarShowLatency", true))
             local showSpark = ReadGBool("castbarShowSpark", false)
             self.spark:SetShown(showSpark)
-            local kickKey = KickReadyKey(unit)
-            self.kick:SetShown(kickKey and ReadGBool(kickKey, false) and ReadG("kickReadyStyle", "border") == "box")
+            self.kick:SetShown(kickEnabled and kickStyle == "box")
             if self.kick:IsShown() then
                 local kickSize = ReadGBool("kickReadyAutoSize", true) and sch or max(8, S(ReadG("kickReadySize", 16)))
                 self.kick:SetSize(kickSize, kickSize)
@@ -1203,6 +1228,7 @@ local function BuildCastbars(ctx)
     local syncKickReady
     local function ApplyKickReady(reason, _, applyQueued)
         ApplyCastbarsIfNeeded(reason, nil, applyQueued)
+        Call("MSUF_KickReady_RefreshAll")
         RequestCastPreviewRefresh()
         if syncKickReady then syncKickReady() end
     end
@@ -1210,11 +1236,11 @@ local function BuildCastbars(ctx)
         { "toggle", "Show on Target castbar", kickLeftX, -88, 300, "kickReadyShowTarget", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
         { "toggle", "Show on Focus castbar", kickLeftX, -114, 300, "kickReadyShowFocus", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
         { "toggle", "Show on Boss castbars", kickLeftX, -140, 300, "kickReadyShowBoss", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
-        { "dropdown", "Indicator style", kickRightX, -88, 300, VT("border", "Castbar border", "box", "Color box next to cast"), "kickReadyStyle", "border", "MSUF2_KICK_READY_STYLE", ApplyAndRefresh },
+        { "dropdown", "Indicator style", kickRightX, -88, 300, VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border", "MSUF2_KICK_READY_STYLE", ApplyKickReady },
         { "slider", "Indicator size", kickRightX, -142, 320, 8, 32, 1, "kickReadySize", 16, "MSUF2_KICK_READY_SIZE", ApplyAndRefresh },
         { "toggle", "Auto-size to castbar height", kickRightX, -196, 360, "kickReadyAutoSize", true, "MSUF2_KICK_READY_AUTO", ApplyKickReady },
     })
-    local colorHint = W.Text(kick, "Ready / cooldown colors: Colors menu > Interrupt Ready Indicator", kickRightX, -228, 370, T.colors.muted)
+    local colorHint = W.Text(kick, "Colors: Colors menu > Castbar Colors", kickRightX, -228, 370, T.colors.muted)
     W.LabelAt(kick, "Placement", kickLeftX, -178, 160, "GameFontNormalSmall", T.colors.accent)
     M.Assign(kickControls, BuildCastControlSpecs(kick, {
         { "dropdown", "Anchor", kickLeftX, -196, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
@@ -1222,12 +1248,15 @@ local function BuildCastbars(ctx)
         { "slider", "Y offset", kickLeftX, -304, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
     }))
     local style, size, auto = kickControls.kickReadyStyle, kickControls.kickReadySize, kickControls.kickReadyAutoSize
-    local kickReadyControls = { style, auto, kickControls.kickReadyAnchor, kickControls.kickReadyOffsetX, kickControls.kickReadyOffsetY }
+    local placementControls = { kickControls.kickReadyAnchor, kickControls.kickReadyOffsetX, kickControls.kickReadyOffsetY }
     syncKickReady = function()
         local enabled = ReadGBool("kickReadyShowTarget", false) or ReadGBool("kickReadyShowFocus", false) or ReadGBool("kickReadyShowBoss", false)
         local autoOn = ReadGBool("kickReadyAutoSize", true)
-        SetControlsEnabled(kickReadyControls, enabled)
-        SetControlEnabled(size, enabled and not autoOn)
+        local isFill = ReadG("kickReadyStyle", "border") == "fill"
+        SetControlEnabled(style, enabled)
+        SetControlEnabled(auto, enabled and not isFill)
+        SetControlEnabled(size, enabled and not isFill and not autoOn)
+        SetControlsEnabled(placementControls, enabled and not isFill)
         SetControlEnabled(colorHint, enabled)
     end
     M.TrackRefresh(ctx, syncKickReady)

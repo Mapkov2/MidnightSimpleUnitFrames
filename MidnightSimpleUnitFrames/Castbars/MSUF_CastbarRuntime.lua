@@ -253,7 +253,9 @@ function Runtime:ApplyActive(frame, state, options)
 
     local reverseFill = ResolveReverseFill(frame, state, isChanneled)
     frame._msufStripeReverseFill = reverseFill and true or false
-    frame.MSUF_timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled) and true or false
+    local timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled) and true or false
+    frame.MSUF_timerDriven = timerDriven
+    frame._msufTimerAssumeCountdown = timerDriven and (isChanneled == true) or nil
 
     local castState = frame._msufCastState or state
     if options.skipCastState ~= true then

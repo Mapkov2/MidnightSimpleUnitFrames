@@ -2622,7 +2622,7 @@ local IsPendingResultCompareIntent
 
 function A._PendingResultRelatedIntent(text)
     local normalized = NormalizeReply(text)
-    if normalized == "related" or normalized == "same page" or normalized == "more" then return true end
+    if normalized == "related" or normalized == "same page" then return true end
     return ReplyHasPhrase(text, "related option")
         or ReplyHasPhrase(text, "related options")
         or ReplyHasPhrase(text, "related setting")
@@ -3618,12 +3618,45 @@ local function RefreshedAlreadySetResponse(setting)
     return "Already set. I refreshed the related MSUF option so the visible UI uses the current value."
 end
 
+local function BuildChangeBundle(plan, changes, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+    return {
+        label = AssistantPlanLabel(plan, "Assistant change"),
+        action = "change",
+        changes = undoChanges,
+        lastSetting = lastSetting,
+        lastUnit = lastUnit,
+        lastFrameType = lastFrameType,
+        lastCategory = lastCategory,
+        lastValue = lastValue,
+        serializable = BuildSerializable(changes),
+    }
+end
+
+local function PushAndRememberChangeBundle(plan, changes, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+    local bundle = BuildChangeBundle(plan, changes, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+    bundle.undoAvailable = A.PushUndo(bundle) == true
+    A.RememberAppliedBundle(bundle)
+    return bundle
+end
+
+local function RefreshChangeBundle(bundle, changes, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+    if type(bundle) ~= "table" then return end
+    bundle.lastSetting = lastSetting
+    bundle.lastUnit = lastUnit
+    bundle.lastFrameType = lastFrameType
+    bundle.lastCategory = lastCategory
+    bundle.lastValue = lastValue
+    bundle.serializable = BuildSerializable(changes)
+end
+
 local function ExecuteChanges(plan)
     local changes = plan.changes or {}
     local undoChanges = {}
+    local executedChanges = {}
     local changedSettings = {}
     local unchangedApplySettings = {}
     local lastSetting, lastUnit, lastFrameType, lastCategory, lastValue
+    local undoBundle
     local requiresReload
 
     for i = 1, #changes do
@@ -3669,6 +3702,13 @@ local function ExecuteChanges(plan)
                     if setting.requiresReload == true then requiresReload = true end
                     if item.direction then A.SetContextValue("lastDirection", item.direction) end
                     RememberTextChangeContext(setting, item, actualNewValue)
+                    executedChanges[#executedChanges + 1] = item
+                    if not undoBundle then
+                        undoBundle = PushAndRememberChangeBundle(plan, executedChanges, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+                    else
+                        RefreshChangeBundle(undoBundle, executedChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+                        A.RememberAppliedBundle(undoBundle)
+                    end
                 elseif setting.applyWhenUnchanged == true then
                     unchangedApplySettings[#unchangedApplySettings + 1] = setting
                 end
@@ -3687,24 +3727,16 @@ local function ExecuteChanges(plan)
         return { text = AlreadySetResponse(changes), result = "applied", summary = plan.summary }
     end
 
-    RunApplies(changedSettings)
-
-    local bundle = {
-        label = AssistantPlanLabel(plan, "Assistant change"),
-        action = "change",
-        changes = undoChanges,
-        lastSetting = lastSetting,
-        lastUnit = lastUnit,
-        lastFrameType = lastFrameType,
-        lastCategory = lastCategory,
-        lastValue = lastValue,
-        serializable = BuildSerializable(changes),
-    }
-    A.PushUndo(bundle)
-    A.RememberAppliedBundle(bundle)
+    if not undoBundle then
+        undoBundle = PushAndRememberChangeBundle(plan, executedChanges, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+    else
+        RefreshChangeBundle(undoBundle, executedChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+        A.RememberAppliedBundle(undoBundle)
+    end
 
     local text = ChangedResponse(changedSettings, undoChanges)
     if requiresReload then text = text .. " Reload the UI for this change to fully take effect." end
+    RunApplies(changedSettings)
     text = AppendUndoFollowupHint(text)
     return { text = text, result = "applied", summary = plan.summary }
 end
@@ -3787,13 +3819,17 @@ function A.CloseLargeTextPanel()
     end
 end
 
+local function ClearPendingConfirmationContext()
+    local ctx = A.GetContext and A.GetContext()
+    if ctx then ctx.pendingConfirmation = nil end
+end
+
 function A.ExecutePlan(plan, opts)
     opts = opts or {}
     if type(plan) ~= "table" then return { text = "Which frame, page, or option do you want me to change?", result = "failed" } end
     if PlanNeedsConfirmation(plan) and opts.confirmed ~= true then
         A.pendingConfirmation = plan
-        local ctx = A.GetContext and A.GetContext()
-        if ctx then ctx.pendingConfirmation = AssistantPlanLabel(plan, "Assistant task") end
+        ClearPendingConfirmationContext()
         return { text = ConfirmationText(plan), result = "confirmation_needed", summary = plan.summary }
     end
     if InCombat() and AnyCombatUnsafe(plan) and opts.fromQueue ~= true then
@@ -3943,14 +3979,12 @@ local function HandlePending(text)
     if A.pendingConfirmation then
         if LooksLikeUndoRedoCommand(text) then
             A.pendingConfirmation = nil
-            local ctx = A.GetContext and A.GetContext()
-            if ctx then ctx.pendingConfirmation = nil end
+            ClearPendingConfirmationContext()
             return nil
         end
         if IsChoiceAbort(text) then
             A.pendingConfirmation = nil
-            local ctx = A.GetContext and A.GetContext()
-            if ctx then ctx.pendingConfirmation = nil end
+            ClearPendingConfirmationContext()
             return { text = "Cancelled. I kept the options as they were.", result = NormalizeReply(text) == "cancel" and "applied" or "failed" }
         end
         local confirmationFollowup = A._PendingConfirmationFollowupResult(text, A.pendingConfirmation)
@@ -3958,11 +3992,12 @@ local function HandlePending(text)
         if IsConfirmationApply(text) then
             local plan = A.pendingConfirmation
             A.pendingConfirmation = nil
-            local ctx = A.GetContext and A.GetContext()
-            if ctx then ctx.pendingConfirmation = nil end
+            ClearPendingConfirmationContext()
             return A.ExecutePlan(plan, { confirmed = true })
         end
         return { text = "Yes, do it, or apply will continue. Cancel stops it.", result = "confirmation_needed" }
+    else
+        ClearPendingConfirmationContext()
     end
     local choices = CurrentPendingChoices()
     if choices then

@@ -143,6 +143,7 @@ end
 
 local interruptibleColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
 local nonInterruptibleColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
+local interruptUnavailableColorCache = { r = nil, g = nil, b = nil, a = nil, obj = nil }
 
 local function CachedColor(cache, red, green, blue, alpha)
     if cache.r == red and cache.g == green and cache.b == blue and cache.a == alpha and cache.obj then
@@ -170,12 +171,26 @@ local function ApplyNonInterruptibleTint(
     castG,
     castB,
     castA,
-    forceNotInterruptible
+    forceNotInterruptible,
+    unavailableR,
+    unavailableG,
+    unavailableB,
+    unavailableA,
+    interruptReadyBool,
+    useUnavailableColor
 )
     local statusBar = frame and frame.statusBar
     if not statusBar then return false end
 
     local useNonInterruptible = forceNotInterruptible == true
+    local useUnavailable = useUnavailableColor == true
+        and unavailableR ~= nil
+        and unavailableG ~= nil
+        and unavailableB ~= nil
+        and CanUseBooleanTintValue(interruptReadyBool)
+        and _G.C_CurveUtil
+        and type(_G.C_CurveUtil.EvaluateColorFromBoolean) == "function"
+
     local red = useNonInterruptible and nonR or castR
     local green = useNonInterruptible and nonG or castG
     local blue = useNonInterruptible and nonB or castB
@@ -186,16 +201,37 @@ local function ApplyNonInterruptibleTint(
     if texture and texture.SetVertexColorFromBoolean and _G.CreateColor then
         local nonColor = CachedColor(nonInterruptibleColorCache, nonR, nonG, nonB, nonA or 1)
         local castColor = CachedColor(interruptibleColorCache, castR, castG, castB, castA or 1)
+        local activeCastColor = castColor
+        if useUnavailable then
+            local unavailableColor = CachedColor(
+                interruptUnavailableColorCache,
+                unavailableR,
+                unavailableG,
+                unavailableB,
+                unavailableA or 1
+            )
+            activeCastColor = _G.C_CurveUtil.EvaluateColorFromBoolean(interruptReadyBool, castColor, unavailableColor)
+        end
+
         local boolValue = apiNotInterruptibleRaw
         if not CanUseBooleanTintValue(boolValue) then
             boolValue = useNonInterruptible == true
         end
-        texture:SetVertexColorFromBoolean(boolValue, nonColor, castColor)
+        texture:SetVertexColorFromBoolean(boolValue, nonColor, activeCastColor)
         usedBooleanTint = true
     end
 
     if not usedBooleanTint then
         SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, alpha)
+    elseif useUnavailable then
+        statusBar._msufLastColorR = nil
+        statusBar._msufLastColorG = nil
+        statusBar._msufLastColorB = nil
+        statusBar._msufLastColorA = nil
+        statusBar._msufLastR = nil
+        statusBar._msufLastG = nil
+        statusBar._msufLastB = nil
+        statusBar._msufLastA = nil
     else
         statusBar._msufLastColorR = red
         statusBar._msufLastColorG = green
@@ -207,7 +243,7 @@ local function ApplyNonInterruptibleTint(
         statusBar._msufLastA = alpha
     end
 
-    if not statusBar._msufGlowSkipBase then
+    if not statusBar._msufGlowSkipBase and not useUnavailable then
         local baseR, baseG, baseB, baseA =
             statusBar._msufGlowBaseR,
             statusBar._msufGlowBaseG,
@@ -411,6 +447,85 @@ local function GetNonInterruptibleCastColor()
     if red and green and blue then return red, green, blue, 1 end
 end
 ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
+
+local function GetInterruptUnavailableCastColor()
+    EnsureDBLazy()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local red = tonumber(general.castbarInterruptUnavailableR)
+    local green = tonumber(general.castbarInterruptUnavailableG)
+    local blue = tonumber(general.castbarInterruptUnavailableB)
+    if red and green and blue then return red, green, blue, 1 end
+end
+ExportPublic("MSUF_GetInterruptUnavailableCastColor", GetInterruptUnavailableCastColor)
+
+local function UnitSupportsInterruptUnavailableTint(frame, general)
+    local unit = frame and frame.unit
+    if type(unit) ~= "string" then return false end
+
+    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
+    local function owns(which)
+        if type(shouldUse) == "function" then
+            return shouldUse(which, general) == true
+        end
+        return true
+    end
+
+    if unit == "target" then return general.kickReadyShowTarget == true and owns("target") end
+    if unit == "focus" then return general.kickReadyShowFocus == true and owns("focus") end
+    if unit:sub(1, 4) == "boss" then return general.kickReadyShowBoss == true and owns("boss") end
+    return false
+end
+
+local function ShouldUseInterruptUnavailableColor(frame)
+    EnsureDBLazy()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    if general.kickReadyStyle ~= "fill" then return false end
+    return UnitSupportsInterruptUnavailableTint(frame, general)
+end
+ExportPublic("MSUF_Castbar_ShouldUseInterruptUnavailableColor", ShouldUseInterruptUnavailableColor)
+
+local function ResolveInterruptUnavailableCastColor()
+    EnsureDBLazy()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local red, green, blue
+
+    if type(_G.MSUF_GetInterruptUnavailableCastColor) == "function" then
+        red, green, blue = _G.MSUF_GetInterruptUnavailableCastColor()
+    end
+
+    if not (red and green and blue) then
+        local key = general.castbarInterruptUnavailableColor
+        local color = key and type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+        if color and color.GetRGB then
+            red, green, blue = color:GetRGB()
+        end
+    end
+
+    if not (red and green and blue) then
+        red, green, blue = 1.0, 0.494117647, 0.137254902
+    end
+
+    return red, green, blue, 1
+end
+ExportPublic("MSUF_ResolveInterruptUnavailableCastColor", ResolveInterruptUnavailableCastColor)
+
+local function GetInterruptUnavailableTintArgs(frame)
+    if not ShouldUseInterruptUnavailableColor(frame) then return nil end
+    if not (_G.C_CurveUtil and type(_G.C_CurveUtil.EvaluateColorFromBoolean) == "function") then return nil end
+    if type(_G.MSUF_KickReady_GetSpellID) == "function" and not _G.MSUF_KickReady_GetSpellID() then return nil end
+
+    local readyBool
+    if type(_G.MSUF_KickReady_GetReadyBoolForTint) == "function" then
+        readyBool = _G.MSUF_KickReady_GetReadyBoolForTint()
+    elseif type(_G.MSUF_KickReady_IsReady) == "function" then
+        readyBool = _G.MSUF_KickReady_IsReady()
+    end
+    if not CanUseBooleanTintValue(readyBool) then return nil end
+
+    local red, green, blue, alpha = ResolveInterruptUnavailableCastColor()
+    return red, green, blue, alpha or 1, readyBool, true
+end
+ExportPublic("MSUF_Castbar_GetInterruptUnavailableTintArgs", GetInterruptUnavailableTintArgs)
 
 local function ToPlainNumber(value)
     if type(value) == "number" then return tonumber(tostring(value)) end

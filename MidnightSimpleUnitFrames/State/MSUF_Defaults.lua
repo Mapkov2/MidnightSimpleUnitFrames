@@ -1382,6 +1382,7 @@ NormalizeCastbarWidthSourceKey("bossCastbarMatchWidth", "castbarBossMatchUnitWid
 if g.kickReadyShowTarget == nil then g.kickReadyShowTarget = false end
 if g.kickReadyShowFocus  == nil then g.kickReadyShowFocus  = false end
 if g.kickReadyShowBoss   == nil then g.kickReadyShowBoss   = false end
+if g.kickReadyStyle      == nil then g.kickReadyStyle      = "border" end
 if g.kickReadySize       == nil then g.kickReadySize       = 8 end
 if g.kickReadyAnchor     == nil then g.kickReadyAnchor     = "RIGHT" end
 if g.kickReadyOffsetX    == nil then g.kickReadyOffsetX    = 4 end

@@ -188,10 +188,21 @@ local function GetRemainingFromStatusBar(frame)
         return nil
     end
 
+    local assumeCountdown = frame._msufTimerAssumeCountdown
     local previous = frame._msufLastSBValue
     frame._msufLastSBValue = value
-    local isCountdown = previous ~= nil and value < (previous - 0.0001)
-    local remaining = isCountdown and (value - minValue) or (maxValue - value)
+    if assumeCountdown == nil then
+        if frame.MSUF_timerDriven == true then
+            assumeCountdown = frame.MSUF_isChanneled == true
+        elseif frame._msufStripeReverseFill == true then
+            assumeCountdown = true
+        else
+            assumeCountdown = previous ~= nil and value < (previous - 0.0001)
+        end
+        frame._msufTimerAssumeCountdown = assumeCountdown and true or false
+    end
+
+    local remaining = assumeCountdown and (value - minValue) or (maxValue - value)
     if type(remaining) ~= "number" then
         return nil
     end
@@ -725,6 +736,12 @@ local function CreateCastBar(frameName, unit)
             rawApiNotInterruptible = true
         end
 
+        local unavailableR, unavailableG, unavailableB, unavailableA, interruptReadyBool, useUnavailableColor
+        if type(_G.MSUF_Castbar_GetInterruptUnavailableTintArgs) == "function" then
+            unavailableR, unavailableG, unavailableB, unavailableA, interruptReadyBool, useUnavailableColor =
+                _G.MSUF_Castbar_GetInterruptUnavailableTintArgs(self)
+        end
+
         if type(_G.MSUF_Castbar_ApplyNonInterruptibleTint) == "function" then
             _G.MSUF_Castbar_ApplyNonInterruptibleTint(
                 self,
@@ -737,7 +754,13 @@ local function CreateCastBar(frameName, unit)
                 castG,
                 castB,
                 1,
-                forcedNotInterruptible
+                forcedNotInterruptible,
+                unavailableR,
+                unavailableG,
+                unavailableB,
+                unavailableA,
+                interruptReadyBool,
+                useUnavailableColor
             )
         elseif forcedNotInterruptible then
             _G.MSUF_SetStatusBarColorIfChanged(self.statusBar, nonR, nonG, nonB, 1)

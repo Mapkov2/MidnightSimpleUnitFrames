@@ -56,13 +56,18 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             RegisterGFAuraBoolean(scope, lane, "Visible", "enabled", laneInfo.plural, true, aliases)
 
             aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "max")
             AddGFAuraAliases(aliases, scope, lane, "max icons")
+            AddGFAuraAliases(aliases, scope, lane, "maximum")
+            AddGFAuraAliases(aliases, scope, lane, "maximum icons")
             AddGFAuraAliases(aliases, scope, lane, "count")
+            AddGFAuraAliases(aliases, scope, lane, "cap")
+            AddGFAuraAliases(aliases, scope, lane, "limit")
             local exactAliases = {}
             for i = 1, #aliases do exactAliases[#exactAliases + 1] = aliases[i] end
-            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "max icons", "maximum icons", "icon count", "count" })
-            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all group", { "max icons", "maximum icons", "icon count", "count" })
-            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "max icons", "maximum icons", "icon count", "count" })
+            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "max", "maximum", "max icons", "maximum icons", "icon count", "count", "cap", "limit" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all group", { "max", "maximum", "max icons", "maximum icons", "icon count", "count", "cap", "limit" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "max", "maximum", "max icons", "maximum icons", "icon count", "count", "cap", "limit" })
             RegisterGFAuraNumber(scope, lane, "Max", "max", laneInfo.label .. " Max Icons", maxDefault, 0, 20, aliases, "visual")
 
             aliases = {}
@@ -100,12 +105,18 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
 
             aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "layer")
+            AddGFAuraAliases(aliases, scope, lane, "z layer")
+            AddGFAuraAliases(aliases, scope, lane, "z level")
             AddGFAuraAliases(aliases, scope, lane, "z order")
+            AddGFAuraAliases(aliases, scope, lane, "z index")
+            AddGFAuraAliases(aliases, scope, lane, "draw layer")
+            AddGFAuraAliases(aliases, scope, lane, "frame level")
+            AddGFAuraAliases(aliases, scope, lane, "strata")
             exactAliases = {}
             for i = 1, #aliases do exactAliases[#exactAliases + 1] = aliases[i] end
-            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "layer", "z order", "frame level" })
-            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all group", { "layer", "z order", "frame level" })
-            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "layer", "z order", "frame level" })
+            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all group", { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
             RegisterGFAuraNumber(scope, lane, "Layer", "layer", laneInfo.label .. " Layer", layerDefault, 1, 15, aliases, "geometry")
 
             RegisterGroupAuraLaneGeometrySettings(ctx, scope, lane, laneInfo)

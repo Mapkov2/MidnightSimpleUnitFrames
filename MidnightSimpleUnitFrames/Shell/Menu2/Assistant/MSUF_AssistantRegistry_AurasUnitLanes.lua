@@ -73,11 +73,16 @@ function A.AurasRegistry.RegisterUnitLaneSettings(ctx)
             RegisterAuraUnitLaneBoolean(unit, lane, "visible", laneInfo.plural, aliases)
 
             aliases = {}
+            AddAuraLaneAliases(aliases, unit, lane, "max")
             AddAuraLaneAliases(aliases, unit, lane, "max icons")
+            AddAuraLaneAliases(aliases, unit, lane, "maximum")
+            AddAuraLaneAliases(aliases, unit, lane, "maximum icons")
             AddAuraLaneAliases(aliases, unit, lane, "count")
-            Assistant._AssistantAddAuraAllLaneNouns(aliases, unit, { "max icons", "maximum icons", "icon count", "count" })
-            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "max icons", "maximum icons", "icon count", "count" })
-            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "max icons", "maximum icons", "icon count", "count" })
+            AddAuraLaneAliases(aliases, unit, lane, "cap")
+            AddAuraLaneAliases(aliases, unit, lane, "limit")
+            Assistant._AssistantAddAuraAllLaneNouns(aliases, unit, { "max", "maximum", "max icons", "maximum icons", "icon count", "count", "cap", "limit" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "max", "maximum", "max icons", "maximum icons", "icon count", "count", "cap", "limit" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "max", "maximum", "max icons", "maximum icons", "icon count", "count", "cap", "limit" })
             RegisterAuraUnitLaneNumber(unit, lane, "max", laneInfo.label .. " Max Icons", AuraLaneDefaultMax(lane), 0, 80, 1, aliases,
                 function() return AuraReadNumber(unit, AuraLaneMaxKey(lane), AuraLaneDefaultMax(lane), 0, 80) end,
                 function(value) AuraWriteNumber(unit, AuraLaneMaxKey(lane), value, 0, 80) end)

@@ -136,10 +136,16 @@ function A.AurasRegistry.RegisterUnitLaneGeometrySettings(ctx, unit, laneInfo)
 
     aliases = {}
     AddAuraLaneAliases(aliases, unit, lane, "layer")
+    AddAuraLaneAliases(aliases, unit, lane, "z layer")
+    AddAuraLaneAliases(aliases, unit, lane, "z level")
     AddAuraLaneAliases(aliases, unit, lane, "z order")
-    Assistant._AssistantAddAuraAllLaneNouns(aliases, unit, { "layer", "z order", "frame level" })
-    Assistant._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "layer", "z order", "frame level" })
-    Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "layer", "z order", "frame level" })
+    AddAuraLaneAliases(aliases, unit, lane, "z index")
+    AddAuraLaneAliases(aliases, unit, lane, "draw layer")
+    AddAuraLaneAliases(aliases, unit, lane, "frame level")
+    AddAuraLaneAliases(aliases, unit, lane, "strata")
+    Assistant._AssistantAddAuraAllLaneNouns(aliases, unit, { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
+    Assistant._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
+    Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
     RegisterAuraUnitLaneNumber(unit, lane, "layer", laneInfo.label .. " Layer", lane == "buff" and 5 or 6, 1, 15, 1, aliases,
         function() return AuraReadLaneLayer(unit, lane) end,
         function(value) AuraWriteLaneLayer(unit, lane, value) end)

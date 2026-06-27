@@ -1917,7 +1917,7 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
     local direction = DetectDirection(text, {})
     if ContainsAny(text, { "auto size", "autosize", "automatic size", "automatic sizing", "auto-size", "automatische groesse", "automatisch groesse" }) then
         key = "general.kickReadyAutoSize"
-    elseif ContainsAny(text, { "style", "border", "box", "outline", "square", "stil", "rand", "kasten", "quadrat" }) then
+    elseif ContainsAny(text, { "style", "border", "box", "fill", "outline", "square", "unavailable fill", "castbar fill", "stil", "rand", "kasten", "quadrat" }) then
         key = "general.kickReadyStyle"
     elseif ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown", "put", "place", "position", "anker", "ankerpunkt", "platzieren" })
         and direction

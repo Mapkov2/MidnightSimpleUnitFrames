@@ -96,7 +96,8 @@ if not P.InitUnsupportedAuraCommand then
                 "filter", "filters", "blacklist", "whitelist", "preset", "quick setup", "setup",
                 "hidden", "hide", "show", "open", "help", "why", "where", "settings",
                 "turn", "turn on", "turn off", "on", "off", "enable", "disable", "enabled", "disabled",
-                "set", "change", "make", "size", "count", "max", "icon", "icons", "per row", "growth",
+                "set", "change", "make", "size", "count", "max", "maximum", "cap", "caps", "limit", "limits",
+                "icon", "icons", "per row", "growth", "spacing", "gap", "x offset", "y offset", "layer", "z layer", "frame level",
                 "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen",
                 "own", "mine", "only mine", "only player", "raid filter", "player filter",
                 "stack", "cooldown", "pandemic",
@@ -145,7 +146,7 @@ if not P.InitUnsupportedAuraCommand then
                     kind = "unsupported",
                     status = "info",
                     summary = "Aura option fallback.",
-                    text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, count, growth, cooldown and stack text, filters, hidden aura lists, quick presets, and group aura copy when those options exist in MSUF. Aura areas I can't match will stay as they are.",
+                    text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown and stack text, filters, hidden aura lists, quick presets, and group aura copy when those options exist in MSUF. Aura areas I can't match will stay as they are.",
                 }
             end
         end
