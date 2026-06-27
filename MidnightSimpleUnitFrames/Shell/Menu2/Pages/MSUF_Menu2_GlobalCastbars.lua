@@ -88,6 +88,11 @@ local function BuildCastbars(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Castbar", "Castbar behavior, textures and interrupt indicators.", 72)
     local function ApplyCastbarTextures(reason)
+        Call("MSUF_UpdateCastbarTextures_Immediate")
+        Call("MSUF_UpdateCastbarTextures")
+        Call("MSUF_UpdateCastbarVisuals_Immediate")
+        Call("MSUF_UpdateCastbarVisuals")
+        Call("MSUF_UpdateBossCastbarPreview")
         ApplyCastbars(reason or "MSUF2_CASTBAR_TEXTURES")
     end
     local function BuildPreview()
@@ -374,14 +379,15 @@ local function BuildCastbars(ctx)
         end
         local function EmpowerBlinkEnabled()
             if type(_G.MSUF_IsEmpowerStageBlinkEnabled) == "function" then
-                return _G.MSUF_IsEmpowerStageBlinkEnabled() and true or false
+                local ok, enabled = pcall(_G.MSUF_IsEmpowerStageBlinkEnabled)
+                if ok then return enabled and true or false end
             end
             return ReadGBool("empowerStageBlink", true)
         end
         local function EmpowerBlinkTime()
             if type(_G.MSUF_GetEmpowerStageBlinkTime) == "function" then
-                local value = _G.MSUF_GetEmpowerStageBlinkTime()
-                if tonumber(value) then return max(0.05, min(1.00, tonumber(value))) end
+                local ok, value = pcall(_G.MSUF_GetEmpowerStageBlinkTime)
+                if ok and tonumber(value) then return max(0.05, min(1.00, tonumber(value))) end
             end
             local value = tonumber(ReadG("empowerStageBlinkTime", 0.25)) or 0.25
             return max(0.05, min(1.00, value))
@@ -406,128 +412,6 @@ local function BuildCastbars(ctx)
             local p = max(0, min(1, tonumber(progress) or 0))
             p = p * p
             return r + ((1 - r) * p), g + ((1 - g) * p), b + ((1 - b) * p)
-        end
-        local function Scaled(scale, value)
-            return floor(((tonumber(value) or 0) * (tonumber(scale) or 1)) + 0.5)
-        end
-        local function RefreshCastbarAnimation(frame, now)
-            local started = ProfileStart()
-            local state = frame and frame._msufCastbarPreviewAnim
-            if not (state and frame.fill and frame.bar) then
-                ProfileStop("preview", "CastbarPreview.Animation", started)
-                return false
-            end
-            local progress = tonumber(frame.progress) or 0
-            if progress < 0 then progress = 0 elseif progress > 1 then progress = progress - floor(progress) end
-            local kind = state.kind or frame.castType or "normal"
-            local duration = state.duration or CastDuration(kind)
-            local visual = (kind == "channel") and (1 - progress) or progress
-            visual = max(0.01, min(1, visual))
-            local barWLocal = max(1, tonumber(state.barW) or 1)
-            local barHLocal = max(1, tonumber(state.barH) or 1)
-            local statusX = tonumber(state.statusX) or 0
-            local fillW = max(1, floor(barWLocal * visual + 0.5))
-            local reverse = state.reverse == true
-            local baseR, baseG, baseB = state.baseR or 0.20, state.baseG or 0.78, state.baseB or 0.94
-            if (tonumber(now) or 0) < (tonumber(frame.interruptUntil) or 0) then baseR, baseG, baseB = 0.90, 0.14, 0.20 end
-            local ir, ig, ib = GlowBlend(baseR, baseG, baseB, progress)
-            if state.showTime and frame.time then
-                local remaining = max(0, (1 - progress) * duration)
-                frame.time:SetText(FormatPreviewTime(state.unit or frame.layoutUnit, state.g, remaining, duration))
-            end
-            if state.useEmpowerSegs then
-                frame.fill:SetShown(false)
-                for i = 1, #frame.empowerBands do
-                    local band = frame.empowerBands[i]
-                    if band and band.SetVertexColor then
-                        local er, eg, eb = GlowBlend(empowerColors[i][1], empowerColors[i][2], empowerColors[i][3], progress)
-                        band:SetVertexColor(er, eg, eb, 0.24)
-                    end
-                end
-                for i = 1, #frame.empowerFills do
-                    local seg = frame.empowerFills[i]
-                    if seg then
-                        local startPct = (i - 1) / 4
-                        local endPct = i / 4
-                        local visiblePct = max(0, min(visual, endPct) - startPct)
-                        if visiblePct > 0 then
-                            local segW = max(1, floor(barWLocal * visiblePct + 0.5))
-                            local x = floor(barWLocal * startPct + 0.5)
-                            if reverse then x = floor(barWLocal * (1 - endPct) + 0.5) end
-                            seg:ClearAllPoints()
-                            seg:SetPoint("TOPLEFT", frame.bar, "TOPLEFT", statusX + x, -1)
-                            seg:SetPoint("BOTTOMLEFT", frame.bar, "TOPLEFT", statusX + x, -1 - barHLocal)
-                            seg:SetWidth(segW)
-                            local er, eg, eb = GlowBlend(empowerColors[i][1], empowerColors[i][2], empowerColors[i][3], progress)
-                            seg:SetVertexColor(er, eg, eb, empowerColors[i][4])
-                            seg:Show()
-                        else
-                            seg:Hide()
-                        end
-                    end
-                end
-            else
-                frame.fill:SetShown(true)
-                frame.fill:SetVertexColor(ir, ig, ib, 1)
-                frame.fill:SetWidth(fillW)
-            end
-            if frame.spark then
-                frame.spark:SetShown(state.showSpark == true)
-                if state.showSpark == true then
-                    frame.spark:ClearAllPoints()
-                    frame.spark:SetPoint("CENTER", frame.bar, "LEFT", reverse and (statusX + barWLocal - fillW) or (statusX + fillW), 0)
-                end
-            end
-            local currentStageTick = min(#frame.stageTicks, max(0, floor(progress * 4)))
-            if kind ~= "empowered" then
-                if frame._lastEmpowerProgress or frame._lastEmpowerStageTick then ResetEmpowerBlinkState(frame) end
-            else
-                local blinkEnabled = state.blinkEnabled == true
-                local blinkTime = tonumber(state.blinkTime) or 0.25
-                frame._stageFlashStart = frame._stageFlashStart or {}
-                frame._stageFlashUntil = frame._stageFlashUntil or {}
-                if frame._lastEmpowerProgress and progress < (frame._lastEmpowerProgress - 0.001) then ResetEmpowerBlinkState(frame) end
-                if blinkEnabled and currentStageTick > 0 and currentStageTick ~= frame._lastEmpowerStageTick then
-                    frame._stageFlashStart[currentStageTick] = now
-                    frame._stageFlashUntil[currentStageTick] = now + blinkTime
-                end
-                frame._lastEmpowerStageTick = currentStageTick
-                frame._lastEmpowerProgress = progress
-                for i = 1, #frame.stageTicks do
-                    local tick = frame.stageTicks[i]
-                    local flash = tick and tick.MSUF_flash
-                    if tick then
-                        local flashStart = frame._stageFlashStart and frame._stageFlashStart[i]
-                        local flashUntil = frame._stageFlashUntil and frame._stageFlashUntil[i]
-                        local flashing = blinkEnabled and flashStart and flashUntil and now < flashUntil
-                        local baseW = max(1, Scaled(state.scale, tick.MSUF_baseWidth or 2))
-                        local flashTickW = max(baseW, Scaled(state.scale, 4))
-                        if flashing then
-                            local phase = max(0, min(1, (now - flashStart) / blinkTime))
-                            local flashAlpha = max(0, 1 - phase)
-                            tick:SetWidth(flashTickW)
-                            tick:SetVertexColor(1.0, 0.10, 0.10, 1.0)
-                            if flash then
-                                flash:ClearAllPoints()
-                                flash:SetPoint("CENTER", tick, "CENTER", 0, 0)
-                                flash:SetWidth(max(10, Scaled(state.scale, 12)))
-                                flash:SetHeight(barHLocal)
-                                flash:SetAlpha(flashAlpha)
-                                flash:Show()
-                            end
-                        else
-                            tick:SetWidth(baseW)
-                            tick:SetVertexColor(1, 1, 1, tick.MSUF_baseAlpha or 0.85)
-                            if flash then
-                                flash:SetAlpha(0)
-                                flash:Hide()
-                            end
-                        end
-                    end
-                end
-            end
-            ProfileStop("preview", "CastbarPreview.Animation", started)
-            return true
         end
         local function KickReadyKey(unit)
             if unit == "player" then return "kickReadyShowPlayer" end
@@ -657,8 +541,8 @@ local function BuildCastbars(ctx)
             local fillW = max(1, floor(barWLocal * visual + 0.5))
             local baseR, baseG, baseB = 0.20, 0.78, 0.94
             if type(_G.MSUF_ResolveCastbarColors) == "function" then
-                local r, g, b = _G.MSUF_ResolveCastbarColors()
-                if r then baseR, baseG, baseB = r, g or baseG, b or baseB end
+                local ok, r, g, b = pcall(_G.MSUF_ResolveCastbarColors)
+                if ok and r then baseR, baseG, baseB = r, g or baseG, b or baseB end
             end
             local kickKey = KickReadyKey(unit)
             local kickEnabled = kickKey and ReadGBool(kickKey, false)
@@ -867,25 +751,6 @@ local function BuildCastbars(ctx)
                 blinkEnabled = EmpowerBlinkEnabled()
                 blinkTime = EmpowerBlinkTime()
             end
-            self._msufCastbarPreviewAnim = {
-                kind = kind,
-                unit = unit,
-                g = g,
-                duration = duration,
-                reverse = reverse,
-                barW = barWLocal,
-                barH = barHLocal,
-                statusX = statusX,
-                scale = scale,
-                showTime = showTime,
-                showSpark = showSpark,
-                useEmpowerSegs = useEmpowerSegs,
-                baseR = baseR,
-                baseG = baseG,
-                baseB = baseB,
-                blinkEnabled = blinkEnabled,
-                blinkTime = blinkTime,
-            }
             local currentStageTick = min(#self.stageTicks, max(0, floor(progress * 4)))
             if kind ~= "empowered" then
                 if self._lastEmpowerProgress or self._lastEmpowerStageTick then ResetEmpowerBlinkState(self) end
@@ -953,16 +818,8 @@ local function BuildCastbars(ctx)
             end
             ProfileStop("preview", "CastbarPreview.Refresh", profileStarted)
         end
-        function preview:RefreshAnimation(now)
-            return RefreshCastbarAnimation(self, now or (GetTime and GetTime() or 0))
-        end
-        local function CastbarPreviewOnUpdate(self, elapsed)
-            if self.IsVisible and not self:IsVisible() then return end
+        box:SetScript("OnUpdate", function(_, elapsed)
             elapsed = tonumber(elapsed) or 0
-            preview._updateElapsed = (tonumber(preview._updateElapsed) or 0) + elapsed
-            if preview._updateElapsed < CASTBAR_PREVIEW_REFRESH_INTERVAL then return end
-            elapsed = preview._updateElapsed
-            preview._updateElapsed = 0
             preview.progress = (preview.progress or 0) + (elapsed / CastDuration(preview.castType or "normal"))
             if preview.progress > 1 then preview.progress = preview.progress - floor(preview.progress) end
             local now = GetTime and GetTime() or 0
@@ -974,26 +831,8 @@ local function BuildCastbars(ctx)
             else
                 preview:SetRowOffset(0)
             end
-            if not (preview.RefreshAnimation and preview:RefreshAnimation(now)) then preview:Refresh() end
-        end
-        function preview:StartAnimationDriver()
-            if box._msufCastbarPreviewDriverActive then return end
-            box._msufCastbarPreviewDriverActive = true
-            if box.SetOnUpdateMode then box:SetOnUpdateMode("RunWhenVisible") end
-            box:SetScript("OnUpdate", CastbarPreviewOnUpdate)
-        end
-        function preview:StopAnimationDriver()
-            box._msufCastbarPreviewDriverActive = nil
-            box:SetScript("OnUpdate", nil)
-            if box.SetOnUpdateMode then box:SetOnUpdateMode("Disabled") end
-        end
-        box:SetScript("OnShow", function()
-            if preview.StartAnimationDriver then preview:StartAnimationDriver() end
+            preview:Refresh()
         end)
-        box:SetScript("OnHide", function()
-            if preview.StopAnimationDriver then preview:StopAnimationDriver() end
-        end)
-        if not box.IsVisible or box:IsVisible() then preview:StartAnimationDriver() end
         M._msuf2CastbarPreview = preview
         if M._msuf2CastbarPreviewUnit then M.SetCastbarPreviewUnit(M._msuf2CastbarPreviewUnit) end
         if M._msuf2CastbarPreviewType then M.SetCastbarPreviewType(M._msuf2CastbarPreviewType) end
