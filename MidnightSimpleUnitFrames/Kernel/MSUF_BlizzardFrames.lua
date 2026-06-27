@@ -183,19 +183,10 @@ local function Hide(frame)
     end
 end
 
-local function BlizzardCastbarOnShow(frame)
-    if frame and frame.MSUF_BackendAllowShown then
-        return
-    end
-    Hide(frame)
-end
-
 local function KeepBlizzardCastbar(frame)
     if not (frame and frame.SetParent) then
         return
     end
-    frame.MSUF_BackendAllowShown = true
-    frame.showCastbar = true
     if InCombatLockdown and InCombatLockdown() and frame.IsProtected and frame:IsProtected() then
         -- Player castbar can be intentionally handed back to Blizzard. Delay
         -- the parent restore if the castbar is protected during combat.
@@ -210,13 +201,7 @@ local function HideBlizzardCastbar(frame)
     if not frame then
         return
     end
-    frame.MSUF_BackendAllowShown = false
-    frame.showCastbar = false
     Hide(frame)
-    if not frame.MSUF_BackendHideHooked and frame.HookScript then
-        frame.MSUF_BackendHideHooked = true
-        frame:HookScript("OnShow", BlizzardCastbarOnShow)
-    end
 end
 
 local function HandleFrame(frame, doNotReparent, unit)

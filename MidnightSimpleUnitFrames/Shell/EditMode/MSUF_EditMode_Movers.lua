@@ -876,6 +876,98 @@ end
 
 ExportPublic("MSUF_SyncAllUnitPreviews", MSUF_SyncAllUnitPreviews)
 
+--- --- Auto-reforce wrappers ---
+--- Visual update functions can overwrite preview text/bars/colors while Edit
+--- Mode preview is active. Wrap MSUF-owned entry points only for the active
+--- preview window, then restore originals when preview mode stops.
+do
+    local PIPELINE_REFORCE_NAMES = {
+        "MSUF_UpdateAllFonts",
+        "MSUF_UpdateAllFonts_Immediate",
+        "MSUF_RefreshAllIdentityColors",
+        "MSUF_RefreshAllPowerTextColors",
+        "MSUF_UpdateAllBarTextures",
+        "MSUF_UpdateAllBarTextures_Immediate",
+        "MSUF_ApplyBarOutlineThickness_All",
+        "MSUF_ApplyPowerBarBorder_All",
+        "MSUF_ApplyReverseFillBars",
+        "MSUF_UpdateCastbarVisuals",
+        "MSUF_UpdateCastbarVisuals_Immediate",
+        "MSUF_UpdateCastbarTextures",
+        "MSUF_UpdateCastbarTextures_Immediate",
+        "MSUF_RefreshDispelOutlineStates",
+        "MSUF_ApplyAllAlpha",
+    }
+    local wrapped = {}
+    local wrappers = {}
+    local unpackResults = table.unpack or unpack
+
+    local function ScheduleReforce(delay)
+        if not _G.MSUF_PreviewTestMode then return end
+        if IsConfigCombatLocked() then return end
+        C_Timer.After(delay or 0, function()
+            if not _G.MSUF_PreviewTestMode then return end
+            if IsConfigCombatLocked() then return end
+            MSUF_EM2_ReforcePreviewFrames()
+        end)
+    end
+
+    local function UninstallPipelineWrappers()
+        for name, original in pairs(wrapped) do
+            if _G[name] == wrappers[name] then
+                _G[name] = original
+            end
+            wrapped[name] = nil
+            wrappers[name] = nil
+        end
+    end
+
+    local function InstallPipelineWrappers()
+        if not _G.MSUF_PreviewTestMode then return end
+        for _, name in ipairs(PIPELINE_REFORCE_NAMES) do
+            if not wrapped[name] and type(_G[name]) == "function" then
+                local original = _G[name]
+                local function wrapper(...)
+                    if not _G.MSUF_PreviewTestMode then
+                        UninstallPipelineWrappers()
+                        return original(...)
+                    end
+                    local results = { original(...) }
+                    ScheduleReforce(0.05)
+                    return unpackResults(results)
+                end
+                wrapped[name] = original
+                wrappers[name] = wrapper
+                _G[name] = wrapper
+            end
+        end
+    end
+
+    local originalSyncAllUnitPreviews = MSUF_SyncAllUnitPreviews
+    local function SyncAllUnitPreviewsWithPipelineWrappers(...)
+        if _G.MSUF_PreviewTestMode then
+            InstallPipelineWrappers()
+        else
+            UninstallPipelineWrappers()
+        end
+
+        local results = { originalSyncAllUnitPreviews(...) }
+
+        if _G.MSUF_PreviewTestMode then
+            InstallPipelineWrappers()
+            ScheduleReforce(0.05)
+            ScheduleReforce(0.20)
+        else
+            UninstallPipelineWrappers()
+        end
+
+        return unpackResults(results)
+    end
+
+    MSUF_SyncAllUnitPreviews = SyncAllUnitPreviewsWithPipelineWrappers
+    ExportPublic("MSUF_SyncAllUnitPreviews", SyncAllUnitPreviewsWithPipelineWrappers)
+end
+
 --- --- MSUF_SyncCastbarEditModeWithUnitEdit (castbar preview sync) ---
 local function MSUF_SyncCastbarEditModeWithUnitEdit()
     local db = _G.MSUF_DB
