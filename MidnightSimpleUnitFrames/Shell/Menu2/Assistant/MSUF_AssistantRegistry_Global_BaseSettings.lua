@@ -62,6 +62,31 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         "navigation symbole", "menue symbole", "menu symbole", "seitenleisten symbole", "navi icons", "navi symbole anzeigen",
         "navigationssymbole anzeigen", "navigationssymbole ausblenden",
     }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_NAV_ICONS" })
+    Registry:RegisterSetting({
+        key = "general.navHoverScale",
+        label = "Navigation Hover Size",
+        category = "Global / Misc",
+        unit = "global",
+        frameType = "misc",
+        attribute = "navHoverScale",
+        type = "number",
+        min = 1,
+        max = 1.5,
+        step = 0.01,
+        percent = true,
+        aliases = { "navigation hover size", "nav hover size", "nav hover scale", "navigation hover scale", "sidebar hover size", "rail hover size", "apple dock hover", "apple ux hover", "navigation magnification", "nav magnification", "navi hover groesse", "navigation hover groesse" },
+        get = function() return tonumber(GeneralDB().navHoverScale) or 1.05 end,
+        set = function(value)
+            value = tonumber(value) or 1
+            if value < 1 then value = 1 elseif value > 1.5 then value = 1.5 end
+            GeneralDB().navHoverScale = value
+        end,
+        apply = function()
+            ApplyGeneral("MSUF_ASSISTANT_NAV_HOVER_SCALE", { preview = false, applyAll = false, notify = false })
+            if Menu and type(Menu.RefreshNavHoverScale) == "function" then Menu.RefreshNavHoverScale() end
+        end,
+        combatSafe = false,
+    })
     RegisterGeneralBoolean("showWelcomeMessage", "welcomeMessage", "Welcome Message", true, {
         "welcome message", "startup welcome", "start message", "show welcome message", "login welcome message", "startup message", "willkommensnachricht",
         "willkommens nachricht", "willkommens meldung", "willkommen nachricht", "login nachricht", "start meldung",

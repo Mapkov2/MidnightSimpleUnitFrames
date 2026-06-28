@@ -991,6 +991,16 @@ local function MigrateHealPredictionOwnership(conf)
     conf.healPrediction = nil
 end
 
+local function MigrateTextureOverrideOwnership(conf)
+    if type(conf) ~= "table" or conf._barTextureOverrideMigrated == true then return end
+    if (type(conf.barTexture) == "string" and conf.barTexture ~= "")
+        or (type(conf.barBackgroundTexture) == "string" and conf.barBackgroundTexture ~= "")
+        or (type(conf.barBgTexture) == "string" and conf.barBgTexture ~= "") then
+        conf.hlOverride = true
+    end
+    conf._barTextureOverrideMigrated = true
+end
+
 ---
 --- DB init
 ---
@@ -1051,6 +1061,9 @@ function GF.EnsureDB()
     MigrateHealPredictionOwnership(db.gf_party)
     MigrateHealPredictionOwnership(db.gf_raid)
     MigrateHealPredictionOwnership(db.gf_mythicraid)
+    MigrateTextureOverrideOwnership(db.gf_party)
+    MigrateTextureOverrideOwnership(db.gf_raid)
+    MigrateTextureOverrideOwnership(db.gf_mythicraid)
     applyDefaults(db.gf_party, PARTY_DEFAULTS)
     applyDefaults(db.gf_raid,  RAID_DEFAULTS)
     applyDefaults(db.gf_mythicraid, MYTHIC_RAID_DEFAULTS)
@@ -1491,7 +1504,7 @@ end
 --- Resolve bar texture path (falls through to global MSUF bar texture)
 function GF.ResolveBarTexture(kind)
     local conf = GF.GetConf(kind)
-    local key = conf.barTexture
+    local key = conf and conf.hlOverride == true and conf.barTexture or nil
     if key and key ~= "" then
         local resolve = _G.MSUF_ResolveStatusbarTextureKey
         if type(resolve) == "function" then return resolve(key) end
@@ -1504,9 +1517,13 @@ end
 --- Resolve bar background texture path
 function GF.ResolveBarBgTexture(kind)
     local conf = GF.GetConf(kind)
-    local key = conf.barBackgroundTexture
-    if key == nil then key = conf.barBgTexture end
-    if key and key ~= "" then
+    local key
+    if conf and conf.hlOverride == true then
+        key = conf.barBackgroundTexture
+        if key == nil then key = conf.barBgTexture end
+    end
+    if key ~= nil then
+        if key == "" then return GF.ResolveBarTexture(kind) end
         local resolve = _G.MSUF_ResolveStatusbarTextureKey
         if type(resolve) == "function" then return resolve(key) end
     end

@@ -118,7 +118,7 @@ local function BuildMisc(ctx)
         end)
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
-    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 224, true)
+    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 304, true)
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil, nil, nil, MENU_WRITE_OPTS)
     local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, (menuBehavior._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
     if menuSnapHelp.SetWordWrap then menuSnapHelp:SetWordWrap(true) end
@@ -127,6 +127,19 @@ local function BuildMisc(ctx)
     BindMiscToggle(menuBehavior, "Show navigation icons", "showNavigationIcons", false, "MSUF2_NAV_ICONS", 14, -148, 280, MENU_WRITE_OPTS,
         function() M.CallIf(M.RefreshNavIconVisibility) end)
     BindMiscToggle(menuBehavior, "Reduce menu motion", "reduceMotion", false, "MSUF2_REDUCE_MOTION", 14, -178, 280, MENU_WRITE_OPTS)
+    local navHoverScale = W.Slider(menuBehavior, "Navigation hover size", 100, 150, 1, 260)
+    if navHoverScale.SetValueFormatter then navHoverScale:SetValueFormatter(function(value) return M.Format("%d%%", floor((tonumber(value) or 100) + 0.5)) end) end
+    M.BindNumberWidget(ctx, navHoverScale,
+        function() return floor(((tonumber(ReadG("navHoverScale", 1.05)) or 1.05) * 100) + 0.5) end,
+        function(value)
+            SetG("navHoverScale", (tonumber(value) or 100) / 100, "MSUF2_NAV_HOVER_SCALE", MENU_WRITE_OPTS)
+            M.CallIf(M.RefreshNavHoverScale)
+        end,
+        105,
+        { min = 100, max = 150, step = 1, format = "%d%%" })
+    W.MoveWidget(navHoverScale, menuBehavior, 14, -214, 300, "LEFT")
+    local navHoverHelp = W.Text(menuBehavior, "100% keeps every navigation row the same size. Higher values magnify the row under the cursor.", 30, -262, (menuBehavior._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
+    if navHoverHelp.SetWordWrap then navHoverHelp:SetWordWrap(true) end
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
     BindMiscToggle(startup, "Enable version check (peer-to-peer)", "versionCheckEnabled", true, "MSUF2_VERSION_CHECK", 14, -76, 360)
@@ -180,4 +193,4 @@ local function BuildMisc(ctx)
         end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 9 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 10 })

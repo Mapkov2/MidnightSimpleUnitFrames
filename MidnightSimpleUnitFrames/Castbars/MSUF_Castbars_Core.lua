@@ -623,7 +623,12 @@ end
 ExportPublic("MSUF_GetBarBackgroundTexture", GetBarBackgroundTexture)
 
 local function ApplyFont(fontString, fontPath, fontSize, fontFlags, red, green, blue, alpha)
-    fontString:SetFont(fontPath, fontSize, fontFlags)
+    fontSize = tonumber(fontSize) or 12
+    if fontSize <= 0 then fontSize = 12 end
+    if fontSize < 6 then fontSize = 6 elseif fontSize > 128 then fontSize = 128 end
+    if fontPath and fontString.SetFont then
+        pcall(fontString.SetFont, fontString, fontPath, fontSize, fontFlags)
+    end
     fontString:SetTextColor(red, green, blue, alpha)
 end
 
@@ -883,7 +888,8 @@ local function UpdateCastbarVisuals()
         shadowAlpha, shadowX, shadowY = 1, 2, -2
     end
 
-    local baseFontSize = general.fontSize or 14
+    local baseFontSize = tonumber(general.fontSize) or 14
+    if baseFontSize <= 0 then baseFontSize = 14 end
     local effectiveSpellFontSize = spellFontSize > 0 and spellFontSize or baseFontSize
 
     local context = {

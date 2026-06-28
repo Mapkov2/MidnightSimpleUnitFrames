@@ -693,7 +693,10 @@ local function ApplyGlobalFont(fs, size)
     fontPath = fontPath or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     fontFlags = fontFlags or "OUTLINE"
     if fs.SetFont then
-        fs:SetFont(fontPath, size or 14, fontFlags)
+        size = tonumber(size) or 14
+        if size <= 0 then size = 14 end
+        if size < 6 then size = 6 elseif size > 40 then size = 40 end
+        pcall(fs.SetFont, fs, fontPath, size, fontFlags)
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then

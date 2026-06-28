@@ -76,19 +76,28 @@ local function MSUF_ProfileIO_RunEnsureDB(force)
     end
     return false
 end
+local function MSUF_ProfileIO_RunProtected(label, fn, ...)
+    if type(fn) ~= "function" then
+        return false
+    end
+    local ok, result = pcall(fn, ...)
+    if not ok then
+        ExportPublic("MSUF_ProfileIO_LastRuntimeApplyError", tostring(label or "runtime") .. ": " .. tostring(result))
+        return false
+    end
+    return true, result
+end
 local function MSUF_ProfileIO_RunApplyAllSettings()
     local UF = MSUF and MSUF.UF
     if UF and UF.Apply then
-        UF.Apply(nil)
-        return true
+        return MSUF_ProfileIO_RunProtected("UF.Apply", UF.Apply, nil)
     end
     return false
 end
 local function MSUF_ProfileIO_RunDisableBlizzardFrames()
     local UF = MSUF and MSUF.UF
     if UF and type(UF.DisableBlizzardFrames) == "function" then
-        UF.DisableBlizzardFrames()
-        return true
+        return MSUF_ProfileIO_RunProtected("UF.DisableBlizzardFrames", UF.DisableBlizzardFrames)
     end
     return false
 end
@@ -153,8 +162,7 @@ MSUF_ProfileIO_CallGlobal = function(name, ...)
     if type(fn) ~= "function" then
         return false
     end
-    fn(...)
-    return true
+    return MSUF_ProfileIO_RunProtected(name, fn, ...)
 end
 local MSUF_ProfileIO_PostProfileRuntimeApply
 local function MSUF_ProfileIO_InCombatLockdown()
@@ -550,6 +558,15 @@ local function MSUF_ProfileIO_FirstProfileTable(profiles)
     end
     return nil
 end
+local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
+    if type(profile) ~= "table" then return end
+    if type(profile.general) ~= "table" then
+        profile.general = {}
+    end
+    if profile.general.navHoverScale == nil then
+        profile.general.navHoverScale = 1.05
+    end
+end
 function MSUF_InitProfiles()
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     local charKey = MSUF_GetCharKey()
@@ -591,6 +608,7 @@ function MSUF_CreateProfile(name)
          return
     end
     profiles[name] = CopyTable(type(MSUF_DB) == "table" and MSUF_DB or {})
+    MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[name])
     print("|cff00ff00MSUF:|r Created new profile '"..name.."'.")
  end
 function MSUF_SwitchProfile(name)
@@ -692,6 +710,7 @@ function MSUF_CopyProfile(sourceName, destName)
         return false
     end
     profiles[destName] = CopyTable(src)
+    MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[destName])
     print("|cff00ff00MSUF:|r Copied '"..sourceName.."' -> '"..destName.."'.")
     return true
 end
@@ -948,6 +967,70 @@ local function MSUF_DeepCopy(v)
         out[k] = MSUF_DeepCopy(vv)
     end
      return out
+end
+
+local MSUF_PROFILEIO_POSITIVE_FONT_SIZE_KEYS = {
+    fontSize = 14,
+    nameFontSize = 14,
+    hpFontSize = 14,
+    powerFontSize = 14,
+    auraFontSize = 25,
+    levelIndicatorSize = 12,
+    classificationIndicatorSize = 12,
+    statusIndicatorSize = 14,
+    statusTextSize = 14,
+    statusGhostTextSize = 14,
+    statusAFKTextSize = 14,
+    playerHPBarTextSize = 14,
+    combatFontSize = 24,
+    combatStateFontSize = 24,
+    focusKickTextSize = 12,
+    stackTextSize = 14,
+    cooldownTextSize = 14,
+    buffStackTextSize = 14,
+    buffCooldownTextSize = 14,
+    debuffStackTextSize = 14,
+    debuffCooldownTextSize = 14,
+}
+local function MSUF_ProfileIO_ClampPositiveFontSize(tbl, key, fallback)
+    if type(tbl) ~= "table" or tbl[key] == nil then
+        return
+    end
+    local n = tonumber(tbl[key])
+    if n == nil then
+        return
+    end
+    fallback = tonumber(fallback) or 14
+    if n <= 0 then
+        n = fallback
+    elseif n < 6 then
+        n = 6
+    elseif n > 128 then
+        n = 128
+    end
+    tbl[key] = n
+end
+local function MSUF_ProfileIO_NormalizeImportedFontSizes(profile)
+    if type(profile) ~= "table" then
+        return profile
+    end
+    local seen = {}
+    local function Walk(tbl, depth)
+        if type(tbl) ~= "table" or seen[tbl] or depth > 8 then
+            return
+        end
+        seen[tbl] = true
+        for key, fallback in pairs(MSUF_PROFILEIO_POSITIVE_FONT_SIZE_KEYS) do
+            MSUF_ProfileIO_ClampPositiveFontSize(tbl, key, fallback)
+        end
+        for _, value in pairs(tbl) do
+            if type(value) == "table" then
+                Walk(value, depth + 1)
+            end
+        end
+    end
+    Walk(profile, 0)
+    return profile
 end
 
 local MSUF_PROFILEIO_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
@@ -1534,6 +1617,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
          return false, "invalid snapshot"
     end
     local isUUFImport = MSUF_ProfileIO_IsUUFConvertedPayload(payload)
+    MSUF_ProfileIO_NormalizeImportedFontSizes(payload)
     if kind == "unitframe" or kind == "all" then
         MSUF_ProfileIO_NormalizeUnitFramePositionDB(payload)
     end
@@ -2748,6 +2832,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl, isUUFImport)
     if isUUFImport then
         MSUF_ProfileIO_ClearUUFUnitFrameScreenCache()
     end
+    MSUF_ProfileIO_NormalizeImportedFontSizes(tbl)
     MSUF_ProfileIO_NormalizeUnitFramePositionDB(tbl)
     --- Keep profile table reference stable; wipe + copy.
     if type(MSUF_DB) ~= "table" then
@@ -2952,6 +3037,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
     if type(newTable) ~= "table" then
          return false, "not a table"
     end
+    MSUF_ProfileIO_NormalizeImportedFontSizes(newTable)
     MSUF_ProfileIO_NormalizeUnitFramePositionDB(newTable)
     if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
         _G.MSUF_NormalizePortraitRenderDB(newTable)

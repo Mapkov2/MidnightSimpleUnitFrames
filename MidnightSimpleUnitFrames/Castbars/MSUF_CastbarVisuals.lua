@@ -224,7 +224,7 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     local flags = ComposeFontFlags(outline, globalFlags)
     size = Clamp(size, 6, 128)
     if fontString.SetFont then
-        fontString:SetFont(fontPath, size, flags)
+        pcall(fontString.SetFont, fontString, fontPath, size, flags)
     end
 
     local r, green, b = CastbarTextColor(g, prefix, colorSuffix)

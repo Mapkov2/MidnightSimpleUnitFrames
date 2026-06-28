@@ -427,6 +427,11 @@ local function BuildBars(ctx)
         local scope = CurrentBarsScope()
         return scope == "shared" or ScopeHasOverride(scope, "hlOverride")
     end
+    local function TextureControlsActive()
+        local scope = CurrentBarsScope()
+        if scope == "shared" then return true end
+        return IsGFScope(scope) and ScopeHasOverride(scope, "hlOverride")
+    end
     local function GradientScopeGet(key, defaultValue)
         local scope = CurrentBarsScope()
         if scope ~= "shared" and ScopeHasOverride(scope, "hlOverride") then
@@ -526,16 +531,27 @@ local function BuildBars(ctx)
         return changed
     end
     local function BarTextureForScope()
+        local scope = CurrentBarsScope()
+        if scope ~= "shared" and not IsGFScope(scope) then return ReadG("barTexture", "Blizzard") end
         return BarScopeGet("barTexture", ReadG("barTexture", "Blizzard"))
+    end
+    local function GeneralBarBackgroundTextureKey()
+        local general = G()
+        local key = general.barBackgroundTexture
+        if key == nil then key = general.barBgTexture end
+        return key or ""
     end
     local function SetBarTextureForScope(value)
         value = value or "Blizzard"
+        local scope = CurrentBarsScope()
+        if scope ~= "shared" and not IsGFScope(scope) then return false end
         if BarTextureForScope() == value then return false end
         BarScopeSet("barTexture", value, "MSUF2_BAR_TEXTURE")
         return true
     end
     local function BarBackgroundTextureForScope()
         local scope = CurrentBarsScope()
+        if scope ~= "shared" and not IsGFScope(scope) then return GeneralBarBackgroundTextureKey() end
         if scope ~= "shared" and ScopeHasOverride(scope, "hlOverride") then
             local db = DB()
             local keys = ScopeDBKeys(scope)
@@ -547,7 +563,7 @@ local function BuildBars(ctx)
                 end
             end
         end
-        return ReadG("barBackgroundTexture", "")
+        return GeneralBarBackgroundTextureKey()
     end
     local function SetGeneralBarBackgroundTexture(value)
         local general = G()
@@ -559,25 +575,19 @@ local function BuildBars(ctx)
         value = value or ""
         local scope = CurrentBarsScope()
         if scope == "shared" then return SetGeneralBarBackgroundTexture(value) end
+        if not IsGFScope(scope) then return false end
         local keys = ScopeDBKeys(scope)
         if not keys then return SetGeneralBarBackgroundTexture(value) end
         ScopeSetOverride(scope, "hlOverride", true)
         local db = DB()
         local changed = false
-        local groupScope = IsGFScope(scope)
         for i = 1, #keys do
             local key = keys[i]
             db[key] = db[key] or {}
             local entry = db[key]
-            if groupScope then
-                if entry.barBackgroundTexture ~= value or entry.barBgTexture ~= value then changed = true end
-                entry.barBackgroundTexture = value
-                entry.barBgTexture = value
-            else
-                if entry.barBackgroundTexture ~= value or entry.barBgTexture ~= nil then changed = true end
-                entry.barBackgroundTexture = value
-                entry.barBgTexture = nil
-            end
+            if entry.barBackgroundTexture ~= value or entry.barBgTexture ~= value then changed = true end
+            entry.barBackgroundTexture = value
+            entry.barBgTexture = value
         end
         return changed
     end
@@ -614,14 +624,16 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_BARS_RESET_OVERRIDES")
             if M.SelectPage then M.SelectPage(ctx.key) end
         end,
-        hint = "Group Frames inherit Shared textures and gradients by default. Raid also applies to Mythic Raid.",
+        hint = "Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.",
         updateHint = function(hint, current, active, shared)
             if shared then
-                hint:SetText("Group Frames inherit Shared textures and gradients by default. Raid also applies to Mythic Raid.")
+                hint:SetText("Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.")
+            elseif IsGFScope(current) and ScopeHasOverride(current, "hlOverride") then
+                hint:SetText("This group scope can use custom textures and gradients. Raid also applies to Mythic Raid.")
             elseif ScopeHasOverride(current, "hlOverride") then
-                hint:SetText("This scope is using custom bar settings. Shared changes will not affect it until the override is reset.")
+                hint:SetText("This scope can use custom gradients and bar settings. Textures still follow Shared.")
             else
-                hint:SetText("This scope follows Shared bar settings. Turn on custom settings here only when this scope needs different bars.")
+                hint:SetText("This scope follows Shared bar settings. Turn on custom settings here when this scope needs different gradients or bar settings.")
             end
         end,
     })
@@ -697,12 +709,15 @@ local function BuildBars(ctx)
     PadButton("<", "LEFT", 8, -27)
     PadButton(">", "RIGHT", 54, -27)
     PadButton("v", "DOWN", 31, -49)
-    local textureScopeControls = { barTexture, bgTexture, hpGradient, powerGradient }
+    local textureControls = { barTexture, bgTexture }
+    local gradientControls = { hpGradient, powerGradient }
     M.TrackRefresh(ctx, SyncGradientControls(function()
         local current = CurrentGradientDirectionsForScope()
-        local controlsActive = GradientControlsActive()
-        local valueControlsActive = controlsActive and ((GradientScopeGet("enableGradient", false) == true) or (GradientScopeGet("enablePowerGradient", false) == true))
-        SetControlsEnabled(textureScopeControls, controlsActive)
+        local textureControlsActive = TextureControlsActive()
+        local gradientControlsActive = GradientControlsActive()
+        local valueControlsActive = gradientControlsActive and ((GradientScopeGet("enableGradient", false) == true) or (GradientScopeGet("enablePowerGradient", false) == true))
+        SetControlsEnabled(textureControls, textureControlsActive)
+        SetControlsEnabled(gradientControls, gradientControlsActive)
         SetControlEnabled(strength, valueControlsActive)
         pad:SetAlpha(valueControlsActive and 1 or 0.45)
         for value, btn in pairs(directionButtons) do

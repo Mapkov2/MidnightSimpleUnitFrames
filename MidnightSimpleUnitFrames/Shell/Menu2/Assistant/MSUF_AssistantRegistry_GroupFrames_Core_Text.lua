@@ -116,7 +116,12 @@ function A.GroupFramesRegistry.BuildTextCoreContext(ctx)
 
     local function RegisterGroupTexture(scope, attr, dbKey, label, aliases)
         RegisterGroupString(scope, attr, dbKey, label, "", "visual", aliases, {
-            set = function(scopeKey, value) GroupDB(scopeKey)[dbKey] = NormalizeGroupTextureName(value) end,
+            set = function(scopeKey, value)
+                local conf = GroupDB(scopeKey)
+                local texture = NormalizeGroupTextureName(value)
+                conf[dbKey] = texture
+                if texture ~= "" then conf.hlOverride = true end
+            end,
             description = "Sets the group-frame texture name, or clears it to follow the global style.",
         })
     end

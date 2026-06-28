@@ -952,7 +952,9 @@ local function ResolveStatusbarTextureKey(key, fallback)
 end
 
 local function TextureFromScope(conf, general)
-  local key = ScopedValue(conf, general, "barTexture", nil)
+  -- Unit-frame textures are shared-only. Party/Raid texture overrides are
+  -- resolved by the GroupFrames compiler path.
+  local key = general and general.barTexture
   if key ~= nil then
     return ResolveStatusbarTextureKey(key, TextureFromGlobal())
   end
@@ -961,11 +963,7 @@ end
 
 local function BackgroundTextureFromScope(conf, general, foregroundTexture)
   local key
-  if conf and conf.hlOverride == true then
-    key = conf.barBackgroundTexture
-    if key == nil then key = conf.barBgTexture end
-  end
-  if key == nil and general then
+  if general then
     key = general.barBackgroundTexture
     if key == nil then key = general.barBgTexture end
   end

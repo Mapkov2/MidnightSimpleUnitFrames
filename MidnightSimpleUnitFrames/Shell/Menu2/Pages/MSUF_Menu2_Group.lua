@@ -145,8 +145,13 @@ end
 local function Set(kind, key, value, mode)
     local function Write()
         local conf = Conf(kind)
-        if conf[key] == value then return false end
+        local textureKey = key == "barTexture" or key == "barBackgroundTexture" or key == "barBgTexture"
+        local activatesTextureOverride = textureKey and type(value) == "string" and value ~= "" and conf.hlOverride ~= true
+        if conf[key] == value and not activatesTextureOverride then return false end
         conf[key] = value
+        if activatesTextureOverride then
+            conf.hlOverride = true
+        end
         QueueGF(kind, mode or "visual")
         return true
     end
