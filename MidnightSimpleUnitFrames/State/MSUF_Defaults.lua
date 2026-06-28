@@ -292,6 +292,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.unitTooltipModifier = "ALT"
         g.disableUnitInfoTooltips = true
         g.unitInfoTooltipStyle = "classic"
+        g.navHoverScale = 1.05
         g.tooltipPosX = nil
         g.tooltipPosY = nil
     end
@@ -746,6 +747,9 @@ if g.hideAdvancedMenu == nil then
 end
 if g.showNavigationIcons == nil then
     g.showNavigationIcons = false
+end
+if g.navHoverScale == nil then
+    g.navHoverScale = 1.05
 end
     if g.editModeSnapToGrid == nil then
         g.editModeSnapToGrid = false --- Default: Snap OFF
