@@ -32,6 +32,14 @@ local function NavIconsEnabled()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     return type(g) == "table" and g.showNavigationIcons == true
 end
+local function NavHoverScale()
+    local g = M.GetGeneralDB and M.GetGeneralDB()
+    local scale = type(g) == "table" and tonumber(g.navHoverScale) or 1.05
+    if not scale then return 1.05 end
+    if scale < 1 then return 1 end
+    if scale > 1.5 then return 1.5 end
+    return scale
+end
 local function TrimText(text)
     text = tostring(text or "")
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
@@ -174,7 +182,59 @@ end
 local function AttachNavHoverGrow(btn)
     if not btn or btn._msuf2NavHoverGrow then return end
     btn._msuf2NavHoverGrow = true
+    if btn.GetWidth then btn._msuf2NavBaseWidth = btn:GetWidth() end
     if btn.SetScale then btn:SetScale(1) end
+    btn:HookScript("OnEnter", function(self)
+        local scale = NavHoverScale()
+        if scale > 1 and self.SetWidth then
+            local baseWidth = tonumber(self._msuf2NavBaseWidth) or (self.GetWidth and self:GetWidth()) or 0
+            if baseWidth <= 0 then return end
+            self._msuf2NavBaseWidth = baseWidth
+            if self.GetFrameLevel and self.SetFrameLevel and self._msuf2NavHoverBaseLevel == nil then
+                self._msuf2NavHoverBaseLevel = self:GetFrameLevel()
+                self:SetFrameLevel(self._msuf2NavHoverBaseLevel + 20)
+            end
+            self:SetWidth(floor(baseWidth * scale + 0.5))
+        end
+    end)
+    btn:HookScript("OnLeave", function(self)
+        if self.SetScale then self:SetScale(1) end
+        if self.SetWidth and self._msuf2NavBaseWidth then self:SetWidth(self._msuf2NavBaseWidth) end
+        if self._msuf2NavHoverBaseLevel and self.SetFrameLevel then
+            self:SetFrameLevel(self._msuf2NavHoverBaseLevel)
+            self._msuf2NavHoverBaseLevel = nil
+        end
+    end)
+    btn:HookScript("OnHide", function(self)
+        if self.SetScale then self:SetScale(1) end
+        if self.SetWidth and self._msuf2NavBaseWidth then self:SetWidth(self._msuf2NavBaseWidth) end
+        if self._msuf2NavHoverBaseLevel and self.SetFrameLevel then
+            self:SetFrameLevel(self._msuf2NavHoverBaseLevel)
+            self._msuf2NavHoverBaseLevel = nil
+        end
+    end)
+end
+function M.RefreshNavHoverScale()
+    if M.navButtons then
+        for _, btn in pairs(M.navButtons) do
+            if btn and btn.SetScale then btn:SetScale(1) end
+            if btn and btn.SetWidth and btn._msuf2NavBaseWidth then btn:SetWidth(btn._msuf2NavBaseWidth) end
+            if btn and btn._msuf2NavHoverBaseLevel and btn.SetFrameLevel then
+                btn:SetFrameLevel(btn._msuf2NavHoverBaseLevel)
+                btn._msuf2NavHoverBaseLevel = nil
+            end
+        end
+    end
+    if M.navHeaders then
+        for _, btn in pairs(M.navHeaders) do
+            if btn and btn.SetScale then btn:SetScale(1) end
+            if btn and btn.SetWidth and btn._msuf2NavBaseWidth then btn:SetWidth(btn._msuf2NavBaseWidth) end
+            if btn and btn._msuf2NavHoverBaseLevel and btn.SetFrameLevel then
+                btn:SetFrameLevel(btn._msuf2NavHoverBaseLevel)
+                btn._msuf2NavHoverBaseLevel = nil
+            end
+        end
+    end
 end
 local function AttachHistoryTooltip(btn, getTitle, getText)
     if not btn then return end
@@ -525,6 +585,8 @@ local function BuildNavRail(parent)
                 if item.frame then item.frame:Hide() end
             elseif item.kind == "header" then
                 btn:Show()
+                if btn.SetScale then btn:SetScale(1) end
+                if btn.SetWidth and btn._msuf2NavBaseWidth then btn:SetWidth(btn._msuf2NavBaseWidth) end
                 btn:ClearAllPoints()
                 btn:SetPoint("TOPLEFT", list, "TOPLEFT", 12, y)
                 ApplyNavHeaderVisual(btn, M.navHeaderState[item.id])
@@ -537,6 +599,8 @@ local function BuildNavRail(parent)
                 y = y - 32
             elseif not item.group or M.navHeaderState[item.group] then
                 btn:Show()
+                if btn.SetScale then btn:SetScale(1) end
+                if btn.SetWidth and btn._msuf2NavBaseWidth then btn:SetWidth(btn._msuf2NavBaseWidth) end
                 btn:ClearAllPoints()
                 btn:SetPoint("TOPLEFT", list, "TOPLEFT", 12 + (btn._msuf2NavIndent or 0), y)
                 y = y - NAV_BUTTON_STEP
