@@ -10,7 +10,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Fonts = MSUF.Fonts or {}
 
-local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
+local type, tostring, tonumber, pairs, pcall = type, tostring, tonumber, pairs, pcall
 
 local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
@@ -170,15 +170,38 @@ local function _MSUF_FontApplied(fs, requestedPath)
     return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(requestedPath or ""):gsub("/", "\\"):lower()
 end
 
+local function _MSUF_NormalizeFontSize(size, fallback)
+    size = tonumber(size)
+    if size == nil or size <= 0 then
+        size = tonumber(fallback) or 14
+    end
+    if size < 6 then
+        return 6
+    elseif size > 128 then
+        return 128
+    end
+    return size
+end
+
 local function _MSUF_SetFontChecked(fs, path, size, flags, fontKey)
-    local applied = fs:SetFont(path, size, flags)
+    if not (fs and type(fs.SetFont) == "function" and type(path) == "string" and path ~= "") then
+        return false
+    end
+    size = _MSUF_NormalizeFontSize(size, 14)
+    flags = flags or ""
+    local applied
+    local ok, result = pcall(fs.SetFont, fs, path, size, flags)
+    if not ok then
+        return false
+    end
+    applied = result
     return applied ~= false and _MSUF_FontApplied(fs, path)
 end
 
 local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb, ca)
     if not fs then return end
     local S = _fontState
-    size = tonumber(size) or 14
+    size = _MSUF_NormalizeFontSize(size, 14)
 
     local rev = S.pathSerial * 10 + (_MSUF_FONT_FLAGS_CODE[S.flags] or 1) + size * 10000030
     if fs._msufFontRev ~= rev then
@@ -281,7 +304,7 @@ local function _MSUF_ApplyFontsToFrame(f)
     if f.levelText then _MSUF_ApplyFontCached(f.levelText, (conf and conf.levelIndicatorSize) or nameSize, false, 0, 0, 0) end
     if f.classificationIndicatorText then _MSUF_ApplyFontCached(f.classificationIndicatorText, (conf and conf.classificationIndicatorSize) or nameSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
 
-    local statusSize = (tonumber(nameSize) or 14) + 2
+    local statusSize = _MSUF_NormalizeFontSize(nameSize, 14) + 2
     if f.statusIndicatorText then _MSUF_ApplyFontCached(f.statusIndicatorText, statusSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
     if f.statusIndicatorOverlayText then _MSUF_ApplyFontCached(f.statusIndicatorOverlayText, statusSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
 
@@ -322,10 +345,10 @@ local function UpdateAllFonts(onlyKey)
     end
     fr, fg, fb = tonumber(fr) or 1, tonumber(fg) or 1, tonumber(fb) or 1
 
-    local baseSize       = g.fontSize or 14
-    local globalNameSize = g.nameFontSize  or baseSize
-    local globalHPSize   = g.hpFontSize    or baseSize
-    local globalPowSize  = g.powerFontSize or baseSize
+    local baseSize       = _MSUF_NormalizeFontSize(g.fontSize, 14)
+    local globalNameSize = _MSUF_NormalizeFontSize(g.nameFontSize, baseSize)
+    local globalHPSize   = _MSUF_NormalizeFontSize(g.hpFontSize, baseSize)
+    local globalPowSize  = _MSUF_NormalizeFontSize(g.powerFontSize, baseSize)
     local useShadow      = not (g and g.textBackdrop == false)
     local shadowAlpha, shadowX, shadowY = _MSUF_ShadowMetrics(g.fontShadowStrength)
     local textAlpha = _MSUF_ClampTextAlpha(g.fontTextAlpha)

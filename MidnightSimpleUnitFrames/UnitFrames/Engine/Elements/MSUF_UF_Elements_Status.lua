@@ -264,7 +264,11 @@ local function ApplyStatusFont(region, font, size, flags)
   if not (region and region.SetFont and font) then
     return false
   end
-  return region:SetFont(font, size, flags) ~= false
+  size = tonumber(size) or 14
+  if size <= 0 then size = 14 end
+  if size < 6 then size = 6 elseif size > 128 then size = 128 end
+  local ok, applied = pcall(region.SetFont, region, font, size, flags)
+  return ok and applied ~= false
 end
 
 local function SetFont(region, spec, size)
@@ -274,6 +278,8 @@ local function SetFont(region, spec, size)
   local font = spec and spec.font
   local flags = spec and spec.fontFlags or "OUTLINE"
   size = tonumber(size) or 14
+  if size <= 0 then size = 14 end
+  if size < 6 then size = 6 elseif size > 128 then size = 128 end
   if font and (region._msufStatusFont ~= font or region._msufStatusFontSize ~= size or region._msufStatusFontFlags ~= flags) then
     if ApplyStatusFont(region, font, size, flags) then
       region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags

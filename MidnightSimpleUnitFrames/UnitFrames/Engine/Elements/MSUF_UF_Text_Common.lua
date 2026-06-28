@@ -89,7 +89,11 @@ end
 
 local function ApplyFontChecked(fs, requested, size, flags)
   if not (fs and type(fs.SetFont) == "function") then return false end
-  return fs:SetFont(requested, size, flags) ~= false and FontApplied(fs, requested)
+  size = tonumber(size) or 12
+  if size <= 0 then size = 12 end
+  if size < 6 then size = 6 elseif size > 128 then size = 128 end
+  local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
+  return ok and applied ~= false and FontApplied(fs, requested)
 end
 
 local function SetFont(fs, spec, size)
@@ -98,6 +102,8 @@ local function SetFont(fs, spec, size)
   end
   local font = (spec and spec.font) or STANDARD_FONT
   local fontSize = tonumber(size) or 12
+  if fontSize <= 0 then fontSize = 12 end
+  if fontSize < 6 then fontSize = 6 elseif fontSize > 128 then fontSize = 128 end
   local flags = spec and spec.fontFlags or "OUTLINE"
   if fs._msufFont ~= font or fs._msufFontSize ~= fontSize or fs._msufFontFlags ~= flags then
     if ApplyFontChecked(fs, font, fontSize, flags) then

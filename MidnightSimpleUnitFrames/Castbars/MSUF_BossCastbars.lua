@@ -173,7 +173,13 @@ local function ApplyBossCastbarLayout(frame)
             or tonumber(general.castbarSpellNameFontSize)
             or tonumber(general.fontSize)
             or 14
+        if nameFontSize <= 0 then
+            nameFontSize = (tonumber(general.fontSize) and tonumber(general.fontSize) > 0 and tonumber(general.fontSize)) or 14
+        end
+        if nameFontSize < 6 then nameFontSize = 6 elseif nameFontSize > 128 then nameFontSize = 128 end
         local timeFontSize = tonumber(general.bossCastTimeFontSize) or nameFontSize
+        if timeFontSize <= 0 then timeFontSize = nameFontSize end
+        if timeFontSize < 6 then timeFontSize = 6 elseif timeFontSize > 128 then timeFontSize = 128 end
 
         _G.MSUF_ApplyBossCastbarTextsLayout(frame, {
             baselineTimeX = -2,

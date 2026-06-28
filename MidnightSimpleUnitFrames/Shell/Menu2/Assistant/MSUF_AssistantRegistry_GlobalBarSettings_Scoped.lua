@@ -50,22 +50,24 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
             reason = "MSUF_ASSISTANT_BARS_OVERRIDE",
             description = "Enables or disables custom Global Bars settings for this target.",
         })
-        RegisterScopedSetting("barScope", scope, "barTexture", "texture", "Bar Texture", "string", "Blizzard", GlobalScopeAliases(scope, {
-            "bar texture", "bars texture", "global bar texture", "global bars texture", "health bar texture", "power bar texture", "foreground bar texture", "foreground texture", "foreground bar texture",
-        }), {
-            flag = "hlOverride",
-            normalizeValue = NormalizeTextureKeyForAssistant,
-            apply = ApplyBars,
-            reason = "MSUF_ASSISTANT_SCOPED_BAR_TEXTURE",
-        })
-        RegisterScopedSetting("barScope", scope, "barBackgroundTexture", "backgroundTexture", "Bar Background Texture", "string", "", GlobalScopeAliases(scope, {
-            "bar background texture", "background bar texture", "bar bg texture",
-        }), {
-            flag = "hlOverride",
-            normalizeValue = NormalizeTextureKeyForAssistant,
-            apply = ApplyBars,
-            reason = "MSUF_ASSISTANT_SCOPED_BAR_BACKGROUND_TEXTURE",
-        })
+        if scope == "gf_party" or scope == "gf_raid" then
+            RegisterScopedSetting("barScope", scope, "barTexture", "texture", "Bar Texture", "string", "Blizzard", GlobalScopeAliases(scope, {
+                "bar texture", "bars texture", "global bar texture", "global bars texture", "health bar texture", "power bar texture", "foreground bar texture", "foreground texture", "foreground bar texture",
+            }), {
+                flag = "hlOverride",
+                normalizeValue = NormalizeTextureKeyForAssistant,
+                apply = ApplyBars,
+                reason = "MSUF_ASSISTANT_SCOPED_BAR_TEXTURE",
+            })
+            RegisterScopedSetting("barScope", scope, "barBackgroundTexture", "backgroundTexture", "Bar Background Texture", "string", "", GlobalScopeAliases(scope, {
+                "bar background texture", "background bar texture", "bar bg texture",
+            }), {
+                flag = "hlOverride",
+                normalizeValue = NormalizeTextureKeyForAssistant,
+                apply = ApplyBars,
+                reason = "MSUF_ASSISTANT_SCOPED_BAR_BACKGROUND_TEXTURE",
+            })
+        end
         RegisterScopedSetting("barScope", scope, "enableGradient", "healthGradient", "HP Bar Gradient", "boolean", false, GlobalScopeAliases(scope, {
             "hp bar gradient", "health bar gradient", "health gradient", "hp gradient",
         }), {
