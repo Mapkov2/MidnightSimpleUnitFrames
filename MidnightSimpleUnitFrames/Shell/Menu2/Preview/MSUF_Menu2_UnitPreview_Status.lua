@@ -149,8 +149,6 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
         local path = StatusSymbolTexture((runtimeCfg and runtimeCfg.symbol) or conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol or g.restingStateIndicatorSymbol)
         if tex and path then
             tex:SetTexture(path)
-        elseif tex and tex.SetAtlas then
-            tex:SetAtlas("UI-HUD-UnitFrame-Player-PortraitRestingIcon")
         elseif tex then
             tex:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
             if tex.SetTexCoord then tex:SetTexCoord(0, 0.5, 0, 0.5) end

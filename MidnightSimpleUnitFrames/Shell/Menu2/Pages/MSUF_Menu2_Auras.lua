@@ -781,7 +781,20 @@ local function ApplyAuraPreviewFont(fs, size)
     if not fs then return end
     local fontPath, fontFlags, r, g, b, _, useShadow
     if type(_G.MSUF_GetGlobalFontSettings) == "function" then fontPath, fontFlags, r, g, b, _, useShadow = _G.MSUF_GetGlobalFontSettings() end
-    if fs.SetFont then fs:SetFont(fontPath or FONT, max(7, tonumber(size) or 10), fontFlags or "OUTLINE") end
+    if fs.SetFont then
+        local px = max(7, tonumber(size) or 10)
+        local flags = fontFlags or "OUTLINE"
+        local path = fontPath or FONT
+        local resolveSafe = _G.MSUF_ResolveSafeFontPath
+        if type(resolveSafe) == "function" then
+            local gdb = _G.MSUF_DB and _G.MSUF_DB.general
+            path = resolveSafe(path, px, flags, gdb and gdb.fontKey)
+        end
+        local ok, applied = pcall(fs.SetFont, fs, path, px, flags)
+        if not ok or applied == false then
+            pcall(fs.SetFont, fs, FONT, px, flags)
+        end
+    end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then fs:SetShadowOffset(useShadow and 1 or 0, useShadow and -1 or 0) end
 end

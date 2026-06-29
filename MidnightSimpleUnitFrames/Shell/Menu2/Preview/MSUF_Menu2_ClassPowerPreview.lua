@@ -356,7 +356,15 @@ local function ApplyFont(region, size)
     local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
     if not fontPath or fontPath == "" then fontPath = "Fonts\\FRIZQT__.TTF" end
     if not fontFlags or fontFlags == "" then fontFlags = "OUTLINE" end
-    region:SetFont(fontPath, size, fontFlags)
+    local resolveSafe = _G.MSUF_ResolveSafeFontPath
+    if type(resolveSafe) == "function" then
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        fontPath = resolveSafe(fontPath, size, fontFlags, g and g.fontKey)
+    end
+    local ok, applied = pcall(region.SetFont, region, fontPath, size, fontFlags)
+    if not ok or applied == false then
+        pcall(region.SetFont, region, "Fonts\\FRIZQT__.TTF", size, fontFlags)
+    end
     if region.SetShadowColor then region:SetShadowColor(0, 0, 0, 1) end
     if region.SetShadowOffset then region:SetShadowOffset(1, -1) end
 end

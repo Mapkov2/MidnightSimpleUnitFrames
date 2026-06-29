@@ -689,7 +689,6 @@ end
 local function IsBlizzardAuraTypeEnabled(confOrRoot, nativeKey)
   local root = type(confOrRoot) == "table" and (confOrRoot.auras or confOrRoot) or nil
   if not root or root.enabled == false then return false end
-  if root.renderer == "NATIVE_12_1" then return true end
   local types = type(root.blizzardTypes) == "table" and root.blizzardTypes or nil
   local value = types and types[nativeKey]
   if value ~= nil then return value == true end
@@ -823,11 +822,11 @@ local function CompileCoreAuras(kind, conf)
     kind = kind,
     renderer = "NATIVE_12_1",
     blizzard = {
-      buffs = true,
-      debuffs = true,
-      dispels = true,
-      externals = true,
-      privateAuras = true,
+      buffs = IsBlizzardAuraTypeEnabled(root or {}, "buffs"),
+      debuffs = IsBlizzardAuraTypeEnabled(root or {}, "debuffs"),
+      dispels = IsBlizzardAuraTypeEnabled(root or {}, "dispels"),
+      externals = IsBlizzardAuraTypeEnabled(root or {}, "externals"),
+      privateAuras = IsBlizzardAuraTypeEnabled(root or {}, "privateAuras"),
       iconSize = Num(root and root.blizzardIconSize, 20),
       organizationType = root and root.blizzardOrganizationType or "default",
       strata = root and root.blizzardContainerStrata or "AUTO",

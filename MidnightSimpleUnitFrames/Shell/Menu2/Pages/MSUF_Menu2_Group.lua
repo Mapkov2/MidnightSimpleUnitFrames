@@ -87,17 +87,20 @@ local function FlushGF()
     local geometry = pendingGF.geometry
     local visual = pendingGF.visual
     local font = pendingGF.font
+    local auras = pendingGF.auras
     local kind = pendingGF.kind
     pendingGF.rebuild = nil
     pendingGF.geometry = nil
     pendingGF.visual = nil
     pendingGF.font = nil
+    pendingGF.auras = nil
     pendingGF.kind = nil
     if kind == false then kind = nil end
     if InCombatLockdown and InCombatLockdown() then
         if rebuild and type(gf.RebuildAll) == "function" then gf.RebuildAll() end
         if geometry then gf._pendingRefreshGeometry = true end
-        if font or visual then gf._pendingRefreshVisuals = true end
+        if auras and type(gf.DeferGroupRuntime) == "function" then gf.DeferGroupRuntime("refresh", kind, gf.DIRTY_AURAS) end
+        if font or visual or auras then gf._pendingRefreshVisuals = true end
         RefreshGFPreview(kind)
         GroupProfileStop("FlushGF", started)
         return
@@ -112,6 +115,7 @@ local function FlushGF()
         if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry() end
     end
     if font and type(gf.RefreshFonts) == "function" then gf.RefreshFonts(kind) end
+    if auras and type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind, gf.DIRTY_AURAS) end
     if visual then
         if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind) end
     end
@@ -130,6 +134,7 @@ local function QueueGF(kind, mode)
     if mode == "geometry" then pendingGF.geometry = true end
     if mode == "visual" then pendingGF.visual = true end
     if mode == "font" then pendingGF.font = true end
+    if mode == "auras" then pendingGF.auras = true end
     if gfFlushQueued then return end
     gfFlushQueued = true
     if type(_G.MSUF_ScheduleDelayOnce) == "function" then

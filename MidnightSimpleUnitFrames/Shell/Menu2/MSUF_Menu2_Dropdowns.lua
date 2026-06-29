@@ -406,7 +406,7 @@ end
 local function RestoreDropdownDefaultFont(fs)
     local d = fs and fs._msuf2DropdownDefaultFont
     if d and fs.SetFont then
-        fs:SetFont(d[1], d[2], d[3] or "")
+        pcall(fs.SetFont, fs, d[1], d[2], d[3] or "")
     elseif fs and fs.SetFontObject then
         fs:SetFontObject(GameFontHighlight)
     end
@@ -431,7 +431,11 @@ local function ApplyDropdownItemFont(fs, item)
         return
     end
     if type(fontPath) == "string" and fontPath ~= "" and fs.SetFont then
-        fs:SetFont(fontPath, size, "")
+        local resolveSafe = _G.MSUF_ResolveSafeFontPath
+        if type(resolveSafe) == "function" then fontPath = resolveSafe(fontPath, size, "", fontKey) end
+        local ok, applied = pcall(fs.SetFont, fs, fontPath, size, "")
+        if ok and applied ~= false then return end
+        RestoreDropdownDefaultFont(fs)
         return
     end
     RestoreDropdownDefaultFont(fs)

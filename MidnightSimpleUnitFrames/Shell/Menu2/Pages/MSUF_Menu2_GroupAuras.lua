@@ -44,7 +44,7 @@ local function BindAuraLaneEnabled(ctx, widget, groupKey)
                 root.blizzardTypes[NativeAuraKey(groupKey)] = false
             end
             group.enabled = enabled
-            if QueueGF then QueueGF(scope, "rebuild") end
+            if QueueGF then QueueGF(scope, "auras") end
             M.CallIf(RefreshContext, ctx)
         end)
     return widget
@@ -84,15 +84,15 @@ local function BuildGFAuras(ctx)
         local enable = BindAuraLaneEnabled(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44, 190), groupKey)
         enable._msuf2GroupFrameGateAlwaysEnabled = true
         local controls = M.BuildControlSpecs({
-            { "dropdown", "Anchor", AURA_POSITION_ANCHORS, "anchor", def.anchor, "geometry", leftX, -118, leftW, "LEFT" },
-            { "dropdown", "Growth", AURA_GROWTH_VALUES, "growth", def.growth, "geometry", leftX, -172, leftW, "LEFT" },
-            { "slider", "Offset X", -160, 160, 1, "x", 0, "geometry", leftX, -226, leftW },
-            { "slider", "Offset Y", -160, 160, 1, "y", 0, "geometry", leftX, -280, leftW },
-            { "slider", def.maxLabel, 0, def.maxMax, 1, "max", def.max, "visual", rightX, -118, rightW },
-            { "slider", "Icon size", 8, 64, 1, "size", def.size, "geometry", rightX, -172, rightW },
-            { "slider", "Per row", 1, 20, 1, "perRow", def.perRow, "geometry", rightX, -226, rightW },
-            { "slider", "Spacing", 0, 12, 1, "spacing", def.spacing, "geometry", rightX, -280, rightW },
-            { "slider", "Layer (Z-Order)", 1, 15, 1, "layer", def.layer, "geometry", rightX, -334, rightW },
+            { "dropdown", "Anchor", AURA_POSITION_ANCHORS, "anchor", def.anchor, "auras", leftX, -118, leftW, "LEFT" },
+            { "dropdown", "Growth", AURA_GROWTH_VALUES, "growth", def.growth, "auras", leftX, -172, leftW, "LEFT" },
+            { "slider", "Offset X", -160, 160, 1, "x", 0, "auras", leftX, -226, leftW },
+            { "slider", "Offset Y", -160, 160, 1, "y", 0, "auras", leftX, -280, leftW },
+            { "slider", def.maxLabel, 0, def.maxMax, 1, "max", def.max, "auras", rightX, -118, rightW },
+            { "slider", "Icon size", 8, 64, 1, "size", def.size, "auras", rightX, -172, rightW },
+            { "slider", "Per row", 1, 20, 1, "perRow", def.perRow, "auras", rightX, -226, rightW },
+            { "slider", "Spacing", 0, 12, 1, "spacing", def.spacing, "auras", rightX, -280, rightW },
+            { "slider", "Layer (Z-Order)", 1, 15, 1, "layer", def.layer, "auras", rightX, -334, rightW },
         }, {
             dropdown = function(s) local widget = BindNestedDropdown(ctx, W.Dropdown(section, s[2], s[3], s[9]), function() return AuraGroup(CurrentScope(), groupKey) end, s[4], s[5], s[6]); W.MoveWidget(widget, section, s[7], s[8], s[9], s[10] or "CENTER"); return widget end,
             slider = function(s) local widget = BindNestedSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,

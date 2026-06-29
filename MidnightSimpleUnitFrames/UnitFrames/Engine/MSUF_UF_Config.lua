@@ -443,6 +443,7 @@ local function ResolveNameShortening(db, general, conf, unit, text)
   local shorten = db and db.shortenNames == true
   local maxChars = Number(general and general.shortenNameMaxChars, 6)
   local side = tostring(general and general.shortenNameClipSide or "LEFT"):upper()
+  local maskPx = Number(general and general.shortenNameFrontMaskPx, 0)
   local dots = general and general.shortenNameShowDots
   dots = dots == nil or dots == true
 
@@ -454,6 +455,7 @@ local function ResolveNameShortening(db, general, conf, unit, text)
     end
     maxChars = Number(conf.shortenNameMaxChars or conf.nameMaxChars, maxChars)
     side = tostring(conf.shortenNameClipSide or conf.nameClipSide or side):upper()
+    maskPx = Number(conf.shortenNameFrontMaskPx, maskPx)
     if conf.shortenNameShowDots ~= nil then
       dots = conf.shortenNameShowDots == true
     elseif conf.nameNoEllipsis ~= nil then
@@ -474,11 +476,18 @@ local function ResolveNameShortening(db, general, conf, unit, text)
   elseif maxChars > 40 then
     maxChars = 40
   end
+  maskPx = floor((tonumber(maskPx) or 0) + 0.5)
+  if maskPx < 0 then
+    maskPx = 0
+  elseif maskPx > 80 then
+    maskPx = 80
+  end
 
   text.nameShorten = shorten == true
   text.nameShortenMax = maxChars
   text.nameShortenSide = side
   text.nameShortenDots = dots == true
+  text.nameShortenMaskPx = maskPx
 end
 
 local function ResolveNameColorFlags(general, conf)

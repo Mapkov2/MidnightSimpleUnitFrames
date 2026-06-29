@@ -25,7 +25,7 @@ local ApplySettingsForKeySafe = U.ApplySettingsForKeySafe
 local SharedUI = U.SharedUI
 
 local hudFrame, row2Frame
-local previewBtn, auraBtn, snapToggle, resetBtn, cdmBtn, anchorBtn
+local previewBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
 local previewAddonSlot
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
@@ -133,6 +133,24 @@ local LABEL_BY_KEY = {
     gf_mythicraid = "Mythic Raid Frames",
 }
 
+local COMPONENT_LABEL = {
+    frame = "Frame",
+    layout = "Layout",
+    bounds = "Frame",
+    size = "Size",
+    name = "Name",
+    hp = "Health Text",
+    power = "Power Text",
+    text = "Text",
+    auras = "Auras",
+    castbar = "Castbar",
+    cast = "Castbar",
+    bars = "Bars",
+    status = "Status",
+    indicators = "Status",
+    sicons = "Status Icons",
+}
+
 local function CurrentSelectionKey()
     local key = (EM2.State and EM2.State.GetUnitKey and EM2.State.GetUnitKey()) or _G.MSUF_CurrentEditUnitKey
     if not key and EM2.Focus and EM2.Focus.GetSelection then
@@ -141,8 +159,22 @@ local function CurrentSelectionKey()
     return key
 end
 
+local function CurrentFocusSelection()
+    if EM2.Focus and EM2.Focus.GetSelection then
+        local key, component, slot = EM2.Focus.GetSelection()
+        if key then return key, component, slot end
+    end
+    return CurrentSelectionKey(), nil, nil
+end
+
+local function SelectionDetail(component, slot)
+    local label = component and (COMPONENT_LABEL[component] or component) or nil
+    if label and slot then return label .. " " .. tostring(slot) end
+    return label
+end
+
 local function SelectionSummary()
-    local key = CurrentSelectionKey()
+    local key, component, slot = CurrentFocusSelection()
     if not key then return HelpText("No selection") end
     local db = _G.MSUF_DB
     local conf
@@ -154,6 +186,8 @@ local function SelectionSummary()
     end
 
     local label = HelpText(LABEL_BY_KEY[key] or key)
+    local detail = SelectionDetail(component, slot)
+    if detail then label = label .. " / " .. HelpText(detail) end
     if not conf then return label end
     local x = floor((tonumber(conf.offsetX) or 0) + 0.5)
     local y = floor((tonumber(conf.offsetY) or 0) + 0.5)
@@ -209,6 +243,25 @@ local function BlockHUDConfigLocked()
         return true
     end
     return false
+end
+
+function HUD.OpenSelectedSettings()
+    if BlockHUDConfigLocked() then return end
+    local key, component, slot = CurrentFocusSelection()
+    key = key or CurrentSelectionKey()
+    if not key then
+        HUD.SetStatus(HelpText("EM_SELECT_FIRST"), "warn")
+        return
+    end
+    if EM2.Focus and EM2.Focus.SetSelection then
+        EM2.Focus.SetSelection(key, component, slot, { source = "hud-settings", openSettings = true })
+    end
+    local opener = (EM2.Focus and EM2.Focus.OpenFullSettings) or _G.MSUF_EM2_OpenFocusSettings
+    if type(opener) == "function" and opener() then
+        HUD.SetStatus(HelpText("Opened settings"), "ok")
+    else
+        HUD.SetStatus(HelpText("Settings unavailable"), "warn")
+    end
 end
 
 function HUD.ResetCurrentPosition()
@@ -970,6 +1023,10 @@ local function EnsureHUD()
         HUD.ResetCurrentPosition()
     end, "Reset the selected frame position.\nSize stays unchanged.")
 
+    settingsBtn = AddRowButton(r1, c1, "Settings", 66, BTN_H, 12, function()
+        HUD.OpenSelectedSettings()
+    end, "Open Menu2 at the selected\nframe or component settings.")
+
     AddRowSep(r1, c1, BTN_H)
 
     cdmBtn = AddRowButton(r1, c1, "CDM", 46, BTN_H, 12, function()
@@ -1124,6 +1181,17 @@ function HUD.RefreshControls(force)
             canReset and TH.textG or TH.offG,
             canReset and TH.textB or TH.offB,
             canReset and 0.92 or 0.55
+        )
+    end
+    if settingsBtn and settingsBtn._label then
+        local key = CurrentFocusSelection()
+        local canOpen = key ~= nil
+        settingsBtn:SetAlpha(canOpen and 1 or 0.45)
+        settingsBtn._label:SetTextColor(
+            canOpen and TH.textR or TH.offR,
+            canOpen and TH.textG or TH.offG,
+            canOpen and TH.textB or TH.offB,
+            canOpen and 0.92 or 0.55
         )
     end
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end

@@ -398,6 +398,7 @@ function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2,
     local l1 = FS(row, 11, c.white)
     l1:SetPoint("LEFT", row, "LEFT", 0, 0)
     l1:SetText(Tr(label1))
+    if key1 then owner[key1 .. "Label"] = l1 end
     local m1 = Quick.Step(row, "-", opts); m1:SetPoint("LEFT", l1, "RIGHT", 6, 0)
     local b1 = Quick.Box(row, opts and opts.boxWidth or 52, opts); b1:SetPoint("LEFT", m1, "RIGHT", 1)
     local p1 = Quick.Step(row, "+", opts); p1:SetPoint("LEFT", b1, "RIGHT", 1)
@@ -407,6 +408,7 @@ function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2,
     local l2 = FS(row, 11, c.white)
     l2:SetPoint("LEFT", p1, "RIGHT", 18, 0)
     l2:SetText(Tr(label2))
+    if key2 then owner[key2 .. "Label"] = l2 end
     local m2 = Quick.Step(row, "-", opts); m2:SetPoint("LEFT", l2, "RIGHT", 6, 0)
     local b2 = Quick.Box(row, opts and opts.boxWidth or 52, opts); b2:SetPoint("LEFT", m2, "RIGHT", 1)
     local p2 = Quick.Step(row, "+", opts); p2:SetPoint("LEFT", b2, "RIGHT", 1)
@@ -646,7 +648,9 @@ function Quick.BuildBoundsPopup(name, shellOpts, spec)
     local defaultOpts = ResolveQuickSpecValue(spec.buttonOpts)
     for i = 1, #(spec.rows or {}) do
         local row = spec.rows[i]
-        Quick.ValuePairAt(pf, pf, row.x or 0, row.y, row.label1, row.key1, row.cb1, row.label2, row.key2, row.cb2, ResolveQuickSpecValue(row.opts) or defaultOpts)
+        local rowX = row.x
+        if rowX == nil then rowX = spec.rowX or 20 end
+        Quick.ValuePairAt(pf, pf, rowX, row.y, row.label1, row.key1, row.cb1, row.label2, row.key2, row.cb2, ResolveQuickSpecValue(row.opts) or defaultOpts)
     end
     local toggle = spec.toggle
     if toggle then

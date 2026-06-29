@@ -347,7 +347,15 @@ local function ApplyAuraFont(fs, size)
     fontPath = fontPath or FONT
     fontFlags = fontFlags or "OUTLINE"
     if fs.SetFont then
-        fs:SetFont(fontPath, size, fontFlags)
+        local resolveSafe = _G.MSUF_ResolveSafeFontPath
+        if type(resolveSafe) == "function" then
+            local gdb = _G.MSUF_DB and _G.MSUF_DB.general
+            fontPath = resolveSafe(fontPath, size, fontFlags, gdb and gdb.fontKey)
+        end
+        local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+        if not ok or applied == false then
+            pcall(fs.SetFont, fs, FONT, size, fontFlags)
+        end
     end
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then fs:SetShadowOffset(useShadow and 1 or 0, useShadow and -1 or 0) end
