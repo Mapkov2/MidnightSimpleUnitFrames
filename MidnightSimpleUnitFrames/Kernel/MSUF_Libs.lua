@@ -113,6 +113,8 @@ do
         if type(path) ~= "string" or path == "" then return nil end
         local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
         if type(isKnown) == "function" and isKnown(path) == false then return nil end
+        local isLoadable = _G.MSUF_FontPathIsLoadable
+        if type(isLoadable) == "function" and isLoadable(path, 14, "") == false then return nil end
         return path
     end
 
@@ -190,7 +192,8 @@ do
         then
             return true
         end
-        local applied = fs:SetFont(path, size, flags)
+        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+        if not ok then return false end
         if applied ~= false then
             fs._msufFontAppliedPath = path
             fs._msufFontAppliedSize = size
@@ -319,6 +322,7 @@ do
     ExportPublic("MSUF_FontLooksLikeBundledExpressway", MSUF_FontLooksLikeBundledExpressway)
     ExportPublic("MSUF_ResolveFontKeyPath", MSUF_ResolveFontKeyPath)
     ExportPublic("MSUF_ResolveFontPath", MSUF_ResolveFontPath)
+    ExportPublic("MSUF_ApplyResolvedFont", ApplyResolvedFont)
     ExportPublic("MSUF_ClearResolvedFontPathCache", MSUF_ClearResolvedFontPathCache)
     ExportPublic("MSUF_PrewarmFontVisualCache", MSUF_PrewarmFontVisualCache)
     ExportPublic("MSUF_GetInternalFontPrimaryPath", MSUF_GetInternalFontPrimaryPath)

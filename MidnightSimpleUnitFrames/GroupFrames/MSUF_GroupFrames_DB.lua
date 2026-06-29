@@ -471,6 +471,16 @@ local PARTY_DEFAULTS = {
     ciCustomBL        = nil,
     ciCustomBR        = nil,
     ciCustomC         = nil,
+    --- Party targeted spell indicators
+    targetedSpellsEnabled  = false,
+    targetedSpellsMode     = "whenHealing",
+    targetedSpellsIconSize = 24,
+    targetedSpellsMaxIcons = 3,
+    targetedSpellsAnchor   = "CENTER",
+    targetedSpellsGrow     = "CENTER",
+    targetedSpellsX        = 0,
+    targetedSpellsY        = 0,
+    targetedSpellsLayer    = 10,
     --- Grid layout
     unitsPerColumn    = 5,
     maxColumns        = 1,
@@ -1019,10 +1029,37 @@ local function NormalizeFontField(conf)
     conf._msufGFNameTruncationOverride = nil
 end
 
+local GF_NATIVE_AURA_RENDERER = "NATIVE_12_1"
+local GF_CUSTOM_AURA_RENDERER = "CUSTOM"
+local GF_BLIZZARD_AURA_TYPE_DEFAULTS = {
+    buffs = true,
+    debuffs = true,
+    dispels = true,
+    externals = true,
+    privateAuras = true,
+}
+
 local function NormalizeAuraRenderer(conf)
     if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
-    if conf.auras.renderer ~= "CUSTOM" then
-        conf.auras.renderer = "CUSTOM"
+    local auras = conf.auras
+    if auras.renderer ~= GF_CUSTOM_AURA_RENDERER and auras.renderer ~= GF_NATIVE_AURA_RENDERER then
+        auras.renderer = GF_NATIVE_AURA_RENDERER
+    end
+    if auras.renderer == GF_NATIVE_AURA_RENDERER then
+        if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
+        for key, value in pairs(GF_BLIZZARD_AURA_TYPE_DEFAULTS) do
+            if auras.blizzardTypes[key] == nil then
+                auras.blizzardTypes[key] = value
+            end
+        end
+        if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
+        if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
+        if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
+        if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+        if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
+        if auras.blizzardContainerAnchor == nil then auras.blizzardContainerAnchor = "FRAME" end
+        if auras.blizzardContainerX == nil then auras.blizzardContainerX = 0 end
+        if auras.blizzardContainerY == nil then auras.blizzardContainerY = 0 end
     end
 end
 
@@ -1184,7 +1221,7 @@ function GF.EnsureDB()
     db._gfDefaultPresetApplied = nil
     GF._pendingDefaultPreset = nil
 
-    if GF.SeedCurrentSpecSpellIndicatorDefaults then
+    if GF.SeedCurrentSpecSpellIndicatorDefaults and not _G.MSUF_ProfileIO_SuppressRuntimeSideEffects then
         GF.SeedCurrentSpecSpellIndicatorDefaults()
     end
 end

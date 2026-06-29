@@ -110,6 +110,47 @@ end
 
 G.MSUF_FONT_LIST = G.MSUF_FONT_LIST or FONT_LIST
 
+local MSUF_FontPathProbe
+local MSUF_FontPathLoadableCache = {}
+
+local function MSUF_NormalizeFontPathForProbe(path)
+    if type(path) ~= "string" or path == "" then return nil end
+    return path:gsub("/", "\\")
+end
+
+local function MSUF_FontPathIsLoadable(path, size, flags)
+    path = MSUF_NormalizeFontPathForProbe(path)
+    if not path then return false end
+    size = tonumber(size) or 14
+    if size <= 0 then size = 14 end
+    flags = flags or ""
+
+    local cacheKey = path:lower() .. "|" .. tostring(size) .. "|" .. tostring(flags)
+    local cached = MSUF_FontPathLoadableCache[cacheKey]
+    if cached ~= nil then return cached end
+
+    if type(G.CreateFont) ~= "function" then
+        return true
+    end
+    if not MSUF_FontPathProbe then
+        local ok, probe = pcall(G.CreateFont, "MSUF_FontPathProbe")
+        if ok then
+            MSUF_FontPathProbe = probe
+        end
+    end
+    if not (MSUF_FontPathProbe and type(MSUF_FontPathProbe.SetFont) == "function") then
+        return true
+    end
+
+    local ok, applied = pcall(MSUF_FontPathProbe.SetFont, MSUF_FontPathProbe, path, size, flags)
+    local loadable = ok and applied ~= false
+    MSUF_FontPathLoadableCache[cacheKey] = loadable
+    return loadable
+end
+
+G.MSUF_FontPathIsLoadable = MSUF_FontPathIsLoadable
+MSUF.MSUF_FontPathIsLoadable = MSUF_FontPathIsLoadable
+
 local MSUF_INTERNAL_LSM_FONT_KEYS = {
     ["Friz Quadrata TT"] = "FRIZQT",
     ["Arial Narrow"] = "ARIALN",
@@ -373,6 +414,34 @@ local function MSUF_FetchFontPathFromLSM(key)
     return nil
 end
 
+local function MSUF_ResolveSafeFontPath(path, size, flags, fontKey)
+    size = tonumber(size) or 14
+    if size <= 0 then size = 14 end
+    flags = flags or ""
+
+    local resolve = G.MSUF_ResolveFontPath
+    local function TryPath(candidate, candidateKey)
+        if type(candidate) ~= "string" or candidate == "" then return nil end
+        local resolved = type(resolve) == "function" and resolve(candidate, size, flags, candidateKey or fontKey) or candidate
+        if type(resolved) == "string" and resolved ~= "" then
+            if MSUF_FontPathIsLoadable(resolved, size, flags) or (flags ~= "" and MSUF_FontPathIsLoadable(resolved, size, "")) then
+                return resolved
+            end
+        end
+        return nil
+    end
+
+    local internal = type(G.MSUF_GetInternalFontPathByKey) == "function" and G.MSUF_GetInternalFontPathByKey(fontKey) or nil
+    return TryPath(path, fontKey)
+        or TryPath(internal, fontKey)
+        or TryPath(FONT_LIST[1] and FONT_LIST[1].path, "FRIZQT")
+        or TryPath("Fonts\\FRIZQT__.TTF", "FRIZQT")
+        or "Fonts\\FRIZQT__.TTF"
+end
+
+G.MSUF_ResolveSafeFontPath = MSUF_ResolveSafeFontPath
+MSUF.MSUF_ResolveSafeFontPath = MSUF_ResolveSafeFontPath
+
 local function MSUF_GetFontPreviewObject(key)
     if not key or key == "" then
         return G.GameFontHighlightSmall
@@ -385,13 +454,15 @@ local function MSUF_GetFontPreviewObject(key)
     end
     local resolveKeyPath = G.MSUF_ResolveFontKeyPath
     local path = type(resolveKeyPath) == "function" and resolveKeyPath(key, 14, "") or nil
-    path = path or G.MSUF_GetInternalFontPathByKey(key) or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
-    path = (G.MSUF_ResolveFontPath or function(p) return p end)(path, 14, "", key)
+    local internalPath = type(G.MSUF_GetInternalFontPathByKey) == "function" and G.MSUF_GetInternalFontPathByKey(key) or nil
+    path = path or internalPath or MSUF_FetchFontPathFromLSM(key) or FONT_LIST[1].path
+    path = MSUF_ResolveSafeFontPath(path, 14, "", key)
     if path then
-        local ok = obj:SetFont(path, 14, "") ~= false
+        local okCall, applied = pcall(obj.SetFont, obj, path, 14, "")
+        local ok = okCall and applied ~= false
         if (not ok) and FONT_LIST[1] and FONT_LIST[1].path then
-            local fallback = (G.MSUF_ResolveFontPath or function(p) return p end)(FONT_LIST[1].path, 14, "")
-            obj:SetFont(fallback, 14, "")
+            local fallback = MSUF_ResolveSafeFontPath(FONT_LIST[1].path, 14, "", "FRIZQT")
+            pcall(obj.SetFont, obj, fallback, 14, "")
         end
     end
     return obj
@@ -451,14 +522,13 @@ local function MSUF_GetFontPathForKey(key)
     local resolveKeyPath = G.MSUF_ResolveFontKeyPath
     if type(resolveKeyPath) == "function" then
         local p = resolveKeyPath(key, 14, "")
-        if p then return p end
+        if p then return MSUF_ResolveSafeFontPath(p, 14, "", key) end
     end
-    local resolve = G.MSUF_ResolveFontPath or function(path) return path end
     local internalPath = G.MSUF_GetInternalFontPathByKey(key)
-    if internalPath then return resolve(internalPath, 14, "", key) end
+    if internalPath then return MSUF_ResolveSafeFontPath(internalPath, 14, "", key) end
     local lsmPath = MSUF_FetchFontPathFromLSM(key)
-    if lsmPath then return resolve(lsmPath, 14, "", key) end
-    return resolve(FONT_LIST[1].path, 14, "", "FRIZQT")
+    if lsmPath then return MSUF_ResolveSafeFontPath(lsmPath, 14, "", key) end
+    return MSUF_ResolveSafeFontPath(FONT_LIST[1].path, 14, "", "FRIZQT")
 end
 G.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey
 MSUF.MSUF_GetFontPathForKey = MSUF_GetFontPathForKey

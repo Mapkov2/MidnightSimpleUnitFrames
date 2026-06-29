@@ -965,6 +965,22 @@ local function CreateGroup(unit, kind)
         self._lastDragY = nil
     end)
 
+    local hitbox = CreateFrame("Frame", nil, group)
+    hitbox:SetAllPoints(group)
+    hitbox:EnableMouse(true)
+    hitbox._msufA3HitboxOwner = group
+    hitbox:SetScript("OnMouseDown", function(self, button)
+        local owner = self._msufA3HitboxOwner or self:GetParent()
+        local handler = owner and owner:GetScript("OnMouseDown")
+        if handler then handler(owner, button) end
+    end)
+    hitbox:SetScript("OnMouseUp", function(self, button)
+        local owner = self._msufA3HitboxOwner or self:GetParent()
+        local handler = owner and owner:GetScript("OnMouseUp")
+        if handler then handler(owner, button) end
+    end)
+    group.Hitbox = hitbox
+
     byUnit[kind] = group
     return group
 end
@@ -1030,6 +1046,9 @@ function EM.RefreshUnit(unit)
             group:SetSize(laneW, laneH + HEADER_H)
             if group.Body then group.Body:SetSize(laneW, laneH) end
             group:SetFrameLevel(900 + (tonumber(cfg.layer) or 5))
+            if group.Hitbox and group.Hitbox.SetFrameLevel then
+                group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
+            end
             if group.Label then
                 group.Label:SetText(UnitLabel(unit) .. " " .. spec.label)
                 StyleLabel(group.Label)

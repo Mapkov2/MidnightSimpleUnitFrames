@@ -464,12 +464,20 @@ builders.PLAYER_HP = function(E)
         local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
         if not fontPath or fontPath == "" then fontPath = "Fonts\\FRIZQT__.TTF" end
         if not fontFlags or fontFlags == "" then fontFlags = "OUTLINE" end
+        local resolveSafe = _G.MSUF_ResolveSafeFontPath
+        if type(resolveSafe) == "function" then
+            local g = _G.MSUF_DB and _G.MSUF_DB.general
+            fontPath = resolveSafe(fontPath, size, fontFlags, g and g.fontKey)
+        end
         local stamp = tostring(fontPath) .. ":" .. tostring(size) .. ":" .. tostring(fontFlags)
         if PHP._fontStamp == stamp then return end
         PHP._fontStamp = stamp
         for _, fs in pairs({ PHP.left, PHP.center, PHP.right }) do
             if fs.SetFont then
-                fs:SetFont(fontPath, size, fontFlags)
+                local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+                if not ok or applied == false then
+                    pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
+                end
             end
             fs._phpTextR, fs._phpTextG, fs._phpTextB, fs._phpTextA = nil, nil, nil, nil
             if fs.SetTextColor then fs:SetTextColor(1, 1, 1, 1) end
