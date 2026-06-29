@@ -39,9 +39,12 @@ local function PerfNowMs()
 end
 
 local PERF_TRACE_LIMIT = 80
-local JOB_BUDGET_MS = 4
-local JOB_MAX_STEPS = 8
+local JOB_BUDGET_MS = 2
+local JOB_MAX_STEPS = 4
 A.JOB_YIELD = A.JOB_YIELD or {}
+if A.allowPerformanceWarmup == nil then A.allowPerformanceWarmup = true end
+if A.jobBudgetMs == nil then A.jobBudgetMs = JOB_BUDGET_MS end
+if A.jobMaxStepsPerFrame == nil then A.jobMaxStepsPerFrame = JOB_MAX_STEPS end
 
 local function InCombat()
     return ((_G.InCombatLockdown and _G.InCombatLockdown())
@@ -183,6 +186,10 @@ end
 
 local function WarmupReasonLabel(reason)
     reason = tostring(reason or "")
+    if reason == "menu-hide" then return "waiting until the menu is open" end
+    if reason == "menu-open" then return "waiting until the menu is idle" end
+    if reason == "menu-activity" or reason == "select-page" then return "waiting for menu activity to settle" end
+    if reason == "combat" then return "waiting until combat ends" end
     if reason:find("^combat:", 1, false) then return "waiting until combat ends" end
     if reason:find("^busy:", 1, false) then return "waiting until the current request finishes" end
     if reason:find("^jobs:", 1, false) then return "finishing current Assistant work" end
@@ -1088,6 +1095,42 @@ function A.ResumeCombatDeferredJobs(reason)
     return false
 end
 
+local function ClearCombatDeferredJobsIfIdle()
+    local jobs = A._assistantJobs
+    if type(jobs) == "table" and #jobs > 0 then return end
+    A._assistantJobsCombatDeferred = nil
+    A._assistantJobsCombatReason = nil
+    if combatResumeFrame and type(combatResumeFrame.UnregisterEvent) == "function" then
+        combatResumeFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    end
+end
+
+local function JobMatches(job, match)
+    if type(match) == "function" then return match(job) == true end
+    if match == nil then return true end
+    return tostring(job and job.label or "") == tostring(match)
+end
+
+function A.CancelJobs(match, reason)
+    local jobs = A._assistantJobs
+    if type(jobs) ~= "table" or #jobs == 0 then
+        ClearCombatDeferredJobsIfIdle()
+        return 0
+    end
+    local removed = 0
+    for i = #jobs, 1, -1 do
+        local job = jobs[i]
+        if JobMatches(job, match) then
+            job.cancelled = true
+            job.cancelReason = tostring(reason or "cancelled")
+            table.remove(jobs, i)
+            removed = removed + 1
+        end
+    end
+    if removed > 0 then ClearCombatDeferredJobsIfIdle() end
+    return removed
+end
+
 function ScheduleJobPump()
     if InCombat() then
         DeferJobPumpForCombat("schedule")
@@ -1192,7 +1235,7 @@ function A.CoroutineStep(fn)
             end)
         end
         A._jobYieldStartedMs = PerfNowMs()
-        A._jobYieldBudgetMs = tonumber(A.jobBudgetMs) or JOB_BUDGET_MS
+        A._jobYieldBudgetMs = tonumber(job and job.budgetMs) or tonumber(A.jobBudgetMs) or JOB_BUDGET_MS
         local ok, result = coroutine.resume(co, job)
         A._jobYieldStartedMs = nil
         A._jobYieldBudgetMs = nil
@@ -3820,21 +3863,28 @@ local function ClearPendingConfirmationContext()
     if ctx then ctx.pendingConfirmation = nil end
 end
 
+local function NormalizePlanResult(result)
+    if type(result) ~= "table" then return result end
+    if result.status == nil and result.result ~= nil then result.status = result.result end
+    if result.result == nil and result.status ~= nil then result.result = result.status end
+    return result
+end
+
 function A.ExecutePlan(plan, opts)
     opts = opts or {}
-    if type(plan) ~= "table" then return { text = "Which frame, page, or option do you want me to change?", result = "failed" } end
+    if type(plan) ~= "table" then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
     if PlanNeedsConfirmation(plan) and opts.confirmed ~= true then
         A.pendingConfirmation = plan
         ClearPendingConfirmationContext()
-        return { text = ConfirmationText(plan), result = "confirmation_needed", summary = plan.summary }
+        return NormalizePlanResult({ text = ConfirmationText(plan), result = "confirmation_needed", summary = plan.summary })
     end
     if InCombat() and AnyCombatUnsafe(plan) and opts.fromQueue ~= true then
         A.QueuePlan(plan)
-        return { text = "I will apply this after combat ends: " .. AssistantPlanLabel(plan, "Assistant change") .. ".", result = "queued", summary = plan.summary }
+        return NormalizePlanResult({ text = "I will apply this after combat ends: " .. AssistantPlanLabel(plan, "Assistant change") .. ".", result = "queued", summary = plan.summary })
     end
-    if plan.kind == "changes" then return ExecuteChanges(plan) end
-    if plan.kind == "action" then return ExecuteAction(plan) end
-    return { text = "Which page and option do you want me to use? Example: 'set target cast bar height to 20'.", result = "failed", summary = plan.summary }
+    if plan.kind == "changes" then return NormalizePlanResult(ExecuteChanges(plan)) end
+    if plan.kind == "action" then return NormalizePlanResult(ExecuteAction(plan)) end
+    return NormalizePlanResult({ text = "Which page and option do you want me to use? Example: 'set target cast bar height to 20'.", result = "failed", summary = plan.summary })
 end
 
 function A._PendingConfirmationPage(plan)
@@ -4048,38 +4098,38 @@ end
 
 function A.HandleCommandInput(text)
     local pending = HandlePending(text)
-    if pending then return pending end
+    if pending then return NormalizePlanResult(pending) end
 
     local parsed = A.Parse and A.Parse(text) or nil
-    if not parsed then return { text = "Which frame, page, or option do you want me to change?", result = "failed" } end
+    if not parsed then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
 
     if parsed.kind == "empty" then return nil end
     if parsed.kind == "undo" then
         local ok, message = A.UndoLast()
-        return { text = message, result = ok and "applied" or "failed" }
+        return NormalizePlanResult({ text = message, result = ok and "applied" or "failed" })
     end
     if parsed.kind == "redo" then
         local ok, message = A.RedoLast()
-        return { text = message, result = ok and "applied" or "failed" }
+        return NormalizePlanResult({ text = message, result = ok and "applied" or "failed" })
     end
     if parsed.kind == "ambiguous" then
         A.pendingChoices = parsed.choices or {}
         local ctx = A.GetContext and A.GetContext()
         if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
-        return { text = ChoiceText(A.pendingChoices), result = "ambiguous", summary = parsed.summary }
+        return NormalizePlanResult({ text = ChoiceText(A.pendingChoices), result = "ambiguous", summary = parsed.summary })
     end
     if parsed.kind == "unknown" then
         local result = { text = parsed.text or "Which page and option do you want me to use? Example: 'set target cast bar height to 20'.", result = parsed.status or "failed", kind = "unknown" }
         if A.RecordNoMatch and type(A.RouteInput) ~= "function" then A.RecordNoMatch(text, result, "parser") end
-        return result
+        return NormalizePlanResult(result)
     end
     if parsed.kind == "unsupported" then
-        return { text = parsed.text or "I don't see an MSUF option for that request yet.", result = parsed.status or "info", kind = "unsupported", summary = parsed.summary }
+        return NormalizePlanResult({ text = parsed.text or "I don't see an MSUF option for that request yet.", result = parsed.status or "info", kind = "unsupported", summary = parsed.summary })
     end
     if parsed.kind == "answer" then
-        return { text = parsed.text or "", result = parsed.status or "info", summary = parsed.summary }
+        return NormalizePlanResult({ text = parsed.text or "", result = parsed.status or "info", summary = parsed.summary })
     end
-    return A.ExecutePlan(parsed)
+    return NormalizePlanResult(A.ExecutePlan(parsed))
 end
 
 local function CombatSubmitResult()
@@ -4091,11 +4141,11 @@ local function CombatSubmitResult()
 end
 
 function A.HandleInput(text)
-    if InCombat() then return CombatSubmitResult() end
+    if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
     if type(A.RouteInput) == "function" then
-        return A.RouteInput(text, A.HandleCommandInput)
+        return NormalizePlanResult(A.RouteInput(text, A.HandleCommandInput))
     end
-    return A.HandleCommandInput(text)
+    return NormalizePlanResult(A.HandleCommandInput(text))
 end
 
 function A.IsBusy()
@@ -4362,7 +4412,7 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     if opts.skipUserHistory ~= true then
         A.AddHistory("user", text, "submitted")
     end
-    local result = AP.LongInputResult(text) or AP.TrySubmitBatch(text) or A.HandleInput(text)
+    local result = NormalizePlanResult(AP.LongInputResult(text) or AP.TrySubmitBatch(text) or A.HandleInput(text))
     AP.RecordAssistantResult(result)
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.submit")
@@ -4387,7 +4437,7 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
     local function Complete(result)
         if finished then return end
         finished = true
-        finalResult = result
+        finalResult = NormalizePlanResult(result)
         AP.RecordAssistantResult(finalResult)
         A.RecordPerfSample("assistant.submit.deferred", startedMs, text)
         A.SetBusy(false)
@@ -4457,9 +4507,9 @@ end
 function A.SubmitDeferred(text, callback)
     text = Trim(text)
     if text == "" then return nil end
-    if InCombat() then return CombatSubmitResult() end
+    if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
     if A.IsBusy() then
-        return { text = "I am still working on the previous request.", result = "busy" }
+        return NormalizePlanResult({ text = "I am still working on the previous request.", result = "busy" })
     end
 
     A.SetBusy(true, "I am working on that")
@@ -4468,9 +4518,9 @@ function A.SubmitDeferred(text, callback)
     local steps, onDone = AP.BuildDeferredSubmitSteps(text, callback, { userHistoryRecorded = true })
     local job = A.StartJob("assistant.submit", steps, onDone)
     if job and type(job.result) == "table" and not A.IsBusy() then
-        return job.result
+        return NormalizePlanResult(job.result)
     end
-    return { text = A.GetBusyText(), result = "queued" }
+    return NormalizePlanResult({ text = A.GetBusyText(), result = "queued" })
 end
 
 function A.WarmupPerformanceIndexes(reason)
@@ -4511,8 +4561,8 @@ function A.WarmupPerformanceIndexes(reason)
             end
         end),
     }
-    local warmupBudget = tonumber(A.warmupJobBudgetMs) or 2
-    if warmupBudget <= 0 or warmupBudget > 2 then warmupBudget = 2 end
+    local warmupBudget = tonumber(A.warmupJobBudgetMs) or 0.75
+    if warmupBudget <= 0 or warmupBudget > 1 then warmupBudget = 0.75 end
     A.StartJob("assistant.warmup", steps, function()
         A._performanceWarmupCompleted = true
     end, {
@@ -4520,6 +4570,18 @@ function A.WarmupPerformanceIndexes(reason)
         maxStepsPerFrame = 1,
     })
     return true, reason
+end
+
+function A.CancelPerformanceWarmup(reason)
+    reason = tostring(reason or "cancelled")
+    local removed = A.CancelJobs and A.CancelJobs("assistant.warmup", reason) or 0
+    if removed > 0 or (A._performanceWarmupStarted == true and A._performanceWarmupCompleted ~= true) then
+        A._performanceWarmupStarted = nil
+        A._performanceWarmupCompleted = nil
+        A._performanceWarmupSuppressed = reason
+        A._performanceWarmupReason = nil
+    end
+    return removed > 0
 end
 
 function A.RegisteredSettingSummary()

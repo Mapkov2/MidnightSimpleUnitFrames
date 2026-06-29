@@ -596,6 +596,7 @@ local function RefreshCastbarFrame(frame)
 
     ApplyCastbarDetailLayout(frame)
 end
+ExportPublic("MSUF_RefreshCastbarFrame", RefreshCastbarFrame)
 
 local function UpdateCastbarVisuals(...)
     if type(previousUpdateCastbarVisuals) == "function" and previousUpdateCastbarVisuals ~= _G.MSUF_UpdateCastbarVisuals then

@@ -109,17 +109,38 @@ M.Format = M.Format or function(text, ...)
     if select("#", ...) == 0 then return translated end
     return string.format(translated, ...)
 end
+local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local function SetColor(tex, c)
     if tex and c then tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
 end
-local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local function SmoothTexture(tex)
     if not tex then return end
     if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
 end
 local Clamp01 = M.Clamp01
-local function ShadeColor(c, amount, alphaMul)
+local function SetTextureColorCached(tex, r, g, b, a)
+    if not tex then return end
+    r, g, b = r or 0, g or 0, b or 0
+    if a == nil then a = 1 end
+    if tex._msuf2TextureMode == "flat"
+        and tex._msuf2ColorR == r
+        and tex._msuf2ColorG == g
+        and tex._msuf2ColorB == b
+        and tex._msuf2ColorA == a
+    then
+        return
+    end
+    tex._msuf2TextureMode = "flat"
+    tex._msuf2ColorR, tex._msuf2ColorG, tex._msuf2ColorB, tex._msuf2ColorA = r, g, b, a
+    if tex.SetColorTexture then
+        tex:SetColorTexture(r, g, b, a)
+    else
+        tex:SetTexture(WHITE8)
+        if tex.SetVertexColor then tex:SetVertexColor(r, g, b, a) end
+    end
+end
+local function ShadeColorInto(out, c, amount, alphaMul)
     c = c or T.colors.panel2 or { 0.04, 0.05, 0.08, 1 }
     amount = tonumber(amount) or 0
     local r, g, b = c[1] or 0, c[2] or 0, c[3] or 0
@@ -131,40 +152,62 @@ local function ShadeColor(c, amount, alphaMul)
         local f = 1 + amount
         r, g, b = r * f, g * f, b * f
     end
-    return {
-        Clamp01(r),
-        Clamp01(g),
-        Clamp01(b),
-        Clamp01((c[4] or 1) * (alphaMul or 1)),
-    }
+    out = out or {}
+    out[1] = Clamp01(r)
+    out[2] = Clamp01(g)
+    out[3] = Clamp01(b)
+    out[4] = Clamp01((c[4] or 1) * (alphaMul or 1))
+    return out
+end
+local function ShadeColor(c, amount, alphaMul)
+    return ShadeColorInto({}, c, amount, alphaMul)
 end
 local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preserveTexture)
     if not tex then return false end
     fromColor = fromColor or T.colors.panel2 or { 0.04, 0.05, 0.08, 1 }
     toColor = toColor or fromColor
     orientation = orientation or "VERTICAL"
+    local fr, fg, fb, fa = fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1
+    local tr, tg, tb, ta = toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1
+    if tex._msuf2TextureMode == "gradient"
+        and tex._msuf2GradientOrientation == orientation
+        and tex._msuf2GradientFR == fr
+        and tex._msuf2GradientFG == fg
+        and tex._msuf2GradientFB == fb
+        and tex._msuf2GradientFA == fa
+        and tex._msuf2GradientTR == tr
+        and tex._msuf2GradientTG == tg
+        and tex._msuf2GradientTB == tb
+        and tex._msuf2GradientTA == ta
+    then
+        return true
+    end
     if not preserveTexture and tex.SetTexture then
         tex:SetTexture(WHITE8)
         if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
     end
     if tex.SetGradientAlpha then
-        tex:SetGradientAlpha(orientation,
-            fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1,
-            toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1)
+        tex._msuf2TextureMode = "gradient"
+        tex._msuf2GradientOrientation = orientation
+        tex._msuf2GradientFR, tex._msuf2GradientFG, tex._msuf2GradientFB, tex._msuf2GradientFA = fr, fg, fb, fa
+        tex._msuf2GradientTR, tex._msuf2GradientTG, tex._msuf2GradientTB, tex._msuf2GradientTA = tr, tg, tb, ta
+        tex:SetGradientAlpha(orientation, fr, fg, fb, fa, tr, tg, tb, ta)
         return true
     end
     if tex.SetGradient and _G.CreateColor then
-        tex:SetGradient(orientation,
-            _G.CreateColor(fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1),
-            _G.CreateColor(toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1))
+        tex._msuf2TextureMode = "gradient"
+        tex._msuf2GradientOrientation = orientation
+        tex._msuf2GradientFR, tex._msuf2GradientFG, tex._msuf2GradientFB, tex._msuf2GradientFA = fr, fg, fb, fa
+        tex._msuf2GradientTR, tex._msuf2GradientTG, tex._msuf2GradientTB, tex._msuf2GradientTA = tr, tg, tb, ta
+        tex:SetGradient(orientation, _G.CreateColor(fr, fg, fb, fa), _G.CreateColor(tr, tg, tb, ta))
         return true
     end
     if tex.SetVertexColor then
-        tex:SetVertexColor(
-            ((fromColor[1] or 0) + (toColor[1] or 0)) * 0.5,
-            ((fromColor[2] or 0) + (toColor[2] or 0)) * 0.5,
-            ((fromColor[3] or 0) + (toColor[3] or 0)) * 0.5,
-            ((fromColor[4] or 1) + (toColor[4] or 1)) * 0.5)
+        SetTextureColorCached(tex,
+            (fr + tr) * 0.5,
+            (fg + tg) * 0.5,
+            (fb + tb) * 0.5,
+            (fa + ta) * 0.5)
     end
     return false
 end
@@ -177,8 +220,12 @@ end
 local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMul)
     if not fill then return end
     baseColor = baseColor or T.colors.pillBase
-    local top = ShadeColor(baseColor, amountTop or 0.16, alphaMul)
-    local bottom = ShadeColor(baseColor, amountBottom or -0.20, alphaMul)
+    local top = fill._msuf2GradientTopColor or {}
+    local bottom = fill._msuf2GradientBottomColor or {}
+    fill._msuf2GradientTopColor = top
+    fill._msuf2GradientBottomColor = bottom
+    ShadeColorInto(top, baseColor, amountTop or 0.16, alphaMul)
+    ShadeColorInto(bottom, baseColor, amountBottom or -0.20, alphaMul)
     if fill._parts then
         ApplyGradientToParts(fill._parts, "VERTICAL", top, bottom)
     elseif fill.SetGradientAlpha or fill.SetGradient then
@@ -278,21 +325,41 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
     frame[key .. "Border"] = border
     return fill, border
 end
+local BACKDROP_INFO = {
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true,
+    tileSize = 16,
+    edgeSize = 14,
+    insets = { left = 3, right = 3, top = 3, bottom = 3 },
+}
 function T.ApplyBackdrop(frame, bg, border)
     if not frame then return frame end
     if frame.SetBackdrop then
-        frame:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true,
-            tileSize = 16,
-            edgeSize = 14,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 },
-        })
+        if frame._msuf2BackdropInfoApplied ~= BACKDROP_INFO then
+            frame:SetBackdrop(BACKDROP_INFO)
+            frame._msuf2BackdropInfoApplied = BACKDROP_INFO
+        end
         local b = bg or T.colors.panel
         local e = border or T.colors.borderSoft
-        frame:SetBackdropColor(b[1], b[2], b[3], b[4] or 1)
-        frame:SetBackdropBorderColor(e[1], e[2], e[3], e[4] or 1)
+        local br, bgc, bb, ba = b[1], b[2], b[3], b[4] or 1
+        if frame._msuf2BackdropR ~= br
+            or frame._msuf2BackdropG ~= bgc
+            or frame._msuf2BackdropB ~= bb
+            or frame._msuf2BackdropA ~= ba
+        then
+            frame._msuf2BackdropR, frame._msuf2BackdropG, frame._msuf2BackdropB, frame._msuf2BackdropA = br, bgc, bb, ba
+            frame:SetBackdropColor(br, bgc, bb, ba)
+        end
+        local er, eg, eb, ea = e[1], e[2], e[3], e[4] or 1
+        if frame._msuf2BackdropBorderR ~= er
+            or frame._msuf2BackdropBorderG ~= eg
+            or frame._msuf2BackdropBorderB ~= eb
+            or frame._msuf2BackdropBorderA ~= ea
+        then
+            frame._msuf2BackdropBorderR, frame._msuf2BackdropBorderG, frame._msuf2BackdropBorderB, frame._msuf2BackdropBorderA = er, eg, eb, ea
+            frame:SetBackdropBorderColor(er, eg, eb, ea)
+        end
     else
         if not frame._msuf2Bg then
             local tex = frame:CreateTexture(nil, "BACKGROUND")
@@ -820,6 +887,7 @@ local SLIDER_STYLED_TEXTURE_KEYS = { "_msufTrack", "_msufTrackTop", "_msufTrackB
 local SLIDER_NATIVE_SUFFIXES = WL "Left Middle Right Text Low High"
 local function HideNativeSliderParts(slider)
     if not slider then return end
+    if slider._msuf2NativeSliderPartsHidden then return end
     local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
     local keep = {}
     local function Keep(region)
@@ -840,15 +908,10 @@ local function HideNativeSliderParts(slider)
             HideNativeSliderTexture(_G[name .. suffix])
         end
     end
+    slider._msuf2NativeSliderPartsHidden = true
 end
 local function SetSliderTextureColor(texture, r, g, b, a)
-    if not texture then return end
-    if texture.SetColorTexture then
-        texture:SetColorTexture(r, g, b, a)
-    else
-        texture:SetTexture("Interface\\Buttons\\WHITE8X8")
-        if texture.SetVertexColor then texture:SetVertexColor(r, g, b, a) end
-    end
+    SetTextureColorCached(texture, r, g, b, a)
 end
 local function SliderTexture(slider, key, layer, subLevel, height)
     local tex = slider:CreateTexture(nil, layer, nil, subLevel)
@@ -922,12 +985,39 @@ function T.StyleSlider(slider)
         slider._msuf2Thumb = thumb
     end
     slider._msuf2UpdateThumb = UpdateSliderThumb
+    if slider.HookScript and not slider._msuf2SliderStyleHooks then
+        slider._msuf2SliderStyleHooks = true
+        for script, handler in pairs(SLIDER_STYLE_HOOKS) do slider:HookScript(script, handler) end
+    end
     local enabled = not (slider.IsEnabled and not slider:IsEnabled())
     local hovered = slider._msuf2SliderHovered and true or false
     local active = enabled and slider._msuf2SliderActive and true or false
     local alpha = enabled and 1 or 0.45
     local accent = T.colors.accent
     local edge = T.colors.border or T.colors.borderSoft
+    local thumbMedia = T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8"
+    if slider._msuf2SliderVisualReady
+        and slider._msuf2SliderVisualEnabled == enabled
+        and slider._msuf2SliderVisualHovered == hovered
+        and slider._msuf2SliderVisualActive == active
+        and slider._msuf2SliderVisualAccentR == accent[1]
+        and slider._msuf2SliderVisualAccentG == accent[2]
+        and slider._msuf2SliderVisualAccentB == accent[3]
+        and slider._msuf2SliderVisualEdgeR == edge[1]
+        and slider._msuf2SliderVisualEdgeG == edge[2]
+        and slider._msuf2SliderVisualEdgeB == edge[3]
+        and slider._msuf2SliderVisualThumbMedia == thumbMedia
+    then
+        UpdateSliderThumb(slider)
+        return
+    end
+    slider._msuf2SliderVisualReady = true
+    slider._msuf2SliderVisualEnabled = enabled
+    slider._msuf2SliderVisualHovered = hovered
+    slider._msuf2SliderVisualActive = active
+    slider._msuf2SliderVisualAccentR, slider._msuf2SliderVisualAccentG, slider._msuf2SliderVisualAccentB = accent[1], accent[2], accent[3]
+    slider._msuf2SliderVisualEdgeR, slider._msuf2SliderVisualEdgeG, slider._msuf2SliderVisualEdgeB = edge[1], edge[2], edge[3]
+    slider._msuf2SliderVisualThumbMedia = thumbMedia
     if slider._msufTrack then
         local trackBase = { active and 0.045 or 0.035, active and 0.058 or 0.043, active and 0.098 or 0.078, 0.98 * alpha }
         SetSliderTextureColor(slider._msufTrack, trackBase[1], trackBase[2], trackBase[3], trackBase[4])
@@ -963,7 +1053,7 @@ function T.StyleSlider(slider)
     end
     local thumb = slider._msuf2Thumb
     if thumb then
-        thumb:SetTexture(T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8")
+        thumb:SetTexture(thumbMedia)
         thumb:SetTexCoord(0, 1, 0, 1)
         thumb:SetSize(active and 20 or (hovered and 19 or 18), active and 20 or (hovered and 19 or 18))
         if thumb.SetVertexColor then
@@ -972,10 +1062,6 @@ function T.StyleSlider(slider)
         end
         if thumb.SetAlpha then thumb:SetAlpha(alpha) end
         UpdateSliderThumb(slider)
-    end
-    if slider.HookScript and not slider._msuf2SliderStyleHooks then
-        slider._msuf2SliderStyleHooks = true
-        for script, handler in pairs(SLIDER_STYLE_HOOKS) do slider:HookScript(script, handler) end
     end
 end
 function T.StyleCheckmark(checkButton)

@@ -133,10 +133,6 @@ local function ShowGFBarMenuPreviews(gf)
     gf.ShowPreview("party", GFPreviewCount("party"))
     gf.ShowPreview("raid", GFPreviewCount("raid"))
     gf.HidePreview("mythicraid")
-    if type(gf.RefreshPreviewLayout) == "function" then
-        gf.RefreshPreviewLayout("party")
-        gf.RefreshPreviewLayout("raid")
-    end
 end
 local function SetGFPagePreviewFlag(active, kind)
     _G.MSUF2_GFPagePreviewActive = active and true or nil
@@ -175,6 +171,7 @@ local lastGFPreviewActive
 local lastGFPreviewKind
 local lastGFPreviewEditMode
 local lastGFPreviewRuntime
+local groupPreviewRequestSerial = 0
 
 -- Page previews borrow runtime group headers only while the menu owns focus. This cache avoids
 -- repeatedly hiding/restoring secure headers when the selected page key has not changed.
@@ -233,9 +230,26 @@ local function SyncGroupPagePreviewForKey(key, force)
     if kind ~= "raid" then gf.HidePreview("raid") end
     if kind ~= "mythicraid" then gf.HidePreview("mythicraid") end
     gf.ShowPreview(kind, GFPreviewCount(kind))
-    if type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout(kind) end
+end
+local function RequestGroupPagePreviewForKey(key, force)
+    groupPreviewRequestSerial = groupPreviewRequestSerial + 1
+    if force or not (IsGroupPageKey(key) or IsGFBarMenuPreviewKey(key)) then
+        SyncGroupPagePreviewForKey(key, force)
+        return
+    end
+    local timer = _G.C_Timer
+    if not (timer and type(timer.After) == "function") then
+        SyncGroupPagePreviewForKey(key, force)
+        return
+    end
+    local serial = groupPreviewRequestSerial
+    timer.After(0.06, function()
+        if serial ~= groupPreviewRequestSerial then return end
+        SyncGroupPagePreviewForKey(key, force)
+    end)
 end
 M.SyncBossPagePreviewForKey = SyncBossPagePreviewForKey
 M.ResetBossPagePreviewCache = ResetBossPagePreviewCache
 M.ResetStatusIndicatorTestModeOnMenuExit = ResetStatusIndicatorTestModeOnMenuExit
 M.SyncGFPagePreviewForKey = SyncGroupPagePreviewForKey
+M.RequestGFPagePreviewForKey = RequestGroupPagePreviewForKey

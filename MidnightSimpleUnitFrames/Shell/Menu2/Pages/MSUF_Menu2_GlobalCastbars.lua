@@ -21,6 +21,7 @@ local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss"
 local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords "normal channel empowered"
 local CASTBAR_PAGE_WORK_DELAY = 0.04
 local CASTBAR_PREVIEW_REFRESH_INTERVAL = 1 / 30
+local CASTBAR_PREVIEW_ANIMATION_INTERVAL = 1 / 20
 local function ProfileStart()
     return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
 end
@@ -836,6 +837,9 @@ local function BuildCastbars(ctx)
             else
                 preview:SetRowOffset(0)
             end
+            preview._animationRefreshElapsed = (tonumber(preview._animationRefreshElapsed) or 0) + elapsed
+            if preview._animationRefreshElapsed < CASTBAR_PREVIEW_ANIMATION_INTERVAL then return end
+            preview._animationRefreshElapsed = 0
             preview:Refresh()
         end)
         M._msuf2CastbarPreview = preview

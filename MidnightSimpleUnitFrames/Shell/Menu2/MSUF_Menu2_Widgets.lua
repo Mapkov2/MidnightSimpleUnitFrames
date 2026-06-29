@@ -1723,8 +1723,7 @@ local function ApplyControlEnabled(control)
     if not control then return end
     local enabled = (control._msuf2DesiredEnabled ~= false) and not HasDisableGate(control)
     if control._msuf2AppliedEnabled == enabled then
-        ApplyEnabledVisuals(control, enabled)
-        if control._msuf2UpdateFill then control:_msuf2UpdateFill() end
+        if control._msuf2ControlKind == "slider" and control._msuf2UpdateFill then control:_msuf2UpdateFill() end
         return
     end
     control._msuf2AppliedEnabled = enabled

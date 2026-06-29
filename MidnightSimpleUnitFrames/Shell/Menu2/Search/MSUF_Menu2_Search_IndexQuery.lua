@@ -25,8 +25,8 @@ local SEARCH_KEYWORDS = SearchText.KEYWORDS or SearchData.KEYWORDS or {}
 
 local MIN_SEARCH_QUERY_LEN = 2
 local SEARCH_TEXT_MAX_LEN = 170
-local SEARCH_BACKGROUND_STEP_SEC = 0.90
-local SEARCH_BACKGROUND_FIRST_STEP_SEC = 0.65
+local SEARCH_BACKGROUND_STEP_SEC = 1.75
+local SEARCH_BACKGROUND_FIRST_STEP_SEC = 2.50
 local SEARCH_INPUT_DEBOUNCE_SEC = 0.10
 local SEARCH_MAX_RESULTS = 24
 local SEARCH_VISIBLE_RESULTS = 12
@@ -77,6 +77,12 @@ end
 local function SearchCombatLocked()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+local function SearchHiddenPageIndexEnabled()
+    if _G.MSUF_SEARCH_ALLOW_HIDDEN_PAGE_INDEX == true then return true end
+    local g = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
+    return type(g) == "table" and g.searchHiddenPageIndex == true
 end
 
 local function CancelSearchBackgroundIndex()
@@ -992,6 +998,220 @@ BuildRegistrySearchRecord = function(entry)
     return rec
 end
 
+local ASSISTANT_UNIT_PAGE = {
+    player = "uf_player",
+    target = "uf_target",
+    focus = "uf_focus",
+    pet = "uf_pet",
+    boss = "uf_boss",
+    targettarget = "uf_targettarget",
+    focustarget = "uf_focustarget",
+}
+
+local ASSISTANT_FRAME_PAGE = {
+    dashboard = "home",
+    misc = "opt_misc",
+    castbar = "opt_castbar",
+    bars = "opt_bars",
+    globalBars = "opt_bars",
+    fonts = "opt_fonts",
+    modules = "modules",
+    classPower = "classpower",
+    classPowerPlayerHP = "classpower",
+    detachedPowerBar = "classpower",
+    altMana = "classpower",
+    gameplay = "gameplay",
+    combatTimer = "gameplay",
+    combatState = "gameplay",
+    playerTotems = "gameplay",
+    combatCrosshair = "gameplay",
+    profiles = "profiles",
+    groupAura = "gf_auras",
+    aura = "auras3_styling",
+}
+
+local ASSISTANT_GROUP_LAYOUT_ATTRS = M.KeySetFromWords([[
+enabled showPlayer showSolo clickCast clickCastEnabled blizzardFallbackMode
+hideInClientScene hideOfflineEnabled hideOfflineInCombat hideOfflineDelay
+smoothFill reverseFill width height offsetX offsetY spacing unitsPerColumn
+maxColumns preserveRaidGroups growth sortMode sortByRole playerFirstInRole
+roleOrder frameScaleMode frameScaleEnabled frameScaleManual scaleAt10
+scaleAt20 scaleAt25 scaleOver25 hpBarAlpha hpBgAlpha alphaExcludeTextPortrait
+groupBackdropColor anchorToFrame customAnchorFrame anchorPoint
+]])
+
+local ASSISTANT_GROUP_INDICATOR_PARTS = M.KeySetFromWords([[
+roleicon leadericon assisticon raidmarker readycheck summonicon summonanchor
+summonx summony summonlayer resurrecticon resurrectanchor resurrectx resurrecty
+resurrectlayer phaseicon pvpicon warmode threaticon aggroicon spellindicator
+spellindicators cornerindicator cornerindicators
+]])
+
+local function AssistantRegistryGroupPage(setting)
+    local attr = tostring(setting and setting.attribute or "")
+    local attrNorm = NormalizeSearchText(attr):gsub("%s+", "")
+    local keyNorm = NormalizeSearchText(setting and setting.key or ""):gsub("%s+", "")
+    for part in pairs(ASSISTANT_GROUP_INDICATOR_PARTS) do
+        if attrNorm:find(part, 1, true) or keyNorm:find(part, 1, true) then return "gf_indicators" end
+    end
+    if ASSISTANT_GROUP_LAYOUT_ATTRS[attr] then return "gf_layout" end
+    local suffix = tostring(setting and setting.key or ""):match("%.([^%.]+)$")
+    if suffix and ASSISTANT_GROUP_LAYOUT_ATTRS[suffix] then return "gf_layout" end
+    return "gf_bars"
+end
+
+local function AssistantRegistryPageForSetting(setting)
+    if type(setting) ~= "table" then return nil end
+    if type(setting.page) == "string" and setting.page ~= "" then return setting.page end
+    if type(setting.pageKey) == "string" and setting.pageKey ~= "" then return setting.pageKey end
+    local unitPage = ASSISTANT_UNIT_PAGE[tostring(setting.unit or "")]
+    if unitPage then return unitPage end
+    local frameType = tostring(setting.frameType or "")
+    if frameType == "group" then return AssistantRegistryGroupPage(setting) end
+    local framePage = ASSISTANT_FRAME_PAGE[frameType]
+    if framePage then return framePage end
+    local category = NormalizeSearchText(setting.category or "")
+    if category:find("dashboard", 1, true) then return "home" end
+    if category:find("profile", 1, true) then return "profiles" end
+    if category:find("castbar", 1, true) then return "opt_castbar" end
+    if category:find("font", 1, true) then return "opt_fonts" end
+    if category:find("color", 1, true) or category:find("colour", 1, true) then return "opt_colors" end
+    if category:find("class resource", 1, true) or category:find("class power", 1, true) then return "classpower" end
+    if category:find("gameplay", 1, true) then return "gameplay" end
+    return nil
+end
+
+local function AssistantRegistryPageForAction(action)
+    if type(action) ~= "table" then return nil end
+    if type(action.page) == "string" and action.page ~= "" then return action.page end
+    if type(action.pageKey) == "string" and action.pageKey ~= "" then return action.pageKey end
+    local key = NormalizeSearchText(action.key or ""):gsub("%s+", "")
+    local typ = tostring(action.type or "")
+    if key:find("profile", 1, true) or typ == "profile" then return "profiles" end
+    if key:find("aura", 1, true) then return key:find("group", 1, true) and "gf_auras" or "auras3" end
+    if key:find("groupstatus", 1, true) or key:find("groupcorner", 1, true) then return "gf_indicators" end
+    if key:find("group", 1, true) then return "gf_layout" end
+    if key:find("castbar", 1, true) or key:find("kick", 1, true) then return "opt_castbar" end
+    if key:find("classpower", 1, true) or typ == "classPower" then return "classpower" end
+    if key:find("totem", 1, true) or key:find("crosshair", 1, true) or typ == "gameplay" then return "gameplay" end
+    if key:find("font", 1, true) or typ == "fonts" then return "opt_fonts" end
+    if key:find("color", 1, true) or typ == "color" then return "opt_colors" end
+    if typ == "globalBars" then return "opt_bars" end
+    return "home"
+end
+
+local function AssistantRegistryControlKind(setting)
+    local kind = tostring(setting and setting.type or "")
+    if kind == "boolean" then return "toggle" end
+    if kind == "number" then return "slider" end
+    if kind == "enum" then return "dropdown" end
+    if kind == "color" then return "color" end
+    if kind == "string" or kind == "text" then return "textinput" end
+    return "control"
+end
+
+local function AddAssistantRegistryListText(parts, values, limit)
+    if type(values) == "string" then
+        if values:find("|", 1, true) then
+            local count = 0
+            for value in values:gmatch("[^|]+") do
+                count = count + 1
+                AddSearchText(parts, value)
+                if limit and count >= limit then break end
+            end
+        else
+            AddSearchText(parts, values)
+        end
+        return
+    end
+    if type(values) ~= "table" then return end
+    local maxValues = math.min(#values, tonumber(limit) or 24)
+    for i = 1, maxValues do AddSearchText(parts, SearchValueText(values[i])) end
+end
+
+local function AddAssistantRegistryMapKeys(parts, values, limit)
+    if type(values) ~= "table" then return end
+    local count = 0
+    for key in pairs(values) do
+        count = count + 1
+        AddSearchText(parts, key)
+        if limit and count >= limit then break end
+    end
+end
+
+local function AddAssistantRegistrySettingRecord(records, seenRecords, pageInfoByKey, assistant, setting)
+    if type(setting) ~= "table" or tostring(setting.key or "") == "" then return end
+    local pageKey = AssistantRegistryPageForSetting(setting)
+    if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
+    local info = pageInfoByKey[pageKey] or BuildSearchPageInfoForKey(pageKey)
+    local label = type(assistant.DisplaySettingLabel) == "function"
+        and assistant.DisplaySettingLabel(setting)
+        or (setting.label or setting.name or setting.key)
+    local extra = {}
+    AddSearchText(extra, setting.key)
+    AddSearchText(extra, setting.category)
+    AddSearchText(extra, setting.attribute)
+    AddSearchText(extra, setting.unit)
+    AddSearchText(extra, setting.frameType)
+    AddSearchText(extra, setting.description or setting.summary)
+    AddAssistantRegistryListText(extra, setting.aliases, 24)
+    AddAssistantRegistryListText(extra, setting.exactAliases, 24)
+    AddAssistantRegistryListText(extra, setting.keywords, 24)
+    AddAssistantRegistryMapKeys(extra, setting.valueAliases, 24)
+    AddAssistantRegistryMapKeys(extra, setting.booleanAliases, 24)
+    if type(setting.values) == "table" then AddValuesSearchText(extra, setting.values) end
+    if type(setting.options) == "table" then AddValuesSearchText(extra, setting.options) end
+    local rec = AddSearchRecord(records, seenRecords, info, label, "assistant:" .. tostring(setting.key), AssistantRegistryControlKind(setting), extra)
+    if rec then
+        rec.answer = setting.description or setting.summary
+        rec.target = info.title and ("Opens: " .. tostring(info.title)) or nil
+        rec._msufAssistantSettingKey = setting.key
+        rec.priority = (tonumber(rec.priority) or 0) + 35
+    end
+end
+
+local function AddAssistantRegistryActionRecord(records, seenRecords, pageInfoByKey, assistant, action)
+    if type(action) ~= "table" or tostring(action.key or "") == "" then return end
+    local pageKey = AssistantRegistryPageForAction(action)
+    if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
+    local info = pageInfoByKey[pageKey] or BuildSearchPageInfoForKey(pageKey)
+    local label = type(assistant.DisplayActionLabel) == "function"
+        and assistant.DisplayActionLabel(action)
+        or (action.label or action.name or action.key)
+    local extra = {}
+    AddSearchText(extra, action.key)
+    AddSearchText(extra, action.category or action.type)
+    AddSearchText(extra, action.description or action.summary)
+    AddAssistantRegistryListText(extra, action.aliases, 24)
+    AddAssistantRegistryListText(extra, action.exactAliases, 24)
+    AddAssistantRegistryListText(extra, action.keywords, 24)
+    local rec = AddSearchRecord(records, seenRecords, info, label, "assistant-action:" .. tostring(action.key), "button", extra)
+    if rec then
+        rec.answer = action.description or action.summary
+        rec.target = info.title and ("Opens: " .. tostring(info.title)) or nil
+        rec._msufAssistantActionKey = action.key
+        rec.priority = (tonumber(action.priority) or 0) + 15
+    end
+end
+
+local function AddAssistantRegistrySearchRecords(records, seenRecords, pageInfoByKey)
+    local assistant = (MSUF and MSUF.Assistant) or M.Assistant
+    local registry = assistant and assistant.Registry
+    if type(registry) ~= "table" then return end
+    if type(registry.AllSettings) == "function" then
+        local settings = registry:AllSettings() or {}
+        for i = 1, #settings do
+            AddAssistantRegistrySettingRecord(records, seenRecords, pageInfoByKey, assistant, settings[i])
+        end
+    end
+    if type(registry.AllActions) == "function" then
+        local actions = registry:AllActions() or {}
+        for i = 1, #actions do
+            AddAssistantRegistryActionRecord(records, seenRecords, pageInfoByKey, assistant, actions[i])
+        end
+    end
+end
+
 local SEARCH_FAQ = SearchData.BuildFAQ and SearchData.BuildFAQ({
     SearchKeywordList = SearchKeywordList,
     DASHBOARD_ROUTE_RECOVERY = DASHBOARD_ROUTE_RECOVERY,
@@ -1040,6 +1260,8 @@ local function BuildSearchRecords()
             records[#records + 1] = rec
         end
     end
+
+    AddAssistantRegistrySearchRecords(records, seenRecords, pageInfoByKey)
 
     for i = 1, #SEARCH_FAQ do
         local faq = SEARCH_FAQ[i]
@@ -1099,9 +1321,11 @@ end
 
 local function StartSearchBackgroundIndex()
     if SEARCH_STATE.indexing then return end
+    if not SearchHiddenPageIndexEnabled() then return end
     if SearchCombatLocked() then return end
     if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
     if not M.scrollChild then return end
+    if not (_G.C_Timer and type(_G.C_Timer.After) == "function") then return end
 
     local pageInfos = BuildSearchPageInfos()
     local queue = {}
@@ -1423,6 +1647,7 @@ Search._CoreAPI = {
     CancelSearchBackgroundIndex = CancelSearchBackgroundIndex,
     ClearSearchLocaleCaches = ClearSearchLocaleCaches,
     ClearSearchRegistryPage = ClearSearchRegistryPage,
+    HiddenPageIndexEnabled = SearchHiddenPageIndexEnabled,
     MarkSearchIndexDirty = MarkSearchIndexDirty,
     OpenSearchResults = OpenSearchResults,
     OpenSearchTarget = OpenSearchTarget,

@@ -49,6 +49,31 @@ local function PreviewEnabled()
         or general.enableBossCastbar ~= false
 end
 
+local UpdateBossCastbarPreview
+local bossPreviewBatchDepth = 0
+local bossPreviewBatchPending
+
+local function BeginBossCastbarPreviewBatch()
+    bossPreviewBatchDepth = bossPreviewBatchDepth + 1
+end
+
+local function EndBossCastbarPreviewBatch()
+    if bossPreviewBatchDepth <= 0 then
+        bossPreviewBatchDepth = 0
+        return
+    end
+    bossPreviewBatchDepth = bossPreviewBatchDepth - 1
+    if bossPreviewBatchDepth == 0 and bossPreviewBatchPending then
+        bossPreviewBatchPending = nil
+        if type(UpdateBossCastbarPreview) == "function" then
+            UpdateBossCastbarPreview()
+        end
+    end
+end
+
+ExportPublic("MSUF_BeginBossCastbarPreviewBatch", BeginBossCastbarPreviewBatch)
+ExportPublic("MSUF_EndBossCastbarPreviewBatch", EndBossCastbarPreviewBatch)
+
 local function BossUnitFrame(index)
     local unitFrames = _G.MSUF_UnitFrames
     return (unitFrames and unitFrames["boss" .. index]) or _G["MSUF_boss" .. index]
@@ -153,7 +178,9 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
         preview:SetSize(width, height)
     end
 
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+    if type(_G.MSUF_RefreshCastbarFrame) == "function" then
+        _G.MSUF_RefreshCastbarFrame(preview)
+    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
         _G.MSUF_UpdateCastbarVisuals()
     end
 
@@ -172,11 +199,15 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
 
     if preview.statusBar then
         preview.statusBar:SetValue(0)
-        preview.statusBar.MSUF_hideFillTexture = true
+        if preview.MSUF_testMode then
+            preview.statusBar.MSUF_hideFillTexture = nil
+        else
+            preview.statusBar.MSUF_hideFillTexture = true
+        end
 
         local fillTexture = preview.statusBar.GetStatusBarTexture and preview.statusBar:GetStatusBarTexture()
         if fillTexture then
-            fillTexture:SetAlpha(0)
+            fillTexture:SetAlpha(preview.MSUF_testMode and 1 or 0)
         end
     end
 end
@@ -216,7 +247,12 @@ local function PositionBossCastbarPreview(preview, index)
     end
 end
 
-local function UpdateBossCastbarPreview()
+UpdateBossCastbarPreview = function()
+    if bossPreviewBatchDepth > 0 then
+        bossPreviewBatchPending = true
+        return
+    end
+
     if InCombat() then
         return
     end
