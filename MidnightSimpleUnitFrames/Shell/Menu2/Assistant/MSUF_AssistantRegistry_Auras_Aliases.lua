@@ -86,10 +86,25 @@ function A.AurasRegistry.BuildAliasHelpers(ctx)
     end
 
     Assistant._AssistantAddAllAuraNounAliases = Assistant._AssistantAddAllAuraNounAliases or function(out, lane, prefix, noun)
+        local laneWord = lane == "buff" and "buff" or "debuff"
         local lanePlural = lane == "buff" and "buffs" or "debuffs"
         out[#out + 1] = prefix .. " aura " .. noun
         out[#out + 1] = prefix .. " auras " .. noun
         out[#out + 1] = prefix .. " " .. lanePlural .. " " .. noun
+        if prefix == "all group" then
+            local groupNouns = { "group", "group frame", "group frames" }
+            for i = 1, #groupNouns do
+                local groupNoun = groupNouns[i]
+                out[#out + 1] = groupNoun .. " aura " .. noun
+                out[#out + 1] = groupNoun .. " auras " .. noun
+                out[#out + 1] = groupNoun .. " " .. laneWord .. " " .. noun
+                out[#out + 1] = groupNoun .. " " .. lanePlural .. " " .. noun
+                out[#out + 1] = noun .. " " .. groupNoun .. " aura"
+                out[#out + 1] = noun .. " " .. groupNoun .. " auras"
+                out[#out + 1] = noun .. " " .. groupNoun .. " " .. laneWord
+                out[#out + 1] = noun .. " " .. groupNoun .. " " .. lanePlural
+            end
+        end
     end
 
     Assistant._AssistantAddAllAuraRelativeSizeAliases = Assistant._AssistantAddAllAuraRelativeSizeAliases or function(out, lane, prefix)

@@ -32,6 +32,19 @@ local GROWTH_VALUE_ALIASES = {
     leftup = "LEFTUP",
 }
 
+local function BuildAnchorValueAliases(lane)
+    local aliases = {}
+    for key, value in pairs(ANCHOR_VALUE_ALIASES) do aliases[key] = value end
+    if lane == "buff" then
+        aliases.left = "BOTTOMLEFT"
+        aliases.right = "BOTTOMRIGHT"
+    else
+        aliases.left = "TOPLEFT"
+        aliases.right = "TOPRIGHT"
+    end
+    return aliases
+end
+
 local function AddStrictAliases(aliases, AddGFAuraStrictAliases, scope, lane, nouns)
     for i = 1, #nouns do
         AddGFAuraStrictAliases(aliases, scope, lane, nouns[i])
@@ -39,6 +52,8 @@ local function AddStrictAliases(aliases, AddGFAuraStrictAliases, scope, lane, no
 end
 
 local function AddDirectionalAliases(aliases, lane, negativeWord, positiveWord)
+    local laneWord = lane == "buff" and "buff" or "debuff"
+    local lanePlural = lane == "buff" and "buffs" or "debuffs"
     aliases[#aliases + 1] = "all group aura " .. negativeWord
     aliases[#aliases + 1] = "all group auras " .. negativeWord
     aliases[#aliases + 1] = "all group aura " .. positiveWord
@@ -49,6 +64,22 @@ local function AddDirectionalAliases(aliases, lane, negativeWord, positiveWord)
     aliases[#aliases + 1] = "all auras " .. positiveWord
     aliases[#aliases + 1] = "all group frame auras " .. negativeWord
     aliases[#aliases + 1] = "all group frame auras " .. positiveWord
+    aliases[#aliases + 1] = "group frame " .. laneWord .. " " .. negativeWord
+    aliases[#aliases + 1] = "group frame " .. lanePlural .. " " .. negativeWord
+    aliases[#aliases + 1] = "group frames " .. laneWord .. " " .. negativeWord
+    aliases[#aliases + 1] = "group frames " .. lanePlural .. " " .. negativeWord
+    aliases[#aliases + 1] = "group frame " .. laneWord .. " " .. positiveWord
+    aliases[#aliases + 1] = "group frame " .. lanePlural .. " " .. positiveWord
+    aliases[#aliases + 1] = "group frames " .. laneWord .. " " .. positiveWord
+    aliases[#aliases + 1] = "group frames " .. lanePlural .. " " .. positiveWord
+    aliases[#aliases + 1] = negativeWord .. " group frame " .. laneWord
+    aliases[#aliases + 1] = negativeWord .. " group frame " .. lanePlural
+    aliases[#aliases + 1] = negativeWord .. " group frames " .. laneWord
+    aliases[#aliases + 1] = negativeWord .. " group frames " .. lanePlural
+    aliases[#aliases + 1] = positiveWord .. " group frame " .. laneWord
+    aliases[#aliases + 1] = positiveWord .. " group frame " .. lanePlural
+    aliases[#aliases + 1] = positiveWord .. " group frames " .. laneWord
+    aliases[#aliases + 1] = positiveWord .. " group frames " .. lanePlural
     aliases[#aliases + 1] = lane == "buff" and "all group buffs " .. negativeWord or "all group debuffs " .. negativeWord
     aliases[#aliases + 1] = lane == "buff" and "all group buffs " .. positiveWord or "all group debuffs " .. positiveWord
     aliases[#aliases + 1] = lane == "buff" and "all buffs " .. negativeWord or "all debuffs " .. negativeWord
@@ -90,7 +121,7 @@ function A.AurasRegistry.RegisterGroupAuraLaneGeometrySettings(ctx, scope, lane,
     Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "anchor", "anchor point", "position anchor" })
     Assistant._AssistantAddAllAuraNouns(aliases, lane, "all group", { "anchor", "anchor point", "position anchor" })
     Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "anchor", "anchor point", "position anchor" })
-    RegisterGFAuraEnum(scope, lane, "Anchor", "anchor", laneInfo.label .. " Anchor", GF_AURA_ANCHORS, ANCHOR_VALUE_ALIASES, anchorDefault, aliases, "geometry")
+    RegisterGFAuraEnum(scope, lane, "Anchor", "anchor", laneInfo.label .. " Anchor", GF_AURA_ANCHORS, BuildAnchorValueAliases(lane), anchorDefault, aliases, "geometry")
 
     aliases = {}
     AddGFAuraAliases(aliases, scope, lane, "growth")
