@@ -719,7 +719,11 @@ builders.PRESENTATION = function(E)
 
         local function ApplyClassPowerFont(region, fontPath, size, fontFlags)
             if not (region and region.SetFont) then return false end
-            return region:SetFont(fontPath, size, fontFlags) ~= false
+            local ok, applied = pcall(region.SetFont, region, fontPath, size, fontFlags)
+            if ok and applied ~= false then return true end
+            local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
+            ok, applied = pcall(region.SetFont, region, fallback, size, fontFlags)
+            return ok and applied ~= false
         end
 
         local rev = (_G.MSUF_FontPathSerial or 0) + fontSize * 1000003

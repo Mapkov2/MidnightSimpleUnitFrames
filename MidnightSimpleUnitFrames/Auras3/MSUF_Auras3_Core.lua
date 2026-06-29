@@ -46,8 +46,20 @@ end
 function A3.EnsureDB()
     local db = EnsureRootDB()
     local current = db.auras3
+    if type(db.auras2) == "table" then
+        local translate = _G.MSUF_ProfileIO_TranslateProfileToCurrent
+        if type(translate) == "function" then
+            pcall(translate, db, { source = "auras3_core", markProfile = true })
+            current = db.auras3
+        end
+    end
 
     if type(current) == "table" then
+        if next(current) == nil and type(db.auras2) == "table" then
+            current = db.auras2
+            db.auras3 = current
+            current._msufAuras3TranslatedFromLegacyAuras2 = true
+        end
         db.auras2 = nil
         current._msufAurasRuntime = 3
         A3.DBRef = current

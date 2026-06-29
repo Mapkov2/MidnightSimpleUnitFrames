@@ -19,6 +19,7 @@ local GROUP_LABELS = {
 local GROUP_SPECS = {
     buff = {
         label = "Buffs",
+        singular = "Buff",
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
@@ -28,6 +29,7 @@ local GROUP_SPECS = {
     },
     debuff = {
         label = "Debuffs",
+        singular = "Debuff",
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
@@ -242,15 +244,39 @@ local function WirePopupFocus(btn)
     return Util.WirePopupFocus and Util.WirePopupFocus(btn, function() return pf and pf.unit and MenuUnit(pf.unit) end, "auras", "aura-popup") or btn
 end
 
+local function SetLabel(fs, text)
+    if fs and fs.SetText then fs:SetText(Quick.Tr(text)) end
+end
+
+local function SetActiveGroup(kind)
+    if not GROUP_SPECS[kind] then return end
+    local current = _G.MSUF_EM2_ActiveAuraGroup
+    if current ~= kind and pf and pf.unit and pf.xBox then
+        Apply()
+    end
+    local export = (MSUF and MSUF.ExportPublic) or function(name, value) _G[name] = value end
+    export("MSUF_EM2_ActiveAuraGroup", kind)
+    if pf and pf.unit then export("MSUF_EM2_ActiveAuraUnit", pf.unit) end
+    if pf and pf:IsShown() then Sync() end
+end
+
 function Sync()
     if not (pf and pf.unit) then return end
     local sh = Shared(false) or {}
     local layout = UnitLayout(EffectiveUnit(pf.unit, sh), false) or {}
     local activeGroup, spec = ActiveGroup()
-    local suffix = " - " .. Quick.Tr(spec.label or GROUP_LABELS[activeGroup] or "Buffs")
+    local laneLabel = spec.label or GROUP_LABELS[activeGroup] or "Buffs"
+    local singular = spec.singular or laneLabel
+    local suffix = " - " .. Quick.Tr(laneLabel) .. " " .. Quick.Tr("Position")
 
     if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(pf.unit) .. " - Auras")) end
     if pf._subtitleFS then pf._subtitleFS:SetText(Quick.Tr("Aura bounds") .. suffix) end
+    SetLabel(pf.xBoxLabel, singular .. " X")
+    SetLabel(pf.yBoxLabel, singular .. " Y")
+    SetLabel(pf.sizeBoxLabel, singular .. " Size")
+    SetLabel(pf.spacingBoxLabel, "Shared Spacing")
+    if pf.buffLaneBtn and pf.buffLaneBtn.SetCheckedVisual then pf.buffLaneBtn:SetCheckedVisual(activeGroup == "buff") end
+    if pf.debuffLaneBtn and pf.debuffLaneBtn.SetCheckedVisual then pf.debuffLaneBtn:SetCheckedVisual(activeGroup == "debuff") end
     Quick.SetBoxText(pf.spacingBox, ReadValue(layout, sh, "spacing", "spacing", 2))
     Quick.SetBoxText(pf.xBox, ReadValue(layout, sh, spec.xKey, spec.xKey, spec.defaultX))
     Quick.SetBoxText(pf.yBox, ReadValue(layout, sh, spec.yKey, spec.yKey, spec.defaultY))
@@ -259,7 +285,8 @@ function Sync()
         local isBoss = IsBoss(pf.unit)
         pf.bossTogetherBtn:SetShown(isBoss)
         if isBoss then
-            pf.bossTogetherBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -140)
+            pf.bossTogetherBtn:ClearAllPoints()
+            pf.bossTogetherBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -170)
         end
         pf.bossTogetherBtn:SetCheckedVisual(sh.bossEditTogether ~= false)
     end
@@ -269,28 +296,30 @@ local function Build()
     if pf then return pf end
 
     pf = Quick.BuildBoundsPopup("MSUF_EM2_AuraPopup", {
-        height = 282,
+        height = 306,
         subtitle = "",
         hoverSource = "aura-popup",
         peelSkin = true,
     }, {
         buttonOpts = ButtonOpts,
         rows = {
-            { y = -72, label1 = "X", key1 = "xBox", cb1 = Apply, label2 = "Y", key2 = "yBox", cb2 = Apply },
-            { y = -102, label1 = "Size", key1 = "sizeBox", cb1 = Apply, label2 = "Spacing", key2 = "spacingBox", cb2 = Apply },
+            { y = -108, label1 = "Buff X", key1 = "xBox", cb1 = Apply, label2 = "Buff Y", key2 = "yBox", cb2 = Apply },
+            { y = -138, label1 = "Buff Size", key1 = "sizeBox", cb1 = Apply, label2 = "Shared Spacing", key2 = "spacingBox", cb2 = Apply },
         },
         toggle = {
-            key = "bossTogetherBtn", text = "Boss 1-5 together", x = 20, y = -140, w = 394, h = 30,
+            key = "bossTogetherBtn", text = "Boss 1-5 together", x = 20, y = -170, w = 394, h = 30,
             onClick = Apply,
             opts = function() return ButtonOpts(function() if pf and pf:IsShown() then Sync() end end) end,
         },
         buttons = {
-            { key = "unitAurasBtn", text = "Unitframe auras", x = 20, y = -190, w = 190, h = 30, onClick = OpenUnitAuras },
-            { key = "generalAurasBtn", text = "General auras", x = 224, y = -190, w = 190, h = 30, onClick = OpenGeneralAuras },
+            { key = "unitAurasBtn", text = "Unitframe auras", x = 20, y = -210, w = 190, h = 30, onClick = OpenUnitAuras },
+            { key = "generalAurasBtn", text = "General auras", x = 224, y = -210, w = 190, h = 30, onClick = OpenGeneralAuras },
         },
         wireButton = function(btn) return WirePopupFocus(btn) end,
-        footer = { y = -230, onResetPosition = ResetPosition },
+        footer = { y = -250, resetLabel = "Reset lane position", onResetPosition = ResetPosition },
     })
+    pf.buffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Buffs", 20, -72, 190, 28, function() SetActiveGroup("buff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
+    pf.debuffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Debuffs", 224, -72, 190, 28, function() SetActiveGroup("debuff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
     return pf
 end
 

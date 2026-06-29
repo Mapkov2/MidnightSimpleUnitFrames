@@ -131,13 +131,19 @@ local _measureFS
 local function _ConfiguredFontReady()
     local getPath = _G.MSUF_GetFontPath
     local path = (type(getPath) == "function" and getPath()) or _fontState.path or "Fonts\\FRIZQT__.TTF"
+    local resolveSafe = _G.MSUF_ResolveSafeFontPath
+    if type(resolveSafe) == "function" then
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        path = resolveSafe(path, 14, "", g and g.fontKey)
+    end
     if type(path) ~= "string" or path == "" then return false end
     if not _measureFS then
         if not _G.UIParent then return true end
         _measureFS = _G.UIParent:CreateFontString(nil, "BACKGROUND")
         _measureFS:Hide()
     end
-    if _measureFS:SetFont(path, 14, "") == false then return false end
+    local ok, applied = pcall(_measureFS.SetFont, _measureFS, path, 14, "")
+    if not ok or applied == false then return false end
     -- If the requested path does not match yet, the client is still using a fallback font.
     local applied = _measureFS:GetFont()
     if not applied or tostring(applied):gsub("/", "\\"):lower() ~= tostring(path):gsub("/", "\\"):lower() then
@@ -207,7 +213,9 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb, ca)
     if fs._msufFontRev ~= rev then
         local ok = _MSUF_SetFontChecked(fs, S.path, size, S.flags, S.fontKey)
         if not ok then
-            local fallback = _G.MSUF_ResolveFontPath and _G.MSUF_ResolveFontPath("Fonts\\FRIZQT__.TTF", size, S.flags) or "Fonts\\FRIZQT__.TTF"
+            local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, S.flags, "FRIZQT")
+                or (_G.MSUF_ResolveFontPath and _G.MSUF_ResolveFontPath("Fonts\\FRIZQT__.TTF", size, S.flags))
+                or "Fonts\\FRIZQT__.TTF"
             ok = _MSUF_SetFontChecked(fs, fallback, size, S.flags, "FRIZQT")
         end
         if ok then
@@ -338,6 +346,10 @@ local function UpdateAllFonts(onlyKey)
     EnsureDBSafe()
     local db = _G.MSUF_DB
     local g = (db and db.general) or {}
+    local resolveSafe = _G.MSUF_ResolveSafeFontPath
+    if type(resolveSafe) == "function" then
+        path = resolveSafe(path, 14, flags, g.fontKey)
+    end
     local getColor = (MSUF and MSUF.MSUF_GetConfiguredFontColor) or _G.MSUF_GetConfiguredFontColor
     local fr, fg, fb = 1, 1, 1
     if type(getColor) == "function" then
