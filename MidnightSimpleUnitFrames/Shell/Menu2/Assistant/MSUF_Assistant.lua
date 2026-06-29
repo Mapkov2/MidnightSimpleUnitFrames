@@ -4009,6 +4009,9 @@ local function HandlePending(text)
         if choiceExplain then return choiceExplain end
         local choiceOpen = PendingChoiceOpenFollowupResult(text, choices)
         if choiceOpen then return choiceOpen end
+        if NormalizeReply(text) == "what" then
+            return { text = "Which listed option do you want me to use? A number, label, or unit name is enough.", result = "ambiguous" }
+        end
         if LooksLikeFreshCommand(text) then
             ClearPendingChoices()
             return nil

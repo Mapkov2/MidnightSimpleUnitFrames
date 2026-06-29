@@ -165,10 +165,15 @@ function R.IsExactGenericDiagnosticRequest(text)
         or norm == "health check"
         or norm == "run health check"
         or norm == "msuf status"
+        or norm == "show msuf status"
         or norm == "assistant status"
+        or norm == "show assistant status"
         or norm == "diagnostic report"
+        or norm == "show diagnostic report"
         or norm == "support text"
+        or norm == "show support text"
         or norm == "assistant support text"
+        or norm == "show assistant support text"
 end
 
 function R.IsStandaloneCancelReply(text)    local norm = R.Normalize(text)
@@ -2528,6 +2533,49 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
             "Open Aura Filters | hide spell 12345 for " .. scope .. " " .. lane:lower() .. "s",
             asksLocation and "applied" or "info"
         )
+    end
+
+    local broadCooldownText = R.ContainsAny(norm, { "cooldown text", "timer text" })
+    local broadStackText = R.ContainsAny(norm, { "stack text", "stack count", "count text", "stacks" })
+    if scope and not lane and (broadCooldownText or broadStackText) then
+        local textName = broadCooldownText and "cooldown text" or "stack text"
+        local settingLabel = broadCooldownText and "Cooldown Text" or "Stack Text"
+        local sizeLabel = broadCooldownText and "Cooldown Text Size" or "Stack Text Size"
+        local sizeIntent = R.ContainsAny(norm, { "size", "groesse", "grosse", "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink" })
+        if isGroupScope then
+            return A.RouterAuraDetailReply(
+                scopeLabel .. " aura " .. settingLabel .. " needs a lane",
+                scopeLabel .. " aura " .. settingLabel .. " has separate Buff and Debuff controls. Tell me which lane so I do not change the wrong group aura text setting.",
+                "make " .. scope .. " buff " .. textName .. " size bigger; make " .. scope .. " debuff " .. textName .. " size bigger; turn off " .. scope .. " debuff " .. textName .. ".",
+                "Open Group Auras | " .. scopeLabel .. " Buff " .. settingLabel .. " | " .. scopeLabel .. " Debuff " .. settingLabel,
+                asksLocation and "applied" or "ambiguous"
+            )
+        end
+        local command
+        if sizeIntent then
+            local explicitNumber = R.AuraDetailExplicitNumber(norm)
+            if explicitNumber then
+                command = "set " .. scope .. " " .. textName .. " size to " .. explicitNumber
+            else
+                local direction = R.ContainsAny(norm, { "smaller", "decrease", "reduce", "shrink" }) and "smaller" or "bigger"
+                command = "make " .. scope .. " " .. textName .. " size " .. direction
+            end
+            settingLabel = sizeLabel
+        else
+            local verb = wantsOff and "turn off " or "turn on "
+            command = verb .. scope .. " " .. textName
+        end
+        if asksLocation then
+            local locationLabel = broadCooldownText and "Cooldown Text" or "Stack Text"
+            return A.RouterAuraDetailReply(
+                scopeLabel .. " Aura " .. locationLabel .. " setting location",
+                scopeLabel .. " Aura " .. locationLabel .. " lives in Aura Style. Use Aura Style for cooldown/stack text size, visibility, anchor, and offsets for that unit scope, separate from Buff/Debuff icon layout.",
+                command .. "; open aura style.",
+                "Open Aura Style | " .. command
+            )
+        end
+        local result = R.CoreControl(coreHandler, command, scopeLabel .. " Aura " .. settingLabel .. " is in Aura Style.", "info")
+        if result then return result end
     end
 
     if not lane or not scope then return nil end
@@ -6213,7 +6261,10 @@ function R.IsBroadTroubleshootingSubject(subject)
         "player cast bar", "target cast bar", "focus cast bar", "boss cast bar",
         "player castbar", "target castbar", "focus castbar", "boss castbar",
         "class resource", "class resources", "class power", "class powers",
-        "frames", "unit frames", "profile", "profiles",
+        "frames", "unit frames", "unitframes", "profile", "profiles",
+        "player frame", "target frame", "focus frame", "pet frame",
+        "boss frame", "boss frames", "party frames", "raid frames",
+        "group frame", "group frames", "mythic raid frames",
     }
     for i = 1, #broad do
         if subject == broad[i] then return true end
@@ -7437,6 +7488,7 @@ function A.RouterLooksLikePendingChoiceFollowup(text)
     local norm = R.Normalize(text)
     if norm == "" then return false end
     if norm:match("^%d+$") then return true end
+    if norm == "what" then return true end
     if R.IsStandaloneCancelReply(norm) then return true end
     if R.ContainsAny(norm, R.FLOW_TERMS) then return true end
     if R.ContainsAny(norm, {

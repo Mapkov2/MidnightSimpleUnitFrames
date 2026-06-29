@@ -70,6 +70,11 @@ local function Normalize(text)
     text = text:gsub("%f[%w]whcih%f[%W]", "which")
     text = text:gsub("%f[%w]wheree%f[%W]", "where")
     text = text:gsub("%f[%w]wher%f[%W]", "where")
+    text = text:gsub("%f[%w]chnage%f[%W]", "change")
+    text = text:gsub("%f[%w]chagne%f[%W]", "change")
+    text = text:gsub("%f[%w]moev%f[%W]", "move")
+    text = text:gsub("%f[%w]mvoe%f[%W]", "move")
+    text = text:gsub("%f[%w]toggel%f[%W]", "toggle")
     text = text:gsub("%f[%w]porfile%f[%W]", "profile")
     text = text:gsub("%f[%w]profiel%f[%W]", "profile")
     text = text:gsub("%f[%w]improt%f[%W]", "import")
@@ -89,6 +94,9 @@ local function Normalize(text)
     text = text:gsub("%f[%w]collor%f[%W]", "color")
     text = text:gsub("%f[%w]colour%f[%W]", "color")
     text = text:gsub("%f[%w]grey%f[%W]", "gray")
+    text = text:gsub("%f[%w]fitler%f[%W]", "filter")
+    text = text:gsub("%f[%w]fliter%f[%W]", "filter")
+    text = text:gsub("%f[%w]filtres%f[%W]", "filters")
     text = text:gsub("%f[%w]antoher%f[%W]", "another")
     text = text:gsub("%f[%w]bgu%f[%W]", "bug")
     text = text:gsub("%f[%w]condtion%f[%W]", "condition")
@@ -107,17 +115,24 @@ local function Normalize(text)
     text = text:gsub("%f[%w]snappping%f[%W]", "snapping")
     text = text:gsub("%f[%w]taregt%f[%W]", "target")
     text = text:gsub("%f[%w]targte%f[%W]", "target")
+    text = text:gsub("%f[%w]targt%f[%W]", "target")
     text = text:gsub("%f[%w]targrt%f[%W]", "target")
     text = text:gsub("%f[%w]taret%f[%W]", "target")
+    text = text:gsub("%f[%w]traget%f[%W]", "target")
+    text = text:gsub("%f[%w]taerget%f[%W]", "target")
     text = text:gsub("%f[%w]playr%f[%W]", "player")
     text = text:gsub("%f[%w]plaer%f[%W]", "player")
+    text = text:gsub("%f[%w]plyer%f[%W]", "player")
     text = text:gsub("%f[%w]foucs%f[%W]", "focus")
     text = text:gsub("%f[%w]focs%f[%W]", "focus")
+    text = text:gsub("%f[%w]frm%f[%W]", "frame")
+    text = text:gsub("%f[%w]frms%f[%W]", "frames")
     text = text:gsub("%f[%w]unitfram%f[%W]", "unitframe")
     text = text:gsub("%f[%w]unitframs%f[%W]", "unitframes")
     text = text:gsub("%f[%w]unitfames%f[%W]", "unitframes")
     text = text:gsub("%f[%w]auras%f[%W]", "aura")
     text = text:gsub("%f[%w]auara%f[%W]", "aura")
+    text = text:gsub("%f[%w]auaras%f[%W]", "aura")
     text = text:gsub("%f[%w]auars%f[%W]", "aura")
     text = text:gsub("%f[%w]aurra%f[%W]", "aura")
     text = text:gsub("%f[%w]aurs%f[%W]", "aura")
@@ -126,21 +141,54 @@ local function Normalize(text)
     text = text:gsub("%f[%w]debuf%f[%W]", "debuff")
     text = text:gsub("%f[%w]debufs%f[%W]", "debuffs")
     text = text:gsub("%f[%w]debufff%f[%W]", "debuff")
+    text = text:gsub("%f[%w]cd%f[%W]", "cooldown")
+    text = text:gsub("%f[%w]pwr%f[%W]", "power")
+    text = text:gsub("%f[%w]powr%f[%W]", "power")
+    text = text:gsub("%f[%w]pwoer%f[%W]", "power")
     text = text:gsub("%f[%w]stak%f[%W]", "stack")
     text = text:gsub("%f[%w]staks%f[%W]", "stacks")
     text = text:gsub("%f[%w]castbr%f[%W]", "castbar")
     text = text:gsub("%f[%w]castabr%f[%W]", "castbar")
+    text = text:gsub("%f[%w]castba%f[%W]", "castbar")
+    text = text:gsub("%f[%w]castbra%f[%W]", "castbar")
+    text = text:gsub("%f[%w]helath%f[%W]", "health")
+    text = text:gsub("%f[%w]haelth%f[%W]", "health")
     text = text:gsub("%f[%w]waggo%f[%W]", "wago")
     text = text:gsub("%f[%w]wagoo%f[%W]", "wago")
     text = text:gsub("%f[%w]wgao%f[%W]", "wago")
+    text = text:gsub("%f[%w]rihgt%f[%W]", "right")
+    text = text:gsub("%f[%w]rigth%f[%W]", "right")
+    text = text:gsub("%f[%w]riht%f[%W]", "right")
     text = text:gsub("%f[%w]lef%f[%W]", "left")
     text = text:gsub("%f[%w]lft%f[%W]", "left")
     text = text:gsub("%f[%w]upp%f[%W]", "up")
     text = text:gsub("%f[%w]dn%f[%W]", "down")
+    text = text:gsub("%f[%w]donw%f[%W]", "down")
+    text = text:gsub("%f[%w]dwon%f[%W]", "down")
+    text = text:gsub("%f[%w]smaler%f[%W]", "smaller")
+    text = text:gsub("%f[%w]smalller%f[%W]", "smaller")
+    text = text:gsub("%f[%w]biger%f[%W]", "bigger")
+    text = text:gsub("%f[%w]larger%f[%W]", "larger")
+    text = text:gsub("%f[%w]lagrer%f[%W]", "larger")
+    text = text:gsub("%f[%w]closser%f[%W]", "closer")
+    text = text:gsub("%f[%w]clsoer%f[%W]", "closer")
     text = text:gsub("%f[%w]atach%f[%W]", "attach")
     text = text:gsub("%f[%w]detatch%f[%W]", "detach")
     text = text:gsub("%f[%w]teh%f[%W]", "the")
+    text = text:gsub("%f[%w]yu%f[%W]", "you")
     text = text:gsub("%f[%w]yuo%f[%W]", "you")
+    text = text:gsub("%f[%w]txt%f[%W]", "text")
+    text = text:gsub("%f[%w]txts%f[%W]", "texts")
+    text = text:gsub("%f[%w]icn%f[%W]", "icon")
+    text = text:gsub("%f[%w]icns%f[%W]", "icons")
+    text = text:gsub("%f[%w]rdy%f[%W]", "ready")
+    text = text:gsub("%f[%w]readycheck%f[%W]", "ready check")
+    text = text:gsub("%f[%w]readychecks%f[%W]", "ready checks")
+    text = text:gsub("%f[%w]readychk%f[%W]", "ready check")
+    text = text:gsub("%f[%w]readychks%f[%W]", "ready checks")
+    text = text:gsub("%f[%w]raidmark%f[%W]", "raid marker")
+    text = text:gsub("%f[%w]raidmarks%f[%W]", "raid markers")
+    text = text:gsub("%f[%w]zlayer%f[%W]", "z layer")
     text = text:gsub("interupt", "interrupt")
     text = text:gsub("%f[%w]turn%s+of%f[%W]", "turn off")
     text = text:gsub("trennzeichen", "separator")
@@ -154,6 +202,7 @@ local function Normalize(text)
     text = text:gsub("focus%s+target", "focustarget")
     text = text:gsub("cast%s+bar", "castbar")
     text = text:gsub("castbars", "castbar")
+    text = text:gsub("cast%s+text", "castbar text")
     text = text:gsub("powerbars", "power bars")
     text = text:gsub("power%s+bars", "power bar")
     text = text:gsub("powerbar", "power bar")
@@ -362,12 +411,76 @@ local function HasPhrase(text, phrase)
 end
 
 local function ContainsAny(text, words)
-    local normalizedText = Normalize(text)
     for i = 1, #(words or {}) do
-        if HasPhrase(normalizedText, words[i]) then return true end
+        if HasPhrase(text, words[i]) then return true end
     end
-    for i = 1, #(words or {}) do
-        if FuzzyPhraseMatch(normalizedText, words[i]) then return true end
+    return false
+end
+
+local FUZZY_ALIAS_ANCHOR_IGNORE = {
+    a = true,
+    an = true,
+    ["and"] = true,
+    are = true,
+    as = true,
+    at = true,
+    by = true,
+    ["for"] = true,
+    from = true,
+    ["in"] = true,
+    is = true,
+    my = true,
+    of = true,
+    on = true,
+    the = true,
+    to = true,
+    with = true,
+    set = true,
+    change = true,
+    make = true,
+    turn = true,
+}
+
+local fuzzyAliasPrefilterText
+local fuzzyAliasPrefilterTokens = {}
+local fuzzyAliasPrefilterSet = {}
+
+local function EnsureFuzzyAliasPrefilter(text)
+    text = Normalize(text)
+    if fuzzyAliasPrefilterText == text then
+        return fuzzyAliasPrefilterTokens, fuzzyAliasPrefilterSet
+    end
+    fuzzyAliasPrefilterText = text
+    fuzzyAliasPrefilterTokens = Tokenize(text)
+    fuzzyAliasPrefilterSet = {}
+    for i = 1, #fuzzyAliasPrefilterTokens do
+        fuzzyAliasPrefilterSet[fuzzyAliasPrefilterTokens[i]] = true
+    end
+    return fuzzyAliasPrefilterTokens, fuzzyAliasPrefilterSet
+end
+
+local function FuzzyAliasWorthTrying(text, alias)
+    text = Normalize(text)
+    alias = Normalize(alias)
+    if text == "" or alias == "" then return false end
+    local textTokens, textSet = EnsureFuzzyAliasPrefilter(text)
+    local aliasTokens = Tokenize(alias)
+    if #aliasTokens == 0 or #aliasTokens > 6 or #aliasTokens > #textTokens then return false end
+
+    if #aliasTokens > 1 then
+        for i = 1, #aliasTokens do
+            local token = aliasTokens[i]
+            if not FUZZY_ALIAS_ANCHOR_IGNORE[token] and textSet[token] then return true end
+        end
+        return false
+    end
+
+    local expected = aliasTokens[1]
+    if FUZZY_ALIAS_ANCHOR_IGNORE[expected] or EXACT_ONLY_FUZZY_WORDS[expected] or #expected < 4 then return false end
+    local first = expected:sub(1, 1)
+    for i = 1, #textTokens do
+        local word = textTokens[i]
+        if word:sub(1, 1) == first and math.abs(#word - #expected) <= 1 then return true end
     end
     return false
 end
@@ -688,7 +801,10 @@ local function TextMatchesAlias(text, relationText, alias)
     local normalizedText = Normalize(text)
     local normalizedRelation = Normalize(relationText or AliasRelationText(text))
     local normalizedAlias = Normalize(alias)
-    if FuzzyPhraseMatch(normalizedText, normalizedAlias) or FuzzyPhraseMatch(normalizedRelation, normalizedAlias) then return true end
+    if P._allowFuzzyAliasMatch == true then
+        if FuzzyAliasWorthTrying(normalizedText, normalizedAlias) and FuzzyPhraseMatch(normalizedText, normalizedAlias) then return true end
+        if FuzzyAliasWorthTrying(normalizedRelation, normalizedAlias) and FuzzyPhraseMatch(normalizedRelation, normalizedAlias) then return true end
+    end
     local foldedText = PluralFoldText(normalizedText)
     local foldedRelation = PluralFoldText(normalizedRelation)
     local foldedAlias = PluralFoldText(alias)
