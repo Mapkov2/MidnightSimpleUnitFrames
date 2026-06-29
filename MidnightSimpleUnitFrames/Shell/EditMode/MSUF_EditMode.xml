@@ -7,5 +7,6 @@
     <Script file="MSUF_EditMode_CastPopup.lua"/>
     <Script file="MSUF_EditMode_AuraPopup.lua"/>
     <Script file="MSUF_EditMode_HUD.lua"/>
+    <Script file="MSUF_EditMode_Logo.lua"/>
     <Script file="MSUF_EditMode_Focus.lua"/>
 </Ui>

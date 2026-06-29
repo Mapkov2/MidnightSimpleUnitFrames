@@ -355,6 +355,7 @@ end
 --- boss preview, Blizzard EM sync, and keeps all legacy globals in sync.
 local State = {}
 EM2.State = State
+local ENTER_DEFER_DELAY = 0.03
 
 --- Internal state
 local active      = false
@@ -362,6 +363,7 @@ local unitKey     = nil
 local combatFrame = nil
 local combatEventsRegistered = false
 local pendingCombatExitApply = false
+local enterGeneration = 0
 
 local IsConfigCombatLocked = Util.IsConfigCombatLocked
 local ShowConfigCombatLockMessage = Util.ShowConfigCombatLockMessage
@@ -516,19 +518,38 @@ local function HardHideEditModePreviews()
     end
 end
 
-local function RestoreAfterCombatExit()
-    pendingCombatExitApply = false
-    ApplyAllSettingsSafe()
-    PublishCompat("MSUF_UnitPreviewActive", false)
-    local didPreviewSync = false
-    if _G.MSUF_SyncAllUnitPreviews then
-        _G.MSUF_SyncAllUnitPreviews()
-        didPreviewSync = true
+local function PlayLogoIntro()
+    local play = _G.MSUF_PlayEditModeLogoIntro
+    if type(play) == "function" then
+        play()
+    end
+end
+
+local function StopLogoIntro()
+    local stop = _G.MSUF_StopEditModeLogoIntro
+    if type(stop) == "function" then
+        stop()
+    end
+end
+
+local function RestoreRuntimeAfterEditModeExit()
+    if _G.MSUF_RefreshAllUnitVisibilityDrivers then
+        _G.MSUF_RefreshAllUnitVisibilityDrivers(false)
+    end
+    if _G.MSUF_UpdateBossCastbarPreview then
+        _G.MSUF_UpdateBossCastbarPreview()
     end
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if not didPreviewSync and a3 and type(a3.RefreshAll) == "function" then
+    if a3 and type(a3.RefreshAll) == "function" then
         a3.RefreshAll()
     end
+end
+
+local function RestoreAfterCombatExit()
+    pendingCombatExitApply = false
+    HardHideEditModePreviews()
+    ApplyAllSettingsSafe()
+    RestoreRuntimeAfterEditModeExit()
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
 
@@ -563,18 +584,11 @@ function State.Enter(key)
 
     active  = true
     unitKey = key or "player"
+    enterGeneration = enterGeneration + 1
+    local enterToken = enterGeneration
     SyncLegacy()
+    PlayLogoIntro()
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
-
-    SnapshotDB()
-
-    --- Clear undo history for new session
-    if _G.MSUF_EM_UndoClear then
-        _G.MSUF_EM_UndoClear()
-    end
-
-    --- (Auras3 is refreshed inside MSUF_SyncAllUnitPreviews below; calling it
-    --- here too just doubled the work on the entry frame and spiked the click.)
 
     --- Arrow key nudge
     if _G.MSUF_EnableArrowKeyNudge then
@@ -584,55 +598,6 @@ function State.Enter(key)
     --- Preview must be active before the apply pipeline queues its boss sync.
     PublishCompat("MSUF_UnitPreviewActive", true)
 
-    --- Entering edit mode changes no actual settings - it only flips preview
-    --- and visibility flags. A full ApplyAllSettings (re-apply every element on
-    --- every frame) was the dominant entry CPU spike. We only need frames that
-    --- are normally hidden (e.g. target with no target) to appear, which is a
-    --- visibility-driver refresh - far cheaper. The heavier per-frame preview
-    --- pass runs deferred via MSUF_SyncAllUnitPreviews on the next frame.
-    if _G.MSUF_RefreshAllUnitVisibilityDrivers then
-        _G.MSUF_RefreshAllUnitVisibilityDrivers(true)
-    else
-        ApplyAllSettingsSafe()
-    end
-
-    local function SyncUnitPreviewsAfterEnter()
-        if not (EM2.State and EM2.State.IsActive()) then return end
-        if _G.MSUF_SyncAllUnitPreviews then
-            _G.MSUF_SyncAllUnitPreviews()
-        end
-    end
-
-    local function ReforceUnitPreviewsAfterEnter()
-        if not (EM2.State and EM2.State.IsActive()) then return end
-        if _G.MSUF_EM2_ReforcePreviewFrames then
-            _G.MSUF_EM2_ReforcePreviewFrames()
-        elseif _G.MSUF_SyncAllUnitPreviews then
-            _G.MSUF_SyncAllUnitPreviews()
-        end
-        Util.SyncMovers()
-    end
-
-    --- Preview: defer the (heavy) preview sync to the next frame so the click
-    --- that opens edit mode stays responsive. Later settle passes only re-force
-    --- preview frames and mover bounds; repeating the full sync reruns Auras3,
-    --- castbar previews, visibility drivers, and boss preview work.
-    C_Timer.After(0, SyncUnitPreviewsAfterEnter)
-    C_Timer.After(0.1, function()
-        ReforceUnitPreviewsAfterEnter()
-    end)
-    C_Timer.After(0.25, function()
-        ReforceUnitPreviewsAfterEnter()
-    end)
-
-    --- Undo transaction
-    if type(MSUF_BeginEditModeTransaction) == "function" then
-        MSUF_BeginEditModeTransaction()
-    end
-
-    --- Notify listeners (Auras3 previews etc.)
-    NotifyListeners()
-
     --- Start ticker (zero overhead when stopped)
     if EM2.Ticker and EM2.Ticker.Start then EM2.Ticker.Start() end
 
@@ -640,18 +605,85 @@ function State.Enter(key)
     if EM2.Grid   and EM2.Grid.Show   then EM2.Grid.Show()   end
     if EM2.HUD    and EM2.HUD.Show    then EM2.HUD.Show()    end
     if EM2.Focus  and EM2.Focus.Show   then EM2.Focus.Show(unitKey) end
-    --- Movers can create a frame per registered element on first entry; defer
-    --- that to the next frame so it doesn't pile onto the entry spike. Guard
-    --- against an immediate exit before the timer fires.
-    C_Timer.After(0, function()
-        if not (EM2.State and EM2.State.IsActive()) then return end
-        if EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
+
+    --- Let the logo and shell paint before the heavier preview/listener work.
+    C_Timer.After(ENTER_DEFER_DELAY, function()
+        if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
+        if IsConfigCombatLocked() then return end
+
+        SnapshotDB()
+
+        --- Clear undo history for new session
+        if _G.MSUF_EM_UndoClear then
+            _G.MSUF_EM_UndoClear()
+        end
+
+        --- (Auras3 is refreshed inside MSUF_SyncAllUnitPreviews below; calling it
+        --- here too just doubled the work on the entry frame and spiked the click.)
+
+        --- Entering edit mode changes no actual settings - it only flips preview
+        --- and visibility flags. A full ApplyAllSettings (re-apply every element on
+        --- every frame) was the dominant entry CPU spike. We only need frames that
+        --- are normally hidden (e.g. target with no target) to appear, which is a
+        --- visibility-driver refresh - far cheaper. The heavier per-frame preview
+        --- pass runs deferred via MSUF_SyncAllUnitPreviews on the next frame.
+        if _G.MSUF_RefreshAllUnitVisibilityDrivers then
+            _G.MSUF_RefreshAllUnitVisibilityDrivers(true)
+        else
+            ApplyAllSettingsSafe()
+        end
+
+        local function SyncUnitPreviewsAfterEnter()
+            if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
+            if _G.MSUF_SyncAllUnitPreviews then
+                _G.MSUF_SyncAllUnitPreviews()
+            end
+        end
+
+        local function ReforceUnitPreviewsAfterEnter()
+            if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
+            if _G.MSUF_EM2_ReforcePreviewFrames then
+                _G.MSUF_EM2_ReforcePreviewFrames()
+            elseif _G.MSUF_SyncAllUnitPreviews then
+                _G.MSUF_SyncAllUnitPreviews()
+            end
+            Util.SyncMovers()
+        end
+
+        --- Preview: defer the (heavy) preview sync to the next frame so the click
+        --- that opens edit mode stays responsive. Later settle passes only re-force
+        --- preview frames and mover bounds; repeating the full sync reruns Auras3,
+        --- castbar previews, visibility drivers, and boss preview work.
+        C_Timer.After(0, SyncUnitPreviewsAfterEnter)
+        C_Timer.After(0.1, function()
+            ReforceUnitPreviewsAfterEnter()
+        end)
+        C_Timer.After(0.25, function()
+            ReforceUnitPreviewsAfterEnter()
+        end)
+
+        --- Undo transaction
+        if type(MSUF_BeginEditModeTransaction) == "function" then
+            MSUF_BeginEditModeTransaction()
+        end
+
+        --- Notify listeners (Auras3 previews etc.)
+        NotifyListeners()
+
+        --- Movers can create a frame per registered element on first entry; defer
+        --- that to the next frame so it doesn't pile onto the entry spike. Guard
+        --- against an immediate exit before the timer fires.
+        C_Timer.After(0, function()
+            if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
+            if EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
+        end)
     end)
 end
 
 --- EXIT Edit Mode
 function State.Exit(source)
     if not active then return end
+    enterGeneration = enterGeneration + 1
     local combatLocked = (InCombatLockdown and InCombatLockdown()) and true or false
 
     --- Stop ticker FIRST (zero overhead from this point)
@@ -674,41 +706,22 @@ function State.Exit(source)
     PublishCompat("MSUF_BossTestMode", false)
     PublishCompat("MSUF_PreviewTestMode", false)
     SyncLegacy()
+    StopLogoIntro()
 
     --- Arrow keys off
     if _G.MSUF_EnableArrowKeyNudge then
         _G.MSUF_EnableArrowKeyNudge(false)
     end
 
-    --- Visibility drivers restore. In combat, protected frames cannot be
-    --- safely re-shown/re-anchored, so only clear non-protected edit previews
-    --- now and defer the heavy restore until PLAYER_REGEN_ENABLED.
+    --- Preview state must be cleared exactly once. In combat, protected frames
+    --- cannot be safely re-shown/re-anchored, so defer the full restore until
+    --- PLAYER_REGEN_ENABLED.
+    HardHideEditModePreviews()
     if combatLocked then
         pendingCombatExitApply = true
-        HardHideEditModePreviews()
     else
         ApplyAllSettingsSafe()
-    end
-
-    --- Preview: disable all previews, restore visibility
-    PublishCompat("MSUF_UnitPreviewActive", false)
-    local didPreviewSync = false
-    if combatLocked then
-        HardHideEditModePreviews()
-    elseif _G.MSUF_SyncAllUnitPreviews then
-        _G.MSUF_SyncAllUnitPreviews()
-        didPreviewSync = true
-    end
-    if not combatLocked
-        and _G.MSUF_UpdateBossCastbarPreview
-    then
-        _G.MSUF_UpdateBossCastbarPreview()
-    end
-
-    --- Refresh Auras3
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    if not combatLocked and not didPreviewSync and a3 and type(a3.RefreshAll) == "function" then
-        a3.RefreshAll()
+        RestoreRuntimeAfterEditModeExit()
     end
 
     --- Notify listeners
@@ -719,6 +732,7 @@ end
 --- CANCEL ALL - restore DB to pre-edit-mode state, then exit
 function State.CancelAll()
     if not active then return end
+    enterGeneration = enterGeneration + 1
 
     --- Stop ticker FIRST so no OnUpdate can write offsets after restore.
     if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
@@ -741,7 +755,9 @@ function State.CancelAll()
     unitKey = nil
     PublishCompat("MSUF_BossTestMode", false)
     PublishCompat("MSUF_PreviewTestMode", false)
+    PublishCompat("MSUF_UnitPreviewActive", false)
     SyncLegacy()
+    StopLogoIntro()
 
     if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(false) end
 
@@ -765,16 +781,8 @@ function State.CancelAll()
         ApplyAllSettingsSafe()
     end
 
-    PublishCompat("MSUF_UnitPreviewActive", false)
-    local didPreviewSync = false
-    if _G.MSUF_SyncAllUnitPreviews then
-        _G.MSUF_SyncAllUnitPreviews()
-        didPreviewSync = true
-    end
-    do
-        local a3 = MSUF and MSUF.MSUF_Auras3
-        if not didPreviewSync and a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
-    end
+    HardHideEditModePreviews()
+    RestoreRuntimeAfterEditModeExit()
 
     NotifyListeners()
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
