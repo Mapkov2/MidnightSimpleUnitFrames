@@ -61,7 +61,7 @@ local function MSUF_Defaults_TryDecodeCompactString(str)
     if type(E.DeserializeCBOR) ~= "function" then  return nil end
     if type(E.DecodeBase64) ~= "function" then  return nil end
     local ok, prefix, b64 = pcall(string.match, str, "^%s*(MSUF%d+):%s*(.-)%s*$")
-    if not ok or (prefix ~= "MSUF2" and prefix ~= "MSUF3") or type(b64) ~= "string" or b64 == "" then  return nil end
+    if not ok or (prefix ~= "MSUF2" and prefix ~= "MSUF3" and prefix ~= "MSUF4") or type(b64) ~= "string" or b64 == "" then  return nil end
     local ok2, cleaned = pcall(string.gsub, b64, "%s+", "")
     if not ok2 or type(cleaned) ~= "string" or cleaned == "" then  return nil end
     local rem = #cleaned % 4
@@ -168,8 +168,490 @@ local function MSUF_Defaults_NormalizePortraitRenderDB(db)
 end
 ExportPublic("MSUF_NormalizePortraitRenderDB", MSUF_Defaults_NormalizePortraitRenderDB)
 
+local MSUF_DEFAULTS_TEXT_SCOPE_KEYS = { "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }
+local MSUF_DEFAULTS_GROUP_SCOPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
+local MSUF_DEFAULTS_STATUS_PREFIXES = {
+    "leaderIcon", "raidMarker", "levelIndicator", "eliteIcon", "statusText",
+    "combatStateIndicator", "restedStateIndicator", "restingStateIndicator",
+    "incomingResIndicator", "pvpIndicator", "raidGroupName",
+}
+local MSUF_DEFAULTS_AURA_NUMERIC_KEYS = {
+    offsetX = { -4096, 4096 }, offsetY = { -4096, 4096 },
+    buffOffsetX = { -4096, 4096 }, buffOffsetY = { -4096, 4096 },
+    debuffOffsetX = { -4096, 4096 }, debuffOffsetY = { -4096, 4096 },
+    buffGroupOffsetX = { -4096, 4096 }, buffGroupOffsetY = { -4096, 4096 },
+    debuffGroupOffsetX = { -4096, 4096 }, debuffGroupOffsetY = { -4096, 4096 },
+    iconSize = { 1, 256 }, buffIconSize = { 1, 256 }, debuffIconSize = { 1, 256 },
+    buffGroupIconSize = { 1, 256 }, debuffGroupIconSize = { 1, 256 },
+    spacing = { 0, 128 }, splitSpacing = { 0, 256 },
+    perRow = { 1, 80 }, buffPerRow = { 1, 80 }, debuffPerRow = { 1, 80 },
+    maxIcons = { 0, 80 }, maxBuffs = { 0, 80 }, maxDebuffs = { 0, 80 },
+    stackTextSize = { 1, 128 }, cooldownTextSize = { 1, 128 },
+    stackTextOffsetX = { -2000, 2000 }, stackTextOffsetY = { -2000, 2000 },
+    cooldownTextOffsetX = { -2000, 2000 }, cooldownTextOffsetY = { -2000, 2000 },
+    cooldownDecimalSeconds = { 0, 30 }, buffLayer = { 1, 15 }, debuffLayer = { 1, 15 },
+}
+local MSUF_DEFAULTS_AURA_STRING_KEYS = {
+    "growth", "rowWrap", "buffGrowth", "debuffGrowth",
+    "buffGrowthX", "buffGrowthY", "debuffGrowthX", "debuffGrowthY",
+    "buffRowWrap", "debuffRowWrap", "layoutMode", "buffDebuffAnchor",
+    "stackCountAnchor", "cooldownTextAnchor", "buffAnchor", "debuffAnchor",
+    "debuffTypeBorderMode", "dispelBorderMode", "pandemicMode",
+}
+local MSUF_DEFAULTS_AURA_GROWTH_PARTS = {
+    RIGHTDOWN = { "RIGHT", "DOWN" }, LEFTDOWN = { "LEFT", "DOWN" },
+    RIGHTUP = { "RIGHT", "UP" }, LEFTUP = { "LEFT", "UP" },
+    RIGHT = { "RIGHT", nil }, LEFT = { "LEFT", nil },
+    UP = { "UP", "UP" }, DOWN = { "DOWN", "DOWN" },
+}
+
+local function MSUF_Defaults_ToNumber(value)
+    return tonumber(value)
+end
+
+local function MSUF_Defaults_CopyIfMissing(tbl, toKey, fromKey)
+    if type(tbl) ~= "table" or tbl[toKey] ~= nil or tbl[fromKey] == nil then return false end
+    tbl[toKey] = tbl[fromKey]
+    return true
+end
+
+local function MSUF_Defaults_CopyInverseBoolIfMissing(tbl, toKey, fromKey)
+    if type(tbl) ~= "table" or tbl[toKey] ~= nil or tbl[fromKey] == nil then return false end
+    if type(tbl[fromKey]) ~= "boolean" then return false end
+    tbl[toKey] = not tbl[fromKey]
+    return true
+end
+
+local function MSUF_Defaults_CopyNumberAliasIfMissing(tbl, toKey, fromKey)
+    if type(tbl) ~= "table" or tbl[toKey] ~= nil or tbl[fromKey] == nil then return false end
+    local n = MSUF_Defaults_ToNumber(tbl[fromKey])
+    if n == nil then return false end
+    tbl[toKey] = n
+    return true
+end
+
+local function MSUF_Defaults_NormalizeNumberField(tbl, key, minValue, maxValue)
+    if type(tbl) ~= "table" or tbl[key] == nil then return false end
+    local n = MSUF_Defaults_ToNumber(tbl[key])
+    if n == nil then return false end
+    if minValue ~= nil and n < minValue then
+        n = minValue
+    elseif maxValue ~= nil and n > maxValue then
+        n = maxValue
+    end
+    if tbl[key] ~= n then
+        tbl[key] = n
+        return true
+    end
+    return false
+end
+
+local function MSUF_Defaults_UpperStringField(tbl, key)
+    if type(tbl) ~= "table" or type(tbl[key]) ~= "string" then return false end
+    local upper = string.upper(tbl[key])
+    if upper ~= tbl[key] then
+        tbl[key] = upper
+        return true
+    end
+    return false
+end
+
+local function MSUF_Defaults_TableHasAnyValue(tbl)
+    return type(tbl) == "table" and next(tbl) ~= nil
+end
+
+local function MSUF_Defaults_CopyAuraGrowthAlias(tbl, fromKey, toGrowthKey, toWrapKey)
+    if type(tbl) ~= "table" or tbl[fromKey] == nil then return false end
+    local parts = MSUF_DEFAULTS_AURA_GROWTH_PARTS[tostring(tbl[fromKey] or ""):upper()]
+    if not parts then return false end
+    local changed = false
+    if tbl[toGrowthKey] == nil then
+        tbl[toGrowthKey] = parts[1]
+        changed = true
+    end
+    if parts[2] ~= nil and tbl[toWrapKey] == nil then
+        tbl[toWrapKey] = parts[2]
+        changed = true
+    end
+    return changed
+end
+
+local MSUF_DEFAULTS_A2_AURA_FRAME_DEFAULT_SIZE = {
+    player = { 275, 40 },
+    target = { 276, 40 },
+    focus = { 216, 30 },
+    targettarget = { 170, 36 },
+    focustarget = { 170, 30 },
+    boss = { 264, 35 },
+}
+
+local function MSUF_Defaults_A2AuraFrameKey(unit)
+    if unit == "tot" or unit == "targetoftarget" then return "targettarget" end
+    if unit == "focus_target" or unit == "focustargettarget" then return "focustarget" end
+    if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
+    return unit
+end
+
+local function MSUF_Defaults_A2AuraFrameSize(profile, unit)
+    local key = MSUF_Defaults_A2AuraFrameKey(unit)
+    local conf = type(profile) == "table" and type(profile[key]) == "table" and profile[key] or nil
+    local defaults = MSUF_DEFAULTS_A2_AURA_FRAME_DEFAULT_SIZE[key] or MSUF_DEFAULTS_A2_AURA_FRAME_DEFAULT_SIZE.player
+    local width = MSUF_Defaults_ToNumber(conf and (conf.width or conf.frameWidth)) or defaults[1]
+    local height = MSUF_Defaults_ToNumber(conf and (conf.height or conf.frameHeight)) or defaults[2]
+    if width < 1 then width = defaults[1] end
+    if height < 1 then height = defaults[2] end
+    return width, height
+end
+
+local function MSUF_Defaults_A2AuraReadNumber(primary, secondary, key, fallback)
+    local n = type(primary) == "table" and MSUF_Defaults_ToNumber(primary[key]) or nil
+    if n ~= nil then return n end
+    n = type(secondary) == "table" and MSUF_Defaults_ToNumber(secondary[key]) or nil
+    if n ~= nil then return n end
+    return fallback or 0
+end
+
+local function MSUF_Defaults_ConvertLegacyAuras2Geometry(auras, profile)
+    if type(auras) ~= "table" or auras._msufAuras3LegacyGeometry_v2 == true then return false end
+    local shared = type(auras.shared) == "table" and auras.shared or {}
+    auras.shared = shared
+    local repairV1 = auras._msufAuras3LegacyGeometry_v1 == true
+    local changed = false
+    if type(auras.perUnit) == "table" then
+        for unit, unitCfg in pairs(auras.perUnit) do
+            if type(unitCfg) == "table" then
+                local layout = type(unitCfg.layout) == "table" and unitCfg.layout or {}
+                unitCfg.layout = layout
+                local width, height = MSUF_Defaults_A2AuraFrameSize(profile, unit)
+                local baseX = MSUF_Defaults_A2AuraReadNumber(layout, shared, "offsetX", 0)
+                local baseY = MSUF_Defaults_A2AuraReadNumber(layout, shared, "offsetY", 0)
+                local function ReadLaneNumber(primary, secondary, key, aliasKey, fallback)
+                    local n = type(primary) == "table" and MSUF_Defaults_ToNumber(primary[key]) or nil
+                    if n ~= nil then return n end
+                    n = type(primary) == "table" and MSUF_Defaults_ToNumber(primary[aliasKey]) or nil
+                    if n ~= nil then return n end
+                    n = type(secondary) == "table" and MSUF_Defaults_ToNumber(secondary[key]) or nil
+                    if n ~= nil then return n end
+                    n = type(secondary) == "table" and MSUF_Defaults_ToNumber(secondary[aliasKey]) or nil
+                    if n ~= nil then return n end
+                    return fallback or 0
+                end
+                for _, lane in ipairs({
+                    { "buffGroupOffsetX", "buffGroupOffsetY", "buffAnchor", "buffOffsetX", "buffOffsetY" },
+                    { "debuffGroupOffsetX", "debuffGroupOffsetY", "debuffAnchor", "debuffOffsetX", "debuffOffsetY" },
+                }) do
+                    local anchor = "BOTTOMLEFT"
+                    local x
+                    local y
+                    if repairV1 then
+                        x = ReadLaneNumber(layout, nil, lane[1], lane[4], 0)
+                        y = ReadLaneNumber(layout, nil, lane[2], lane[5], 0)
+                        local oldAnchor = tostring(layout[lane[3]] or ""):upper()
+                        if oldAnchor == "TOPRIGHT" or oldAnchor == "BOTTOMRIGHT" then
+                            x = x + width
+                        end
+                        if oldAnchor == "TOPLEFT" or oldAnchor == "TOPRIGHT" then
+                            y = y + height
+                        end
+                    else
+                        x = baseX + ReadLaneNumber(layout, shared, lane[1], lane[4], 0)
+                        y = height + baseY + ReadLaneNumber(layout, shared, lane[2], lane[5], 0)
+                    end
+                    if layout[lane[3]] ~= anchor then layout[lane[3]] = anchor; changed = true end
+                    if layout[lane[1]] ~= x then layout[lane[1]] = x; changed = true end
+                    if layout[lane[2]] ~= y then layout[lane[2]] = y; changed = true end
+                end
+                if unitCfg.overrideLayout ~= true then unitCfg.overrideLayout = true; changed = true end
+            end
+        end
+    end
+    auras._msufAuras3LegacyGeometry_v1 = true
+    auras._msufAuras3LegacyGeometry_v2 = true
+    return true
+end
+
+local function MSUF_Defaults_NormalizeNameShorteningScope(scope, groupScope)
+    if type(scope) ~= "table" then return false end
+    local changed = false
+    if groupScope then
+        changed = MSUF_Defaults_CopyIfMissing(scope, "nameShortenEnabled", "shortenNames") or changed
+        changed = MSUF_Defaults_CopyIfMissing(scope, "nameMaxChars", "shortenNameMaxChars") or changed
+        changed = MSUF_Defaults_CopyIfMissing(scope, "nameClipSide", "shortenNameClipSide") or changed
+        changed = MSUF_Defaults_CopyInverseBoolIfMissing(scope, "nameNoEllipsis", "shortenNameShowDots") or changed
+    else
+        changed = MSUF_Defaults_CopyIfMissing(scope, "shortenNames", "nameShortenEnabled") or changed
+        changed = MSUF_Defaults_CopyIfMissing(scope, "shortenNameMaxChars", "nameMaxChars") or changed
+        changed = MSUF_Defaults_CopyIfMissing(scope, "shortenNameClipSide", "nameClipSide") or changed
+        changed = MSUF_Defaults_CopyInverseBoolIfMissing(scope, "shortenNameShowDots", "nameNoEllipsis") or changed
+    end
+    changed = MSUF_Defaults_NormalizeNumberField(scope, "shortenNameMaxChars", 0, 256) or changed
+    changed = MSUF_Defaults_NormalizeNumberField(scope, "nameMaxChars", 0, 256) or changed
+    changed = MSUF_Defaults_NormalizeNumberField(scope, "shortenNameFrontMaskPx", 0, 128) or changed
+    changed = MSUF_Defaults_UpperStringField(scope, "shortenNameClipSide") or changed
+    changed = MSUF_Defaults_UpperStringField(scope, "nameClipSide") or changed
+    return changed
+end
+
+local function MSUF_Defaults_NormalizeTextScope(scope, groupScope)
+    if type(scope) ~= "table" then return false end
+    local changed = false
+    if groupScope then
+        changed = MSUF_Defaults_CopyIfMissing(scope, "nameAnchor", "nameTextAnchor") or changed
+    else
+        changed = MSUF_Defaults_CopyIfMissing(scope, "nameTextAnchor", "nameAnchor") or changed
+    end
+    changed = MSUF_Defaults_CopyIfMissing(scope, "nameOffsetX", "nameTextOffsetX") or changed
+    changed = MSUF_Defaults_CopyIfMissing(scope, "nameOffsetY", "nameTextOffsetY") or changed
+    changed = MSUF_Defaults_CopyIfMissing(scope, "hpOffsetX", "hpTextOffsetX") or changed
+    changed = MSUF_Defaults_CopyIfMissing(scope, "hpOffsetY", "hpTextOffsetY") or changed
+    changed = MSUF_Defaults_CopyIfMissing(scope, "powerOffsetX", "powerTextOffsetX") or changed
+    changed = MSUF_Defaults_CopyIfMissing(scope, "powerOffsetY", "powerTextOffsetY") or changed
+    changed = MSUF_Defaults_CopyIfMissing(scope, "textLeft", "hpTextLeft") or changed
+    changed = MSUF_Defaults_CopyIfMissing(scope, "textCenter", "hpTextCenter") or changed
+    changed = MSUF_Defaults_CopyIfMissing(scope, "textRight", "hpTextRight") or changed
+    if groupScope then
+        changed = MSUF_Defaults_CopyIfMissing(scope, "textDelimiter", "hpTextSeparator") or changed
+        changed = MSUF_Defaults_CopyIfMissing(scope, "powerTextDelimiter", "powerTextSeparator") or changed
+    else
+        changed = MSUF_Defaults_CopyIfMissing(scope, "hpTextSeparator", "textDelimiter") or changed
+        changed = MSUF_Defaults_CopyIfMissing(scope, "powerTextSeparator", "powerTextDelimiter") or changed
+    end
+    for _, key in ipairs({ "nameOffsetX", "nameOffsetY", "hpOffsetX", "hpOffsetY", "powerOffsetX", "powerOffsetY" }) do
+        changed = MSUF_Defaults_NormalizeNumberField(scope, key, -500, 500) or changed
+    end
+    changed = MSUF_Defaults_UpperStringField(scope, "nameTextAnchor") or changed
+    changed = MSUF_Defaults_UpperStringField(scope, "nameAnchor") or changed
+    changed = MSUF_Defaults_NormalizeNameShorteningScope(scope, groupScope == true) or changed
+    return changed
+end
+
+local function MSUF_Defaults_NormalizeStatusScope(scope, groupScope)
+    if type(scope) ~= "table" then return false end
+    local changed = false
+    local boolAliases = groupScope and {
+        { "roleIcon", "showRoleIcon" }, { "leaderIcon", "showLeaderIcon" },
+        { "assistIcon", "showAssistIcon" }, { "raidMarker", "showRaidMarker" },
+        { "statusText", "statusTextEnabled" }, { "statusGhostText", "statusGhostTextEnabled" },
+        { "statusAFKText", "statusAFKTextEnabled" }, { "showGroupNumber", "showRaidGroupInName" },
+    } or {
+        { "showLeaderIcon", "leaderIcon" }, { "showRaidMarker", "raidMarker" },
+        { "showLevelIndicator", "levelIndicator" }, { "showEliteIcon", "eliteIcon" },
+        { "statusTextEnabled", "statusText" }, { "showCombatStateIndicator", "combatStateIndicator" },
+        { "showRestingIndicator", "restedStateIndicator" }, { "showRestingIndicator", "restingStateIndicator" },
+        { "showIncomingResIndicator", "incomingResIndicator" }, { "showPvpIndicator", "pvpIndicator" },
+        { "showRaidGroupInName", "raidGroupName" },
+    }
+    for i = 1, #boolAliases do
+        changed = MSUF_Defaults_CopyIfMissing(scope, boolAliases[i][1], boolAliases[i][2]) or changed
+    end
+    local offsetAliases = groupScope and {
+        { "roleIconX", "roleIconOffsetX" }, { "roleIconY", "roleIconOffsetY" },
+        { "leaderIconX", "leaderIconOffsetX" }, { "leaderIconY", "leaderIconOffsetY" },
+        { "assistIconX", "assistIconOffsetX" }, { "assistIconY", "assistIconOffsetY" },
+        { "raidMarkerX", "raidMarkerOffsetX" }, { "raidMarkerY", "raidMarkerOffsetY" },
+        { "statusOffsetX", "statusTextOffsetX" }, { "statusOffsetY", "statusTextOffsetY" },
+        { "statusGhostOffsetX", "statusGhostTextOffsetX" }, { "statusGhostOffsetY", "statusGhostTextOffsetY" },
+        { "statusAFKOffsetX", "statusAFKTextOffsetX" }, { "statusAFKOffsetY", "statusAFKTextOffsetY" },
+        { "groupNumberX", "raidGroupNameOffsetX" }, { "groupNumberY", "raidGroupNameOffsetY" },
+    } or {
+        { "leaderIconOffsetX", "leaderIconX" }, { "leaderIconOffsetY", "leaderIconY" },
+        { "raidMarkerOffsetX", "raidMarkerX" }, { "raidMarkerOffsetY", "raidMarkerY" },
+        { "statusTextOffsetX", "statusOffsetX" }, { "statusTextOffsetY", "statusOffsetY" },
+        { "raidGroupNameOffsetX", "groupNumberX" }, { "raidGroupNameOffsetY", "groupNumberY" },
+    }
+    for i = 1, #offsetAliases do
+        changed = MSUF_Defaults_CopyIfMissing(scope, offsetAliases[i][1], offsetAliases[i][2]) or changed
+    end
+    for i = 1, #MSUF_DEFAULTS_STATUS_PREFIXES do
+        local prefix = MSUF_DEFAULTS_STATUS_PREFIXES[i]
+        changed = MSUF_Defaults_NormalizeNumberField(scope, prefix .. "Size", 1, 256) or changed
+        changed = MSUF_Defaults_NormalizeNumberField(scope, prefix .. "OffsetX", -500, 500) or changed
+        changed = MSUF_Defaults_NormalizeNumberField(scope, prefix .. "OffsetY", -500, 500) or changed
+        changed = MSUF_Defaults_NormalizeNumberField(scope, prefix .. "Layer", 0, 30) or changed
+        changed = MSUF_Defaults_UpperStringField(scope, prefix .. "Anchor") or changed
+    end
+    if groupScope then
+        for _, key in ipairs({
+            "roleIconX", "roleIconY", "raidMarkerX", "raidMarkerY",
+            "leaderIconX", "leaderIconY", "assistIconX", "assistIconY",
+            "statusOffsetX", "statusOffsetY", "statusGhostOffsetX", "statusGhostOffsetY",
+            "statusAFKOffsetX", "statusAFKOffsetY", "groupNumberX", "groupNumberY",
+        }) do
+            changed = MSUF_Defaults_NormalizeNumberField(scope, key, -500, 500) or changed
+        end
+        for _, key in ipairs({ "roleIconAnchor", "raidMarkerAnchor", "leaderIconAnchor", "assistIconAnchor", "statusTextAnchor", "statusGhostTextAnchor", "statusAFKTextAnchor", "groupNumberAnchor" }) do
+            changed = MSUF_Defaults_UpperStringField(scope, key) or changed
+        end
+    end
+    return changed
+end
+
+local function MSUF_Defaults_NormalizeAuraLayoutTable(tbl)
+    if type(tbl) ~= "table" then return false end
+    local changed = false
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "maxBuffs", "maxIcons") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "maxDebuffs", "maxIcons") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "buffGroupIconSize", "buffIconSize") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "debuffGroupIconSize", "debuffIconSize") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "buffGroupIconSize", "iconSize") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "debuffGroupIconSize", "iconSize") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "buffGroupOffsetX", "buffOffsetX") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "buffGroupOffsetY", "buffOffsetY") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "debuffGroupOffsetX", "debuffOffsetX") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "debuffGroupOffsetY", "debuffOffsetY") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "buffGroupOffsetX", "offsetX") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "buffGroupOffsetY", "offsetY") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "debuffGroupOffsetX", "offsetX") or changed
+    changed = MSUF_Defaults_CopyNumberAliasIfMissing(tbl, "debuffGroupOffsetY", "offsetY") or changed
+    changed = MSUF_Defaults_CopyAuraGrowthAlias(tbl, "buffGrowth", "buffGrowthX", "buffGrowthY") or changed
+    changed = MSUF_Defaults_CopyAuraGrowthAlias(tbl, "debuffGrowth", "debuffGrowthX", "debuffGrowthY") or changed
+    changed = MSUF_Defaults_CopyIfMissing(tbl, "buffGrowthY", "buffRowWrap") or changed
+    changed = MSUF_Defaults_CopyIfMissing(tbl, "debuffGrowthY", "debuffRowWrap") or changed
+    changed = MSUF_Defaults_CopyIfMissing(tbl, "buffGrowthY", "rowWrap") or changed
+    changed = MSUF_Defaults_CopyIfMissing(tbl, "debuffGrowthY", "rowWrap") or changed
+    for key, limits in pairs(MSUF_DEFAULTS_AURA_NUMERIC_KEYS) do
+        changed = MSUF_Defaults_NormalizeNumberField(tbl, key, limits[1], limits[2]) or changed
+    end
+    for i = 1, #MSUF_DEFAULTS_AURA_STRING_KEYS do
+        changed = MSUF_Defaults_UpperStringField(tbl, MSUF_DEFAULTS_AURA_STRING_KEYS[i]) or changed
+    end
+    return changed
+end
+
+local function MSUF_Defaults_NormalizeAuras3Profile(db)
+    if type(db) ~= "table" then return false end
+    local changed = false
+    local fromLegacyAuras2 = false
+    if db.auras ~= nil then
+        db.auras = nil
+        changed = true
+    end
+    if type(db.auras2) == "table" and (type(db.auras3) ~= "table" or tonumber(db._msufProfileSchema) ~= 600) then
+        db.auras3 = {}
+        MSUF_Defaults_DeepCopy(db.auras3, db.auras2)
+        db.auras3._msufAuras3TranslatedFromLegacyAuras2 = true
+        fromLegacyAuras2 = true
+        changed = true
+    end
+    if db.auras2 ~= nil then
+        db.auras2 = nil
+        changed = true
+    end
+    local auras = db.auras3
+    if type(auras) ~= "table" then return changed end
+    if fromLegacyAuras2 or (auras._msufAuras3TranslatedFromLegacyAuras2 == true and auras._msufAuras3LegacyGeometry_v2 ~= true) then
+        changed = MSUF_Defaults_ConvertLegacyAuras2Geometry(auras, db) or changed
+    end
+    changed = MSUF_Defaults_NormalizeAuraLayoutTable(auras.shared) or changed
+    if type(auras.perUnit) == "table" then
+        for _, unitCfg in pairs(auras.perUnit) do
+            if type(unitCfg) == "table" then
+                changed = MSUF_Defaults_NormalizeAuraLayoutTable(unitCfg.layout) or changed
+                changed = MSUF_Defaults_NormalizeAuraLayoutTable(unitCfg.layoutShared) or changed
+                if MSUF_Defaults_TableHasAnyValue(unitCfg.layout) and unitCfg.overrideLayout ~= true then
+                    unitCfg.overrideLayout = true
+                    changed = true
+                end
+                if MSUF_Defaults_TableHasAnyValue(unitCfg.layoutShared) and unitCfg.overrideSharedLayout ~= true then
+                    unitCfg.overrideSharedLayout = true
+                    changed = true
+                end
+            end
+        end
+    end
+    return changed
+end
+
+local function MSUF_Defaults_NormalizeUnitPositionAliases(db)
+    if type(db) ~= "table" then return false end
+    local changed = false
+    for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
+        local u = db[key]
+        if type(u) == "table" then
+            changed = MSUF_Defaults_CopyIfMissing(u, "point", "anchorMyPoint") or changed
+            changed = MSUF_Defaults_CopyIfMissing(u, "relativePoint", "anchorRelPoint") or changed
+            changed = MSUF_Defaults_UpperStringField(u, "point") or changed
+            changed = MSUF_Defaults_UpperStringField(u, "relativePoint") or changed
+            changed = MSUF_Defaults_NormalizeNumberField(u, "offsetX", -10000, 10000) or changed
+            changed = MSUF_Defaults_NormalizeNumberField(u, "offsetY", -10000, 10000) or changed
+        end
+    end
+    return changed
+end
+
+local function MSUF_Defaults_NormalizeProfileTo60Defaults(db)
+    if type(db) ~= "table" then return false end
+    local sharedTranslator = _G.MSUF_ProfileIO_TranslateProfileToCurrent
+    if type(sharedTranslator) ~= "function" and type(MSUF) == "table" then
+        sharedTranslator = MSUF.MSUF_ProfileIO_TranslateProfileToCurrent
+    end
+    if type(sharedTranslator) == "function" then
+        local _, changed = sharedTranslator(db, { source = "defaults", markProfile = true })
+        if db.auras ~= nil then
+            db.auras = nil
+            changed = true
+        end
+        if db.auras2 ~= nil then
+            db.auras2 = nil
+            changed = true
+        end
+        return changed == true
+    end
+    local changed = false
+    changed = MSUF_Defaults_NormalizeUnitPositionAliases(db) or changed
+    changed = MSUF_Defaults_NormalizeAuras3Profile(db) or changed
+    for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
+        changed = MSUF_Defaults_NormalizeTextScope(db[key], false) or changed
+        changed = MSUF_Defaults_NormalizeStatusScope(db[key], false) or changed
+    end
+    for _, key in ipairs(MSUF_DEFAULTS_GROUP_SCOPE_KEYS) do
+        changed = MSUF_Defaults_NormalizeTextScope(db[key], true) or changed
+        changed = MSUF_Defaults_NormalizeStatusScope(db[key], true) or changed
+    end
+    return changed
+end
+ExportPublic("MSUF_NormalizeProfileTo60Defaults", MSUF_Defaults_NormalizeProfileTo60Defaults)
+
 local MSUF_DEFAULT_BOSS_OFFSET_X = 360
 local MSUF_DEFAULT_BOSS_OFFSET_Y = 230
+
+local function MSUF_Defaults_DisableFactoryNameShortening(db)
+    if type(db) ~= "table" then return false end
+    local changed = false
+    if db.shortenNames ~= false then
+        db.shortenNames = false
+        changed = true
+    end
+    if db.nameShortenEnabled ~= nil and db.nameShortenEnabled ~= false then
+        db.nameShortenEnabled = false
+        changed = true
+    end
+    if type(db.general) == "table" then
+        local g = db.general
+        if g.shortenNames ~= nil and g.shortenNames ~= false then
+            g.shortenNames = false
+            changed = true
+        end
+        if g.nameShortenEnabled ~= nil and g.nameShortenEnabled ~= false then
+            g.nameShortenEnabled = false
+            changed = true
+        end
+    end
+    for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
+        local scope = db[key]
+        if type(scope) == "table" then
+            if scope.shortenNames ~= nil and scope.shortenNames ~= false then
+                scope.shortenNames = false
+                changed = true
+            end
+            if scope.nameShortenEnabled ~= nil and scope.nameShortenEnabled ~= false then
+                scope.nameShortenEnabled = false
+                changed = true
+            end
+        end
+    end
+    return changed
+end
 
 --- Default position offsets per unit, mirrored from the fill() defaults below.
 --- Exposed so Edit Mode popups can offer a "Reset position" action that only
@@ -194,6 +676,7 @@ ExportPublic("MSUF_GetDefaultUnitOffsets", MSUF_GetDefaultUnitOffsets)
 --- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
 local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     if not db then  return end
+    MSUF_Defaults_DisableFactoryNameShortening(db)
     --- Unified alpha defaults: HP fill opacity, background texture opacity, and a
     --- toggle to keep text + portrait opaque while bars dim. Identical for unit and
     --- group frames.
@@ -295,6 +778,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.navHoverScale = 1.05
         g.tooltipPosX = nil
         g.tooltipPosY = nil
+        g._msufFactoryNameShorteningFixed_v1 = true
+        g._msufFactoryScopedNameShorteningFixed_v1 = true
     end
     MSUF_Defaults_NormalizePortraitRenderDB(db)
  end
@@ -312,6 +797,7 @@ local function MSUF_Defaults_CreateFactoryProfile()
     local out = {}
     MSUF_Defaults_DeepCopy(out, payload)
     MSUF_Defaults_ApplyFreshInstallOverrides(out)
+    MSUF_Defaults_NormalizeProfileTo60Defaults(out)
     out.general = out.general or {}
     out.general._msufFactoryProfileApplied = true
     return out
@@ -330,6 +816,42 @@ local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     if type(payload) ~= "table" then  return end
     --- Replace the empty DB with the decoded payload.
     MSUF_Defaults_DeepCopy(MSUF_DB, payload)
+end
+local function MSUF_Defaults_RepairFactoryNameShortening(db)
+    if type(db) ~= "table" then return false end
+    local g = type(db.general) == "table" and db.general or nil
+    if not (g and g._msufFactoryProfileApplied == true) then return false end
+    local looksLikeFactoryShortening = db.shortenNames == true
+        and tonumber(g.shortenNameMaxChars) == 8
+        and tostring(g.shortenNameClipSide or ""):upper() == "RIGHT"
+        and g.shortenNameShowDots == false
+    local hasScopedFactoryShortening = false
+    for _, key in ipairs(MSUF_DEFAULTS_TEXT_SCOPE_KEYS) do
+        local scope = db[key]
+        if type(scope) == "table" and (scope.shortenNames == true or scope.nameShortenEnabled == true) then
+            hasScopedFactoryShortening = true
+            break
+        end
+    end
+    if g._msufFactoryNameShorteningFixed_v1 == true
+        and g._msufFactoryScopedNameShorteningFixed_v1 == true
+        and not looksLikeFactoryShortening
+        and not hasScopedFactoryShortening then
+        return false
+    end
+    local changed = false
+    if g._msufFactoryNameShorteningFixed_v1 ~= true or looksLikeFactoryShortening then
+        if looksLikeFactoryShortening then
+            db.shortenNames = false
+            changed = true
+        end
+        g._msufFactoryNameShorteningFixed_v1 = true
+    end
+    if g._msufFactoryScopedNameShorteningFixed_v1 ~= true or hasScopedFactoryShortening then
+        changed = MSUF_Defaults_DisableFactoryNameShortening(db) or changed
+        g._msufFactoryScopedNameShorteningFixed_v1 = true
+    end
+    return changed
 end
 local MSUF_DB_LastHeavyRun
 
@@ -515,7 +1037,9 @@ end
 
 local function MSUF_Defaults_MigrateDispelPriorityProfiles()
     local changed = false
-    if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" then
+    if not _G.MSUF_ProfileIO_SuppressRuntimeSideEffects
+        and type(MSUF_GlobalDB) == "table"
+        and type(MSUF_GlobalDB.profiles) == "table" then
         for _, profile in pairs(MSUF_GlobalDB.profiles) do
             changed = MSUF_Defaults_MigrateDispelPriorityProfile(profile) or changed
         end
@@ -545,7 +1069,9 @@ end
 
 local function MSUF_Defaults_MigrateGroupTooltipProfiles()
     local changed = false
-    if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" then
+    if not _G.MSUF_ProfileIO_SuppressRuntimeSideEffects
+        and type(MSUF_GlobalDB) == "table"
+        and type(MSUF_GlobalDB.profiles) == "table" then
         for _, profile in pairs(MSUF_GlobalDB.profiles) do
             changed = MSUF_Defaults_MigrateGroupTooltipProfile(profile) or changed
         end
@@ -603,6 +1129,7 @@ local function MSUF_EnsureDB_Heavy()
     MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     MSUF_Defaults_EnsureRootTables()
     local g = MSUF_DB.general
+    MSUF_Defaults_RepairFactoryNameShortening(MSUF_DB)
     MSUF_Defaults_MigrateDispelPriorityProfiles()
     MSUF_Defaults_MigrateGroupTooltipProfiles()
     MSUF_Defaults_NormalizePortraitRenderDB(MSUF_DB)
@@ -2085,12 +2612,8 @@ end
     if gp.meleeSpellPerSpec == nil then gp.meleeSpellPerSpec = false end
     if gp.nameplateMeleeSpellIDByClass == nil then gp.nameplateMeleeSpellIDByClass = {} end
     if gp.nameplateMeleeSpellIDBySpec == nil then gp.nameplateMeleeSpellIDBySpec = {} end
-    --- Auras3 profile root.
-    if MSUF_DB.auras ~= nil then MSUF_DB.auras = nil end
-    if type(MSUF_DB.auras3) ~= "table" and type(MSUF_DB.auras2) == "table" then
-        MSUF_DB.auras3 = MSUF_DB.auras2
-    end
-    MSUF_DB.auras2 = nil
+    --- 5.6 -> 6.0 shape repair for existing DBs and factory defaults.
+    MSUF_Defaults_NormalizeProfileTo60Defaults(MSUF_DB)
 --- Root toggle: Shorten unit names (Frames -> General)
 if MSUF_DB.shortenNames == nil then
     MSUF_DB.shortenNames = false
@@ -2109,28 +2632,47 @@ end
             shared = {
                 _msufA3_migrated_v11f = true,
                 bossEditTogether = true,
-                buffOffsetY = 30,
+                buffGroupOffsetX = 0,
+                buffGroupOffsetY = 36,
+                debuffGroupOffsetX = 0,
+                debuffGroupOffsetY = 6,
+                buffGroupIconSize = 26,
+                debuffGroupIconSize = 26,
                 cooldownTextSize = 14,
                 iconSize = 26,
-                offsetX = 0,
-                offsetY = 6,
                 spacing = 2,
                 stackTextSize = 14,
                 growth = "RIGHT",
-                layoutMode = "SINGLE",
-                perRow = 11,
+                buffGrowthX = "RIGHT",
+                buffGrowthY = "DOWN",
+                debuffGrowthX = "RIGHT",
+                debuffGrowthY = "DOWN",
+                layoutMode = "SEPARATE",
+                perRow = 12,
                 maxIcons = 12,
-                maxBuffs = 8,
-                maxDebuffs = 15,
+                maxBuffs = 12,
+                maxDebuffs = 12,
                 showBuffs = true,
                 showDebuffs = true,
+                showCooldownText = true,
                 showCooldownSwipe = true,
                 cooldownSwipeReverse = false,
                 showStackCount = true,
                 debuffTypeBorderMode = "OFF",
+                useDebuffTypeBorders = false,
                 showTooltip = true,
                 showInEditMode = true,
                 stackCountAnchor = "TOPRIGHT",
+                stackTextOffsetX = -1,
+                stackTextOffsetY = 1,
+                cooldownTextAnchor = "CENTER",
+                cooldownTextOffsetX = 0,
+                cooldownTextOffsetY = 0,
+                cooldownDecimalSeconds = 3,
+                buffAnchor = "BOTTOMRIGHT",
+                debuffAnchor = "TOPLEFT",
+                buffLayer = 5,
+                debuffLayer = 6,
                 hidePermanent = false,
                 onlyMyBuffs = false,
                 onlyMyDebuffs = false,
@@ -2171,10 +2713,25 @@ filters = {
                     layout = {
                         cooldownTextSize = 14,
                         iconSize = 26,
-                        offsetX = -1,
-                        offsetY = 0,
+                        buffGroupOffsetX = -3,
+                        buffGroupOffsetY = 0,
+                        debuffGroupOffsetX = 230,
+                        debuffGroupOffsetY = 2,
+                        buffGroupIconSize = 34,
+                        debuffGroupIconSize = 34,
                         spacing = 2,
                         stackTextSize = 14,
+                    },
+                    overrideSharedLayout = true,
+                    layoutShared = {
+                        maxBuffs = 4,
+                        maxDebuffs = 3,
+                        perRow = 8,
+                        rowWrap = "UP",
+                        buffGrowthX = "RIGHT",
+                        buffGrowthY = "UP",
+                        debuffGrowthX = "UP",
+                        debuffGrowthY = "UP",
                     },
                     filters = {
                         _msufA3_filtersMigrated_v2 = true,
@@ -2207,8 +2764,12 @@ filters = {
                     layout = {
                         cooldownTextSize = 14,
                         iconSize = 26,
-                        offsetX = 0,
-                        offsetY = -1,
+                        buffGroupOffsetX = -1,
+                        buffGroupOffsetY = 0,
+                        debuffGroupOffsetX = 125,
+                        debuffGroupOffsetY = 1,
+                        buffGroupIconSize = 30,
+                        debuffGroupIconSize = 26,
                         spacing = 2,
                         stackTextSize = 14,
                     },
@@ -2248,8 +2809,12 @@ filters = {
                 layout = {
                     cooldownTextSize = 14,
                     iconSize = 26,
-                    offsetX = 0,
-                    offsetY = 0,
+                    buffGroupOffsetX = -1,
+                    buffGroupOffsetY = -3,
+                    debuffGroupOffsetX = 234,
+                    debuffGroupOffsetY = -45,
+                    buffGroupIconSize = 40,
+                    debuffGroupIconSize = 26,
                     spacing = 2,
                     stackTextSize = 14,
                 },
@@ -2336,17 +2901,19 @@ local function fill(key, defaults)
                 t[k] = v
             end
         end
-     end
+    end
     local textDefaults = {
-        nameOffsetX   = 4,
+        nameTextAnchor = "LEFT",
+        nameOffsetX   = 7,
         nameOffsetY   = -4,
-        hpOffsetX     = -4,
-        hpOffsetY     = -4,
-        powerOffsetX  = -4,
-        powerOffsetY  = 4,
+        hpOffsetX     = -2,
+        hpOffsetY     = -18,
+        powerOffsetX  = -2,
+        powerOffsetY  = -2,
         textLeft      = "NONE",
         textCenter    = "NONE",
         textRight     = "CURPERCENT",
+        hpTextMode    = "CURPERCENT",
         hpTextLeftOffsetX = 0,
         hpTextLeftOffsetY = 0,
         hpTextCenterOffsetX = 0,
