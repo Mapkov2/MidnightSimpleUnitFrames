@@ -196,7 +196,7 @@ local function EnsureLayerFrame(frame, layer)
     layers[layer] = holder
   end
   if holder.SetFrameLevel then
-    local level = GetLayerBaseLevel(frame) + layer
+    local level = GetLayerBaseLevel(frame) + 10 + layer
     if holder._msufStatusFrameLevel ~= level then
       holder:SetFrameLevel(level)
       holder._msufStatusFrameLevel = level
@@ -463,12 +463,8 @@ local function ApplyStateIconTexture(tex, kind, cfg, status)
       SetTexCoord(tex, 0.5, 1, 0, 0.5)
     end
   elseif kind == "resting" then
-    if tex.SetAtlas then
-      SetAtlas(tex, "UI-HUD-UnitFrame-Player-PortraitRestingIcon")
-    else
-      SetTexture(tex, STATE_TEXTURE)
-      SetTexCoord(tex, 0, 0.5, 0, 0.5)
-    end
+    SetTexture(tex, STATE_TEXTURE)
+    SetTexCoord(tex, 0, 0.5, 0, 0.5)
   elseif kind == "incomingRes" then
     SetTexture(tex, READY_REZ_TEXTURE)
     SetTexCoord(tex, 0, 1, 0, 1)

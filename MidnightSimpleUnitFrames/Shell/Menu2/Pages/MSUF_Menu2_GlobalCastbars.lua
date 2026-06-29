@@ -572,6 +572,11 @@ local function BuildCastbars(ctx)
             local previewTimeText = FormatPreviewTime(unit, g, remaining, duration)
             local fontPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
             local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
+            local resolveSafe = _G.MSUF_ResolveSafeFontPath
+            if type(resolveSafe) == "function" then
+                local gdb = _G.MSUF_DB and _G.MSUF_DB.general
+                fontPath = resolveSafe(fontPath, 14, fontFlags, gdb and gdb.fontKey)
+            end
             local tr, tg, tb = 1, 1, 1
             if type(_G.MSUF_GetCastbarTextColor) == "function" then tr, tg, tb = _G.MSUF_GetCastbarTextColor() end
             local showTime = CastbarShowTime(unit, g)
@@ -581,7 +586,7 @@ local function BuildCastbars(ctx)
                 local timeSize = ReadCastbarNum(g, unit, "TimeFontSize", "bossCastTimeFontSize", ReadG("castbarTimeFontSize", ReadG("fontSize", 14)))
                 if not timeSize or timeSize <= 0 then timeSize = ReadG("fontSize", 14) end
                 local timeSizePx = max(7, S(timeSize))
-                if fontPath and self.time.SetFont then self.time:SetFont(fontPath, timeSizePx, fontFlags) end
+                if fontPath and self.time.SetFont then pcall(self.time.SetFont, self.time, fontPath, timeSizePx, fontFlags) end
                 self.time:SetText(previewTimeText)
                 self.time:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
                 local measured = self.time.GetStringWidth and self.time:GetStringWidth() or nil
@@ -608,7 +613,7 @@ local function BuildCastbars(ctx)
                 local textSize = ReadCastbarNum(g, unit, "SpellNameFontSize", "bossCastSpellNameFontSize", ReadG("castbarSpellNameFontSize", ReadG("fontSize", 14)))
                 if not textSize or textSize <= 0 then textSize = ReadG("fontSize", 14) end
                 local textSizePx = max(7, S(textSize))
-                if fontPath and self.spell.SetFont then self.spell:SetFont(fontPath, textSizePx, fontFlags) end
+                if fontPath and self.spell.SetFont then pcall(self.spell.SetFont, self.spell, fontPath, textSizePx, fontFlags) end
                 self.spell:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
                 self.spell:SetText(SpellText(kind))
                 self.spell:ClearAllPoints()

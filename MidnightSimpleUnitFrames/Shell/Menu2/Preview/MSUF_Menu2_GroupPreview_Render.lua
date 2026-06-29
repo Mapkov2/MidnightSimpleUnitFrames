@@ -368,7 +368,16 @@ function Render.Install(box, ctx, deps)
         end
         local function SetPreviewFont(fs, size)
             if not fs then return end
-            fs:SetFont(fontPath, size, fontFlags)
+            local path = fontPath
+            local resolveSafe = _G.MSUF_ResolveSafeFontPath
+            if type(resolveSafe) == "function" then
+                local g = _G.MSUF_DB and _G.MSUF_DB.general
+                path = resolveSafe(path, size, fontFlags, g and g.fontKey)
+            end
+            local ok, applied = pcall(fs.SetFont, fs, path, size, fontFlags)
+            if not ok or applied == false then
+                pcall(fs.SetFont, fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, fontFlags)
+            end
             if fs.SetShadowOffset then
                 if fontShadow then
                     if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, fontShadowAlpha or 1) end

@@ -4007,6 +4007,21 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
     }
 end
 
+local FULL_REGISTRY_ALIAS_FALLBACK_TERMS = {
+    "player", "target", "focus", "pet", "boss", "party", "raid", "mythicraid", "mythic raid",
+    "unitframe", "unitframes", "unit frame", "unit frames", "frame", "frames", "group", "group frames",
+    "castbar", "cast bar", "aura", "buff", "debuff", "profile", "class power", "class resource",
+    "health", "hp", "power", "mana", "name", "text", "font", "bar", "portrait", "indicator", "status icon",
+    "width", "height", "size", "scale", "opacity", "alpha", "color", "colour", "offset", "x offset", "y offset",
+    "position", "anchor", "spacing", "gap", "layer", "z layer", "filter", "cooldown", "stack", "border",
+    "show", "hide", "enable", "disable", "turn on", "turn off", "move", "set", "change", "make",
+}
+
+local function ShouldTryFullRegistryAliasFallback(text)
+    if FirstNumber(text) ~= nil then return true end
+    return ContainsAny(text, FULL_REGISTRY_ALIAS_FALLBACK_TERMS)
+end
+
 local function ParseRegistryAlias(text, raw)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(raw or text) then return nil end
     local exactAlias = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(text, raw)
@@ -4024,6 +4039,7 @@ local function ParseRegistryAlias(text, raw)
 
     local _, fallbackTokens = MeaningTokens(AliasRelationText(text))
     if #fallbackTokens == 0 then return nil end
+    if not ShouldTryFullRegistryAliasFallback(text) then return nil end
 
     local fullSettings = P.RegistryCandidateSettings(text, allSettings, true)
     if fullSettings ~= lightSettings then

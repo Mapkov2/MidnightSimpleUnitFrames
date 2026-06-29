@@ -250,7 +250,7 @@ local function EnsureClipFrame(frame, key, layer)
   end
   frame[key] = clip
   if frame.GetFrameLevel and clip.SetFrameLevel then
-    local level = GetLayerBaseLevel(frame) + ClampFrameLayer(layer, 5)
+    local level = GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, 5)
     SetFrameLevelCached(clip, level)
   end
   return clip
@@ -314,7 +314,7 @@ local function ApproxNameWidth(fs, maxChars)
   if fs and fs.GetFont and measureFS.SetFont then
     local font, size, flags = fs:GetFont()
     if font and size then
-      measureFS:SetFont(font, size, flags)
+      pcall(measureFS.SetFont, measureFS, font, size, flags)
     end
   end
   measureFS:SetText("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -339,6 +339,23 @@ local function RestoreNameParent(frame)
     fs._msufPoint, fs._msufRelPoint, fs._msufRelativeTo, fs._msufX, fs._msufY = nil, nil, nil, nil, nil
     fs._msufShown = nil
   end
+end
+
+local function NameRightReservation(frame, spec)
+  local status = spec and spec.status
+  if not status then
+    return 0
+  end
+  local reserved = 0
+  local raidGroup = status.raidGroup
+  if raidGroup and raidGroup.enabled == true and raidGroup.anchor == "NAMERIGHT" then
+    reserved = reserved + 24
+  end
+  local level = status.level
+  if level and level.enabled == true and level.anchor == "NAMERIGHT" then
+    reserved = reserved + 26
+  end
+  return reserved
 end
 
 local function ClearNameClip(frame)
@@ -468,13 +485,35 @@ local function ApplyNameClip(frame, spec, text)
   if frameWidth <= 0 then frameWidth = 220 end
   local nameWidth = floor(frameWidth * 0.80 + 0.5)
   if nameWidth < 80 then nameWidth = 80 end
+  local reservedRight = NameRightReservation(frame, spec)
+  if reservedRight > 0 then
+    nameWidth = nameWidth - reservedRight
+    if nameWidth < 40 then nameWidth = 40 end
+  end
 
   local maxChars = text and text.nameShorten == true and tonumber(text.nameShortenMax) or 0
   local shorten = maxChars and maxChars > 0
+  local clipSide = text and text.nameShortenSide == "RIGHT" and "RIGHT" or "LEFT"
+  local anchor = text and text.nameAnchor or "LEFT"
+  local justify = (anchor == "RIGHT" and "RIGHT") or (anchor == "CENTER" and "CENTER") or "LEFT"
+  if not shorten then
+    if fs._msufJustifyH ~= justify then
+      fs:SetJustifyH(justify)
+      fs._msufJustifyH = justify
+    end
+    if fs._msufNameClipTextWidth ~= 0 then
+      fs:SetWidth(0)
+      fs._msufNameClipTextWidth = 0
+    end
+    HideDots(frame._msufNameDotsFS)
+    fs._msufShown = nil
+    return
+  end
+
   if shorten then
     local approx = ApproxNameWidth(fs, maxChars)
     if approx > 0 then
-      local w = floor(approx + 0.5)
+      local w = floor(approx + 0.5) - reservedRight
       if w < nameWidth then
         nameWidth = w
         if nameWidth < 40 then nameWidth = 40 end
@@ -482,12 +521,19 @@ local function ApplyNameClip(frame, spec, text)
     end
   end
 
-  local clipSide = text.nameShortenSide == "RIGHT" and "RIGHT" or "LEFT"
-  local anchor = text.nameAnchor or "LEFT"
-  local justify = (anchor == "RIGHT" and "RIGHT") or (anchor == "CENTER" and "CENTER") or "LEFT"
   if shorten and anchor == "LEFT" then
     justify = clipSide == "LEFT" and "RIGHT" or "LEFT"
   end
+
+  local maskPx = text and text.nameShortenDots == true and tonumber(text.nameShortenMaskPx) or 0
+  maskPx = floor((maskPx or 0) + 0.5)
+  if maskPx < 0 then
+    maskPx = 0
+  elseif maskPx > 80 then
+    maskPx = 80
+  end
+  local clipWidth = nameWidth - maskPx
+  if clipWidth < 10 then clipWidth = 10 end
 
   if shorten and text.nameShortenDots ~= true and ApplyNoEllipsisClip(frame, fs, spec, text, nameWidth, clipSide) then
     return
@@ -497,9 +543,9 @@ local function ApplyNameClip(frame, spec, text)
     fs:SetJustifyH(justify)
     fs._msufJustifyH = justify
   end
-  if fs._msufNameClipTextWidth ~= nameWidth then
-    fs:SetWidth(nameWidth)
-    fs._msufNameClipTextWidth = nameWidth
+  if fs._msufNameClipTextWidth ~= clipWidth then
+    fs:SetWidth(clipWidth)
+    fs._msufNameClipTextWidth = clipWidth
   end
   fs._msufShown = nil
 
@@ -589,7 +635,7 @@ local function EnsureTextOverlay(frame, field, layer, fallback)
     frame[field] = overlay
   end
   if frame.GetFrameLevel and overlay.SetFrameLevel then
-    local level = GetLayerBaseLevel(frame) + ClampFrameLayer(layer, fallback)
+    local level = GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, fallback)
     if overlay._msufFrameLevel ~= level then
       overlay:SetFrameLevel(level)
       overlay._msufFrameLevel = level
@@ -647,6 +693,7 @@ local SIG_SPEC_KEYS = { "key", "scope", "width", "height", "font", "fontFlags", 
 local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight", "detachedWidth", "detachedX", "detachedY", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
 local SIG_TEXT_KEYS = {
   "anchorToBars", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
+  "nameShortenMaskPx",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY",
   "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthDelimiter", "healthColorByHealth", "healthThrottle", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
   "directHealthLeftPoint", "directHealthLeftRelativePoint", "directHealthLeftX", "directHealthLeftY", "directHealthCenterPoint", "directHealthCenterRelativePoint", "directHealthCenterX", "directHealthCenterY", "directHealthRightPoint", "directHealthRightRelativePoint", "directHealthRightX", "directHealthRightY",
@@ -754,7 +801,7 @@ function Text.Apply(frame, spec)
     local detachedTextLayer = max(tonumber(text.powerLayer) or 2, (tonumber(power.detachedLevel) or 6) + 1)
     local overlay = EnsureTextOverlay(frame, "MSUFPowerTextLayer", detachedTextLayer, 2)
     local baseLevel = frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or GetLayerBaseLevel(frame)
-    SetFrameLevelCached(overlay, baseLevel + detachedTextLayer)
+    SetFrameLevelCached(overlay, baseLevel + 10 + detachedTextLayer)
   end
 
   RestoreNameParent(frame)
@@ -804,19 +851,19 @@ function Text.Apply(frame, spec)
     LayoutText(frame.powerTextCenter, "CENTER", "CENTER", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER", powerAnchor)
     LayoutText(frame.powerTextRight, "RIGHT", "RIGHT", -2 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT", powerAnchor)
   elseif detachedPowerText then
-    LayoutText(frame.hpTextLeft, "LEFT", "LEFT", 4 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT")
-    LayoutText(frame.hpTextCenter, "CENTER", "CENTER", text.healthCenterX or 0, text.healthCenterY or 0, "CENTER")
-    LayoutText(frame.hpTextRight, "RIGHT", "RIGHT", -4 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT")
+    LayoutText(frame.hpTextLeft, "TOPLEFT", "TOPLEFT", 4 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT")
+    LayoutText(frame.hpTextCenter, "TOP", "TOP", text.healthCenterX or 0, text.healthCenterY or 0, "CENTER")
+    LayoutText(frame.hpTextRight, "TOPRIGHT", "TOPRIGHT", -4 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT")
     LayoutText(frame.powerTextLeft, "LEFT", "LEFT", 4 + (text.powerLeftX or 0), text.powerLeftY or 0, "LEFT", frame.targetPowerBar)
     LayoutText(frame.powerTextCenter, "CENTER", "CENTER", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER", frame.targetPowerBar)
     LayoutText(frame.powerTextRight, "RIGHT", "RIGHT", -4 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT", frame.targetPowerBar)
   else
-    LayoutText(frame.hpTextLeft, "LEFT", "LEFT", 4 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT")
-    LayoutText(frame.hpTextCenter, "CENTER", "CENTER", text.healthCenterX or 0, text.healthCenterY or 0, "CENTER")
-    LayoutText(frame.hpTextRight, "RIGHT", "RIGHT", -4 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT")
-    LayoutText(frame.powerTextLeft, "BOTTOMLEFT", "BOTTOMLEFT", 4 + (text.powerLeftX or 0), 1 + (text.powerLeftY or 0), "LEFT")
-    LayoutText(frame.powerTextCenter, "BOTTOM", "BOTTOM", text.powerCenterX or 0, 1 + (text.powerCenterY or 0), "CENTER")
-    LayoutText(frame.powerTextRight, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + (text.powerRightX or 0), 1 + (text.powerRightY or 0), "RIGHT")
+    LayoutText(frame.hpTextLeft, "TOPLEFT", "TOPLEFT", 4 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT")
+    LayoutText(frame.hpTextCenter, "TOP", "TOP", text.healthCenterX or 0, text.healthCenterY or 0, "CENTER")
+    LayoutText(frame.hpTextRight, "TOPRIGHT", "TOPRIGHT", -4 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT")
+    LayoutText(frame.powerTextLeft, "BOTTOMLEFT", "BOTTOMLEFT", 4 + (text.powerLeftX or 0), text.powerLeftY or 0, "LEFT")
+    LayoutText(frame.powerTextCenter, "BOTTOM", "BOTTOM", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER")
+    LayoutText(frame.powerTextRight, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT")
   end
   SetTextLayer(frame.hpTextLeft, text.healthLayer)
   SetTextLayer(frame.hpTextCenter, text.healthLayer)

@@ -42,6 +42,8 @@ local function IconPackValues()
     return values
 end
 local STATUS_ICON_TAB_VALUES = VT("basic", "Basic", "advanced", "Advanced")
+local TARGETED_SPELL_MODE_VALUES = VT("whenHealing", "When Healing", "always", "Always")
+local TARGETED_SPELL_GROW_VALUES = VT("CENTER", "Centered", "RIGHT", "Right", "LEFT", "Left", "UP", "Up", "DOWN", "Down")
 local function SetManyEnabled(enabled, ...)
     for i = 1, select("#", ...) do SetOptionEnabled(select(i, ...), enabled) end
 end
@@ -375,6 +377,92 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         })
     end
     TrackSectionRefresh(ctx, sicons, RefreshStatusIconState)
+end
+
+local function BuildTargetedSpellsSection(ctx, b)
+    local targeted = b:CollapsibleSection("targetedSpells", Tr("Targeted Spells"), 438, false)
+    local tsW = targeted._msuf2Width or ctx.width or 720
+    local gap = 16
+    local leftX = 20
+    local innerW = max(320, tsW - 40)
+    local leftW = floor((innerW - gap) * 0.46)
+    local rightX = leftX + leftW + gap
+    local rightW = innerW - leftW - gap
+    local behavior = W.ControlCard(targeted, Tr("Behavior"), Tr("Party-only enemy nameplate cast tracker."), leftX, -38, leftW, 170)
+    local stack = W.ControlCard(targeted, Tr("Icon Stack"), nil, leftX, -226, leftW, 190)
+    local placement = W.ControlCard(targeted, Tr("Placement"), nil, rightX, -38, rightW, 378)
+    local RefreshTargetedSpellState
+    local function NotifyTargetedSpells()
+        QueueGF("party", "visual")
+        local gf = GF and GF()
+        local ts = gf and gf.TargetedSpells
+        if ts and type(ts.RefreshConfig) == "function" then
+            ts.RefreshConfig()
+        end
+    end
+    local function SetTS(key, value)
+        Set("party", key, value, "visual")
+        NotifyTargetedSpells()
+        if RefreshTargetedSpellState then RefreshTargetedSpellState() end
+    end
+    local function BindTSToggle(widget, key, defaultValue)
+        M.BindBoolWidget(ctx, widget,
+            function() return Bool("party", key, defaultValue) end,
+            function(value) SetTS(key, value and true or false) end)
+        return widget
+    end
+    local function BindTSDropdown(parent, label, values, width, key, defaultValue, y)
+        local control = W.Dropdown(parent, Tr(label), values, width)
+        M.BindDropdownWidget(ctx, control,
+            function() return Val("party", key, defaultValue) end,
+            function(value) SetTS(key, value or defaultValue) end)
+        W.MoveWidget(control, parent, 16, y, width - 32, "LEFT")
+        return control
+    end
+    local function BindTSSlider(parent, label, minValue, maxValue, step, width, key, defaultValue, y)
+        local control = W.Slider(parent, Tr(label), minValue, maxValue, step, width)
+        M.BindNumberWidget(ctx, control,
+            function() return Num("party", key, defaultValue) end,
+            function(value) SetTS(key, floor((tonumber(value) or defaultValue) + 0.5)) end,
+            defaultValue, { step = step, roundStep = true })
+        W.MoveWidget(control, parent, 16, y, width - 58, "CENTER")
+        return control
+    end
+    local enable = BindTSToggle(W.SwitchAt(behavior, Tr("Targeted Spell Indicators"), leftW - 62, -24, 0, "HIDDEN"), "targetedSpellsEnabled", false)
+    local mode = BindTSDropdown(behavior, "Mode", TARGETED_SPELL_MODE_VALUES, leftW, "targetedSpellsMode", "whenHealing", -74)
+    local status = W.Text(behavior, "", 16, -124, leftW - 32, T.colors.muted)
+    if status.SetWordWrap then status:SetWordWrap(true) end
+    local size = BindTSSlider(stack, "Icon Size", 8, 64, 1, leftW, "targetedSpellsIconSize", 24, -56)
+    local maxIcons = BindTSSlider(stack, "Max Icons", 1, 5, 1, leftW, "targetedSpellsMaxIcons", 3, -108)
+    local layer = BindTSSlider(stack, "Layer", 0, 30, 1, leftW, "targetedSpellsLayer", 10, -160)
+    local anchor = BindTSDropdown(placement, "Anchor", STATUS_ICON_ANCHORS, rightW, "targetedSpellsAnchor", "CENTER", -56)
+    local grow = BindTSDropdown(placement, "Growth", TARGETED_SPELL_GROW_VALUES, rightW, "targetedSpellsGrow", "CENTER", -108)
+    local x = BindTSSlider(placement, "X Offset", -200, 200, 1, rightW, "targetedSpellsX", 0, -160)
+    local y = BindTSSlider(placement, "Y Offset", -200, 200, 1, rightW, "targetedSpellsY", 0, -212)
+    local controls = { mode, size, maxIcons, layer, anchor, grow, x, y }
+    RefreshTargetedSpellState = function()
+        local partyScope = CurrentScope() == "party"
+        local enabled = Bool("party", "targetedSpellsEnabled", false)
+        local modeValue = Val("party", "targetedSpellsMode", "whenHealing")
+        SetOptionEnabled(enable, partyScope)
+        SetOptionsEnabled(controls, partyScope and enabled)
+        if not partyScope then
+            status:SetText(Tr("Switch to Party scope to edit this feature."))
+            status:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.90)
+        elseif enabled then
+            status:SetText(Tr("Runs only in party while the selected mode is active."))
+            status:SetTextColor(T.colors.muted[1], T.colors.muted[2], T.colors.muted[3], 0.95)
+        else
+            status:SetText(Tr("No nameplate cast events are registered while disabled."))
+            status:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.90)
+        end
+        SetSectionBadgesAndStatus(targeted, {
+            OnOffBadge(enabled, "Enabled", "Disabled"),
+            { text = Tr("Party only"), kind = partyScope and "info" or "muted" },
+            { text = OptionText(TARGETED_SPELL_MODE_VALUES, modeValue, modeValue), kind = enabled and "accent" or "muted" },
+        })
+    end
+    TrackSectionRefresh(ctx, targeted, RefreshTargetedSpellState)
 end
 
 local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
@@ -1091,8 +1179,9 @@ local function BuildGFIndicators(ctx)
     local function RefreshPage() M.CallIf(M.SelectPage, ctx.key) end
     BuildIndicatorsSection(ctx, b)
     BuildStatusIconsSection(ctx, b, RefreshPage)
+    BuildTargetedSpellsSection(ctx, b)
     BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_indicators", { title = "MSUF Group Indicators", build = BuildGFIndicators, version = 12 })
+M.RegisterPage("gf_indicators", { title = "MSUF Group Indicators", build = BuildGFIndicators, version = 13 })
