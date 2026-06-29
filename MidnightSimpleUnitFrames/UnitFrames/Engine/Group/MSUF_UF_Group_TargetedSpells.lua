@@ -21,6 +21,7 @@ local GetSpecialization = GetSpecialization
 local GetSpecializationRole = GetSpecializationRole
 local GetTime = GetTime
 local IsInGroup = IsInGroup
+local IsInInstance = IsInInstance
 local IsInRaid = IsInRaid
 local UnitCanAttack = UnitCanAttack
 local UnitCastingInfo = UnitCastingInfo
@@ -29,11 +30,13 @@ local UnitChannelInfo = UnitChannelInfo
 local UnitChannelDuration = _G.UnitChannelDuration
 local UnitClass = UnitClass
 local UnitExists = UnitExists
+local UnitGUID = UnitGUID
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local UnitRace = UnitRace
 local UnitSex = UnitSex
 local UnitShouldDisplaySpellTargetName = UnitShouldDisplaySpellTargetName
 local floor = math.floor
+local max = math.max
 local pairs = pairs
 local pcall = pcall
 local tremove = table.remove
@@ -160,9 +163,28 @@ local function ReadSettings()
   settings.layer = ClampInt(ReadValue("targetedSpellsLayer", 10), 10, 0, 30)
 end
 
-local function InParty()
-  if not IsInGroup or not IsInGroup() then return false end
+local function HasInstancedPartyRoster()
   if IsInRaid and IsInRaid() then return false end
+  if IsInGroup and IsInGroup() then return true end
+
+  local inInstance = IsInInstance and IsInInstance()
+  if inInstance ~= true then return false end
+
+  for i = 2, #PARTY_UNITS do
+    local exists = UnitExists and UnitExists(PARTY_UNITS[i])
+    if IsSecret(exists) ~= true and exists == true then
+      return true
+    end
+  end
+
+  local conf = Conf()
+  if not (conf and conf.showSolo == true and conf.showPlayer ~= false) then return false end
+  local playerExists = UnitExists and UnitExists("player")
+  return IsSecret(playerExists) == true or playerExists == true
+end
+
+local function InParty()
+  if not HasInstancedPartyRoster() then return false end
   return true
 end
 
@@ -221,7 +243,9 @@ end
 
 local function BaseFrameLevel(frame)
   local host = AnchorHost(frame)
-  return host and host.GetFrameLevel and (host:GetFrameLevel() or 0) or 0
+  local hostLevel = host and host.GetFrameLevel and (host:GetFrameLevel() or 0) or 0
+  local frameLevel = frame and frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or 0
+  return max(hostLevel or 0, frameLevel or 0)
 end
 
 local function SetShown(frame, shown)
@@ -253,12 +277,30 @@ end
 
 local function ApplyIconFrame(icon, frame)
   if not icon then return end
+  local holder = frame and frame.MSUFGFTargetedSpellsHolder
+  if not holder then
+    holder = CreateFrame("Frame", nil, frame)
+    holder:SetAllPoints(frame)
+    holder:EnableMouse(false)
+    frame.MSUFGFTargetedSpellsHolder = holder
+  end
+  if holder.SetFrameStrata and frame.GetFrameStrata then
+    holder:SetFrameStrata(frame:GetFrameStrata())
+  end
+  local holderLevel = BaseFrameLevel(frame) + 40 + settings.layer
+  if holder.SetFrameLevel and holder._msufTSLevel ~= holderLevel then
+    holder:SetFrameLevel(holderLevel)
+    holder._msufTSLevel = holderLevel
+  end
+  if icon.GetParent and icon:GetParent() ~= holder then
+    icon:SetParent(holder)
+  end
   local size = settings.size
   if icon._msufTSSize ~= size then
     icon:SetSize(size, size)
     icon._msufTSSize = size
   end
-  local level = BaseFrameLevel(frame) + settings.layer
+  local level = holderLevel + 1
   if icon.SetFrameLevel and icon._msufTSLevel ~= level then
     icon:SetFrameLevel(level)
     icon._msufTSLevel = level
@@ -311,13 +353,17 @@ local function LayoutFrame(frame)
 end
 
 local function CreateIcon(frame)
-  local icon = CreateFrame("Frame", nil, frame)
-  icon:EnableMouse(false)
-  if icon.SetFrameStrata and frame.GetFrameStrata then
-    icon:SetFrameStrata(frame:GetFrameStrata())
+  local holder = frame.MSUFGFTargetedSpellsHolder
+  if not holder then
+    holder = CreateFrame("Frame", nil, frame)
+    holder:SetAllPoints(frame)
+    holder:EnableMouse(false)
+    frame.MSUFGFTargetedSpellsHolder = holder
   end
+  local icon = CreateFrame("Frame", nil, holder)
+  icon:EnableMouse(false)
 
-  local tex = icon:CreateTexture(nil, "ARTWORK")
+  local tex = icon:CreateTexture(nil, "OVERLAY")
   tex:SetAllPoints(icon)
   tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   icon.tex = tex
@@ -441,11 +487,41 @@ local function RefreshVisibleIcons()
 end
 
 local function FrameForPartyUnit(unit)
-  if not (GF.FrameForUnit and IsUnitToken(unit)) then return nil end
-  local frame = GF.FrameForUnit(unit)
-  if not frame or frame._msufGFKind ~= "party" then return nil end
-  if frame.IsShown and not frame:IsShown() then return nil end
-  return frame
+  if not IsUnitToken(unit) then return nil end
+  local frame = GF.FrameForUnit and GF.FrameForUnit(unit)
+  if frame and frame._msufGFKind == "party" and (not frame.IsShown or frame:IsShown()) then
+    return frame
+  end
+
+  if not (GF.ForEachFrame and UnitGUID) then return nil end
+  local targetGUID = UnitGUID(unit)
+  if IsSecret(targetGUID) == true or targetGUID == nil then return nil end
+
+  local matched
+  GF.ForEachFrame(function(candidate, frameUnit, kind)
+    if matched or kind ~= "party" or not candidate then return end
+    if candidate.IsShown and not candidate:IsShown() then return end
+    frameUnit = IsUnitToken(frameUnit) and frameUnit or candidate.unit
+    if not IsUnitToken(frameUnit) then return end
+    local frameGUID = UnitGUID(frameUnit)
+    if IsSecret(frameGUID) ~= true and frameGUID == targetGUID then
+      matched = candidate
+      return true
+    end
+  end, true)
+  return matched
+end
+
+local function FirstPartyFrame()
+  if not GF.ForEachFrame then return nil end
+  local matched
+  GF.ForEachFrame(function(candidate, _, kind)
+    if matched or kind ~= "party" or not candidate then return end
+    if candidate.IsShown and not candidate:IsShown() then return end
+    matched = candidate
+    return true
+  end, true)
+  return matched
 end
 
 local function ShowFor(caster, unit, cast)
@@ -536,24 +612,14 @@ local function CopyClassCandidates(classToken)
 end
 
 local function NarrowCandidates(targetValue, rosterMap)
-  if targetValue == nil or #matchBuf == 0 then return end
+  if targetValue == nil or #matchBuf <= 1 then return end
   local exact = 0
-  local known = 0
   for i = 1, #matchBuf do
-    local value = rosterMap[matchBuf[i]]
-    if value ~= nil then
-      known = known + 1
-      if value == targetValue then
-        exact = exact + 1
-      end
+    if rosterMap[matchBuf[i]] == targetValue then
+      exact = exact + 1
     end
   end
-  if exact == 0 then
-    if known == #matchBuf then
-      wipe(matchBuf)
-    end
-    return
-  end
+  if exact == 0 then return end
   for i = #matchBuf, 1, -1 do
     if rosterMap[matchBuf[i]] ~= targetValue then
       tremove(matchBuf, i)
@@ -616,7 +682,7 @@ end
 
 local function ReadCast(caster)
   local name, _, texture, startMS, endMS = UnitCastingInfo(caster)
-  if name ~= nil and IsSecret(name) ~= true then
+  if name ~= nil then
     return {
       name = name,
       texture = texture,
@@ -627,7 +693,7 @@ local function ReadCast(caster)
   end
 
   name, _, texture, startMS, endMS = UnitChannelInfo(caster)
-  if name ~= nil and IsSecret(name) ~= true then
+  if name ~= nil then
     return {
       name = name,
       texture = texture,
@@ -747,6 +813,69 @@ end
 
 function TS.Clear()
   ClearAll()
+end
+
+function TS.DebugSnapshot()
+  ReadSettings()
+  local plates = 0
+  for _ in pairs(nameplateUnits) do
+    plates = plates + 1
+  end
+  local activeCasts = 0
+  for _ in pairs(activeByCaster) do
+    activeCasts = activeCasts + 1
+  end
+  local frames = {}
+  for i = 1, #PARTY_UNITS do
+    local unit = PARTY_UNITS[i]
+    local frame = FrameForPartyUnit(unit)
+    frames[unit] = frame and (frame.GetName and frame:GetName() or true) or false
+  end
+  local inInstance, instanceType
+  if IsInInstance then
+    inInstance, instanceType = IsInInstance()
+  end
+  return {
+    enabled = settings.enabled,
+    mode = settings.mode,
+    roleAllows = RoleAllows(),
+    active = active,
+    hotRegistered = hotRegistered,
+    controlRegistered = controlRegistered,
+    shouldRun = ShouldRun(),
+    inGroup = IsInGroup and IsInGroup() or false,
+    inRaid = IsInRaid and IsInRaid() or false,
+    inInstance = inInstance == true,
+    instanceType = instanceType,
+    trackedNameplates = plates,
+    activeCasts = activeCasts,
+    partyFrames = frames,
+  }
+end
+
+function TS.ShowTest(unit, seconds)
+  ReadSettings()
+  unit = IsUnitToken(unit) and unit or "player"
+  local frame = FrameForPartyUnit(unit) or FirstPartyFrame()
+  if not frame then return false, "no party frame" end
+  local caster = "__MSUF_TS_TEST"
+  ClearCaster(caster)
+  local icon = AcquireIcon(frame)
+  if not icon then return false, "no free icon" end
+  icon._msufTSCaster = caster
+  icon.tex:SetTexture(FALLBACK_ICON)
+  ApplyIconFrame(icon, frame)
+  local now = GetTime and GetTime() or 0
+  local duration = tonumber(seconds) or 8
+  ApplyCooldown(icon.cooldown, nil, now * 1000, (now + duration) * 1000)
+  SetShown(icon, true)
+  activeByCaster[caster] = { icon = icon, frame = frame, unit = frame.unit or unit }
+  LayoutFrame(frame)
+  return true, frame.unit or unit
+end
+
+function TS.HideTest()
+  ClearCaster("__MSUF_TS_TEST")
 end
 
 local function InstallHooks()
