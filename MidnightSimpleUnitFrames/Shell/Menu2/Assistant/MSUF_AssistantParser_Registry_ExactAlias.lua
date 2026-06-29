@@ -116,8 +116,15 @@ local function HasExactAliasBulkScope(text)
         or (" " .. text .. " "):find(" alle ", 1, true) ~= nil
         or (" " .. text .. " "):find(" jede ", 1, true) ~= nil
         or (" " .. text .. " "):find(" jeder ", 1, true) ~= nil
+        or text:find("group frame", 1, true) ~= nil
         or text:find("group frames", 1, true) ~= nil
         or text:find("groupframes", 1, true) ~= nil
+        or text:find("group aura", 1, true) ~= nil
+        or text:find("group auras", 1, true) ~= nil
+        or text:find("group buff", 1, true) ~= nil
+        or text:find("group buffs", 1, true) ~= nil
+        or text:find("group debuff", 1, true) ~= nil
+        or text:find("group debuffs", 1, true) ~= nil
 end
 
 local function AddMatches(out, seen, index, tokens)
