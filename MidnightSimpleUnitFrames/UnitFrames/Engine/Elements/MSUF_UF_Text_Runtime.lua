@@ -16,6 +16,7 @@ local UnitPowerMax = Text.UnitPowerMax
 local UnitPowerType = Text.UnitPowerType
 local InCombatLockdown = Text.InCombatLockdown
 local UnitName = Text.UnitName
+local ReadDisplayName = UnitName
 local GetTime = Text.GetTime
 local PowerColor = Text.PowerColor
 local SetShownCached = Text.SetShownCached
@@ -51,6 +52,15 @@ local POWER_EVENTS_FREQUENT = Text.POWER_EVENTS_FREQUENT
 local POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_TEXT_VALUE_META_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
+
+function Text.SetDisplayNameResolver(resolver)
+  ReadDisplayName = type(resolver) == "function" and resolver or UnitName
+end
+
+if type(Text._pendingDisplayNameResolver) == "function" then
+  Text.SetDisplayNameResolver(Text._pendingDisplayNameResolver)
+  Text._pendingDisplayNameResolver = nil
+end
 
 local function MissingHealthFromValues(hp, hpMax)
   -- Missing health is derived from API values that may become secret. Return nil in that case
@@ -228,7 +238,7 @@ function Text.UpdateInline(frame, event, unit)
     SetTextCached(frame.totInlineSep, inline.separator)
     frame._msufInlineStamp = stamp
   end
-  local name = UnitName(inlineUnit)
+  local name = ReadDisplayName(inlineUnit)
   SetTextCached(frame.totInlineText, name)
   if AnchorInlineToName then
     AnchorInlineToName(frame)
@@ -318,7 +328,7 @@ function Text.UpdateName(frame, event, unit)
     Text.UpdateNameColor(frame, event, unit)
     return
   end
-  SetTextCached(frame.nameText, UnitName and UnitName(unit) or nil)
+  SetTextCached(frame.nameText, ReadDisplayName(unit))
   frame._msufNameTextUnit = unit
   Text.UpdateNameColor(frame, event, unit)
 end
