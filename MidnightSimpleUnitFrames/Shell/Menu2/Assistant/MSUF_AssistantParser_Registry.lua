@@ -3905,7 +3905,7 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or ParseCastbarInterruptRegistryShortcut(text)
 end
 
-P.ParseRegistryAliasCandidates = function(text, raw, settings)
+P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
     local changes = {}
     local missingValue = {}
     local bestScore = 0
@@ -3951,6 +3951,7 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings)
         end
     end
     if #changes == 0 then
+        if suppressNoMatch then return nil end
         return MissingValueResponse(missingValue, raw) or RegistrySuggestions(text, raw, settings)
     end
     if #changes == 1 and changes[1].mediaNoMatch then

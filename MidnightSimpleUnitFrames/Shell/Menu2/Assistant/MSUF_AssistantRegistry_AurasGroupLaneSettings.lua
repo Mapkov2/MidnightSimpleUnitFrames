@@ -252,6 +252,10 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "cooldown font")
             AddGFAuraAliases(aliases, scope, lane, "cooldown size")
+            AddGFAuraAliases(aliases, scope, lane, "cooldown text size")
+            AddGFAuraAliases(aliases, scope, lane, "timer text size")
+            AddGFAuraAliases(aliases, scope, lane, "cooldown text font size")
+            AddGFAuraAliases(aliases, scope, lane, "timer text font size")
             RegisterGFAuraNumber(scope, lane, "CooldownSize", "cooldownSize", laneInfo.label .. " Cooldown Font Size", 8, 6, 24, aliases, "font")
 
             aliases = {}
