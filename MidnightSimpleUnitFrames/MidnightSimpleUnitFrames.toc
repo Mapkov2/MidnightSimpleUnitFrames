@@ -109,6 +109,7 @@ Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
 UnitFrames\MSUF_UnitFrames_Elements.xml
+Integrations\MSUF_Integration_NSRTNicknames.lua
 Integrations\MSUF_Integration_ThirdPartyAnchors.lua
 UnitFrames\MSUF_UnitFrames_Factory.xml
 Auras3\MSUF_Auras3_Runtime.xml
