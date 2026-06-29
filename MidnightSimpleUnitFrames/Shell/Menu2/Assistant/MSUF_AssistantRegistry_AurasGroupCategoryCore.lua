@@ -105,10 +105,10 @@ function A.AurasRegistry.BuildGroupAuraCategoryCore(ctx)
     local function ApplyGFAuraCategory(scope)
         scope = GFAuraCategoryScope(scope)
         if scope == "party" then
-            ApplyGroup("party", "visual")
+            ApplyGroup("party", "auras")
         else
-            ApplyGroup("raid", "visual")
-            ApplyGroup("mythicraid", "visual")
+            ApplyGroup("raid", "auras")
+            ApplyGroup("mythicraid", "auras")
         end
     end
 

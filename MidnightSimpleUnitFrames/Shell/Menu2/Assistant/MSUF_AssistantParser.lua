@@ -154,6 +154,24 @@ if not P.InitUnsupportedAuraCommand then
 end
 P.InitUnsupportedAuraCommand()
 
+local function EarlyAuraShortcut(normalized)
+    return (P.ParseAuraScopeOverrideShortcut and P.ParseAuraScopeOverrideShortcut(normalized))
+        or (P.ParseAuraCooldownSwipeDirectionShortcut and P.ParseAuraCooldownSwipeDirectionShortcut(normalized))
+        or (P.ParseAuraDebuffBorderModeShortcut and P.ParseAuraDebuffBorderModeShortcut(normalized))
+end
+
+local function CopyRequest(normalized)
+    return ParseGroupCopy(normalized)
+        or (P.ParseUnsupportedMixedCopy and P.ParseUnsupportedMixedCopy(normalized))
+        or ParseCopy(normalized)
+end
+
+local function ExactTextDetailShortcut(normalized)
+    return (A._ParseTextLayerShortcut and A._ParseTextLayerShortcut(normalized))
+        or (A._ParseTextSlotDropdownShortcut and A._ParseTextSlotDropdownShortcut(normalized))
+        or (A._ParseTextDetailExactOffset and A._ParseTextDetailExactOffset(normalized))
+end
+
 --- Pipeline order matters. Specific workflows and follow-up answers must win
 --- before broad registry matching, otherwise "yes", copy/profile flows, and
 --- exact assistant keys can be swallowed by generic setting aliases.
@@ -167,9 +185,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     result = P.ParseProfileRepairShortcut and P.ParseProfileRepairShortcut(normalized); if result then return result end
     result = ParseGroupCornerIndicatorSetting and ParseGroupCornerIndicatorSetting(normalized, raw); if result then return result end
     result = ParseDiagnostic(normalized); if result then return result end
-    result = ParseGroupCopy(normalized); if result then return result end
-    result = P.ParseUnsupportedMixedCopy(normalized); if result then return result end
-    result = ParseCopy(normalized); if result then return result end
+    result = CopyRequest(normalized); if result then return result end
     result = ParseProfileStagingState(normalized, raw); if result then return result end
     result = ParseProfile(normalized, raw); if result then return result end
     result = P.ParseBossFramePreviewShortcut and P.ParseBossFramePreviewShortcut(normalized); if result then return result end
@@ -227,6 +243,8 @@ function A._ParsePipelineGeometry(normalized, raw)
     result = P.ParseCastbarTextSizeShortcut and P.ParseCastbarTextSizeShortcut(normalized); if result then return result end
     result = P.ParseCastbarSizeShortcut and P.ParseCastbarSizeShortcut(normalized); if result then return result end
     result = P.ParseCastbarPlacementShortcut and P.ParseCastbarPlacementShortcut(normalized); if result then return result end
+    result = P.ParseAuraCooldownSwipeDirectionShortcut and P.ParseAuraCooldownSwipeDirectionShortcut(normalized); if result then return result end
+    result = P.ParseAuraDebuffBorderModeShortcut and P.ParseAuraDebuffBorderModeShortcut(normalized); if result then return result end
     result = P.AuraGeometryShortcut and P.AuraGeometryShortcut(normalized); if result then return result end
     result = P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized); if result then return result end
     result = P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized); if result then return result end
@@ -270,15 +288,14 @@ function A._ParsePipelineFeature(normalized, raw, ctx)
     result = ParseDarkModeBrightnessShortcut(normalized); if result then return result end
     result = ParseGlobalBarsAction(normalized); if result then return result end
     result = P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx); if result then return result end
+    result = EarlyAuraShortcut(normalized); if result then return result end
     result = ParseCastbarGlobalDetail(normalized); if result then return result end
     result = P.ParseCastbarDirectionClarification and P.ParseCastbarDirectionClarification(normalized); if result then return result end
     result = ParseCastbarPreviewAction(normalized); if result then return result end
     result = ParseScopedOverrideReset(normalized); if result then return result end
     result = ParseGuidedSetup(normalized); if result then return result end
     result = ParseGroupCopyScopeState(normalized); if result then return result end
-    result = ParseGroupCopy(normalized); if result then return result end
-    result = P.ParseUnsupportedMixedCopy(normalized); if result then return result end
-    result = ParseCopy(normalized); if result then return result end
+    result = CopyRequest(normalized); if result then return result end
     result = BuildContextReset(normalized, ctx); if result then return result end
     result = ParseColorAction(normalized); if result then return result end
     result = ParseGroupSpellIndicatorAction(normalized, raw); if result then return result end
@@ -307,22 +324,21 @@ function A._ParsePipelineFallback(normalized, raw, ctx)
         or ParseSetting(normalized, ctx)
 end
 
-local function ParserContext(ctxOverride)
+local function BuildContext(ctxOverride)
     if type(ctxOverride) == "table" then return ctxOverride end
     return A.GetContext and A.GetContext() or {}
 end
-A.ParserContext = ParserContext
+A.ParserContext = BuildContext
 
 function A.ParseSimpleChange(text, ctxOverride)
     local raw = Trim(text)
     local normalized = Normalize(raw)
-    local ctx = ParserContext(ctxOverride)
+    local ctx = BuildContext(ctxOverride)
     if normalized == "" then return nil end
-    local parsed = (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
+    local parsed = EarlyAuraShortcut(normalized)
+        or (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
         or (P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw))
-        or (A._ParseTextLayerShortcut and A._ParseTextLayerShortcut(normalized))
-        or (A._ParseTextSlotDropdownShortcut and A._ParseTextSlotDropdownShortcut(normalized))
-        or (A._ParseTextDetailExactOffset and A._ParseTextDetailExactOffset(normalized))
+        or ExactTextDetailShortcut(normalized)
         or (A._ParseGroupOpacityShortcut and A._ParseGroupOpacityShortcut(normalized))
         or (ParseUnitOpacityShortcut and ParseUnitOpacityShortcut(normalized))
         or ParseScopedFontTextColorShortcut(normalized, raw)
@@ -340,8 +356,14 @@ end
 function A.Parse(text, ctxOverride)
     local raw = Trim(text)
     local normalized = Normalize(raw)
-    local ctx = ParserContext(ctxOverride)
+    local ctx = BuildContext(ctxOverride)
     if normalized == "" then return { kind = "empty" } end
+    local earlyAuraParsed = EarlyAuraShortcut(normalized)
+    if earlyAuraParsed then
+        earlyAuraParsed.raw = raw
+        earlyAuraParsed.normalized = normalized
+        return earlyAuraParsed
+    end
     local exactKeyParsed = (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
         or (P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw))
         or (P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw))

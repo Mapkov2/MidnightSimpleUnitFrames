@@ -17,6 +17,7 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
 local ContainsAny = P.ContainsAny
 local CLASS_POWER_TERMS = P.CLASS_POWER_TERMS
@@ -1325,6 +1326,23 @@ local function ParseColorAction(text)
 end
 
 local function ParseDiagnostic(text)
+    local norm = Normalize(text)
+    local exactDashboardSetupCheck = norm == "check dashboard"
+        or norm == "check setup"
+        or norm == "diagnose setup"
+        or norm == "diagnostic setup"
+        or norm == "troubleshoot setup"
+    if exactDashboardSetupCheck then
+        local action = Registry and Registry:GetAction("diagnose_dashboard_setup")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Check Dashboard setup",
+            summary = "Checks the Assistant state, Dashboard panels, and menu navigation.",
+        } or nil
+    end
+
     local directChangeIntent = ContainsAny(text, {
         "turn on", "turn off", "enable", "disable", "show", "hide", "set", "make",
         "move", "put", "send", "bring", "increase", "decrease", "raise", "lower",

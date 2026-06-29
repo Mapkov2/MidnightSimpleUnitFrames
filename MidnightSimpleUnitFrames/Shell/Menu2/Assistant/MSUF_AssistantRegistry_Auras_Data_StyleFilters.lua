@@ -19,6 +19,22 @@ Data.AURA_LANE_STYLE_BOOLEAN_SPECS = {
     { key = "showCooldownSwipe", label = "Show Cooldown Swipe", defaultValue = true, words = { "show cooldown swipe", "cooldown swipe", "timer swipe" } },
 }
 
+Data.AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
+Data.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = {
+    normal = "NORMAL",
+    default = "NORMAL",
+    forward = "NORMAL",
+    forwards = "NORMAL",
+    ["normal swipe"] = "NORMAL",
+    ["normal direction"] = "NORMAL",
+    reverse = "REVERSE",
+    reversed = "REVERSE",
+    backward = "REVERSE",
+    backwards = "REVERSE",
+    ["reverse swipe"] = "REVERSE",
+    ["reverse direction"] = "REVERSE",
+}
+
 Data.AURA_LANE_STYLE_NUMBER_SPECS = {
     { key = "stackTextSize", label = "Stack Text Size", defaultValue = 14, minValue = 6, maxValue = 40, words = { "stack size", "stack text size", "stack count text size" } },
     { key = "stackTextOffsetX", label = "Stack Text X Offset", defaultValue = -1, minValue = -2000, maxValue = 2000, words = { "stack x", "stack x offset", "stack text x", "stack text x offset" } },

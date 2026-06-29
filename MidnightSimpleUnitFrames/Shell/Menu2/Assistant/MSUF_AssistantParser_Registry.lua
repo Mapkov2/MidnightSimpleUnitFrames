@@ -516,6 +516,7 @@ local function EnumValueForText(setting, text)
     if tail then tail = Trim(tail:gsub("^the%s+", ""):gsub("^a%s+", "")) end
     local tailValue = tail and tail ~= "" and matchSegment(tail)
     if tailValue ~= nil then return tailValue end
+    if tail and tail ~= "" then return nil end
     return matchSegment(norm)
 end
 
@@ -1630,6 +1631,33 @@ local function BooleanValueForNumberSetting(setting, text)
     return value
 end
 
+local function ContextualBooleanValueForRegistrySetting(setting, text)
+    if type(setting) ~= "table" then return nil end
+    if ContainsAny(text, { "what", "where", "why", "help", "explain", "how" }) then return nil end
+
+    local hay = (tostring(setting.key or "") .. " " .. tostring(setting.label or "") .. " " .. tostring(setting.attribute or "")):lower()
+    local customSetting = hay:find("custom", 1, true) ~= nil or hay:find("override", 1, true) ~= nil
+    local sharedSetting = hay:find("useshared", 1, true) ~= nil
+        or hay:find("use shared", 1, true) ~= nil
+        or hay:find("shared", 1, true) ~= nil
+        or hay:find("inherit", 1, true) ~= nil
+
+    local customIntent = ContainsAny(text, {
+        "use custom", "custom aura", "custom style", "custom filters", "custom rules",
+        "custom layout", "custom caps", "override", "own aura", "own filters",
+    })
+    local sharedIntent = ContainsAny(text, {
+        "use shared", "shared aura", "shared style", "shared filters", "shared rules",
+        "inherit", "inherited", "follow shared", "use defaults", "default aura",
+    })
+
+    if customSetting and customIntent then return true end
+    if customSetting and sharedIntent then return false end
+    if sharedSetting and sharedIntent then return true end
+    if sharedSetting and customIntent then return false end
+    return nil
+end
+
 ValueForRegistrySetting = function(setting, text, raw)
     if not setting then return nil end
     if setting.type == "boolean" then
@@ -1655,6 +1683,8 @@ ValueForRegistrySetting = function(setting, text, raw)
         end
         local aliasValue = P.BooleanAliasValueForText and P.BooleanAliasValueForText(setting, text)
         if aliasValue ~= nil then return aliasValue end
+        local contextualValue = ContextualBooleanValueForRegistrySetting(setting, text)
+        if contextualValue ~= nil then return contextualValue end
         return DetectBoolean(text)
     end
     if setting.type == "number" then

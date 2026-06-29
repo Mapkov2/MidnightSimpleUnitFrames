@@ -108,7 +108,7 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
             set = function(value)
                 if key == "enabled" then SetGFAuraLaneShown(scope, lane, value) else GFWriteAuraValue(scope, lane, key, value and true or false) end
             end,
-            apply = function() ApplyGroup(scope, "visual") end,
+            apply = function() ApplyGroup(scope, "auras") end,
             combatSafe = false,
         })
     end
@@ -133,7 +133,7 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
             moveAmount = opts.moveAmount,
             get = function() return GFReadAuraNumber(scope, lane, key, defaultValue) end,
             set = function(value) GFWriteAuraNumber(scope, lane, key, value, minValue, maxValue, 1) end,
-            apply = function() ApplyGroup(scope, mode or "geometry") end,
+            apply = function() ApplyGroup(scope, "auras") end,
             combatSafe = false,
         })
     end
@@ -159,7 +159,7 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
                 return allowed[value] and value or defaultValue
             end,
             set = function(value) GFWriteAuraValue(scope, lane, key, allowed[value] and value or defaultValue) end,
-            apply = function() ApplyGroup(scope, mode or "geometry") end,
+            apply = function() ApplyGroup(scope, "auras") end,
             combatSafe = false,
         })
     end

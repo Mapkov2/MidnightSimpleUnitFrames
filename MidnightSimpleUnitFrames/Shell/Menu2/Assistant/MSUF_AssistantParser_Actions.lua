@@ -62,7 +62,10 @@ local COPY_LIKE_TERMS = {
 }
 
 local function HasCopyIntent(text)
-    return ContainsAny(text, COPY_LIKE_TERMS)
+    for i = 1, #COPY_LIKE_TERMS do
+        if HasPhrase(text, COPY_LIKE_TERMS[i]) then return true end
+    end
+    return false
 end
 
 local function CopyCommandText(text)
@@ -1658,15 +1661,15 @@ local function ParseMenuWindowAction(text)
     if not ContainsAny(text, { "menu", "menue", "dashboard", "options", "optionen", "options window", "msuf menu", "msuf menue", "msuf window", "msuf fenster", "fenster" }) then return nil end
     local actionKey
     local label
-    if ContainsAny(text, { "minimize", "minimise", "collapse", "minimieren", "einklappen" }) then
+    if ContainsAny(text, { "restore", "unminimize", "unminimise", "show minimized", "wiederherstellen", "minimierung aufheben" }) then
+        actionKey = "menu_window_restore"
+        label = "Restore MSUF menu"
+    elseif ContainsAny(text, { "minimize", "minimise", "collapse", "minimieren", "einklappen" }) then
         actionKey = "menu_window_minimize"
         label = "Minimize MSUF menu"
     elseif ContainsAny(text, { "maximize", "maximise", "fullscreen", "full screen", "maximieren", "vollbild" }) then
         actionKey = "menu_window_maximize"
         label = "Maximize MSUF menu"
-    elseif ContainsAny(text, { "restore", "unminimize", "unminimise", "show minimized", "wiederherstellen", "minimierung aufheben" }) then
-        actionKey = "menu_window_restore"
-        label = "Restore MSUF menu"
     elseif ContainsAny(text, { "close", "hide", "schliessen", "verstecken", "ausblenden" }) then
         actionKey = "menu_window_close"
         label = "Close MSUF menu"

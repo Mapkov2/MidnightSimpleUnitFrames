@@ -26,6 +26,7 @@ local DetectGroups = P.DetectGroups
 local FirstNumber = P.FirstNumber
 local Compact = P.Compact
 local DetectDirection = P.DetectDirection
+local DetectBoolean = P.DetectBoolean
 
 local AURA_BLACKLIST_PRESETS = {
     { key = "RAID_BUFFS", aliases = { "raid buffs", "raid buff", "long term raid buffs", "raid buff preset" } },
@@ -398,6 +399,229 @@ local function AuraEditScopeForText(text)
     return nil
 end
 
+local function AuraShortcutScopes(text, allowShared)
+    local out = {}
+    if allowShared and ContainsAny(text, { "shared", "global", "shared aura", "shared auras" }) then
+        AddAuraGeometryScope(out, "unit", "shared")
+    end
+
+    local groups = DetectGroups(text)
+    for i = 1, #groups do
+        if groups[i] == "party" or groups[i] == "raid" or groups[i] == "mythicraid" then
+            AddAuraGeometryScope(out, "group", groups[i])
+        end
+    end
+
+    local units = DetectUnits(text)
+    for i = 1, #units do
+        local unit = units[i]
+        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+            AddAuraGeometryScope(out, "unit", unit)
+        end
+    end
+
+    if #out == 0 and HasUnitAuraGeometryScope(text) then
+        if allowShared then AddAuraGeometryScope(out, "unit", "shared") end
+        AddAuraGeometryUnits(out)
+    end
+    if #out == 0 and HasAllAuraGeometryScope(text) then
+        if allowShared then AddAuraGeometryScope(out, "unit", "shared") end
+        AddAuraGeometryUnits(out)
+        AddAuraGeometryGroups(out)
+    end
+
+    if #out > 0 then return out end
+
+    local scope = AuraEditScopeForText(text)
+    if scope == "party" or scope == "raid" then
+        AddAuraGeometryScope(out, "group", scope)
+    elseif scope == "shared" then
+        if allowShared then AddAuraGeometryScope(out, "unit", "shared") end
+    elseif scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then
+        AddAuraGeometryScope(out, "unit", scope)
+    end
+    return #out > 0 and out or nil
+end
+
+local function AuraScopeOverrideScopes(text)
+    local scopes = AuraShortcutScopes(text, false)
+    if not scopes then return nil end
+
+    local out = {}
+    for i = 1, #scopes do
+        local scope = scopes[i]
+        if scope.kind == "unit" and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
+            AddAuraGeometryScope(out, "unit", scope.key)
+        end
+    end
+    return #out > 0 and out or nil
+end
+
+local function AuraEnumAliasValue(text, aliases)
+    if type(aliases) ~= "table" then return nil end
+    local compactText = Compact(text)
+    local bestValue, bestLen
+    for alias, value in pairs(aliases) do
+        local compactAlias = Compact(alias)
+        if compactAlias ~= "" and (HasPhrase(text, alias) or (#compactAlias >= 5 and compactText:find(compactAlias, 1, true))) then
+            local len = #compactAlias
+            if not bestLen or len > bestLen then
+                bestValue, bestLen = value, len
+            end
+        end
+    end
+    return bestValue
+end
+
+local function AuraCooldownSwipeDirectionValue(text)
+    local data = A.AurasRegistryData or {}
+    return AuraEnumAliasValue(text, data.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES)
+end
+
+local function AuraDebuffBorderModeValue(text)
+    if ContainsAny(text, { "symbol", "with symbol", "with icon", "border symbol", "border and symbol", "border plus symbol" }) then return "SYMBOL" end
+    if ContainsAny(text, { "off", "none", "disabled", "hide", "hidden", "turn off" }) then return "OFF" end
+    if ContainsAny(text, { "border only", "just border", "outline", "outline only" }) then return "BORDER" end
+    if HasPhrase(text, "to border") or HasPhrase(text, "as border") or HasPhrase(text, "mode border") or HasPhrase(text, "use border") then return "BORDER" end
+    return nil
+end
+
+local function AuraShortcutLanes(text)
+    local lanes = AuraGeometryLanes(text)
+    if lanes then return lanes end
+    return { "buff", "debuff" }
+end
+
+local function AddAuraShortcutChange(changes, setting, value, label)
+    if not setting then return end
+    changes[#changes + 1] = {
+        setting = setting,
+        value = value,
+        label = label,
+    }
+end
+
+local function ParseAuraCooldownSwipeDirectionShortcut(text)
+    if not ContainsAny(text, { "cooldown swipe direction", "timer swipe direction", "reverse cooldown swipe", "swipe direction" }) then return nil end
+    if not ContainsAny(text, { "swipe" }) then return nil end
+
+    local scopes = AuraShortcutScopes(text, true)
+    if not scopes then return nil end
+
+    local value = AuraCooldownSwipeDirectionValue(text)
+    if not value then
+        return {
+            kind = "answer",
+            status = "missing_value",
+            text = "Use normal or reverse for Aura Cooldown Swipe Direction. Example: set raid cooldown swipe direction to reverse.",
+        }
+    end
+
+    local lanes = AuraShortcutLanes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        for j = 1, #lanes do
+            local key = AuraGeometrySettingKey(scopes[i], lanes[j], "cooldownSwipeReverse")
+            local setting = Registry and Registry:GetSetting(key)
+            AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or "Aura Cooldown Swipe Direction"))
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = "Change Aura cooldown swipe direction",
+        summary = "Adjusts Aura cooldown swipe direction.",
+    }
+end
+
+local function ParseAuraDebuffBorderModeShortcut(text)
+    if not ContainsAny(text, { "debuff type border", "dispel type border", "debuff border mode", "dispel border mode", "aura debuff border" }) then return nil end
+
+    local scopes = AuraShortcutScopes(text, true)
+    if not scopes then return nil end
+
+    local value = AuraDebuffBorderModeValue(text)
+    if not value then
+        return {
+            kind = "answer",
+            status = "missing_value",
+            text = "Use off, border, or symbol for Debuff Dispel-type Border Mode. Example: set raid debuff dispel border mode to border.",
+        }
+    end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local scope = scopes[i]
+        local key
+        if scope.kind == "group" then
+            key = "gf_" .. tostring(scope.key) .. ".auras.debuff.dispelBorderMode"
+        else
+            key = "auras3." .. tostring(scope.key) .. ".debuffTypeBorderMode"
+        end
+        local setting = Registry and Registry:GetSetting(key)
+        AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or "Debuff Dispel-type Border Mode"))
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = "Change Aura debuff border mode",
+        summary = "Adjusts Debuff Dispel-type Border Mode.",
+    }
+end
+
+local function ParseAuraScopeOverrideShortcut(text)
+    if ContainsAny(text, { "what", "where", "why", "help", "explain", "how" }) then return nil end
+    if not ContainsAny(text, {
+        "custom aura style", "use custom aura style", "aura style override", "custom aura visuals",
+        "use shared style", "shared aura style", "inherit style", "follow shared style",
+        "custom aura filters", "use custom aura filters", "aura filter override", "aura filters override",
+        "use shared filters", "shared aura filters", "inherit filters", "follow shared filters",
+        "use shared rules", "shared aura rules", "inherit rules", "follow shared rules",
+    }) then return nil end
+
+    local attr, value
+    local bool = DetectBoolean and DetectBoolean(text)
+    if ContainsAny(text, { "custom aura style", "use custom aura style", "aura style override", "custom aura visuals" }) then
+        attr = "customStyle"
+        value = bool == nil and true or bool
+    elseif ContainsAny(text, { "use shared style", "shared aura style", "inherit style", "follow shared style" }) then
+        attr = "useSharedStyle"
+        value = bool == nil and true or bool
+    elseif ContainsAny(text, { "custom aura filters", "use custom aura filters", "aura filter override", "aura filters override" }) then
+        attr = "overrideFilters"
+        value = bool == nil and true or bool
+    elseif ContainsAny(text, { "use shared filters", "shared aura filters", "inherit filters", "follow shared filters" }) then
+        attr = "overrideFilters"
+        value = bool == nil and false or not bool
+    elseif ContainsAny(text, { "use shared rules", "shared aura rules", "inherit rules", "follow shared rules" }) then
+        attr = "useSharedRules"
+        value = bool == nil and true or bool
+    end
+    if not attr or value == nil then return nil end
+
+    local scopes = AuraScopeOverrideScopes(text)
+    if not scopes then return nil end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local scope = scopes[i]
+        local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. tostring(attr))
+        AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or "Aura override"))
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = "Change Aura scope override",
+        summary = "Adjusts Aura scope override settings.",
+    }
+end
+
 local function AuraBlacklistPresetForText(text)
     for i = 1, #AURA_BLACKLIST_PRESETS do
         local spec = AURA_BLACKLIST_PRESETS[i]
@@ -515,6 +739,9 @@ P.AuraQuickPresetForText = AuraQuickPresetForText
 P.AuraEditScopeForText = AuraEditScopeForText
 P.ParseAuraGeometryShortcut = ParseAuraGeometryShortcut
 P.AuraGeometryShortcut = ParseAuraGeometryShortcut
+P.ParseAuraCooldownSwipeDirectionShortcut = ParseAuraCooldownSwipeDirectionShortcut
+P.ParseAuraDebuffBorderModeShortcut = ParseAuraDebuffBorderModeShortcut
+P.ParseAuraScopeOverrideShortcut = ParseAuraScopeOverrideShortcut
 P.AuraBlacklistPresetForText = AuraBlacklistPresetForText
 P.AuraGroupBlacklistScope = AuraGroupBlacklistScope
 P.AuraGroupBlacklistLane = AuraGroupBlacklistLane
