@@ -8,10 +8,81 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-alpha5",
-    previousVersion = "6.0-alpha4",
-    rangeLabel = "6.0-alpha4 -> 6.0-alpha5",
+    currentVersion = "6.0-alpha6",
+    previousVersion = "6.0-alpha5",
+    rangeLabel = "6.0-alpha5 -> 6.0-alpha6",
     entries = {
+        {
+            version = "6.0-alpha6",
+            date = "2026-06-29",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added party targeted spell indicators that can show enemy nameplate casts on the targeted party frame, with icon stack, placement, timer text, and time-based text color controls.",
+                        "Added optional Northern Sky Raid Tools nickname integration for unit-frame display names.",
+                        "Improved profile import/export and migration handling, including the new MSUF4 compact profile format and better fallback decoding for older MSUF2/MSUF3 profile strings.",
+                        "Added the bundled in-game changelog prompt so users can open release notes from the dashboard after updating.",
+                    },
+                },
+                {
+                    title = "Group Frames And Indicators",
+                    bullets = {
+                        "Added party-only targeted spell tracking for enemy casts, including cast/channel pickup, retarget verification, cooldown text, and per-party-frame icon placement.",
+                        "Added Targeted Spells controls to Group Indicators with enable mode, icon size/count/layer, anchor/growth, offsets, cooldown text, and timer color thresholds.",
+                        "Updated group-frame defaults and configuration so targeted spell settings are carried by the party profile scope.",
+                        "Improved group preview rendering for targeted spell/status indicator placement and native preview refreshes.",
+                    },
+                },
+                {
+                    title = "Profiles, Imports, And Defaults",
+                    bullets = {
+                        "Added MSUF4 profile export strings while keeping import compatibility for MSUF3 and legacy MSUF2 variants.",
+                        "Improved compact profile decoding by trying Blizzard decompression, direct CBOR, and LibDeflate-backed fallbacks where available.",
+                        "Added profile translation and normalization for older 6.0 alpha profile layouts, including aura geometry, text/name shortening aliases, status indicator fields, and group-frame scope fields.",
+                        "Hardened profile runtime apply calls so one apply error is captured instead of breaking the whole profile operation.",
+                    },
+                },
+                {
+                    title = "Menu, Assistant, And Integrations",
+                    bullets = {
+                        "Added NSRT nickname resolver support with combat-safe refresh behavior and cache updates when NSRT nickname data changes.",
+                        "Expanded Assistant parsing and registry coverage for aura style/filter commands, group aura lane geometry, targeted spell controls, global bar settings, and base global options.",
+                        "Improved dashboard and nav-rail behavior, including hover scale defaults and typewriter/changelog handling.",
+                        "Clarified Global Bars texture inheritance: unit scopes keep Shared textures while group-frame scopes can override textures and gradients.",
+                        "Temporarily disabled dispel/purge border controls for 12.1 PTR until native AuraContainer exposes the needed detection path again.",
+                    },
+                },
+                {
+                    title = "Fonts, Text, And Visuals",
+                    bullets = {
+                        "Improved font path probing and safe font fallback resolution for missing or unavailable fonts.",
+                        "Updated text layout/status paths to handle layer frames, status fonts, name shortening, and profile-translated text fields more consistently.",
+                        "Refined castbar, class power, aura popup, group preview, and Edit Mode HUD rendering details.",
+                        "Updated superellipse media assets used by the rounded frame visuals.",
+                    },
+                },
+                {
+                    title = "Release And Notes",
+                    bullets = {
+                        "Release name: MSUF_6.0A6.",
+                        "Bumped VERSION and addon metadata to 6.0-alpha6.",
+                        "Regenerated the in-game dashboard changelog data for Alpha 6.",
+                        "Hardened the release workflow and Wago upload step so alpha metadata, alpha tags, and A-style alpha release names cannot be uploaded to Wago as stable/release.",
+                        "This tag is intentionally an alpha build; use 6.0-alpha6 as the publish tag so Wago receives stability = alpha, CurseForge receives an alpha release type, and GitHub marks the release as prerelease.",
+                    },
+                },
+                {
+                    title = "Alpha Testing Notes",
+                    bullets = {
+                        "This is an alpha build for the 6.0 branch. Export important profiles before testing.",
+                        "Please test Targeted Spells in 5-player party content with enemy nameplates enabled, especially casts that retarget or channel.",
+                        "Please test importing older Alpha 2 through Alpha 5 profile strings, especially profiles with custom aura positions, fonts, textures, and group-frame text settings.",
+                        "Please test NSRT nickname display with NSRT global nicknames enabled and disabled.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-alpha5",
             date = "2026-06-28",
@@ -123,68 +194,6 @@ local data = {
                     title = "Notes",
                     bullets = {
                         "Alpha 3 was an interim alpha build on the 6.0 branch before the A4 aura style and assistant followup pass.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0 Alpha 2",
-            date = "2026-06-27",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "New Aura Container System: MSUF now uses WoW 12.1's native AuraContainer and AuraButton system for live aura display instead of the older custom aura scanner/render path from Alpha 1.",
-                        "Buffs, debuffs, and important defensive/external auras are handled as separate native aura lanes, so aura updates should feel smoother and more reliable during target swaps, group changes, and combat.",
-                        "Unit frames, party frames, raid frames, and mythic raid frames now share the same Auras3 foundation, with Blizzard doing the heavy aura tracking and MSUF focusing on layout and styling.",
-                        "Aura containers allocate only the configured number of icons, which keeps the system predictable and avoids unnecessary preloading spikes.",
-                    },
-                },
-                {
-                    title = "Aura Settings And Filtering",
-                    bullets = {
-                        "Added clearer aura controls for unit frames and group frames, including separate styling for buffs and debuffs.",
-                        "Added native group aura filter choices such as raid buffs, raid debuffs, dispellable debuffs, crowd control, external defensives, and big defensives.",
-                        "Added optional debuff type visuals: off, colored border, or colored border with a type symbol.",
-                        "Cooldown swipe, cooldown text, stack count, tooltip behavior, size, spacing, growth direction, and text placement can now be adjusted per aura lane.",
-                        "Existing legacy blacklist data is kept, but exact SpellID-style filtering is limited in this alpha because the new native AuraContainer path exposes Blizzard filter strings rather than MSUF's old custom predicate system.",
-                    },
-                },
-                {
-                    title = "Menu And Assistant Improvements",
-                    bullets = {
-                        "The Auras page was rebuilt around scope and lane workflows, making it easier to edit Shared, Player, Target, Focus, Boss, Party, and Raid aura behavior.",
-                        "The Assistant gained much broader coverage for auras, group auras, castbars, class resources, unit frames, profiles, dashboard actions, and troubleshooting.",
-                        "Search and dashboard routing now expose more setup tasks directly, so common configuration areas are easier to find.",
-                        "Many large Assistant registry files were split into smaller pieces to reduce load risk and make future changes easier to maintain.",
-                    },
-                },
-                {
-                    title = "Unit Frames, Castbars, And Class Resources",
-                    bullets = {
-                        "Unit frame refresh paths received more targeted updates for visuals, text, alpha, range fade, status indicators, and aura-related state.",
-                        "Castbar runtime code received cleanup across player, target, focus, boss, channel ticks, empower casts, focus kick, and Interrupt Ready paths.",
-                        "Class resource handling received follow-up fixes around Player HP integration, preview behavior, alternate mana, and balance druid state.",
-                        "Group frame visuals, status handling, spell indicators, and preview paths received additional Alpha 2 cleanup.",
-                    },
-                },
-                {
-                    title = "Performance And Stability",
-                    bullets = {
-                        "Removed much of the Alpha 1 custom aura scan/diff/render work from the live display path.",
-                        "Aura refreshes now lean on Blizzard's native incremental aura updates, while MSUF coalesces expensive layout/configuration changes.",
-                        "Target and focus aura swaps are refreshed more deliberately so stale aura displays are less likely after changing targets.",
-                        "Several runtime paths were simplified so errors surface during alpha testing instead of being hidden by broad fallback wrappers.",
-                        "Added local smoke and quality checks for Assistant parsing, group status runtime behavior, namespace safety, spell indicator data, and general addon quality gates.",
-                    },
-                },
-                {
-                    title = "Alpha Testing Notes",
-                    bullets = {
-                        "This is still an alpha build. Export important profiles before testing.",
-                        "Please test auras on player, target, focus, boss, party, raid, and mythic raid frames.",
-                        "Please test target switching, focus switching, entering/leaving groups, raid conversion, combat lockdown, dispel visuals, stack counts, cooldown text, and tooltip behavior.",
-                        "If an old aura blacklist or exact spell filter no longer behaves like Alpha 1, report it with the spell name, SpellID, unit frame, and aura lane.",
                     },
                 },
             },

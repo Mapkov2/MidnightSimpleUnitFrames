@@ -68,8 +68,51 @@ jobs:
         id: channel
         shell: pwsh
         run: |
+          function Test-AlphaReleaseSignal([AllowNull()][string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return $false }
+            $v = $value.Trim()
+            return (
+              ($v -match '(?i)alpha') -or
+              ($v -match '(?i)\d+(?:\.\d+)*A\d+(?:$|[^A-Za-z0-9])') -or
+              ($v -match '(?i)(^|[^A-Za-z0-9])A\d+(?:$|[^A-Za-z0-9])')
+            )
+          }
+
+          function Test-PrereleaseSignal([AllowNull()][string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return $false }
+            return ((Test-AlphaReleaseSignal $value) -or ($value.Trim() -match '(?i)(beta|rc|pre|preview)'))
+          }
+
+          function Get-FileFirstLine([string]$path) {
+            if (-not (Test-Path -LiteralPath $path)) { return "" }
+            $line = Get-Content -LiteralPath $path | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
+            if ($line) { return $line.Trim() }
+            return ""
+          }
+
+          function Get-TocVersion([string]$path) {
+            if (-not (Test-Path -LiteralPath $path)) { return "" }
+            $content = Get-Content -LiteralPath $path -Raw
+            $match = [regex]::Match($content, '(?m)^##\s+Version:\s*(.+?)\s*$')
+            if ($match.Success) { return $match.Groups[1].Value.Trim() }
+            return ""
+          }
+
+          function Convert-AlphaTagToReleaseName([AllowNull()][string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return "" }
+            $v = $value.Trim()
+            $v = $v -replace '^refs/tags/', ''
+            $v = $v -replace '^v(?=\d)', ''
+            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*alpha[\s._-]*(?<number>\d+(?:\.\d+)*))\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              return "MSUF_${base}A$number"
+            }
+            return ""
+          }
+
           $tag = $env:RELEASE_VERSION
-          $isPrerelease = $env:RELEASE_IS_PRERELEASE -eq "true" -or $tag -match '(?i)(alpha|beta|rc|pre)'
+          $eventIsPrerelease = $env:RELEASE_IS_PRERELEASE -eq "true"
           $releaseName = $env:RELEASE_NAME_INPUT
           if ([string]::IsNullOrWhiteSpace($releaseName)) {
             $tagSubject = git for-each-ref "refs/tags/$tag" --format='%(contents:subject)' 2>$null
@@ -78,32 +121,44 @@ jobs:
             }
           }
           if ([string]::IsNullOrWhiteSpace($releaseName)) {
-            $displayVersion = $tag -replace '^refs/tags/', ''
-            $displayVersion = $displayVersion -replace '^v(?=\d)', ''
-            if ($displayVersion -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
-              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
-              if ([string]::IsNullOrWhiteSpace($Matches["channel"])) {
-                $displayVersion = $base
-              } else {
-                $number = ""
-                if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
-                  $number = " " + ((($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join ".")
-                }
-                $channel = (Get-Culture).TextInfo.ToTitleCase($Matches["channel"].ToLowerInvariant()) -replace '\bRc\b', 'RC'
-                $displayVersion = ($base + " " + $channel + $number).Trim()
-              }
+            $alphaReleaseName = Convert-AlphaTagToReleaseName $tag
+            if (-not [string]::IsNullOrWhiteSpace($alphaReleaseName)) {
+              $releaseName = $alphaReleaseName
             } else {
-              $displayVersion = $displayVersion -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
-              $displayVersion = $displayVersion -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
-              $displayVersion = $displayVersion -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
-              $displayVersion = $displayVersion -replace '[-_]+', ' '
-              $displayVersion = ($displayVersion -replace '\s+', ' ').Trim()
+              $displayVersion = $tag -replace '^refs/tags/', ''
+              $displayVersion = $displayVersion -replace '^v(?=\d)', ''
+              if ($displayVersion -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+                $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+                if ([string]::IsNullOrWhiteSpace($Matches["channel"])) {
+                  $displayVersion = $base
+                } else {
+                  $number = ""
+                  if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+                    $number = " " + ((($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join ".")
+                  }
+                  $channel = (Get-Culture).TextInfo.ToTitleCase($Matches["channel"].ToLowerInvariant()) -replace '\bRc\b', 'RC'
+                  $displayVersion = ($base + " " + $channel + $number).Trim()
+                }
+              } else {
+                $displayVersion = $displayVersion -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
+                $displayVersion = $displayVersion -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
+                $displayVersion = $displayVersion -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
+                $displayVersion = $displayVersion -replace '[-_]+', ' '
+                $displayVersion = ($displayVersion -replace '\s+', ' ').Trim()
+              }
+              $releaseName = "MSUF $displayVersion"
             }
-            $releaseName = "MSUF $displayVersion"
           }
           $releaseName = ($releaseName -replace '[\r\n]+', ' ').Trim()
 
-          if ($tag -match '(?i)alpha') {
+          $versionFileValue = Get-FileFirstLine "VERSION"
+          $tocVersionValue = Get-TocVersion "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
+          $releaseSignals = @($tag, $releaseName, $versionFileValue, $tocVersionValue)
+          $hasAlphaSignal = @($releaseSignals | Where-Object { Test-AlphaReleaseSignal $_ } | Select-Object -First 1).Count -gt 0
+          $hasPrereleaseSignal = @($releaseSignals | Where-Object { Test-PrereleaseSignal $_ } | Select-Object -First 1).Count -gt 0
+          $isPrerelease = $eventIsPrerelease -or $hasPrereleaseSignal
+
+          if ($hasAlphaSignal) {
             $wagoStability = "alpha"
             $curseForgeType = "alpha"
           } elseif ($isPrerelease) {
@@ -126,9 +181,41 @@ jobs:
       - name: Enforce alpha channel for alpha tags
         shell: pwsh
         run: |
-          if ($env:RELEASE_VERSION -match '(?i)alpha') {
+          function Test-AlphaReleaseSignal([AllowNull()][string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return $false }
+            $v = $value.Trim()
+            return (
+              ($v -match '(?i)alpha') -or
+              ($v -match '(?i)\d+(?:\.\d+)*A\d+(?:$|[^A-Za-z0-9])') -or
+              ($v -match '(?i)(^|[^A-Za-z0-9])A\d+(?:$|[^A-Za-z0-9])')
+            )
+          }
+
+          function Get-FileFirstLine([string]$path) {
+            if (-not (Test-Path -LiteralPath $path)) { return "" }
+            $line = Get-Content -LiteralPath $path | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
+            if ($line) { return $line.Trim() }
+            return ""
+          }
+
+          function Get-TocVersion([string]$path) {
+            if (-not (Test-Path -LiteralPath $path)) { return "" }
+            $content = Get-Content -LiteralPath $path -Raw
+            $match = [regex]::Match($content, '(?m)^##\s+Version:\s*(.+?)\s*$')
+            if ($match.Success) { return $match.Groups[1].Value.Trim() }
+            return ""
+          }
+
+          $alphaSignals = @(
+            $env:RELEASE_VERSION,
+            $env:RELEASE_NAME,
+            (Get-FileFirstLine "VERSION"),
+            (Get-TocVersion "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc")
+          ) | Where-Object { Test-AlphaReleaseSignal $_ }
+
+          if ($alphaSignals) {
             if ($env:WAGO_STABILITY -ne "alpha" -or $env:CF_RELEASE_TYPE -ne "alpha") {
-              throw "Alpha tag '$env:RELEASE_VERSION' must publish as alpha. Got Wago '$env:WAGO_STABILITY' and CurseForge '$env:CF_RELEASE_TYPE'."
+              throw "Alpha signal '$($alphaSignals[0])' must publish as alpha. Got Wago '$env:WAGO_STABILITY' and CurseForge '$env:CF_RELEASE_TYPE'."
             }
           }
 
@@ -390,14 +477,31 @@ jobs:
             throw "Invalid Wago stability '$env:WAGO_STABILITY'."
           }
 
-          if ($env:RELEASE_VERSION -match '(?i)alpha' -and $env:WAGO_STABILITY -ne "alpha") {
-            throw "Alpha tag '$env:RELEASE_VERSION' must upload to Wago as alpha. Got '$env:WAGO_STABILITY'."
-          }
-
           $tocContent = Get-Content -LiteralPath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc" -Raw
           $projectId = Get-TocField -Content $tocContent -Name "X-Wago-ID"
           if ([string]::IsNullOrWhiteSpace($projectId)) {
             throw "No Wago project id found in TOC."
+          }
+
+          $tocVersion = Get-TocField -Content $tocContent -Name "Version"
+          $versionFileValue = ""
+          if (Test-Path -LiteralPath "VERSION") {
+            $versionFileValue = Get-Content -LiteralPath "VERSION" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
+          }
+          $alphaSignals = @($env:RELEASE_VERSION, $env:RELEASE_NAME, $versionFileValue, $tocVersion) | Where-Object {
+            if ([string]::IsNullOrWhiteSpace($_)) {
+              $false
+            } else {
+              $v = $_.Trim()
+              (
+                ($v -match '(?i)alpha') -or
+                ($v -match '(?i)\d+(?:\.\d+)*A\d+(?:$|[^A-Za-z0-9])') -or
+                ($v -match '(?i)(^|[^A-Za-z0-9])A\d+(?:$|[^A-Za-z0-9])')
+              )
+            }
+          }
+          if ($alphaSignals -and $env:WAGO_STABILITY -ne "alpha") {
+            throw "Alpha signal '$($alphaSignals[0])' must upload to Wago as alpha. Got '$env:WAGO_STABILITY'."
           }
 
           $interfaceField = Get-TocField -Content $tocContent -Name "Interface"
