@@ -343,6 +343,7 @@ do
         end
         return decode_lsb(), decode_msb()
     end
+    local TryDeserialize
     local function TryBlizzardDecompress(E, compressed)
         if not E or type(compressed) ~= "string" then  return nil end
         if type(E.DecompressString) ~= "function" then  return nil end
@@ -355,6 +356,41 @@ do
         ok, res = pcall(E.DecompressString, compressed)
         if ok and type(res) == "string" then  return res end
          return nil
+    end
+    local function GetLibDeflate()
+        if _G.LibDeflate and type(_G.LibDeflate.DecompressDeflate) == "function" then
+            return _G.LibDeflate
+        end
+        local libStub = _G.LibStub
+        if libStub and type(libStub.GetLibrary) == "function" then
+            local ok, lib = pcall(libStub.GetLibrary, libStub, "LibDeflate", true)
+            if ok and lib and type(lib.DecompressDeflate) == "function" then
+                return lib
+            end
+        end
+        return nil
+    end
+    local function TryLibDeflateDecompress(compressed)
+        local lib = GetLibDeflate()
+        if not lib or type(compressed) ~= "string" then return nil end
+        local ok, plain = pcall(lib.DecompressDeflate, lib, compressed)
+        if ok and type(plain) == "string" then return plain end
+        return nil
+    end
+    local function TryDeserializeMaybeCompressed(E, payload)
+        if type(payload) ~= "string" then return nil end
+        local plain = TryBlizzardDecompress(E, payload)
+        local t = TryDeserialize(E, plain or payload)
+        if t then return t end
+        local libPlain = TryLibDeflateDecompress(payload)
+        if libPlain and libPlain ~= plain then
+            t = TryDeserialize(E, libPlain)
+            if t then return t end
+        end
+        if plain then
+            return TryDeserialize(E, payload)
+        end
+        return nil
     end
     local function TryBlizzardCompress(E, plain)
         if not E or type(plain) ~= "string" then  return nil end
@@ -373,7 +409,7 @@ do
         if ok and type(res) == "string" then  return res end
          return nil
     end
-    local function TryDeserialize(E, payload)
+    TryDeserialize = function(E, payload)
         if not E or type(payload) ~= "string" then  return nil end
         --- 1) CBOR via Blizzard
         local ok, tbl = pcall(E.DeserializeCBOR, payload)
@@ -477,11 +513,10 @@ do
                 if not b64 then  return nil end
                 local ok1, blob = pcall(E.DecodeBase64, b64)
                 if ok1 and type(blob) == "string" then
-                    local plain = TryBlizzardDecompress(E, blob) or blob
-                    local t = TryDeserialize(E, plain)
+                    local t = TryDeserializeMaybeCompressed(E, blob)
                     if t then  return t end
                 end
-                 return nil
+                  return nil
             end
         end
         --- MSUF2: legacy variants
@@ -494,21 +529,18 @@ do
             if b64 then
                 local ok1, blob = pcall(E.DecodeBase64, b64)
                 if ok1 and type(blob) == "string" then
-                    local plain = TryBlizzardDecompress(E, blob) or blob
-                    local t = TryDeserialize(E, plain)
+                    local t = TryDeserializeMaybeCompressed(E, blob)
                     if t then  return t end
                 end
             end
             --- 2) Try LibDeflate print-safe (Wago/WA style)
             local raw_lsb, raw_msb = DecodeForPrint_Variants(payload)
             if raw_lsb then
-                local plain = TryBlizzardDecompress(E, raw_lsb) or raw_lsb
-                local t = TryDeserialize(E, plain)
+                local t = TryDeserializeMaybeCompressed(E, raw_lsb)
                 if t then  return t end
             end
             if raw_msb then
-                local plain = TryBlizzardDecompress(E, raw_msb) or raw_msb
-                local t = TryDeserialize(E, plain)
+                local t = TryDeserializeMaybeCompressed(E, raw_msb)
                 if t then  return t end
             end
             --- 3) Hard fallback: if LibDeflate is available (from another addon), try it.
