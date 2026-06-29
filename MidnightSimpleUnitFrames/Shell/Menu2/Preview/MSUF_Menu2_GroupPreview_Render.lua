@@ -60,6 +60,7 @@ function Render.Install(box, ctx, deps)
     local debuffHandle = deps.debuffHandle
     local statusHandles = deps.statusHandles or {}
     local spellHandle = deps.spellHandle
+    local targetedHandle = deps.targetedHandle
     local statusSpecs = deps.statusSpecs or {}
     local CompiledSpec, CompiledAuraLane, RuntimeStatusConfig, CurrentStatusSpec, StatusSpecEnabled, StatusSpecInMode, StatusSpecIsText, StatusText, StatusLabel, CurrentSpellConfig, CurrentSpellPlaced, CurrentSpellTexture, CurrentSpellColor, MockSpellTexture = M.PickFallbacks(deps, GROUP_RENDER_FALLBACKS, [[
         CompiledSpec CompiledAuraLane RuntimeStatusConfig CurrentStatusSpec StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText StatusLabel CurrentSpellConfig CurrentSpellPlaced CurrentSpellTexture CurrentSpellColor MockSpellTexture
@@ -153,6 +154,7 @@ function Render.Install(box, ctx, deps)
             debuff = AuraLaneAvailable(debuffCfg, 6),
             status = statusLayerAvailable,
             si = (runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.enabled == true and selectedSpellPlacedEnabled) and true or false,
+            targetedSpells = kind == "party" and conf.targetedSpellsEnabled == true,
             auraText = aurasEnabled and customAuraText,
             text = textAvailable,
         }
@@ -772,6 +774,156 @@ function Render.Install(box, ctx, deps)
             anchor = "TOPLEFT", growth = "RIGHTDOWN",
             size = 20, perRow = 3, max = 6, spacing = 1, minSize = 8,
         })
+        local function TargetedAnchor(anchor)
+            if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT"
+                or anchor == "LEFT" or anchor == "CENTER" or anchor == "RIGHT"
+                or anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
+                return anchor
+            end
+            return "CENTER"
+        end
+        local function TargetedGrow(grow)
+            if grow == "LEFT" or grow == "UP" or grow == "DOWN" or grow == "CENTER" then return grow end
+            return "RIGHT"
+        end
+        local function TargetedNumber(key, fallback, minValue, maxValue)
+            local value = tonumber(conf[key])
+            if value == nil then value = fallback or 0 end
+            if minValue ~= nil and value < minValue then value = minValue end
+            if maxValue ~= nil and value > maxValue then value = maxValue end
+            return value
+        end
+        local function TargetedColorValue(key, fallback)
+            return TargetedNumber(key, fallback or 1, 0, 1)
+        end
+        local function TargetedTimerColor(remaining)
+            if conf.targetedSpellsTextColorByTime ~= true then return 1, 1, 1 end
+            local urgent = TargetedNumber("targetedSpellsTextUrgentSeconds", 5, 0, 30)
+            local warning = TargetedNumber("targetedSpellsTextWarningSeconds", 15, 0, 60)
+            local safe = TargetedNumber("targetedSpellsTextSafeSeconds", 60, 0, 600)
+            if warning < urgent then warning = urgent end
+            if safe < warning then safe = warning end
+            if remaining <= urgent then
+                return TargetedColorValue("targetedSpellsTextUrgentR", 1),
+                    TargetedColorValue("targetedSpellsTextUrgentG", 0.55),
+                    TargetedColorValue("targetedSpellsTextUrgentB", 0.10)
+            elseif remaining <= warning then
+                return TargetedColorValue("targetedSpellsTextWarningR", 1),
+                    TargetedColorValue("targetedSpellsTextWarningG", 0.85),
+                    TargetedColorValue("targetedSpellsTextWarningB", 0.20)
+            elseif remaining <= safe then
+                return TargetedColorValue("targetedSpellsTextSafeR", 1),
+                    TargetedColorValue("targetedSpellsTextSafeG", 1),
+                    TargetedColorValue("targetedSpellsTextSafeB", 1)
+            end
+            return 1, 1, 1
+        end
+        local function TargetedTimerText(remaining)
+            local decimalBelow = TargetedNumber("targetedSpellsTextDecimalBelow", 3, 0, 30)
+            if decimalBelow > 0 and remaining < decimalBelow then
+                return string.format("%.1f", remaining)
+            end
+            return tostring(ceil(remaining))
+        end
+        local function LayoutTargetedSpells()
+            if not targetedHandle then return end
+            local maxIcons = Int(conf.targetedSpellsMaxIcons, 3, 1, 5)
+            local size = max(8, ScaleValue(conf.targetedSpellsIconSize or 24, previewScale, 8))
+            local gap = max(1, ScaleValue(2, previewScale, 1))
+            local step = size + gap
+            local anchor = TargetedAnchor(conf.targetedSpellsAnchor)
+            local grow = TargetedGrow(conf.targetedSpellsGrow)
+            local frac = GF_PREVIEW_ANCHOR_FRAC[anchor] or GF_PREVIEW_ANCHOR_FRAC.CENTER
+            local ids = (GF_AURA_MOCK_ICON_IDS and GF_AURA_MOCK_ICON_IDS.targeted) or { 116, 133, 51505, 20484, 257044 }
+            if #ids == 0 then ids = { 116, 133, 51505, 20484, 257044 } end
+            AddIconPool(targetedHandle, maxIcons)
+            targetedHandle._previewRects = targetedHandle._previewRects or {}
+            local minL, minB, maxR, maxT
+            local centeredOffset = grow == "CENTER" and -((maxIcons - 1) * step * 0.5) or 0
+            for i = 1, maxIcons do
+                local offset = (i - 1) * step
+                local ax, ay = offset, 0
+                if grow == "CENTER" then
+                    ax = centeredOffset + offset
+                elseif grow == "LEFT" then
+                    ax = -offset
+                elseif grow == "UP" then
+                    ax, ay = 0, offset
+                elseif grow == "DOWN" then
+                    ax, ay = 0, -offset
+                end
+                local left = ax - ((frac and frac[1]) or 0.5) * size
+                local bottom = ay - ((frac and frac[2]) or 0.5) * size
+                local right, top = left + size, bottom + size
+                local rect = targetedHandle._previewRects[i] or {}
+                rect[1], rect[2] = left, bottom
+                targetedHandle._previewRects[i] = rect
+                minL = minL and min(minL, left) or left
+                minB = minB and min(minB, bottom) or bottom
+                maxR = maxR and max(maxR, right) or right
+                maxT = maxT and max(maxT, top) or top
+            end
+            if not minL then minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5 end
+            local handleW = max(1, Round(maxR - minL))
+            local handleH = max(1, Round(maxT - minB))
+            local originX, originY = -minL, -minB
+            targetedHandle:SetSize(handleW, handleH)
+            targetedHandle._previewOriginX = originX
+            targetedHandle._previewOriginY = originY
+            targetedHandle._previewAnchorFrame = mock
+            targetedHandle._previewScale = previewScale
+            targetedHandle._previewWriteScale = previewScale
+            targetedHandle._previewText = "Targeted Spells"
+            targetedHandle:ClearAllPoints()
+            targetedHandle:SetPoint("BOTTOMLEFT", mock, anchor,
+                ConfigToOffset(conf.targetedSpellsX or 0, previewScale) - originX,
+                ConfigToOffset(conf.targetedSpellsY or 0, previewScale) - originY)
+            local showText = conf.targetedSpellsTextEnabled ~= false
+            local textSize = max(6, ScaleValue(conf.targetedSpellsTextSize or 10, previewScale, 6))
+            for i = 1, maxIcons do
+                local tex = targetedHandle._icons and targetedHandle._icons[i]
+                local swipe = targetedHandle._iconSwipes and targetedHandle._iconSwipes[i]
+                local timer = targetedHandle._iconTimers and targetedHandle._iconTimers[i]
+                local border = targetedHandle._iconBorders and targetedHandle._iconBorders[i]
+                local stack = targetedHandle._iconStacks and targetedHandle._iconStacks[i]
+                local rect = targetedHandle._previewRects[i]
+                if tex and rect then
+                    tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
+                    tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                    tex:SetVertexColor(1, 1, 1, 1)
+                    tex:SetSize(size, size)
+                    tex:ClearAllPoints()
+                    tex:SetPoint("BOTTOMLEFT", targetedHandle, "BOTTOMLEFT", rect[1] + originX, rect[2] + originY)
+                    tex:Show()
+                    if swipe then
+                        swipe:ClearAllPoints()
+                        swipe:SetPoint("TOPLEFT", tex, "TOP", 0, 0)
+                        swipe:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, 0)
+                        swipe:SetShown(true)
+                    end
+                    if timer then
+                        local remaining = (i == 1 and 2.4) or (i == 2 and 7) or max(1, 13 - (i * 2))
+                        SetPreviewFont(timer, textSize)
+                        timer:SetText(TargetedTimerText(remaining))
+                        local tr, tg, tb = TargetedTimerColor(remaining)
+                        timer:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
+                        timer:ClearAllPoints()
+                        timer:SetPoint("CENTER", tex, "CENTER", 0, 0)
+                        timer:SetShown(showText)
+                    end
+                    if border then border:Hide() end
+                    if stack then stack:Hide() end
+                end
+            end
+            for i = maxIcons + 1, #(targetedHandle._icons or {}) do
+                if targetedHandle._icons[i] then targetedHandle._icons[i]:Hide() end
+                if targetedHandle._iconSwipes and targetedHandle._iconSwipes[i] then targetedHandle._iconSwipes[i]:Hide() end
+                if targetedHandle._iconBorders and targetedHandle._iconBorders[i] then targetedHandle._iconBorders[i]:Hide() end
+                if targetedHandle._iconStacks and targetedHandle._iconStacks[i] then targetedHandle._iconStacks[i]:Hide() end
+                if targetedHandle._iconTimers and targetedHandle._iconTimers[i] then targetedHandle._iconTimers[i]:Hide() end
+            end
+        end
+        LayoutTargetedSpells()
         local function ConfigureStatusHandle(statusHandle)
             local spec = statusHandle and statusHandle._statusSpec
             if not (statusHandle and spec) then return end
@@ -951,6 +1103,7 @@ function Render.Install(box, ctx, deps)
         local spellLayer = conf.spellIndicators and conf.spellIndicators.layer
         if runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.layer ~= nil then spellLayer = runtimeSpec.spellIndicators.layer end
         spellHandle:SetFrameLevel(baseLevel + ClampLayer(spellLayer, 9))
+        if targetedHandle then targetedHandle:SetFrameLevel(baseLevel + 40 + ClampLayer(conf.targetedSpellsLayer, 10)) end
         textHandles.name:SetFrameLevel(baseLevel + (tonumber(runtimeText.nameLayer) or tonumber(conf.nameTextLayer) or 6))
         textHandles.hpGroup:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))
         textHandles.hpLeft:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))
@@ -968,12 +1121,14 @@ function Render.Install(box, ctx, deps)
             if handle then handle:SetShown(StatusSpecInMode(spec, statusSpec) and StatusConfigAvailable(spec) and LayerOn("status")) end
         end
         spellHandle:SetShown(layerAvailable.si and LayerOn("si"))
+        if targetedHandle then targetedHandle:SetShown(layerAvailable.targetedSpells and LayerOn("targetedSpells")) end
         buffHandle:SetAlpha(LayerAlpha("buff") * AuraPreviewAlpha(buffCfg))
         debuffHandle:SetAlpha(LayerAlpha("debuff") * AuraPreviewAlpha(debuffCfg))
         for i = 1, #statusHandles do
             if statusHandles[i] then statusHandles[i]:SetAlpha(LayerAlpha("status")) end
         end
         spellHandle:SetAlpha((selectedSpellCfg and selectedSpellCfg.enabled == false) and (LayerAlpha("si") * 0.45) or LayerAlpha("si"))
+        if targetedHandle then targetedHandle:SetAlpha(LayerAlpha("targetedSpells")) end
         textHandles.name:SetAlpha(LayerAlpha("text"))
         textHandles.hpGroup:SetAlpha(LayerAlpha("text"))
         textHandles.hpLeft:SetAlpha(LayerAlpha("text"))

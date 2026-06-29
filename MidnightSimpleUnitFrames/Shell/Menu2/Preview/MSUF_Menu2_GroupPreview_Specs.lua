@@ -30,6 +30,7 @@ autil=gf_auras
 indicators=gf_indicators
 sicons=gf_indicators
 si=gf_indicators
+targetedSpells=gf_indicators
 ci=gf_indicators
 ]],
     PAGE_FOCUS = M.KeyLabelMap [[

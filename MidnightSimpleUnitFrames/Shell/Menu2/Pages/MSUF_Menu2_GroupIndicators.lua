@@ -380,7 +380,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
 end
 
 local function BuildTargetedSpellsSection(ctx, b)
-    local targeted = b:CollapsibleSection("targetedSpells", Tr("Targeted Spells"), 438, false)
+    local targeted = b:CollapsibleSection("targetedSpells", Tr("Targeted Spells"), 842, false)
     local tsW = targeted._msuf2Width or ctx.width or 720
     local gap = 16
     local leftX = 20
@@ -390,10 +390,13 @@ local function BuildTargetedSpellsSection(ctx, b)
     local rightW = innerW - leftW - gap
     local behavior = W.ControlCard(targeted, Tr("Behavior"), Tr("Party-only enemy nameplate cast tracker."), leftX, -38, leftW, 170)
     local stack = W.ControlCard(targeted, Tr("Icon Stack"), nil, leftX, -226, leftW, 190)
-    local placement = W.ControlCard(targeted, Tr("Placement"), nil, rightX, -38, rightW, 378)
+    local placement = W.ControlCard(targeted, Tr("Placement"), nil, rightX, -38, rightW, 270)
+    local textCard = W.ControlCard(targeted, Tr("Cooldown Text"), nil, rightX, -326, rightW, 486)
     local RefreshTargetedSpellState
     local function NotifyTargetedSpells()
         QueueGF("party", "visual")
+        M.CallIf(RefreshGFPreview)
+        if type(M.RefreshGFNativePreviews) == "function" then M.RefreshGFNativePreviews("GF_TARGETED_SPELLS") end
         local gf = GF and GF()
         local ts = gf and gf.TargetedSpells
         if ts and type(ts.RefreshConfig) == "function" then
@@ -428,6 +431,26 @@ local function BuildTargetedSpellsSection(ctx, b)
         W.MoveWidget(control, parent, 16, y, width - 58, "CENTER")
         return control
     end
+    local function SetTSColor(rKey, gKey, bKey, r, g, b)
+        Set("party", rKey, r or 1, "visual")
+        Set("party", gKey, g or 1, "visual")
+        Set("party", bKey, b or 1, "visual")
+        NotifyTargetedSpells()
+        if RefreshTargetedSpellState then RefreshTargetedSpellState() end
+    end
+    local function BindTSColor(parent, label, width, rKey, gKey, bKey, defaults, y)
+        local control = W.Color(parent, Tr(label))
+        defaults = defaults or WHITE_RGB
+        M.BindColor(ctx, control,
+            function()
+                return Num("party", rKey, defaults[1] or 1),
+                    Num("party", gKey, defaults[2] or 1),
+                    Num("party", bKey, defaults[3] or 1)
+            end,
+            function(r, g, bcol) SetTSColor(rKey, gKey, bKey, r, g, bcol) end)
+        W.MoveWidget(control, parent, 16, y, width - 32)
+        return control
+    end
     local enable = BindTSToggle(W.SwitchAt(behavior, Tr("Targeted Spell Indicators"), leftW - 62, -24, 0, "HIDDEN"), "targetedSpellsEnabled", false)
     local mode = BindTSDropdown(behavior, "Mode", TARGETED_SPELL_MODE_VALUES, leftW, "targetedSpellsMode", "whenHealing", -74)
     local status = W.Text(behavior, "", 16, -124, leftW - 32, T.colors.muted)
@@ -439,13 +462,29 @@ local function BuildTargetedSpellsSection(ctx, b)
     local grow = BindTSDropdown(placement, "Growth", TARGETED_SPELL_GROW_VALUES, rightW, "targetedSpellsGrow", "CENTER", -108)
     local x = BindTSSlider(placement, "X Offset", -200, 200, 1, rightW, "targetedSpellsX", 0, -160)
     local y = BindTSSlider(placement, "Y Offset", -200, 200, 1, rightW, "targetedSpellsY", 0, -212)
-    local controls = { mode, size, maxIcons, layer, anchor, grow, x, y }
+    local textEnabled = BindTSToggle(W.SwitchAt(textCard, Tr("Show Cooldown Text"), rightW - 62, -24, 0, "HIDDEN"), "targetedSpellsTextEnabled", true)
+    local textSize = BindTSSlider(textCard, "Cooldown Text Size", 6, 24, 1, rightW, "targetedSpellsTextSize", 10, -66)
+    local decimals = BindTSSlider(textCard, "Decimals below sec", 0, 30, 1, rightW, "targetedSpellsTextDecimalBelow", 3, -118)
+    local colorByTime = BindTSToggle(W.ToggleAt(textCard, Tr("Color by time"), 16, -166, rightW - 32), "targetedSpellsTextColorByTime", false)
+    local safeSeconds = BindTSSlider(textCard, "Safe seconds", 0, 600, 5, rightW, "targetedSpellsTextSafeSeconds", 60, -216)
+    local warningSeconds = BindTSSlider(textCard, "Warning seconds", 0, 60, 1, rightW, "targetedSpellsTextWarningSeconds", 15, -268)
+    local urgentSeconds = BindTSSlider(textCard, "Urgent seconds", 0, 30, 1, rightW, "targetedSpellsTextUrgentSeconds", 5, -320)
+    local safeColor = BindTSColor(textCard, "Safe", rightW, "targetedSpellsTextSafeR", "targetedSpellsTextSafeG", "targetedSpellsTextSafeB", { 1, 1, 1 }, -370)
+    local warningColor = BindTSColor(textCard, "Warning", rightW, "targetedSpellsTextWarningR", "targetedSpellsTextWarningG", "targetedSpellsTextWarningB", { 1, 0.85, 0.20 }, -410)
+    local urgentColor = BindTSColor(textCard, "Urgent", rightW, "targetedSpellsTextUrgentR", "targetedSpellsTextUrgentG", "targetedSpellsTextUrgentB", { 1, 0.55, 0.10 }, -450)
+    local controls = { mode, size, maxIcons, layer, anchor, grow, x, y, textEnabled }
+    local textControls = { textSize, decimals, colorByTime }
+    local textColorControls = { safeSeconds, warningSeconds, urgentSeconds, safeColor, warningColor, urgentColor }
     RefreshTargetedSpellState = function()
         local partyScope = CurrentScope() == "party"
         local enabled = Bool("party", "targetedSpellsEnabled", false)
         local modeValue = Val("party", "targetedSpellsMode", "whenHealing")
+        local textOn = Bool("party", "targetedSpellsTextEnabled", true)
+        local colorOn = Bool("party", "targetedSpellsTextColorByTime", false)
         SetOptionEnabled(enable, partyScope)
         SetOptionsEnabled(controls, partyScope and enabled)
+        SetOptionsEnabled(textControls, partyScope and enabled and textOn)
+        SetOptionsEnabled(textColorControls, partyScope and enabled and textOn and colorOn)
         if not partyScope then
             status:SetText(Tr("Switch to Party scope to edit this feature."))
             status:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.90)
@@ -460,6 +499,7 @@ local function BuildTargetedSpellsSection(ctx, b)
             OnOffBadge(enabled, "Enabled", "Disabled"),
             { text = Tr("Party only"), kind = partyScope and "info" or "muted" },
             { text = OptionText(TARGETED_SPELL_MODE_VALUES, modeValue, modeValue), kind = enabled and "accent" or "muted" },
+            { text = textOn and Tr("Timer text") or Tr("No timer"), kind = (enabled and textOn) and "info" or "muted" },
         })
     end
     TrackSectionRefresh(ctx, targeted, RefreshTargetedSpellState)
@@ -1184,4 +1224,4 @@ local function BuildGFIndicators(ctx)
     BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_indicators", { title = "MSUF Group Indicators", build = BuildGFIndicators, version = 13 })
+M.RegisterPage("gf_indicators", { title = "MSUF Group Indicators", build = BuildGFIndicators, version = 14 })

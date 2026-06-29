@@ -72,10 +72,14 @@ function Handles.Install(box, deps)
     end
     local function RefreshGroupPreviewAfterMove(handle)
         local gf = MSUF and MSUF.GF
+        local refreshKind = (handle and handle._cfgTargetedSpells) and "party" or H.CurrentScope()
         if gf and gf.RefreshVisuals then
             local dirty = gf.DIRTY_VISUAL or 0x02
             if handle and (handle._cfgGroup or handle._cfgSpell) then dirty = gf.DIRTY_AURAS or dirty end
-            gf.RefreshVisuals(H.CurrentScope(), dirty)
+            gf.RefreshVisuals(refreshKind, dirty)
+            if handle and handle._cfgTargetedSpells and gf.TargetedSpells and type(gf.TargetedSpells.RefreshConfig) == "function" then
+                gf.TargetedSpells.RefreshConfig(false)
+            end
         elseif gf and gf.MarkAllDirty then
             gf.MarkAllDirty(gf.DIRTY_VISUAL or 0x02)
         end
@@ -120,7 +124,7 @@ function Handles.Install(box, deps)
         if not (handle and box._mock) or handle._locked then return end
         if handle._cfgText then return end
         local m = box._mock
-        local anchorFrame = (handle._cfgGroup and handle._previewAnchorFrame) or m
+        local anchorFrame = ((handle._cfgGroup or handle._cfgTargetedSpells) and handle._previewAnchorFrame) or m
         local mL, mT = anchorFrame:GetLeft() or 0, anchorFrame:GetTop() or 0
         local mW, mH = max(1, anchorFrame:GetWidth() or 1), max(1, anchorFrame:GetHeight() or 1)
         local hL, hT = handle:GetLeft() or 0, handle:GetTop() or 0
@@ -131,6 +135,11 @@ function Handles.Install(box, deps)
             local px = hL + handle._previewOriginX
             local py = hB + handle._previewOriginY
             anchor = ResolveGroupAuraAnchor((px - mL) / mW, (mT - py) / mH)
+            offX, offY = PointOffset(px, py, anchorFrame, anchor)
+        elseif handle._cfgTargetedSpells and handle._previewOriginX and handle._previewOriginY then
+            local px = hL + handle._previewOriginX
+            local py = hB + handle._previewOriginY
+            anchor = ResolveAnchor((px - mL) / mW, (mT - py) / mH)
             offX, offY = PointOffset(px, py, anchorFrame, anchor)
         else
             local cx, cy = hL + hW * 0.5, hT - hH * 0.5
@@ -165,6 +174,11 @@ function Handles.Install(box, deps)
                 placed.x = cfgX
                 placed.y = cfgY
             end
+        elseif handle._cfgTargetedSpells then
+            local partyConf = H.Conf("party") or conf
+            partyConf.targetedSpellsAnchor = anchor
+            partyConf.targetedSpellsX = cfgX
+            partyConf.targetedSpellsY = cfgY
         end
         RefreshGroupPreviewAfterMove(handle)
         CheckpointHandleHistory(handle, action)
@@ -201,6 +215,10 @@ function Handles.Install(box, deps)
             if not placed then return false end
             placed.x = cfgX
             placed.y = cfgY
+        elseif handle._cfgTargetedSpells then
+            local partyConf = H.Conf("party") or conf
+            partyConf.targetedSpellsX = cfgX
+            partyConf.targetedSpellsY = cfgY
         else
             return false
         end
@@ -450,6 +468,10 @@ function Handles.Install(box, deps)
     local spellHandle = CreatePreviewHandle("si", "si", { 0.69, 0.50, 0.88 }, "SPELL", 44, 44, false)
     spellHandle._cfgSpell = true
     AddIconPool(spellHandle, 1)
+    local targetedHandle = CreatePreviewHandle("targetedSpells", "targetedSpells", { 1.00, 0.52, 0.18 }, "TARGET", 72, 32, false)
+    targetedHandle._cfgTargetedSpells = true
+    targetedHandle._previewText = "Targeted Spells"
+    AddIconPool(targetedHandle, 5)
     local function ConfigureTextHandle(handle, kind, slot)
         if not handle then return end
         handle._cfgText = true
@@ -516,6 +538,7 @@ function Handles.Install(box, deps)
         debuffHandle = debuffHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
+        targetedHandle = targetedHandle,
         SelectHandle = SelectHandle,
         NudgeHandlePosition = NudgeHandlePosition,
         AddIconPool = AddIconPool,
