@@ -1062,28 +1062,54 @@ local function SettingPartialSuggestionScore(setting, text)
     return best
 end
 
-P._AddCandidateIndexTokens = function(tokenSet, text)
-    if type(tokenSet) ~= "table" then return end
-    text = tostring(text or "")
-    if text == "" then return end
+local candidateIndexTokenCache = {}
+local candidateIndexTokenCacheCount = 0
+local function CandidateIndexTokens(text)
+    local raw = tostring(text or "")
+    if raw == "" then return nil end
+    local cached = candidateIndexTokenCache[raw]
+    if cached ~= nil then return cached end
+    local tokens = {}
+    local seen = {}
     local function add(word)
         if #word >= 2 and not word:match("^[-+]?%d") and not SUGGESTION_IGNORE_TOKENS[word] then
-            tokenSet[word] = true
+            if not seen[word] then
+                seen[word] = true
+                tokens[#tokens + 1] = word
+            end
         end
     end
-    for word in Normalize(text):gmatch("%S+") do
+    for word in Normalize(raw):gmatch("%S+") do
         add(word)
         local folded = P.PluralFoldWord and P.PluralFoldWord(word) or word
         if folded ~= word then add(folded) end
+    end
+    if #raw <= 180 then
+        if candidateIndexTokenCacheCount > 4096 then
+            candidateIndexTokenCache = {}
+            candidateIndexTokenCacheCount = 0
+        end
+        candidateIndexTokenCache[raw] = tokens
+        candidateIndexTokenCacheCount = candidateIndexTokenCacheCount + 1
+    end
+    return tokens
+end
+
+P._AddCandidateIndexTokens = function(tokenSet, text)
+    if type(tokenSet) ~= "table" then return end
+    local tokens = CandidateIndexTokens(text)
+    for i = 1, #(tokens or {}) do
+        tokenSet[tokens[i]] = true
     end
 end
 
 P._BuildRegistryCandidateIndex = function(settings, includeAliases)
     includeAliases = includeAliases == true
+    local maybeYield = A and type(A.MaybeYield) == "function" and A.MaybeYield or nil
     local byToken = {}
     local all = {}
     for i = 1, #(settings or {}) do
-        if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        if maybeYield and i % 2 == 0 then maybeYield() end
         local setting = settings[i]
         if type(setting) == "table" then
             all[#all + 1] = setting
@@ -1094,12 +1120,12 @@ P._BuildRegistryCandidateIndex = function(settings, includeAliases)
             if includeAliases then
                 local aliases = setting.aliases
                 for j = 1, #(aliases or {}) do
-                    if j % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+                    if maybeYield and j % 4 == 0 then maybeYield() end
                     P._AddCandidateIndexTokens(tokenSet, aliases[j])
                 end
                 local prefixes = setting.valuePrefixes
                 for j = 1, #(prefixes or {}) do
-                    if j % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+                    if maybeYield and j % 4 == 0 then maybeYield() end
                     P._AddCandidateIndexTokens(tokenSet, prefixes[j])
                 end
             end

@@ -1044,20 +1044,24 @@ do
     AssignNamedValues(deps, [[
         PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeVisualScaleForPreviewKey ClampPreviewZoom UpdatePreviewZoomControls ZOOM_MIN
         max min abs floor format TEX_W8 FONT STATUS_PREVIEW CurrentPanelKey UnitDB UNIT_DATA UNIT_LABELS ReadPowerBarEnabled ReadPowerBarHeight
+    ]],
+        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN,
+        max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight)
+    AssignNamedValues(deps, [[
         PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizeRaidGroupNameAnchor CastbarEnabled CastbarShowIcon CastbarShowText ReadCastbarSize ReadCastbarNum FormatCastbarPreviewTime
         CastbarOffsetFields CastbarDetached CanDetachPowerBarKey ClampPreviewLayer SetTex PlaceHandle PlaceHandleAroundRegions UnitPreviewText UnitPreviewTextMovesTogether
         NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor ClassColor HealthColor
+    ]],
+        PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor, CastbarEnabled, CastbarShowIcon, CastbarShowText, ReadCastbarSize, ReadCastbarNum, FormatCastbarPreviewTime,
+        CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey, ClampPreviewLayer, SetTex, PlaceHandle, UnitPreviewText.PlaceHandleAroundRegions, UnitPreviewText, UnitPreviewTextMovesTogether,
+        NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, FormatMode, ShortenPreviewName, ToTInlineSeparator, ResolveNameAnchor, ClassColor, HealthColor)
+    AssignNamedValues(deps, [[
         HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
         UnitPreviewPortraitTexture ClassPortraitVisual PreviewNameColor PreviewToTInlineColor LayoutUnitPreviewOverlay PositionFromAnchor PositionRuntimeLayoutIconPreview
         PositionStatusCornerPreview PositionSameAnchorPreview PositionLevelPreview ResolveStatusPreviewAnchor SetPreviewIconTexture NormalizeStatusPreviewId
         ApplyPreviewTextFocus ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide SetShownSafe ApplyPreviewLayerVisibility
         ApplyPreviewTransparency RefreshHandleSelectionVisuals Auras
     ]],
-        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN,
-        max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight,
-        PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor, CastbarEnabled, CastbarShowIcon, CastbarShowText, ReadCastbarSize, ReadCastbarNum, FormatCastbarPreviewTime,
-        CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey, ClampPreviewLayer, SetTex, PlaceHandle, UnitPreviewText.PlaceHandleAroundRegions, UnitPreviewText, UnitPreviewTextMovesTogether,
-        NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, FormatMode, ShortenPreviewName, ToTInlineSeparator, ResolveNameAnchor, ClassColor, HealthColor,
         HealthBackgroundColor, PowerBackgroundColor, PowerColor, FontColor, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewHealPredictionEnabled, PreviewAbsorbBarEnabled,
         UnitPreviewPortraitTexture, ClassPortraitVisual, PreviewNameColor, PreviewToTInlineColor, LayoutUnitPreviewOverlay, PositionFromAnchor, PositionRuntimeLayoutIconPreview,
         PositionStatusCornerPreview, PositionSameAnchorPreview, PositionLevelPreview, ResolveStatusPreviewAnchor, SetPreviewIconTexture, NormalizeStatusPreviewId,

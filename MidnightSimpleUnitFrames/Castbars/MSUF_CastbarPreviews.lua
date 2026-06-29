@@ -328,6 +328,9 @@ local function StartPreviewTest(frame)
     frame.MSUF_testStart = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
     frame.MSUF_testDur = 4.0
     frame.statusBar._msufTestMinMax = nil
+    frame.statusBar.MSUF_hideFillTexture = nil
+    local fillTexture = frame.statusBar.GetStatusBarTexture and frame.statusBar:GetStatusBarTexture()
+    if fillTexture and fillTexture.SetAlpha then fillTexture:SetAlpha(1) end
 
     SetTextIfChanged(frame.castText, Translate(PREVIEW_LABELS.test))
     if frame.icon then
@@ -348,7 +351,8 @@ local function SetUnitTestMode(unit, enabled, transient)
         general[config.test] = enabled and true or false
     end
 
-    local active = _G.MSUF_UnitEditModeActive == true and general[config.test] == true
+    local requested = transient and enabled == true or general[config.test] == true
+    local active = _G.MSUF_UnitEditModeActive == true and requested
     local frame
     if unit == "player" and not (general.castbarPlayerPreviewEnabled and _G.MSUF_PlayerCastbarPreview) then
         if type(_G.MSUF_InitSafePlayerCastbar) == "function" then
@@ -366,7 +370,9 @@ local function SetUnitTestMode(unit, enabled, transient)
 
     PositionPreview(unit, frame)
     StartPreviewTest(frame)
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+    if type(_G.MSUF_RefreshCastbarFrame) == "function" then
+        _G.MSUF_RefreshCastbarFrame(frame)
+    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
         _G.MSUF_UpdateCastbarVisuals()
     end
 end
@@ -414,7 +420,16 @@ local function SetBossCastbarTestMode(enabled, transient)
         general.bossCastbarTestMode = enabled and true or false
     end
 
-    local active = _G.MSUF_UnitEditModeActive == true and general.bossCastbarTestMode == true
+    local active = _G.MSUF_UnitEditModeActive == true
+        and (transient and enabled == true or general.bossCastbarTestMode == true)
+    if active then
+        local createBossPreview = _G.MSUF_CreateBossCastbarPreview
+        if type(createBossPreview) == "function" then
+            local maxBossFrames = tonumber(_G.MAX_BOSS_FRAMES) or 5
+            if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
+            for index = 1, maxBossFrames do createBossPreview(index) end
+        end
+    end
     if not IsInCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
         _G.MSUF_UpdateBossCastbarPreview()
     end
@@ -537,10 +552,12 @@ local function UpdatePlayerCastbarPreview()
         return
     end
 
+    local refreshFrame = _G.MSUF_RefreshCastbarFrame
     for unit in pairs(PREVIEW_UNITS) do
         local frame = CreatePreview(unit)
         if frame then
             PositionPreview(unit, frame)
+            if type(refreshFrame) == "function" then refreshFrame(frame) end
             frame:Show()
         end
     end
@@ -549,7 +566,9 @@ local function UpdatePlayerCastbarPreview()
         _G.MSUF_UpdateBossCastbarPreview()
         SetupBossCastbarPreviewEditMode()
     end
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
+    if type(refreshFrame) ~= "function" and type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+        _G.MSUF_UpdateCastbarVisuals()
+    end
     if type(_G.MSUF_UpdateCastbarTextures) == "function" then _G.MSUF_UpdateCastbarTextures() end
 end
 

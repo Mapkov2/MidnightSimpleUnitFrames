@@ -287,11 +287,19 @@ local function ActiveSequenceChanged(frame, sequenceID)
     return activeSeq ~= sequenceID
 end
 
+local function CastbarAlreadyIdle(frame)
+    if not frame then return true end
+    if frame.MSUF_castActive == true or frame.interrupted or frame.timer or frame.hideTimer then return false end
+    if frame.IsShown and frame:IsShown() then return false end
+    return true
+end
+
 local function RefreshFromEngine(frame)
     if frame.interrupted then return end
 
     local state = BuildState(frame)
     StoreActiveStateIdentity(frame, state)
+    if not (state and state.active and state.spellName) and CastbarAlreadyIdle(frame) then return end
     frame:Cast(state)
 end
 

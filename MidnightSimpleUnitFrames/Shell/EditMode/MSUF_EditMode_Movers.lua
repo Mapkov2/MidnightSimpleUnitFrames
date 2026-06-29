@@ -847,6 +847,10 @@ local function MSUF_SyncAllUnitPreviews()
     PreviewProfileStop("ForcePreviewFrames", frameStarted)
 
     --- 3) Castbars
+    local beginBossBatch = _G.MSUF_BeginBossCastbarPreviewBatch
+    local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
+    local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
+    if batchingBossPreview then beginBossBatch() end
     if _G.MSUF_SyncCastbarEditModeWithUnitEdit then
         local started = PreviewProfileStart()
         _G.MSUF_SyncCastbarEditModeWithUnitEdit()
@@ -857,6 +861,7 @@ local function MSUF_SyncAllUnitPreviews()
         local f = _G[fn]; if type(f) == "function" then f(want, true) end
     end
     PreviewProfileStop("CastbarTestModes", castbarStarted)
+    if batchingBossPreview then endBossBatch() end
 
     --- 4) Aura refresh
     local a3 = MSUF and MSUF.MSUF_Auras3

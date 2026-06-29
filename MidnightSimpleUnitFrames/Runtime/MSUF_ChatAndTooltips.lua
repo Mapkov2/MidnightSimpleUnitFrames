@@ -535,8 +535,17 @@ local function MSUF_ClearTrackedGameTooltip(owner, force)
     local gt = _G.GameTooltip
     if not gt or gt:IsForbidden() then return end
     if (not force) and gt._msufUnitTooltipOwner and gt._msufUnitTooltipOwner ~= owner then return end
+    if (not force)
+        and gt._msufUnitTooltipOwner == nil
+        and gt._msufUnitTooltipUnit == nil
+        and gt.IsShown
+        and not gt:IsShown() then
+        return
+    end
     gt._msufUnitTooltipOwner = nil
     gt._msufUnitTooltipUnit = nil
+    gt._msufUnitTooltipAnchor = nil
+    if gt.IsShown and not gt:IsShown() then return end
     gt:Hide()
 end
 
@@ -746,6 +755,9 @@ local function HidePlayerInfoTooltip()
             end
             return
         end
+        if MSUF_PlayerInfoFrame.IsShown and not MSUF_PlayerInfoFrame:IsShown() then
+            return
+        end
         MSUF_PlayerInfoFrame:Hide()
     end
  end
@@ -794,15 +806,13 @@ Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
         return true
     end
 
-    HidePlayerInfoTooltip()
-    local gt = MSUF_AnchorGameTooltip(owner, g, anchor)
-    if not gt or type(gt.SetUnit) ~= "function" then return false end
     -- Dedupe: re-hovering the same frame/unit (mouse jitter, or OnEnter
-    -- re-firing) must not rebuild the tooltip. SetUnit is the ~0.3ms cost; if
-    -- it is already showing this owner+unit, leave it. Guarded on the tooltip
-    -- still being visible so a hidden tooltip always rebuilds.
-    if gt._msufUnitTooltipOwner == owner
+    -- re-firing) must not rebuild or re-anchor the tooltip.
+    local gt = _G.GameTooltip
+    if gt
+        and gt._msufUnitTooltipOwner == owner
         and gt._msufUnitTooltipUnit == unit
+        and gt._msufUnitTooltipAnchor == anchor
         and gt.IsShown and gt:IsShown()
         and gt.GetUnit then
         local _, shownUnit = gt:GetUnit()
@@ -810,14 +820,23 @@ Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
             return true
         end
     end
+    HidePlayerInfoTooltip()
+    gt = MSUF_AnchorGameTooltip(owner, g, anchor)
+    if not gt or type(gt.SetUnit) ~= "function" then return false end
     gt._msufUnitTooltipOwner = owner
     gt._msufUnitTooltipUnit = unit
+    gt._msufUnitTooltipAnchor = anchor
     gt:SetUnit(unit)
     gt:Show()
     return true
 end
 Tooltips.HideUnit = Tooltips.HideUnit or function(owner)
-    HidePlayerInfoTooltip()
+    if MSUF_PlayerInfoFrame
+        and (MSUF_PlayerInfoFrame._msufEditPreviewActive == true
+            or not MSUF_PlayerInfoFrame.IsShown
+            or MSUF_PlayerInfoFrame:IsShown()) then
+        HidePlayerInfoTooltip()
+    end
     MSUF_ClearTrackedGameTooltip(owner)
 end
 --- [8c6] Removed legacy Options UI relayout functions (Player/Bars).

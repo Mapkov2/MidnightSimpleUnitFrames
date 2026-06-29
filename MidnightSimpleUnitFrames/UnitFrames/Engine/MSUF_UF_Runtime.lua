@@ -26,6 +26,15 @@ local math_floor = math.floor
 local math_min = math.min
 local UnitExists = UnitExists
 local UnitGUID = UnitGUID
+local UnitHealth = UnitHealth
+local UnitHealthMax = UnitHealthMax
+local UnitPower = UnitPower
+local UnitPowerMax = UnitPowerMax
+local UnitPowerType = UnitPowerType
+local UnitName = UnitName
+local UnitIsConnected = UnitIsConnected
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local UnitAffectingCombat = UnitAffectingCombat
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local EMPTY_METADATA_SET = {}
@@ -734,6 +743,61 @@ local function UnitExistsPlain(unit)
   return exists == true or exists == 1
 end
 
+local function PlainUnitValue(fn, unit)
+  if not fn then
+    return nil, false
+  end
+  local value = fn(unit)
+  if issecretvalue(value) == true then
+    return nil, true
+  end
+  return value, false
+end
+
+local function DependentUnitPollStateChanged(frame, unit)
+  local guid = frame._msufIdentityGUID
+  if guid == false then
+    return true
+  end
+
+  local hp, hpSecret = PlainUnitValue(UnitHealth, unit)
+  local maxHP, maxSecret = PlainUnitValue(UnitHealthMax, unit)
+  local power, powerSecret = PlainUnitValue(UnitPower, unit)
+  local maxPower, maxPowerSecret = PlainUnitValue(UnitPowerMax, unit)
+  local powerType, powerTypeSecret = PlainUnitValue(UnitPowerType, unit)
+  local name, nameSecret = PlainUnitValue(UnitName, unit)
+  local connected, connectedSecret = PlainUnitValue(UnitIsConnected, unit)
+  local dead, deadSecret = PlainUnitValue(UnitIsDeadOrGhost, unit)
+  local combat, combatSecret = PlainUnitValue(UnitAffectingCombat, unit)
+  if hpSecret or maxSecret or powerSecret or maxPowerSecret or powerTypeSecret
+    or nameSecret or connectedSecret or deadSecret or combatSecret then
+    return true
+  end
+
+  local changed = frame._msufDependentPollGUID ~= guid
+    or frame._msufDependentPollHP ~= hp
+    or frame._msufDependentPollMaxHP ~= maxHP
+    or frame._msufDependentPollPower ~= power
+    or frame._msufDependentPollMaxPower ~= maxPower
+    or frame._msufDependentPollPowerType ~= powerType
+    or frame._msufDependentPollName ~= name
+    or frame._msufDependentPollConnected ~= connected
+    or frame._msufDependentPollDead ~= dead
+    or frame._msufDependentPollCombat ~= combat
+
+  frame._msufDependentPollGUID = guid
+  frame._msufDependentPollHP = hp
+  frame._msufDependentPollMaxHP = maxHP
+  frame._msufDependentPollPower = power
+  frame._msufDependentPollMaxPower = maxPower
+  frame._msufDependentPollPowerType = powerType
+  frame._msufDependentPollName = name
+  frame._msufDependentPollConnected = connected
+  frame._msufDependentPollDead = dead
+  frame._msufDependentPollCombat = combat
+  return changed
+end
+
 local function DependentUnitPollFrame(unit)
   local frame = RuntimeFrame(unit)
   if not frame then
@@ -780,10 +844,21 @@ local function RunDependentUnitTicker()
       active = true
       if frame:IsShown() then
         visible = true
-        if DependentIdentityGuidChanged(frame, unit) or fullTick then
+        local guidChanged = DependentIdentityGuidChanged(frame, unit)
+        local stateChanged = DependentUnitPollStateChanged(frame, unit) or guidChanged
+        if guidChanged or stateChanged and fullTick then
           RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_SOFT")
-        else
+        elseif stateChanged then
           RunRuntimeFrame(frame, DEPENDENT_UNIT_TICK_REASON)
+        elseif fullTick then
+          if frame._msufUpdateAuras then
+            frame._msufA3DeferAuraVisualNotify = true
+            RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_SOFT_AURAS")
+            frame._msufA3DeferAuraVisualNotify = nil
+          end
+          if frame._msufRuntimeSoftVisualCount then
+            RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_SOFT_VISUAL")
+          end
         end
       end
     end

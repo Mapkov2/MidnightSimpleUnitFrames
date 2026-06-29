@@ -324,16 +324,16 @@ function A._ParsePipelineFallback(normalized, raw, ctx)
         or ParseSetting(normalized, ctx)
 end
 
-local function BuildContext(ctxOverride)
+local function ParserContext(ctxOverride)
     if type(ctxOverride) == "table" then return ctxOverride end
     return A.GetContext and A.GetContext() or {}
 end
-A.ParserContext = BuildContext
+A.ParserContext = ParserContext
 
 function A.ParseSimpleChange(text, ctxOverride)
     local raw = Trim(text)
     local normalized = Normalize(raw)
-    local ctx = BuildContext(ctxOverride)
+    local ctx = ParserContext(ctxOverride)
     if normalized == "" then return nil end
     local parsed = EarlyAuraShortcut(normalized)
         or (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
@@ -356,7 +356,7 @@ end
 function A.Parse(text, ctxOverride)
     local raw = Trim(text)
     local normalized = Normalize(raw)
-    local ctx = BuildContext(ctxOverride)
+    local ctx = ParserContext(ctxOverride)
     if normalized == "" then return { kind = "empty" } end
     local earlyAuraParsed = EarlyAuraShortcut(normalized)
     if earlyAuraParsed then

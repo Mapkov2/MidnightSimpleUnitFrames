@@ -113,6 +113,11 @@ local EnsurePersistentMenuState = M.EnsurePersistentMenuState
 local SavePersistentMenuState = M.SavePersistentMenuState
 local SyncBossPagePreviewForKey = M.SyncBossPagePreviewForKey
 local SyncGroupPagePreviewForKey = M.SyncGFPagePreviewForKey
+local function RequestGroupPagePreviewForKey(key, force)
+    local request = M.RequestGFPagePreviewForKey
+    if type(request) == "function" then return request(key, force) end
+    if type(SyncGroupPagePreviewForKey) == "function" then return SyncGroupPagePreviewForKey(key, force) end
+end
 local ResetBossPagePreviewCache = M.ResetBossPagePreviewCache
 local ResetStatusIndicatorTestModeOnMenuExit = M.ResetStatusIndicatorTestModeOnMenuExit
 local SearchBridge = M.SearchBridge or {}
@@ -729,8 +734,9 @@ function M.SelectPage(key)
         M.CallIf(M.ReleaseGFNativePreviews, "SELECT_CACHED", key)
         RunRefreshers(cached)
         SyncBossPagePreviewForKey(key)
-        SyncGroupPagePreviewForKey(key)
+        RequestGroupPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+        M.CallIf(M.PostponeAssistantPerformanceWarmup, "select-page")
         return true
     end
     local previousKey = M.activeKey
@@ -762,8 +768,9 @@ function M.SelectPage(key)
     SetTitle(key)
     UpdateNav(key)
     SyncBossPagePreviewForKey(key)
-    SyncGroupPagePreviewForKey(key)
+    RequestGroupPagePreviewForKey(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+    M.CallIf(M.PostponeAssistantPerformanceWarmup, "select-page")
     return true
 end
 local function CreateMinimizedBar(frame)
@@ -1181,12 +1188,80 @@ local function BuildWindow()
         local method = registered and status.RegisterEvent or status.UnregisterEvent
         for i = 1, #STATUS_EVENTS do method(status, STATUS_EVENTS[i]) end
     end
+    local assistantWarmupSerial = 0
+    local assistantWarmupTimer
+    local ASSISTANT_WARMUP_IDLE_DELAY = 2.5
+    local function AssistantAPI()
+        return (MSUF and MSUF.Assistant) or M.Assistant
+    end
+    local function CancelAssistantWarmupTimer()
+        if assistantWarmupTimer and type(assistantWarmupTimer.Cancel) == "function" then
+            assistantWarmupTimer:Cancel()
+        end
+        assistantWarmupTimer = nil
+    end
+    local function CancelAssistantPerformanceWarmup(reason)
+        CancelAssistantWarmupTimer()
+        local assistant = AssistantAPI()
+        if assistant and type(assistant.CancelPerformanceWarmup) == "function" then
+            assistant.CancelPerformanceWarmup(reason)
+        end
+    end
+    local function AssistantWarmupBlocked()
+        return (_G.InCombatLockdown and _G.InCombatLockdown())
+            or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+            or not (f and f.IsShown and f:IsShown())
+    end
+    local function RequestAssistantPerformanceWarmup(serial)
+        if serial ~= assistantWarmupSerial then return end
+        if AssistantWarmupBlocked() then return end
+        local assistant = AssistantAPI()
+        if assistant and type(assistant.WarmupPerformanceIndexes) == "function" then
+            assistant.WarmupPerformanceIndexes("menu-open")
+        end
+    end
+    local function QueueAssistantPerformanceWarmup(reason, delay)
+        local assistant = AssistantAPI()
+        if assistant and assistant._performanceWarmupCompleted == true then
+            CancelAssistantWarmupTimer()
+            return true
+        end
+        assistantWarmupSerial = assistantWarmupSerial + 1
+        local warmupSerial = assistantWarmupSerial
+        CancelAssistantPerformanceWarmup(reason or "menu-activity")
+        if AssistantWarmupBlocked() then return false end
+        delay = tonumber(delay) or ASSISTANT_WARMUP_IDLE_DELAY
+        if delay < 0 then delay = 0 end
+        if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
+            assistantWarmupTimer = _G.C_Timer.NewTimer(delay, function()
+                assistantWarmupTimer = nil
+                RequestAssistantPerformanceWarmup(warmupSerial)
+            end)
+        elseif _G.C_Timer and type(_G.C_Timer.After) == "function" then
+            _G.C_Timer.After(delay, function()
+                RequestAssistantPerformanceWarmup(warmupSerial)
+            end)
+        else
+            RequestAssistantPerformanceWarmup(warmupSerial)
+        end
+        return true
+    end
+    function M.PostponeAssistantPerformanceWarmup(reason)
+        if not (f and f.IsShown and f:IsShown()) then
+            assistantWarmupSerial = assistantWarmupSerial + 1
+            CancelAssistantPerformanceWarmup(reason or "menu-hide")
+            return false
+        end
+        return QueueAssistantPerformanceWarmup(reason or "menu-activity", ASSISTANT_WARMUP_IDLE_DELAY)
+    end
     status:SetScript("OnEvent", function(_, event)
         if not (f and f:IsShown()) then
             SetStatusEventsRegistered(false)
             return
         end
         if event == "PLAYER_REGEN_DISABLED" then
+            assistantWarmupSerial = assistantWarmupSerial + 1
+            CancelAssistantPerformanceWarmup("combat")
             CancelSearchBackgroundIndex()
             M.CallIf(M.BlockCombatAction)
             HideSlashMenuAndMinibar(f)
@@ -1215,10 +1290,13 @@ local function BuildWindow()
         SyncBossPagePreviewForKey(M.activeKey)
         SyncGroupPagePreviewForKey(M.activeKey)
         M.CallIf(M.UpdateMenuCombatListener)
+        M.PostponeAssistantPerformanceWarmup("menu-open")
     end)
     f:SetScript("OnHide", function()
+        assistantWarmupSerial = assistantWarmupSerial + 1
         if f._msuf2FinishWindowDrag then f:_msuf2FinishWindowDrag(false) end
         if FinishResizeProxy then FinishResizeProxy(false) end
+        CancelAssistantPerformanceWarmup("menu-hide")
         CancelSearchBackgroundIndex()
         SetStatusEventsRegistered(false)
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
@@ -1229,7 +1307,7 @@ local function BuildWindow()
         M.CallIf(M.ReleasePinnedPreviews, "WINDOW_HIDE", nil)
         M.CallIf(M.ReleaseGFNativePreviews, "WINDOW_HIDE", nil)
         SyncBossPagePreviewForKey(nil)
-        SyncGroupPagePreviewForKey(nil)
+        RequestGroupPagePreviewForKey(nil)
         M.CallIf(M.UpdateMenuCombatListener)
     end)
     local scroll = CreateFrame("ScrollFrame", nil, host)

@@ -421,9 +421,17 @@ local owner = self:GetFrameRef("MSUFPingBindingOwner") or self
 owner:ClearBindings()
 ]]
 local SECURE_PING_ONHIDE = SECURE_PING_ONLEAVE
+local pingBindingCache = {}
+local pingBindingCacheValid = false
+local pingBindingCacheVersion = 0
 local pendingPingFrames = setmetatable({}, { __mode = "k" })
 local pingEventFrame
 local securePingInitialConfig
+
+local function InvalidatePingBindingCache()
+  pingBindingCacheValid = false
+  pingBindingCacheVersion = pingBindingCacheVersion + 1
+end
 
 function UF.GetSecureUnitButtonTemplate()
   return PING_COMPAT_UNIT_BUTTON_TEMPLATE
@@ -450,6 +458,7 @@ local function EnsurePingEventFrame()
     end
 
     if event == "UPDATE_BINDINGS" then
+      InvalidatePingBindingCache()
       if UF.RefreshPingCompatibility then
         UF.RefreshPingCompatibility()
       end
@@ -516,21 +525,55 @@ local function PingBindingKey(command, index)
   return select(index, GetBindingKey(command))
 end
 
+local function RefreshPingBindingCache()
+  if pingBindingCacheValid then
+    return pingBindingCache, pingBindingCacheVersion
+  end
+
+  local n = 0
+  for i = 1, #SECURE_PING_BINDINGS do
+    local info = SECURE_PING_BINDINGS[i]
+    for keyIndex = 1, MAX_PING_BINDING_KEYS do
+      n = n + 1
+      local slot = pingBindingCache[n]
+      if not slot then
+        slot = {}
+        pingBindingCache[n] = slot
+      end
+      slot.attribute = info.attrPrefix .. "-" .. keyIndex
+      slot.key = PingBindingKey(info.command, keyIndex)
+    end
+  end
+  for i = n + 1, #pingBindingCache do
+    pingBindingCache[i] = nil
+  end
+
+  pingBindingCacheValid = true
+  return pingBindingCache, pingBindingCacheVersion
+end
+
 function UF.ForEachPingBindingAttribute(callback)
   if type(callback) ~= "function" then
     return
   end
-  for _, info in ipairs(SECURE_PING_BINDINGS) do
-    for keyIndex = 1, MAX_PING_BINDING_KEYS do
-      callback(info.attrPrefix .. "-" .. keyIndex, PingBindingKey(info.command, keyIndex))
-    end
+  local bindings = RefreshPingBindingCache()
+  for i = 1, #bindings do
+    local slot = bindings[i]
+    callback(slot.attribute, slot.key)
   end
 end
 
-local function ApplyPingBindingKeys(frame)
-  UF.ForEachPingBindingAttribute(function(attribute, key)
-    frame:SetAttribute(attribute, key)
-  end)
+local function ApplyPingBindingKeys(frame, force)
+  local bindings, version = RefreshPingBindingCache()
+  if force ~= true and frame._msufPingBindingVersion == version then
+    return false
+  end
+  for i = 1, #bindings do
+    local slot = bindings[i]
+    frame:SetAttribute(slot.attribute, slot.key)
+  end
+  frame._msufPingBindingVersion = version
+  return true
 end
 
 local function EnsurePingBindingOwner(frame)
@@ -558,12 +601,21 @@ local function ApplySecurePingCompatibility(frame)
   if not (frame and frame.SetAttribute) then
     return false
   end
-  if frame._msufGFIsPreviewFrame or frame._msufGFPreviewActive or not ResolvePingUnit(frame) then
+  local unit = ResolvePingUnit(frame)
+  if frame._msufGFIsPreviewFrame or frame._msufGFPreviewActive or not unit then
     return false
   end
   if InCombat() then
     QueuePingRefresh(frame)
     return false
+  end
+
+  local _, bindingVersion = RefreshPingBindingCache()
+  if frame._msufPingCompatInstalled == true
+    and frame._msufPingCompatConfigured == true
+    and frame._msufPingCompatUnit == unit
+    and frame._msufPingBindingVersion == bindingVersion then
+    return true
   end
 
   ClearAddonPingMethods(frame)
@@ -574,10 +626,12 @@ local function ApplySecurePingCompatibility(frame)
     frame:SetAttribute("type-" .. info.button, "macro")
     frame:SetAttribute("macrotext-" .. info.button, info.macro)
   end
-  ApplyPingBindingKeys(frame)
+  ApplyPingBindingKeys(frame, true)
   frame:SetAttribute("_onenter", SECURE_PING_ONENTER)
   frame:SetAttribute("_onleave", SECURE_PING_ONLEAVE)
   frame:SetAttribute("_onhide", SECURE_PING_ONHIDE)
+  frame._msufPingCompatConfigured = true
+  frame._msufPingCompatUnit = unit
   return true
 end
 
@@ -611,6 +665,9 @@ function UF.DisablePingCompatibility(frame)
   ClearAddonPingMethods(frame)
   ClearLegacyPingReceiver(frame)
   frame._msufPingCompatInstalled = nil
+  frame._msufPingCompatConfigured = nil
+  frame._msufPingCompatUnit = nil
+  frame._msufPingBindingVersion = nil
   return true
 end
 
@@ -621,7 +678,18 @@ function UF.InstallPingCompatibility(frame)
   if IsForbidden and IsForbidden(frame) then
     return false
   end
+  local unit = ResolvePingUnit(frame)
+  if frame._msufGFIsPreviewFrame or frame._msufGFPreviewActive or not unit then
+    return false
+  end
   if InCombat() then
+    if frame._msufPingCompatInstalled == true
+      and frame._msufPingCompatConfigured == true
+      and frame._msufPingCompatUnit == unit
+      and pingBindingCacheValid == true
+      and frame._msufPingBindingVersion == pingBindingCacheVersion then
+      return true
+    end
     QueuePingRefresh(frame)
     return frame._msufPingCompatInstalled == true
   end
@@ -826,12 +894,21 @@ function UF.EnsureNativePingIcon(frame)
 end
 
 function UF.RefreshNativePingIcon(frame)
-  local ping = UF.EnsureNativePingIcon(frame)
+  if not frame then return false end
+  local unit = UF.ResolvePingUnit and UF.ResolvePingUnit(frame) or frame and frame.unit
+  local guid = unit and UnitGUID(unit) or nil
+  local ping = frame.pingIconFrame or frame.PingIconFrame
+  if ping and ping._msufNativePingIconConfigured == true and frame._msufNativePingGUID == guid then
+    return true
+  end
+  if guid == nil and not ping then
+    frame._msufNativePingGUID = nil
+    return false
+  end
+  ping = UF.EnsureNativePingIcon(frame)
   if not ping then
     return false
   end
-  local unit = UF.ResolvePingUnit and UF.ResolvePingUnit(frame) or frame and frame.unit
-  local guid = unit and UnitGUID(unit) or nil
   if frame._msufNativePingGUID == guid then
     return true
   end

@@ -1,0 +1,93 @@
+name: MSUF Perfy
+run-name: Build Perfy package from ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      perfy_ref:
+        description: Perfy git ref to download as zip
+        required: true
+        default: main
+        type: string
+      lua_language_server_version:
+        description: LuaLS release version, or latest
+        required: true
+        default: latest
+        type: string
+      instrument_all_lua:
+        description: Instrument every staged MSUF Lua file, not only TOC/XML reachable files
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install lua-language-server
+        shell: pwsh
+        run: |
+          $requested = "${{ inputs.lua_language_server_version }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($requested)) {
+            throw "lua_language_server_version cannot be empty."
+          }
+
+          $headers = @{ "User-Agent" = "MSUF-Perfy-Workflow" }
+          if ($requested -eq "latest") {
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/LuaLS/lua-language-server/releases/latest" -Headers $headers
+          } else {
+            $tag = $requested -replace '^v', ''
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/LuaLS/lua-language-server/releases/tags/$tag" -Headers $headers
+          }
+
+          $assetName = "lua-language-server-$($release.tag_name)-linux-x64.tar.gz"
+          $asset = $release.assets | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
+          if (-not $asset) {
+            throw "Could not find LuaLS asset '$assetName' in release '$($release.tag_name)'."
+          }
+
+          $deps = Join-Path $PWD ".perfy-deps"
+          $archive = Join-Path $deps $assetName
+          $extract = Join-Path $deps "lua-language-server"
+          New-Item -ItemType Directory -Force -Path $deps | Out-Null
+
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $archive -Headers $headers
+          if (Test-Path -LiteralPath $extract) {
+            Remove-Item -LiteralPath $extract -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path $extract | Out-Null
+          tar -xzf $archive -C $extract
+
+          $lls = Join-Path $extract "bin/lua-language-server"
+          if (-not (Test-Path -LiteralPath $lls)) {
+            throw "lua-language-server binary was not found after extraction."
+          }
+          chmod +x $lls
+          "LUALS_BIN=$lls" >> $env:GITHUB_ENV
+          Write-Host "Installed $lls"
+
+      - name: Build Perfy package
+        id: perfy
+        shell: pwsh
+        run: |
+          $instrumentAllLua = [System.Convert]::ToBoolean("${{ inputs.instrument_all_lua }}")
+          & .github/scripts/Build-PerfyPackage.ps1 `
+            -PerfyRef "${{ inputs.perfy_ref }}" `
+            -LuaLanguageServer $env:LUALS_BIN `
+            -OutputDir "dist/perfy" `
+            -WorkDir "dist/perfy-work" `
+            -InstrumentAllLua:$instrumentAllLua
+
+      - name: Upload Perfy package
+        uses: actions/upload-artifact@v4
+        with:
+          name: MSUF-Perfy-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            dist/perfy/*.zip
+            dist/perfy/*.txt
