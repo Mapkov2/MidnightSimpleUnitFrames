@@ -24,6 +24,16 @@ on:
         description: Display name for GitHub, Wago, and CurseForge
         required: false
         type: string
+      publish_target:
+        description: Publish destination
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - github
+          - wago
+          - curseforge
 
 permissions:
   contents: write
@@ -36,11 +46,48 @@ jobs:
       RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
       RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease || inputs.prerelease }}
       RELEASE_NAME_INPUT: ${{ github.event.release.name || inputs.release_name }}
+      RELEASE_PUBLISH_TARGET_INPUT: ${{ inputs.publish_target }}
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
           fetch-depth: 0
+
+      - name: Resolve publish target
+        id: publish
+        shell: pwsh
+        run: |
+          $target = $env:RELEASE_PUBLISH_TARGET_INPUT
+          $tag = $env:RELEASE_VERSION
+          $tagContents = git for-each-ref "refs/tags/$tag" --format='%(contents)' 2>$null
+          if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($tagContents)) {
+            $match = [regex]::Match($tagContents, '(?im)^\s*publish-target\s*:\s*(all|github|wago|curseforge)\s*$')
+            if ($match.Success) {
+              $target = $match.Groups[1].Value
+            }
+          }
+
+          if ([string]::IsNullOrWhiteSpace($target)) {
+            $target = "all"
+          }
+          $target = $target.Trim().ToLowerInvariant()
+          if ($target -notin @("all", "github", "wago", "curseforge")) {
+            throw "Invalid publish target '$target'. Use all, github, wago, or curseforge."
+          }
+
+          $publishToGitHub = $target -eq "all" -or $target -eq "github"
+          $publishToWago = $target -eq "all" -or $target -eq "wago"
+          $publishToCurseForge = $target -eq "all" -or $target -eq "curseforge"
+
+          "PUBLISH_TARGET=$target" >> $env:GITHUB_ENV
+          "PUBLISH_TO_GITHUB=$($publishToGitHub.ToString().ToLowerInvariant())" >> $env:GITHUB_ENV
+          "PUBLISH_TO_WAGO=$($publishToWago.ToString().ToLowerInvariant())" >> $env:GITHUB_ENV
+          "PUBLISH_TO_CURSEFORGE=$($publishToCurseForge.ToString().ToLowerInvariant())" >> $env:GITHUB_ENV
+          "target=$target" >> $env:GITHUB_OUTPUT
+          "publish_to_github=$($publishToGitHub.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "publish_to_wago=$($publishToWago.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "publish_to_curseforge=$($publishToCurseForge.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          Write-Host "Publish target: $target. GitHub=$publishToGitHub Wago=$publishToWago CurseForge=$publishToCurseForge."
 
       - name: Validate publishing config
         shell: pwsh
@@ -54,10 +101,10 @@ jobs:
           }
 
           $missing = @()
-          if ([string]::IsNullOrWhiteSpace($env:WAGO_API_TOKEN)) {
+          if ($env:PUBLISH_TO_WAGO -eq "true" -and [string]::IsNullOrWhiteSpace($env:WAGO_API_TOKEN)) {
             $missing += "secret WAGO_API_TOKEN"
           }
-          if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
+          if ($env:PUBLISH_TO_CURSEFORGE -eq "true" -and [string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
             $missing += "secret CF_API_KEY"
           }
           if ($missing.Count -gt 0) {
@@ -421,6 +468,7 @@ jobs:
           [System.IO.File]::WriteAllText("dist/RELEASE_NOTES_CF.html", (($script:HtmlLines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
 
       - name: Upload to GitHub Release
+        if: steps.publish.outputs.publish_to_github == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
@@ -433,6 +481,7 @@ jobs:
           make_latest: ${{ steps.channel.outputs.github_make_latest }}
 
       - name: Upload to Wago
+        if: steps.publish.outputs.publish_to_wago == 'true'
         shell: pwsh
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
@@ -533,6 +582,7 @@ jobs:
           Write-Host "Uploaded $($zip.FullName) to Wago project $projectId as $env:RELEASE_NAME / $env:RELEASE_VERSION ($env:WAGO_STABILITY, retail $retailPatch)."
 
       - name: Upload to CurseForge
+        if: steps.publish.outputs.publish_to_curseforge == 'true'
         uses: BigWigsMods/packager@v2
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
