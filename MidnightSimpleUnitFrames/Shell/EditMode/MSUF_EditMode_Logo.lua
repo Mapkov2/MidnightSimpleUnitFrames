@@ -1,4 +1,4 @@
---- EditMode/MSUF_EditMode_Logo.lua - MSUF logo intro with one ring draw.
+--- EditMode/MSUF_EditMode_Logo.lua - MSUF logo wake intro with one ring draw.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
@@ -20,7 +20,7 @@ local W8 = "Interface\\Buttons\\WHITE8X8"
 local sin, cos, pi = math.sin, math.cos, math.pi
 local min, max = math.min, math.max
 
-local frame, overlay, logoHost, logo, ringHost, headLine, headGlow
+local frame, overlay, logoHost, logo, logoGlow, ringHost, headLine, headGlow
 local ringSegments = {}
 local playing = false
 local elapsed = 0
@@ -31,7 +31,9 @@ local RING_SEGMENTS = 88
 local RING_SEGMENT_W = 6.4
 local RING_SEGMENT_H = 2.0
 local FADE_IN_DUR = 0.38
-local RING_START = 0.46
+local WAKE_START = 0.28
+local WAKE_DUR = 0.84
+local RING_START = 0.42
 local RING_DUR = 1.62
 local HOLD_DUR = 0.34
 local FADE_OUT_DUR = 0.46
@@ -48,6 +50,12 @@ end
 
 local function EaseInOutSine(t)
     return 0.5 - 0.5 * cos(Clamp01(t) * pi)
+end
+
+local function Pulse(startTime, duration)
+    local t = Clamp01((elapsed - startTime) / duration)
+    if t <= 0 or t >= 1 then return 0 end
+    return sin(t * pi)
 end
 
 local function HideNow()
@@ -72,6 +80,14 @@ local function ResetVisuals()
     overlay:SetAlpha(0)
     logoHost:SetAlpha(0)
     logoHost:SetScale(0.992)
+    if logo then
+        logo:SetAlpha(1)
+        logo:SetVertexColor(1, 1, 1, 1)
+    end
+    if logoGlow then
+        logoGlow:SetAlpha(0)
+        logoGlow:SetScale(1)
+    end
     for i = 1, #ringSegments do
         SetSegmentAlpha(i, 0)
     end
@@ -112,6 +128,17 @@ local function EnsureIntroFrame()
         logo:SetTexelSnappingBias(0)
     end
 
+    logoGlow = logoHost:CreateTexture(nil, "ARTWORK", nil, 1)
+    logoGlow:SetTexture(LOGO_TEXTURE)
+    logoGlow:SetAllPoints(logoHost)
+    logoGlow:SetBlendMode("ADD")
+    logoGlow:SetVertexColor(0.22, 0.78, 1.00, 1)
+    logoGlow:SetAlpha(0)
+    if logoGlow.SetSnapToPixelGrid then
+        logoGlow:SetSnapToPixelGrid(false)
+        logoGlow:SetTexelSnappingBias(0)
+    end
+
     ringHost = CreateFrame("Frame", nil, logoHost)
     ringHost:SetAllPoints(logoHost)
     ringHost:EnableMouse(false)
@@ -141,14 +168,14 @@ local function EnsureIntroFrame()
 
     headGlow = ringHost:CreateTexture(nil, "OVERLAY", nil, 2)
     headGlow:SetTexture(W8)
-    headGlow:SetSize(15, 5)
+    headGlow:SetSize(16, 5)
     headGlow:SetColorTexture(0.28, 0.76, 1.00, 1)
     headGlow:SetBlendMode("ADD")
     headGlow:SetAlpha(0)
 
     headLine = ringHost:CreateTexture(nil, "OVERLAY", nil, 3)
     headLine:SetTexture(W8)
-    headLine:SetSize(10, 3)
+    headLine:SetSize(11, 3)
     headLine:SetColorTexture(0.90, 0.98, 1.00, 1)
     headLine:SetBlendMode("ADD")
     headLine:SetAlpha(0)
@@ -168,8 +195,8 @@ local function PlaceRingHead(progress, fade)
     headLine:SetPoint("CENTER", logoHost, "CENTER", x, y)
     if headGlow.SetRotation then headGlow:SetRotation(angle - pi * 0.5) end
     if headLine.SetRotation then headLine:SetRotation(angle - pi * 0.5) end
-    headGlow:SetAlpha(0.34 * fade)
-    headLine:SetAlpha(0.92 * fade)
+    headGlow:SetAlpha(0.42 * fade)
+    headLine:SetAlpha(0.86 * fade)
 end
 
 local function UpdateRing(progress, fade)
@@ -193,14 +220,14 @@ local function UpdateRing(progress, fade)
         local idx = i - 1
         local alpha = 0
         if closed then
-            alpha = 0.40 + 0.16 * finishPulse
+            alpha = 0.34 + 0.14 * finishPulse
         elseif idx <= head then
             local distance = head - idx
-            alpha = 0.22
+            alpha = 0.18
             if distance <= 9 then
-                alpha = alpha + (1 - distance / 9) * 0.56
+                alpha = alpha + (1 - distance / 9) * 0.58
             elseif distance <= 18 then
-                alpha = alpha + (1 - (distance - 9) / 9) * 0.14
+                alpha = alpha + (1 - (distance - 9) / 9) * 0.12
             end
         end
         SetSegmentAlpha(i, alpha * fade)
@@ -228,7 +255,19 @@ local function OnUpdate(self, dt)
     self:SetAlpha(alpha)
     overlay:SetAlpha(alpha)
     logoHost:SetAlpha(alpha)
-    logoHost:SetScale(0.992 + 0.008 * fadeIn)
+    logoHost:SetScale(0.990 + 0.010 * fadeIn)
+
+    local wake = Pulse(WAKE_START, WAKE_DUR)
+    if logoGlow then
+        logoGlow:SetAlpha(0.34 * wake * alpha)
+        logoGlow:SetScale(1.000 + 0.018 * wake)
+    end
+    if logo then
+        local base = 0.82 + 0.18 * fadeIn
+        local boost = 0.08 * wake
+        local c = min(1, base + boost)
+        logo:SetVertexColor(c, c, 1, 1)
+    end
 
     local ringProgress = Clamp01((elapsed - RING_START) / RING_DUR)
     UpdateRing(ringProgress, alpha)

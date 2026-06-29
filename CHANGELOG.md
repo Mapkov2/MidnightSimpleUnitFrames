@@ -1,5 +1,26 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-alpha7 - 2026-06-30
+
+### Highlights
+- Added the MSUF Edit Mode Logo Wake intro using the high-resolution MSUF logo asset.
+- Added a CurseForge-only release path so Alpha 7 can be published without also uploading to Wago.
+
+### Edit Mode
+- Updated the logo intro so the logo fades in smoothly, gets a brief cyan wake glow, then lets the ring trace run once and close.
+- Kept the intro animation scoped to the Edit Mode opening sequence; its `OnUpdate` is removed again when the intro stops.
+
+### Release And Notes
+- Release name: MSUF_6.0A7.
+- Bumped VERSION and addon metadata to 6.0-alpha7.
+- This tag is intentionally an alpha build; use `6.0-alpha7` as the publish tag.
+- Alpha 7 is intended for CurseForge-only publishing.
+
+### Alpha Testing Notes
+- This is an alpha build for the 6.0 branch. Export important profiles before testing.
+- Please test opening and leaving Edit Mode repeatedly and verify the logo intro does not continue running after Edit Mode closes.
+- Please test opening Edit Mode shortly before/after combat to confirm no combat overhead or lingering animation state.
+
 ## 6.0-alpha6 - 2026-06-29
 
 ### Highlights

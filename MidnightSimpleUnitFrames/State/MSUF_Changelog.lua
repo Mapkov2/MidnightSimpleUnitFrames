@@ -8,10 +8,47 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-alpha6",
-    previousVersion = "6.0-alpha5",
-    rangeLabel = "6.0-alpha5 -> 6.0-alpha6",
+    currentVersion = "6.0-alpha7",
+    previousVersion = "6.0-alpha6",
+    rangeLabel = "6.0-alpha6 -> 6.0-alpha7",
     entries = {
+        {
+            version = "6.0-alpha7",
+            date = "2026-06-30",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Added the MSUF Edit Mode Logo Wake intro using the high-resolution MSUF logo asset.",
+                        "Added a CurseForge-only release path so Alpha 7 can be published without also uploading to Wago.",
+                    },
+                },
+                {
+                    title = "Edit Mode",
+                    bullets = {
+                        "Updated the logo intro so the logo fades in smoothly, gets a brief cyan wake glow, then lets the ring trace run once and close.",
+                        "Kept the intro animation scoped to the Edit Mode opening sequence; its OnUpdate is removed again when the intro stops.",
+                    },
+                },
+                {
+                    title = "Release And Notes",
+                    bullets = {
+                        "Release name: MSUF_6.0A7.",
+                        "Bumped VERSION and addon metadata to 6.0-alpha7.",
+                        "This tag is intentionally an alpha build; use 6.0-alpha7 as the publish tag.",
+                        "Alpha 7 is intended for CurseForge-only publishing.",
+                    },
+                },
+                {
+                    title = "Alpha Testing Notes",
+                    bullets = {
+                        "This is an alpha build for the 6.0 branch. Export important profiles before testing.",
+                        "Please test opening and leaving Edit Mode repeatedly and verify the logo intro does not continue running after Edit Mode closes.",
+                        "Please test opening Edit Mode shortly before/after combat to confirm no combat overhead or lingering animation state.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-alpha6",
             date = "2026-06-29",
@@ -79,121 +116,6 @@ local data = {
                         "Please test Targeted Spells in 5-player party content with enemy nameplates enabled, especially casts that retarget or channel.",
                         "Please test importing older Alpha 2 through Alpha 5 profile strings, especially profiles with custom aura positions, fonts, textures, and group-frame text settings.",
                         "Please test NSRT nickname display with NSRT global nicknames enabled and disabled.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-alpha5",
-            date = "2026-06-28",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added reverse cooldown swipe options for aura icons, including defaults, profile export normalization, previews, and Assistant/menu registry coverage.",
-                        "Improved Aura Style and Aura Filters menu scope handling with clearer shared-vs-custom override controls for unit frames and group frames.",
-                        "Fixed castbar channel and empowered preview/runtime behavior after the Alpha 4 castbar pass.",
-                        "Fixed castbar previews so player/target/focus/boss preview refreshes and Blizzard player castbar suppression behave more reliably.",
-                    },
-                },
-                {
-                    title = "Aura Menu And Assistant",
-                    bullets = {
-                        "Added cooldown swipe direction controls for unit and group aura lanes.",
-                        "Updated shared aura previews to distinguish normal and reverse swipe samples instead of grouping them only by icon size.",
-                        "Added shared/custom override bars for aura style and filter pages so inherited settings are easier to see and reset.",
-                        "Expanded Assistant coverage for aura style/filter settings and group aura lane controls.",
-                    },
-                },
-                {
-                    title = "Castbars",
-                    bullets = {
-                        "Hardened castbar preview refreshes and removed fragile preview driver state.",
-                        "Fixed channel and empowered castbar preview updates, including stage blink handling and safer color/option lookups.",
-                        "Stopped writing addon-owned suppression fields onto Blizzard castbar frames; MSUF now suppresses Blizzard player castbar events directly when MSUF owns the player castbar.",
-                        "Removed unsafe SetOnUpdateMode calls from castbar runtime paths.",
-                    },
-                },
-                {
-                    title = "Release And Notes",
-                    bullets = {
-                        "Release name: MSUF_6.0A5.",
-                        "Bumped VERSION and addon metadata to 6.0-alpha5.",
-                        "Regenerated the in-game dashboard changelog data for Alpha 5.",
-                        "This tag is intentionally an alpha build; the release workflow maps alpha tags to Wago alpha stability, CurseForge alpha release type, and GitHub prerelease.",
-                    },
-                },
-                {
-                    title = "Alpha Testing Notes",
-                    bullets = {
-                        "This is an alpha build for the 6.0 branch. Export important profiles before testing.",
-                        "Please test aura cooldown swipe direction on player, target, focus, boss, party, and raid frames.",
-                        "Please test normal casts, channels, empowered casts, castbar previews, and switching between Blizzard and MSUF player castbar ownership.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-alpha4",
-            date = "2026-06-27",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Release name: MSUF_6.0A4.",
-                        "Aura style editing now separates shared layout inheritance from per-unit text style overrides, so individual frames can adjust aura text without cloning all aura layout data.",
-                        "Unit, group, and shared aura previews now show cooldown and stack text placement more accurately, including per-lane cooldown anchors.",
-                        "Assistant followups and aura registries now cover more natural language commands for aura lanes, unit aura settings, and text-area adjustments.",
-                        "Boss frame previews refresh more reliably outside encounters, including when reopening the unit-frame page.",
-                    },
-                },
-                {
-                    title = "Aura Style And Preview",
-                    bullets = {
-                        "Added cooldown text anchor support for shared, buff, and debuff aura lanes in the Auras3 model, edit-mode preview path, live unit-frame compiler, and Auras menu controls.",
-                        "Added sparse visual override normalization so inherited aura layout keys are not treated as per-unit style overrides unless the scope actually customizes text or style behavior.",
-                        "Rebuilt unit and group aura style controls into focused preview, text feature, stack-count, cooldown text, and behavior sections.",
-                        "Shared aura previews now group frame samples by actual configured icon size and label the affected frame group instead of showing one generic preview.",
-                        "Added scope-aware cooldown timer formatting so Shared, unit, and group aura styles can choose below how many remaining seconds decimal text is shown; live aura text still uses Blizzard's C-side DurationTextBinding/NumericRuleFormatter path.",
-                        "Group aura style controls now expose cooldown and stack text anchors, offsets, dynamic scaling, tooltip, sorting, and player-aura preference in collapsible sections.",
-                    },
-                },
-                {
-                    title = "Assistant And Menu",
-                    bullets = {
-                        "Improved followup parsing for bare exact-number edits such as \"set to 12\" and for applying the previous HP/name/power text adjustment to another text area.",
-                        "Expanded aura assistant registry coverage for cooldown text anchors, lane style values, use-shared-style behavior, and unit aura lane commands.",
-                        "Added larger change/reload guidance for assistant-driven changes that may need a UI reload.",
-                        "Refined assistant context handling from the previous local commit, including no-match resolution, geometry followups, edit-mode previews, and registry exact aliases.",
-                        "Updated the Boss frame preview copy and refresh logic so previewed boss frames are not left hidden after menu navigation.",
-                    },
-                },
-                {
-                    title = "Release And Notes",
-                    bullets = {
-                        "Bumped addon metadata from 6.0-alpha3 to 6.0-alpha4 and VERSION from 6.0-alpha2 to 6.0-alpha4.",
-                        "Regenerated the in-game changelog data from this changelog for the A4 package.",
-                        "Kept the existing release automation path compatible with alpha publishing by using the 6.0-alpha4 publish tag and MSUF_6.0A4 as the release name.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0 Alpha 3",
-            date = "2026-06-27",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added timer-based aura color work after Alpha 2.",
-                        "Improved assistant context, geometry followups, exact alias handling, edit-mode controls, and preview routing.",
-                        "Updated castbar, aura, and assistant release notes after the Alpha 3 packaging pass.",
-                    },
-                },
-                {
-                    title = "Notes",
-                    bullets = {
-                        "Alpha 3 was an interim alpha build on the 6.0 branch before the A4 aura style and assistant followup pass.",
                     },
                 },
             },
