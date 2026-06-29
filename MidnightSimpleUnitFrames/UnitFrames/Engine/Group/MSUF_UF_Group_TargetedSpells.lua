@@ -35,10 +35,12 @@ local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local UnitRace = UnitRace
 local UnitSex = UnitSex
 local UnitShouldDisplaySpellTargetName = UnitShouldDisplaySpellTargetName
+local ceil = math.ceil
 local floor = math.floor
 local max = math.max
 local pairs = pairs
 local pcall = pcall
+local string_format = string.format
 local tremove = table.remove
 local type = type
 local wipe = wipe or function(t)
@@ -91,6 +93,22 @@ local settings = {
   x = 0,
   y = 0,
   layer = 10,
+  textEnabled = true,
+  textSize = 10,
+  textDecimalBelow = 3,
+  textColorByTime = false,
+  textSafeSeconds = 60,
+  textWarningSeconds = 15,
+  textUrgentSeconds = 5,
+  textSafeR = 1,
+  textSafeG = 1,
+  textSafeB = 1,
+  textWarningR = 1,
+  textWarningG = 0.85,
+  textWarningB = 0.20,
+  textUrgentR = 1,
+  textUrgentG = 0.55,
+  textUrgentB = 0.10,
 }
 
 local eventFrame = CreateFrame("Frame")
@@ -104,6 +122,9 @@ local trackedCasters = {}
 local casterGeneration = {}
 local activeByCaster = {}
 local frameIcons = setmetatable({}, { __mode = "k" })
+local activeTextIcons = setmetatable({}, { __mode = "k" })
+local activeTextCount = 0
+local textTicker
 
 local rosterByClass = {}
 local rosterRole = {}
@@ -115,6 +136,36 @@ local lastRosterSync = 0
 
 local function IsSecret(value)
   return issecretvalue(value) == true
+end
+
+local function PlainNumber(value)
+  if value == nil then return nil end
+
+  local runtimePlain = _G.MSUF_CastbarRuntime_PlainNumber
+  if type(runtimePlain) == "function" then
+    local plain = runtimePlain(value)
+    if IsSecret(plain) ~= true then
+      local number = tonumber(tostring(plain))
+      if number ~= nil then return number end
+    end
+    return nil
+  end
+
+  local toPlain = _G.ToPlain
+  if type(toPlain) == "function" then
+    local plain = toPlain(value)
+    if IsSecret(plain) ~= true then
+      local number = tonumber(tostring(plain))
+      if number ~= nil then return number end
+    end
+  end
+
+  if IsSecret(value) == true then return nil end
+  local valueType = type(value)
+  if valueType == "number" or valueType == "string" then
+    return tonumber(tostring(value))
+  end
+  return nil
 end
 
 local function IsUnitToken(unit)
@@ -145,6 +196,18 @@ local function ClampInt(value, fallback, minValue, maxValue)
   return value
 end
 
+local function ClampNumber(value, fallback, minValue, maxValue)
+  value = tonumber(value)
+  if value == nil then value = fallback or 0 end
+  if minValue and value < minValue then return minValue end
+  if maxValue and value > maxValue then return maxValue end
+  return value
+end
+
+local function Clamp01(value, fallback)
+  return ClampNumber(value, fallback or 1, 0, 1)
+end
+
 local function NormalizeKey(value, allowed, fallback)
   if type(value) ~= "string" then return fallback end
   value = value:upper()
@@ -161,6 +224,24 @@ local function ReadSettings()
   settings.x = ClampInt(ReadValue("targetedSpellsX", 0), 0, -200, 200)
   settings.y = ClampInt(ReadValue("targetedSpellsY", 0), 0, -200, 200)
   settings.layer = ClampInt(ReadValue("targetedSpellsLayer", 10), 10, 0, 30)
+  settings.textEnabled = ReadValue("targetedSpellsTextEnabled", true) ~= false
+  settings.textSize = ClampInt(ReadValue("targetedSpellsTextSize", 10), 10, 6, 24)
+  settings.textDecimalBelow = ClampNumber(ReadValue("targetedSpellsTextDecimalBelow", 3), 3, 0, 30)
+  settings.textColorByTime = ReadValue("targetedSpellsTextColorByTime", false) == true
+  settings.textUrgentSeconds = ClampNumber(ReadValue("targetedSpellsTextUrgentSeconds", 5), 5, 0, 30)
+  settings.textWarningSeconds = ClampNumber(ReadValue("targetedSpellsTextWarningSeconds", 15), 15, 0, 60)
+  settings.textSafeSeconds = ClampNumber(ReadValue("targetedSpellsTextSafeSeconds", 60), 60, 0, 600)
+  if settings.textWarningSeconds < settings.textUrgentSeconds then settings.textWarningSeconds = settings.textUrgentSeconds end
+  if settings.textSafeSeconds < settings.textWarningSeconds then settings.textSafeSeconds = settings.textWarningSeconds end
+  settings.textSafeR = Clamp01(ReadValue("targetedSpellsTextSafeR", 1), 1)
+  settings.textSafeG = Clamp01(ReadValue("targetedSpellsTextSafeG", 1), 1)
+  settings.textSafeB = Clamp01(ReadValue("targetedSpellsTextSafeB", 1), 1)
+  settings.textWarningR = Clamp01(ReadValue("targetedSpellsTextWarningR", 1), 1)
+  settings.textWarningG = Clamp01(ReadValue("targetedSpellsTextWarningG", 0.85), 0.85)
+  settings.textWarningB = Clamp01(ReadValue("targetedSpellsTextWarningB", 0.20), 0.20)
+  settings.textUrgentR = Clamp01(ReadValue("targetedSpellsTextUrgentR", 1), 1)
+  settings.textUrgentG = Clamp01(ReadValue("targetedSpellsTextUrgentG", 0.55), 0.55)
+  settings.textUrgentB = Clamp01(ReadValue("targetedSpellsTextUrgentB", 0.10), 0.10)
 end
 
 local function HasInstancedPartyRoster()
@@ -275,6 +356,163 @@ local function SetPointCached(region, point, relativeTo, relativePoint, x, y)
   region:SetPoint(point, relativeTo, relativePoint, x, y)
 end
 
+local function TextColorForRemaining(remaining)
+  if settings.textColorByTime ~= true then
+    return 1, 1, 1
+  end
+  if remaining <= settings.textUrgentSeconds then
+    return settings.textUrgentR, settings.textUrgentG, settings.textUrgentB
+  elseif remaining <= settings.textWarningSeconds then
+    return settings.textWarningR, settings.textWarningG, settings.textWarningB
+  elseif remaining <= settings.textSafeSeconds then
+    return settings.textSafeR, settings.textSafeG, settings.textSafeB
+  end
+  return 1, 1, 1
+end
+
+local function FormatRemaining(remaining)
+  remaining = max(0, tonumber(remaining) or 0)
+  if settings.textDecimalBelow > 0 and remaining < settings.textDecimalBelow then
+    return string_format("%.1f", remaining)
+  end
+  return tostring(ceil(remaining))
+end
+
+local function EnsureIconText(icon)
+  if not icon then return nil end
+  if icon.text then return icon.text end
+  local parent = icon.textLayer or icon
+  local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  fs:SetPoint("CENTER", parent, "CENTER", 0, 0)
+  fs:SetJustifyH("CENTER")
+  if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+  fs:Hide()
+  icon.text = fs
+  return fs
+end
+
+local function ApplyIconTextStyle(icon)
+  local fs = EnsureIconText(icon)
+  if not fs then return end
+  local size = settings.textSize
+  if icon._msufTSTextSize ~= size then
+    fs:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, "OUTLINE")
+    icon._msufTSTextSize = size
+  end
+end
+
+local function StopTextTicker()
+  if textTicker and textTicker.Cancel then
+    textTicker:Cancel()
+  end
+  textTicker = nil
+end
+
+local function ReleaseTextIcon(icon)
+  if not icon then return end
+  if icon._msufTSTextActive then
+    activeTextIcons[icon] = nil
+    activeTextCount = max(0, activeTextCount - 1)
+    icon._msufTSTextActive = nil
+  end
+  icon._msufTSEndTime = nil
+  if icon.text then
+    icon.text:SetText("")
+    icon.text:Hide()
+  end
+  if activeTextCount <= 0 then
+    StopTextTicker()
+  end
+end
+
+local function UpdateIconText(icon, now)
+  if not (icon and settings.textEnabled == true and icon._msufTSEndTime) then
+    if icon and icon.text then
+      icon.text:SetText("")
+      icon.text:Hide()
+    end
+    return false
+  end
+  now = now or (GetTime and GetTime()) or 0
+  local remaining = (tonumber(icon._msufTSEndTime) or 0) - now
+  if remaining <= 0 then
+    if icon.text then
+      icon.text:SetText("")
+      icon.text:Hide()
+    end
+    return false
+  end
+  ApplyIconTextStyle(icon)
+  local fs = icon.text
+  if not fs then return false end
+  fs:SetText(FormatRemaining(remaining))
+  local r, g, b = TextColorForRemaining(remaining)
+  fs:SetTextColor(r or 1, g or 1, b or 1, 1)
+  fs:Show()
+  return true
+end
+
+local function TextTickerPulse()
+  local now = (GetTime and GetTime()) or 0
+  for icon in pairs(activeTextIcons) do
+    if not UpdateIconText(icon, now) then
+      ReleaseTextIcon(icon)
+    end
+  end
+  if activeTextCount <= 0 then
+    StopTextTicker()
+  end
+end
+
+local function StartTextTicker()
+  if textTicker or activeTextCount <= 0 then return end
+  if C_Timer and C_Timer.NewTicker then
+    textTicker = C_Timer.NewTicker(settings.textDecimalBelow > 0 and 0.10 or 0.25, TextTickerPulse)
+  end
+end
+
+local function ActivateTextIcon(icon)
+  if not icon then return end
+  if icon._msufTSTextActive ~= true then
+    activeTextIcons[icon] = true
+    activeTextCount = activeTextCount + 1
+    icon._msufTSTextActive = true
+  end
+  UpdateIconText(icon)
+  StartTextTicker()
+end
+
+local function SetIconTiming(icon, durationObj, startMS, endMS)
+  if not icon then return end
+  if settings.textEnabled ~= true then
+    ReleaseTextIcon(icon)
+    return
+  end
+
+  local remaining
+  if durationObj then
+    if durationObj.GetRemainingDuration then
+      remaining = PlainNumber(durationObj:GetRemainingDuration())
+    elseif durationObj.GetRemaining then
+      remaining = PlainNumber(durationObj:GetRemaining())
+    end
+  end
+  if remaining and remaining > 0 then
+    icon._msufTSEndTime = ((GetTime and GetTime()) or 0) + remaining
+    ActivateTextIcon(icon)
+    return
+  end
+
+  startMS = PlainNumber(startMS)
+  endMS = PlainNumber(endMS)
+  if settings.textEnabled == true and startMS and endMS and endMS > startMS then
+    icon._msufTSEndTime = endMS * 0.001
+    ActivateTextIcon(icon)
+  else
+    ReleaseTextIcon(icon)
+  end
+end
+
 local function ApplyIconFrame(icon, frame)
   if not icon then return end
   local holder = frame and frame.MSUFGFTargetedSpellsHolder
@@ -304,6 +542,17 @@ local function ApplyIconFrame(icon, frame)
   if icon.SetFrameLevel and icon._msufTSLevel ~= level then
     icon:SetFrameLevel(level)
     icon._msufTSLevel = level
+  end
+  if icon.cooldown and icon.cooldown.SetFrameLevel then
+    icon.cooldown:SetFrameLevel(level + 1)
+  end
+  if icon.textLayer then
+    icon.textLayer:ClearAllPoints()
+    icon.textLayer:SetAllPoints(icon)
+    if icon.textLayer.SetFrameLevel then icon.textLayer:SetFrameLevel(level + 3) end
+  end
+  if settings.textEnabled == true or icon.text then
+    ApplyIconTextStyle(icon)
   end
 end
 
@@ -378,6 +627,11 @@ local function CreateIcon(frame)
   cooldown:Hide()
   icon.cooldown = cooldown
 
+  local textLayer = CreateFrame("Frame", nil, icon)
+  textLayer:SetAllPoints(icon)
+  textLayer:EnableMouse(false)
+  icon.textLayer = textLayer
+
   ApplyIconFrame(icon, frame)
   icon:Hide()
   return icon
@@ -421,8 +675,8 @@ local function ApplyCooldown(cooldown, durationObj, startMS, endMS)
     return
   end
 
-  startMS = tonumber(startMS)
-  endMS = tonumber(endMS)
+  startMS = PlainNumber(startMS)
+  endMS = PlainNumber(endMS)
   if startMS and endMS and endMS > startMS and cooldown.SetCooldown then
     cooldown:SetCooldown(startMS * 0.001, (endMS - startMS) * 0.001)
     if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
@@ -445,6 +699,7 @@ local function HideCasterIcon(caster)
   local icon = rec.icon
   if icon then
     icon._msufTSCaster = nil
+    ReleaseTextIcon(icon)
     SetShown(icon, false)
     ApplyCooldown(icon.cooldown)
   end
@@ -479,6 +734,11 @@ local function RefreshVisibleIcons()
       for i = 1, #icons do
         if icons[i]._msufTSCaster then
           ApplyIconFrame(icons[i], frame)
+          if settings.textEnabled == true then
+            UpdateIconText(icons[i])
+          else
+            ReleaseTextIcon(icons[i])
+          end
         end
       end
       LayoutFrame(frame)
@@ -536,6 +796,7 @@ local function ShowFor(caster, unit, cast)
     if rec.icon and rec.icon.tex then
       rec.icon.tex:SetTexture(cast.texture or FALLBACK_ICON)
       ApplyCooldown(rec.icon.cooldown, cast.durationObj, cast.startMS, cast.endMS)
+      SetIconTiming(rec.icon, cast.durationObj, cast.startMS, cast.endMS)
     end
     return
   end
@@ -550,6 +811,7 @@ local function ShowFor(caster, unit, cast)
   icon.tex:SetTexture(cast.texture or FALLBACK_ICON)
   ApplyIconFrame(icon, frame)
   ApplyCooldown(icon.cooldown, cast.durationObj, cast.startMS, cast.endMS)
+  SetIconTiming(icon, cast.durationObj, cast.startMS, cast.endMS)
   SetShown(icon, true)
   activeByCaster[caster] = { icon = icon, frame = frame, unit = unit }
   LayoutFrame(frame)
@@ -838,6 +1100,9 @@ function TS.DebugSnapshot()
   return {
     enabled = settings.enabled,
     mode = settings.mode,
+    textEnabled = settings.textEnabled,
+    textTickerActive = textTicker ~= nil,
+    activeTextIcons = activeTextCount,
     roleAllows = RoleAllows(),
     active = active,
     hotRegistered = hotRegistered,
@@ -868,6 +1133,7 @@ function TS.ShowTest(unit, seconds)
   local now = GetTime and GetTime() or 0
   local duration = tonumber(seconds) or 8
   ApplyCooldown(icon.cooldown, nil, now * 1000, (now + duration) * 1000)
+  SetIconTiming(icon, nil, now * 1000, (now + duration) * 1000)
   SetShown(icon, true)
   activeByCaster[caster] = { icon = icon, frame = frame, unit = frame.unit or unit }
   LayoutFrame(frame)
