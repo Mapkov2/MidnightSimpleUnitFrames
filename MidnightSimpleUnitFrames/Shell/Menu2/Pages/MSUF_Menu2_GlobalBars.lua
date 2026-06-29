@@ -19,6 +19,8 @@ local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
 local BARS_PAGE_WORK_DELAY = 0.04
+local DISPEL_PURGE_BORDER_121_PTR_DISABLED = true
+local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Disabled for 12.1 PTR; native AuraContainer does not expose this MSUF border detection path yet."
 local ROUNDED_PREVIEW_WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local ROUNDED_PREVIEW_MASK = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_4x.tga"
@@ -991,7 +993,9 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_BOSS_TARGET_BORDER")
             RequestBossTargetBorderRuntime()
         end)
-    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -414, hlLeftW, T.colors.dim)
+    local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -402, hlLeftW, T.colors.dim)
+    if dispelPurgePtrHint.SetWordWrap then dispelPurgePtrHint:SetWordWrap(true) end
+    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -432, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
     local function ScopeBorderModeOn(key, defaultValue) return tonumber(BarScopeGet(key, defaultValue)) == 1 end
     local function BossTargetBorderOn()
@@ -1050,15 +1054,18 @@ local function BuildBars(ctx)
         local purgeOn = ScopeBorderModeOn("purgeOutlineMode", 0)
         local bossTargetOn = BossTargetBorderOn()
         ClearBorderTestIfDisabled("MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", aggroOn)
-        ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn)
-        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", purgeOn)
+        ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
+        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", purgeOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
         ClearBorderTestIfDisabled("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", sharedActive and bossTargetOn)
         SetControlsEnabled(scopedBorderControls, scopedActive)
+        SetControlEnabled(dispelBorder, scopedActive and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
+        SetControlEnabled(purge, scopedActive and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTarget, sharedActive)
         SetControlEnabled(aggroTest, scopedActive and aggroOn)
-        SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn)
-        SetControlEnabled(purgeTest, scopedActive and purgeOn)
+        SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
+        SetControlEnabled(purgeTest, scopedActive and purgeOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
+        if dispelPurgePtrHint and dispelPurgePtrHint.SetShown then dispelPurgePtrHint:SetShown(DISPEL_PURGE_BORDER_121_PTR_DISABLED) end
         local hintColor = sharedActive and T.colors.dim or T.colors.muted
         bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
     end)
