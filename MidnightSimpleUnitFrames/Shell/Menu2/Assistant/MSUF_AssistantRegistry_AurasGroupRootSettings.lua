@@ -30,7 +30,7 @@ local function RegisterGFAuraRootBoolean(ctx, scope, attr, key, label, defaultVa
             return value and true or false
         end,
         set = function(value) GFAurasRoot(scope)[key] = value and true or false end,
-        apply = function() ApplyGroup(scope, mode or "visual") end,
+        apply = function() ApplyGroup(scope, "auras") end,
         combatSafe = false,
     })
 end

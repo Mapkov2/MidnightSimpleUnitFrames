@@ -30,6 +30,8 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     local GF_AURA_GROUPS = ctx.GF_AURA_GROUPS or {}
     local GF_AURA_FILTER_VALUES = ctx.GF_AURA_FILTER_VALUES or {}
     local GF_AURA_FILTER_ALIASES = ctx.GF_AURA_FILTER_ALIASES
+    local AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_VALUES or {}
+    local AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES or {}
     local AURA_DEBUFF_TYPE_BORDER_VALUES = ctx.AURA_DEBUFF_TYPE_BORDER_VALUES or {}
     local AURA_DEBUFF_TYPE_BORDER_ALIASES = ctx.AURA_DEBUFF_TYPE_BORDER_ALIASES or {}
     local AURA_LANES = ctx.AURA_LANES or {}
@@ -50,6 +52,22 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     if #AURA_DEBUFF_TYPE_BORDER_VALUES == 0 then
         AURA_DEBUFF_TYPE_BORDER_VALUES = { "OFF", "BORDER", "SYMBOL" }
     end
+    if #AURA_COOLDOWN_SWIPE_DIRECTION_VALUES == 0 then
+        AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
+    end
+    local cooldownSwipeDirectionAllowed = {}
+    for i = 1, #AURA_COOLDOWN_SWIPE_DIRECTION_VALUES do cooldownSwipeDirectionAllowed[AURA_COOLDOWN_SWIPE_DIRECTION_VALUES[i]] = true end
+
+    local function ReadGFCooldownSwipeDirection(scope, lane)
+        if type(GFReadAuraValue) ~= "function" then return "NORMAL" end
+        return GFReadAuraValue(scope, lane, "cooldownSwipeReverse", false) == true and "REVERSE" or "NORMAL"
+    end
+
+    local function WriteGFCooldownSwipeDirection(scope, lane, value)
+        if type(GFWriteAuraValue) ~= "function" then return end
+        GFWriteAuraValue(scope, lane, "cooldownSwipeReverse", value == "REVERSE")
+    end
+
     local debuffBorderAllowed = {}
     for i = 1, #AURA_DEBUFF_TYPE_BORDER_VALUES do debuffBorderAllowed[AURA_DEBUFF_TYPE_BORDER_VALUES[i]] = true end
 
@@ -168,6 +186,30 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             RegisterGFAuraBoolean(scope, lane, "CooldownSwipe", "showCooldownSwipe", laneInfo.label .. " Cooldown Swipe", true, aliases)
 
             aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "swipe direction")
+            AddGFAuraAliases(aliases, scope, lane, "cooldown swipe direction")
+            AddGFAuraAliases(aliases, scope, lane, "timer swipe direction")
+            AddGFAuraAliases(aliases, scope, lane, "reverse cooldown swipe")
+            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "swipe direction", "cooldown swipe direction", "timer swipe direction", "reverse cooldown swipe" })
+            Registry:RegisterSetting({
+                key = "gf_" .. scope .. ".auras." .. lane .. ".cooldownSwipeReverse",
+                label = UNIT_LABELS[scope] .. " " .. laneInfo.label .. " Cooldown Swipe Direction",
+                category = UNIT_LABELS[scope] .. " / Group Auras",
+                unit = scope,
+                frameType = "groupAura",
+                attribute = "gfAura" .. lane .. "CooldownSwipeReverse",
+                type = "enum",
+                aliases = aliases,
+                exactAliases = aliases,
+                values = AURA_COOLDOWN_SWIPE_DIRECTION_VALUES,
+                valueAliases = AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES,
+                get = function() return ReadGFCooldownSwipeDirection(scope, lane) end,
+                set = function(value) WriteGFCooldownSwipeDirection(scope, lane, cooldownSwipeDirectionAllowed[value] and value or "NORMAL") end,
+                apply = function() ApplyGroup(scope, "auras") end,
+                combatSafe = false,
+            })
+
+            aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "stack count")
             AddGFAuraAliases(aliases, scope, lane, "stacks")
             RegisterGFAuraBoolean(scope, lane, "StackCount", "showStacks", laneInfo.label .. " Stack Count", true, aliases)
@@ -202,7 +244,7 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
                     valueAliases = AURA_DEBUFF_TYPE_BORDER_ALIASES,
                     get = function() return ReadGFDebuffTypeBorderMode(scope, lane) end,
                     set = function(value) WriteGFDebuffTypeBorderMode(scope, lane, value) end,
-                    apply = function() ApplyGroup(scope, "visual") end,
+                    apply = function() ApplyGroup(scope, "auras") end,
                     combatSafe = false,
                 })
             end
@@ -263,8 +305,8 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
                     if settingScope == "raid" then GFWriteConfValue("mythicraid", "cooldownSwipeDarkenOnLoss", value) end
                 end,
                 apply = function()
-                    ApplyGroup(settingScope, "visual")
-                    if settingScope == "raid" then ApplyGroup("mythicraid", "visual") end
+                    ApplyGroup(settingScope, "auras")
+                    if settingScope == "raid" then ApplyGroup("mythicraid", "auras") end
                 end,
                 combatSafe = false,
             })

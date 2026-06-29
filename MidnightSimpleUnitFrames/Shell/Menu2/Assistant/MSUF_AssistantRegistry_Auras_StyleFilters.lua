@@ -22,6 +22,8 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AURA_ANCHOR_ALIASES = ctx.AURA_ANCHOR_ALIASES or {}
     local AURA_STACK_ANCHOR_VALUES = ctx.AURA_STACK_ANCHOR_VALUES or {}
     local AURA_STACK_ANCHOR_ALIASES = ctx.AURA_STACK_ANCHOR_ALIASES or {}
+    local AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_VALUES or {}
+    local AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES or {}
     local AURA_LANE_STYLE_BOOLEAN_SPECS = ctx.AURA_LANE_STYLE_BOOLEAN_SPECS or {}
     local AURA_LANE_STYLE_NUMBER_SPECS = ctx.AURA_LANE_STYLE_NUMBER_SPECS or {}
     local AURA_DEBUFF_TYPE_BORDER_VALUES = ctx.AURA_DEBUFF_TYPE_BORDER_VALUES or {}
@@ -64,6 +66,9 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
 
     if #AURA_DEBUFF_TYPE_BORDER_VALUES == 0 then
         AURA_DEBUFF_TYPE_BORDER_VALUES = { "OFF", "BORDER", "SYMBOL" }
+    end
+    if #AURA_COOLDOWN_SWIPE_DIRECTION_VALUES == 0 then
+        AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
     end
     local debuffBorderAllowed = {}
     for i = 1, #AURA_DEBUFF_TYPE_BORDER_VALUES do debuffBorderAllowed[AURA_DEBUFF_TYPE_BORDER_VALUES[i]] = true end
@@ -231,6 +236,16 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                 function(value) AuraWriteLaneCooldownAnchor(settingScope, settingLane, value) end,
                 true)
 
+            aliases = {}
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "swipe direction")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "cooldown swipe direction")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "timer swipe direction")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "reverse cooldown swipe")
+            RegisterAuraScopeLaneEnum(settingScope, settingLane, "cooldownSwipeReverse", "Cooldown Swipe Direction", AURA_COOLDOWN_SWIPE_DIRECTION_VALUES, AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES, aliases,
+                function() return AuraReadLaneStyleBool(settingScope, settingLane, "cooldownSwipeReverse", false) and "REVERSE" or "NORMAL" end,
+                function(value) AuraWriteLaneStyleBool(settingScope, settingLane, "cooldownSwipeReverse", value == "REVERSE") end,
+                true)
+
             for i = 1, #AURA_LANE_STYLE_NUMBER_SPECS do
                 local spec = AURA_LANE_STYLE_NUMBER_SPECS[i]
                 aliases = {}
@@ -243,6 +258,18 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
         end
 
         if scope ~= "shared" then
+            aliases = {}
+            AddAliasesForAuraScope(aliases, scope, "custom aura style")
+            AddAliasesForAuraScope(aliases, scope, "use custom aura style")
+            AddAliasesForAuraScope(aliases, scope, "use custom aura style for this scope")
+            AddAliasesForAuraScope(aliases, scope, "aura style override")
+            AddAliasesForAuraScope(aliases, scope, "custom aura visuals")
+            RegisterAuraScopeBoolean(scope, "customStyle", "Custom Aura Style", false, aliases,
+                function() return not AuraUseSharedVisuals(scope) end,
+                function(value) AuraSetUseSharedVisuals(scope, not value) end,
+                false,
+                { "custom aura style", "use custom aura style", "use custom aura style for this scope", "aura style override", "custom aura visuals" })
+
             aliases = {}
             AddAliasesForAuraScope(aliases, scope, "use shared style")
             AddAliasesForAuraScope(aliases, scope, "shared aura style")

@@ -650,7 +650,36 @@ local function BuildFollowup(text, ctx)
         return nil
     end
 
-    local function GenericNumberFollowupValue(setting, targetAttr, direction)
+    local function IsMovementSettingShape(setting, key, attr)
+        attr = tostring(attr or (setting and setting.attribute) or "")
+        key = tostring(key or (setting and setting.key) or "")
+        if attr == "offsetX" or attr == "offsetY" or attr == "x" or attr == "y" then return true end
+        if attr == "positionX" or attr == "positionY" then return true end
+        if attr:find("OffsetX$") or attr:find("OffsetY$") then return true end
+        if attr:find("PositionX$") or attr:find("PositionY$") then return true end
+        if key:find("OffsetX$") or key:find("OffsetY$") then return true end
+        if key:find("%.x$") or key:find("%.y$") or key:find("%.offsetX$") or key:find("%.offsetY$") then return true end
+        return false
+    end
+
+    local function PreviousMovementDelta(prev)
+        if not prev then return nil end
+        local previousSetting = prev.key and Registry and Registry:GetSetting(prev.key) or nil
+        if not IsMovementSettingShape(previousSetting, prev.key, prev.attribute) then return nil end
+        local delta = tonumber(prev.relativeDelta)
+        if delta ~= nil and delta ~= 0 then return delta end
+        return nil
+    end
+
+    local function PreviousValueDelta(prev)
+        if not prev then return nil end
+        local oldValue = tonumber(prev.oldValue)
+        local newValue = tonumber(prev.value)
+        if oldValue == nil or newValue == nil or oldValue == newValue then return nil end
+        return newValue - oldValue
+    end
+
+    local function GenericNumberFollowupValue(setting, targetAttr, direction, prev)
         if not (setting and setting.type == "number") then return nil, nil end
         local attr = tostring(setting.attribute or "")
         local movementTarget = targetAttr == "offsetX" or targetAttr == "offsetY"
@@ -658,11 +687,13 @@ local function BuildFollowup(text, ctx)
         if movementTarget and direction then
             local relative = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 10) or nil
             if relative ~= nil then return nil, relative end
+            local prevDelta = PreviousMovementDelta(prev)
             local amount = A._RelativeNumberAmountForText(text)
+                or (prevDelta ~= nil and prevDelta ~= 0 and math.abs(prevDelta))
                 or tonumber(setting.moveStep)
                 or tonumber(setting.moveAmount)
-                or tonumber(setting.step)
                 or 10
+            if amount == nil or amount == 0 then amount = tonumber(setting.step) or 10 end
             if direction == "left" or direction == "down" then amount = -amount end
             return nil, amount
         end
@@ -675,14 +706,14 @@ local function BuildFollowup(text, ctx)
         return nil, nil
     end
 
-    local function GenericRelatedFollowupValue(setting, targetAttr, direction)
+    local function GenericRelatedFollowupValue(setting, targetAttr, direction, prev)
         if not setting then return nil, nil end
         if setting.type == "boolean" then
             return DetectBoolean(text), nil
         elseif setting.type == "enum" then
             return GenericEnumFollowupValue(setting, targetAttr, direction), nil
         elseif setting.type == "number" then
-            return GenericNumberFollowupValue(setting, targetAttr, direction)
+            return GenericNumberFollowupValue(setting, targetAttr, direction, prev)
         end
         return nil, nil
     end
@@ -759,8 +790,37 @@ local function BuildFollowup(text, ctx)
         end
     end
 
+    local function IsTextSlotPreviousKey(key)
+        key = tostring(key or "")
+        for _, slot in ipairs({ "Left", "Center", "Right" }) do
+            if key:match("^gf_[^%.]+%.text" .. slot .. "$") then return true end
+            if key:match("^gf_[^%.]+%.powerText" .. slot .. "$") then return true end
+            if key:match("^[^%.]+%.text" .. slot .. "$") then return true end
+            if key:match("^[^%.]+%.powerText" .. slot .. "$") then return true end
+            if key:match("^gf_[^%.]+%.hpText" .. slot .. "Offset[XY]$") then return true end
+            if key:match("^gf_[^%.]+%.powerText" .. slot .. "Offset[XY]$") then return true end
+            if key:match("^[^%.]+%.hpText" .. slot .. "Offset[XY]$") then return true end
+            if key:match("^[^%.]+%.powerText" .. slot .. "Offset[XY]$") then return true end
+        end
+        return false
+    end
+
+    local function BundleHasTextSlotPrevious()
+        for i = 1, #ctx.lastChangeBundle do
+            if IsTextSlotPreviousKey(ctx.lastChangeBundle[i] and ctx.lastChangeBundle[i].key) then return true end
+        end
+        return false
+    end
+
+    local textSlotFollowupShouldHandle = #units == 0 and #groups == 0 and BundleHasTextSlotPrevious()
+        and (
+            ContainsAny(text, { "hide it", "clear it", "remove it", "empty it", "turn it off", "disable it", "hide that", "clear that", "remove that" })
+            or (followDirection and ContainsAny(text, { "move", "nudge", "shift", "left", "right", "up", "down" }))
+            or ContainsAny(text, { "make it bigger", "make it larger", "bigger", "larger", "increase it", "make it smaller", "smaller", "decrease it", "shrink it" })
+        )
+
     local genericObjectFollowupReference = HasGenericObjectFollowupReference(text) or bareDirectionalFollowup
-    if #units == 0 and #groups == 0 and genericObjectFollowupReference then
+    if #units == 0 and #groups == 0 and genericObjectFollowupReference and not textSlotFollowupShouldHandle then
         local targetAttr = GenericFollowupTargetAttr(text, followDirection)
         if targetAttr then
             local genericChanges = {}
@@ -769,7 +829,7 @@ local function BuildFollowup(text, ctx)
                 local prev = ctx.lastChangeBundle[i]
                 local setting = FindGenericRelatedSetting(prev, targetAttr)
                 if setting and not seenGenericKeys[setting.key] then
-                    local value, relativeDelta = GenericRelatedFollowupValue(setting, targetAttr, followDirection)
+                    local value, relativeDelta = GenericRelatedFollowupValue(setting, targetAttr, followDirection, prev)
                     if value ~= nil or relativeDelta ~= nil then
                         seenGenericKeys[setting.key] = true
                         genericChanges[#genericChanges + 1] = {
@@ -1160,17 +1220,19 @@ local function BuildFollowup(text, ctx)
                 if sibling and sibling.type == "number" then setting = sibling end
                 local relativeDelta = nil
                 local prevDelta = tonumber(prev.relativeDelta)
+                local directionDelta = prevDelta
+                if directionDelta == nil then directionDelta = PreviousValueDelta(prev) end
                 local explicitAmount = A._RelativeNumberAmountForText(text)
                 local amount = FollowupAmount(setting, prevDelta, explicitAmount)
-                local previousNegative = (prev.direction == "left" or prev.direction == "down") or (prevDelta ~= nil and prevDelta < 0)
+                local previousNegative = (prev.direction == "left" or prev.direction == "down") or (directionDelta ~= nil and directionDelta < 0)
                 local sign = nil
-                if (oppositeIntent or reverseCorrectionIntent) and prevDelta ~= nil and prevDelta ~= 0 then
+                if (oppositeIntent or reverseCorrectionIntent) and directionDelta ~= nil and directionDelta ~= 0 then
                     sign = previousNegative and 1 or -1
                 elseif reverseCorrectionIntent or tooPositiveIntent then
                     sign = -1
                 elseif tooNegativeIntent then
                     sign = 1
-                elseif notEnoughIntent and prevDelta ~= nil and prevDelta ~= 0 then
+                elseif notEnoughIntent and directionDelta ~= nil and directionDelta ~= 0 then
                     sign = previousNegative and -1 or 1
                 elseif notEnoughIntent then
                     sign = 1
@@ -1182,7 +1244,7 @@ local function BuildFollowup(text, ctx)
                     sign = -1
                 elseif positiveIntent then
                     sign = 1
-                elseif neutralIntent and (prevDelta ~= nil or neutralIncreaseIntent) then
+                elseif neutralIntent and (directionDelta ~= nil or neutralIncreaseIntent) then
                     sign = previousNegative and -1 or 1
                 end
                 if sign ~= nil then

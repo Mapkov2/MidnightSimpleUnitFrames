@@ -15,6 +15,7 @@ M.Assistant = A
 local T = M.Theme or {}
 local W = M.Widgets or {}
 
+local ceil = math.ceil
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -221,11 +222,161 @@ local function MessageColor(role, status)
 end
 
 local BUSY_DOTS = { "", ".", "..", "..." }
+local TYPEWRITER_INTERVAL = 0.025
+local TYPEWRITER_MIN_CHARS_PER_TICK = 2
+local TYPEWRITER_MAX_SECONDS = 3.0
+local TYPEWRITER_RECENT_SECONDS = 12
 
 local function InCombat()
     if A.IsCombatLocked and A.IsCombatLocked() then return true end
     return ((_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
+end
+
+local function NowSeconds()
+    if type(_G.time) == "function" then return tonumber(_G.time()) or 0 end
+    if os and type(os.time) == "function" then return tonumber(os.time()) or 0 end
+    return 0
+end
+
+local function AssistantTypewriterAllowed()
+    if not (_G.C_Timer and type(_G.C_Timer.After) == "function") then return false end
+    if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then return false end
+    return true
+end
+
+local function UTF8CharBytes(text, index)
+    local byte = string.byte(text, index)
+    if not byte then return 0 end
+    if byte >= 240 then return 4 end
+    if byte >= 224 then return 3 end
+    if byte >= 192 then return 2 end
+    return 1
+end
+
+local function UTF8Length(text)
+    text = tostring(text or "")
+    local count, index, bytes = 0, 1, #text
+    while index <= bytes do
+        count = count + 1
+        index = index + UTF8CharBytes(text, index)
+    end
+    return count
+end
+
+local function UTF8Prefix(text, charCount)
+    text = tostring(text or "")
+    charCount = tonumber(charCount) or 0
+    if charCount <= 0 then return "" end
+    local count, index, bytes = 0, 1, #text
+    while index <= bytes do
+        count = count + 1
+        local nextIndex = index + UTF8CharBytes(text, index)
+        if count >= charCount then return text:sub(1, min(bytes, nextIndex - 1)) end
+        index = nextIndex
+    end
+    return text
+end
+
+local function AssistantHistoryKey(item, index)
+    return table.concat({
+        tostring(index or 0),
+        tostring(item and item.timestamp or ""),
+        tostring(item and item.role or ""),
+        tostring(item and item.status or ""),
+        tostring(item and item.text or ""),
+    }, "\031")
+end
+
+local function NewestAssistantHistoryIndex(history)
+    for i = #(history or {}), 1, -1 do
+        local item = history[i]
+        if item and item.role ~= "user" then return i end
+    end
+    return nil
+end
+
+local function TypewriterCharsPerTick(fullChars)
+    fullChars = tonumber(fullChars) or 0
+    local ticks = max(1, floor(TYPEWRITER_MAX_SECONDS / TYPEWRITER_INTERVAL))
+    return max(TYPEWRITER_MIN_CHARS_PER_TICK, ceil(fullChars / ticks))
+end
+
+local function FinishAssistantTypewriter(ui, state)
+    if not (ui and state) then return end
+    ui._msufAssistantTyped = ui._msufAssistantTyped or {}
+    ui._msufAssistantTyped[state.key] = true
+    if ui._msufAssistantTypewriter == state then ui._msufAssistantTypewriter = nil end
+    if state.region then
+        SetAssistantHistoryText(state.row, state.region, state.text)
+    end
+end
+
+local function ScheduleAssistantTypewriter(ui, state)
+    if not (ui and state) then return end
+    if state.scheduled then return end
+    state.scheduled = true
+    _G.C_Timer.After(TYPEWRITER_INTERVAL, function()
+        state.scheduled = nil
+        if not (A.dashboardUI == ui and ui._msufAssistantTypewriter == state) then return end
+        state.visible = min(state.fullChars, (tonumber(state.visible) or 0) + state.charsPerTick)
+        if state.visible >= state.fullChars then
+            FinishAssistantTypewriter(ui, state)
+            return
+        end
+        if state.region then
+            SetAssistantText(state.region, UTF8Prefix(state.text, state.visible))
+        end
+        ScheduleAssistantTypewriter(ui, state)
+    end)
+end
+
+local function ShouldTypeAssistantItem(ui, item, index, newestAssistantIndex)
+    if not (ui and item and item.role ~= "user") then return false end
+    if index ~= newestAssistantIndex then return false end
+    if not AssistantTypewriterAllowed() then return false end
+    local text = tostring(item.text or "")
+    if text == "" or #text < 8 then return false end
+    if text:find("|", 1, true) then return false end
+    local timestamp = tonumber(item.timestamp)
+    local now = NowSeconds()
+    if not timestamp or timestamp <= 0 or (now > 0 and (now - timestamp) > TYPEWRITER_RECENT_SECONDS) then return false end
+    local key = AssistantHistoryKey(item, index)
+    ui._msufAssistantTyped = ui._msufAssistantTyped or {}
+    if ui._msufAssistantTyped[key] then return false end
+    return true, key
+end
+
+local function ApplyAssistantTypewriter(ui, row, region, item, index, newestAssistantIndex)
+    local shouldType, key = ShouldTypeAssistantItem(ui, item, index, newestAssistantIndex)
+    if not shouldType then return false end
+    local text = tostring(item.text or "")
+    local state = ui._msufAssistantTypewriter
+    if not (state and state.key == key) then
+        local fullChars = max(1, UTF8Length(text))
+        state = {
+            key = key,
+            row = row,
+            region = region,
+            text = text,
+            fullChars = fullChars,
+            visible = min(fullChars, TYPEWRITER_MIN_CHARS_PER_TICK),
+            charsPerTick = TypewriterCharsPerTick(fullChars),
+        }
+        ui._msufAssistantTypewriter = state
+    else
+        state.row = row
+        state.region = region
+    end
+    if state.region then
+        SetAssistantText(state.region, UTF8Prefix(state.text, state.visible))
+    end
+    if state.visible >= state.fullChars then
+        FinishAssistantTypewriter(ui, state)
+    else
+        ScheduleAssistantTypewriter(ui, state)
+    end
+    return true
 end
 
 local function BusyText(ui)
@@ -269,6 +420,7 @@ local function RenderHistory(ui)
     for i = 1, #ui.rows do ui.rows[i]:Hide() end
 
     local history = A.GetHistory and A.GetHistory() or {}
+    local newestAssistantIndex = NewestAssistantHistoryIndex(history)
     local y = -4
     local width = max(160, (ui.width or 420) - 16)
     local rowIndex = 0
@@ -317,6 +469,7 @@ local function RenderHistory(ui)
             SetAssistantHistoryText(row, row.text, item.text)
 
             local h = max(30, floor((row.text.GetStringHeight and row.text:GetStringHeight() or 20) + 12))
+            ApplyAssistantTypewriter(ui, row, row.text, item, i, newestAssistantIndex)
             row:SetHeight(h)
             y = y - h - 4
         end

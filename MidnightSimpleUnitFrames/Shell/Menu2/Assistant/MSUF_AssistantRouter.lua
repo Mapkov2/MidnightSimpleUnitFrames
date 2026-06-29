@@ -148,7 +148,27 @@ function R.ContainsAny(text, words)    local normalizedText = R.Normalize(text)
     for i = 1, #(words or {}) do
         if R.HasNormalizedPhrase(normalizedText, words[i]) then return true end
     end
+    if type(A.FuzzyPhraseMatch) == "function" then
+        for i = 1, #(words or {}) do
+            if A.FuzzyPhraseMatch(normalizedText, words[i]) then return true end
+        end
+    end
     return false
+end
+
+function R.IsExactGenericDiagnosticRequest(text)
+    local norm = R.Normalize(text)
+    return norm == "run checks"
+        or norm == "run check"
+        or norm == "run diagnostics"
+        or norm == "run diagnostic"
+        or norm == "health check"
+        or norm == "run health check"
+        or norm == "msuf status"
+        or norm == "assistant status"
+        or norm == "diagnostic report"
+        or norm == "support text"
+        or norm == "assistant support text"
 end
 
 function R.IsStandaloneCancelReply(text)    local norm = R.Normalize(text)
@@ -1789,6 +1809,23 @@ function R.WantsVisibilityOff(norm)
     return R.ContainsAny(norm, { "turn off", "disable", "hide", "remove", "get rid", "dont show", "do not show" })
 end
 
+function R.StartsWithVisibilityMutation(norm)
+    norm = R.Normalize(norm)
+    return norm:match("^turn%s+off%s+") ~= nil
+        or norm:match("^hide%s+") ~= nil
+        or norm:match("^disable%s+") ~= nil
+        or norm:match("^remove%s+") ~= nil
+        or norm:match("^get%s+rid%s+of%s+") ~= nil
+        or norm:match("^dont%s+show%s+") ~= nil
+        or norm:match("^do%s+not%s+show%s+") ~= nil
+        or norm:match("^verstecke%s+") ~= nil
+        or norm:match("^verstecken%s+") ~= nil
+        or norm:match("^ausblenden%s+") ~= nil
+        or norm:match("^deaktiviere%s+") ~= nil
+        or norm:match("^deaktivieren%s+") ~= nil
+        or norm:match("^ausschalten%s+") ~= nil
+end
+
 function R.WantsVisibilityOn(norm)
     return R.ContainsAny(norm, { "turn on", "enable", "show", "display" })
 end
@@ -2152,6 +2189,9 @@ function R.HasConcreteMovementChangeDetail(norm)
     return R.ContainsAny(norm, {
         "left", "right", "up", "down", "x position", "y position",
         "x offset", "y offset", "x pos", "y pos",
+        "above", "below", "under", "over", "next to", "beside",
+        "closer", "farther", "further", "apart", "together",
+        "anchor to", "attach to", "attached to", "relative to",
         "links", "rechts", "hoch", "runter", "oben", "unten",
     })
 end
@@ -2240,7 +2280,7 @@ A.RouterTryMovementSettingShortcut = function(text, coreHandler)
             body = unitLabel .. " frame position can be restored with the reset-position action, while exact placement lives on the " .. unitLabel .. " page as " .. unitLabel .. " X Position, " .. unitLabel .. " Y Position, Anchor to, Anchor Point, and Custom Anchor Frame. I do not reset it from a location question."
             examples = "open " .. unit .. "; reset " .. unit .. " frame position; move " .. unit .. " frame down 10."
             actions = "Open " .. unitLabel .. " | reset " .. unit .. " frame position | Enter Edit Mode"
-        elseif asksCapability and not R.HasConcreteMovementChangeDetail(norm) then
+        elseif asksCapability and not asksLocation and not R.HasConcreteMovementChangeDetail(norm) then
             title = unitLabel .. " frame movement help"
             body = "Yes. I can help move the " .. unitLabel .. " frame. Use MSUF Edit Mode for visual dragging, or give me an exact direction/amount or X/Y position. I will not guess a new position from only 'move it'."
             examples = "enter MSUF edit mode; move " .. unit .. " frame right 10; set " .. unit .. " x position to 240; open " .. unit .. "."
@@ -2262,7 +2302,7 @@ A.RouterTryMovementSettingShortcut = function(text, coreHandler)
 
     local groupScope, groupLabel = R.GroupScopeFromText(norm)
     if groupScope then
-        if asksCapability and not R.HasConcreteMovementChangeDetail(norm) then
+        if asksCapability and not asksLocation and not R.HasConcreteMovementChangeDetail(norm) then
             return R.MovementSettingReply(
                 groupLabel .. " frame movement help",
                 "Yes. I can help move " .. groupLabel .. " frames. Use MSUF Edit Mode for visual dragging, or use Group Layout for exact X/Y position and anchor settings.",
@@ -2289,7 +2329,7 @@ A.RouterTryMovementSettingShortcut = function(text, coreHandler)
         )
     end
 
-    if asksCapability and not R.HasConcreteMovementChangeDetail(norm) then
+    if asksCapability and not asksLocation and not R.HasConcreteMovementChangeDetail(norm) then
         return R.MovementSettingReply(
             "Frame movement help",
             "Yes. I can help move MSUF frames. Use MSUF Edit Mode for visual dragging, or name a frame plus a direction/amount for an exact move.",
@@ -4243,6 +4283,7 @@ end
 function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHandler) ~= "function" then return nil end
     local norm = R.Normalize(text)
     if norm == "" then return nil end
+    if R.StartsWithVisibilityMutation and R.StartsWithVisibilityMutation(norm) then return nil end
     if not R.ContainsAny(norm, R.VISIBILITY_PROBLEM_TERMS)
         and not (R.ContainsAny(norm, { "sehe", "sehen" }) and R.ContainsAny(norm, { "nicht" }))
     then
@@ -7513,6 +7554,10 @@ function A.RouteInput(text, coreHandler)
         hasPendingState = A.RouterHasPendingAssistantState()
         hasBlockingPendingState = A.RouterHasBlockingPendingAssistantState()
         hasPendingChoices = A.RouterHasPendingChoices()
+    end
+    if R.IsExactGenericDiagnosticRequest(text) and not pendingResultReply then
+        local diagnosticResult = Core(text)
+        if diagnosticResult then return diagnosticResult end
     end
     if not hasPendingState and not pendingResultReply and R.IsStandaloneCancelReply(text) then
         return {
