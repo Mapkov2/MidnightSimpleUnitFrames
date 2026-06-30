@@ -1,5 +1,11 @@
 # Midnight Simple Unit Frames Changelog
 
+
+## 6.0-alpha8 - 2026-06-30
+
+### Highlights
+- Fixed several bugs including aura movement
+
 ## 6.0-alpha7 - 2026-06-30
 
 ### Highlights
