@@ -16,10 +16,11 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
-local math_floor, math_min, math_max, math_ceil = math.floor, math.min, math.max, math.ceil
+local math_floor, math_min, math_max, math_ceil, math_abs = math.floor, math.min, math.max, math.ceil, math.abs
 local CreateFrame = _G.CreateFrame
 local UIParent = _G.UIParent
 local GetCursorPosition = _G.GetCursorPosition
+local IsMouseButtonDown = _G.IsMouseButtonDown
 local InCombatLockdown = _G.InCombatLockdown
 local C_Timer = _G.C_Timer
 
@@ -37,6 +38,7 @@ A3.EditMode = (type(A3.EditMode) == "table") and A3.EditMode or {}
 local EM = A3.EditMode
 
 local AURA_DRAG_RUNTIME_INTERVAL = 0.05
+local AURA_PENDING_DRAG_THRESHOLD = 3
 local AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local GROUPS = {
@@ -658,11 +660,17 @@ end
 local function AuraGroupDragOnUpdate(me, elapsed)
     if not me._dragging then
         me:SetScript("OnUpdate", nil)
-        me:SetOnUpdateMode("Disabled")
+        if me.SetOnUpdateMode then me:SetOnUpdateMode("Disabled") end
+        return
+    end
+    if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+        local handler = me:GetScript("OnMouseUp")
+        if handler then handler(me, "LeftButton") end
         return
     end
     local uiScale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
     local mx, my = GetCursorPosition()
+    if not (mx and my) then return end
     mx, my = mx / uiScale, my / uiScale
     local dx = mx - (me._dragStartCursorX or mx)
     local dy = my - (me._dragStartCursorY or my)
@@ -681,6 +689,235 @@ local function AuraGroupDragOnUpdate(me, elapsed)
     local frameScale = tonumber(me._dragFrameScale) or tonumber(me._msufA3FrameScale) or 1
     if frameScale <= 0 then frameScale = 1 end
     ApplyDragDelta(me, dx / frameScale, dy / frameScale, elapsed)
+end
+
+local activeAuraDragGroup
+local pendingAuraDragFrame
+local pendingAuraDragGroup
+local pendingAuraDragStartX
+local pendingAuraDragStartY
+local auraDragCaptureFrame
+local BeginAuraGroupDrag
+
+local function OpenAuraGroupPopup(group)
+    if not (group and IsEditModeActive() and not IsConfigBlocked()) then return false end
+    if type(_G.MSUF_OpenAuras3PositionPopup) ~= "function" then return false end
+    ExportPublic("MSUF_EM2_ActiveAuraGroup", group._msufA3MoverKind)
+    ExportPublic("MSUF_EM2_ActiveAuraUnit", group._msufA3Unit)
+    _G.MSUF_OpenAuras3PositionPopup(group._msufA3Unit, group)
+    return true
+end
+
+local function StopAuraPendingDrag(group)
+    if group and pendingAuraDragGroup and pendingAuraDragGroup ~= group then return end
+    pendingAuraDragGroup = nil
+    pendingAuraDragStartX = nil
+    pendingAuraDragStartY = nil
+    if pendingAuraDragFrame then
+        pendingAuraDragFrame:SetScript("OnUpdate", nil)
+        pendingAuraDragFrame:Hide()
+    end
+end
+
+local function EnsureAuraPendingDragFrame()
+    if pendingAuraDragFrame then return pendingAuraDragFrame end
+    pendingAuraDragFrame = CreateFrame("Frame", "MSUF_A3_EditPendingDragFrame", UIParent)
+    pendingAuraDragFrame:Hide()
+    return pendingAuraDragFrame
+end
+
+local function StopAuraDragCapture(group)
+    if group and activeAuraDragGroup and activeAuraDragGroup ~= group then return end
+    activeAuraDragGroup = nil
+    if auraDragCaptureFrame then
+        auraDragCaptureFrame:SetScript("OnUpdate", nil)
+        auraDragCaptureFrame:Hide()
+    end
+end
+
+local function EnsureAuraDragCaptureFrame()
+    if auraDragCaptureFrame then return auraDragCaptureFrame end
+    auraDragCaptureFrame = CreateFrame("Button", "MSUF_A3_EditDragCaptureFrame", UIParent)
+    auraDragCaptureFrame:SetAllPoints(UIParent)
+    auraDragCaptureFrame:SetFrameStrata("TOOLTIP")
+    auraDragCaptureFrame:SetFrameLevel(1500)
+    auraDragCaptureFrame:EnableMouse(true)
+    if auraDragCaptureFrame.RegisterForClicks then
+        auraDragCaptureFrame:RegisterForClicks("LeftButtonUp")
+    end
+    auraDragCaptureFrame:SetScript("OnMouseUp", function(_, button)
+        local target = activeAuraDragGroup
+        local handler = target and target:GetScript("OnMouseUp")
+        if handler then handler(target, button) end
+    end)
+    auraDragCaptureFrame:SetScript("OnHide", function(self)
+        self:SetScript("OnUpdate", nil)
+    end)
+    auraDragCaptureFrame:Hide()
+    return auraDragCaptureFrame
+end
+
+local function StartAuraDragCapture(group)
+    if not group then return end
+    activeAuraDragGroup = group
+    local capture = EnsureAuraDragCaptureFrame()
+    if capture.SetFrameLevel then
+        capture:SetFrameLevel(math_max(1500, (group.GetFrameLevel and (group:GetFrameLevel() or 0) or 0) + 200))
+    end
+    capture:SetScript("OnUpdate", function(_, elapsed)
+        local target = activeAuraDragGroup
+        if target and target._dragging then
+            AuraGroupDragOnUpdate(target, elapsed)
+        else
+            StopAuraDragCapture(target)
+        end
+    end)
+    capture:Show()
+end
+
+local function QueueAuraPendingDrag(group, button)
+    if button ~= "LeftButton" or not group or group._dragging then return false end
+    if not IsEditModeActive() or IsConfigBlocked() then return false end
+    local cx, cy = GetCursorPosition()
+    if not (cx and cy) then return false end
+    ExportPublic("MSUF_EM2_ActiveAuraGroup", group._msufA3MoverKind)
+    ExportPublic("MSUF_EM2_ActiveAuraUnit", group._msufA3Unit)
+    group._suppressNextAuraClick = nil
+    pendingAuraDragGroup = group
+    pendingAuraDragStartX = cx
+    pendingAuraDragStartY = cy
+
+    local frame = EnsureAuraPendingDragFrame()
+    frame:SetScript("OnUpdate", function()
+        local target = pendingAuraDragGroup
+        if not target then
+            StopAuraPendingDrag()
+            return
+        end
+        if IsMouseButtonDown and not IsMouseButtonDown("LeftButton") then
+            StopAuraPendingDrag(target)
+            return
+        end
+        if not IsEditModeActive() or IsConfigBlocked() or (target.IsShown and not target:IsShown()) then
+            StopAuraPendingDrag(target)
+            return
+        end
+        local mx, my = GetCursorPosition()
+        if not (mx and my) then return end
+        if math_max(math_abs(mx - (pendingAuraDragStartX or mx)), math_abs(my - (pendingAuraDragStartY or my))) < AURA_PENDING_DRAG_THRESHOLD then
+            return
+        end
+        StopAuraPendingDrag(target)
+        if type(BeginAuraGroupDrag) == "function" then BeginAuraGroupDrag(target, true) end
+    end)
+    frame:Show()
+    return true
+end
+
+BeginAuraGroupDrag = function(self, fromMotion)
+    if not self or self._dragging then return true end
+    StopAuraPendingDrag(self)
+    if not IsEditModeActive() or IsConfigBlocked() then return false end
+    if self.Raise then self:Raise() end
+
+    ExportPublic("MSUF_EM2_ActiveAuraGroup", self._msufA3MoverKind)
+    ExportPublic("MSUF_EM2_ActiveAuraUnit", self._msufA3Unit)
+
+    local before = _G.MSUF_EM_UndoBeforeChange
+    if type(before) == "function" and not _G.MSUF__UndoRestoring then
+        before("aura", self._msufA3Unit)
+    end
+
+    local cfg = ReadGroupConfig(self._msufA3Unit, self._msufA3MoverKind)
+    self._dragStartOffsetX = cfg.x
+    self._dragStartOffsetY = cfg.y
+    self._dragFrameScale = ApplyGroupScaleForFrame(self, GetFrame(self._msufA3Unit))
+
+    local scale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+    if not scale or scale == 0 then scale = 1 end
+    local cx, cy = GetCursorPosition()
+    if not (cx and cy) then return false end
+    self._dragStartCursorX = cx / scale
+    self._dragStartCursorY = cy / scale
+    self._dragMoved = false
+    self._dragStartedByMotion = fromMotion == true
+    self._dragging = true
+    self._lastDragX = nil
+    self._lastDragY = nil
+    self._dragRuntimeElapsed = AURA_DRAG_RUNTIME_INTERVAL
+    self._dragRuntimePending = nil
+    self._lastDragElapsed = 0
+
+    local l, r, t, b = self:GetLeft(), self:GetRight(), self:GetTop(), self:GetBottom()
+    if not (l and r and t and b) then
+        local centerX, centerY = self:GetCenter()
+        local w = self:GetWidth() or 0
+        local h = self:GetHeight() or 0
+        centerX, centerY = centerX or 0, centerY or 0
+        l, r = centerX - w * 0.5, centerX + w * 0.5
+        b, t = centerY - h * 0.5, centerY + h * 0.5
+    end
+    self._snapStartCX = (l + r) * 0.5
+    self._snapStartCY = (t + b) * 0.5
+    self._snapHW = (r - l) * 0.5
+    self._snapHH = (t - b) * 0.5
+
+    if self.SetOnUpdateMode then self:SetOnUpdateMode("RunWhenVisible") end
+    self:SetScript("OnUpdate", AuraGroupDragOnUpdate)
+    StartAuraDragCapture(self)
+    return true
+end
+
+local function EndAuraGroupDrag(self, button, suppressClick)
+    if button and button ~= "LeftButton" then return false end
+    StopAuraPendingDrag(self)
+    if not self then return false end
+
+    if not self._dragging then
+        if self._suppressNextAuraClick then
+            self._suppressNextAuraClick = nil
+            return false
+        end
+        if not suppressClick and button == "LeftButton" then OpenAuraGroupPopup(self) end
+        return false
+    end
+
+    local moved = self._dragMoved == true or self._dragStartedByMotion == true
+    self._dragging = false
+    self:SetScript("OnUpdate", nil)
+    StopAuraDragCapture(self)
+    if self.SetOnUpdateMode then self:SetOnUpdateMode("Disabled") end
+    self._dragAuras = nil
+    self._dragShared = nil
+    self._dragRuntimeElapsed = nil
+    self._dragRuntimePending = nil
+    self._lastDragElapsed = nil
+    self._dragStartedByMotion = nil
+    local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+    if Snap and Snap.HideGuides then Snap.HideGuides() end
+
+    if moved then
+        local _, shared = EnsureDB()
+        RefreshAffectedRuntimeUnits(self._msufA3Unit, shared)
+        RequestUnitFrameMenuPreview("AURAS3_EDITMODE_DRAG_END")
+        local sync = _G.MSUF_SyncAuras3PositionPopup
+        if type(sync) == "function" then sync(self._msufA3Unit) end
+        self._lastDragX = nil
+        self._lastDragY = nil
+        self._dragMoved = false
+        self._suppressNextAuraClick = true
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if self then self._suppressNextAuraClick = nil end
+            end)
+        end
+        return true
+    end
+
+    if not suppressClick then OpenAuraGroupPopup(self) end
+    self._lastDragX = nil
+    self._lastDragY = nil
+    return false
 end
 
 local function ApplyGlobalFont(fs, size)
@@ -747,40 +984,166 @@ local function PlaceCooldownText(fs, owner, cfg)
     end
 end
 
+local function SafeFrameCall(frame, methodName, ...)
+    local method = frame and frame[methodName]
+    if type(method) ~= "function" then return nil end
+    local ok, value = pcall(method, frame, ...)
+    if ok then return value end
+    return nil
+end
+
+local function SafeFrameBool(frame, methodName)
+    local value = SafeFrameCall(frame, methodName)
+    if value == nil then return nil end
+    return value == true
+end
+
+local function StoreAuraMouseState(frame)
+    if not frame or frame._msufA3EditMouseStored == true then return end
+    frame._msufA3EditMouseStored = true
+    frame._msufA3EditMouseEnabled = SafeFrameBool(frame, "IsMouseEnabled")
+    frame._msufA3EditClickEnabled = SafeFrameBool(frame, "IsMouseClickEnabled")
+    frame._msufA3EditMotionEnabled = SafeFrameBool(frame, "IsMouseMotionEnabled")
+    frame._msufA3EditPropagateClicks = SafeFrameBool(frame, "GetPropagateMouseClicks")
+end
+
+local function SuppressAuraMouse(frame, forwardClicks)
+    if not frame then return end
+    StoreAuraMouseState(frame)
+    local hasClick = type(frame.SetMouseClickEnabled) == "function"
+    local hasMotion = type(frame.SetMouseMotionEnabled) == "function"
+    if type(frame.EnableMouse) == "function" then
+        SafeFrameCall(frame, "EnableMouse", forwardClicks ~= false)
+    end
+    if hasClick then SafeFrameCall(frame, "SetMouseClickEnabled", forwardClicks ~= false) end
+    if hasMotion then SafeFrameCall(frame, "SetMouseMotionEnabled", false) end
+    if forwardClicks ~= false and frame._msufA3EditPropagateClicks ~= nil then
+        SafeFrameCall(frame, "SetPropagateMouseClicks", true)
+    end
+end
+
+local function RestoreAuraMouse(frame, motionEnabled, fallbackClickEnabled)
+    if not frame then return end
+    local stored = frame._msufA3EditMouseStored == true
+    local mouseEnabled = frame._msufA3EditMouseEnabled
+    local clickEnabled = frame._msufA3EditClickEnabled
+    local storedMotionEnabled = frame._msufA3EditMotionEnabled
+    local propagateClicks = frame._msufA3EditPropagateClicks
+
+    frame._msufA3EditMouseStored = nil
+    frame._msufA3EditMouseEnabled = nil
+    frame._msufA3EditClickEnabled = nil
+    frame._msufA3EditMotionEnabled = nil
+    frame._msufA3EditPropagateClicks = nil
+
+    local hasClick = type(frame.SetMouseClickEnabled) == "function"
+    local hasMotion = type(frame.SetMouseMotionEnabled) == "function"
+    if type(frame.EnableMouse) == "function" then
+        if mouseEnabled ~= nil then
+            SafeFrameCall(frame, "EnableMouse", mouseEnabled == true)
+        elseif not hasClick and not hasMotion then
+            mouseEnabled = stored ~= true or fallbackClickEnabled == true or motionEnabled == true
+            SafeFrameCall(frame, "EnableMouse", mouseEnabled == true)
+        end
+    end
+    if hasClick then
+        if clickEnabled == nil then clickEnabled = fallbackClickEnabled == true end
+        SafeFrameCall(frame, "SetMouseClickEnabled", clickEnabled == true)
+    end
+    if hasMotion then
+        if motionEnabled == nil then motionEnabled = storedMotionEnabled end
+        SafeFrameCall(frame, "SetMouseMotionEnabled", motionEnabled == true)
+    end
+    if propagateClicks ~= nil then
+        SafeFrameCall(frame, "SetPropagateMouseClicks", propagateClicks == true)
+    end
+end
+
+local function NativeAuraEditGroup(frame)
+    if not frame or not IsEditModeActive() then return nil end
+    local container = frame._msufA3EditForwardContainer or frame
+    local laneKind = container._msufA3NativeLane
+    if laneKind == "buffs" then laneKind = "buff" end
+    if laneKind == "debuffs" then laneKind = "debuff" end
+    if laneKind ~= "buff" and laneKind ~= "debuff" then return nil end
+    local lane = container._msufA3NativeLaneConfig
+    local unit = (lane and lane.unit) or container.unit
+    return unit and EM.groups and EM.groups[unit] and EM.groups[unit][laneKind] or nil
+end
+
+local function ForwardNativeAuraMouse(frame, scriptName, button)
+    if button ~= "LeftButton" and button ~= "RightButton" then return end
+    local group = NativeAuraEditGroup(frame)
+    local handler = group and group:GetScript(scriptName)
+    if handler then handler(group, button) end
+end
+
+local function WireNativeAuraEditForward(frame, container)
+    if not (frame and frame.HookScript) then return false end
+    if frame._msufA3EditDragForwardHooked == true then return true end
+    frame._msufA3EditForwardContainer = container or frame
+    local okDown = pcall(frame.HookScript, frame, "OnMouseDown", function(self, button)
+        ForwardNativeAuraMouse(self, "OnMouseDown", button)
+    end)
+    local okUp = pcall(frame.HookScript, frame, "OnMouseUp", function(self, button)
+        ForwardNativeAuraMouse(self, "OnMouseUp", button)
+    end)
+    frame._msufA3EditDragForwardHooked = (okDown or okUp) and true or nil
+    return frame._msufA3EditDragForwardHooked == true
+end
+
+local function SetLaneMouseSuppressed(element, container, suppressed)
+    if not container then return end
+    local laneKind = container._msufA3NativeLane
+    local forwardKind = laneKind
+    if forwardKind == "buffs" then forwardKind = "buff" end
+    if forwardKind == "debuffs" then forwardKind = "debuff" end
+    local canForward = forwardKind == "buff" or forwardKind == "debuff"
+    local laneCfg = element and element._msufA3Config and element._msufA3Config.lanes and element._msufA3Config.lanes[laneKind]
+    local motionEnabled = not laneCfg or laneCfg.showTooltip ~= false
+    if suppressed then
+        if canForward then WireNativeAuraEditForward(container, container) end
+        SuppressAuraMouse(container, canForward)
+    else
+        RestoreAuraMouse(container, nil, false)
+    end
+
+    local count = type(container.GetAuraFrameCount) == "function" and container:GetAuraFrameCount() or tonumber(container.createdButtons) or 0
+    for i = 1, count do
+        local ok, button
+        if type(container.GetAuraFrame) == "function" then
+            ok, button = pcall(container.GetAuraFrame, container, i)
+        end
+        if not button then button = container[i] end
+        if ok ~= false and button then
+            if suppressed then
+                if canForward then WireNativeAuraEditForward(button, container) end
+                SuppressAuraMouse(button, canForward)
+            else
+                RestoreAuraMouse(button, motionEnabled, true)
+            end
+        end
+    end
+end
+
 local function SetRuntimeAuraHidden(unit, hidden)
     local frame = GetFrame(unit)
     local element = frame and frame.Auras
     if not element or not element.SetAlpha then return end
-    local function SetLaneMouseMotion(container, enabled)
-        if not container then return end
-        local laneKind = container._msufA3NativeLane
-        local laneCfg = element._msufA3Config and element._msufA3Config.lanes and element._msufA3Config.lanes[laneKind]
-        enabled = enabled == true and (not laneCfg or laneCfg.showTooltip ~= false)
-        local count = type(container.GetAuraFrameCount) == "function" and container:GetAuraFrameCount() or tonumber(container.createdButtons) or 0
-        for i = 1, count do
-            local ok, button
-            if type(container.GetAuraFrame) == "function" then
-                ok, button = pcall(container.GetAuraFrame, container, i)
-            end
-            if ok and button and type(button.SetMouseMotionEnabled) == "function" then
-                pcall(button.SetMouseMotionEnabled, button, enabled)
-            end
-        end
-    end
     if hidden then
         if element._msufA3EditModeAlpha == nil and element.GetAlpha then
             element._msufA3EditModeAlpha = element:GetAlpha()
         end
         element:SetAlpha(0)
-        SetLaneMouseMotion(element.Buffs, false)
-        SetLaneMouseMotion(element.Debuffs, false)
-        SetLaneMouseMotion(element.Externals, false)
+        SetLaneMouseSuppressed(element, element.Buffs, true)
+        SetLaneMouseSuppressed(element, element.Debuffs, true)
+        SetLaneMouseSuppressed(element, element.Externals, true)
     elseif element._msufA3EditModeAlpha ~= nil then
         element:SetAlpha(element._msufA3EditModeAlpha)
         element._msufA3EditModeAlpha = nil
-        SetLaneMouseMotion(element.Buffs, true)
-        SetLaneMouseMotion(element.Debuffs, true)
-        SetLaneMouseMotion(element.Externals, true)
+        SetLaneMouseSuppressed(element, element.Buffs, false)
+        SetLaneMouseSuppressed(element, element.Debuffs, false)
+        SetLaneMouseSuppressed(element, element.Externals, false)
     end
 end
 
@@ -853,11 +1216,16 @@ local function CreateGroup(unit, kind)
     local spec = GROUPS[kind]
     local safeUnit = tostring(unit):gsub("%W", "")
     local name = "MSUF_A3_" .. safeUnit .. "_" .. kind .. "Preview"
-    local group = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
+    local group = CreateFrame("Button", name, UIParent, "BackdropTemplate")
     group:SetFrameStrata("TOOLTIP")
     group:SetFrameLevel(900)
     group:SetClampedToScreen(false)
+    group:SetMovable(true)
     group:EnableMouse(true)
+    if group.SetMouseClickEnabled then group:SetMouseClickEnabled(true) end
+    if group.SetMouseMotionEnabled then group:SetMouseMotionEnabled(true) end
+    if group.RegisterForClicks then group:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
+    if group.RegisterForDrag then group:RegisterForDrag("LeftButton") end
     group:SetBackdrop({ bgFile = W8, edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
     group:SetBackdropColor(0.02, 0.03, 0.08, 0.28)
     group:SetBackdropBorderColor(spec.color[1], spec.color[2], spec.color[3], 0.72)
@@ -889,95 +1257,55 @@ local function CreateGroup(unit, kind)
     group:Hide()
 
     group:SetScript("OnMouseDown", function(self, button)
-        ExportPublic("MSUF_EM2_ActiveAuraGroup", self._msufA3MoverKind)
-        ExportPublic("MSUF_EM2_ActiveAuraUnit", self._msufA3Unit)
-
         if button == "RightButton" then
-            if IsEditModeActive() and not IsConfigBlocked() and type(_G.MSUF_OpenAuras3PositionPopup) == "function" then
-                _G.MSUF_OpenAuras3PositionPopup(self._msufA3Unit, self)
-            end
+            StopAuraPendingDrag(self)
+            OpenAuraGroupPopup(self)
             return
         end
-        if button ~= "LeftButton" or not IsEditModeActive() or IsConfigBlocked() then return end
-        if self.Raise then self:Raise() end
-
-        local before = _G.MSUF_EM_UndoBeforeChange
-        if type(before) == "function" and not _G.MSUF__UndoRestoring then
-            before("aura", self._msufA3Unit)
-        end
-
-        local cfg = ReadGroupConfig(self._msufA3Unit, self._msufA3MoverKind)
-        self._dragStartOffsetX = cfg.x
-        self._dragStartOffsetY = cfg.y
-        self._dragFrameScale = ApplyGroupScaleForFrame(self, GetFrame(self._msufA3Unit))
-
-        local scale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
-        local cx, cy = GetCursorPosition()
-        self._dragStartCursorX = cx / scale
-        self._dragStartCursorY = cy / scale
-        self._dragMoved = false
-        self._dragging = true
-        self._lastDragX = nil
-        self._lastDragY = nil
-        self._dragRuntimeElapsed = AURA_DRAG_RUNTIME_INTERVAL
-        self._dragRuntimePending = nil
-        self._lastDragElapsed = 0
-
-        local l, r, t, b = self:GetLeft() or 0, self:GetRight() or 0, self:GetTop() or 0, self:GetBottom() or 0
-        self._snapStartCX = (l + r) * 0.5
-        self._snapStartCY = (t + b) * 0.5
-        self._snapHW = (r - l) * 0.5
-        self._snapHH = (t - b) * 0.5
-
-        self:SetOnUpdateMode("RunWhenVisible")
-        self:SetScript("OnUpdate", AuraGroupDragOnUpdate)
+        QueueAuraPendingDrag(self, button)
     end)
 
-    group:SetScript("OnMouseUp", function(self)
-        local moved = self._dragMoved == true
-        self._dragging = false
-        self:SetScript("OnUpdate", nil)
-        self:SetOnUpdateMode("Disabled")
-        self._dragAuras = nil
-        self._dragShared = nil
-        self._dragRuntimeElapsed = nil
-        self._dragRuntimePending = nil
-        self._lastDragElapsed = nil
-        local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
-        if Snap and Snap.HideGuides then Snap.HideGuides() end
-
-        if moved then
-            local _, shared = EnsureDB()
-            RefreshAffectedRuntimeUnits(self._msufA3Unit, shared)
-            RequestUnitFrameMenuPreview("AURAS3_EDITMODE_DRAG_END")
-            local sync = _G.MSUF_SyncAuras3PositionPopup
-            if type(sync) == "function" then sync(self._msufA3Unit) end
-            self._lastDragX = nil
-            self._lastDragY = nil
-            self._dragMoved = false
-            return
-        end
-
-        if IsEditModeActive() and not IsConfigBlocked() and type(_G.MSUF_OpenAuras3PositionPopup) == "function" then
-            _G.MSUF_OpenAuras3PositionPopup(self._msufA3Unit, self)
-        end
-        self._lastDragX = nil
-        self._lastDragY = nil
+    group:SetScript("OnMouseUp", function(self, button)
+        EndAuraGroupDrag(self, button)
+    end)
+    group:SetScript("OnDragStart", function(self)
+        BeginAuraGroupDrag(self, true)
+    end)
+    group:SetScript("OnDragStop", function(self)
+        EndAuraGroupDrag(self, "LeftButton")
+    end)
+    group:SetScript("OnHide", function(self)
+        EndAuraGroupDrag(self, "LeftButton", true)
     end)
 
-    local hitbox = CreateFrame("Frame", nil, group)
+    local hitbox = CreateFrame("Button", nil, group)
     hitbox:SetAllPoints(group)
     hitbox:EnableMouse(true)
+    if hitbox.SetMouseClickEnabled then hitbox:SetMouseClickEnabled(true) end
+    if hitbox.SetMouseMotionEnabled then hitbox:SetMouseMotionEnabled(true) end
+    if hitbox.RegisterForClicks then hitbox:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
+    if hitbox.RegisterForDrag then hitbox:RegisterForDrag("LeftButton") end
     hitbox._msufA3HitboxOwner = group
     hitbox:SetScript("OnMouseDown", function(self, button)
         local owner = self._msufA3HitboxOwner or self:GetParent()
-        local handler = owner and owner:GetScript("OnMouseDown")
-        if handler then handler(owner, button) end
+        if button == "RightButton" then
+            StopAuraPendingDrag(owner)
+            OpenAuraGroupPopup(owner)
+        else
+            QueueAuraPendingDrag(owner, button)
+        end
     end)
     hitbox:SetScript("OnMouseUp", function(self, button)
         local owner = self._msufA3HitboxOwner or self:GetParent()
-        local handler = owner and owner:GetScript("OnMouseUp")
-        if handler then handler(owner, button) end
+        EndAuraGroupDrag(owner, button)
+    end)
+    hitbox:SetScript("OnDragStart", function(self)
+        local owner = self._msufA3HitboxOwner or self:GetParent()
+        BeginAuraGroupDrag(owner, true)
+    end)
+    hitbox:SetScript("OnDragStop", function(self)
+        local owner = self._msufA3HitboxOwner or self:GetParent()
+        EndAuraGroupDrag(owner, "LeftButton")
     end)
     group.Hitbox = hitbox
 
@@ -985,12 +1313,49 @@ local function CreateGroup(unit, kind)
     return group
 end
 
+local function FrameRefreshSignature(frame)
+    if not frame then return "noframe" end
+    local l = frame.GetLeft and frame:GetLeft() or 0
+    local t = frame.GetTop and frame:GetTop() or 0
+    local w = frame.GetWidth and frame:GetWidth() or 0
+    local h = frame.GetHeight and frame:GetHeight() or 0
+    return tostring(Round(l or 0)) .. "\031" .. tostring(Round(t or 0))
+        .. "\031" .. tostring(Round(w or 0)) .. "\031" .. tostring(Round(h or 0))
+        .. "\031" .. tostring(Round(FrameScaleRelativeToUIParent(frame) * 1000))
+end
+
+local function EditModeThemeRevision()
+    local menu = MSUF and MSUF.MSUF2
+    return tostring((menu and (menu._msuf2MenuDataRevision or menu._msuf2LayoutVersion)) or 0)
+end
+
+local function RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, size, step, perRow, laneW, laneH, growthX, growthY, vertical, initialAnchor, x, y, anchor, frameSig)
+    return tostring(unit) .. "\030" .. tostring(kind) .. "\030" .. tostring(frameSig)
+        .. "\030" .. EditModeThemeRevision()
+        .. "\030" .. tostring(cfg and cfg.show) .. "\030" .. tostring(cfg and cfg.max)
+        .. "\030" .. tostring(cfg and cfg.layer) .. "\030" .. tostring(cfg and cfg.spacing)
+        .. "\030" .. tostring(shownIcons) .. "\030" .. tostring(size)
+        .. "\030" .. tostring(step) .. "\030" .. tostring(perRow)
+        .. "\030" .. tostring(laneW) .. "\030" .. tostring(laneH)
+        .. "\030" .. tostring(growthX) .. "\030" .. tostring(growthY)
+        .. "\030" .. tostring(vertical) .. "\030" .. tostring(initialAnchor)
+        .. "\030" .. tostring(x) .. "\030" .. tostring(y) .. "\030" .. tostring(anchor)
+        .. "\030" .. tostring(metrics and metrics.enabled)
+        .. "\030" .. tostring(textCfg and textCfg.stackSize) .. "\030" .. tostring(textCfg and textCfg.stackX)
+        .. "\030" .. tostring(textCfg and textCfg.stackY) .. "\030" .. tostring(textCfg and textCfg.cooldownSize)
+        .. "\030" .. tostring(textCfg and textCfg.cooldownX) .. "\030" .. tostring(textCfg and textCfg.cooldownY)
+        .. "\030" .. tostring(textCfg and textCfg.stackAnchor) .. "\030" .. tostring(textCfg and textCfg.cooldownAnchor)
+end
+
 function EM.HideUnit(unit)
     local byUnit = EM.groups and EM.groups[unit]
     SetRuntimeAuraHidden(unit, false)
     if not byUnit then return end
     for _, group in pairs(byUnit) do
-        if group then group:Hide() end
+        if group then
+            group._msufA3RefreshSignature = nil
+            group:Hide()
+        end
     end
 end
 
@@ -1014,12 +1379,14 @@ function EM.RefreshUnit(unit)
     end
 
     SetRuntimeAuraHidden(unit, true)
+    local frameSig = FrameRefreshSignature(frame)
 
     for kind, spec in pairs(GROUPS) do
         local cfg = ReadGroupConfig(unit, kind)
         local metrics = type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(unit, kind) or nil
         local group = CreateGroup(unit, kind)
         if not (cfg.show and cfg.max > 0 and (not metrics or metrics.enabled ~= false)) then
+            group._msufA3RefreshSignature = nil
             group:Hide()
         else
             local textCfg = ReadTextConfig(unit, kind)
@@ -1039,39 +1406,43 @@ function EM.RefreshUnit(unit)
             local x = (metrics and metrics.x) or cfg.x
             local y = (metrics and metrics.y) or cfg.y
             local anchor = (metrics and metrics.anchor) or cfg.anchor
+            local signature = RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, size, step, perRow, laneW, laneH, growthX, growthY, vertical, initialAnchor, x, y, anchor, frameSig)
 
-            if group.SetClampedToScreen then group:SetClampedToScreen(false) end
-            ApplyGroupScaleForFrame(group, frame)
-            PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)
-            group:SetSize(laneW, laneH + HEADER_H)
-            if group.Body then group.Body:SetSize(laneW, laneH) end
-            group:SetFrameLevel(900 + (tonumber(cfg.layer) or 5))
-            if group.Hitbox and group.Hitbox.SetFrameLevel then
-                group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
-            end
-            if group.Label then
-                group.Label:SetText(UnitLabel(unit) .. " " .. spec.label)
-                StyleLabel(group.Label)
-            end
+            if group._msufA3RefreshSignature ~= signature or not (group.IsShown and group:IsShown()) then
+                group._msufA3RefreshSignature = signature
+                if group.SetClampedToScreen then group:SetClampedToScreen(false) end
+                ApplyGroupScaleForFrame(group, frame)
+                PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)
+                group:SetSize(laneW, laneH + HEADER_H)
+                if group.Body then group.Body:SetSize(laneW, laneH) end
+                group:SetFrameLevel(900 + (tonumber(cfg.layer) or 5))
+                if group.Hitbox and group.Hitbox.SetFrameLevel then
+                    group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
+                end
+                if group.Label then
+                    group.Label:SetText(UnitLabel(unit) .. " " .. spec.label)
+                    StyleLabel(group.Label)
+                end
 
-            for i = 1, shownIcons do
-                local icon = EnsureIcon(group, i)
-                icon:SetSize(size, size)
-                icon:ClearAllPoints()
-                local col, row = IconGridCoord(i, perRow, vertical)
-                local body = group.Body or group
-                icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)
-                if icon.Icon then icon.Icon:SetTexture(spec.texture) end
-                if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
-                if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
-                ApplyPreviewIconText(icon, unit, textCfg)
-                icon:Show()
-            end
+                for i = 1, shownIcons do
+                    local icon = EnsureIcon(group, i)
+                    icon:SetSize(size, size)
+                    icon:ClearAllPoints()
+                    local col, row = IconGridCoord(i, perRow, vertical)
+                    local body = group.Body or group
+                    icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)
+                    if icon.Icon then icon.Icon:SetTexture(spec.texture) end
+                    if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
+                    if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
+                    ApplyPreviewIconText(icon, unit, textCfg)
+                    icon:Show()
+                end
 
-            local icons = group._icons
-            if icons then
-                for i = shownIcons + 1, #icons do
-                    if icons[i] then icons[i]:Hide() end
+                local icons = group._icons
+                if icons then
+                    for i = shownIcons + 1, #icons do
+                        if icons[i] then icons[i]:Hide() end
+                    end
                 end
             end
 
@@ -1094,15 +1465,42 @@ function EM.HideAll()
     end
 end
 
-local CoreRefreshAll = A3.RefreshAll
-function A3.RefreshAll(...)
-    local ret
-    if type(CoreRefreshAll) == "function" then ret = CoreRefreshAll(...) end
+local editRefreshSerial = 0
+local function CancelQueuedEditRefresh()
+    editRefreshSerial = editRefreshSerial + 1
+end
+
+local function RefreshEditModeAuras()
+    CancelQueuedEditRefresh()
     if IsEditModeActive() then
         EM.RefreshAll()
     else
         EM.HideAll()
     end
+end
+
+local function RequestEditModeAurasRefresh(delay)
+    CancelQueuedEditRefresh()
+    if not IsEditModeActive() then
+        EM.HideAll()
+        return
+    end
+    local serial = editRefreshSerial
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay or 0, function()
+            if serial ~= editRefreshSerial or not IsEditModeActive() then return end
+            EM.RefreshAll()
+        end)
+    else
+        EM.RefreshAll()
+    end
+end
+
+local CoreRefreshAll = A3.RefreshAll
+function A3.RefreshAll(...)
+    local ret
+    if type(CoreRefreshAll) == "function" then ret = CoreRefreshAll(...) end
+    RefreshEditModeAuras()
     return ret
 end
 
@@ -1171,8 +1569,9 @@ ExportPublic("MSUF_OpenAuras3PositionPopup", OpenAuras3PositionPopup)
 
 local function OnEditModeChanged(active)
     if active then
-        EM.RefreshAll()
+        RequestEditModeAurasRefresh(0.12)
     else
+        CancelQueuedEditRefresh()
         EM.HideAll()
         ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)

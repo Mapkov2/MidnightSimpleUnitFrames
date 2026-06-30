@@ -971,6 +971,107 @@ do
 
     MSUF_SyncAllUnitPreviews = SyncAllUnitPreviewsWithPipelineWrappers
     ExportPublic("MSUF_SyncAllUnitPreviews", SyncAllUnitPreviewsWithPipelineWrappers)
+
+    local asyncPreviewSerial = 0
+    local function SyncAllUnitPreviewsAsync()
+        asyncPreviewSerial = asyncPreviewSerial + 1
+        local serial = asyncPreviewSerial
+        local active = _G.MSUF_UnitPreviewActive and true or false
+        local editOn = EM2.State and EM2.State.IsActive()
+        local want = active and editOn
+
+        if IsConfigCombatLocked() then
+            ExportPublic("MSUF_PreviewTestMode", false)
+            ExportPublic("MSUF_BossTestMode", false)
+            if type(_G.MSUF_HideAllCastbarPreviews) == "function" then
+                _G.MSUF_HideAllCastbarPreviews()
+            end
+            UninstallPipelineWrappers()
+            return
+        end
+
+        ExportPublic("MSUF_PreviewTestMode", want)
+        ExportPublic("MSUF_BossTestMode", want)
+        if want then
+            InstallPipelineWrappers()
+        else
+            UninstallPipelineWrappers()
+        end
+
+        local timer = C_Timer
+        if not (timer and type(timer.After) == "function") then
+            return SyncAllUnitPreviewsWithPipelineWrappers()
+        end
+
+        local function Alive()
+            if serial ~= asyncPreviewSerial then return false end
+            if IsConfigCombatLocked() then return false end
+            if want and not (_G.MSUF_UnitPreviewActive and EM2.State and EM2.State.IsActive()) then return false end
+            return true
+        end
+
+        local function Phase(delay, label, fn)
+            timer.After(delay, function()
+                if not Alive() then return end
+                local started = PreviewProfileStart()
+                fn()
+                PreviewProfileStop("SyncAllUnitPreviewsAsync", label, started)
+            end)
+        end
+
+        Phase(0, "BossUnitPreviewSync", function()
+            if _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
+                _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
+            end
+        end)
+
+        Phase(0.02, "RefreshVisibilityDrivers", function()
+            if _G.MSUF_RefreshAllUnitVisibilityDrivers then
+                _G.MSUF_RefreshAllUnitVisibilityDrivers(want)
+            end
+        end)
+
+        Phase(0.04, "ForcePreviewFrames", function()
+            ForPreviewFrames(function(frame)
+                if frame.ForceUpdate then frame:ForceUpdate("EM2_PREVIEW") end
+                if want then
+                    frame:Show()
+                    if frame.SetAlpha then frame:SetAlpha(1) end
+                    if frame.EnableMouse then frame:EnableMouse(true) end
+                end
+            end)
+        end)
+
+        Phase(0.06, "CastbarPreviews", function()
+            local beginBossBatch = _G.MSUF_BeginBossCastbarPreviewBatch
+            local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
+            local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
+            if batchingBossPreview then beginBossBatch() end
+            if _G.MSUF_SyncCastbarEditModeWithUnitEdit then _G.MSUF_SyncCastbarEditModeWithUnitEdit() end
+            for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
+                local f = _G[fn]; if type(f) == "function" then f(want, true) end
+            end
+            if batchingBossPreview then endBossBatch() end
+        end)
+
+        Phase(0.08, "Auras3.RefreshAll", function()
+            local a3 = MSUF and MSUF.MSUF_Auras3
+            if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
+        end)
+
+        Phase(0.10, "PreviewSettle", function()
+            SchedulePreviewMoverSync(0.02)
+            if want then
+                MSUF_EM2_SchedulePreviewReforce()
+                ScheduleReforce(0.05)
+                ScheduleReforce(0.20)
+                InstallPipelineWrappers()
+            else
+                UninstallPipelineWrappers()
+            end
+        end)
+    end
+    ExportPublic("MSUF_SyncAllUnitPreviewsAsync", SyncAllUnitPreviewsAsync)
 end
 
 --- --- MSUF_SyncCastbarEditModeWithUnitEdit (castbar preview sync) ---
