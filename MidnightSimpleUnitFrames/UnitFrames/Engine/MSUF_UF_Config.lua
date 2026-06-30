@@ -909,6 +909,7 @@ local LOAD_CONDITION_KEYS = {
   { "hideResting", "HideResting" },
   { "hideInCombat", "HideInCombat" },
   { "hideStealthed", "HideStealthed" },
+  { "hideInHousing", "HideInHousing" },
 }
 
 local function CompileLoadConditions(out, conf)
@@ -927,7 +928,7 @@ local function CompileLoadConditions(out, conf)
   if load.active then
     AddEvent(load.unitlessEvents, "PLAYER_REGEN_ENABLED")
   end
-  if load.hideInInstance == true then
+  if load.hideInInstance == true or load.hideInHousing == true then
     AddEvent(load.unitlessEvents, "PLAYER_ENTERING_WORLD")
     AddEvent(load.unitlessEvents, "ZONE_CHANGED_NEW_AREA")
   end
@@ -1400,6 +1401,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
     text.healthReverse = general.hpTextReverse == true
   end
   text.healthDelimiter = conf.hpTextSeparator or general.hpTextSeparator or " - "
+  text.healthPercentDecimals = (conf.healthTextDecimals == true or conf.hpTextDecimals == true) and 1 or 0
   text.nameAnchor = conf.nameTextAnchor or conf.nameAnchor or general.nameTextAnchor or general.nameAnchor or "LEFT"
   text.nameX = Number(conf.nameOffsetX or conf.nameTextOffsetX or general.nameOffsetX or general.nameTextOffsetX, 4)
   local fontBaselineOffset = ResolveFontBaselineOffset(general, conf)
@@ -1461,6 +1463,15 @@ local function CompileUnitHealth(out, conf, general, bars)
   health.smooth = conf.smoothFill ~= false
   health.mode = ResolveUnitBarMode(conf, general)
   health.gradient = general.enableHealthGradient ~= false
+  health.gradientLowR = Number(general.healthGradientLowR, 1)
+  health.gradientLowG = Number(general.healthGradientLowG, 0)
+  health.gradientLowB = Number(general.healthGradientLowB, 0)
+  health.gradientMidR = Number(general.healthGradientMidR, 1)
+  health.gradientMidG = Number(general.healthGradientMidG, 1)
+  health.gradientMidB = Number(general.healthGradientMidB, 0)
+  health.gradientHighR = Number(general.healthGradientHighR, 0)
+  health.gradientHighG = Number(general.healthGradientHighG, 1)
+  health.gradientHighB = Number(general.healthGradientHighB, 0)
   health.barGradient = ResolveBarGradient(conf, general, "enableGradient")
   ApplyNpcTypeFlags(health, general, "npcTypeColorBar")
   health.petColorEnabled = general.petFrameColorEnabled == true
@@ -1783,6 +1794,15 @@ local function BuildSettingsCache(db)
   cache.unifiedBarG = Number(general.unifiedBarG, 0.6)
   cache.unifiedBarB = Number(general.unifiedBarB, 0.9)
   cache.healthGradientEnabled = general.enableHealthGradient ~= false
+  cache.healthGradientLowR = Number(general.healthGradientLowR, 1)
+  cache.healthGradientLowG = Number(general.healthGradientLowG, 0)
+  cache.healthGradientLowB = Number(general.healthGradientLowB, 0)
+  cache.healthGradientMidR = Number(general.healthGradientMidR, 1)
+  cache.healthGradientMidG = Number(general.healthGradientMidG, 1)
+  cache.healthGradientMidB = Number(general.healthGradientMidB, 0)
+  cache.healthGradientHighR = Number(general.healthGradientHighR, 0)
+  cache.healthGradientHighG = Number(general.healthGradientHighG, 1)
+  cache.healthGradientHighB = Number(general.healthGradientHighB, 0)
   cache.barBackgroundAlpha = ResolveBgAlpha(general, bars)
   cache.barBgTintR, cache.barBgTintG, cache.barBgTintB, cache.barBgTintA = healthBg.r, healthBg.g, healthBg.b, healthBg.a
   cache.powerBgTintR, cache.powerBgTintG, cache.powerBgTintB, cache.powerBgTintA = powerBg.r, powerBg.g, powerBg.b, powerBg.a

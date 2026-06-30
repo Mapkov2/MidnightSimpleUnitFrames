@@ -287,7 +287,11 @@ local function HealthTextNeedsTickUpdate(frame, hp, maxHP)
     if type(hp) ~= "number" or type(maxHP) ~= "number" or maxHP <= 0 then
       return true
     end
-    keyHP = floor((hp / maxHP) * 100 + 0.5)
+    if (tonumber(rt.healthPercentDecimals) or 0) >= 1 then
+      keyHP = floor((hp / maxHP) * 1000 + 0.5)
+    else
+      keyHP = floor((hp / maxHP) * 100 + 0.5)
+    end
     keyMax = mode == 5 and maxHP or false
   else
     keyHP, keyMax = false, false

@@ -1340,6 +1340,21 @@ end
     if g.enableHealthGradient == nil then
         g.enableHealthGradient = true
     end
+    if g.healthGradientLowR == nil or g.healthGradientLowG == nil or g.healthGradientLowB == nil then
+        g.healthGradientLowR = 1
+        g.healthGradientLowG = 0
+        g.healthGradientLowB = 0
+    end
+    if g.healthGradientMidR == nil or g.healthGradientMidG == nil or g.healthGradientMidB == nil then
+        g.healthGradientMidR = 1
+        g.healthGradientMidG = 1
+        g.healthGradientMidB = 0
+    end
+    if g.healthGradientHighR == nil or g.healthGradientHighG == nil or g.healthGradientHighB == nil then
+        g.healthGradientHighR = 0
+        g.healthGradientHighG = 1
+        g.healthGradientHighB = 0
+    end
     if g.enablePowerGradient == nil then
         g.enablePowerGradient = false
     end
@@ -2914,6 +2929,7 @@ local function fill(key, defaults)
         textCenter    = "NONE",
         textRight     = "CURPERCENT",
         hpTextMode    = "CURPERCENT",
+        healthTextDecimals = false,
         hpTextLeftOffsetX = 0,
         hpTextLeftOffsetY = 0,
         hpTextCenterOffsetX = 0,

@@ -19,6 +19,7 @@ local UnitExists = V.UnitExists or UnitExists
 local UnitThreatSituation = V.UnitThreatSituation or UnitThreatSituation
 local UnitGroupRolesAssigned = V.UnitGroupRolesAssigned or UnitGroupRolesAssigned
 local tonumber = V.tonumber or tonumber
+local tostring = V.tostring or tostring
 local type = V.type or type
 local IsNil = V.IsNil or function(value) return value == nil end
 local NotSecretValue = V.NotSecretValue or function(_) return true end
@@ -337,9 +338,19 @@ local function ThreatState(frame)
       local cfg = spec and spec.border
       mode = cfg and cfg.aggroMode
     end
-    if mode == "TANK" or mode == "HEALER" then
+    mode = tostring(mode or "ALL"):upper()
+    if mode == "TANK_ONLY" then mode = "TANK"
+    elseif mode == "HEALER_ONLY" then mode = "HEALER" end
+    if mode == "TANK" or mode == "HEALER" or mode == "NON_TANK" then
       local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or nil
-      if IsNil(role) or not NotSecretValue(role) or role ~= mode then
+      if IsNil(role) or not NotSecretValue(role) then
+        return false
+      end
+      if mode == "NON_TANK" then
+        if role == "TANK" then
+          return false
+        end
+      elseif role ~= mode then
         return false
       end
     end
