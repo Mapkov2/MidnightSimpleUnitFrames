@@ -655,7 +655,6 @@ Group Frame Filters=inclusive filter|exclusive filter|base filter|category black
 Aura Type=buffs|debuffs|buff|debuff|back|style
 Unit Aura Text=stack size|cooldown size|stack anchor|timer text|unit aura text
 Group Frame Styling=group frame aura style|stack font|cooldown font|cooldown swipe|tooltip|sort by duration|prefer player|aura behavior
-Colors=timer color|cooldown text color|stack color|own buff|own debuff|safe warning urgent
 ]],
     opt_colors = [[
 colors_font=global font color|font color
@@ -671,7 +670,7 @@ colors_highlight=mouseover highlight|hover highlight
 colors_gameplay=gameplay|crosshair|target sound
 colors_power=power bar colors|power bar color|mana color|rage color|energy color|focus power|runic power|insanity color|fury color|pain color|essence color|astral power|lunar power|maelstrom color
 colors_class_power=class power colors|combo point color|holy power color|soul shard|chi color|arcane charges|runes color|essence color|soul fragments|maelstrom weapon|astral power|eclipse|stagger|icicles|ebon might
-colors_auras=auras|buff color|debuff color
+colors_auras=auras|aura colors|buff color|debuff color|timer color|cooldown text color|stack color|own buff|own debuff|safe warning urgent|pandemic
 colors_portrait=portrait colors|portrait color
 ]],
     gameplay = [[

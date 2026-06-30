@@ -138,6 +138,7 @@ local function BuildBars(ctx)
         Call("MSUF_AggroOutline_ApplyEventRegistration")
         RefreshUnitBorders({ "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" })
         RefreshGroupFrameBorders()
+        RefreshGroupFrameVisuals()
     end
     local function ApplyDispelPurgeBorderRuntime()
         Call("MSUF_UFCore_RefreshSettingsCache", "MSUF2_DISPEL_BORDER_RUNTIME")
@@ -907,7 +908,7 @@ local function BuildBars(ctx)
     }, {
         also = function() if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end end,
     }))
-    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 606, true)
+    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 660, true)
     local hlW = highlights._msuf2Width or ctx.width or 720
     local hlGap = 28
     local hlLeftX = 30
@@ -924,7 +925,7 @@ local function BuildBars(ctx)
         width = min(520, hlInnerW), frames = highlightTabFrames, defaultTab = "modes",
         x = hlLeftX, y = -44,
     })
-    W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 438)
+    W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 492)
     local priorityCardW = min(360, max(260, hlLeftW + 28))
     local priorityCard = W.ControlCard(priorityFrame, "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296)
     W.ControlCard(previewFrame, "Preview", nil, hlPreviewX - 14, -38, hlPreviewW + 28, 248)
@@ -968,19 +969,34 @@ local function BuildBars(ctx)
                 apply()
             end)
     end
+    local aggroModeValues = VT("ALL", "All roles", "NON_TANK", "Non-tanks", "HEALER", "Healers only", "TANK", "Tanks only")
+    local function NormalizeAggroMode(value)
+        value = tostring(value or "ALL"):upper()
+        if value == "TANK_ONLY" then return "TANK" end
+        if value == "HEALER_ONLY" then return "HEALER" end
+        if value == "NON_TANK" or value == "HEALER" or value == "TANK" then return value end
+        return "ALL"
+    end
     local aggro = BindBorderModeDropdown("Aggro border", "aggroOutlineMode", 1, "MSUF2_AGGRO_BORDER", -136,
         "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", RequestAggroBorderRuntime)
-    local dispelBorder = BindBorderModeDropdown("Dispel border", "dispelOutlineMode", 1, "MSUF2_DISPEL_BORDER", -190,
+    local aggroMode = BindHighlightDropdown("Aggro shows for", aggroModeValues, -190,
+        function() return NormalizeAggroMode(BarScopeGet("aggroMode", "ALL")) end,
+        function(v)
+            BarScopeSet("aggroMode", NormalizeAggroMode(v), "MSUF2_AGGRO_MODE")
+            ApplyBars("MSUF2_AGGRO_MODE")
+            RequestAggroBorderRuntime()
+        end)
+    local dispelBorder = BindBorderModeDropdown("Dispel border", "dispelOutlineMode", 1, "MSUF2_DISPEL_BORDER", -244,
         "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", RequestDispelPurgeBorderRuntime)
-    local dispelTrigger = BindHighlightDropdown("Dispel border detects", dispelTriggers, -244,
+    local dispelTrigger = BindHighlightDropdown("Dispel border detects", dispelTriggers, -298,
         function() return NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "BY_ME")) end,
         function(v)
             BarScopeSet("dispelBorderTrigger", NormalizeDispelTrigger(v), "MSUF2_DISPEL_TRIGGER")
             RequestDispelPurgeBorderRuntime()
         end)
-    local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -298,
+    local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -352,
         "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", RequestDispelPurgeBorderRuntime)
-    local bossTarget = BindHighlightDropdown("Boss target border", borderModes, -352,
+    local bossTarget = BindHighlightDropdown("Boss target border", borderModes, -406,
         function()
             local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
             return tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback
@@ -993,9 +1009,9 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_BOSS_TARGET_BORDER")
             RequestBossTargetBorderRuntime()
         end)
-    local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -402, hlLeftW, T.colors.dim)
+    local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -456, hlLeftW, T.colors.dim)
     if dispelPurgePtrHint.SetWordWrap then dispelPurgePtrHint:SetWordWrap(true) end
-    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -432, hlLeftW, T.colors.dim)
+    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -486, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
     local function ScopeBorderModeOn(key, defaultValue) return tonumber(BarScopeGet(key, defaultValue)) == 1 end
     local function BossTargetBorderOn()
@@ -1061,6 +1077,7 @@ local function BuildBars(ctx)
         SetControlEnabled(dispelBorder, scopedActive and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(purge, scopedActive and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTarget, sharedActive)
+        SetControlEnabled(aggroMode, scopedActive and aggroOn)
         SetControlEnabled(aggroTest, scopedActive and aggroOn)
         SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(purgeTest, scopedActive and purgeOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)

@@ -353,6 +353,12 @@ local function BuildText(ctx, builder, unit)
                 function() return ReadText(unit, cfg.reverseKey, false) == true end,
                 function(v) SetText(unit, cfg.reverseKey, v and true or false, cfg.reverseReason) end)
         end
+        if cfg.decimalsKey then
+            controls.decimals = SwitchOrToggle(content, "Decimal percent", 28 + halfDropdownW, -256, halfDropdownW)
+            M.BindBoolWidget(ctx, controls.decimals,
+                function() return ReadText(unit, cfg.decimalsKey, false) == true end,
+                function(v) SetText(unit, cfg.decimalsKey, v and true or false, cfg.decimalsReason) end)
+        end
         local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 410)
         local function BindPositionSlider(name, label, y, key, defaultValue, reason, focusSlot, afterSet)
             local control = W.Slider(position, label, -300, 300, 1, 260)
@@ -403,7 +409,7 @@ local function BuildText(ctx, builder, unit)
         return controls
     end
     local hpControls = BuildValueTextTab("hp", hpTab, {
-        preview = "630.0k - 63%",
+        preview = "630.0k - 63.4%",
         showLabel = "Show HP Text",
         showKey = "showHP",
         showDefault = true,
@@ -420,6 +426,8 @@ local function BuildText(ctx, builder, unit)
         separatorReason = "MSUF2_HP_SEPARATOR",
         reverseKey = "hpTextReverse",
         reverseReason = "MSUF2_HP_REVERSE",
+        decimalsKey = "healthTextDecimals",
+        decimalsReason = "MSUF2_HP_TEXT_DECIMALS",
         positionTitle = "Position",
         positionSubtitle = "Move all HP text together or adjust a selected slot.",
         xKey = "hpOffsetX",
@@ -499,6 +507,7 @@ local function BuildText(ctx, builder, unit)
     local nameTextControls = { nameAnchor, nameSize, nameX, nameY, advNameLayer }
     local hpTextControls, hpSlotControls = UnitSectionShared.ValueTextControlSets("hp", hpControls, advHpLayer, HookTextControls, CurrentSlot)
     local powerTextControls, powerSlotControls = UnitSectionShared.ValueTextControlSets("power", powerControls, advPowerLayer, HookTextControls, CurrentSlot)
+    if hpControls.decimals then hpTextControls[#hpTextControls + 1] = hpControls.decimals end
     RefreshTextControlState = RefreshTextControlState(function()
         local tab = CurrentTextTab()
         M.CallIf(RefreshTextTabs)

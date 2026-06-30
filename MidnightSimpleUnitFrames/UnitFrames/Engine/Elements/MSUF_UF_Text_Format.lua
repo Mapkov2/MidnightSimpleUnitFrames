@@ -161,14 +161,23 @@ local function PowerPercent(unit)
   return UnitPowerPercent(unit, powerType, false, true)
 end
 
-local function PercentFromPlainValues(cur, maxValue)
+local function NormalizePercentDecimals(decimals)
+  decimals = tonumber(decimals) or 0
+  return decimals >= 1 and 1 or 0
+end
+
+local function PercentFromPlainValues(cur, maxValue, decimals)
   if nativeSecrets and (issecretvalue(cur) == true or issecretvalue(maxValue) == true) then
     return nil
   end
   if type(cur) ~= "number" or type(maxValue) ~= "number" or maxValue <= 0 then
     return nil
   end
-  return floor((cur / maxValue) * 100 + 0.5)
+  local pct = (cur / maxValue) * 100
+  if NormalizePercentDecimals(decimals) >= 1 then
+    return floor(pct * 10 + 0.5) / 10
+  end
+  return floor(pct + 0.5)
 end
 
 local function MissingHealthFromValues(cur, maxValue)
@@ -224,12 +233,17 @@ local function FormatValue(value, short, canSecret)
   return CompactNumber(value)
 end
 
-local function FormatPercentValue(value, hideSymbol, canSecret)
+local function FormatPercentValue(value, hideSymbol, canSecret, decimals)
   if issecretvalue(value) == true then
     return value
   end
   if value == nil then
     return nil
+  end
+  decimals = NormalizePercentDecimals(decimals)
+  if decimals >= 1 and type(value) == "number" then
+    local text = format("%.1f", floor(value * 10 + 0.5) / 10)
+    return hideSymbol and text or (text .. "%")
   end
   local text = SmallIntegerText(value) or format("%d", value or 0)
   if hideSymbol then
@@ -297,7 +311,7 @@ local function SlotValue(slot, value)
 end
 
 local function SlotPercent(slot, pct)
-  return FormatPercentValue(pct, slot.hidePercentSymbol, slot.canSecret)
+  return FormatPercentValue(pct, slot.hidePercentSymbol, slot.canSecret, slot.percentDecimals)
 end
 
 local function SlotValuePlain(slot, value)
@@ -316,6 +330,10 @@ end
 local function SlotPercentPlain(slot, pct)
   if pct == nil then
     return nil
+  end
+  if NormalizePercentDecimals(slot.percentDecimals) >= 1 and type(pct) == "number" then
+    local text = format("%.1f", floor(pct * 10 + 0.5) / 10)
+    return slot.hidePercentSymbol and text or (text .. "%")
   end
   if not slot.hidePercentSymbol and type(pct) == "number" and pct >= 0 and pct <= 100 then
     local n = floor(pct)
@@ -689,7 +707,7 @@ local function SecretWrite(slot, cur, maxValue, pct)
   end
 end
 
-local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short, hidePercentSymbol, pctOverride, pctOverrideSet, suffix, canSecret)
+local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short, hidePercentSymbol, pctOverride, pctOverrideSet, suffix, canSecret, percentDecimals)
   if not fs then
     return
   end
@@ -719,6 +737,7 @@ local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short
   slot.delimiter = delimiter
   slot.short = short == true
   slot.hidePercentSymbol = hidePercentSymbol == true
+  slot.percentDecimals = NormalizePercentDecimals(percentDecimals)
   slot.suffix = suffix
   slot.canSecret = canSecret
   local writer = MODE_WRITERS[mode] or WriteCurMax
@@ -759,7 +778,7 @@ local function BuildSecretPattern(mode, vf, pf)
   return nil
 end
 
-local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercentSymbol)
+local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
   if not (fs and mode and mode ~= "NONE") then
     return index, false, false
   end
@@ -783,6 +802,7 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
   slot.delimiter = NormalizeTextDelimiter(delimiter)
   slot.short = short == true
   slot.hidePercentSymbol = hidePercentSymbol == true
+  slot.percentDecimals = NormalizePercentDecimals(percentDecimals)
   if secretCode then
     local secretValueFn = slot.short and AbbreviateSecretNumber or BreakUpLargeNumbers
     slot.secretValueFn = secretValueFn
@@ -807,7 +827,7 @@ end
 local HEALTH_SLOT_FIELDS = { "hpTextLeft", "hpTextCenter", "hpTextRight" }
 local POWER_SLOT_FIELDS = { "powerTextLeft", "powerTextCenter", "powerTextRight" }
 
-local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, mode3, delimiter, short, hidePercentSymbol)
+local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, mode3, delimiter, short, hidePercentSymbol, percentDecimals)
   local nextIndex = 1
   local needsPercent, needsMissing, needsCurrent, needsMax = false, false, false, false
   if show then
@@ -816,7 +836,7 @@ local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, m
       if fs and fs:IsShown() then
         local mode = i == 1 and mode1 or (i == 2 and mode2 or mode3)
         local slotNeeds, slotMissing, slotCurrent, slotMax
-        nextIndex, slotNeeds, slotMissing, slotCurrent, slotMax = AddTextSlot(slots, nextIndex, fs, mode, delimiter, short, hidePercentSymbol)
+        nextIndex, slotNeeds, slotMissing, slotCurrent, slotMax = AddTextSlot(slots, nextIndex, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
         needsPercent = needsPercent or slotNeeds
         needsMissing = needsMissing or slotMissing
         needsCurrent = needsCurrent or slotCurrent
@@ -880,12 +900,13 @@ local function CompileTextRuntime(frame, spec, text)
   rt.powerSlots = rt.powerSlots or {}
   local showHealth = spec and spec.showHealthText ~= false
   local healthLeft, healthCenter, healthRight = ResolveHealthTextModes(text)
+  rt.healthPercentDecimals = NormalizePercentDecimals(text.healthPercentDecimals)
 
   local needsPercent, needsMissing, needsCurrent, needsMax
   rt.healthSlotCount, needsPercent, needsMissing, needsCurrent, needsMax = CompileThreeTextSlots(
     rt.healthSlots, frame, showHealth, HEALTH_SLOT_FIELDS,
     healthLeft, healthCenter, healthRight,
-    text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
+    text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol, rt.healthPercentDecimals)
   rt.healthNeedsPercent = needsPercent
   rt.healthNeedsMissing = needsMissing
   rt.healthNeedsCurrent = needsCurrent
@@ -1051,7 +1072,7 @@ local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, nee
     if pctOverrideSet == true then
       pct = pctOverride
     else
-      pct = PercentFromPlainValues(cur, max)
+      pct = PercentFromPlainValues(cur, max, rt and rt.healthPercentDecimals)
     end
     if pct == nil and pctOverrideSet ~= true then
       pct = percentFn(unit)
@@ -1078,7 +1099,12 @@ UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsP
   end
   local pct
   if needsPercent == true and percentFn then
-    pct = percentFn(unit)
+    if NormalizePercentDecimals(rt and rt.healthPercentDecimals) >= 1 then
+      pct = PercentFromPlainValues(cur, max, rt and rt.healthPercentDecimals)
+    end
+    if pct == nil then
+      pct = percentFn(unit)
+    end
   end
   for i = 1, count do
     local slot = slots[i]
@@ -1217,10 +1243,19 @@ local function PlainHealthTextKey(rt, hp, hpMax, pctOverride, pctOverrideSet)
   elseif mode == 3 then
     keyHP, keyMax = hp, hpMax
   elseif mode == 4 or mode == 5 then
+    local decimalPct = NormalizePercentDecimals(rt and rt.healthPercentDecimals) >= 1
     if pctOverrideSet == true and issecretvalue(pctOverride) ~= true then
-      keyHP = pctOverride or false
+      if decimalPct and type(pctOverride) == "number" then
+        keyHP = floor(pctOverride * 10 + 0.5)
+      else
+        keyHP = pctOverride or false
+      end
     elseif type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
-      keyHP = floor((hp / hpMax) * 100 + 0.5)
+      if decimalPct then
+        keyHP = floor((hp / hpMax) * 1000 + 0.5)
+      else
+        keyHP = floor((hp / hpMax) * 100 + 0.5)
+      end
     else
       return false
     end
@@ -1277,7 +1312,7 @@ local function FlushPendingHealthText(frame)
   if rt.healthPlain == true then
     local pctOverride, pctOverrideSet
     if rt.healthNeedsPercent == true then
-      pctOverride = PercentFromPlainValues(hp, hpMax)
+      pctOverride = PercentFromPlainValues(hp, hpMax, rt and rt.healthPercentDecimals)
       if pctOverride ~= nil then
         pctOverrideSet = true
       elseif UnitHealthPercent then

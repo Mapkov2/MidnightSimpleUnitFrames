@@ -1032,7 +1032,7 @@ local ASSISTANT_FRAME_PAGE = {
 
 local ASSISTANT_GROUP_LAYOUT_ATTRS = M.KeySetFromWords([[
 enabled showPlayer showSolo clickCast clickCastEnabled blizzardFallbackMode
-hideInClientScene hideOfflineEnabled hideOfflineInCombat hideOfflineDelay
+hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay
 smoothFill reverseFill width height offsetX offsetY spacing unitsPerColumn
 maxColumns preserveRaidGroups growth sortMode sortByRole playerFirstInRole
 roleOrder frameScaleMode frameScaleEnabled frameScaleManual scaleAt10

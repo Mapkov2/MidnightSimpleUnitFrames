@@ -25,7 +25,7 @@ if not (UF and UF.RegisterElement) then return end
 if A3.__unitFrameBackendLoaded then return end
 A3.__unitFrameBackendLoaded = true
 
-local type, tostring, tonumber, pairs, next = type, tostring, tonumber, pairs, next
+local type, tostring, tonumber, pairs, next, pcall = type, tostring, tonumber, pairs, next, pcall
 local table_concat = table.concat
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
@@ -897,6 +897,12 @@ local function NumericRuleFormatRounding(name, fallback)
     return fallback
 end
 
+local function DurationTextBindingProperty(name, fallback)
+    local enum = _G.Enum and _G.Enum.DurationTextBindingProperty
+    if enum and enum[name] ~= nil then return enum[name] end
+    return fallback
+end
+
 local function BuildAuraDurationFormatter(lane)
     local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
     local sig = table_concat({ "unitless-minutes", decimalSec }, "\030")
@@ -1011,8 +1017,23 @@ end
 
 -- Reusable options table for SetDurationText. Blizzard securecopies options on
 -- each call, so a single mutated table is safe across buttons and avoids per-button
--- garbage; we only ever set cold-path formatter/curve references on it.
+-- garbage; we only ever set cold-path formatter references on it.
 local _durationTextOptions = {}
+
+local function ApplyDurationTextColorCurve(button, curve)
+    if not curve then return false end
+    local binding = button and button.DurationTextBinding
+    if not (binding and type(binding.SetTextColorCurve) == "function") then return false end
+
+    -- Blizzard's 12.1 CustomAuraButton SetDurationText path forwards only the
+    -- curve option, but DurationTextBinding:SetTextColorCurve requires the
+    -- sampled duration property too. Apply it directly to the created binding.
+    local ok = pcall(binding.SetTextColorCurve, binding, curve, DurationTextBindingProperty("RemainingDuration", 0))
+    if ok and type(binding.UpdateFontString) == "function" then
+        pcall(binding.UpdateFontString, binding)
+    end
+    return ok
+end
 
 local function PlaceStackText(fs, owner, lane)
     if not (fs and owner and lane) then return end
@@ -1286,9 +1307,11 @@ local function PrepareAuraButton(button, lane, index)
         -- or hour/day units.
         local formatter = BuildAuraDurationFormatter(lane)
         if formatter then
+            local textColorCurve = BuildAuraDurationTextColorCurve()
             _durationTextOptions.formatter = formatter
-            _durationTextOptions.textColorCurve = BuildAuraDurationTextColorCurve()
+            _durationTextOptions.textColorCurve = nil
             CallButtonMethod(button, "SetDurationText", duration, _durationTextOptions)
+            ApplyDurationTextColorCurve(button, textColorCurve)
         else
             _durationTextOptions.formatter = nil
             _durationTextOptions.textColorCurve = nil

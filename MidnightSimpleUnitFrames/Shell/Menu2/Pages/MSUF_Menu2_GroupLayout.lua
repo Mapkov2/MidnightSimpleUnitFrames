@@ -53,6 +53,7 @@ local function BuildGFLayout(ctx)
     M.BuildControlSpecs({
         { "Show player", generalLeftX, -94, generalLeftToggleW, "layout", "showPlayer", true, "rebuild" },
         { "Show while solo", generalLeftX, -124, generalLeftToggleW, "layout", "showSolo", false, "rebuild" },
+        { "Hide in Housing", generalLeftX, -154, generalLeftToggleW, "layout", "hideInHousing", false, "visual" },
         { "Smooth health fill", generalRightX, -64, generalRightToggleW, "bars", "smoothFill", true, "visual" },
         { "Reverse fill direction", generalRightX, -94, generalRightToggleW, "bars", "reverseFill", false, "visual" },
         { "Hide during client scene", generalRightX, -124, generalRightToggleW, "layout", "hideInClientScene", true, "visual" },

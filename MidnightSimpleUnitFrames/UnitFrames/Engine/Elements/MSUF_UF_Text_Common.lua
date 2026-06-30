@@ -232,7 +232,7 @@ local function BaseTextColor(frame)
   return color and color.r or 1, color and color.g or 1, color and color.b or 1, color and color.a or 1
 end
 
-local function HealthGradientFromValues(hp, hpMax)
+local function HealthGradientFromValues(frame, hp, hpMax)
   if nativeSecrets and (issecretvalue(hp) == true or issecretvalue(hpMax) == true) then
     -- Secret health values cannot be normalized safely. Fall back to the runtime
     -- color provider or the configured base text color.
@@ -249,10 +249,17 @@ local function HealthGradientFromValues(hp, hpMax)
   elseif pct > 1 then
     pct = 1
   end
+  local spec = frame and frame.MSUFSpec
+  local health = spec and spec.health or nil
+  local lr, lg, lb = health and health.gradientLowR or 1, health and health.gradientLowG or 0, health and health.gradientLowB or 0
+  local mr, mg, mb = health and health.gradientMidR or 1, health and health.gradientMidG or 1, health and health.gradientMidB or 0
+  local hr, hg, hb = health and health.gradientHighR or 0, health and health.gradientHighG or 1, health and health.gradientHighB or 0
   if pct <= 0.5 then
-    return 1, pct * 2, 0, 1
+    local t = pct * 2
+    return lr + (mr - lr) * t, lg + (mg - lg) * t, lb + (mb - lb) * t, 1
   end
-  return (1 - pct) * 2, 1, 0, 1
+  local t = (pct - 0.5) * 2
+  return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t, 1
 end
 
 local function HealthTextColor(frame, unit, hp, hpMax, rt)
@@ -268,7 +275,7 @@ local function HealthTextColor(frame, unit, hp, hpMax, rt)
       return frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB, a
     end
   end
-  local r, g, b, raw = GradientColor(unit, calc)
+  local r, g, b, raw = GradientColor(unit, calc, frame, hp, hpMax)
   if raw == true then
     if a == nil then
       local _
@@ -277,7 +284,7 @@ local function HealthTextColor(frame, unit, hp, hpMax, rt)
     return r, g, b, a
   end
   if nativeSecrets ~= true then
-    local gr, gg, gb = HealthGradientFromValues(hp, hpMax)
+    local gr, gg, gb = HealthGradientFromValues(frame, hp, hpMax)
     if gr then
       r, g, b = gr, gg, gb
     else

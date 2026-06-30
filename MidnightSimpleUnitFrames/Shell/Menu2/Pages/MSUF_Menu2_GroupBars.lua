@@ -331,10 +331,10 @@ local function BuildGFBars(ctx)
     local hpSliderW = min(310, max(230, textRightW))
     local textDropW = min(310, max(220, textCardW))
     local textHalfDropW = floor((textCardW - 44) / 2)
-    local function TextModeExampleStr(mode, delim, isPower)
+    local function TextModeExampleStr(mode, delim, isPower, decimalHP)
         local cur     = isPower and "100"  or "12,450"
         local max_    = isPower and "100"  or "15,000"
-        local pct     = isPower and "100%" or "83%"
+        local pct     = isPower and "100%" or (decimalHP and "83.0%" or "83%")
         local deficit = isPower and "0"    or "-2,550"
         if mode == "PERCENT"        then return pct
         elseif mode == "CURRENT"    then return cur
@@ -364,12 +364,12 @@ local function BuildGFBars(ctx)
         }
         return rev[mode] or mode
     end
-    local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower)
+    local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP)
         if reverse and not isPower then leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode) end
         local slots = { leftMode, centerMode, rightMode }
         local parts = {}
         for _, mode in ipairs(slots) do
-            local ex = TextModeExampleStr(mode, delim, isPower)
+            local ex = TextModeExampleStr(mode, delim, isPower, decimalHP)
             if ex then parts[#parts + 1] = ex end
         end
         return #parts > 0 and table.concat(parts, "  ") or "(none)"
@@ -577,6 +577,7 @@ local function BuildGFBars(ctx)
         SlotControl("center", "Center slot", 28 + textHalfDropW, -150, textHalfDropW)
         controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, -206, textHalfDropW)
         if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, -228, textHalfDropW), cfg.reverseKey, false, "visual") end
+        if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, -256, textHalfDropW), cfg.decimalsKey, false, "visual") end
         local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 410)
         controls.x = ScopeSlider(ctx, position, "X Offset", -100, 100, 1, hpSliderW, cfg.xKey, 0, "font", 16, -64, textRightW - 58)
         controls.y = ScopeSlider(ctx, position, "Y Offset", -100, 100, 1, hpSliderW, cfg.yKey, 0, "font", 16, -122, textRightW - 58)
@@ -631,6 +632,7 @@ local function BuildGFBars(ctx)
         },
         delimiterKey = "textDelimiter",
         reverseKey = "hpTextReverse",
+        decimalsKey = "healthTextDecimals",
         positionSubtitle = "Move all HP text together or adjust a selected slot.",
         xKey = "hpOffsetX",
         yKey = "hpOffsetY",
@@ -667,6 +669,7 @@ local function BuildGFBars(ctx)
     local nameTextControls = { hideNameOnStatus, nameSize, nameAnchor, nameX, nameY, nameLayer }
     local hpTextControls, hpSlotControls = M.UnitSectionsShared.ValueTextControlSets("hp", hpControls, hpLayer, HookTextControls, CurrentSlot)
     local powerTextControls, powerSlotControls = M.UnitSectionsShared.ValueTextControlSets("power", powerControls, powerLayer, HookTextControls, CurrentSlot)
+    if hpControls.decimals then hpTextControls[#hpTextControls + 1] = hpControls.decimals end
     refreshTextControls = function()
         local tab = CurrentTextTab()
         local nameOn = Bool(CurrentScope(), "showName", true)
@@ -687,7 +690,7 @@ local function BuildGFBars(ctx)
             local delim = Val(kind, "textDelimiter", " / ")
             hpControls.preview:SetText(BuildTextPreviewStr(
                 Val(kind, "textLeft", "NONE"), Val(kind, "textCenter", "PERCENT"), Val(kind, "textRight", "NONE"),
-                delim, Bool(kind, "hpTextReverse", false), false))
+                delim, Bool(kind, "hpTextReverse", false), false, Bool(kind, "healthTextDecimals", false)))
         end
         if powerControls.preview then
             local delim = Val(kind, "powerTextDelimiter", " / ")

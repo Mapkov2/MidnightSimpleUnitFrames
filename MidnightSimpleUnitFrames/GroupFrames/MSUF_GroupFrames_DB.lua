@@ -224,6 +224,7 @@ local PARTY_DEFAULTS = {
     textCenter        = "PERCENT",
     textRight         = "NONE",
     textDelimiter     = " / ",
+    healthTextDecimals = false,
     --- Reverse order toggle (flips multi-part modes)
     hpTextReverse     = false,
     --- Name color
@@ -259,7 +260,7 @@ local PARTY_DEFAULTS = {
     aggroR            = 1,
     aggroG            = 0,
     aggroB            = 0,
-    aggroMode         = "ALL",  --- ALL / HEALER_ONLY / TANK_ONLY
+    aggroMode         = "ALL",  --- ALL / NON_TANK / HEALER / TANK
     --- Dispel border
     dispelEnabled     = true,
     --- Target indicator
@@ -427,6 +428,7 @@ local PARTY_DEFAULTS = {
     hlFocusOffset         = 0,
     --- Hide in client scene (barber/dressing room)
     hideInClientScene     = true,
+    hideInHousing         = false,
     --- Power per-role visibility
     powerShowTank         = true,
     powerShowHealer       = true,

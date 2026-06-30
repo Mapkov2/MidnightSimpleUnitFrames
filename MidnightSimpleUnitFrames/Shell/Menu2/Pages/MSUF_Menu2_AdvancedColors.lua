@@ -12,6 +12,7 @@ local AP = M.AdvancedPage or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
+local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled]])
 local KLR, WL, ColorRows, KeyLabelMap, ValueTextPairs, SetControlsEnabled = M.KeyLabelRows, M.WordList, M.ColorRows, M.KeyLabelMap, M.ValueTextPairs, W.SetControlsEnabled
 local colorApplyQueued = false
@@ -318,6 +319,11 @@ local function ButtonAt(parent, label, x, y, width, onClick)
     end
     return btn
 end
+local function Card(parent, title, subtitle, x, y, width, height)
+    local card = W.ControlCard(parent, title, subtitle, x, y, width, height)
+    if card and T.ApplyBackdrop then T.ApplyBackdrop(card, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+    return card
+end
 local function NPCColorAt(ctx, section, row, x, y, apply)
     return ColorValueAt(ctx, section, row.label, x, y,
         function() return ApiRGB("GetNPCColor", row.dr, row.dg, row.db, row.key) end,
@@ -443,6 +449,38 @@ local function SetPandemicRGB(r, g, b)
     db.auras3.shared.pandemicR, db.auras3.shared.pandemicG, db.auras3.shared.pandemicB = r, g, b
     ApplyAuraColors()
 end
+local function ReadAuraNumber(key, defaultValue, minValue, maxValue)
+    local value = tonumber(G()[key]) or defaultValue
+    if minValue then value = max(minValue, value) end
+    if maxValue then value = min(maxValue, value) end
+    return value
+end
+local function WriteAuraNumber(key, value, minValue, maxValue)
+    value = tonumber(value) or 0
+    if minValue then value = max(minValue, value) end
+    if maxValue then value = min(maxValue, value) end
+    if floor(value) == value then value = floor(value + 0.5) end
+    G()[key] = value
+    ApplyAuraColors()
+end
+local function ResetAuraColorSettings()
+    local g = G()
+    g.aurasOwnBuffHighlightColor = { 1.00, 0.85, 0.20 }
+    g.aurasOwnDebuffHighlightColor = { 1.00, 0.30, 0.30 }
+    g.aurasStackCountColor = { 1.00, 1.00, 1.00 }
+    g.aurasCooldownTextUseBuckets = false
+    g.aurasCooldownTextSafeColor = nil
+    g.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
+    g.aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 }
+    g.aurasCooldownTextSafeSeconds = 60
+    g.aurasCooldownTextWarningSeconds = 15
+    g.aurasCooldownTextUrgentSeconds = 5
+    local db = DB()
+    db.auras3 = db.auras3 or {}
+    db.auras3.shared = db.auras3.shared or {}
+    db.auras3.shared.pandemicR, db.auras3.shared.pandemicG, db.auras3.shared.pandemicB = 0.0, 0.4, 1.0
+    ApplyAuraColors()
+end
 local function SetAllPortraitRGB(prefix, r, g, b)
     local db = DB()
     db.general = db.general or {}
@@ -520,35 +558,80 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
     end)
 end
 local function BuildAuraAndPortraitColors(ctx, b, CH)
-    local auras = b:CollapsibleSection("colors_auras", "Auras", 310, false)
-    CH.TableColorSpecs(ctx, auras, G, {
-        { "Own buff highlight color", 12, -10, "aurasOwnBuffHighlightColor", 1.0, 0.85, 0.2 },
-        { "Own debuff highlight color", 12, -46, "aurasOwnDebuffHighlightColor", 1.0, 0.85, 0.2 },
-        { "Stack count text color", 12, -82, "aurasStackCountColor", 1, 1, 1 },
-        { "Cooldown text: Warning", 360, -46, "aurasCooldownTextWarningColor", 1, 0.85, 0.2 },
-        { "Cooldown text: Urgent", 360, -82, "aurasCooldownTextUrgentColor", 1, 0.55, 0.1 },
-    }, ApplyAuraColors)
-    ColorValueAt(ctx, auras, "Pandemic window color", 12, -118, GetPandemicRGB, SetPandemicRGB)
-    local bucketToggle = BindTableToggle(ctx, auras, "Color aura timers by remaining time", G, "aurasCooldownTextUseBuckets", false, ApplyAuraColors)
-    MoveWidget(bucketToggle, auras, 12, -154)
-    ColorValueAt(ctx, auras, "Cooldown text: Safe", 360, -10,
-        function()
-            local t = G().aurasCooldownTextSafeColor
-            if type(t) == "table" then return TableRGB(G(), "aurasCooldownTextSafeColor", 1, 1, 1) end
-            return ApiRGB("GetGlobalFontColor", 1, 1, 1)
-        end,
-        function(r, g, c) SetTableRGB(G(), "aurasCooldownTextSafeColor", r, g, c); ApplyAuraColors() end)
-    CH.ButtonAt(auras, "Reset aura colors", 12, -264, 150, function()
-        local g = G()
-        g.aurasOwnBuffHighlightColor = { 1.0, 0.85, 0.2 }
-        g.aurasOwnDebuffHighlightColor = { 1.0, 0.85, 0.2 }
-        g.aurasStackCountColor = { 1, 1, 1 }
-        g.aurasCooldownTextSafeColor = nil
-        g.aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 }
-        g.aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 }
-        SetPandemicRGB(0.0, 0.4, 1.0)
+    local auras = b:CollapsibleSection("colors_auras", "Auras", 526, false)
+    local w = auras._msuf2Width or b.width or 720
+    local colW = max(310, floor((w - 58) / 2))
+    local rightX = 24 + colW + 18
+    local cooldown = Card(auras, "Cooldown Timer Colors", nil, 24, -42, colW, 380)
+    local markers = Card(auras, "Stack & Highlights", nil, rightX, -42, colW, 380)
+
+    local preview = T.Panel(cooldown, nil, { 0.014, 0.020, 0.040, 0.82 }, T.colors.borderSoft)
+    preview:SetPoint("TOPLEFT", cooldown, "TOPLEFT", 16, -60)
+    preview:SetSize(colW - 32, 88)
+    W.LabelAt(preview, "Preview", 12, -12, 120, "GameFontNormalSmall", T.colors.muted)
+    local samples = {}
+    local sampleAreaW = max(180, (colW - 32) - 88)
+    local sampleBoxW = min(64, max(52, floor((sampleAreaW - 16) / 3)))
+    local sampleGap = max(8, floor((sampleAreaW - sampleBoxW * 3) / 2))
+    for i = 1, 3 do
+        local box = T.Panel(preview, nil, { 0.020, 0.024, 0.046, 0.92 }, T.colors.borderSoft)
+        box:SetPoint("LEFT", preview, "LEFT", 88 + (i - 1) * (sampleBoxW + sampleGap), -6)
+        box:SetSize(sampleBoxW, 54)
+        local fs = T.Font(box, nil, i == 1 and "60" or (i == 2 and "15" or "5"), T.colors.text)
+        fs:SetFont(FONT, 18, "OUTLINE")
+        fs:SetPoint("CENTER", box, "CENTER", 0, 6)
+        local label = T.Font(box, "GameFontDisableSmall", i == 1 and "Safe" or (i == 2 and "Warn" or "Urgent"), T.colors.muted)
+        label:SetPoint("BOTTOM", box, "BOTTOM", 0, 5)
+        samples[i] = fs
+    end
+    local function RefreshColorSamples()
+        local sr, sg, sb = TableRGB(G(), "aurasCooldownTextSafeColor", 1, 1, 1)
+        local wr, wg, wb = TableRGB(G(), "aurasCooldownTextWarningColor", 1, 0.85, 0.20)
+        local ur, ug, ub = TableRGB(G(), "aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
+        local buckets = G().aurasCooldownTextUseBuckets == true
+        samples[1]:SetTextColor(sr, sg, sb, 1)
+        samples[2]:SetTextColor(buckets and wr or sr, buckets and wg or sg, buckets and wb or sb, 1)
+        samples[3]:SetTextColor(buckets and ur or sr, buckets and ug or sg, buckets and ub or sb, 1)
+    end
+    ValueSwitchAt(ctx, cooldown, "Color by time", 16, -166, colW - 32,
+        function() return G().aurasCooldownTextUseBuckets == true end,
+        function(v)
+            G().aurasCooldownTextUseBuckets = v and true or false
+            RefreshColorSamples()
+            ApplyAuraColors()
+        end)
+    local function AuraColorAt(parent, label, y, key, r, g, bcol, after)
+        return ColorValueAt(ctx, parent, label, 16, y,
+            function() return TableRGB(G(), key, r, g, bcol) end,
+            function(nr, ng, nb)
+                SetTableRGB(G(), key, nr, ng, nb)
+                if type(after) == "function" then after() else ApplyAuraColors() end
+            end)
+    end
+    local function RefreshTextColors()
+        RefreshColorSamples()
         ApplyAuraColors()
-    end)
+    end
+    AuraColorAt(cooldown, "Safe", -210, "aurasCooldownTextSafeColor", 1, 1, 1, RefreshTextColors)
+    AuraColorAt(cooldown, "Warning", -248, "aurasCooldownTextWarningColor", 1, 0.85, 0.20, RefreshTextColors)
+    AuraColorAt(cooldown, "Urgent", -286, "aurasCooldownTextUrgentColor", 1, 0.55, 0.10, RefreshTextColors)
+    AuraColorAt(markers, "Stack Count", -62, "aurasStackCountColor", 1, 1, 1, ApplyAuraColors)
+    AuraColorAt(markers, "Own Buff", -102, "aurasOwnBuffHighlightColor", 1, 0.85, 0.20, ApplyAuraColors)
+    AuraColorAt(markers, "Own Debuff", -142, "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30, ApplyAuraColors)
+    ColorValueAt(ctx, markers, "Pandemic window color", 16, -180, GetPandemicRGB, SetPandemicRGB)
+    ValueSliderAt(ctx, markers, "Safe seconds", 16, -232, 0, 600, 1, colW - 32,
+        function() return ReadAuraNumber("aurasCooldownTextSafeSeconds", 60, 0, 600) end,
+        function(v) WriteAuraNumber("aurasCooldownTextSafeSeconds", v, 0, 600) end)
+    ValueSliderAt(ctx, markers, "Warning <= sec", 16, -292, 0, 60, 1, colW - 32,
+        function() return ReadAuraNumber("aurasCooldownTextWarningSeconds", 15, 0, 60) end,
+        function(v) WriteAuraNumber("aurasCooldownTextWarningSeconds", v, 0, 60) end)
+    ValueSliderAt(ctx, markers, "Urgent <= sec", 16, -352, 0, 30, 1, colW - 32,
+        function() return ReadAuraNumber("aurasCooldownTextUrgentSeconds", 5, 0, 30) end,
+        function(v) WriteAuraNumber("aurasCooldownTextUrgentSeconds", v, 0, 30) end)
+    W.Text(auras, "Timer and marker colors are shared by unit and group aura previews.", 24, -440, w - 48, T.colors.muted)
+    CH.ButtonAt(auras, "Reset aura colors", 24, -476, 150, ResetAuraColorSettings)
+    M.TrackRefresh(ctx, RefreshColorSamples)
+
     local portrait = b:CollapsibleSection("colors_portrait", "Portrait Colors", 180, false)
     ColorValueAt(ctx, portrait, "Border custom color", 12, -10,
         function() return GeneralRGB("portraitBorderColor", 1, 1, 1) end,
@@ -629,13 +712,17 @@ local function BuildColors(ctx)
         if not ApiCall("ResetClassBarBgColor") then ClearRGB(G(), "classBarBg") end
         ApplyUnitframeColorWithReload()
     end)
-    local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 290, true)
+    local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 350, true)
+    local refreshBarModeControls
+    local function CurrentBarMode()
+        local g = G()
+        local mode = g.barMode
+        if mode ~= "dark" and mode ~= "class" and mode ~= "unified" and mode ~= "gradient" then mode = (g.useClassColors and "class") or "dark" end
+        return mode
+    end
     ValueDropdownAt(ctx, appearance, "Bar mode", 12, -10, ValueTextPairs "dark=Dark Mode (dark black bars)|class=Class Color Mode (color HP bars)|unified=Unified Color Mode (one color for all frames)|gradient=Color Gradient", 320,
         function()
-            local g = G()
-            local mode = g.barMode
-            if mode ~= "dark" and mode ~= "class" and mode ~= "unified" and mode ~= "gradient" then mode = (g.useClassColors and "class") or "dark" end
-            return mode
+            return CurrentBarMode()
         end,
         function(mode)
             local g = G()
@@ -643,9 +730,10 @@ local function BuildColors(ctx)
             g.darkMode = (mode == "dark")
             g.useClassColors = (mode == "class")
             ApplyUnitframeColorWithReload()
+            if refreshBarModeControls then refreshBarModeControls() end
         end)
-    CH.GeneralColorAt(ctx, appearance, "Unified bar color", 12, -70, "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload)
-    ValueSliderAt(ctx, appearance, "Dark mode bar color", 12, -112, 0, 100, 1, 300,
+    local unifiedColor = CH.GeneralColorAt(ctx, appearance, "Unified bar color", 12, -70, "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload)
+    local darkColor = ValueSliderAt(ctx, appearance, "Dark mode bar color", 12, -112, 0, 100, 1, 300,
         function()
             local v = tonumber(G().darkBarGray)
             if not v then return 7 end
@@ -657,8 +745,34 @@ local function BuildColors(ctx)
             G().darkBarTone = nil
             ApplyUnitframeColorWithReload()
         end)
-    SliderAt(ctx, appearance, "Gradient strength", 360, -70, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload)
-    SwitchAt(ctx, appearance, "Health Gradient", 360, -158, 230, G, "enableHealthGradient", true, ApplyUnitframeColorWithReload)
+    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -70, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload)
+    local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -118, 230, G, "enableHealthGradient", true, function()
+        ApplyUnitframeColorWithReload()
+        if refreshBarModeControls then refreshBarModeControls() end
+    end)
+    local gradientStopsLabel = LabelAt(appearance, "Health gradient stops", 12, -166, 220, "GameFontNormalSmall", T.colors.muted)
+    local gradientLow = CH.GeneralColorAt(ctx, appearance, "Low", 12, -196, "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload, 58, 34)
+    local gradientMid = CH.GeneralColorAt(ctx, appearance, "Mid", 170, -196, "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
+    local gradientHigh = CH.GeneralColorAt(ctx, appearance, "High", 328, -196, "healthGradientHigh", 0, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
+    local gradientReset = CH.ButtonAt(appearance, "Reset gradient", 486, -196, 150, function()
+        local g = G()
+        g.healthGradientLowR, g.healthGradientLowG, g.healthGradientLowB = 1, 0, 0
+        g.healthGradientMidR, g.healthGradientMidG, g.healthGradientMidB = 1, 1, 0
+        g.healthGradientHighR, g.healthGradientHighG, g.healthGradientHighB = 0, 1, 0
+        ApplyUnitframeColorWithReload()
+    end)
+    local gradientEditControls = { gradientStrength, gradientStopsLabel, gradientLow, gradientMid, gradientHigh, gradientReset }
+    refreshBarModeControls = function()
+        local mode = CurrentBarMode()
+        local gradientMode = mode == "gradient"
+        local gradientEnabled = gradientMode and G().enableHealthGradient ~= false
+        SetControlEnabled(unifiedColor, mode == "unified")
+        SetControlEnabled(darkColor, mode == "dark")
+        SetControlEnabled(healthGradient, gradientMode)
+        SetControlsEnabled(gradientEditControls, gradientEnabled)
+    end
+    M.TrackRefresh(ctx, refreshBarModeControls)
+    refreshBarModeControls()
     local unit = b:CollapsibleSection("colors_unit", "Unitframe Colors", 230, false)
     for i = 1, #COLOR_DATA.NPC_ROWS do
         local row = COLOR_DATA.NPC_ROWS[i]
@@ -914,4 +1028,4 @@ local function BuildColors(ctx)
     BuildAuraAndPortraitColors(ctx, b, CH)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 5 })
+M.RegisterPage("opt_colors", { title = "MSUF Colors", build = BuildColors, version = 6 })

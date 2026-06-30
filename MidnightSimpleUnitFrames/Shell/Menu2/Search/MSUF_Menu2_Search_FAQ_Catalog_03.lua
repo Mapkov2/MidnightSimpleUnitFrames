@@ -240,11 +240,11 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where do I change aura cooldown text?",
-                a = "Open Auras > Style for timer colors, stack text, cooldown text size, and group-frame aura text" ..
-                    " styling.",
+                a = "Open Auras > Style for cooldown text size, stack text, swipe, and group-frame aura text" ..
+                    " styling. Use Colors > Auras for timer colors, stack color, highlights, and pandemic color.",
                 p = "auras3_styling",
                 t = "Opens: Auras > Style",
-                x = "Style Cooldown Timer Text cooldown text size safe warning urgent stack count",
+                x = "Style Cooldown Timer Text cooldown text size stack count Colors Auras timer colors safe warning urgent pandemic",
                 k = SearchKeywordList(
                     "aura cooldown text|aura cooldown text too small|aura timer too small|buff timer|debuff timer",
                     "cooldown text size|stack text size|timer color|aura timer color|cooldown swipe|pandemic color"
