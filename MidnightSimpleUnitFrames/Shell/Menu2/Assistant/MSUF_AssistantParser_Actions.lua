@@ -37,6 +37,7 @@ local WantsFullUnitCopy = P.WantsFullUnitCopy
 local CopyScopesForText = P.CopyScopesForText
 local WantsFullGroupCopy = P.WantsFullGroupCopy
 local GroupCopyScopesForText = P.GroupCopyScopesForText
+local ActionableText = P.ActionableText
 
 local function UnitDisplayLabel(unit)
     if A and type(A.DisplayUnitLabel) == "function" then return A.DisplayUnitLabel(unit) end
@@ -1750,16 +1751,48 @@ local ACTION_ALIAS_COMMON_TOKENS = {
     a = true,
     an = true,
     ["and"] = true,
+    assistant = true,
+    bit = true,
+    bitte = true,
+    brauche = true,
+    can = true,
+    could = true,
+    danke = true,
+    du = true,
     ["for"] = true,
+    fuer = true,
+    help = true,
+    hey = true,
+    hi = true,
+    ich = true,
+    im = true,
     ["in"] = true,
+    just = true,
+    kannst = true,
+    koenntest = true,
+    like = true,
+    maybe = true,
+    mir = true,
+    moechte = true,
+    msuf = true,
     my = true,
+    need = true,
     of = true,
     on = true,
     please = true,
+    pls = true,
+    really = true,
     the = true,
     to = true,
+    wanna = true,
+    want = true,
+    will = true,
     with = true,
+    would = true,
+    you = true,
 }
+
+local ACTION_ALIAS_FUZZY_CANDIDATE_LIMIT = 180
 
 local function ActionAliasTokens(text)
     local out = {}
@@ -1775,6 +1808,16 @@ local function AddActionAliasBucket(index, token, action)
         index.byToken[token] = bucket
     end
     bucket[#bucket + 1] = action
+    if #token >= 4 and token:match("^[a-z]+$") then
+        local first = token:sub(1, 1)
+        index.fuzzyBuckets[first] = index.fuzzyBuckets[first] or {}
+        index.fuzzyBuckets[first][#token] = index.fuzzyBuckets[first][#token] or {}
+        local fuzzyBucket = index.fuzzyBuckets[first][#token]
+        if fuzzyBucket[token] ~= true then
+            fuzzyBucket[#fuzzyBucket + 1] = token
+            fuzzyBucket[token] = true
+        end
+    end
     return true
 end
 
@@ -1786,7 +1829,7 @@ local function EnsureRegistryActionAliasIndex(actions)
         return P._registryActionAliasIndex
     end
 
-    local index = { byToken = {}, always = {} }
+    local index = { byToken = {}, fuzzyBuckets = {}, fuzzyTokenCache = {}, always = {} }
     for i = 1, #actions do
         local action = actions[i]
         if type(action) == "table"
@@ -1817,12 +1860,71 @@ local function AddActionAliasCandidates(candidateSet, index, tokens)
     end
 end
 
-local function RegistryActionAliasCandidates(actions, text)
+local function FuzzyActionAliasTokenCandidates(index, token)
+    token = Normalize(token)
+    if token == "" or #token < 4 or ACTION_ALIAS_COMMON_TOKENS[token] or not token:match("^[a-z]+$") then return nil end
+    local fuzzyWordMatch = P.FuzzyWordMatch or (A and A.FuzzyWordMatch)
+    if type(fuzzyWordMatch) ~= "function" then return nil end
+    index.fuzzyTokenCache = index.fuzzyTokenCache or {}
+    local cached = index.fuzzyTokenCache[token]
+    if cached ~= nil then return cached ~= false and cached or nil end
+
+    local firstBuckets = index.fuzzyBuckets and index.fuzzyBuckets[token:sub(1, 1)]
+    if type(firstBuckets) ~= "table" then
+        index.fuzzyTokenCache[token] = false
+        return nil
+    end
+
+    local out, seenActions, seenTokens = {}, {}, {}
+    local len = #token
+    for delta = -1, 1 do
+        local bucket = firstBuckets[len + delta]
+        for i = 1, #(bucket or {}) do
+            local indexedToken = bucket[i]
+            if not seenTokens[indexedToken] and fuzzyWordMatch(token, indexedToken) then
+                seenTokens[indexedToken] = true
+                local actions = index.byToken and index.byToken[indexedToken]
+                for j = 1, #(actions or {}) do
+                    local action = actions[j]
+                    if action and not seenActions[action] then
+                        seenActions[action] = true
+                        out[#out + 1] = action
+                        if #out > ACTION_ALIAS_FUZZY_CANDIDATE_LIMIT then
+                            index.fuzzyTokenCache[token] = false
+                            return nil
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    index.fuzzyTokenCache[token] = #out > 0 and out or false
+    return #out > 0 and out or nil
+end
+
+local function AddActionAliasFuzzyCandidates(candidateSet, index, tokens)
+    for i = 1, #(tokens or {}) do
+        local token = tokens[i]
+        if not (index.byToken and index.byToken[token]) then
+            local actions = FuzzyActionAliasTokenCandidates(index, token)
+            for j = 1, #(actions or {}) do candidateSet[actions[j]] = true end
+        end
+    end
+end
+
+local function RegistryActionAliasCandidates(actions, text, allowFuzzy)
     local index = EnsureRegistryActionAliasIndex(actions)
     local candidateSet = {}
-    AddActionAliasCandidates(candidateSet, index, ActionAliasTokens(text))
+    local tokens = ActionAliasTokens(text)
+    AddActionAliasCandidates(candidateSet, index, tokens)
+    if allowFuzzy then AddActionAliasFuzzyCandidates(candidateSet, index, tokens) end
     local relationText = AliasRelationText(text)
-    if relationText ~= text then AddActionAliasCandidates(candidateSet, index, ActionAliasTokens(relationText)) end
+    if relationText ~= text then
+        local relationTokens = ActionAliasTokens(relationText)
+        AddActionAliasCandidates(candidateSet, index, relationTokens)
+        if allowFuzzy then AddActionAliasFuzzyCandidates(candidateSet, index, relationTokens) end
+    end
     for i = 1, #(index.always or {}) do candidateSet[index.always[i]] = true end
 
     local out = {}
@@ -1903,6 +2005,10 @@ function P.ParseExactActionPhraseShortcut(text, raw)
     local actions = Registry and Registry:AllActions() or {}
     local index = EnsureExactActionPhraseIndex(actions)
     local match = index[phrase]
+    if not match and ActionableText then
+        local actionablePhrase = ExactActionPhraseText(ActionableText(raw or text))
+        if actionablePhrase ~= "" and actionablePhrase ~= phrase then match = index[actionablePhrase] end
+    end
     if not match then return nil end
     if type(match) == "table" and not match.key then
         local choices = {}
@@ -1956,26 +2062,49 @@ end
 function P.ParseRegistryActionAliasShortcut(text, raw)
     if LooksLikeNumericSettingChange(text) then return nil end
     local actions = Registry and Registry:AllActions() or {}
-    local bestAction, bestArgs, bestMeta, bestScore
-    local candidates = RegistryActionAliasCandidates(actions, text)
-    for i = 1, #candidates do
-        local action = candidates[i]
-        local score = RegistryActionAliasScore(action, text)
-        if score > 0 and (not bestScore or score > bestScore) then
-            local args, meta
-            if type(action.parseAliasArgs) == "function" then
-                local parsedArgs, parsedMeta = action.parseAliasArgs(text, raw, action)
-                if parsedArgs ~= false then
-                    args = type(parsedArgs) == "table" and parsedArgs or {}
-                    meta = type(parsedMeta) == "table" and parsedMeta or nil
+    local function scan(matchText, allowFuzzy)
+        local previousFuzzy = P._allowFuzzyAliasMatch
+        if allowFuzzy then P._allowFuzzyAliasMatch = true end
+        local function run()
+            local bestAction, bestArgs, bestMeta, bestScore
+            local candidates = RegistryActionAliasCandidates(actions, matchText, allowFuzzy)
+            for i = 1, #candidates do
+                local action = candidates[i]
+                local score = RegistryActionAliasScore(action, matchText)
+                if score > 0 and (not bestScore or score > bestScore) then
+                    local args, meta
+                    if type(action.parseAliasArgs) == "function" then
+                        local parsedArgs, parsedMeta = action.parseAliasArgs(matchText, raw, action)
+                        if parsedArgs ~= false then
+                            args = type(parsedArgs) == "table" and parsedArgs or {}
+                            meta = type(parsedMeta) == "table" and parsedMeta or nil
+                        end
+                    elseif action.aliasNoArgs == true then
+                        args = {}
+                    end
+                    if args then
+                        bestAction, bestArgs, bestMeta, bestScore = action, args, meta, score
+                    end
                 end
-            elseif action.aliasNoArgs == true then
-                args = {}
             end
-            if args then
-                bestAction, bestArgs, bestMeta, bestScore = action, args, meta, score
-            end
+            return bestAction, bestArgs, bestMeta, bestScore
         end
+        if not allowFuzzy then return run() end
+        local ok, bestAction, bestArgs, bestMeta, bestScore = pcall(run)
+        P._allowFuzzyAliasMatch = previousFuzzy
+        if not ok then error(bestAction) end
+        return bestAction, bestArgs, bestMeta, bestScore
+    end
+
+    local bestAction, bestArgs, bestMeta, bestScore
+    bestAction, bestArgs, bestMeta, bestScore = scan(text, false)
+    local actionable = ActionableText and ActionableText(text) or text
+    if not bestAction and actionable ~= "" and actionable ~= text then
+        bestAction, bestArgs, bestMeta, bestScore = scan(actionable, false)
+    end
+    if not bestAction then
+        local fallbackText = (actionable ~= "" and actionable) or text
+        bestAction, bestArgs, bestMeta, bestScore = scan(fallbackText, true)
     end
     if not bestAction then return nil end
     return {

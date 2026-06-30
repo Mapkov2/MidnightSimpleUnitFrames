@@ -21,10 +21,10 @@ local POWER_UNITS = KSW("player target focus targettarget focustarget pet boss")
 local CASTBAR_FIELDS = {
     -- Castbar settings live in general DB rather than each unit DB. Keep this map as the one
     -- place where unit pages translate a unit key into the correct castbar field names.
-    player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
-    target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat" },
-    focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", timeFormat = "castbarFocusTimeFormat" },
-    boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat" },
+    player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight", match = "castbarPlayerMatchWidth" },
+    target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", match = "castbarTargetMatchWidth" },
+    focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", timeFormat = "castbarFocusTimeFormat", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", match = "castbarFocusMatchWidth" },
+    boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight", match = "bossCastbarMatchWidth" },
 }
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
 local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderStyle SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY]]
@@ -276,12 +276,16 @@ local function CopyCastbar(g, src, dst)
     g[d.icon] = g[s.icon]
     g[d.text] = g[s.text]
     g[d.timeFormat] = g[s.timeFormat]
+    g[d.w] = g[s.w]
+    g[d.h] = g[s.h]
+    g[d.match] = g[s.match]
     local srcPrefix = CASTBAR_PREFIX[src]
     local dstPrefix = CASTBAR_PREFIX[dst]
-    if not srcPrefix or not dstPrefix then return end
+    if not srcPrefix or not dstPrefix then return true end
     for i = 1, #CASTBAR_COPY_SUFFIXES do
         g[dstPrefix .. CASTBAR_COPY_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_COPY_SUFFIXES[i]]
     end
+    return true
 end
 local function AuraRuntimeSource(unit)
     unit = CanonUnitKey(unit)
@@ -416,7 +420,10 @@ local function CopyUnitSettings(unit, target, scopes)
         end
         if scopes.castbar then
             dst.showInterrupt = src.showInterrupt
-            CopyCastbar(g, srcKey, dstKey)
+            if CopyCastbar(g, srcKey, dstKey) then
+                Call("MSUF_UpdateCastbarWidthSourceSync", g, dstKey)
+                Call("MSUF_ApplyCastbarUnitAndSync", dstKey)
+            end
         end
         if scopes.load then CopyFields(dst, src, COPY_LOAD_CONDITION_FIELDS) end
         if scopes.transparency then CopyFields(dst, src, COPY_TRANSPARENCY_FIELDS) end

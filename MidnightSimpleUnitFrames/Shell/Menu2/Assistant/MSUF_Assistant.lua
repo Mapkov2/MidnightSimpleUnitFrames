@@ -2115,6 +2115,8 @@ local PENDING_GROUP_LAYOUT_ATTRS = {
     hideOfflineDelay = true,
     smoothFill = true,
     reverseFill = true,
+    groupBackdropColor = true,
+    bgColor = true,
     width = true,
     height = true,
     offsetX = true,
@@ -3576,6 +3578,57 @@ local function BuildSerializable(changes)
     return out
 end
 
+local function BuildUnchangedSerializable(changes)
+    local out = {}
+    local lastSetting, lastUnit, lastFrameType, lastCategory, lastValue
+    for i = 1, #(changes or {}) do
+        local item = changes[i]
+        local setting = item and item.setting
+        if setting then
+            local currentValue = type(setting.get) == "function" and setting.get() or nil
+            local targetValue = item.value
+            if targetValue == nil then targetValue = currentValue end
+            out[#out + 1] = {
+                key = setting.key,
+                unit = setting.unit,
+                frameType = setting.frameType,
+                attribute = setting.attribute,
+                oldValue = currentValue,
+                value = targetValue,
+                valueLabel = item.valueLabel,
+                relativeDelta = item.relativeDelta,
+                direction = item.direction,
+                textArea = item.textArea,
+                textSlot = item.textSlot,
+                unchanged = true,
+            }
+            lastSetting = setting.key
+            lastUnit = setting.unit
+            lastFrameType = setting.frameType
+            lastCategory = setting.category
+            lastValue = targetValue
+        end
+    end
+    return out, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue
+end
+
+local function RememberUnchangedChangeContext(plan, changes)
+    if not (A and type(A.RememberAppliedBundle) == "function") then return end
+    local serializable, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue = BuildUnchangedSerializable(changes)
+    if #serializable == 0 then return end
+    A.RememberAppliedBundle({
+        label = AssistantPlanLabel(plan, "Assistant change"),
+        action = "change",
+        lastSetting = lastSetting,
+        lastUnit = lastUnit,
+        lastFrameType = lastFrameType,
+        lastCategory = lastCategory,
+        lastValue = lastValue,
+        serializable = serializable,
+        undoAvailable = false,
+    })
+end
+
 local function CopySerializableActionArgs(value, depth)
     depth = (depth or 0) + 1
     if depth > 4 then return nil end
@@ -3753,6 +3806,7 @@ local function ExecuteChanges(plan)
     end
 
     if #undoChanges == 0 then
+        RememberUnchangedChangeContext(plan, changes)
         if #unchangedApplySettings > 0 then
             RunApplies(unchangedApplySettings)
             local first = unchangedApplySettings[1]

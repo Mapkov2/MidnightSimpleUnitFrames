@@ -1294,6 +1294,28 @@ local function AppendCommands(commands, more)
     for i = 1, #(more or {}) do commands[#commands + 1] = more[i] end
 end
 
+local function PrefixPrePlanAllowedForAttribute(prePlan, prefix, attr)
+    if not (prePlan and type(prePlan.changes) == "table") then return false end
+    attr = tostring(attr or "")
+    if (attr == "width" or attr == "height")
+        and ContainsAny(prefix, { "castbar", "cast bar" })
+        and #prePlan.changes == 1 then
+        local setting = prePlan.changes[1] and prePlan.changes[1].setting
+        if setting and setting.frameType == "castbar" and setting.attribute == "iconBorderStyle" then
+            return false
+        end
+    end
+    if ContainsAny(prefix, { "power bar", "powerbar" })
+        and not ContainsAny(prefix, { "shape", "style" })
+        and #prePlan.changes == 1 then
+        local setting = prePlan.changes[1] and prePlan.changes[1].setting
+        if setting and setting.attribute == "detachedPowerBarShape" then
+            return false
+        end
+    end
+    return true
+end
+
 local function AttributeNumberPairs(text)
     local pairText = Normalize((text or ""):gsub("=", " "))
     local segments, values = {}, {}
@@ -1322,6 +1344,7 @@ local function AttributeNumberPairs(text)
         if i == 1 and prefix and prefix ~= "" then
             prePlan = SimpleParse(prefix)
             if not (prePlan and prePlan.kind == "changes" and type(prePlan.changes) == "table" and #prePlan.changes > 0) then prePlan = nil end
+            if prePlan and not PrefixPrePlanAllowedForAttribute(prePlan, prefix, attr) then prePlan = nil end
         end
         local usedPrePlan = prePlan ~= nil
         prefix = StripCommandLead(prefix or "")
@@ -1720,7 +1743,10 @@ local BOOL_WORDS = {
 local BOOLEAN_ITEM_TERMS = {
     { term = "castbar icons", item = "castbar icon" },
     { term = "cast bar icons", item = "castbar icon" },
+    { term = "castbar icon", item = "castbar icon" },
+    { term = "cast bar icon", item = "castbar icon" },
     { term = "status icons", item = "status icon" },
+    { term = "status icon", item = "status icon" },
     { term = "health bars", item = "health bar" },
     { term = "power bars", item = "power bar" },
     { term = "mana bars", item = "mana bar" },
@@ -1732,9 +1758,6 @@ local BOOLEAN_ITEM_TERMS = {
     { term = "health bar", item = "health bar" },
     { term = "power bar", item = "power bar" },
     { term = "mana bar", item = "mana bar" },
-    { term = "castbar icon", item = "castbar icon" },
-    { term = "cast bar icon", item = "castbar icon" },
-    { term = "status icon", item = "status icon" },
     { term = "castbar", item = "castbar" },
     { term = "cast bar", item = "castbar" },
     { term = "portrait", item = "portrait" },

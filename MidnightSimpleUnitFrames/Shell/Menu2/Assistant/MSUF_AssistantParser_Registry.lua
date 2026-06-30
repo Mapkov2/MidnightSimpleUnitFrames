@@ -33,6 +33,7 @@ local FirstNumber = P.FirstNumber
 local Compact = P.Compact
 local AliasRelationText = P.AliasRelationText
 local TextMatchesAlias = P.TextMatchesAlias
+local ActionableText = P.ActionableText
 local ExtractColor = P.ExtractColor
 local DetectDirection = P.DetectDirection
 local UnitPageKey = P.UnitPageKey
@@ -416,6 +417,34 @@ local function SettingMatchesText(setting, text)
     return false
 end
 
+local BOOLEAN_TOGGLE_TERMS = { "toggle", "switch", "flip", "invert", "umschalten", "wechseln" }
+local BOOLEAN_ALIAS_STATE_WORDS = {
+    "enabled", "disabled", "enable", "disable", "shown", "show", "hidden", "hide",
+    "visible", "visibility", "displayed", "display",
+    "aktiviert", "deaktiviert", "aktivieren", "deaktivieren", "anzeigen", "ausblenden", "sichtbar",
+}
+
+local function BooleanToggleMatchScore(setting, matchText, relationText)
+    if type(setting) ~= "table" or setting.type ~= "boolean" then return 0 end
+    if not ContainsAny(matchText, BOOLEAN_TOGGLE_TERMS) then return 0 end
+    relationText = relationText or AliasRelationText(matchText)
+    local best = 0
+    local function consider(alias)
+        alias = Normalize(alias)
+        if alias == "" then return end
+        for i = 1, #BOOLEAN_ALIAS_STATE_WORDS do
+            alias = alias:gsub("%f[%w]" .. BOOLEAN_ALIAS_STATE_WORDS[i] .. "%f[%W]", " ")
+        end
+        alias = Trim(alias:gsub("%s+", " "))
+        local compact = Compact(alias)
+        if #compact < 5 then return end
+        if TextMatchesAlias(matchText, relationText, alias) and #compact > best then best = #compact end
+    end
+    consider(setting.label)
+    for i = 1, #(setting.aliases or {}) do consider(setting.aliases[i]) end
+    return best
+end
+
 local function SettingMatchScore(setting, text)
     if type(setting) ~= "table" then return 0 end
     text = tostring(text or "")
@@ -463,6 +492,9 @@ local function SettingMatchScore(setting, text)
     if setting.matchLabel ~= false and setting.label and TextMatchesAlias(matchText, relationText, setting.label) then
         local score = #Compact(setting.label)
         if score > best then best = score end
+    end
+    if best == 0 then
+        best = BooleanToggleMatchScore(setting, matchText, relationText)
     end
     if best > 0 and P.SettingMatchScoreCachePut then return P.SettingMatchScoreCachePut(setting, text, best) end
     return best
@@ -916,12 +948,16 @@ local SUGGESTION_IGNORE_TOKENS = {
     frame = true, frames = true, unitframe = true, unitframes = true, group = true, groups = true,
     setting = true, settings = true, option = true, options = true, control = true, controls = true,
     command = true, commands = true, help = true, please = true,
+    assistant = true, msuf = true, can = true, could = true, would = true, will = true,
+    you = true, i = true, im = true, id = true, want = true, wanna = true, need = true,
+    like = true, trying = true, just = true, really = true, maybe = true, pls = true,
     all = true, every = true, everyone = true, everything = true, each = true,
     setze = true, stelle = true, aktivieren = true, aktiviert = true, deaktivieren = true, deaktiviert = true,
     einschalten = true, eingeschaltet = true, ausschalten = true, ausgeschaltet = true,
     erhoehe = true, erhoehen = true, hoeher = true, groesser = true, kleiner = true, senke = true, reduziere = true,
     anzeigen = true, einblenden = true, ausblenden = true, verstecken = true, versteckt = true,
     zeige = true, zeigen = true, hilfe = true, befehl = true, befehle = true, bitte = true, mir = true,
+    kannst = true, koenntest = true, du = true, ich = true, moechte = true, will = true, brauche = true,
     an = true, aus = true, ja = true, nein = true, auf = true, zu = true, als = true, wert = true,
     fuer = true, fur = true, vom = true, von = true, nach = true, ["in"] = true,
     gruppe = true, gruppen = true, gruppenframes = true,
@@ -929,6 +965,7 @@ local SUGGESTION_IGNORE_TOKENS = {
 }
 
 local REGISTRY_CANDIDATE_RARE_TOKEN_LIMIT = 260
+local REGISTRY_FUZZY_CANDIDATE_LIST_LIMIT = 520
 P.REGISTRY_COLOR_VALUE_TOKENS = P.REGISTRY_COLOR_VALUE_TOKENS or {
     white = true, black = true, red = true, green = true, blue = true, yellow = true,
     cyan = true, magenta = true, orange = true, purple = true, pink = true,
@@ -1135,13 +1172,28 @@ P._BuildRegistryCandidateIndex = function(settings, includeAliases)
             end
         end
     end
+    local fuzzyBuckets = {}
+    for token in pairs(byToken) do
+        if type(token) == "string"
+            and #token >= 4
+            and token:match("^[a-z]+$")
+            and not SUGGESTION_IGNORE_TOKENS[token] then
+            local first = token:sub(1, 1)
+            local len = #token
+            fuzzyBuckets[first] = fuzzyBuckets[first] or {}
+            fuzzyBuckets[first][len] = fuzzyBuckets[first][len] or {}
+            fuzzyBuckets[first][len][#fuzzyBuckets[first][len] + 1] = token
+        end
+    end
     P._registryCandidateIndexSettings = settings
     P._registryCandidateIndexCount = #(settings or {})
     P._registryCandidateIndexFull = includeAliases
     P._registryCandidateIndexByToken = byToken
+    P._registryCandidateIndexFuzzyBuckets = fuzzyBuckets
     P._registryCandidateIndexAll = all
     P._registryCandidateCache = {}
     P._registryCandidateCacheOrder = {}
+    P._registryCandidateFuzzyTokenCache = {}
     if P.ClearSettingMatchScoreCache then P.ClearSettingMatchScoreCache() end
 end
 
@@ -1152,6 +1204,56 @@ P._EnsureRegistryCandidateIndex = function(settings, includeAliases)
         or (includeAliases and P._registryCandidateIndexFull ~= true) then
         P._BuildRegistryCandidateIndex(settings, includeAliases)
     end
+end
+
+local function RegistryCandidateListForToken(token)
+    token = Normalize(token)
+    if token == "" then return nil end
+    local byToken = P._registryCandidateIndexByToken
+    local direct = byToken and byToken[token]
+    if direct then return direct end
+    if #token < 4 or not token:match("^[a-z]+$") or SUGGESTION_IGNORE_TOKENS[token] then return nil end
+    local fuzzyWordMatch = P.FuzzyWordMatch or (A and A.FuzzyWordMatch)
+    if type(fuzzyWordMatch) ~= "function" then return nil end
+
+    P._registryCandidateFuzzyTokenCache = P._registryCandidateFuzzyTokenCache or {}
+    local cached = P._registryCandidateFuzzyTokenCache[token]
+    if cached ~= nil then return cached ~= false and cached or nil end
+
+    local first = token:sub(1, 1)
+    local buckets = P._registryCandidateIndexFuzzyBuckets
+    local firstBuckets = buckets and buckets[first]
+    if type(firstBuckets) ~= "table" then
+        P._registryCandidateFuzzyTokenCache[token] = false
+        return nil
+    end
+
+    local out, seenSettings, seenTokens = {}, {}, {}
+    local len = #token
+    for delta = -1, 1 do
+        local bucket = firstBuckets[len + delta]
+        for i = 1, #(bucket or {}) do
+            local indexedToken = bucket[i]
+            if not seenTokens[indexedToken] and fuzzyWordMatch(token, indexedToken) then
+                seenTokens[indexedToken] = true
+                local settings = byToken and byToken[indexedToken]
+                for j = 1, #(settings or {}) do
+                    local setting = settings[j]
+                    if setting and not seenSettings[setting] then
+                        seenSettings[setting] = true
+                        out[#out + 1] = setting
+                        if #out > REGISTRY_FUZZY_CANDIDATE_LIST_LIMIT then
+                            P._registryCandidateFuzzyTokenCache[token] = false
+                            return nil
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    P._registryCandidateFuzzyTokenCache[token] = #out > 0 and out or false
+    return #out > 0 and out or nil
 end
 
 P.RegistryCandidateSettings = function(text, settings, includeAliases)
@@ -1176,7 +1278,7 @@ P.RegistryCandidateSettings = function(text, settings, includeAliases)
     local selectedTokens, selectedCount, hasRareToken = {}, 0, false
     for i = 1, #candidateTokens do
         local token = candidateTokens[i]
-        local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[token]
+        local list = RegistryCandidateListForToken(token)
         if type(list) == "table" and #list > 0 and #list <= REGISTRY_CANDIDATE_RARE_TOKEN_LIMIT then
             selectedCount = selectedCount + 1
             selectedTokens[selectedCount] = token
@@ -1193,7 +1295,7 @@ P.RegistryCandidateSettings = function(text, settings, includeAliases)
         local ordered = {}
         for i = 1, selectedCount do
             if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
-            local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[selectedTokens[i]]
+            local list = RegistryCandidateListForToken(selectedTokens[i])
             for j = 1, #(list or {}) do
                 if j % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
                 local setting = list[j]
@@ -1218,7 +1320,7 @@ P.RegistryCandidateSettings = function(text, settings, includeAliases)
     if #out == 0 then
         for i = 1, selectedCount do
             if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
-            local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[selectedTokens[i]]
+            local list = RegistryCandidateListForToken(selectedTokens[i])
             for j = 1, #(list or {}) do
                 if j % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
                 local setting = list[j]
@@ -1329,6 +1431,7 @@ local UNIT_LOAD_CONDITION_SPECS = {
     { key = "loadCondHideResting", label = "Hide Resting", terms = { "resting", "rested", "rest area", "while resting", "when resting", "ruhend", "erholt" } },
     { key = "loadCondHideInCombat", label = "Hide in Combat", terms = { "in combat", "combat", "fight", "while in combat", "when in combat", "im kampf", "kampf" } },
     { key = "loadCondHideStealthed", label = "Hide Stealthed", terms = { "stealthed", "stealth", "in stealth", "while stealthed", "when stealthed", "getarnt", "verstohlen" } },
+    { key = "loadCondHideInHousing", label = "Hide in Housing", terms = { "housing", "house", "in housing", "while in housing", "when in housing", "player housing", "haus", "spielerhaus" } },
 }
 
 local LOAD_CONDITION_TERMS = {
@@ -1404,6 +1507,10 @@ local function GroupAvailabilityAttributeForText(text)
     end
     if ContainsAny(text, { "client scene", "client scenes", "hide during client scene", "hide in client scene", "client szene" }) then
         return "hideInClientScene", "hide"
+    end
+    local groupScopesForHousing = DetectGroups(text)
+    if #groupScopesForHousing > 0 and ContainsAny(text, { "housing", "house", "in housing", "while in housing", "when in housing", "player housing", "haus", "spielerhaus" }) then
+        return "hideInHousing", "hide"
     end
     if ContainsAny(text, {
         "player in group", "player in group frames", "show player in group",
@@ -1536,6 +1643,15 @@ local function RegistrySuggestions(text, raw, settings)
             bulkSafe = P.AreBulkSafeAuraSettingChanges and P.AreBulkSafeAuraSettingChanges(filtered) or nil,
             label = "Multiple matching options",
             summary = "Changes multiple matched options.",
+        }
+    end
+    if #filtered == 1 then
+        local setting = filtered[1].setting
+        return {
+            kind = "changes",
+            changes = filtered,
+            label = setting and setting.label or "Assistant option change",
+            summary = "Changes the best matching MSUF option.",
         }
     end
     table.sort(filtered, function(a, b)
@@ -1684,6 +1800,15 @@ local function ContextualBooleanValueForRegistrySetting(setting, text)
     return nil
 end
 
+local function ToggleBooleanValueForRegistrySetting(setting, text)
+    if type(setting) ~= "table" or setting.type ~= "boolean" then return nil end
+    if not ContainsAny(text, { "toggle", "switch", "flip", "invert", "umschalten", "wechseln" }) then return nil end
+    if type(setting.get) ~= "function" then return nil end
+    local ok, current = pcall(setting.get)
+    if not ok or type(current) ~= "boolean" then return nil end
+    return not current
+end
+
 ValueForRegistrySetting = function(setting, text, raw)
     if not setting then return nil end
     if setting.type == "boolean" then
@@ -1711,6 +1836,8 @@ ValueForRegistrySetting = function(setting, text, raw)
         if aliasValue ~= nil then return aliasValue end
         local contextualValue = ContextualBooleanValueForRegistrySetting(setting, text)
         if contextualValue ~= nil then return contextualValue end
+        local toggleValue = ToggleBooleanValueForRegistrySetting(setting, text)
+        if toggleValue ~= nil then return toggleValue end
         return DetectBoolean(text)
     end
     if setting.type == "number" then
@@ -3556,7 +3683,7 @@ P.GROUP_COLOR_TARGETS = {
     { key = "groupBorderColor", title = "Group Border Color", terms = { "group border color", "group frame border color", "frame border color", "border color" } },
     { key = "hlFocusColor", title = "Focus Highlight Color", terms = { "focus highlight color", "focus border color", "focus glow color" } },
     { key = "deadBgColor", title = "Dead Background Color", terms = { "dead background color", "dead member background color", "dead offline background color", "dead bg color" } },
-    { key = "bgColor", title = "Bar Background Color", terms = { "group backdrop color", "group background color", "frame background color", "backdrop color", "background color", "bar background color", "hp track color", "health track color", "track color" } },
+    { key = "bgColor", title = "Backdrop Color", terms = { "group backdrop color", "group background color", "frame background color", "backdrop color", "background color", "bar background color", "hp track color", "health track color", "track color" } },
     { key = "healthCustomColor", title = "Custom Health Color", terms = { "custom health color", "health custom color", "health bar custom color" } },
     { key = "gfDarkColor", title = "Dark Bar Color", terms = { "dark health color", "dark bar color", "dark mode health color" } },
     { key = "gfUnifiedColor", title = "Unified Bar Color", terms = { "unified health color", "unified bar color", "unified color" } },
@@ -4043,13 +4170,59 @@ local FULL_REGISTRY_ALIAS_FALLBACK_TERMS = {
     "show", "hide", "enable", "disable", "turn on", "turn off", "move", "set", "change", "make",
 }
 
+local FULL_REGISTRY_ALIAS_SUBJECT_TERMS = {
+    "player", "target", "focus", "pet", "boss", "party", "raid", "mythicraid", "mythic raid",
+    "unitframe", "unitframes", "unit frame", "unit frames", "frame", "frames", "group", "group frames",
+    "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs", "profile",
+    "class power", "class resource", "resource", "gameplay", "crosshair", "totem",
+    "health", "hp", "power", "mana", "name", "text", "font", "bar", "bars", "portrait",
+    "indicator", "status icon", "icon", "tooltip", "minimap", "language", "module",
+    "width", "height", "size", "scale", "opacity", "alpha", "offset", "x offset", "y offset",
+    "position", "anchor", "spacing", "gap", "layer", "z layer", "filter", "cooldown", "stack", "border",
+}
+
 local function ShouldTryFullRegistryAliasFallback(text)
     if FirstNumber(text) ~= nil then return true end
-    return ContainsAny(text, FULL_REGISTRY_ALIAS_FALLBACK_TERMS)
+    if not ContainsAny(text, FULL_REGISTRY_ALIAS_FALLBACK_TERMS) then return false end
+    return ContainsAny(text, FULL_REGISTRY_ALIAS_SUBJECT_TERMS)
+end
+
+local function ParseRegistryAliasCandidatesWithFuzzy(text, raw, settings)
+    local previous = P._allowFuzzyAliasMatch
+    P._allowFuzzyAliasMatch = true
+    local ok, result = pcall(P.ParseRegistryAliasCandidates, text, raw, settings)
+    P._allowFuzzyAliasMatch = previous
+    if not ok then error(result) end
+    return result
+end
+
+local function ParseTargetInlinePartialAmbiguity(text)
+    text = Normalize(text)
+    if not ContainsAny(text, { "inline" }) then return nil end
+    if ContainsAny(text, { "inline text", "target target inline text", "target of target inline text", "separator", "seperator", "delimiter" }) then return nil end
+    if not ContainsAny(text, { "target of target", "targettarget", "target inline", "target target", "tot" }) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then return nil end
+    local setting = Registry and Registry.GetSetting and Registry:GetSetting("targettarget.showToTInTargetName") or nil
+    if not setting then return nil end
+    return {
+        kind = "ambiguous",
+        choices = {
+            {
+                setting = setting,
+                value = value,
+                label = "Target Target Inline Text: " .. (value and "enabled" or "disabled"),
+            },
+        },
+        label = "Target of Target inline option needs clarification",
+        summary = "Asks before applying a partial Target of Target inline request.",
+    }
 end
 
 local function ParseRegistryAlias(text, raw)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(raw or text) then return nil end
+    local partialInline = ParseTargetInlinePartialAmbiguity(text)
+    if partialInline then return partialInline end
     local exactAlias = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(text, raw)
     if exactAlias then return exactAlias end
     local repeated = ParseRepeatedRegistryShortcut(text, raw)
@@ -4061,15 +4234,22 @@ local function ParseRegistryAlias(text, raw)
     local lightSettings = P.RegistryCandidateSettings(text, allSettings, false)
     local result = P.ParseRegistryAliasCandidates(text, raw, lightSettings)
     if result then return result end
+    local actionable = ActionableText and ActionableText(text) or text
+    if actionable ~= text then
+        local actionableLightSettings = P.RegistryCandidateSettings(actionable, allSettings, false)
+        result = P.ParseRegistryAliasCandidates(actionable, raw, actionableLightSettings, true)
+        if result then return result end
+    end
     if (tonumber(P._compoundDepth) or 0) > 0 then return nil end
 
-    local _, fallbackTokens = MeaningTokens(AliasRelationText(text))
+    local fallbackText = actionable ~= text and actionable or text
+    local _, fallbackTokens = MeaningTokens(AliasRelationText(fallbackText))
     if #fallbackTokens == 0 then return nil end
-    if not ShouldTryFullRegistryAliasFallback(text) then return nil end
+    if not (ShouldTryFullRegistryAliasFallback(text) or (actionable ~= text and ShouldTryFullRegistryAliasFallback(actionable))) then return nil end
 
-    local fullSettings = P.RegistryCandidateSettings(text, allSettings, true)
+    local fullSettings = P.RegistryCandidateSettings(fallbackText, allSettings, true)
     if fullSettings ~= lightSettings then
-        return P.ParseRegistryAliasCandidates(text, raw, fullSettings)
+        return ParseRegistryAliasCandidatesWithFuzzy(fallbackText, raw, fullSettings)
     end
     return nil
 end

@@ -323,16 +323,10 @@ function A._ParsePipelineFallback(normalized, raw, ctx)
         or ParseSetting(normalized, ctx)
 end
 
-local function ParserContext(ctxOverride)
-    if type(ctxOverride) == "table" then return ctxOverride end
-    return A.GetContext and A.GetContext() or {}
-end
-A.ParserContext = ParserContext
-
 function A.ParseSimpleChange(text, ctxOverride)
     local raw = Trim(text)
     local normalized = Normalize(raw)
-    local ctx = ParserContext(ctxOverride)
+    local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return nil end
     local parsed = EarlyAuraShortcut(normalized)
         or (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
@@ -355,7 +349,7 @@ end
 function A.Parse(text, ctxOverride)
     local raw = Trim(text)
     local normalized = Normalize(raw)
-    local ctx = ParserContext(ctxOverride)
+    local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return { kind = "empty" } end
     local earlyAuraParsed = EarlyAuraShortcut(normalized)
     if earlyAuraParsed then
@@ -409,6 +403,12 @@ function A.Parse(text, ctxOverride)
         guidedSetupFollowup.normalized = normalized
         return guidedSetupFollowup
     end
+    local directFollowupAnswer = A._ParseFollowupAnswer and A._ParseFollowupAnswer(normalized, ctx)
+    if directFollowupAnswer then
+        directFollowupAnswer.raw = raw
+        directFollowupAnswer.normalized = normalized
+        return directFollowupAnswer
+    end
     local lookupQuestion = P.ParseLookupQuestion and P.ParseLookupQuestion(normalized, raw)
     if lookupQuestion then
         lookupQuestion.raw = raw
@@ -454,6 +454,12 @@ function A.Parse(text, ctxOverride)
         status = "failed",
     }
 end
+
+local function ParserContext(ctxOverride)
+    if type(ctxOverride) == "table" then return ctxOverride end
+    return A.GetContext and A.GetContext() or {}
+end
+A.ParserContext = ParserContext
 
 A.ParsePlan = A.Parse
 A.ParseForTest = A.Parse

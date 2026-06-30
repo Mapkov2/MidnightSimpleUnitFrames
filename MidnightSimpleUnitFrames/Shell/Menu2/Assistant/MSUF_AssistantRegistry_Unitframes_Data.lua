@@ -143,6 +143,7 @@ Data.LOAD_CONDITION_SPECS = {
     { key = "loadCondHideResting", label = "Hide Resting", aliases = { "hide resting", "resting load condition" } },
     { key = "loadCondHideInCombat", label = "Hide in Combat", aliases = { "hide in combat", "combat load condition" } },
     { key = "loadCondHideStealthed", label = "Hide Stealthed", aliases = { "hide stealthed", "stealth load condition" } },
+    { key = "loadCondHideInHousing", label = "Hide in Housing", aliases = { "hide in housing", "housing load condition" } },
 }
 Data.STATUS_TEXT_STATE_SPECS = {
     {

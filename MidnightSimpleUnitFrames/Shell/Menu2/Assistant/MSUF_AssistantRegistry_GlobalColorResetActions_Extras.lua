@@ -58,9 +58,13 @@ Registry:RegisterAction({
         g.aurasOwnBuffHighlightColor = { 1, 0.85, 0.2 }
         g.aurasOwnDebuffHighlightColor = { 1, 0.30, 0.30 }
         g.aurasStackCountColor = { 1, 1, 1 }
+        g.aurasCooldownTextUseBuckets = false
         g.aurasCooldownTextSafeColor = nil
         g.aurasCooldownTextWarningColor = { 1, 0.85, 0.2 }
         g.aurasCooldownTextUrgentColor = { 1, 0.55, 0.1 }
+        g.aurasCooldownTextSafeSeconds = 60
+        g.aurasCooldownTextWarningSeconds = 15
+        g.aurasCooldownTextUrgentSeconds = 5
         local sh = AuraSharedDB()
         sh.pandemicR, sh.pandemicG, sh.pandemicB = 0, 0.4, 1
         ApplyAuraColors("MSUF_ASSISTANT_RESET_AURA_COLORS")

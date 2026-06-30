@@ -84,6 +84,12 @@ function A.GroupFramesRegistry.RegisterTextSettings(ctx, scope)
     RegisterGroupBoolean(scope, "healthTextReverse", "hpTextReverse", "Reverse HP Text", false, "visual", aliases)
 
     aliases = {}
+    AddAliasesForUnit(aliases, scope, "health text decimals")
+    AddAliasesForUnit(aliases, scope, "hp text decimals")
+    AddAliasesForUnit(aliases, scope, "decimal percent")
+    RegisterGroupBoolean(scope, "healthTextDecimals", "healthTextDecimals", "Health Text Decimals", false, "visual", aliases)
+
+    aliases = {}
     AddAliasesForUnit(aliases, scope, "hp text x")
     AddAliasesForUnit(aliases, scope, "hp text x offset")
     AddAliasesForUnit(aliases, scope, "health text x offset")

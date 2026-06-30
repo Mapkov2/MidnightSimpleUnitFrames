@@ -126,6 +126,11 @@ function A.GroupFramesRegistry.RegisterBasicSettings(ctx, scope)
     RegisterGroupBoolean(scope, "hideInClientScene", "hideInClientScene", "Hide During Client Scene", true, "visual", aliases)
 
     aliases = {}
+    AddAliasesForUnit(aliases, scope, "hide in housing", "housing ausblenden")
+    AddAliasesForUnit(aliases, scope, "hide during housing")
+    RegisterGroupBoolean(scope, "hideInHousing", "hideInHousing", "Hide in Housing", false, "visual", aliases)
+
+    aliases = {}
     AddAliasesForUnit(aliases, scope, "hide offline members", "offline spieler ausblenden")
     AddAliasesForUnit(aliases, scope, "offline members")
     RegisterGroupBoolean(scope, "hideOfflineEnabled", "hideOfflineEnabled", "Hide Offline Members", false, "visual", aliases)
