@@ -37,6 +37,7 @@ local function BossPreviewFramesVisible()
 end
 local lastBossPreviewActive
 local lastBossPreviewFn
+local bossPreviewRequestSerial = 0
 local function SyncBossPagePreviewForKey(key, force)
     local active = (key == "uf_boss")
         and M.frame and M.frame.IsShown and M.frame:IsShown()
@@ -58,9 +59,28 @@ local function SyncBossPagePreviewForKey(key, force)
     end
     ApplyBossPagePreviewFallback(active and true or false, "MSUF2_BOSS_PAGE_FALLBACK")
 end
+local function RequestBossPagePreviewForKey(key, force)
+    bossPreviewRequestSerial = bossPreviewRequestSerial + 1
+    if force or key ~= "uf_boss" then
+        SyncBossPagePreviewForKey(key, force)
+        return
+    end
+    local timer = _G.C_Timer
+    if not (timer and type(timer.After) == "function") then
+        SyncBossPagePreviewForKey(key, force)
+        return
+    end
+    local serial = bossPreviewRequestSerial
+    timer.After(0.05, function()
+        if serial ~= bossPreviewRequestSerial then return end
+        if M.activeKey ~= key then return end
+        SyncBossPagePreviewForKey(key, force)
+    end)
+end
 local function ResetBossPagePreviewCache()
     lastBossPreviewActive = nil
     lastBossPreviewFn = nil
+    bossPreviewRequestSerial = bossPreviewRequestSerial + 1
 end
 local GF_PAGE_KEYS = M.KeySetFromWords "gf_layout gf_bars gf_auras gf_indicators"
 local GF_BAR_MENU_PREVIEW_KEYS = M.KeySetFromWords "opt_bars"
@@ -243,12 +263,14 @@ local function RequestGroupPagePreviewForKey(key, force)
         return
     end
     local serial = groupPreviewRequestSerial
-    timer.After(0.06, function()
+    timer.After(0.09, function()
         if serial ~= groupPreviewRequestSerial then return end
+        if M.activeKey ~= key then return end
         SyncGroupPagePreviewForKey(key, force)
     end)
 end
 M.SyncBossPagePreviewForKey = SyncBossPagePreviewForKey
+M.RequestBossPagePreviewForKey = RequestBossPagePreviewForKey
 M.ResetBossPagePreviewCache = ResetBossPagePreviewCache
 M.ResetStatusIndicatorTestModeOnMenuExit = ResetStatusIndicatorTestModeOnMenuExit
 M.SyncGFPagePreviewForKey = SyncGroupPagePreviewForKey

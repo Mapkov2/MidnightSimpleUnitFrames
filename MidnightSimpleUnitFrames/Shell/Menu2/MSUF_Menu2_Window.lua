@@ -112,6 +112,11 @@ local RefreshMenuFramePriority = M.RefreshMenuFramePriority
 local EnsurePersistentMenuState = M.EnsurePersistentMenuState
 local SavePersistentMenuState = M.SavePersistentMenuState
 local SyncBossPagePreviewForKey = M.SyncBossPagePreviewForKey
+local function RequestBossPagePreviewForKey(key, force)
+    local request = M.RequestBossPagePreviewForKey
+    if type(request) == "function" then return request(key, force) end
+    if type(SyncBossPagePreviewForKey) == "function" then return SyncBossPagePreviewForKey(key, force) end
+end
 local SyncGroupPagePreviewForKey = M.SyncGFPagePreviewForKey
 local function RequestGroupPagePreviewForKey(key, force)
     local request = M.RequestGFPagePreviewForKey
@@ -531,7 +536,8 @@ local function EnsureEditModeUIHook()
         if frame and frame:IsShown() then
             if frame.RefreshStatus then frame:RefreshStatus() end
             M.RequestOrRefresh(nil, "edit-mode-ui")
-            SyncGroupPagePreviewForKey(M.activeKey)
+            RequestBossPagePreviewForKey(M.activeKey)
+            RequestGroupPagePreviewForKey(M.activeKey)
         else
             RefreshDashboardEditModeButton()
         end
@@ -733,7 +739,7 @@ function M.SelectPage(key)
         M.CallIf(M.ReleasePinnedPreviews, "SELECT_CACHED", key)
         M.CallIf(M.ReleaseGFNativePreviews, "SELECT_CACHED", key)
         RunRefreshers(cached)
-        SyncBossPagePreviewForKey(key)
+        RequestBossPagePreviewForKey(key)
         RequestGroupPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
         M.CallIf(M.PostponeAssistantPerformanceWarmup, "select-page")
@@ -767,7 +773,7 @@ function M.SelectPage(key)
     RunRefreshers(entry)
     SetTitle(key)
     UpdateNav(key)
-    SyncBossPagePreviewForKey(key)
+    RequestBossPagePreviewForKey(key)
     RequestGroupPagePreviewForKey(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
     M.CallIf(M.PostponeAssistantPerformanceWarmup, "select-page")
@@ -1271,7 +1277,8 @@ local function BuildWindow()
         end
         f:RefreshStatus()
         M.RequestOrRefresh(nil, event or "menu-status-event")
-        SyncGroupPagePreviewForKey(M.activeKey)
+        RequestBossPagePreviewForKey(M.activeKey)
+        RequestGroupPagePreviewForKey(M.activeKey)
     end)
     f:SetScript("OnShow", function(self)
         if M.BlockCombatAction and M.BlockCombatAction() then
@@ -1287,8 +1294,8 @@ local function BuildWindow()
         EnsureEditModeUIHook()
         if self.RefreshStatus then self:RefreshStatus() end
         if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
-        SyncBossPagePreviewForKey(M.activeKey)
-        SyncGroupPagePreviewForKey(M.activeKey)
+        RequestBossPagePreviewForKey(M.activeKey)
+        RequestGroupPagePreviewForKey(M.activeKey)
         M.CallIf(M.UpdateMenuCombatListener)
         M.PostponeAssistantPerformanceWarmup("menu-open")
     end)
