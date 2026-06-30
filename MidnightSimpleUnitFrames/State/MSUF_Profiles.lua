@@ -3614,6 +3614,7 @@ local function MSUF_ProfileIO_MakeUUFUnitVisible(dst)
     dst.loadCondHideInVehicle = false
     dst.loadCondHideInGroup = false
     dst.loadCondHideInInstance = false
+    dst.loadCondHideInHousing = false
     dst.loadCondHideResting = false
     dst.loadCondHideInCombat = false
     dst.loadCondHideStealthed = false

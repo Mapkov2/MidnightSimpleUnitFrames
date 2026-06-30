@@ -1,0 +1,2957 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MSUF Menu2 Full System Mockup</title>
+  <style>
+    :root {
+      --root: #05070c;
+      --window: #080d16;
+      --panel: #0d1421;
+      --panel-2: #111a2a;
+      --card: #121d30;
+      --card-2: #0f1828;
+      --line: #24334d;
+      --line-soft: #1a273d;
+      --line-bright: #385071;
+      --text: #e7eefc;
+      --muted: #8f9db5;
+      --dim: #65728a;
+      --title: #f4f8ff;
+      --accent: #37a8e8;
+      --accent-soft: #0e3955;
+      --green: #39d287;
+      --red: #f26f7a;
+      --gold: #efb84d;
+      --purple: #a889ff;
+      --shadow: rgba(0, 0, 0, 0.52);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(55, 168, 232, 0.13), transparent 32rem),
+        linear-gradient(180deg, #07101c 0%, #05070c 48%, #030508 100%);
+      color: var(--text);
+      letter-spacing: 0;
+    }
+
+    body {
+      padding: 22px;
+      overflow-x: hidden;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .app-shell {
+      width: min(1580px, 100%);
+      min-height: calc(100vh - 44px);
+      margin: 0 auto;
+      border: 1px solid #1c2a40;
+      background: linear-gradient(180deg, rgba(13, 20, 33, 0.98), rgba(5, 9, 16, 0.98));
+      box-shadow: 0 28px 88px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      display: grid;
+      grid-template-rows: 54px 1fr;
+      overflow: hidden;
+    }
+
+    .titlebar {
+      display: grid;
+      grid-template-columns: 280px 1fr 380px;
+      align-items: center;
+      gap: 16px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(14, 24, 39, 0.98), rgba(8, 13, 22, 0.98));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 10px;
+      font-weight: 760;
+      color: var(--title);
+    }
+
+    .brand-mark {
+      width: 24px;
+      height: 24px;
+      border: 1px solid #3f6488;
+      background:
+        linear-gradient(135deg, rgba(55, 168, 232, 0.72), rgba(168, 137, 255, 0.55)),
+        #0e1829;
+      box-shadow: 0 0 0 2px rgba(55, 168, 232, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .brand-sub {
+      display: block;
+      margin-top: 1px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .breadcrumb {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .breadcrumb strong {
+      color: var(--text);
+      font-weight: 760;
+    }
+
+    .searchbox {
+      position: relative;
+      min-width: 0;
+    }
+
+    .searchbox input {
+      width: 100%;
+      height: 34px;
+      border: 1px solid var(--line-bright);
+      background: #08111e;
+      color: var(--text);
+      padding: 0 92px 0 34px;
+      outline: none;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+    }
+
+    .searchbox::before {
+      content: "";
+      position: absolute;
+      left: 13px;
+      top: 12px;
+      width: 9px;
+      height: 9px;
+      border: 2px solid #83a8cf;
+      border-radius: 50%;
+    }
+
+    .searchbox::after {
+      content: "";
+      position: absolute;
+      left: 23px;
+      top: 23px;
+      width: 7px;
+      height: 2px;
+      background: #83a8cf;
+      transform: rotate(45deg);
+      transform-origin: left center;
+    }
+
+    .search-hint {
+      position: absolute;
+      right: 8px;
+      top: 7px;
+      height: 20px;
+      padding: 3px 7px;
+      border: 1px solid #26384f;
+      color: var(--dim);
+      font-size: 11px;
+      background: #0c1625;
+    }
+
+    .scope-strip {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .scope-chip,
+    .badge,
+    .tiny-chip {
+      border: 1px solid #24496a;
+      background: #0a1b2b;
+      color: #bfe9ff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+
+    .scope-chip.active {
+      background: #0d3956;
+      border-color: #3c9ed0;
+      color: #e8fbff;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    }
+
+    .main-grid {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 280px minmax(560px, 1fr) 380px;
+    }
+
+    .nav {
+      min-height: 0;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(8, 14, 24, 0.98), rgba(5, 9, 16, 0.98));
+      padding: 12px;
+    }
+
+    .nav-section {
+      margin-bottom: 12px;
+    }
+
+    .nav-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #9fb1cb;
+      font-size: 11px;
+      font-weight: 760;
+      text-transform: uppercase;
+      margin: 12px 6px 6px;
+    }
+
+    .nav-button {
+      width: 100%;
+      height: 32px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      display: grid;
+      grid-template-columns: 18px 1fr auto;
+      align-items: center;
+      gap: 7px;
+      text-align: left;
+      padding: 0 8px;
+      cursor: pointer;
+    }
+
+    .nav-button:hover {
+      border-color: #1d314b;
+      background: rgba(55, 168, 232, 0.055);
+      color: var(--text);
+    }
+
+    .nav-button.active {
+      border-color: #335e83;
+      background: linear-gradient(90deg, rgba(20, 70, 105, 0.92), rgba(11, 26, 44, 0.86));
+      color: #f2fbff;
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .nav-icon {
+      width: 14px;
+      height: 14px;
+      border: 1px solid #385071;
+      background: #0f1a2b;
+      display: inline-block;
+    }
+
+    .nav-button.active .nav-icon {
+      background: var(--accent);
+      border-color: #9bd8ff;
+      box-shadow: 0 0 12px rgba(55, 168, 232, 0.35);
+    }
+
+    .nav-count {
+      color: var(--dim);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .content {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 16px 18px 24px;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.018), transparent 18px),
+        var(--window);
+    }
+
+    .page-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+
+    .page-title {
+      margin: 0 0 6px;
+      color: var(--title);
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+
+    .page-subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      max-width: 860px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .tool-button {
+      height: 30px;
+      border: 1px solid #2a4260;
+      background: #0d1727;
+      color: #cbd9ef;
+      padding: 0 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .tool-button.primary {
+      border-color: #3f8fbd;
+      background: #0d3854;
+      color: #e9fbff;
+    }
+
+    .segment-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      margin-bottom: 14px;
+      border: 1px solid #213149;
+      background: #08111e;
+      width: fit-content;
+      max-width: 100%;
+      overflow: auto;
+    }
+
+    .segment-tabs button {
+      height: 28px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      padding: 0 12px;
+      white-space: nowrap;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .segment-tabs button.active {
+      color: #eefdff;
+      border-color: #346487;
+      background: #0d2d45;
+    }
+
+    .section {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      margin-bottom: 12px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .section-header {
+      min-height: 42px;
+      padding: 0 12px;
+      display: grid;
+      grid-template-columns: 16px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid rgba(36, 51, 77, 0.86);
+      background: linear-gradient(180deg, rgba(18, 29, 48, 0.95), rgba(13, 20, 33, 0.95));
+      cursor: pointer;
+    }
+
+    .section.closed .section-header {
+      border-bottom-color: transparent;
+    }
+
+    .chev {
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 7px solid #94a8c4;
+      transition: transform 0.12s ease;
+    }
+
+    .section.closed .chev {
+      transform: rotate(-90deg);
+    }
+
+    .section-title {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .section-meta {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .badge {
+      color: #cde7ff;
+      border-color: #274d70;
+      background: #0b2135;
+      padding: 3px 7px;
+    }
+
+    .badge.ok {
+      color: #bfffe0;
+      border-color: #268b5f;
+      background: #073522;
+    }
+
+    .badge.warn {
+      color: #ffe0a2;
+      border-color: #8f6727;
+      background: #30220b;
+    }
+
+    .section-body {
+      padding: 12px;
+    }
+
+    .section.closed .section-body {
+      display: none;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .cards.single {
+      grid-template-columns: 1fr;
+    }
+
+    .control-card {
+      min-width: 0;
+      border: 1px solid var(--line-soft);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 22px),
+        var(--card);
+      padding: 11px 12px 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .control-card h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .control-card p {
+      margin: 4px 0 10px;
+      min-height: 16px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .row {
+      min-height: 28px;
+      display: grid;
+      grid-template-columns: minmax(116px, 1fr) minmax(124px, auto);
+      align-items: center;
+      gap: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.035);
+      padding: 6px 0;
+    }
+
+    .row:first-of-type {
+      border-top: 0;
+    }
+
+    .row-label {
+      min-width: 0;
+      color: #d9e5f6;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .control-value {
+      justify-self: end;
+      max-width: 100%;
+      min-height: 22px;
+      border: 1px solid #2a3d58;
+      background: #0a1322;
+      color: #c9d8ee;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .control-value.on {
+      border-color: #1e7e55;
+      background: #07361f;
+      color: #baffdc;
+    }
+
+    .control-value.off {
+      color: #738096;
+      background: #090f1a;
+    }
+
+    .control-value.accent {
+      border-color: #3886b3;
+      background: #0a2a41;
+      color: #d9f5ff;
+    }
+
+    .swatches {
+      display: flex;
+      gap: 5px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .swatch {
+      width: 20px;
+      height: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+    }
+
+    .side {
+      min-height: 0;
+      overflow: auto;
+      padding: 14px;
+      border-left: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(8, 14, 24, 0.98), rgba(5, 9, 16, 0.98));
+    }
+
+    .side-panel {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      margin-bottom: 12px;
+    }
+
+    .side-title {
+      min-height: 36px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line-soft);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 800;
+      background: #101a2b;
+    }
+
+    .side-body {
+      padding: 11px;
+    }
+
+    .preview-frame {
+      border: 1px solid #263a58;
+      background:
+        linear-gradient(180deg, rgba(57, 91, 130, 0.13), rgba(0, 0, 0, 0.05)),
+        #07111e;
+      min-height: 212px;
+      padding: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .unit-preview {
+      position: relative;
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .portrait {
+      height: 58px;
+      border: 1px solid #385071;
+      background:
+        linear-gradient(135deg, rgba(235, 184, 77, 0.42), rgba(168, 137, 255, 0.2)),
+        #111a2a;
+    }
+
+    .bar-stack {
+      display: grid;
+      gap: 5px;
+      align-content: start;
+    }
+
+    .healthbar,
+    .powerbar,
+    .castbar {
+      position: relative;
+      height: 24px;
+      border: 1px solid #304766;
+      background: #0a1322;
+      overflow: hidden;
+    }
+
+    .healthbar::before {
+      content: "";
+      position: absolute;
+      inset: 0 36% 0 0;
+      background: linear-gradient(90deg, #1ba66b, #d9b33e, #d35c5c);
+    }
+
+    .powerbar {
+      height: 12px;
+    }
+
+    .powerbar::before {
+      content: "";
+      position: absolute;
+      inset: 0 18% 0 0;
+      background: #1f70d6;
+    }
+
+    .castbar {
+      height: 18px;
+      margin-top: 4px;
+    }
+
+    .castbar::before {
+      content: "";
+      position: absolute;
+      inset: 0 44% 0 0;
+      background: #d8a54f;
+    }
+
+    .bar-text {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 7px;
+      color: #f9fbff;
+      font-size: 11px;
+      font-weight: 800;
+      text-shadow: 0 1px 1px #000;
+    }
+
+    .aura-strip {
+      display: flex;
+      gap: 5px;
+      margin-top: 10px;
+      justify-content: flex-end;
+    }
+
+    .aura {
+      width: 26px;
+      height: 26px;
+      border: 1px solid #385071;
+      background: #182a3e;
+      position: relative;
+    }
+
+    .aura.debuff {
+      border-color: #a03a4a;
+      background: #331320;
+    }
+
+    .aura::after {
+      content: "3";
+      position: absolute;
+      right: 2px;
+      bottom: 1px;
+      color: white;
+      font-size: 10px;
+      font-weight: 800;
+      text-shadow: 0 1px 1px black;
+    }
+
+    .group-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+      margin-top: 8px;
+    }
+
+    .member {
+      height: 42px;
+      border: 1px solid #2d4260;
+      background: #0a1322;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .member::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: var(--hp, 70%);
+      background: linear-gradient(90deg, rgba(34, 164, 102, 0.9), rgba(105, 148, 65, 0.85));
+    }
+
+    .member .name {
+      position: relative;
+      z-index: 1;
+      display: block;
+      padding: 5px 7px;
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+      text-shadow: 0 1px 1px black;
+    }
+
+    .corner {
+      position: absolute;
+      z-index: 2;
+      width: 8px;
+      height: 8px;
+      right: 3px;
+      top: 3px;
+      background: var(--red);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+    }
+
+    .spell-dot {
+      position: absolute;
+      z-index: 2;
+      width: 14px;
+      height: 14px;
+      left: 4px;
+      bottom: 4px;
+      border: 1px solid #d8eaff;
+      background: var(--purple);
+    }
+
+    .subsystem-list {
+      display: grid;
+      gap: 7px;
+    }
+
+    .subsystem {
+      display: grid;
+      grid-template-columns: 9px 1fr auto;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      border: 1px solid #1d2b42;
+      background: #0a1322;
+      padding: 4px 7px;
+      color: #c7d4e8;
+      font-size: 11px;
+    }
+
+    .subsystem .dot {
+      width: 9px;
+      height: 9px;
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(55, 168, 232, 0.38);
+    }
+
+    .coverage {
+      border: 1px solid var(--line);
+      background: #0c1422;
+      margin-top: 14px;
+    }
+
+    .coverage-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 38px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--line-soft);
+      background: #101a2b;
+      color: var(--text);
+      font-weight: 800;
+      font-size: 13px;
+    }
+
+    .coverage-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0;
+    }
+
+    .coverage-cell {
+      min-height: 106px;
+      border-right: 1px solid rgba(255, 255, 255, 0.045);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+      padding: 10px;
+    }
+
+    .coverage-cell:nth-child(4n) {
+      border-right: 0;
+    }
+
+    .coverage-cell h4 {
+      margin: 0 0 7px;
+      color: #e5efff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .coverage-cell p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.42;
+    }
+
+    .palette {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 7px;
+    }
+
+    .mini-note {
+      color: var(--dim);
+      font-size: 11px;
+      line-height: 1.45;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 1220px) {
+      .titlebar,
+      .main-grid {
+        grid-template-columns: 238px minmax(0, 1fr);
+      }
+
+      .titlebar {
+        grid-template-areas:
+          "brand search"
+          "scope scope";
+        height: auto;
+        min-height: 82px;
+        align-items: center;
+      }
+
+      .brand { grid-area: brand; }
+      .searchbox { grid-area: search; }
+      .scope-strip { grid-area: scope; justify-content: flex-start; padding-bottom: 8px; }
+      .side { display: none; }
+      .nav { width: 238px; }
+      .coverage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cards { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 820px) {
+      body { padding: 0; }
+      .app-shell { min-height: 100vh; }
+      .titlebar,
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+      .titlebar {
+        grid-template-areas:
+          "brand"
+          "search"
+          "scope";
+        padding: 10px;
+      }
+      .nav {
+        max-height: 260px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .coverage-grid { grid-template-columns: 1fr; }
+      .page-head { grid-template-columns: 1fr; }
+      .toolbar { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="titlebar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <span>
+          Midnight Simple Unit Frames
+          <span class="brand-sub">Menu2 full-system mockup</span>
+        </span>
+      </div>
+      <div class="searchbox">
+        <input id="quickSearch" type="search" placeholder="Search page, option, assistant command, or registry alias">
+        <span class="search-hint">Ctrl K</span>
+      </div>
+      <div class="scope-strip" aria-label="Scope switcher">
+        <span class="scope-chip active">Selected scope</span>
+        <span class="scope-chip">Global</span>
+        <span class="scope-chip">Player</span>
+        <span class="scope-chip">Party</span>
+        <span class="scope-chip">Raid</span>
+      </div>
+    </header>
+
+    <main class="main-grid">
+      <nav class="nav" id="nav"></nav>
+      <section class="content">
+        <div class="page-head">
+          <div>
+            <div class="breadcrumb" id="breadcrumb">MSUF Menu2 / <strong>Dashboard</strong></div>
+            <h1 class="page-title" id="pageTitle">MSUF Menu</h1>
+            <p class="page-subtitle" id="pageSubtitle"></p>
+          </div>
+          <div class="toolbar">
+            <button class="tool-button">Copy From...</button>
+            <button class="tool-button">Apply To...</button>
+            <button class="tool-button primary">Open Assistant</button>
+          </div>
+        </div>
+        <div class="segment-tabs" id="segmentTabs"></div>
+        <div id="pageBody"></div>
+        <div class="coverage" id="coverage"></div>
+      </section>
+      <aside class="side">
+        <div class="side-panel">
+          <div class="side-title">
+            Native Preview
+            <span class="tiny-chip" id="previewMode">Unit</span>
+          </div>
+          <div class="side-body">
+            <div class="preview-frame" id="previewFrame"></div>
+            <p class="mini-note">Preview is pinned like the Menu2 native preview sections. It changes state with the selected page and never requires building hidden pages.</p>
+          </div>
+        </div>
+        <div class="side-panel">
+          <div class="side-title">
+            Subsystems Used
+            <span class="tiny-chip">runtime</span>
+          </div>
+          <div class="side-body">
+            <div class="subsystem-list" id="subsystems"></div>
+          </div>
+        </div>
+        <div class="side-panel">
+          <div class="side-title">
+            Assistant
+            <span class="tiny-chip">sliced</span>
+          </div>
+          <div class="side-body">
+            <div class="subsystem-list">
+              <div class="subsystem"><span class="dot"></span><span>Static registry hits first</span><span class="badge ok">No hidden UI build</span></div>
+              <div class="subsystem"><span class="dot"></span><span>Jobs capped to small slices</span><span class="badge">2 ms</span></div>
+              <div class="subsystem"><span class="dot"></span><span>Warmup tied to menu lifetime</span><span class="badge warn">Stop on close</span></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const unitSharedSections = (unitLabel) => [
+      {
+        title: "Hide Preview",
+        badge: "native",
+        cards: [
+          card("Pinned Unit Preview", "Same mental model as current Menu2 preview blocks.", [
+            row("Preview target", unitLabel),
+            row("State", "Normal / Combat / Targeted"),
+            row("Show overlays", "On", "on"),
+            row("Preview lock", "On", "on")
+          ]),
+          card("Fast Scope Actions", "Actions should sit next to preview, not in unrelated pages.", [
+            row("Copy settings from", "Player / Target / Focus"),
+            row("Apply to", "Selected compatible units"),
+            row("Reset section", "Current section only"),
+            row("Open search result", "Focus section")
+          ])
+        ]
+      },
+      {
+        title: "Frame Basics",
+        badge: "core",
+        cards: [
+          card("Unit Frame", "Visibility, click behavior, and base sizing.", [
+            row("Enabled", "On", "on"),
+            row("Locked", "Off", "off"),
+            row("Click-through", "Off", "off"),
+            row("Frame strata", "MEDIUM")
+          ]),
+          card("Size", "Width, height, scale, and safe combat rebuild behavior.", [
+            row("Width", "240 px"),
+            row("Height", "54 px"),
+            row("Scale", "1.00"),
+            row("Combat changes", "Defer")
+          ])
+        ]
+      },
+      {
+        title: "Auras",
+        badge: "12.1",
+        cards: [
+          card("Aura Lanes", "Per-unit lane enablement using the 12.1 aura system.", [
+            row("Buffs", "On", "on"),
+            row("Debuffs", "On", "on"),
+            row("Important only", "Optional"),
+            row("Use global filters", "On", "on")
+          ]),
+          card("Placement", "Fast access to the full Aura Style and Filters pages.", [
+            row("Anchor", "TOPRIGHT"),
+            row("Growth", "LEFT then DOWN"),
+            row("Icon size", "24 px"),
+            row("Open advanced page", "Aura Style")
+          ])
+        ]
+      },
+      {
+        title: "Text",
+        badge: "slots",
+        cards: [
+          card("Health Text", "All HP text modes belong here for each UF page.", [
+            row("Mode", "Current + Percent", "accent"),
+            row("Decimals", "On", "on"),
+            row("Missing health", "Enabled"),
+            row("Dead/offline text", "Use status")
+          ]),
+          card("Power Text", "Slot-based position and visibility controls.", [
+            row("Mode", "Current"),
+            row("Decimals", "Off", "off"),
+            row("Hide at full", "On", "on"),
+            row("Position set", "All slots")
+          ])
+        ]
+      },
+      {
+        title: "Status icons",
+        badge: "basic + advanced",
+        cards: [
+          card("Selected Indicator", "Leader, assist, role, rest, combat, ready check.", [
+            row("Indicator", "Role"),
+            row("Enabled", "On", "on"),
+            row("Size", "18 px"),
+            row("Preview state", "Tank + Combat")
+          ]),
+          card("Placement", "Simple placement first, advanced grid available in same section.", [
+            row("Anchor", "TOPLEFT"),
+            row("X / Y", "4 / -4"),
+            row("Advanced placement", "Available"),
+            row("Clamp inside frame", "On", "on")
+          ])
+        ]
+      },
+      {
+        title: "Portrait",
+        badge: "visual",
+        cards: [
+          card("Portrait", "Main portrait visibility and render mode.", [
+            row("Enabled", "On", "on"),
+            row("Mode", "Class / 3D / 2D"),
+            row("Alpha", "1.00"),
+            row("Mirror on right", "Off", "off")
+          ]),
+          card("Shape & Border", "Shape, class color, and background options.", [
+            row("Shape", "Rounded texture"),
+            row("Border", "Class color"),
+            row("Background", "Bar tint"),
+            row("Class texture", "On", "on")
+          ])
+        ]
+      },
+      {
+        title: "Power Bar",
+        badge: "unit",
+        cards: [
+          card("Power Bar", "Per-unit visibility, height, and color source.", [
+            row("Enabled", "On", "on"),
+            row("Height", "12 px"),
+            row("Color source", "Power type"),
+            row("Smooth updates", "On", "on")
+          ]),
+          card("Power Textures", "Uses global SharedMedia texture defaults unless overridden.", [
+            row("Texture", "Global bar texture"),
+            row("Background", "Global background"),
+            row("Rounded", "Use global"),
+            row("Text accuracy", "Exact")
+          ])
+        ]
+      },
+      {
+        title: "Castbar",
+        badge: "tabs",
+        cards: [
+          card("General", "Unit castbar visibility and provider selection.", [
+            row("Enabled", unitLabel === "Pet" ? "Off" : "On", unitLabel === "Pet" ? "off" : "on"),
+            row("Provider", "Blizzard / MSUF"),
+            row("Interrupt color", "Global"),
+            row("Empowered support", "Global")
+          ]),
+          card("Text + Icon", "Spell name, cast time, icon style, and shortening.", [
+            row("Spell name", "On", "on"),
+            row("Cast time", "On", "on"),
+            row("Icon", "Left"),
+            row("Name shortening", "Global")
+          ])
+        ]
+      },
+      {
+        title: "Transparency",
+        badge: "fade",
+        cards: [
+          card("Opacity", "Fade the health bar and background.", [
+            row("Frame alpha", "1.00"),
+            row("Inactive alpha", "0.70"),
+            row("Combat alpha", "1.00"),
+            row("Fade background too", "On", "on")
+          ]),
+          card("Options", "Keep critical text and portrait readable.", [
+            row("Keep text readable", "On", "on"),
+            row("Keep portrait readable", "On", "on"),
+            row("Mouseover restores", "On", "on"),
+            row("Target restores", "On", "on")
+          ])
+        ]
+      },
+      {
+        title: "Range Fade",
+        badge: "runtime",
+        cards: [
+          card("Range", "Unitframe range fade.", [
+            row("Enabled", "On", "on"),
+            row("Range source", "Spell / interact"),
+            row("Fade layer", "Frame + auras"),
+            row("Update budget", "Runtime")
+          ]),
+          card("Out of range", "Opacity multiplier and affected layer.", [
+            row("Alpha", "0.45"),
+            row("Offline alpha", "0.25"),
+            row("Dead alpha", "0.55"),
+            row("Smooth fade", "On", "on")
+          ])
+        ]
+      },
+      {
+        title: "Load Conditions",
+        badge: "safe",
+        cards: [
+          card("Game State", "Per-unit load condition toggles.", [
+            row("Hide in combat", "Off", "off"),
+            row("Hide in vehicle", "Optional"),
+            row("Hide in pet battle", "On", "on"),
+            row("Hide in Housing", "On", "on")
+          ]),
+          card("Spec / Class", "Condition changes are applied out of combat.", [
+            row("Spec profile", "Follow profile"),
+            row("Class restriction", "None"),
+            row("Instance type", "Any"),
+            row("Combat apply", "Defer")
+          ])
+        ]
+      },
+      {
+        title: "Anchoring",
+        badge: "layout",
+        cards: [
+          card("Anchor", "Position relative to UIParent or another MSUF frame.", [
+            row("Point", "CENTER"),
+            row("Relative frame", "UIParent"),
+            row("Relative point", "CENTER"),
+            row("X / Y", "0 / -160")
+          ]),
+          card("Nudge", "Small-step positioning without accidental rebuilds.", [
+            row("Step", "1 px"),
+            row("Snap", "Off", "off"),
+            row("Copy anchor", "Available"),
+            row("Reset anchor", "Section only")
+          ])
+        ]
+      }
+    ];
+
+    const bossExtra = {
+      title: "Boss Layout",
+      badge: "boss",
+      cards: [
+        card("Boss frame layout", "Controls row spacing and count for boss frames.", [
+          row("Boss count", "5"),
+          row("Growth", "DOWN"),
+          row("Spacing", "12 px"),
+          row("Shared castbars", "On", "on")
+        ]),
+        card("Boss text", "Boss pages still use the same UF text system.", [
+          row("Name text", "Left"),
+          row("Health decimals", "On", "on"),
+          row("Power text", "Optional"),
+          row("Status icons", "Compact")
+        ])
+      ]
+    };
+
+    function card(title, subtitle, rows) {
+      return { title, subtitle, rows };
+    }
+
+    function row(label, value, kind) {
+      return { label, value, kind: kind || "" };
+    }
+
+    function colorRow(label, values) {
+      return { label, swatches: values };
+    }
+
+    const pages = {
+      home: {
+        group: "Dashboard",
+        title: "MSUF Menu",
+        subtitle: "Full Menu2 mockup using the actual page registry, native section structure, preview, assistant, and subsystem coverage.",
+        systems: ["Page registry", "Assistant registry", "Pinned previews", "Scope override", "Combat-safe apply", "Static search index"],
+        sections: [
+          {
+            title: "Start Here",
+            badge: "dashboard",
+            cards: [
+              card("Common Tasks", "A direct route to the settings users touch most.", [
+                row("Move frames", "Unit / Group layout"),
+                row("Change health text", "UF/GF Text"),
+                row("Change colors", "Colors"),
+                row("Highlight aggro", "Bars -> Highlight Borders")
+              ]),
+              card("Current Profile", "Profile state should be visible without opening Profiles.", [
+                row("Profile", "Default"),
+                row("Spec profile", "Disabled"),
+                row("Pending combat changes", "0", "on"),
+                row("Menu warmup", "Stopped when closed", "on")
+              ])
+            ]
+          },
+          {
+            title: "Subsystem Map",
+            badge: "all systems",
+            cards: [
+              card("Frames", "Unit pages share the same section pipeline.", [
+                row("Unit pages", "Player, Target, Boss, Focus, Pet, ToT, Focus Target"),
+                row("Registered sections", "Auras, Text, Status, Portrait, Power, Castbar"),
+                row("Load conditions", "UF + GF"),
+                row("Lazy sections", "Enabled")
+              ]),
+              card("Group Frames", "Group pages are separate but share style/runtime foundations.", [
+                row("Layout", "Frame basics, geometry, sorting, scale, anchoring"),
+                row("Health & Text", "Colors, bars, power, text, range"),
+                row("Indicators", "Targeted spells, spell indicators, corners"),
+                row("Auras", "Buffs, debuffs, placement, grid")
+              ])
+            ]
+          }
+        ]
+      },
+      search: {
+        group: "Dashboard",
+        title: "Search",
+        subtitle: "Search uses static Assistant registry hits by default, with hidden page indexing kept opt-in.",
+        systems: ["Search API", "Assistant registry", "Static index", "Optional hidden page index", "No hidden page build"],
+        sections: [
+          {
+            title: "Search Results",
+            badge: "static first",
+            cards: [
+              card("Result List", "Results are grouped by page, section, and control.", [
+                row("health decimals", "UF Text / GF Text"),
+                row("housing", "Load Conditions"),
+                row("aggro", "Bars / Indicators"),
+                row("gradient", "Colors / Bars")
+              ]),
+              card("Index Policy", "Avoids building all menu pages in the background.", [
+                row("Hidden page build", "Off", "off"),
+                row("Opt-in CVar", "MSUF_SEARCH_ALLOW_HIDDEN_PAGE_INDEX"),
+                row("Saved option", "general.searchHiddenPageIndex"),
+                row("Combat behavior", "No work")
+              ])
+            ]
+          }
+        ]
+      },
+      opt_bars: {
+        group: "Appearance",
+        title: "MSUF Bars",
+        subtitle: "Global bar texture, gradient, absorb, outline, highlight, dispel overlay, animation, and text accuracy controls.",
+        systems: ["Global style", "SharedMedia", "Highlight borders", "Dispel overlay", "Bar runtime"],
+        sections: [
+          {
+            title: "Textures & Gradient",
+            badge: "style",
+            cards: [
+              card("Textures", "SharedMedia texture source and fallback.", [
+                row("Health texture", "Minimalist"),
+                row("Power texture", "Global"),
+                row("Background texture", "Global"),
+                row("Use rounded mask", "On", "on")
+              ]),
+              card("Health Gradient", "Color stop editing belongs close to the bar model.", [
+                row("Gradient enabled", "On", "on"),
+                colorRow("Low / Mid / High", ["#d65a5a", "#e0b84e", "#24a66d"]),
+                row("Midpoint", "50%"),
+                row("Preview", "Live")
+              ])
+            ]
+          },
+          {
+            title: "Absorb Display",
+            badge: "runtime",
+            cards: [
+              card("Absorb", "Absorb overlay and overflow behavior.", [
+                row("Enabled", "On", "on"),
+                row("Overflow cap", "100%"),
+                row("Texture", "Global"),
+                row("Alpha", "0.72")
+              ]),
+              card("Heal Absorb", "Separate treatment for negative absorbs.", [
+                row("Enabled", "On", "on"),
+                row("Color", "Red"),
+                row("Show text", "Optional"),
+                row("Priority", "Above absorb")
+              ])
+            ]
+          },
+          {
+            title: "Frame Outline",
+            badge: "border",
+            cards: [
+              card("Outline", "Global frame outline width, alpha, and texture.", [
+                row("Enabled", "On", "on"),
+                row("Width", "1 px"),
+                row("Alpha", "0.85"),
+                row("Inset", "0 px")
+              ]),
+              card("Rounded Texture", "Global rounded bar and outline model.", [
+                row("Rounded bars", "On", "on"),
+                row("Radius", "8 px"),
+                row("Use alpha asset", "On", "on"),
+                row("Corner smoothing", "High")
+              ])
+            ]
+          },
+          {
+            title: "Highlight Borders",
+            badge: "aggro",
+            cards: [
+              card("Border Modes", "Mouseover, target, focus, dispel, aggro, and role state borders.", [
+                row("Mouseover", "Blue"),
+                row("Target", "Gold"),
+                row("Aggro", "Red"),
+                row("Aggro non-tank only", "On", "on")
+              ]),
+              card("Priority Order", "First active condition wins unless stacked mode is enabled.", [
+                row("1", "Dispel"),
+                row("2", "Aggro non-tank"),
+                row("3", "Target / focus"),
+                row("4", "Mouseover")
+              ]),
+              card("Corner Indicator Link", "Aggro can also light corner indicators for non-tanks.", [
+                row("Show in corners", "On", "on"),
+                row("Tank role suppression", "On", "on"),
+                row("Threat source", "UnitThreatSituation"),
+                row("Combat only", "On", "on")
+              ])
+            ]
+          },
+          {
+            title: "UnitFrame Dispel Overlay",
+            badge: "debuff",
+            cards: [
+              card("Overlay", "Tints health bars when a configured debuff condition is active.", [
+                row("Enabled", "On", "on"),
+                row("Source", "Dispel type"),
+                row("Alpha", "0.34"),
+                row("Affects", "Health fill")
+              ]),
+              card("Classes", "Class-aware dispel support.", [
+                row("Magic", "Healer capable"),
+                row("Poison", "Class capable"),
+                row("Disease", "Class capable"),
+                row("Curse", "Class capable")
+              ])
+            ]
+          },
+          {
+            title: "Bar Animation + Text Accuracy",
+            badge: "perf",
+            cards: [
+              card("Animation", "Smooth bar interpolation without combat spikes.", [
+                row("Smooth health", "On", "on"),
+                row("Smooth power", "On", "on"),
+                row("Update budget", "Runtime"),
+                row("Combat throttle", "Enabled")
+              ]),
+              card("Text Accuracy", "Controls how often text re-evaluates.", [
+                row("Health text", "Exact events"),
+                row("Power text", "Exact events"),
+                row("Absorb text", "Event driven"),
+                row("Decimals", "Per text page")
+              ])
+            ]
+          }
+        ]
+      },
+      opt_colors: {
+        group: "Appearance",
+        title: "MSUF Colors",
+        subtitle: "Complete color surface: font, class bars, backgrounds, unitframes, NPC types, bars, dispel, castbar, mouseover, gameplay, power, class power, auras, portrait.",
+        systems: ["Color store", "Class colors", "NPC type colors", "Aura colors", "Portrait colors"],
+        sections: [
+          {
+            title: "Unitframe Global Coloring",
+            badge: "core",
+            cards: [
+              card("Health Source", "Global health color mode and gradient stops.", [
+                row("Health mode", "Class / Reaction / Gradient"),
+                colorRow("Gradient stops", ["#d65a5a", "#e0b84e", "#24a66d"]),
+                row("Pet uses owner class", "Optional"),
+                row("NPC reaction fallback", "On", "on")
+              ]),
+              card("Bar Background Tint", "Behind health and power bars.", [
+                row("Background mode", "Darken fill"),
+                row("Background alpha", "0.62"),
+                row("Use texture tint", "On", "on"),
+                colorRow("Custom tint", ["#101722", "#1c2c44"])
+              ])
+            ]
+          },
+          {
+            title: "Class Bar Colors",
+            badge: "classes",
+            cards: [
+              card("Player Classes", "Editable class swatches.", [
+                colorRow("Warrior / Paladin / Hunter", ["#c69b6d", "#f48cba", "#aad372"]),
+                colorRow("Rogue / Priest / DK", ["#fff468", "#ffffff", "#c41e3a"]),
+                colorRow("Shaman / Mage / Warlock", ["#0070dd", "#3fc7eb", "#8788ee"]),
+                colorRow("Monk / Druid / DH / Evoker", ["#00ff98", "#ff7c0a", "#a330c9", "#33937f"])
+              ]),
+              card("Class Resource Colors", "Pips, alt mana, and resource bars.", [
+                row("Use class defaults", "On", "on"),
+                row("Combo / Holy / Chi", "Editable"),
+                row("Rune colors", "Editable"),
+                row("Alternative mana", "Blue")
+              ])
+            ]
+          },
+          {
+            title: "Unitframe Colors",
+            badge: "unit",
+            cards: [
+              card("Unit States", "Dead, offline, tapped, selected, and reaction colors.", [
+                colorRow("Dead / Offline / Tapped", ["#5d6470", "#353b45", "#777777"]),
+                row("Use reaction colors", "On", "on"),
+                row("Hostile players", "Class color"),
+                row("Neutral NPC", "Yellow")
+              ]),
+              card("NPC Type Colors", "Type-based NPC color overrides.", [
+                row("Normal", "Reaction"),
+                row("Rare", "Blue accent"),
+                row("Elite", "Gold"),
+                row("Boss", "Red")
+              ])
+            ]
+          },
+          {
+            title: "Bar Colors",
+            badge: "bars",
+            cards: [
+              card("Health / Power", "Global defaults used by UF and GF bars.", [
+                colorRow("Health low/mid/high", ["#d65a5a", "#e0b84e", "#24a66d"]),
+                colorRow("Mana / Rage / Energy", ["#1f70d6", "#c51f3d", "#cbdd3f"]),
+                row("Power by type", "On", "on"),
+                row("Threat tint", "Optional")
+              ]),
+              card("Dispel", "Magic, poison, disease, curse, and enrage colors.", [
+                colorRow("Magic / Poison / Disease", ["#3399ff", "#33cc33", "#9966ff"]),
+                colorRow("Curse / Enrage", ["#cc66ff", "#ff9933"]),
+                row("Use class capability", "On", "on"),
+                row("Overlay alpha", "0.34")
+              ])
+            ]
+          },
+          {
+            title: "Castbar Colors",
+            badge: "castbar",
+            cards: [
+              card("Cast States", "Normal, channel, interruptible, not interruptible, success, failed.", [
+                colorRow("Normal / Channel / Empower", ["#d8a54f", "#5da7ff", "#b68cff"]),
+                colorRow("Kickable / Protected", ["#58d68d", "#d85d5d"]),
+                row("Success flash", "Green"),
+                row("Failed flash", "Red")
+              ]),
+              card("Focus Kick", "Colors used by focus interrupt helper.", [
+                row("Ready", "Green"),
+                row("Cooldown", "Muted"),
+                row("Out of range", "Red"),
+                row("No target", "Dim")
+              ])
+            ]
+          },
+          {
+            title: "Mouseover Highlight",
+            badge: "interaction",
+            cards: [
+              card("Highlight", "Mouseover and selected unit color.", [
+                row("Mouseover enabled", "On", "on"),
+                colorRow("Mouseover color", ["#37a8e8"]),
+                row("Alpha", "0.42"),
+                row("Affects border", "On", "on")
+              ]),
+              card("Gameplay Colors", "Combat timer, crosshair, and gameplay indicators.", [
+                colorRow("Combat / Rest / Warning", ["#f26f7a", "#39d287", "#efb84d"]),
+                row("Crosshair color", "Class / custom"),
+                row("Timer color", "Global font"),
+                row("Preview", "Live")
+              ])
+            ]
+          },
+          {
+            title: "Auras + Portrait Colors",
+            badge: "shared",
+            cards: [
+              card("Aura Colors", "Shared aura border, cooldown, text, stealable, and dispel colors.", [
+                row("Buff border", "Green"),
+                row("Debuff border", "Type color"),
+                row("Cooldown text", "White"),
+                row("Stealable", "Blue")
+              ]),
+              card("Portrait Colors", "Portrait tint and state colors.", [
+                row("Class tint", "Optional"),
+                row("Dead tint", "Gray"),
+                row("Offline tint", "Dark"),
+                row("Combat tint", "Off")
+              ])
+            ]
+          }
+        ]
+      },
+      opt_castbar: {
+        group: "Appearance",
+        title: "MSUF Castbar",
+        subtitle: "Global castbar behavior, textures, empowered casts, name shortening, focus kick, and interrupt ready indicator.",
+        systems: ["Castbar runtime", "Interrupt tracker", "Global colors", "SharedMedia"],
+        sections: [
+          {
+            title: "Shake & Fill Direction",
+            badge: "behavior",
+            cards: [
+              card("Behavior", "Shared behavior for unit castbars.", [
+                row("Shake on interrupt", "On", "on"),
+                row("Fill direction", "Left to right"),
+                row("Latency safe zone", "On", "on"),
+                row("Channel invert", "On", "on")
+              ]),
+              card("Preview States", "Normal, channel, and empowered preview states.", [
+                row("Normal", "Visible"),
+                row("Channel", "Visible"),
+                row("Empowered", "Visible"),
+                row("Failed", "Flash")
+              ])
+            ]
+          },
+          {
+            title: "Textures & Outline",
+            badge: "style",
+            cards: [
+              card("Textures", "Castbar texture and background.", [
+                row("Texture", "Global cast texture"),
+                row("Background", "Global background"),
+                row("Spark", "On", "on"),
+                row("Rounded", "Use bars setting")
+              ]),
+              card("Outline", "Separate castbar outline.", [
+                row("Enabled", "On", "on"),
+                row("Width", "1 px"),
+                row("Protected color", "Red"),
+                row("Interruptible color", "Green")
+              ])
+            ]
+          },
+          {
+            title: "Name Shortening",
+            badge: "text",
+            cards: [
+              card("Spell Name", "Global spell name shortening model.", [
+                row("Enabled", "On", "on"),
+                row("Max length", "24"),
+                row("Ellipsis", "On", "on"),
+                row("Known spell aliases", "On", "on")
+              ]),
+              card("Cast Time", "Cast time text display.", [
+                row("Show remaining", "On", "on"),
+                row("Show total", "Optional"),
+                row("Decimals", "1"),
+                row("Hide at zero", "On", "on")
+              ])
+            ]
+          },
+          {
+            title: "Focus Kick",
+            badge: "kick",
+            cards: [
+              card("Focus Kick", "Focus interrupt tracking.", [
+                row("Enabled", "On", "on"),
+                row("Spell list", "Class interrupts"),
+                row("Show on target", "Optional"),
+                row("Out of range state", "Red")
+              ]),
+              card("Interrupt Ready Indicator", "Ready icon and border state.", [
+                row("Enabled", "On", "on"),
+                row("Anchor", "RIGHT"),
+                row("Size", "20 px"),
+                row("Cooldown text", "On", "on")
+              ])
+            ]
+          }
+        ]
+      },
+      opt_fonts: {
+        group: "Appearance",
+        title: "MSUF Fonts",
+        subtitle: "Global font, text style, text colors, and name shortening.",
+        systems: ["Font registry", "SharedMedia", "Text layout", "Name shortening"],
+        sections: [
+          {
+            title: "Global Font",
+            badge: "font",
+            cards: [
+              card("Font Face", "SharedMedia font with fallback.", [
+                row("Font", "Friz Quadrata / SharedMedia"),
+                row("Size baseline", "12"),
+                row("Outline", "Thin"),
+                row("Monochrome", "Off", "off")
+              ]),
+              card("Scaling", "Global font scaling for compact layouts.", [
+                row("Scale with frame", "On", "on"),
+                row("Minimum size", "9"),
+                row("Maximum size", "18"),
+                row("Pixel snap", "On", "on")
+              ])
+            ]
+          },
+          {
+            title: "Text Style",
+            badge: "text",
+            cards: [
+              card("Style", "General text treatment.", [
+                row("Shadow", "On", "on"),
+                row("Shadow offset", "1 / -1"),
+                row("Justify default", "Center"),
+                row("Clamp to frame", "On", "on")
+              ]),
+              card("Text Colors", "Name, health, power, and status colors.", [
+                row("Name color", "Class / reaction"),
+                row("Health color", "White"),
+                row("Power color", "Power type"),
+                row("Status color", "State")
+              ])
+            ]
+          },
+          {
+            title: "Name Shortening",
+            badge: "names",
+            cards: [
+              card("Unit Names", "Player, target, group, boss name rules.", [
+                row("Enabled", "On", "on"),
+                row("Max characters", "18"),
+                row("Realm names", "Hide"),
+                row("NPC title cleanup", "On", "on")
+              ]),
+              card("Group Names", "Compact group frame name handling.", [
+                row("First name only", "On", "on"),
+                row("Class color", "On", "on"),
+                row("Role suffix", "Optional"),
+                row("Ellipsis", "On", "on")
+              ])
+            ]
+          }
+        ]
+      },
+      opt_misc: {
+        group: "Appearance",
+        title: "MSUF Miscellaneous",
+        subtitle: "Language, menu behavior, startup, unitframe tooltips, and Blizzard frame handling.",
+        systems: ["Localization", "Menu runtime", "Startup", "Tooltips", "Blizzard frame hooks"],
+        sections: [
+          {
+            title: "Language",
+            badge: "locale",
+            cards: [
+              card("Localization", "Language picker and fallback behavior.", [
+                row("Language", "Auto"),
+                row("Fallback", "English"),
+                row("Reload required", "Only if needed"),
+                row("Debug missing keys", "Off", "off")
+              ]),
+              card("Menu behavior", "Menu open, close, scale, and performance behavior.", [
+                row("Scale", "1.00"),
+                row("Remember page", "On", "on"),
+                row("Warmup on open", "Budgeted"),
+                row("Stop jobs on close", "On", "on")
+              ])
+            ]
+          },
+          {
+            title: "Startup",
+            badge: "load",
+            cards: [
+              card("Startup", "Login and reload behavior.", [
+                row("Startup diagnostics", "Off", "off"),
+                row("Build menu on login", "Off", "off"),
+                row("Lazy page sections", "On", "on"),
+                row("Preload runtime only", "On", "on")
+              ]),
+              card("Unitframe tooltips", "Tooltip ownership and combat behavior.", [
+                row("Show tooltips", "On", "on"),
+                row("Combat tooltips", "Optional"),
+                row("Anchor", "Default"),
+                row("Hide in Housing", "Follow load condition")
+              ])
+            ]
+          },
+          {
+            title: "Blizzard Frames",
+            badge: "compat",
+            cards: [
+              card("Blizzard Frames", "Hide or leave stock frames.", [
+                row("Player frame", "Hide"),
+                row("Target frame", "Hide"),
+                row("Party frame", "Hide"),
+                row("Boss frame", "Hide")
+              ]),
+              card("Compatibility", "Avoid taint-sensitive combat work.", [
+                row("Apply in combat", "Defer"),
+                row("Protected frames", "Safe path"),
+                row("Reload warning", "When required"),
+                row("Diagnostics", "Available")
+              ])
+            ]
+          }
+        ]
+      },
+      gf_layout: {
+        group: "Group Frames",
+        title: "MSUF Group Layout",
+        subtitle: "Frame basics, geometry, sorting, frame scaling, and anchoring for party, raid, arena, and battleground scopes.",
+        systems: ["Group layout", "Roster runtime", "Secure frames", "Combat defer", "Scope override"],
+        sections: [
+          {
+            title: "Frame Basics",
+            badge: "core",
+            cards: [
+              card("Group Frame", "Visibility and scope selection.", [
+                row("Enabled", "On", "on"),
+                row("Scope", "Party / Raid / Arena"),
+                row("Show player", "On", "on"),
+                row("Hide in Housing", "On", "on")
+              ]),
+              card("Visibility", "Combat-safe hide/show model.", [
+                row("Hide empty groups", "Out of combat"),
+                row("Hide in vehicle", "Optional"),
+                row("Hide in pet battle", "On", "on"),
+                row("Combat roster changes", "Defer")
+              ])
+            ]
+          },
+          {
+            title: "Geometry",
+            badge: "layout",
+            cards: [
+              card("Size", "Dimensions and spacing for each group member.", [
+                row("Width", "92 px"),
+                row("Height", "42 px"),
+                row("Horizontal spacing", "4 px"),
+                row("Vertical spacing", "4 px")
+              ]),
+              card("Columns", "Column behavior for raid-like scopes.", [
+                row("Columns", "5"),
+                row("Members per column", "5"),
+                row("Column spacing", "8 px"),
+                row("Wrap groups", "On", "on")
+              ]),
+              card("Growth", "How new members fill the group frame.", [
+                row("Growth X", "RIGHT"),
+                row("Growth Y", "DOWN"),
+                row("Group by", "Group / Role"),
+                row("Header order", "1 to 8")
+              ])
+            ]
+          },
+          {
+            title: "Sorting",
+            badge: "order",
+            cards: [
+              card("Sort mode", "Controls how group members are ordered.", [
+                row("Sort", "Role then name"),
+                row("Reverse", "Off", "off"),
+                row("Keep player first", "Optional"),
+                row("Stable order", "On", "on")
+              ]),
+              card("Role Priority", "Drag rows with mouse to reorder.", [
+                row("1", "Tank"),
+                row("2", "Healer"),
+                row("3", "Damage"),
+                row("4", "Unknown")
+              ])
+            ]
+          },
+          {
+            title: "Frame Scaling",
+            badge: "scale",
+            cards: [
+              card("Frame scaling", "Scales frame size, fonts, and icons proportionally.", [
+                row("Mode", "Manual / auto breakpoints"),
+                row("Manual scale", "1.00"),
+                row("Buff/debuff relative", "On", "on"),
+                row("Clamp minimum", "On", "on")
+              ]),
+              card("Auto Breakpoints", "Automatically scale by group size.", [
+                row("1-5", "1.00"),
+                row("6-20", "0.90"),
+                row("21-30", "0.80"),
+                row("31-40", "0.72")
+              ])
+            ]
+          },
+          {
+            title: "Anchoring",
+            badge: "position",
+            cards: [
+              card("Anchor", "Position relative to UIParent or another MSUF frame.", [
+                row("Point", "CENTER"),
+                row("Relative point", "CENTER"),
+                row("X / Y", "-360 / 0"),
+                row("Lock", "Off", "off")
+              ]),
+              card("Move Tools", "Group frame movement should be visible in preview.", [
+                row("Nudge", "1 px"),
+                row("Snap to grid", "Off", "off"),
+                row("Copy from", "Party / Raid"),
+                row("Reset anchor", "Current scope")
+              ])
+            ]
+          }
+        ]
+      },
+      gf_bars: {
+        group: "Group Frames",
+        title: "MSUF Group Health & Text",
+        subtitle: "Group health colors, bar fill, power bar, text slots, debuff stripe, dispel overlay, dead/offline background, and range fade.",
+        systems: ["Group bars", "Text slots", "Range fade", "Dispel overlay", "Debuff stripe", "Role filters"],
+        sections: [
+          {
+            title: "Colors",
+            badge: "health",
+            cards: [
+              card("Health Bar", "Color source and opacity for filled health bars.", [
+                row("Color source", "Class / gradient / reaction"),
+                colorRow("Health gradient", ["#d65a5a", "#e0b84e", "#24a66d"]),
+                row("Opacity", "1.00"),
+                row("Dead color", "Gray")
+              ]),
+              card("Bar Background", "Color, texture, and opacity behind health and power bars.", [
+                row("Background mode", "Darken fill"),
+                row("Background opacity", "0.60"),
+                row("Texture", "Global"),
+                row("Dead/offline background", "Enabled")
+              ])
+            ]
+          },
+          {
+            title: "Bar Fill",
+            badge: "bars",
+            cards: [
+              card("Health Fill", "Fill direction and smoothing.", [
+                row("Fill direction", "Left to right"),
+                row("Smooth health", "On", "on"),
+                row("Absorb overlay", "On", "on"),
+                row("Heal absorb", "On", "on")
+              ]),
+              card("Dead / Offline Background", "State-specific bar backgrounds.", [
+                row("Dead background", "On", "on"),
+                row("Offline background", "On", "on"),
+                row("Ghost background", "On", "on"),
+                row("Alpha", "0.45")
+              ])
+            ]
+          },
+          {
+            title: "Power Bar",
+            badge: "power",
+            cards: [
+              card("Power bar", "Global visibility and size for this group scope.", [
+                row("Enabled", "On", "on"),
+                row("Height", "4 px"),
+                row("Color by power", "On", "on"),
+                row("Only show active", "Optional")
+              ]),
+              card("Roles", "Limit power display to selected group roles.", [
+                row("Tank", "On", "on"),
+                row("Healer", "On", "on"),
+                row("Damage", "Off", "off"),
+                row("Pets", "Off", "off")
+              ])
+            ]
+          },
+          {
+            title: "Text",
+            badge: "slots",
+            cards: [
+              card("Health Text", "Same value modes as UF health text.", [
+                row("Mode", "Current + Percent", "accent"),
+                row("Decimals", "On", "on"),
+                row("Missing health", "Optional"),
+                row("Hide at full", "Off", "off")
+              ]),
+              card("Name Text", "Group member name handling.", [
+                row("Name mode", "Short name"),
+                row("Class color", "On", "on"),
+                row("Role icon inline", "Optional"),
+                row("Dead/offline status", "On", "on")
+              ]),
+              card("Power Text", "Optional compact power text.", [
+                row("Mode", "Hidden"),
+                row("Decimals", "Off", "off"),
+                row("Show mana only", "On", "on"),
+                row("Role filter", "Healer")
+              ])
+            ]
+          },
+          {
+            title: "Dispel Overlay",
+            badge: "debuff",
+            cards: [
+              card("Dispel Overlay", "Tints the health bar when a configured debuff condition is active.", [
+                row("Enabled", "On", "on"),
+                row("Alpha", "0.34"),
+                row("Priority", "Above health"),
+                row("Role aware", "On", "on")
+              ]),
+              card("Debuff Stripe", "Thin colored stripe for debuffs matched by the filter.", [
+                row("Enabled", "On", "on"),
+                row("Position", "LEFT"),
+                row("Width", "3 px"),
+                row("Color", "Dispel type")
+              ])
+            ]
+          },
+          {
+            title: "Range Fade",
+            badge: "range",
+            cards: [
+              card("Range Fade", "Controls what fades when group members are not reachable.", [
+                row("Enabled", "On", "on"),
+                row("Fade frame", "On", "on"),
+                row("Fade auras", "On", "on"),
+                row("Fade indicators", "Optional")
+              ]),
+              card("Alpha", "Opacity values used by range and offline states.", [
+                row("Out of range", "0.45"),
+                row("Offline", "0.25"),
+                row("Dead", "0.55"),
+                row("Mouseover restore", "On", "on")
+              ])
+            ]
+          }
+        ]
+      },
+      gf_indicators: {
+        group: "Group Frames",
+        title: "MSUF Group Indicators",
+        subtitle: "Targeted spells, spell indicators, frame effects, utilities, and corner indicators.",
+        systems: ["Indicator runtime", "Spell sets", "Corner indicators", "Aggro non-tank", "Cooldown text"],
+        sections: [
+          {
+            title: "Targeted Spells",
+            badge: "spells",
+            cards: [
+              card("Behavior", "Track spells targeting group members.", [
+                row("Enabled", "On", "on"),
+                row("Track hostile casts", "On", "on"),
+                row("Track friendly casts", "Optional"),
+                row("Only dangerous", "On", "on")
+              ]),
+              card("Icon Stack", "Targeted spell icon stack behavior.", [
+                row("Max icons", "3"),
+                row("Icon size", "18 px"),
+                row("Growth", "RIGHT"),
+                row("Cooldown text", "On", "on")
+              ])
+            ]
+          },
+          {
+            title: "Spell Indicators",
+            badge: "sets",
+            cards: [
+              card("Spell Set", "Choose or edit the indicator spell set.", [
+                row("Set", "Default PvE"),
+                row("Add spell", "Available"),
+                row("Import", "Available"),
+                row("Export", "Available")
+              ]),
+              card("Selected Spell", "Rules for the currently selected spell.", [
+                row("Spell ID", "Editable"),
+                row("Glow", "On", "on"),
+                row("Priority", "50"),
+                row("Role filter", "Any")
+              ]),
+              card("Placed Indicator", "Placement and style of a spell indicator.", [
+                row("Anchor", "CENTER"),
+                row("Size", "20 px"),
+                row("Stack", "On", "on"),
+                row("Text", "Cooldown")
+              ]),
+              card("Frame Effect", "Optional frame-level effect from the selected spell.", [
+                row("Border flash", "Optional"),
+                row("Health tint", "Optional"),
+                row("Pulse", "Off", "off"),
+                row("Priority", "After dispel")
+              ])
+            ]
+          },
+          {
+            title: "Corner Indicators",
+            badge: "corners",
+            cards: [
+              card("Corners", "Corner indicators for roles, debuffs, target, focus, aggro.", [
+                row("Top left", "Role"),
+                row("Top right", "Aggro non-tank"),
+                row("Bottom left", "Dispel"),
+                row("Bottom right", "Target")
+              ]),
+              card("Aggro Condition", "Additional aggro display only when the unit is not the tank.", [
+                row("Aggro corner", "On", "on"),
+                row("Suppress tank", "On", "on"),
+                row("Combat only", "On", "on"),
+                row("Threat source", "UnitThreatSituation")
+              ]),
+              card("Utilities", "Bulk actions for indicator setup.", [
+                row("Copy from scope", "Available"),
+                row("Apply to scopes", "Available"),
+                row("Reset selected", "Available"),
+                row("Preview all", "On", "on")
+              ])
+            ]
+          }
+        ]
+      },
+      gf_auras: {
+        group: "Group Frames",
+        title: "MSUF Group Auras",
+        subtitle: "Group-specific buff and debuff placement using the same Aura 12.1 style/filter system.",
+        systems: ["Aura 12.1", "Group aura lanes", "Aura filters", "Icon grid", "Cooldown text"],
+        sections: [
+          {
+            title: "Buffs",
+            badge: "lane",
+            cards: [
+              card("Placement", "Group buff lane anchor and growth.", [
+                row("Enabled", "On", "on"),
+                row("Anchor", "TOPRIGHT"),
+                row("Growth", "LEFT"),
+                row("Offset", "0 / 2")
+              ]),
+              card("Icon Grid", "Group buff icon grid.", [
+                row("Icon size", "18 px"),
+                row("Columns", "4"),
+                row("Rows", "1"),
+                row("Spacing", "2 px")
+              ])
+            ]
+          },
+          {
+            title: "Debuffs",
+            badge: "lane",
+            cards: [
+              card("Placement", "Group debuff lane anchor and growth.", [
+                row("Enabled", "On", "on"),
+                row("Anchor", "BOTTOMRIGHT"),
+                row("Growth", "LEFT"),
+                row("Offset", "0 / -2")
+              ]),
+              card("Icon Grid", "Group debuff icon grid.", [
+                row("Icon size", "20 px"),
+                row("Columns", "3"),
+                row("Rows", "1"),
+                row("Spacing", "2 px")
+              ])
+            ]
+          }
+        ]
+      },
+      auras3_styling: {
+        group: "Auras",
+        title: "MSUF Aura Style",
+        subtitle: "Shared 12.1 aura styling for unit and group frames: text features, stack count, cooldown text, colors, placement, and icon grid.",
+        systems: ["Aura 12.1", "Scope override", "Cooldown text", "Stack count", "Shared aura colors"],
+        sections: [
+          {
+            title: "Scope Override",
+            badge: "scope",
+            cards: [
+              card("Aura Style Scope", "Use global style or override per scope.", [
+                row("Use global", "On", "on"),
+                row("Override player", "Optional"),
+                row("Override group", "Optional"),
+                row("Copy scope", "Available")
+              ]),
+              card("Shared Aura Colors", "Shared aura border, text, cooldown, and dispel colors.", [
+                row("Buff border", "Green"),
+                row("Debuff border", "Dispel type"),
+                row("Cooldown text", "White"),
+                row("Stealable", "Blue")
+              ])
+            ]
+          },
+          {
+            title: "Buffs Text Features",
+            badge: "buff",
+            cards: [
+              card("Stack Count", "Buff stack count text.", [
+                row("Enabled", "On", "on"),
+                row("Font size", "11"),
+                row("Anchor", "BOTTOMRIGHT"),
+                row("Hide count 1", "On", "on")
+              ]),
+              card("Cooldown Text", "Buff cooldown text.", [
+                row("Enabled", "On", "on"),
+                row("Decimals under", "10 sec"),
+                row("Color by time", "On", "on"),
+                row("Minimum duration", "2 sec")
+              ])
+            ]
+          },
+          {
+            title: "Debuffs Text Features",
+            badge: "debuff",
+            cards: [
+              card("Stack Count", "Debuff stack count text.", [
+                row("Enabled", "On", "on"),
+                row("Font size", "12"),
+                row("Anchor", "BOTTOMRIGHT"),
+                row("Hide count 1", "Off", "off")
+              ]),
+              card("Cooldown Text", "Debuff cooldown text.", [
+                row("Enabled", "On", "on"),
+                row("Decimals under", "10 sec"),
+                row("Color by dispel", "Optional"),
+                row("Minimum duration", "0 sec")
+              ])
+            ]
+          },
+          {
+            title: "Placement",
+            badge: "layout",
+            cards: [
+              card("Placement", "Lane anchor and offsets.", [
+                row("Anchor", "TOPRIGHT"),
+                row("Growth", "LEFT then DOWN"),
+                row("Offset X / Y", "0 / 4"),
+                row("Attach to frame", "On", "on")
+              ]),
+              card("Icon Grid", "Icon sizing, rows, columns, and spacing.", [
+                row("Icon size", "24 px"),
+                row("Columns", "6"),
+                row("Rows", "2"),
+                row("Spacing", "3 px")
+              ])
+            ]
+          }
+        ]
+      },
+      auras3_filters: {
+        group: "Auras",
+        title: "MSUF Aura Filters",
+        subtitle: "Aura filter builder for buffs and debuffs using static registry targets and per-scope overrides.",
+        systems: ["Aura filters", "Whitelist", "Blacklist", "Spell IDs", "Scope override"],
+        sections: [
+          {
+            title: "Filter Scope Override",
+            badge: "scope",
+            cards: [
+              card("Filter Scope", "Use global filter lists or override per scope.", [
+                row("Use global filters", "On", "on"),
+                row("Player override", "Optional"),
+                row("Group override", "Optional"),
+                row("Import list", "Available")
+              ]),
+              card("Filter Defaults", "Default behavior for unknown auras.", [
+                row("Unknown buffs", "Show"),
+                row("Unknown debuffs", "Show important"),
+                row("Player cast only", "Optional"),
+                row("Boss debuffs", "Always show")
+              ])
+            ]
+          },
+          {
+            title: "Buff Filters",
+            badge: "buff",
+            cards: [
+              card("Buff Rules", "Whitelist, blacklist, and priority rules.", [
+                row("Whitelist", "Enabled"),
+                row("Blacklist", "Enabled"),
+                row("Personal buffs", "Priority"),
+                row("Mount / utility", "Hide optional")
+              ]),
+              card("Selected Buff", "Selected aura editor.", [
+                row("Spell ID", "Editable"),
+                row("Action", "Show / Hide / Important"),
+                row("Priority", "50"),
+                row("Scope", "Current")
+              ])
+            ]
+          },
+          {
+            title: "Debuff Filters",
+            badge: "debuff",
+            cards: [
+              card("Debuff Rules", "Dispel, boss, personal, and blacklist rules.", [
+                row("Dispellable", "Show"),
+                row("Boss debuffs", "Important"),
+                row("Personal debuffs", "Priority"),
+                row("Blacklist", "Enabled")
+              ]),
+              card("Selected Debuff", "Selected debuff editor.", [
+                row("Spell ID", "Editable"),
+                row("Action", "Show / Hide / Important"),
+                row("Priority", "70"),
+                row("Color source", "Dispel type")
+              ])
+            ]
+          }
+        ]
+      },
+      classpower: {
+        group: "Advanced",
+        title: "MSUF Class Resources",
+        subtitle: "Class resource layout, behavior, style, visibility, detached player power, second HP bar, and alternative mana.",
+        systems: ["Class resource runtime", "Detached power", "Alternative mana", "Pips", "Scope override"],
+        sections: [
+          {
+            title: "Class Resource Layout",
+            badge: "layout",
+            cards: [
+              card("Class Resource", "Enablement, resource type, pips, and size.", [
+                row("Enabled", "On", "on"),
+                row("Resource", "Auto by class"),
+                row("Pips", "Auto"),
+                row("Width / height", "220 / 18")
+              ]),
+              card("Position", "Detached or anchored resource position.", [
+                row("Anchor", "Player frame"),
+                row("Point", "BOTTOM"),
+                row("Offset", "0 / -8"),
+                row("Snap to player", "On", "on")
+              ])
+            ]
+          },
+          {
+            title: "Class Resource Behavior",
+            badge: "behavior",
+            cards: [
+              card("Behavior", "Visibility and class-specific behavior.", [
+                row("Show only relevant", "On", "on"),
+                row("Combat only", "Optional"),
+                row("Preview any class", "On", "on"),
+                row("Zero resources", "Dim")
+              ]),
+              card("Auto-Hide Rules", "Class resource visibility rules.", [
+                row("Hide in vehicle", "On", "on"),
+                row("Hide in pet battle", "On", "on"),
+                row("Hide in Housing", "On", "on"),
+                row("Apply in combat", "Defer")
+              ])
+            ]
+          },
+          {
+            title: "Class Resource Style",
+            badge: "style",
+            cards: [
+              card("Resource & Textures", "Bar texture, background, and resource colors.", [
+                row("Texture", "Global"),
+                row("Background", "Global"),
+                row("Color source", "Resource"),
+                row("Rounded", "Use bars setting")
+              ]),
+              card("Text", "Resource text options.", [
+                row("Show text", "On", "on"),
+                row("Mode", "Current / max"),
+                row("Decimals", "Off", "off"),
+                row("Font", "Global")
+              ]),
+              card("Pips & Border", "Pip sizing and border style.", [
+                row("Pip spacing", "2 px"),
+                row("Pip border", "On", "on"),
+                row("Empty pip alpha", "0.25"),
+                row("Glow full", "Optional")
+              ])
+            ]
+          },
+          {
+            title: "Player Power Bar",
+            badge: "detached",
+            cards: [
+              card("Detached Player Power", "When anchored or synced here, Player power settings are managed by Class Resources.", [
+                row("Enabled", "Optional"),
+                row("Sync player power", "On", "on"),
+                row("Anchor", "Class resource"),
+                row("Height", "12 px")
+              ]),
+              card("Power Text", "Text shown on the detached Player power bar.", [
+                row("Mode", "Current"),
+                row("Decimals", "Off", "off"),
+                row("Hide at full", "On", "on"),
+                row("Position", "Center")
+              ])
+            ]
+          },
+          {
+            title: "Second Player HP Bar",
+            badge: "hp",
+            cards: [
+              card("Second Player HP Bar", "Optional duplicate HP bar managed by Class Resources.", [
+                row("Enabled", "Off", "off"),
+                row("Anchor", "Player frame"),
+                row("Width / height", "240 / 16"),
+                row("Sync colors", "On", "on")
+              ]),
+              card("HP Text", "Same value modes as Player unitframe health text.", [
+                row("Mode", "Current + Percent"),
+                row("Decimals", "On", "on"),
+                row("Missing health", "Optional"),
+                row("Font", "Global")
+              ])
+            ]
+          },
+          {
+            title: "Alternative Mana",
+            badge: "mana",
+            cards: [
+              card("Alternative Mana", "Shadow, Ret, Ele, Enh, Balance, Feral, WW.", [
+                row("Enabled", "Auto"),
+                row("Show text", "On", "on"),
+                row("Height", "8 px"),
+                row("Color", "Mana")
+              ]),
+              card("Visibility", "Alternative mana visibility rules.", [
+                row("Combat only", "Off", "off"),
+                row("Hide empty", "On", "on"),
+                row("Hide in vehicle", "On", "on"),
+                row("Hide in Housing", "On", "on")
+              ])
+            ]
+          }
+        ]
+      },
+      gameplay: {
+        group: "Advanced",
+        title: "MSUF Gameplay",
+        subtitle: "Combat timer, combat enter/leave behavior, class-specific toggles, and combat crosshair.",
+        systems: ["Combat timer", "Combat events", "Class rules", "Crosshair", "Runtime throttles"],
+        sections: [
+          {
+            title: "Combat Timer",
+            badge: "timer",
+            cards: [
+              card("Timer", "Combat time display.", [
+                row("Enabled", "On", "on"),
+                row("Format", "mm:ss"),
+                row("Anchor", "Player"),
+                row("Reset on leave", "On", "on")
+              ]),
+              card("Text", "Timer text and font.", [
+                row("Font", "Global"),
+                row("Size", "13"),
+                row("Color", "Gameplay color"),
+                row("Shadow", "On", "on")
+              ])
+            ]
+          },
+          {
+            title: "Combat Enter/Leave",
+            badge: "state",
+            cards: [
+              card("Enter Combat", "Frame state changes on combat start.", [
+                row("Flash frames", "Optional"),
+                row("Show player", "On", "on"),
+                row("Show target", "On", "on"),
+                row("Apply queued changes", "After combat")
+              ]),
+              card("Leave Combat", "Frame state changes on combat end.", [
+                row("Fade delay", "2 sec"),
+                row("Clear combat effects", "On", "on"),
+                row("Apply deferred layout", "On", "on"),
+                row("Stop menu jobs", "If menu closed")
+              ])
+            ]
+          },
+          {
+            title: "Class-specific toggles",
+            badge: "class",
+            cards: [
+              card("Class Toggles", "Class-specific runtime helpers.", [
+                row("Druid form states", "On", "on"),
+                row("Rogue combo sync", "On", "on"),
+                row("Evoker empower", "On", "on"),
+                row("Priest alt mana", "On", "on")
+              ]),
+              card("Combat Crosshair", "Target/player combat crosshair.", [
+                row("Enabled", "Optional"),
+                row("Anchor", "Player"),
+                row("Size", "64 px"),
+                row("Color", "Class / custom")
+              ])
+            ]
+          }
+        ]
+      },
+      profiles: {
+        group: "Advanced",
+        title: "MSUF Profiles",
+        subtitle: "Profile management, spec profiles, export/import, and profile-safe apply behavior.",
+        systems: ["Profile store", "Spec profiles", "Import/export", "Undo", "Version migration"],
+        sections: [
+          {
+            title: "Profile Management",
+            badge: "profile",
+            cards: [
+              card("Current Profile", "Create, copy, rename, and delete profiles.", [
+                row("Current", "Default"),
+                row("Create", "Available"),
+                row("Copy from", "Available"),
+                row("Delete", "Protected")
+              ]),
+              card("Profile Safety", "Undo and migration handling.", [
+                row("Undo stack", "Enabled"),
+                row("Migration", "Versioned"),
+                row("Backup before import", "On", "on"),
+                row("Combat apply", "Defer")
+              ])
+            ]
+          },
+          {
+            title: "Spec Profiles",
+            badge: "spec",
+            cards: [
+              card("Spec Assignment", "Profile per specialization.", [
+                row("Spec 1", "Default"),
+                row("Spec 2", "Default"),
+                row("Spec 3", "Default"),
+                row("Spec 4", "Default")
+              ]),
+              card("Switching", "Behavior when spec changes.", [
+                row("Auto switch", "Off", "off"),
+                row("Confirm switch", "On", "on"),
+                row("Queued in combat", "On", "on"),
+                row("Reload required", "If protected")
+              ])
+            ]
+          },
+          {
+            title: "Export / Import",
+            badge: "io",
+            cards: [
+              card("Export", "Copy profile payload.", [
+                row("Scope", "Full profile"),
+                row("Minify", "On", "on"),
+                row("Include version", "On", "on"),
+                row("Copy string", "Available")
+              ]),
+              card("Import", "Paste profile payload.", [
+                row("Validation", "Strict"),
+                row("Preview changes", "On", "on"),
+                row("Overwrite", "Confirm"),
+                row("Rollback", "Available")
+              ])
+            ]
+          }
+        ]
+      },
+      modules: {
+        group: "Advanced",
+        title: "MSUF Modules",
+        subtitle: "Module visibility and style-level feature gates.",
+        systems: ["Module gates", "Style module", "Runtime modules", "Diagnostics"],
+        sections: [
+          {
+            title: "Style",
+            badge: "module",
+            cards: [
+              card("Style Module", "Feature gate for style systems.", [
+                row("Enabled", "On", "on"),
+                row("Bars", "On", "on"),
+                row("Colors", "On", "on"),
+                row("Fonts", "On", "on")
+              ]),
+              card("Runtime Modules", "Runtime modules stay loaded, menu pages stay lazy.", [
+                row("Unit frames", "On", "on"),
+                row("Group frames", "On", "on"),
+                row("Auras", "On", "on"),
+                row("Assistant", "Menu only")
+              ])
+            ]
+          }
+        ]
+      }
+    };
+
+    const unitPages = [
+      ["uf_player", "Player"],
+      ["uf_target", "Target"],
+      ["uf_boss", "Boss Frames"],
+      ["uf_focus", "Focus"],
+      ["uf_pet", "Pet"],
+      ["uf_targettarget", "Target of Target"],
+      ["uf_focustarget", "Focus Target"]
+    ];
+
+    for (const [key, label] of unitPages) {
+      const sections = unitSharedSections(label);
+      if (key === "uf_boss") {
+        sections.splice(10, 0, bossExtra);
+      }
+      if (key !== "uf_target") {
+        const idx = sections.findIndex((section) => section.title === "Text");
+        if (idx !== -1) {
+          sections[idx] = {
+            ...sections[idx],
+            cards: [
+              ...sections[idx].cards,
+              card("Name Text", "Unit name slot behavior.", [
+                row("Mode", "Name + status"),
+                row("Class color", "On", "on"),
+                row("Shorten name", "Global"),
+                row("Status suffix", "On", "on")
+              ])
+            ]
+          };
+        }
+      } else {
+        sections.splice(4, 0, {
+          title: "Inline Text",
+          badge: "target",
+          cards: [
+            card("Inline Text", "Target-specific inline state text.", [
+              row("Enabled", "On", "on"),
+              row("Reaction text", "Optional"),
+              row("Classification", "On", "on"),
+              row("NPC type", "Optional")
+            ]),
+            card("Placement", "Inline text position inside the target frame.", [
+              row("Anchor", "CENTER"),
+              row("X / Y", "0 / 0"),
+              row("Layer", "Above bars"),
+              row("Clamp", "On", "on")
+            ])
+          ]
+        });
+      }
+      pages[key] = {
+        group: "Frames",
+        title: key === "uf_boss" ? "MSUF Boss Frames" : "MSUF " + label,
+        subtitle: "Unit frame page built from shared MSUF unit sections. Each section remains lazy and can be focused directly from Search or Assistant.",
+        systems: ["Unit page registry", "Lazy sections", "Native preview", "Text slots", "Status icons", "Load conditions", "Combat defer"],
+        sections
+      };
+    }
+
+    pages.auras3_buffs = {
+      group: "Auras",
+      title: "MSUF Aura Buffs",
+      subtitle: "Dedicated buff lane page registered by Menu2. It exposes text features, stack count, cooldown text, group behavior, placement, and icon grid.",
+      systems: ["Aura 12.1", "Buff lane", "Cooldown text", "Stack count", "Aura filters", "Scope override"],
+      sections: [
+        {
+          title: "Buffs Text Features",
+          badge: "buff",
+          cards: [
+            card("Text Features", "Buff lane text switches.", [
+              row("Show stack count", "On", "on"),
+              row("Show cooldown text", "On", "on"),
+              row("Show owner glow", "Optional"),
+              row("Show dispel hint", "Off", "off")
+            ]),
+            card("Stack Count", "Buff stack count position and style.", [
+              row("Anchor", "BOTTOMRIGHT"),
+              row("Font size", "11"),
+              row("Hide count 1", "On", "on"),
+              row("Color", "White")
+            ])
+          ]
+        },
+        {
+          title: "Buffs Cooldown Text",
+          badge: "cooldown",
+          cards: [
+            card("Cooldown Text", "Buff cooldown display behavior.", [
+              row("Enabled", "On", "on"),
+              row("Decimals under", "10 sec"),
+              row("Minimum duration", "2 sec"),
+              row("Color by time", "On", "on")
+            ]),
+            card("Placement", "Buff lane placement and grid.", [
+              row("Anchor", "TOPRIGHT"),
+              row("Growth", "LEFT then DOWN"),
+              row("Icon size", "24 px"),
+              row("Spacing", "3 px")
+            ])
+          ]
+        },
+        {
+          title: "Group Buffs Behavior",
+          badge: "group",
+          cards: [
+            card("Group Behavior", "Group buff lane specific behavior.", [
+              row("Use compact size", "On", "on"),
+              row("Show only mine", "Optional"),
+              row("Show missing buffs", "Optional"),
+              row("Respect filter page", "On", "on")
+            ]),
+            card("Icon Grid", "Group buff icon grid.", [
+              row("Columns", "4"),
+              row("Rows", "1"),
+              row("Wrap", "On", "on"),
+              row("Sort", "Duration")
+            ])
+          ]
+        }
+      ]
+    };
+
+    pages.auras3_debuffs = {
+      group: "Auras",
+      title: "MSUF Aura Debuffs",
+      subtitle: "Dedicated debuff lane page registered by Menu2. It exposes debuff text, stack count, cooldown text, group behavior, priority, and dispel-state display.",
+      systems: ["Aura 12.1", "Debuff lane", "Dispel colors", "Cooldown text", "Stack count", "Aura filters"],
+      sections: [
+        {
+          title: "Debuffs Text Features",
+          badge: "debuff",
+          cards: [
+            card("Text Features", "Debuff lane text switches.", [
+              row("Show stack count", "On", "on"),
+              row("Show cooldown text", "On", "on"),
+              row("Show dispel border", "On", "on"),
+              row("Show boss marker", "On", "on")
+            ]),
+            card("Stack Count", "Debuff stack count position and style.", [
+              row("Anchor", "BOTTOMRIGHT"),
+              row("Font size", "12"),
+              row("Hide count 1", "Off", "off"),
+              row("Color", "White")
+            ])
+          ]
+        },
+        {
+          title: "Debuffs Cooldown Text",
+          badge: "cooldown",
+          cards: [
+            card("Cooldown Text", "Debuff cooldown display behavior.", [
+              row("Enabled", "On", "on"),
+              row("Decimals under", "10 sec"),
+              row("Minimum duration", "0 sec"),
+              row("Color by dispel", "Optional")
+            ]),
+            card("Priority", "Debuff priority and state behavior.", [
+              row("Boss debuffs", "Always show"),
+              row("Dispellable", "High priority"),
+              row("Blacklist", "Enabled"),
+              row("Personal debuffs", "Priority")
+            ])
+          ]
+        },
+        {
+          title: "Group Debuffs Behavior",
+          badge: "group",
+          cards: [
+            card("Group Behavior", "Group debuff lane specific behavior.", [
+              row("Use compact size", "On", "on"),
+              row("Show dispellable first", "On", "on"),
+              row("Show dangerous first", "On", "on"),
+              row("Respect filter page", "On", "on")
+            ]),
+            card("Icon Grid", "Group debuff icon grid.", [
+              row("Columns", "3"),
+              row("Rows", "1"),
+              row("Wrap", "On", "on"),
+              row("Sort", "Priority")
+            ])
+          ]
+        }
+      ]
+    };
+
+    const navGroups = [
+      {
+        title: "Dashboard",
+        items: [
+          ["home", "Dashboard"],
+          ["search", "Search"]
+        ]
+      },
+      {
+        title: "Frames",
+        items: [
+          ["uf_player", "Player"],
+          ["uf_target", "Target"],
+          ["uf_boss", "Boss Frames"],
+          ["uf_focus", "Focus"],
+          ["uf_pet", "Pet"],
+          ["uf_targettarget", "Target of Target"],
+          ["uf_focustarget", "Focus Target"]
+        ]
+      },
+      {
+        title: "Group Frames",
+        items: [
+          ["gf_layout", "Layout"],
+          ["gf_bars", "Health & Text"],
+          ["gf_indicators", "Indicators"],
+          ["gf_auras", "Auras"]
+        ]
+      },
+      {
+        title: "Auras",
+        items: [
+          ["auras3_buffs", "Buffs"],
+          ["auras3_debuffs", "Debuffs"],
+          ["auras3_styling", "Style"],
+          ["auras3_filters", "Filters"]
+        ]
+      },
+      {
+        title: "Appearance",
+        items: [
+          ["opt_bars", "Bars"],
+          ["opt_castbar", "Castbars"],
+          ["opt_colors", "Colors"],
+          ["opt_fonts", "Fonts"],
+          ["opt_misc", "Miscellaneous"]
+        ]
+      },
+      {
+        title: "Advanced",
+        items: [
+          ["classpower", "Class Resources"],
+          ["gameplay", "Gameplay"],
+          ["profiles", "Profiles"],
+          ["modules", "Modules"]
+        ]
+      }
+    ];
+
+    const coverage = [
+      ["Unit Frame Pages", "Player, Target, Boss, Focus, Pet, Target of Target, Focus Target. Shared section pipeline: preview, basics, auras, text, status, portrait, power, castbar, fade, range, load, anchor."],
+      ["Group Layout", "Frame basics, geometry, sorting, frame scaling, anchoring, Housing load condition, combat-safe visibility."],
+      ["Group Bars & Text", "Colors, bar fill, power bar, text slots, health decimals, dispel overlay, dead/offline background, debuff stripe, range fade."],
+      ["Group Indicators", "Targeted spells, spell sets, selected spell, placed indicators, frame effect, utilities, corner indicators, aggro non-tank."],
+      ["Auras 12.1", "Style and filter pages, buff/debuff lanes, stack count, cooldown text, shared colors, placement, icon grid, scope overrides."],
+      ["Appearance", "Bars, castbars, colors, fonts, misc. Includes textures, gradients, outline, highlights, class colors, NPC colors, language, startup, Blizzard frames."],
+      ["Class Resources", "Class resource layout, behavior, style, visibility, detached player power, second player HP bar, alternative mana."],
+      ["Runtime Safety", "Lazy menu sections, static search index, Assistant job slicing, no hidden page build by default, stop menu jobs on close, defer protected changes in combat."]
+    ];
+
+    const pageTabs = ["Overview", "Layout", "Style", "Text", "Runtime", "Advanced"];
+    let activePage = "home";
+
+    function renderNav() {
+      const nav = document.getElementById("nav");
+      nav.innerHTML = "";
+      navGroups.forEach((group) => {
+        const section = document.createElement("div");
+        section.className = "nav-section";
+        section.innerHTML = `<div class="nav-header"><span>${group.title}</span><span>${group.items.length}</span></div>`;
+        group.items.forEach(([key, label]) => {
+          const page = pages[key];
+          const count = page ? page.sections.length : 0;
+          const btn = document.createElement("button");
+          btn.className = "nav-button" + (key === activePage ? " active" : "");
+          btn.type = "button";
+          btn.dataset.page = key;
+          btn.innerHTML = `<span class="nav-icon"></span><span>${label}</span><span class="nav-count">${count}</span>`;
+          section.appendChild(btn);
+        });
+        nav.appendChild(section);
+      });
+    }
+
+    function controlHtml(item) {
+      if (item.swatches) {
+        return `<span class="swatches">${item.swatches.map((color) => `<span class="swatch" style="background:${color}"></span>`).join("")}</span>`;
+      }
+      const kind = item.kind || (String(item.value).toLowerCase() === "on" ? "on" : String(item.value).toLowerCase() === "off" ? "off" : "");
+      return `<span class="control-value ${kind}">${item.value}</span>`;
+    }
+
+    function renderCards(cards) {
+      const cls = cards.length === 1 ? "cards single" : "cards";
+      return `<div class="${cls}">` + cards.map((cardData) => {
+        const rows = cardData.rows.map((item) => `
+          <div class="row">
+            <span class="row-label" title="${item.label}">${item.label}</span>
+            ${controlHtml(item)}
+          </div>
+        `).join("");
+        return `
+          <article class="control-card">
+            <h3>${cardData.title}</h3>
+            <p>${cardData.subtitle || ""}</p>
+            ${rows}
+          </article>
+        `;
+      }).join("") + `</div>`;
+    }
+
+    function renderPage(key) {
+      activePage = pages[key] ? key : "home";
+      const page = pages[activePage];
+      document.getElementById("breadcrumb").innerHTML = `MSUF Menu2 / ${page.group} / <strong>${page.title}</strong>`;
+      document.getElementById("pageTitle").textContent = page.title;
+      document.getElementById("pageSubtitle").textContent = page.subtitle;
+      document.getElementById("segmentTabs").innerHTML = pageTabs.map((tab, idx) => `<button class="${idx === 0 ? "active" : ""}" type="button">${tab}</button>`).join("");
+      document.getElementById("pageBody").innerHTML = page.sections.map((section, idx) => `
+        <section class="section ${idx > 2 ? "closed" : ""}">
+          <header class="section-header">
+            <span class="chev"></span>
+            <span class="section-title">${section.title}</span>
+            <span class="section-meta">
+              <span class="badge ${section.badge === "safe" || section.badge === "static first" ? "ok" : ""}">${section.badge || "section"}</span>
+              <span class="badge">${section.cards.length} cards</span>
+            </span>
+          </header>
+          <div class="section-body">${renderCards(section.cards)}</div>
+        </section>
+      `).join("");
+      renderCoverage();
+      renderPreview(page);
+      renderSubsystems(page);
+      renderNav();
+    }
+
+    function renderCoverage() {
+      const host = document.getElementById("coverage");
+      host.innerHTML = `
+        <div class="coverage-head">
+          <span>Option Coverage / Subsystem Use</span>
+          <span class="badge ok">All current Menu2 areas represented</span>
+        </div>
+        <div class="coverage-grid">
+          ${coverage.map(([title, text]) => `
+            <div class="coverage-cell">
+              <h4>${title}</h4>
+              <p>${text}</p>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderPreview(page) {
+      const key = activePage;
+      const mode = key.startsWith("gf_") ? "Group" : key.startsWith("auras") ? "Auras" : key === "opt_colors" ? "Colors" : key === "classpower" ? "Class" : "Unit";
+      document.getElementById("previewMode").textContent = mode;
+      const host = document.getElementById("previewFrame");
+      if (mode === "Group") {
+        host.innerHTML = `
+          <div class="group-grid">
+            <div class="member" style="--hp:92%"><span class="name">Tankname</span><span class="corner"></span><span class="spell-dot"></span></div>
+            <div class="member" style="--hp:68%"><span class="name">Healername</span><span class="spell-dot"></span></div>
+            <div class="member" style="--hp:44%"><span class="name">Dpsname</span><span class="corner"></span></div>
+            <div class="member" style="--hp:100%"><span class="name">Dpsname</span></div>
+            <div class="member" style="--hp:22%"><span class="name">Aggro non-tank</span><span class="corner"></span><span class="spell-dot"></span></div>
+            <div class="member" style="--hp:0%"><span class="name">Offline</span></div>
+          </div>
+          <div class="aura-strip"><span class="aura"></span><span class="aura debuff"></span><span class="aura"></span><span class="aura debuff"></span></div>
+        `;
+        return;
+      }
+      if (mode === "Colors") {
+        host.innerHTML = `
+          <div class="unit-preview">
+            <div class="portrait"></div>
+            <div class="bar-stack">
+              <div class="healthbar"><div class="bar-text"><span>Gradient HP</span><span>64.3%</span></div></div>
+              <div class="powerbar"></div>
+              <div class="castbar"><div class="bar-text"><span>Cast Color</span><span>1.4</span></div></div>
+            </div>
+          </div>
+          <div class="palette">
+            <span class="swatch" style="background:#d65a5a"></span>
+            <span class="swatch" style="background:#e0b84e"></span>
+            <span class="swatch" style="background:#24a66d"></span>
+            <span class="swatch" style="background:#37a8e8"></span>
+            <span class="swatch" style="background:#a889ff"></span>
+          </div>
+        `;
+        return;
+      }
+      host.innerHTML = `
+        <div class="unit-preview">
+          <div class="portrait"></div>
+          <div class="bar-stack">
+            <div class="healthbar"><div class="bar-text"><span>${page.title.replace("MSUF ", "")}</span><span>64.3%</span></div></div>
+            <div class="powerbar"></div>
+            <div class="castbar"><div class="bar-text"><span>Shadow Bolt</span><span>1.4 / 2.0</span></div></div>
+          </div>
+        </div>
+        <div class="aura-strip"><span class="aura"></span><span class="aura"></span><span class="aura debuff"></span><span class="aura debuff"></span><span class="aura"></span></div>
+        <div class="mini-note">State chips: Normal, Combat, Targeted, Dead, Offline, Out of range, Housing hidden.</div>
+      `;
+    }
+
+    function renderSubsystems(page) {
+      const host = document.getElementById("subsystems");
+      host.innerHTML = (page.systems || []).map((name) => `
+        <div class="subsystem">
+          <span class="dot"></span>
+          <span>${name}</span>
+          <span class="badge">used</span>
+        </div>
+      `).join("");
+    }
+
+    document.addEventListener("click", (event) => {
+      const navBtn = event.target.closest(".nav-button");
+      if (navBtn) {
+        renderPage(navBtn.dataset.page);
+        return;
+      }
+      const header = event.target.closest(".section-header");
+      if (header) {
+        header.parentElement.classList.toggle("closed");
+      }
+    });
+
+    document.getElementById("quickSearch").addEventListener("input", (event) => {
+      const term = event.target.value.trim().toLowerCase();
+      if (!term) return;
+      const found = Object.entries(pages).find(([key, page]) => {
+        if (key.toLowerCase().includes(term) || page.title.toLowerCase().includes(term)) return true;
+        return page.sections.some((section) => {
+          if (section.title.toLowerCase().includes(term)) return true;
+          return section.cards.some((cardData) => cardData.title.toLowerCase().includes(term) || cardData.rows.some((item) => item.label.toLowerCase().includes(term) || String(item.value || "").toLowerCase().includes(term)));
+        });
+      });
+      if (found) renderPage(found[0]);
+    });
+
+    renderPage(activePage);
+  </script>
+</body>
+</html>

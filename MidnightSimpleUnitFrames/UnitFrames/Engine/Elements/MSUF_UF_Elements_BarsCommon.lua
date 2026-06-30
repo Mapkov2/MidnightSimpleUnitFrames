@@ -660,24 +660,77 @@ local function NPCColor(kind)
 end
 
 local healthGradientCurve
-local function HealthGradientCurve()
+local function GradientStops(health)
+  if type(health) == "table" then
+    return tonumber(health.gradientLowR) or 1, tonumber(health.gradientLowG) or 0, tonumber(health.gradientLowB) or 0,
+      tonumber(health.gradientMidR) or 1, tonumber(health.gradientMidG) or 1, tonumber(health.gradientMidB) or 0,
+      tonumber(health.gradientHighR) or 0, tonumber(health.gradientHighG) or 1, tonumber(health.gradientHighB) or 0
+  end
+  return 1, 0, 0, 1, 1, 0, 0, 1, 0
+end
+
+local function CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
+  if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
+    local curve = C_CurveUtil.CreateColorCurve()
+    curve:AddPoint(0, CreateColor(lr, lg, lb, 1))
+    curve:AddPoint(0.5, CreateColor(mr, mg, mb, 1))
+    curve:AddPoint(1, CreateColor(hr, hg, hb, 1))
+    return curve
+  end
+  return false
+end
+
+local function HealthGradientCurve(health)
+  local lr, lg, lb, mr, mg, mb, hr, hg, hb = GradientStops(health)
+  if type(health) == "table" then
+    if health._msufGradientCurve ~= nil
+      and health._msufGradientLowR == lr and health._msufGradientLowG == lg and health._msufGradientLowB == lb
+      and health._msufGradientMidR == mr and health._msufGradientMidG == mg and health._msufGradientMidB == mb
+      and health._msufGradientHighR == hr and health._msufGradientHighG == hg and health._msufGradientHighB == hb then
+      return health._msufGradientCurve
+    end
+    local curve = CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
+    health._msufGradientCurve = curve
+    health._msufGradientLowR, health._msufGradientLowG, health._msufGradientLowB = lr, lg, lb
+    health._msufGradientMidR, health._msufGradientMidG, health._msufGradientMidB = mr, mg, mb
+    health._msufGradientHighR, health._msufGradientHighG, health._msufGradientHighB = hr, hg, hb
+    return curve
+  end
   if healthGradientCurve ~= nil then
     return healthGradientCurve
   end
-  if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
-    local curve = C_CurveUtil.CreateColorCurve()
-    curve:AddPoint(0, CreateColor(1, 0, 0, 1))
-    curve:AddPoint(0.5, CreateColor(1, 1, 0, 1))
-    curve:AddPoint(1, CreateColor(0, 1, 0, 1))
-    healthGradientCurve = curve
-  else
-    healthGradientCurve = false
-  end
+  healthGradientCurve = CreateHealthGradientCurve(lr, lg, lb, mr, mg, mb, hr, hg, hb)
   return healthGradientCurve
 end
 
-local function GradientColor(unit, calc)
-  local curve = HealthGradientCurve()
+local function GradientFromValues(health, hp, maxHP)
+  if issecretvalue(hp) == true or issecretvalue(maxHP) == true then
+    return nil
+  end
+  hp = tonumber(hp)
+  maxHP = tonumber(maxHP)
+  if not hp or not maxHP or maxHP <= 0 then
+    return nil
+  end
+  local pct = hp / maxHP
+  if pct < 0 then
+    pct = 0
+  elseif pct > 1 then
+    pct = 1
+  end
+  local lr, lg, lb, mr, mg, mb, hr, hg, hb = GradientStops(health)
+  if pct <= 0.5 then
+    local t = pct * 2
+    return lr + (mr - lr) * t, lg + (mg - lg) * t, lb + (mb - lb) * t, true
+  end
+  local t = (pct - 0.5) * 2
+  return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t, true
+end
+
+local function GradientColor(unit, calc, frame, hp, maxHP)
+  local spec = frame and frame.MSUFSpec
+  local health = spec and spec.health or nil
+  local curve = HealthGradientCurve(health)
   if calc and curve and calc.EvaluateCurrentHealthPercent then
     local color = calc:EvaluateCurrentHealthPercent(curve)
     if color and color.GetRGB then
@@ -691,6 +744,10 @@ local function GradientColor(unit, calc)
       local r, g, b = color:GetRGB()
       return r, g, b, true
     end
+  end
+  local r, g, b, raw = GradientFromValues(health, hp, maxHP)
+  if raw == true then
+    return r, g, b, true
   end
   return 0.2, 0.8, 0.2, false
 end
@@ -709,7 +766,7 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
   if health.mode == "dark" or health.mode == "unified" then
     return health.r or 1, health.g or 1, health.b or 1
   elseif health.mode == "gradient" then
-    return GradientColor(unit, calc)
+    return GradientColor(unit, calc, frame, hp, maxHP)
   end
 
   if spec and spec.key == "pet" and health.petColorEnabled == true then
