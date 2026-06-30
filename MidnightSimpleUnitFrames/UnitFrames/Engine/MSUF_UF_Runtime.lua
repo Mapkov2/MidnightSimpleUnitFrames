@@ -846,7 +846,7 @@ local function RunDependentUnitTicker()
         visible = true
         local guidChanged = DependentIdentityGuidChanged(frame, unit)
         local stateChanged = DependentUnitPollStateChanged(frame, unit) or guidChanged
-        if guidChanged or stateChanged and fullTick then
+        if guidChanged == true or (stateChanged and fullTick) or (guidChanged == nil and fullTick) then
           RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_SOFT")
         elseif stateChanged then
           RunRuntimeFrame(frame, DEPENDENT_UNIT_TICK_REASON)
@@ -974,13 +974,15 @@ end
 -- targeting the boss). The token never stopped pointing at that GUID, so the
 -- live event stream kept the frame current and the full identity fanout is
 -- redundant -- this is the main reason oUF showed ~0 on group clicks while
--- MSUF re-ran 11 ToT elements per click. Secret GUIDs disable the skip
--- (stored as false so the next plain compare always mismatches).
+-- MSUF re-ran 11 ToT elements per click. Secret GUIDs are treated as unknown,
+-- not "changed every tick": the poll snapshot and periodic full tick keep the
+-- frame correct without forcing a full identity pass every 0.5s in combat.
 DependentIdentityGuidChanged = function(frame, unit)
   local guid = UnitGUID(unit)
   if issecretvalue(guid) == true then
+    local firstUnknown = frame._msufIdentityGUID == nil
     frame._msufIdentityGUID = false
-    return true
+    return firstUnknown and true or nil
   end
   if guid == frame._msufIdentityGUID then
     return false

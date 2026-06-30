@@ -708,11 +708,13 @@ local pendingFocusTargetRange = false
 local pendingTargetRange = false
 local pendingFocusRange = false
 local pendingRangeFlush = false
+local pendingPollSetRebuild = false
 local driver
 local RangeFlushOnUpdate
 
 local function RunPendingRangeFlush()
   pendingRangeFlush = false
+  local rebuildPollSet = pendingPollSetRebuild or pollSetDirty
   local runTarget = pendingTargetRange
   local runFocus = pendingFocusRange
   local runTargetTarget = pendingTargetTargetRange
@@ -721,11 +723,16 @@ local function RunPendingRangeFlush()
   pendingFocusRange = false
   pendingTargetTargetRange = false
   pendingFocusTargetRange = false
+  pendingPollSetRebuild = false
   if runTarget then EvaluateTargetUnits(false) end
   if runFocus then EvaluateFocusUnits(false) end
   if runTargetTarget then EvaluateIfActive("targettarget", false) end
   if runFocusTarget then EvaluateIfActive("focustarget", false) end
-  RebuildPollSet()
+  if rebuildPollSet or pollSetDirty then
+    RebuildPollSet()
+  else
+    SchedulePoll()
+  end
 end
 
 RangeFlushOnUpdate = function(self)
@@ -772,6 +779,7 @@ local function ScheduleFocusRange()
   if not RangeUnitScheduled("focus") then
     return false
   end
+  pendingPollSetRebuild = true
   if pendingFocusRange then
     return true
   end
@@ -780,6 +788,8 @@ local function ScheduleFocusRange()
     return true
   end
   EvaluateFocusUnits(false)
+  RebuildPollSet()
+  pendingPollSetRebuild = false
   return false
 end
 
@@ -787,6 +797,7 @@ local function ScheduleTargetTargetRange()
   if not RangeUnitScheduled("targettarget") then
     return false
   end
+  pendingPollSetRebuild = true
   if pendingTargetTargetRange then
     return true
   end
@@ -795,6 +806,8 @@ local function ScheduleTargetTargetRange()
     return true
   end
   EvaluateIfActive("targettarget", false)
+  RebuildPollSet()
+  pendingPollSetRebuild = false
   return false
 end
 
@@ -802,6 +815,7 @@ local function ScheduleFocusTargetRange()
   if not RangeUnitScheduled("focustarget") then
     return false
   end
+  pendingPollSetRebuild = true
   if pendingFocusTargetRange then
     return true
   end
@@ -810,6 +824,8 @@ local function ScheduleFocusTargetRange()
     return true
   end
   EvaluateIfActive("focustarget", false)
+  RebuildPollSet()
+  pendingPollSetRebuild = false
   return false
 end
 
@@ -1047,6 +1063,7 @@ local function SyncRuntime()
   pendingFocusRange = false
   pendingTargetTargetRange = false
   pendingFocusTargetRange = false
+  pendingPollSetRebuild = false
   if driver and driver.SetScript then
     driver:SetScript("OnUpdate", nil)
   end
