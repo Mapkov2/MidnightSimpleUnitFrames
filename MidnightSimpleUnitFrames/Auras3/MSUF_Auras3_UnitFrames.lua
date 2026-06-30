@@ -27,7 +27,6 @@ A3.__unitFrameBackendLoaded = true
 
 local type, tostring, tonumber, pairs, next = type, tostring, tonumber, pairs, next
 local table_concat = table.concat
-local table_sort = table.sort
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
@@ -883,25 +882,70 @@ local function ApplyFont(fs, size)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
 end
 
--- Aura timer text format/color: a C-side NumericRuleFormatter evaluated by
+-- Aura timer text format/color: C-side formatter objects evaluated by
 -- Blizzard's DurationTextBinding against the secret aura duration object. MSUF
 -- only builds/caches formatter objects when style config changes; there is no
 -- addon timer or OnUpdate work per aura.
-local function ColorEscape(r, g, b)
-    return string.format("|cff%02x%02x%02x", Round(Clamp01(r, 1) * 255), Round(Clamp01(g, 1) * 255), Round(Clamp01(b, 1) * 255))
+local _durationFormatterCache
+local _durationColorCurveCache
+
+local function NumericRuleFormatRounding(name, fallback)
+    local enum = _G.Enum and _G.Enum.NumericRuleFormatRounding
+    if enum and enum[name] ~= nil then return enum[name] end
+    local numericRuleFormatter = _G.NumericRuleFormatter and _G.NumericRuleFormatter.Rounding
+    if numericRuleFormatter and numericRuleFormatter[name] ~= nil then return numericRuleFormatter[name] end
+    return fallback
 end
 
-local _durationFormatterCache
-
 local function BuildAuraDurationFormatter(lane)
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
-    if not general then return nil end
-    local buckets = general.aurasCooldownTextUseBuckets == true
     local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
-    if not buckets and decimalSec <= 0 then return nil end
+    local sig = table_concat({ "unitless-minutes", decimalSec }, "\030")
+    if _durationFormatterCache and _durationFormatterCache[sig] then return _durationFormatterCache[sig] end
 
     local C_StringUtil = _G.C_StringUtil
     if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then return nil end
+
+    local roundingDown = NumericRuleFormatRounding("Down", 2)
+    local formatter = C_StringUtil.CreateNumericRuleFormatter()
+    if decimalSec > 0 then
+        formatter:AddBreakpoint({
+            threshold = 0,
+            step = 0.1,
+            rounding = roundingDown,
+            format = "%.1f",
+        })
+    end
+    formatter:AddBreakpoint({
+        threshold = decimalSec > 0 and decimalSec or 0,
+        step = 1,
+        rounding = roundingDown,
+        min = 1,
+        format = "%.0f",
+    })
+    formatter:AddBreakpoint({
+        threshold = 60,
+        step = 1,
+        rounding = roundingDown,
+        min = 1,
+        format = "%.0f",
+        components = {
+            { div = 60, step = 1, rounding = roundingDown },
+        },
+    })
+
+    _durationFormatterCache = _durationFormatterCache or {}
+    _durationFormatterCache[sig] = formatter
+    return formatter
+end
+
+local function BuildAuraDurationTextColorCurve()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    if not general then return nil end
+    local buckets = general.aurasCooldownTextUseBuckets == true
+    if not buckets then return nil end
+    local C_CurveUtil = _G.C_CurveUtil
+    local CreateColor = _G.CreateColor
+    if not (C_CurveUtil and type(C_CurveUtil.CreateColorCurve) == "function" and type(CreateColor) == "function") then return nil end
 
     -- Safe color falls back to the configured global font color when the user has
     -- not picked one, matching the menu's Safe swatch behavior.
@@ -933,48 +977,41 @@ local function BuildAuraDurationFormatter(lane)
     if safeSec < warningSec then safeSec = warningSec end
 
     local sig = table_concat({
-        buckets and 1 or 0, decimalSec, sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
+        sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
     }, "\030")
-    if _durationFormatterCache and _durationFormatterCache[sig] then return _durationFormatterCache[sig] end
+    if _durationColorCurveCache and _durationColorCurveCache[sig] then return _durationColorCurveCache[sig] end
 
-    local formatter = C_StringUtil.CreateNumericRuleFormatter()
-    local thresholds, seen = {}, {}
-    local function AddThreshold(value)
-        value = ClampNumber(value, 0, 0, 600)
-        if seen[value] then return end
-        seen[value] = true
-        thresholds[#thresholds + 1] = value
+    local curve = C_CurveUtil.CreateColorCurve()
+    local lastX
+    local function AddPoint(x, r, g, b)
+        x = ClampNumber(x, 0, 0, 600)
+        if lastX and x <= lastX then
+            if lastX >= 600 then return end
+            x = math_min(600, lastX + 0.001)
+            if x <= lastX then return end
+        end
+        curve:AddPoint(x, CreateColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 1))
+        lastX = x
     end
-    AddThreshold(0)
-    if decimalSec > 0 then AddThreshold(decimalSec) end
-    if buckets then
-        AddThreshold(urgentSec)
-        AddThreshold(warningSec)
-        AddThreshold(safeSec)
-    end
-    table_sort(thresholds)
-
-    local function FormatAt(threshold)
-        local format = threshold < decimalSec and "%.1f" or "%.0f"
-        if not buckets then return format end
-        if safeSec > warningSec and threshold >= safeSec then return format end
-        if threshold >= warningSec then return ColorEscape(sr, sg, sb) .. format .. "|r" end
-        if threshold >= urgentSec then return ColorEscape(wr, wg, wb) .. format .. "|r" end
-        return ColorEscape(ur, ug, ub) .. format .. "|r"
-    end
-    for i = 1, #thresholds do
-        local threshold = thresholds[i]
-        formatter:AddBreakpoint({ threshold = threshold, format = FormatAt(threshold) })
+    local function AddStepBoundary(boundary, fromR, fromG, fromB, toR, toG, toB)
+        boundary = ClampNumber(boundary, 0, 0, 600)
+        if boundary > 0.001 then AddPoint(boundary - 0.001, fromR, fromG, fromB) end
+        AddPoint(boundary, toR, toG, toB)
     end
 
-    _durationFormatterCache = _durationFormatterCache or {}
-    _durationFormatterCache[sig] = formatter
-    return formatter
+    AddPoint(0, ur, ug, ub)
+    AddStepBoundary(urgentSec, ur, ug, ub, wr, wg, wb)
+    AddStepBoundary(warningSec, wr, wg, wb, sr, sg, sb)
+    AddPoint(safeSec, sr, sg, sb)
+
+    _durationColorCurveCache = _durationColorCurveCache or {}
+    _durationColorCurveCache[sig] = curve
+    return curve
 end
 
 -- Reusable options table for SetDurationText. Blizzard securecopies options on
 -- each call, so a single mutated table is safe across buttons and avoids per-button
--- garbage; we only ever set .formatter on it.
+-- garbage; we only ever set cold-path formatter/curve references on it.
 local _durationTextOptions = {}
 
 local function PlaceStackText(fs, owner, lane)
@@ -1243,15 +1280,18 @@ local function PrepareAuraButton(button, lane, index)
         ApplyFont(duration, lane.cooldownSize)
         PlaceCooldownText(duration, button, lane)
         duration:Show()
-        -- When "Color aura timers by remaining time" is on, hand Blizzard a C-side
-        -- NumericRuleFormatter so the duration text is colored/formatted from the
-        -- secret duration object with no addon cost. When off, pass no options and
-        -- the binding uses Blizzard's DefaultAuraDurationFormatter (plain seconds).
+        -- Hand Blizzard C-side formatter/curve objects so the duration text is
+        -- formatted from the secret duration object with no addon cost. MSUF caps
+        -- long buffs at whole minutes, with no unit suffix, instead of raw seconds
+        -- or hour/day units.
         local formatter = BuildAuraDurationFormatter(lane)
         if formatter then
             _durationTextOptions.formatter = formatter
+            _durationTextOptions.textColorCurve = BuildAuraDurationTextColorCurve()
             CallButtonMethod(button, "SetDurationText", duration, _durationTextOptions)
         else
+            _durationTextOptions.formatter = nil
+            _durationTextOptions.textColorCurve = nil
             CallButtonMethod(button, "SetDurationText", duration)
         end
     else

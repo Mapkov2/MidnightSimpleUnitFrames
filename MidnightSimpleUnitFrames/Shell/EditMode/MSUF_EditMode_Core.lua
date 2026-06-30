@@ -635,7 +635,9 @@ function State.Enter(key)
 
         local function SyncUnitPreviewsAfterEnter()
             if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
-            if _G.MSUF_SyncAllUnitPreviews then
+            if _G.MSUF_SyncAllUnitPreviewsAsync then
+                _G.MSUF_SyncAllUnitPreviewsAsync()
+            elseif _G.MSUF_SyncAllUnitPreviews then
                 _G.MSUF_SyncAllUnitPreviews()
             end
         end
@@ -684,6 +686,7 @@ end
 function State.Exit(source)
     if not active then return end
     enterGeneration = enterGeneration + 1
+    local exitToken = enterGeneration
     local combatLocked = (InCombatLockdown and InCombatLockdown()) and true or false
 
     --- Stop ticker FIRST (zero overhead from this point)
@@ -720,8 +723,16 @@ function State.Exit(source)
     if combatLocked then
         pendingCombatExitApply = true
     else
-        ApplyAllSettingsSafe()
-        RestoreRuntimeAfterEditModeExit()
+        local function RestoreAfterExitFrame()
+            if enterGeneration ~= exitToken or active then return end
+            ApplyAllSettingsSafe()
+            RestoreRuntimeAfterEditModeExit()
+        end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, RestoreAfterExitFrame)
+        else
+            RestoreAfterExitFrame()
+        end
     end
 
     --- Notify listeners
