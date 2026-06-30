@@ -109,22 +109,31 @@ local function BuildDeadBgSection(ctx, b)
     end
     TrackSectionRefresh(ctx, deadSec, RefreshDeadBgState)
 end
-local function HealthModeHint(mode)
-    if not mode or mode == "GLOBAL" then return "follows global style" end
-    if mode == "CLASS" then return "class-colored health bars" end
-    if mode == "GRADIENT" then return "health gradient active" end
-    if mode == "CUSTOM" then return "custom health color" end
-    if mode == "dark" then return "dark bar style" end
-    if mode == "unified" then return "unified bar style" end
-    return tostring(mode)
+local function FormatPercent(value)
+    return tostring(floor((tonumber(value) or 0) * 100 + 0.5)) .. "%"
 end
 local function BuildGFBars(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
     local AlphaLabel = M.AlphaLabel
-    local hcolor = b:CollapsibleSection("hcolor", "Health Colors  (Global)", 156, true)
-    local mode = W.Dropdown(hcolor, "Bar Color Mode", GF_BAR_MODES, 270)
+    local Clamp01 = M.Clamp01
+    local colorSectionW = ctx.width or b.width or 720
+    local colorProbeW = max(320, colorSectionW - 40)
+    local colorsWide = colorProbeW >= 660
+    local hcolor = b:CollapsibleSection("hcolor", "Colors", colorsWide and 364 or 626, true)
+    local colorsW = hcolor._msuf2Width or b.width or 720
+    local colorsGap = 16
+    local colorsLeftX = 20
+    local colorsInnerW = max(320, colorsW - 40)
+    local colorsLeftW = colorsWide and floor((colorsInnerW - colorsGap) * 0.48) or colorsInnerW
+    local colorsRightX = colorsWide and (colorsLeftX + colorsLeftW + colorsGap) or colorsLeftX
+    local colorsRightW = colorsWide and (colorsInnerW - colorsLeftW - colorsGap) or colorsInnerW
+    local backgroundY = colorsWide and -38 or -362
+    local healthColorCard = W.ControlCard(hcolor, "Health Bar", "Color source and opacity for the filled health bars.", colorsLeftX, -38, colorsLeftW, 300)
+    local backgroundCard = W.ControlCard(hcolor, "Bar Background", "Color, texture, and opacity behind health and power bars.", colorsRightX, backgroundY, colorsRightW, 198)
+    local mode = W.Dropdown(healthColorCard, "Bar Color Mode", GF_BAR_MODES, min(270, colorsLeftW - 32))
+    W.MoveWidget(mode, healthColorCard, 16, -54, min(270, colorsLeftW - 32), "LEFT")
     M.BindDropdownWidget(ctx, mode,
         function() return Conf(CurrentScope()).gfBarMode or "GLOBAL" end,
         function(v)
@@ -134,8 +143,27 @@ local function BuildGFBars(ctx)
             QueueGF(CurrentScope(), "visual")
             RequestGroupBarsRefresh(ctx, "gf-bars-health-mode")
         end)
-    local color = W.Color(hcolor, "Health bar")
-    local colorHint = W.Text(hcolor, "", 12, -116, hcolor._msuf2Width or 640, T.colors.muted)
+    local color = W.Color(healthColorCard, "Health bar color")
+    W.MoveWidget(color, healthColorCard, 16, -106)
+    local hpAlpha = W.Slider(healthColorCard, "", 0, 1, 0.05, colorsLeftW)
+    M.BindNumberWidget(ctx, hpAlpha,
+        function() return Num(CurrentScope(), "hpBarAlpha", 1) end,
+        function(v)
+            local n = Clamp01(v, 1)
+            local conf = Conf(CurrentScope())
+            if conf.hpBarAlpha == n then return end
+            conf.hpBarAlpha = n
+            QueueGF(CurrentScope(), "visual")
+        end,
+        1)
+    W.MoveWidget(hpAlpha, healthColorCard, 16, -154, colorsLeftW - 58, "LEFT")
+    M.BindSliderLiveLabel(ctx, hpAlpha, function() return Num(CurrentScope(), "hpBarAlpha", 1) end,
+        function(value) return AlphaLabel("Health bar opacity", tonumber(value) or 1) end, true)
+    local exclude = W.ToggleAt(healthColorCard, "Keep text + portrait visible", 16, -214, colorsLeftW - 32)
+    M.BindBoolWidget(ctx, exclude,
+        function() return Bool(CurrentScope(), "alphaExcludeTextPortrait", false) end,
+        function(v) Set(CurrentScope(), "alphaExcludeTextPortrait", v and true or false, "visual") end)
+    local colorHint = W.Text(healthColorCard, "", 16, -248, colorsLeftW - 32, T.colors.muted)
     if colorHint.SetWordWrap then colorHint:SetWordWrap(true) end
     local function CurrentGlobalBarColor()
         local getCache = _G.MSUF_UFCore_GetSettingsCache
@@ -194,14 +222,31 @@ local function BuildGFBars(ctx)
         end
         SetSectionBadgesAndStatus(hcolor, {
             { text = OptionText(GF_BAR_MODES, m or "GLOBAL", "Global"), kind = editable and "accent" or "info" },
-            { text = HealthModeHint(m), kind = editable and "info" or "muted" },
+            { text = "HP " .. FormatPercent(Num(CurrentScope(), "hpBarAlpha", 1)), kind = "info" },
+            { text = "BG " .. FormatPercent(Num(CurrentScope(), "hpBgAlpha", 0.85)), kind = "accent" },
         })
     end
+    ScopeColor(ctx, backgroundCard, "Background Color", min(320, colorsRightW - 32), "bgR", "bgG", "bgB", { 0.10, 0.10, 0.10 }, "visual", 16, -54, min(320, colorsRightW - 32))
+    local bgTexture = BindScopeDropdown(ctx, W.Dropdown(backgroundCard, "Background Texture", SIMPLE_TEXTURES, min(280, colorsRightW - 32)), "barBgTexture", "", "visual")
+    W.MoveWidget(bgTexture, backgroundCard, 16, -88, min(280, colorsRightW - 32), "LEFT")
+    local bgAlpha = W.Slider(backgroundCard, "", 0, 1, 0.05, colorsRightW)
+    M.BindNumberWidget(ctx, bgAlpha,
+        function() return Num(CurrentScope(), "hpBgAlpha", 0.85) end,
+        function(v)
+            local n = Clamp01(v, 0.85)
+            local conf = Conf(CurrentScope())
+            if conf.hpBgAlpha == n then return end
+            conf.hpBgAlpha = n
+            QueueGF(CurrentScope(), "visual")
+        end,
+        0.85)
+    W.MoveWidget(bgAlpha, backgroundCard, 16, -142, colorsRightW - 58, "LEFT")
+    M.BindSliderLiveLabel(ctx, bgAlpha, function() return Num(CurrentScope(), "hpBgAlpha", 0.85) end,
+        function(value) return AlphaLabel("Background opacity", tonumber(value) or 0.85) end, true)
     TrackSectionRefresh(ctx, hcolor, RefreshHealthColorState)
-    local bars = b:CollapsibleSection("bars", "Bars  (Custom)", 206, false)
+    local bars = b:CollapsibleSection("bars", "Bar Fill", 156, false)
     BindScopeDropdown(ctx, W.Dropdown(bars, "Foreground Texture", SIMPLE_TEXTURES, 280), "barTexture", "", "visual")
-    BindScopeDropdown(ctx, W.Dropdown(bars, "Background Texture", SIMPLE_TEXTURES, 280), "barBgTexture", "", "visual")
-    BindScopeDropdown(ctx, W.Dropdown(bars, "Health color mode", HEALTH_MODES, 220), "healthColorMode", "CLASS", "visual")
+    BindScopeDropdown(ctx, W.Dropdown(bars, "Health color fallback", HEALTH_MODES, 220), "healthColorMode", "CLASS", "visual")
     local power = b:CollapsibleSection("power", "Power Bar", 240, false)
     local powerW = power._msuf2Width or b.width or 720
     local powerGap = 16
@@ -728,4 +773,4 @@ local function BuildGFBars(ctx)
     TrackSectionRefresh(ctx, range, RefreshRangeState)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 13 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 14 })

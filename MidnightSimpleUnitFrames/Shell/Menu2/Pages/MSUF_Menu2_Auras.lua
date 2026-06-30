@@ -941,6 +941,7 @@ local function FormatAuraPreviewTimer(seconds, cfg)
     seconds = tonumber(seconds) or 0
     local decimalSec = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
     if decimalSec > 0 and seconds < decimalSec then return string.format("%.1f", seconds) end
+    if seconds >= 60 then return tostring(max(1, floor(seconds / 60))) end
     return tostring(Round(seconds))
 end
 local function SharedAuraPreviewLabel(cfg)
@@ -1253,8 +1254,8 @@ local function BuildUnitStyle(ctx, b, scope)
     local swipeDirection = BindStyleDropdown(cooldown, "Swipe Direction", 24, -354, COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48, ReadScopeSwipeDirection, WriteScopeSwipeDirection, "AURAS3_COOLDOWN_SWIPE_DIRECTION")
     AddTooltip(swipeDirection, "Cooldown swipe direction", "Selects the Blizzard cooldown swipe direction with Cooldown:SetReverse. This only affects the swipe overlay, not icon size or position.")
     local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -412, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
-    AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. At and above it, timers show whole seconds. Set 0 for whole seconds only.")
-    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added.", 24, -456, cw - 48, T.colors.muted)
+    AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and unitless minutes above it. Set 0 for whole seconds only.")
+    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then unitless minutes.", 24, -456, cw - 48, T.colors.muted)
 
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
@@ -1337,8 +1338,8 @@ local function BuildGroupStyle(ctx, b, scope)
         end)
     AddTooltip(groupSwipeDirection, "Cooldown swipe direction", "Selects the Blizzard cooldown swipe direction with Cooldown:SetReverse. This only affects the swipe overlay, not icon size or position.")
     local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -288, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual", RefreshStylePreview)
-    AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. At and above it, timers show whole seconds. Set 0 for whole seconds only.")
-    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added.", 24, -340, cw - 48, T.colors.muted)
+    AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and unitless minutes above it. Set 0 for whole seconds only.")
+    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then unitless minutes.", 24, -340, cw - 48, T.colors.muted)
 
     local stack = b:CollapsibleSection(baseId .. "_stack", "Group " .. LaneTitle(lane) .. " Stack Count", 238, false)
     local sw = BodyWidth(stack)

@@ -1037,6 +1037,10 @@ local function BuildUnitPage(info)
                     and ctx.wrapper and ctx.wrapper.IsShown and ctx.wrapper:IsShown()
             end
             local function SetBossPagePreviewActive(active)
+                if active and type(M.RequestBossPagePreviewForKey) == "function" then
+                    M.RequestBossPagePreviewForKey("uf_boss")
+                    return
+                end
                 if M.UnitPage and M.UnitPage.SetBossPagePreviewActive then M.UnitPage.SetBossPagePreviewActive(active) end
             end
             local function RefreshBossPagePreviewActive()

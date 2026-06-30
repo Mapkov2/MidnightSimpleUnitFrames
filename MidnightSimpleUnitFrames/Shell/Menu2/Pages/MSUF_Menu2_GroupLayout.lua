@@ -12,7 +12,7 @@ local max = math.max
 local min = math.min
 local VT = M.ValueTextList
 local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES BLIZZARD_FALLBACK_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice]])
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice]])
 SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
@@ -317,52 +317,6 @@ local function BuildGFLayout(ctx)
     end)
     TrackSectionRefresh(ctx, scale, RefreshScalingState)
 
-    -- Unified, simple transparency: HP bar fill slider, background slider, background
-    -- colour, and a toggle that keeps text + portrait opaque while bars fade. Range fade
-    -- multiplies these at runtime. All coldpath.
-    local transparency = b:CollapsibleSection("border", "Transparency", 200, false)
-    local transparencyW = transparency._msuf2Width or b.width or 720
-    local transGap = 16
-    local transLeftX = 20
-    local transInnerW = max(320, transparencyW - 40)
-    local transLeftW = floor((transInnerW - transGap) * 0.5)
-    local transRightX = transLeftX + transLeftW + transGap
-    local transRightW = transInnerW - transLeftW - transGap
-    local AlphaLabel = M.AlphaLabel
-    local Clamp01 = M.Clamp01
-    local opacityCard = W.ControlCard(transparency, "Opacity", "Fade the health bar and its background.", transLeftX, -38, transLeftW, 150)
-    local optionsCard = W.ControlCard(transparency, "Background & Options", "Background colour and readability.", transRightX, -38, transRightW, 150)
-    local function BindAlphaSlider(widget, key, default, label)
-        M.BindNumberWidget(ctx, widget,
-            function() return Num(CurrentScope(), key, default) end,
-            function(v)
-                local n = Clamp01(v, default or 0)
-                local conf = Conf(CurrentScope())
-                if conf[key] == n then return end
-                conf[key] = n
-                QueueGF(CurrentScope(), "visual")
-            end,
-            default)
-        return M.BindSliderLiveLabel(ctx, widget, function() return Num(CurrentScope(), key, default) end, function(value) return AlphaLabel(label, tonumber(value) or default or 0) end, true)
-    end
-    M.BuildControlSpecs({
-        { "hpBarAlpha", 1, "HP Bar", -62 },
-        { "hpBgAlpha", 0.85, "Background", -116 },
-    }, { ["*"] = function(s) W.MoveWidget(BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), s[1], s[2], s[3]), opacityCard, 16, s[4], transLeftW - 58, "LEFT") end })
-    local bgColor = ScopeColor(ctx, optionsCard, "Background Color", nil, "bgR", "bgG", "bgB", { 0.10, 0.10, 0.10 }, "visual")
-    if bgColor._msuf2Title then
-        bgColor._msuf2Title:ClearAllPoints()
-        bgColor._msuf2Title:SetPoint("TOPLEFT", optionsCard, "TOPLEFT", 16, -62)
-        bgColor._msuf2Title:SetWidth(120)
-        bgColor._msuf2Title:SetJustifyH("LEFT")
-    end
-    bgColor:ClearAllPoints()
-    bgColor:SetPoint("TOPLEFT", optionsCard, "TOPLEFT", 154, -60)
-    bgColor:SetSize(34, 16)
-    local exclude = W.ToggleAt(optionsCard, "Keep text + portrait visible", 16, -100, transRightW - 32)
-    M.BindBoolWidget(ctx, exclude,
-        function() return Bool(CurrentScope(), "alphaExcludeTextPortrait", false) end,
-        function(v) Set(CurrentScope(), "alphaExcludeTextPortrait", v and true or false, "visual") end)
     local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
     local anchorTo = W.Dropdown(anchor, "Anchor To", GF_ANCHOR_TO, 200)
     M.UnitSectionsShared.PlaceDropdown(anchor, anchorTo, 14, -38, 200)
@@ -407,4 +361,4 @@ local function BuildGFLayout(ctx)
     TrackSectionRefresh(ctx, anchor, RefreshAnchorHeader)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 18 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 19 })
