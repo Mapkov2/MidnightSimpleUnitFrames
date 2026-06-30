@@ -293,7 +293,6 @@ function A._ParsePipelineFeature(normalized, raw, ctx)
     result = P.ParseCastbarDirectionClarification and P.ParseCastbarDirectionClarification(normalized); if result then return result end
     result = ParseCastbarPreviewAction(normalized); if result then return result end
     result = ParseScopedOverrideReset(normalized); if result then return result end
-    result = ParseGuidedSetup(normalized); if result then return result end
     result = ParseGroupCopyScopeState(normalized); if result then return result end
     result = CopyRequest(normalized); if result then return result end
     result = BuildContextReset(normalized, ctx); if result then return result end

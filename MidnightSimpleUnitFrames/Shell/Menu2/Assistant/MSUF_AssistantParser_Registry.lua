@@ -3556,7 +3556,7 @@ P.GROUP_COLOR_TARGETS = {
     { key = "groupBorderColor", title = "Group Border Color", terms = { "group border color", "group frame border color", "frame border color", "border color" } },
     { key = "hlFocusColor", title = "Focus Highlight Color", terms = { "focus highlight color", "focus border color", "focus glow color" } },
     { key = "deadBgColor", title = "Dead Background Color", terms = { "dead background color", "dead member background color", "dead offline background color", "dead bg color" } },
-    { key = "bgColor", title = "Backdrop Color", terms = { "group backdrop color", "group background color", "frame background color", "backdrop color", "background color" } },
+    { key = "bgColor", title = "Bar Background Color", terms = { "group backdrop color", "group background color", "frame background color", "backdrop color", "background color", "bar background color", "hp track color", "health track color", "track color" } },
     { key = "healthCustomColor", title = "Custom Health Color", terms = { "custom health color", "health custom color", "health bar custom color" } },
     { key = "gfDarkColor", title = "Dark Bar Color", terms = { "dark health color", "dark bar color", "dark mode health color" } },
     { key = "gfUnifiedColor", title = "Unified Bar Color", terms = { "unified health color", "unified bar color", "unified color" } },
