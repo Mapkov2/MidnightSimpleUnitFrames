@@ -1936,9 +1936,9 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
         if scopeKind == "group" then
             return R.VisualSettingReply(
                 scopeLabel .. " Opacity setting location",
-                scopeLabel .. " frame opacity lives in Group Health & Text. Use " .. scopeLabel .. " HP Bar Opacity for the filled health bar and " .. scopeLabel .. " Background Opacity for the track/background.",
-                "open group health and text; set " .. scope .. " hp bar opacity to 80; set " .. scope .. " background opacity to 70.",
-                "Open Group Health & Text | set " .. scope .. " hp bar opacity to 80"
+                scopeLabel .. " frame opacity lives in Group Health & Text. Use " .. scopeLabel .. " Health Bar Opacity for the filled health bar and " .. scopeLabel .. " Bar Background Opacity for the track/background.",
+                "open group health and text; set " .. scope .. " health bar opacity to 80; set " .. scope .. " bar background opacity to 70.",
+                "Open Group Health & Text | set " .. scope .. " health bar opacity to 80"
             )
         end
         if scopeKind == "unit" then
@@ -6353,6 +6353,44 @@ function R.RegistryLocationResultFollowups(entries, limit)
     return out
 end
 
+local GROUP_LAYOUT_FALLBACK_ATTRS = {
+    enabled = true,
+    showPlayer = true,
+    showSolo = true,
+    clickCast = true,
+    clickCastEnabled = true,
+    blizzardFallbackMode = true,
+    hideInClientScene = true,
+    hideOfflineEnabled = true,
+    hideOfflineInCombat = true,
+    hideOfflineDelay = true,
+    smoothFill = true,
+    reverseFill = true,
+    width = true,
+    height = true,
+    offsetX = true,
+    offsetY = true,
+    spacing = true,
+    unitsPerColumn = true,
+    maxColumns = true,
+    preserveRaidGroups = true,
+    growth = true,
+    sortMode = true,
+    sortByRole = true,
+    playerFirstInRole = true,
+    roleOrder = true,
+    frameScaleMode = true,
+    frameScaleEnabled = true,
+    frameScaleManual = true,
+    scaleAt10 = true,
+    scaleAt20 = true,
+    scaleAt25 = true,
+    scaleOver25 = true,
+    anchorToFrame = true,
+    customAnchorFrame = true,
+    anchorPoint = true,
+}
+
 function R.FallbackPageForSetting(setting)
     if type(setting) ~= "table" then return nil end
     local unit = tostring(setting.unit or "")
@@ -6371,7 +6409,10 @@ function R.FallbackPageForSetting(setting)
     if unit == "party" or unit == "raid" or unit == "mythicraid" then
         if frameType == "aura" then return "gf_auras" end
         if category:find("indicator", 1, true) then return "gf_indicators" end
-        return "gf_layout"
+        local attr = tostring(setting.attribute or "")
+        local suffix = tostring(setting.key or ""):match("%.([^%.]+)$")
+        if GROUP_LAYOUT_FALLBACK_ATTRS[attr] or (suffix and GROUP_LAYOUT_FALLBACK_ATTRS[suffix]) then return "gf_layout" end
+        return "gf_bars"
     end
     if category:find("misc", 1, true) then return "opt_misc" end
     if category:find("cast", 1, true) then return "castbars" end

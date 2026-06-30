@@ -1,4 +1,4 @@
--- Group frame opacity, dead-background, and anchoring assistant settings.
+-- Group frame opacity, bar-background, dead-background, and anchoring assistant settings.
 -- Loaded before MSUF_AssistantRegistry_GroupFramesSettings.lua; the main loop preserves registration order.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -52,13 +52,18 @@ function A.GroupFramesRegistry.RegisterFrameAlphaAnchorSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "opacity affects")
     AddAliasesForUnit(aliases, scope, "transparency affects")
     AddAliasesForUnit(aliases, scope, "alpha target")
-    -- Unified transparency: HP bar fill opacity, background opacity, and a toggle to
-    -- keep text + portrait opaque while bars dim.
+    -- Unified colors transparency: health bar fill opacity, background opacity, and a toggle
+    -- to keep text + portrait opaque while bars dim.
     aliases = {}
     AddAliasesForUnit(aliases, scope, "hp bar opacity")
     AddAliasesForUnit(aliases, scope, "hp fill opacity")
     AddAliasesForUnit(aliases, scope, "health bar opacity")
-    RegisterGroupNumber(scope, "hpBarAlpha", "hpBarAlpha", "HP Bar Opacity", 1, 0, 1, 0.05, "visual", aliases, { percent = true })
+    AddAliasesForUnit(aliases, scope, "foreground opacity")
+    AddAliasesForUnit(aliases, scope, "foreground alpha")
+    AddAliasesForUnit(aliases, scope, "bar foreground opacity")
+    AddAliasesForUnit(aliases, scope, "bar fill opacity")
+    AddAliasesForUnit(aliases, scope, "health foreground opacity")
+    RegisterGroupNumber(scope, "hpBarAlpha", "hpBarAlpha", "Health Bar Opacity", 1, 0, 1, 0.05, "visual", aliases, { percent = true })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "background opacity")
@@ -68,7 +73,8 @@ function A.GroupFramesRegistry.RegisterFrameAlphaAnchorSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "health track opacity")
     AddAliasesForUnit(aliases, scope, "track opacity")
     AddAliasesForUnit(aliases, scope, "bar background opacity")
-    RegisterGroupNumber(scope, "hpBgAlpha", "hpBgAlpha", "Background Opacity", 0.85, 0, 1, 0.05, "visual", aliases, { percent = true })
+    AddAliasesForUnit(aliases, scope, "bar background alpha")
+    RegisterGroupNumber(scope, "hpBgAlpha", "hpBgAlpha", "Bar Background Opacity", 0.85, 0, 1, 0.05, "visual", aliases, { percent = true })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "keep text visible")
@@ -85,8 +91,12 @@ function A.GroupFramesRegistry.RegisterFrameAlphaAnchorSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "group background color")
     AddAliasesForUnit(aliases, scope, "frame background color")
     AddAliasesForUnit(aliases, scope, "background color")
+    AddAliasesForUnit(aliases, scope, "bar background color")
+    AddAliasesForUnit(aliases, scope, "hp track color")
+    AddAliasesForUnit(aliases, scope, "health track color")
+    AddAliasesForUnit(aliases, scope, "track color")
     AddAliasesForUnit(aliases, scope, "backdrop color")
-    RegisterGroupColor(scope, "groupBackdropColor", "bg", "Backdrop Color", 0.10, 0.10, 0.10, aliases)
+    RegisterGroupColor(scope, "groupBackdropColor", "bg", "Bar Background Color", 0.10, 0.10, 0.10, aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "dead background")
