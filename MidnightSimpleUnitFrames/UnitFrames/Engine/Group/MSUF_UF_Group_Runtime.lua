@@ -31,6 +31,7 @@ local GetInstanceInfo = GetInstanceInfo
 local UnitGUID = UnitGUID
 local UnitName = UnitName
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
+local C_Housing = _G.C_Housing
 local floor = math.floor
 local table_concat = table.concat
 local type = type
@@ -61,7 +62,7 @@ local rosterSignatureParts = {}
 local ROSTER_EVENTS = { "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "ROLE_CHANGED_INFORM" }
 local INIT_EVENTS = {
   "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_DIFFICULTY_CHANGED",
-  "ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+  "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
   "BARBER_SHOP_OPEN", "BARBER_SHOP_CLOSE",
 }
 
@@ -442,19 +443,33 @@ local function HeaderKindForKey(key)
   return key
 end
 
-local function ClientSceneHidden(key)
-  if GF._clientSceneActive ~= true then
+local function InHousing()
+  local fn = C_Housing and C_Housing.IsInsideHouseOrPlot
+  if type(fn) ~= "function" then
     return false
   end
+  return fn() == true
+end
+
+local function HeaderLoadHidden(key)
   local kind = HeaderKindForKey(key)
   local conf = GF.GetConf and GF.GetConf(kind) or nil
-  return conf and conf.hideInClientScene ~= false or false
+  if not conf then
+    return false
+  end
+  if GF._clientSceneActive == true and conf.hideInClientScene ~= false then
+    return true
+  end
+  if conf.hideInHousing == true and InHousing() then
+    return true
+  end
+  return false
 end
 
 local function ApplyHeaderSceneAlpha(key)
   local header = GF.headers and GF.headers[key]
   local anchor = GF.anchors and GF.anchors[key]
-  local hidden = ClientSceneHidden(key)
+  local hidden = HeaderLoadHidden(key)
   if header then
     header._msufGF_clientSceneHidden = hidden and true or nil
   end
@@ -1011,7 +1026,10 @@ local function OnEvent(self, event, ...)
   elseif event == "ZONE_CHANGED_NEW_AREA" then
     lastDifficultyToken = CurrentDifficultyToken()
     GF._forceRecreateHeaders = true
+    ApplySceneAlphas()
     ScheduleZoneRefresh()
+  elseif event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" then
+    ApplySceneAlphas()
   elseif event == "BARBER_SHOP_OPEN" then
     GF._clientSceneActive = true
     ApplySceneAlphas()

@@ -35,6 +35,11 @@ local function Layer(value, fallback)
   return value
 end
 
+local function GeneralDB()
+  local db = _G.MSUF_DB
+  return type(db) == "table" and type(db.general) == "table" and db.general or nil
+end
+
 local CI_SLOT_FIELDS = {
   { "TL", "TOPLEFT", 2, -2 },
   { "TR", "TOPRIGHT", -2, -2 },
@@ -47,6 +52,7 @@ local CI_SLOT_FIELDS = {
 --- legacy aura categories are normalized to none during compile.
 function GF.CompileCornerIndicators(conf)
   conf = conf or {}
+  local general = GeneralDB() or {}
   local slots, slotMap, aggroSlots = {}, {}, {}
   local hasWork, needsThreat = false, false
   for i = 1, #CI_SLOT_FIELDS do
@@ -84,6 +90,7 @@ function GF.CompileCornerIndicators(conf)
     slots = slots,
     aggroSlots = aggroSlots,
     slotMap = slotMap,
+    aggroMode = conf.aggroMode or general.aggroMode or "ALL",
     aggroR = Num(conf.ciAggroColorR, 1),
     aggroG = Num(conf.ciAggroColorG, 0.55),
     aggroB = Num(conf.ciAggroColorB, 0),
