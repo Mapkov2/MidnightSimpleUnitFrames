@@ -21,7 +21,8 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
-local CASTBAR_TAB_HEIGHTS = { general = 318, icon = 488, spell = 488, time = 488, advanced = 344 }
+local CASTBAR_TAB_HEIGHTS = { general = 430, icon = 488, spell = 488, time = 488, advanced = 344 }
+local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto", "CLIP", "Fixed Clip", "NONE", "No Limit")
 local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CASTBAR", "Castbar Border")
@@ -412,6 +413,36 @@ local function BuildCastbar(ctx, builder, unit)
     local function DetailKey(suffix)
         return prefix and (prefix .. suffix) or suffix
     end
+    local function CastbarWidthKey()
+        if unit == "boss" then return "bossCastbarWidth" end
+        return prefix and (prefix .. "BarWidth") or nil
+    end
+    local function CastbarHeightKey()
+        if unit == "boss" then return "bossCastbarHeight" end
+        return prefix and (prefix .. "BarHeight") or nil
+    end
+    local function CastbarWidthSourceKey()
+        local fn = _G.MSUF_GetCastbarWidthSourceKey
+        if type(fn) == "function" then
+            local key = fn(unit)
+            if key then return key end
+        end
+        if unit == "player" then return "castbarPlayerMatchWidth" end
+        if unit == "target" then return "castbarTargetMatchWidth" end
+        if unit == "focus" then return "castbarFocusMatchWidth" end
+        if unit == "boss" then return "bossCastbarMatchWidth" end
+    end
+    local function NormalizeWidthSource(value)
+        local fn = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
+        if type(fn) == "function" then return fn(value) end
+        if value == true then return "unitframe" end
+        if value == "unitframe" or value == "essential" or value == "utility" then return value end
+        return nil
+    end
+    local function ReadWidthSource()
+        local key = CastbarWidthSourceKey()
+        return NormalizeWidthSource(key and GetGeneral()[key]) or "manual"
+    end
     local function ReadGeneralValue(key, defaultValue)
         local value = GetGeneral()[key]
         if value == nil or value == "" then return defaultValue end
@@ -430,6 +461,11 @@ local function BuildCastbar(ctx, builder, unit)
         if value == nil then return end
         if math.abs(value - floor(value + 0.5)) < 0.001 then value = floor(value + 0.5) end
         SetGeneralValue(key, value, reason)
+    end
+    local function ReapplyCastbarSize(reason)
+        Call("MSUF_UpdateCastbarWidthSourceSync", GetGeneral(), unit)
+        Call("MSUF_ApplyCastbarUnitAndSync", unit)
+        Call("MSUF_UFPreview_RequestRefresh", reason or "MSUF2_CASTBAR_SIZE")
     end
     local function BindDetailDropdown(parent, list, label, x, y, width, values, key, defaultValue, reason)
         local control = W.Dropdown(parent, label, values, width)
@@ -538,6 +574,7 @@ local function BuildCastbar(ctx, builder, unit)
         UnitSectionShared.MakeTabFrames(sec, -118, sectionW, tabFrames, "general", "icon", "spell", "time", "advanced")
     local generalCard = W.ControlCard(generalTab, "General", nil, leftX, -4, leftW, 132)
     local providerCard = W.ControlCard(generalTab, "Provider", nil, rightX, -4, rightW, 132)
+    local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 150)
     local iconCard = W.ControlCard(iconTab, "Icon", nil, leftX, -4, leftW, 332)
     local spellCard = W.ControlCard(spellTab, "Spell Name Text", nil, leftX, -4, leftW, 332)
     local timeCard = W.ControlCard(timeTab, "Cast Time Text", nil, leftX, -4, leftW, 332)
@@ -554,7 +591,7 @@ local function BuildCastbar(ctx, builder, unit)
         afterRefresh = function(tab) SetCastbarSectionHeight(CASTBAR_TAB_HEIGHTS[tab] or CASTBAR_TAB_HEIGHTS.general) end,
         x = 20, y = -58,
     })
-    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -156, "Use MSUF", 96)
+    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -318, "Use MSUF", 96)
     if castbarNoticeButton then
         castbarNoticeButton:SetScript("OnClick", function()
             SetCastbarBackend("MSUF")
@@ -581,6 +618,50 @@ local function BuildCastbar(ctx, builder, unit)
     M.BindBoolWidget(ctx, interrupt,
         function() return ReadBool(unit, "showInterrupt", true) end,
         function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end)
+    local sizeCardW = sizeCard._msuf2Width or (sectionW - 32)
+    local sizeRightX = max(350, floor(sizeCardW * 0.52))
+    local sizeControlWLeft = min(300, max(220, sizeRightX - 42))
+    local sizeControlWRight = min(320, max(220, sizeCardW - sizeRightX - 24))
+    local widthMode = W.Dropdown(sizeCard, "Width mode", CASTBAR_WIDTH_SOURCE_VALUES, sizeControlWLeft)
+    W.MoveWidget(widthMode, sizeCard, 16, -52, sizeControlWLeft)
+    AddControl(nil, widthMode)
+    W.AttachUnitEditFocus(widthMode, unit, "castbar")
+    M.BindDropdownWidget(ctx, widthMode,
+        ReadWidthSource,
+        function(v)
+            local key = CastbarWidthSourceKey()
+            if not key then return end
+            local nextValue = NormalizeWidthSource(v)
+            SetGeneralValue(key, nextValue, "MSUF2_CASTBAR_WIDTH_MODE")
+            ReapplyCastbarSize("MSUF2_CASTBAR_WIDTH_MODE")
+            RefreshCastbarEnabled()
+        end)
+    local widthKey = CastbarWidthKey()
+    local heightKey = CastbarHeightKey()
+    local manualWidth = W.Slider(sizeCard, "Manual width", 40, 900, 1, sizeControlWRight)
+    W.MoveWidget(manualWidth, sizeCard, sizeRightX, -52, sizeControlWRight)
+    AddControl(nil, manualWidth)
+    W.AttachUnitEditFocus(manualWidth, unit, "castbar")
+    M.BindNumberWidget(ctx, manualWidth,
+        function() return ReadGeneralNumber(widthKey, unit == "boss" and 176 or (unit == "focus" and 175 or 272)) end,
+        function(v)
+            if not widthKey then return end
+            SetGeneralNumber(widthKey, v, "MSUF2_CASTBAR_WIDTH")
+            ReapplyCastbarSize("MSUF2_CASTBAR_WIDTH")
+        end,
+        unit == "boss" and 176 or (unit == "focus" and 175 or 272), { step = 1, roundStep = true })
+    local height = W.Slider(sizeCard, "Height", 6, 80, 1, sizeControlWRight)
+    W.MoveWidget(height, sizeCard, sizeRightX, -106, sizeControlWRight)
+    AddControl(nil, height)
+    W.AttachUnitEditFocus(height, unit, "castbar")
+    M.BindNumberWidget(ctx, height,
+        function() return ReadGeneralNumber(heightKey, unit == "boss" and 12 or 18) end,
+        function(v)
+            if not heightKey then return end
+            SetGeneralNumber(heightKey, v, "MSUF2_CASTBAR_HEIGHT")
+            ReapplyCastbarSize("MSUF2_CASTBAR_HEIGHT")
+        end,
+        unit == "boss" and 12 or 18, { step = 1, roundStep = true })
     local function BindCastbarFeatureToggle(parent, field, reason)
         local control = W.SwitchAt(parent, "Enable", 16, -52, 160)
         W.AttachUnitEditFocus(control, unit, "castbar")
@@ -629,6 +710,7 @@ local function BuildCastbar(ctx, builder, unit)
         { enable = enabled, controls = castbarFeatureToggles, on = MsufOn },
         { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end },
         { controls = allCastbarControls, on = MsufOn },
+        { controls = manualWidth, on = function() return MsufOn() and ReadWidthSource() == "manual" end },
         { controls = iconControls, on = function() return MsufOn() and ReadGeneralBool(fields.icon, true) end },
         { controls = spellControls, on = function() return MsufOn() and ReadGeneralBool(fields.text, true) end },
         { controls = timeControls, on = function() return MsufOn() and ReadGeneralBool(fields.time, true) end },

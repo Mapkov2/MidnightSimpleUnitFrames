@@ -262,7 +262,7 @@ local function EnsureIconBorder(frame)
     if frame._msufDetailIconBorder then return frame._msufDetailIconBorder end
     local border = {}
     for _, key in ipairs({ "top", "bottom", "left", "right" }) do
-        border[key] = frame:CreateTexture(nil, "OVERLAY", nil, 8)
+        border[key] = frame:CreateTexture(nil, "OVERLAY", nil, 7)
         border[key]:SetColorTexture(0, 0, 0, 1)
         border[key]:Hide()
     end
