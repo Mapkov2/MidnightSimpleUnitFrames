@@ -470,6 +470,18 @@ local function BossPagePreviewInCombat()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
 end
+local function BossPreviewFramesVisible()
+    local frames = _G.MSUF_UnitFrames
+    local sawFrame = false
+    for i = 1, 5 do
+        local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
+        if frame then
+            sawFrame = true
+            if frame.IsShown and not frame:IsShown() then return false end
+        end
+    end
+    return sawFrame
+end
 local function SyncBossPagePreview()
     local active = (_G.MSUF2_BossUnitframePreviewActive == true)
     if BossPagePreviewInCombat() then
@@ -509,7 +521,7 @@ local function SetBossPagePreviewActive(active)
     end
     local current = _G.MSUF2_BossUnitframePreviewActive == true
     if current == active then
-        if active and not BossPagePreviewInCombat() then SyncBossPagePreview() end
+        if active and not BossPagePreviewInCombat() and not BossPreviewFramesVisible() then SyncBossPagePreview() end
         if not active and _G.MSUF_BossTestMode == true and not BossPagePreviewInCombat() then SyncBossPagePreview() end
         return
     end

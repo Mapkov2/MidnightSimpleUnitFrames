@@ -37,6 +37,14 @@ local function GroupProfileStop(key, started, extraCount)
         M.ProfileStop("groupPage", key, started, extraCount)
     end
 end
+local function RequestGFPagePreview()
+    if type(M.RequestGFPagePreviewForKey) == "function" then
+        return M.RequestGFPagePreviewForKey(M.activeKey)
+    end
+    if type(M.SyncGFPagePreviewForKey) == "function" then
+        return M.SyncGFPagePreviewForKey(M.activeKey)
+    end
+end
 local function RefreshGFPreview(kind)
     -- Preview and live group frames have separate render paths. Refresh both when controls
     -- change so the page does not hide a stale runtime configuration.
@@ -51,10 +59,10 @@ local function RefreshGFPreview(kind)
         M.RefreshGFNativePreviews("GF_PAGE_REFRESH")
         GroupProfileStop("M.RefreshGFNativePreviews", started)
     end
-    if type(M.SyncGFPagePreviewForKey) == "function" then
+    if type(M.RequestGFPagePreviewForKey) == "function" or type(M.SyncGFPagePreviewForKey) == "function" then
         local started = GroupProfileStart()
-        M.SyncGFPagePreviewForKey(M.activeKey)
-        GroupProfileStop("M.SyncGFPagePreviewForKey", started)
+        RequestGFPagePreview()
+        GroupProfileStop("M.RequestGFPagePreviewForKey", started)
     end
 end
 local function Conf(kind)
@@ -302,7 +310,7 @@ local function ScopeSection(ctx, builder)
         if previousScope ~= M.gfScope and M.ShowStatusFeedback then M.ShowStatusFeedback(ScopeShortLabel(M.gfScope) .. " scope", "info", 1.1) end
         local gf = GF()
         if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
-        if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
+        RequestGFPagePreview()
         if gf and type(gf.PreviewScopeChanged) == "function" then
             gf.PreviewScopeChanged()
         else
@@ -388,7 +396,7 @@ local function ScopeSection(ctx, builder)
             if M.ShowStatusFeedback then M.ShowStatusFeedback(enabled and "Edit mode on" or "Edit mode off", "info", 1.1) end
             local function RefreshAfterToggle()
                 RefreshTop()
-                if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
+                RequestGFPagePreview()
             end
             C_Timer.After(0, RefreshAfterToggle)
         end,

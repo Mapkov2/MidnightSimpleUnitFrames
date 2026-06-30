@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MSUF Edit Mode Animation Mockups</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080d12;
+      --panel: #0d151d;
+      --panel-2: #101b25;
+      --line: rgba(132, 203, 255, 0.26);
+      --text: #e8f5ff;
+      --muted: #9db2c2;
+      --cyan: #64d9ff;
+      --blue: #1e9fff;
+      --gold: #ffc74f;
+      --green: #43d08a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+        radial-gradient(circle at 50% 20%, rgba(35, 122, 173, 0.16), transparent 48%),
+        var(--bg);
+      background-size: 24px 24px, 24px 24px, 100% 100%, 100% 100%;
+      color: var(--text);
+      font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    }
+
+    body {
+      padding: 28px;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin: 0 auto 22px;
+      max-width: 1320px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 760;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .hint {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid rgba(136, 206, 255, 0.32);
+      background: rgba(14, 25, 34, 0.92);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 9px 13px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: rgba(136, 206, 255, 0.68);
+      background: rgba(20, 35, 47, 0.96);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(210px, 1fr));
+      gap: 14px;
+      max-width: 1320px;
+      margin: 0 auto;
+    }
+
+    .card {
+      position: relative;
+      min-height: 390px;
+      overflow: hidden;
+      border: 1px solid rgba(151, 207, 255, 0.16);
+      border-radius: 8px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.035), transparent 22%),
+        var(--panel);
+      box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34);
+    }
+
+    .stage {
+      position: relative;
+      height: 300px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background:
+        linear-gradient(rgba(255,255,255,0.026) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px),
+        #091119;
+      background-size: 18px 18px, 18px 18px, 100% 100%;
+    }
+
+    .stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.04), transparent 24%),
+        radial-gradient(circle at 50% 52%, transparent 0 102px, rgba(0, 0, 0, 0.18) 142px);
+    }
+
+    .logo-wrap {
+      position: relative;
+      width: 190px;
+      height: 190px;
+      display: grid;
+      place-items: center;
+      isolation: isolate;
+    }
+
+    .logo {
+      width: 156px;
+      height: 156px;
+      object-fit: contain;
+      opacity: 0;
+      filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.55));
+      animation: logoBase 3.2s ease-in-out infinite;
+      will-change: opacity, transform, filter;
+    }
+
+    .ring-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      pointer-events: none;
+      transform: rotate(-90deg);
+    }
+
+    .ring-bg {
+      opacity: 0.16;
+      stroke: rgba(107, 184, 244, 0.88);
+      stroke-width: 1.1;
+      fill: none;
+    }
+
+    .ring-run {
+      stroke: var(--cyan);
+      stroke-width: 3.2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-dasharray: 50 470;
+      filter: drop-shadow(0 0 9px rgba(88, 210, 255, 0.86));
+    }
+
+    .titlebar {
+      padding: 14px 14px 13px;
+      border-top: 1px solid rgba(151, 207, 255, 0.13);
+      background: var(--panel-2);
+    }
+
+    .name {
+      font-size: 14px;
+      font-weight: 760;
+      margin: 0 0 6px;
+    }
+
+    .meta {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .variant-1 .ring-run {
+      animation: ringTrace 3.2s ease-in-out infinite;
+    }
+
+    .variant-2 .logo {
+      animation-name: logoWake;
+    }
+
+    .variant-2 .ring-run {
+      stroke-dasharray: 42 470;
+      animation: ringTrace 3.2s cubic-bezier(.25,.84,.32,1) infinite;
+    }
+
+    .variant-2 .m-wake {
+      position: absolute;
+      width: 142px;
+      height: 142px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 43%, rgba(104, 221, 255, 0.36), transparent 52%);
+      opacity: 0;
+      mix-blend-mode: screen;
+      animation: mWake 3.2s ease-in-out infinite;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .variant-3 .logo {
+      animation-name: logoPulse;
+    }
+
+    .variant-3 .ring-run {
+      stroke: #95ecff;
+      stroke-width: 2.4;
+      stroke-dasharray: 1 520;
+      animation: ringClose 3.2s ease-in-out infinite;
+    }
+
+    .variant-3 .pulse {
+      position: absolute;
+      width: 136px;
+      height: 136px;
+      border: 1px solid rgba(97, 220, 255, 0.52);
+      border-radius: 50%;
+      opacity: 0;
+      animation: innerPulse 3.2s ease-in-out infinite;
+    }
+
+    .variant-4 .logo {
+      animation-name: logoScanBase;
+    }
+
+    .variant-4 .scan {
+      position: absolute;
+      width: 156px;
+      height: 156px;
+      border-radius: 50%;
+      background: linear-gradient(115deg, transparent 0 42%, rgba(152, 239, 255, 0.72) 49%, transparent 57% 100%);
+      mix-blend-mode: screen;
+      opacity: 0;
+      transform: translateX(-80px);
+      animation: precisionScan 3.2s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .variant-4 .ring-run {
+      stroke-width: 2.2;
+      stroke-dasharray: 30 490;
+      animation: scannerRing 3.2s ease-in-out infinite;
+    }
+
+    .variant-5 .logo {
+      animation-name: minimalLogo;
+    }
+
+    .variant-5 .ring-run {
+      stroke-width: 2.1;
+      stroke: rgba(190, 244, 255, 0.96);
+      stroke-dasharray: 28 492;
+      animation: minimalTrace 3.2s ease-in-out infinite;
+    }
+
+    .variant-5 .soft-line {
+      position: absolute;
+      bottom: 30px;
+      width: 96px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(105, 216, 255, 0.92), transparent);
+      opacity: 0;
+      animation: softLine 3.2s ease-in-out infinite;
+    }
+
+    @keyframes logoBase {
+      0%, 8% { opacity: 0; transform: scale(.985); filter: brightness(.75) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      20%, 73% { opacity: 1; transform: scale(1); filter: brightness(1.03) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      90%, 100% { opacity: 0; transform: scale(.997); filter: brightness(.8) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+    }
+
+    @keyframes ringTrace {
+      0%, 20% { opacity: 0; stroke-dashoffset: 520; }
+      26% { opacity: 1; }
+      68% { opacity: 1; stroke-dashoffset: 0; }
+      76% { opacity: .78; stroke-dasharray: 520 0; }
+      90%, 100% { opacity: 0; stroke-dasharray: 520 0; }
+    }
+
+    @keyframes logoWake {
+      0%, 8% { opacity: 0; transform: scale(.988); filter: brightness(.62) saturate(.88) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      20% { opacity: 1; transform: scale(1); filter: brightness(.86) saturate(.96) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      48% { opacity: 1; transform: scale(1.006); filter: brightness(1.18) saturate(1.15) drop-shadow(0 0 12px rgba(86,211,255,.34)) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      74% { opacity: 1; transform: scale(1); filter: brightness(1.04) saturate(1.03) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      90%, 100% { opacity: 0; transform: scale(.997); filter: brightness(.75) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+    }
+
+    @keyframes mWake {
+      0%, 24% { opacity: 0; transform: scale(.9); }
+      43% { opacity: .72; transform: scale(1.08); }
+      66%, 100% { opacity: 0; transform: scale(1.18); }
+    }
+
+    @keyframes logoPulse {
+      0%, 8% { opacity: 0; transform: scale(.985); filter: brightness(.75) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      20% { opacity: 1; transform: scale(1); filter: brightness(.98) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      34% { opacity: 1; transform: scale(1.012); filter: brightness(1.22) drop-shadow(0 0 15px rgba(74,210,255,.38)) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      58%, 73% { opacity: 1; transform: scale(1); filter: brightness(1.04) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      90%, 100% { opacity: 0; transform: scale(.997); filter: brightness(.8) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+    }
+
+    @keyframes ringClose {
+      0%, 24% { opacity: 0; stroke-dasharray: 1 520; stroke-dashoffset: 520; }
+      30% { opacity: 1; }
+      70% { opacity: 1; stroke-dasharray: 520 0; stroke-dashoffset: 0; }
+      78% { opacity: .78; }
+      92%, 100% { opacity: 0; stroke-dasharray: 520 0; }
+    }
+
+    @keyframes innerPulse {
+      0%, 22% { opacity: 0; transform: scale(.72); }
+      36% { opacity: .62; transform: scale(1.02); }
+      54%, 100% { opacity: 0; transform: scale(1.18); }
+    }
+
+    @keyframes logoScanBase {
+      0%, 8% { opacity: 0; transform: scale(.985); filter: brightness(.68) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      20%, 74% { opacity: 1; transform: scale(1); filter: brightness(.98) contrast(1.05) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      90%, 100% { opacity: 0; transform: scale(.997); filter: brightness(.78) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+    }
+
+    @keyframes precisionScan {
+      0%, 24% { opacity: 0; transform: translateX(-92px); }
+      34% { opacity: .44; }
+      55% { opacity: .36; transform: translateX(92px); }
+      64%, 100% { opacity: 0; transform: translateX(116px); }
+    }
+
+    @keyframes scannerRing {
+      0%, 22% { opacity: 0; stroke-dashoffset: 520; }
+      34% { opacity: .9; }
+      60% { opacity: .88; stroke-dashoffset: 220; }
+      78%, 100% { opacity: 0; stroke-dashoffset: 0; }
+    }
+
+    @keyframes minimalLogo {
+      0%, 8% { opacity: 0; transform: scale(.99); filter: brightness(.82) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      19%, 69% { opacity: .96; transform: scale(1); filter: brightness(1.04) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+      84%, 100% { opacity: 0; transform: scale(.998); filter: brightness(.82) drop-shadow(0 16px 28px rgba(0,0,0,.55)); }
+    }
+
+    @keyframes minimalTrace {
+      0%, 24% { opacity: 0; stroke-dashoffset: 520; }
+      32% { opacity: .92; }
+      62% { opacity: .92; stroke-dashoffset: 0; }
+      72%, 100% { opacity: 0; stroke-dashoffset: 0; }
+    }
+
+    @keyframes softLine {
+      0%, 26% { opacity: 0; transform: scaleX(.35); }
+      44% { opacity: .86; transform: scaleX(1); }
+      72%, 100% { opacity: 0; transform: scaleX(.72); }
+    }
+
+    @media (max-width: 1180px) {
+      .grid {
+        grid-template-columns: repeat(3, minmax(220px, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      body {
+        padding: 16px;
+      }
+
+      header {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>MSUF Edit Mode Animation Mockups</h1>
+      <p class="hint">Live-Vorschau mit aktuellem Logo-Asset. Jede Variante loopt automatisch.</p>
+    </div>
+    <button type="button" id="replay">Replay</button>
+  </header>
+
+  <main class="grid" id="mockups">
+    <section class="card variant-1">
+      <div class="stage">
+        <div class="logo-wrap">
+          <img class="logo" src="../Media/MSUF_EditModeIcon.png" alt="">
+          <svg class="ring-svg" viewBox="0 0 190 190" aria-hidden="true">
+            <circle class="ring-bg" cx="95" cy="95" r="76"></circle>
+            <circle class="ring-run" cx="95" cy="95" r="76"></circle>
+          </svg>
+        </div>
+      </div>
+      <div class="titlebar">
+        <p class="name">1. Ring Trace</p>
+        <p class="meta">Logo fade-in, ein sauberer umlaufender Ring, kurzer Close.</p>
+      </div>
+    </section>
+
+    <section class="card variant-2">
+      <div class="stage">
+        <div class="logo-wrap">
+          <span class="m-wake"></span>
+          <img class="logo" src="../Media/MSUF_EditModeIcon.png" alt="">
+          <svg class="ring-svg" viewBox="0 0 190 190" aria-hidden="true">
+            <circle class="ring-bg" cx="95" cy="95" r="76"></circle>
+            <circle class="ring-run" cx="95" cy="95" r="76"></circle>
+          </svg>
+        </div>
+      </div>
+      <div class="titlebar">
+        <p class="name">2. Logo Wake</p>
+        <p class="meta">Ring aktiviert das Logo mit leichtem M-Glow, sehr MSUF-nah.</p>
+      </div>
+    </section>
+
+    <section class="card variant-3">
+      <div class="stage">
+        <div class="logo-wrap">
+          <span class="pulse"></span>
+          <img class="logo" src="../Media/MSUF_EditModeIcon.png" alt="">
+          <svg class="ring-svg" viewBox="0 0 190 190" aria-hidden="true">
+            <circle class="ring-bg" cx="95" cy="95" r="76"></circle>
+            <circle class="ring-run" cx="95" cy="95" r="76"></circle>
+          </svg>
+        </div>
+      </div>
+      <div class="titlebar">
+        <p class="name">3. Pulse + Close</p>
+        <p class="meta">Ein kurzer innerer Impuls, danach schließt der Kreis vollständig.</p>
+      </div>
+    </section>
+
+    <section class="card variant-4">
+      <div class="stage">
+        <div class="logo-wrap">
+          <img class="logo" src="../Media/MSUF_EditModeIcon.png" alt="">
+          <span class="scan"></span>
+          <svg class="ring-svg" viewBox="0 0 190 190" aria-hidden="true">
+            <circle class="ring-bg" cx="95" cy="95" r="76"></circle>
+            <circle class="ring-run" cx="95" cy="95" r="76"></circle>
+          </svg>
+        </div>
+      </div>
+      <div class="titlebar">
+        <p class="name">4. Precision Scan</p>
+        <p class="meta">Schmaler Lichtscan plus dezenter Ringlauf, technisch und ruhig.</p>
+      </div>
+    </section>
+
+    <section class="card variant-5">
+      <div class="stage">
+        <div class="logo-wrap">
+          <img class="logo" src="../Media/MSUF_EditModeIcon.png" alt="">
+          <span class="soft-line"></span>
+          <svg class="ring-svg" viewBox="0 0 190 190" aria-hidden="true">
+            <circle class="ring-bg" cx="95" cy="95" r="76"></circle>
+            <circle class="ring-run" cx="95" cy="95" r="76"></circle>
+          </svg>
+        </div>
+      </div>
+      <div class="titlebar">
+        <p class="name">5. Minimal Premium</p>
+        <p class="meta">Sehr dezenter Lauf und schneller Fade, wenig Ablenkung.</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const replay = document.getElementById("replay");
+    const mockups = document.getElementById("mockups");
+
+    replay.addEventListener("click", () => {
+      mockups.style.display = "none";
+      void mockups.offsetHeight;
+      mockups.style.display = "grid";
+    });
+  </script>
+</body>
+</html>
