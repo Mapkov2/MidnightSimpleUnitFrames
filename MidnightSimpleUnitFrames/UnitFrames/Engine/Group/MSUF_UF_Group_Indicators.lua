@@ -22,8 +22,10 @@ local function SetShown(region, show)
   region._msufGFShown = show
 end
 local UnitThreatSituation = UnitThreatSituation
+local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local CreateFrame = CreateFrame
 local tonumber = tonumber
+local tostring = tostring
 local type = type
 local pairs = pairs
 local floor = math.floor
@@ -112,8 +114,22 @@ end
 
 --- Threat values can be secret/unknown. Treat those as "no visible aggro" rather
 --- than throwing or showing stale indicators.
-local function HasThreat(unit)
+local function AggroModeAllows(unit, mode)
+  mode = tostring(mode or "ALL"):upper()
+  if mode == "TANK_ONLY" then mode = "TANK"
+  elseif mode == "HEALER_ONLY" then mode = "HEALER" end
+  if mode == "ALL" or mode == "" then return true end
+  if not UnitGroupRolesAssigned then return false end
+  local role = UnitGroupRolesAssigned(unit)
+  if issecretvalue(role) == true or role == nil then return false end
+  if mode == "NON_TANK" then return role ~= "TANK" end
+  if mode == "TANK" or mode == "HEALER" then return role == mode end
+  return true
+end
+
+local function HasThreat(unit, cfg)
   if not UnitThreatSituation or not unit then return false end
+  if not AggroModeAllows(unit, cfg and cfg.aggroMode) then return false end
   local status = UnitThreatSituation(unit)
   if issecretvalue(status) == true or status == nil then return false end
   status = tonumber(status)
@@ -207,7 +223,7 @@ local function RuntimeThreat(frame, cfg, event)
     return
   end
   if frame._msufGFCornerPreparedCfg ~= cfg then return end
-  local threat = HasThreat(unit)
+  local threat = HasThreat(unit, cfg)
   if (event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE")
     and frame._msufGFCornerThreatCfg == cfg
     and frame._msufGFCornerThreatState == threat then
