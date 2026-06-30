@@ -20,6 +20,7 @@ local SecureCmdOptionParse = _G.SecureCmdOptionParse
 local InCombatLockdown = _G.InCombatLockdown
 local UnitAffectingCombat = _G.UnitAffectingCombat
 local IsInInstance = _G.IsInInstance
+local C_Housing = _G.C_Housing
 local Secrets = MSUF.Secrets or {}
 local UnitExistsPlain = Secrets.UnitExistsPlain or function(_) return true end
 local type = type
@@ -63,6 +64,13 @@ local BOSS_PREVIEW_REFRESH_ELEMENTS = {
 }
 
 local LoadConditions = {}
+local bossPreviewAppliedActive
+local BOSS_PREVIEW_LIGHT_REASONS = {
+  MSUF_BOSS_PREVIEW = true,
+  MSUF_BOSS_PREVIEW_SYNC = true,
+  MSUF2_BOSS_PAGE_CORE = true,
+  MSUF2_BOSS_PAGE_FALLBACK = true,
+}
 
 local function BossPreviewCombatLocked()
   return (InCombatLockdown and InCombatLockdown())
@@ -76,6 +84,14 @@ local function InInstance()
   end
   local inside = IsInInstance()
   return inside == true or inside == 1
+end
+
+local function InHousing()
+  local fn = C_Housing and C_Housing.IsInsideHouseOrPlot
+  if type(fn) ~= "function" then
+    return false
+  end
+  return fn() == true
 end
 
 local function ShouldForcePreview(frame)
@@ -104,6 +120,9 @@ local function BuildVisibility(frame, spec)
 
   local load = spec.load
   if load and load.hideInInstance == true and InInstance() then
+    return "hide"
+  end
+  if load and load.hideInHousing == true and InHousing() then
     return "hide"
   end
 
@@ -159,6 +178,9 @@ local function VisibilityNeedsDriver(spec)
     return true
   end
   if load and load.hideInInstance == true then
+    return true
+  end
+  if load and load.hideInHousing == true then
     return true
   end
   return false
@@ -315,6 +337,10 @@ local function BossPreviewPowerPercent()
   return 100
 end
 
+local function BossPreviewConfigDirty()
+  return UF.Config and UF.Config.dirty == true
+end
+
 local function ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
   if not frame then
     return
@@ -369,6 +395,54 @@ local function ApplyBossPreviewFrameData(frame, index)
   ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
 end
 
+local function ApplyBossPreviewFrames(active)
+  for i = 1, 5 do
+    local frame = UF.frames and UF.frames["boss" .. i]
+    if frame and active then
+      frame:Show()
+      if frame.SetAlpha then frame:SetAlpha(1) end
+      if frame.EnableMouse then frame:EnableMouse(true) end
+      ApplyBossPreviewFrameData(frame, i)
+    elseif frame then
+      frame._msufBossPreviewForced = nil
+    end
+  end
+end
+
+local function BossPreviewFramesReady(active)
+  local frames = UF.frames
+  if type(frames) ~= "table" then
+    return false
+  end
+  local sawFrame = false
+  for i = 1, 5 do
+    local frame = frames["boss" .. i]
+    if frame then
+      sawFrame = true
+      if active then
+        if frame._msufBossPreviewForced ~= true then return false end
+        if frame.IsShown and not frame:IsShown() then return false end
+      elseif frame._msufBossPreviewForced == true then
+        return false
+      end
+    end
+  end
+  return sawFrame
+end
+
+local function CanUseLightBossPreviewApply(active, reason)
+  if bossPreviewAppliedActive ~= active then
+    return false
+  end
+  if BossPreviewConfigDirty() then
+    return false
+  end
+  if BOSS_PREVIEW_LIGHT_REASONS[reason or ""] ~= true then
+    return false
+  end
+  return BossPreviewFramesReady(active)
+end
+
 local function RefreshBossAuras()
   local A3 = MSUF and MSUF.MSUF_Auras3
   if A3 and type(A3.RefreshUnit) == "function" then
@@ -389,24 +463,18 @@ function UF.ApplyBossPreviewState(active, reason)
   end
 
   local refreshReason = reason or "MSUF_BOSS_PREVIEW"
+  if CanUseLightBossPreviewApply(active, refreshReason) then
+    ApplyBossPreviewFrames(active)
+    return true
+  end
+
   UF.RefreshVisibilityDrivers("boss")
   if active and type(UF.RefreshElements) == "function" then
     UF.RefreshElements("boss", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
   end
   UF.UpdateRuntime("boss", refreshReason)
 
-  for i = 1, 5 do
-    local frame = UF.frames and UF.frames["boss" .. i]
-    if frame and active then
-      frame:Show()
-      if frame.SetAlpha then frame:SetAlpha(1) end
-      if frame.EnableMouse then frame:EnableMouse(true) end
-      ApplyBossPreviewFrameData(frame, i)
-    elseif frame then
-      frame._msufBossPreviewForced = nil
-    end
-  end
-
+  ApplyBossPreviewFrames(active)
   RefreshBossAuras()
   if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
     _G.MSUF_UpdateBossCastbarPreview()
@@ -415,6 +483,7 @@ function UF.ApplyBossPreviewState(active, reason)
   if em2 and em2.Movers and type(em2.Movers.SyncAll) == "function" then
     em2.Movers.SyncAll()
   end
+  bossPreviewAppliedActive = active
   return true
 end
 

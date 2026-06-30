@@ -38,6 +38,7 @@ loadCondHideInInstance=In instance
 loadCondHideResting=Resting
 loadCondHideInCombat=In combat
 loadCondHideStealthed=Stealthed
+loadCondHideInHousing=Housing
 ]]
 local STATUS_ANCHORS = VTP "TOPLEFT=Top Left|TOPRIGHT=Top Right|BOTTOMLEFT=Bottom Left|BOTTOMRIGHT=Bottom Right|CENTER=Center|TOP=Top|BOTTOM=Bottom|LEFT=Left|RIGHT=Right"
 local STATUS_CORNER_ANCHORS = STATUS_ANCHORS
@@ -123,12 +124,12 @@ local function DeepCopy(src)
 end
 local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower]]
 local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitShape portraitSizeOverride portraitOffsetX portraitOffsetY portraitBorderStyle portraitBorderThickness portraitBgEnabled portraitFillBorder]]
-local COPY_TEXT_FIELDS = WL [[showName showHP showPower nameTextAnchor nameOffsetX nameOffsetY nameFontSize showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameStyle hpOffsetX hpOffsetY hpFontSize hpTextMode textLeft textCenter textRight hpTextReverse hpTextSeparator powerOffsetX powerOffsetY powerFontSize powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextSeparator nameTextLayer hpTextLayer powerTextLayer]]
+local COPY_TEXT_FIELDS = WL [[showName showHP showPower nameTextAnchor nameOffsetX nameOffsetY nameFontSize showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameStyle hpOffsetX hpOffsetY hpFontSize hpTextMode textLeft textCenter textRight hpTextReverse hpTextSeparator healthTextDecimals powerOffsetX powerOffsetY powerFontSize powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextSeparator nameTextLayer hpTextLayer powerTextLayer]]
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader raidmarker raidgroupname level eliteicon")
 local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "statusText statusCombat statusResting statusIncomingRes statusPvp", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha")
 local COPY_FRAME_BASIC_FIELDS = WL [[enabled showName showHP showPower reverseFillBars smoothFill healthColorMode]]
 local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha hpBgAlpha alphaExcludeTextPortrait rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
-local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondActive]]
+local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondHideInHousing loadCondActive]]
 local COPY_LAYOUT_FIELDS = WL [[width height offsetX offsetY point relativePoint anchorFrameName anchorToUnitframe]]
 local AURA_COPY_UNITS = KSW("player target focus boss")
 local AURA_COPY_FLAGS = { player = "showPlayer", target = "showTarget", focus = "showFocus", boss = "showBoss" }

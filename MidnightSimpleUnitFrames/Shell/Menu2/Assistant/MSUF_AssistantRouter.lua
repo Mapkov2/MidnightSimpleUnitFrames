@@ -6366,6 +6366,8 @@ local GROUP_LAYOUT_FALLBACK_ATTRS = {
     hideOfflineDelay = true,
     smoothFill = true,
     reverseFill = true,
+    groupBackdropColor = true,
+    bgColor = true,
     width = true,
     height = true,
     offsetX = true,
@@ -7443,7 +7445,9 @@ function R.TryContext(text, coreHandler)    if type(coreHandler) ~= "function" t
         local result = coreHandler(variants[i])
         if result and not A.RouterIsUnknownResult(result) then
             if not A.RouterIsAmbiguousResult(result) then
-                result.summary = result.summary or ("Current-page context: " .. R.CurrentPageSummaryLabel())
+                if result.summary == nil or result.summary == "" or result.summary == "MSUF options change." then
+                    result.summary = "Current-page context: " .. R.CurrentPageSummaryLabel()
+                end
                 return result
             end
             local ambiguousPending = A.RouterSnapshotPendingState()

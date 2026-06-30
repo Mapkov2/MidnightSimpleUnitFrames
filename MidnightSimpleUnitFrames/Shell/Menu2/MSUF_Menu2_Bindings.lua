@@ -488,7 +488,7 @@ local function ResetInfo(label, kind, summary)
     return { label = label, kind = kind, summary = summary }
 end
 local GROUP_RESET_INFO = ResetInfo("Group Frames", "group", "Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions")
-local AURA_STYLE_SUMMARY = "scope-aware Buff and Debuff text, cooldown and stack styling"
+local AURA_STYLE_SUMMARY = "scope-aware Buff and Debuff basics, cooldown and stack styling"
 local PAGE_RESET_INFO = {
     gf_layout = GROUP_RESET_INFO,
     gf_bars = GROUP_RESET_INFO,
@@ -497,8 +497,8 @@ local PAGE_RESET_INFO = {
     opt_bars = ResetInfo("Bars", "bars", "shared bar textures, gradients, rounded frame corners, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides"),
     opt_fonts = ResetInfo("Fonts", "fonts", "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides"),
     auras3 = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
-    auras3_buffs = ResetInfo("Aura Buffs", "auras", "Buff text, cooldown and stack styling"),
-    auras3_debuffs = ResetInfo("Aura Debuffs", "auras", "Debuff text, cooldown and stack styling"),
+    auras3_buffs = ResetInfo("Aura Buffs", "auras", "Buff basics, cooldown and stack styling"),
+    auras3_debuffs = ResetInfo("Aura Debuffs", "auras", "Debuff basics, cooldown and stack styling"),
     auras3_rendering = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
     auras3_filters = ResetInfo("Aura Filters", "auras", "scope-aware Buff and Debuff filters and blacklists"),
     auras3_styling = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),

@@ -123,7 +123,6 @@ local pendingAuraGlobalReason
 local pendingAuraRefreshCtx
 local pendingAuraRefreshReason
 local auraApplyQueued = false
-local auraTextRefreshQueued = false
 local function AurasProfileStart()
     return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
 end
@@ -203,7 +202,7 @@ local function ApplyUnit(ctx, unit, reason, refresh)
     QueueAuraApply(ctx, unit, reason or "AURAS3_MENU2", refresh == true)
 end
 local BindSwitch, BindToggle, BindSlider = M.BindSwitchAt, M.BindToggleAt, M.BindSliderAt
-local BindDropdown, BindTextInput, BindColor = M.BindDropdownAt, M.BindTextInputAt, M.BindColorAt
+local BindDropdown, BindTextInput = M.BindDropdownAt, M.BindTextInputAt
 local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setValue, gap, buttonFactory)
     gap = gap or 6
     local count = #values
@@ -727,28 +726,6 @@ local function WriteGroupDebuffTypeBorderMode(scope, groupKey, value)
         showDispelSymbol = value == "SYMBOL",
     }, "visual")
 end
-local function RequestAuraTextRefresh()
-    if auraTextRefreshQueued then return end
-    auraTextRefreshQueued = true
-    ScheduleAuraMenuWork("MSUF2_AURAS_TEXT_REFRESH", AURA_MENU_APPLY_DELAY, function()
-        auraTextRefreshQueued = false
-        local started = AurasProfileStart()
-        if A3 and type(A3.ApplyFontsFromGlobal) == "function" then
-            A3.ApplyFontsFromGlobal()
-        elseif A3 and type(A3.RefreshAll) == "function" then
-            A3.RefreshAll()
-        else
-            QueueAuraApply(nil, "shared", "AURAS3_TEXT_REFRESH", false)
-        end
-        if type(M.RefreshGFNativePreviews) == "function" then
-            M.RefreshGFNativePreviews("AURAS3_TEXT_REFRESH")
-        end
-        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-            _G.MSUF_UFPreview_RequestRefresh("AURAS3_TEXT_REFRESH")
-        end
-        AurasProfileStop("RequestAuraTextRefresh", started, 1)
-    end)
-end
 local function CreateAuraPreviewIcon(parent)
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(24, 24)
@@ -1208,23 +1185,23 @@ local function BuildUnitStyle(ctx, b, scope)
     refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, unit, 24, -34, pw - 48, previewBoxH, lane))
     local hint = W.Text(preview, "", 24, previewHintY, pw - 48, T.colors.muted)
 
-    local featuresH = 170 + extraDebuffControls
-    local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Text Features", featuresH, true)
+    local featuresH = 154 + extraDebuffControls
+    local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", featuresH, true)
     local fw = BodyWidth(features)
     local featuresY = -44
-    local featuresIntro = W.Text(features, "Stack-count and cooldown text for " .. scopeLabel .. " " .. laneName .. ".", 24, featuresY, fw - 48, T.colors.muted)
-    BindStyleSwitch(features, "Show Stack Count", 24, featuresY - 44, fw - 48, "showStackCount", true, "AURAS3_SHOW_STACKS")
-    BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 76, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
-    BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 108, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
+    local featuresIntro = W.Text(features, "Cooldown basics for " .. scopeLabel .. " " .. laneName .. ". Colors live in Colors > Auras.", 24, featuresY, fw - 48, T.colors.muted)
+    BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 44, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
+    BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 76, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
     if lane == "debuff" then
-        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 158,
+        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 126,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             fw - 48, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
     end
 
-    local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 258, false)
+    local stack = b:CollapsibleSection(baseId .. "_stack", LaneTitle(lane) .. " Stack Count", 296, false)
     local sw = BodyWidth(stack)
-    AddStyleControl(BindDropdown(ctx, stack, "Anchor", 24, -54, Model.StackAnchorValues(), sw - 48,
+    BindStyleSwitch(stack, "Show Stack Count", 24, -54, sw - 48, "showStackCount", true, "AURAS3_SHOW_STACKS")
+    AddStyleControl(BindDropdown(ctx, stack, "Anchor", 24, -94, Model.StackAnchorValues(), sw - 48,
         function()
             if type(Model.ReadLaneStackAnchor) == "function" then return Model.ReadLaneStackAnchor(unit, lane) end
             return Model.ReadStackAnchor(unit)
@@ -1238,10 +1215,10 @@ local function BuildUnitStyle(ctx, b, scope)
             ApplyUnit(ctx, unit, "AURAS3_STACK_ANCHOR")
             RefreshStylePreview()
         end))
-    BindStyleSlider(stack, "Text Size", 24, -112, 6, 40, 1, sw - 48, "stackTextSize", 14, 6, 40, nil, nil, "AURAS3_STACK_SIZE")
+    BindStyleSlider(stack, "Text Size", 24, -152, 6, 40, 1, sw - 48, "stackTextSize", 14, 6, 40, nil, nil, "AURAS3_STACK_SIZE")
     local stackSmallW = max(120, floor((sw - 72) / 2))
-    BindStyleSlider(stack, "X", 24, -172, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
-    BindStyleSlider(stack, "Y", 32 + stackSmallW, -172, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
+    BindStyleSlider(stack, "X", 24, -212, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
+    BindStyleSlider(stack, "Y", 32 + stackSmallW, -212, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
 
     local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 474, true)
     local cw = BodyWidth(cooldown)
@@ -1273,9 +1250,9 @@ local function BuildUnitStyle(ctx, b, scope)
         end
         if featuresIntro then
             if unit == "shared" then
-                featuresIntro:SetText("Shared aura style is the baseline. Unit scopes can override these text, swipe, border, and timer settings.")
+                featuresIntro:SetText("Shared aura style is the baseline. Timer, stack, highlight, and pandemic colors live in Colors > Auras.")
             else
-                featuresIntro:SetText("These controls affect only " .. scopeLabel .. " " .. laneName .. " when the local style override is active.")
+                featuresIntro:SetText("These controls affect only " .. scopeLabel .. " " .. laneName .. " when the local style override is active. Colors live in Colors > Auras.")
             end
         end
         if unit == "shared" then
@@ -1303,14 +1280,13 @@ local function BuildGroupStyle(ctx, b, scope)
     local pw = BodyWidth(preview)
     refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, scope, 24, -34, pw - 48, 118, lane))
 
-    local features = b:CollapsibleSection(baseId .. "_features", "Group " .. LaneTitle(lane) .. " Text Features", 170 + extraDebuffControls, true)
+    local features = b:CollapsibleSection(baseId .. "_features", "Group " .. LaneTitle(lane) .. " Basics", 154 + extraDebuffControls, true)
     local fw = BodyWidth(features)
-    W.Text(features, "Cooldown and stack text for " .. scopeLabel .. " " .. laneName .. ".", 24, -42, fw - 48, T.colors.muted)
-    BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -82, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
-    BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -114, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
-    BindGroupSwitch(ctx, features, "Show Stack Count", 24, -146, fw - 48, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
+    W.Text(features, "Cooldown basics for " .. scopeLabel .. " " .. laneName .. ". Colors live in Colors > Auras.", 24, -42, fw - 48, T.colors.muted)
+    BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -82, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -114, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
     if lane == "debuff" then
-        BindDropdown(ctx, features, "Dispel-type Border", 24, -198,
+        BindDropdown(ctx, features, "Dispel-type Border", 24, -166,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             fw - 48,
             function() return ReadGroupDebuffTypeBorderMode(scope, lane) end,
@@ -1341,13 +1317,14 @@ local function BuildGroupStyle(ctx, b, scope)
     AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and unitless minutes above it. Set 0 for whole seconds only.")
     W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then unitless minutes.", 24, -340, cw - 48, T.colors.muted)
 
-    local stack = b:CollapsibleSection(baseId .. "_stack", "Group " .. LaneTitle(lane) .. " Stack Count", 238, false)
+    local stack = b:CollapsibleSection(baseId .. "_stack", "Group " .. LaneTitle(lane) .. " Stack Count", 270, false)
     local sw = BodyWidth(stack)
-    BindGroupSlider(ctx, stack, "Stack Font", 24, -54, 6, 24, 1, sw - 48, scope, lane, "stackSize", 10, "font", RefreshStylePreview)
-    BindGroupDropdown(ctx, stack, "Stack Anchor", 24, -112, GFAnchorValues(), sw - 48, scope, lane, "stackAnchor", "BOTTOMRIGHT", "geometry", RefreshStylePreview)
+    BindGroupSwitch(ctx, stack, "Show Stack Count", 24, -54, sw - 48, scope, lane, "showStacks", true, "visual", RefreshStylePreview)
+    BindGroupSlider(ctx, stack, "Stack Font", 24, -94, 6, 24, 1, sw - 48, scope, lane, "stackSize", 10, "font", RefreshStylePreview)
+    BindGroupDropdown(ctx, stack, "Stack Anchor", 24, -152, GFAnchorValues(), sw - 48, scope, lane, "stackAnchor", "BOTTOMRIGHT", "geometry", RefreshStylePreview)
     local stackSmallW = max(120, floor((sw - 72) / 2))
-    BindGroupSlider(ctx, stack, "Stack X", 24, -170, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
-    BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -170, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
+    BindGroupSlider(ctx, stack, "Stack X", 24, -210, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
+    BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -210, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
 
     local behavior = b:CollapsibleSection(baseId .. "_behavior", "Group " .. LaneTitle(lane) .. " Behavior", 252, false)
     local bw = BodyWidth(behavior)
@@ -1357,75 +1334,6 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 24, -146, bw - 48, scope, "preferPlayer", false, "visual")
     BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 24, -178, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
     BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 24, -220, bw - 48, scope, "cooldownSwipeDarkenOnLoss", false, "visual", RefreshStylePreview)
-end
-local function BuildSharedColors(ctx, b)
-    local section = b:CollapsibleSection("aura_shared_colors", "Shared Aura Colors", 480, false)
-    local w = section._msuf2Width or b.width or 720
-    local colW = max(310, floor((w - 58) / 2))
-    local rightX = 24 + colW + 18
-    local cooldown = Card(section, "Cooldown Timer Colors", nil, 24, -42, colW, 380)
-    local markers = Card(section, "Stack & Highlights", nil, rightX, -42, colW, 380)
-    local preview = T.Panel(cooldown, nil, { 0.014, 0.020, 0.040, 0.82 }, T.colors.borderSoft)
-    preview:SetPoint("TOPLEFT", cooldown, "TOPLEFT", 16, -60)
-    preview:SetSize(colW - 32, 88)
-    W.LabelAt(preview, "Preview", 12, -12, 120, "GameFontNormalSmall", T.colors.muted)
-    local samples = {}
-    for i = 1, 3 do
-        local box = T.Panel(preview, nil, { 0.020, 0.024, 0.046, 0.92 }, T.colors.borderSoft)
-        box:SetPoint("LEFT", preview, "LEFT", 88 + (i - 1) * 78, -6)
-        box:SetSize(64, 54)
-        local fs = T.Font(box, nil, i == 1 and "60" or (i == 2 and "15" or "5"), T.colors.text)
-        fs:SetFont(FONT, 18, "OUTLINE")
-        fs:SetPoint("CENTER", box, "CENTER", 0, 6)
-        local label = T.Font(box, "GameFontDisableSmall", i == 1 and "Safe" or (i == 2 and "Warn" or "Urgent"), T.colors.muted)
-        label:SetPoint("BOTTOM", box, "BOTTOM", 0, 5)
-        samples[i] = fs
-    end
-    local function RefreshColorSamples()
-        local sr, sg, sb = Model.ReadGeneralColor("aurasCooldownTextSafeColor", 1, 1, 1)
-        local wr, wg, wb = Model.ReadGeneralColor("aurasCooldownTextWarningColor", 1, 0.85, 0.20)
-        local ur, ug, ub = Model.ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
-        local buckets = Model.ReadGeneralBool("aurasCooldownTextUseBuckets", false)
-        samples[1]:SetTextColor(sr, sg, sb, 1)
-        samples[2]:SetTextColor(buckets and wr or sr, buckets and wg or sg, buckets and wb or sb, 1)
-        samples[3]:SetTextColor(buckets and ur or sr, buckets and ug or sg, buckets and ub or sb, 1)
-    end
-    BindSwitch(ctx, cooldown, "Color by time", 16, -166, colW - 32,
-        function() return Model.ReadGeneralBool("aurasCooldownTextUseBuckets", false) end,
-        function(v)
-            Model.WriteGeneralBool("aurasCooldownTextUseBuckets", v)
-            RefreshColorSamples()
-            RequestAuraTextRefresh()
-        end)
-    local function BindGeneralColor(parent, label, y, key, r, g, bcol, after)
-        BindColor(ctx, parent, label, 16, y,
-            function() return Model.ReadGeneralColor(key, r, g, bcol) end,
-            function(nr, ng, nb)
-                Model.WriteGeneralColor(key, nr, ng, nb)
-                if after then after() end
-            end)
-    end
-    local function RefreshTextColors()
-        RefreshColorSamples()
-        RequestAuraTextRefresh()
-    end
-    BindGeneralColor(cooldown, "Safe", -210, "aurasCooldownTextSafeColor", 1, 1, 1, RefreshTextColors)
-    BindGeneralColor(cooldown, "Warning", -248, "aurasCooldownTextWarningColor", 1, 0.85, 0.20, RefreshTextColors)
-    BindGeneralColor(cooldown, "Urgent", -286, "aurasCooldownTextUrgentColor", 1, 0.55, 0.10, RefreshTextColors)
-    BindGeneralColor(markers, "Stack Count", -62, "aurasStackCountColor", 1, 1, 1, RequestAuraTextRefresh)
-    BindGeneralColor(markers, "Own Buff", -102, "aurasOwnBuffHighlightColor", 1, 0.85, 0.20)
-    BindGeneralColor(markers, "Own Debuff", -142, "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30)
-    BindSlider(ctx, markers, "Safe seconds", 16, -196, 0, 600, 1, colW - 32,
-        function() return Model.ReadGeneralNumber("aurasCooldownTextSafeSeconds", 60, 0, 600) end,
-        function(v) Model.WriteGeneralNumber("aurasCooldownTextSafeSeconds", v, 0, 600); RequestAuraTextRefresh() end)
-    BindSlider(ctx, markers, "Warning <= sec", 16, -256, 0, 60, 1, colW - 32,
-        function() return Model.ReadGeneralNumber("aurasCooldownTextWarningSeconds", 15, 0, 60) end,
-        function(v) Model.WriteGeneralNumber("aurasCooldownTextWarningSeconds", v, 0, 60); RequestAuraTextRefresh() end)
-    BindSlider(ctx, markers, "Urgent <= sec", 16, -316, 0, 30, 1, colW - 32,
-        function() return Model.ReadGeneralNumber("aurasCooldownTextUrgentSeconds", 5, 0, 30) end,
-        function(v) Model.WriteGeneralNumber("aurasCooldownTextUrgentSeconds", v, 0, 30); RequestAuraTextRefresh() end)
-    W.Text(section, "Timer and marker colors are shared by unit and group aura previews.", 24, -440, w - 48, T.colors.muted)
-    M.TrackRefresh(ctx, RefreshColorSamples)
 end
 local function BuildAuraStylePage(ctx)
     local b = W.PageBuilder(ctx)
@@ -1438,7 +1346,6 @@ local function BuildAuraStylePage(ctx)
     else
         BuildUnitStyle(ctx, b, scope)
     end
-    BuildSharedColors(ctx, b)
     FinishPage(ctx, b)
 end
 local function BuildAuraStyleLanePage(ctx, lane)
@@ -1883,7 +1790,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         end
     end)
 end
-M.RegisterPage("auras3_buffs", { title = "MSUF Aura Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 9 })
-M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 9 })
-M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 30 })
+M.RegisterPage("auras3_buffs", { title = "MSUF Aura Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 10 })
+M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 10 })
+M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 31 })
 M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 21 })

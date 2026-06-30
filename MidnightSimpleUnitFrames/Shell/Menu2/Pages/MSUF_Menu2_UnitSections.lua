@@ -792,7 +792,7 @@ local function BuildStatus(ctx, builder, unit)
     end
 end
 local function BuildLoadConditions(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("load_conditions", "Load Conditions", 148, false)
+    local sec = builder:CollapsibleSection("load_conditions", "Load Conditions", 178, false)
     local colW = math.floor(((ctx.width or 720) - 42) / 3)
     for i = 1, #LOAD_CONDITIONS do
         local spec = LOAD_CONDITIONS[i]
@@ -1094,7 +1094,7 @@ local function BuildUnitPage(info)
         if info.unit == "boss" then
             BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 204 })
         end
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 148 })
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions, { sectionId = "load_conditions", title = "Load Conditions", height = 178 })
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions") end
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchoring", height = 220 })
         M.TrackRefresh(ctx, function()
