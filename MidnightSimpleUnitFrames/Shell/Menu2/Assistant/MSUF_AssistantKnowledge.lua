@@ -20,7 +20,7 @@ local K = A.Knowledge or {}
 A.Knowledge = K
 
 local MAX_RESULTS = 6
-local INDEX_VERSION = 6
+local INDEX_VERSION = 7
 local SEARCH_CACHE_LIMIT = 32
 local SEARCH_TEXT_LIMIT = 360
 local KNOWLEDGE_ALIAS_LIMIT = 24
@@ -32,14 +32,18 @@ local function Trim(text)
 end
 
 local function Normalize(text)
-    text = tostring(text or ""):lower()
-    text = text:gsub("\195\164", "ae")
-    text = text:gsub("\195\182", "oe")
-    text = text:gsub("\195\188", "ue")
-    text = text:gsub("\195\159", "ss")
-    text = text:gsub("[,;:!?%(%)]", " ")
-    text = text:gsub("%s+", " ")
-    text = Trim(text)
+    if type(A.Normalize) == "function" then
+        text = A.Normalize(text)
+    else
+        text = tostring(text or ""):lower()
+        text = text:gsub("\195\164", "ae")
+        text = text:gsub("\195\182", "oe")
+        text = text:gsub("\195\188", "ue")
+        text = text:gsub("\195\159", "ss")
+        text = text:gsub("[,;:!?%(%)]", " ")
+        text = text:gsub("%s+", " ")
+        text = Trim(text)
+    end
     text = text:gsub("target%s+of%s+target", "targettarget")
     text = text:gsub("target%s+target", "targettarget")
     text = text:gsub("focus%s+target", "focustarget")
@@ -264,6 +268,8 @@ local GROUP_LAYOUT_ATTRS = {
     hideOfflineDelay = true,
     smoothFill = true,
     reverseFill = true,
+    groupBackdropColor = true,
+    bgColor = true,
     width = true,
     height = true,
     offsetX = true,
@@ -735,13 +741,22 @@ local QUERY_PREFIXES = {
 
 local function SearchQueryText(query)
     local norm = Normalize(query)
-    for i = 1, #QUERY_PREFIXES do
-        local prefix = QUERY_PREFIXES[i]
-        if norm:sub(1, #prefix) == prefix then
-            return Trim(norm:sub(#prefix + 1))
+    local candidates = { norm }
+    local actionText = A.Parser and A.Parser.ActionableText
+    if type(actionText) == "function" then
+        local actionable = actionText(norm)
+        if actionable ~= "" and actionable ~= norm then candidates[#candidates + 1] = actionable end
+    end
+    for c = 1, #candidates do
+        local candidate = candidates[c]
+        for i = 1, #QUERY_PREFIXES do
+            local prefix = QUERY_PREFIXES[i]
+            if candidate:sub(1, #prefix) == prefix then
+                return Trim(candidate:sub(#prefix + 1))
+            end
         end
     end
-    return norm
+    return candidates[#candidates] or norm
 end
 
 local function ExpandQueryText(query)
@@ -997,7 +1012,7 @@ local PAGE_HELP = {
         },
         actions = { "Open Bars", "Open Colors" },
     },
-    opt_colors = { title = "Colors help", lines = { "You can change global, frame, bar, cast bar, class resource, portrait, and highlight colors that MSUF lets the Assistant edit.", "Examples: set global font color white; set cast bar text color red; change player border color blue." }, actions = { "Open Colors", "Reset Color" } },
+    opt_colors = { title = "Colors help", lines = { "You can change global, frame, bar, cast bar, class resource, aura, portrait, and highlight colors that MSUF lets the Assistant edit.", "Examples: set global font color white; set aura cooldown warning color yellow; change player border color blue." }, actions = { "Open Colors", "Reset Color" } },
     opt_fonts = { title = "Fonts help", lines = { "You can change global fonts, font sizes, section-specific font styles, and related text styling options.", "Examples: set global font to Friz Quadrata; set player name font size 14." }, actions = { "Open Fonts" } },
     opt_misc = { title = "Miscellaneous help", lines = { "You can change menu language, menu snapping, reduced motion, welcome/version messages, minimap icon, target sounds, Blizzard unit frame handling, and unit frame tooltip behavior.", "Examples: set menu language to German; show minimap icon; use MSUF tooltips; show tooltips only with ALT; disable Blizzard unit frames." }, actions = { "Open Miscellaneous" } },
     modules = { title = "Modules help", lines = { "You can change optional MSUF style modules such as the MSUF Style module and menu choice style.", "Examples: enable MSUF Style; turn off midnight style; set menu choice style to old; open modules." }, actions = { "Open Modules" } },
@@ -1012,7 +1027,7 @@ local PAGE_HELP = {
         actions = { "Export Current Profile", "Copy Wago Profiles Link", "Import Profile" },
     },
     auras3 = { title = "Auras help", lines = { "You can change Aura and Group Aura options such as visibility, icon size, caps/count, per-row layout, growth, X/Y offsets, layer, cooldown text, stack text, filters, hidden auras, and quick presets.", "Examples: cap player buffs at 2; set target buff icon size to 30; set raid debuff layer to 7." }, actions = { "Open Auras", "Open Aura Filters" } },
-    auras3_styling = { title = "Aura Style help", lines = { "You can change aura visual styling such as colors, borders, cooldown text, stack text, and related rendering details.", "Examples: set aura cooldown text size to 14; change aura border color; open Aura Style." }, actions = { "Open Aura Style", "Open Aura Filters" } },
+    auras3_styling = { title = "Aura Style help", lines = { "You can change aura basics, borders, cooldown text, stack text, and related rendering details. Aura timer, stack, highlight, and pandemic colors live in Colors > Auras.", "Examples: set aura cooldown text size to 14; move target buff stack text right 3; open Aura Style." }, actions = { "Open Aura Style", "Open Colors" } },
     auras3_buffs = { title = "Aura Buffs help", lines = { "You can change buff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, stack text, cooldown text, and filters.", "Examples: set player buff max to 8; cap player buffs at 2; set party buff icon size to 24." }, actions = { "Open Aura Buffs" } },
     auras3_debuffs = { title = "Aura Debuffs help", lines = { "You can change debuff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, cooldown text, and debuff filters.", "Examples: set focus debuff icon size to 28; limit raid debuffs to 4; set target debuff z layer to 7." }, actions = { "Open Aura Debuffs" } },
     auras3_filters = { title = "Aura Filters help", lines = { "You can change Aura filter toggles, hidden-aura entries, hidden group-aura categories, Aura quick presets, and Group Aura copy through Group Copy categories.", "Examples: hide spell 12345 for player auras; show hidden raid buff categories; apply performance aura preset; copy raid auras to party." }, actions = { "Open Aura Filters" } },
@@ -1166,7 +1181,7 @@ local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "classpower", terms = { "class resource", "class resources", "class power", "class powers", "combo point", "combo points", "holy power" } },
     { page = "profiles", terms = { "profile", "profiles", "profile import", "profile export", "spec profile", "spec profiles" } },
     { page = "gameplay", terms = { "gameplay", "combat timer", "combat crosshair", "totem", "totems", "totem frame" } },
-    { page = "opt_colors", terms = { "color", "colors", "class colors", "bar colors", "font color" } },
+    { page = "opt_colors", terms = { "color", "colors", "class colors", "bar colors", "font color", "aura colors", "aura timer colors" } },
     { page = "opt_fonts", terms = { "font", "fonts", "font outline", "font shadow" } },
     { page = "opt_bars", terms = { "bar texture", "bar textures", "health bar", "power bar", "bars", "bar", "absorb bar", "dispel overlay", "rounded bars" } },
     { page = "opt_misc", terms = { "misc", "miscellaneous", "tooltip", "tooltips", "minimap", "menu language", "blizzard frames" } },
@@ -2136,7 +2151,62 @@ function K.Answer(query, opts)
     return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant knowledge result", searchResults = ResultFollowups(results, 5) }
 end
 
+local NO_MATCH_SEARCH_SIGNAL_TERMS = {
+    "msuf", "menu", "setting", "settings", "option", "options", "page", "where", "help", "explain", "find", "search",
+    "player", "target", "focus", "pet", "boss", "party", "raid", "mythic", "frame", "frames", "unitframe", "group",
+    "health", "hp", "power", "mana", "name", "text", "font", "bar", "bars", "texture", "color", "colour",
+    "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
+    "width", "height", "size", "scale", "alpha", "opacity", "anchor", "position", "offset", "spacing", "gap",
+    "border", "portrait", "indicator", "status", "cooldown", "stack", "filter", "profile", "copy", "reset",
+    "gameplay", "crosshair", "totem", "class power", "class resource", "resource",
+}
+
+local NO_MATCH_SEARCH_LOW_SIGNAL_TOKENS = {
+    a = true, an = true, the = true, to = true, of = true, on = true, ["in"] = true, ["for"] = true, with = true,
+    make = true, set = true, change = true, turn = true, ["do"] = true, please = true, pls = true,
+    can = true, could = true, would = true, will = true, you = true, i = true, want = true, need = true,
+    vague = true, thing = true, stuff = true, something = true, anything = true,
+}
+
+local function ShouldSearchNoMatchCandidates(query)
+    local cleaned = SearchQueryText(query)
+    local norm = Normalize(cleaned ~= "" and cleaned or query)
+    if norm == "" then return false end
+    if ContainsAny(norm, NO_MATCH_SEARCH_SIGNAL_TERMS) then return true end
+    local meaningful = 0
+    for token in norm:gmatch("%S+") do
+        if #token >= 3 and not NO_MATCH_SEARCH_LOW_SIGNAL_TOKENS[token] then
+            meaningful = meaningful + 1
+            if meaningful >= 4 then return true end
+        end
+    end
+    return false
+end
+
 function K.NoMatch(query)
+    local results
+    if ShouldSearchNoMatchCandidates(query) then
+        results = K.Search(query, 3, { ignoreCurrentPage = true })
+    end
+    if type(results) == "table" and #results > 0 and (tonumber(results[1].score) or 0) >= 360 then
+        local lines = {
+            "I'm not sure which MSUF request you mean yet, so I did not change anything.",
+            "Closest MSUF matches I found:",
+        }
+        for i = 1, math.min(#results, 3) do
+            lines[#lines + 1] = FormatResultLine(i, results[i].item)
+        end
+        local top = results[1] and results[1].item
+        local example = ExampleCommand(top)
+        if example then lines[#lines + 1] = example end
+        lines[#lines + 1] = "You can ask me to open a result, explain it, or give a more specific frame/page plus value."
+        return {
+            text = table.concat(lines, "\n"),
+            status = "info",
+            summary = "Assistant help fallback with close matches",
+            searchResults = ResultFollowups(results, 3),
+        }
+    end
     return {
         text = "I'm not sure which MSUF request you mean yet.\nI can help once I can match the request to an MSUF menu option. Include the frame or page plus the option, for example 'set target cast bar height to 20' or 'turn on party dead background'. For aura requests, I change aura options that exist in the MSUF menu.\nIf that wording should work, share the exact text in Discord: " .. DISCORD_INVITE,
         status = "info",

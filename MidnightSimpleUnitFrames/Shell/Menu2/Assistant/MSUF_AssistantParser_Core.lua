@@ -25,6 +25,8 @@ local function Trim(text)
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+local Normalize
+
 local normalizeCache = {}
 local normalizeCacheCount = 0
 
@@ -39,7 +41,13 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     chagne = "change",
     moev = "move",
     mvoe = "move",
+    adjut = "adjust",
+    ajust = "adjust",
+    aply = "apply",
+    aplly = "apply",
     toggel = "toggle",
+    togge = "toggle",
+    tggle = "toggle",
     porfile = "profile",
     profiel = "profile",
     profie = "profile",
@@ -117,8 +125,18 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     castabr = "castbar",
     castba = "castbar",
     castbra = "castbar",
+    crosair = "crosshair",
+    crossair = "crosshair",
+    crosshir = "crosshair",
+    protait = "portrait",
+    portriat = "portrait",
+    portrtait = "portrait",
+    portait = "portrait",
+    portraid = "portrait",
     helath = "health",
     haelth = "health",
+    helth = "health",
+    healt = "health",
     waggo = "wago",
     wagoo = "wago",
     wgao = "wago",
@@ -137,11 +155,17 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     lagrer = "larger",
     closser = "closer",
     clsoer = "closer",
+    achor = "anchor",
+    ancor = "anchor",
+    ancher = "anchor",
+    anchro = "anchor",
+    acnhor = "anchor",
     atach = "attach",
     detatch = "detach",
     teh = "the",
     yu = "you",
     yuo = "you",
+    u = "you",
     txt = "text",
     txts = "texts",
     icn = "icon",
@@ -159,6 +183,129 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     trenner = "separator",
 }
 
+local ACTIONABLE_LEADING_PREFIXES = {
+    "can you please",
+    "could you please",
+    "would you please",
+    "will you please",
+    "can you",
+    "could you",
+    "would you",
+    "will you",
+    "please",
+    "pls",
+    "hey",
+    "hi",
+    "hello",
+    "assistant",
+    "msuf assistant",
+    "i want to",
+    "i wanna",
+    "i need to",
+    "i would like to",
+    "id like to",
+    "i am trying to",
+    "im trying to",
+    "help me to",
+    "help me",
+    "let us",
+    "lets",
+    "bitte",
+    "kannst du bitte",
+    "kannst du",
+    "koenntest du bitte",
+    "koenntest du",
+    "ich moechte",
+    "ich will",
+    "ich brauche",
+    "hilf mir bitte",
+    "hilf mir",
+}
+
+local ACTIONABLE_TRAILING_SUFFIXES = {
+    "for me please",
+    "for me",
+    "please",
+    "pls",
+    "in msuf",
+    "inside msuf",
+    "with msuf",
+    "on msuf",
+    "thanks",
+    "thank you",
+    "danke",
+    "danke dir",
+    "bitte",
+}
+
+local actionableTextCache = {}
+local actionableTextCacheCount = 0
+
+local function StripPhrasePrefix(text, prefix)
+    if text == prefix then return "" end
+    if text:sub(1, #prefix + 1) == prefix .. " " then return Trim(text:sub(#prefix + 2)) end
+    return nil
+end
+
+local function StripPhraseSuffix(text, suffix)
+    if text == suffix then return "" end
+    if #text > #suffix and text:sub(-#suffix) == suffix and text:sub(#text - #suffix, #text - #suffix) == " " then
+        return Trim(text:sub(1, #text - #suffix - 1))
+    end
+    return nil
+end
+
+-- A second normalized form for matching only. It removes human chat wrappers while
+-- preserving the original/raw text for string values and profile payloads.
+local function ActionableText(text)
+    local normalized = Normalize(text)
+    if normalized == "" then return normalized end
+    local cached = actionableTextCache[normalized]
+    if cached ~= nil then return cached end
+
+    local out = normalized
+    local changed = true
+    local loops = 0
+    while changed and loops < 8 do
+        loops = loops + 1
+        changed = false
+        for i = 1, #ACTIONABLE_LEADING_PREFIXES do
+            local stripped = StripPhrasePrefix(out, ACTIONABLE_LEADING_PREFIXES[i])
+            if stripped ~= nil then
+                out = stripped
+                changed = true
+                break
+            end
+        end
+    end
+
+    changed = true
+    loops = 0
+    while changed and loops < 6 do
+        loops = loops + 1
+        changed = false
+        for i = 1, #ACTIONABLE_TRAILING_SUFFIXES do
+            local stripped = StripPhraseSuffix(out, ACTIONABLE_TRAILING_SUFFIXES[i])
+            if stripped ~= nil then
+                out = stripped
+                changed = true
+                break
+            end
+        end
+    end
+
+    if out == "" then out = normalized end
+    if #normalized <= 180 then
+        if actionableTextCacheCount > 2048 then
+            actionableTextCache = {}
+            actionableTextCacheCount = 0
+        end
+        if actionableTextCache[normalized] == nil then actionableTextCacheCount = actionableTextCacheCount + 1 end
+        actionableTextCache[normalized] = out
+    end
+    return out
+end
+
 -- Normalization runs on every assistant query and on many registry aliases. Keep the cache
 -- bounded and only cache short strings so pasted imports or bug reports cannot grow it forever.
 local function CacheNormalize(raw, value)
@@ -173,7 +320,7 @@ local function CacheNormalize(raw, value)
     return value
 end
 
-local function Normalize(text)
+Normalize = function(text)
     local raw = tostring(text or "")
     local cached = normalizeCache[raw]
     if cached ~= nil then return cached end
@@ -544,13 +691,13 @@ local PAGE_TEXT_TARGETS = {
     { page = "gf_layout", label = "Group Layout", terms = { "group layout", "party layout", "raid layout", "group settings", "party settings", "raid settings", "group frames", "groupframes", "party frames", "raid frames", "mythic raid", "mythicraid", "gruppenframes", "group", "party", "raid" } },
 
     { page = "auras3_filters", label = "Aura Filters", terms = { "aura filters", "aura filter", "filters", "blacklist", "aura blacklist", "blocked auras" } },
-    { page = "auras3_styling", label = "Aura Style", terms = { "aura style", "aura styling", "aura colors", "aura cooldown text", "aura borders" } },
+    { page = "auras3_styling", label = "Aura Style", terms = { "aura style", "aura styling", "aura cooldown text", "aura borders" } },
     { page = "auras3_debuffs", label = "Aura Debuffs", terms = { "debuff", "debuffs", "debuff settings", "debuff style" } },
     { page = "auras3_buffs", label = "Aura Buffs", terms = { "buff", "buffs", "buff settings", "buff style" } },
     { page = "auras3", label = "Auras", terms = { "aura", "auras", "auren", "aura settings", "auren einstellungen" } },
 
     { page = "opt_castbar", label = "Cast Bars", terms = { "castbar", "castbars", "zauberleiste" } },
-    { page = "opt_colors", label = "Colors", terms = { "colors", "colours", "color palette", "farben" } },
+    { page = "opt_colors", label = "Colors", terms = { "colors", "colours", "color palette", "aura colors", "aura timer colors", "farben" } },
     { page = "opt_fonts", label = "Fonts", terms = { "fonts", "font", "schrift" } },
     { page = "opt_misc", label = "Miscellaneous", terms = { "misc", "miscellaneous", "tooltips", "tooltip", "modules style", "dropdown style" } },
     { page = "opt_bars", label = "Bars", terms = GLOBAL_BARS_TERMS },
@@ -951,6 +1098,7 @@ end
 
 P.Trim = Trim
 P.Normalize = Normalize
+P.ActionableText = ActionableText
 P.FuzzyWordMatch = FuzzyWordMatch
 P.FuzzyPhraseMatch = FuzzyPhraseMatch
 P.HasPhrase = HasPhrase

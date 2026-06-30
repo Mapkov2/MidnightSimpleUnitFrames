@@ -95,6 +95,8 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
         { category = "Text", text = true, valueAliases = SEPARATOR_ALIASES, get = function(unitKey) return TextValue(unitKey, "hpTextSeparator", "") end })
     RegisterUnitBooleanSetting(unit, "hpTextReverse", "hpTextReverse", "Reverse HP Text Order", false,
         MakeAliases(unit, "reverse hp text", "hp text reverse order"), { category = "Text", text = true })
+    RegisterUnitBooleanSetting(unit, "healthTextDecimals", "healthTextDecimals", "Health Text Decimals", false,
+        MakeAliases(unit, "health text decimals", "hp text decimals", "decimal percent"), { category = "Text", text = true })
     RegisterUnitTextNumber(unit, "hpOffsetX", "hpOffsetX", "HP Text X Offset", -4,
         MakeAliases(unit, "hp text x", "health text x offset"), { min = -300, max = 300 })
     RegisterUnitTextNumber(unit, "hpOffsetY", "hpOffsetY", "HP Text Y Offset", -4,

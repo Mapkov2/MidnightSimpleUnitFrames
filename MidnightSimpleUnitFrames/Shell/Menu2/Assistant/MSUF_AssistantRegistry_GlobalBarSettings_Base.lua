@@ -76,6 +76,29 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     RegisterGeneralMappedEnum("aggroOutlineMode", "aggroBorder", "Aggro Border", "on", ON_OFF_VALUES, ON_OFF_STORAGE, {
         "aggro border", "threat border", "aggro outline",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyAggroBorder, reason = "MSUF_ASSISTANT_AGGRO_BORDER", valueAliases = ON_OFF_ALIASES })
+    RegisterGeneralEnum("aggroMode", "aggroMode", "Aggro Shows For", "ALL", {
+        "ALL", "NON_TANK", "HEALER", "TANK",
+    }, {
+        "aggro shows for", "aggro role filter", "aggro non tanks", "aggro not tank", "threat non tanks",
+    }, {
+        category = "Global / Bars / Highlight Borders",
+        frameType = "globalBars",
+        apply = ApplyAggroBorder,
+        reason = "MSUF_ASSISTANT_AGGRO_MODE",
+        valueAliases = {
+            all = "ALL",
+            everyone = "ALL",
+            ["all roles"] = "ALL",
+            nontank = "NON_TANK",
+            ["non tank"] = "NON_TANK",
+            ["non tanks"] = "NON_TANK",
+            ["not tank"] = "NON_TANK",
+            healer = "HEALER",
+            healers = "HEALER",
+            tank = "TANK",
+            tanks = "TANK",
+        },
+    })
     RegisterGeneralMappedEnum("dispelOutlineMode", "dispelBorder", "Dispel Border", "on", ON_OFF_VALUES, ON_OFF_STORAGE, {
         "dispel border", "dispellable border", "dispel outline",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_DISPEL_BORDER", valueAliases = ON_OFF_ALIASES })

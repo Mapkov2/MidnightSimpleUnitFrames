@@ -108,19 +108,87 @@ function A._FollowupChangeLineForAnswer(index, setting, previous)
     if newValue == nil and type(setting.get) == "function" then newValue = setting.get() end
     local newLabel = A._FollowupValueLabelForAnswer(setting, newValue, previous and previous.valueLabel)
     local prefix = index and (tostring(index) .. ". ") or ""
+    if previous and previous.unchanged == true then return prefix .. label .. " was already " .. newLabel .. "." end
     return prefix .. label .. " from " .. oldLabel .. " to " .. newLabel .. "."
 end
 
+local function IsTroubleshootingWhyQuestion(text)
+    text = Normalize(text)
+    if text == "" then return false end
+    if text:match("^why%s+are%s+") or text:match("^why%s+is%s+") then
+        if ContainsAny(text, {
+            "why is that", "why is this", "why are those", "why are these",
+            "why is it", "why are they",
+        }) then
+            return false
+        end
+        return ContainsAny(text, {
+            "hidden", "missing", "not showing", "not visible", "invisible",
+            "disabled", "gone", "broken", "doesnt work", "does not work",
+            "frame", "frames", "cast bar", "castbar", "buff", "buffs",
+            "debuff", "debuffs", "aura", "auras", "text", "icon", "icons",
+        })
+    end
+
+    if text:match("^why%s+cant%s+") or text:match("^why%s+cannot%s+")
+        or text:match("^why%s+can%s+not%s+") or text:match("^why%s+doesnt%s+")
+        or text:match("^why%s+does%s+not%s+") or text:match("^why%s+dont%s+")
+        or text:match("^why%s+do%s+not%s+") then
+        return ContainsAny(text, {
+            "edit mode", "exit", "close", "cancel", "leave", "start", "open",
+            "cast bar", "castbar", "frame", "frames", "aura", "auras",
+            "buff", "buffs", "debuff", "debuffs", "profile", "import", "export",
+            "anchor picker", "custom anchor", "copy", "paste",
+        })
+    end
+
+    return false
+end
+
+local function IsPageExplanationQuestion(text)
+    text = Normalize(text)
+    if text == "" then return false end
+    if ContainsAny(text, {
+        "explain this page", "explain current page", "explain the page",
+        "explain page", "what is this page", "what can i do on this page",
+        "what can i do on current page", "what can i change on this page",
+        "what can i change on current page", "what can be changed on this page",
+        "how can i configure this page", "show me commands for this page",
+        "commands for this page", "current page help", "this page help",
+        "help on this page", "help for this page", "page help",
+    }) then
+        return true
+    end
+    return false
+end
+
 function A._ParseFollowupAnswer(text, ctx)
-    if not ContainsAny(text, {
+    if IsTroubleshootingWhyQuestion(text) or IsPageExplanationQuestion(text) then return nil end
+    local asksWhatChanged = ContainsAny(text, {
         "what did you change", "what changed", "what was changed", "what did you do",
         "what did you just change", "what exactly did you change", "what did you set",
         "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
-        "show me last change", "show me the last change",
+        "show me last change", "show me the last change", "what now", "what happened",
+        "what did that do", "what did this do", "what does that mean",
+        "what does this mean", "explain that", "explain this",
+        "explain the last change", "explain last change", "what is the result",
+        "what was the result",
         "what did you copy", "what did you just copy", "what was copied", "last copy",
         "show last copy", "show me last copy",
-    }) then return nil end
+    })
+    local asksWhy = ContainsAny(text, {
+        "why did you change", "why did you do that", "why did you do this",
+        "why did you set", "why did you pick", "why that change",
+        "why this change", "why did that happen", "why did this happen",
+        "why", "why that", "why this", "why did you", "why did you choose",
+        "why did you choose that", "why did you choose this",
+        "why did you choose that option", "why did you choose this option",
+        "why that option", "why this option", "why did you pick that option",
+        "why did you pick this option", "why did you use that",
+        "why did you use this", "explain why",
+    })
+    if not asksWhatChanged and not asksWhy then return nil end
     if not ctx then return nil end
 
     if type(ctx.lastChangeBundle) == "table" and #ctx.lastChangeBundle > 0 then
@@ -131,8 +199,15 @@ function A._ParseFollowupAnswer(text, ctx)
             local setting = previous and previous.key and Registry and Registry:GetSetting(previous.key) or nil
             local line = A._FollowupChangeLineForAnswer(nil, setting, previous)
             if line then
-                lines[#lines + 1] = "Last change I made: " .. line
-                lines[#lines + 1] = "Ask for 'undo' to revert it."
+                if asksWhy then
+                    lines[#lines + 1] = "Why I did that: your last request matched " .. tostring(ctx.lastActionLabel or "that MSUF option") .. "."
+                    lines[#lines + 1] = "Change recorded: " .. line
+                else
+                    lines[#lines + 1] = "Last change I made: " .. line
+                end
+                if not (previous and previous.unchanged == true) then
+                    lines[#lines + 1] = "Ask for 'undo' to revert it."
+                end
                 return {
                     kind = "answer",
                     status = "info",
@@ -141,16 +216,23 @@ function A._ParseFollowupAnswer(text, ctx)
                 }
             end
         elseif #bundle > 1 then
-            lines[#lines + 1] = "Last change I made touched " .. tostring(#bundle) .. " MSUF options:"
+            if asksWhy then
+                lines[#lines + 1] = "Why I did that: your last request matched " .. tostring(ctx.lastActionLabel or "several MSUF options") .. "."
+                lines[#lines + 1] = "The recorded change touched " .. tostring(#bundle) .. " MSUF options:"
+            else
+                lines[#lines + 1] = "Last change I made touched " .. tostring(#bundle) .. " MSUF options:"
+            end
             local visible = math.min(#bundle, 5)
+            local hasChangedOption = false
             for i = 1, visible do
                 local previous = bundle[i]
                 local setting = previous and previous.key and Registry and Registry:GetSetting(previous.key) or nil
                 local line = A._FollowupChangeLineForAnswer(i, setting, previous)
                 if line then lines[#lines + 1] = line end
+                if not (previous and previous.unchanged == true) then hasChangedOption = true end
             end
             if #bundle > visible then lines[#lines + 1] = "And " .. tostring(#bundle - visible) .. " more." end
-            lines[#lines + 1] = "Ask for 'undo' to revert it."
+            if hasChangedOption then lines[#lines + 1] = "Ask for 'undo' to revert it." end
             return {
                 kind = "answer",
                 status = "info",
@@ -181,7 +263,9 @@ function A._ParseFollowupAnswer(text, ctx)
         local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction(actionKey) or nil
         local label = ctx.lastActionLabel or (action and action.label) or actionKey
         local message = tostring(ctx.lastActionMessage or "")
-        local lines = { "Last thing I did: " .. tostring(label) .. "." }
+        local lines = asksWhy
+            and { "Why I did that: your last request matched the MSUF task " .. tostring(label) .. "." }
+            or { "Last thing I did: " .. tostring(label) .. "." }
         if message ~= "" then lines[#lines + 1] = "Result: " .. message end
         if ctx.lastActionUndoable == true then
             lines[#lines + 1] = "Ask for 'undo' to revert it."
@@ -286,6 +370,7 @@ end
 
 local function BuildFollowup(text, ctx)
     if not ctx then return nil end
+    if IsPageExplanationQuestion(text) then return nil end
     local copyActionFollowup = P.BuildCopyActionFollowup and P.BuildCopyActionFollowup(text, ctx)
     if copyActionFollowup then return copyActionFollowup end
     if ContainsAny(text, {
@@ -360,6 +445,15 @@ local function BuildFollowup(text, ctx)
     local tooNegativeIntent = ContainsAny(text, tooNegativeTerms)
     local notEnoughIntent = ContainsAny(text, notEnoughTerms)
     local targetReplayIntent = ContainsAny(text, replayTerms)
+    local explicitAuraBulkScope = ContainsAny(text, {
+        "all aura", "all auras", "all aura icon", "all aura icons",
+        "all unit aura", "all unit auras", "all unit aura icon", "all unit aura icons",
+        "all group aura", "all group auras", "all group aura icon", "all group aura icons",
+        "all buff", "all buffs", "all buff icon", "all buff icons",
+        "all debuff", "all debuffs", "all debuff icon", "all debuff icons",
+        "every aura", "every aura icon", "every aura icons",
+        "every buff", "every buff icon", "every debuff", "every debuff icon",
+    })
     local pureNumberIntent = tostring(text or ""):match("^[-+]?%d+%.?%d*$") ~= nil
     local bareExactValueIntent = tostring(text or ""):match("^to%s+[-+]?%d+%.?%d*$") ~= nil
         or tostring(text or ""):match("^move%s+to%s+[-+]?%d+%.?%d*$") ~= nil
@@ -380,8 +474,8 @@ local function BuildFollowup(text, ctx)
     })
     local exactValueIntent = pureNumberIntent
         or bareExactValueIntent
-        or ContainsAny(text, { "min", "minimum", "max", "maximum" })
-        or (exactValueReference and FirstNumber(text) ~= nil)
+        or (not explicitAuraBulkScope and ContainsAny(text, { "min", "minimum", "max", "maximum" }))
+        or (not explicitAuraBulkScope and exactValueReference and FirstNumber(text) ~= nil)
     local commandIntent = ContainsAny(text, {
         "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift",
         "create", "select", "use", "reset", "copy", "open", "import", "export", "rename", "delete", "remove", "switch", "assign",
@@ -918,6 +1012,41 @@ local function BuildFollowup(text, ctx)
         return "auras3." .. tostring(info.scope) .. "." .. tostring(info.lane) .. "." .. tostring(targetAttr)
     end
 
+    local function RequestedAuraMirrorLane(textValue)
+        local wantsBuff = ContainsAny(textValue, { "buff", "buffs" })
+        local wantsDebuff = ContainsAny(textValue, { "debuff", "debuffs" })
+        if wantsBuff == wantsDebuff then return nil end
+        return wantsBuff and "buff" or "debuff"
+    end
+
+    local function AddAuraLaneMirrorChange(changes, seen, prev, targetLane)
+        local info = AuraLaneInfoFromPrevious(prev)
+        if not (info and targetLane and info.lane ~= targetLane) then return end
+        info = {
+            kind = info.kind,
+            scope = info.scope,
+            lane = targetLane,
+            attr = info.attr,
+        }
+        local setting = Registry:GetSetting(AuraLaneFollowupSettingKey(info, info.attr))
+        if not setting or seen[setting.key] then return end
+        seen[setting.key] = true
+        local relativeDelta = tonumber(prev and prev.relativeDelta)
+        if relativeDelta ~= nil and setting.type == "number" then
+            changes[#changes + 1] = {
+                setting = setting,
+                relativeDelta = relativeDelta,
+                direction = prev.direction,
+            }
+        elseif prev and prev.value ~= nil then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = prev.value,
+                valueLabel = prev.valueLabel,
+            }
+        end
+    end
+
     local function AuraLaneEnumFollowupValue(setting, targetAttr, direction)
         if not (setting and setting.type == "enum") then return nil end
         local compactText = Compact and Compact(text) or Normalize(text):gsub("%s+", "")
@@ -972,7 +1101,26 @@ local function BuildFollowup(text, ctx)
     end
 
     local auraObjectFollowupReference = HasAuraObjectFollowupReference(text) or bareDirectionalFollowup
-    if #units == 0 and #groups == 0 and auraObjectFollowupReference then
+    local auraReplayReference = targetReplayIntent or explicitFollowupReference or bareDirectionalFollowup
+    if #units == 0 and #groups == 0 and not explicitAuraBulkScope and targetReplayIntent and auraObjectFollowupReference then
+        local targetLane = RequestedAuraMirrorLane(text)
+        if targetLane then
+            local mirrorChanges = {}
+            local seenMirrorKeys = {}
+            for i = 1, #ctx.lastChangeBundle do
+                AddAuraLaneMirrorChange(mirrorChanges, seenMirrorKeys, ctx.lastChangeBundle[i], targetLane)
+            end
+            if #mirrorChanges > 0 then
+                return {
+                    kind = "changes",
+                    changes = mirrorChanges,
+                    label = "Apply previous aura lane change",
+                    summary = "Continues the last aura lane change on the sibling buff/debuff lane.",
+                }
+            end
+        end
+    end
+    if #units == 0 and #groups == 0 and not explicitAuraBulkScope and auraReplayReference and auraObjectFollowupReference then
         local targetAttr = AuraLaneFollowupTargetAttr(text, followDirection)
         if targetAttr then
             local auraChanges = {}
@@ -1405,6 +1553,7 @@ local function BuildFollowup(text, ctx)
 end
 
 local function BuildBooleanCorrection(text, ctx)
+    if IsPageExplanationQuestion(text) then return nil end
     if not (ctx and type(ctx.lastSetting) == "string") then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end

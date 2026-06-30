@@ -96,7 +96,7 @@ function A.GroupFramesRegistry.RegisterFrameAlphaAnchorSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "health track color")
     AddAliasesForUnit(aliases, scope, "track color")
     AddAliasesForUnit(aliases, scope, "backdrop color")
-    RegisterGroupColor(scope, "groupBackdropColor", "bg", "Bar Background Color", 0.10, 0.10, 0.10, aliases)
+    RegisterGroupColor(scope, "groupBackdropColor", "bg", "Backdrop Color", 0.10, 0.10, 0.10, aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "dead background")
