@@ -1475,6 +1475,9 @@ function UF.AttachFrameMethods(frame, opts)
   if not frame then
     return frame
   end
+  if frame._msufDispatchToken == nil then
+    frame._msufDispatchToken = 0
+  end
   local ownEventScript = not (opts and opts.ownEvents == false) and frame._msufCoreOwnEvents ~= false
   if frame._msufCleanCoreMethods then
     if ownEventScript then

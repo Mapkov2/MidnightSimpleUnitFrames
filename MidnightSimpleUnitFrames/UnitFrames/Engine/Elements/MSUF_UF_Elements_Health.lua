@@ -58,8 +58,14 @@ local function StoreHealthValue(bar, unit, hp, hpSecret)
   if not bar then return end
   if hpSecret == nil then hpSecret = issecretvalue(hp) == true end
   if hpSecret then
+    if bar._msufHealthValue == nil and bar._msufHealthValueUnit == nil then
+      return
+    end
     bar._msufHealthValue = nil
     bar._msufHealthValueUnit = nil
+    return
+  end
+  if bar._msufHealthValue == hp and bar._msufHealthValueUnit == unit then
     return
   end
   bar._msufHealthValue = hp
@@ -70,10 +76,22 @@ local function StoreHealthMax(bar, unit, maxHP, maxSecret)
   if not bar then return end
   if maxSecret == nil then maxSecret = issecretvalue(maxHP) == true end
   if maxSecret then
+    if bar._msufHealthMax == nil
+      and bar._msufHealthMaxUnit == nil
+      and bar._msufHealthMaxSecret == nil
+      and bar._msufHealthMaxReady == nil then
+      return
+    end
     bar._msufHealthMax = nil
     bar._msufHealthMaxUnit = nil
     bar._msufHealthMaxSecret = nil
     bar._msufHealthMaxReady = nil
+    return
+  end
+  if bar._msufHealthMax == maxHP
+    and bar._msufHealthMaxUnit == unit
+    and bar._msufHealthMaxSecret == nil
+    and bar._msufHealthMaxReady == true then
     return
   end
   bar._msufHealthMax = maxHP
@@ -103,6 +121,32 @@ local function ConnectionStatusKey(frame, unit, event)
     return 0
   end
   return nil
+end
+
+local function GroupHealthStatusNeedsRefresh(frame, hp, hpSecret)
+  local shown = frame and frame._msufStatusTextValue
+  if shown == "DEAD" or shown == "GHOST" then
+    return true
+  end
+  return hpSecret ~= true and hp == 0
+end
+
+local function RefreshGroupDeadStateFromHealth(frame, event, unit, hp, hpSecret)
+  if event ~= "UNIT_HEALTH" or not (frame and frame._msufIsGroupFrame == true) then
+    return
+  end
+  if GroupHealthStatusNeedsRefresh(frame, hp, hpSecret) then
+    local fn = frame._msufUpdateGroupStatusState
+    if fn then
+      fn(frame, event, unit, hpSecret ~= true and hp or nil)
+    end
+  end
+  if hpSecret ~= true and (hp == 0 or frame._msufGFDeadBgState == true) then
+    local fn = frame._msufUpdateGroupVisualsGoneState
+    if fn then
+      fn(frame, event, unit, hp)
+    end
+  end
 end
 
 function Health.Create(frame, spec)
@@ -240,6 +284,7 @@ function Health.UpdateValuePlain(frame, event, unit)
   if updateColor and not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
     ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
   end
+  RefreshGroupDeadStateFromHealth(frame, event, unit, hp, false)
   return hp, maxHP
 end
 
@@ -315,6 +360,7 @@ function Health.UpdateValue(frame, event, unit)
   if updateColor and not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
     ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
   end
+  RefreshGroupDeadStateFromHealth(frame, event, unit, hp, hpSecret)
   return hp, maxHP
 end
 
@@ -565,6 +611,7 @@ function Health.Update(frame, event, unit)
   if updateColor and not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
     ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
   end
+  RefreshGroupDeadStateFromHealth(frame, event, unit, hp, hpSecret)
   return hp, maxHP
 end
 

@@ -71,6 +71,11 @@ local function OwnerModeAllowsUnit(mode, frame, unit)
   return unit or frameUnit, true
 end
 
+local function BeginDispatchContext(frame)
+  frame._msufDispatchToken = (frame._msufDispatchToken or 0) + 1
+  frame._msufDispatchActive = true
+end
+
 local function FrameForceUpdate(frame, reason)
   if not frame then
     return
@@ -156,6 +161,11 @@ end
 
 local HOT_EVENT_KIND = Metadata.hotEventKind or {}
 local HOT_STATE_SPECS = Metadata.hotStateSpecs or {}
+local PREDICTION_QUEUE_BITS = {
+  UNIT_HEAL_PREDICTION = 1,
+  UNIT_ABSORB_AMOUNT_CHANGED = 2,
+  UNIT_HEAL_ABSORB_AMOUNT_CHANGED = 4,
+}
 
 local function PredictionMaskFromSpec(frame)
   local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.prediction
@@ -953,9 +963,25 @@ end
 local function RunHotKindPrediction(frame, state, event, unit, sameUnit, a, b, c)
   if not sameUnit then
     if state.predictionUnitless then
+      local queue = state.predictionQueueBit
+      if queue and queue(frame, state.predictionBit, unit) then
+        return true
+      end
+      queue = state.predictionQueue or frame._msufQueuePredictionUpdate
+      if queue and queue(frame, event, unit) then
+        return true
+      end
       local fn = state.prediction
       if fn then fn(frame, event, unit, a, b, c) end
     end
+    return true
+  end
+  local queue = state.predictionQueueBit
+  if queue and queue(frame, state.predictionBit, unit) then
+    return true
+  end
+  queue = state.predictionQueue or frame._msufQueuePredictionUpdate
+  if queue and queue(frame, event, unit) then
     return true
   end
   local fn = state.prediction
@@ -1335,6 +1361,10 @@ RebuildHotEventState = function(frame, event, owners)
     state.prediction = frame._msufUpdatePredictionHealthValue or state.prediction
   elseif state.prediction and event == "UNIT_CONNECTION" then
     state.prediction = frame._msufUpdatePredictionConnectionState or state.prediction
+  elseif state.prediction and kind == 9 then
+    state.predictionQueue = frame._msufQueuePredictionUpdate
+    state.predictionQueueBit = frame._msufQueuePredictionBit
+    state.predictionBit = PREDICTION_QUEUE_BITS[event]
   end
   if state.groupVisuals and (event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH") then
     state.groupVisuals = frame._msufUpdateGroupVisualsHealthValue or state.groupVisuals
@@ -1386,6 +1416,9 @@ end
 --- handling through hot-state metadata or element ownership rather than adding
 --- broad logic here; this function is on every unit-frame event path.
 function DispatchFrameEvent(frame, event, unit, ...)
+  if not frame or frame._msufDisabledByConfig == true then
+    return
+  end
 
   local frameUnit = frame.unit
   if unit and issecretvalue(unit) == true then
@@ -1418,8 +1451,7 @@ function DispatchFrameEvent(frame, event, unit, ...)
       end
       local needsContext = hotState.needsDispatchContext == true
       if needsContext then
-        frame._msufDispatchToken = frame._msufDispatchToken + 1
-        frame._msufDispatchActive = true
+        BeginDispatchContext(frame)
       end
       local sameUnit = true
       local eventUnit = unit or frameUnit
@@ -1453,8 +1485,7 @@ function DispatchFrameEvent(frame, event, unit, ...)
   if not list then
     return
   end
-  frame._msufDispatchToken = frame._msufDispatchToken + 1
-  frame._msufDispatchActive = true
+  BeginDispatchContext(frame)
   for i = 1, #list, 2 do
     local update = list[i]
     local eventUnit, ok = OwnerModeAllowsUnit(list[i + 1], frame, unit)
