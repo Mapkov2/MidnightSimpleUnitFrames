@@ -46,7 +46,6 @@ local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
     SYMBOL = "ui-debuff-border-magic-icon",
 }
-local BUFF_EXCLUSIVE = VTP "none=None"
 local DEBUFF_EXCLUSIVE = VTP "none=None|raid=Raid"
 local NATIVE_EXACT_AURA_FILTERS_ENABLED = false
 local NATIVE_EXACT_AURA_FILTERS_DISABLED_TEXT = "Temporarily disabled for 12.1 native AuraContainers. Blizzard currently exposes filter strings only, not SpellID whitelist/blacklist predicates."
@@ -1527,35 +1526,42 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
         filterControls[#filterControls + 1] = widget
         return widget
     end
-    W.LabelAt(card, "Native Filter Tokens", 16, -70, colW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(card, "Restrictive Tokens", 16, -70, colW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(card, "Include Modifier", 16, -206, colW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(card, lane == "buff" and "Defensive Tokens" or "Debuff Tokens", rightX, -70, colW, "GameFontNormalSmall", T.colors.accent)
+    if lane == "buff" then
+        W.LabelAt(card, "Buff State (choose one)", rightX, -168, colW, "GameFontNormalSmall", T.colors.accent)
+    end
     local filterSpecs = lane == "buff" and {
-        { "Player", "onlyMine", 1, 1, "Auras applied by the player." },
-        { "Raid", "raid", 1, 2, "Raid-useful public Buffs." },
-        { "Raid In Combat", "raidInCombat", 1, 3, "Buffs Blizzard flags for raid frames while in combat." },
-        { "Include Nameplate-only", "includeNameplateOnly", 1, 4, "Also include Buffs Blizzard marks as nameplate-only." },
-        { "External Defensive", "externalDefensive", 2, 1, "External defensive Buffs from Blizzard's native filter." },
-        { "Big Defensive", "bigDefensive", 2, 2, "Major defensive Buffs from Blizzard's native filter." },
-        { "Cancelable", "cancelable", 2, 3, "Buffs that can be cancelled.", { "notCancelable" } },
-        { "Not Cancelable", "notCancelable", 2, 4, "Buffs that cannot be cancelled.", { "cancelable" } },
+        { "Player", "onlyMine", 16, -100, "Narrows to auras applied by the player." },
+        { "Raid", "raid", 16, -134, "Narrows to raid-useful public Buffs." },
+        { "Raid In Combat", "raidInCombat", 16, -168, "Narrows to Buffs Blizzard flags for raid frames while in combat." },
+        { "Include Nameplate-only", "includeNameplateOnly", 16, -236, "Adds Buffs Blizzard marks as nameplate-only." },
+        { "External Defensive", "externalDefensive", rightX, -100, "Narrows to external defensive Buffs from Blizzard's native filter." },
+        { "Big Defensive", "bigDefensive", rightX, -134, "Narrows to major defensive Buffs from Blizzard's native filter." },
+        { "Cancelable", "cancelable", rightX, -198, "Narrows to Buffs that can be cancelled. Mutually exclusive with Not Cancelable.", { "notCancelable" } },
+        { "Not Cancelable", "notCancelable", rightX, -232, "Narrows to Buffs that cannot be cancelled. Mutually exclusive with Cancelable.", { "cancelable" } },
     } or {
-        { "Player", "onlyMine", 1, 1, "Debuffs applied by the player." },
-        { "Raid", "raid", 1, 2, "Raid and encounter Debuffs." },
-        { "Raid In Combat", "raidInCombat", 1, 3, "Debuffs Blizzard flags for raid frames while in combat." },
-        { "Include Nameplate-only", "includeNameplateOnly", 1, 4, "Also include Debuffs Blizzard marks as nameplate-only." },
-        { "Dispellable", "includeDispellable", 2, 1, "Debuffs Blizzard marks as dispellable by the player." },
-        { "Crowd Control", "crowdControl", 2, 2, "Crowd-control Debuffs from Blizzard's native filter." },
+        { "Player", "onlyMine", 16, -100, "Narrows to Debuffs applied by the player." },
+        { "Raid", "raid", 16, -134, "Narrows to raid and encounter Debuffs." },
+        { "Raid In Combat", "raidInCombat", 16, -168, "Narrows to Debuffs Blizzard flags for raid frames while in combat." },
+        { "Include Nameplate-only", "includeNameplateOnly", 16, -236, "Adds Debuffs Blizzard marks as nameplate-only." },
+        { "Dispellable", "includeDispellable", rightX, -100, "Narrows to Debuffs Blizzard marks as dispellable by the player." },
+        { "Crowd Control", "crowdControl", rightX, -134, "Narrows to crowd-control Debuffs from Blizzard's native filter." },
     }
     M.BuildControlSpecs(filterSpecs, {
-        ["*"] = function(s) return FilterToggle(s[1], s[2], s[3] == 2 and rightX or 16, -100 - ((s[4] - 1) * 34), s[5], s[6]) end,
+        ["*"] = function(s) return FilterToggle(s[1], s[2], s[3], s[4], s[5], s[6]) end,
     })
-    local exclusiveValues = lane == "buff" and BUFF_EXCLUSIVE or DEBUFF_EXCLUSIVE
-    local exclusiveEvent = lane == "buff" and "AURAS3_FILTER_BUFF_EXCLUSIVE" or "AURAS3_FILTER_DEBUFF_EXCLUSIVE"
-    filterControls[#filterControls + 1] = BindDropdown(ctx, card, "Exclusive Filter", rightX, -250, exclusiveValues, min(250, colW - 32),
-        function() return Model.ReadFilter(scope, lane, "exclusive", "none") end,
-        function(v)
-            Model.WriteFilter(scope, lane, "exclusive", v or "none")
-            ApplyUnit(ctx, scope, exclusiveEvent, true)
-        end)
+    if lane == "debuff" then
+        local exclusiveDrop = BindDropdown(ctx, card, "Exclusive Mode", rightX, -218, DEBUFF_EXCLUSIVE, min(250, colW - 32),
+            function() return Model.ReadFilter(scope, lane, "exclusive", "none") end,
+            function(v)
+                Model.WriteFilter(scope, lane, "exclusive", v or "none")
+                ApplyUnit(ctx, scope, "AURAS3_FILTER_DEBUFF_EXCLUSIVE", true)
+            end)
+        AddTooltip(exclusiveDrop, "Exclusive Mode", "Uses Blizzard's debuff mode selector. Other enabled tokens can still narrow the result further.")
+        filterControls[#filterControls + 1] = exclusiveDrop
+    end
     W.Text(section, "Native 12.1 AuraContainers currently support Blizzard filter tokens only. Exact SpellID whitelist/blacklist data is shown below as read-only legacy data.", 24, -506, w - 48, T.colors.muted)
     M.TrackRefresh(ctx, function()
         local customRules = scope == "shared" or not Model.UseSharedRules(scope)
@@ -1942,4 +1948,4 @@ end
 M.RegisterPage("auras3_buffs", { title = "MSUF Aura Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 10 })
 M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 10 })
 M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 31 })
-M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 22 })
+M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 23 })
