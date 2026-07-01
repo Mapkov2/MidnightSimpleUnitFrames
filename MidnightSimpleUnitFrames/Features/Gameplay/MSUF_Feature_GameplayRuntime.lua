@@ -358,6 +358,18 @@ end
 
 local GAMEPLAY_FALLBACK_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
+local function GameplayFontApplied(fs, path, size, flags)
+    if type(fs.GetFont) ~= "function" then return true end
+    local actual, actualSize, actualFlags = fs:GetFont()
+    if not actual then return true end
+    if actualSize and actualSize ~= size then return false end
+    if (actualFlags or "") ~= (flags or "") then return false end
+    if actual == path then return true end
+    local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
+    if type(matches) == "function" then return matches(path, actual) == true end
+    return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(path or ""):gsub("/", "\\"):lower()
+end
+
 local function ApplyGameplayFont(fs, path, size, flags)
     if not (fs and fs.SetFont) then return false end
     path = path or GAMEPLAY_FALLBACK_FONT
@@ -365,13 +377,13 @@ local function ApplyGameplayFont(fs, path, size, flags)
     if size <= 0 then size = 12 end
     if size < 6 then size = 6 elseif size > 128 then size = 128 end
     flags = flags or "OUTLINE"
-    local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
-    if ok and applied ~= false then
+    local ok = pcall(fs.SetFont, fs, path, size, flags)
+    if ok and GameplayFontApplied(fs, path, size, flags) then
         return true
     end
     if path ~= GAMEPLAY_FALLBACK_FONT then
-        ok, applied = pcall(fs.SetFont, fs, GAMEPLAY_FALLBACK_FONT, size, flags)
-        return ok and applied ~= false
+        ok = pcall(fs.SetFont, fs, GAMEPLAY_FALLBACK_FONT, size, flags)
+        return ok == true
     end
     return false
 end

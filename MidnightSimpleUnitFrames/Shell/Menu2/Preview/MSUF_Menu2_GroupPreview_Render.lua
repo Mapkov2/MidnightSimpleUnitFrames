@@ -376,8 +376,8 @@ function Render.Install(box, ctx, deps)
                 local g = _G.MSUF_DB and _G.MSUF_DB.general
                 path = resolveSafe(path, size, fontFlags, g and g.fontKey)
             end
-            local ok, applied = pcall(fs.SetFont, fs, path, size, fontFlags)
-            if not ok or applied == false then
+            local ok = pcall(fs.SetFont, fs, path, size, fontFlags)
+            if not ok then
                 pcall(fs.SetFont, fs, STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, fontFlags)
             end
             if fs.SetShadowOffset then

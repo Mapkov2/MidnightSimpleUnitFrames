@@ -352,8 +352,8 @@ local function ApplyAuraFont(fs, size)
             local gdb = _G.MSUF_DB and _G.MSUF_DB.general
             fontPath = resolveSafe(fontPath, size, fontFlags, gdb and gdb.fontKey)
         end
-        local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-        if not ok or applied == false then
+        local ok = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+        if not ok then
             pcall(fs.SetFont, fs, FONT, size, fontFlags)
         end
     end
