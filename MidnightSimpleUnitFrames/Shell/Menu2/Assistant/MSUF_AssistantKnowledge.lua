@@ -994,6 +994,22 @@ local PAGE_HELP = {
     },
     uf_focus = { title = "Focus frame help", lines = { "You can change Focus frame visibility, size, position, text, portrait, alpha, border/outline, and focus cast bar options.", "Examples: hide focus power text; move focus 10 left; set focus portrait size 40." }, actions = { "Open Focus", "Open Cast Bars" } },
     uf_pet = { title = "Pet frame help", lines = { "You can change Pet frame visibility, name/HP/power text, size, position, portrait, border/outline, and alpha options." }, actions = { "Open Pet" } },
+    uf_targettarget = {
+        title = "Target of Target help",
+        lines = {
+            "You can change Target of Target frame visibility, size, position, health/text, cast bar, range fade, colors, and related status options.",
+            "Examples: show target of target; set target of target width to 160; make target of target width smaller; open target of target.",
+        },
+        actions = { "Open Target of Target" },
+    },
+    uf_focustarget = {
+        title = "Focus Target help",
+        lines = {
+            "You can change Focus Target frame visibility, size, position, health/text, cast bar, range fade, colors, and related status options.",
+            "Examples: show focus target; set focus target width to 180; make focus target height smaller; open focus target.",
+        },
+        actions = { "Open Focus Target" },
+    },
     uf_boss = { title = "Boss Frames help", lines = { "You can change Boss frame visibility, size, position, name/HP/power text, raid marker/range fade, and boss cast bar options." }, actions = { "Open Boss Frames", "Open Cast Bars" } },
     opt_castbar = {
         title = "Cast Bars help",
@@ -1089,6 +1105,49 @@ end
 local function ActionLine(actions)
     if type(actions) ~= "table" or #actions == 0 then return nil end
     return "You can also ask: " .. table.concat(actions, " | ")
+end
+
+local function FirstLine(text)
+    text = tostring(text or "")
+    for line in text:gmatch("[^\n]+") do
+        line = Trim(line)
+        if line ~= "" then return line end
+    end
+    return nil
+end
+
+local function ExtractPrefixedLine(text, prefixes)
+    text = tostring(text or "")
+    for line in text:gmatch("[^\n]+") do
+        line = Trim(line)
+        for i = 1, #prefixes do
+            local prefix = prefixes[i]
+            if line:sub(1, #prefix) == prefix then
+                return Trim(line:sub(#prefix + 1))
+            end
+        end
+    end
+    return nil
+end
+
+local function RememberKnowledgeHelpContext(result)
+    if type(result) ~= "table" or type(result.text) ~= "string" or result.searchResults then return result end
+    local title = FirstLine(result.text)
+    if not title or title == "" then return result end
+
+    local examples = ExtractPrefixedLine(result.text, { "Examples:" })
+    local actions = ExtractPrefixedLine(result.text, { "You can ask:", "You can also ask:" })
+    if (not examples or examples == "") and (not actions or actions == "") then return result end
+
+    A.lastAssistantHelpContext = {
+        kind = "knowledge",
+        title = title,
+        examples = examples and examples ~= "" and examples or tostring(actions or ""),
+        actions = actions and actions ~= "" and actions or "",
+        clarification = "Name the exact MSUF frame, page, or option before I change anything from this help topic, so I do not guess wrong.",
+        nextStep = "Start by opening the matching page or using one of the examples. If you want me to change a setting, name the exact MSUF frame and option.",
+    }
+    return result
 end
 
 local function CountRegisteredForPage(page)
@@ -1631,6 +1690,7 @@ local function DirectHelpAnswer(query, opts)
         }
     end
     if ContainsAny(norm, { "alpha", "opacity", "transparent", "transparency", "fade", "faded" })
+        and not ContainsAny(norm, { "range fade", "range check", "out of range", "in range", "melee range" })
         and HasConceptDefinitionIntent(norm)
     then
         return {
@@ -1730,7 +1790,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "where" })
     then
         return {
-            text = "Focus Target help\nFocus Target is the unit your Focus is targeting. In MSUF, Focus Target has its own unit-frame page, so you can configure visibility, size, health, text, cast bar, auras, range fade, colors, and position separately from Focus.\nExamples: open focus target; show focus target frame; make focus target width 180; hide focus target buffs.\nYou can ask: Open Focus Target",
+            text = "Focus Target help\nFocus Target is the unit your Focus is targeting. In MSUF, Focus Target has its own unit-frame page, so you can configure visibility, size, health, text, cast bar, range fade, colors, and position separately from Focus.\nExamples: open focus target; show focus target frame; set focus target width to 180; make focus target height smaller.\nYou can ask: Open Focus Target",
             status = "applied",
             summary = "Assistant focus target help",
         }
@@ -1739,7 +1799,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "what", "what is", "what does", "help", "explain", "where" })
     then
         return {
-            text = "Target of Target help\nTarget of Target shows what your current target is targeting. It is useful for tanks, assist targeting, and checking whether an enemy is targeting you or another player. In MSUF, it has its own page for visibility, size, text, cast bar, auras, range fade, colors, and position.\nExamples: open target of target; show target of target; make target of target smaller; hide target of target buffs.\nYou can ask: Open Target of Target",
+            text = "Target of Target help\nTarget of Target shows what your current target is targeting. It is useful for tanks, assist targeting, and checking whether an enemy is targeting you or another player. In MSUF, it has its own page for visibility, size, text, cast bar, range fade, colors, and position.\nExamples: open target of target; show target of target; set target of target width to 160; make target of target width smaller.\nYou can ask: Open Target of Target",
             status = "applied",
             summary = "Assistant target of target help",
         }
@@ -2119,7 +2179,7 @@ function K.Answer(query, opts)
         if changelog then return changelog end
 
         local direct = DirectHelpAnswer(query, opts)
-        if direct then return direct end
+        if direct then return RememberKnowledgeHelpContext(direct) end
     end
 
     local results = K.Search(query, MAX_RESULTS, opts)
@@ -2135,7 +2195,7 @@ function K.Answer(query, opts)
         if openText then lines[#lines + 1] = openText end
         local action = ActionableHint(top)
         if action then lines[#lines + 1] = action end
-        return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant FAQ answer" }
+        return RememberKnowledgeHelpContext({ text = table.concat(lines, "\n"), status = "applied", summary = "Assistant FAQ answer" })
     end
 
     if intent == "location" then
@@ -2157,7 +2217,7 @@ function K.Answer(query, opts)
         if openText then lines[#lines + 1] = openText end
         local action = ActionableHint(top)
         if action then lines[#lines + 1] = action end
-        return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant FAQ answer" }
+        return RememberKnowledgeHelpContext({ text = table.concat(lines, "\n"), status = "applied", summary = "Assistant FAQ answer" })
     end
 
     local lines = { "I found these MSUF matches:" }

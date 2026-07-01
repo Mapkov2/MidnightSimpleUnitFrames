@@ -2985,6 +2985,28 @@ P.ParseGroupColumnLayoutShortcut = function(text)
     return P.GroupShortcutResponse(text, changes, concrete, label, "Changes Group Layout column options.")
 end
 
+P.ParseGroupPreserveRaidGroupsShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if not ContainsAny(text, {
+        "preserve raid groups", "keep raid groups", "keep raid groups together",
+        "keep groups together", "preserve groups", "preserve group order",
+    }) then
+        return nil
+    end
+
+    local value = DetectBoolean(text)
+    if value == nil then
+        value = not ContainsAny(text, { "do not", "dont", "don't", "disable", "turn off", "off", "false", "no", "stop" })
+    end
+
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".preserveRaidGroups", value)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame Preserve Raid Groups", "Changes Group Layout raid-group preservation.")
+end
+
 P.ParseGroupPlayerFirstInRoleShortcut = function(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, { "role", "role sorting", "sort by role", "sorting" }) then return nil end
@@ -3300,6 +3322,8 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if groupHealthFade then return groupHealthFade end
     local groupColumns = P.ParseGroupColumnLayoutShortcut and P.ParseGroupColumnLayoutShortcut(text)
     if groupColumns then return groupColumns end
+    local groupPreserveRaidGroups = P.ParseGroupPreserveRaidGroupsShortcut and P.ParseGroupPreserveRaidGroupsShortcut(text)
+    if groupPreserveRaidGroups then return groupPreserveRaidGroups end
     local groupPlayerFirst = P.ParseGroupPlayerFirstInRoleShortcut and P.ParseGroupPlayerFirstInRoleShortcut(text)
     if groupPlayerFirst then return groupPlayerFirst end
     local groupBlizzardFallback = P.ParseGroupBlizzardFallbackShortcut and P.ParseGroupBlizzardFallbackShortcut(text)
@@ -4479,6 +4503,7 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or P.ParseGroupOfflineAlphaShortcut(text)
         or P.ParseGroupHealthFadeShortcut(text)
         or P.ParseGroupColumnLayoutShortcut(text)
+        or P.ParseGroupPreserveRaidGroupsShortcut(text)
         or P.ParseGroupPlayerFirstInRoleShortcut(text)
         or P.ParseGroupAggroRoleFilterShortcut(text)
         or P.ParseGroupBooleanRegistryShortcut(text)

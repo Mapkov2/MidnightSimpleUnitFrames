@@ -162,8 +162,32 @@ local function IsPageExplanationQuestion(text)
     return false
 end
 
+local function HasNormalizedPhrase(text, phrase)
+    text = Normalize(text)
+    phrase = Normalize(phrase)
+    if phrase == "" then return false end
+    return (" " .. tostring(text or "") .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
+end
+
+local function HasExplicitValueSubject(text)
+    local norm = Normalize(text)
+    if not HasNormalizedPhrase(norm, "current value") and not HasNormalizedPhrase(norm, "value now") then return false end
+    if norm:find(" of ", 1, true)
+        and not ContainsAny(norm, { "of it", "of that", "of this", "of the last setting", "of last setting", "of the last option", "of last option" })
+    then
+        return true
+    end
+    if norm:find(" for ", 1, true)
+        and not ContainsAny(norm, { "for it", "for that", "for this", "for the last setting", "for last setting", "for the last option", "for last option" })
+    then
+        return true
+    end
+    return false
+end
+
 function A._ParseFollowupAnswer(text, ctx)
     if IsTroubleshootingWhyQuestion(text) or IsPageExplanationQuestion(text) then return nil end
+    if HasExplicitValueSubject(text) then return nil end
     local asksWhatChanged = ContainsAny(text, {
         "what did you change", "what changed", "what was changed", "what did you do",
         "what did you just change", "what exactly did you change", "what did you set",
