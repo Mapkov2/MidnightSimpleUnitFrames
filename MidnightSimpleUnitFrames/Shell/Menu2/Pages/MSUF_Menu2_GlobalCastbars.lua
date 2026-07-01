@@ -369,6 +369,15 @@ local function BuildCastbars(ctx)
         local function SpellText(kind)
             return previewSpellNames[kind or "normal"] or previewSpellNames.normal
         end
+        local function PreviewSpellText(unit, kind)
+            local text = SpellText(kind)
+            local shorten = _G.MSUF_ShortenCastbarSpellName
+            if type(shorten) ~= "function" then return text end
+
+            preview._spellNameShortenFrame = preview._spellNameShortenFrame or {}
+            preview._spellNameShortenFrame.unit = unit == "boss" and "boss1" or unit
+            return shorten(preview._spellNameShortenFrame, text)
+        end
         local function CastDuration(kind)
             if kind == "channel" then return 4.5 end
             if kind == "empowered" then return 3.0 end
@@ -616,7 +625,7 @@ local function BuildCastbars(ctx)
                 local textSizePx = max(7, S(textSize))
                 if fontPath and self.spell.SetFont then pcall(self.spell.SetFont, self.spell, fontPath, textSizePx, fontFlags) end
                 self.spell:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
-                self.spell:SetText(SpellText(kind))
+                self.spell:SetText(PreviewSpellText(unit, kind))
                 self.spell:ClearAllPoints()
                 if self.spell.SetMaxLines then self.spell:SetMaxLines(1) end
                 if self.spell.SetWordWrap then self.spell:SetWordWrap(false) end

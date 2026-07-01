@@ -86,6 +86,7 @@ local function SetDriverEventsRegistered(frame, unit, enabled)
     if not frame then return end
 
     if enabled then
+        frame._msufDriverBackendEnabled = true
         if frame._msufDriverEventsRegistered then return end
         for index = 1, #CASTBAR_UNIT_EVENTS do
             frame:RegisterUnitEvent(CASTBAR_UNIT_EVENTS[index], unit)
@@ -105,6 +106,7 @@ local function SetDriverEventsRegistered(frame, unit, enabled)
         frame:UnregisterEvent("PLAYER_" .. unit:upper() .. "_CHANGED")
     end
     frame._msufDriverEventsRegistered = nil
+    frame._msufDriverBackendEnabled = nil
 end
 
 local function AnchorDriverFrameToUnitFrame(frame, unit)
@@ -538,7 +540,7 @@ local function NormalizeEventForUnit(frame, event)
 end
 
 local function HandleDriverEvent(frame, event, eventUnit)
-    if not IsCastbarEnabledForUnit(frame.unit or "") then
+    if frame._msufDriverBackendEnabled ~= true then
         if frame.unit == "target" or frame.unit == "focus" then
             SetDriverEventsRegistered(frame, frame.unit, false)
         end

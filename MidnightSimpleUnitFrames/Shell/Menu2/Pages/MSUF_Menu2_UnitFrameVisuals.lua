@@ -24,7 +24,7 @@ local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Sp
 local CASTBAR_TAB_HEIGHTS = { general = 430, icon = 488, spell = 488, time = 488, advanced = 344 }
 local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
-local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto", "CLIP", "Fixed Clip", "NONE", "No Limit")
+local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
 local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CASTBAR", "Castbar Border")
 local DETACHED_POWER_SHAPE_VALUES = VT("FOLLOW_CLASS", "Follow Class Resource", "BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
 local UnitSectionShared = M.UnitSectionsShared or {}
@@ -689,10 +689,42 @@ local function BuildCastbar(ctx, builder, unit)
         { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TextOffsetX"), 0, "MSUF2_CASTBAR_SPELL_X" },
         { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TextOffsetY"), 0, "MSUF2_CASTBAR_SPELL_Y" },
     })
-    BuildDetailControls(textAdvancedCard, spellControls, {
-        { "slider", "Max width", 16, -52, controlWLeft, 0, 500, 1, DetailKey("SpellNameMaxWidth"), 0, "MSUF2_CASTBAR_SPELL_MAX_WIDTH" },
-        { "dropdown", "Truncate behavior", 16, -106, min(260, controlWLeft), CASTBAR_TRUNCATE_VALUES, DetailKey("SpellNameTruncate"), "AUTO", "MSUF2_CASTBAR_SPELL_TRUNCATE" },
-    })
+    local function ReadSpellTextWidthMode()
+        local value = tostring(ReadGeneralValue(DetailKey("SpellNameTruncate"), "AUTO") or "AUTO"):upper()
+        if value == "CLIP" or value == "NONE" then return value end
+        return "AUTO"
+    end
+    local function IsManualSpellTextWidth()
+        return ReadSpellTextWidthMode() == "CLIP"
+    end
+    local function DefaultSpellTextManualWidth()
+        local base = unit == "boss" and 176 or (unit == "focus" and 175 or 272)
+        local value = ReadGeneralNumber(CastbarWidthKey(), base) - 64
+        return max(40, min(260, floor(value + 0.5)))
+    end
+    local spellTextWidthMode = W.Dropdown(textAdvancedCard, "Width behavior", CASTBAR_TRUNCATE_VALUES, min(260, controlWLeft))
+    W.MoveWidget(spellTextWidthMode, textAdvancedCard, 16, -52, min(260, controlWLeft))
+    AddControl(spellControls, spellTextWidthMode)
+    W.AttachUnitEditFocus(spellTextWidthMode, unit, "castbar")
+    M.BindDropdownWidget(ctx, spellTextWidthMode,
+        ReadSpellTextWidthMode,
+        function(v)
+            local nextValue = tostring(v or "AUTO"):upper()
+            if nextValue ~= "CLIP" and nextValue ~= "NONE" then nextValue = "AUTO" end
+            SetGeneralValue(DetailKey("SpellNameTruncate"), nextValue, "MSUF2_CASTBAR_SPELL_TRUNCATE")
+            if nextValue == "CLIP" and ReadGeneralNumber(DetailKey("SpellNameMaxWidth"), 0) <= 0 then
+                SetGeneralNumber(DetailKey("SpellNameMaxWidth"), DefaultSpellTextManualWidth(), "MSUF2_CASTBAR_SPELL_MAX_WIDTH")
+            end
+            RefreshCastbarEnabled()
+        end)
+    local spellTextManualWidth = W.Slider(textAdvancedCard, "Manual text width", 20, 500, 1, controlWLeft)
+    W.MoveWidget(spellTextManualWidth, textAdvancedCard, 16, -106, controlWLeft)
+    AddControl(nil, spellTextManualWidth)
+    W.AttachUnitEditFocus(spellTextManualWidth, unit, "castbar")
+    M.BindNumberWidget(ctx, spellTextManualWidth,
+        function() return ReadGeneralNumber(DetailKey("SpellNameMaxWidth"), 0) end,
+        function(v) SetGeneralNumber(DetailKey("SpellNameMaxWidth"), v, "MSUF2_CASTBAR_SPELL_MAX_WIDTH") end,
+        0, { step = 1, roundStep = true })
     BuildDetailControls(iconAdvancedCard, iconControls, {
         { "dropdown", "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "NONE", "MSUF2_CASTBAR_ICON_BORDER" },
     })
@@ -713,6 +745,7 @@ local function BuildCastbar(ctx, builder, unit)
         { controls = manualWidth, on = function() return MsufOn() and ReadWidthSource() == "manual" end },
         { controls = iconControls, on = function() return MsufOn() and ReadGeneralBool(fields.icon, true) end },
         { controls = spellControls, on = function() return MsufOn() and ReadGeneralBool(fields.text, true) end },
+        { controls = spellTextManualWidth, on = function() return MsufOn() and ReadGeneralBool(fields.text, true) and IsManualSpellTextWidth() end },
         { controls = timeControls, on = function() return MsufOn() and ReadGeneralBool(fields.time, true) end },
     }, {
         also = function()

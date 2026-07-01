@@ -471,26 +471,28 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     local statusW = RegionNumber(statusBar, "GetWidth", nil) or RegionNumber(frame, "GetWidth", 250)
     local maxWidth = DetailNum(g, prefix, "SpellNameMaxWidth", nil, 0)
     local truncate = NormalizeSpellNameTruncate(DetailString(g, prefix, "SpellNameTruncate", nil, "AUTO"))
-    local width
-    if truncate == "NONE" then
-        width = math.max(statusW, 1000)
-    elseif maxWidth and maxWidth > 0 then
-        width = maxWidth
-    else
+    local function AutoWidth()
         local reserve = 0
         if frame.timeText and frame.timeText.IsShown and frame.timeText:IsShown() then
             local timeW = RegionNumber(frame.timeText, "GetStringWidth", nil)
             reserve = timeW and math.max(44, timeW + 10) or ApproxTimeTextReserve(frame, g, prefix, statusW)
         end
-        width = math.max(20, statusW - reserve - 8)
+        return math.max(20, statusW - reserve - 8)
+    end
+    local width
+    if truncate == "NONE" then
+        width = math.max(statusW, 1000)
+    elseif truncate == "CLIP" then
+        width = (maxWidth and maxWidth > 0) and maxWidth or AutoWidth()
+    else
+        width = AutoWidth()
     end
     if fs.SetWidth then fs:SetWidth(width) end
 
-    local raw = frame._msufRawCastText
-    if raw ~= nil and truncate ~= "AUTO" then
-        SetTextIfChanged(fs, raw)
-    elseif type(_G.MSUF_RefreshCastbarSpellNameText) == "function" then
+    if type(_G.MSUF_RefreshCastbarSpellNameText) == "function" then
         _G.MSUF_RefreshCastbarSpellNameText(frame)
+    elseif frame._msufRawCastText ~= nil then
+        SetTextIfChanged(fs, frame._msufRawCastText)
     end
 end
 

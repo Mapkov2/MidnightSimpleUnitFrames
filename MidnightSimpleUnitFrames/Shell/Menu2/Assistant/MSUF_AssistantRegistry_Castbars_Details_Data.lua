@@ -57,15 +57,18 @@ A.CastbarsRegistry.DetailData = {
 
     CASTBAR_TRUNCATE_ALIASES = {
         auto = "AUTO",
+        ["auto fit"] = "AUTO",
         automatic = "AUTO",
         automatisch = "AUTO",
         clip = "CLIP",
         clipped = "CLIP",
         ["fixed clip"] = "CLIP",
+        ["manual width"] = "CLIP",
         none = "NONE",
         off = "NONE",
         aus = "NONE",
         ["no limit"] = "NONE",
+        ["no width limit"] = "NONE",
         unlimited = "NONE",
     },
 

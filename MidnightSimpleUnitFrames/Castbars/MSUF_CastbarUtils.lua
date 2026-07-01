@@ -692,9 +692,11 @@ local function GetSpellNameShorteningConfig(frame)
     if not general then return false end
 
     local unit = GetCastbarUnitKey(frame)
-    local mode = tonumber(general.castbarSpellNameShortening) or 0
+    local modeValue = general.castbarSpellNameShortening
+    local mode = tonumber(modeValue) or (modeValue == true and 1 or 0)
     if unit and tostring(unit):match("^boss") and general.bossCastSpellNameShortening ~= nil then
-        mode = tonumber(general.bossCastSpellNameShortening) or mode
+        local bossMode = general.bossCastSpellNameShortening
+        mode = tonumber(bossMode) or (bossMode == true and 1 or bossMode == false and 0 or mode)
     end
     if mode <= 0 then return false end
 
@@ -716,7 +718,7 @@ local function GetSpellNameShorteningConfig(frame)
     reserved = math_floor((tonumber(reserved) or 0) + 0.5)
     if reserved < 0 then reserved = 0 elseif reserved > 160 then reserved = 160 end
 
-    local cacheKey = (_G.MSUF_CastbarStyleRevision or 1) .. ":" .. maxLen .. ":" .. reserved
+    local cacheKey = (_G.MSUF_CastbarStyleRevision or 1) .. ":" .. mode .. ":" .. maxLen .. ":" .. reserved
     return true, maxLen, reserved, cacheKey
 end
 ExportPublic("MSUF_GetCastbarSpellNameShorteningConfig", GetSpellNameShorteningConfig)
@@ -740,7 +742,7 @@ local function ShortenCastbarSpellName(frame, text)
         return rawText
     end
 
-    local enabled, _, reserved, cacheKey = GetSpellNameShorteningConfig(frame)
+    local enabled, maxLen, _, cacheKey = GetSpellNameShorteningConfig(frame)
     if not enabled then
         if frame then
             frame._msufRawCastText = rawText
@@ -757,7 +759,7 @@ local function ShortenCastbarSpellName(frame, text)
         return frame._msufShortCastText
     end
 
-    local truncated, wasTruncated = Utf8Truncate(rawText, reserved)
+    local truncated, wasTruncated = Utf8Truncate(rawText, maxLen)
     local out = wasTruncated and (truncated .. "...") or rawText
     if frame then
         frame._msufRawCastText = rawText
