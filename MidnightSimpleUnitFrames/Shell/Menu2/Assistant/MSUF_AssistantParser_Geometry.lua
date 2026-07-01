@@ -1714,7 +1714,10 @@ function P.ParseGroupScaleBreakpointShortcut(text)
     end
     local changes = {}
     for i = 1, #groups do
-        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
+        local scope = tostring(groups[i])
+        local modeSetting = Registry and Registry:GetSetting("gf_" .. scope .. ".frameScaleMode")
+        if modeSetting then changes[#changes + 1] = { setting = modeSetting, value = "auto" } end
+        local setting = Registry and Registry:GetSetting("gf_" .. scope .. "." .. attr)
         if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
     end
     if #changes == 0 then return nil end
@@ -2642,7 +2645,7 @@ end
 local function ParseBorderThicknessShortcut(text)
     if not ContainsAny(text, { "border", "outline" }) then return nil end
     if ContainsAny(text, { "portrait", "castbar", "cast bar", "class power", "class resource", "class resources", "power bar", "mana bar", "power border", "mana border", "detached power", "group border", "group frame border" }) then return nil end
-    if ContainsAny(text, { "color", "colour", "farbe", "reset" }) then return nil end
+    if ContainsAny(text, { "color", "colour", "farbe", "opacity", "alpha", "transparent", "transparency", "reset" }) then return nil end
     if ContainsAny(text, { "aggro", "threat", "dispel", "dispellable", "purge", "purgeable", "boss target", "highlight" }) then return nil end
 
     local explicitDetail = ContainsAny(text, {
@@ -3049,7 +3052,7 @@ function A._ParseGroupRangeFadeShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
     if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
     if ContainsAny(text, { "affects", "layer", "mode", "health only", "current health only" }) then return nil end
-    if ContainsAny(text, { "keep", "visible", "text visible", "names visible" }) then return nil end
+    if ContainsAny(text, { "keep text visible", "keep names visible", "text visible", "names visible" }) then return nil end
     if not ContainsAny(text, {
         "range fade", "range fading", "out of range", "outside range",
         "when out of range", "while out of range",
@@ -3063,21 +3066,22 @@ function A._ParseGroupRangeFadeShortcut(text)
 
     local value
     local relativeDelta
+    local number = FirstNumber(text)
     local alphaIntent = ContainsAny(text, {
         "alpha", "opacity", "transparency", "transparent", "out of range alpha",
         "out of range opacity", "range fade alpha", "range fade opacity",
-    })
+        "more visible", "less visible", "more faded", "less faded",
+    }) or number ~= nil
     if alphaIntent then
-        if ContainsAny(text, { "more transparent", "more transparency", "fade more", "stronger fade" }) then
-            local amount = FirstNumber(text) or 0.05
+        if ContainsAny(text, { "more transparent", "more transparency", "less visible", "fade more", "more faded", "stronger fade" }) then
+            local amount = number or 0.05
             if amount > 1 then amount = amount / 100 end
             relativeDelta = -amount
-        elseif ContainsAny(text, { "less transparent", "less transparency", "more opaque", "fade less", "weaker fade" }) then
-            local amount = FirstNumber(text) or 0.05
+        elseif ContainsAny(text, { "less transparent", "less transparency", "more visible", "more opaque", "fade less", "less faded", "weaker fade" }) then
+            local amount = number or 0.05
             if amount > 1 then amount = amount / 100 end
             relativeDelta = amount
         else
-            local number = FirstNumber(text)
             if number ~= nil then
                 value = number
                 if value > 1 then value = value / 100 end
@@ -3098,7 +3102,7 @@ function A._ParseGroupRangeFadeShortcut(text)
         local scope = tostring(groups[i])
         if enableIntent then
             local enabled = Registry and Registry:GetSetting("gf_" .. scope .. ".rangeFadeEnabled")
-            if enabled then changes[#changes + 1] = { setting = enabled, value = bool == false and false or true } end
+            if enabled then changes[#changes + 1] = { setting = enabled, value = bool ~= false } end
         end
         if value ~= nil or relativeDelta ~= nil then
             local alpha = Registry and Registry:GetSetting("gf_" .. scope .. ".rangeFadeAlpha")

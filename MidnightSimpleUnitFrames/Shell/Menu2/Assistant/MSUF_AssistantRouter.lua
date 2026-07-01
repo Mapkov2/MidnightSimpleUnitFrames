@@ -85,7 +85,7 @@ R.AURA_BUFF_CONTEXT_TERMS = {    "filter", "filters", "blacklist", "whitelist", 
     "icon", "icons", "per row", "growth", "spacing", "gap", "x offset", "y offset", "layer", "z layer", "frame level",
     "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen",
     "own", "mine", "only mine", "only player", "raid filter", "player filter",
-    "stack", "cooldown", "pandemic",
+    "stack", "cooldown", "duration", "duration bar", "timer bar", "pandemic",
 }
 
 R.PAGE_CONTEXT = {    uf_player = { prefix = "player", label = "Player" },
@@ -665,7 +665,7 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         "auren nicht finden", "auren suche",
     }) then
         return {
-            text = "Auras are in the MSUF Auras pages. I can open Aura pages, explain filters, change icon size/count/growth, adjust cooldown and stack text, manage hidden aura lists, and run visibility checks. Ask: open auras; where do I change aura filters; why are target buffs hidden?",
+            text = "Auras are in the MSUF Auras pages. I can open Aura pages, explain live filters, change icon size/count/growth, adjust cooldown and stack text, list saved legacy hidden-aura data, and run visibility checks. Exact SpellID blacklist edits are read-only in the native 12.1 backend. Ask: open auras; where do I change aura filters; why are target buffs hidden?",
             status = "info",
             summary = "Auras help",
         }
@@ -818,7 +818,7 @@ function R.UnsupportedAuraReply(text)    local norm = R.Normalize(text)
         kind = "unsupported",
         status = "info",
         summary = "Aura option fallback.",
-        text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown and stack text, filters, hidden aura lists, quick presets, and group aura copy when those options exist in MSUF. Aura areas I can't match will stay as they are.",
+        text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown text, stack text, duration bars, live filter tokens, quick presets, private aura options, and group aura copy when those options exist in MSUF. Saved exact SpellID blacklist data can be listed, but it is read-only while the native 12.1 backend is active. Aura areas I can't match will stay as they are.",
     }
 end
 
@@ -901,11 +901,12 @@ R.READABILITY_FRAME_TERMS = {    "frame", "frames", "unit frame", "unit frames",
     "player", "target", "focus", "boss", "spieler", "ziel", "fokus",
 }
 
-function R.ReadabilityReply(title, body, examples, actions)    A.lastAssistantHelpContext = {
+function R.ReadabilityReply(title, body, examples, actions, clarification)    A.lastAssistantHelpContext = {
         kind = "readability",
         title = tostring(title or "Readability help"),
         examples = tostring(examples or "set player width to 300; set target cast bar height to 24."),
         actions = tostring(actions or "Open Dashboard Scaling | Open Fonts"),
+        clarification = clarification,
     }
     return {
         text = tostring(title or "Readability help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "set player width to 300; set target cast bar height to 24.") .. "\nYou can ask: " .. tostring(actions or "Open Dashboard Scaling | Open Fonts"),
@@ -987,8 +988,9 @@ function R.TryHelpContextFollowup(text, coreHandler)    local ctx = type(A.lastA
     end
 
     if R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS) and R.ContainsAny(norm, { "it", "that", "this" }) then
+        local clarification = tostring(ctx.clarification or "Name the exact MSUF area before I change it, so I do not guess wrong.")
         return {
-            text = tostring(ctx.title) .. "\nName the exact MSUF area before I change it, so I do not guess wrong.\nExamples: " .. tostring(ctx.examples),
+            text = tostring(ctx.title) .. "\n" .. clarification .. "\nExamples: " .. tostring(ctx.examples),
             status = "info",
             summary = "Assistant readability clarification",
         }
@@ -1039,6 +1041,23 @@ function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
             "For text readability, I can adjust unit-frame name, health, power, level, status, font-size, anchor, slot, offset, and global font settings.",
             "set player name font size to 14; set target hp text left current; open fonts.",
             "Open Fonts | Open Player | Open Target"
+        )
+    end
+
+    local unit, unitLabel = R.UnitFrameScopeFromText(norm)
+    if unit and unitLabel then
+        local examples
+        if R.ContainsAny(norm, { "too big", "too large", "overwhelming", "crowded", "cluttered" }) then
+            examples = "set " .. unit .. " width to 240; set " .. unit .. " height to 34; open " .. unit .. "."
+        else
+            examples = "set " .. unit .. " width to 280; set " .. unit .. " height to 44; open " .. unit .. "."
+        end
+        return R.ReadabilityReply(
+            unitLabel .. " frame readability help",
+            unitLabel .. " readability usually starts with that frame's Width and Height. If only the words are hard to read, use text/font settings instead; use broad scaling only when the entire UI is too small.",
+            examples,
+            "Open " .. unitLabel .. " | set " .. unit .. " width to 280 | set " .. unit .. " height to 44",
+            "I can help tune " .. unitLabel .. ", but I need an exact Width, Height, text-size, or page-open request before changing it."
         )
     end
 
@@ -1200,7 +1219,7 @@ function R.TryColorContrastShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.COLOR_CONTRAST_AURA_TERMS) then
         return R.ColorContrastReply(
             "Aura color and opacity help",
-            "For aura readability, I can adjust aura cooldown text colors, stack text, icon sizing, filters, and hidden aura lists. For faded or hard-to-read aura icons, start by naming the scope and lane.",
+            "For aura readability, I can adjust aura cooldown text colors, stack text, icon sizing, and live filters. Saved exact hidden-aura lists are read-only in the native 12.1 backend. For faded or hard-to-read aura icons, start by naming the scope and lane.",
             "set aura safe timer color to white; set target buff icon size to 30; check target buffs.",
             "Open Auras | Check target buffs"
         )
@@ -2007,12 +2026,12 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
         )
     end
 
-    if R.ContainsAny(norm, { "aggro border", "threat border", "aggro outline" }) and (asksLocation or wantsOff or wantsOn) then
+    if R.ContainsAny(norm, { "aggro border", "threat border", "aggro outline", "aggro role filter", "aggro shows for" }) and (asksLocation or wantsOff or wantsOn) then
         if asksLocation then
             return R.VisualSettingReply(
                 "Aggro Border setting location",
-                "Aggro Border lives in Bars under Highlight Borders. Its color lives in Colors as Aggro Border Color, and scoped bar overrides can exist for individual frame groups.",
-                "open bars; turn off aggro border; set aggro border color red.",
+                "Aggro Border and Aggro Shows For live in Bars under Highlight Borders. Its color lives in Colors as Aggro Border Color, and scoped bar overrides can exist for individual frame groups.",
+                "open bars; turn off aggro border; set raid aggro shows for non tanks; set aggro border color red.",
                 "Open Bars | turn off aggro border"
             )
         end
@@ -2509,16 +2528,16 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
                 local laneText = lane and (" " .. laneLabel) or ""
                 return A.RouterAuraDetailReply(
                     scopeLabel .. laneText .. " hidden aura setting location",
-                    "Specific aura hiding lives in Aura Filters. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", then add the exact spell ID, spell link, or full spell name to the hidden-aura list. I did not change the frame or its power text.",
-                    "open aura filters; hide spell 12345 for " .. scope .. (lane and (" " .. lane:lower() .. "s") or " auras") .. ".",
-                    "Open Aura Filters | hide spell 12345 for " .. scope .. (lane and (" " .. lane:lower() .. "s") or " auras")
+                    "Saved exact aura hiding data is shown in Aura Filters, but it is read-only while the native 12.1 backend is active. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", then use live filter toggles/tokens for display changes. I did not change the frame or its power text.",
+                    "open aura filters; set " .. scope .. (lane and (" " .. lane:lower() .. " ") or " ") .. "raid filter on.",
+                    "Open Aura Filters | Check " .. scopeLabel .. " Auras"
                 )
             end
             local laneText = lane and (" " .. lane:lower() .. "s") or " auras"
             local result = R.CoreControl(
                 coreHandler,
                 "hide " .. tostring(value) .. " for " .. tostring(scope) .. laneText,
-                "That looks like a specific aura. Use Aura Filters or a spell ID/name so I can hide that aura without disabling the whole frame or aura lane.",
+                "That looks like a specific aura. Exact SpellID blacklist edits are read-only while the native 12.1 backend is active, so use live Aura Filters instead of disabling the whole frame or aura lane.",
                 "info"
             )
             if result then return result end
@@ -2528,9 +2547,9 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
     if lane and scope and R.AuraSpecificIconFilterRequest(norm) then
         return A.RouterAuraDetailReply(
             scopeLabel .. " " .. laneLabel .. " specific icon filter",
-            "That sounds like one specific " .. laneLabel:lower() .. " icon, not the whole " .. scopeLabel .. " " .. lanePlural .. " lane. Use Aura Filters or tell me the exact spell ID/name; I will not hide all " .. scopeLabel .. " " .. lanePlural .. " for one icon name.",
-            "open aura filters; hide spell 12345 for " .. scope .. " " .. lane:lower() .. "s; where can I hide " .. scope .. " " .. lane:lower() .. " icons.",
-            "Open Aura Filters | hide spell 12345 for " .. scope .. " " .. lane:lower() .. "s",
+            "That sounds like one specific " .. laneLabel:lower() .. " icon, not the whole " .. scopeLabel .. " " .. lanePlural .. " lane. Exact SpellID hiding is read-only in the native 12.1 backend, so use Aura Filters for live filter changes. I will not hide all " .. scopeLabel .. " " .. lanePlural .. " for one icon name.",
+            "open aura filters; set " .. scope .. " " .. lane:lower() .. " raid filter on; where can I adjust " .. scope .. " " .. lane:lower() .. " filters.",
+            "Open Aura Filters | Check " .. scopeLabel .. " " .. laneLabel,
             asksLocation and "applied" or "info"
         )
     end
@@ -2701,9 +2720,9 @@ A.RouterTryAuraSettingShortcut = function(norm, coreHandler)
     if asksLocation and R.ContainsAny(norm, { "blacklist", "whitelist", "hidden aura", "hidden spell", "spell blacklist", "spell filter", "filter" }) then
         local reply = A.RouterAuraProblemReply(
             scopeLabel .. " " .. laneLabel .. " Filter setting location",
-            scopeLabel .. " " .. laneLabel .. " filtering lives in Aura Filters. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", set Aura Filter Lane to " .. lanePlural .. ", then use hidden-aura blacklist, filter, whitelist, preset, or exact spell controls for that lane.",
-            "open aura filters; set aura editing scope to " .. scope .. "; set aura filter lane to " .. lane:lower() .. "s; hide spell 12345 for " .. scope .. " " .. lane:lower() .. "s.",
-            "Open Aura Filters | hide spell 12345 for " .. scope .. " " .. lane:lower() .. "s"
+            scopeLabel .. " " .. laneLabel .. " filtering lives in Aura Filters. Open Aura Filters, set Aura Editing Scope to " .. scopeLabel .. ", set Aura Filter Lane to " .. lanePlural .. ", then use live filter toggles/tokens for that lane. Saved exact blacklist/whitelist data is read-only in the native 12.1 backend.",
+            "open aura filters; set aura editing scope to " .. scope .. "; set aura filter lane to " .. lane:lower() .. "s; set " .. scope .. " " .. lane:lower() .. " raid filter on.",
+            "Open Aura Filters | Check " .. scopeLabel .. " " .. laneLabel
         )
         reply.status = "applied"
         reply.result = "applied"
@@ -2992,6 +3011,10 @@ A.RouterAuraProblemTerms = A.RouterAuraProblemTerms or {
     aura = {
         "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs",
     },
+    masque = {
+        "masque", "masque skin", "masque skinning", "masque border", "masque borders",
+        "masque backdrop", "masque add-on", "masque addon",
+    },
     layout = {
         "wrong side", "on wrong side", "wrong position", "position is wrong",
         "wrong place", "growth is wrong", "grow wrong way", "grow the wrong way",
@@ -3028,6 +3051,17 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
     end
 
     local terms = A.RouterAuraProblemTerms
+    if R.ContainsAny(norm, terms.masque) then
+        local reply = A.RouterAuraProblemReply(
+            "Masque aura skinning",
+            "I will not toggle Masque from the Assistant because this MSUF build does not expose a live Masque aura-skinning path in the active menu or renderer. Use the Masque addon itself for skin selection if it is installed. In MSUF, I can still change aura icon size, caps, borders, cooldown text, stack text, duration bars, and live filters.",
+            "open auras; set target buff icon size to 30; set aura cooldown text size to 14; open aura style.",
+            "Open Auras | Open Aura Style | Open Aura Filters"
+        )
+        reply.status = "info"
+        reply.result = "info"
+        return reply
+    end
     local mentionsAura = R.ContainsAny(norm, terms.aura)
         or R.ContainsAny(norm, terms.filter)
         or R.ContainsAny(norm, terms.text)
@@ -3070,8 +3104,8 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
     if R.ContainsAny(norm, terms.filter) then
         return A.RouterAuraProblemReply(
             "Aura filter help",
-            "Aura filters depend on the exact scope and lane: unit buffs, unit debuffs, group buffs, or group debuffs. Check Aura Editing Scope, Aura Filter Lane, hidden aura lists, quick presets, and group aura category filters before applying a new filter.",
-            "open aura filters; set aura editing scope to target; hide spell 12345 for target buffs; check target buffs.",
+            "Aura filters depend on the exact scope and lane: unit buffs, unit debuffs, group buffs, or group debuffs. Use Aura Editing Scope, Aura Filter Lane, live filter tokens, and quick presets before applying a new filter. Saved exact SpellID blacklist/category data is read-only in the native 12.1 backend.",
+            "open aura filters; set aura editing scope to target; set target debuff dispellable filter on; check target buffs.",
             "Open Aura Filters | Open Auras | Check target buffs | Open Group Auras"
         )
     end
@@ -3744,6 +3778,12 @@ A.RouterIndicatorProblemTerms = A.RouterIndicatorProblemTerms or {
     },
 }
 
+A.RouterTargetedSpellIndicatorTerms = A.RouterTargetedSpellIndicatorTerms or {
+    "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators",
+    "targeted spell tracker", "targeted spells tracker", "enemy targeted spell", "enemy targeted spells",
+    "enemy nameplate cast tracker", "nameplate cast tracker",
+}
+
 A.RouterIndicatorProblemReply = function(title, body, examples, actions)
     return {
         text = tostring(title or "Indicator help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open group indicators; show raid marker on target.") .. "\nYou can ask: " .. tostring(actions or "Open Group Indicators | Open Player | Open Target"),
@@ -3808,6 +3848,30 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
         or norm:match("^suche%s+") or norm:match("^finde%s+")
     then
         return nil
+    end
+
+    if R.ContainsAny(norm, A.RouterTargetedSpellIndicatorTerms) then
+        local groupScope, groupLabel = R.GroupScopeFromText(norm)
+        if groupScope and groupScope ~= "party" then
+            return A.RouterIndicatorProblemReply(
+                "Targeted Spell Indicators are Party-only",
+                "MSUF Targeted Spell Indicators track enemy nameplate casts that target party members. They do not have separate Raid or Mythic Raid settings, so I did not change " .. tostring(groupLabel or "that group scope") .. " frames.",
+                "open group indicators; show party targeted spell indicators; set party targeted spell icon size to 28.",
+                "Open Group Indicators | show party targeted spell indicators"
+            )
+        end
+        local wantsInfo = R.AsksSettingLocation(norm)
+            or R.HasNaturalProblemTerm(norm)
+            or R.ContainsAny(norm, R.VISIBILITY_PROBLEM_TERMS)
+            or R.ContainsAny(norm, { "help", "explain", "what is", "what are", "how do", "how can" })
+        if wantsInfo then
+            return A.RouterIndicatorProblemReply(
+                "Targeted Spell Indicators help",
+                "Party Targeted Spell Indicators live in Group Indicators. They are party-only and show enemy nameplate casts that target party members. Use exact party commands when you want a change.",
+                "show party targeted spell indicators; set party targeted spell icon size to 28; set targeted spell mode to always.",
+                "Open Group Indicators | show party targeted spell indicators"
+            )
+        end
     end
 
     if R.AsksSettingLocation(norm)
@@ -5379,8 +5443,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         if R.ContainsAny(norm, { "aura", "auras", "filter", "filters", "layout", "blacklist", "hidden aura", "hidden", "dispellable" }) then
             return A.RouterSafePlanningReply(
                 "Aura system comparison",
-                "Aura layout controls where icons appear, how they grow, size, spacing, text, and caps. Aura filters decide which buffs or debuffs are allowed, hidden, exclusive, or dispellable-focused. Tune layout when icons look wrong; tune filters when the wrong auras appear.",
-                "open auras; open aura filters; show only dispellable debuffs; hide spell 12345 for target auras.",
+                "Aura layout controls where icons appear, how they grow, size, spacing, text, and caps. Live Aura filters decide which buffs or debuffs are allowed, exclusive, raid-focused, or dispellable-focused. Saved exact blacklist data is read-only in the native 12.1 backend. Tune layout when icons look wrong; tune live filters when the wrong aura groups appear.",
+                "open auras; open aura filters; show only dispellable debuffs; set target debuff raid filter on.",
                 "Open Auras | Open Aura Filters | Check Target Buffs"
             )
         end
@@ -5454,8 +5518,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         end
         return A.RouterSafePlanningReply(
             "Why Aura Filters matter",
-            "Aura Filters reduce noise by controlling which buffs and debuffs appear. They are safer than hiding whole aura systems because you can tune exact spells, categories, or dispellable debuffs while keeping important information visible.",
-            "open aura filters; show only dispellable debuffs; hide spell 12345 for target auras.",
+            "Aura Filters reduce noise by controlling which buffs and debuffs appear. They are safer than hiding whole aura systems because you can tune live filter tokens such as raid, player-only, exclusive, or dispellable while keeping important information visible. Saved exact SpellID/category blacklist data is read-only in the native 12.1 backend.",
+            "open aura filters; show only dispellable debuffs; set target debuff raid filter on.",
             "Open Aura Filters | Open Auras | Check Target Buffs"
         )
     end
@@ -5475,8 +5539,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
     then
         return A.RouterSafePlanningReply(
             "Aura filter planning",
-            "I will not guess which buffs or debuffs are useless or important, because that depends on class, content, and preference. The safe path is to inspect Aura Filters, then hide or show exact spell IDs, aura categories, or dispellable-debuff rules.",
-            "open aura filters; show only dispellable debuffs; hide spell 12345 for target auras; set target debuff icon size to 30.",
+            "I will not guess which buffs or debuffs are useless or important, because that depends on class, content, and preference. The safe path is to inspect Aura Filters, then tune live filter tokens/toggles such as raid, player-only, exclusive, or dispellable. Saved exact SpellID/category blacklist data is read-only in the native 12.1 backend.",
+            "open aura filters; show only dispellable debuffs; set target debuff raid filter on; set target debuff icon size to 30.",
             "Open Aura Filters | Open Auras | Check Target Buffs"
         )
     end
@@ -5956,7 +6020,7 @@ R.PAGE_LOCATION_TERMS = {    { label = "Support Links", terms = { "support link"
     { label = "Target", terms = { "target", "target frame" } },
     { label = "Focus", terms = { "focus", "focus frame" } },
     { label = "Pet", terms = { "pet", "pet frame" } },
-    { label = "Bars", terms = { "bar", "bars", "bar texture", "bar textures", "absorb bar", "dispel overlay", "rounded bars" } },
+    { label = "Bars", terms = { "bar", "bars", "bar texture", "bar textures", "absorb bar", "dispel overlay", "rounded bars", "aggro role filter", "aggro shows for", "highlight priority", "custom highlight priority" } },
     { label = "Colors", terms = { "color", "colors", "class colors", "bar colors", "font color" } },
     { label = "Fonts", terms = { "font", "fonts", "font outline", "font shadow" } },
 }
@@ -6410,8 +6474,14 @@ function R.FallbackPageForSetting(setting)
     if unitPages[unit] then return unitPages[unit] end
     if unit == "party" or unit == "raid" or unit == "mythicraid" then
         if frameType == "aura" then return "gf_auras" end
-        if category:find("indicator", 1, true) then return "gf_indicators" end
         local attr = tostring(setting.attribute or "")
+        local key = tostring(setting.key or "")
+        if category:find("indicator", 1, true)
+            or R.Normalize(attr):gsub("%s+", ""):find("targetedspells", 1, true)
+            or R.Normalize(key):gsub("%s+", ""):find("targetedspells", 1, true)
+        then
+            return "gf_indicators"
+        end
         local suffix = tostring(setting.key or ""):match("%.([^%.]+)$")
         if GROUP_LAYOUT_FALLBACK_ATTRS[attr] or (suffix and GROUP_LAYOUT_FALLBACK_ATTRS[suffix]) then return "gf_layout" end
         return "gf_bars"

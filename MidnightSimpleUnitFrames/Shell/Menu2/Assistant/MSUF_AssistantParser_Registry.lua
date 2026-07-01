@@ -230,7 +230,16 @@ P.NON_AURA_DEBUFF_CONTROL_TERMS = P.NON_AURA_DEBUFF_CONTROL_TERMS or {
     "dispel overlay", "dispel overlays", "unitframe dispel", "unit frame dispel",
     "unitframe dispel overlay", "unit frame dispel overlay",
     "debuff overlay", "debuff overlays",
+    "dispellable overlay", "dispellable overlays", "dispellable debuff overlay", "dispellable debuff overlays",
+    "dispel health overlay", "dispellable health overlay",
     "health bar dispel overlay", "healthbar dispel overlay",
+    "debuff type color", "debuff type colors", "debuff type colour", "debuff type colours",
+    "dispel color", "dispel colors", "dispel colour", "dispel colours",
+    "magic debuff color", "magic debuff colour", "magic dispel color", "magic dispel colour",
+    "curse debuff color", "curse debuff colour", "curse dispel color", "curse dispel colour",
+    "disease debuff color", "disease debuff colour", "disease dispel color", "disease dispel colour",
+    "poison debuff color", "poison debuff colour", "poison dispel color", "poison dispel colour",
+    "bleed debuff color", "bleed debuff colour", "bleed dispel color", "bleed dispel colour",
 }
 
 local function HasAuraSettingIntent(text)
@@ -701,6 +710,7 @@ end
 local ENUM_VALUE_DISPLAY_LABELS = {
     ALr = "alt",
     ALWAYS = "always",
+    AUTO = "auto",
     AUrO = "auto",
     BLIZZARD = "Blizzard",
     BOrrOM = "bottom",
@@ -2078,6 +2088,45 @@ local function AddRegisteredChange(out, key, value, relativeDelta, direction)
     }
 end
 
+local DEPENDENT_TARGET_FRAME_VISIBILITY_SPECS = {
+    { unit = "targettarget", label = "Target of Target", terms = { "target of target", "targettarget", "target target", "targets target", "tot" } },
+    { unit = "focustarget", label = "Focus Target", terms = { "focus target", "focustarget" } },
+}
+
+local DEPENDENT_TARGET_FRAME_DETAIL_BLOCKERS = {
+    "name", "names", "text", "inline", "inside target", "on target frame", "in target frame",
+    "hp", "health", "power", "mana", "castbar", "cast bar", "buff", "buffs", "debuff", "debuffs",
+    "aura", "auras", "icon", "icons", "indicator", "indicators", "portrait", "range fade",
+    "alpha", "opacity", "width", "height", "size", "anchor", "position", "move", "offset",
+    "load condition", "load conditions", "visibility condition", "when", "while", "in group",
+    "grouped", "solo", "mounted", "vehicle", "instance", "combat", "resting", "stealth", "housing",
+}
+
+local function DependentTargetFrameVisibilitySpec(text)
+    for i = 1, #DEPENDENT_TARGET_FRAME_VISIBILITY_SPECS do
+        local spec = DEPENDENT_TARGET_FRAME_VISIBILITY_SPECS[i]
+        if ContainsAny(text, spec.terms) then return spec end
+    end
+    return nil
+end
+
+P.ParseDependentTargetFrameVisibilityShortcut = function(text)
+    if ContainsAny(text, DEPENDENT_TARGET_FRAME_DETAIL_BLOCKERS) then return nil end
+    local spec = DependentTargetFrameVisibilitySpec(text)
+    if not spec then return nil end
+    local value = ShowSettingValueForText(text)
+    if value == nil then return nil end
+    local changes = {}
+    AddRegisteredChange(changes, tostring(spec.unit) .. ".enabled", value)
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = tostring(spec.label) .. " Frame Enabled",
+        summary = "Changes the " .. tostring(spec.label) .. " frame visibility toggle.",
+    }
+end
+
 function P.HasInterruptReadyIntent(text)
     if ContainsAny(text, {
         "interrupt ready", "kick ready", "ready interrupt", "ready kick",
@@ -2711,7 +2760,7 @@ end
 P.ParseGroupRolePowerVisibilityShortcut = function(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
     if ContainsAny(text, { "role icon", "role indicator", "status icon", "status indicator", "symbol" }) then return nil end
-    if not ContainsAny(text, { "power", "mana", "resource", "power bar", "mana bar" }) then return nil end
+    if not ContainsAny(text, { "power", "mana", "resource", "resources", "power bar", "power bars", "mana bar", "mana bars", "resource bar", "resource bars" }) then return nil end
 
     local attr
     local label
@@ -2800,6 +2849,102 @@ P.ParseGroupOfflineAlphaShortcut = function(text)
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".offlineAlpha", value, relativeDelta)
     end
     return P.GroupShortcutResponse(text, changes, concrete, "Group frame offline opacity", "Changes the Group Frame Offline Opacity slider.")
+end
+
+P.ParseGroupHealthFadeShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if not ContainsAny(text, {
+        "health fade", "healthy fade", "healer health fade",
+        "fade healthy", "fade healthy members", "fade healthy frames",
+        "dim healthy", "dim healthy members", "dim healthy frames",
+        "fade full health", "dim full health",
+    }) then
+        return nil
+    end
+
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    if not concrete and #scopes > 1 then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which group frame Health Fade should I change: Party, Raid, or Mythic Raid? Examples: 'dim healthy raid frames', 'set party health fade threshold to 90', or 'set raid health fade opacity to 35%'.",
+            summary = "Clarifies group Health Fade scope instead of changing every group scope.",
+        }
+    end
+
+    local value = FirstNumber(text)
+    local relativeDelta
+    local alphaIntent = ContainsAny(text, {
+        "opacity", "alpha", "transparent", "transparency", "visibility",
+        "dimmed opacity", "dimmed health opacity", "healthy opacity",
+    }) or (ContainsAny(text, {
+        "dim healthy", "dim healthy members", "dim healthy frames",
+        "fade healthy", "fade healthy members", "fade healthy frames",
+        "dim full health", "fade full health",
+    }) and HasPhrase(text, "to"))
+    local thresholdIntent = ContainsAny(text, {
+        "threshold", "percent", "health percent", "hp percent",
+        "above health", "above health percent", "above hp", "above hp percent",
+        "fade above", "dim above", "when above", "at health",
+    }) or (value ~= nil and HasPhrase(text, "above")) or (value ~= nil and HasPhrase(text, "over")) or (value ~= nil and HasPhrase(text, "at") and not alphaIntent)
+
+    if ContainsAny(text, { "more transparent", "less visible", "fade more", "more faded", "stronger fade", "dim more" }) then
+        local amount = value or 0.05
+        if amount > 1 then amount = amount / 100 end
+        relativeDelta = -amount
+        alphaIntent = true
+        thresholdIntent = false
+    elseif ContainsAny(text, { "less transparent", "more visible", "fade less", "less faded", "weaker fade", "dim less" }) then
+        local amount = value or 0.05
+        if amount > 1 then amount = amount / 100 end
+        relativeDelta = amount
+        alphaIntent = true
+        thresholdIntent = false
+    end
+
+    local changes = {}
+    if value ~= nil or relativeDelta ~= nil then
+        local attr
+        local label
+        if alphaIntent and not thresholdIntent then
+            attr = "healthFadeAlpha"
+            label = "Group Health Fade Opacity"
+            if value ~= nil and value > 1 then value = value / 100 end
+        elseif thresholdIntent and not alphaIntent then
+            attr = "healthFadeThreshold"
+            label = "Group Health Fade Threshold"
+            if value ~= nil and value > 0 and value <= 1 then value = value * 100 end
+        else
+            return {
+                kind = "answer",
+                status = "ambiguous",
+                text = "For Health Fade, do you mean the health threshold or the dimmed opacity? Examples: 'set raid health fade threshold to 90' or 'set raid health fade opacity to 35%'.",
+                summary = "Clarifies Health Fade numeric intent instead of guessing threshold or opacity.",
+            }
+        end
+        for i = 1, #scopes do
+            AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. "." .. attr, value, relativeDelta)
+            if attr == "healthFadeThreshold" or (attr == "healthFadeAlpha" and (relativeDelta ~= nil or (value ~= nil and value < 1))) then
+                AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".healthFadeEnabled", true)
+            end
+        end
+        return P.GroupShortcutResponse(text, changes, concrete, label, "Changes group-frame Health Fade options.")
+    end
+
+    local enabled = ShowSettingValueForText(text)
+    if enabled == nil then
+        if ContainsAny(text, { "stop", "stop fading", "stop dimming", "do not dim", "dont dim", "don't dim", "never dim", "do not fade", "dont fade", "don't fade", "never fade" }) then
+            enabled = false
+        elseif ContainsAny(text, { "dim", "fade", "health fade", "healthy fade" }) then
+            enabled = true
+        end
+    end
+    if enabled == nil then return nil end
+
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".healthFadeEnabled", enabled)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group Health Fade", "Changes the group-frame Health Fade toggle.")
 end
 
 P.ParseGroupColumnLayoutShortcut = function(text)
@@ -2899,7 +3044,7 @@ local function GroupBlizzardFallbackValueForText(text)
         "normal behavior", "default behavior", "automatisch", "blizzard entscheidet",
         "standard verhalten", "normales verhalten",
     }) then
-        return "AUrO"
+        return "AUTO"
     end
     if ContainsAny(text, {
         "hide all", "hide both", "hide blizzard", "hide default", "hide standard",
@@ -2934,6 +3079,94 @@ P.ParseGroupBlizzardFallbackShortcut = function(text)
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".blizzardFallbackMode", value)
     end
     return P.GroupShortcutResponse(text, changes, concrete, "Group frame Blizzard fallback", "Changes the Group Frame Blizzard Fallback Mode dropdown.")
+end
+
+local GROUP_AGGRO_ROLE_INTENT_TERMS = {
+    "aggro shows for", "threat shows for", "aggro role filter", "threat role filter",
+    "aggro non tank", "aggro non tanks", "aggro not tank", "aggro not tanks",
+    "threat non tank", "threat non tanks", "threat not tank", "threat not tanks",
+    "aggro only for", "threat only for", "aggro for", "threat for",
+}
+
+local GROUP_AGGRO_ROLE_SCOPE_TERMS = {
+    "party", "party frame", "party frames", "partyframe", "partyframes",
+    "raid", "raid frame", "raid frames", "raidframe", "raidframes",
+    "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid",
+    "mythicraidframe", "mythicraidframes", "group", "groups", "group frame", "group frames",
+}
+
+local function GroupAggroRoleValueForText(text)
+    if ContainsAny(text, { "non tank", "non tanks", "nontank", "nontanks", "not tank", "not tanks", "non-tank", "non-tanks" }) then
+        return "NON_TANK"
+    end
+    if ContainsAny(text, { "healer", "healers", "heal role", "healer role", "healing role" }) then
+        return "HEALER"
+    end
+    if ContainsAny(text, { "tank", "tanks", "tank role" }) then
+        return "TANK"
+    end
+    if ContainsAny(text, {
+        "shows for all", "show for all", "role filter to all", "filter to all",
+        "for everyone", "for anyone", "all roles", "all players",
+    }) then
+        return "ALL"
+    end
+    return nil
+end
+
+local function GroupAggroExplicitScopes(text)
+    local scopes = {}
+    local mythic = ContainsAny(text, {
+        "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid",
+        "mythicraidframe", "mythicraidframes",
+    })
+    if mythic then scopes[#scopes + 1] = "mythicraid" end
+    if ContainsAny(text, { "party", "party frame", "party frames", "partyframe", "partyframes" }) then scopes[#scopes + 1] = "party" end
+    if ContainsAny(text, { "raid", "raid frame", "raid frames", "raidframe", "raidframes" }) and not mythic then scopes[#scopes + 1] = "raid" end
+    if #scopes > 0 then return scopes, true end
+    if ContainsAny(text, { "all group frames", "all groups", "every group frame", "each group frame", "party and raid", "party raid" }) then
+        return { "party", "raid", "mythicraid" }, true
+    end
+    if ContainsAny(text, { "group", "groups", "group frame", "group frames" }) then return nil, false, true end
+    return nil, false, false
+end
+
+P.ParseGroupAggroRoleFilterShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar", "boss target", "corner indicator", "spell indicator" }) then return nil end
+    if ContainsAny(text, { "fallback aggro", "fallback threat", "group fallback aggro", "group fallback threat" }) then return nil end
+    if not ContainsAny(text, { "aggro", "threat" }) then return nil end
+    if not ContainsAny(text, GROUP_AGGRO_ROLE_SCOPE_TERMS) then return nil end
+    local roleValue = GroupAggroRoleValueForText(text)
+    local hasRoleIntent = ContainsAny(text, GROUP_AGGRO_ROLE_INTENT_TERMS)
+        or (roleValue ~= nil and not ContainsAny(text, { "color", "colour", "opacity", "alpha", "thickness", "size" }))
+    if not hasRoleIntent then return nil end
+
+    local scopes, concrete, genericGroup = GroupAggroExplicitScopes(text)
+    if genericGroup then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which group aggro role filter do you mean: Party, Raid, or Mythic Raid? You can also say 'all group frames'.",
+            summary = "Clarifies the group-frame scope before changing the scoped Aggro Shows For setting.",
+        }
+    end
+    if not scopes or #scopes == 0 then return nil end
+    if roleValue == nil then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "For Aggro Shows For, choose all roles, non-tanks, healers, or tanks. Example: 'set raid aggro shows for non tanks'.",
+            summary = "Clarifies the group aggro role filter value instead of guessing.",
+        }
+    end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local scope = "gf_" .. tostring(scopes[i])
+        AddRegisteredChange(changes, "barScope." .. scope .. ".aggroMode", roleValue)
+        AddRegisteredChange(changes, "barScope." .. scope .. ".aggroOutlineMode", "on")
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group Aggro Shows For", "Enables scoped Aggro Border and changes which group-member roles can show it.")
 end
 
 P.ParseGroupSortShortcut = function(text)
@@ -3063,12 +3296,16 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if groupRoleIcon then return groupRoleIcon end
     local groupOfflineAlpha = P.ParseGroupOfflineAlphaShortcut and P.ParseGroupOfflineAlphaShortcut(text)
     if groupOfflineAlpha then return groupOfflineAlpha end
+    local groupHealthFade = P.ParseGroupHealthFadeShortcut and P.ParseGroupHealthFadeShortcut(text)
+    if groupHealthFade then return groupHealthFade end
     local groupColumns = P.ParseGroupColumnLayoutShortcut and P.ParseGroupColumnLayoutShortcut(text)
     if groupColumns then return groupColumns end
     local groupPlayerFirst = P.ParseGroupPlayerFirstInRoleShortcut and P.ParseGroupPlayerFirstInRoleShortcut(text)
     if groupPlayerFirst then return groupPlayerFirst end
     local groupBlizzardFallback = P.ParseGroupBlizzardFallbackShortcut and P.ParseGroupBlizzardFallbackShortcut(text)
     if groupBlizzardFallback then return groupBlizzardFallback end
+    local groupAggroRole = P.ParseGroupAggroRoleFilterShortcut and P.ParseGroupAggroRoleFilterShortcut(text)
+    if groupAggroRole then return groupAggroRole end
     local groupBoolean = P.ParseGroupBooleanRegistryShortcut and P.ParseGroupBooleanRegistryShortcut(text)
     if groupBoolean then return groupBoolean end
     local groupNumber = P.ParseGroupNumberRegistryShortcut and P.ParseGroupNumberRegistryShortcut(text)
@@ -3613,6 +3850,80 @@ P.ColorShortcutResponse = function(changes, title, concrete, summary)
     }
 end
 
+local DISPEL_TYPE_COLOR_SPECS = {
+    { key = "Magic", label = "Magic", terms = { "magic" } },
+    { key = "Curse", label = "Curse", terms = { "curse" } },
+    { key = "Disease", label = "Disease", terms = { "disease" } },
+    { key = "Poison", label = "Poison", terms = { "poison" } },
+    { key = "Bleed", label = "Bleed", terms = { "bleed" } },
+}
+
+local function DispelTypeColorSpecForText(text)
+    for i = 1, #DISPEL_TYPE_COLOR_SPECS do
+        local spec = DISPEL_TYPE_COLOR_SPECS[i]
+        if ContainsAny(text, spec.terms) then return spec end
+    end
+    return nil
+end
+
+P.ParseDispelTypeColorShortcut = function(text, raw)
+    if not ContainsAny(text, { "color", "colors", "colour", "colours" }) then return nil end
+    local specificType = DispelTypeColorSpecForText(text)
+    local typeColorIntent = ContainsAny(text, {
+        "debuff type color", "debuff type colors", "debuff type colour", "debuff type colours",
+        "magic debuff color", "magic debuff colour", "magic dispel color", "magic dispel colour",
+        "curse debuff color", "curse debuff colour", "curse dispel color", "curse dispel colour",
+        "disease debuff color", "disease debuff colour", "disease dispel color", "disease dispel colour",
+        "poison debuff color", "poison debuff colour", "poison dispel color", "poison dispel colour",
+        "bleed debuff color", "bleed debuff colour", "bleed dispel color", "bleed dispel colour",
+    })
+    local singleDispelIntent = ContainsAny(text, {
+        "dispel color", "dispel colour", "dispel border color", "dispel border colour",
+        "single dispel color", "single dispel colour", "all dispel color", "all dispel colour",
+    }) and not ContainsAny(text, { "debuff type", "magic", "curse", "disease", "poison", "bleed" })
+    if not typeColorIntent and not singleDispelIntent then return nil end
+
+    local value, valueLabel = P.ColorShortcutValue(text, raw)
+    if not value then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which color should I use? Examples: 'set magic debuff color blue' or 'set dispel color #33ccff'.",
+            summary = "Asks for a concrete dispel color value.",
+        }
+    end
+
+    local changes = {}
+    if specificType then
+        AddRegisteredChange(changes, "general.hlDispelColorMode", "TYPE")
+        local change = P.BuildColorShortcutChange("general.dispelType" .. specificType.key, value, valueLabel)
+        if change then changes[#changes + 1] = change end
+        return P.ColorShortcutResponse(changes, specificType.label .. " Dispel Color", true, "Sets Dispel Color Mode to per-type colors and changes that debuff-type color.")
+    end
+
+    if typeColorIntent then
+        if not HasAllScopeIntent(text) then
+            return {
+                kind = "answer",
+                status = "ambiguous",
+                text = "Which debuff type color do you mean: Magic, Curse, Disease, Poison, or Bleed? You can also say 'set all debuff type colors blue'.",
+                summary = "Clarifies the debuff type before changing a dispel type color.",
+            }
+        end
+        AddRegisteredChange(changes, "general.hlDispelColorMode", "TYPE")
+        for i = 1, #DISPEL_TYPE_COLOR_SPECS do
+            local change = P.BuildColorShortcutChange("general.dispelType" .. DISPEL_TYPE_COLOR_SPECS[i].key, value, valueLabel)
+            if change then changes[#changes + 1] = change end
+        end
+        return P.ColorShortcutResponse(changes, "Dispel Type Colors", true, "Sets Dispel Color Mode to per-type colors and changes every debuff-type color.")
+    end
+
+    AddRegisteredChange(changes, "general.hlDispelColorMode", "SINGLE")
+    local change = P.BuildColorShortcutChange("general.hlDispelColor", value, valueLabel)
+    if change then changes[#changes + 1] = change end
+    return P.ColorShortcutResponse(changes, "Dispel Color", true, "Sets Dispel Color Mode to single color and changes the shared dispel color.")
+end
+
 P.BuildCastbarColorChoices = function(keys, value, valueLabel)
     local changes = {}
     for i = 1, #(keys or {}) do
@@ -3679,8 +3990,91 @@ P.ParseCastbarColorShortcut = function(text, raw)
     return nil
 end
 
+local function HasExplicitFullGroupBorderIntent(text)
+    return ContainsAny(text, {
+        "group border", "full group border", "whole group border", "outer group border", "group block border",
+    })
+end
+
+local function HasGroupFrameOutlineColorIntent(text)
+    if not ContainsAny(text, {
+        "border color", "border colour", "outline color", "outline colour",
+        "frame border color", "frame outline color", "bar border color", "bar outline color",
+    }) then
+        return false
+    end
+    if HasExplicitFullGroupBorderIntent(text) then return false end
+    if ContainsAny(text, {
+        "aura", "auras", "buff", "debuff",
+        "castbar", "cast bar", "portrait", "power bar", "mana bar",
+        "aggro", "threat", "focus", "target", "dispel", "dispellable", "purge", "purgeable", "highlight",
+    }) then
+        return false
+    end
+    return ContainsAny(text, {
+        "group", "group frame", "group frames",
+        "party", "party frame", "party frames",
+        "raid", "raid frame", "raid frames", "mythic raid", "mythicraid",
+    })
+end
+
+local function HasAmbiguousGroupFrameBorderSizeIntent(text)
+    if HasExplicitFullGroupBorderIntent(text) then return false end
+    if ContainsAny(text, { "opacity", "alpha", "transparent", "transparency", "color", "colour" }) then return false end
+    if ContainsAny(text, {
+        "bar outline", "frame outline", "outline thickness", "outline size", "outline width",
+        "bar border thickness", "bar border size", "bar border width",
+        "party frame border", "raid frame border", "mythic raid frame border",
+    }) then
+        return false
+    end
+    if not ContainsAny(text, {
+        "thickness", "size", "width", "thicker", "thinner", "bigger", "smaller",
+        "increase", "decrease", "reduce", "dicker", "duenner",
+    }) then
+        return false
+    end
+    if not ContainsAny(text, {
+        "group frame border", "group frame outline", "frame border", "frame outline",
+        "border thickness", "outline thickness", "border size", "outline size",
+        "border width", "outline width",
+    }) then
+        return false
+    end
+    if ContainsAny(text, {
+        "aura", "auras", "buff", "debuff",
+        "castbar", "cast bar", "portrait", "power bar", "mana bar",
+        "aggro", "threat", "focus", "target", "dispel", "dispellable", "purge", "purgeable", "highlight",
+    }) then
+        return false
+    end
+    return ContainsAny(text, {
+        "group", "group frame", "group frames",
+        "party", "party frame", "party frames",
+        "raid", "raid frame", "raid frames", "mythic raid", "mythicraid",
+    })
+end
+
+local function BarOutlineScopeForGroup(scope)
+    if scope == "party" then return "gf_party" end
+    if scope == "raid" or scope == "mythicraid" then return "gf_raid" end
+    return nil
+end
+
+local function UniqueBarOutlineScopes(groups)
+    local out, seen = {}, {}
+    for i = 1, #(groups or {}) do
+        local scope = BarOutlineScopeForGroup(groups[i])
+        if scope and not seen[scope] then
+            seen[scope] = true
+            out[#out + 1] = scope
+        end
+    end
+    return out
+end
+
 P.GROUP_COLOR_TARGETS = {
-    { key = "groupBorderColor", title = "Group Border Color", terms = { "group border color", "group frame border color", "frame border color", "border color" } },
+    { key = "groupBorderColor", title = "Group Border Color", terms = { "group border color", "full group border color", "whole group border color", "outer group border color", "group block border color" } },
     { key = "hlFocusColor", title = "Focus Highlight Color", terms = { "focus highlight color", "focus border color", "focus glow color" } },
     { key = "deadBgColor", title = "Dead Background Color", terms = { "dead background color", "dead member background color", "dead offline background color", "dead bg color" } },
     { key = "bgColor", title = "Backdrop Color", terms = { "group backdrop color", "group background color", "frame background color", "backdrop color", "background color", "bar background color", "hp track color", "health track color", "track color" } },
@@ -3722,6 +4116,35 @@ P.GroupColorScopesForText = function(text)
         if current then return { current }, true end
     end
     return { "party", "raid", "mythicraid" }, false
+end
+
+P.ParseGroupFrameOutlineColorShortcut = function(text, raw)
+    if not HasGroupFrameOutlineColorIntent(text) then return nil end
+    local value, valueLabel = P.ColorShortcutValue(text, raw)
+    if not value then return nil end
+
+    local groups = DetectGroups(text)
+    local concrete = #groups > 0
+    if not concrete and HasAllScopeIntent(text) then
+        groups, concrete = { "party", "raid" }, true
+    end
+
+    if not concrete then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which group frame border color do you mean: Party or Raid/Mythic Raid bar outline? If you meant the optional border around the whole group block, say 'set raid group border color to red'.",
+            summary = "Clarifies group frame border color instead of guessing Party.",
+        }
+    end
+
+    local barScopes = UniqueBarOutlineScopes(groups)
+    local changes = {}
+    for i = 1, #barScopes do
+        local change = P.BuildColorShortcutChange("barScope." .. tostring(barScopes[i]) .. ".barOutlineColor", value, valueLabel)
+        if change then changes[#changes + 1] = change end
+    end
+    return P.ColorShortcutResponse(changes, "Group Frame Outline Color", concrete, "Changes scoped Bar Outline Color for group frames.")
 end
 
 P.ParseGroupFrameColorShortcut = function(text, raw)
@@ -3996,7 +4419,14 @@ function P.ParseGroupNumberRegistryShortcut(text)
     elseif ContainsAny(text, { "group border padding", "border padding", "padding around", "padding around frames", "padding around group", "frame padding" }) then
         attr = "groupBorderPadding"
         label = "Group Border Padding"
-    elseif ContainsAny(text, { "group border", "group frame border", "frame border" })
+    elseif HasAmbiguousGroupFrameBorderSizeIntent(text) then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Group frame border thickness can mean the scoped bar outline or the optional border around the whole group block. Say 'set raid frame outline thickness to 2' for the bar outline, or 'set raid group border thickness to 2' for the full group border.",
+            summary = "Clarifies group frame border thickness instead of changing the wrong border.",
+        }
+    elseif HasExplicitFullGroupBorderIntent(text)
         and ContainsAny(text, { "thickness", "size", "border size", "border thickness", "thicker", "thinner", "increase", "decrease", "reduce", "bigger", "smaller", "dicker", "duenner" })
     then
         attr = "groupBorderSize"
@@ -4032,6 +4462,7 @@ end
 local function ParseRepeatedRegistryShortcut(text, raw)
     return P.ParseExactRegistryKeyShortcut(text, raw)
         or ParseScopedFontTextColorShortcut(text)
+        or P.ParseDispelTypeColorShortcut(text, raw)
         or P.ParseCastbarColorShortcut(text, raw)
         or P.ParseInterruptReadyRegistryShortcut(text, raw)
         or P.ParseUnitStatusSymbolRegistryShortcut(text)
@@ -4039,19 +4470,23 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or P.ParseCastbarPositionRegistryShortcut(text)
         or (P.ParseFocusKickRegistryShortcut and P.ParseFocusKickRegistryShortcut(text))
         or P.ParsePowerBarGradientRegistryShortcut(text)
+        or P.ParseGroupFrameOutlineColorShortcut(text, raw)
         or P.ParseGroupFrameColorShortcut(text, raw)
         or P.ParseAlphaExcludeTextPortraitShortcut(text)
         or P.ParseUnitHPTextReverseShortcut(text)
         or P.ParseGroupRolePowerVisibilityShortcut(text)
         or P.ParseGroupRoleIconVisibilityShortcut(text)
         or P.ParseGroupOfflineAlphaShortcut(text)
+        or P.ParseGroupHealthFadeShortcut(text)
         or P.ParseGroupColumnLayoutShortcut(text)
         or P.ParseGroupPlayerFirstInRoleShortcut(text)
+        or P.ParseGroupAggroRoleFilterShortcut(text)
         or P.ParseGroupBooleanRegistryShortcut(text)
         or P.ParseGroupNumberRegistryShortcut(text)
         or P.ParseGroupSortShortcut(text)
         or P.ParseGroupScaleModeShortcut(text)
         or P.ParseGroupOfflineDelayShortcut(text)
+        or P.ParseDependentTargetFrameVisibilityShortcut(text)
         or ParseUnitLoadConditionShortcut(text)
         or ParsePowerBarRegistryShortcut(text, raw)
         or ParseStatusIconTestModeRegistryShortcut(text)
