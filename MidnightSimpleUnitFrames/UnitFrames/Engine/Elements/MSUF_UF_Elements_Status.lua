@@ -1143,22 +1143,35 @@ local function UpdateElite(frame, status)
   end
 end
 
-local function StatusText(frame, cfg, unitState)
+local function SeedHealthDeadOverride(seedHP)
+  if type(seedHP) ~= "number" then
+    return nil
+  end
+  return seedHP <= 0
+end
+
+local function StatusText(frame, cfg, unitState, seedHP)
   local unit = frame.unit
+  local healthDead = SeedHealthDeadOverride(seedHP)
   if cfg and cfg.showDead then
     local connected, connectedKnown = ReadConnectedCached(frame, unit, unitState)
     if connectedKnown == true and connected == false then
       return "OFFLINE", "dead"
     end
   end
-  if cfg and cfg.showGhost and UnitIsGhost then
+  if healthDead ~= false and cfg and cfg.showGhost and UnitIsGhost then
     local ghost = UnitIsGhost(unit)
     if BoolTrue(ghost) then
       return "GHOST", "ghost"
     end
   end
   if cfg and cfg.showDead then
-    local dead, deadKnown = ReadDeadCached(frame, unit, unitState)
+    local dead, deadKnown
+    if healthDead ~= nil then
+      dead, deadKnown = healthDead, true
+    else
+      dead, deadKnown = ReadDeadCached(frame, unit, unitState)
+    end
     if deadKnown == true and dead == true then
       return "DEAD", "dead"
     end
@@ -1193,19 +1206,25 @@ local function StatusTextConnectionKey(frame, cfg, unitState)
   return connected == false and 1 or 0
 end
 
-local function StatusTextFlagsKey(frame, cfg, unitState)
+local function StatusTextFlagsKey(frame, cfg, unitState, seedHP)
   local unit = frame and frame.unit
   if not unit then
     return nil
   end
+  local healthDead = SeedHealthDeadOverride(seedHP)
   local key = 0
-  if cfg.showGhost == true and UnitIsGhost then
+  if healthDead ~= false and cfg.showGhost == true and UnitIsGhost then
     local ghost = UnitIsGhost(unit)
     if issecretvalue(ghost) == true then return nil end
     if ghost == true or ghost == 1 then key = key + 2 end
   end
   if cfg.showDead == true then
-    local dead, known = ReadDeadCached(frame, unit, unitState)
+    local dead, known
+    if healthDead ~= nil then
+      dead, known = healthDead, true
+    else
+      dead, known = ReadDeadCached(frame, unit, unitState)
+    end
     if known ~= true then return nil end
     if dead == true then key = key + 4 end
   end
@@ -1222,7 +1241,7 @@ local function StatusTextFlagsKey(frame, cfg, unitState)
   return key
 end
 
-local function StatusTextChanged(frame, status, event, unitState)
+local function StatusTextChanged(frame, status, event, unitState, seedHP)
   local cfg = status and status.statusText
   if not (cfg and cfg.enabled == true) then return true end
   if status.testMode == true then return true end
@@ -1234,7 +1253,11 @@ local function StatusTextChanged(frame, status, event, unitState)
     storeKey = "_msufStatusTextFlagsKey"
     key = StatusTextFlagsKey(frame, cfg, unitState)
   elseif event == "UNIT_HEALTH" then
-    return false
+    if cfg.showDead ~= true and cfg.showGhost ~= true then
+      return false
+    end
+    storeKey = "_msufStatusTextHealthKey"
+    key = StatusTextFlagsKey(frame, cfg, unitState, seedHP)
   else
     return true
   end
@@ -1258,7 +1281,7 @@ local function ClearStatusText(frame, fs)
   end
 end
 
-local function UpdateStatusText(frame, status, event)
+local function UpdateStatusText(frame, status, event, seedHP)
   local cfg = status and status.statusText
   local fs = frame.statusIndicatorText
   local unit = frame.unit
@@ -1272,7 +1295,8 @@ local function UpdateStatusText(frame, status, event)
     and frame._msufStatusTextValue == nil
     and fs._msufStatusShown == false
     and (cfg.showDead == true or cfg.showGhost == true) then
-    local deadOrGhost = ReadDeadCached(frame, unit, unitState)
+    local healthDead = SeedHealthDeadOverride(seedHP)
+    local deadOrGhost = healthDead == true or ReadDeadCached(frame, unit, unitState)
     if deadOrGhost ~= true then
       return
     end
@@ -1287,12 +1311,12 @@ local function UpdateStatusText(frame, status, event)
     ClearStatusText(frame, fs)
     return
   end
-  if not StatusTextChanged(frame, status, event, unitState) then
+  if not StatusTextChanged(frame, status, event, unitState, seedHP) then
     return
   end
   local text, state = status.testMode and "DEAD" or nil, status.testMode and "dead" or nil
   if not text then
-    text, state = StatusText(frame, cfg, unitState)
+    text, state = StatusText(frame, cfg, unitState, seedHP)
   end
   if text then
     local layout = cfg
@@ -1407,6 +1431,9 @@ function Status.Apply(frame, spec)
   if frame then
     frame._msufStatusTextValue = nil
     frame._msufStatusTextLayout = nil
+    frame._msufStatusTextConnectionKey = nil
+    frame._msufStatusTextFlagsKey = nil
+    frame._msufStatusTextHealthKey = nil
   end
   ApplyConfiguredRegions(frame, spec)
 end
@@ -1417,6 +1444,9 @@ function Status.Disable(frame)
   end
   frame._msufStatusTextValue = nil
   frame._msufStatusTextLayout = nil
+  frame._msufStatusTextConnectionKey = nil
+  frame._msufStatusTextFlagsKey = nil
+  frame._msufStatusTextHealthKey = nil
   CancelReadyCheckTimer(frame)
 end
 
