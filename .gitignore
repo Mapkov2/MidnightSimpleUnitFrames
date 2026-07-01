@@ -4,7 +4,13 @@ _backups/
 *.log
 *.tmp
 .vs/
+.vscode/
 .idea/
+.luarc.json
+luac.out
+luarc-notes.md
+luarsp-project.json
+AGENTS.md
 
 # Local MSUF developer toolbelt. These scripts/docs are intentionally local-only
 # and should not ship with the addon or be pushed to GitHub.
