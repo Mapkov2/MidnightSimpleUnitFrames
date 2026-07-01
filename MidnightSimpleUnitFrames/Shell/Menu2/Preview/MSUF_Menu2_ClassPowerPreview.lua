@@ -577,7 +577,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h:SetFrameLevel((preview.canvas:GetFrameLevel() or 0) + 40)
     h:EnableMouse(true)
     h:EnableKeyboard(true)
-    if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(false) end
+    if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(true) end
     if h.RegisterForClicks then h:RegisterForClicks("LeftButtonDown", "LeftButtonUp") end
     if h.RegisterForDrag then h:RegisterForDrag("LeftButton") end
     h._preview, h._key, h._store = preview, key, store
@@ -1724,7 +1724,11 @@ function Preview.Create(ctx, builder)
         StopAnimationDriver(box)
         SetArrowBindings(box, false)
         if box._msufCPPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == box._msufCPPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
-        if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
+        if Helpers.ReleaseKeyboardCapture then
+            Helpers.ReleaseKeyboardCapture(box)
+        elseif box.SetPropagateKeyboardInput then
+            box:SetPropagateKeyboardInput(true)
+        end
         if box.dragFrame then
             box.dragFrame:SetScript("OnUpdate", nil)
             box.dragFrame._handle = nil

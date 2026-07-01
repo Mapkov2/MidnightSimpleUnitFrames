@@ -89,8 +89,7 @@ local function NormalizeCastbarPreviewTruncate(value)
     if value == "CLIP" or value == "NONE" then return value end
     return "AUTO"
 end
-local function ShortenCastbarPreviewSpellName(key, text, truncate)
-    if truncate ~= "AUTO" then return text end
+local function ShortenCastbarPreviewSpellName(key, text)
     local shorten = _G.MSUF_ShortenCastbarSpellName
     if type(shorten) ~= "function" then return text end
     return shorten({ unit = key == "boss" and "boss1" or key }, text)
@@ -214,12 +213,12 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         AnchorCastbarPreviewText(mock.cast.text, mock.cast.fill, textPosition, textX, textY, textJustify, S)
         local textMaxWidth = ReadCastbarNum(g, key, "SpellNameMaxWidth", "bossCastSpellNameMaxWidth", 0)
         local truncate = NormalizeCastbarPreviewTruncate(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNameTruncate", "bossCastSpellNameTruncate", "AUTO"))
-        local spellName = ShortenCastbarPreviewSpellName(key, TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"), truncate)
+        local spellName = ShortenCastbarPreviewSpellName(key, TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"))
         mock.cast.text:SetText(spellName)
         if truncate == "NONE" then
             local naturalWidth = (mock.cast.text.GetStringWidth and mock.cast.text:GetStringWidth()) or scw
             mock.cast.text:SetWidth(max(20, scw, naturalWidth + 10))
-        elseif textMaxWidth and textMaxWidth > 0 then
+        elseif truncate == "CLIP" and textMaxWidth and textMaxWidth > 0 then
             mock.cast.text:SetWidth(textMaxWidth)
         else
             mock.cast.text:SetWidth(max(20, scw - timeReserve - 10))
@@ -1201,7 +1200,8 @@ function Preview.Refresh(box, reason)
         PlacePreviewSlot(right, parent, rPoint, rRel, S(-4 + offsets.rightX), S(yAdd + offsets.rightY), "RIGHT")
         PlacePreviewSlot(pct, parent, rPoint, rRel, S(-4 + offsets.rightX), S(yAdd + offsets.rightY), "RIGHT")
     end
-    PlaceTextSet(mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct, mock.textFrame, "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", TextOffsets("hp", -4))
+    local hpOffsets = TextOffsets("hp", -4)
+    PlaceTextSet(mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct, mock.textFrame, "TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", hpOffsets)
     local powerOffsets = TextOffsets("power", 4)
     if detachedPowerInUnitPreview and box._runtimeDetachedPowerTextOnBar and mock.detachedPower:IsShown() then
         PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.detachedPower, "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", powerOffsets)

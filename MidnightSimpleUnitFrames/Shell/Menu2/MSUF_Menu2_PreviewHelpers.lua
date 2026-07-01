@@ -596,11 +596,44 @@ end
 local function SetKeyboardPropagate(frame, propagate)
     if frame and frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(propagate == true) end
 end
+local function InCombatLocked()
+    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+end
+local function ForEachPreviewKeyboardFrame(owner, callback)
+    if not (owner and type(callback) == "function") then return end
+    local seen = {}
+    local function Visit(frame)
+        if frame and not seen[frame] then
+            seen[frame] = true
+            callback(frame)
+        end
+    end
+    Visit(owner)
+    local handles = owner.handles
+    if type(handles) == "table" then
+        for i = 1, #handles do
+            Visit(handles[i])
+        end
+    end
+    handles = owner._handleList
+    if type(handles) == "table" then
+        for i = 1, #handles do
+            Visit(handles[i])
+        end
+    end
+end
+function H.ReleaseKeyboardCapture(owner)
+    ForEachPreviewKeyboardFrame(owner, function(frame)
+        SetKeyboardPropagate(frame, true)
+    end)
+end
 function H.FocusKeyboardTarget(owner, handle, defer, opts)
     if not owner then return end
     opts = opts or {}
     local selectedField = opts.selectedField or "_selectedHandle"
     handle = handle or (selectedField and owner[selectedField])
+    H.ReleaseKeyboardCapture(owner)
+    if InCombatLocked() then return end
     if owner.EnableKeyboard then owner:EnableKeyboard(true) end
     SetKeyboardPropagate(owner, handle and false or true)
     if handle and handle.EnableKeyboard then handle:EnableKeyboard(true) end
@@ -623,14 +656,20 @@ end
 function H.ArrowKeyDown(self, keyName, opts)
     opts = opts or {}
     local owner = (opts.owner and opts.owner(self)) or (self and self._preview) or self or (opts.active and opts.active())
-    local dx, dy = H.KeyDelta(keyName)
-    if not dx then
+    if InCombatLocked() then
+        H.ReleaseKeyboardCapture(owner)
         SetKeyboardPropagate(self, true)
         return false
     end
-    if H.IsTextInputFocused() then
+    local dx, dy = H.KeyDelta(keyName)
+    if not dx then
         SetKeyboardPropagate(self, true)
         SetKeyboardPropagate(owner, true)
+        return false
+    end
+    if H.IsTextInputFocused() then
+        H.ReleaseKeyboardCapture(owner)
+        SetKeyboardPropagate(self, true)
         return false
     end
     SetKeyboardPropagate(self, false)
@@ -655,6 +694,7 @@ function H.RegisterEditModeNudgeTarget(owner, opts)
     owner[targetField] = owner[targetField] or {
         frame = owner,
         IsActive = function()
+            if InCombatLocked() then return false end
             if not (owner and owner.IsShown and owner:IsShown()) then return false end
             local selected = Selected()
             if opts.canNudge and not opts.canNudge(selected, owner) then return false end

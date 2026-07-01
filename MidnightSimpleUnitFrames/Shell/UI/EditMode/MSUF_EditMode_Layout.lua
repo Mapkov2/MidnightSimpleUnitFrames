@@ -952,10 +952,11 @@ function Nudge.Enable()
     end
 
     if IsConfigCombatLocked() then
-        owner.__msufPendingClear = false
+        owner.__msufPendingClear = true
         owner:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
     end
+    if ClearOverrideBindings then ClearOverrideBindings(owner) end
     for i = 1, #NUDGE_DIRS do
         local dir = NUDGE_DIRS[i][1]
         SetOverrideBindingClick(owner, false, dir, "MSUF_EM2_Nudge" .. dir)
@@ -963,6 +964,7 @@ function Nudge.Enable()
 end
 
 function Nudge.Disable()
+    if type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
     if not owner then return end
     if IsConfigCombatLocked() then
         owner.__msufPendingClear = true

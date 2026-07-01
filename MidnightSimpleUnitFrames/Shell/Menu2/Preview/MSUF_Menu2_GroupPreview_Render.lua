@@ -1151,6 +1151,12 @@ function Render.Install(box, ctx, deps)
     box:EnableKeyboard(true)
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
     box:SetScript("OnKeyDown", function(self, key)
+        if _G.InCombatLockdown and _G.InCombatLockdown() then
+            self._selectedHandle = nil
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+            RefreshHandleSelection(self)
+            return
+        end
         local handle = self._selectedHandle
         if not handle or handle._locked then
             if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
