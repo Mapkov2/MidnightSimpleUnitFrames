@@ -54,7 +54,11 @@ A.GroupFramesRegistryData.GROUP_STATUS_ICON_EXTRA_SPECS = {
         defaultSize = 14,
         defaultAnchor = "CENTER",
         defaultLayer = 7,
-        terms = { "dead text", "dead status text", "status text" },
+        terms = {
+            "dead text", "dead status text", "status text",
+            "offline text", "offline status text", "offline indicator",
+            "disconnected text", "connection text",
+        },
     },
     {
         value = "statusGhostText",

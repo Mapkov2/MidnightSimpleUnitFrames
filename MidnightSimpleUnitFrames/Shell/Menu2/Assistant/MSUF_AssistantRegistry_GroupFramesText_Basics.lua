@@ -38,6 +38,7 @@ function A.GroupFramesRegistry.RegisterTextBasics(ctx, scope, defaults)
     if type(ApplyGroup) ~= "function" or type(ClampNumber) ~= "function" then return end
     if type(RegisterGroupBoolean) ~= "function" or type(RegisterGroupNumber) ~= "function" then return end
     if type(RegisterGroupEnum) ~= "function" or type(SetGroupFontOverrideValue) ~= "function" then return end
+    local scopeLabel = tostring(UNIT_LABELS[scope] or scope):lower()
 
     local aliases = {}
     AddAliasesForUnit(aliases, scope, "name", "name")
@@ -52,6 +53,13 @@ function A.GroupFramesRegistry.RegisterTextBasics(ctx, scope, defaults)
     aliases = {}
     AddAliasesForUnit(aliases, scope, "power text", "power text")
     AddAliasesForUnit(aliases, scope, "mana text", "mana text")
+    AddAliasesForUnit(aliases, scope, "power number")
+    AddAliasesForUnit(aliases, scope, "power numbers")
+    AddAliasesForUnit(aliases, scope, "mana number")
+    AddAliasesForUnit(aliases, scope, "mana numbers")
+    AddAliasesForUnit(aliases, scope, "resource text")
+    AddAliasesForUnit(aliases, scope, "resource number")
+    AddAliasesForUnit(aliases, scope, "resource numbers")
     Registry:RegisterSetting({
         key = "gf_" .. scope .. ".showPowerText",
         label = UNIT_LABELS[scope] .. " Power Text",
@@ -61,6 +69,20 @@ function A.GroupFramesRegistry.RegisterTextBasics(ctx, scope, defaults)
         attribute = "powerText",
         type = "boolean",
         aliases = aliases,
+        exactAliases = {
+            scope .. " power text",
+            scopeLabel .. " power text",
+            scope .. " mana text",
+            scopeLabel .. " mana text",
+            scope .. " power numbers",
+            scopeLabel .. " power numbers",
+            scope .. " mana numbers",
+            scopeLabel .. " mana numbers",
+            scope .. " resource text",
+            scopeLabel .. " resource text",
+            scope .. " resource numbers",
+            scopeLabel .. " resource numbers",
+        },
         get = function()
             local db = GroupDB(scope)
             return db.showPowerText == true or db.showPower == true
@@ -73,6 +95,7 @@ function A.GroupFramesRegistry.RegisterTextBasics(ctx, scope, defaults)
         end,
         apply = function() ApplyGroup(scope, "font") end,
         combatSafe = false,
+        description = "Controls the saved group-frame power/resource text. Power bars are a separate setting.",
     })
 
     aliases = {}

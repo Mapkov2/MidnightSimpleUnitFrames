@@ -35,6 +35,24 @@ Data.GRADIENT_DIRECTION_ALIASES = {
 Data.ON_OFF_STORAGE = { off = 0, on = 1 }
 Data.ON_OFF_VALUES = { "off", "on" }
 Data.ON_OFF_ALIASES = { off = "off", disabled = "off", hide = "off", on = "on", enabled = "on", show = "on" }
+Data.AGGRO_MODE_VALUES = { "ALL", "NON_TANK", "HEALER", "TANK" }
+Data.AGGRO_MODE_ALIASES = {
+    all = "ALL",
+    everyone = "ALL",
+    ["all roles"] = "ALL",
+    nontank = "NON_TANK",
+    ["non tank"] = "NON_TANK",
+    ["non tanks"] = "NON_TANK",
+    ["not tank"] = "NON_TANK",
+    ["non-tank"] = "NON_TANK",
+    ["non-tanks"] = "NON_TANK",
+    healer = "HEALER",
+    healers = "HEALER",
+    ["healers only"] = "HEALER",
+    tank = "TANK",
+    tanks = "TANK",
+    ["tanks only"] = "TANK",
+}
 Data.ABSORB_MODE_STORAGE = { off = 1, bar = 2 }
 Data.ABSORB_MODE_VALUES = { "off", "bar" }
 Data.ABSORB_MODE_ALIASES = { off = "off", disabled = "off", none = "off", bar = "bar", enabled = "bar", on = "bar" }

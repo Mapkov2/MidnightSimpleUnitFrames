@@ -32,6 +32,8 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     local ON_OFF_STORAGE = ctx.ON_OFF_STORAGE or {}
     local ON_OFF_VALUES = ctx.ON_OFF_VALUES or {}
     local ON_OFF_ALIASES = ctx.ON_OFF_ALIASES
+    local AGGRO_MODE_VALUES = ctx.AGGRO_MODE_VALUES or {}
+    local AGGRO_MODE_ALIASES = ctx.AGGRO_MODE_ALIASES
     local DISPEL_TRIGGER_VALUES = ctx.DISPEL_TRIGGER_VALUES or {}
     local DISPEL_TRIGGER_ALIASES = ctx.DISPEL_TRIGGER_ALIASES
     local UNIT_DISPEL_TRIGGER_VALUES = ctx.UNIT_DISPEL_TRIGGER_VALUES or {}
@@ -54,6 +56,19 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
         "make frame outline bigger", "make frame outline smaller", "make outline bigger", "make outline smaller",
         "border thicker", "border thinner", "border bigger", "border smaller", "outline thicker", "outline thinner", "outline bigger", "outline smaller",
     }, { category = "Global / Bars / Outline", frameType = "globalBars", apply = ApplyBarOutline, reason = "MSUF_ASSISTANT_BAR_OUTLINE" })
+    RegisterGeneralNumberSetting("barOutlineColorA", "barOutlineOpacity", "Global Bar Outline Opacity", 1, 0, 1, {
+        "bar outline opacity", "bar outline alpha", "frame outline opacity", "frame outline alpha",
+        "bar border opacity", "bar border alpha", "frame border opacity", "frame border alpha",
+        "outline opacity", "outline alpha",
+    }, {
+        category = "Global / Bars / Outline",
+        frameType = "globalBars",
+        apply = ApplyBarOutline,
+        reason = "MSUF_ASSISTANT_BAR_OUTLINE_OPACITY",
+        step = 0.05,
+        percent = true,
+        description = "Controls the alpha channel used by the shared bar/frame outline color.",
+    })
     RegisterBarsBoolean("roundedFramesEnabled", "rounded", "Rounded Frame Texture", false, {
         "rounded frame texture", "rounded frames", "round corners", "rounded corners", "rounded texture",
     }, { category = "Global / Bars / Rounded", frameType = "globalBars", apply = ApplyRoundedBars, reason = "MSUF_ASSISTANT_ROUNDED_FRAMES", requiresReload = true })
@@ -76,33 +91,19 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     RegisterGeneralMappedEnum("aggroOutlineMode", "aggroBorder", "Aggro Border", "on", ON_OFF_VALUES, ON_OFF_STORAGE, {
         "aggro border", "threat border", "aggro outline",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyAggroBorder, reason = "MSUF_ASSISTANT_AGGRO_BORDER", valueAliases = ON_OFF_ALIASES })
-    RegisterGeneralEnum("aggroMode", "aggroMode", "Aggro Shows For", "ALL", {
-        "ALL", "NON_TANK", "HEALER", "TANK",
-    }, {
+    RegisterGeneralEnum("aggroMode", "aggroMode", "Aggro Shows For", "ALL", AGGRO_MODE_VALUES, {
         "aggro shows for", "aggro role filter", "aggro non tanks", "aggro not tank", "threat non tanks",
     }, {
         category = "Global / Bars / Highlight Borders",
         frameType = "globalBars",
         apply = ApplyAggroBorder,
         reason = "MSUF_ASSISTANT_AGGRO_MODE",
-        valueAliases = {
-            all = "ALL",
-            everyone = "ALL",
-            ["all roles"] = "ALL",
-            nontank = "NON_TANK",
-            ["non tank"] = "NON_TANK",
-            ["non tanks"] = "NON_TANK",
-            ["not tank"] = "NON_TANK",
-            healer = "HEALER",
-            healers = "HEALER",
-            tank = "TANK",
-            tanks = "TANK",
-        },
+        valueAliases = AGGRO_MODE_ALIASES,
     })
     RegisterGeneralMappedEnum("dispelOutlineMode", "dispelBorder", "Dispel Border", "on", ON_OFF_VALUES, ON_OFF_STORAGE, {
         "dispel border", "dispellable border", "dispel outline",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_DISPEL_BORDER", valueAliases = ON_OFF_ALIASES })
-    RegisterGeneralEnum("dispelBorderTrigger", "dispelBorderTrigger", "Dispel Border Detects", "BY_ME", DISPEL_TRIGGER_VALUES, {
+    RegisterGeneralEnum("dispelBorderTrigger", "dispelBorderTrigger", "Dispel Border Detects", "DISPEL_TYPE", DISPEL_TRIGGER_VALUES, {
         "dispel border detects", "dispel border trigger", "dispel detection",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_DISPEL_BORDER_TRIGGER", valueAliases = DISPEL_TRIGGER_ALIASES })
     RegisterGeneralMappedEnum("purgeOutlineMode", "purgeBorder", "Purge Border", "off", ON_OFF_VALUES, ON_OFF_STORAGE, {
