@@ -433,8 +433,8 @@ local function ApplyDropdownItemFont(fs, item)
     if type(fontPath) == "string" and fontPath ~= "" and fs.SetFont then
         local resolveSafe = _G.MSUF_ResolveSafeFontPath
         if type(resolveSafe) == "function" then fontPath = resolveSafe(fontPath, size, "", fontKey) end
-        local ok, applied = pcall(fs.SetFont, fs, fontPath, size, "")
-        if ok and applied ~= false then return end
+        local ok = pcall(fs.SetFont, fs, fontPath, size, "")
+        if ok then return end
         RestoreDropdownDefaultFont(fs)
         return
     end

@@ -472,10 +472,21 @@ builders.PLAYER_HP = function(E)
         local stamp = tostring(fontPath) .. ":" .. tostring(size) .. ":" .. tostring(fontFlags)
         if PHP._fontStamp == stamp then return end
         PHP._fontStamp = stamp
+        local function FontApplied(fs, path, px, fontFlags)
+            if type(fs.GetFont) ~= "function" then return true end
+            local actual, actualSize, actualFlags = fs:GetFont()
+            if not actual then return true end
+            if actualSize and actualSize ~= px then return false end
+            if (actualFlags or "") ~= (fontFlags or "") then return false end
+            if actual == path then return true end
+            local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
+            if type(matches) == "function" then return matches(path, actual) == true end
+            return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(path or ""):gsub("/", "\\"):lower()
+        end
         for _, fs in pairs({ PHP.left, PHP.center, PHP.right }) do
             if fs.SetFont then
-                local ok, applied = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
-                if not ok or applied == false then
+                local ok = pcall(fs.SetFont, fs, fontPath, size, fontFlags)
+                if not ok or not FontApplied(fs, fontPath, size, fontFlags) then
                     pcall(fs.SetFont, fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
                 end
             end

@@ -717,13 +717,25 @@ builders.PRESENTATION = function(E)
         end
         if fontSize < 6 then fontSize = 6 end
 
+        local function ClassPowerFontApplied(region, fontPath, size, fontFlags)
+            if type(region.GetFont) ~= "function" then return true end
+            local actual, actualSize, actualFlags = region:GetFont()
+            if not actual then return true end
+            if actualSize and actualSize ~= size then return false end
+            if (actualFlags or "") ~= (fontFlags or "") then return false end
+            if actual == fontPath then return true end
+            if type(_G.MSUF_FontPathMatches) == "function" and _G.MSUF_FontPathMatches(fontPath, actual) == true then return true end
+            if type(_G.MSUF_FontPathEquals) == "function" and _G.MSUF_FontPathEquals(fontPath, actual) == true then return true end
+            return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(fontPath or ""):gsub("/", "\\"):lower()
+        end
+
         local function ApplyClassPowerFont(region, fontPath, size, fontFlags)
             if not (region and region.SetFont) then return false end
-            local ok, applied = pcall(region.SetFont, region, fontPath, size, fontFlags)
-            if ok and applied ~= false then return true end
+            local ok = pcall(region.SetFont, region, fontPath, size, fontFlags)
+            if ok and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
             local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
-            ok, applied = pcall(region.SetFont, region, fallback, size, fontFlags)
-            return ok and applied ~= false
+            ok = pcall(region.SetFont, region, fallback, size, fontFlags)
+            return ok and ClassPowerFontApplied(region, fallback, size, fontFlags)
         end
 
         local rev = (_G.MSUF_FontPathSerial or 0) + fontSize * 1000003
