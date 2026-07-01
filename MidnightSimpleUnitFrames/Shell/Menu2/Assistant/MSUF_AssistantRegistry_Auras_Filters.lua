@@ -28,11 +28,23 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
     local AuraSetFiltersEnabled = ctx.AuraSetFiltersEnabled
     local AuraReadFilter = ctx.AuraReadFilter
     local AuraWriteFilter = ctx.AuraWriteFilter
+    local AuraModel = ctx.AuraModel
     local ApplyAura = ctx.ApplyAura
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(AddAliasesForAuraScope) ~= "function" or type(AddAuraLaneAliases) ~= "function" then return end
     if type(AuraScopeLabel) ~= "function" or type(RegisterAuraScopeBoolean) ~= "function" then return end
+
+    local function AuraUseSharedBlacklist(scopeKey)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.UseSharedBlacklist) == "function" then return Model.UseSharedBlacklist(scopeKey) end
+        return true
+    end
+
+    local function AuraSetUseSharedBlacklist(scopeKey, value)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.SetUseSharedBlacklist) == "function" then Model.SetUseSharedBlacklist(scopeKey, value) end
+    end
 
     local aliases = {}
     AddAliasesForAuraScope(aliases, scope, "filters")
@@ -41,6 +53,49 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
         function() return AuraFiltersEnabled(scope) end,
         function(value) AuraSetFiltersEnabled(scope, value) end,
         false)
+
+    local registerMutableLegacyBlacklistScopeSetting = false
+    if registerMutableLegacyBlacklistScopeSetting and scope ~= "shared" then
+        -- Exact aura blacklist storage is legacy read-only while the native 12.1
+        -- backend is active, so do not expose inheritance as a live mutation.
+        aliases = {}
+        AddAliasesForAuraScope(aliases, scope, "use shared blacklist")
+        AddAliasesForAuraScope(aliases, scope, "shared blacklist")
+        AddAliasesForAuraScope(aliases, scope, "use shared hidden auras")
+        AddAliasesForAuraScope(aliases, scope, "shared hidden auras")
+        AddAliasesForAuraScope(aliases, scope, "custom blacklist")
+        AddAliasesForAuraScope(aliases, scope, "custom hidden aura list")
+        AddAliasesForAuraScope(aliases, scope, "custom hidden auras")
+        Registry:RegisterSetting({
+            key = "auras3." .. scope .. ".useSharedBlacklist",
+            label = AuraScopeLabel(scope) .. " Use Shared Blacklist",
+            category = AuraScopeLabel(scope) .. " / Aura Filters",
+            unit = scope,
+            frameType = "aura",
+            attribute = "auraUseSharedBlacklist",
+            type = "boolean",
+            aliases = aliases,
+            booleanAliases = {
+                ["use shared blacklist"] = true,
+                ["shared blacklist"] = true,
+                ["inherit blacklist"] = true,
+                ["use shared hidden auras"] = true,
+                ["shared hidden auras"] = true,
+                ["inherit hidden auras"] = true,
+                ["use custom blacklist"] = false,
+                ["custom blacklist"] = false,
+                ["own blacklist"] = false,
+                ["use custom hidden auras"] = false,
+                ["custom hidden auras"] = false,
+                ["custom hidden aura list"] = false,
+                ["own hidden aura list"] = false,
+            },
+            get = function() return AuraUseSharedBlacklist(scope) end,
+            set = function(value) AuraSetUseSharedBlacklist(scope, value and true or false) end,
+            apply = function() ApplyAura(scope, "MSUF_ASSISTANT_AURA_BLACKLIST_SHARED") end,
+            combatSafe = false,
+        })
+    end
 
     for i = 1, #AURA_FILTER_BOOLEAN_SPECS do
         local spec = AURA_FILTER_BOOLEAN_SPECS[i]

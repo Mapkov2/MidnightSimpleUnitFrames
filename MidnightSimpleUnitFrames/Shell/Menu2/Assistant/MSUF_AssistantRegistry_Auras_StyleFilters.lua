@@ -24,6 +24,10 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AURA_STACK_ANCHOR_ALIASES = ctx.AURA_STACK_ANCHOR_ALIASES or {}
     local AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_VALUES or {}
     local AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES or {}
+    local AURA_DURATION_BAR_POSITION_VALUES = ctx.AURA_DURATION_BAR_POSITION_VALUES or {}
+    local AURA_DURATION_BAR_POSITION_ALIASES = ctx.AURA_DURATION_BAR_POSITION_ALIASES or {}
+    local AURA_DURATION_BAR_DIRECTION_VALUES = ctx.AURA_DURATION_BAR_DIRECTION_VALUES or {}
+    local AURA_DURATION_BAR_DIRECTION_ALIASES = ctx.AURA_DURATION_BAR_DIRECTION_ALIASES or {}
     local AURA_LANE_STYLE_BOOLEAN_SPECS = ctx.AURA_LANE_STYLE_BOOLEAN_SPECS or {}
     local AURA_LANE_STYLE_NUMBER_SPECS = ctx.AURA_LANE_STYLE_NUMBER_SPECS or {}
     local AURA_DEBUFF_TYPE_BORDER_VALUES = ctx.AURA_DEBUFF_TYPE_BORDER_VALUES or {}
@@ -70,12 +74,91 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     if #AURA_COOLDOWN_SWIPE_DIRECTION_VALUES == 0 then
         AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
     end
+    if #AURA_DURATION_BAR_POSITION_VALUES == 0 then
+        AURA_DURATION_BAR_POSITION_VALUES = { "BOTTOM", "TOP" }
+    end
+    if #AURA_DURATION_BAR_DIRECTION_VALUES == 0 then
+        AURA_DURATION_BAR_DIRECTION_VALUES = { "REMAINING", "ELAPSED" }
+    end
     local debuffBorderAllowed = {}
     for i = 1, #AURA_DEBUFF_TYPE_BORDER_VALUES do debuffBorderAllowed[AURA_DEBUFF_TYPE_BORDER_VALUES[i]] = true end
+
+    local durationBarPositionAllowed = {}
+    for i = 1, #AURA_DURATION_BAR_POSITION_VALUES do durationBarPositionAllowed[AURA_DURATION_BAR_POSITION_VALUES[i]] = true end
+    local durationBarDirectionAllowed = {}
+    for i = 1, #AURA_DURATION_BAR_DIRECTION_VALUES do durationBarDirectionAllowed[AURA_DURATION_BAR_DIRECTION_VALUES[i]] = true end
 
     local function NormalizeDebuffTypeBorderMode(value)
         value = tostring(value or "OFF")
         return debuffBorderAllowed[value] and value or "OFF"
+    end
+
+    local function LaneStyleKey(lane, key)
+        local prefix = lane == "buff" and "buff" or "debuff"
+        return prefix .. key:sub(1, 1):upper() .. key:sub(2)
+    end
+
+    local function NormalizeDurationBarPosition(value)
+        value = tostring(value or "BOTTOM"):upper()
+        return durationBarPositionAllowed[value] and value or "BOTTOM"
+    end
+
+    local function NormalizeDurationBarDirection(value)
+        value = tostring(value or "REMAINING"):upper()
+        if value == "ELAPSED_TIME" then value = "ELAPSED" end
+        return durationBarDirectionAllowed[value] and value or "REMAINING"
+    end
+
+    local function AuraReadLaneDurationBarPosition(scope, lane)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.ReadLaneDurationBarPosition) == "function" then
+            return NormalizeDurationBarPosition(Model.ReadLaneDurationBarPosition(scope, lane))
+        end
+        if Model and type(Model.ReadValue) == "function" then
+            local laneKey = LaneStyleKey(lane, "durationBarPosition")
+            local value = Model.ReadValue(scope, laneKey, nil)
+            if value == nil then value = Model.ReadValue(scope, "durationBarPosition", "BOTTOM") end
+            return NormalizeDurationBarPosition(value)
+        end
+        return "BOTTOM"
+    end
+
+    local function AuraWriteLaneDurationBarPosition(scope, lane, value)
+        value = NormalizeDurationBarPosition(value)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.WriteLaneDurationBarPosition) == "function" then
+            Model.WriteLaneDurationBarPosition(scope, lane, value)
+            return
+        end
+        if Model and type(Model.WriteValue) == "function" then
+            Model.WriteValue(scope, LaneStyleKey(lane, "durationBarPosition"), value)
+        end
+    end
+
+    local function AuraReadLaneDurationBarDirection(scope, lane)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.ReadLaneDurationBarDirection) == "function" then
+            return NormalizeDurationBarDirection(Model.ReadLaneDurationBarDirection(scope, lane))
+        end
+        if Model and type(Model.ReadValue) == "function" then
+            local laneKey = LaneStyleKey(lane, "durationBarDirection")
+            local value = Model.ReadValue(scope, laneKey, nil)
+            if value == nil then value = Model.ReadValue(scope, "durationBarDirection", "REMAINING") end
+            return NormalizeDurationBarDirection(value)
+        end
+        return "REMAINING"
+    end
+
+    local function AuraWriteLaneDurationBarDirection(scope, lane, value)
+        value = NormalizeDurationBarDirection(value)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.WriteLaneDurationBarDirection) == "function" then
+            Model.WriteLaneDurationBarDirection(scope, lane, value)
+            return
+        end
+        if Model and type(Model.WriteValue) == "function" then
+            Model.WriteValue(scope, LaneStyleKey(lane, "durationBarDirection"), value)
+        end
     end
 
     local function AuraReadStyleBool(scope, key, defaultValue)
@@ -213,6 +296,10 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                 local spec = AURA_LANE_STYLE_BOOLEAN_SPECS[i]
                 aliases = {}
                 for j = 1, #spec.words do AddAuraLaneAliases(aliases, settingScope, settingLane, spec.words[j]) end
+                if spec.key == "showDurationBar" then
+                    A._AssistantAddAuraAllLaneNouns(aliases, settingScope, { "duration bar", "show duration bar", "timer bar", "show timer bar" })
+                    A._AssistantAddAllAuraNouns(aliases, settingLane, "all", { "duration bar", "show duration bar", "timer bar", "show timer bar" })
+                end
                 RegisterAuraScopeLaneBoolean(settingScope, settingLane, spec.key, spec.label, spec.defaultValue, aliases,
                     function() return AuraReadLaneStyleBool(settingScope, settingLane, spec.key, spec.defaultValue) end,
                     function(value) AuraWriteLaneStyleBool(settingScope, settingLane, spec.key, value) end,
@@ -246,10 +333,35 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
                 function(value) AuraWriteLaneStyleBool(settingScope, settingLane, "cooldownSwipeReverse", value == "REVERSE") end,
                 true)
 
+            aliases = {}
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "duration bar position")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "timer bar position")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "duration bar edge")
+            A._AssistantAddAuraAllLaneNouns(aliases, settingScope, { "duration bar position", "timer bar position", "duration bar edge" })
+            RegisterAuraScopeLaneEnum(settingScope, settingLane, "durationBarPosition", "Duration Bar Position", AURA_DURATION_BAR_POSITION_VALUES, AURA_DURATION_BAR_POSITION_ALIASES, aliases,
+                function() return AuraReadLaneDurationBarPosition(settingScope, settingLane) end,
+                function(value) AuraWriteLaneDurationBarPosition(settingScope, settingLane, value) end,
+                true)
+
+            aliases = {}
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "duration bar fill mode")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "duration bar direction")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "timer bar fill mode")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "timer bar direction")
+            A._AssistantAddAuraAllLaneNouns(aliases, settingScope, { "duration bar fill mode", "duration bar direction", "timer bar fill mode", "timer bar direction" })
+            RegisterAuraScopeLaneEnum(settingScope, settingLane, "durationBarDirection", "Duration Bar Fill Mode", AURA_DURATION_BAR_DIRECTION_VALUES, AURA_DURATION_BAR_DIRECTION_ALIASES, aliases,
+                function() return AuraReadLaneDurationBarDirection(settingScope, settingLane) end,
+                function(value) AuraWriteLaneDurationBarDirection(settingScope, settingLane, value) end,
+                true)
+
             for i = 1, #AURA_LANE_STYLE_NUMBER_SPECS do
                 local spec = AURA_LANE_STYLE_NUMBER_SPECS[i]
                 aliases = {}
                 for j = 1, #spec.words do AddAuraLaneAliases(aliases, settingScope, settingLane, spec.words[j]) end
+                if spec.key == "durationBarHeight" then
+                    A._AssistantAddAuraAllLaneNouns(aliases, settingScope, { "duration bar height", "timer bar height" })
+                    A._AssistantAddAllAuraNouns(aliases, settingLane, "all", { "duration bar height", "timer bar height" })
+                end
                 RegisterAuraScopeLaneNumber(settingScope, settingLane, spec.key, spec.label, spec.defaultValue, spec.minValue, spec.maxValue, aliases,
                     function() return AuraReadLaneStyleNumber(settingScope, settingLane, spec.key, spec.defaultValue, spec.minValue, spec.maxValue) end,
                     function(value) AuraWriteLaneStyleNumber(settingScope, settingLane, spec.key, value, spec.minValue, spec.maxValue) end,
@@ -281,6 +393,11 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             aliases = {}
             AddAliasesForAuraScope(aliases, scope, "use shared rules")
             AddAliasesForAuraScope(aliases, scope, "shared aura rules")
+            AddAliasesForAuraScope(aliases, scope, "use shared filters")
+            AddAliasesForAuraScope(aliases, scope, "shared filters")
+            AddAliasesForAuraScope(aliases, scope, "shared aura filters")
+            AddAliasesForAuraScope(aliases, scope, "inherit filters")
+            AddAliasesForAuraScope(aliases, scope, "follow shared filters")
             RegisterAuraScopeBoolean(scope, "useSharedRules", "Use Shared Rules", true, aliases,
                 function() return AuraUseSharedRules(scope) end,
                 function(value) AuraSetUseSharedRules(scope, value) end,

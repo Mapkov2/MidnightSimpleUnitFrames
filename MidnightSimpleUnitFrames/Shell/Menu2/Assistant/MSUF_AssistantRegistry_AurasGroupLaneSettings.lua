@@ -28,10 +28,15 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     local ApplyGroup = ctx.ApplyGroup
     local RegisterGroupAuraLaneGeometrySettings = A.AurasRegistry and A.AurasRegistry.RegisterGroupAuraLaneGeometrySettings
     local GF_AURA_GROUPS = ctx.GF_AURA_GROUPS or {}
+    local GF_AURA_ANCHORS = ctx.GF_AURA_ANCHORS or {}
     local GF_AURA_FILTER_VALUES = ctx.GF_AURA_FILTER_VALUES or {}
     local GF_AURA_FILTER_ALIASES = ctx.GF_AURA_FILTER_ALIASES
     local AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_VALUES or {}
     local AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES or {}
+    local AURA_DURATION_BAR_POSITION_VALUES = ctx.AURA_DURATION_BAR_POSITION_VALUES or {}
+    local AURA_DURATION_BAR_POSITION_ALIASES = ctx.AURA_DURATION_BAR_POSITION_ALIASES or {}
+    local AURA_DURATION_BAR_DIRECTION_VALUES = ctx.AURA_DURATION_BAR_DIRECTION_VALUES or {}
+    local AURA_DURATION_BAR_DIRECTION_ALIASES = ctx.AURA_DURATION_BAR_DIRECTION_ALIASES or {}
     local AURA_DEBUFF_TYPE_BORDER_VALUES = ctx.AURA_DEBUFF_TYPE_BORDER_VALUES or {}
     local AURA_DEBUFF_TYPE_BORDER_ALIASES = ctx.AURA_DEBUFF_TYPE_BORDER_ALIASES or {}
     local AURA_LANES = ctx.AURA_LANES or {}
@@ -55,8 +60,306 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     if #AURA_COOLDOWN_SWIPE_DIRECTION_VALUES == 0 then
         AURA_COOLDOWN_SWIPE_DIRECTION_VALUES = { "NORMAL", "REVERSE" }
     end
+    if #AURA_DURATION_BAR_POSITION_VALUES == 0 then
+        AURA_DURATION_BAR_POSITION_VALUES = { "BOTTOM", "TOP" }
+    end
+    if #AURA_DURATION_BAR_DIRECTION_VALUES == 0 then
+        AURA_DURATION_BAR_DIRECTION_VALUES = { "REMAINING", "ELAPSED" }
+    end
+    if #GF_AURA_ANCHORS == 0 then
+        GF_AURA_ANCHORS = { "CENTER", "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
+    end
     local cooldownSwipeDirectionAllowed = {}
     for i = 1, #AURA_COOLDOWN_SWIPE_DIRECTION_VALUES do cooldownSwipeDirectionAllowed[AURA_COOLDOWN_SWIPE_DIRECTION_VALUES[i]] = true end
+
+    local PRIVATE_AURA_ANCHOR_ALIASES = {
+        center = "CENTER",
+        middle = "CENTER",
+        top = "TOPRIGHT",
+        topright = "TOPRIGHT",
+        ["top right"] = "TOPRIGHT",
+        top_right = "TOPRIGHT",
+        right = "TOPRIGHT",
+        topleft = "TOPLEFT",
+        ["top left"] = "TOPLEFT",
+        top_left = "TOPLEFT",
+        left = "TOPLEFT",
+        bottomright = "BOTTOMRIGHT",
+        ["bottom right"] = "BOTTOMRIGHT",
+        bottom_right = "BOTTOMRIGHT",
+        bottom = "BOTTOMRIGHT",
+        bottomleft = "BOTTOMLEFT",
+        ["bottom left"] = "BOTTOMLEFT",
+        bottom_left = "BOTTOMLEFT",
+    }
+    local PRIVATE_AURA_GROWTH_VALUES = { "RIGHT", "LEFT", "UP", "DOWN" }
+    local PRIVATE_AURA_GROWTH_ALIASES = {
+        right = "RIGHT",
+        rechts = "RIGHT",
+        left = "LEFT",
+        links = "LEFT",
+        up = "UP",
+        above = "UP",
+        hoch = "UP",
+        down = "DOWN",
+        below = "DOWN",
+        runter = "DOWN",
+    }
+
+    local function ClampGroupAuraNumber(value, defaultValue, minValue, maxValue, step)
+        value = tonumber(value)
+        if value == nil then value = defaultValue end
+        step = tonumber(step) or 1
+        if step > 0 then value = math.floor((value / step) + 0.5) * step end
+        if minValue ~= nil and value < minValue then value = minValue end
+        if maxValue ~= nil and value > maxValue then value = maxValue end
+        return value
+    end
+
+    local function RegisterGFAuraConfBoolean(scope, attr, key, label, defaultValue, aliases, description)
+        Registry:RegisterSetting({
+            key = "gf_" .. scope .. "." .. key,
+            label = UNIT_LABELS[scope] .. " " .. label,
+            category = UNIT_LABELS[scope] .. " / Group Auras",
+            unit = scope,
+            frameType = "groupAura",
+            attribute = "gfAura" .. attr,
+            type = "boolean",
+            aliases = aliases,
+            exactAliases = aliases,
+            get = function()
+                local value = GFReadConfValue(scope, key, defaultValue)
+                return value and true or false
+            end,
+            set = function(value) GFWriteConfValue(scope, key, value and true or false) end,
+            apply = function() ApplyGroup(scope, "auras") end,
+            combatSafe = false,
+            description = description,
+        })
+    end
+
+    local function RegisterGFAuraConfNumber(scope, attr, key, label, defaultValue, minValue, maxValue, step, aliases, description)
+        Registry:RegisterSetting({
+            key = "gf_" .. scope .. "." .. key,
+            label = UNIT_LABELS[scope] .. " " .. label,
+            category = UNIT_LABELS[scope] .. " / Group Auras",
+            unit = scope,
+            frameType = "groupAura",
+            attribute = "gfAura" .. attr,
+            type = "number",
+            aliases = aliases,
+            exactAliases = aliases,
+            min = minValue,
+            max = maxValue,
+            step = step or 1,
+            get = function()
+                return tonumber(GFReadConfValue(scope, key, defaultValue)) or defaultValue
+            end,
+            set = function(value)
+                GFWriteConfValue(scope, key, ClampGroupAuraNumber(value, defaultValue, minValue, maxValue, step or 1))
+            end,
+            apply = function() ApplyGroup(scope, "auras") end,
+            combatSafe = false,
+            description = description,
+        })
+    end
+
+    local function RegisterGFAuraConfEnum(scope, attr, key, label, values, valueAliases, defaultValue, aliases, description)
+        local allowed = {}
+        for i = 1, #values do allowed[values[i]] = true end
+        Registry:RegisterSetting({
+            key = "gf_" .. scope .. "." .. key,
+            label = UNIT_LABELS[scope] .. " " .. label,
+            category = UNIT_LABELS[scope] .. " / Group Auras",
+            unit = scope,
+            frameType = "groupAura",
+            attribute = "gfAura" .. attr,
+            type = "enum",
+            aliases = aliases,
+            exactAliases = aliases,
+            values = values,
+            valueAliases = valueAliases,
+            get = function()
+                local value = GFReadConfValue(scope, key, defaultValue)
+                return allowed[value] and value or defaultValue
+            end,
+            set = function(value) GFWriteConfValue(scope, key, allowed[value] and value or defaultValue) end,
+            apply = function() ApplyGroup(scope, "auras") end,
+            combatSafe = false,
+            description = description,
+        })
+    end
+
+    local function PrivateAuraConfig(scope)
+        local value = GFReadConfValue(scope, "privateAuras", nil)
+        if type(value) ~= "table" then
+            value = {}
+            GFWriteConfValue(scope, "privateAuras", value)
+        end
+        return value
+    end
+
+    local function ReadPrivateAuraValue(scope, field, flatKey, defaultValue)
+        local private = GFReadConfValue(scope, "privateAuras", nil)
+        if type(private) == "table" and private[field] ~= nil then return private[field] end
+        if flatKey then return GFReadConfValue(scope, flatKey, defaultValue) end
+        return defaultValue
+    end
+
+    local function WritePrivateAuraValue(scope, field, value, flatKey)
+        PrivateAuraConfig(scope)[field] = value
+        if flatKey then GFWriteConfValue(scope, flatKey, value) end
+    end
+
+    local function RegisterPrivateAuraBoolean(scope, attr, field, flatKey, label, defaultValue, aliases, description)
+        Registry:RegisterSetting({
+            key = "gf_" .. scope .. "." .. (flatKey or ("privateAuras." .. field)),
+            label = UNIT_LABELS[scope] .. " " .. label,
+            category = UNIT_LABELS[scope] .. " / Group Auras",
+            unit = scope,
+            frameType = "groupAura",
+            attribute = "gfAura" .. attr,
+            type = "boolean",
+            aliases = aliases,
+            exactAliases = aliases,
+            get = function()
+                local value = ReadPrivateAuraValue(scope, field, flatKey, defaultValue)
+                return value and true or false
+            end,
+            set = function(value) WritePrivateAuraValue(scope, field, value and true or false, flatKey) end,
+            apply = function() ApplyGroup(scope, "auras") end,
+            combatSafe = false,
+            description = description,
+        })
+    end
+
+    local function RegisterPrivateAuraNumber(scope, attr, field, flatKey, label, defaultValue, minValue, maxValue, step, aliases, description)
+        Registry:RegisterSetting({
+            key = "gf_" .. scope .. "." .. (flatKey or ("privateAuras." .. field)),
+            label = UNIT_LABELS[scope] .. " " .. label,
+            category = UNIT_LABELS[scope] .. " / Group Auras",
+            unit = scope,
+            frameType = "groupAura",
+            attribute = "gfAura" .. attr,
+            type = "number",
+            aliases = aliases,
+            exactAliases = aliases,
+            min = minValue,
+            max = maxValue,
+            step = step or 1,
+            get = function()
+                return tonumber(ReadPrivateAuraValue(scope, field, flatKey, defaultValue)) or defaultValue
+            end,
+            set = function(value)
+                WritePrivateAuraValue(scope, field, ClampGroupAuraNumber(value, defaultValue, minValue, maxValue, step or 1), flatKey)
+            end,
+            apply = function() ApplyGroup(scope, "auras") end,
+            combatSafe = false,
+            description = description,
+        })
+    end
+
+    local function RegisterPrivateAuraEnum(scope, attr, field, flatKey, label, values, valueAliases, defaultValue, aliases, description)
+        local allowed = {}
+        for i = 1, #values do allowed[values[i]] = true end
+        Registry:RegisterSetting({
+            key = "gf_" .. scope .. "." .. (flatKey or ("privateAuras." .. field)),
+            label = UNIT_LABELS[scope] .. " " .. label,
+            category = UNIT_LABELS[scope] .. " / Group Auras",
+            unit = scope,
+            frameType = "groupAura",
+            attribute = "gfAura" .. attr,
+            type = "enum",
+            aliases = aliases,
+            exactAliases = aliases,
+            values = values,
+            valueAliases = valueAliases,
+            get = function()
+                local value = ReadPrivateAuraValue(scope, field, flatKey, defaultValue)
+                return allowed[value] and value or defaultValue
+            end,
+            set = function(value) WritePrivateAuraValue(scope, field, allowed[value] and value or defaultValue, flatKey) end,
+            apply = function() ApplyGroup(scope, "auras") end,
+            combatSafe = false,
+            description = description,
+        })
+    end
+
+    local function RegisterGroupPrivateAuraSettings(scope)
+        local aliases = {}
+        AddAliasesForUnit(aliases, scope, "private auras")
+        AddAliasesForUnit(aliases, scope, "private aura icons")
+        AddAliasesForUnit(aliases, scope, "private aura indicators")
+        RegisterPrivateAuraBoolean(scope, "PrivateAuras", "enabled", "privateAurasEnabled", "Private Auras", true, aliases,
+            "Shows Blizzard private-aura indicators on group frames.")
+
+        aliases = {}
+        AddAliasesForUnit(aliases, scope, "private aura max")
+        AddAliasesForUnit(aliases, scope, "private aura count")
+        AddAliasesForUnit(aliases, scope, "private aura limit")
+        AddAliasesForUnit(aliases, scope, "private aura icons max")
+        RegisterPrivateAuraNumber(scope, "PrivateAuraMax", "max", "privateAuraMax", "Private Aura Max Icons", 4, 0, 8, 1, aliases,
+            "Maximum private-aura indicators shown on each group frame.")
+
+        aliases = {}
+        AddAliasesForUnit(aliases, scope, "private aura size")
+        AddAliasesForUnit(aliases, scope, "private aura icon size")
+        AddAliasesForUnit(aliases, scope, "private aura icons size")
+        RegisterPrivateAuraNumber(scope, "PrivateAuraSize", "size", "privateAuraSize", "Private Aura Icon Size", 20, 8, 64, 1, aliases,
+            "Private-aura indicator icon size on group frames.")
+
+        aliases = {}
+        AddAliasesForUnit(aliases, scope, "private aura anchor")
+        AddAliasesForUnit(aliases, scope, "private aura position")
+        AddAliasesForUnit(aliases, scope, "private aura corner")
+        RegisterPrivateAuraEnum(scope, "PrivateAuraAnchor", "anchor", "privateAuraAnchor", "Private Aura Anchor", GF_AURA_ANCHORS, PRIVATE_AURA_ANCHOR_ALIASES, "TOPRIGHT", aliases,
+            "Private-aura indicator anchor on group frames.")
+
+        aliases = {}
+        AddAliasesForUnit(aliases, scope, "private aura x")
+        AddAliasesForUnit(aliases, scope, "private aura x offset")
+        AddAliasesForUnit(aliases, scope, "private aura horizontal offset")
+        RegisterPrivateAuraNumber(scope, "PrivateAuraX", "x", "privateAuraX", "Private Aura X Offset", 0, -160, 160, 1, aliases,
+            "Private-aura indicator horizontal offset on group frames.")
+
+        aliases = {}
+        AddAliasesForUnit(aliases, scope, "private aura y")
+        AddAliasesForUnit(aliases, scope, "private aura y offset")
+        AddAliasesForUnit(aliases, scope, "private aura vertical offset")
+        RegisterPrivateAuraNumber(scope, "PrivateAuraY", "y", "privateAuraY", "Private Aura Y Offset", 0, -160, 160, 1, aliases,
+            "Private-aura indicator vertical offset on group frames.")
+
+        aliases = {}
+        AddAliasesForUnit(aliases, scope, "private aura countdown")
+        AddAliasesForUnit(aliases, scope, "private aura timer")
+        AddAliasesForUnit(aliases, scope, "private aura cooldown text")
+        RegisterPrivateAuraBoolean(scope, "PrivateAuraCountdown", "showCountdown", "privateAuraCountdown", "Private Aura Countdown", true, aliases,
+            "Shows countdown text on group-frame private-aura indicators.")
+
+        aliases = {}
+        AddAliasesForUnit(aliases, scope, "private aura spacing")
+        AddAliasesForUnit(aliases, scope, "private aura gap")
+        AddAliasesForUnit(aliases, scope, "private aura icon spacing")
+        RegisterPrivateAuraNumber(scope, "PrivateAuraSpacing", "spacing", nil, "Private Aura Spacing", 1, 0, 24, 1, aliases,
+            "Spacing between group-frame private-aura indicators.")
+
+        aliases = {}
+        AddAliasesForUnit(aliases, scope, "private aura growth")
+        AddAliasesForUnit(aliases, scope, "private aura grow")
+        AddAliasesForUnit(aliases, scope, "private auras grow")
+        AddAliasesForUnit(aliases, scope, "private aura grow direction")
+        AddAliasesForUnit(aliases, scope, "private aura direction")
+        RegisterPrivateAuraEnum(scope, "PrivateAuraGrowth", "growth", nil, "Private Aura Growth", PRIVATE_AURA_GROWTH_VALUES, PRIVATE_AURA_GROWTH_ALIASES, "RIGHT", aliases,
+            "Direction private-aura indicators grow from their anchor.")
+
+        aliases = {}
+        AddAliasesForUnit(aliases, scope, "private aura numbers")
+        AddAliasesForUnit(aliases, scope, "private aura number text")
+        AddAliasesForUnit(aliases, scope, "private aura stacks")
+        AddAliasesForUnit(aliases, scope, "private aura stack text")
+        RegisterPrivateAuraBoolean(scope, "PrivateAuraNumbers", "showNumbers", nil, "Private Aura Numbers", false, aliases,
+            "Shows private-aura numeric text when the runtime provides a count.")
+    end
 
     local function ReadGFCooldownSwipeDirection(scope, lane)
         if type(GFReadAuraValue) ~= "function" then return "NORMAL" end
@@ -214,6 +517,16 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             AddGFAuraAliases(aliases, scope, lane, "stacks")
             RegisterGFAuraBoolean(scope, lane, "StackCount", "showStacks", laneInfo.label .. " Stack Count", true, aliases)
 
+            aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "duration bar")
+            AddGFAuraAliases(aliases, scope, lane, "show duration bar")
+            AddGFAuraAliases(aliases, scope, lane, "timer bar")
+            AddGFAuraAliases(aliases, scope, lane, "show timer bar")
+            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "duration bar", "show duration bar", "timer bar", "show timer bar" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all group", { "duration bar", "show duration bar", "timer bar", "show timer bar" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "duration bar", "show duration bar", "timer bar", "show timer bar" })
+            RegisterGFAuraBoolean(scope, lane, "DurationBar", "showDurationBar", laneInfo.label .. " Duration Bar", false, aliases)
+
             if lane == "debuff" then
                 aliases = {}
                 AddGFAuraAliases(aliases, scope, lane, "dispel type border")
@@ -271,11 +584,36 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             AddGFAuraAliases(aliases, scope, lane, "stack font")
             AddGFAuraAliases(aliases, scope, lane, "stack size")
             RegisterGFAuraNumber(scope, lane, "StackSize", "stackSize", laneInfo.label .. " Stack Font Size", 10, 6, 24, aliases, "font")
+
+            aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "duration bar height")
+            AddGFAuraAliases(aliases, scope, lane, "timer bar height")
+            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "duration bar height", "timer bar height" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all group", { "duration bar height", "timer bar height" })
+            Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "duration bar height", "timer bar height" })
+            RegisterGFAuraNumber(scope, lane, "DurationBarHeight", "durationBarHeight", laneInfo.label .. " Duration Bar Height", 2, 1, 16, aliases, "visual")
+
+            aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "duration bar position")
+            AddGFAuraAliases(aliases, scope, lane, "timer bar position")
+            AddGFAuraAliases(aliases, scope, lane, "duration bar edge")
+            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "duration bar position", "timer bar position", "duration bar edge" })
+            RegisterGFAuraEnum(scope, lane, "DurationBarPosition", "durationBarPosition", laneInfo.label .. " Duration Bar Position", AURA_DURATION_BAR_POSITION_VALUES, AURA_DURATION_BAR_POSITION_ALIASES, "BOTTOM", aliases, "visual")
+
+            aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "duration bar fill mode")
+            AddGFAuraAliases(aliases, scope, lane, "duration bar direction")
+            AddGFAuraAliases(aliases, scope, lane, "timer bar fill mode")
+            AddGFAuraAliases(aliases, scope, lane, "timer bar direction")
+            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "duration bar fill mode", "duration bar direction", "timer bar fill mode", "timer bar direction" })
+            RegisterGFAuraEnum(scope, lane, "DurationBarDirection", "durationBarDirection", laneInfo.label .. " Duration Bar Fill Mode", AURA_DURATION_BAR_DIRECTION_VALUES, AURA_DURATION_BAR_DIRECTION_ALIASES, "REMAINING", aliases, "visual")
         end
 
         if type(RegisterGroupAuraRootSettings) == "function" then
             RegisterGroupAuraRootSettings(GroupAuraRootSettings, scope)
         end
+
+        RegisterGroupPrivateAuraSettings(scope)
 
         if scope ~= "mythicraid"
             and Registry and type(Registry.RegisterSetting) == "function"

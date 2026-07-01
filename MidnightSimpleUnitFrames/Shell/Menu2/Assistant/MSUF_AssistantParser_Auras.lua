@@ -478,6 +478,16 @@ local function AuraCooldownSwipeDirectionValue(text)
     return AuraEnumAliasValue(text, data.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES)
 end
 
+local function AuraDurationBarPositionValue(text)
+    local data = A.AurasRegistryData or {}
+    return AuraEnumAliasValue(text, data.AURA_DURATION_BAR_POSITION_ALIASES)
+end
+
+local function AuraDurationBarDirectionValue(text)
+    local data = A.AurasRegistryData or {}
+    return AuraEnumAliasValue(text, data.AURA_DURATION_BAR_DIRECTION_ALIASES)
+end
+
 local function AuraDebuffBorderModeValue(text)
     if ContainsAny(text, { "symbol", "with symbol", "with icon", "border symbol", "border and symbol", "border plus symbol" }) then return "SYMBOL" end
     if ContainsAny(text, { "off", "none", "disabled", "hide", "hidden", "turn off" }) then return "OFF" end
@@ -498,6 +508,476 @@ local function AddAuraShortcutChange(changes, setting, value, label)
         setting = setting,
         value = value,
         label = label,
+    }
+end
+
+local UNIT_AURA_FILTER_KEYS = {
+    buff = { "onlyMine", "raid", "raidInCombat", "cancelable", "notCancelable", "externalDefensive", "bigDefensive" },
+    debuff = { "onlyMine", "raid", "raidInCombat", "includeDispellable", "crowdControl" },
+}
+
+local function AddAuraRegisteredChange(changes, key, value, label)
+    local setting = Registry and Registry:GetSetting(key)
+    AddAuraShortcutChange(changes, setting, value, label or (setting and setting.label) or key)
+end
+
+local function UnitAuraFilterExplicitScope(text)
+    if ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" }) then return "shared" end
+    local units = DetectUnits(text)
+    for i = 1, #units do
+        local unit = units[i]
+        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+    end
+    if M then
+        local scope = M.auraScope
+        if scope == "shared" or scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then return scope end
+    end
+    return nil
+end
+
+local function UnitAuraFilterLaneFromSpec(text, spec)
+    if ContainsAny(text, { "buff", "buffs" }) then return "buff" end
+    if ContainsAny(text, { "debuff", "debuffs" }) then return "debuff" end
+    return spec and spec.lane or nil
+end
+
+local function UnitAuraFilterSpecForText(text)
+    local data = A.AurasRegistryData or {}
+    local specs = data.AURA_FILTER_BOOLEAN_SPECS or {}
+    local compactText = Compact(text)
+    local scopeStripped = " " .. Normalize(text) .. " "
+    for _, word in ipairs({ "shared", "global", "player", "target", "focus", "boss" }) do
+        scopeStripped = scopeStripped:gsub(" " .. word .. " ", " ")
+    end
+    scopeStripped = Trim(scopeStripped:gsub("%s+", " "))
+    local compactScopeStripped = Compact(scopeStripped)
+    local bestSpec, bestLen
+    for i = 1, #specs do
+        local spec = specs[i]
+        local words = type(spec.words) == "table" and spec.words or {}
+        for j = 1, #words do
+            local alias = tostring(words[j] or "")
+            local compactAlias = Compact(alias)
+            if compactAlias ~= "" and (
+                HasPhrase(text, alias)
+                or HasPhrase(scopeStripped, alias)
+                or (#compactAlias >= 5 and compactText:find(compactAlias, 1, true))
+                or (#compactAlias >= 5 and compactScopeStripped:find(compactAlias, 1, true))
+            ) then
+                local len = #compactAlias
+                if not bestLen or len > bestLen then
+                    bestSpec, bestLen = spec, len
+                end
+            end
+        end
+    end
+    return bestSpec
+end
+
+local function UnitAuraFilterHasIntent(text)
+    if ContainsAny(text, { "blacklist", "whitelist", "category", "spell id", "spellid", "spell:" }) then return false end
+    if ContainsAny(text, { "filter", "filters", "only", "show only", "just show", "display only" }) then return true end
+    if ContainsAny(text, {
+        "show all", "show everything", "all buffs", "all debuffs", "all auras",
+        "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
+        "filter off", "filters off", "normal filter", "default filter",
+    }) then return true end
+    return ContainsAny(text, {
+        "dispellable", "dispelable", "purgeable",
+        "crowd control", "cc debuff", "cc debuffs",
+        "raid buff", "raid buffs", "raid debuff", "raid debuffs",
+        "raid in combat", "combat raid",
+        "external defensive", "external defensives", "big defensive", "big defensives", "major defensive", "major defensives",
+        "cancelable buff", "cancelable buffs", "cancellable buff", "cancellable buffs",
+    })
+end
+
+local function HasNativeGroupAuraRootIntent(text)
+    if not ContainsAny(text, { "native", "blizzard" }) then return false end
+    if not ContainsAny(text, {
+        "party", "raid", "mythic raid", "mythicraid",
+        "group aura", "group auras", "group frame", "group frames",
+    }) then
+        return false
+    end
+    return ContainsAny(text, {
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
+        "dispel", "dispels", "dispellable", "external", "externals",
+        "private aura", "private auras",
+    })
+end
+
+local function AddUnitAuraFiltersEnabled(changes, scope)
+    AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. ".filtersEnabled", true, "Enable Aura Filters")
+end
+
+local function AddUnitAuraFilterClearLaneChanges(changes, scope, lane)
+    local keys = UNIT_AURA_FILTER_KEYS[lane] or {}
+    for i = 1, #keys do
+        AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(keys[i]), false)
+    end
+    AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter.exclusive", "none")
+end
+
+local function AddUnitAuraFilterSetChange(changes, scope, lane, key, value)
+    AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(key), value)
+end
+
+local function GroupAuraFilterExplicitScopes(text, value)
+    if #DetectUnits(text) > 0 then return nil, false, false end
+
+    local explicitAll = ContainsAny(text, {
+        "all group auras", "all group aura", "all group buffs", "all group debuffs",
+        "all group frames", "all groups", "every group aura", "every group buff", "every group debuff",
+    })
+    if explicitAll then return { "party", "raid", "mythicraid" }, true end
+
+    local scopes = {}
+    local hasParty = ContainsAny(text, { "party", "party frame", "party frames", "party aura", "party auras", "party buff", "party buffs", "party debuff", "party debuffs" })
+    local hasMythic = ContainsAny(text, { "mythic raid", "mythicraid", "mythic raid frame", "mythic raid frames", "mythic raid aura", "mythic raid auras", "mythic raid buff", "mythic raid buffs", "mythic raid debuff", "mythic raid debuffs" })
+    local hasRaidFrameScope = ContainsAny(text, { "raid frame", "raid frames", "raid aura", "raid auras" })
+    local hasRaidLanePhrase = ContainsAny(text, { "raid buff", "raid buffs", "raid debuff", "raid debuffs" })
+    local hasRaidScope = not hasMythic and ContainsAny(text, { "raid", "raid frame", "raid frames", "raid aura", "raid auras", "raid buff", "raid buffs", "raid debuff", "raid debuffs" })
+    if hasParty then scopes[#scopes + 1] = "party" end
+    if hasMythic then scopes[#scopes + 1] = "mythicraid" end
+    if hasRaidScope then
+        local raidPhraseLooksLikeFilterValue = value == "RAID" and hasRaidLanePhrase and not hasRaidFrameScope and (hasParty or hasMythic)
+        if not raidPhraseLooksLikeFilterValue then scopes[#scopes + 1] = "raid" end
+    end
+    if #scopes > 0 then return scopes, true end
+    if HasGenericGroupAuraGeometryScope(text) or ContainsAny(text, { "group frame", "group frames", "group debuff", "group debuffs", "group buff", "group buffs" }) then
+        return nil, false, true
+    end
+    return nil, false, false
+end
+
+local function GroupAuraFilterLaneForText(text, value)
+    if ContainsAny(text, { "buff", "buffs" }) and not ContainsAny(text, { "debuff", "debuffs" }) then return "buff" end
+    if ContainsAny(text, { "debuff", "debuffs" }) then return "debuff" end
+    if value == "RAID_PLAYER_DISPELLABLE" or value == "CROWD_CONTROL" then return "debuff" end
+    return nil
+end
+
+local function GroupAuraFilterValueForText(text)
+    if ContainsAny(text, {
+        "show all", "show everything", "all buffs", "all debuffs", "all auras",
+        "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
+        "filter off", "filters off", "normal filter", "default filter",
+    }) or (ContainsAny(text, { "clear", "remove", "reset", "default", "normal" }) and ContainsAny(text, { "filter", "filters" })) then
+        return "ALL"
+    end
+    local data = A.AurasRegistryData or {}
+    return AuraEnumAliasValue(text, data.GF_AURA_FILTER_ALIASES)
+end
+
+local function ParseGroupAuraLiveFilterShortcut(text)
+    if not UnitAuraFilterHasIntent(text) then return nil end
+    local value = GroupAuraFilterValueForText(text)
+    if not value then return nil end
+    local scopes, concrete, genericGroup = GroupAuraFilterExplicitScopes(text, value)
+    if genericGroup then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which group aura scope should use that filter: Party, Raid, Mythic Raid, or all group frames? Example: 'show only dispellable raid debuffs'.",
+            summary = "Asks for a concrete group aura scope before changing the live filter.",
+        }
+    end
+    if not scopes or #scopes == 0 then return nil end
+
+    local lane = GroupAuraFilterLaneForText(text, value)
+    if not lane then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which group aura lane should use that filter: Buffs or Debuffs? Example: 'show only dispellable raid debuffs'.",
+            summary = "Asks for a group aura lane before changing the live filter.",
+        }
+    end
+
+    local values = (A.AurasRegistryData and A.AurasRegistryData.GF_AURA_FILTER_VALUES and A.AurasRegistryData.GF_AURA_FILTER_VALUES[lane]) or {}
+    local allowed = false
+    for i = 1, #values do
+        if values[i] == value then
+            allowed = true
+            break
+        end
+    end
+    if not allowed then return nil end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local scope = scopes[i]
+        AddAuraRegisteredChange(changes, "gf_" .. tostring(scope) .. ".auras.enabled", true)
+        AddAuraRegisteredChange(changes, "gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".enabled", true)
+        AddAuraRegisteredChange(changes, "gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".filterToken", value)
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = lane == "buff" and "Group Buff Filter" or "Group Debuff Filter",
+        summary = "Enables the requested Group Aura lane and changes its live filter dropdown.",
+    }
+end
+
+local function ParseUnitAuraLiveFilterShortcut(text)
+    if not UnitAuraFilterHasIntent(text) then return nil end
+    if HasNativeGroupAuraRootIntent(text) then return nil end
+    if HasGenericGroupAuraGeometryScope(text) or ContainsAny(text, { "party", "raid frame", "raid frames", "group frame", "group frames", "mythic raid" }) then return nil end
+
+    local scope = UnitAuraFilterExplicitScope(text)
+    if not scope then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which aura scope should use that live filter: Shared, Player, Target, Focus, Boss, Party, Raid, or Mythic Raid? Examples: 'show only dispellable target debuffs' or 'show only dispellable raid debuffs'.",
+            summary = "Asks for a unit aura scope before changing live filters.",
+        }
+    end
+
+    local clearAll = ContainsAny(text, {
+        "show all", "show everything", "all buffs", "all debuffs", "all auras",
+        "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
+        "filter off", "filters off", "normal filter", "default filter",
+    })
+    if clearAll then
+        local lanes = AuraShortcutLanes(text)
+        local changes = {}
+        AddUnitAuraFiltersEnabled(changes, scope)
+        for i = 1, #lanes do AddUnitAuraFilterClearLaneChanges(changes, scope, lanes[i]) end
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            bulkSafe = #changes > 1,
+            label = "Show all Aura filter results",
+            summary = "Clears live unit aura filters for the requested lane.",
+        }
+    end
+
+    local spec = UnitAuraFilterSpecForText(text)
+    if not spec then return nil end
+    local lane = UnitAuraFilterLaneFromSpec(text, spec)
+    if not lane then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which aura lane should use that filter: Buffs or Debuffs? Example: 'show only my target buffs' or 'show only my target debuffs'.",
+            summary = "Asks for a unit aura lane before changing live filters.",
+        }
+    end
+
+    local value = DetectBoolean and DetectBoolean(text)
+    if value == nil then
+        if ContainsAny(text, { "off", "disable", "disabled", "turn off", "remove", "clear", "without", "no ", "aus", "deaktivieren" }) then
+            value = false
+        else
+            value = true
+        end
+    end
+
+    local directChanges = {}
+    AddUnitAuraFiltersEnabled(directChanges, scope)
+    AddUnitAuraFilterSetChange(directChanges, scope, lane, spec.key, value)
+    if #directChanges == 0 then return nil end
+
+    local wantsOnly = value == true and ContainsAny(text, { "only", "show only", "just", "just show", "display only" })
+    if wantsOnly then
+        local replaceChanges = {}
+        AddUnitAuraFiltersEnabled(replaceChanges, scope)
+        AddUnitAuraFilterClearLaneChanges(replaceChanges, scope, lane)
+        AddUnitAuraFilterSetChange(replaceChanges, scope, lane, spec.key, true)
+        if #replaceChanges > #directChanges then
+            return {
+                kind = "ambiguous",
+                choices = {
+                    {
+                        changes = directChanges,
+                        label = "Enable " .. tostring(spec.label or "that filter"),
+                        bulkSafe = #directChanges > 1,
+                        summary = "Enables one live Aura filter without changing other filters.",
+                    },
+                    {
+                        changes = replaceChanges,
+                        label = "Use only " .. tostring(spec.label or "that filter"),
+                        bulkSafe = true,
+                        summary = "Clears the lane's other live Aura filters first.",
+                    },
+                },
+                label = "How should I apply that Aura filter?",
+                summary = "Clarifies whether to replace other live Aura filters.",
+            }
+        end
+    end
+
+    return {
+        kind = "changes",
+        changes = directChanges,
+        bulkSafe = #directChanges > 1,
+        label = "Change live Aura filter",
+        summary = "Changes a live unit Aura filter.",
+    }
+end
+
+local function AddGroupAuraVisibilityChoice(choices, scope, lane, value)
+    local setting = Registry and Registry:GetSetting("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".enabled")
+    if not setting then return end
+    local laneLabel = lane == "buff" and "Buffs" or "Debuffs"
+    local verb = value and "show" or "hide"
+    choices[#choices + 1] = {
+        setting = setting,
+        value = value,
+        label = tostring(setting.label or laneLabel) .. " -> " .. verb,
+        summary = "Changes " .. tostring(setting.label or laneLabel) .. " visibility.",
+    }
+end
+
+local function AddGroupAuraVisibilityChange(changes, scope, lane, value)
+    local setting = Registry and Registry:GetSetting("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".enabled")
+    AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or "Group Aura Visibility"))
+end
+
+local function AddGroupAuraRootVisibilityChoice(choices, scope, value)
+    local setting = Registry and Registry:GetSetting("gf_" .. tostring(scope) .. ".auras.enabled")
+    if not setting then return end
+    local verb = value and "show" or "hide"
+    choices[#choices + 1] = {
+        setting = setting,
+        value = value,
+        label = tostring(setting.label or "Group Auras Enabled") .. " -> " .. verb,
+        summary = "Changes the whole Group Aura system for that scope.",
+    }
+end
+
+local function ParseGroupAuraVisibilityShortcut(text)
+    local hasBuff = ContainsAny(text, { "buff", "buffs" })
+    local hasDebuff = ContainsAny(text, { "debuff", "debuffs" })
+    if not ContainsAny(text, { "aura", "auras", "auren" }) and not (hasBuff and hasDebuff) then return nil end
+    if not ContainsAny(text, {
+        "show", "enable", "enabled", "turn on", "on",
+        "hide", "disable", "disabled", "turn off", "off",
+        "anzeigen", "einblenden", "aktivieren", "an",
+        "ausblenden", "verstecken", "deaktivieren", "aus",
+    }) then return nil end
+    if ContainsAny(text, { "size", "count", "max", "maximum", "cap", "limit", "spacing", "gap", "growth", "anchor", "position", "offset", "filter", "blacklist", "cooldown", "timer", "duration", "stack", "copy", "preset" }) then
+        return nil
+    end
+    if ContainsAny(text, {
+        "aura system", "group aura system", "native aura", "native auras", "native group aura", "native group auras",
+        "blizzard aura", "blizzard auras", "blizzard group aura", "blizzard group auras",
+    }) then
+        return nil
+    end
+
+    if (hasBuff or hasDebuff) and not (hasBuff and hasDebuff) then return nil end
+
+    local scopes = {}
+    local groups = DetectGroups(text)
+    for i = 1, #groups do
+        local group = groups[i]
+        if group == "party" or group == "raid" or group == "mythicraid" then
+            AddAuraGeometryScope(scopes, "group", group)
+        end
+    end
+
+    if #scopes == 0 then
+        if HasGenericGroupAuraGeometryScope(text) or ContainsAny(text, { "group", "group frame", "group frames" }) then
+            return {
+                kind = "answer",
+                status = "ambiguous",
+                text = "Which group aura scope do you mean: Party or Raid? Also say Buffs, Debuffs, or both. Example: 'hide party debuffs' or 'hide both raid buffs and debuffs'.",
+                summary = "Asks for a concrete group aura scope before changing visibility.",
+            }
+        end
+        return nil
+    end
+
+    local value = DetectBoolean and DetectBoolean(text)
+    if value == nil then
+        if ContainsAny(text, { "show", "enable", "enabled", "turn on", "on", "anzeigen", "einblenden", "aktivieren", "an" }) then value = true end
+        if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "ausblenden", "verstecken", "deaktivieren", "aus" }) then value = false end
+    end
+    if value == nil then return nil end
+
+    local explicitBothLanes = hasBuff and hasDebuff
+        or ContainsAny(text, { "both", "both lanes", "buffs and debuffs", "buff and debuff", "buffs debuffs" })
+    local broadAllAuras = ContainsAny(text, { "all auras", "all aura", "all party auras", "all raid auras", "all mythic raid auras", "all group auras" })
+    local wantsBoth = explicitBothLanes or broadAllAuras
+    if wantsBoth then
+        if broadAllAuras and not explicitBothLanes and #scopes == 1 then
+            local scope = scopes[1].key
+            local choices = {}
+            local bothChanges = {}
+            AddGroupAuraVisibilityChange(bothChanges, scope, "buff", value)
+            AddGroupAuraVisibilityChange(bothChanges, scope, "debuff", value)
+            if #bothChanges == 2 then
+                local verb = value and "show" or "hide"
+                choices[#choices + 1] = {
+                    changes = bothChanges,
+                    label = "Buff and Debuff lanes -> " .. verb,
+                    bulkSafe = true,
+                    summary = "Changes only the Group Aura Buff and Debuff lanes.",
+                }
+            end
+            AddGroupAuraRootVisibilityChoice(choices, scope, value)
+            if #choices > 1 then
+                return {
+                    kind = "ambiguous",
+                    choices = choices,
+                    label = "How much should I change?",
+                    summary = "Clarifies whether to change visible lanes or the whole Group Aura system.",
+                }
+            end
+        end
+        local changes = {}
+        for i = 1, #scopes do
+            local scope = scopes[i].key
+            AddGroupAuraVisibilityChange(changes, scope, "buff", value)
+            AddGroupAuraVisibilityChange(changes, scope, "debuff", value)
+        end
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            bulkSafe = #changes > 1,
+            label = "Group Aura visibility",
+            summary = "Changes Group Aura Buff and Debuff visibility.",
+        }
+    end
+
+    if #scopes == 1 then
+        local scope = scopes[1].key
+        local choices = {}
+        AddGroupAuraVisibilityChoice(choices, scope, "buff", value)
+        AddGroupAuraVisibilityChoice(choices, scope, "debuff", value)
+        local bothChanges = {}
+        AddGroupAuraVisibilityChange(bothChanges, scope, "buff", value)
+        AddGroupAuraVisibilityChange(bothChanges, scope, "debuff", value)
+        if #bothChanges == 2 then
+            local verb = value and "show" or "hide"
+            choices[#choices + 1] = {
+                changes = bothChanges,
+                label = "Both Group Aura lanes -> " .. verb,
+                bulkSafe = true,
+                summary = "Changes both Group Aura Buff and Debuff visibility.",
+            }
+        end
+        if #choices == 0 then return nil end
+        return {
+            kind = "ambiguous",
+            choices = choices,
+            label = "Which group aura lane?",
+            summary = "Asks whether to change group buffs, group debuffs, or both.",
+        }
+    end
+
+    return {
+        kind = "answer",
+        status = "ambiguous",
+        text = "Which group aura lane do you mean for those scopes: Buffs, Debuffs, or both? Example: 'hide both party and raid buffs and debuffs'.",
+        summary = "Asks for a concrete group aura lane before changing multiple scopes.",
     }
 end
 
@@ -533,6 +1013,66 @@ local function ParseAuraCooldownSwipeDirectionShortcut(text)
         bulkSafe = #changes > 1,
         label = "Change Aura cooldown swipe direction",
         summary = "Adjusts Aura cooldown swipe direction.",
+    }
+end
+
+local function ParseAuraDurationBarShortcut(text)
+    if not ContainsAny(text, { "duration bar", "timer bar" }) then return nil end
+
+    local attr, value, missingText, label, summary
+    local wantsPosition = ContainsAny(text, {
+        "duration bar position", "timer bar position", "duration bar edge",
+        "top", "upper", "on top", "at top", "top edge", "above",
+        "bottom", "lower", "on bottom", "at bottom", "bottom edge", "below",
+    })
+    local wantsDirection = ContainsAny(text, {
+        "duration bar fill mode", "duration bar direction", "timer bar fill mode", "timer bar direction",
+        "fill mode", "remaining", "elapsed", "count up", "count down", "countdown", "deplete", "depletion", "drain", "progress",
+    })
+
+    if wantsPosition and not wantsDirection then
+        attr = "durationBarPosition"
+        value = AuraDurationBarPositionValue(text)
+        missingText = "Use top or bottom for Aura Duration Bar Position. Example: put target buff duration bar on top."
+        label = "Change Aura duration bar position"
+        summary = "Adjusts Aura Duration Bar Position."
+    elseif wantsDirection then
+        attr = "durationBarDirection"
+        value = AuraDurationBarDirectionValue(text)
+        missingText = "Use remaining or elapsed for Aura Duration Bar Fill Mode. Example: set raid duration bar fill mode to elapsed."
+        label = "Change Aura duration bar fill mode"
+        summary = "Adjusts Aura Duration Bar Fill Mode."
+    else
+        return nil
+    end
+
+    if not value then
+        return {
+            kind = "answer",
+            status = "missing_value",
+            text = missingText,
+        }
+    end
+
+    local scopes = AuraShortcutScopes(text, true)
+    if not scopes then return nil end
+
+    local lanes = AuraShortcutLanes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        for j = 1, #lanes do
+            local key = AuraGeometrySettingKey(scopes[i], lanes[j], attr)
+            local setting = Registry and Registry:GetSetting(key)
+            AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or "Aura Duration Bar"))
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = label,
+        summary = summary,
     }
 end
 
@@ -578,8 +1118,8 @@ local function ParseAuraScopeOverrideShortcut(text)
     if not ContainsAny(text, {
         "custom aura style", "use custom aura style", "aura style override", "custom aura visuals",
         "use shared style", "shared aura style", "inherit style", "follow shared style",
-        "custom aura filters", "use custom aura filters", "aura filter override", "aura filters override",
-        "use shared filters", "shared aura filters", "inherit filters", "follow shared filters",
+        "custom aura filters", "custom filters", "use custom aura filters", "use custom filters", "aura filter override", "aura filters override", "custom filter override",
+        "use shared filters", "shared filters", "shared aura filters", "inherit filters", "follow shared filters",
         "use shared rules", "shared aura rules", "inherit rules", "follow shared rules",
     }) then return nil end
 
@@ -591,12 +1131,16 @@ local function ParseAuraScopeOverrideShortcut(text)
     elseif ContainsAny(text, { "use shared style", "shared aura style", "inherit style", "follow shared style" }) then
         attr = "useSharedStyle"
         value = bool == nil and true or bool
-    elseif ContainsAny(text, { "custom aura filters", "use custom aura filters", "aura filter override", "aura filters override" }) then
+    elseif ContainsAny(text, { "custom aura filters", "custom filters", "use custom aura filters", "use custom filters", "aura filter override", "aura filters override", "custom filter override" }) then
         attr = "overrideFilters"
         value = bool == nil and true or bool
-    elseif ContainsAny(text, { "use shared filters", "shared aura filters", "inherit filters", "follow shared filters" }) then
+    elseif ContainsAny(text, { "use shared filters", "shared filters", "shared aura filters", "inherit filters", "follow shared filters" }) then
         attr = "overrideFilters"
-        value = bool == nil and false or not bool
+        if bool == nil then
+            value = false
+        else
+            value = not bool
+        end
     elseif ContainsAny(text, { "use shared rules", "shared aura rules", "inherit rules", "follow shared rules" }) then
         attr = "useSharedRules"
         value = bool == nil and true or bool
@@ -739,7 +1283,11 @@ P.AuraQuickPresetForText = AuraQuickPresetForText
 P.AuraEditScopeForText = AuraEditScopeForText
 P.ParseAuraGeometryShortcut = ParseAuraGeometryShortcut
 P.AuraGeometryShortcut = ParseAuraGeometryShortcut
+P.ParseGroupAuraLiveFilterShortcut = ParseGroupAuraLiveFilterShortcut
+P.ParseUnitAuraLiveFilterShortcut = ParseUnitAuraLiveFilterShortcut
+P.ParseGroupAuraVisibilityShortcut = ParseGroupAuraVisibilityShortcut
 P.ParseAuraCooldownSwipeDirectionShortcut = ParseAuraCooldownSwipeDirectionShortcut
+P.ParseAuraDurationBarShortcut = ParseAuraDurationBarShortcut
 P.ParseAuraDebuffBorderModeShortcut = ParseAuraDebuffBorderModeShortcut
 P.ParseAuraScopeOverrideShortcut = ParseAuraScopeOverrideShortcut
 P.AuraBlacklistPresetForText = AuraBlacklistPresetForText
