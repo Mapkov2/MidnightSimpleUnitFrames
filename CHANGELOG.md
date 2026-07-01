@@ -11,6 +11,7 @@
 ### What You Will Notice First
 - Auras are the biggest change. Buffs and debuffs now use the WoW 12.1 native aura system instead of the old 5.60 aura renderer.
 - Group frames should feel more complete and more consistent, especially in parties and raids.
+- Class resources and Player power bars have more visual styles, better previews, and more layout control.
 - The settings menu is more useful. The new Assistant can find settings, apply many changes, handle followups, run checks, and undo changes it made.
 - Castbars are now part of the main 6.0 setup instead of feeling like a separate older layer.
 - Profile import/export is more forgiving, especially when older strings, missing fonts, missing textures, or alpha profiles are involved.
@@ -26,13 +27,17 @@
 - MSUF4 profile strings are now supported, while older MSUF2/MSUF3 strings are still handled as fallback imports.
 - Northern Sky Raid Tools nicknames can be used for unit-frame names.
 - External anchor support was added, including Skiron cooldown anchors.
-- New class-resource shapes were added: circle, diamond, hex, crystal, and round.
+- New class-resource and power-bar shapes were added: circle, diamond, hex, round, crystal, and orb-style options.
+- Class Resources now has shape presets such as Classic Bar, Clean Dots, Gems, Hex Pips, and Compact.
+- The detached Player Power bar can now follow class-resource styling or use its own bar, round, crystal, or orb style.
+- An optional extra Player HP bar can be shown near class resources or Player Power, with its own text, size, color, texture, and shape options.
 - The in-game changelog can be opened from MSUF after updating.
 
 ### Reworked From 5.60
 - Unit frames were rebuilt for 6.0: health, power, text, alpha, range fade, status icons, prediction bars, borders, and load conditions now use the new engine.
 - Group frames were rebuilt instead of patched on top of the old 5.60 group system. Party, Raid, and Mythic Raid now share the same newer frame logic.
 - Castbars existed in 5.60, but 6.0 integrates Player, Target, Focus, Boss, Focus Kick, and Interrupt Ready into the main addon flow with better previews and cleaner ownership.
+- Class Resources were expanded with better class/spec previews, shape media, smoother resource presentation, detached power-bar controls, and the optional Player HP bridge.
 - Menu2 was already present in 5.60, but 6.0 turns it into a fuller settings shell with navigation, previews, search, Assistant support, bug report tools, and better window handling.
 - Edit Mode moved from the old EditMode2 path to the new 6.0 Edit Mode, including aura handles, cast/aura popups, popup scaling, and the new logo intro.
 - Gameplay helpers were reorganized and hardened around combat, reloads, target sound, totem preview, and related helper settings.
@@ -50,6 +55,14 @@
 - Status indicators, spell indicators, range fade, health fade, offline/dead visuals, role filters, threat/aggro visuals, and text handling were cleaned up into one more predictable setup.
 - Beta1 also adds more visibility/load conditions, including housing cases, and more control over which roles show aggro borders.
 
+### Class Resources And Power Bars
+- Class resources are no longer just the old rectangular class bar style. You can use bar, dot, gem, hex, compact, round, crystal, and orb-like looks depending on the resource or attached power bar.
+- The Class Resources page now has better previews for real class/spec cases such as runes, combo points, soul shards, essence, holy power, chi, insanity, maelstrom, stagger, and similar resource styles.
+- Shape presets make it faster to switch between classic bars, clean dots, gem-style pips, hex pips, and compact resource displays.
+- Detached Player Power can sync with class resources or use its own style, size, texture, outline, text, and placement.
+- The optional Player HP bar can sit above or below class resources or Player Power, and can follow the Player Power style if you want a matched resource cluster.
+- Power-bar and class-resource previews were improved so changes are easier to judge before leaving the settings menu.
+
 ### Profiles And Migration
 - 6.0 tries to migrate 5.60 profiles automatically, but this is a major version jump. Export first.
 - Old profile strings, missing media, older alpha data, and some external imports should recover better instead of failing the whole import.
@@ -60,10 +73,10 @@
 ### From Alpha 1 To Beta1
 - Alpha 1 opened the 6.0 branch with the new foundation, previews, castbar work, class-resource work, profile import/export, group-frame work, and the first Auras3 version.
 - Alpha 2 moved live aura display to Blizzard's native 12.1 AuraContainer system.
-- Alpha 3 improved aura timer colors, Assistant context, geometry followups, castbar controls, and preview routing.
+- Alpha 3 improved aura timer colors, Assistant context, geometry followups, castbar controls, class-resource previews, and preview routing.
 - Alpha 4 improved Shared aura styling, per-unit aura text overrides, cooldown text anchors, aura previews, and boss preview refresh.
 - Alpha 5 added reverse cooldown swipe and fixed important castbar preview/runtime issues.
-- Alpha 6 added Party Targeted Spell Indicators, NSRT nicknames, MSUF4 profile strings, stronger import handling, and the in-game changelog.
+- Alpha 6 added Party Targeted Spell Indicators, NSRT nicknames, MSUF4 profile strings, class-resource shapes, stronger import handling, and the in-game changelog.
 - Alpha 7 added the Edit Mode logo intro and prepared the CurseForge-only alpha release path.
 - Alpha 8 added aura dragging, menu performance work, combat performance work, and more Assistant coverage for group and bar settings.
 - Beta1 stabilizes all of that for wider 5.60 -> 6.0 testing.
@@ -79,6 +92,7 @@
 - Import or copy a 5.60 profile, then check Player, Target, Focus, Boss, Target of Target, Focus Target, Party, Raid, and Mythic Raid.
 - Test auras on WoW 12.1: target swaps, focus swaps, party/raid conversion, dispellable debuffs, duration bars, cooldown text, stack text, aura dragging, and filters.
 - Test Party Targeted Spell Indicators in 5-player content with enemy nameplates enabled.
+- Test Class Resources on several classes/specs, especially shape presets, detached Player Power, the optional Player HP bar, and preview switching.
 - Test castbars for normal casts, channels, empower casts, Boss casts, Focus Kick, Interrupt Ready, and Blizzard/MSUF player castbar ownership.
 - Test profile strings, missing font/texture fallback, NSRT nicknames, external anchors, Edit Mode, and /reload after combat.
 
