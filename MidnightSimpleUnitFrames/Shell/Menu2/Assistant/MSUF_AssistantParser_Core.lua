@@ -1036,7 +1036,47 @@ local ON_WORDS = {
     "wieder an", "ja",
 }
 
+local TARGET_VALUE_CONNECTORS = { " to ", " as ", " is ", " be ", " into ", " value ", " = ", " auf ", " zu ", " als ", " wert " }
+
+local function RawAfterLastConnector(text, connectors)
+    text = tostring(text or "")
+    if text == "" then return nil end
+    connectors = connectors or TARGET_VALUE_CONNECTORS
+    local padded = " " .. text .. " "
+    local lower = padded:lower()
+    local bestEnd
+    for i = 1, #connectors do
+        local connector = tostring(connectors[i] or ""):lower()
+        if connector ~= "" then
+            local startAt = 1
+            while true do
+                local _, endPos = lower:find(connector, startAt, true)
+                if not endPos then break end
+                if not bestEnd or endPos > bestEnd then bestEnd = endPos end
+                startAt = endPos + 1
+            end
+        end
+    end
+    local tail = bestEnd and Trim(padded:sub(bestEnd + 1)) or nil
+    if tail then tail = Trim(tail:gsub("^the%s+", ""):gsub("^a%s+", "")) end
+    if tail == "" then return nil end
+    return tail
+end
+
+local function TargetAfterLastConnector(text, connectors)
+    local tail = RawAfterLastConnector(text, connectors)
+    if not tail then return nil end
+    tail = Normalize(tail)
+    if tail == "" then return nil end
+    return tail
+end
+
 local function DetectBoolean(text)
+    local target = TargetAfterLastConnector(text)
+    if target then
+        if ContainsAny(target, OFF_WORDS) then return false end
+        if ContainsAny(target, ON_WORDS) then return true end
+    end
     -- Off wins over on when both appear. Commands like "do not show" include "show", and
     -- treating the negative intent as stronger avoids destructive surprise.
     if ContainsAny(text, OFF_WORDS) then return false end
@@ -1197,19 +1237,31 @@ local function TextMatchesAlias(text, relationText, alias)
 end
 
 local function ExtractColor(raw, text)
-    local hex = tostring(raw or ""):match("#(%x%x%x%x%x%x)") or tostring(raw or ""):match("0x(%x%x%x%x%x%x)")
+    local rawTarget = RawAfterLastConnector(raw)
+    local textTarget = TargetAfterLastConnector(text)
+    local function hexFrom(value)
+        value = tostring(value or "")
+        return value:match("#(%x%x%x%x%x%x)") or value:match("0x(%x%x%x%x%x%x)")
+    end
+    local function rgbFrom(value)
+        return tostring(value or ""):match("(%d+)%s*,%s*(%d+)%s*,%s*(%d+)")
+    end
+    local hex = rawTarget and hexFrom(rawTarget) or nil
+    if not hex and not rawTarget then hex = hexFrom(raw) end
     if hex and A.HexToColor then
         return A.HexToColor(hex)
     end
-    local rr, gg, bb = tostring(raw or ""):match("(%d+)%s*,%s*(%d+)%s*,%s*(%d+)")
+    local rr, gg, bb = rawTarget and rgbFrom(rawTarget) or nil
+    if not rr and not rawTarget then rr, gg, bb = rgbFrom(raw) end
     if rr and gg and bb then
         local r, g, b = tonumber(rr) or 255, tonumber(gg) or 255, tonumber(bb) or 255
         if r > 1 or g > 1 or b > 1 then r, g, b = r / 255, g / 255, b / 255 end
         return r, g, b, tostring(rr) .. "," .. tostring(gg) .. "," .. tostring(bb)
     end
-    rr, gg, bb = tostring(text or ""):match("rgb%s+([-+]?%d+%.?%d*)%s+([-+]?%d+%.?%d*)%s+([-+]?%d+%.?%d*)")
+    local colorText = textTarget or tostring(text or "")
+    rr, gg, bb = tostring(colorText or ""):match("rgb%s+([-+]?%d+%.?%d*)%s+([-+]?%d+%.?%d*)%s+([-+]?%d+%.?%d*)")
     if not rr then
-        rr, gg, bb = tostring(text or ""):match("r%s+([-+]?%d+%.?%d*)%s+g%s+([-+]?%d+%.?%d*)%s+b%s+([-+]?%d+%.?%d*)")
+        rr, gg, bb = tostring(colorText or ""):match("r%s+([-+]?%d+%.?%d*)%s+g%s+([-+]?%d+%.?%d*)%s+b%s+([-+]?%d+%.?%d*)")
     end
     if rr and gg and bb then
         local r, g, b = tonumber(rr) or 1, tonumber(gg) or 1, tonumber(bb) or 1
@@ -1217,7 +1269,7 @@ local function ExtractColor(raw, text)
         return r, g, b, tostring(rr) .. "," .. tostring(gg) .. "," .. tostring(bb)
     end
     if A.ColorFromName then
-        for word in tostring(text or ""):gmatch("%S+") do
+        for word in tostring(colorText or ""):gmatch("%S+") do
             local r, g, b, label = A.ColorFromName(word)
             if r then return r, g, b, label end
         end
@@ -1246,10 +1298,18 @@ local function DetectFrameType(text, ctx)
 end
 
 local function DetectDirection(text, ctx)
-    if ContainsAny(text, { "right", "rechts" }) then return "right" end
-    if ContainsAny(text, { "left", "links" }) then return "left" end
-    if ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" }) then return "down" end
-    if ContainsAny(text, { "up", "higher", "hoeher", "hoch", "oben" }) then return "up" end
+    local function directionIn(segment)
+        if ContainsAny(segment, { "right", "rechts" }) then return "right" end
+        if ContainsAny(segment, { "left", "links" }) then return "left" end
+        if ContainsAny(segment, { "down", "lower", "tiefer", "runter", "unten" }) then return "down" end
+        if ContainsAny(segment, { "up", "higher", "hoeher", "hoch", "oben" }) then return "up" end
+        return nil
+    end
+    local target = TargetAfterLastConnector(text)
+    local targetDirection = target and directionIn(target)
+    if targetDirection then return targetDirection end
+    local direction = directionIn(text)
+    if direction then return direction end
     if ContainsAny(text, { "more", "mehr", "weiter" }) and ctx and type(ctx.lastDirection) == "string" then
         return ctx.lastDirection
     end
@@ -1341,6 +1401,8 @@ P.DetectGroups = DetectGroups
 P.DetectGlobalScope = DetectGlobalScope
 P.OFF_WORDS = OFF_WORDS
 P.ON_WORDS = ON_WORDS
+P.RawAfterLastConnector = RawAfterLastConnector
+P.TargetAfterLastConnector = TargetAfterLastConnector
 P.DetectBoolean = DetectBoolean
 P.FirstNumber = FirstNumber
 P.Compact = Compact
