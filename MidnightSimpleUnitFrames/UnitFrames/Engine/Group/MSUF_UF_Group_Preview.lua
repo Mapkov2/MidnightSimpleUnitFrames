@@ -96,6 +96,15 @@ local function ActivePreviewCount(kind)
   return DefaultPreviewCount(kind)
 end
 
+local function VisiblePreviewCount(kind, count)
+  count = floor((tonumber(count) or 0) + 0.5)
+  if count < 1 then return count end
+  if GF.GetVisibleLayoutCount then
+    return GF.GetVisibleLayoutCount(kind, count)
+  end
+  return count
+end
+
 local function GetPositionCount(kind)
   kind = NormalizeKind(kind) or "party"
   local previewCount = ActivePreviewCount(kind)
@@ -486,6 +495,7 @@ function GF.ShowPreview(kind, count)
   kind = NormalizeKind(kind) or "party"
   count = floor((tonumber(count) or DefaultPreviewCount(kind)) + 0.5)
   if count < 1 then count = DefaultPreviewCount(kind) end
+  local visibleCount = VisiblePreviewCount(kind, count)
 
   GF._previewActive[kind] = true
   GF._previewShownCounts[kind] = count
@@ -493,7 +503,7 @@ function GF.ShowPreview(kind, count)
   local container, layout, w, h, spacing, growth, upc, primary, blockW, blockH = PositionContainer(kind, count)
   local frames = GF._previewFrames[kind] or {}
   GF._previewFrames[kind] = frames
-  for i = 1, count do
+  for i = 1, visibleCount do
     local frame = EnsurePreviewFrame(kind, i, layout)
     frame:SetSize(w, h)
     frame.unit = "player"
@@ -503,7 +513,7 @@ function GF.ShowPreview(kind, count)
     PositionPreviewFrame(frame, layout, i, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
     ApplyPreviewData(frame, i, kind)
   end
-  for i = count + 1, #frames do
+  for i = visibleCount + 1, #frames do
     local frame = frames[i]
     if frame then
       ClearPreviewData(frame)
@@ -546,17 +556,23 @@ function GF.RefreshPreviewLayout(kind)
   kind = NormalizeKind(kind) or "party"
   if not (GF._previewActive and GF._previewActive[kind]) then return false end
   local count = GF._previewShownCounts[kind] or DefaultPreviewCount(kind)
+  local visibleCount = VisiblePreviewCount(kind, count)
   local _, layout, w, h, spacing, growth, upc, primary, blockW, blockH = PositionContainer(kind, count)
-  local frames = GF._previewFrames[kind]
-  if not frames then return false end
-  for i = 1, #frames do
+  local frames = GF._previewFrames[kind] or {}
+  GF._previewFrames[kind] = frames
+  for i = 1, visibleCount do
+    local frame = EnsurePreviewFrame(kind, i, layout)
+    if frame:GetParent() ~= layout then frame:SetParent(layout) end
+    frame:SetSize(w, h)
+    if GF.ApplyButton then GF.ApplyButton(frame, kind, "MSUF_GF_PREVIEW_REFRESH") end
+    PositionPreviewFrame(frame, layout, i, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
+    ApplyPreviewData(frame, i, kind)
+  end
+  for i = visibleCount + 1, #frames do
     local frame = frames[i]
-    if frame and frame:IsShown() then
-      if frame:GetParent() ~= layout then frame:SetParent(layout) end
-      frame:SetSize(w, h)
-      if GF.ApplyButton then GF.ApplyButton(frame, kind, "MSUF_GF_PREVIEW_REFRESH") end
-      PositionPreviewFrame(frame, layout, i, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
-      ApplyPreviewData(frame, i, kind)
+    if frame then
+      ClearPreviewData(frame)
+      frame:Hide()
     end
   end
   return true

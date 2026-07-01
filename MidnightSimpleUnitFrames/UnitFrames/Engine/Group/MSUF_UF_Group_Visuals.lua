@@ -875,7 +875,8 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
       return true
     end
     if healthEvent and frame._msufGFDeadBgState == true then
-      return true
+      local dg, known = ReadDeadCached(frame, unit)
+      return known ~= true or dg == true
     end
     if frame._msufGFDeadBgState == true and not deadKnown then
       local dg, known = ReadDeadCached(frame, unit)
@@ -1108,10 +1109,10 @@ function GroupVisuals.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
   end
 end
 
-function GroupVisuals.UpdateGoneState(frame, event)
+function GroupVisuals.UpdateGoneState(frame, event, unit, seedHP)
   local fn = frame and frame._msufGFVisualRuntimeGone
   if fn then
-    fn(frame, frame._msufGFVisualRuntimeGroup, nil, event)
+    fn(frame, frame._msufGFVisualRuntimeGroup, seedHP, event)
   end
 end
 

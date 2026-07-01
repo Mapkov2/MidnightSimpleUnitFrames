@@ -727,21 +727,32 @@ local function GetRaidGroupLayoutParts(conf, count)
     local primary = math_min(upc, 5)
     local groups = math_floor((tonumber(conf and conf.maxColumns) or 8) + 0.5)
     if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
-    count = tonumber(count) or 0
-    local needed
-    if count > 0 then
-        needed = math_ceil(count / 5)
-        if needed > groups then groups = needed end
-        if groups > 8 then groups = 8 end
-    end
     if type(GF.GetPreservedRaidGroupCount) == "function" then
         groups = tonumber(GF.GetPreservedRaidGroupCount(conf)) or groups
-        if needed and needed > groups then groups = needed end
         if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
     end
     local blockColumns = math_ceil(5 / primary)
     if blockColumns < 1 then blockColumns = 1 end
     return upc, primary, groups, blockColumns
+end
+
+function GF.GetVisibleLayoutCount(kind, count, conf)
+    count = math_floor((tonumber(count) or 0) + 0.5)
+    if count < 1 then return count end
+    if not IsRaidLikeKind(kind) then return count end
+
+    conf = conf or (GF.GetConf and GF.GetConf(kind)) or {}
+    if conf and conf.preserveRaidGroups == true then
+        local groups = math_floor((tonumber(conf.maxColumns) or 8) + 0.5)
+        if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
+        return math_min(count, groups * 5)
+    end
+
+    local upc = math_floor((tonumber(conf and conf.unitsPerColumn) or 5) + 0.5)
+    if upc < 1 then upc = 1 elseif upc > 40 then upc = 40 end
+    local columns = math_floor((tonumber(conf and conf.maxColumns) or 8) + 0.5)
+    if columns < 1 then columns = 1 elseif columns > 40 then columns = 40 end
+    return math_min(count, upc * columns)
 end
 
 function GF.GetPreservedRaidGridMetrics(kind, count)
@@ -808,17 +819,12 @@ function GF.GetGridMetrics(kind, count)
 
     local numCols = math_ceil(count / upc)
     if numCols < 1 then numCols = 1 end
-    -- Non-preserve raid columns are unitsPerColumn-driven (up to 40 with a small
-    -- upc), not bounded by 8 groups. RequiredHeaderColumns lets the secure header
-    -- lay out that many, so the anchor sizing here must allow the same range --
-    -- otherwise a 40-man raid at a low upc gets an undersized anchor and the
-    -- centering drifts while the overflow frames sit outside the box.
+    -- Non-preserve raid columns use maxColumns as a real display cap. The wider
+    -- column cap preserves imported/manual values above the menu slider range.
     local columnCap = IsRaidLikeKind(kind) and 40 or 8
-    local maxColumns = math_floor((tonumber(conf.maxColumns) or numCols) + 0.5)
+    local maxDefault = IsRaidLikeKind(kind) and 8 or numCols
+    local maxColumns = math_floor((tonumber(conf.maxColumns) or maxDefault) + 0.5)
     if maxColumns < 1 then maxColumns = 1 elseif maxColumns > columnCap then maxColumns = columnCap end
-    if IsRaidLikeKind(kind) and numCols > maxColumns then
-        maxColumns = math_min(numCols, columnCap)
-    end
     if numCols > maxColumns then numCols = maxColumns end
     local major = math_min(count, upc)
 
