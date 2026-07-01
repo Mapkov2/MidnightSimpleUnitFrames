@@ -47,6 +47,7 @@ local activeIndicatorFrames = {}
 local activeIndicatorFrameCount = 0
 local fillActiveFrames = {}
 local fillActiveFrameCount = 0
+local refreshActiveFrames = {}
 local UpdateCooldownEventRegistration
 
 local function GeneralDB()
@@ -575,6 +576,60 @@ local function RefreshAll(updateFillColor)
         status.resolved = status.remaining ~= nil
     end
 
+    if status.resolved == true then
+        if status.ready ~= nil then
+            state.cooldownDisplayReady = status.ready == true
+        else
+            state.cooldownDisplayReady = status.remaining ~= nil and status.remaining <= 0.05
+        end
+    end
+
+    return status.remaining, status.resolved == true
+end
+
+local function QueueActiveRefreshFrame(frame)
+    if not frame or frame._msufKickReadyQueuedRefresh == true then
+        return
+    end
+    frame._msufKickReadyQueuedRefresh = true
+    refreshActiveFrames[#refreshActiveFrames + 1] = frame
+end
+
+local function QueueActiveRefreshFrames(frames)
+    for frame in pairs(frames) do
+        QueueActiveRefreshFrame(frame)
+    end
+end
+
+local function RefreshActive(updateFillColor)
+    local status = {}
+    local general = GeneralDB()
+
+    QueueActiveRefreshFrames(activeIndicatorFrames)
+    QueueActiveRefreshFrames(fillActiveFrames)
+
+    for index = 1, #refreshActiveFrames do
+        local frame = refreshActiveFrames[index]
+        refreshActiveFrames[index] = nil
+        if frame then
+            frame._msufKickReadyQueuedRefresh = nil
+            RefreshFrame(frame, nil, status, general, updateFillColor)
+        end
+    end
+
+    if not status.resolved and fillActiveFrameCount > 0 then
+        status.remaining = InterruptRemaining()
+        status.resolved = status.remaining ~= nil
+    end
+
+    if status.resolved == true then
+        if status.ready ~= nil then
+            state.cooldownDisplayReady = status.ready == true
+        else
+            state.cooldownDisplayReady = status.remaining ~= nil and status.remaining <= 0.05
+        end
+    end
+
     return status.remaining, status.resolved == true
 end
 
@@ -680,6 +735,23 @@ local function KickReady_RefreshAll()
     return remaining, resolved
 end
 
+local function CooldownEventAlreadyDisplayed()
+    local remaining = InterruptRemaining()
+    if remaining == nil then
+        return false
+    end
+
+    local ready = remaining <= 0.05
+    if state.cooldownDisplayReady ~= ready then
+        return false
+    end
+
+    if not ready then
+        ScheduleCooldownRefresh(remaining, true)
+    end
+    return true
+end
+
 ExportPublic("MSUF_KickReady_Init", KickReady_Init)
 ExportPublic("MSUF_KickReady_IsReady", KickReady_IsReady)
 ExportPublic("MSUF_KickReady_GetSpellID", KickReady_GetSpellID)
@@ -711,9 +783,17 @@ eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:SetScript("OnEvent", function(_, event)
     if event ~= "SPELL_UPDATE_COOLDOWN" then
         ResolveInterruptSpellID()
+    elseif CooldownEventAlreadyDisplayed() then
+        UpdateCooldownEventRegistration()
+        return
     end
 
-    local remaining, resolved = RefreshAll(true)
+    local remaining, resolved
+    if event == "SPELL_UPDATE_COOLDOWN" then
+        remaining, resolved = RefreshActive(true)
+    else
+        remaining, resolved = RefreshAll(true)
+    end
     if resolved then
         ScheduleCooldownRefresh(remaining, true)
     end

@@ -103,10 +103,14 @@ function A.CastbarsRegistry.RegisterDetailSettings(ctx)
         RegisterGeneralEnumSetting(spec.prefix .. "SpellNameAlign", unit, "castbar", "spellNameAlign", "Castbar Spell Name Alignment", "LEFT", CASTBAR_TEXT_ALIGN_VALUES, aliases, CASTBAR_TEXT_ALIGN_ALIASES)
         aliases = UnitCastbarAliases(unit, "castbar spell name font size", "castbar text font size", "castbar spell text size")
         RegisterGeneralNumber(spec.prefix .. "SpellNameFontSize", unit, "castbar", "spellNameFontSize", "Castbar Spell Name Font Size", 0, 0, 48, aliases)
-        aliases = UnitCastbarAliases(unit, "castbar spell name max width", "castbar spell text max width", "castbar text max width")
-        RegisterGeneralNumber(spec.prefix .. "SpellNameMaxWidth", unit, "castbar", "spellNameMaxWidth", "Castbar Spell Name Max Width", 0, 0, 500, aliases)
-        aliases = UnitCastbarAliases(unit, "castbar spell name truncate", "castbar spell text truncate", "castbar text truncate")
-        RegisterGeneralEnumSetting(spec.prefix .. "SpellNameTruncate", unit, "castbar", "spellNameTruncate", "Castbar Spell Name Truncate Behavior", "AUTO", CASTBAR_TRUNCATE_VALUES, aliases, CASTBAR_TRUNCATE_ALIASES)
+        aliases = UnitCastbarAliases(unit,
+            "castbar spell name manual width", "castbar spell text manual width", "castbar text manual width",
+            "castbar spell name max width", "castbar spell text max width", "castbar text max width")
+        RegisterGeneralNumber(spec.prefix .. "SpellNameMaxWidth", unit, "castbar", "spellNameMaxWidth", "Castbar Spell Name Manual Width", 0, 0, 500, aliases)
+        aliases = UnitCastbarAliases(unit,
+            "castbar spell name width behavior", "castbar spell text width behavior", "castbar text width behavior",
+            "castbar spell name truncate", "castbar spell text truncate", "castbar text truncate")
+        RegisterGeneralEnumSetting(spec.prefix .. "SpellNameTruncate", unit, "castbar", "spellNameTruncate", "Castbar Spell Name Width Behavior", "AUTO", CASTBAR_TRUNCATE_VALUES, aliases, CASTBAR_TRUNCATE_ALIASES)
 
         aliases = UnitCastbarAliases(unit, "castbar time format", "cast time format", "castbar timer format")
         RegisterGeneralEnumSetting(CASTBAR_DETAIL_FIELDS[unit].timeFormat, unit, "castbar", "timeFormat", "Castbar Time Format", "CURRENT", CASTBAR_TIME_FORMAT_VALUES, aliases, CASTBAR_TIME_FORMAT_ALIASES)
