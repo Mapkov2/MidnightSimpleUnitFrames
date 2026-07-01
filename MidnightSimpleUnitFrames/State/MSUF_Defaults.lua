@@ -2721,6 +2721,7 @@ filters = {
                     buffs = {
                         includeBoss = false,
                         includeStealable = false,
+                        includeNameplateOnly = false,
                         onlyMine = false,
                         onlyImportant = false,
                     },
@@ -2732,6 +2733,7 @@ filters = {
                         dispelPoison = false,
                         includeBoss = false,
                         includeDispellable = false,
+                        includeNameplateOnly = false,
                         onlyMine = false,
                         onlyImportant = false,
                     },
@@ -2773,6 +2775,7 @@ filters = {
                         buffs = {
                             includeBoss = false,
                             includeStealable = false,
+                            includeNameplateOnly = false,
                             onlyMine = false,
                             onlyImportant = false,
                         },
@@ -2784,6 +2787,7 @@ filters = {
                             dispelPoison = false,
                             includeBoss = false,
                             includeDispellable = false,
+                            includeNameplateOnly = false,
                             onlyMine = false,
                             onlyImportant = false,
                         },
@@ -2813,6 +2817,7 @@ filters = {
                         buffs = {
                             includeBoss = false,
                             includeStealable = false,
+                            includeNameplateOnly = false,
                             onlyMine = false,
                             onlyImportant = false,
                         },
@@ -2824,6 +2829,7 @@ filters = {
                             dispelPoison = false,
                             includeBoss = false,
                             includeDispellable = false,
+                            includeNameplateOnly = false,
                             onlyMine = false,
                             onlyImportant = false,
                         },
@@ -2858,6 +2864,7 @@ filters = {
                     buffs = {
                         includeBoss = false,
                         includeStealable = false,
+                        includeNameplateOnly = false,
                         onlyMine = false,
                         onlyImportant = false,
                     },
@@ -2869,6 +2876,7 @@ filters = {
                         dispelPoison = false,
                         includeBoss = false,
                         includeDispellable = false,
+                        includeNameplateOnly = false,
                         onlyMine = false,
                         onlyImportant = false,
                     },

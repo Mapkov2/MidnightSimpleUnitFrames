@@ -367,8 +367,8 @@ local LANE_STYLE_KEYS = {
 }
 
 local RUNTIME_FILTER_KEYS = {
-    buffs = { "onlyMine", "raid", "raidInCombat", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "exclusive" },
-    debuffs = { "onlyMine", "raid", "raidInCombat", "includeDispellable", "crowdControl", "exclusive" },
+    buffs = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "exclusive" },
+    debuffs = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "crowdControl", "exclusive" },
 }
 
 local DEFAULT_SHARED = {
@@ -459,6 +459,7 @@ local DEFAULT_SHARED = {
             onlyMine = false,
             raid = false,
             raidInCombat = false,
+            includeNameplateOnly = false,
             cancelable = false,
             notCancelable = false,
             externalDefensive = false,
@@ -470,6 +471,7 @@ local DEFAULT_SHARED = {
             includeDispellable = false,
             raid = false,
             raidInCombat = false,
+            includeNameplateOnly = false,
             crowdControl = false,
             exclusive = "none",
         },
@@ -878,6 +880,9 @@ GF_AURA_FILTER.BUFF_FILTER_ITEMS = {
     { value = "PLAYER", text = "My Buffs Only" },
     { value = "RAID", text = "Raid Buffs" },
     { value = "RAID_IN_COMBAT", text = "Raid In Combat" },
+    { value = "INCLUDE_NAME_PLATE_ONLY", text = "Include Nameplate-only" },
+    { value = "CANCELABLE", text = "Cancelable" },
+    { value = "NOT_CANCELABLE", text = "Not Cancelable" },
     { value = "EXTERNAL_DEFENSIVE", text = "External Defensive" },
     { value = "BIG_DEFENSIVE", text = "Big Defensive" },
 }
@@ -886,14 +891,17 @@ GF_AURA_FILTER.DEBUFF_FILTER_ITEMS = {
     { value = "PLAYER", text = "My Debuffs Only" },
     { value = "RAID", text = "Raid Debuffs" },
     { value = "RAID_IN_COMBAT", text = "Raid In Combat" },
+    { value = "INCLUDE_NAME_PLATE_ONLY", text = "Include Nameplate-only" },
     { value = "RAID_PLAYER_DISPELLABLE", text = "Dispellable" },
     { value = "CROWD_CONTROL", text = "Crowd Control" },
 }
 local GF_NATIVE_BUFF_TOKENS = {
-    PLAYER = true, RAID = true, RAID_IN_COMBAT = true, EXTERNAL_DEFENSIVE = true, BIG_DEFENSIVE = true,
+    PLAYER = true, RAID = true, RAID_IN_COMBAT = true, INCLUDE_NAME_PLATE_ONLY = true,
+    CANCELABLE = true, NOT_CANCELABLE = true, EXTERNAL_DEFENSIVE = true, BIG_DEFENSIVE = true,
 }
 local GF_NATIVE_DEBUFF_TOKENS = {
-    PLAYER = true, RAID = true, RAID_IN_COMBAT = true, RAID_PLAYER_DISPELLABLE = true, CROWD_CONTROL = true,
+    PLAYER = true, RAID = true, RAID_IN_COMBAT = true, INCLUDE_NAME_PLATE_ONLY = true,
+    RAID_PLAYER_DISPELLABLE = true, CROWD_CONTROL = true,
 }
 local function ResolveGFNativeFilter(token, baseFilter, validTokens)
     token = tostring(token or "ALL"):upper()
@@ -908,7 +916,7 @@ end
 GF_AURA_FILTER.ResolveDebuffFilter = function(token)
     return ResolveGFNativeFilter(token, "HARMFUL", GF_NATIVE_DEBUFF_TOKENS)
 end
-GF_AURA_FILTER.EXTERNALS_TOKEN = "HELPFUL|BIG_DEFENSIVE"
+GF_AURA_FILTER.EXTERNALS_TOKEN = "HELPFUL|EXTERNAL_DEFENSIVE"
 GF_AURA_FILTER.BuildBlacklistHash = GF_AURA_FILTER.BuildBlacklistHash or BuildGroupBlacklistHash
 GF_AURA_FILTER.InvalidateBlacklistHash = GF_AURA_FILTER.InvalidateBlacklistHash or function(group)
     if type(group) == "table" then _gfBlacklistHashCache[group] = nil end
@@ -1756,6 +1764,7 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
         filters.buffs.onlyMine = false
         filters.buffs.raid = false
         filters.buffs.raidInCombat = false
+        filters.buffs.includeNameplateOnly = false
         filters.buffs.cancelable = false
         filters.buffs.notCancelable = false
         filters.buffs.externalDefensive = false
@@ -1766,6 +1775,7 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
         filters.debuffs.onlyMine = false
         filters.debuffs.raid = false
         filters.debuffs.raidInCombat = false
+        filters.debuffs.includeNameplateOnly = false
         filters.debuffs.includeDispellable = false
         filters.debuffs.crowdControl = false
         filters.debuffs.exclusive = "none"

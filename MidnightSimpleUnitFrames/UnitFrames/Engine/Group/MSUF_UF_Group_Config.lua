@@ -735,7 +735,7 @@ local function AuraFilterString(groupKey, group)
   if groupKey == "buff" then
     return filter and filter.ResolveBuffFilter and filter.ResolveBuffFilter(token) or "HELPFUL"
   elseif groupKey == "externals" then
-    return filter and filter.EXTERNALS_TOKEN or "HELPFUL|BIG_DEFENSIVE"
+    return filter and filter.EXTERNALS_TOKEN or "HELPFUL|EXTERNAL_DEFENSIVE"
   end
   return filter and filter.ResolveDebuffFilter and filter.ResolveDebuffFilter(token) or "HARMFUL"
 end

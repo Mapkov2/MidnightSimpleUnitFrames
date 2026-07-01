@@ -691,6 +691,7 @@ local function NativeFilter(baseFilter, filters)
         if filters.onlyMine == true then filter = filter .. "|PLAYER" end
         if filters.exclusive == "raid" then filter = filter .. "|RAID" end
         if filters.raid == true then filter = filter .. "|RAID" end
+        if filters.includeNameplateOnly == true then filter = filter .. "|INCLUDE_NAME_PLATE_ONLY" end
         if filters.cancelable == true and helpful then filter = filter .. "|CANCELABLE" end
         if filters.notCancelable == true and helpful then filter = filter .. "|NOT_CANCELABLE" end
         if filters.raidInCombat == true then filter = filter .. "|RAID_IN_COMBAT" end

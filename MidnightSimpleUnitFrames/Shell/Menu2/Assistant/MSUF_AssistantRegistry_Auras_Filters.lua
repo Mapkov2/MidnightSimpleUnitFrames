@@ -111,7 +111,15 @@ function A.AurasRegistry.RegisterFilterSettings(ctx, scope)
             type = "boolean",
             aliases = aliases,
             get = function() return AuraReadFilter(scope, spec.lane, spec.key, false) == true end,
-            set = function(value) AuraWriteFilter(scope, spec.lane, spec.key, value and true or false) end,
+            set = function(value)
+                value = value and true or false
+                if value == true and type(spec.conflicts) == "table" then
+                    for k = 1, #spec.conflicts do
+                        AuraWriteFilter(scope, spec.lane, spec.conflicts[k], false)
+                    end
+                end
+                AuraWriteFilter(scope, spec.lane, spec.key, value)
+            end,
             apply = function() ApplyAura(scope, "MSUF_ASSISTANT_AURA_FILTER") end,
             combatSafe = false,
         })

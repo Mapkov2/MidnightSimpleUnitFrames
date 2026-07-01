@@ -55,14 +55,17 @@ local GROUP_NATIVE_FILTER_LABELS = {
     PLAYER = "Player",
     RAID = "Raid",
     RAID_IN_COMBAT = "Raid In Combat",
+    INCLUDE_NAME_PLATE_ONLY = "Include Nameplate-only",
+    CANCELABLE = "Cancelable",
+    NOT_CANCELABLE = "Not Cancelable",
     RAID_PLAYER_DISPELLABLE = "Dispellable",
     EXTERNAL_DEFENSIVE = "External Defensive",
     BIG_DEFENSIVE = "Big Defensive",
     CROWD_CONTROL = "Crowd Control",
 }
 local GROUP_NATIVE_FILTER_ALLOWED = {
-    buff = M.KeySetFromWords "ALL PLAYER RAID RAID_IN_COMBAT EXTERNAL_DEFENSIVE BIG_DEFENSIVE",
-    debuff = M.KeySetFromWords "ALL PLAYER RAID RAID_IN_COMBAT RAID_PLAYER_DISPELLABLE CROWD_CONTROL",
+    buff = M.KeySetFromWords "ALL PLAYER RAID RAID_IN_COMBAT INCLUDE_NAME_PLATE_ONLY CANCELABLE NOT_CANCELABLE EXTERNAL_DEFENSIVE BIG_DEFENSIVE",
+    debuff = M.KeySetFromWords "ALL PLAYER RAID RAID_IN_COMBAT INCLUDE_NAME_PLATE_ONLY RAID_PLAYER_DISPELLABLE CROWD_CONTROL",
 }
 local function Tr(text)
     if type(M.Tr) == "function" then return M.Tr(text) end
@@ -653,9 +656,9 @@ local function GroupFilterValues(groupKey)
     end
     if #out > 0 then return out end
     if groupKey == "buff" then
-        return VT("ALL", "All Buffs", "PLAYER", "My Buffs Only", "RAID", "Raid Buffs", "RAID_IN_COMBAT", "Raid In Combat", "EXTERNAL_DEFENSIVE", "External Defensive", "BIG_DEFENSIVE", "Big Defensive")
+        return VT("ALL", "All Buffs", "PLAYER", "My Buffs Only", "RAID", "Raid Buffs", "RAID_IN_COMBAT", "Raid In Combat", "INCLUDE_NAME_PLATE_ONLY", "Include Nameplate-only", "CANCELABLE", "Cancelable", "NOT_CANCELABLE", "Not Cancelable", "EXTERNAL_DEFENSIVE", "External Defensive", "BIG_DEFENSIVE", "Big Defensive")
     end
-    return VT("ALL", "All Debuffs", "PLAYER", "My Debuffs Only", "RAID", "Raid Debuffs", "RAID_IN_COMBAT", "Raid In Combat", "RAID_PLAYER_DISPELLABLE", "Dispellable", "CROWD_CONTROL", "Crowd Control")
+    return VT("ALL", "All Debuffs", "PLAYER", "My Debuffs Only", "RAID", "Raid Debuffs", "RAID_IN_COMBAT", "Raid In Combat", "INCLUDE_NAME_PLATE_ONLY", "Include Nameplate-only", "RAID_PLAYER_DISPELLABLE", "Dispellable", "CROWD_CONTROL", "Crowd Control")
 end
 local function GFAnchorValues()
     local values = GP.STATUS_ICON_ANCHORS or GP.AURA_ANCHORS
@@ -1505,35 +1508,45 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
     local card = Card(section, laneTitle, "Rules for " .. ScopeLabel(scope) .. ".", 24, -152, w - 48, 336)
     local colW = max(280, floor(((w - 48) - 46) / 2))
     local rightX = 24 + colW
-    local function FilterToggle(label, key, x, y, tip)
+    local function FilterToggle(label, key, x, y, tip, conflicts)
         local widget = BindSwitch(ctx, card, label, x, y, colW - 32,
             function() return Model.ReadFilter(scope, lane, key, false) == true end,
             function(v)
+                local didConflict = false
+                if v == true and type(conflicts) == "table" then
+                    for i = 1, #conflicts do
+                        Model.WriteFilter(scope, lane, conflicts[i], false)
+                        didConflict = true
+                    end
+                end
                 Model.WriteFilter(scope, lane, key, v)
                 ApplyUnit(ctx, scope, "AURAS3_FILTER_" .. lane .. "_" .. key, true)
+                if didConflict then QueueAurasPageRefresh(ctx, "auras-filter-conflict") end
             end)
         AddTooltip(widget, label, tip or "")
         filterControls[#filterControls + 1] = widget
         return widget
     end
-    W.LabelAt(card, "Inclusive Filters", 16, -70, colW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(card, "Native Filter Tokens", 16, -70, colW, "GameFontNormalSmall", T.colors.accent)
     local filterSpecs = lane == "buff" and {
         { "Player", "onlyMine", 1, 1, "Auras applied by the player." },
         { "Raid", "raid", 1, 2, "Raid-useful public Buffs." },
         { "Raid In Combat", "raidInCombat", 1, 3, "Buffs Blizzard flags for raid frames while in combat." },
-        { "External Defensive", "externalDefensive", 1, 4, "External defensive Buffs from Blizzard's native filter." },
-        { "Big Defensive", "bigDefensive", 2, 1, "Major defensive Buffs from Blizzard's native filter." },
-        { "Cancelable", "cancelable", 2, 2, "Buffs that can be cancelled." },
-        { "Not Cancelable", "notCancelable", 2, 3, "Buffs that cannot be cancelled." },
+        { "Include Nameplate-only", "includeNameplateOnly", 1, 4, "Also include Buffs Blizzard marks as nameplate-only." },
+        { "External Defensive", "externalDefensive", 2, 1, "External defensive Buffs from Blizzard's native filter." },
+        { "Big Defensive", "bigDefensive", 2, 2, "Major defensive Buffs from Blizzard's native filter." },
+        { "Cancelable", "cancelable", 2, 3, "Buffs that can be cancelled.", { "notCancelable" } },
+        { "Not Cancelable", "notCancelable", 2, 4, "Buffs that cannot be cancelled.", { "cancelable" } },
     } or {
         { "Player", "onlyMine", 1, 1, "Debuffs applied by the player." },
         { "Raid", "raid", 1, 2, "Raid and encounter Debuffs." },
         { "Raid In Combat", "raidInCombat", 1, 3, "Debuffs Blizzard flags for raid frames while in combat." },
+        { "Include Nameplate-only", "includeNameplateOnly", 1, 4, "Also include Debuffs Blizzard marks as nameplate-only." },
         { "Dispellable", "includeDispellable", 2, 1, "Debuffs Blizzard marks as dispellable by the player." },
         { "Crowd Control", "crowdControl", 2, 2, "Crowd-control Debuffs from Blizzard's native filter." },
     }
     M.BuildControlSpecs(filterSpecs, {
-        ["*"] = function(s) return FilterToggle(s[1], s[2], s[3] == 2 and rightX or 16, -100 - ((s[4] - 1) * 34), s[5]) end,
+        ["*"] = function(s) return FilterToggle(s[1], s[2], s[3] == 2 and rightX or 16, -100 - ((s[4] - 1) * 34), s[5], s[6]) end,
     })
     local exclusiveValues = lane == "buff" and BUFF_EXCLUSIVE or DEBUFF_EXCLUSIVE
     local exclusiveEvent = lane == "buff" and "AURAS3_FILTER_BUFF_EXCLUSIVE" or "AURAS3_FILTER_DEBUFF_EXCLUSIVE"
@@ -1772,7 +1785,7 @@ local function BuildGroupFilters(ctx, b, scope)
     local lane = CurrentLane("auraFilterLane", "buff")
     local laneText = lane == "buff" and "Buff" or "Debuff"
     local filterW = w - 48
-    local filter = Card(section, "Inclusive " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, -42, filterW, 234)
+    local filter = Card(section, "Native " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, -42, filterW, 234)
     W.LabelAt(filter, "Filter Type", 16, -72, 90, "GameFontNormalSmall", T.colors.accent)
     BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180))
     local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
@@ -1929,4 +1942,4 @@ end
 M.RegisterPage("auras3_buffs", { title = "MSUF Aura Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 10 })
 M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 10 })
 M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 31 })
-M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 21 })
+M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 22 })

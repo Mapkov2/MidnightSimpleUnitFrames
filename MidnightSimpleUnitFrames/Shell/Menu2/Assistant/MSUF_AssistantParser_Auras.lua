@@ -512,8 +512,8 @@ local function AddAuraShortcutChange(changes, setting, value, label)
 end
 
 local UNIT_AURA_FILTER_KEYS = {
-    buff = { "onlyMine", "raid", "raidInCombat", "cancelable", "notCancelable", "externalDefensive", "bigDefensive" },
-    debuff = { "onlyMine", "raid", "raidInCombat", "includeDispellable", "crowdControl" },
+    buff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "cancelable", "notCancelable", "externalDefensive", "bigDefensive" },
+    debuff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "crowdControl" },
 }
 
 local function AddAuraRegisteredChange(changes, key, value, label)
@@ -587,8 +587,11 @@ local function UnitAuraFilterHasIntent(text)
         "crowd control", "cc debuff", "cc debuffs",
         "raid buff", "raid buffs", "raid debuff", "raid debuffs",
         "raid in combat", "combat raid",
+        "nameplate only", "nameplate-only", "include nameplate", "include nameplate-only",
         "external defensive", "external defensives", "big defensive", "big defensives", "major defensive", "major defensives",
         "cancelable buff", "cancelable buffs", "cancellable buff", "cancellable buffs",
+        "not cancelable buff", "not cancelable buffs", "not cancellable buff", "not cancellable buffs",
+        "non cancelable buff", "non cancelable buffs", "uncancelable buff", "uncancelable buffs",
     })
 end
 
@@ -619,7 +622,12 @@ local function AddUnitAuraFilterClearLaneChanges(changes, scope, lane)
     AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter.exclusive", "none")
 end
 
-local function AddUnitAuraFilterSetChange(changes, scope, lane, key, value)
+local function AddUnitAuraFilterSetChange(changes, scope, lane, key, value, conflicts)
+    if value == true and type(conflicts) == "table" then
+        for i = 1, #conflicts do
+            AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(conflicts[i]), false)
+        end
+    end
     AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(key), value)
 end
 
@@ -654,6 +662,7 @@ end
 local function GroupAuraFilterLaneForText(text, value)
     if ContainsAny(text, { "buff", "buffs" }) and not ContainsAny(text, { "debuff", "debuffs" }) then return "buff" end
     if ContainsAny(text, { "debuff", "debuffs" }) then return "debuff" end
+    if value == "CANCELABLE" or value == "NOT_CANCELABLE" or value == "EXTERNAL_DEFENSIVE" or value == "BIG_DEFENSIVE" then return "buff" end
     if value == "RAID_PLAYER_DISPELLABLE" or value == "CROWD_CONTROL" then return "debuff" end
     return nil
 end
@@ -780,7 +789,7 @@ local function ParseUnitAuraLiveFilterShortcut(text)
 
     local directChanges = {}
     AddUnitAuraFiltersEnabled(directChanges, scope)
-    AddUnitAuraFilterSetChange(directChanges, scope, lane, spec.key, value)
+    AddUnitAuraFilterSetChange(directChanges, scope, lane, spec.key, value, spec.conflicts)
     if #directChanges == 0 then return nil end
 
     local wantsOnly = value == true and ContainsAny(text, { "only", "show only", "just", "just show", "display only" })
@@ -788,7 +797,7 @@ local function ParseUnitAuraLiveFilterShortcut(text)
         local replaceChanges = {}
         AddUnitAuraFiltersEnabled(replaceChanges, scope)
         AddUnitAuraFilterClearLaneChanges(replaceChanges, scope, lane)
-        AddUnitAuraFilterSetChange(replaceChanges, scope, lane, spec.key, true)
+        AddUnitAuraFilterSetChange(replaceChanges, scope, lane, spec.key, true, spec.conflicts)
         if #replaceChanges > #directChanges then
             return {
                 kind = "ambiguous",
