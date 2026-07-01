@@ -2148,6 +2148,7 @@ local PENDING_GROUP_INDICATOR_KEY_PARTS = {
     "resurrecticon", "resurrectanchor", "resurrectx", "resurrecty", "resurrectlayer",
     "phaseicon", "pvpicon", "warmode", "threaticon", "aggroicon",
     "spellindicator", "spellindicators", "cornerindicator", "cornerindicators",
+    "targetedspell", "targetedspells",
 }
 
 local function PendingGroupSettingPage(setting)

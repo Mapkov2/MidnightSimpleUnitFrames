@@ -45,9 +45,16 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     ajust = "adjust",
     aply = "apply",
     aplly = "apply",
+    applay = "apply",
     toggel = "toggle",
     togge = "toggle",
     tggle = "toggle",
+    enabel = "enable",
+    enablee = "enable",
+    enalbe = "enable",
+    disabel = "disable",
+    disablee = "disable",
+    disaable = "disable",
     porfile = "profile",
     profiel = "profile",
     profie = "profile",
@@ -66,8 +73,12 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     widh = "width",
     opactiy = "opacity",
     opacitiy = "opacity",
+    aplha = "alpha",
+    alhpa = "alpha",
     transparancy = "transparency",
     transparant = "transparent",
+    transperency = "transparency",
+    transperancy = "transparency",
     collor = "color",
     colour = "color",
     grey = "gray",
@@ -94,11 +105,40 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     taret = "target",
     traget = "target",
     taerget = "target",
+    targett = "target",
+    tagret = "target",
+    targert = "target",
+    targer = "target",
+    targget = "target",
+    tarhet = "target",
+    trget = "target",
     playr = "player",
     plaer = "player",
     plyer = "player",
+    palyer = "player",
+    plaeyr = "player",
+    playre = "player",
+    pleyer = "player",
     foucs = "focus",
     focs = "focus",
+    focsu = "focus",
+    fcous = "focus",
+    focuss = "focus",
+    foccus = "focus",
+    partty = "party",
+    praty = "party",
+    pratty = "party",
+    partyy = "party",
+    parties = "party",
+    riad = "raid",
+    raide = "raid",
+    raidss = "raid",
+    raids = "raid",
+    mythci = "mythic",
+    myhtic = "mythic",
+    mithic = "mythic",
+    mythc = "mythic",
+    mythicc = "mythic",
     frm = "frame",
     frms = "frames",
     unitfram = "unitframe",
@@ -116,11 +156,31 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     debufs = "debuffs",
     debufff = "debuff",
     cd = "cooldown",
+    countdwon = "countdown",
+    countdonw = "countdown",
+    coundown = "countdown",
     pwr = "power",
     powr = "power",
     pwoer = "power",
+    ressource = "resource",
+    resrouce = "resource",
+    resoruce = "resource",
+    resorce = "resource",
     stak = "stack",
     staks = "stacks",
+    privte = "private",
+    prviate = "private",
+    pirvate = "private",
+    visiblity = "visibility",
+    visibilty = "visibility",
+    visable = "visible",
+    visibile = "visible",
+    indcator = "indicator",
+    indciator = "indicator",
+    indictor = "indicator",
+    idnicator = "indicator",
+    threshhold = "threshold",
+    treshold = "threshold",
     castbr = "castbar",
     castabr = "castbar",
     castba = "castbar",
@@ -170,6 +230,16 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     txts = "texts",
     icn = "icon",
     icns = "icons",
+    icno = "icon",
+    iocn = "icon",
+    iconn = "icon",
+    boder = "border",
+    bordr = "border",
+    broder = "border",
+    outlne = "outline",
+    outlien = "outline",
+    otuline = "outline",
+    oultine = "outline",
     rdy = "ready",
     readycheck = "ready check",
     readychecks = "ready checks",
@@ -506,9 +576,24 @@ local fuzzyPhraseCacheText
 local fuzzyPhraseCache = {}
 local fuzzyPhraseCacheTokens = {}
 local fuzzyPhraseTokenCache = {}
+local fuzzyPhraseTokenCacheOrder = {}
+local FUZZY_PHRASE_TOKEN_CACHE_LIMIT = 4096
 
 -- Phrase fuzzy matching is scoped to the current input text. Registry aliases are reused
--- heavily, so the token cache saves work without keeping per-query state alive forever.
+-- heavily, so the bounded token cache saves work without retaining unbounded alias text.
+local function CachedFuzzyPhraseTokens(phrase)
+    local phraseTokens = fuzzyPhraseTokenCache[phrase]
+    if phraseTokens then return phraseTokens end
+    phraseTokens = Tokenize(phrase)
+    fuzzyPhraseTokenCache[phrase] = phraseTokens
+    fuzzyPhraseTokenCacheOrder[#fuzzyPhraseTokenCacheOrder + 1] = phrase
+    while #fuzzyPhraseTokenCacheOrder > FUZZY_PHRASE_TOKEN_CACHE_LIMIT do
+        local oldPhrase = table.remove(fuzzyPhraseTokenCacheOrder, 1)
+        fuzzyPhraseTokenCache[oldPhrase] = nil
+    end
+    return phraseTokens
+end
+
 local function FuzzyPhraseMatch(text, phrase)
     text = Normalize(text)
     phrase = Normalize(phrase)
@@ -521,11 +606,7 @@ local function FuzzyPhraseMatch(text, phrase)
         return fuzzyPhraseCache[phrase]
     end
 
-    local phraseTokens = fuzzyPhraseTokenCache[phrase]
-    if not phraseTokens then
-        phraseTokens = Tokenize(phrase)
-        fuzzyPhraseTokenCache[phrase] = phraseTokens
-    end
+    local phraseTokens = CachedFuzzyPhraseTokens(phrase)
     if #phraseTokens == 0 or #phraseTokens > 6 then
         fuzzyPhraseCache[phrase] = false
         return false
@@ -632,6 +713,16 @@ local function FuzzyAliasWorthTrying(text, alias)
             local token = aliasTokens[i]
             if not FUZZY_ALIAS_ANCHOR_IGNORE[token] and textSet[token] then return true end
         end
+        if #aliasTokens <= 4 and #textTokens <= 10 then
+            for i = 1, #aliasTokens do
+                local token = aliasTokens[i]
+                if not FUZZY_ALIAS_ANCHOR_IGNORE[token] and not EXACT_ONLY_FUZZY_WORDS[token] and #token >= 5 then
+                    for j = 1, #textTokens do
+                        if FuzzyWordMatch(textTokens[j], token) then return true end
+                    end
+                end
+            end
+        end
         return false
     end
 
@@ -666,7 +757,7 @@ local GAMEPLAY_TERMS = {
     "statuen rahmen", "statuenrahmen", "combat crosshair",
     "crosshair", "fadenkreuz", "melee range spell", "nahkampf zauber", "reichweiten zauber",
 }
-local GLOBAL_BARS_TERMS = { "bar texture", "bar background", "bar gradient", "gradient direction", "absorb bar", "absorb bars", "heal prediction", "heal absorb", "bar outline", "rounded frames", "rounded frame", "rounded texture", "highlight border", "aggro border", "dispel border", "purge border", "boss target border", "dispel overlay", "power text" }
+local GLOBAL_BARS_TERMS = { "bar texture", "bar background", "bar gradient", "gradient direction", "absorb bar", "absorb bars", "heal prediction", "heal absorb", "bar outline", "rounded frames", "rounded frame", "rounded texture", "highlight border", "highlight priority", "custom highlight priority", "aggro border", "aggro role filter", "aggro shows for", "dispel border", "purge border", "boss target border", "dispel overlay", "power text" }
 local CASTBAR_ROOT_DETAIL_TERMS = {
     "castbar time", "cast time", "time text", "timer",
     "castbar icon", "cast icon", "spell icon",

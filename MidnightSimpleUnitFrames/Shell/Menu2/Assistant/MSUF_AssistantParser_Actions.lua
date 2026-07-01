@@ -322,18 +322,18 @@ local function BuildContextReset(text, ctx)
 end
 
 local GROUP_STATUS_ICON_ALIASES = {
-    { key = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", layer = "roleIconLayer", style = "roleIconStyle", aliases = { "role icon", "role icons", "role indicator", "role indicators", "role symbol", "role symbols", "rollen icon", "rollen icons", "rollen indikator", "rollen symbol" } },
-    { key = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", layer = "leaderIconLayer", style = "leaderIconStyle", aliases = { "leader icon", "leader icons", "leader indicator", "leader indicators", "leader symbol", "leader symbols", "gruppenleiter icon", "leiter icon", "anfuehrer icon" } },
-    { key = "assistIcon", size = "assistIconSize", anchor = "assistIconAnchor", layer = "assistIconLayer", style = "assistIconStyle", aliases = { "assist icon", "assist icons", "assistant icon", "assistant icons", "assist indicator", "assist indicators", "assistant indicator", "assistant indicators", "assist symbol", "assist symbols", "assistant symbol", "assistant symbols" } },
-    { key = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", layer = "raidMarkerLayer", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol", "raid markierung", "ziel markierung", "zielmarker" } },
-    { key = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", layer = "readyCheckLayer", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol", "bereitschaftscheck", "bereitschaftscheck icon", "readycheck icon" } },
-    { key = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", layer = "summonLayer", aliases = { "summon icon", "summon indicator", "summon symbol", "beschwoerung icon", "beschwoeren icon" } },
-    { key = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", layer = "resurrectLayer", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol", "wiederbelebung icon", "wiederbelebungs icon", "eingehende wiederbelebung" } },
-    { key = "pvpIcon", size = "pvpIconSize", anchor = "pvpIconAnchor", layer = "pvpIconLayer", aliases = { "pvp flag", "pvp icon", "pvp flag icon", "pvp indicator", "pvp flag indicator", "pvp status", "war mode indicator", "flagged indicator" } },
-    { key = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", layer = "phaseLayer", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
-    { key = "statusText", size = "statusTextSize", anchor = "statusTextAnchor", layer = "statusTextLayer", aliases = { "dead text", "dead status text", "status text" } },
-    { key = "statusGhostText", size = "statusGhostTextSize", anchor = "statusGhostTextAnchor", layer = "statusGhostTextLayer", aliases = { "ghost text", "ghost status text" } },
-    { key = "statusAFKText", size = "statusAFKTextSize", anchor = "statusAFKTextAnchor", layer = "statusAFKTextLayer", aliases = { "afk text", "dnd text", "afk dnd text", "away text" } },
+    { key = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", style = "roleIconStyle", aliases = { "role icon", "role icons", "role indicator", "role indicators", "role symbol", "role symbols", "rollen icon", "rollen icons", "rollen indikator", "rollen symbol" } },
+    { key = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", style = "leaderIconStyle", aliases = { "leader icon", "leader icons", "leader indicator", "leader indicators", "leader symbol", "leader symbols", "gruppenleiter icon", "leiter icon", "anfuehrer icon" } },
+    { key = "assistIcon", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", style = "assistIconStyle", aliases = { "assist icon", "assist icons", "assistant icon", "assistant icons", "assist indicator", "assist indicators", "assistant indicator", "assistant indicators", "assist symbol", "assist symbols", "assistant symbol", "assistant symbols" } },
+    { key = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol", "raid markierung", "ziel markierung", "zielmarker" } },
+    { key = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol", "bereitschaftscheck", "bereitschaftscheck icon", "readycheck icon" } },
+    { key = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", aliases = { "summon icon", "summon indicator", "summon symbol", "beschwoerung icon", "beschwoeren icon" } },
+    { key = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", x = "resurrectX", y = "resurrectY", layer = "resurrectLayer", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol", "wiederbelebung icon", "wiederbelebungs icon", "eingehende wiederbelebung" } },
+    { key = "pvpIcon", size = "pvpIconSize", anchor = "pvpIconAnchor", x = "pvpIconX", y = "pvpIconY", layer = "pvpIconLayer", aliases = { "pvp flag", "pvp icon", "pvp flag icon", "pvp indicator", "pvp flag indicator", "pvp status", "war mode indicator", "flagged indicator" } },
+    { key = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", x = "phaseX", y = "phaseY", layer = "phaseLayer", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
+    { key = "statusText", size = "statusTextSize", anchor = "statusTextAnchor", x = "statusOffsetX", y = "statusOffsetY", layer = "statusTextLayer", aliases = { "dead text", "dead status text", "status text", "offline text", "offline status text", "offline indicator", "disconnected text", "connection text" } },
+    { key = "statusGhostText", size = "statusGhostTextSize", anchor = "statusGhostTextAnchor", x = "statusGhostOffsetX", y = "statusGhostOffsetY", layer = "statusGhostTextLayer", aliases = { "ghost text", "ghost status text" } },
+    { key = "statusAFKText", size = "statusAFKTextSize", anchor = "statusAFKTextAnchor", x = "statusAFKOffsetX", y = "statusAFKOffsetY", layer = "statusAFKTextLayer", aliases = { "afk text", "dnd text", "afk dnd text", "away text" } },
 }
 
 local GROUP_STATUS_ICON_PACK_ALIASES = {
@@ -381,7 +381,7 @@ local GROUP_STATUS_ICON_TERMS = {
     "raid marker", "raid markers", "raid markierung", "ready check", "ready icon", "bereitschaftscheck", "summon", "summon icon", "beschwoerung icon",
     "resurrect", "resurrect icon", "resurrection", "resurrection icon", "incoming resurrection",
     "incoming resurrection icon", "incoming rez", "incoming rez icon", "rez icon", "wiederbelebung icon", "eingehende wiederbelebung",
-    "pvp flag", "pvp icon", "pvp indicator", "phase icon", "dead text", "ghost text", "afk text", "dnd text",
+    "pvp flag", "pvp icon", "pvp indicator", "phase icon", "dead text", "offline text", "disconnected text", "connection text", "ghost text", "afk text", "dnd text",
 }
 
 local GROUP_STATUS_MIDNIGHT_STYLE_TERMS = {
@@ -864,6 +864,50 @@ local function ParseGroupStatusIconDetail(text)
         end
     end
 
+    local offsetKey
+    local offsetLabel
+    if ContainsAny(text, { "x offset", "offset x", "horizontal offset" }) then
+        offsetKey = iconSpec.x
+        offsetLabel = "X Offset"
+    elseif ContainsAny(text, { "y offset", "offset y", "vertical offset" }) then
+        offsetKey = iconSpec.y
+        offsetLabel = "Y Offset"
+    end
+    if type(offsetKey) == "string" and offsetKey ~= "" then
+        local value = FirstNumber(text)
+        if value ~= nil then
+            local changes = BuildGroupStatusChanges(scopes, offsetKey, value)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group Status Icon " .. offsetLabel,
+                    bulkSafe = #changes > 1,
+                    summary = "Changes the X/Y offset for the selected group status icon.",
+                }
+            end
+        end
+    end
+
+    if ContainsAny(text, { "move", "nudge", "shift", "position", "verschiebe" }) then
+        local direction = DetectDirection(text)
+        local moveKey = direction and ((direction == "left" or direction == "right") and iconSpec.x or iconSpec.y)
+        if type(moveKey) == "string" and moveKey ~= "" then
+            local amount = FirstNumber(text) or 10
+            if direction == "left" or direction == "down" then amount = -amount end
+            local changes = BuildGroupStatusChanges(scopes, moveKey, nil, amount)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group Status Icon Position",
+                    bulkSafe = #changes > 1,
+                    summary = "Moves the selected group status icon with its X/Y offset.",
+                }
+            end
+        end
+    end
+
     if ContainsAny(text, { "layer", "draw layer", "draw order", "behind", "forward", "front", "backward", "backwards", "ebene", "zeichenebene" }) then
         local relativeDelta = RelativeLayerDeltaForText(text)
         local value
@@ -918,9 +962,41 @@ local UNIT_STATUS_RESET_TERMS = {
 }
 
 local UNIT_STATUS_RUNTIME_TEXT_TERMS = {
+    "offline text", "offline indicator", "offline status", "offline status text", "offline status indicator",
+    "disconnected text", "disconnected indicator", "disconnected status", "disconnected status text",
+    "connection text", "connection indicator", "connection status", "connection status text",
+    "ghost text", "ghost indicator", "ghost status", "ghost status text", "ghost status indicator",
     "afk text", "afk indicator", "afk status", "afk status text", "afk status indicator",
     "dnd text", "dnd indicator", "dnd status", "dnd status text", "dnd status indicator",
     "away text", "away indicator", "away status", "afk dnd text", "afk dnd indicator",
+}
+
+local UNIT_STATUS_TEXT_STATE_TERMS = {
+    {
+        key = "showDead",
+        label = "Dead/Offline Text",
+        terms = {
+            "dead text dead units", "status text dead units", "show dead text for dead",
+            "offline text", "offline indicator", "offline status", "offline status text", "offline status indicator",
+            "disconnected text", "disconnected indicator", "disconnected status", "disconnected status text",
+            "connection text", "connection indicator", "connection status", "connection status text",
+        },
+    },
+    {
+        key = "showGhost",
+        label = "Ghost Text",
+        terms = { "ghost text", "ghost indicator", "ghost status", "ghost status text", "ghost status indicator" },
+    },
+    {
+        key = "showAFK",
+        label = "AFK Text",
+        terms = { "afk text", "afk indicator", "afk status", "afk status text", "afk status indicator", "away text", "away indicator", "away status" },
+    },
+    {
+        key = "showDND",
+        label = "DND Text",
+        terms = { "dnd text", "dnd indicator", "dnd status", "dnd status text", "dnd status indicator" },
+    },
 }
 
 local UNIT_STATUS_SIZE_TERMS = {
@@ -985,6 +1061,14 @@ local UNIT_STATUS_ANCHOR_ALIASES = {
 
 local function UnitStatusHasIntent(text)
     return ContainsAny(text, UNIT_STATUS_RESET_TERMS) or ContainsAny(text, UNIT_STATUS_RUNTIME_TEXT_TERMS)
+end
+
+local function UnitStatusTextStateForText(text)
+    for i = 1, #UNIT_STATUS_TEXT_STATE_TERMS do
+        local spec = UNIT_STATUS_TEXT_STATE_TERMS[i]
+        if ContainsAny(text, spec.terms) then return spec end
+    end
+    return nil
 end
 
 local function ResolveUnitStatusSpecForText(unit, text)
@@ -1113,12 +1197,48 @@ local function ParseUnitStatusIndicatorDetail(text)
     if not UnitStatusHasIntent(text) then return nil end
 
     local units = UnitStatusUnitsOrCurrent(text)
-    if #units == 0 then return nil end
     local unit = units[1]
+    local visible = DetectBoolean(text)
+    local textState = visible ~= nil and UnitStatusTextStateForText(text) or nil
+    if textState then
+        local changes = {}
+        local stateSetting = Registry and Registry:GetSetting("general.statusIndicators." .. textState.key)
+        if stateSetting then
+            changes[#changes + 1] = { setting = stateSetting, value = visible }
+        end
+        if visible == true and unit then
+            local showSetting = Registry and Registry:GetSetting(unit .. ".statusTextEnabled")
+            if showSetting then
+                changes[#changes + 1] = { setting = showSetting, value = true }
+            end
+        end
+        if #changes > 0 then
+            return {
+                kind = "changes",
+                changes = changes,
+                label = "Status Text " .. tostring(textState.label or "State"),
+                bulkSafe = #changes > 1,
+                summary = visible and "Enables the requested status text state and the unit Dead Text indicator when a unit was named." or "Disables the requested global status text state without hiding the whole Dead Text indicator.",
+            }
+        end
+    end
+    if #units == 0 then return nil end
     local spec = ResolveUnitStatusSpecOrSelected(unit, text)
     if not spec then return nil end
     if spec.value == "raidmarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS) and not HasStatusOffsetIntent(text) then
         return RaidMarkerSymbolAnswer()
+    end
+
+    if visible ~= nil and type(spec.show) == "string" and spec.show ~= "" then
+        local setting = Registry and Registry:GetSetting(unit .. "." .. spec.show)
+        if setting then
+            return {
+                kind = "changes",
+                changes = { { setting = setting, value = visible } },
+                label = UnitDisplayLabel(unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Visibility",
+                summary = "Changes the visibility toggle for one unit-frame status indicator.",
+            }
+        end
     end
 
     if ContainsAny(text, { "icon pack", "icon style" }) and spec.iconStyle then

@@ -301,6 +301,7 @@ local GROUP_INDICATOR_KEY_PARTS = {
     "resurrecticon", "resurrectanchor", "resurrectx", "resurrecty", "resurrectlayer",
     "phaseicon", "pvpicon", "warmode", "threaticon", "aggroicon",
     "spellindicator", "spellindicators", "cornerindicator", "cornerindicators",
+    "targetedspell", "targetedspells",
 }
 
 local function GroupSettingLikelyPage(setting)
@@ -1006,8 +1007,8 @@ local PAGE_HELP = {
     opt_bars = {
         title = "Bars help",
         lines = {
-            "You can change bar textures, background/foreground behavior, gradients, outlines, rounded frames, absorb bars, and highlight border options.",
-            "Examples: set bar texture to amooth; set bar outline color red; enable class colored background; test aggro border; show absorb bar preview.",
+            "You can change bar textures, background/foreground behavior, gradients, outlines, rounded frames, absorb bars, aggro role filtering, and highlight border options.",
+            "Examples: set bar texture to amooth; set bar outline color red; enable class colored background; set raid aggro shows for non tanks; show absorb bar preview.",
             "Preview requests can test aggro borders, dispel borders, absorb bars, and other bar previews.",
         },
         actions = { "Open Bars", "Open Colors" },
@@ -1026,11 +1027,11 @@ local PAGE_HELP = {
         },
         actions = { "Export Current Profile", "Copy Wago Profiles Link", "Import Profile" },
     },
-    auras3 = { title = "Auras help", lines = { "You can change Aura and Group Aura options such as visibility, icon size, caps/count, per-row layout, growth, X/Y offsets, layer, cooldown text, stack text, filters, hidden auras, and quick presets.", "Examples: cap player buffs at 2; set target buff icon size to 30; set raid debuff layer to 7." }, actions = { "Open Auras", "Open Aura Filters" } },
-    auras3_styling = { title = "Aura Style help", lines = { "You can change aura basics, borders, cooldown text, stack text, and related rendering details. Aura timer, stack, highlight, and pandemic colors live in Colors > Auras.", "Examples: set aura cooldown text size to 14; move target buff stack text right 3; open Aura Style." }, actions = { "Open Aura Style", "Open Colors" } },
-    auras3_buffs = { title = "Aura Buffs help", lines = { "You can change buff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, stack text, cooldown text, and filters.", "Examples: set player buff max to 8; cap player buffs at 2; set party buff icon size to 24." }, actions = { "Open Aura Buffs" } },
-    auras3_debuffs = { title = "Aura Debuffs help", lines = { "You can change debuff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, cooldown text, and debuff filters.", "Examples: set focus debuff icon size to 28; limit raid debuffs to 4; set target debuff z layer to 7." }, actions = { "Open Aura Debuffs" } },
-    auras3_filters = { title = "Aura Filters help", lines = { "You can change Aura filter toggles, hidden-aura entries, hidden group-aura categories, Aura quick presets, and Group Aura copy through Group Copy categories.", "Examples: hide spell 12345 for player auras; show hidden raid buff categories; apply performance aura preset; copy raid auras to party." }, actions = { "Open Aura Filters" } },
+    auras3 = { title = "Auras help", lines = { "You can change Aura and Group Aura options such as visibility, icon size, caps/count, per-row layout, growth, X/Y offsets, layer, cooldown text, stack text, duration bars, live filters, and quick presets. Saved exact hidden-aura lists are read-only in the native 12.1 backend.", "Examples: cap player buffs at 2; set target buff icon size to 30; put raid duration bars on top." }, actions = { "Open Auras", "Open Aura Filters" } },
+    auras3_styling = { title = "Aura Style help", lines = { "You can change aura basics, borders, cooldown text, stack text, duration bars, and related rendering details. Aura timer, stack, highlight, and pandemic colors live in Colors > Auras.", "Examples: set aura cooldown text size to 14; move target buff stack text right 3; set target duration bar fill mode to elapsed." }, actions = { "Open Aura Style", "Open Colors" } },
+    auras3_buffs = { title = "Aura Buffs help", lines = { "You can change buff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, stack text, cooldown text, duration bars, and filters.", "Examples: set player buff max to 8; cap player buffs at 2; set party buff duration bar height to 3." }, actions = { "Open Aura Buffs" } },
+    auras3_debuffs = { title = "Aura Debuffs help", lines = { "You can change debuff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, cooldown text, duration bars, and debuff filters.", "Examples: set focus debuff icon size to 28; limit raid debuffs to 4; put target debuff duration bar on top." }, actions = { "Open Aura Debuffs" } },
+    auras3_filters = { title = "Aura Filters help", lines = { "You can change live Aura filter toggles/tokens and quick presets, and you can list saved legacy hidden-aura entries or group category data. Exact SpellID/category blacklist edits are read-only in the native 12.1 backend.", "Examples: set target debuff dispellable filter on; show hidden raid buff categories; apply performance aura preset; copy raid auras to party." }, actions = { "Open Aura Filters" } },
     gf_layout = { title = "Group Layout help", lines = { "You can change group frame layout, spacing, growth, anchoring, reverse health fill, scaling breakpoints, party/raid/mythic raid options, Blizzard fallback behavior, and visibility options.", "Examples: 'set raid scale for 20 players to 80', 'make raid frames fill backwards', 'move raid frame closer to player', 'set party growth direction to down', or 'show Blizzard party frames when Party is disabled'." }, actions = { "Open Group Layout" } },
     gf_bars = {
         title = "Group Health & Text help",
@@ -1040,8 +1041,15 @@ local PAGE_HELP = {
         },
         actions = { "Open Group Health & Text" },
     },
-    gf_indicators = { title = "Group Indicators help", lines = { "You can change group status indicators, role/ready/summon icons, corner indicators, and related editor choices available in MSUF." }, actions = { "Open Group Indicators" } },
-    gf_auras = { title = "Group Auras help", lines = { "You can change Party, Raid, and Mythic Raid aura visibility, icon size, caps/count, layout, X/Y offsets, layer, filters, hidden group-aura categories, and group aura copy behavior.", "Examples: set raid buff icon size to 24; cap party buffs at 4; set mythic raid debuff layer to 8; copy raid auras to party." }, actions = { "Open Group Auras", "Open Aura Filters" } },
+    gf_indicators = {
+        title = "Group Indicators help",
+        lines = {
+            "You can change group status indicators, role/ready/summon icons, targeted spell indicators, spell indicators, corner indicators, and related editor choices available in MSUF.",
+            "Examples: show party targeted spell indicators; set targeted spell icon size to 28; show raid ready check icon; move raid phase icon right.",
+        },
+        actions = { "Open Group Indicators" },
+    },
+    gf_auras = { title = "Group Auras help", lines = { "You can change Party, Raid, and Mythic Raid aura visibility, icon size, caps/count, layout, X/Y offsets, layer, live filters, private aura options, and group aura copy behavior. Saved group category blacklist data is read-only in the native 12.1 backend.", "Examples: set raid buff icon size to 24; cap party buffs at 4; set mythic raid debuff layer to 8; copy raid auras to party." }, actions = { "Open Group Auras", "Open Aura Filters" } },
     classpower = { title = "Class Resources help", lines = { "You can change class resource mode, size, position, colors, and gameplay-specific class resource options available in MSUF." }, actions = { "Open Class Resources" } },
     gameplay = { title = "Gameplay help", lines = { "You can change gameplay features such as combat timer, sounds, totem/statue frame behavior, and related options." }, actions = { "Open Gameplay" } },
 }
@@ -1064,7 +1072,7 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "edit mode help", "editmode help", "help edit mode", "bearbeitungsmodus hilfe", "hilfe bearbeitungsmodus", "editmodus hilfe" }, page = "home", special = "editmode" },
     { terms = { "group help", "group frames help", "help group", "help group frames", "party help", "help party", "raid help", "help raid" }, page = "gf_layout" },
     { terms = { "group text help", "group health help", "group health and text help", "help group text", "help group health", "help group health and text", "party text help", "raid text help", "party health help", "raid health help" }, page = "gf_bars" },
-    { terms = { "indicator help", "help indicator", "group indicator help", "help group indicator", "corner indicator help", "help corner indicator" }, page = "gf_indicators" },
+    { terms = { "indicator help", "help indicator", "group indicator help", "help group indicator", "corner indicator help", "help corner indicator", "targeted spell help", "targeted spells help", "targeted spell indicator help" }, page = "gf_indicators" },
     { terms = { "group aura help", "group auras help", "help group aura", "help group auras", "party aura help", "raid aura help", "mythic raid aura help" }, page = "gf_auras" },
     { terms = { "class resource help", "help class resource", "class power help", "help class power" }, page = "classpower" },
     { terms = { "gameplay help", "help gameplay" }, page = "gameplay" },
@@ -1169,7 +1177,7 @@ local WHAT_CAN_DIRECT_HELP_TERMS = {
 
 local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "gf_bars", terms = { "group health and text", "group health", "group text", "party health", "party text", "raid health", "raid text", "mythic raid health", "mythic raid text" } },
-    { page = "gf_indicators", terms = { "group indicator", "group indicators", "party indicator", "party indicators", "raid indicator", "raid indicators", "corner indicator", "corner indicators", "status icon", "status icons", "ready check", "raid marker", "role icon" } },
+    { page = "gf_indicators", terms = { "group indicator", "group indicators", "party indicator", "party indicators", "raid indicator", "raid indicators", "corner indicator", "corner indicators", "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators", "status icon", "status icons", "ready check", "raid marker", "role icon" } },
     { page = "gf_auras", terms = { "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras", "mythic raid aura", "mythic raid auras", "group buff", "group buffs", "group debuff", "group debuffs" } },
     { page = "gf_layout", terms = { "group layout", "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames", "party layout", "raid layout" } },
     { page = "auras3_filters", terms = { "aura filter", "aura filters", "hidden aura", "hidden auras", "blacklist", "whitelist", "ignore list" } },
@@ -1183,7 +1191,7 @@ local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "gameplay", terms = { "gameplay", "combat timer", "combat crosshair", "totem", "totems", "totem frame" } },
     { page = "opt_colors", terms = { "color", "colors", "class colors", "bar colors", "font color", "aura colors", "aura timer colors" } },
     { page = "opt_fonts", terms = { "font", "fonts", "font outline", "font shadow" } },
-    { page = "opt_bars", terms = { "bar texture", "bar textures", "health bar", "power bar", "bars", "bar", "absorb bar", "dispel overlay", "rounded bars" } },
+    { page = "opt_bars", terms = { "bar texture", "bar textures", "health bar", "power bar", "bars", "bar", "absorb bar", "dispel overlay", "rounded bars", "aggro role filter", "aggro shows for", "highlight priority", "custom highlight priority" } },
     { page = "opt_misc", terms = { "misc", "miscellaneous", "tooltip", "tooltips", "minimap", "menu language", "blizzard frames" } },
     { page = "modules", terms = { "module", "modules", "style module", "msuf style", "dropdown style" } },
     { page = "uf_targettarget", terms = { "target of target", "targettarget" } },
@@ -1421,6 +1429,8 @@ local GROUP_INDICATOR_HELP_TERMS = {
     "leader", "assist", "raid marker", "target marker", "resurrection", "resurrection icon", "resurrect",
     "resurrect icon", "incoming res", "incoming resurrection", "rez icon", "summon", "summon icon",
     "phase icon", "phasing icon", "pvp icon", "pvp flag", "war mode", "threat", "aggro", "dispel",
+    "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators",
+    "enemy targeted spell", "enemy targeted spells", "nameplate cast tracker",
 }
 
 local UNIT_FRAME_SCOPE_TERMS = {
@@ -1547,7 +1557,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Auras, buffs, and debuffs help\nAuras are buffs and debuffs shown on unit or group frames. Buffs are usually helpful effects; debuffs are usually harmful effects. MSUF can change aura visibility, icon size, caps/count, layout, X/Y offsets, layer, cooldown text, stack text, hidden aura filters, dispellable-debuff behavior, and group aura categories.\nExamples: open auras; cap player buffs at 2; set target buff icon size to 30; set raid debuff layer to 7.\nYou can ask: Open Auras | Open Aura Filters | Open Group Auras",
+            text = "Auras, buffs, and debuffs help\nAuras are buffs and debuffs shown on unit or group frames. Buffs are usually helpful effects; debuffs are usually harmful effects. MSUF can change aura visibility, icon size, caps/count, layout, X/Y offsets, layer, cooldown text, stack text, live filters, dispellable-debuff behavior, private aura options, and group aura copy. Saved exact blacklist/category data is read-only in the native 12.1 backend.\nExamples: open auras; cap player buffs at 2; set target buff icon size to 30; set raid debuff layer to 7.\nYou can ask: Open Auras | Open Aura Filters | Open Group Auras",
             status = "applied",
             summary = "Assistant auras help",
         }
@@ -1775,9 +1785,18 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain" })
     then
         return {
-            text = "Threat and aggro help\nThreat is how enemies decide whom to attack; aggro means a unit currently has enemy attention. MSUF can highlight this with Aggro Border options, threat/status indicators, group indicators, and colors.\nExamples: turn on aggro border; test aggro border; set aggro border color red; open group indicators.\nYou can ask: Open Bars | Open Colors | Open Group Indicators",
+            text = "Threat and aggro help\nThreat is how enemies decide whom to attack; aggro means a unit currently has enemy attention. MSUF can highlight this with Aggro Border options, aggro role filters, threat/status indicators, group indicators, and colors.\nExamples: turn on aggro border; set raid aggro shows for non tanks; test aggro border; set aggro border color red.\nYou can ask: Open Bars | Open Colors | Open Group Indicators",
             status = "applied",
             summary = "Assistant threat help",
+        }
+    end
+    if ContainsAny(norm, { "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators", "enemy targeted spell", "enemy targeted spells", "nameplate cast tracker" })
+        and ContainsAny(norm, { "help", "what", "what is", "what are", "what does", "how", "where", "explain", "mean", "change", "set", "show", "open" })
+    then
+        return {
+            text = "Targeted Spell Indicators help\nParty Targeted Spell Indicators show enemy nameplate casts that are targeting party members. They are party-only and live in Group Frames > Indicators.\nExamples: show party targeted spell indicators; set targeted spell icon size to 28; set targeted spell mode to always; move targeted spells up 4.\nYou can ask: Open Group Indicators",
+            status = "applied",
+            summary = "Assistant targeted spell indicator help",
         }
     end
     if ContainsAny(norm, { "combat lockdown", "lockdown", "in combat lockdown", "combat protected", "combat restriction", "protected action" })
@@ -1803,7 +1822,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Group Indicators help\nIn Group Frames > Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, spell, and corner indicators.\nExamples: show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18; open group indicators.\nYou can ask: Open Group Indicators",
+            text = "Group Indicators help\nIn Group Frames > Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, targeted spell, spell, and corner indicators.\nExamples: show party targeted spell indicators; show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Indicators",
             status = "applied",
             summary = "Assistant group indicators help",
         }

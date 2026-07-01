@@ -100,7 +100,7 @@ if not P.InitUnsupportedAuraCommand then
                 "icon", "icons", "per row", "growth", "spacing", "gap", "x offset", "y offset", "layer", "z layer", "frame level",
                 "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen",
                 "own", "mine", "only mine", "only player", "raid filter", "player filter",
-                "stack", "cooldown", "pandemic",
+                "stack", "cooldown", "duration", "duration bar", "timer bar", "pandemic",
             }
         end
         if not P.AURA_COPY_COMMAND_TERMS then
@@ -122,7 +122,41 @@ if not P.InitUnsupportedAuraCommand then
             P.AURA_DEBUFF_STRIPE_TERMS = { "debuff stripe", "debuff stripes" }
         end
         if not P.AURA_DISPEL_OVERLAY_TERMS then
-            P.AURA_DISPEL_OVERLAY_TERMS = { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay" }
+            P.AURA_DISPEL_OVERLAY_TERMS = {
+                "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay",
+                "debuff overlay", "dispellable overlay", "dispellable debuff overlay",
+                "dispel health overlay", "dispellable health overlay",
+            }
+        end
+        if not P.AURA_GROUP_BLACKLIST_SCOPE_TERMS then
+            P.AURA_GROUP_BLACKLIST_SCOPE_TERMS = {
+                "group aura", "group auras", "group frame aura", "group frame auras",
+                "party aura", "party auras", "party buff", "party buffs", "party debuff", "party debuffs",
+                "raid aura", "raid auras", "raid buff", "raid buffs", "raid debuff", "raid debuffs",
+                "mythic raid aura", "mythic raid auras", "mythic raid buff", "mythic raid buffs", "mythic raid debuff", "mythic raid debuffs",
+            }
+        end
+        if not P.AURA_GROUP_BLACKLIST_TERMS then
+            P.AURA_GROUP_BLACKLIST_TERMS = {
+                "blacklist", "blacklisted", "whitelist", "whitelisted",
+                "block", "blocked", "ignore", "ignored", "exclude", "excluded",
+                "hide", "hidden", "allow", "unblacklist", "unblock", "unhide",
+            }
+        end
+        if not P.AURA_GROUP_BLACKLIST_DETAIL_TERMS then
+            P.AURA_GROUP_BLACKLIST_DETAIL_TERMS = {
+                "spell", "spells", "spell id", "spellid", "spell link",
+                "category", "categories", "public category", "public categories",
+                "preset", "presets", "exact", "specific",
+            }
+        end
+        if not P.AURA_UNIT_BLACKLIST_SCOPE_TERMS then
+            P.AURA_UNIT_BLACKLIST_SCOPE_TERMS = {
+                "aura blacklist", "blacklist aura", "blacklist spell", "hidden aura", "hidden auras",
+                "player aura", "player auras", "target aura", "target auras",
+                "focus aura", "focus auras", "boss aura", "boss auras",
+                "shared aura", "shared auras", "unit aura", "unit auras",
+            }
         end
 
         if not P.CopyCommandExcludesAuras then
@@ -137,6 +171,26 @@ if not P.InitUnsupportedAuraCommand then
                 if P.CopyCommandExcludesAuras and P.CopyCommandExcludesAuras(text) then return nil end
                 if ContainsAny(text, P.AURA_DEBUFF_STRIPE_TERMS) then return nil end
                 if ContainsAny(text, P.AURA_DISPEL_OVERLAY_TERMS) then return nil end
+                local groupBlacklistScope = ContainsAny(text, P.AURA_GROUP_BLACKLIST_SCOPE_TERMS)
+                local groupBlacklistIntent = ContainsAny(text, P.AURA_GROUP_BLACKLIST_TERMS)
+                local groupBlacklistDetail = ContainsAny(text, P.AURA_GROUP_BLACKLIST_DETAIL_TERMS) or text:match("#?%d%d%d+") ~= nil
+                if groupBlacklistScope and groupBlacklistIntent and (groupBlacklistDetail or text:find("blacklist", 1, true)) then
+                    return {
+                        kind = "unsupported",
+                        status = "info",
+                        summary = "Explains native group aura blacklist limitation.",
+                        text = "Group aura exact spell/category blacklist data is legacy read-only in the native 12.1 backend, so I will not edit it as if it could affect live aura display. I can change live group aura filter tokens instead, such as All, Raid, or Dispellable, plus icon size, count, spacing, growth, layer, cooldown text, stack text, duration bars, and private aura options.",
+                    }
+                end
+                local unitBlacklistScope = ContainsAny(text, P.AURA_UNIT_BLACKLIST_SCOPE_TERMS)
+                if unitBlacklistScope and groupBlacklistIntent and (groupBlacklistDetail or text:find("blacklist", 1, true)) then
+                    return {
+                        kind = "unsupported",
+                        status = "info",
+                        summary = "Explains native unit aura blacklist limitation.",
+                        text = "Exact aura blacklist edits are legacy read-only while the native 12.1 backend is active, so I will not edit them as if they could affect live aura display. I can change live Aura Filter options instead, such as player-only, raid, dispellable, crowd-control, exclusive filters, icon size, count, spacing, growth, cooldown text, stack text, and duration bars.",
+                    }
+                end
                 if not ContainsAny(text, P.AURA_OUT_OF_SCOPE_TERMS)
                     and not (ContainsAny(text, P.AURA_BUFF_TERMS) and ContainsAny(text, P.AURA_BUFF_CONTEXT_TERMS))
                 then
@@ -146,7 +200,7 @@ if not P.InitUnsupportedAuraCommand then
                     kind = "unsupported",
                     status = "info",
                     summary = "Aura option fallback.",
-                    text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown and stack text, filters, hidden aura lists, quick presets, and group aura copy when those options exist in MSUF. Aura areas I can't match will stay as they are.",
+                    text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown text, stack text, duration bars, live filter tokens, quick presets, private aura options, and group aura copy when those options exist in MSUF. Saved exact SpellID blacklist data can be listed, but it is read-only while the native 12.1 backend is active. Aura areas I can't match will stay as they are.",
                 }
             end
         end
@@ -156,7 +210,11 @@ P.InitUnsupportedAuraCommand()
 
 local function EarlyAuraShortcut(normalized)
     return (P.ParseAuraScopeOverrideShortcut and P.ParseAuraScopeOverrideShortcut(normalized))
+        or (P.ParseGroupAuraLiveFilterShortcut and P.ParseGroupAuraLiveFilterShortcut(normalized))
+        or (P.ParseUnitAuraLiveFilterShortcut and P.ParseUnitAuraLiveFilterShortcut(normalized))
+        or (P.ParseGroupAuraVisibilityShortcut and P.ParseGroupAuraVisibilityShortcut(normalized))
         or (P.ParseAuraCooldownSwipeDirectionShortcut and P.ParseAuraCooldownSwipeDirectionShortcut(normalized))
+        or (P.ParseAuraDurationBarShortcut and P.ParseAuraDurationBarShortcut(normalized))
         or (P.ParseAuraDebuffBorderModeShortcut and P.ParseAuraDebuffBorderModeShortcut(normalized))
 end
 
@@ -201,6 +259,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     result = A._ParseClassPowerPlacementShortcut and A._ParseClassPowerPlacementShortcut(normalized); if result then return result end
     result = A._ParseClassPowerDisplayStyleShortcut and A._ParseClassPowerDisplayStyleShortcut(normalized); if result then return result end
     result = A._ParseClassPowerFillDirectionShortcut and A._ParseClassPowerFillDirectionShortcut(normalized); if result then return result end
+    result = P.ParseGroupFrameFillDirectionShortcut and P.ParseGroupFrameFillDirectionShortcut(normalized); if result then return result end
     result = A._ParseClassPowerTextSizeShortcut and A._ParseClassPowerTextSizeShortcut(normalized); if result then return result end
     result = A._ParseClassPowerSizeShortcut and A._ParseClassPowerSizeShortcut(normalized); if result then return result end
     result = A._ParseClassPowerSeparatorShortcut and A._ParseClassPowerSeparatorShortcut(normalized); if result then return result end
@@ -243,7 +302,10 @@ function A._ParsePipelineGeometry(normalized, raw)
     result = P.ParseCastbarTextSizeShortcut and P.ParseCastbarTextSizeShortcut(normalized); if result then return result end
     result = P.ParseCastbarSizeShortcut and P.ParseCastbarSizeShortcut(normalized); if result then return result end
     result = P.ParseCastbarPlacementShortcut and P.ParseCastbarPlacementShortcut(normalized); if result then return result end
+    result = P.ParseGroupAuraLiveFilterShortcut and P.ParseGroupAuraLiveFilterShortcut(normalized); if result then return result end
+    result = P.ParseUnitAuraLiveFilterShortcut and P.ParseUnitAuraLiveFilterShortcut(normalized); if result then return result end
     result = P.ParseAuraCooldownSwipeDirectionShortcut and P.ParseAuraCooldownSwipeDirectionShortcut(normalized); if result then return result end
+    result = P.ParseAuraDurationBarShortcut and P.ParseAuraDurationBarShortcut(normalized); if result then return result end
     result = P.ParseAuraDebuffBorderModeShortcut and P.ParseAuraDebuffBorderModeShortcut(normalized); if result then return result end
     result = P.AuraGeometryShortcut and P.AuraGeometryShortcut(normalized); if result then return result end
     result = P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized); if result then return result end

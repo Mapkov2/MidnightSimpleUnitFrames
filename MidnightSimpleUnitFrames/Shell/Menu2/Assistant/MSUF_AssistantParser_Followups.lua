@@ -472,6 +472,10 @@ local function BuildFollowup(text, ctx)
         "them to", "those to", "these to",
         "use",
     })
+    local pluralExactValueReference = ContainsAny(text, {
+        "them", "those", "these", "both", "all", "all of them",
+        "each", "every", "settings", "options", "values",
+    })
     local exactValueIntent = pureNumberIntent
         or bareExactValueIntent
         or (not explicitAuraBulkScope and ContainsAny(text, { "min", "minimum", "max", "maximum" }))
@@ -1343,6 +1347,14 @@ local function BuildFollowup(text, ctx)
             end
         end
         if #exactChanges > 0 then
+            if #exactChanges > 1 and not pluralExactValueReference then
+                return {
+                    kind = "ambiguous",
+                    choices = exactChanges,
+                    label = "Multiple previous numeric options",
+                    summary = "Asks which previous numeric option should receive the follow-up value.",
+                }
+            end
             return {
                 kind = "changes",
                 changes = exactChanges,
