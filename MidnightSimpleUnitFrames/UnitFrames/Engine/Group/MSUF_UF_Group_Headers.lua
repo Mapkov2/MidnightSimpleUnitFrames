@@ -325,18 +325,44 @@ local function ClampInt(value, fallback, minValue, maxValue)
   return value
 end
 
+local function PreservedRaidGroupLimit(conf)
+  if not (conf and conf.preserveRaidGroups == true) then return nil end
+  return ClampInt(conf.maxColumns, 8, 1, 8)
+end
+
+local function RaidGroupingOrder(conf)
+  local limit = PreservedRaidGroupLimit(conf)
+  if not limit or limit >= 8 then
+    return "1,2,3,4,5,6,7,8"
+  end
+  local out = {}
+  for i = 1, limit do
+    out[#out + 1] = tostring(i)
+  end
+  return table_concat(out, ",")
+end
+
 local function RequiredHeaderColumns(kind, conf, count)
   if kind == "party" then return 1 end
   count = floor((tonumber(count) or 0) + 0.5)
   if count < 1 then return 1 end
   if conf and conf.preserveRaidGroups == true then
     local groups = floor(((count + 4) / 5))
+    local maxGroups = PreservedRaidGroupLimit(conf) or 8
     if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
-    return groups
+    if groups > maxGroups then groups = maxGroups end
+    local upc = ClampInt(conf and conf.unitsPerColumn, 5, 1, 40)
+    local primary = upc < 5 and upc or 5
+    local blockColumns = floor(((5 + primary - 1) / primary))
+    local columns = groups * blockColumns
+    if columns < 1 then columns = 1 elseif columns > 40 then columns = 40 end
+    return columns
   end
   local upc = ClampInt(conf and conf.unitsPerColumn, 5, 1, 40)
+  local maxColumns = ClampInt(conf and conf.maxColumns, 8, 1, 40)
   local columns = floor(((count + upc - 1) / upc))
   if columns < 1 then columns = 1 elseif columns > 40 then columns = 40 end
+  if columns > maxColumns then columns = maxColumns end
   return columns
 end
 
@@ -375,23 +401,35 @@ end
 
 local function ResolveGroupFilter(conf)
   local value = conf and conf.groupFilter
+  local groupLimit = PreservedRaidGroupLimit(conf)
   if type(value) == "string" then
     return value ~= "" and value or nil
   elseif type(value) == "table" then
     local out = {}
     for i = 1, 8 do
-      if value[i] == true or value[tostring(i)] == true then
+      if (not groupLimit or i <= groupLimit) and (value[i] == true or value[tostring(i)] == true) then
         out[#out + 1] = tostring(i)
       end
     end
-    if #out > 0 and #out < 8 then
+    if #out > 0 and (#out < 8 or groupLimit) then
       return table_concat(out, ",")
     end
+  elseif groupLimit and groupLimit < 8 then
+    local out = {}
+    for i = 1, groupLimit do
+      out[#out + 1] = tostring(i)
+    end
+    return table_concat(out, ",")
   end
   return nil
 end
 
 local function GroupFilterAllows(conf, groupIndex, classFile, role)
+  local groupLimit = PreservedRaidGroupLimit(conf)
+  groupIndex = tonumber(groupIndex)
+  if groupLimit and groupIndex and groupIndex > groupLimit then
+    return false
+  end
   local filter = conf and conf.groupFilter
   if type(filter) == "table" then
     local value = filter[groupIndex]
@@ -647,7 +685,7 @@ local function BuildSortState(key, kind, conf)
     groupingOrder = RoleOrder(conf)
   elseif key ~= "party" and (mode == "GROUP" or mode == "GROUP_ROLE") then
     groupBy = "GROUP"
-    groupingOrder = "1,2,3,4,5,6,7,8"
+    groupingOrder = RaidGroupingOrder(conf)
   end
 
   return {

@@ -86,6 +86,7 @@ function A.GroupFramesRegistry.RegisterLayoutSettings(ctx, scope, defaults)
     aliases = {}
     AddAliasesForUnit(aliases, scope, "preserve raid groups", "raid gruppen beibehalten")
     AddAliasesForUnit(aliases, scope, "keep raid groups")
+    AddAliasesForUnit(aliases, scope, "keep raid groups together")
     RegisterGroupBoolean(scope, "preserveRaidGroups", "preserveRaidGroups", "Preserve Raid Groups", false, "rebuild", aliases)
 
     aliases = {}
