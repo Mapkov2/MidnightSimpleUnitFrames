@@ -857,8 +857,9 @@ local function MSUF_SyncAllUnitPreviews()
         PreviewProfileStop("SyncCastbarEditMode", started)
     end
     local castbarStarted = PreviewProfileStart()
+    --- Animated castbar motion is owned by the on-demand preview animation driver.
     for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
-        local f = _G[fn]; if type(f) == "function" then f(want, true) end
+        local f = _G[fn]; if type(f) == "function" then f(false, true) end
     end
     PreviewProfileStop("CastbarTestModes", castbarStarted)
     if batchingBossPreview then endBossBatch() end
@@ -1048,8 +1049,9 @@ do
             local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
             if batchingBossPreview then beginBossBatch() end
             if _G.MSUF_SyncCastbarEditModeWithUnitEdit then _G.MSUF_SyncCastbarEditModeWithUnitEdit() end
+            --- Animated castbar motion is owned by the on-demand preview animation driver.
             for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
-                local f = _G[fn]; if type(f) == "function" then f(want, true) end
+                local f = _G[fn]; if type(f) == "function" then f(false, true) end
             end
             if batchingBossPreview then endBossBatch() end
         end)

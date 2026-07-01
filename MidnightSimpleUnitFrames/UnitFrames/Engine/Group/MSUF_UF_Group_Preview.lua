@@ -368,12 +368,21 @@ local function ApplyPreviewData(frame, index, kind)
   end
 
   local hpPct = min(0.95, 0.34 + (((index * 13) % 55) * 0.01))
+  local animState = _G.MSUF_GetPreviewAnimationFrameState
+    and _G.MSUF_GetPreviewAnimationFrameState(frame, index, kind, frame._msufGFPreviewAnimState or {})
+  if animState then
+    frame._msufGFPreviewAnimState = animState
+    hpPct = min(0.98, max(0.02, tonumber(animState.hpPct) or hpPct))
+  end
   local hpMax = 100
   local hp = floor(hpPct * hpMax + 0.5)
   SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, PreviewHealthColor(frame, class, hpPct))
 
   local powerMax = 100
   local power = min(powerMax, 35 + ((index * 11) % 55))
+  if animState then
+    power = min(powerMax, max(0, floor((tonumber(animState.powerPct) or (power / powerMax)) * powerMax + 0.5)))
+  end
   local powerBar = frame.targetPowerBar or frame.powerBar or frame.Power or frame.power
   if powerBar and (not powerBar.IsShown or powerBar:IsShown()) then
     SetBar(powerBar, power, powerMax, 0.10, 0.45, 0.95, 1)
@@ -381,6 +390,13 @@ local function ApplyPreviewData(frame, index, kind)
 
   ApplyPreviewText(frame, hp, hpMax, power, powerMax)
   ApplyPreviewStatus(frame, kind, index, role)
+  if animState and frame.combatStateIndicatorIcon then
+    if frame.combatStateIndicatorIcon.SetAtlas then
+      frame.combatStateIndicatorIcon:SetAtlas("UI-HUD-UnitFrame-Player-PortraitCombatIcon")
+    end
+    if frame.combatStateIndicatorIcon.SetAlpha then frame.combatStateIndicatorIcon:SetAlpha(0.55 + ((animState.pulse or 0) * 0.45)) end
+    frame.combatStateIndicatorIcon:Show()
+  end
   if GF.PreviewSpellIndicators then GF.PreviewSpellIndicators(frame, kind, nil, nil) end
   if GF.PreviewFrameAuras then GF.PreviewFrameAuras(frame, kind, index) end
   frame:Show()
@@ -580,6 +596,28 @@ end
 
 GF.RefreshPreviewBox = GF.RefreshPreviewLayout
 
+function GF.RefreshPreviewAnimation()
+  if InCombat() then return false end
+  local any = false
+  for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+    if GF._previewActive and GF._previewActive[kind] then
+      local count = GF._previewShownCounts[kind] or DefaultPreviewCount(kind)
+      local visibleCount = VisiblePreviewCount(kind, count)
+      local frames = GF._previewFrames[kind]
+      if frames then
+        for i = 1, visibleCount do
+          local frame = frames[i]
+          if frame and frame.IsShown and frame:IsShown() then
+            ApplyPreviewData(frame, i, kind)
+            any = true
+          end
+        end
+      end
+    end
+  end
+  return any
+end
+
 PreviewsAllowed = function()
   if _G.MSUF_UnitEditModeActive == true then return true end
   if _G.MSUF2_GFPagePreviewActive == true then return true end
@@ -604,3 +642,4 @@ ExportPublic("MSUF_GF_HidePreview", function(kind) return GF.HidePreview(kind) e
 ExportPublic("MSUF_GF_SetPreviewAnchor", function(kind, parent) return GF.SetPreviewAnchor(kind, parent) end)
 ExportPublic("MSUF_GF_RefreshPreviewLayout", function(kind) return GF.RefreshPreviewLayout(kind) end)
 ExportPublic("MSUF_GF_RefreshPreviewBox", _G.MSUF_GF_RefreshPreviewLayout)
+ExportPublic("MSUF_GF_RefreshPreviewAnimation", function() return GF.RefreshPreviewAnimation() end)

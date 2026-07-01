@@ -25,7 +25,7 @@ local ApplySettingsForKeySafe = U.ApplySettingsForKeySafe
 local SharedUI = U.SharedUI
 
 local hudFrame, row2Frame
-local previewBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
+local previewBtn, previewAnimBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
 local previewAddonSlot
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
@@ -996,6 +996,27 @@ local function EnsureHUD()
     previewAddonSlot:SetSize(38, BTN_H)
     r1[#r1+1] = previewAddonSlot
 
+    previewAnimBtn = AddRowButton(r1, c1, "Anim", 46, BTN_H, 12, function()
+        local toggle = _G.MSUF_TogglePreviewAnimation
+        if type(toggle) ~= "function" then
+            HUD.SetStatus(HelpText("Preview animation unavailable"), "warn")
+            return
+        end
+        local ok, reason = toggle("edit_mode")
+        local active = type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true
+        SetActive(previewAnimBtn, active)
+        if ok == false and reason == "combat" then
+            HUD.SetStatus(HelpText("Preview animation pauses during combat."), "warn")
+        else
+            HUD.SetStatus(HelpText(active and "Preview animation on" or "Preview animation off"), "info")
+        end
+    end, "Animate visible preview dummy frames.\nStops automatically in combat\nor when previews are hidden.")
+    if type(_G.MSUF_RegisterPreviewAnimationRefreshOwner) == "function" then
+        _G.MSUF_RegisterPreviewAnimationRefreshOwner(previewAnimBtn, function(btn, active)
+            SetActive(btn, active == true)
+        end)
+    end
+
     auraBtn = AddRowButton(r1, c1, "Auras", 52, BTN_H, 12, function()
         local db = _G.MSUF_DB; if not db then return end
         local a2 = db.auras3; if not a2 then return end
@@ -1195,6 +1216,10 @@ function HUD.RefreshControls(force)
         )
     end
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
+    if previewAnimBtn then
+        local active = type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true
+        SetActive(previewAnimBtn, active)
+    end
     if cdmBtn then
         local db = _G.MSUF_DB
         SetActive(cdmBtn, db and db.general and db.general.anchorToCooldown and true or false)
