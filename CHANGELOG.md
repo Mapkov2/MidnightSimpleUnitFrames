@@ -2,70 +2,62 @@
 
 ## 6.0-Beta1 - 2026-07-01
 
-### Comparison Scope
-- Compared against 5.60 / MSUF_5.6. This beta includes the full 6.0 line since 5.60, not only the last alpha.
-- The comparison covers 219 commits, 732 changed files, 539 added files, and 133 removed files.
-- 6.0-Beta1 targets the WoW 12.1 addon/runtime path. 5.60 remains the last 5.x baseline for the older 12.0.x-era code path.
+### Kurz gesagt
+- 6.0-Beta1 ist der echte 5.60 -> 6.0 Beta-Schnitt: alle Alpha-Aenderungen 1 bis 8 plus die Beta-Stabilisierung sind enthalten.
+- Umfang seit 5.60: 222 Commits, 726 geaenderte Dateien, 212631 neue und 147999 entfernte Zeilen; davon 533 neue und 133 entfernte Dateien.
+- Ziel ist WoW 12.1. 5.60 bleibt die letzte 5.x-Basis fuer den alten 12.0.x-Pfad.
 
-### 10 Highlight Features Since 5.60
-- New Auras3 system: MSUF now uses WoW 12.1 native AuraContainer/AuraButton handling instead of the old Auras2 custom scanner and renderer.
-- New aura lane controls: unit and group auras now support shared/per-scope style inheritance, buff/debuff lane editing, cooldown text placement, reverse swipe, stack text, native filter toggles, and duration bars.
-- New integrated castbars: Player, Target, Focus, Boss, Focus Kick, Interrupt Ready, channels, empower casts, latency, spark, glow, icons, and live previews are now handled by the main addon's 6.0 castbar runtime.
-- New 6.x UnitFrame engine: health, power, text, alpha, prediction bars, load conditions, status elements, borders, range fade, and dispatch are split into focused runtime modules with fewer hot-path updates.
-- New 6.x GroupFrame engine: secure headers, Blizzard fallback, group previews, spell/status indicators, health fade, offline/dead visuals, aggro role filters, dispel overlays, corner indicators, and range handling were rebuilt from the 5.60 group-frame stack.
-- New party Targeted Spell Indicators: MSUF can show enemy nameplate casts that target party members, with configurable icon count, placement, timer text, and time-based colors.
-- New full Assistant: the 5.60 search/ask flow is replaced by a registry-driven assistant with natural language commands, setting changes, followups, diagnostics, page routing, undo, dashboard actions, profile actions, and broad aura/group/castbar/class-power coverage.
-- New Menu2 shell and preview system: dashboard, navigation rail, window controls, search FAQ, page previews, unit/group/class-power previews, zoom/pan, anchor picker, bug report flow, and the in-game changelog prompt are now bundled in the 6.0 UI.
-- New profile transition layer: 6.0 adds MSUF4 compact profile export/import, stronger 5.60-to-6.0 migration, LibDeflate/AceSerializer fallback decoding, safer missing font/texture fallback, and more complete old-profile normalization.
-- New integrations and visuals: NSRT nickname support, third-party anchor support, Skiron cooldown-anchor handling, new class-resource shapes/assets, PvP flag indicators, native dispel sensors, new outline/opacity controls, and refreshed rounded-frame media were added after 5.60.
+### Die grossen Unterschiede zu 5.60
+- Auras: Auras2 ist raus, Auras3 ist drin. MSUF nutzt jetzt Blizzards 12.1 AuraContainer/AuraButton-System statt eigener Aura-Scanner und Renderer.
+- Aura-Bedienung: Buffs, Debuffs, Shared-vs-Custom Styles, Cooldowntext, Stacks, Reverse Swipe, Duration Bars, native Filter und Dispel-Visuals sind pro Scope sauber editierbar.
+- Castbars: Player, Target, Focus, Boss, Focus Kick und Interrupt Ready laufen im Hauptaddon, inklusive Channels, Empower, Spark, Glow, Latenz, Icons und Live-Previews.
+- Unit Frames: Health, Power, Text, Alpha, Prediction Bars, Load Conditions, Status, Borders, Range Fade und Dispatch laufen ueber die neue 6.x Engine.
+- Group Frames: Party, Raid und Mythic Raid wurden neu aufgebaut, inklusive secure Headers, Blizzard-Fallback, Previews, Status-/Spell-Indikatoren, Health Fade, Offline/Dead Looks, Rollenfiltern, Dispel/Highlight-Overlays und Range.
+- Assistant: aus Suche/FAQ wurde ein echter Einstellungs-Assistent mit Kommandos, Followups, Diagnose, Undo, Profilaktionen, Seiten-Routing und breiter Abdeckung fuer Auren, Gruppen, Castbars, Class Resources und Unitframes.
+- Menu2: neues Shell/UI-System mit Dashboard, Nav Rail, Fenstersteuerung, Seiten-Previews, Zoom/Pan, Anchor Picker, Bug Report Flow und Ingame-Changelog.
+- Profile: MSUF4 Export/Import, Legacy MSUF2/MSUF3 Fallbacks, 5.60 -> 6.0 Migration, Font-/Texture-Fallbacks und Normalisierung alter Alpha-Profile.
+- Integrationen und Optik: NSRT Nicknames, Third-Party Anchors, Skiron Cooldown Anchors, neue Class-Resource Shapes, PvP Flags, native Dispel-Sensoren und neue runde Frame-Medien.
 
-### Auras And WoW 12.1
-- Removed the old Auras2 runtime files from the active path and added Auras3 modules for native unit-frame and group-frame aura rendering.
-- Added native filter workflows for raid/player/dispellable/crowd-control/defensive aura use cases, with clearer handling for legacy exact blacklist data while Blizzard's native 12.1 aura backend is active.
-- Added duration bar support for unit and group aura lanes, including display mode, position, fill direction, height, preview rendering, Assistant commands, and saved defaults.
-- Added native dispel sensors so dispel borders, overlays, and corner indicators can use the 12.1 AuraContainer path without relying on the old custom aura scan.
-- Improved target/focus aura swap refresh behavior and coalesced aura refresh work so fast target changes avoid unnecessary synchronous rebuilds.
+### Beta1 nach Alpha8
+- Aura Duration Bars und native Dispel Sensors sind jetzt in Runtime, Preview, Defaults, Menu und Assistant angebunden.
+- Assistant und Parser verstehen mehr Followups, Aura-Kommandos, Group-Frame-Status, Bar-/Overlay-Optionen, Load Conditions und konkrete Korrekturaktionen.
+- Neue Load Conditions und Rollenfilter decken mehr Housing-/Visibility-Faelle ab; Aggro-Border koennen gezielter nach Rollen angezeigt werden.
+- Castbar-Fixes fuer Width Mode, Text, Interrupt Ready und Refresh-Verhalten; Class-Bar Quick Setup setzt Player Power wieder korrekt.
+- Menu-Previews, Keyboard-Handling, Group Layout und Group Status wurden fuer Beta stabilisiert.
+- Font-Anwendung, lokale Dev-Dateien, Bytecode-Reste und Release-Vorbereitung wurden bereinigt.
 
-### Unit Frames, Group Frames, And Castbars
-- Replaced the old monolithic UnitFrame runtime with the new `UnitFrames/Engine` modules for config, factory, dispatch, text, visuals, bars, borders, predictions, status, secrets, range fade, and group adapters.
-- Rebuilt group frames around the 6.x engine, including secure header setup, Blizzard frame fallback behavior, group visual compilation, targeted spells, spell registry data, and live group previews.
-- Added or expanded group-frame options for health fade, role-specific power/resource bars, aggro role filtering, fallback aggro/dispel borders, target/focus highlight controls, group-border opacity, and offline/dead status text aliases.
-- Moved castbars from the separate castbar addon tree into the main addon and expanded runtime/preview coverage for channels, empower casts, boss casts, player castbar ownership, focus kick, and interrupt-ready behavior.
-- Added dependent target visibility shortcuts and improved Target of Target / Focus Target handling for visibility, sizing, text, castbars, range fade, colors, and positioning.
+### Alpha-Verlauf kompakt
+- Alpha 1: erster oeffentlicher 6.x Kern mit neuer Menu2 UI, Previews, integrierten Castbars, Class Resources, Group-Frame-Arbeit, Profil-Import/Export und erstem Auras3-Pfad.
+- Alpha 2: Umstieg auf Blizzards native 12.1 AuraContainer, neue Aura-Filter, bessere Aura-Performance, Castbar-/Class-Power-/Group-Frame-Cleanup und Smoke Checks.
+- Alpha 3: Aura-Farben nach Timer, mehr Assistant-Kontext, bessere Geometry-Followups und weitere Castbar-/Aura-Notizen.
+- Alpha 4: Shared Aura Style vs. per-unit Text-Overrides, Cooldowntext-Anker, bessere Aura-Previews, Followups und Boss-Preview-Refresh.
+- Alpha 5: Reverse Cooldown Swipe, klarere Shared/Custom Aura-Steuerung und wichtige Castbar-Fixes fuer Channels, Empower und Player-Castbar-Suppression.
+- Alpha 6: Party Targeted Spell Indicators, NSRT Nicknames, MSUF4 Profilstrings, bessere Legacy-Imports, Ingame-Changelog und mehr Assistant-Abdeckung.
+- Alpha 7: Edit-Mode Logo-Intro und CurseForge-only Alpha-Release-Pfad.
+- Alpha 8: Aura-Dragging, Menu-Performance, Combat-Performance und mehr Group-/Bar-Control-Abdeckung im Assistant.
+- Beta1: Stabilisierung der Alpha-Linie fuer einen echten 5.60 -> 6.0 Beta-Test.
 
-### Menu, Assistant, And UX
-- Added the full Assistant framework with knowledge, parser, router, command registry, match cache, media resolver, queue, undo, dashboard, diagnostics, and profile workflows.
-- Expanded Assistant coverage for aura style/filter commands, group aura lane geometry, group-frame visual settings, scoped bar overrides, castbars, class power, unit frames, profiles, dashboard navigation, and safe troubleshooting answers.
-- Rebuilt Menu2 under the Shell structure with dashboard state, navigation rail, Apply service, page previews, control gates, search routing, searchable FAQ catalogs, persistent UI state, and dedicated preview modules.
-- Added the bundled dashboard changelog data and popup so users can open release notes from inside MSUF after updating.
-- Added a richer bug report/support flow and clearer diagnostics guidance for setup, profile, aura, gameplay, and frame-visibility questions.
-
-### Profiles, Compatibility, And Integrations
-- Added MSUF4 profile strings while preserving compatibility paths for MSUF3 and legacy MSUF2 imports.
-- Added migration and normalization for 5.60-era profiles, including aura geometry, text/name fields, fonts, textures, group-frame scopes, status indicators, and old 6.0 alpha layouts.
-- Added optional Northern Sky Raid Tools nickname integration with combat-safe refresh behavior.
-- Added third-party anchor helpers, including Skiron cooldown anchor support for profiles anchored to external cooldown UI.
-- Added a WoW 12.1-ready versioning path and release tooling updates for beta packaging, static checks, and safer CurseForge/Wago publishing metadata.
-
-### Performance And Stability
-- Reduced hot-path work across unit frames, group frames, castbars, auras, range fade, menu previews, assistant matching, and font application.
-- Added bounded caches and coalesced refresh paths for expensive Assistant fuzzy matching, aura refreshes, target/focus swaps, menu rebuilds, and visual updates.
-- Hardened font and texture application so missing SharedMedia or disabled addon media falls back safely instead of producing asset errors.
-- Improved combat-lockdown handling for frame movement, late anchors, profile applies, menu actions, and secure group-frame recovery.
-- Added local static checks and release-time validation for namespace safety, Assistant parser/registry coverage, group status runtime behavior, spell indicator data, and general addon quality gates.
-
-### Beta Testing Notes
-- Export important 5.60 profiles before testing 6.0-Beta1.
-- Test Player, Target, Focus, Boss, Party, Raid, Mythic Raid, Target of Target, and Focus Target pages after importing an old profile.
-- Test auras on WoW 12.1 content specifically: target swaps, focus swaps, party/raid conversion, dispellable debuffs, duration bars, cooldown text, stack text, and group aura filters.
-- Test party Targeted Spell Indicators with enemy nameplates enabled in 5-player content.
-- Test profile import/export, font fallback, texture fallback, NSRT nicknames, external anchors, and castbar ownership changes after `/reload` and after combat.
+### Testfokus fuer Beta
+- Vor dem Test wichtige 5.60 Profile exportieren.
+- Nach Import alter Profile Player, Target, Focus, Boss, Party, Raid, Mythic Raid, Target of Target und Focus Target pruefen.
+- Auren auf WoW 12.1 testen: Target-/Focus-Wechsel, Party/Raid-Konvertierung, Dispel-Debuffs, Duration Bars, Cooldowntext, Stacktext und Group Aura Filter.
+- Party Targeted Spell Indicators in 5er Content mit aktivierten Enemy Nameplates testen.
+- Profile, Font-/Texture-Fallbacks, NSRT Nicknames, externe Anchors, Castbar Ownership, Edit Mode und /reload nach Combat testen.
 
 
 ## 6.0-alpha8 - 2026-06-30
 
 ### Highlights
-- Fixed several bugs including aura movement
+- Added draggable Auras3 edit handles so aura lanes can be moved more directly in Edit Mode.
+- Improved Menu2 and combat hot-path performance before the Beta cut.
+- Expanded Assistant coverage for group-frame and bar controls.
+- Prepared the MSUF_6.0A8 package as the last alpha before Beta1.
+
+### Auras, Menu, And Performance
+- Improved aura movement, aura edit-mode state, target/focus aura refresh, and range fade related refresh behavior.
+- Reduced menu preview rebuild work and tightened several Menu2 window/page refresh paths.
+- Improved combat performance across runtime update paths that were too noisy during alpha testing.
+- Updated group bar/page controls and related Assistant routing so more group-frame settings can be found and changed naturally.
 
 ## 6.0-alpha7 - 2026-06-30
 
