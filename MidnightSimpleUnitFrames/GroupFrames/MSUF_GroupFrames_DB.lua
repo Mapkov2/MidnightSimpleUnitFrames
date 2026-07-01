@@ -1215,6 +1215,11 @@ function GF.EnsureDB()
                     end
                     if type(g.blacklist) ~= "table" then g.blacklist = {} end
                     if type(g.blacklist.spells) ~= "table" then g.blacklist.spells = {} end
+                    if g.showDurationBar == nil then g.showDurationBar = false end
+                    if g.durationBarHeight == nil then g.durationBarHeight = 2 end
+                    if g.durationBarDisplay ~= "OVERLAY" then g.durationBarDisplay = "BAR_ONLY" end
+                    if g.durationBarPosition ~= "TOP" then g.durationBarPosition = "BOTTOM" end
+                    if g.durationBarDirection ~= "ELAPSED" then g.durationBarDirection = "REMAINING" end
                 end
             end
         end

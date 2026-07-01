@@ -52,7 +52,7 @@ local NormalizeDispelOverlayStyle = UF.NormalizeDispelOverlayStyle or function(v
   if value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT" then return value end
   return "FULL"
 end
-local DISPEL_OVERLAY_121_PTR_DISABLED = true
+local DISPEL_OVERLAY_121_PTR_DISABLED = false
 local NormalizeRangeFadeLayerMode = UF.NormalizeRangeFadeLayerMode or function(value)
   if value == "health" or value == "hp" or value == "hpbar" or value == "HP" or value == 2 then return "health" end
   return "frame"
@@ -749,6 +749,24 @@ local function AuraTextAnchor(value, fallback)
   return fallback or "CENTER"
 end
 
+local function AuraDurationBarPosition(value)
+  value = tostring(value or "BOTTOM"):upper()
+  if value == "TOP" then return "TOP" end
+  return "BOTTOM"
+end
+
+local function AuraDurationBarDirection(value)
+  value = tostring(value or "REMAINING"):upper()
+  if value == "ELAPSED" or value == "ELAPSED_TIME" then return "ELAPSED" end
+  return "REMAINING"
+end
+
+local function AuraDurationBarDisplay(value)
+  value = tostring(value or "BAR_ONLY"):upper()
+  if value == "ICON" or value == "ICONS" or value == "ICON_BAR" or value == "ICON+BAR" or value == "OVERLAY" then return "OVERLAY" end
+  return "BAR_ONLY"
+end
+
 local function LaneAlpha(group)
   return Clamp01(Num(group and group.behindBarAlpha, 85) / 100, 0.85)
 end
@@ -774,6 +792,11 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
   out[prefix .. "ShowCooldownSwipe"] = group.showCooldownSwipe ~= false
   out[prefix .. "CooldownSwipeReverse"] = group.cooldownSwipeReverse == true
+  out[prefix .. "ShowDurationBar"] = group.showDurationBar == true
+  out[prefix .. "DurationBarHeight"] = scale(group.durationBarHeight, 2, 1)
+  out[prefix .. "DurationBarDisplay"] = AuraDurationBarDisplay(group.durationBarDisplay)
+  out[prefix .. "DurationBarPosition"] = AuraDurationBarPosition(group.durationBarPosition)
+  out[prefix .. "DurationBarDirection"] = AuraDurationBarDirection(group.durationBarDirection)
   out[prefix .. "ShowCooldown"] = group.showCooldown ~= false
   out[prefix .. "ShowStacks"] = defaults[7] ~= false and group.showStacks ~= false or group.showStacks == true
   out[prefix .. "CooldownSize"] = scale(group.cooldownSize, defaults[5], 6)
@@ -826,7 +849,9 @@ local function CompileCoreAuras(kind, conf)
     return ScaleAuraValue(Num(value, fallback), auraScale, minValue)
   end
   local out = {
-    enabled = showBuffs == true or showDebuffs == true or showExternals == true,
+    enabled = showBuffs == true or showDebuffs == true or showExternals == true
+      or conf.dispelEnabled == true
+      or conf.dispelOverlayEnabled == true,
     group = true,
     kind = kind,
     renderer = "NATIVE_12_1",
@@ -986,7 +1011,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     highlightThickness = ScopedValue(conf, general, "highlightBorderThickness", nil)
       or ScopedValue(conf, general, "hlAggroSize", nil)
   end
-  local dispelBorderTrigger = ScopedValue(conf, general, "dispelBorderTrigger", "BY_ME")
+  local dispelBorderTrigger = ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE")
   local prioEnabled, prioOrder = CompileBorderPriority(conf, general)
   local nameFontSize = Num(conf.nameFontSize, 12)
   local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)

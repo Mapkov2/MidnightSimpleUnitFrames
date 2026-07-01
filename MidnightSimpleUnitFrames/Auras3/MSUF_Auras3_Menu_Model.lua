@@ -89,6 +89,24 @@ local DEBUFF_TYPE_BORDER_MODE_VALUES = {
     { value = "SYMBOL", text = "Border + Symbol" },
 }
 
+local DURATION_BAR_DISPLAY_VALUES = {
+    { value = "BAR_ONLY", text = "Bar Only" },
+    { value = "OVERLAY", text = "Icon + Bar" },
+}
+local DURATION_BAR_DISPLAY_OK = { BAR_ONLY=true, OVERLAY=true }
+
+local DURATION_BAR_POSITION_VALUES = {
+    { value = "BOTTOM", text = "Bottom" },
+    { value = "TOP", text = "Top" },
+}
+local DURATION_BAR_POSITION_OK = { BOTTOM=true, TOP=true }
+
+local DURATION_BAR_DIRECTION_VALUES = {
+    { value = "REMAINING", text = "Remaining" },
+    { value = "ELAPSED", text = "Elapsed" },
+}
+local DURATION_BAR_DIRECTION_OK = { REMAINING=true, ELAPSED=true }
+
 local AURA_ANCHORS = {
     { value = "TOPLEFT", text = "Top Left" },
     { value = "TOPRIGHT", text = "Top Right" },
@@ -137,6 +155,7 @@ local LAYOUT_KEYS = {
     cooldownTextOffsetX = true,
     cooldownTextOffsetY = true,
     cooldownDecimalSeconds = true,
+    durationBarHeight = true,
     buffStackTextSize = true,
     buffStackTextOffsetX = true,
     buffStackTextOffsetY = true,
@@ -144,6 +163,7 @@ local LAYOUT_KEYS = {
     buffCooldownTextOffsetX = true,
     buffCooldownTextOffsetY = true,
     buffCooldownDecimalSeconds = true,
+    buffDurationBarHeight = true,
     debuffStackTextSize = true,
     debuffStackTextOffsetX = true,
     debuffStackTextOffsetY = true,
@@ -151,6 +171,7 @@ local LAYOUT_KEYS = {
     debuffCooldownTextOffsetX = true,
     debuffCooldownTextOffsetY = true,
     debuffCooldownDecimalSeconds = true,
+    debuffDurationBarHeight = true,
 }
 
 local STYLE_LAYOUT_KEYS = {
@@ -161,6 +182,7 @@ local STYLE_LAYOUT_KEYS = {
     cooldownTextOffsetX = true,
     cooldownTextOffsetY = true,
     cooldownDecimalSeconds = true,
+    durationBarHeight = true,
     buffStackTextSize = true,
     buffStackTextOffsetX = true,
     buffStackTextOffsetY = true,
@@ -168,6 +190,7 @@ local STYLE_LAYOUT_KEYS = {
     buffCooldownTextOffsetX = true,
     buffCooldownTextOffsetY = true,
     buffCooldownDecimalSeconds = true,
+    buffDurationBarHeight = true,
     debuffStackTextSize = true,
     debuffStackTextOffsetX = true,
     debuffStackTextOffsetY = true,
@@ -175,24 +198,37 @@ local STYLE_LAYOUT_KEYS = {
     debuffCooldownTextOffsetX = true,
     debuffCooldownTextOffsetY = true,
     debuffCooldownDecimalSeconds = true,
+    debuffDurationBarHeight = true,
 }
 
 local SHARED_LAYOUT_KEYS = {
     showTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = true,
+    showDurationBar = true,
+    durationBarDisplay = true,
+    durationBarPosition = true,
+    durationBarDirection = true,
     showCooldownText = true,
     showStackCount = true,
     debuffTypeBorderMode = true,
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = true,
+    buffShowDurationBar = true,
+    buffDurationBarDisplay = true,
+    buffDurationBarPosition = true,
+    buffDurationBarDirection = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
     buffStackCountAnchor = true,
     buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
     debuffCooldownSwipeReverse = true,
+    debuffShowDurationBar = true,
+    debuffDurationBarDisplay = true,
+    debuffDurationBarPosition = true,
+    debuffDurationBarDirection = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
     debuffStackCountAnchor = true,
@@ -219,18 +255,30 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     showTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = true,
+    showDurationBar = true,
+    durationBarDisplay = true,
+    durationBarPosition = true,
+    durationBarDirection = true,
     showCooldownText = true,
     showStackCount = true,
     debuffTypeBorderMode = true,
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = true,
+    buffShowDurationBar = true,
+    buffDurationBarDisplay = true,
+    buffDurationBarPosition = true,
+    buffDurationBarDirection = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
     buffStackCountAnchor = true,
     buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
     debuffCooldownSwipeReverse = true,
+    debuffShowDurationBar = true,
+    debuffDurationBarDisplay = true,
+    debuffDurationBarPosition = true,
+    debuffDurationBarDirection = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
     debuffStackCountAnchor = true,
@@ -277,6 +325,11 @@ local LANE_STYLE_KEYS = {
     buff = {
         showCooldownSwipe = "buffShowCooldownSwipe",
         cooldownSwipeReverse = "buffCooldownSwipeReverse",
+        showDurationBar = "buffShowDurationBar",
+        durationBarHeight = "buffDurationBarHeight",
+        durationBarDisplay = "buffDurationBarDisplay",
+        durationBarPosition = "buffDurationBarPosition",
+        durationBarDirection = "buffDurationBarDirection",
         showCooldownText = "buffShowCooldownText",
         showStackCount = "buffShowStackCount",
         stackCountAnchor = "buffStackCountAnchor",
@@ -292,6 +345,11 @@ local LANE_STYLE_KEYS = {
     debuff = {
         showCooldownSwipe = "debuffShowCooldownSwipe",
         cooldownSwipeReverse = "debuffCooldownSwipeReverse",
+        showDurationBar = "debuffShowDurationBar",
+        durationBarHeight = "debuffDurationBarHeight",
+        durationBarDisplay = "debuffDurationBarDisplay",
+        durationBarPosition = "debuffDurationBarPosition",
+        durationBarDirection = "debuffDurationBarDirection",
         showCooldownText = "debuffShowCooldownText",
         showStackCount = "debuffShowStackCount",
         debuffTypeBorderMode = "debuffTypeBorderMode",
@@ -319,16 +377,31 @@ local DEFAULT_SHARED = {
     showTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = false,
+    showDurationBar = false,
+    durationBarHeight = 2,
+    durationBarDisplay = "BAR_ONLY",
+    durationBarPosition = "BOTTOM",
+    durationBarDirection = "REMAINING",
     showCooldownText = true,
     showStackCount = true,
     debuffTypeBorderMode = "OFF",
     useDebuffTypeBorders = false,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = false,
+    buffShowDurationBar = false,
+    buffDurationBarHeight = 2,
+    buffDurationBarDisplay = "BAR_ONLY",
+    buffDurationBarPosition = "BOTTOM",
+    buffDurationBarDirection = "REMAINING",
     buffShowCooldownText = true,
     buffShowStackCount = true,
     debuffShowCooldownSwipe = true,
     debuffCooldownSwipeReverse = false,
+    debuffShowDurationBar = false,
+    debuffDurationBarHeight = 2,
+    debuffDurationBarDisplay = "BAR_ONLY",
+    debuffDurationBarPosition = "BOTTOM",
+    debuffDurationBarDirection = "REMAINING",
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
     clickThroughAuras = false,
@@ -1156,6 +1229,18 @@ function Model.DebuffTypeBorderModeValues()
     return DEBUFF_TYPE_BORDER_MODE_VALUES
 end
 
+function Model.DurationBarDisplayValues()
+    return DURATION_BAR_DISPLAY_VALUES
+end
+
+function Model.DurationBarPositionValues()
+    return DURATION_BAR_POSITION_VALUES
+end
+
+function Model.DurationBarDirectionValues()
+    return DURATION_BAR_DIRECTION_VALUES
+end
+
 function Model.ScopeLabel(scope)
     scope = NormalizeScope(scope)
     if scope == "shared" then return "Shared" end
@@ -1466,6 +1551,56 @@ end
 function Model.WriteLaneCooldownAnchor(unit, kind, value)
     value = AURA_ANCHOR_OK[value] and value or "CENTER"
     Model.WriteValue(unit, LaneStyleKey(kind, "cooldownTextAnchor"), value)
+end
+
+local function NormalizeDurationBarPosition(value, fallback)
+    value = tostring(value or fallback or "BOTTOM"):upper()
+    return DURATION_BAR_POSITION_OK[value] and value or "BOTTOM"
+end
+
+local function NormalizeDurationBarDirection(value, fallback)
+    value = tostring(value or fallback or "REMAINING"):upper()
+    if value == "ELAPSED_TIME" then value = "ELAPSED" end
+    return DURATION_BAR_DIRECTION_OK[value] and value or "REMAINING"
+end
+
+local function NormalizeDurationBarDisplay(value, fallback)
+    value = tostring(value or fallback or "BAR_ONLY"):upper()
+    if value == "ICON" or value == "ICONS" or value == "ICON_BAR" or value == "ICON+BAR" then value = "OVERLAY" end
+    return DURATION_BAR_DISPLAY_OK[value] and value or "BAR_ONLY"
+end
+
+function Model.ReadLaneDurationBarPosition(unit, kind)
+    local laneKey = LaneStyleKey(kind, "durationBarPosition")
+    local value = Model.ReadValue(unit, laneKey, nil)
+    if value == nil and laneKey ~= "durationBarPosition" then value = Model.ReadValue(unit, "durationBarPosition", "BOTTOM") end
+    return NormalizeDurationBarPosition(value, "BOTTOM")
+end
+
+function Model.WriteLaneDurationBarPosition(unit, kind, value)
+    Model.WriteValue(unit, LaneStyleKey(kind, "durationBarPosition"), NormalizeDurationBarPosition(value, "BOTTOM"))
+end
+
+function Model.ReadLaneDurationBarDirection(unit, kind)
+    local laneKey = LaneStyleKey(kind, "durationBarDirection")
+    local value = Model.ReadValue(unit, laneKey, nil)
+    if value == nil and laneKey ~= "durationBarDirection" then value = Model.ReadValue(unit, "durationBarDirection", "REMAINING") end
+    return NormalizeDurationBarDirection(value, "REMAINING")
+end
+
+function Model.WriteLaneDurationBarDirection(unit, kind, value)
+    Model.WriteValue(unit, LaneStyleKey(kind, "durationBarDirection"), NormalizeDurationBarDirection(value, "REMAINING"))
+end
+
+function Model.ReadLaneDurationBarDisplay(unit, kind)
+    local laneKey = LaneStyleKey(kind, "durationBarDisplay")
+    local value = Model.ReadValue(unit, laneKey, nil)
+    if value == nil and laneKey ~= "durationBarDisplay" then value = Model.ReadValue(unit, "durationBarDisplay", "BAR_ONLY") end
+    return NormalizeDurationBarDisplay(value, "BAR_ONLY")
+end
+
+function Model.WriteLaneDurationBarDisplay(unit, kind, value)
+    Model.WriteValue(unit, LaneStyleKey(kind, "durationBarDisplay"), NormalizeDurationBarDisplay(value, "BAR_ONLY"))
 end
 
 function Model.GroupShown(unit, kind)

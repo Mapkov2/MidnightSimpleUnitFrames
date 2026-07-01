@@ -88,6 +88,11 @@ local LANE_STYLE_KEYS = {
         cooldownTextSize = "buffCooldownTextSize",
         cooldownTextOffsetX = "buffCooldownTextOffsetX",
         cooldownTextOffsetY = "buffCooldownTextOffsetY",
+        showDurationBar = "buffShowDurationBar",
+        durationBarHeight = "buffDurationBarHeight",
+        durationBarDisplay = "buffDurationBarDisplay",
+        durationBarPosition = "buffDurationBarPosition",
+        durationBarDirection = "buffDurationBarDirection",
     },
     debuff = {
         stackCountAnchor = "debuffStackCountAnchor",
@@ -98,6 +103,11 @@ local LANE_STYLE_KEYS = {
         cooldownTextSize = "debuffCooldownTextSize",
         cooldownTextOffsetX = "debuffCooldownTextOffsetX",
         cooldownTextOffsetY = "debuffCooldownTextOffsetY",
+        showDurationBar = "debuffShowDurationBar",
+        durationBarHeight = "debuffDurationBarHeight",
+        durationBarDisplay = "debuffDurationBarDisplay",
+        durationBarPosition = "debuffDurationBarPosition",
+        durationBarDirection = "debuffDurationBarDirection",
     },
 }
 
@@ -111,26 +121,41 @@ local TEXT_STYLE_LAYOUT_KEYS = {
     cooldownTextSize = true,
     cooldownTextOffsetX = true,
     cooldownTextOffsetY = true,
+    durationBarHeight = true,
     buffStackTextSize = true,
     buffStackTextOffsetX = true,
     buffStackTextOffsetY = true,
     buffCooldownTextSize = true,
     buffCooldownTextOffsetX = true,
     buffCooldownTextOffsetY = true,
+    buffDurationBarHeight = true,
     debuffStackTextSize = true,
     debuffStackTextOffsetX = true,
     debuffStackTextOffsetY = true,
     debuffCooldownTextSize = true,
     debuffCooldownTextOffsetX = true,
     debuffCooldownTextOffsetY = true,
+    debuffDurationBarHeight = true,
 }
 local TEXT_STYLE_SHARED_KEYS = {
     stackCountAnchor = true,
     cooldownTextAnchor = true,
+    showDurationBar = true,
+    durationBarDisplay = true,
+    durationBarPosition = true,
+    durationBarDirection = true,
     buffStackCountAnchor = true,
     buffCooldownTextAnchor = true,
+    buffShowDurationBar = true,
+    buffDurationBarDisplay = true,
+    buffDurationBarPosition = true,
+    buffDurationBarDirection = true,
     debuffStackCountAnchor = true,
     debuffCooldownTextAnchor = true,
+    debuffShowDurationBar = true,
+    debuffDurationBarDisplay = true,
+    debuffDurationBarPosition = true,
+    debuffDurationBarDirection = true,
 }
 local AURA_TEXT_ANCHOR_OK = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true,
@@ -313,12 +338,34 @@ local function ReadRawNumber(shared, layout, key)
     return tonumber(v)
 end
 
+local function ReadRawValue(shared, layout, key)
+    if layout and layout[key] ~= nil then return layout[key] end
+    return shared and shared[key]
+end
+
 local function ReadLaneTextNumber(shared, layout, kind, key, defaultValue, minValue, maxValue)
     kind = NormalizeKind(kind)
     local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind][key]
     local v = laneKey and ReadRawNumber(shared, layout, laneKey) or nil
     if v == nil then v = ReadRawNumber(shared, layout, key) end
     return Clamp(v, defaultValue, minValue, maxValue)
+end
+
+local function ReadLaneTextBool(shared, layout, kind, key, defaultValue)
+    kind = NormalizeKind(kind)
+    local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind][key]
+    local v = laneKey and ReadRawValue(shared, layout, laneKey) or nil
+    if v == nil then v = ReadRawValue(shared, layout, key) end
+    if v == nil then return defaultValue == true end
+    return v == true
+end
+
+local function ReadLaneTextString(shared, layout, kind, key, fallback)
+    kind = NormalizeKind(kind)
+    local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind][key]
+    local v = laneKey and ReadRawValue(shared, layout, laneKey) or nil
+    if v == nil then v = ReadRawValue(shared, layout, key) end
+    return tostring(v or fallback or "")
 end
 
 local function ReadLaneTextAnchor(shared, layoutShared, kind)
@@ -355,6 +402,11 @@ local function ReadTextConfig(unit, kind)
         cooldownSize = ReadLaneTextNumber(shared, layout, kind, "cooldownTextSize", 14, 6, 40),
         cooldownX = ReadLaneTextNumber(shared, layout, kind, "cooldownTextOffsetX", 0, -2000, 2000),
         cooldownY = ReadLaneTextNumber(shared, layout, kind, "cooldownTextOffsetY", 0, -2000, 2000),
+        showDurationBar = ReadLaneTextBool(shared, ls, kind, "showDurationBar", false),
+        durationBarHeight = ReadLaneTextNumber(shared, layout, kind, "durationBarHeight", 2, 1, 16),
+        durationBarDisplay = ReadLaneTextString(shared, ls, kind, "durationBarDisplay", "BAR_ONLY") == "OVERLAY" and "OVERLAY" or "BAR_ONLY",
+        durationBarPosition = ReadLaneTextString(shared, ls, kind, "durationBarPosition", "BOTTOM") == "TOP" and "TOP" or "BOTTOM",
+        durationBarDirection = ReadLaneTextString(shared, ls, kind, "durationBarDirection", "REMAINING") == "ELAPSED" and "ELAPSED" or "REMAINING",
         stackAnchor = ReadLaneTextAnchor(shared, ls, kind),
         cooldownAnchor = ReadLaneCooldownTextAnchor(shared, ls, kind),
     }
@@ -1176,6 +1228,12 @@ local function EnsureIcon(group, index)
     shade:SetColorTexture(0, 0, 0, 0)
     icon.Shade = shade
 
+    local durationBar = icon:CreateTexture(nil, "OVERLAY")
+    durationBar:SetTexture(W8)
+    durationBar:SetVertexColor(0.08, 0.78, 1, 0.92)
+    durationBar:Hide()
+    icon.DurationBar = durationBar
+
     local cd = icon:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     cd:SetPoint("CENTER", icon, "CENTER", 0, 0)
     ApplyGlobalFont(cd, 14)
@@ -1193,6 +1251,9 @@ end
 
 local function ApplyPreviewIconText(icon, unit, cfg)
     cfg = cfg or ReadTextConfig(unit)
+    local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
+    if icon.Icon then icon.Icon:SetShown(not barOnly) end
+    if icon.Shade then icon.Shade:SetShown(not barOnly) end
     if icon.Count then
         ApplyGlobalFont(icon.Count, cfg.stackSize)
         PlaceStackText(icon.Count, icon, cfg)
@@ -1200,6 +1261,29 @@ local function ApplyPreviewIconText(icon, unit, cfg)
     if icon.CooldownText then
         ApplyGlobalFont(icon.CooldownText, cfg.cooldownSize)
         PlaceCooldownText(icon.CooldownText, icon, cfg)
+    end
+    if icon.DurationBar then
+        if cfg.showDurationBar == true then
+            local height = Clamp(cfg.durationBarHeight, 2, 1, 16)
+            local inset = 1
+            icon.DurationBar:ClearAllPoints()
+            icon.DurationBar:SetHeight(height)
+            if cfg.durationBarPosition == "TOP" then
+                icon.DurationBar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+                icon.DurationBar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+            else
+                icon.DurationBar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+                icon.DurationBar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+            end
+            if cfg.durationBarDirection == "ELAPSED" then
+                icon.DurationBar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
+            else
+                icon.DurationBar:SetVertexColor(0.08, 0.78, 1, 0.92)
+            end
+            icon.DurationBar:Show()
+        else
+            icon.DurationBar:Hide()
+        end
     end
 end
 
@@ -1345,6 +1429,9 @@ local function RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, s
         .. "\030" .. tostring(textCfg and textCfg.stackY) .. "\030" .. tostring(textCfg and textCfg.cooldownSize)
         .. "\030" .. tostring(textCfg and textCfg.cooldownX) .. "\030" .. tostring(textCfg and textCfg.cooldownY)
         .. "\030" .. tostring(textCfg and textCfg.stackAnchor) .. "\030" .. tostring(textCfg and textCfg.cooldownAnchor)
+        .. "\030" .. tostring(textCfg and textCfg.showDurationBar) .. "\030" .. tostring(textCfg and textCfg.durationBarHeight)
+        .. "\030" .. tostring(textCfg and textCfg.durationBarDisplay) .. "\030" .. tostring(textCfg and textCfg.durationBarPosition)
+        .. "\030" .. tostring(textCfg and textCfg.durationBarDirection)
 end
 
 function EM.HideUnit(unit)

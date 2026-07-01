@@ -1648,7 +1648,7 @@ local function CompileUnitBorder(out, conf, general, bars)
     general.aggroIndicatorMode == "border" or general.enableAggroHighlight == true)
   border.dispel = OutlineModeEnabled(ScopedValue(conf, general, "dispelOutlineMode", nil),
     legacyDispelBorder)
-  border.dispelTrigger = NormalizeDispelDetectTrigger(ScopedValue(conf, general, "dispelBorderTrigger", "BY_ME"))
+  border.dispelTrigger = NormalizeDispelDetectTrigger(ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE"))
   border.purge = OutlineModeEnabled(ScopedValue(conf, general, "purgeOutlineMode", nil),
     general.purgeBorderEnabled == true or general.hlPurgeBorderEnabled == true)
 end
@@ -1659,7 +1659,10 @@ local function CompileUnitTail(out, unit, key, conf, general, bars)
 
   out.auras = out.auras or {}
   local A3 = MSUF.MSUF_Auras3
-  out.auras.enabled = A3 and A3.UnitFrameAuraEnabled and A3.UnitFrameAuraEnabled(unit) == true or false
+  out.auras.enabled = (A3 and A3.UnitFrameAuraEnabled and A3.UnitFrameAuraEnabled(unit) == true)
+    or (out.border and out.border.dispel == true)
+    or (out.dispelOverlay and out.dispelOverlay.enabled == true)
+    or false
 
   out.castbar = out.castbar or {}
   out.castbar.enabled = CastbarEnabled(unit, key, general)

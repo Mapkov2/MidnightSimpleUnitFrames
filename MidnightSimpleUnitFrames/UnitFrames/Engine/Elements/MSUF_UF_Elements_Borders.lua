@@ -48,6 +48,9 @@ end
 
 local EDGE_KEYS = { "top", "bottom", "left", "right" }
 local DEFAULT_HIGHLIGHT_PRIORITY = { "dispel", "aggro", "purge", "bossTarget" }
+local BORDER_LEVEL_NORMAL = 35
+local BORDER_LEVEL_DEFAULT = 40
+local BORDER_LEVEL_OVER_NATIVE_DISPEL = 50
 
 local function EnsureBorderOverlay(parent)
   local overlay = parent.MSUFBorderOverlay
@@ -58,13 +61,25 @@ local function EnsureBorderOverlay(parent)
     parent.MSUFBorderOverlay = overlay
   end
   if parent.GetFrameLevel and overlay.SetFrameLevel then
-    local level = (parent:GetFrameLevel() or 1) + 40
+    local level = (parent:GetFrameLevel() or 1) + (parent._msufBorderLevelOffset or BORDER_LEVEL_DEFAULT)
     if overlay._msufBorderLevel ~= level then
       overlay:SetFrameLevel(level)
       overlay._msufBorderLevel = level
     end
   end
   return overlay
+end
+
+local function SetBorderOverlayLevel(frame, offset)
+  if not frame then return end
+  offset = offset or BORDER_LEVEL_DEFAULT
+  if frame._msufBorderLevelOffset ~= offset then
+    frame._msufBorderLevelOffset = offset
+    if frame.MSUFBorderOverlay then
+      frame.MSUFBorderOverlay._msufBorderLevel = nil
+    end
+  end
+  EnsureBorderOverlay(frame)
 end
 
 local function EnsureEdge(parent, key)
@@ -537,15 +552,41 @@ local function HighlightPriorityOrder(cfg)
   return DEFAULT_HIGHLIGHT_PRIORITY
 end
 
+local function PriorityIndex(cfg, key)
+  local order = HighlightPriorityOrder(cfg)
+  for i = 1, #order do
+    if order[i] == key then
+      return i
+    end
+  end
+  return nil
+end
+
+local function HighlightBorderLevel(cfg, key)
+  if key == "dispel" then
+    return BORDER_LEVEL_OVER_NATIVE_DISPEL
+  end
+  if cfg and cfg.dispel == true and key then
+    local dispelIndex = PriorityIndex(cfg, "dispel")
+    local keyIndex = PriorityIndex(cfg, key)
+    if dispelIndex and keyIndex and dispelIndex < keyIndex then
+      return BORDER_LEVEL_NORMAL
+    end
+  end
+  return BORDER_LEVEL_OVER_NATIVE_DISPEL
+end
+
 local function ApplyHighlightBorder(frame, cfg, key, testActive)
   if key == "dispel" then
     if testActive and DispelTestApplies(frame) then
       local r, g, b, a = DispelTestColor(frame)
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key))
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true, r, g, b, a)
       return true
     end
     if cfg.dispel == true and frame._msufA3DispelActive == true then
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key))
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true,
         frame._msufA3DispelR or 0.25,
@@ -556,18 +597,21 @@ local function ApplyHighlightBorder(frame, cfg, key, testActive)
     end
   elseif key == "aggro" then
     if (testActive and AggroTestApplies(frame)) or (cfg.aggro and IsAggroBorderUnit(frame) and ThreatState(frame)) then
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key))
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true, AggroColor(cfg))
       return true
     end
   elseif key == "purge" then
     if testActive and PurgeTestApplies(frame) then
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key))
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true, PurgeColor(cfg))
       return true
     end
   elseif key == "bossTarget" then
     if testActive and BossTargetTestApplies(frame) then
+      SetBorderOverlayLevel(frame, HighlightBorderLevel(cfg, key))
       LayoutBorder(frame, BorderHighlightThickness(cfg))
       SetBorder(frame, true, BossTargetColor(cfg))
       return true
@@ -600,6 +644,7 @@ function Borders.Apply(frame, spec)
     LayoutBorder(frame, BorderHighlightThickness(cfg))
     Borders.Update(frame, "MSUF_BORDER_APPLY", frame.unit)
   else
+    SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL)
     LayoutBorder(frame, BorderNormalThickness(cfg))
     SetBorder(frame, true, NormalBorderColor(cfg))
   end
@@ -654,6 +699,7 @@ function Borders.Update(frame)
     SetBorder(frame, false)
     return
   end
+  SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL)
   LayoutBorder(frame, BorderNormalThickness(cfg))
   SetBorder(frame, true, NormalBorderColor(cfg))
 end

@@ -39,6 +39,9 @@ local SHARED_PREVIEW_SCOPES = {
 local LANE_VALUES = VTP "buff=Buffs|debuff=Debuffs"
 local DEBUFF_TYPE_BORDER_MODE_VALUES = VTP "OFF=Off|BORDER=Border|SYMBOL=Border + Symbol"
 local COOLDOWN_SWIPE_DIRECTION_VALUES = VTP "NORMAL=Normal|REVERSE=Reverse"
+local DURATION_BAR_DISPLAY_VALUES = VTP "BAR_ONLY=Bar Only|OVERLAY=Icon + Bar"
+local DURATION_BAR_POSITION_VALUES = VTP "BOTTOM=Bottom|TOP=Top"
+local DURATION_BAR_DIRECTION_VALUES = VTP "REMAINING=Remaining|ELAPSED=Elapsed"
 local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
     SYMBOL = "ui-debuff-border-magic-icon",
@@ -115,6 +118,17 @@ local function SelectPage(pageKey, scope)
         if scope == "party" or scope == "raid" then M.SetMenuStateValue("auraStyleGFScope", scope) end
     end
     if M.SelectPage then M.SelectPage(pageKey or "auras3") end
+end
+local function OpenAuraColors()
+    _G.MSUF_EM2_MenuFocusRequest = {
+        pageKey = "opt_colors",
+        sectionId = "colors_auras",
+        explicit = true,
+        consumed = false,
+    }
+    if M.SelectPage and M.SelectPage("opt_colors") == false then
+        _G.MSUF_EM2_MenuFocusRequest = nil
+    end
 end
 local pendingAuraUnits = {}
 local pendingAuraReasons = {}
@@ -742,6 +756,10 @@ local function CreateAuraPreviewIcon(parent)
     f.swipe:SetTexture(TEX_W8)
     f.swipe:SetVertexColor(0, 0, 0, 0.28)
     f.swipe:Hide()
+    f.durationBar = f:CreateTexture(nil, "OVERLAY")
+    f.durationBar:SetTexture(TEX_W8)
+    f.durationBar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+    f.durationBar:Hide()
     f.dispelBorder = f:CreateTexture(nil, "OVERLAY")
     f.dispelBorder:Hide()
     f.edge = {}
@@ -767,8 +785,8 @@ local function ApplyAuraPreviewFont(fs, size)
             local gdb = _G.MSUF_DB and _G.MSUF_DB.general
             path = resolveSafe(path, px, flags, gdb and gdb.fontKey)
         end
-        local ok, applied = pcall(fs.SetFont, fs, path, px, flags)
-        if not ok or applied == false then
+        local ok = pcall(fs.SetFont, fs, path, px, flags)
+        if not ok then
             pcall(fs.SetFont, fs, FONT, px, flags)
         end
     end
@@ -827,6 +845,11 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cooldownX = 0,
         cooldownY = 0,
         debuffBorderMode = "OFF",
+        showDurationBar = false,
+        durationBarHeight = 2,
+        durationBarDisplay = "BAR_ONLY",
+        durationBarPosition = "BOTTOM",
+        durationBarDirection = "REMAINING",
     }
     if isGroup then
         local group = GFReadGroup(scope, lane or "debuff")
@@ -847,6 +870,11 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.cooldownX = tonumber(group.cooldownX) or 0
         cfg.cooldownY = tonumber(group.cooldownY) or 0
         cfg.cooldownDecimalSeconds = tonumber(group.cooldownDecimalSeconds) or 3
+        cfg.showDurationBar = group.showDurationBar == true
+        cfg.durationBarHeight = tonumber(group.durationBarHeight) or 2
+        cfg.durationBarDisplay = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
+        cfg.durationBarPosition = group.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
+        cfg.durationBarDirection = group.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING"
         if lane == "debuff" then cfg.debuffBorderMode = ReadGroupDebuffTypeBorderMode(scope, "debuff") end
     else
         local readScope = scope or "shared"
@@ -870,11 +898,13 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             cfg.showTimers = Model.ReadLaneStyleBool(readScope, lane, "showCooldownText", true)
             cfg.showSwipe = Model.ReadLaneStyleBool(readScope, lane, "showCooldownSwipe", true)
             cfg.cooldownSwipeReverse = Model.ReadLaneStyleBool(readScope, lane, "cooldownSwipeReverse", false)
+            cfg.showDurationBar = Model.ReadLaneStyleBool(readScope, lane, "showDurationBar", false)
         else
             cfg.showStacks = Model.ReadBool(readScope, "showStackCount", true)
             cfg.showTimers = Model.ReadBool(readScope, "showCooldownText", true)
             cfg.showSwipe = Model.ReadBool(readScope, "showCooldownSwipe", true)
             cfg.cooldownSwipeReverse = Model.ReadBool(readScope, "cooldownSwipeReverse", false)
+            cfg.showDurationBar = Model.ReadBool(readScope, "showDurationBar", false)
         end
         cfg.stackSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)
         cfg.stackAnchor = lane and type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(readScope, lane) or Model.ReadStackAnchor(readScope)
@@ -891,6 +921,22 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         cfg.cooldownX = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetX", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetX", 0, -2000, 2000)
         cfg.cooldownY = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetY", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetY", 0, -2000, 2000)
         cfg.cooldownDecimalSeconds = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownDecimalSeconds", 3, 0, 30) or Model.ReadNumber(readScope, "cooldownDecimalSeconds", 3, 0, 30)
+        cfg.durationBarHeight = lane and Model.ReadLaneStyleNumber(readScope, lane, "durationBarHeight", 2, 1, 16) or Model.ReadNumber(readScope, "durationBarHeight", 2, 1, 16)
+        if lane and type(Model.ReadLaneDurationBarDisplay) == "function" then
+            cfg.durationBarDisplay = Model.ReadLaneDurationBarDisplay(readScope, lane)
+        else
+            cfg.durationBarDisplay = Model.ReadValue(readScope, "durationBarDisplay", "BAR_ONLY")
+        end
+        if lane and type(Model.ReadLaneDurationBarPosition) == "function" then
+            cfg.durationBarPosition = Model.ReadLaneDurationBarPosition(readScope, lane)
+        else
+            cfg.durationBarPosition = Model.ReadValue(readScope, "durationBarPosition", "BOTTOM")
+        end
+        if lane and type(Model.ReadLaneDurationBarDirection) == "function" then
+            cfg.durationBarDirection = Model.ReadLaneDurationBarDirection(readScope, lane)
+        else
+            cfg.durationBarDirection = Model.ReadValue(readScope, "durationBarDirection", "REMAINING")
+        end
         if lane == "debuff" then
             if type(Model.ReadDebuffTypeBorderMode) == "function" then
                 cfg.debuffBorderMode = Model.ReadDebuffTypeBorderMode(readScope)
@@ -912,6 +958,10 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
     cfg.stackSize = max(7, tonumber(cfg.stackSize) or 10)
     cfg.cooldownSize = max(7, tonumber(cfg.cooldownSize) or 9)
     cfg.cooldownDecimalSeconds = min(30, max(0, tonumber(cfg.cooldownDecimalSeconds) or 3))
+    cfg.durationBarHeight = min(max(1, tonumber(cfg.durationBarHeight) or 2), max(1, floor((cfg.size or 24) / 2)))
+    cfg.durationBarDisplay = cfg.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
+    cfg.durationBarPosition = cfg.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
+    cfg.durationBarDirection = cfg.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING"
     return cfg
 end
 local function FormatAuraPreviewTimer(seconds, cfg)
@@ -982,17 +1032,21 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
     local function HidePreviewIcon(icon)
         icon:Hide()
         icon.swipe:Hide()
+        icon.durationBar:Hide()
         icon.dispelBorder:Hide()
     end
     local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText)
         icon:SetSize(cfg.size, cfg.size)
+        local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
         local tex = isBuffIcon and buffTex or debuffTex
         icon.icon:SetTexture(tex[((index - 1) % #tex) + 1])
+        icon.bg:SetShown(not barOnly)
+        icon.icon:SetShown(not barOnly)
         local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
-        local borderAtlas = (not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
-        local showPreviewEdges = isBuffIcon == true
+        local borderAtlas = (not barOnly and not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
+        local showPreviewEdges = isBuffIcon == true and not barOnly
         for _, edge in pairs(icon.edge) do edge:SetShown(showPreviewEdges); edge:SetVertexColor(r, g, b, 0.95) end
-        icon.swipe:SetShown(cfg.showSwipe ~= false)
+        icon.swipe:SetShown(cfg.showSwipe ~= false and not barOnly)
         icon.swipe:ClearAllPoints()
         if cfg.cooldownSwipeReverse == true then
             icon.swipe:SetPoint("TOPRIGHT", icon, "TOP", 0, -1)
@@ -1010,6 +1064,26 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             icon.dispelBorder:Show()
         else
             icon.dispelBorder:Hide()
+        end
+        if cfg.showDurationBar == true then
+            local inset = max(1, floor((cfg.size / 32) + 0.5))
+            icon.durationBar:ClearAllPoints()
+            icon.durationBar:SetHeight(cfg.durationBarHeight or 2)
+            if cfg.durationBarPosition == "TOP" then
+                icon.durationBar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+                icon.durationBar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+            else
+                icon.durationBar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+                icon.durationBar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+            end
+            if cfg.durationBarDirection == "ELAPSED" then
+                icon.durationBar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
+            else
+                icon.durationBar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+            end
+            icon.durationBar:Show()
+        else
+            icon.durationBar:Hide()
         end
         ApplyAuraPreviewFont(icon.stack, cfg.stackSize)
         ApplyAuraPreviewFont(icon.timer, cfg.cooldownSize)
@@ -1141,6 +1215,45 @@ local function BuildUnitStyle(ctx, b, scope)
     local function WriteScopeSwipeDirection(value)
         WriteScopeBool("cooldownSwipeReverse", value == "REVERSE")
     end
+    local function ReadScopeDurationBarDisplay()
+        if type(Model.ReadLaneDurationBarDisplay) == "function" then return Model.ReadLaneDurationBarDisplay(unit, lane) end
+        local value = Model.ReadValue and Model.ReadValue(unit, "durationBarDisplay", "BAR_ONLY") or "BAR_ONLY"
+        return value == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
+    end
+    local function WriteScopeDurationBarDisplay(value)
+        value = value == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
+        if type(Model.WriteLaneDurationBarDisplay) == "function" then
+            Model.WriteLaneDurationBarDisplay(unit, lane, value)
+        elseif type(Model.WriteValue) == "function" then
+            Model.WriteValue(unit, "durationBarDisplay", value)
+        end
+    end
+    local function ReadScopeDurationBarPosition()
+        if type(Model.ReadLaneDurationBarPosition) == "function" then return Model.ReadLaneDurationBarPosition(unit, lane) end
+        local value = Model.ReadValue and Model.ReadValue(unit, "durationBarPosition", "BOTTOM") or "BOTTOM"
+        return value == "TOP" and "TOP" or "BOTTOM"
+    end
+    local function WriteScopeDurationBarPosition(value)
+        value = value == "TOP" and "TOP" or "BOTTOM"
+        if type(Model.WriteLaneDurationBarPosition) == "function" then
+            Model.WriteLaneDurationBarPosition(unit, lane, value)
+        elseif type(Model.WriteValue) == "function" then
+            Model.WriteValue(unit, "durationBarPosition", value)
+        end
+    end
+    local function ReadScopeDurationBarDirection()
+        if type(Model.ReadLaneDurationBarDirection) == "function" then return Model.ReadLaneDurationBarDirection(unit, lane) end
+        local value = Model.ReadValue and Model.ReadValue(unit, "durationBarDirection", "REMAINING") or "REMAINING"
+        return value == "ELAPSED" and "ELAPSED" or "REMAINING"
+    end
+    local function WriteScopeDurationBarDirection(value)
+        value = value == "ELAPSED" and "ELAPSED" or "REMAINING"
+        if type(Model.WriteLaneDurationBarDirection) == "function" then
+            Model.WriteLaneDurationBarDirection(unit, lane, value)
+        elseif type(Model.WriteValue) == "function" then
+            Model.WriteValue(unit, "durationBarDirection", value)
+        end
+    end
     local function AddStyleControl(control) M.AppendValues(styleControls, control); return control end
     local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason)
         return AddStyleControl(BindSwitch(ctx, parent, label, x, y, width,
@@ -1189,7 +1302,10 @@ local function BuildUnitStyle(ctx, b, scope)
     local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", featuresH, true)
     local fw = BodyWidth(features)
     local featuresY = -44
-    local featuresIntro = W.Text(features, "Cooldown basics for " .. scopeLabel .. " " .. laneName .. ". Colors live in Colors > Auras.", 24, featuresY, fw - 48, T.colors.muted)
+    local colorsButton = ActionButton(features, "Open Aura Colors", 150, "normal")
+    colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, featuresY)
+    colorsButton:SetScript("OnClick", OpenAuraColors)
+    AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
     BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 44, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
     BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 76, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
     if lane == "debuff" then
@@ -1234,6 +1350,21 @@ local function BuildUnitStyle(ctx, b, scope)
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and unitless minutes above it. Set 0 for whole seconds only.")
     W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then unitless minutes.", 24, -456, cw - 48, T.colors.muted)
 
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 358, false)
+    local dbw = BodyWidth(durationBar)
+    W.Text(durationBar, "Optional native StatusBar timer for " .. scopeLabel .. " " .. laneName .. ". Driven by Blizzard's DurationBar binding.", 24, -42, dbw - 48, T.colors.muted)
+    BindStyleSwitch(durationBar, "Show Duration Bar", 24, -82, dbw - 48, "showDurationBar", false, "AURAS3_DURATION_BAR")
+    BindStyleSlider(durationBar, "Height", 24, -140, 1, 16, 1, dbw - 48, "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT")
+    BindStyleDropdown(durationBar, "Display", 24, -198,
+        type(Model.DurationBarDisplayValues) == "function" and Model.DurationBarDisplayValues() or DURATION_BAR_DISPLAY_VALUES,
+        dbw - 48, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, "AURAS3_DURATION_BAR_DISPLAY")
+    BindStyleDropdown(durationBar, "Position", 24, -256,
+        type(Model.DurationBarPositionValues) == "function" and Model.DurationBarPositionValues() or DURATION_BAR_POSITION_VALUES,
+        dbw - 48, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition, "AURAS3_DURATION_BAR_POSITION")
+    BindStyleDropdown(durationBar, "Fill Mode", 24, -314,
+        type(Model.DurationBarDirectionValues) == "function" and Model.DurationBarDirectionValues() or DURATION_BAR_DIRECTION_VALUES,
+        dbw - 48, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION")
+
     M.TrackRefresh(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
         W.SetControlsEnabled(styleControls, editable)
@@ -1246,13 +1377,6 @@ local function BuildUnitStyle(ctx, b, scope)
                 W.SetCollapsibleBadges(features, {
                     { text = editable and "Override active" or "Inherited", kind = editable and "accent" or "muted", showWhenClosed = true },
                 })
-            end
-        end
-        if featuresIntro then
-            if unit == "shared" then
-                featuresIntro:SetText("Shared aura style is the baseline. Timer, stack, highlight, and pandemic colors live in Colors > Auras.")
-            else
-                featuresIntro:SetText("These controls affect only " .. scopeLabel .. " " .. laneName .. " when the local style override is active. Colors live in Colors > Auras.")
             end
         end
         if unit == "shared" then
@@ -1282,7 +1406,10 @@ local function BuildGroupStyle(ctx, b, scope)
 
     local features = b:CollapsibleSection(baseId .. "_features", "Group " .. LaneTitle(lane) .. " Basics", 154 + extraDebuffControls, true)
     local fw = BodyWidth(features)
-    W.Text(features, "Cooldown basics for " .. scopeLabel .. " " .. laneName .. ". Colors live in Colors > Auras.", 24, -42, fw - 48, T.colors.muted)
+    local colorsButton = ActionButton(features, "Open Aura Colors", 150, "normal")
+    colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, -42)
+    colorsButton:SetScript("OnClick", OpenAuraColors)
+    AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
     BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -82, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
     BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -114, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
     if lane == "debuff" then
@@ -1316,6 +1443,15 @@ local function BuildGroupStyle(ctx, b, scope)
     local groupDecimal = BindGroupSlider(ctx, cooldown, "Decimals below sec", 24, -288, 0, 30, 1, cw - 48, scope, lane, "cooldownDecimalSeconds", 3, "visual", RefreshStylePreview)
     AddTooltip(groupDecimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and unitless minutes above it. Set 0 for whole seconds only.")
     W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then unitless minutes.", 24, -340, cw - 48, T.colors.muted)
+
+    local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", "Group " .. LaneTitle(lane) .. " Duration Bar", 358, false)
+    local dbw = BodyWidth(durationBar)
+    W.Text(durationBar, "Optional native StatusBar timer for " .. scopeLabel .. " " .. laneName .. ".", 24, -42, dbw - 48, T.colors.muted)
+    BindGroupSwitch(ctx, durationBar, "Show Duration Bar", 24, -82, dbw - 48, scope, lane, "showDurationBar", false, "visual", RefreshStylePreview)
+    BindGroupSlider(ctx, durationBar, "Height", 24, -140, 1, 16, 1, dbw - 48, scope, lane, "durationBarHeight", 2, "visual", RefreshStylePreview)
+    BindGroupDropdown(ctx, durationBar, "Display", 24, -198, DURATION_BAR_DISPLAY_VALUES, dbw - 48, scope, lane, "durationBarDisplay", "BAR_ONLY", "visual", RefreshStylePreview)
+    BindGroupDropdown(ctx, durationBar, "Position", 24, -256, DURATION_BAR_POSITION_VALUES, dbw - 48, scope, lane, "durationBarPosition", "BOTTOM", "visual", RefreshStylePreview)
+    BindGroupDropdown(ctx, durationBar, "Fill Mode", 24, -314, DURATION_BAR_DIRECTION_VALUES, dbw - 48, scope, lane, "durationBarDirection", "REMAINING", "visual", RefreshStylePreview)
 
     local stack = b:CollapsibleSection(baseId .. "_stack", "Group " .. LaneTitle(lane) .. " Stack Count", 270, false)
     local sw = BodyWidth(stack)

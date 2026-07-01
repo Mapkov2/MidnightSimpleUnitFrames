@@ -19,8 +19,9 @@ local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
 local BARS_PAGE_WORK_DELAY = 0.04
-local DISPEL_PURGE_BORDER_121_PTR_DISABLED = true
-local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Disabled for 12.1 PTR; native AuraContainer does not expose this MSUF border detection path yet."
+local DISPEL_BORDER_121_PTR_DISABLED = false
+local PURGE_BORDER_121_PTR_DISABLED = true
+local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel uses native 12.1 AuraContainer detection. Purge border stays disabled until Blizzard exposes a safe purge/stealable filter."
 local ROUNDED_PREVIEW_WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local ROUNDED_PREVIEW_MASK = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_4x.tga"
@@ -989,7 +990,7 @@ local function BuildBars(ctx)
     local dispelBorder = BindBorderModeDropdown("Dispel border", "dispelOutlineMode", 1, "MSUF2_DISPEL_BORDER", -244,
         "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", RequestDispelPurgeBorderRuntime)
     local dispelTrigger = BindHighlightDropdown("Dispel border detects", dispelTriggers, -298,
-        function() return NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "BY_ME")) end,
+        function() return NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "DISPEL_TYPE")) end,
         function(v)
             BarScopeSet("dispelBorderTrigger", NormalizeDispelTrigger(v), "MSUF2_DISPEL_TRIGGER")
             RequestDispelPurgeBorderRuntime()
@@ -1070,19 +1071,19 @@ local function BuildBars(ctx)
         local purgeOn = ScopeBorderModeOn("purgeOutlineMode", 0)
         local bossTargetOn = BossTargetBorderOn()
         ClearBorderTestIfDisabled("MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", aggroOn)
-        ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
-        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", purgeOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
+        ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn and not DISPEL_BORDER_121_PTR_DISABLED)
+        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", purgeOn and not PURGE_BORDER_121_PTR_DISABLED)
         ClearBorderTestIfDisabled("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", sharedActive and bossTargetOn)
         SetControlsEnabled(scopedBorderControls, scopedActive)
-        SetControlEnabled(dispelBorder, scopedActive and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
-        SetControlEnabled(purge, scopedActive and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
+        SetControlEnabled(dispelBorder, scopedActive and not DISPEL_BORDER_121_PTR_DISABLED)
+        SetControlEnabled(purge, scopedActive and not PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTarget, sharedActive)
         SetControlEnabled(aggroMode, scopedActive and aggroOn)
         SetControlEnabled(aggroTest, scopedActive and aggroOn)
-        SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
-        SetControlEnabled(purgeTest, scopedActive and purgeOn and not DISPEL_PURGE_BORDER_121_PTR_DISABLED)
+        SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn and not DISPEL_BORDER_121_PTR_DISABLED)
+        SetControlEnabled(purgeTest, scopedActive and purgeOn and not PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
-        if dispelPurgePtrHint and dispelPurgePtrHint.SetShown then dispelPurgePtrHint:SetShown(DISPEL_PURGE_BORDER_121_PTR_DISABLED) end
+        if dispelPurgePtrHint and dispelPurgePtrHint.SetShown then dispelPurgePtrHint:SetShown(PURGE_BORDER_121_PTR_DISABLED) end
         local hintColor = sharedActive and T.colors.dim or T.colors.muted
         bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
     end)
