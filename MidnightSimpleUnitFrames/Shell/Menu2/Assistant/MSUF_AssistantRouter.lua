@@ -356,6 +356,26 @@ function R.LooksLikeKnowledgeFirstRequest(text)    local norm = R.Normalize(text
     })
 end
 
+function R.LooksLikeDirectDefinitionQuestion(text)    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    if R.ContainsAny(norm, {
+        "what did you change", "what changed", "what was changed", "what did you do",
+        "what did you just change", "what exactly did you change", "what did you set",
+        "last change", "last assistant change", "previous change", "what is it now",
+        "what is it set to", "current value", "value now", "show last change",
+        "show me last change", "show me the last change",
+    }) then return false end
+    if R.LooksLikeConcreteScopedValueRequest and R.LooksLikeConcreteScopedValueRequest(norm) then return false end
+    if R.ContainsAny(norm, { "where", "where is", "where are", "where can", "where do", "how do i", "how can i", "how to" }) then return false end
+    if norm:match("^what%s+is%s+") or norm:match("^what%s+are%s+")
+        or norm:match("^what%s+does%s+") or norm:match("^explain%s+")
+        or norm:match("^describe%s+")
+    then
+        return true
+    end
+    return false
+end
+
 function R.LooksLikeChangelogKnowledgeRequest(text)    if A.Knowledge and type(A.Knowledge.LooksLikeChangelogQuestion) == "function" then
         return A.Knowledge.LooksLikeChangelogQuestion(text) == true
     end
@@ -928,14 +948,45 @@ R.HELP_CONTEXT_OPEN_TERMS = {    "open it", "open that", "open this", "show it",
     "take me there", "go there", "open the page", "open that page",
 }
 
-R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS = {    "make it", "make that", "make this", "change it", "change that", "change this",
-    "set it", "set that", "set this", "move it", "move that", "move this",
+R.HELP_CONTEXT_LOCATION_TERMS = {
+    "where is it", "where is that", "where is this", "where are they", "where are those",
+    "where do i change it", "where do i change that", "where do i change this", "where do i change them", "where do i change those",
+    "where can i change it", "where can i change that", "where can i change this", "where can i change them", "where can i change those",
+    "where do i configure it", "where do i configure that", "where do i configure this", "where do i configure them", "where do i configure those",
+    "where can i configure it", "where can i configure that", "where can i configure this", "where can i configure them", "where can i configure those",
+    "where do i find it", "where do i find that", "where do i find this", "where do i find them", "where do i find those",
+    "where can i find it", "where can i find that", "where can i find this", "where can i find them", "where can i find those",
+    "which page is it on", "which page is that on", "which page is this on", "which page are they on", "which page are those on",
+    "what page is it on", "what page is that on", "what page is this on", "what page are they on", "what page are those on",
+    "what menu is it in", "what menu is that in", "what menu is this in", "what menu are they in", "what menu are those in",
 }
 
+R.HELP_CONTEXT_PRONOUN_VISIBILITY_TERMS = {
+    "show it", "show that", "show this", "show them", "show those",
+    "hide it", "hide that", "hide this", "hide them", "hide those",
+    "enable it", "enable that", "enable this", "enable them", "enable those",
+    "disable it", "disable that", "disable this", "disable them", "disable those",
+    "toggle it", "toggle that", "toggle this", "toggle them", "toggle those",
+    "turn it on", "turn that on", "turn this on", "turn them on", "turn those on",
+    "turn it off", "turn that off", "turn this off", "turn them off", "turn those off",
+    "switch it on", "switch that on", "switch this on", "switch them on", "switch those on",
+    "switch it off", "switch that off", "switch this off", "switch them off", "switch those off",
+}
+
+R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS = {    "make it", "make that", "make this", "change it", "change that", "change this",
+    "set it", "set that", "set this", "move it", "move that", "move this",
+    "make them", "make those", "change them", "change those",
+    "set them", "set those", "move them", "move those",
+}
+
+R.HELP_CONTEXT_PRONOUN_TERMS = { "it", "that", "this", "them", "those" }
+
 function R.LooksLikeHelpContextFollowup(norm)    return R.ContainsAny(norm, R.HELP_CONTEXT_OPEN_TERMS)
+        or (R.ContainsAny(norm, R.HELP_CONTEXT_LOCATION_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS))
         or R.ContainsAny(norm, R.HELP_CONTEXT_EXAMPLE_TERMS)
         or R.ContainsAny(norm, R.HELP_CONTEXT_NEXT_TERMS)
-        or (R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS) and R.ContainsAny(norm, { "it", "that", "this" }))
+        or (R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_VISIBILITY_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS))
+        or (R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS))
 end
 
 function R.ClearStaleHelpContextForInput(text)    if type(A.lastAssistantHelpContext) ~= "table" then return end
@@ -953,21 +1004,48 @@ function R.FirstOpenActionCommand(actions)    local first = tostring(actions or 
 end
 
 function R.TryHelpContextFollowup(text, coreHandler)    local ctx = type(A.lastAssistantHelpContext) == "table" and A.lastAssistantHelpContext or nil
-    if not ctx or ctx.kind ~= "readability" then return nil end
+    if not ctx or (ctx.kind ~= "readability" and ctx.kind ~= "knowledge") then return nil end
 
     local norm = R.Normalize(text)
     if norm == "" then return nil end
+
+    if R.ContainsAny(norm, R.HELP_CONTEXT_LOCATION_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS) then
+        local command = R.FirstOpenActionCommand(ctx.actions)
+        local label = command and R.Trim(command:gsub("^open%s+", "")) or ""
+        local location = label ~= "" and ("This topic is handled from " .. label .. ".") or ("Use the action list for this help topic: " .. tostring(ctx.actions))
+        return {
+            text = tostring(ctx.title) .. "\n" .. location .. "\nExamples: " .. tostring(ctx.examples) .. "\nYou can ask: " .. tostring(ctx.actions),
+            status = "info",
+            summary = "Assistant help location",
+        }
+    end
+
+    if R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_VISIBILITY_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS) then
+        local clarification = tostring(ctx.clarification or "Name the exact MSUF area before I change it, so I do not guess wrong.")
+        return {
+            text = tostring(ctx.title) .. "\n" .. clarification .. "\nExamples: " .. tostring(ctx.examples),
+            status = "info",
+            summary = "Assistant help clarification",
+        }
+    end
 
     if R.ContainsAny(norm, R.HELP_CONTEXT_OPEN_TERMS) then
         local command = R.FirstOpenActionCommand(ctx.actions)
         if command and type(coreHandler) == "function" then
             local result = coreHandler(command)
-            if result and not (type(result) == "table" and result.kind == "unknown") then return result end
+            if result and not (type(result) == "table" and result.kind == "unknown") then
+                if type(result) == "table" and R.Trim(result.text or "") == "" then
+                    local label = R.Trim(command:gsub("^open%s+", ""))
+                    result.text = label ~= "" and ("Opened " .. label .. ".") or "Opened the matching MSUF page."
+                    result.status = result.status or "applied"
+                end
+                return result
+            end
         end
         return {
-            text = tostring(ctx.title) .. "\nOpen the matching page from the action list: " .. tostring(ctx.actions),
+            text = tostring(ctx.title) .. "\nUse the matching action from this help topic: " .. tostring(ctx.actions),
             status = "info",
-            summary = "Assistant readability follow-up",
+            summary = "Assistant help follow-up",
         }
     end
 
@@ -975,24 +1053,25 @@ function R.TryHelpContextFollowup(text, coreHandler)    local ctx = type(A.lastA
         return {
             text = tostring(ctx.title) .. "\nExamples: " .. tostring(ctx.examples),
             status = "info",
-            summary = "Assistant readability examples",
+            summary = "Assistant help examples",
         }
     end
 
     if R.ContainsAny(norm, R.HELP_CONTEXT_NEXT_TERMS) then
+        local nextStep = tostring(ctx.nextStep or "Start with the least destructive visible setting: open the matching page, adjust size or text first, then tune spacing, filters, or colors only if it is still hard to read.")
         return {
-            text = tostring(ctx.title) .. "\nStart with the least destructive visible setting: open the matching page, adjust size or text first, then tune spacing, filters, or colors only if it is still hard to read.\nExamples: " .. tostring(ctx.examples) .. "\nYou can ask: " .. tostring(ctx.actions),
+            text = tostring(ctx.title) .. "\n" .. nextStep .. "\nExamples: " .. tostring(ctx.examples) .. "\nYou can ask: " .. tostring(ctx.actions),
             status = "info",
-            summary = "Assistant readability next step",
+            summary = "Assistant help next step",
         }
     end
 
-    if R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS) and R.ContainsAny(norm, { "it", "that", "this" }) then
+    if R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS) then
         local clarification = tostring(ctx.clarification or "Name the exact MSUF area before I change it, so I do not guess wrong.")
         return {
             text = tostring(ctx.title) .. "\n" .. clarification .. "\nExamples: " .. tostring(ctx.examples),
             status = "info",
-            summary = "Assistant readability clarification",
+            summary = "Assistant help clarification",
         }
     end
 
@@ -2910,6 +2989,7 @@ A.RouterTryGroupLayoutProblemShortcut = function(text, coreHandler)
     local mentionsGroup = R.ContainsAny(norm, terms.group)
     local mentionsClickCasting = R.ContainsAny(norm, terms.clickCasting)
     if not mentionsGroup and not mentionsClickCasting then return nil end
+    local concreteMutation = R.StartsWithMutationCommand(norm)
 
     local naturalSettingResult = A.RouterTryGroupNaturalSettingShortcut and A.RouterTryGroupNaturalSettingShortcut(norm, coreHandler)
     if naturalSettingResult then return naturalSettingResult end
@@ -2934,7 +3014,7 @@ A.RouterTryGroupLayoutProblemShortcut = function(text, coreHandler)
         )
     end
 
-    if mentionsGroup and R.ContainsAny(norm, terms.sorting) then
+    if mentionsGroup and not concreteMutation and R.ContainsAny(norm, terms.sorting) then
         return A.RouterGroupLayoutReply(
             "Group sorting help",
             "Group ordering lives in Group Layout. For raid frames, check Sort by Role, Role Priority Order, Preserve Raid Groups, and player-first options before changing frame geometry.",
@@ -2943,7 +3023,7 @@ A.RouterTryGroupLayoutProblemShortcut = function(text, coreHandler)
         )
     end
 
-    if mentionsGroup and R.ContainsAny(norm, terms.columns) then
+    if mentionsGroup and not concreteMutation and R.ContainsAny(norm, terms.columns) then
         return A.RouterGroupLayoutReply(
             "Group columns help",
             "Group columns are controlled in Group Layout through Max Columns, Units per Column, growth direction, and raid-group preservation. Tell me the exact column count when you want me to change it.",
@@ -2952,7 +3032,7 @@ A.RouterTryGroupLayoutProblemShortcut = function(text, coreHandler)
         )
     end
 
-    if mentionsGroup and (R.ContainsAny(norm, terms.growth) or R.ContainsAny(norm, terms.spacing)) then
+    if mentionsGroup and not concreteMutation and (R.ContainsAny(norm, terms.growth) or R.ContainsAny(norm, terms.spacing)) then
         return A.RouterGroupLayoutReply(
             "Group spacing and growth help",
             "Group spacing, growth direction, columns, width, height, and scale are all Group Layout settings. If frames overlap or spread too far apart, start with spacing and scale before changing health text or auras.",
@@ -4614,11 +4694,53 @@ R.RESULT_ORDINAL_WORDS = {    "first", "second", "third", "fourth", "fifth",
     "sixth", "seventh", "eighth", "ninth", "tenth",
 }
 
+R.RESULT_NUMBER_WORDS = R.RESULT_NUMBER_WORDS or {
+    "one", "two", "three", "four", "five",
+    "six", "seven", "eight", "nine", "ten",
+}
+
+R.RESULT_LIST_POSITION_TERMS = R.RESULT_LIST_POSITION_TERMS or {
+    first = { "top", "top one", "top result", "top option", "top choice", "top item", "first listed", "first listed result", "first listed option" },
+    penultimate = { "second last", "second to last", "second from bottom", "next to last", "penultimate", "2nd last", "2nd to last", "2nd from bottom" },
+    last = { "last", "last one", "last result", "last option", "last choice", "last item", "bottom", "bottom one", "bottom result", "bottom option", "final", "final one", "final result", "final option" },
+}
+
+R.RESULT_ADJACENT_TERMS = R.RESULT_ADJACENT_TERMS or {
+    next = {
+        "next one", "next result", "next option", "next choice", "next item",
+        "following one", "following result", "following option",
+        "one after", "result after", "option after", "one below", "below result",
+        "next",
+    },
+    previous = {
+        "previous one", "previous result", "previous option", "previous choice", "previous item",
+        "prev one", "prev result", "prior one", "prior result",
+        "one before", "result before", "option before", "one above", "above result",
+        "previous", "prev", "prior",
+    },
+}
+
+function R.OrdinalSuffixForIndex(index)    index = tonumber(index)
+    if not index then return nil end
+    local suffix = "th"
+    if index % 100 < 11 or index % 100 > 13 then
+        local last = index % 10
+        if last == 1 then suffix = "st"
+        elseif last == 2 then suffix = "nd"
+        elseif last == 3 then suffix = "rd" end
+    end
+    return tostring(index) .. suffix
+end
+
 R.RESULT_ORDINAL_NOUNS = { "one", "result", "option", "choice", "item", "match" }
 R.RESULT_ORDINAL_ACTIONS = {    "open", "show", "show me", "explain", "describe", "tell me about",
-    "what is", "what does", "run", "execute", "use", "apply", "select", "pick",
+    "what is", "what does", "is", "run", "execute", "use", "apply", "select", "pick",
     "compare", "set", "change", "make", "turn", "enable", "disable", "hide",
-    "increase", "decrease", "raise", "lower",
+    "increase", "decrease", "raise", "lower", "where is", "where do i change",
+    "where can i change", "which page is", "what page is", "what menu is",
+    "current value of", "value of", "why", "what about", "how about", "what can i set",
+    "move", "nudge", "shift", "put", "place", "position", "anchor",
+    "bring", "send", "push", "pull",
 }
 
 function R.ResultOrdinalActionTargetMatches(norm, target)    target = R.Normalize(target)
@@ -4628,7 +4750,13 @@ function R.ResultOrdinalActionTargetMatches(norm, target)    target = R.Normaliz
     if tail == "" then return true end
     if tail == "on" or tail == "off" or tail == "enabled" or tail == "disabled" then return true end
     if tail == "up" or tail == "down" or tail == "higher" or tail == "lower" then return true end
+    if tail == "bigger" or tail == "larger" or tail == "smaller" or tail == "shorter" or tail == "taller" then return true end
+    if tail == "left" or tail == "right" or tail == "forward" or tail == "back" or tail == "backward" then return true end
+    if tail == "for" or tail == "used for" or tail == "help with" or tail == "do" then return true end
+    if tail == "to" or tail == "at" then return true end
     if tail:sub(1, 3) == "to " then return true end
+    if tail:match("^left%s+") or tail:match("^right%s+") or tail:match("^up%s+") or tail:match("^down%s+") then return true end
+    if tail:match("^bigger%s+") or tail:match("^larger%s+") or tail:match("^smaller%s+") then return true end
     if tail:sub(1, 4) == "and " then return true end
     return false
 end
@@ -4641,13 +4769,20 @@ function R.LooksLikeResultOrdinalReply(text)    local norm = R.Normalize(text)
     }) and R.ContainsAny(norm, { "compare", "difference", "differences", "result", "results", "option", "options", "choice", "choices" }) then
         return true
     end
+    local ordinalCompare = R.ContainsAny(norm, { "vs", "versus" })
     for i = 1, #R.RESULT_ORDINAL_WORDS do
         local word = R.RESULT_ORDINAL_WORDS[i]
         if norm == word or norm == "the " .. word then return true end
+        if ordinalCompare and R.HasNormalizedPhrase(norm, word) then return true end
         for j = 1, #R.RESULT_ORDINAL_NOUNS do
             local noun = R.RESULT_ORDINAL_NOUNS[j]
             if R.HasNormalizedPhrase(norm, word .. " " .. noun)
                 or R.HasNormalizedPhrase(norm, "the " .. word .. " " .. noun) then
+                return true
+            end
+            if noun ~= "one"
+                and (R.HasNormalizedPhrase(norm, noun .. " " .. word)
+                    or R.HasNormalizedPhrase(norm, "the " .. noun .. " " .. word)) then
                 return true
             end
         end
@@ -4662,11 +4797,196 @@ function R.LooksLikeResultOrdinalReply(text)    local norm = R.Normalize(text)
     return false
 end
 
+function R.LooksLikeResultNumericReply(text)    if not A.RouterHasPendingSearchResults() then return false end
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    if norm:match("^%d+%a*$") or norm:match("^the%s+%d+%a*$") then return true end
+    for j = 1, #R.RESULT_ORDINAL_ACTIONS do
+        local action = R.Normalize(R.RESULT_ORDINAL_ACTIONS[j])
+        if action ~= "" and norm:sub(1, #action + 1) == action .. " " then
+            local tail = R.Trim(norm:sub(#action + 2))
+            if tail:match("^the%s+%d+%a*") or tail:match("^%d+%a*") then return true end
+        end
+    end
+    if R.ContainsAny(norm, { "compare", "difference", "differences", "vs", "versus" }) and norm:match("%d+") then return true end
+    for i = 1, 10 do
+        local tokens = { tostring(i) }
+        local ordinalToken = R.OrdinalSuffixForIndex(i)
+        if ordinalToken then tokens[#tokens + 1] = ordinalToken end
+        for tokenIndex = 1, #tokens do
+            local token = tokens[tokenIndex]
+            for j = 1, #R.RESULT_ORDINAL_ACTIONS do
+                local action = R.RESULT_ORDINAL_ACTIONS[j]
+                if R.ResultOrdinalActionTargetMatches(norm, action .. " the " .. token)
+                    or R.ResultOrdinalActionTargetMatches(norm, action .. " " .. token) then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+function R.LooksLikeResultListPositionReply(text)    if not A.RouterHasPendingSearchResults() then return false end
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    local function termMatches(term)
+        term = R.Normalize(term)
+        if term == "" then return false end
+        if norm == term or norm == "the " .. term then return true end
+        if R.HasNormalizedPhrase(norm, term) then return true end
+        for j = 1, #R.RESULT_ORDINAL_ACTIONS do
+            local action = R.RESULT_ORDINAL_ACTIONS[j]
+            if R.ResultOrdinalActionTargetMatches(norm, action .. " the " .. term)
+                or R.ResultOrdinalActionTargetMatches(norm, action .. " " .. term) then
+                return true
+            end
+        end
+        if R.ContainsAny(norm, { "vs", "versus", "compare", "difference", "better" }) and R.HasNormalizedPhrase(norm, term) then
+            return true
+        end
+        return false
+    end
+    for _, terms in pairs(R.RESULT_LIST_POSITION_TERMS or {}) do
+        for i = 1, #terms do
+            if termMatches(terms[i]) then return true end
+        end
+    end
+    return false
+end
+
+function R.LooksLikeResultAdjacentReply(text)    if not (A.RouterHasPendingSearchResults() and A.RouterHasPendingSelectedResult()) then return false end
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    local penultimateMention = false
+    for _, term in ipairs((R.RESULT_LIST_POSITION_TERMS and R.RESULT_LIST_POSITION_TERMS.penultimate) or {}) do
+        if R.HasNormalizedPhrase(norm, term) then
+            penultimateMention = true
+            break
+        end
+    end
+    local compareIntent = R.ContainsAny(norm, { "compare", "difference", "differences", "vs", "versus", "better" })
+    local function compareMentions(term)
+        if not compareIntent then return false end
+        local padded = " " .. norm .. " "
+        if padded:find(" compare " .. term .. " ", 1, true)
+            or padded:find(" between " .. term .. " ", 1, true) then
+            return true
+        end
+        for _, separator in ipairs({ " vs ", " versus ", " and ", " or ", " to ", " with " }) do
+            if padded:find(" " .. term .. separator, 1, true)
+                or padded:find(separator .. term .. " ", 1, true) then
+                return true
+            end
+        end
+        return false
+    end
+    local function termMatches(term)
+        term = R.Normalize(term)
+        if term == "" then return false end
+        if penultimateMention and term == "next" then return false end
+        if norm == term or norm == "the " .. term then return true end
+        local bare = term:find("%s", 1, true) == nil
+        if not bare and R.HasNormalizedPhrase(norm, term) then return true end
+        for j = 1, #R.RESULT_ORDINAL_ACTIONS do
+            local action = R.RESULT_ORDINAL_ACTIONS[j]
+            if R.ResultOrdinalActionTargetMatches(norm, action .. " the " .. term)
+                or R.ResultOrdinalActionTargetMatches(norm, action .. " " .. term) then
+                return true
+            end
+        end
+        return compareMentions(term)
+    end
+    for _, terms in pairs(R.RESULT_ADJACENT_TERMS or {}) do
+        for i = 1, #terms do
+            if termMatches(terms[i]) then return true end
+        end
+    end
+    return false
+end
+
+function R.LooksLikeResultOrdinalSuffixReply(text)    if not A.RouterHasPendingSearchResults() then return false end
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    if norm:match("^%d+%a%a$") or norm:match("^the%s+%d+%a%a$") then return true end
+    for i = 1, 10 do
+        local token = R.OrdinalSuffixForIndex(i)
+        if token then
+            for j = 1, #R.RESULT_ORDINAL_NOUNS do
+                local noun = R.RESULT_ORDINAL_NOUNS[j]
+                if noun ~= "one"
+                    and (R.HasNormalizedPhrase(norm, noun .. " " .. token)
+                        or R.HasNormalizedPhrase(norm, "the " .. noun .. " " .. token)
+                        or R.HasNormalizedPhrase(norm, token .. " " .. noun)
+                        or R.HasNormalizedPhrase(norm, "the " .. token .. " " .. noun)) then
+                    return true
+                end
+            end
+            for j = 1, #R.RESULT_ORDINAL_ACTIONS do
+                local action = R.RESULT_ORDINAL_ACTIONS[j]
+                if R.ResultOrdinalActionTargetMatches(norm, action .. " the " .. token)
+                    or R.ResultOrdinalActionTargetMatches(norm, action .. " " .. token) then
+                    return true
+                end
+            end
+            if R.ContainsAny(norm, { "vs", "versus" }) and R.HasNormalizedPhrase(norm, token) then return true end
+        end
+    end
+    return false
+end
+
+function R.LooksLikeResultNumberWordReply(text)    if not A.RouterHasPendingSearchResults() then return false end
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    for i = 1, #R.RESULT_NUMBER_WORDS do
+        local word = R.RESULT_NUMBER_WORDS[i]
+        if norm == word or norm == "the " .. word then return true end
+        if R.HasNormalizedPhrase(norm, "result " .. word)
+            or R.HasNormalizedPhrase(norm, "option " .. word)
+            or R.HasNormalizedPhrase(norm, "choice " .. word)
+            or R.HasNormalizedPhrase(norm, "number " .. word) then
+            return true
+        end
+        for j = 1, #R.RESULT_ORDINAL_ACTIONS do
+            local action = R.RESULT_ORDINAL_ACTIONS[j]
+            if R.ResultOrdinalActionTargetMatches(norm, action .. " the " .. word)
+                or R.ResultOrdinalActionTargetMatches(norm, action .. " " .. word) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 function R.LooksLikePendingResultReply(text)    local norm = R.Normalize(text)
     if norm == "" then return false end
+    if (R.HasNormalizedPhrase(norm, "current value") or R.HasNormalizedPhrase(norm, "value now"))
+        and R.LastChangeFollowupHasExplicitOtherSubject and R.LastChangeFollowupHasExplicitOtherSubject(norm)
+    then
+        if not (norm:match("result%s+%d+")
+            or norm:match("option%s+%d+")
+            or norm:match("choice%s+%d+")
+            or norm:match("#%d+")
+            or R.LooksLikeResultOrdinalReply(text)
+            or R.LooksLikeResultOrdinalSuffixReply(text)
+            or R.LooksLikeResultNumericReply(text)
+            or R.LooksLikeResultListPositionReply(text)
+            or R.LooksLikeResultAdjacentReply(text)
+            or (A._PendingResultLabelReply and A._PendingResultLabelReply(text))
+            or R.LooksLikeResultNumberWordReply(text)) then
+            return false
+        end
+    end
     if R.LooksLikeRegistrySettingDecisionQuestion and R.LooksLikeRegistrySettingDecisionQuestion(norm) then return false end
     if R.LooksLikeRegistrySettingTroubleshootingQuestion and R.LooksLikeRegistrySettingTroubleshootingQuestion(norm) then return false end
     if norm:match("^%d+$") then return true end
+    if norm:match("#%d+") then return true end
+    if A._PendingResultLabelReply and A._PendingResultLabelReply(text) then return true end
+    if R.LooksLikeResultNumericReply(text) then return true end
+    if R.LooksLikeResultListPositionReply(text) then return true end
+    if R.LooksLikeResultAdjacentReply(text) then return true end
+    if R.LooksLikeResultOrdinalSuffixReply(text) then return true end
+    if R.LooksLikeResultNumberWordReply(text) then return true end
     if norm:match("^run%s+%d+") or norm:match("^execute%s+%d+") or norm:match("^compare%s+%d+") then return true end
     if R.IsStandaloneCancelReply(text) then return true end
     if R.LooksLikeResultOrdinalReply(text) then return true end
@@ -4678,6 +4998,13 @@ function R.LooksLikePendingResultReply(text)    local norm = R.Normalize(text)
     end
     if R.ContainsAny(norm, {
         "open it", "open that", "open this",
+        "where is it", "where is that", "where is this",
+        "where are they", "where are these", "where are those",
+        "where do i change it", "where do i change that", "where do i change this",
+        "where can i change it", "where can i change that", "where can i change this",
+        "which page is it on", "which page is that on", "which page is this on",
+        "what page is it on", "what page is that on", "what page is this on",
+        "what menu is it in", "what menu is that in", "what menu is this in",
         "show me where", "take me there", "go there",
         "tell me more", "more details",
         "more options", "more settings", "more like this",
@@ -4687,6 +5014,14 @@ function R.LooksLikePendingResultReply(text)    local norm = R.Normalize(text)
         "why should i use it", "why should i use this", "why should i use that",
         "what is it for", "what is this for", "what is that for",
         "what does it help with", "what does this help with", "what does that help with",
+        "which one should i", "which should i",
+        "which result should i", "which option should i",
+        "what should i pick", "what should i use", "what should i choose",
+        "should i use", "should i pick", "should i choose", "should i change", "should i open",
+        "what should i change first", "which should i change first",
+        "which one is safer", "which result is safer", "which option is safer",
+        "safest result", "safest option", "best result", "best option",
+        "recommend a result", "recommend an option", "recommend one",
     }) then
         return true
     end
@@ -4697,6 +5032,17 @@ function R.LooksLikePendingResultReply(text)    local norm = R.Normalize(text)
         "difference between them", "differences between them",
         "difference between the results", "differences between the results",
         "which is better", "which one is better",
+    }) then
+        return true
+    end
+    if A.RouterHasPendingSearchResults() and R.ContainsAny(norm, {
+        "what can i set", "what can it be", "what can this be", "what can that be",
+        "what values", "which values", "allowed values", "supported values",
+        "valid values", "available values", "possible values",
+        "what choices", "which choices", "available choices", "supported choices",
+        "choices for", "options for this", "options for it",
+        "what range", "which range", "allowed range", "supported range", "valid range",
+        "minimum", "maximum", "min max",
     }) then
         return true
     end
@@ -4799,6 +5145,11 @@ function R.TryCorrectionShortcut(text, coreHandler)    local norm = R.Normalize(
     if norm == "" then return nil end
     if norm:match("^can%s+i%s+undo") or norm:match("^can%s+you%s+undo")
         or norm:match("^can%s+i%s+redo") or norm:match("^can%s+you%s+redo")
+    then
+        return nil
+    end
+    if (R.HasNormalizedPhrase(norm, "current value") or R.HasNormalizedPhrase(norm, "value now"))
+        and R.LastChangeFollowupHasExplicitOtherSubject and R.LastChangeFollowupHasExplicitOtherSubject(norm)
     then
         return nil
     end
@@ -5903,6 +6254,12 @@ function R.ContentGuidanceReply(text)    local norm = R.Normalize(text)
 end
 
 function R.CombinedGuidanceReply(text)    local norm = R.Normalize(text)
+    local broadSetupMutation = R.ContainsAny(norm, R.SETUP_GUIDANCE_TERMS)
+        or norm:match("^make%s+.+%s+ui%s+better") ~= nil
+        or norm:match("^make%s+.+%s+ui%s+cleaner") ~= nil
+        or norm:match("^make%s+.+%s+interface%s+better") ~= nil
+        or norm:match("^make%s+.+%s+interface%s+cleaner") ~= nil
+    if (R.LooksLikeMutation(norm) or R.StartsWithMutationCommand(norm)) and not broadSetupMutation then return nil end
     local role = R.DetectGuidanceRole(norm)
     local context = R.DetectGuidanceContext(norm)
     if not role or not context then return nil end
@@ -6130,6 +6487,51 @@ R.BROAD_SETTING_EXPLAIN_SUBJECTS = {
     ["it"] = true,
 }
 
+R.BROAD_CURRENT_VALUE_SUBJECTS = {
+    ["width"] = true,
+    ["height"] = true,
+    ["size"] = true,
+    ["scale"] = true,
+    ["alpha"] = true,
+    ["opacity"] = true,
+    ["color"] = true,
+    ["colour"] = true,
+    ["font"] = true,
+    ["font size"] = true,
+    ["text size"] = true,
+    ["texture"] = true,
+    ["bar"] = true,
+    ["bar height"] = true,
+    ["bar width"] = true,
+    ["castbar height"] = true,
+    ["cast bar height"] = true,
+    ["castbar width"] = true,
+    ["cast bar width"] = true,
+    ["frame height"] = true,
+    ["frame width"] = true,
+    ["icon"] = true,
+    ["icon size"] = true,
+    ["anchor"] = true,
+    ["anchor point"] = true,
+    ["x offset"] = true,
+    ["y offset"] = true,
+    ["offset"] = true,
+    ["layer"] = true,
+    ["spacing"] = true,
+    ["growth"] = true,
+    ["count"] = true,
+    ["visibility"] = true,
+    ["enabled"] = true,
+}
+
+function R.RegistryCurrentValueSubjectTooBroad(subject)
+    subject = R.Normalize(subject)
+    if subject == "" then return true end
+    if R.BROAD_PAGE_LOCATION_SUBJECTS[subject] or R.BROAD_SETTING_EXPLAIN_SUBJECTS[subject] then return true end
+    if R.BROAD_CURRENT_VALUE_SUBJECTS[subject] then return true end
+    return false
+end
+
 function R.RegistryLocationSubject(norm)
     norm = R.Normalize(norm)
     local prefixes = {
@@ -6217,6 +6619,206 @@ function R.RegistryExplainSubject(norm)
     norm = norm:gsub("%s+for$", "")
     norm = norm:gsub("^the%s+", "")
     return R.Trim(norm)
+end
+
+function R.RegistryCurrentValueSubject(norm)
+    norm = R.Normalize(norm)
+    local prefixes = {
+        "current value of ", "current value for ",
+        "current val of ", "current val for ",
+        "curent value of ", "curent value for ",
+        "curent val of ", "curent val for ",
+        "show current value of ", "show current value for ",
+        "show current val of ", "show current val for ",
+        "show curent value of ", "show curent value for ",
+        "show me current value of ", "show me current value for ",
+        "show me current val of ", "show me current val for ",
+        "show me curent value of ", "show me curent value for ",
+        "show the current value of ", "show the current value for ",
+        "show the current val of ", "show the current val for ",
+        "show the curent value of ", "show the curent value for ",
+        "show me the current value of ", "show me the current value for ",
+        "show me the current val of ", "show me the current val for ",
+        "show me the curent value of ", "show me the curent value for ",
+        "get current value of ", "get current value for ",
+        "get current val of ", "get current val for ",
+        "get curent value of ", "get curent value for ",
+        "get the current value of ", "get the current value for ",
+        "get the current val of ", "get the current val for ",
+        "get the curent value of ", "get the curent value for ",
+        "what is the current value of ", "what is the current value for ",
+        "what is the current val of ", "what is the current val for ",
+        "what is the curent value of ", "what is the curent value for ",
+        "what is current value of ", "what is current value for ",
+        "what is current val of ", "what is current val for ",
+        "what is curent value of ", "what is curent value for ",
+        "what value is ", "what value does ",
+        "what is the value of ", "what is the value for ",
+        "what is ", "what are ", "what s ", "whats ",
+        "is the ", "is ",
+        "are the ", "are ",
+        "do i have the ", "do i have ", "do we have the ", "do we have ",
+        "do the ", "do ", "does the ", "does ", "will the ", "will ",
+        "can i see the ", "can i see ", "can we see the ", "can we see ",
+        "can i se the ", "can i se ", "can we se the ", "can we se ",
+    }
+    for i = 1, #prefixes do
+        local prefix = prefixes[i]
+        if norm:sub(1, #prefix) == prefix then
+            norm = R.Trim(norm:sub(#prefix + 1))
+            break
+        end
+    end
+    norm = norm:gsub("%s+set%s+to$", "")
+    norm = norm:gsub("%s+currently%s+set%s+to$", "")
+    norm = norm:gsub("%s+set%s+at$", "")
+    norm = norm:gsub("%s+currently$", "")
+    norm = norm:gsub("%s+right%s+now$", "")
+    norm = norm:gsub("%s+turned%s+on$", "")
+    norm = norm:gsub("%s+turned%s+off$", "")
+    norm = norm:gsub("%s+turnd%s+on$", "")
+    norm = norm:gsub("%s+turnd%s+off$", "")
+    norm = norm:gsub("%s+turn%s+on$", "")
+    norm = norm:gsub("%s+turn%s+off$", "")
+    norm = norm:gsub("%s+switched%s+on$", "")
+    norm = norm:gsub("%s+switched%s+off$", "")
+    norm = norm:gsub("%s+switchd%s+on$", "")
+    norm = norm:gsub("%s+switchd%s+off$", "")
+    norm = norm:gsub("%s+show%s+right%s+now$", "")
+    norm = norm:gsub("%s+shwo%s+right%s+now$", "")
+    norm = norm:gsub("%s+show%s+now$", "")
+    norm = norm:gsub("%s+shwo%s+now$", "")
+    norm = norm:gsub("%s+show$", "")
+    norm = norm:gsub("%s+shwo$", "")
+    norm = norm:gsub("%s+shows$", "")
+    norm = norm:gsub("%s+shwos$", "")
+    norm = norm:gsub("%s+now$", "")
+    norm = norm:gsub("%s+enabled$", "")
+    norm = norm:gsub("%s+enabld$", "")
+    norm = norm:gsub("%s+enabeld$", "")
+    norm = norm:gsub("%s+disabled$", "")
+    norm = norm:gsub("%s+disabld$", "")
+    norm = norm:gsub("%s+disabeld$", "")
+    norm = norm:gsub("%s+visible$", "")
+    norm = norm:gsub("%s+visble$", "")
+    norm = norm:gsub("%s+visibl$", "")
+    norm = norm:gsub("%s+shown$", "")
+    norm = norm:gsub("%s+shwon$", "")
+    norm = norm:gsub("%s+showing$", "")
+    norm = norm:gsub("%s+hidden$", "")
+    norm = norm:gsub("%s+hiden$", "")
+    norm = norm:gsub("%s+on$", "")
+    norm = norm:gsub("%s+off$", "")
+    norm = norm:gsub("^the%s+", "")
+    return R.Trim(norm)
+end
+
+function R.LooksLikeRegistrySettingStateQuestion(norm)
+    norm = R.Normalize(norm)
+    if norm == "" then return false end
+    if not (norm:match("^is%s+") or norm:match("^is%s+the%s+")
+        or norm:match("^are%s+") or norm:match("^are%s+the%s+")
+        or norm:match("^do%s+") or norm:match("^do%s+i%s+have%s+") or norm:match("^do%s+we%s+have%s+")
+        or norm:match("^does%s+") or norm:match("^will%s+")
+        or norm:match("^can%s+i%s+see%s+") or norm:match("^can%s+we%s+see%s+")
+        or norm:match("^can%s+i%s+se%s+") or norm:match("^can%s+we%s+se%s+"))
+    then
+        return false
+    end
+    if not R.ContainsAny(norm, {
+        "enabled", "disabled", "visible", "shown", "showing", "hidden",
+        "turned on", "turned off", "switched on", "switched off", "on", "off",
+        "show", "shows", "shwo", "shwos", "see", "se",
+    }) then
+        return false
+    end
+    if R.ContainsAny(norm, { "safe", "needed", "necessary", "recommended", "better", "good", "bad" }) then return false end
+    return true
+end
+
+function R.RegistryCurrentValueExpectedBoolean(norm)
+    norm = R.Normalize(norm)
+    if R.ContainsAny(norm, { "disabled", "hidden", "turned off", "turnd off", "turn off", "switched off", "switchd off", "off" }) then return false end
+    if R.ContainsAny(norm, { "enabled", "visible", "shown", "showing", "turned on", "turnd on", "turn on", "switched on", "switchd on", "on" }) then return true end
+    if R.LooksLikeRegistrySettingStateQuestion(norm)
+        and (R.ContainsAny(norm, { "show", "shows", "shwo", "shwos" })
+            or norm:match("^can%s+i%s+see%s+") or norm:match("^can%s+we%s+see%s+")
+            or norm:match("^can%s+i%s+se%s+") or norm:match("^can%s+we%s+se%s+"))
+    then
+        return true
+    end
+    return nil
+end
+
+function R.LooksLikeRegistrySettingCurrentValueQuestion(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    if A.RouterLooksLikeExplicitSearchRequest and A.RouterLooksLikeExplicitSearchRequest(norm) then return false end
+    if norm == "current value" or norm == "value now" then return false end
+    if R.ContainsAny(norm, {
+        "current value of", "current value for",
+        "current val of", "current val for",
+        "curent value of", "curent value for",
+        "curent val of", "curent val for",
+        "show current value of", "show current value for",
+        "show current val of", "show current val for",
+        "show curent value of", "show curent value for",
+        "show me current value of", "show me current value for",
+        "show me current val of", "show me current val for",
+        "show me curent value of", "show me curent value for",
+        "show the current value of", "show the current value for",
+        "show the current val of", "show the current val for",
+        "show the curent value of", "show the curent value for",
+        "show me the current value of", "show me the current value for",
+        "show me the current val of", "show me the current val for",
+        "show me the curent value of", "show me the curent value for",
+        "get current value of", "get current value for",
+        "get current val of", "get current val for",
+        "get curent value of", "get curent value for",
+        "get the current value of", "get the current value for",
+        "get the current val of", "get the current val for",
+        "get the curent value of", "get the curent value for",
+        "what is the current value of", "what is the current value for",
+        "what is the current val of", "what is the current val for",
+        "what is the curent value of", "what is the curent value for",
+        "what is current value of", "what is current value for",
+        "what is current val of", "what is current val for",
+        "what is curent value of", "what is curent value for",
+        "what value is", "what is the value of", "what is the value for",
+    }) then
+        local subject = R.RegistryCurrentValueSubject(norm)
+        if subject == "" then return false end
+        if subject == "it" or subject == "that" or subject == "this" then return false end
+        if subject:match("^result%s+%d+") or subject:match("^option%s+%d+") then return false end
+        return true
+    end
+    if (norm:match("^what%s+is%s+") or norm:match("^what%s+are%s+") or norm:match("^what%s+s%s+") or norm:match("^whats%s+"))
+        and R.ContainsAny(norm, { "set to", "set at", "currently", "right now" })
+    then
+        local subject = R.RegistryCurrentValueSubject(norm)
+        if subject == "" or subject == norm then return false end
+        if subject == "it" or subject == "that" or subject == "this" then return false end
+        if subject:match("^result%s+%d+") or subject:match("^option%s+%d+") then return false end
+        return true
+    end
+    if (norm:match("^is%s+") or norm:match("^is%s+the%s+") or norm:match("^are%s+") or norm:match("^are%s+the%s+"))
+        and R.ContainsAny(norm, { "enabled", "disabled", "visible", "shown", "showing", "hidden", "on", "off" })
+        and not R.ContainsAny(norm, { "safe", "needed", "necessary", "recommended", "better", "good", "bad" })
+    then
+        local subject = R.RegistryCurrentValueSubject(norm)
+        if subject == "" or subject == norm then return false end
+        if subject == "it" or subject == "that" or subject == "this" then return false end
+        if subject:match("^result%s+%d+") or subject:match("^option%s+%d+") then return false end
+        return true
+    end
+    if R.LooksLikeRegistrySettingStateQuestion(norm) then
+        local subject = R.RegistryCurrentValueSubject(norm)
+        if subject == "" or subject == norm then return false end
+        if subject == "it" or subject == "that" or subject == "this" then return false end
+        if subject:match("^result%s+%d+") or subject:match("^option%s+%d+") then return false end
+        return true
+    end
+    return false
 end
 
 function R.LooksLikeRegistrySettingExplainQuestion(text)
@@ -6476,9 +7078,15 @@ function R.FallbackPageForSetting(setting)
         if frameType == "aura" then return "gf_auras" end
         local attr = tostring(setting.attribute or "")
         local key = tostring(setting.key or "")
+        local compactAttr = R.Normalize(attr):gsub("%s+", "")
+        local compactKey = R.Normalize(key):gsub("%s+", "")
         if category:find("indicator", 1, true)
-            or R.Normalize(attr):gsub("%s+", ""):find("targetedspells", 1, true)
-            or R.Normalize(key):gsub("%s+", ""):find("targetedspells", 1, true)
+            or compactAttr:find("targetedspells", 1, true)
+            or compactKey:find("targetedspells", 1, true)
+            or compactAttr:find("statusicon", 1, true)
+            or compactKey:find("statusicon", 1, true)
+            or compactAttr:find("roleicon", 1, true)
+            or compactKey:find("roleicon", 1, true)
         then
             return "gf_indicators"
         end
@@ -6739,6 +7347,184 @@ function R.RegistryEnumChoicesLine(item)
     return "Choices: " .. table.concat(values, ", ") .. "."
 end
 
+R.LAST_CHANGE_VALUE_FOLLOWUP_TERMS = {
+    "what is it now", "what is that now", "what is this now",
+    "what is it set to", "what is that set to", "what is this set to",
+    "what value is it", "what value is that", "what value is this",
+    "current value", "value now", "what is the value",
+    "is it on", "is that on", "is this on",
+    "is it off", "is that off", "is this off",
+    "is it enabled", "is that enabled", "is this enabled",
+    "is it disabled", "is that disabled", "is this disabled",
+}
+
+R.LAST_CHANGE_LOCATION_FOLLOWUP_TERMS = {
+    "where is it", "where is that", "where is this",
+    "where do i change it", "where do i change that", "where do i change this",
+    "where can i change it", "where can i change that", "where can i change this",
+    "which page is it on", "which page is that on", "which page is this on",
+    "what page is it on", "what page is that on", "what page is this on",
+    "what menu is it in", "what menu is that in", "what menu is this in",
+}
+
+R.LAST_CHANGE_EXPLAIN_FOLLOWUP_TERMS = {
+    "what does it do", "what does that do", "what does this do",
+    "what does it mean", "what does that mean", "what does this mean",
+    "explain it", "explain that", "explain this",
+    "why should i use it", "why should i use that", "why should i use this",
+    "why would i use it", "why would i use that", "why would i use this",
+    "what is it for", "what is that for", "what is this for",
+    "what does it help with", "what does that help with", "what does this help with",
+}
+
+function R.LastChangedSettingItem()
+    local ctx = A.GetContext and A.GetContext() or nil
+    local key = tostring(ctx and ctx.lastSetting or "")
+    if key == "" and type(ctx and ctx.lastChangeBundle) == "table" then
+        for i = #ctx.lastChangeBundle, 1, -1 do
+            key = tostring(ctx.lastChangeBundle[i] and ctx.lastChangeBundle[i].key or "")
+            if key ~= "" then break end
+        end
+    end
+    if key == "" then return nil, ctx end
+
+    local registry = A.Registry
+    local setting = registry and type(registry.GetSetting) == "function" and registry:GetSetting(key) or nil
+    if not setting then return nil, ctx end
+
+    local page = setting.page or R.FallbackPageForSetting(setting)
+    local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
+    local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or key)
+    return {
+        kind = "setting",
+        key = key,
+        settingKey = key,
+        label = label,
+        page = page,
+        pageLabel = pageLabel,
+        category = setting.category,
+        controlType = setting.type,
+        setting = setting,
+        canOpen = page ~= nil,
+        canExplain = true,
+    }, ctx
+end
+
+function R.LastChangeFollowupHasSubject(norm)
+    norm = R.Normalize(norm)
+    if norm == "current value" or norm == "value now" then return true end
+    if R.HasNormalizedPhrase(norm, "it")
+        or R.HasNormalizedPhrase(norm, "that")
+        or R.HasNormalizedPhrase(norm, "this")
+    then
+        return true
+    end
+    return R.ContainsAny(norm, {
+        "last setting", "last option", "same setting", "same option",
+        "the setting", "the option", "last change", "previous change",
+    })
+end
+
+function R.LastChangeFollowupHasExplicitOtherSubject(norm)
+    norm = R.Normalize(norm)
+    if R.ContainsAny(norm, {
+        "result 1", "result 2", "result 3", "option 1", "option 2", "option 3",
+        "choice 1", "choice 2", "choice 3",
+    }) then
+        return true
+    end
+    if norm:find(" of ", 1, true)
+        and not R.ContainsAny(norm, { "of it", "of that", "of this", "of the last setting", "of last setting", "of the last option", "of last option" })
+    then
+        return true
+    end
+    if norm:find(" for ", 1, true)
+        and not R.ContainsAny(norm, { "for it", "for that", "for this", "for the last setting", "for last setting", "for the last option", "for last option" })
+    then
+        return true
+    end
+    return false
+end
+
+function R.LastChangedSettingCurrentValueLine(item, ctx)
+    local setting = item and item.setting
+    if not setting then return nil end
+    local value
+    if type(setting.get) == "function" then
+        value = setting.get()
+    else
+        value = ctx and ctx.lastValue
+    end
+    local valueLabel = R.RegistryValueLabel(setting, value)
+    if valueLabel == nil or valueLabel == "" then return nil end
+    return "Current value: " .. tostring(item.label or setting.label or "that setting") .. " is " .. tostring(valueLabel) .. "."
+end
+
+function R.TryLastChangeSettingFollowup(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    if not R.LastChangeFollowupHasSubject(norm) or R.LastChangeFollowupHasExplicitOtherSubject(norm) then return nil end
+
+    local asksValue = R.ContainsAny(norm, R.LAST_CHANGE_VALUE_FOLLOWUP_TERMS)
+    local asksLocation = R.ContainsAny(norm, R.LAST_CHANGE_LOCATION_FOLLOWUP_TERMS)
+    local asksExplain = R.ContainsAny(norm, R.LAST_CHANGE_EXPLAIN_FOLLOWUP_TERMS)
+    if not asksValue and not asksLocation and not asksExplain then return nil end
+
+    local item, ctx = R.LastChangedSettingItem()
+    if not item then return nil end
+
+    local label = tostring(item.label or "Last changed setting")
+    local pageLabel = tostring(item.pageLabel or "the matching MSUF page")
+    local controlType = tostring(item.controlType or (item.setting and item.setting.type) or "setting")
+    local valueLine = R.LastChangedSettingCurrentValueLine(item, ctx)
+    local example = R.RegistrySettingExample(item)
+    local lines = {}
+
+    if asksLocation and not asksValue and not asksExplain then
+        lines[#lines + 1] = label .. " setting location"
+        lines[#lines + 1] = "This is the last setting I changed. It lives on " .. pageLabel .. " and is " .. R.RegistrySettingTypeText(controlType) .. ". I did not change it from this location question."
+        if valueLine then lines[#lines + 1] = valueLine end
+        if example and example ~= "" then lines[#lines + 1] = "Examples: open " .. pageLabel:lower() .. "; " .. example .. "." end
+        lines[#lines + 1] = "You can ask: what does it do | what is it now | undo"
+        return {
+            text = table.concat(lines, "\n"),
+            status = "info",
+            result = "info",
+            summary = "Shows where the last changed setting lives.",
+        }
+    end
+
+    if asksValue and not asksExplain then
+        lines[#lines + 1] = label .. " current value"
+        lines[#lines + 1] = "This is the last setting I changed."
+        lines[#lines + 1] = valueLine or "I do not have a saved current value for " .. label .. "."
+        lines[#lines + 1] = "It lives on " .. pageLabel .. ". Ask 'undo' to revert the last Assistant change if needed."
+        lines[#lines + 1] = "You can ask: where is it | what does it do" .. (example and (" | " .. example) or "")
+        return {
+            text = table.concat(lines, "\n"),
+            status = "info",
+            result = "info",
+            summary = "Shows the current value for the last changed setting.",
+        }
+    end
+
+    lines[#lines + 1] = label .. " explanation"
+    lines[#lines + 1] = "This is the last setting I changed."
+    lines[#lines + 1] = R.RegistrySettingPurpose(item)
+    lines[#lines + 1] = label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType) .. ". I did not change it from this explanation question."
+    if valueLine then lines[#lines + 1] = valueLine end
+    local choicesLine = R.RegistryEnumChoicesLine(item)
+    if choicesLine then lines[#lines + 1] = choicesLine end
+    if example and example ~= "" then lines[#lines + 1] = "Examples: open " .. pageLabel:lower() .. "; " .. example .. "." end
+    lines[#lines + 1] = "You can ask: where is it | what is it now | undo"
+    return {
+        text = table.concat(lines, "\n"),
+        status = "info",
+        result = "info",
+        summary = "Explains the last changed setting.",
+    }
+end
+
 function R.RegistryRelatedLine(close)
     if type(close) ~= "table" or #close <= 1 then return nil end
     local related = {}
@@ -6762,6 +7548,99 @@ function R.RegistrySubjectMatchesLabel(item, subject)
         end
     end
     return matched > 0
+end
+
+function R.RegistrySettingCurrentValueLine(item)
+    local setting = item and item.setting
+    if not setting or type(setting.get) ~= "function" then return nil end
+    local value = setting.get()
+    local valueLabel = R.RegistryValueLabel(setting, value)
+    if valueLabel == nil or valueLabel == "" then return nil end
+    local label = tostring(item.label or setting.label or "MSUF setting")
+    return "Current value: " .. label .. " is " .. tostring(valueLabel) .. "."
+end
+
+function R.RegistrySettingItemForKey(settingKey)
+    settingKey = tostring(settingKey or "")
+    if settingKey == "" then return nil end
+    local registry = A.Registry
+    local setting = registry and type(registry.GetSetting) == "function" and registry:GetSetting(settingKey) or nil
+    if not setting then return nil end
+    local page = setting.page or R.FallbackPageForSetting(setting)
+    local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, "MSUF page") or nil
+    local label = type(A.DisplaySettingLabel) == "function" and A.DisplaySettingLabel(setting) or tostring(setting.label or settingKey)
+    return {
+        kind = "setting",
+        key = settingKey,
+        settingKey = settingKey,
+        label = label,
+        page = page,
+        pageLabel = pageLabel,
+        category = setting.category,
+        controlType = setting.type,
+        setting = setting,
+        canOpen = page ~= nil,
+        canExplain = true,
+    }
+end
+
+function R.RegistryVisibilityCurrentValueSettingKey(subject, norm)
+    subject = R.Normalize(subject)
+    norm = R.Normalize(norm)
+    if subject == "" then return nil end
+    if not R.ContainsAny(norm, {
+        "visible", "visble", "shown", "showing", "hidden", "hiden",
+        "enabled", "enabld", "disabled", "disabld",
+        "turned on", "turnd on", "turned off", "turnd off",
+        "on", "off", "show", "shows", "shwo", "shwos", "see", "se",
+    }) then return nil end
+
+    if R.ContainsAny(subject, { "party frame", "party frames", "party group frame", "party group frames" }) then return "gf_party.enabled" end
+    if R.ContainsAny(subject, { "raid frame", "raid frames", "raid group frame", "raid group frames" }) then return "gf_raid.enabled" end
+    if R.ContainsAny(subject, { "mythic raid frame", "mythic raid frames", "mythic frame", "mythic frames", "mythic group frame", "mythic group frames" }) then return "gf_mythicraid.enabled" end
+
+    if R.ContainsAny(subject, { "player frame", "my frame", "self frame" }) then return "player.enabled" end
+    if R.ContainsAny(subject, { "target frame", "target unit frame" }) then return "target.enabled" end
+    if R.ContainsAny(subject, { "focus frame", "focus unit frame" }) then return "focus.enabled" end
+    if R.ContainsAny(subject, { "pet frame", "pet unit frame" }) then return "pet.enabled" end
+    if R.ContainsAny(subject, { "boss frame", "boss frames", "boss unit frame", "boss unit frames" }) then return "boss.enabled" end
+    if R.ContainsAny(subject, { "target of target frame", "target of target unit frame", "targettarget frame", "tot frame" }) then return "targettarget.enabled" end
+    if R.ContainsAny(subject, { "focus target frame", "focus target unit frame", "focustarget frame" }) then return "focustarget.enabled" end
+    return nil
+end
+
+function R.RegistryCurrentValueClarification(subject, entries, limit)
+    local lines = { "Current value clarification" }
+    local visible = math.min(tonumber(limit) or 3, #(entries or {}))
+    if visible > 0 then
+        lines[#lines + 1] = "I found multiple possible MSUF settings for " .. tostring(subject or "that request") .. ":"
+        for i = 1, visible do
+            local item = entries[i] and entries[i].item or {}
+            local line = R.RegistryLocationLine(i, item)
+            local valueLine = R.RegistrySettingCurrentValueLine(item)
+            if valueLine then
+                line = line .. "; " .. valueLine
+            end
+            lines[#lines + 1] = line
+        end
+        lines[#lines + 1] = "Pick a result or ask for the exact setting name. I did not change anything."
+        lines[#lines + 1] = "You can ask: current value of result 1 | explain result 1 | open result 1"
+        return {
+            text = table.concat(lines, "\n"),
+            status = "info",
+            result = "info",
+            summary = "Assistant registry current value clarification",
+            searchResults = R.RegistryLocationResultFollowups(entries, visible),
+        }
+    end
+
+    lines[#lines + 1] = "I could not confidently identify which MSUF setting you mean. Name the frame and setting, for example 'current value of target cast bar height'."
+    return {
+        text = table.concat(lines, "\n"),
+        status = "info",
+        result = "info",
+        summary = "Assistant registry current value clarification",
+    }
 end
 
 R.CROSS_FRAME_TEXT_UNIT_TERMS = {
@@ -7109,6 +7988,84 @@ function A.RouterTryRegistrySettingExplainShortcut(text, coreHandler)
         result = "applied",
         summary = "Assistant registry setting explanation",
         searchResults = R.RegistryLocationResultFollowups(close, #close),
+    }
+end
+
+function A.RouterTryRegistrySettingCurrentValueShortcut(text, coreHandler)
+    local norm = R.Normalize(text)
+    if not R.LooksLikeRegistrySettingCurrentValueQuestion(norm) then return nil end
+    local subject = R.RegistryCurrentValueSubject(norm)
+    local directKey = R.RegistryVisibilityCurrentValueSettingKey(subject, norm)
+    local directItem = directKey and R.RegistrySettingItemForKey(directKey) or nil
+    local entries = directItem and { { item = directItem, score = 9999, rawScore = 9999 } }
+        or R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16)
+    if not entries or #entries == 0 then return R.RegistryCurrentValueClarification(subject, nil, 0) end
+    local top = entries[1]
+    if not directItem and (not top or (tonumber(top.rawScore) or 0) < 220) then
+        return R.RegistryCurrentValueClarification(subject, nil, 0)
+    end
+    if not directItem and R.RegistryCurrentValueSubjectTooBroad(subject) then
+        return R.RegistryCurrentValueClarification(subject, entries, 3)
+    end
+
+    local exactLabelMatch = directItem ~= nil or R.RegistrySubjectMatchesLabel(top and top.item, subject)
+    if not top or (top.score < 340 and not (exactLabelMatch and top.score >= 260)) then
+        return R.RegistryCurrentValueClarification(subject, entries, 3)
+    end
+    if (tonumber(top.rawScore) or 0) < 260 and not R.RegistryRequestedScope(norm) then
+        return R.RegistryCurrentValueClarification(subject, entries, 3)
+    end
+
+    local close = { top }
+    for i = 2, #entries do
+        if #close >= 3 then break end
+        local includeRelated = entries[i].score >= top.score - 140
+            and (tonumber(entries[i].rawScore) or 0) >= (tonumber(top.rawScore) or 0) - 120
+            and R.RegistryCloseMatchAllowed(entries[i].item, norm)
+        if not includeRelated and exactLabelMatch
+            and R.RegistrySubjectMatchesLabel(entries[i].item, subject)
+            and R.RegistryCloseMatchAllowed(entries[i].item, norm)
+        then
+            includeRelated = true
+        end
+        if includeRelated then close[#close + 1] = entries[i] end
+    end
+    if #close > 1 and not exactLabelMatch then
+        return R.RegistryCurrentValueClarification(subject, close, #close)
+    end
+
+    local item = top.item or {}
+    local setting = item.setting
+    local label = tostring(item.label or "MSUF setting")
+    local pageLabel = tostring(item.pageLabel or "MSUF page")
+    local controlType = tostring(item.controlType or (setting and setting.type) or "setting")
+    local valueLine = R.RegistrySettingCurrentValueLine(item)
+    local example = R.RegistrySettingExample(item)
+    local lines = { label .. " current value" }
+
+    local expectedBoolean = R.RegistryCurrentValueExpectedBoolean(norm)
+    if setting and setting.type == "boolean" and expectedBoolean ~= nil and type(setting.get) == "function" then
+        local current = setting.get()
+        if type(current) == "boolean" then
+            lines[#lines + 1] = (current == expectedBoolean and "Yes." or "No.")
+        end
+    end
+
+    lines[#lines + 1] = valueLine or ("I cannot read a saved current value for " .. label .. " right now.")
+    lines[#lines + 1] = label .. " lives on " .. pageLabel .. ". It is " .. R.RegistrySettingTypeText(controlType) .. ". I did not change it."
+    local choicesLine = R.RegistryEnumChoicesLine(item)
+    if choicesLine then lines[#lines + 1] = choicesLine end
+    local relatedLine = R.RegistryRelatedLine(close)
+    if relatedLine then lines[#lines + 1] = relatedLine end
+    if example and example ~= "" then lines[#lines + 1] = "Examples: open " .. pageLabel:lower() .. "; " .. example .. "." end
+    lines[#lines + 1] = "You can ask: Open " .. pageLabel .. " | Explain Result 1" .. (example and (" | " .. example) or "")
+
+    return {
+        text = table.concat(lines, "\n"),
+        status = "info",
+        result = "info",
+        summary = "Assistant registry setting current value",
+        searchResults = R.RegistryLocationResultFollowups({ top }, 1),
     }
 end
 
@@ -7664,6 +8621,7 @@ function A.RouterLooksLikePendingChoiceTopicSwitch(text)
     if A.RouterLooksLikeMovementSettingTopic and A.RouterLooksLikeMovementSettingTopic(norm) then return true end
     if A.RouterLooksLikeUnitFrameSettingTopic and A.RouterLooksLikeUnitFrameSettingTopic(norm) then return true end
     if R.LooksLikeRegistrySettingDecisionQuestion and R.LooksLikeRegistrySettingDecisionQuestion(norm) then return true end
+    if R.LooksLikeRegistrySettingCurrentValueQuestion and R.LooksLikeRegistrySettingCurrentValueQuestion(norm) then return true end
     if R.LooksLikeRegistrySettingExplainQuestion and R.LooksLikeRegistrySettingExplainQuestion(norm) then return true end
     if R.LooksLikeRegistrySettingTroubleshootingQuestion and R.LooksLikeRegistrySettingTroubleshootingQuestion(norm) then return true end
     if R.LooksLikeRegistrySettingLocationQuestion and R.LooksLikeRegistrySettingLocationQuestion(norm) then return true end
@@ -7734,6 +8692,24 @@ function A.RouteInput(text, coreHandler)
         }
     end
 
+    if not hasBlockingPendingState and not pendingResultReply then
+        local earlyLastChangeSettingFollowupResult = R.TryLastChangeSettingFollowup and R.TryLastChangeSettingFollowup(text)
+        if earlyLastChangeSettingFollowupResult then return earlyLastChangeSettingFollowupResult end
+
+        local earlyRegistrySettingCurrentValueResult = A.RouterTryRegistrySettingCurrentValueShortcut and A.RouterTryRegistrySettingCurrentValueShortcut(text, Core)
+        if earlyRegistrySettingCurrentValueResult then return earlyRegistrySettingCurrentValueResult end
+    end
+
+    if not hasBlockingPendingState and not pendingResultReply
+        and R.LooksLikeDirectDefinitionQuestion(text)
+        and A.Knowledge and type(A.Knowledge.Answer) == "function"
+    then
+        local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
+        if answer then return answer end
+        local noMatch = R.KnowledgeNoMatch(text)
+        if noMatch then return noMatch end
+    end
+
     local safePlanningOverride = A.RouterTrySafePlanningShortcut and A.RouterTrySafePlanningShortcut(text, Core)
     if safePlanningOverride and (pendingResultReply or hasPendingState or not hasBlockingPendingState) then
         return safePlanningOverride
@@ -7763,6 +8739,12 @@ function A.RouteInput(text, coreHandler)
 
         local safePlanningResult = A.RouterTrySafePlanningShortcut and A.RouterTrySafePlanningShortcut(text, Core)
         if safePlanningResult then return safePlanningResult end
+
+        local lastChangeSettingFollowupResult = R.TryLastChangeSettingFollowup and R.TryLastChangeSettingFollowup(text)
+        if lastChangeSettingFollowupResult then return lastChangeSettingFollowupResult end
+
+        local registrySettingCurrentValueResult = A.RouterTryRegistrySettingCurrentValueShortcut and A.RouterTryRegistrySettingCurrentValueShortcut(text, Core)
+        if registrySettingCurrentValueResult then return registrySettingCurrentValueResult end
 
         local registrySettingDecisionResult = A.RouterTryRegistrySettingDecisionShortcut and A.RouterTryRegistrySettingDecisionShortcut(text, Core)
         if registrySettingDecisionResult then return registrySettingDecisionResult end
@@ -7817,6 +8799,12 @@ function A.RouteInput(text, coreHandler)
 
         local pendingSafePlanningResult = A.RouterTrySafePlanningShortcut and A.RouterTrySafePlanningShortcut(text, Core)
         if pendingSafePlanningResult then return pendingSafePlanningResult end
+
+        local pendingLastChangeSettingFollowupResult = R.TryLastChangeSettingFollowup and R.TryLastChangeSettingFollowup(text)
+        if pendingLastChangeSettingFollowupResult then return pendingLastChangeSettingFollowupResult end
+
+        local pendingRegistrySettingCurrentValueResult = A.RouterTryRegistrySettingCurrentValueShortcut and A.RouterTryRegistrySettingCurrentValueShortcut(text, Core)
+        if pendingRegistrySettingCurrentValueResult then return pendingRegistrySettingCurrentValueResult end
 
         local pendingRegistrySettingDecisionResult = A.RouterTryRegistrySettingDecisionShortcut and A.RouterTryRegistrySettingDecisionShortcut(text, Core)
         if pendingRegistrySettingDecisionResult then return pendingRegistrySettingDecisionResult end
@@ -7899,6 +8887,9 @@ function A.RouteInput(text, coreHandler)
         if pendingResult and (not A.RouterIsUnknownResult(pendingResult) or hasBlockingPendingState) then return pendingResult end
     end
 
+    local earlyHelpContextResult = R.TryHelpContextFollowup(text, Core)
+    if earlyHelpContextResult then return earlyHelpContextResult end
+
     if R.LooksLikeBugReportRequest(text) then return R.BugReportReply(text) end
 
     local crossFrameTextProblemResult = A.RouterTryCrossFrameTextRequestShortcut and A.RouterTryCrossFrameTextRequestShortcut(text, Core)
@@ -7921,6 +8912,12 @@ function A.RouteInput(text, coreHandler)
 
     local safePlanningProblemResult = A.RouterTrySafePlanningShortcut and A.RouterTrySafePlanningShortcut(text, Core)
     if safePlanningProblemResult then return safePlanningProblemResult end
+
+    local lastChangeSettingFollowupProblemResult = R.TryLastChangeSettingFollowup and R.TryLastChangeSettingFollowup(text)
+    if lastChangeSettingFollowupProblemResult then return lastChangeSettingFollowupProblemResult end
+
+    local registrySettingCurrentValueProblemResult = A.RouterTryRegistrySettingCurrentValueShortcut and A.RouterTryRegistrySettingCurrentValueShortcut(text, Core)
+    if registrySettingCurrentValueProblemResult then return registrySettingCurrentValueProblemResult end
 
     local registrySettingDecisionProblemResult = A.RouterTryRegistrySettingDecisionShortcut and A.RouterTryRegistrySettingDecisionShortcut(text, Core)
     if registrySettingDecisionProblemResult then return registrySettingDecisionProblemResult end

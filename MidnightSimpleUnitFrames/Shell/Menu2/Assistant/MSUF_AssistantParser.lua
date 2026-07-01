@@ -191,6 +191,16 @@ if not P.InitUnsupportedAuraCommand then
                         text = "Exact aura blacklist edits are legacy read-only while the native 12.1 backend is active, so I will not edit them as if they could affect live aura display. I can change live Aura Filter options instead, such as player-only, raid, dispellable, crowd-control, exclusive filters, icon size, count, spacing, growth, cooldown text, stack text, and duration bars.",
                     }
                 end
+                if ContainsAny(text, { "target of target", "targettarget", "target target", "targets target", "focus target", "focustarget" })
+                    and ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+                then
+                    return {
+                        kind = "unsupported",
+                        status = "info",
+                        summary = "Explains dependent target aura limitation.",
+                        text = "Target of Target and Focus Target do not expose Auras3 settings in MSUF, so I did not change anything. Their unit pages can still change frame visibility, size, health/text, cast bar, range fade, colors, and position. For aura changes, use Player, Target, Focus, Boss, or group aura scopes, such as 'hide target buffs' or 'show only dispellable raid debuffs'.",
+                    }
+                end
                 if not ContainsAny(text, P.AURA_OUT_OF_SCOPE_TERMS)
                     and not (ContainsAny(text, P.AURA_BUFF_TERMS) and ContainsAny(text, P.AURA_BUFF_CONTEXT_TERMS))
                 then
