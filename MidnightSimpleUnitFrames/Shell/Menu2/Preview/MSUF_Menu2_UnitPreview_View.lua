@@ -1015,14 +1015,26 @@ local function BuildPreview(parent, panel, width, height)
         self.dragFrame:SetScript("OnMouseUp", nil)
         self.dragFrame._handle = nil
         if self._msufPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
-        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+        if PreviewHelpers.ReleaseKeyboardCapture then
+            PreviewHelpers.ReleaseKeyboardCapture(self)
+        elseif self.SetPropagateKeyboardInput then
+            self:SetPropagateKeyboardInput(true)
+        end
     end)
-    box:SetScript("OnEvent", function(_, event)
+    box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_ENABLED" then
             Preview.RequestRefresh("COMBAT_ALPHA")
         elseif event == "PLAYER_REGEN_DISABLED" then
-            box._refreshReason = nil
-            box._refreshQueued = nil
+            self._refreshReason = nil
+            self._refreshQueued = nil
+            self._selectedHandle = nil
+            Preview.SetArrowBindings(self, false)
+            if PreviewHelpers.ReleaseKeyboardCapture then
+                PreviewHelpers.ReleaseKeyboardCapture(self)
+            elseif self.SetPropagateKeyboardInput then
+                self:SetPropagateKeyboardInput(true)
+            end
+            RefreshHandleSelectionVisuals(self)
         end
     end)
     return box

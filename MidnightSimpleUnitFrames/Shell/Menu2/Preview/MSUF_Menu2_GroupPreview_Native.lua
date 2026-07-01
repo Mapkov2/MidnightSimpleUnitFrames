@@ -1006,6 +1006,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         self._msufGFRefreshReason = nil
         StopHandleDrag(self and self._selectedHandle)
         self._selectedHandle = nil
+        if PreviewHelpers.ReleaseKeyboardCapture then
+            PreviewHelpers.ReleaseKeyboardCapture(self)
+        elseif self.SetPropagateKeyboardInput then
+            self:SetPropagateKeyboardInput(true)
+        end
     end
     box:HookScript("OnShow", function(self)
         self:RequestRefresh("GROUP_PREVIEW_SHOW")

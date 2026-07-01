@@ -113,27 +113,100 @@ M.AddTooltip = M.AddTooltip or AddTooltip
 local PREVIEW_NUDGE_DIRECTIONS = { { "LEFT", -1, 0 }, { "RIGHT", 1, 0 }, { "UP", 0, 1 }, { "DOWN", 0, -1 } }
 local PREVIEW_NUDGE_BINDING_PREFIXES = { "", "SHIFT-", "CTRL-", "CTRL-SHIFT-", "SHIFT-CTRL-" }
 
+local function ReleasePreviewKeyboardCapture(box)
+    local helpers = M.PreviewHelpers
+    if helpers and type(helpers.ReleaseKeyboardCapture) == "function" then
+        helpers.ReleaseKeyboardCapture(box)
+    elseif box and box.SetPropagateKeyboardInput then
+        box:SetPropagateKeyboardInput(true)
+    end
+end
+
+local function PreviewBindingOwner_OnEvent(self, event)
+    if event == "PLAYER_REGEN_DISABLED" then
+        self.__msufPendingClear = true
+        ReleasePreviewKeyboardCapture(self.__msufActiveBox)
+        return
+    end
+    if event ~= "PLAYER_REGEN_ENABLED" then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    self:UnregisterEvent("PLAYER_REGEN_DISABLED")
+    self.__msufPendingClear = nil
+    if self.__msufActiveName then _G[self.__msufActiveName] = nil end
+    ReleasePreviewKeyboardCapture(self.__msufActiveBox)
+    self.__msufActiveBox = nil
+    self.__msufActiveName = nil
+    if ClearOverrideBindings then ClearOverrideBindings(self) end
+    if self.Hide then self:Hide() end
+end
+
+local function EnsurePreviewBindingOwner(ownerName)
+    if not ownerName then return nil end
+    local owner = _G[ownerName]
+    if not owner then
+        owner = CreateFrame("Frame", ownerName, UIParent)
+        _G[ownerName] = owner
+    end
+    if owner.SetScript and owner.__msufPreviewBindingOwner ~= true then
+        owner.__msufPreviewBindingOwner = true
+        owner:SetScript("OnEvent", PreviewBindingOwner_OnEvent)
+    end
+    return owner
+end
+
 -- Shared secure arrow-key binding for preview-only movers. The helper only runs
 -- while preview handles are selected and exits before touching protected state in combat.
 function M.SetPreviewArrowBindings(box, enabled, spec)
-    if InCombatLockdown and InCombatLockdown() then return end
     spec = spec or {}
     local ownerName = spec.ownerName
     local activeName = spec.activeName
     local owner = ownerName and _G[ownerName]
+    if InCombatLockdown and InCombatLockdown() then
+        ReleasePreviewKeyboardCapture(box)
+        if activeName and (enabled or _G[activeName] == box or box == nil) then _G[activeName] = nil end
+        if not enabled or not box then
+            if spec.onDisable then spec.onDisable(box) end
+        end
+        if owner then
+            if owner.SetScript and owner.__msufPreviewBindingOwner ~= true then
+                owner.__msufPreviewBindingOwner = true
+                owner:SetScript("OnEvent", PreviewBindingOwner_OnEvent)
+            end
+            owner.__msufActiveBox = box
+            owner.__msufActiveName = activeName
+            owner.__msufPendingClear = true
+            if owner.RegisterEvent then owner:RegisterEvent("PLAYER_REGEN_ENABLED") end
+        end
+        return false
+    end
     if owner and ClearOverrideBindings then ClearOverrideBindings(owner) end
     if owner and owner.Hide then owner:Hide() end
     if not enabled or not box then
         if spec.onDisable then spec.onDisable(box) end
         if activeName and (_G[activeName] == box or box == nil) then _G[activeName] = nil end
+        if owner then
+            owner.__msufPendingClear = nil
+            owner.__msufActiveBox = nil
+            owner.__msufActiveName = nil
+            if owner.UnregisterEvent then
+                owner:UnregisterEvent("PLAYER_REGEN_DISABLED")
+                owner:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            end
+        end
         return
     end
     if activeName then _G[activeName] = box end
-    if not owner then
-        owner = CreateFrame("Frame", ownerName, UIParent)
-        if ownerName then _G[ownerName] = owner end
-    end
+    owner = EnsurePreviewBindingOwner(ownerName)
+    if not owner then return false end
+    owner.__msufPendingClear = nil
+    owner.__msufActiveBox = box
+    owner.__msufActiveName = activeName
     owner:Show()
+    if owner.RegisterEvent then
+        owner:RegisterEvent("PLAYER_REGEN_DISABLED")
+        owner:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
     local prefix = spec.buttonPrefix or ownerName or "MSUF_Preview_Nudge"
     for i = 1, #PREVIEW_NUDGE_DIRECTIONS do
         local dir = PREVIEW_NUDGE_DIRECTIONS[i]
