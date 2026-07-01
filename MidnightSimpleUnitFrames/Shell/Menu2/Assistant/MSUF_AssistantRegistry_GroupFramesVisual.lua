@@ -40,12 +40,20 @@ function A.GroupFramesRegistry.RegisterVisualSettings(ctx, scope)
     local aliases = {}
     AddAliasesForUnit(aliases, scope, "dispel overlay")
     AddAliasesForUnit(aliases, scope, "debuff overlay")
+    AddAliasesForUnit(aliases, scope, "dispellable overlay")
+    AddAliasesForUnit(aliases, scope, "dispellable debuff overlay")
+    AddAliasesForUnit(aliases, scope, "dispel health overlay")
+    AddAliasesForUnit(aliases, scope, "dispellable health overlay")
     RegisterGroupBoolean(scope, "dispelOverlay", "dispelOverlayEnabled", "Dispel Overlay", false, "visual", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "dispel overlay detects")
     AddAliasesForUnit(aliases, scope, "dispel overlay trigger")
     AddAliasesForUnit(aliases, scope, "debuff overlay trigger")
+    AddAliasesForUnit(aliases, scope, "dispellable overlay detects")
+    AddAliasesForUnit(aliases, scope, "dispellable overlay trigger")
+    AddAliasesForUnit(aliases, scope, "dispellable debuff overlay detects")
+    AddAliasesForUnit(aliases, scope, "dispellable debuff overlay trigger")
     RegisterGroupEnum(scope, "dispelOverlayTrigger", "dispelOverlayTrigger", "Dispel Overlay Detects", "BORDER", GROUP_DISPEL_TRIGGER_VALUES, {
         border = "BORDER",
         inherit = "BORDER",
@@ -70,6 +78,8 @@ function A.GroupFramesRegistry.RegisterVisualSettings(ctx, scope)
     aliases = {}
     AddAliasesForUnit(aliases, scope, "dispel overlay style")
     AddAliasesForUnit(aliases, scope, "debuff overlay style")
+    AddAliasesForUnit(aliases, scope, "dispellable overlay style")
+    AddAliasesForUnit(aliases, scope, "dispellable debuff overlay style")
     RegisterGroupEnum(scope, "dispelOverlayStyle", "dispelOverlayStyle", "Dispel Overlay Style", "FULL", GROUP_DISPEL_STYLE_VALUES, {
         full = "FULL",
         ["full frame"] = "FULL",
@@ -86,12 +96,18 @@ function A.GroupFramesRegistry.RegisterVisualSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "dispel overlay on health")
     AddAliasesForUnit(aliases, scope, "debuff overlay on health")
     AddAliasesForUnit(aliases, scope, "debuff overlay current health only")
+    AddAliasesForUnit(aliases, scope, "dispellable overlay on health")
+    AddAliasesForUnit(aliases, scope, "dispellable overlay current health only")
+    AddAliasesForUnit(aliases, scope, "dispellable debuff overlay current health only")
     RegisterGroupBoolean(scope, "dispelOverlayOnHealth", "dispelOverlayOnHealth", "Dispel Overlay on Current Health", true, "visual", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "dispel overlay opacity")
     AddAliasesForUnit(aliases, scope, "dispel overlay alpha")
     AddAliasesForUnit(aliases, scope, "debuff overlay opacity")
+    AddAliasesForUnit(aliases, scope, "dispellable overlay opacity")
+    AddAliasesForUnit(aliases, scope, "dispellable overlay alpha")
+    AddAliasesForUnit(aliases, scope, "dispellable debuff overlay opacity")
     RegisterGroupNumber(scope, "dispelOverlayAlpha", "dispelOverlayAlpha", "Dispel Overlay Opacity", 0.35, 0.05, 1, 0.05, "visual", aliases, { percent = true })
 
     aliases = {}
@@ -146,6 +162,40 @@ function A.GroupFramesRegistry.RegisterVisualSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "fade offline members")
     AddAliasesForUnit(aliases, scope, "offline member fade")
     RegisterGroupNumber(scope, "offlineAlpha", "offlineAlpha", "Offline Opacity", 0.5, 0, 1, 0.05, "visual", aliases, { percent = true })
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "health fade")
+    AddAliasesForUnit(aliases, scope, "healthy fade")
+    AddAliasesForUnit(aliases, scope, "healer health fade")
+    AddAliasesForUnit(aliases, scope, "fade healthy members")
+    AddAliasesForUnit(aliases, scope, "dim healthy members")
+    AddAliasesForUnit(aliases, scope, "dim healthy frames")
+    AddAliasesForUnit(aliases, scope, "fade full health")
+    AddAliasesForUnit(aliases, scope, "dim full health")
+    RegisterGroupBoolean(scope, "healthFade", "healthFadeEnabled", "Health Fade", false, "visual", aliases, {
+        description = "Dims group frames when a member is at or above the configured health percentage.",
+    })
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "health fade threshold")
+    AddAliasesForUnit(aliases, scope, "health fade percent")
+    AddAliasesForUnit(aliases, scope, "fade above health")
+    AddAliasesForUnit(aliases, scope, "fade above health percent")
+    AddAliasesForUnit(aliases, scope, "dim above health")
+    AddAliasesForUnit(aliases, scope, "dim above health percent")
+    AddAliasesForUnit(aliases, scope, "healthy frame threshold")
+    RegisterGroupNumber(scope, "healthFadeThreshold", "healthFadeThreshold", "Health Fade Threshold", 95, 1, 100, 1, "visual", aliases, {
+        description = "Health percentage at or above which health fade dims group frames.",
+    })
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "health fade opacity")
+    AddAliasesForUnit(aliases, scope, "health fade alpha")
+    AddAliasesForUnit(aliases, scope, "healthy frame opacity")
+    AddAliasesForUnit(aliases, scope, "healthy member opacity")
+    AddAliasesForUnit(aliases, scope, "dimmed health opacity")
+    AddAliasesForUnit(aliases, scope, "dimmed healthy opacity")
+    RegisterGroupNumber(scope, "healthFadeAlpha", "healthFadeAlpha", "Health Fade Opacity", 0.45, 0.05, 1, 0.05, "visual", aliases, { percent = true })
 
     RegisterVisualHighlightSettings(ctx, scope)
 end

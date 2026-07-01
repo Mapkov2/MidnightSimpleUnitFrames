@@ -28,6 +28,8 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
     local ON_OFF_VALUES = ctx.ON_OFF_VALUES
     local ON_OFF_STORAGE = ctx.ON_OFF_STORAGE
     local ON_OFF_ALIASES = ctx.ON_OFF_ALIASES
+    local AGGRO_MODE_VALUES = ctx.AGGRO_MODE_VALUES
+    local AGGRO_MODE_ALIASES = ctx.AGGRO_MODE_ALIASES
     local ABSORB_ANCHOR_VALUES = ctx.ABSORB_ANCHOR_VALUES
     local ABSORB_ANCHOR_STORAGE = ctx.ABSORB_ANCHOR_STORAGE
     local ABSORB_ANCHOR_ALIASES = ctx.ABSORB_ANCHOR_ALIASES
@@ -109,6 +111,20 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
         apply = ApplyBarOutline,
         reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE",
     })
+    RegisterScopedSetting("barScope", scope, "barOutlineColorA", "barOutlineOpacity", "Bar Outline Opacity", "number", 1, GlobalScopeAliases(scope, {
+        "bar outline opacity", "bar outline alpha", "frame outline opacity", "frame outline alpha",
+        "bar border opacity", "bar border alpha", "frame border opacity", "frame border alpha",
+        "outline opacity", "outline alpha",
+    }), {
+        flag = "hlOverride",
+        min = 0,
+        max = 1,
+        step = 0.05,
+        percent = true,
+        apply = ApplyBarOutline,
+        reason = "MSUF_ASSISTANT_SCOPED_BAR_OUTLINE_OPACITY",
+        description = "Controls the scoped alpha channel for the bar/frame outline color.",
+    })
     RegisterScopedSetting("barScope", scope, "highlightBorderThickness", "highlightBorder", "Highlight Border Thickness", "number", 2, GlobalScopeAliases(scope, {
         "highlight border thickness", "highlight border size", "aggro border size", "dispel border size",
     }), {
@@ -126,6 +142,15 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
         apply = ApplyAggroBorder,
         reason = "MSUF_ASSISTANT_SCOPED_AGGRO_BORDER",
     })
+    RegisterScopedSetting("barScope", scope, "aggroMode", "aggroMode", "Aggro Shows For", "enum", "ALL", GlobalScopeAliases(scope, {
+        "aggro shows for", "aggro role filter", "aggro non tanks", "aggro not tank", "threat non tanks",
+    }), {
+        flag = "hlOverride",
+        values = AGGRO_MODE_VALUES,
+        valueAliases = AGGRO_MODE_ALIASES,
+        apply = ApplyAggroBorder,
+        reason = "MSUF_ASSISTANT_SCOPED_AGGRO_MODE",
+    })
     RegisterScopedMappedEnum("barScope", scope, "dispelOutlineMode", "dispelBorder", "Dispel Border", "on", ON_OFF_VALUES, ON_OFF_STORAGE, GlobalScopeAliases(scope, {
         "dispel border", "dispellable border", "dispel outline",
     }), {
@@ -134,7 +159,7 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
         apply = ApplyDispelPurgeBorder,
         reason = "MSUF_ASSISTANT_SCOPED_DISPEL_BORDER",
     })
-    RegisterScopedSetting("barScope", scope, "dispelBorderTrigger", "dispelBorderTrigger", "Dispel Border Detects", "enum", "BY_ME", GlobalScopeAliases(scope, {
+    RegisterScopedSetting("barScope", scope, "dispelBorderTrigger", "dispelBorderTrigger", "Dispel Border Detects", "enum", "DISPEL_TYPE", GlobalScopeAliases(scope, {
         "dispel border detects", "dispel border trigger", "dispel detection",
     }), {
         flag = "hlOverride",
@@ -150,6 +175,14 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
         valueAliases = ON_OFF_ALIASES,
         apply = ApplyDispelPurgeBorder,
         reason = "MSUF_ASSISTANT_SCOPED_PURGE_BORDER",
+    })
+    RegisterScopedSetting("barScope", scope, "hlPrioEnabled", "highlightPriority", "Custom Highlight Priority", "boolean", false, GlobalScopeAliases(scope, {
+        "custom highlight priority", "highlight priority", "border priority", "highlight border priority",
+        "highlight prio", "border prio", "custom highlight prio",
+    }), {
+        flag = "hlOverride",
+        apply = ApplyHighlightBorders,
+        reason = "MSUF_ASSISTANT_SCOPED_HIGHLIGHT_PRIORITY",
     })
 
     if GlobalScopeIsGroup(scope) then

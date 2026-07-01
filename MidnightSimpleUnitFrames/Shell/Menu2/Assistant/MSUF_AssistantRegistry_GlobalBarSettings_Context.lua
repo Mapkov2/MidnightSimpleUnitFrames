@@ -59,6 +59,8 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     local ON_OFF_STORAGE = GlobalBarData.ON_OFF_STORAGE
     local ON_OFF_VALUES = GlobalBarData.ON_OFF_VALUES
     local ON_OFF_ALIASES = GlobalBarData.ON_OFF_ALIASES
+    local AGGRO_MODE_VALUES = GlobalBarData.AGGRO_MODE_VALUES
+    local AGGRO_MODE_ALIASES = GlobalBarData.AGGRO_MODE_ALIASES
     local ABSORB_MODE_STORAGE = GlobalBarData.ABSORB_MODE_STORAGE
     local ABSORB_MODE_VALUES = GlobalBarData.ABSORB_MODE_VALUES
     local ABSORB_MODE_ALIASES = GlobalBarData.ABSORB_MODE_ALIASES
@@ -74,6 +76,7 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
 
     if type(GRADIENT_DIRECTION_VALUES) ~= "table" or type(GRADIENT_DIRECTION_KEYS) ~= "table" or type(GRADIENT_DIRECTION_ALIASES) ~= "table" then return nil end
     if type(ON_OFF_STORAGE) ~= "table" or type(ON_OFF_VALUES) ~= "table" or type(ON_OFF_ALIASES) ~= "table" then return nil end
+    if type(AGGRO_MODE_VALUES) ~= "table" or type(AGGRO_MODE_ALIASES) ~= "table" then return nil end
     if type(ABSORB_MODE_STORAGE) ~= "table" or type(ABSORB_MODE_VALUES) ~= "table" or type(ABSORB_MODE_ALIASES) ~= "table" then return nil end
     if type(ABSORB_ANCHOR_STORAGE) ~= "table" or type(ABSORB_ANCHOR_VALUES) ~= "table" or type(ABSORB_ANCHOR_ALIASES) ~= "table" then return nil end
     if type(DISPEL_TRIGGER_VALUES) ~= "table" or type(DISPEL_TRIGGER_ALIASES) ~= "table" then return nil end
@@ -117,6 +120,8 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
         ON_OFF_STORAGE = ON_OFF_STORAGE,
         ON_OFF_VALUES = ON_OFF_VALUES,
         ON_OFF_ALIASES = ON_OFF_ALIASES,
+        AGGRO_MODE_VALUES = AGGRO_MODE_VALUES,
+        AGGRO_MODE_ALIASES = AGGRO_MODE_ALIASES,
         ABSORB_MODE_STORAGE = ABSORB_MODE_STORAGE,
         ABSORB_MODE_VALUES = ABSORB_MODE_VALUES,
         ABSORB_MODE_ALIASES = ABSORB_MODE_ALIASES,
