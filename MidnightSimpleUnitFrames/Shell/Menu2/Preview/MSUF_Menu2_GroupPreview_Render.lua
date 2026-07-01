@@ -86,6 +86,13 @@ function Render.Install(box, ctx, deps)
         local label = H.PreviewScopeLabel(kind)
         local conf = H.Conf(kind)
         local gf = MSUF and MSUF.GF
+        local animState = _G.MSUF_GetPreviewAnimationFrameState
+            and _G.MSUF_GetPreviewAnimationFrameState(self, 1, kind, self._msufGFMenuPreviewAnimState or {})
+        if animState then self._msufGFMenuPreviewAnimState = animState end
+        local hpPct = animState and max(0.02, min(0.98, tonumber(animState.hpPct) or 0.72)) or 0.72
+        local powerPct = animState and max(0, min(1, tonumber(animState.powerPct) or 0.70)) or 0.70
+        local healPct = animState and max(0.01, min(0.24, tonumber(animState.healPct) or 0.12)) or 0.12
+        local absorbPct = animState and max(0.01, min(0.24, tonumber(animState.absorbPct) or 0.08)) or 0.08
         local runtimeSpec = CompiledSpec(kind)
         local runtimeAuras = runtimeSpec and runtimeSpec.auras or nil
         local runtimeText = (runtimeSpec and runtimeSpec.text) or {}
@@ -242,6 +249,8 @@ function Render.Install(box, ctx, deps)
         if not hr then hr, hg, hb = HealthColor(conf, 0.72, cls) end
         local groupVisual = (runtimeSpec and runtimeSpec.group) or {}
         mock._health:SetStatusBarColor(hr, hg, hb, tonumber(groupVisual.hpBarAlpha) or tonumber(conf.hpBarAlpha) or 1)
+        if mock._health.SetMinMaxValues then mock._health:SetMinMaxValues(0, 1) end
+        mock._health:SetValue(hpPct)
         local hpReverse = runtimeHealth.reverse == true or (not runtimeSpec and conf.reverseFill == true)
         if mock._health.SetReverseFill then mock._health:SetReverseFill(hpReverse) end
         mock._healthBg:SetTexture(bgTex)
@@ -272,12 +281,12 @@ function Render.Install(box, ctx, deps)
                 mock._healPred:SetPoint("BOTTOMLEFT", hpTex, "BOTTOMRIGHT", 0, 0)
                 if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill(false) end
             end
-            mock._healPred:SetWidth(max(1, mockW * 0.12))
+            mock._healPred:SetWidth(max(1, mockW * healPct))
             mock._healPred:SetValue(1)
         else
             mock._healPred:SetAllPoints(mock._health)
             if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill((healPredMode == 1) and false or ((healPredMode == 5) and not hpReverse or true)) end
-            mock._healPred:SetValue(0.12)
+            mock._healPred:SetValue(healPct)
         end
         mock._healPred:SetShown(healPredShown)
         mock._absorb:ClearAllPoints()
@@ -315,8 +324,8 @@ function Render.Install(box, ctx, deps)
             mock._absorb:SetAllPoints(mock._health)
             if mock._absorb.SetReverseFill then mock._absorb:SetReverseFill((absorbMode == 1) and false or ((absorbMode == 5) and not hpReverse or true)) end
         end
-        if absorbFollows then mock._absorb:SetWidth(max(1, mockW * 0.08)) end
-        mock._absorb:SetValue(absorbFollows and 1 or 0.08)
+        if absorbFollows then mock._absorb:SetWidth(max(1, mockW * absorbPct)) end
+        mock._absorb:SetValue(absorbFollows and 1 or absorbPct)
         mock._absorb:SetShown(absorbShown)
         if powerH > 0 then
             mock._power:SetStatusBarTexture(runtimePower.texture or barTex)
@@ -327,6 +336,8 @@ function Render.Install(box, ctx, deps)
             mock._powerBg:SetTexture(runtimePower.backgroundTexture or bgTex)
             local pbg = runtimePower.background or {}
             mock._powerBg:SetVertexColor(pbg.r or conf.bgR or 0.06, pbg.g or conf.bgG or 0.06, pbg.b or conf.bgB or 0.07, pbg.a or conf.hpBgAlpha or 0.85)
+            if mock._power.SetMinMaxValues then mock._power:SetMinMaxValues(0, 1) end
+            mock._power:SetValue(powerPct)
             mock._power:Show()
             mock._powerBg:Show()
         else
@@ -446,7 +457,8 @@ function Render.Install(box, ctx, deps)
         else
             hpLeftMode, hpCenterMode, hpRightMode = runtimeText.healthLeft or conf.textLeft or "NONE", runtimeText.healthCenter or conf.textCenter or "NONE", runtimeText.healthRight or conf.textRight or "NONE"
         end
-        local fakeHP, fakeMax = 720000, 1000000
+        local fakeMax = 1000000
+        local fakeHP = max(1, floor(fakeMax * hpPct + 0.5))
         local hpTextR, hpTextG, hpTextB = fr or 1, fg or 1, fb or 1
         if runtimeText.healthColorByHealth == true then
             local pct = fakeHP / fakeMax
@@ -480,7 +492,8 @@ function Render.Install(box, ctx, deps)
         elseif gf and gf.IsPowerTextEnabled then
             showPowerText = showText and gf.IsPowerTextEnabled(kind, conf)
         end
-        local fakePow, fakePowMax = 70, 100
+        local fakePowMax = 100
+        local fakePow = max(0, floor(fakePowMax * powerPct + 0.5))
         local powerDelimiter = runtimeText.powerDelimiter or conf.powerTextDelimiter or conf.textDelimiter or " - "
         local function PreviewPowerText(mode)
             if gf and gf.FormatPowerText then return gf.FormatPowerText(mode, fakePow, fakePowMax, powerDelimiter) end
@@ -593,6 +606,66 @@ function Render.Install(box, ctx, deps)
             border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
             border:Show()
         end
+        local function PreviewAuraState(groupKey, index, handle, cfg)
+            local fn = _G.MSUF_GetPreviewAnimationAuraState
+            if type(fn) ~= "function" or not handle then return nil end
+            handle._previewAuraStates = handle._previewAuraStates or {}
+            local scratch = handle._previewAuraStates[index] or {}
+            handle._previewAuraStates[index] = scratch
+            return fn(groupKey, index, scratch, {
+                decimalSeconds = cfg and cfg.cooldownDecimalSeconds == true,
+            })
+        end
+        local function LayoutAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
+            if not (swipe and icon) then return end
+            remainingFrac = max(0.02, min(1, tonumber(remainingFrac) or 0.48))
+            local w = max(1, floor((tonumber(size) or 1) * remainingFrac + 0.5))
+            swipe:ClearAllPoints()
+            swipe:SetWidth(w)
+            swipe:SetHeight(max(1, tonumber(size) or 1))
+            if reverse == true then
+                swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
+                swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+            else
+                swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
+                swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+            end
+        end
+        local function LayoutAuraDurationBar(bar, icon, cfg, size, auraState)
+            if not (bar and icon and cfg and cfg.showDurationBar == true) then
+                if bar then bar:Hide() end
+                return
+            end
+            size = max(1, tonumber(size) or 1)
+            local height = max(1, min(size, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
+            local inset = max(1, floor(size / 32 + 0.5))
+            local frac
+            if cfg.durationBarDirection == "ELAPSED" then
+                frac = auraState and auraState.elapsedFrac or 0.38
+                bar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
+            else
+                frac = auraState and auraState.remainingFrac or 0.62
+                bar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+            end
+            frac = max(0.02, min(1, tonumber(frac) or 0.62))
+            bar:ClearAllPoints()
+            bar:SetHeight(height)
+            if auraState then
+                bar:SetWidth(max(1, floor(max(1, size - inset * 2) * frac + 0.5)))
+                if cfg.durationBarPosition == "TOP" then
+                    bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+                else
+                    bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+                end
+            elseif cfg.durationBarPosition == "TOP" then
+                bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+                bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+            else
+                bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+                bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+            end
+            bar:Show()
+        end
         local function RuntimeAuraGridShape(count, perRow, verticalGrowth)
             count = max(Round(count), 1)
             perRow = max(Round(perRow), 1)
@@ -620,6 +693,7 @@ function Render.Install(box, ctx, deps)
             local showCooldown = cfg.showCooldown ~= false
             local showStacks = cfg.showStacks ~= false
             local showSwipe = cfg.showCooldownSwipe ~= false
+            local barOnly = cfg.showDurationBar == true and (cfg.durationBarDisplay or "BAR_ONLY") == "BAR_ONLY"
             local cooldownSwipeReverse = cfg.cooldownSwipeReverse == true
             local cooldownSize = max(6, ScaleValue(cfg.cooldownSize or defaults.cooldownSize or 8, textScale, 6))
             local stackSize = max(6, ScaleValue(cfg.stackSize or defaults.stackSize or 10, textScale, 6))
@@ -718,9 +792,12 @@ function Render.Install(box, ctx, deps)
                 local border = handle._iconBorders and handle._iconBorders[i]
                 local stack = handle._iconStacks and handle._iconStacks[i]
                 local timer = handle._iconTimers and handle._iconTimers[i]
+                local durationBar = handle._iconDurationBars and handle._iconDurationBars[i]
                 local rect = handle._previewRects[i]
                 if tex and rect then
+                    local auraState = PreviewAuraState(groupKey, i, handle, cfg)
                     tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
+                    if tex.SetAlpha then tex:SetAlpha(barOnly and 0 or 1) end
                     tex:SetSize(size, size)
                     tex:ClearAllPoints()
                     if rect.anchor then
@@ -729,29 +806,27 @@ function Render.Install(box, ctx, deps)
                         tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", rect[1] + originX, rect[2] + originY)
                     end
                     if swipe then
-                        swipe:ClearAllPoints()
-                        if cooldownSwipeReverse then
-                            swipe:SetPoint("TOPRIGHT", tex, "TOP", 0, 0)
-                            swipe:SetPoint("BOTTOMLEFT", tex, "BOTTOMLEFT", 0, 0)
+                        if showSwipe and not barOnly then
+                            LayoutAuraPreviewSwipe(swipe, tex, size, auraState and auraState.remainingFrac, cooldownSwipeReverse)
+                            swipe:Show()
                         else
-                            swipe:SetPoint("TOPLEFT", tex, "TOP", 0, 0)
-                            swipe:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, 0)
+                            swipe:Hide()
                         end
-                        swipe:SetShown(showSwipe)
                     end
-                    LayoutAuraPreviewBorder(border, tex, size, dispelMode)
+                    LayoutAuraPreviewBorder(border, tex, size, barOnly and "OFF" or dispelMode)
+                    LayoutAuraDurationBar(durationBar, tex, cfg, size, auraState)
                     if stack then
                         SetPreviewFont(stack, stackSize)
                         stack:SetTextColor(1, 1, 1, 1)
                         PlaceAuraPreviewText(stack, tex, stackAnchor, stackX, stackY)
-                        stack:SetText(showStacks and (i % 3 == 1 and "2" or "") or "")
+                        stack:SetText(showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
                         stack:SetShown(showStacks)
                     end
                     if timer then
                         SetPreviewFont(timer, cooldownSize)
                         timer:SetTextColor(1, 1, 1, 1)
                         PlaceAuraPreviewText(timer, tex, cooldownAnchor, cooldownX, cooldownY)
-                        timer:SetText(showCooldown and (i % 2 == 0 and "12" or "") or "")
+                        timer:SetText(showCooldown and (auraState and auraState.text or (i % 2 == 0 and "12" or "")) or "")
                         timer:SetShown(showCooldown)
                     end
                     tex:Show()
@@ -763,6 +838,7 @@ function Render.Install(box, ctx, deps)
                 if handle._iconBorders and handle._iconBorders[i] then handle._iconBorders[i]:Hide() end
                 if handle._iconStacks and handle._iconStacks[i] then handle._iconStacks[i]:Hide() end
                 if handle._iconTimers and handle._iconTimers[i] then handle._iconTimers[i]:Hide() end
+                if handle._iconDurationBars and handle._iconDurationBars[i] then handle._iconDurationBars[i]:Hide() end
             end
             return size
         end

@@ -1287,6 +1287,64 @@ local function ApplyPreviewIconText(icon, unit, cfg)
     end
 end
 
+local function PreviewAuraState(kind, index, icon)
+    local fn = _G.MSUF_GetPreviewAnimationAuraState
+    if type(fn) ~= "function" then return nil end
+    icon._msufA3PreviewAuraScratch = icon._msufA3PreviewAuraScratch or {}
+    return fn(kind, index, icon._msufA3PreviewAuraScratch)
+end
+
+local function ApplyPreviewDurationBarProgress(icon, cfg, auraState)
+    local bar = icon and icon.DurationBar
+    if not (bar and cfg and cfg.showDurationBar == true) then
+        if bar then bar:Hide() end
+        return
+    end
+    local size = math_max(1, (icon.GetWidth and icon:GetWidth()) or 1)
+    local height = Clamp(cfg.durationBarHeight, 2, 1, math_max(1, size))
+    local inset = math_max(1, math_floor(size / 32 + 0.5))
+    local frac
+    if cfg.durationBarDirection == "ELAPSED" then
+        frac = auraState and auraState.elapsedFrac or 1
+        bar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
+    else
+        frac = auraState and auraState.remainingFrac or 1
+        bar:SetVertexColor(0.08, 0.78, 1, 0.92)
+    end
+    frac = math_max(0.02, math_min(1, tonumber(frac) or 1))
+    bar:ClearAllPoints()
+    bar:SetHeight(height)
+    if auraState then
+        bar:SetWidth(math_max(1, math_floor(math_max(1, size - inset * 2) * frac + 0.5)))
+        if cfg.durationBarPosition == "TOP" then
+            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        else
+            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        end
+    elseif cfg.durationBarPosition == "TOP" then
+        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+    else
+        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+    end
+    bar:Show()
+end
+
+local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg)
+    local icons = group and group._icons
+    if not icons then return end
+    for i = 1, shownIcons do
+        local icon = icons[i]
+        if icon then
+            local auraState = PreviewAuraState(kind, i, icon)
+            if icon.Count then icon.Count:SetText(auraState and auraState.stacks or (i == 1 and "3" or "")) end
+            if icon.CooldownText then icon.CooldownText:SetText(auraState and auraState.text or (i == 1 and "1m" or "32")) end
+            ApplyPreviewDurationBarProgress(icon, textCfg, auraState)
+        end
+    end
+end
+
 local function CreateGroup(unit, kind)
     kind = NormalizeKind(kind)
     EM.groups = EM.groups or {}
@@ -1533,6 +1591,7 @@ function EM.RefreshUnit(unit)
                 end
             end
 
+            ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg)
             group:Show()
             if group.Raise then group:Raise() end
         end

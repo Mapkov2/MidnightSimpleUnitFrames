@@ -424,6 +424,7 @@ function Handles.Install(box, deps)
         handle._iconBorders = handle._iconBorders or {}
         handle._iconStacks = handle._iconStacks or {}
         handle._iconTimers = handle._iconTimers or {}
+        handle._iconDurationBars = handle._iconDurationBars or {}
         for i = 1, count do
             local tex = handle._icons[i] or handle:CreateTexture(nil, "ARTWORK")
             tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -442,6 +443,11 @@ function Handles.Install(box, deps)
             local timer = handle._iconTimers[i] or handle:CreateFontString(nil, "OVERLAY")
             timer:Hide()
             handle._iconTimers[i] = timer
+            local durationBar = handle._iconDurationBars[i] or handle:CreateTexture(nil, "OVERLAY")
+            durationBar:SetTexture(WHITE8X8)
+            durationBar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+            durationBar:Hide()
+            handle._iconDurationBars[i] = durationBar
         end
     end
     local buffHandle = CreatePreviewHandle("buff", "buffs", { 0.36, 0.79, 0.36 }, "BUFFS", 86, 34, false)

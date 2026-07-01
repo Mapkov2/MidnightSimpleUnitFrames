@@ -5,7 +5,7 @@
 --- Live aura filtering, icon, stack, and duration data stay in Blizzard's native 12.1 aura containers.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
-local floor, max, min = math.floor, math.max, math.min
+local floor, max, min, ceil = math.floor, math.max, math.min, math.ceil
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local PREVIEW_ICONS = 4
@@ -389,6 +389,10 @@ local function CreateIcon(parent)
     f.swipe:SetTexture(TEX_W8)
     f.swipe:SetVertexColor(0, 0, 0, 0.28)
     f.swipe:Hide()
+    f.durationBar = f:CreateTexture(nil, "OVERLAY")
+    f.durationBar:SetTexture(TEX_W8)
+    f.durationBar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+    f.durationBar:Hide()
     f.edge = f:CreateTexture(nil, "BORDER")
     f.edge:SetAllPoints(f)
     f.edge:SetTexture(TEX_W8)
@@ -451,6 +455,10 @@ function Auras.Hide(box)
         HideVisual(box.auraPreviewVisuals.debuff)
     end
 end
+local function ValueOr(value, fallback)
+    if value ~= nil then return value end
+    return fallback
+end
 local function LaneTextConfig(cfg, kind)
     if kind == "buff" then
         return {
@@ -465,6 +473,12 @@ local function LaneTextConfig(cfg, kind)
             cooldownSize = cfg.buffCooldownSize or cfg.cooldownSize,
             cooldownX = cfg.buffCooldownX or cfg.cooldownX,
             cooldownY = cfg.buffCooldownY or cfg.cooldownY,
+            showDurationBar = ValueOr(cfg.buffShowDurationBar, cfg.showDurationBar),
+            durationBarHeight = ValueOr(cfg.buffDurationBarHeight, cfg.durationBarHeight),
+            durationBarDisplay = ValueOr(cfg.buffDurationBarDisplay, cfg.durationBarDisplay) or "BAR_ONLY",
+            durationBarPosition = ValueOr(cfg.buffDurationBarPosition, cfg.durationBarPosition) or "BOTTOM",
+            durationBarDirection = ValueOr(cfg.buffDurationBarDirection, cfg.durationBarDirection) or "REMAINING",
+            cooldownDecimalSeconds = ValueOr(cfg.buffCooldownDecimalSeconds, cfg.cooldownDecimalSeconds),
         }
     end
     return {
@@ -479,8 +493,77 @@ local function LaneTextConfig(cfg, kind)
         cooldownSize = cfg.debuffCooldownSize or cfg.cooldownSize,
         cooldownX = cfg.debuffCooldownX or cfg.cooldownX,
         cooldownY = cfg.debuffCooldownY or cfg.cooldownY,
+        showDurationBar = ValueOr(cfg.debuffShowDurationBar, cfg.showDurationBar),
+        durationBarHeight = ValueOr(cfg.debuffDurationBarHeight, cfg.durationBarHeight),
+        durationBarDisplay = ValueOr(cfg.debuffDurationBarDisplay, cfg.durationBarDisplay) or "BAR_ONLY",
+        durationBarPosition = ValueOr(cfg.debuffDurationBarPosition, cfg.durationBarPosition) or "BOTTOM",
+        durationBarDirection = ValueOr(cfg.debuffDurationBarDirection, cfg.durationBarDirection) or "REMAINING",
+        cooldownDecimalSeconds = ValueOr(cfg.debuffCooldownDecimalSeconds, cfg.cooldownDecimalSeconds),
     }
 end
+
+local function PreviewAuraState(kind, index, icon, cfg)
+    local fn = _G.MSUF_GetPreviewAnimationAuraState
+    if type(fn) ~= "function" then return nil end
+    icon._msufPreviewAuraScratch = icon._msufPreviewAuraScratch or {}
+    return fn(kind, index, icon._msufPreviewAuraScratch, {
+        decimalSeconds = cfg and cfg.cooldownDecimalSeconds == true,
+    })
+end
+
+local function LayoutPreviewAuraSwipe(swipe, icon, size, remainingFrac, reverse)
+    if not (swipe and icon) then return end
+    remainingFrac = max(0.02, min(1, tonumber(remainingFrac) or 0.48))
+    local w = max(1, floor((tonumber(size) or icon:GetWidth() or 1) * remainingFrac + 0.5))
+    swipe:ClearAllPoints()
+    swipe:SetWidth(w)
+    swipe:SetHeight(max(1, tonumber(size) or 1))
+    if reverse == true then
+        swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
+        swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+    else
+        swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
+        swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+    end
+end
+
+local function LayoutPreviewDurationBar(bar, icon, cfg, size, auraState)
+    if not (bar and icon and cfg and cfg.showDurationBar == true) then
+        if bar then bar:Hide() end
+        return
+    end
+    size = max(1, tonumber(size) or 1)
+    local height = max(1, min(size, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
+    local inset = max(1, floor(size / 32 + 0.5))
+    local avail = max(1, size - (inset * 2))
+    local frac
+    if cfg.durationBarDirection == "ELAPSED" then
+        frac = auraState and auraState.elapsedFrac or 0.38
+        bar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
+    else
+        frac = auraState and auraState.remainingFrac or 0.62
+        bar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+    end
+    frac = max(0.02, min(1, tonumber(frac) or 0.62))
+    bar:ClearAllPoints()
+    bar:SetHeight(height)
+    if auraState then
+        bar:SetWidth(max(1, floor(avail * frac + 0.5)))
+        if cfg.durationBarPosition == "TOP" then
+            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        else
+            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        end
+    elseif cfg.durationBarPosition == "TOP" then
+        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+    else
+        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+    end
+    bar:Show()
+end
+
 local function PlaceStack(fs, icon, cfg, S)
     if not fs then return end
     local stackAnchor = cfg.stackAnchor or "TOPRIGHT"
@@ -578,37 +661,40 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         local icon = EnsureIcon(visual, i)
         BindDragProxy(icon, handle)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 0) + 1) end
+        local auraState = PreviewAuraState(kind, i, icon, textCfg)
+        local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
         local col, row = IconGridCoord(i, bounds.perRow, bounds.verticalGrowth == true)
         icon:SetSize(size, size)
         icon:ClearAllPoints()
         icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX, row * step * bounds.growthY)
         icon.tex:SetTexture(textures[((i - 1) % #textures) + 1])
+        if icon.bg then icon.bg:SetShown(not barOnly) end
+        icon.tex:SetShown(not barOnly)
         icon.edge:SetVertexColor(0, 0, 0, 0)
         if icon.swipe then
-            icon.swipe:ClearAllPoints()
-            if textCfg.cooldownSwipeReverse == true then
-                icon.swipe:SetPoint("TOPRIGHT", icon, "TOP", 0, 0)
-                icon.swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+            if textCfg.showCooldownSwipe ~= false and not barOnly then
+                LayoutPreviewAuraSwipe(icon.swipe, icon, size, auraState and auraState.remainingFrac, textCfg.cooldownSwipeReverse == true)
+                icon.swipe:Show()
             else
-                icon.swipe:SetPoint("TOPLEFT", icon, "TOP", 0, 0)
-                icon.swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+                icon.swipe:Hide()
             end
-            icon.swipe:SetShown(textCfg.showCooldownSwipe ~= false)
         end
-        LayoutPreviewDispelBorder(icon, size, debuffBorderMode)
+        LayoutPreviewDurationBar(icon.durationBar, icon, textCfg, size, auraState)
+        LayoutPreviewDispelBorder(icon, size, barOnly and "OFF" or debuffBorderMode)
         ApplyAuraFont(icon.stack, stackSize)
         PlaceStack(icon.stack, icon, textCfg, S)
-        icon.stack:SetText(textCfg.showStackCount ~= false and (i % 3 == 1 and "2" or "") or "")
+        icon.stack:SetText(textCfg.showStackCount ~= false and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
         ApplyAuraFont(icon.timer, cooldownSize)
         icon.timer:ClearAllPoints()
         icon.timer:SetPoint("CENTER", icon, "CENTER", cooldownX, cooldownY)
         icon.timer:SetJustifyH("CENTER")
-        icon.timer:SetText(textCfg.showCooldownText ~= false and (i % 2 == 0 and "18" or "") or "")
+        icon.timer:SetText(textCfg.showCooldownText ~= false and (auraState and auraState.text or (i % 2 == 0 and "18" or "")) or "")
         icon:Show()
     end
     for i = bounds.shown + 1, #(visual._icons or {}) do
         local icon = visual._icons[i]
         if icon.swipe then icon.swipe:Hide() end
+        if icon.durationBar then icon.durationBar:Hide() end
         if icon.dispelBorder then icon.dispelBorder:Hide() end
         icon:Hide()
     end

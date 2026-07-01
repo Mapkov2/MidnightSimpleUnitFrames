@@ -126,6 +126,53 @@ local function OpenGFSection(sectionKey)
         M.SelectPage(pageKey)
     end
 end
+local function PreviewAnimationActive()
+    local fn = _G.MSUF_IsPreviewAnimationEnabled
+    return type(fn) == "function" and fn() == true
+end
+local function RefreshPreviewAnimationButton(box)
+    local btn = box and box._previewAnimationButton
+    if not btn then return end
+    local active = PreviewAnimationActive()
+    if btn.SetText then btn:SetText(active and "Stop" or "Combat") end
+    if btn.SetActive then btn:SetActive(active) end
+end
+local function TogglePreviewAnimation(box)
+    local toggle = _G.MSUF_TogglePreviewAnimation
+    if type(toggle) ~= "function" then return end
+    if box and type(_G.MSUF_RegisterPreviewAnimationGroupBox) == "function" then _G.MSUF_RegisterPreviewAnimationGroupBox(box) end
+    local ok, reason = toggle("group_menu")
+    RefreshPreviewAnimationButton(box)
+    if ok == false and reason == "combat" and box and box._hint then
+        box._hint:SetText((M.Tr and M.Tr("Preview animation pauses during combat.")) or "Preview animation pauses during combat.")
+        return
+    end
+    if box and box.RequestRefresh then
+        box:RequestRefresh("GROUP_PREVIEW_COMBAT_ANIMATE_TOGGLE")
+    elseif box and box.Refresh then
+        box:Refresh("GROUP_PREVIEW_COMBAT_ANIMATE_TOGGLE")
+    end
+end
+local function CreatePreviewAnimationButton(box)
+    if not (box and T and T.Button) or box._previewAnimationButton then return end
+    local btn = T.Button(box, "Combat", 74, 22)
+    btn._msuf2AllowCombatClick = true
+    if box._zoomBar then
+        btn:SetPoint("RIGHT", box._zoomBar, "LEFT", -6, 0)
+    elseif box._stage then
+        btn:SetPoint("TOPRIGHT", box._stage, "TOPRIGHT", -154, -6)
+    else
+        btn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -104, -34)
+    end
+    if btn.SetFrameLevel and box.GetFrameLevel then btn:SetFrameLevel((box:GetFrameLevel() or 0) + 85) end
+    btn:SetScript("OnClick", function() TogglePreviewAnimation(box) end)
+    if M.AddTooltip then
+        M.AddTooltip(btn, "Combat Preview", "Animates health, power, prediction bars, text values, and combat-state indicators for visible group previews only. Stops automatically in combat.", { hook = true })
+    end
+    box._previewAnimationButton = btn
+    box.RefreshAnimationButton = RefreshPreviewAnimationButton
+    RefreshPreviewAnimationButton(box)
+end
 local function PreviewScopeLabel(kind)
     if kind == "raid" then return "Raid" end
     if kind == "mythicraid" then return "Mythic Raid" end
@@ -822,6 +869,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         oneReason = "GROUP_PREVIEW_ZOOM_1TO1",
     })
     R.ZoomWheel = box._zoomWheel or R.ZoomWheel
+    CreatePreviewAnimationButton(box)
     local bounds = CreateFrame("Frame", nil, stage, T.Template())
     bounds:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
     bounds:SetBackdropColor(0, 0, 0, 0)
@@ -1013,9 +1061,14 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
     end
     box:HookScript("OnShow", function(self)
+        if type(_G.MSUF_RegisterPreviewAnimationGroupBox) == "function" then _G.MSUF_RegisterPreviewAnimationGroupBox(self) end
+        if type(_G.MSUF_RegisterPreviewAnimationRefreshOwner) == "function" then _G.MSUF_RegisterPreviewAnimationRefreshOwner(self, RefreshPreviewAnimationButton) end
+        RefreshPreviewAnimationButton(self)
         self:RequestRefresh("GROUP_PREVIEW_SHOW")
     end)
     box:HookScript("OnHide", function(self)
+        if type(_G.MSUF_UnregisterPreviewAnimationGroupBox) == "function" then _G.MSUF_UnregisterPreviewAnimationGroupBox(self) end
+        if type(_G.MSUF_UnregisterPreviewAnimationRefreshOwner) == "function" then _G.MSUF_UnregisterPreviewAnimationRefreshOwner(self) end
         self:ReleaseRuntimePreview()
     end)
     box:HookScript("OnSizeChanged", function(self, width, height)

@@ -89,6 +89,19 @@ local function NormalizeCastbarPreviewTruncate(value)
     if value == "CLIP" or value == "NONE" then return value end
     return "AUTO"
 end
+local function CopyPreviewAnimationData(box, data, hpFrac, powerFrac)
+    local copy = box and box._previewAnimationData
+    if not copy then
+        copy = {}
+        if box then box._previewAnimationData = copy end
+    else
+        for k in pairs(copy) do copy[k] = nil end
+    end
+    for k, v in pairs(data or {}) do copy[k] = v end
+    copy.hp = hpFrac
+    copy.power = powerFrac
+    return copy
+end
 local function ShortenCastbarPreviewSpellName(key, text)
     local shorten = _G.MSUF_ShortenCastbarSpellName
     if type(shorten) ~= "function" then return text end
@@ -152,7 +165,7 @@ local UNIT_RENDER_FALLBACKS = {
 
 --- Castbar preview detail layout mirrors the live CastbarVisuals rules without
 --- subscribing to spellcast events. Keep all data reads profile/local here.
-local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, CastbarShowIcon, CastbarShowText, ReadCastbarNum, FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle)
+local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, CastbarShowIcon, CastbarShowText, ReadCastbarNum, FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle, animState)
     local detailPrefix = CastbarPreviewDetailPrefix(key)
     local showIcon = CastbarShowIcon(key, g)
     mock.cast.icon:SetShown(showIcon)
@@ -183,16 +196,22 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         box.handleCastbarIcon:Hide()
     end
     mock.cast.fill:ClearAllPoints()
-    if showIcon and iconPosition == "LEFT" then
-        mock.cast.fill:SetPoint("TOPLEFT", mock.cast, "TOPLEFT", sIcon + S(iconSpacing), -S(1))
-    else
-        mock.cast.fill:SetPoint("TOPLEFT", mock.cast, "TOPLEFT", S(1), -S(1))
-    end
+    local fillLeft = S(1)
+    if showIcon and iconPosition == "LEFT" then fillLeft = sIcon + S(iconSpacing) end
+    mock.cast.fill:SetPoint("TOPLEFT", mock.cast, "TOPLEFT", fillLeft, -S(1))
+    mock.cast.fill:SetPoint("BOTTOMLEFT", mock.cast, "BOTTOMLEFT", fillLeft, S(1))
     local timeReserve = max(S(2), min(S(60), floor(scw * 0.34 + 0.5)))
+    local fillRight = timeReserve
     if showIcon and iconPosition == "RIGHT" then
-        mock.cast.fill:SetPoint("BOTTOMRIGHT", mock.cast, "BOTTOMRIGHT", -(sIcon + S(iconSpacing)), S(1))
+        fillRight = sIcon + S(iconSpacing)
+    end
+    if animState then
+        local fillMaxW = max(S(2), scw - fillLeft - fillRight)
+        local castPct = tonumber(animState.castPct) or 0.5
+        if castPct < 0 then castPct = 0 elseif castPct > 1 then castPct = 1 end
+        mock.cast.fill:SetWidth(max(S(2), floor(fillMaxW * castPct + 0.5)))
     else
-        mock.cast.fill:SetPoint("BOTTOMRIGHT", mock.cast, "BOTTOMRIGHT", -timeReserve, S(1))
+        mock.cast.fill:SetPoint("BOTTOMRIGHT", mock.cast, "BOTTOMRIGHT", -fillRight, S(1))
     end
     local showText = CastbarShowText(key, g)
     mock.cast.text:SetShown(showText)
@@ -233,7 +252,9 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         or (key == "focus" and g.showFocusCastTime ~= false)
         or (key == "player" and g.showPlayerCastTime ~= false)
     mock.cast.time:SetShown(showTime)
-    mock.cast.time:SetText(FormatCastbarPreviewTime(g, key, 1.4, 2.0))
+    local castDuration = animState and tonumber(animState.castDuration) or 2.0
+    local castCurrent = animState and (castDuration - (tonumber(animState.castRemaining) or 0)) or 1.4
+    mock.cast.time:SetText(FormatCastbarPreviewTime(g, key, castCurrent, castDuration))
     if showTime then
         local timeX = ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", g.castbarPlayerTimeOffsetX or -2)
         local timeY = ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", g.castbarPlayerTimeOffsetY or 0)
@@ -297,6 +318,8 @@ function Render.Install(Preview, deps)
         ResolveTextColor = function(fallbackR, fallbackG, fallbackB)
             return (SharedCPPreview.ResolveTextColor or FallbackText)(fallbackR, fallbackG, fallbackB, PowerColor)
         end,
+        AnimatedValue = SharedCPPreview.AnimatedValue,
+        TextForValue = SharedCPPreview.TextForValue,
     }
     local fallbackFont = deps.FONT or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     if type(deps.ApplyPreviewFont) ~= "function" then
@@ -488,6 +511,21 @@ function Preview.Refresh(box, reason)
     local powerFrac = tonumber(data.power) or 1
     if not detachedPower and key ~= "player" then powerFrac = 1 end
     if powerFrac < 0 then powerFrac = 0 elseif powerFrac > 1 then powerFrac = 1 end
+    local animState
+    local previewAnimation = MSUF and MSUF.PreviewAnimation
+    if previewAnimation and previewAnimation.IsEnabled and previewAnimation.IsEnabled() and previewAnimation.FrameState then
+        animState = previewAnimation.FrameState(box, 1, key, box._previewAnimationState or {})
+        box._previewAnimationState = animState
+        local animHp = animState and tonumber(animState.hpPct)
+        local animPower = animState and tonumber(animState.powerPct)
+        if animHp then
+            if animHp < 0 then animHp = 0 elseif animHp > 1 then animHp = 1 end
+            if animPower == nil then animPower = powerFrac end
+            if animPower < 0 then animPower = 0 elseif animPower > 1 then animPower = 1 end
+            powerFrac = animPower
+            data = CopyPreviewAnimationData(box, data, animHp, powerFrac)
+        end
+    end
     local cpH = classPowerOn and (tonumber(bars.classPowerHeight) or 4) or 0
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
     local classPowerSegCount = PreviewClassPowerSegmentCount(classPowerPreviewSpec, 10)
@@ -728,6 +766,7 @@ function Preview.Refresh(box, reason)
         cp.token = cp.preview and cp.preview.token
         cp.isRune = cp.preview and cp.preview.mode == "rune"
         cp.r, cp.g, cp.b = pr, pg, pb
+        cp.animatedValue = animState and R.CPPreview.AnimatedValue and R.CPPreview.AnimatedValue(cp.preview, animState.elapsed) or nil
         if cp.token then cp.r, cp.g, cp.b = R.CPPreview.ResolveBaseColor(cp.preview, bars, pr, pg, pb) end
         cp.filledAlpha = tonumber(bars.classPowerFilledAlpha) or 0.95
         if cp.filledAlpha < 0 then cp.filledAlpha = 0 elseif cp.filledAlpha > 1 then cp.filledAlpha = 1 end
@@ -801,7 +840,7 @@ function Preview.Refresh(box, reason)
                 seg:Show()
                 seg:ClearAllPoints()
                 cp.rune = cp.runeOrder and cp.runeOrder[i] or nil
-                cp.fill = cp.rune and ((cp.rune.elapsed or 0) / (cp.rune.total or 1)) or R.CPPreview.FillForSegment(cp.preview, i)
+                cp.fill = cp.rune and ((cp.rune.elapsed or 0) / (cp.rune.total or 1)) or R.CPPreview.FillForSegment(cp.preview, i, cp.animatedValue)
                 cp.drawW = segW
                 cp.mode = cp.preview and cp.preview.mode
                 if (cp.mode == "continuous" or cp.mode == "timer_bar" or cp.mode == "stagger" or cp.mode == "aura_single" or cp.mode == "fractional") and cp.fill > 0 and cp.fill < 1 then
@@ -901,7 +940,11 @@ function Preview.Refresh(box, reason)
             local cpTextSize = S(tonumber(bars.classPowerFontSize) or 16)
             if cpTextSize < 7 then cpTextSize = 7 end
             ApplyPreviewFont(mock.classPower.text, cpTextSize)
-            mock.classPower.text:SetText((cp.preview and cp.preview.previewText) or "3")
+            if cp.animatedValue ~= nil and R.CPPreview.TextForValue then
+                mock.classPower.text:SetText(R.CPPreview.TextForValue(cp.preview, cp.animatedValue))
+            else
+                mock.classPower.text:SetText((cp.preview and cp.preview.previewText) or "3")
+            end
             cp.tr, cp.tg, cp.tb = R.CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
             mock.classPower.text:SetTextColor(cp.tr, cp.tg, cp.tb, 1)
             mock.classPower.text:ClearAllPoints()
@@ -1312,7 +1355,7 @@ function Preview.Refresh(box, reason)
         local cr, cg, cb = 0.0, 0.9, 0.8
         if type(_G.MSUF_GetInterruptibleCastColor) == "function" then cr, cg, cb = _G.MSUF_GetInterruptibleCastColor() end
         mock.cast.fill:SetVertexColor(cr or 0.0, cg or 0.9, cb or 0.8, 1)
-        ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, R.CastbarShowIcon, R.CastbarShowText, R.ReadCastbarNum, R.FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle)
+        ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, R.CastbarShowIcon, R.CastbarShowText, R.ReadCastbarNum, R.FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle, animState)
         box.handleCastbar:SetSize(max(36, scw), max(18, sch + 8))
         PlaceHandle(box.handleCastbar, mock.cast)
     else

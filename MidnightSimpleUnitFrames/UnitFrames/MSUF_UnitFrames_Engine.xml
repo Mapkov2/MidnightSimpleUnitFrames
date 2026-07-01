@@ -6,4 +6,5 @@
   <Script file="Engine\MSUF_UF_Dispatch.lua"/>
   <Script file="Engine\MSUF_UF_Runtime.lua"/>
   <Script file="Engine\MSUF_UF_Config.lua"/>
+  <Script file="Engine\MSUF_UF_PreviewAnimation.lua"/>
 </Ui>

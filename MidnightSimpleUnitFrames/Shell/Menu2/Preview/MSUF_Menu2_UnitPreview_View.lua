@@ -666,6 +666,68 @@ local SetPreviewZoom = PreviewZoomPan.SetZoom or F.Noop
 local StepPreviewZoom = PreviewZoomPan.Step or F.Noop
 StartPreviewPan = PreviewZoomPan.Start or StartPreviewPan
 StopPreviewPan = PreviewZoomPan.Stop or StopPreviewPan
+local function PreviewAnimationActive()
+    local fn = _G.MSUF_IsPreviewAnimationEnabled
+    return type(fn) == "function" and fn() == true
+end
+local function RefreshPreviewAnimationButton(box)
+    local btn = box and box.animateCombatButton
+    if not btn then return end
+    local active = PreviewAnimationActive()
+    if btn.fs then
+        btn.fs:SetText(active and TR("Stop") or TR("Combat"))
+        btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
+    end
+    if btn.SetBackdropColor then
+        if active then
+            btn:SetBackdropColor(0.020, 0.125, 0.155, 0.96)
+            btn:SetBackdropBorderColor(0.10, 0.82, 0.95, 1)
+        else
+            btn:SetBackdropColor(0.015, 0.018, 0.030, 0.86)
+            btn:SetBackdropBorderColor(0.10, 0.14, 0.22, 0.92)
+        end
+    end
+end
+local function TogglePreviewAnimation(box)
+    local fn = _G.MSUF_TogglePreviewAnimation
+    if type(fn) ~= "function" then return end
+    local ok, reason = fn("unit_menu")
+    RefreshPreviewAnimationButton(box)
+    if ok == false and reason == "combat" and box and box.hint then
+        box.hint:SetText(TR("Preview animation pauses during combat."))
+        return
+    end
+    RequestPreviewLayoutRefresh(box, "UNIT_PREVIEW_COMBAT_ANIMATE")
+end
+local function CreatePreviewAnimationButton(box)
+    if not (box and box.canvas) or box.animateCombatButton then return end
+    local btn = CreateFrame("Button", nil, box.canvas, "BackdropTemplate")
+    btn:SetSize(74, 22)
+    btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
+    if box.zoomBar then
+        btn:SetPoint("RIGHT", box.zoomBar, "LEFT", -6, 0)
+    else
+        btn:SetPoint("TOPRIGHT", box.canvas, "TOPRIGHT", -174, -6)
+    end
+    if btn.SetFrameLevel and box.canvas.GetFrameLevel then btn:SetFrameLevel((box.canvas:GetFrameLevel() or 0) + 82) end
+    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    btn.fs:SetPoint("CENTER")
+    btn._preview = box
+    btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
+    btn:SetScript("OnEnter", function(self)
+        if self.SetBackdropColor and not PreviewAnimationActive() then
+            self:SetBackdropColor(0.05, 0.07, 0.11, 0.98)
+            self:SetBackdropBorderColor(0.28, 0.42, 0.68, 1)
+        end
+    end)
+    btn:SetScript("OnLeave", function(self) RefreshPreviewAnimationButton(self._preview) end)
+    if M2.AddTooltip then
+        M2.AddTooltip(btn, "Combat Preview", "Animates health, power, absorbs, cast progress, and combat indicators for visible previews only. Stops automatically in combat.", { hook = true })
+    end
+    box.animateCombatButton = btn
+    box.RefreshAnimationButton = RefreshPreviewAnimationButton
+    RefreshPreviewAnimationButton(box)
+end
 local function BuildPreview(parent, panel, width, height)
     local sideW = 72
     local T = MenuTheme()
@@ -712,6 +774,7 @@ local function BuildPreview(parent, panel, width, height)
         fitReason = "UNIT_PREVIEW_ZOOM_FIT",
         oneReason = "UNIT_PREVIEW_ZOOM_1TO1",
     })
+    CreatePreviewAnimationButton(box)
     local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
     sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 6, 0)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
@@ -992,13 +1055,18 @@ local function BuildPreview(parent, panel, width, height)
     box:SetScript("OnKeyDown", PreviewArrowKeyDown)
     box:SetScript("OnShow", function(self)
         Preview.active = self
+        if type(_G.MSUF_RegisterPreviewAnimationMenuBox) == "function" then _G.MSUF_RegisterPreviewAnimationMenuBox(self) end
+        if type(_G.MSUF_RegisterPreviewAnimationRefreshOwner) == "function" then _G.MSUF_RegisterPreviewAnimationRefreshOwner(self, RefreshPreviewAnimationButton) end
         if self.RegisterEvent then
             self:RegisterEvent("PLAYER_REGEN_ENABLED")
             self:RegisterEvent("PLAYER_REGEN_DISABLED")
         end
+        RefreshPreviewAnimationButton(self)
         Preview.RequestRefresh("SHOW")
     end)
     box:SetScript("OnHide", function(self)
+        if type(_G.MSUF_UnregisterPreviewAnimationMenuBox) == "function" then _G.MSUF_UnregisterPreviewAnimationMenuBox(self) end
+        if type(_G.MSUF_UnregisterPreviewAnimationRefreshOwner) == "function" then _G.MSUF_UnregisterPreviewAnimationRefreshOwner(self) end
         self._refreshSerial = (tonumber(self._refreshSerial) or 0) + 1
         self._refreshQueued = nil
         self._refreshReason = nil
