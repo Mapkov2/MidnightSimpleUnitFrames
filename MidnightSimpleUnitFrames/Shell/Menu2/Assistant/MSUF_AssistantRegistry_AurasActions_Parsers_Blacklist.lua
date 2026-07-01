@@ -29,7 +29,7 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local normalized = AuraActionNormalized(text)
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
         return { scope = scope or "shared" }, {
-            summary = "Shows or clears hidden aura entries.",
+            summary = "Shows saved legacy hidden aura entries or explains why they are read-only.",
         }
     end
 
@@ -62,7 +62,7 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local args = ParseAuraBlacklistScopeAliasArgs(text)
         if not args then return false end
         return args, {
-            summary = "Shows hidden aura entries.",
+            summary = "Shows saved legacy hidden aura entries.",
         }
     end
 
@@ -77,7 +77,7 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         local args = ParseAuraBlacklistScopeAliasArgs(text)
         if not args then return false end
         return args, {
-            summary = "Clears hidden aura entries.",
+            summary = "Explains why exact hidden aura entries are read-only in the native backend.",
         }
     end
 
@@ -99,7 +99,7 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         if type(value) ~= "string" or value == "" then return false end
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
         return { scope = scope or "shared", value = value }, {
-            summary = "Changes one hidden aura spell.",
+            summary = "Explains why exact hidden aura spell edits are read-only in the native backend.",
         }
     end
 
@@ -164,7 +164,7 @@ function A.AurasRegistry.BuildBlacklistActionParsers(ctx)
         if not preset then return false end
         local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
         return { scope = scope or "shared", preset = preset }, {
-            summary = "Adds a curated hidden-aura preset.",
+            summary = "Explains why exact hidden-aura presets are read-only in the native backend.",
         }
     end
 

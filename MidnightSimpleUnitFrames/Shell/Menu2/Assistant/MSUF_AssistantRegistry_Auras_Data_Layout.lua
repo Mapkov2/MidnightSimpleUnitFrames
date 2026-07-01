@@ -87,7 +87,7 @@ Data.AURA_STACK_ANCHOR_ALIASES = {
 }
 
 Data.AURA_SCOPE_OVERRIDE_SPECS = {
-    { key = "overrideFilters", label = "Custom Aura Filters", aliases = { "custom aura filters", "custom filters", "use custom aura filters", "use custom aura filters for this scope", "aura filter override", "aura filters override" } },
+    { key = "overrideFilters", label = "Custom Aura Filters", aliases = { "custom aura filters", "custom filters", "use custom aura filters", "use custom filters", "use custom aura filters for this scope", "aura filter override", "aura filters override", "custom filter override" } },
     { key = "overrideSharedLayout", label = "Custom Aura Caps", aliases = { "custom aura caps", "custom caps", "aura caps override", "aura limits override" } },
     { key = "overrideLayout", label = "Custom Aura Layout", aliases = { "custom aura layout", "custom layout", "aura layout override", "aura visual override" } },
     { key = "overrideIgnore", label = "Custom Aura Ignore List", aliases = { "custom aura ignore", "custom ignore", "aura ignore list override" } },

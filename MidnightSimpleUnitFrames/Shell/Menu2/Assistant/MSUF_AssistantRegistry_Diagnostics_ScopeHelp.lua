@@ -132,7 +132,7 @@ local function ScopeHelpExamples(frameType, unit, group, page)
             "show player buffs",
             "set target debuff size 32",
             "apply clean aura preset",
-            "hide spell 12345 for player auras",
+            "set target debuff dispellable filter on",
             "show hidden raid buff categories",
         }
     end

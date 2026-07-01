@@ -32,12 +32,26 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
     if type(ParseAuraBlacklistClearAliasArgs) ~= "function" or type(ParseAuraBlacklistPresetAliasArgs) ~= "function" then return end
     if type(ParseAuraBlacklistSummaryAliasArgs) ~= "function" or type(RegisterBlacklistSummaryAction) ~= "function" then return end
 
+    local function NativeUnitBlacklistReadOnlyMessage(scope, value, operation)
+        local target = AuraScopeLabel(scope) .. " auras"
+        local prefix
+        if operation == "clear" then
+            prefix = "I did not clear the saved hidden-aura list for " .. target .. "."
+        elseif operation == "preset" then
+            prefix = "I did not add that preset to the saved hidden-aura list for " .. target .. "."
+        elseif operation == "remove" then
+            prefix = "I did not remove " .. tostring(value or "that spell") .. " from the saved hidden-aura list for " .. target .. "."
+        else
+            prefix = "I did not change the saved hidden-aura list for " .. target .. "."
+        end
+        return prefix .. " Exact SpellID blacklist edits are legacy read-only data while the native 12.1 aura backend is active, so changing them would not affect live aura display. Use Aura Filters instead, such as player-only, raid, dispellable, crowd-control, or exclusive filter options."
+    end
+
     Registry:RegisterAction({
         key = "aura_blacklist_add_spell",
         label = "Hide Aura Spell",
         type = "auras",
-        combatSafe = false,
-        captureSnapshot = true,
+        combatSafe = true,
         aliases = {
             "blacklist", "blacklist spell", "blacklist aura", "blacklist aura spell",
             "block aura", "block aura spell", "ignore aura", "ignore aura spell",
@@ -49,14 +63,10 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
         },
         parseAliasArgs = ParseAuraBlacklistAddSpellAliasArgs,
         run = function(args)
-            local Model = AuraModel()
-            if not (Model and type(Model.AddBlacklistSpell) == "function") then return false, "Open Aura Filters first so I can change hidden auras." end
             local scope = args and args.scope or "shared"
             local value = args and args.value
             if type(value) ~= "string" or value == "" then return false, "Which spell do you want me to use? A spell ID, spell link, or full spell name is enough." end
-            if not Model.AddBlacklistSpell(scope, value) then return false, "I don't recognize that spell yet. A spell ID or full spell name is enough." end
-            ApplyAura(scope, "MSUF_ASSISTANT_AURA_BLACKLIST_ADD")
-            return true, "Done. " .. tostring(value) .. " is now hidden for " .. AuraScopeLabel(scope) .. " auras."
+            return false, NativeUnitBlacklistReadOnlyMessage(scope, value)
         end,
     })
 
@@ -64,8 +74,7 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
         key = "aura_blacklist_remove_spell",
         label = "Allow Hidden Aura Spell",
         type = "auras",
-        combatSafe = false,
-        captureSnapshot = true,
+        combatSafe = true,
         aliases = {
             "remove", "allow",
             "remove aura blacklist spell", "remove spell from aura blacklist",
@@ -78,14 +87,10 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
         },
         parseAliasArgs = ParseAuraBlacklistRemoveSpellAliasArgs,
         run = function(args)
-            local Model = AuraModel()
-            if not (Model and type(Model.RemoveBlacklistSpell) == "function") then return false, "Open Aura Filters first so I can change hidden auras." end
             local scope = args and args.scope or "shared"
             local value = args and args.value
             if type(value) ~= "string" or value == "" then return false, "Which spell do you want me to use? A spell ID, spell link, or full spell name is enough." end
-            Model.RemoveBlacklistSpell(scope, value)
-            ApplyAura(scope, "MSUF_ASSISTANT_AURA_BLACKLIST_REMOVE")
-            return true, "Done. " .. tostring(value) .. " can show again for " .. AuraScopeLabel(scope) .. " auras."
+            return false, NativeUnitBlacklistReadOnlyMessage(scope, value, "remove")
         end,
     })
 
@@ -93,8 +98,7 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
         key = "aura_blacklist_clear_spells",
         label = "Clear Hidden Aura Spells",
         type = "auras",
-        combatSafe = false,
-        captureSnapshot = true,
+        combatSafe = true,
         aliases = {
             "clear aura blacklist", "clear all aura blacklist", "allow all aura blacklist",
             "allow all aura blacklist spells", "remove all aura blacklist spells",
@@ -109,15 +113,8 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
         },
         parseAliasArgs = ParseAuraBlacklistClearAliasArgs,
         run = function(args)
-            local Model = AuraModel()
-            if not (Model and type(Model.ClearBlacklistSpells) == "function") then return false, "Open Aura Filters first so I can change hidden auras." end
             local scope = args and args.scope or "shared"
-            local count = Model.ClearBlacklistSpells(scope)
-            ApplyAura(scope, "MSUF_ASSISTANT_AURA_BLACKLIST_CLEAR")
-            if count and count > 0 then
-                return true, "Done. Cleared hidden spells for " .. AuraScopeLabel(scope) .. " auras. Removed " .. tostring(count) .. " " .. (count == 1 and "spell." or "spells.")
-            end
-            return true, "Already set. " .. AuraScopeLabel(scope) .. " auras have no hidden spell entries."
+            return false, NativeUnitBlacklistReadOnlyMessage(scope, nil, "clear")
         end,
     })
 
@@ -125,9 +122,7 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
         key = "aura_blacklist_add_preset",
         label = "Add Hidden Aura Preset",
         type = "auras",
-        combatSafe = false,
-        confirmRequired = true,
-        captureSnapshot = true,
+        combatSafe = true,
         aliases = {
             "aura blacklist", "aura blacklist preset", "blacklist preset", "blacklist aura preset",
             "add aura blacklist preset", "add blacklist preset",
@@ -149,14 +144,10 @@ function A.AurasRegistry.RegisterBlacklistActions(ctx)
         },
         parseAliasArgs = ParseAuraBlacklistPresetAliasArgs,
         run = function(args)
-            local Model = AuraModel()
-            if not (Model and type(Model.AddBlacklistPresetGroup) == "function") then return false, "Open Aura Filters first so I can add that hidden-aura preset." end
             local scope = args and args.scope or "shared"
             local preset = args and args.preset
             if type(preset) ~= "string" or preset == "" then return false, "Which hidden-aura preset do you want me to use?" end
-            local count = Model.AddBlacklistPresetGroup(scope, preset)
-            ApplyAura(scope, "MSUF_ASSISTANT_AURA_BLACKLIST_PRESET")
-            return true, "Done. Added " .. tostring(count or 0) .. " spells from that preset to hidden " .. AuraScopeLabel(scope) .. " auras."
+            return false, NativeUnitBlacklistReadOnlyMessage(scope, preset, "preset")
         end,
     })
 

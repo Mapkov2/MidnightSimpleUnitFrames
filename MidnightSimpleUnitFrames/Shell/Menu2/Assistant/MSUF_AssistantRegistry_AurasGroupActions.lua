@@ -38,12 +38,20 @@ local ParseGroupAuraDirectBlacklistClearAliasArgs = GroupActionParsers.ParseGrou
 local ParseGroupAuraDirectBlacklistPresetAliasArgs = GroupActionParsers.ParseGroupAuraDirectBlacklistPresetAliasArgs
 local ParseGroupAuraDirectBlacklistSummaryAliasArgs = GroupActionParsers.ParseGroupAuraDirectBlacklistSummaryAliasArgs
 
+local function NativeGroupCategoryBlacklistReadOnlyMessage(scope, lane, categoryLabel, operation)
+    local target = A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane)
+    local detail = categoryLabel and categoryLabel ~= "" and (" for " .. tostring(categoryLabel)) or ""
+    local prefix = operation == "clear"
+        and ("I did not clear the saved " .. target .. " category blacklist.")
+        or ("I did not change the saved " .. target .. " category blacklist" .. detail .. ".")
+    return prefix .. " Group aura category blacklists are legacy read-only data in the native 12.1 aura backend, so changing them would not hide or allow live auras. Use the group aura filter token instead; for example, set " .. target .. " filter to All, Raid, or Dispellable."
+end
+
 Registry:RegisterAction({
     key = "aura_group_category_blacklist_set",
     label = "Set Hidden Group Aura Category",
     type = "auras",
-    combatSafe = false,
-    captureSnapshot = true,
+    combatSafe = true,
     aliases = {
         "blacklist", "allow", "hide", "block", "exclude", "include",
         "category blacklist", "public category blacklist", "blacklist category",
@@ -58,12 +66,7 @@ Registry:RegisterAction({
         local lane = A.GroupAuraCategoryLane(args and args.lane)
         local catKey = A.ResolveAuraGroupCategory(args and args.category)
         if not catKey then return false, "Which aura category do you want me to hide or allow?" end
-        local value = args and args.value == true
-        local changed = A.WriteGroupAuraCategoryState(scope, lane, catKey, value)
-        A.ApplyGroupAuraCategory(scope)
-        local verb = value and "hidden" or "allowed"
-        local prefix = changed and "Done. " or "Already set. "
-        return true, prefix .. A.AuraGroupCategoryLabel(catKey) .. " is " .. verb .. " for " .. A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane) .. "."
+        return false, NativeGroupCategoryBlacklistReadOnlyMessage(scope, lane, A.AuraGroupCategoryLabel(catKey))
     end,
 })
 
@@ -86,7 +89,7 @@ Registry:RegisterAction({
     run = function(args)
         local scope = A.GroupAuraCategoryScope(args and args.scope)
         local lane = A.GroupAuraCategoryLane(args and args.lane)
-        return true, "Hidden " .. A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane) .. " categories:\n" .. A.GroupAuraCategorySummary(scope, lane)
+        return true, "Done. Saved legacy hidden " .. A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane) .. " categories (read-only in the native 12.1 backend):\n" .. A.GroupAuraCategorySummary(scope, lane)
     end,
 })
 
@@ -94,8 +97,7 @@ Registry:RegisterAction({
     key = "aura_group_category_blacklist_clear",
     label = "Clear Hidden Group Aura Categories",
     type = "auras",
-    combatSafe = false,
-    captureSnapshot = true,
+    combatSafe = true,
     aliases = {
         "clear category blacklist", "clear all category blacklist",
         "allow all categories", "allow all public categories",
@@ -110,12 +112,7 @@ Registry:RegisterAction({
     run = function(args)
         local scope = A.GroupAuraCategoryScope(args and args.scope)
         local lane = A.GroupAuraCategoryLane(args and args.lane)
-        local count = A.ClearGroupAuraCategoryBlacklist and A.ClearGroupAuraCategoryBlacklist(scope, lane) or 0
-        local target = A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane)
-        if count and count > 0 then
-            return true, "Done. Cleared hidden aura categories for " .. target .. ". Removed " .. tostring(count) .. " " .. (count == 1 and "entry." or "entries.")
-        end
-        return true, "Already set. " .. target .. " have no hidden aura category entries."
+        return false, NativeGroupCategoryBlacklistReadOnlyMessage(scope, lane, nil, "clear")
     end,
 })
 

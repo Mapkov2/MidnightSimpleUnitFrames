@@ -51,7 +51,7 @@ function A.AurasRegistry.RegisterBlacklistSummaryAction(ctx)
             local Model = AuraModel()
             if not (Model and type(Model.BlacklistSummary) == "function") then return false, "Open Aura Filters first so I can show the hidden-aura list." end
             local scope = args and args.scope or "shared"
-            return true, AuraScopeLabel(scope) .. " hidden auras:\n" .. tostring(Model.BlacklistSummary(scope))
+            return true, "Done. Saved legacy " .. AuraScopeLabel(scope) .. " hidden auras (read-only while the native 12.1 backend is active):\n" .. tostring(Model.BlacklistSummary(scope))
         end,
     })
 end

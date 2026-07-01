@@ -29,6 +29,13 @@ function A.AurasRegistry.RegisterGroupAuraCategorySettings(ctx)
     if type(ReadGFAuraCategorySetting) ~= "function" or type(WriteGFAuraCategoryState) ~= "function" then return end
     if type(SameGFAuraCategoryState) ~= "function" or type(ApplyGFAuraCategory) ~= "function" then return end
 
+    local registerMutableLegacyCategorySettings = false
+    if not registerMutableLegacyCategorySettings then
+        -- The native 12.1 group aura backend does not consume addon category
+        -- blacklist data. Keep this legacy data out of generic setting mutation.
+        return
+    end
+
     local GF_AURA_CATEGORY_SCOPES = ctx.GF_AURA_CATEGORY_SCOPES or {}
     local AURA_LANES = ctx.AURA_LANES or {}
     local categories = GFAuraCategoryValues()
