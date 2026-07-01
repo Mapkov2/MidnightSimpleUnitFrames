@@ -107,6 +107,10 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         M.Open("home")
         return
     end
+    if cmd == "inputdebug" then
+        if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"](msg) end
+        return
+    end
     if cmd == "help" or cmd == "reset" or cmd == "fullreset" or cmd == "absorb" or cmd == "analytics" then
         if cmd ~= "help" and M.BlockCombatAction and M.BlockCombatAction() then return end
         if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"](msg) end

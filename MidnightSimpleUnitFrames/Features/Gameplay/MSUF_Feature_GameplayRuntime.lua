@@ -29,6 +29,7 @@ local GetPlayerSpecID = GameplayHelpers.GetPlayerSpecID
 local Clamp, RoundInt = GameplayHelpers.Clamp or _G._MSUF_Clamp, GameplayHelpers.RoundInt or _G._MSUF_RoundInt
 local CheckpointHistory, BeginHistory, CommitHistory = GameplayHelpers.CheckpointHistory, GameplayHelpers.BeginHistory, GameplayHelpers.CommitHistory
 local SelectNudgeFrame, SetupArrowNudge = GameplayHelpers.SelectNudgeFrame, GameplayHelpers.SetupArrowNudge
+local RefreshKeyboardNudge, ReleaseKeyboardNudge = GameplayHelpers.RefreshKeyboardNudge, GameplayHelpers.ReleaseKeyboardNudge
 
 local ScheduleOnce = _G.MSUF_ScheduleOnce
 local EventBus_Register = _G.MSUF_EventBus_Register
@@ -42,6 +43,24 @@ end
 
 local function BusUnregister(...)
     if type(EventBus_Unregister) == "function" then EventBus_Unregister(...) end
+end
+
+local function RefreshGameplayKeyboardNudge(frame)
+    if not frame then return end
+    if type(RefreshKeyboardNudge) == "function" then
+        RefreshKeyboardNudge(frame)
+    elseif frame._msufGameplayUpdateKeyboardNudge then
+        frame:_msufGameplayUpdateKeyboardNudge()
+    end
+end
+
+local function ReleaseGameplayKeyboardNudge(frame)
+    if not frame then return end
+    if type(ReleaseKeyboardNudge) == "function" then
+        ReleaseKeyboardNudge(frame)
+    elseif frame._msufGameplayReleaseKeyboardNudge then
+        frame:_msufGameplayReleaseKeyboardNudge()
+    end
 end
 
 do
@@ -428,6 +447,7 @@ end
 CombatStateOnEvent = function(event)
     local g = GetGameplayDB()
     if not g or not g.enableCombatStateText then
+        ReleaseGameplayKeyboardNudge(stateFrame)
         ClearCombatStateText()
         SetCombatStateClickThrough(false)
         return
@@ -437,6 +457,7 @@ CombatStateOnEvent = function(event)
     local duration = math_max(g.combatStateDuration or 1.5, 0.1)
 
     if event == "PLAYER_REGEN_DISABLED" then
+        ReleaseGameplayKeyboardNudge(stateFrame)
         if not wantState then
             ClearCombatStateText()
             SetCombatStateClickThrough(false)
@@ -455,6 +476,7 @@ CombatStateOnEvent = function(event)
         if not stateText then EnsureCombatStateText() end
         local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
         ShowCombatStateText("leave", TextOrDefault(g.combatStateLeaveText, "-Combat"), lr, lg, lb, true)
+        RefreshGameplayKeyboardNudge(stateFrame)
         ScheduleCombatStateClear(duration)
     end
 end
@@ -678,6 +700,7 @@ local function ApplyLockState()
     local g = GameplayDefaults()
     if combatFrame then
         SetAltDragMouse(combatFrame, g.enableCombatTimer, g.lockCombatTimer, g.combatTimerClickThrough)
+        RefreshGameplayKeyboardNudge(combatFrame)
     end
 
     if stateFrame then
@@ -690,6 +713,7 @@ local function ApplyLockState()
         else
             stateFrame:EnableMouse(false)
         end
+        RefreshGameplayKeyboardNudge(stateFrame)
     end
 end
 
@@ -1015,9 +1039,11 @@ end
 local function MSUF_CombatTimer_OnRegenDisabled()
     local gd = GetGameplayDB()
     if not gd or not gd.enableCombatTimer then return end
+    ReleaseGameplayKeyboardNudge(combatFrame)
     combatStartTime = GetTime()
     lastTimerText = ""
     TickCombatTimer()
+    ApplyLockState()
     _StartCombatTimerTick()
 end
 
@@ -1035,6 +1061,7 @@ local function MSUF_CombatTimer_OnEnteringWorld()
     if not gd or not gd.enableCombatTimer then return end
     lastTimerText = ""
     if UnitAffectingCombat and UnitAffectingCombat("player") then
+        ReleaseGameplayKeyboardNudge(combatFrame)
         if not combatStartTime then
             combatStartTime = GetTime()
         end
@@ -1044,6 +1071,7 @@ local function MSUF_CombatTimer_OnEnteringWorld()
         _StopCombatTimerTick()
         combatStartTime = nil
     end
+    ApplyLockState()
     TickCombatTimer()
 end
 
