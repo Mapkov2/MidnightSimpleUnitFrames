@@ -48,18 +48,18 @@ local CI_SLOT_FIELDS = {
   { "C", "CENTER", 0, 0 },
 }
 
---- Corner indicators currently support threat/aggro slots in runtime. Disabled
---- legacy aura categories are normalized to none during compile.
+--- Corner indicators use normal runtime logic for threat slots and native
+--- AuraContainer sensors for dispellable slots.
 function GF.CompileCornerIndicators(conf)
   conf = conf or {}
   local general = GeneralDB() or {}
-  local slots, slotMap, aggroSlots = {}, {}, {}
-  local hasWork, needsThreat = false, false
+  local slots, slotMap, aggroSlots, dispelSlots = {}, {}, {}, {}
+  local hasWork, needsThreat, needsDispel = false, false, false
   for i = 1, #CI_SLOT_FIELDS do
     local field = CI_SLOT_FIELDS[i]
     local slotKey = field[1]
     local category = conf["ciSlot" .. slotKey] or "none"
-    if category == "dispel" or category == "custom" then
+    if category == "custom" then
       category = "none"
     end
     local slot = {
@@ -74,6 +74,9 @@ function GF.CompileCornerIndicators(conf)
       if category == "aggro" then
         needsThreat = true
         aggroSlots[#aggroSlots + 1] = slot
+      elseif category == "dispel" then
+        needsDispel = true
+        dispelSlots[#dispelSlots + 1] = slot
       end
     end
     slots[#slots + 1] = slot
@@ -82,13 +85,15 @@ function GF.CompileCornerIndicators(conf)
   return {
     enabled = conf.ciEnabled == true,
     hasWork = hasWork,
-    needsAura = false,
+    needsAura = needsDispel,
     needsThreat = needsThreat,
+    needsDispel = needsDispel,
     size = Num(conf.ciSize, 8),
     alpha = Alpha(conf.ciAlpha, 1),
     layer = Layer(conf.ciLayer, 7),
     slots = slots,
     aggroSlots = aggroSlots,
+    dispelSlots = dispelSlots,
     slotMap = slotMap,
     aggroMode = conf.aggroMode or general.aggroMode or "ALL",
     aggroR = Num(conf.ciAggroColorR, 1),

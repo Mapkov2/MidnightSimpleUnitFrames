@@ -5,7 +5,7 @@
 --- not inspect or transform aura payload data itself. Blizzard's native
 --- AuraContainer owns tracking, filtering, and assignment; MSUF only builds the
 --- visual containers, AuraButton pools, layout, and refresh surface.
-local _, MSUF = ...
+local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 
 local ExportPublic = MSUF.ExportPublic or function(name, value)
@@ -24,9 +24,12 @@ local UF = MSUF.UF
 if not (UF and UF.RegisterElement) then return end
 if A3.__unitFrameBackendLoaded then return end
 A3.__unitFrameBackendLoaded = true
+if A3.swapUseUpdateAllAuras == nil then
+    A3.swapUseUpdateAllAuras = false
+end
 
-local type, tostring, tonumber, pairs, next, pcall = type, tostring, tonumber, pairs, next, pcall
-local table_concat = table.concat
+local type, tostring, tonumber, pairs, next = type, tostring, tonumber, pairs, next
+local table_concat, table_sort = table.concat, table.sort
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
@@ -35,7 +38,18 @@ local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local EMPTY_EVENTS = {}
 local AURA_CONTAINER_ADDON = "Blizzard_AuraContainer"
+local MSUF_AURA_SENSOR_EDGE_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\msuf_frame_edge_thin_256x64.tga"
 local AURA_BORDER_OPTIONS = {
+    showIcon = false,
+    showWhenHarmful = true,
+    showWhenHelpful = false,
+}
+local AURA_SENSOR_BORDER_OPTIONS = {
+    showIcon = false,
+    showWhenHarmful = true,
+    showWhenHelpful = false,
+}
+local AURA_SENSOR_OVERLAY_OPTIONS = {
     showIcon = false,
     showWhenHarmful = true,
     showWhenHelpful = false,
@@ -46,10 +60,9 @@ local IDENTITY_AURA_REFRESH_REASONS = {
     MSUF_GF_UNIT_IDENTITY = true,
 }
 -- Identity reasons safe to coalesce and flush next tick. A target/focus swap
--- keeps the same unit token, so the container's own UNIT_AURA full-update
--- repopulates content on its own frame (the oUF/alpha1 approach) -- MSUF only
--- needs to keep geometry/registration current, and can do that once per tick
--- under swap spam instead of forcing a synchronous filter rebuild per event.
+-- keeps the same unit token, so MSUF must ask the container for one content
+-- refresh. Coalesce that refresh by frame so swap spam resolves to the latest
+-- identity once per tick instead of forcing synchronous reparses per event.
 -- Group identity is intentionally excluded so roster builds settle in one pass.
 local DEFERRED_IDENTITY_REASONS = {
     MSUF_UNIT_IDENTITY_AURAS = true,
@@ -84,6 +97,11 @@ local DEFAULT_SHARED = {
     showTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = false,
+    showDurationBar = false,
+    durationBarHeight = 2,
+    durationBarDisplay = "BAR_ONLY",
+    durationBarPosition = "BOTTOM",
+    durationBarDirection = "REMAINING",
     showCooldownText = true,
     showStackCount = true,
     debuffTypeBorderMode = "OFF",
@@ -134,6 +152,11 @@ local LANE_SPECS = {
         showTextKey = "buffShowCooldownText",
         swipeKey = "buffShowCooldownSwipe",
         swipeReverseKey = "buffCooldownSwipeReverse",
+        showDurationBarKey = "buffShowDurationBar",
+        durationBarHeightKey = "buffDurationBarHeight",
+        durationBarDisplayKey = "buffDurationBarDisplay",
+        durationBarPositionKey = "buffDurationBarPosition",
+        durationBarDirectionKey = "buffDurationBarDirection",
         showStackKey = "buffShowStackCount",
         stackAnchorKey = "buffStackCountAnchor",
         stackSizeKey = "buffStackTextSize",
@@ -164,6 +187,11 @@ local LANE_SPECS = {
         showTextKey = "debuffShowCooldownText",
         swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse",
+        showDurationBarKey = "debuffShowDurationBar",
+        durationBarHeightKey = "debuffDurationBarHeight",
+        durationBarDisplayKey = "debuffDurationBarDisplay",
+        durationBarPositionKey = "debuffDurationBarPosition",
+        durationBarDirectionKey = "debuffDurationBarDirection",
         showStackKey = "debuffShowStackCount",
         stackAnchorKey = "debuffStackCountAnchor",
         stackSizeKey = "debuffStackTextSize",
@@ -187,6 +215,7 @@ local STYLE_LAYOUT_KEYS = {
     cooldownTextOffsetX = true,
     cooldownTextOffsetY = true,
     cooldownDecimalSeconds = true,
+    durationBarHeight = true,
     buffStackTextSize = true,
     buffStackTextOffsetX = true,
     buffStackTextOffsetY = true,
@@ -194,6 +223,7 @@ local STYLE_LAYOUT_KEYS = {
     buffCooldownTextOffsetX = true,
     buffCooldownTextOffsetY = true,
     buffCooldownDecimalSeconds = true,
+    buffDurationBarHeight = true,
     debuffStackTextSize = true,
     debuffStackTextOffsetX = true,
     debuffStackTextOffsetY = true,
@@ -201,24 +231,37 @@ local STYLE_LAYOUT_KEYS = {
     debuffCooldownTextOffsetX = true,
     debuffCooldownTextOffsetY = true,
     debuffCooldownDecimalSeconds = true,
+    debuffDurationBarHeight = true,
 }
 
 local STYLE_SHARED_LAYOUT_KEYS = {
     showTooltip = true,
     showCooldownSwipe = true,
     cooldownSwipeReverse = true,
+    showDurationBar = true,
+    durationBarDisplay = true,
+    durationBarPosition = true,
+    durationBarDirection = true,
     showCooldownText = true,
     showStackCount = true,
     debuffTypeBorderMode = true,
     useDebuffTypeBorders = true,
     buffShowCooldownSwipe = true,
     buffCooldownSwipeReverse = true,
+    buffShowDurationBar = true,
+    buffDurationBarDisplay = true,
+    buffDurationBarPosition = true,
+    buffDurationBarDirection = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
     buffStackCountAnchor = true,
     buffCooldownTextAnchor = true,
     debuffShowCooldownSwipe = true,
     debuffCooldownSwipeReverse = true,
+    debuffShowDurationBar = true,
+    debuffDurationBarDisplay = true,
+    debuffDurationBarPosition = true,
+    debuffDurationBarDirection = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
     debuffStackCountAnchor = true,
@@ -239,6 +282,9 @@ local GROUP_LANE_SPECS = {
         yKey = "buffOffsetY", layerKey = "buffLayer", filterKey = "buffFilter",
         showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
         swipeReverseKey = "buffCooldownSwipeReverse",
+        showDurationBarKey = "buffShowDurationBar", durationBarHeightKey = "buffDurationBarHeight",
+        durationBarDisplayKey = "buffDurationBarDisplay",
+        durationBarPositionKey = "buffDurationBarPosition", durationBarDirectionKey = "buffDurationBarDirection",
         cooldownSizeKey = "buffCooldownSize", stackSizeKey = "buffStackSize",
         cooldownAnchorKey = "buffCooldownAnchor", cooldownXKey = "buffCooldownX",
         cooldownYKey = "buffCooldownY", stackAnchorKey = "buffStackAnchor",
@@ -255,6 +301,9 @@ local GROUP_LANE_SPECS = {
         yKey = "debuffOffsetY", layerKey = "debuffLayer", filterKey = "debuffFilter",
         showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse",
+        showDurationBarKey = "debuffShowDurationBar", durationBarHeightKey = "debuffDurationBarHeight",
+        durationBarDisplayKey = "debuffDurationBarDisplay",
+        durationBarPositionKey = "debuffDurationBarPosition", durationBarDirectionKey = "debuffDurationBarDirection",
         cooldownSizeKey = "debuffCooldownSize", stackSizeKey = "debuffStackSize",
         cooldownAnchorKey = "debuffCooldownAnchor", cooldownXKey = "debuffCooldownX",
         cooldownYKey = "debuffCooldownY", stackAnchorKey = "debuffStackAnchor",
@@ -271,6 +320,9 @@ local GROUP_LANE_SPECS = {
         yKey = "externalOffsetY", layerKey = "externalLayer", filterKey = "externalFilter",
         showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks", swipeKey = "externalShowCooldownSwipe",
         swipeReverseKey = "externalCooldownSwipeReverse",
+        showDurationBarKey = "externalShowDurationBar", durationBarHeightKey = "externalDurationBarHeight",
+        durationBarDisplayKey = "externalDurationBarDisplay",
+        durationBarPositionKey = "externalDurationBarPosition", durationBarDirectionKey = "externalDurationBarDirection",
         cooldownSizeKey = "externalCooldownSize", stackSizeKey = "externalStackSize",
         cooldownAnchorKey = "externalCooldownAnchor", cooldownXKey = "externalCooldownX",
         cooldownYKey = "externalCooldownY", stackAnchorKey = "externalStackAnchor",
@@ -289,9 +341,11 @@ end
 -- our code. Wrapping them does not fix forbidden table access and makes PTR
 -- stack traces harder to reason about.
 --
--- Do NOT call container:UpdateAllAuras() from MSUF on this PTR build. It
--- resolves into the private CustomAuraContainer path and taint-fails while
--- parsing Blizzard's protected aura tables.
+-- PTR3 exposes UpdateAllAuras() as the intended stable-token refresh hook,
+-- but addon-created CustomAuraContainers still fail to refresh reliably on
+-- target/focus swaps on current PTR builds. Keep the content-correct
+-- ClearAuraFilters()+AddAuraFilter() path as default, coalesced by frame.
+-- A3.swapUseUpdateAllAuras=true remains an opt-in A/B switch for future PTRs.
 
 local function IsAddOnLoaded(addonName)
     if C_AddOns and type(C_AddOns.IsAddOnLoaded) == "function" then
@@ -422,6 +476,36 @@ local function ReadAnchor(primary, secondary, key, fallback)
         return value
     end
     return fallback or "CENTER"
+end
+
+local function NormalizeDurationBarPosition(value, fallback)
+    value = tostring(value or fallback or "BOTTOM"):upper()
+    if value == "TOP" then return "TOP" end
+    return "BOTTOM"
+end
+
+local function NormalizeDurationBarDirection(value, fallback)
+    value = tostring(value or fallback or "REMAINING"):upper()
+    if value == "ELAPSED" or value == "ELAPSED_TIME" then return "ELAPSED" end
+    return "REMAINING"
+end
+
+local function NormalizeDurationBarDisplay(value, fallback)
+    value = tostring(value or fallback or "BAR_ONLY"):upper()
+    if value == "ICON" or value == "ICONS" or value == "ICON_BAR" or value == "ICON+BAR" or value == "OVERLAY" then return "OVERLAY" end
+    return "BAR_ONLY"
+end
+
+local function ReadDurationBarPosition(primary, secondary, key, fallback)
+    return NormalizeDurationBarPosition(ReadRaw(primary, secondary, key), fallback)
+end
+
+local function ReadDurationBarDirection(primary, secondary, key, fallback)
+    return NormalizeDurationBarDirection(ReadRaw(primary, secondary, key), fallback)
+end
+
+local function ReadDurationBarDisplay(primary, secondary, key, fallback)
+    return NormalizeDurationBarDisplay(ReadRaw(primary, secondary, key), fallback)
 end
 
 local function EnsureDB()
@@ -619,6 +703,115 @@ local function NativeFilter(baseFilter, filters)
     return NormalizeNativeFilterString(filter, baseFilter)
 end
 
+local function NormalizeDispelSensorTrigger(value, fallback)
+    value = tostring(value or fallback or "BY_ME"):upper()
+    if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
+    if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
+    if value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "ANY_DEBUFF" end
+    if value == "PLAYER_CAST" or value == "CAST_BY_ME" or value == "MY_DEBUFF" then return "PLAYER_CAST" end
+    return "BY_ME"
+end
+
+local function DispelSensorNativeFilter(trigger)
+    trigger = NormalizeDispelSensorTrigger(trigger, "BY_ME")
+    if trigger == "DISPEL_TYPE" then
+        -- Use the raid-filtered harmful list as the best current native path for
+        -- typed/important debuffs without class-specific dispellability. Keeping
+        -- the candidate window small prevents stacked full-frame borders and
+        -- avoids rebuilding large hidden button pools on target swaps.
+        return "HARMFUL|RAID", 3
+    end
+    if trigger == "PLAYER_CAST" then
+        return "HARMFUL|PLAYER", 3
+    end
+    if trigger == "ANY_DEBUFF" then
+        -- AuraButton border/symbol visibility is driven by auraData.dispelName,
+        -- so true any-debuff frame highlights are not representable without an
+        -- addon aura scan. Keep this secret-safe by falling back to dispellable.
+        return "HARMFUL|RAID_PLAYER_DISPELLABLE", 1
+    end
+    return "HARMFUL|RAID_PLAYER_DISPELLABLE", 1
+end
+
+local function NormalizeDispelOverlayStyle(value)
+    value = tostring(value or "FULL"):upper()
+    if value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT" then return value end
+    return "FULL"
+end
+
+local function CompileCornerDispelSlots(corner)
+    if not (type(corner) == "table" and corner.enabled == true and corner.needsDispel == true and type(corner.dispelSlots) == "table") then
+        return nil, nil
+    end
+    local source = corner.dispelSlots
+    local slots, parts = {}, {}
+    for i = 1, #source do
+        local slot = source[i]
+        if type(slot) == "table" then
+            local key = tostring(slot.key or i)
+            local anchor = ReadAnchor(slot, nil, "anchor", "TOPLEFT")
+            local x = Round(ClampNumber(slot.x, 0, -128, 128))
+            local y = Round(ClampNumber(slot.y, 0, -128, 128))
+            local out = { key = key, anchor = anchor, x = x, y = y }
+            slots[#slots + 1] = out
+            parts[#parts + 1] = key .. ":" .. anchor .. ":" .. tostring(x) .. ":" .. tostring(y)
+        end
+    end
+    if #slots == 0 then return nil, nil end
+    return slots, table_concat(parts, "|")
+end
+
+local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
+    if not (type(unit) == "string" and unit ~= "" and type(frameSpec) == "table") then return nil end
+    local border = frameSpec.border
+    local group = frameSpec.group
+    local overlay = groupMode and group or frameSpec.dispelOverlay
+    local corner = groupMode and frameSpec.cornerIndicators or nil
+    local cornerSlots, cornerSignature = nil, nil
+    if visual == "corner" then
+        cornerSlots, cornerSignature = CompileCornerDispelSlots(corner)
+    end
+    local borderOn = border and border.dispel == true
+    local overlayOn = overlay and ((groupMode and overlay.dispelOverlayEnabled == true) or (not groupMode and overlay.enabled == true))
+    if visual == "border" and not borderOn then return nil end
+    if visual == "overlay" and not overlayOn then return nil end
+    if visual == "corner" and not cornerSlots then return nil end
+
+    local borderTrigger = NormalizeDispelSensorTrigger(border and border.dispelTrigger, "BY_ME")
+    local trigger = borderTrigger
+    if visual == "overlay" then
+        trigger = NormalizeDispelSensorTrigger(groupMode and overlay.dispelOverlayTrigger or overlay.trigger, "BORDER")
+        if trigger == "BORDER" then trigger = borderTrigger end
+    elseif visual == "corner" then
+        trigger = "BY_ME"
+    end
+
+    local nativeFilter, maxCount = DispelSensorNativeFilter(trigger)
+    local target = visual == "overlay" and ((groupMode and overlay.dispelOverlayOnHealth ~= false) or (not groupMode and overlay.onHealth ~= false)) and "health" or "frame"
+    local cornerCount = cornerSlots and #cornerSlots or nil
+    return {
+        sensor = true,
+        kind = visual == "corner" and "dispelCorner" or (visual == "overlay" and "dispelOverlay" or "dispelBorder"),
+        rootKey = visual == "corner" and "DispelCornerSensor" or (visual == "overlay" and "DispelOverlaySensor" or "DispelBorderSensor"),
+        unit = unit,
+        enabled = true,
+        nativeFilter = nativeFilter,
+        max = cornerCount or maxCount,
+        filterCount = cornerCount,
+        filterMax = cornerCount and 1 or maxCount,
+        visual = visual,
+        target = target,
+        style = visual == "overlay" and NormalizeDispelOverlayStyle(groupMode and overlay.dispelOverlayStyle or overlay.style) or "FULL",
+        alpha = visual == "corner" and Clamp01(corner and corner.alpha, 1) or (visual == "overlay" and Clamp01(groupMode and overlay.dispelOverlayAlpha or overlay.alpha, 0.35) or 1),
+        thickness = ClampNumber(border and border.highlightThickness, 3, 1, 32),
+        size = cornerSlots and ClampNumber(corner and corner.size, 8, 1, 64) or nil,
+        slots = cornerSlots,
+        slotSignature = cornerSignature,
+        layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30)) or (visual == "overlay" and 13 or 45),
+        trigger = trigger,
+    }
+end
+
 local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
     local spec = LANE_SPECS[kind]
     local filters = type(filtersRoot) == "table" and type(filtersRoot[spec.filterKey]) == "table" and filtersRoot[spec.filterKey] or nil
@@ -663,6 +856,11 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
         showCooldownText = ReadBool(layout, shared, spec.showTextKey, ReadBool(layout, shared, "showCooldownText", true)),
         showCooldownSwipe = ReadBool(layout, shared, spec.swipeKey, ReadBool(layout, shared, "showCooldownSwipe", true)),
         cooldownSwipeReverse = ReadBool(layout, shared, spec.swipeReverseKey, ReadBool(layout, shared, "cooldownSwipeReverse", false)),
+        showDurationBar = ReadBool(layout, shared, spec.showDurationBarKey, ReadBool(layout, shared, "showDurationBar", false)),
+        durationBarHeight = ReadNumber(layout, shared, spec.durationBarHeightKey, ReadRaw(layout, shared, "durationBarHeight") or DEFAULT_SHARED.durationBarHeight, 1, 16),
+        durationBarDisplay = ReadDurationBarDisplay(shared, nil, spec.durationBarDisplayKey, ReadRaw(shared, nil, "durationBarDisplay") or DEFAULT_SHARED.durationBarDisplay),
+        durationBarPosition = ReadDurationBarPosition(shared, nil, spec.durationBarPositionKey, ReadRaw(shared, nil, "durationBarPosition") or DEFAULT_SHARED.durationBarPosition),
+        durationBarDirection = ReadDurationBarDirection(shared, nil, spec.durationBarDirectionKey, ReadRaw(shared, nil, "durationBarDirection") or DEFAULT_SHARED.durationBarDirection),
         showStacks = ReadBool(layout, shared, spec.showStackKey, ReadBool(layout, shared, "showStackCount", true)),
         showTooltip = ReadBool(layout, shared, "showTooltip", DEFAULT_SHARED.showTooltip),
         showAuraBorder = debuffTypeBorderMode ~= "OFF",
@@ -721,6 +919,11 @@ local function CompileGroupLane(unit, source, kind)
         showCooldownText = source[spec.showTextKey] ~= false,
         showCooldownSwipe = source[spec.swipeKey] ~= false,
         cooldownSwipeReverse = cooldownSwipeReverse == true,
+        showDurationBar = source[spec.showDurationBarKey] == true or source.showDurationBar == true,
+        durationBarHeight = ClampNumber(source[spec.durationBarHeightKey] or source.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
+        durationBarDisplay = NormalizeDurationBarDisplay(source[spec.durationBarDisplayKey] or source.durationBarDisplay, DEFAULT_SHARED.durationBarDisplay),
+        durationBarPosition = NormalizeDurationBarPosition(source[spec.durationBarPositionKey] or source.durationBarPosition, DEFAULT_SHARED.durationBarPosition),
+        durationBarDirection = NormalizeDurationBarDirection(source[spec.durationBarDirectionKey] or source.durationBarDirection, DEFAULT_SHARED.durationBarDirection),
         showStacks = source[spec.showStackKey] ~= false,
         showTooltip = source.showTooltip ~= false,
         showAuraBorder = debuffTypeBorderMode ~= "OFF",
@@ -737,33 +940,41 @@ local function CompileGroupLane(unit, source, kind)
     })
 end
 
-local frameSpecConfigCache = setmetatable({}, { __mode = "k" })
-
 local function InvalidateUnitRuntimeConfig(unit)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
     local runtimeCache = A3._runtimeConfigCache
     if runtimeCache then runtimeCache[unit] = nil end
-    for frameSpec, cached in pairs(frameSpecConfigCache) do
-        if cached and cached.unit == unit then frameSpecConfigCache[frameSpec] = nil end
-    end
     return unit
 end
 
-local function BuildUnitFrameConfig(unit)
+local function BuildUnitFrameConfig(unit, frameSpec)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
     local auras, shared = EnsureDB()
-    if not UnitAuraIconsEnabled(auras, unit) then
-        return { unit = unit, enabled = false, lanes = {} }
+    local iconsEnabled = UnitAuraIconsEnabled(auras, unit)
+    local dispelBorder = CompileDispelSensor(unit, frameSpec, false, "border")
+    local dispelOverlay = CompileDispelSensor(unit, frameSpec, false, "overlay")
+    if not iconsEnabled then
+        return {
+            unit = unit,
+            enabled = (dispelBorder and dispelBorder.enabled == true) or (dispelOverlay and dispelOverlay.enabled == true),
+            lanes = {},
+            sensors = { dispelBorder = dispelBorder, dispelOverlay = dispelOverlay },
+            group = false,
+            _msufA3ConfigGen = A3._runtimeConfigGen or 1,
+            _msufA3VisualGen = A3._nativeVisualGen or 0,
+        }
     end
     local layout, sharedLayout, filtersRoot = EffectiveUnitTables(auras, unit)
     local buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff")
     local debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff")
     return {
         unit = unit,
-        enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true),
+        enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
+            or (dispelBorder and dispelBorder.enabled == true) or (dispelOverlay and dispelOverlay.enabled == true),
         lanes = { buff = buff, debuff = debuff },
+        sensors = { dispelBorder = dispelBorder, dispelOverlay = dispelOverlay },
         group = false,
         _msufA3ConfigGen = A3._runtimeConfigGen or 1,
         _msufA3VisualGen = A3._nativeVisualGen or 0,
@@ -776,16 +987,15 @@ function A3.ResolveUnitFrameConfig(unit, frameSpec)
     local gen = A3._runtimeConfigGen or 1
     local visualGen = A3._nativeVisualGen or 0
     if frameSpec ~= nil then
-        local cached = frameSpecConfigCache[frameSpec]
-        if cached and cached.gen == gen and cached.visualGen == visualGen and cached.unit == unit then return cached.config end
-        local cfg = BuildUnitFrameConfig(unit)
-        frameSpecConfigCache[frameSpec] = { gen = gen, visualGen = visualGen, unit = unit, config = cfg }
-        return cfg
+        -- Frame-spec configs also consume UnitFrame border/overlay settings.
+        -- Those are cold-path spec data and can change without touching the
+        -- Auras DB generation, so rebuild them from the current spec.
+        return BuildUnitFrameConfig(unit, frameSpec)
     end
     A3._runtimeConfigCache = A3._runtimeConfigCache or {}
     local cached = A3._runtimeConfigCache[unit]
     if cached and cached.gen == gen and cached.visualGen == visualGen then return cached.config end
-    local cfg = BuildUnitFrameConfig(unit)
+    local cfg = BuildUnitFrameConfig(unit, nil)
     A3._runtimeConfigCache[unit] = { gen = gen, visualGen = visualGen, config = cfg }
     return cfg
 end
@@ -806,6 +1016,7 @@ local function ResolveGroupFrameConfig(frame, unit)
         unit = unit,
         enabled = false,
         lanes = {},
+        sensors = {},
         group = true,
         _msufA3ConfigGen = gen,
         _msufA3VisualGen = visualGen,
@@ -819,6 +1030,18 @@ local function ResolveGroupFrameConfig(frame, unit)
         cfg.lanes.debuff = debuff
         cfg.lanes.external = external
         cfg.enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true) or (external and external.enabled == true)
+    end
+    if type(unit) == "string" and unit ~= "" then
+        local dispelBorder = CompileDispelSensor(unit, spec, true, "border")
+        local dispelOverlay = CompileDispelSensor(unit, spec, true, "overlay")
+        local dispelCorner = CompileDispelSensor(unit, spec, true, "corner")
+        cfg.sensors.dispelBorder = dispelBorder
+        cfg.sensors.dispelOverlay = dispelOverlay
+        cfg.sensors.dispelCorner = dispelCorner
+        cfg.enabled = cfg.enabled == true
+            or (dispelBorder and dispelBorder.enabled == true)
+            or (dispelOverlay and dispelOverlay.enabled == true)
+            or (dispelCorner and dispelCorner.enabled == true)
     end
     frame._msufA3NativeGroupSource = source
     frame._msufA3NativeGroupUnit = unit
@@ -887,7 +1110,6 @@ end
 -- only builds/caches formatter objects when style config changes; there is no
 -- addon timer or OnUpdate work per aura.
 local _durationFormatterCache
-local _durationColorCurveCache
 
 local function NumericRuleFormatRounding(name, fallback)
     local enum = _G.Enum and _G.Enum.NumericRuleFormatRounding
@@ -897,61 +1119,19 @@ local function NumericRuleFormatRounding(name, fallback)
     return fallback
 end
 
-local function DurationTextBindingProperty(name, fallback)
-    local enum = _G.Enum and _G.Enum.DurationTextBindingProperty
-    if enum and enum[name] ~= nil then return enum[name] end
-    return fallback
+local function ColorEscape(r, g, b)
+    return string.format("|cff%02x%02x%02x", Round(Clamp01(r, 1) * 255), Round(Clamp01(g, 1) * 255), Round(Clamp01(b, 1) * 255))
 end
 
 local function BuildAuraDurationFormatter(lane)
-    local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
-    local sig = table_concat({ "unitless-minutes", decimalSec }, "\030")
-    if _durationFormatterCache and _durationFormatterCache[sig] then return _durationFormatterCache[sig] end
-
-    local C_StringUtil = _G.C_StringUtil
-    if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then return nil end
-
-    local roundingDown = NumericRuleFormatRounding("Down", 2)
-    local formatter = C_StringUtil.CreateNumericRuleFormatter()
-    if decimalSec > 0 then
-        formatter:AddBreakpoint({
-            threshold = 0,
-            step = 0.1,
-            rounding = roundingDown,
-            format = "%.1f",
-        })
-    end
-    formatter:AddBreakpoint({
-        threshold = decimalSec > 0 and decimalSec or 0,
-        step = 1,
-        rounding = roundingDown,
-        min = 1,
-        format = "%.0f",
-    })
-    formatter:AddBreakpoint({
-        threshold = 60,
-        step = 1,
-        rounding = roundingDown,
-        min = 1,
-        format = "%.0f",
-        components = {
-            { div = 60, step = 1, rounding = roundingDown },
-        },
-    })
-
-    _durationFormatterCache = _durationFormatterCache or {}
-    _durationFormatterCache[sig] = formatter
-    return formatter
-end
-
-local function BuildAuraDurationTextColorCurve()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     if not general then return nil end
     local buckets = general.aurasCooldownTextUseBuckets == true
-    if not buckets then return nil end
-    local C_CurveUtil = _G.C_CurveUtil
-    local CreateColor = _G.CreateColor
-    if not (C_CurveUtil and type(C_CurveUtil.CreateColorCurve) == "function" and type(CreateColor) == "function") then return nil end
+    local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
+    if not buckets and decimalSec <= 0 then return nil end
+
+    local C_StringUtil = _G.C_StringUtil
+    if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then return nil end
 
     -- Safe color falls back to the configured global font color when the user has
     -- not picked one, matching the menu's Safe swatch behavior.
@@ -983,57 +1163,75 @@ local function BuildAuraDurationTextColorCurve()
     if safeSec < warningSec then safeSec = warningSec end
 
     local sig = table_concat({
-        sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
+        "unitless-minutes-color", buckets and 1 or 0, decimalSec, sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
     }, "\030")
-    if _durationColorCurveCache and _durationColorCurveCache[sig] then return _durationColorCurveCache[sig] end
+    if _durationFormatterCache and _durationFormatterCache[sig] then return _durationFormatterCache[sig] end
 
-    local curve = C_CurveUtil.CreateColorCurve()
-    local lastX
-    local function AddPoint(x, r, g, b)
-        x = ClampNumber(x, 0, 0, 600)
-        if lastX and x <= lastX then
-            if lastX >= 600 then return end
-            x = math_min(600, lastX + 0.001)
-            if x <= lastX then return end
+    local roundingDown = NumericRuleFormatRounding("Down", 2)
+    local thresholds, seen = {}, {}
+    local function AddThreshold(value)
+        value = ClampNumber(value, 0, 0, 600)
+        if seen[value] then return end
+        seen[value] = true
+        thresholds[#thresholds + 1] = value
+    end
+    AddThreshold(0)
+    if decimalSec > 0 then AddThreshold(decimalSec) end
+    AddThreshold(60)
+    if buckets then
+        AddThreshold(urgentSec)
+        AddThreshold(warningSec)
+        AddThreshold(safeSec)
+    end
+    table_sort(thresholds)
+
+    local function ColorPrefix(threshold)
+        if not buckets then return "" end
+        if safeSec > warningSec and threshold >= safeSec then return "" end
+        if threshold >= warningSec then return ColorEscape(sr, sg, sb) end
+        if threshold >= urgentSec then return ColorEscape(wr, wg, wb) end
+        return ColorEscape(ur, ug, ub)
+    end
+    local function BreakpointAt(threshold)
+        local colorPrefix = ColorPrefix(threshold)
+        local colorSuffix = colorPrefix ~= "" and "|r" or ""
+        if threshold >= 60 then
+            return {
+                threshold = threshold,
+                step = 1,
+                rounding = roundingDown,
+                min = 1,
+                format = colorPrefix .. "%.0f" .. colorSuffix,
+                components = {
+                    { div = 60, step = 1, rounding = roundingDown },
+                },
+            }
         end
-        curve:AddPoint(x, CreateColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 1))
-        lastX = x
-    end
-    local function AddStepBoundary(boundary, fromR, fromG, fromB, toR, toG, toB)
-        boundary = ClampNumber(boundary, 0, 0, 600)
-        if boundary > 0.001 then AddPoint(boundary - 0.001, fromR, fromG, fromB) end
-        AddPoint(boundary, toR, toG, toB)
+        return {
+            threshold = threshold,
+            step = threshold < decimalSec and 0.1 or 1,
+            rounding = roundingDown,
+            min = threshold < decimalSec and nil or 1,
+            format = colorPrefix .. (threshold < decimalSec and "%.1f" or "%.0f") .. colorSuffix,
+        }
     end
 
-    AddPoint(0, ur, ug, ub)
-    AddStepBoundary(urgentSec, ur, ug, ub, wr, wg, wb)
-    AddStepBoundary(warningSec, wr, wg, wb, sr, sg, sb)
-    AddPoint(safeSec, sr, sg, sb)
+    local formatter = C_StringUtil.CreateNumericRuleFormatter()
+    for i = 1, #thresholds do
+        formatter:AddBreakpoint(BreakpointAt(thresholds[i]))
+    end
 
-    _durationColorCurveCache = _durationColorCurveCache or {}
-    _durationColorCurveCache[sig] = curve
-    return curve
+    _durationFormatterCache = _durationFormatterCache or {}
+    _durationFormatterCache[sig] = formatter
+    return formatter
 end
 
 -- Reusable options table for SetDurationText. Blizzard securecopies options on
 -- each call, so a single mutated table is safe across buttons and avoids per-button
 -- garbage; we only ever set cold-path formatter references on it.
 local _durationTextOptions = {}
-
-local function ApplyDurationTextColorCurve(button, curve)
-    if not curve then return false end
-    local binding = button and button.DurationTextBinding
-    if not (binding and type(binding.SetTextColorCurve) == "function") then return false end
-
-    -- Blizzard's 12.1 CustomAuraButton SetDurationText path forwards only the
-    -- curve option, but DurationTextBinding:SetTextColorCurve requires the
-    -- sampled duration property too. Apply it directly to the created binding.
-    local ok = pcall(binding.SetTextColorCurve, binding, curve, DurationTextBindingProperty("RemainingDuration", 0))
-    if ok and type(binding.UpdateFontString) == "function" then
-        pcall(binding.UpdateFontString, binding)
-    end
-    return ok
-end
+local _durationBarOptions = {}
+local RegisterNativeContainer
 
 local function PlaceStackText(fs, owner, lane)
     if not (fs and owner and lane) then return end
@@ -1166,11 +1364,27 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.cooldownSwipeReverse) .. "\030" .. tostring(lane.cooldownSize)
         .. "\030" .. tostring(lane.cooldownAnchor) .. "\030" .. tostring(lane.cooldownX)
         .. "\030" .. tostring(lane.cooldownY) .. "\030" .. tostring(lane.cooldownDecimalSeconds)
+        .. "\030" .. tostring(lane.showDurationBar) .. "\030" .. tostring(lane.durationBarHeight)
+        .. "\030" .. tostring(lane.durationBarDisplay) .. "\030" .. tostring(lane.durationBarPosition)
+        .. "\030" .. tostring(lane.durationBarDirection)
         .. "\030" .. tostring(lane.showStacks) .. "\030" .. tostring(lane.stackAnchor)
         .. "\030" .. tostring(lane.stackSize) .. "\030" .. tostring(lane.stackX)
         .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(lane.showTooltip)
         .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
         .. "\030" .. tostring(lane.alpha) .. "\030" .. tostring(A3._nativeVisualGen or 0)
+end
+
+local function SensorTrackingSignature(sensor)
+    return tostring(sensor.unit) .. "\030" .. tostring(sensor.kind) .. "\030" .. tostring(sensor.nativeFilter)
+        .. "\030" .. tostring(sensor.max) .. "\030" .. tostring(sensor.filterCount) .. "\030" .. tostring(sensor.filterMax)
+end
+
+local function SensorLayoutSignature(sensor)
+    return tostring(sensor.visual) .. "\030" .. tostring(sensor.target)
+        .. "\030" .. tostring(sensor.style) .. "\030" .. tostring(sensor.alpha)
+        .. "\030" .. tostring(sensor.thickness) .. "\030" .. tostring(sensor.layer)
+        .. "\030" .. tostring(sensor.size) .. "\030" .. tostring(sensor.slotSignature)
+        .. "\030" .. tostring(sensor.trigger) .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
 
 local function LayoutButton(button, lane, index)
@@ -1199,6 +1413,45 @@ local function LayoutAuraBorder(button, border, lane)
     border:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", pad, -pad)
 end
 
+local function LayoutDurationBar(button, bar, lane)
+    if not (button and bar and lane) then return end
+    local height = ClampNumber(lane.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, math_max(1, lane.size or DEFAULT_SHARED.iconSize))
+    local inset = math_max(1, math_floor(((lane.size or DEFAULT_SHARED.iconSize) / 32) + 0.5))
+    bar:ClearAllPoints()
+    bar:SetHeight(height)
+    if lane.durationBarPosition == "TOP" then
+        bar:SetPoint("TOPLEFT", button, "TOPLEFT", inset, -inset)
+        bar:SetPoint("TOPRIGHT", button, "TOPRIGHT", -inset, -inset)
+    else
+        bar:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", inset, inset)
+        bar:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -inset, inset)
+    end
+end
+
+local function ResolveDurationBarOptions(lane)
+    local enum = _G.Enum
+    local interpolation = enum and enum.StatusBarInterpolation
+    local direction = enum and enum.StatusBarTimerDirection
+    _durationBarOptions.interpolation = interpolation and interpolation.Immediate or nil
+    if lane and lane.durationBarDirection == "ELAPSED" then
+        _durationBarOptions.direction = direction and direction.ElapsedTime or nil
+    else
+        _durationBarOptions.direction = direction and direction.RemainingTime or nil
+    end
+    return _durationBarOptions
+end
+
+local function ApplyDurationBarColor(bar)
+    if not bar then return end
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    local color = general and general.aurasCooldownTextSafeColor
+    local r, g, b = 0.08, 0.78, 1.00
+    if type(color) == "table" then
+        r, g, b = color[1] or color.r or r, color[2] or color.g or g, color[3] or color.b or b
+    end
+    if bar.SetStatusBarColor then bar:SetStatusBarColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), 0.95) end
+end
+
 local function SyncButtonGeometry(button, lane, index)
     if not (button and lane) then return false end
     LayoutButton(button, lane, index)
@@ -1212,6 +1465,9 @@ local function SyncButtonGeometry(button, lane, index)
     end
     if button._msufA3AuraBorder then
         LayoutAuraBorder(button, button._msufA3AuraBorder, lane)
+    end
+    if button._msufA3DurationBar then
+        LayoutDurationBar(button, button._msufA3DurationBar, lane)
     end
     return true
 end
@@ -1255,13 +1511,25 @@ local function PrepareAuraButton(button, lane, index)
     button:SetSize(lane.size, lane.size)
     button:SetFrameLevel((button:GetParent():GetFrameLevel() or 0) + 1)
 
+    local barOnly = lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY"
     local icon = button.Icon
-    if not icon then
-        icon = button:CreateTexture(nil, "ARTWORK")
+    if barOnly then
+        CallButtonMethod(button, "ClearIcon")
+        if icon then
+            icon:SetAlpha(0)
+            icon:Hide()
+        end
+    else
+        if not icon then
+            icon = button:CreateTexture(nil, "ARTWORK")
+            button.Icon = icon
+        end
+        icon:ClearAllPoints()
         icon:SetAllPoints(button)
-        button.Icon = icon
+        icon:SetAlpha(1)
+        icon:Show()
+        CallButtonMethod(button, "SetIcon", icon)
     end
-    button:SetIcon(icon)
 
     -- Native cooldown swipe. Blizzard's ApplyDurationCooldown drives this from
     -- the (secret) aura duration C-side, so there is no addon timer cost.
@@ -1269,7 +1537,7 @@ local function PrepareAuraButton(button, lane, index)
     -- Use CooldownFrameTemplate for the actual swipe art, then immediately opt
     -- out of countdown numbers, bling, and edge drawing. Created once per button
     -- and reused.
-    if lane.showCooldownSwipe == true then
+    if lane.showCooldownSwipe == true and not barOnly then
         local cooldown = button._msufA3Cooldown
         if not cooldown then
             local cd = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
@@ -1291,6 +1559,28 @@ local function PrepareAuraButton(button, lane, index)
         if button._msufA3Cooldown then button._msufA3Cooldown:Hide() end
     end
 
+    if lane.showDurationBar == true then
+        local bar = button._msufA3DurationBar
+        if not bar then
+            bar = CreateFrame("StatusBar", nil, button)
+            bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+            bar:SetMinMaxValues(0, 1)
+            bar:SetValue(0)
+            button._msufA3DurationBar = bar
+        end
+        if type(bar.SetFrameLevel) == "function" then bar:SetFrameLevel((button:GetFrameLevel() or 0) + 2) end
+        LayoutDurationBar(button, bar, lane)
+        ApplyDurationBarColor(bar)
+        if CallButtonMethod(button, "SetDurationBar", bar, ResolveDurationBarOptions(lane)) then
+            bar:Show()
+        else
+            bar:Hide()
+        end
+    else
+        CallButtonMethod(button, "ClearDurationBar")
+        if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
+    end
+
     local duration = button.Text or button.DurationText
     if not duration then
         duration = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1301,20 +1591,17 @@ local function PrepareAuraButton(button, lane, index)
         ApplyFont(duration, lane.cooldownSize)
         PlaceCooldownText(duration, button, lane)
         duration:Show()
-        -- Hand Blizzard C-side formatter/curve objects so the duration text is
+        -- Hand Blizzard a C-side formatter so the duration text is
         -- formatted from the secret duration object with no addon cost. MSUF caps
         -- long buffs at whole minutes, with no unit suffix, instead of raw seconds
         -- or hour/day units.
         local formatter = BuildAuraDurationFormatter(lane)
         if formatter then
-            local textColorCurve = BuildAuraDurationTextColorCurve()
             _durationTextOptions.formatter = formatter
-            _durationTextOptions.textColorCurve = nil
             CallButtonMethod(button, "SetDurationText", duration, _durationTextOptions)
-            ApplyDurationTextColorCurve(button, textColorCurve)
+            _durationTextOptions.formatter = nil
         else
             _durationTextOptions.formatter = nil
-            _durationTextOptions.textColorCurve = nil
             CallButtonMethod(button, "SetDurationText", duration)
         end
     else
@@ -1338,7 +1625,7 @@ local function PrepareAuraButton(button, lane, index)
     end
 
     local auraBorderBound = false
-    if lane.showAuraBorder == true then
+    if lane.showAuraBorder == true and not barOnly then
         local border = button._msufA3AuraBorder or button.AuraBorder or button.Border
         if not border then
             border = button:CreateTexture(nil, "OVERLAY")
@@ -1351,7 +1638,7 @@ local function PrepareAuraButton(button, lane, index)
         if button._msufA3AuraBorder and button._msufA3AuraBorder.Hide then button._msufA3AuraBorder:Hide() end
     end
 
-    if lane.showAuraSymbol == true and auraBorderBound == true then
+    if lane.showAuraSymbol == true and auraBorderBound == true and not barOnly then
         local symbol = button._msufA3AuraSymbol or button.AuraSymbol or button.Symbol
         if not symbol then
             symbol = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1374,6 +1661,207 @@ local function PrepareAuraButton(button, lane, index)
     SyncButtonGeometry(button, lane, index)
 end
 
+local function DispelSensorTarget(parentFrame, sensor)
+    if sensor and sensor.target == "health" and parentFrame then
+        return parentFrame.hpBar or parentFrame.Health or parentFrame.health or parentFrame
+    end
+    return parentFrame
+end
+
+local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
+    if not (button and sensor and parentFrame) then return false end
+    local target = DispelSensorTarget(parentFrame, sensor) or parentFrame
+    button:ClearAllPoints()
+    if sensor.visual == "corner" then
+        local slot = sensor.slots and sensor.slots[index or 1]
+        if not slot then return false end
+        local size = ClampNumber(sensor.size, 8, 1, 64)
+        button:SetSize(size, size)
+        button:SetPoint(slot.anchor or "TOPLEFT", target, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
+    else
+        button:SetAllPoints(target)
+    end
+    if button.SetFrameLevel then button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (sensor.layer or 14)) end
+    return true
+end
+
+local function LayoutDispelSensorOverlay(region, button, sensor)
+    if not (region and button and sensor) then return end
+    local style = sensor.style or "FULL"
+    local thickness = ClampNumber(sensor.thickness, 3, 1, 32)
+    region:ClearAllPoints()
+    if sensor.visual == "corner" then
+        region:SetAllPoints(button)
+        return
+    end
+    if sensor.visual == "border" then
+        local pad = math_min(2, math_max(0, math_floor((thickness * 0.5) + 0.5)))
+        region:SetPoint("TOPLEFT", button, "TOPLEFT", -pad, pad)
+        region:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", pad, -pad)
+        return
+    end
+    if style == "TOP" then
+        region:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+        region:SetPoint("TOPRIGHT", button, "TOPRIGHT", 0, 0)
+        region:SetHeight(thickness)
+    elseif style == "BOTTOM" then
+        region:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 0)
+        region:SetHeight(thickness)
+    elseif style == "LEFT" then
+        region:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+        region:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
+        region:SetWidth(thickness)
+    elseif style == "RIGHT" then
+        region:SetPoint("TOPRIGHT", button, "TOPRIGHT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 0)
+        region:SetWidth(thickness)
+    else
+        region:SetAllPoints(button)
+    end
+end
+
+local function GetSensorOverlayOptions()
+    local styles = _G.AuraButtonBorderStyle
+    AURA_SENSOR_OVERLAY_OPTIONS.style = styles and styles.Color or 1
+    return AURA_SENSOR_OVERLAY_OPTIONS
+end
+
+local function GetSensorBorderOptions()
+    local styles = _G.AuraButtonBorderStyle
+    AURA_SENSOR_BORDER_OPTIONS.style = styles and styles.Color or 1
+    return AURA_SENSOR_BORDER_OPTIONS
+end
+
+local SENSOR_FILTER_OPTIONS = {}
+local function AddDispelSensorAuraFilters(container, sensor)
+    if not (container and sensor and sensor.nativeFilter) then return false end
+    local count = math_floor((tonumber(sensor.filterCount) or 1) + 0.5)
+    if count < 1 then count = 1 end
+    SENSOR_FILTER_OPTIONS.maxFrameCount = math_floor((tonumber(sensor.filterMax) or tonumber(sensor.max) or 1) + 0.5)
+    if SENSOR_FILTER_OPTIONS.maxFrameCount < 1 then SENSOR_FILTER_OPTIONS.maxFrameCount = 1 end
+    for _ = 1, count do
+        container:AddAuraFilter(sensor.nativeFilter, SENSOR_FILTER_OPTIONS)
+    end
+    return true
+end
+
+local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
+    if not (button and sensor and parentFrame) then return false end
+    button._msufA3NativeButton = true
+    button._msufA3DispelSensor = sensor.visual
+    if button.EnableMouse then button:EnableMouse(false) end
+    CallButtonMethod(button, "SetMouseMotionEnabled", false)
+    LayoutDispelSensorButton(button, sensor, parentFrame, index)
+
+    local icon = button.Icon
+    if not icon then
+        icon = button:CreateTexture(nil, "ARTWORK")
+        button.Icon = icon
+    end
+    icon:ClearAllPoints()
+    icon:SetAllPoints(button)
+    icon:SetAlpha(0)
+    CallButtonMethod(button, "SetIcon", icon)
+    CallButtonMethod(button, "ClearApplicationCount")
+    CallButtonMethod(button, "ClearDurationCooldown")
+    CallButtonMethod(button, "ClearDurationText")
+    CallButtonMethod(button, "ClearDurationBar")
+    CallButtonMethod(button, "ClearAuraSymbol")
+
+    local region = button._msufA3DispelSensorRegion
+    if not region then
+        region = button:CreateTexture(nil, "OVERLAY")
+        button._msufA3DispelSensorRegion = region
+    end
+    LayoutDispelSensorOverlay(region, button, sensor)
+    if sensor.visual == "corner" then
+        region:SetTexture("Interface\\Buttons\\WHITE8X8")
+        region:SetAlpha(Clamp01(sensor.alpha, 1))
+        CallButtonMethod(button, "SetAuraBorder", region, GetSensorOverlayOptions())
+    elseif sensor.visual == "overlay" then
+        region:SetTexture("Interface\\Buttons\\WHITE8X8")
+        region:SetAlpha(Clamp01(sensor.alpha, 0.35))
+        CallButtonMethod(button, "SetAuraBorder", region, GetSensorOverlayOptions())
+    else
+        region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        region:SetAlpha(0.82)
+        CallButtonMethod(button, "SetAuraBorder", region, GetSensorBorderOptions())
+    end
+    return true
+end
+
+local function SyncDispelSensorGeometry(container, sensor, parentFrame)
+    if not (container and sensor) then return false end
+    parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
+    if not parentFrame then return false end
+    container._msufA3NativeLaneConfig = sensor
+    container._msufA3ParentFrame = parentFrame
+    local target = DispelSensorTarget(parentFrame, sensor)
+    local sig = sensor._msufA3LayoutSignature or SensorLayoutSignature(sensor)
+    if sig ~= nil
+        and container._msufA3GeomSig == sig
+        and container._msufA3GeomParent == parentFrame
+        and container._msufA3GeomTarget == target
+    then
+        return true
+    end
+    container._msufA3GeomSig = sig
+    container._msufA3GeomParent = parentFrame
+    container._msufA3GeomTarget = target
+    local root = container:GetParent()
+    if root then container:SetAllPoints(root) end
+    if parentFrame and container.SetFrameLevel then
+        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (sensor.layer or 14))
+    end
+    for i = 1, (container.createdButtons or sensor.max or 0) do
+        PrepareDispelSensorButton(container[i], sensor, parentFrame, i)
+    end
+    return true
+end
+
+local function CreateNativeDispelSensor(root, sensor, parentFrame)
+    if not EnsureBlizzardAuraContainerLoaded() then
+        A3.nativeAuraRuntimeAvailable = false
+        A3.nativeAuraRuntimeError = AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
+        return nil
+    end
+    local container = CreateFrame("AuraContainer", nil, root, "CustomAuraContainerTemplate")
+    if not container then
+        A3.nativeAuraRuntimeAvailable = false
+        A3.nativeAuraRuntimeError = "CustomAuraContainerTemplate is unavailable"
+        return nil
+    end
+    A3.nativeAuraRuntimeAvailable = true
+    container._msufA3NativeLane = sensor.kind
+    container._msufA3NativeRegistered = nil
+    container._msufA3NativeRegistrationPending = nil
+    container.unit = sensor.unit
+    container.createdButtons = sensor.max or 1
+    container:Show()
+    container:SetUnit(sensor.unit)
+    if type(container.SetEnabled) == "function" then container:SetEnabled(true) end
+    for i = 1, container.createdButtons do
+        local button = CreateFrame("AuraButton", nil, container, "CustomAuraButtonTemplate")
+        if not button then
+            A3.nativeAuraRuntimeAvailable = false
+            A3.nativeAuraRuntimeError = "CustomAuraButtonTemplate is unavailable"
+            if container.Hide then container:Hide() end
+            return nil
+        end
+        PrepareDispelSensorButton(button, sensor, parentFrame, i)
+        container[i] = button
+        container:AddAuraFrame(button)
+    end
+    AddDispelSensorAuraFilters(container, sensor)
+    if not RegisterNativeContainer(container) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    A3.nativeAuraRuntimeError = nil
+    return container
+end
+
 local function ConfigureContainer(container, lane, parentFrame)
     container._msufA3NativeLane = lane.kind
     container._msufA3NativeRegistered = nil
@@ -1389,7 +1877,7 @@ local function NativeContainerVisible(container)
     return true
 end
 
-local function RegisterNativeContainer(container, forceRefresh)
+RegisterNativeContainer = function(container, forceRefresh)
     if not container then return false end
     if forceRefresh ~= true and container._msufA3NativeRegistered == true then return true end
     if not NativeContainerVisible(container) then
@@ -1501,25 +1989,58 @@ local function ApplyLane(root, lane, parentFrame, forceRecreate)
     return current
 end
 
+local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)
+    if not (root and sensor and sensor.enabled) then return nil end
+    local key = sensor.rootKey
+    local trackingSignature = sensor._msufA3TrackingSignature or SensorTrackingSignature(sensor)
+    local layoutSignature = sensor._msufA3LayoutSignature or SensorLayoutSignature(sensor)
+    local current = root[key]
+    if forceRecreate ~= true
+        and current
+        and current._msufA3TrackingSignature == trackingSignature
+        and current._msufA3LayoutSignature == layoutSignature
+    then
+        SyncDispelSensorGeometry(current, sensor, parentFrame)
+        current:Show()
+        return RegisterNativeContainer(current) and current or nil
+    end
+    HideLane(current)
+    root[key] = nil
+    current = CreateNativeDispelSensor(root, sensor, parentFrame)
+    if current then
+        current._msufA3TrackingSignature = trackingSignature
+        current._msufA3LayoutSignature = layoutSignature
+        sensor._msufA3TrackingSignature = trackingSignature
+        sensor._msufA3LayoutSignature = layoutSignature
+        root[key] = current
+    end
+    return current
+end
+
 local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame)
     lane = lane or (container and container._msufA3NativeLaneConfig)
-    SyncContainerGeometry(container, lane, parentFrame)
+    if lane and lane.sensor == true then
+        SyncDispelSensorGeometry(container, lane, parentFrame)
+    else
+        SyncContainerGeometry(container, lane, parentFrame)
+    end
     if not RegisterNativeContainer(container) then return false end
     if not NativeContainerVisible(container) then return true end
     if forceRefresh == true and lane and lane.nativeFilter and lane.max then
-        -- Swap reparse. ClearAuraFilters()+AddAuraFilter() is two RefreshAuraFrames
-        -- passes: clear every button, then repopulate every button (~2x
-        -- ApplyAuraInstance per visible aura). Blizzard exposes UpdateAllAuras()
-        -- specifically for target changes -- one parse + one populate, ~half the
-        -- cost -- but a prior PTR build taint-failed on it (see note at top of
-        -- file). Default stays on the safe Clear+Add path; set
-        -- A3.swapUseUpdateAllAuras = true in-game to A/B test the cheaper path on
-        -- the current build (confirm swap content updates AND no taint first).
+        -- Stable-token swaps need a full content refresh. UpdateAllAuras() is
+        -- cheaper in theory, but current PTR builds still leave addon-created
+        -- CustomAuraContainers stale in this path. Default to the proven
+        -- content-correct filter re-add route, still coalesced by frame in
+        -- FlushIdentityQueue. Keep UpdateAllAuras as an explicit A/B switch.
         if A3.swapUseUpdateAllAuras == true and type(container.UpdateAllAuras) == "function" then
             container:UpdateAllAuras()
         else
             container:ClearAuraFilters()
-            container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
+            if lane.sensor == true then
+                AddDispelSensorAuraFilters(container, lane)
+            else
+                container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
+            end
         end
     end
     return true
@@ -1543,6 +2064,19 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
     if lanes.external and lanes.external.enabled then
         any = true
         ok = RefreshNativeContainer(root.Externals, forceRefresh, lanes.external, root:GetParent()) and ok
+    end
+    local sensors = cfg.sensors
+    if sensors and sensors.dispelBorder and sensors.dispelBorder.enabled then
+        any = true
+        ok = RefreshNativeContainer(root.DispelBorderSensor, forceRefresh, sensors.dispelBorder, root:GetParent()) and ok
+    end
+    if sensors and sensors.dispelOverlay and sensors.dispelOverlay.enabled then
+        any = true
+        ok = RefreshNativeContainer(root.DispelOverlaySensor, forceRefresh, sensors.dispelOverlay, root:GetParent()) and ok
+    end
+    if sensors and sensors.dispelCorner and sensors.dispelCorner.enabled then
+        any = true
+        ok = RefreshNativeContainer(root.DispelCornerSensor, forceRefresh, sensors.dispelCorner, root:GetParent()) and ok
     end
     if ok and any then A3.nativeAuraRuntimeError = nil end
     return ok and any
@@ -1597,6 +2131,9 @@ local function HideState(frame)
     HideLane(root.Buffs)
     HideLane(root.Debuffs)
     HideLane(root.Externals)
+    HideLane(root.DispelBorderSensor)
+    HideLane(root.DispelOverlaySensor)
+    HideLane(root.DispelCornerSensor)
     root._msufA3Config = nil
     root._msufA3Applied = nil
     root._msufA3ConfigGen = nil
@@ -1629,14 +2166,21 @@ local function ApplyConfig(frame, cfg, reason)
     root:SetAllPoints(frame)
     root:Show()
     local lanes = cfg.lanes or {}
+    local sensors = cfg.sensors or {}
     local forceRecreate = false
     local ok = true
     if lanes.buff and lanes.buff.enabled and not ApplyLane(root, lanes.buff, frame, forceRecreate) then ok = false end
     if lanes.debuff and lanes.debuff.enabled and not ApplyLane(root, lanes.debuff, frame, forceRecreate) then ok = false end
     if lanes.external and lanes.external.enabled and not ApplyLane(root, lanes.external, frame, forceRecreate) then ok = false end
+    if sensors.dispelBorder and sensors.dispelBorder.enabled and not ApplyDispelSensor(root, sensors.dispelBorder, frame, forceRecreate) then ok = false end
+    if sensors.dispelOverlay and sensors.dispelOverlay.enabled and not ApplyDispelSensor(root, sensors.dispelOverlay, frame, forceRecreate) then ok = false end
+    if sensors.dispelCorner and sensors.dispelCorner.enabled and not ApplyDispelSensor(root, sensors.dispelCorner, frame, forceRecreate) then ok = false end
     if not (lanes.buff and lanes.buff.enabled) then HideLane(root.Buffs) end
     if not (lanes.debuff and lanes.debuff.enabled) then HideLane(root.Debuffs) end
     if not (lanes.external and lanes.external.enabled) then HideLane(root.Externals) end
+    if not (sensors.dispelBorder and sensors.dispelBorder.enabled) then HideLane(root.DispelBorderSensor) end
+    if not (sensors.dispelOverlay and sensors.dispelOverlay.enabled) then HideLane(root.DispelOverlaySensor) end
+    if not (sensors.dispelCorner and sensors.dispelCorner.enabled) then HideLane(root.DispelCornerSensor) end
     root._msufA3Config = cfg
     root._msufA3Applied = ok == true
     root._msufA3ConfigGen = ConfigGen(cfg)
@@ -1823,7 +2367,6 @@ end
 function A3.RefreshAll()
     A3.BumpRuntimeConfig()
     A3._runtimeConfigCache = nil
-    frameSpecConfigCache = setmetatable({}, { __mode = "k" })
     RequestUnitNow("*")
     return true
 end
@@ -1841,7 +2384,6 @@ function A3.RefreshUnit(unit)
     if runtimeUnit then return A3.RequestUnit(runtimeUnit) end
     A3.BumpRuntimeConfig()
     A3._runtimeConfigCache = nil
-    frameSpecConfigCache = setmetatable({}, { __mode = "k" })
     return A3.RequestUnit(unit)
 end
 
@@ -1850,9 +2392,9 @@ function A3.ApplyFontsFromGlobal()
     return A3.RefreshAll()
 end
 
--- AuraContainer owns UNIT_AURA and per-aura churn. Do not add an MSUF
--- UNIT_AURA/UpdateAllAuras fallback here; on 12.1 PTR direct UpdateAllAuras can
--- taint-fail inside Blizzard's private AuraContainer tables.
+-- AuraContainer owns UNIT_AURA and per-aura churn. Do not add an MSUF UNIT_AURA
+-- scanner here; target/focus identity refresh is handled by the coalesced
+-- container refresh path above.
 local AurasElement = {
     events = EMPTY_EVENTS,
     unitlessEvents = EMPTY_EVENTS,

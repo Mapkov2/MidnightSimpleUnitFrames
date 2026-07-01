@@ -715,6 +715,11 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         for _, key in pairs({ "buff", "debuff", "externals" }) do
             if type(auras[key]) ~= "table" then auras[key] = {} end
             if auras[key].cooldownSwipeReverse == nil then auras[key].cooldownSwipeReverse = false end
+            if auras[key].showDurationBar == nil then auras[key].showDurationBar = false end
+            if auras[key].durationBarHeight == nil then auras[key].durationBarHeight = 2 end
+            if auras[key].durationBarDisplay ~= "OVERLAY" then auras[key].durationBarDisplay = "BAR_ONLY" end
+            if auras[key].durationBarPosition == nil then auras[key].durationBarPosition = "BOTTOM" end
+            if auras[key].durationBarDirection == nil then auras[key].durationBarDirection = "REMAINING" end
             if type(auras[key].blacklist) ~= "table" then auras[key].blacklist = {} end
             if type(auras[key].blacklist.spells) ~= "table" then auras[key].blacklist.spells = {} end
         end
@@ -1133,6 +1138,12 @@ local function MSUF_EnsureDB_Heavy()
     MSUF_Defaults_MigrateDispelPriorityProfiles()
     MSUF_Defaults_MigrateGroupTooltipProfiles()
     MSUF_Defaults_NormalizePortraitRenderDB(MSUF_DB)
+    if MSUF_DB._msufNativeDispelTriggerMigration ~= 1 then
+        if g.dispelBorderTrigger == nil or g.dispelBorderTrigger == "BY_ME" then
+            g.dispelBorderTrigger = "DISPEL_TYPE"
+        end
+        MSUF_DB._msufNativeDispelTriggerMigration = 1
+    end
     local legacyPortraitOverrideState = false
     for _, unitKey in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }) do
         local u = MSUF_DB[unitKey]
@@ -1589,7 +1600,7 @@ end
     end
     --- UnitFrame dispel overlay (health-bar tint driven by native 12.1 aura visual state)
     if g.dispelOutlineMode == nil then g.dispelOutlineMode = 1 end
-    if g.dispelBorderTrigger == nil then g.dispelBorderTrigger = "BY_ME" end
+    if g.dispelBorderTrigger == nil then g.dispelBorderTrigger = "DISPEL_TYPE" end
     if g.unitDispelOverlayEnabled == nil then g.unitDispelOverlayEnabled = false end
     if g.unitDispelOverlayStyle == nil then g.unitDispelOverlayStyle = "FULL" end
     if g.unitDispelOverlayOnHealth == nil then g.unitDispelOverlayOnHealth = true end
@@ -2672,6 +2683,11 @@ end
                 showCooldownText = true,
                 showCooldownSwipe = true,
                 cooldownSwipeReverse = false,
+                showDurationBar = false,
+                durationBarHeight = 2,
+                durationBarDisplay = "BAR_ONLY",
+                durationBarPosition = "BOTTOM",
+                durationBarDirection = "REMAINING",
                 showStackCount = true,
                 debuffTypeBorderMode = "OFF",
                 useDebuffTypeBorders = false,
