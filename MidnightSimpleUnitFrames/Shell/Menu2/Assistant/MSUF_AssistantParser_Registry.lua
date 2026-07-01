@@ -1951,6 +1951,24 @@ end
 
 P._FontTextColorDefaultIntent = function(text, spec)
     local boolValue = DetectBoolean(text)
+    local targetValue = P.TargetAfterLastConnector and P.TargetAfterLastConnector(text) or tostring(text or ""):match("%s+to%s+(.+)$")
+    if targetValue and spec then
+        if ContainsAny(targetValue, { "default", "font color", "palette", "standard" }) then return true end
+        if spec.key == "nameColorMode" and ContainsAny(targetValue, {
+            "class", "class color", "class colour", "by class", "class colored", "class coloured",
+        }) then return false end
+        if spec.key == "colorHealthTextByHealth" and ContainsAny(targetValue, {
+            "health", "hp", "by health", "health color", "health colour", "health gradient",
+        }) then return false end
+        if spec.key == "colorPowerTextByType" and ContainsAny(targetValue, {
+            "resource", "power", "power type", "by power", "by power type",
+            "energy", "mana", "rage", "focus", "runic power", "insanity", "fury", "pain",
+            "essence", "astral power", "lunar power", "maelstrom",
+        }) then return false end
+        if spec.key == "npcNameRed" and ContainsAny(targetValue, {
+            "npc", "red", "class", "class color", "class colour", "by class", "npc red",
+        }) then return false end
+    end
     if boolValue == false or ContainsAny(text, { "default", "font color", "palette", "standard" }) then return true end
     if not spec then return false end
     if spec.key == "nameColorMode" then
@@ -1999,9 +2017,11 @@ local function ParseScopedFontTextColorShortcut(text)
         "color text by mana", "text color by mana", "color power text", "power color text",
         "mana color text", "resource color text", "power text color", "mana text color",
         "resource text color", "power text by type", "power text by power",
+        "powertext color", "powertext colour", "color of power text", "colour of power text",
+        "color of powertext", "colour of powertext",
     }) or (
         ContainsAny(text, {
-            "power text", "mana text", "resource text", "power value", "mana value", "resource value",
+            "power text", "powertext", "mana text", "resource text", "power value", "mana value", "resource value",
         }) and ContainsAny(text, {
             "power color", "power colour", "power colors", "power colours",
             "resource color", "resource colour", "mana color", "mana colour",

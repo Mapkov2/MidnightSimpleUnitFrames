@@ -1244,6 +1244,44 @@ function A._ParseClassPowerColorShortcut(text, raw)
     }
 end
 
+function A._ParsePowerColorShortcut(text, raw)
+    local token = PowerColorTokenForText(text)
+    if not token then return nil end
+    if ContainsAny(text, {
+        "power text", "powertext", "mana text", "resource text", "font color", "text color",
+    }) then return nil end
+    if ContainsAny(text, {
+        "class power", "class resource", "combo point", "combo points", "holy power",
+        "soul shard", "soul shards", "chi", "arcane charge", "arcane charges", "runes",
+    }) then return nil end
+    if not ContainsAny(text, {
+        "color", "colors", "colour", "colours", "tint", "power bar", "powerbar",
+        "resource bar", "mana bar", "energy bar", "rage bar",
+    }) then return nil end
+
+    if ContainsAny(text, { "reset", "default", "defaults", "restore", "zuruecksetzen" }) then
+        local action = Registry and Registry:GetAction("reset_power_color_token")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { token = token },
+            label = "Reset power bar color",
+            summary = "Resets a single Power Bar color.",
+        } or nil
+    end
+
+    local r, g, b, label = ExtractColor(raw, text)
+    if not r then return nil end
+    local setting = Registry and Registry:GetSetting("general.powerColorOverrides." .. token)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = "Power Bar Color",
+        summary = "Changes a global Power Bar color token.",
+    }
+end
+
 local function ParseColorAction(text)
     if not ContainsAny(text, { "reset", "default", "defaults", "restore", "zuruecksetzen" }) then return nil end
     if not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then return nil end

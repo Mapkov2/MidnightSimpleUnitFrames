@@ -104,6 +104,21 @@ FontData.DEFAULT_RESOURCE_ALIASES = {
     power = "RESOURCE",
     powercolor = "RESOURCE",
     ["power color"] = "RESOURCE",
+    ["power type"] = "RESOURCE",
+    ["by power"] = "RESOURCE",
+    ["by power type"] = "RESOURCE",
+    energy = "RESOURCE",
+    mana = "RESOURCE",
+    rage = "RESOURCE",
+    focus = "RESOURCE",
+    ["runic power"] = "RESOURCE",
+    insanity = "RESOURCE",
+    fury = "RESOURCE",
+    pain = "RESOURCE",
+    essence = "RESOURCE",
+    ["astral power"] = "RESOURCE",
+    ["lunar power"] = "RESOURCE",
+    maelstrom = "RESOURCE",
 }
 
 FontData.NAME_TRUNCATION_VALUES = { "LEFT", "RIGHT" }

@@ -357,6 +357,7 @@ function A._ParsePipelineFeature(normalized, raw, ctx)
     local result = ParseGameplayAction(normalized, raw); if result then return result end
     result = ParseClassPowerAction and ParseClassPowerAction(normalized); if result then return result end
     result = A._ParseClassPowerColorShortcut and A._ParseClassPowerColorShortcut(normalized, raw); if result then return result end
+    result = A._ParsePowerColorShortcut and A._ParsePowerColorShortcut(normalized, raw); if result then return result end
     result = ParseDarkModeBrightnessShortcut(normalized); if result then return result end
     result = ParseGlobalBarsAction(normalized); if result then return result end
     result = P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx); if result then return result end
