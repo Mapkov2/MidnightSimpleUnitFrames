@@ -1417,12 +1417,23 @@ local HIDE_ON_TERMS = {
 }
 
 local function ShowSettingValueForText(text)
+    local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(text) or nil
+    if target then
+        if ContainsAny(target, SHOW_OFF_TERMS) then return false end
+        if ContainsAny(target, SHOW_ON_TERMS) then return true end
+    end
     if ContainsAny(text, SHOW_OFF_TERMS) then return false end
     if ContainsAny(text, SHOW_ON_TERMS) then return true end
     return DetectBoolean(text)
 end
 
 local function HideSettingValueForText(text, defaultValue)
+    local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(text) or nil
+    if target then
+        if ContainsAny(target, { "not show", "dont show", "do not show", "never show", "nicht anzeigen", "nicht zeigen", "nicht einblenden" }) then return true end
+        if ContainsAny(target, HIDE_OFF_TERMS) then return false end
+        if ContainsAny(target, HIDE_ON_TERMS) then return true end
+    end
     if ContainsAny(text, { "not show", "dont show", "do not show", "never show", "nicht anzeigen", "nicht zeigen", "nicht einblenden" }) then return true end
     if ContainsAny(text, HIDE_OFF_TERMS) then return false end
     if ContainsAny(text, HIDE_ON_TERMS) then return true end
@@ -1551,7 +1562,23 @@ local function GroupAvailabilityAttributeForText(text)
         "use msuf group frames", "msuf group frames", "group frames enabled",
         "party frames enabled", "raid frames enabled", "enable group frames",
         "disable group frames", "turn on group frames", "turn off group frames",
-    }) and not ContainsAny(text, { "preview", "power bar", "name", "text", "status icon", "indicator" }) then
+        "enable party frames", "disable party frames", "turn on party frames", "turn off party frames",
+        "enable party frame", "disable party frame", "turn on party frame", "turn off party frame",
+        "enable raid frames", "disable raid frames", "turn on raid frames", "turn off raid frames",
+        "enable raid frame", "disable raid frame", "turn on raid frame", "turn off raid frame",
+        "enable mythic raid frames", "disable mythic raid frames", "turn on mythic raid frames", "turn off mythic raid frames",
+        "enable mythicraid frames", "disable mythicraid frames", "turn on mythicraid frames", "turn off mythicraid frames",
+        "party frames from off to on", "party frames from on to off", "party frames off to on", "party frames on to off",
+        "party frame from off to on", "party frame from on to off", "party frame off to on", "party frame on to off",
+        "raid frames from off to on", "raid frames from on to off", "raid frames off to on", "raid frames on to off",
+        "raid frame from off to on", "raid frame from on to off", "raid frame off to on", "raid frame on to off",
+        "mythic raid frames from off to on", "mythic raid frames from on to off",
+        "mythicraid frames from off to on", "mythicraid frames from on to off",
+    }) and not ContainsAny(text, {
+        "preview", "power bar", "name", "text", "status icon", "indicator",
+        "scaling", "scale", "raid marker", "marker", "role icon", "ready check",
+        "summon", "resurrection", "phase", "pvp", "war mode", "icon",
+    }) then
         return "enabled", "show"
     end
     return nil
@@ -2035,13 +2062,6 @@ local function ParseScopedFontTextColorShortcut(text)
     }) then
         spec = { key = "colorHealthTextByHealth", on = "HEALTH", label = "Health Text Color Mode" }
     elseif ContainsAny(text, {
-        "name text color", "name color", "color name by class", "color name text by class",
-        "color name not by class", "name text by class", "name text not by class",
-        "name not by class", "names not by class", "unit name not by class",
-        "class color name text", "class colored name text", "not class color name",
-    }) then
-        spec = { key = "nameColorMode", on = "CLASS", label = "Name Text Color Mode" }
-    elseif ContainsAny(text, {
         "npc name color", "npc text color", "npc name red", "npc red name",
         "npc name class color", "npc class color name", "color npc name by class",
         "npc name by class", "npc class colored name",
@@ -2054,6 +2074,13 @@ local function ParseScopedFontTextColorShortcut(text)
             on = npcClass and "CLASS" or "NPC",
             label = "NPC Name Text Color",
         }
+    elseif ContainsAny(text, {
+        "name text color", "name color", "color name by class", "color name text by class",
+        "color name not by class", "name text by class", "name text not by class",
+        "name not by class", "names not by class", "unit name not by class",
+        "class color name text", "class colored name text", "not class color name",
+    }) then
+        spec = { key = "nameColorMode", on = "CLASS", label = "Name Text Color Mode" }
     end
     if not spec then return nil end
     scope = scope or "shared"
@@ -2424,7 +2451,9 @@ local function ParseUnitStatusDetailShortcut(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, {
         "level", "level indicator", "level text", "pvp flag", "pvp indicator", "pvp icon",
-        "raid marker", "raid marker icon", "combat indicator", "rested indicator", "incoming rez",
+        "raid marker", "raid marker icon", "raid group", "raid group name", "raid group style",
+        "raid group name style", "group number style",
+        "combat indicator", "rested indicator", "incoming rez",
         "dead text", "status text", "elite icon", "rare icon",
     }) then return nil end
     local wantsAnchor = ContainsAny(text, { "anchor", "position" })
@@ -2432,8 +2461,9 @@ local function ParseUnitStatusDetailShortcut(text)
     local wantsY = ContainsAny(text, { "y offset", "offset y", "vertical offset", "vertical position" })
     local wantsSize = ContainsAny(text, { "size", "icon size", "text size", "font size" })
     local wantsLayer = ContainsAny(text, { "layer", "frame level", "framelevel" })
+    local wantsStyle = ContainsAny(text, { "raid group style", "raid group name style", "group number style" })
     local wantsVisibility = ContainsAny(text, { "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off" })
-    if not (wantsAnchor or wantsX or wantsY or wantsSize or wantsLayer or wantsVisibility) then return nil end
+    if not (wantsAnchor or wantsX or wantsY or wantsSize or wantsLayer or wantsStyle or wantsVisibility) then return nil end
 
     local units = ExplicitUnitAndGroupScopesForRegistry(text)
     if #units == 0 then return nil end
@@ -2453,6 +2483,8 @@ local function ParseUnitStatusDetailShortcut(text)
                 attr = spec.size
             elseif wantsLayer then
                 attr = spec.layer
+            elseif wantsStyle then
+                attr = "raidGroupNameStyle"
             elseif wantsVisibility then
                 attr = spec.show
             end
@@ -4591,6 +4623,8 @@ local function ParseStatusIconTestModeRegistryShortcut(text)
         summary = "Changes per-unit Status Icon Test Mode toggles.",
     }
 end
+
+P.ParseStatusIconTestModeRegistryShortcut = ParseStatusIconTestModeRegistryShortcut
 
 function P.ParseGroupBooleanRegistryShortcut(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end

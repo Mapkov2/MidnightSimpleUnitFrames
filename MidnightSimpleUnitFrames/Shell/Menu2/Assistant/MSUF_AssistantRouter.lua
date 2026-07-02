@@ -106,7 +106,7 @@ R.PAGE_CONTEXT = {    uf_player = { prefix = "player", label = "Player" },
     profiles = { prefix = "profile", label = "Profiles" },
     gf_layout = { prefix = "group", label = "Group Layout" },
     gf_bars = { prefix = "group text", label = "Group Health & Text" },
-    gf_indicators = { prefix = "group indicator", label = "Group Indicators" },
+    gf_indicators = { prefix = "group indicator", label = "Group Status & Indicators" },
     gf_auras = { prefix = "group aura", label = "Group Auras" },
     auras3 = { prefix = "aura", label = "Auras" },
     auras3_buffs = { prefix = "aura buff", label = "Aura Buffs" },
@@ -1190,7 +1190,7 @@ R.SIGNAL_RAID_MARKER_TERMS = {    "raid marker", "raid markers", "raid target ma
 }
 
 function R.SignalProblemReply(title, body, examples, actions)    return {
-        text = tostring(title or "MSUF signal visibility help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open cast bars; open group indicators.") .. "\nYou can ask: " .. tostring(actions or "Open Cast Bars | Open Group Indicators"),
+        text = tostring(title or "MSUF signal visibility help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open cast bars; open group status and indicators.") .. "\nYou can ask: " .. tostring(actions or "Open Cast Bars | Open Group Status & Indicators"),
         status = "info",
         summary = "Assistant signal visibility help",
     }
@@ -1220,36 +1220,36 @@ function R.TrySignalProblemShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.SIGNAL_DISPEL_TERMS) then
         return R.SignalProblemReply(
             "Dispel visibility help",
-            "For dispels, start with Aura Filters and Group Indicators. MSUF can show dispellable debuffs, debuff type colors, dispel borders, debuff stripes, and group-frame aura visibility.",
+            "For dispels, start with Aura Filters and Group Status & Indicators. MSUF can show dispellable debuffs, debuff type colors, dispel borders, debuff stripes, and group-frame aura visibility.",
             "show only dispellable debuffs; open aura filters; test dispel border; set raid range fade to 40.",
-            "Open Aura Filters | Open Group Indicators | Open Group Auras"
+            "Open Aura Filters | Open Group Status & Indicators | Open Group Auras"
         )
     end
 
     if R.ContainsAny(norm, R.SIGNAL_THREAT_TERMS) then
         return R.SignalProblemReply(
             "Threat and aggro visibility help",
-            "For threat or aggro visibility, use Aggro Border, threat/status indicators, group indicators, and colors. Party/Raid frames can also show status cues for group members.",
-            "turn on aggro border; test aggro border; set aggro border color red; open group indicators.",
-            "Open Bars | Open Colors | Open Group Indicators"
+            "For threat or aggro visibility, use Aggro Border, threat/status indicators, group status and indicators, and colors. Party/Raid frames can also show status cues for group members.",
+            "turn on aggro border; test aggro border; set aggro border color red; open group status and indicators.",
+            "Open Bars | Open Colors | Open Group Status & Indicators"
         )
     end
 
     if R.ContainsAny(norm, R.SIGNAL_READY_CHECK_TERMS) then
         return R.SignalProblemReply(
             "Ready Check visibility help",
-            "Ready Check icons live in Group Indicators for Party, Raid, and Mythic Raid frames. Check visibility first, then tune size, anchor, layer, and offsets.",
+            "Ready Check icons live in Group Status & Indicators for Party, Raid, and Mythic Raid frames. Check visibility first, then tune size, anchor, layer, and offsets.",
             "show raid ready check icon; set party ready check size to 18; move raid ready check icon right 4.",
-            "Open Group Indicators"
+            "Open Group Status & Indicators"
         )
     end
 
     if R.ContainsAny(norm, R.SIGNAL_RAID_MARKER_TERMS) then
         return R.SignalProblemReply(
             "Raid Marker visibility help",
-            "Raid markers can appear on unit frames and group frames. In MSUF, tune their visibility, size, anchor, layer, and offsets from the relevant unit or Group Indicators area.",
+            "Raid markers can appear on unit frames and group frames. In MSUF, tune their visibility, size, anchor, layer, and offsets from the relevant unit or Group Status & Indicators area.",
             "show raid marker on target; set raid marker size to 18; move raid marker icon up 4.",
-            "Open Target | Open Player | Open Group Indicators"
+            "Open Target | Open Player | Open Group Status & Indicators"
         )
     end
 
@@ -3121,6 +3121,343 @@ A.RouterAuraProblemReply = function(title, body, examples, actions)
     }
 end
 
+R.AURA_UNIT_FILTER_SPECS = {
+    buff = {
+        { key = "onlyMine", label = "Player filter", token = "PLAYER", effect = "shows only buffs cast by you, your pet, or your vehicle.", bestFor = "tracking your own HoTs, short buffs, or personal maintenance buffs without seeing everyone else's versions.", caution = "It is usually too strict for raid support buffs because it hides buffs cast by other players." },
+        { key = "raid", label = "Raid filter", token = "RAID", effect = "keeps buffs Blizzard marks as raid-frame relevant.", bestFor = "a clean raid setup where you want important buffs and fewer harmless background icons.", caution = "It is not a hand-written MSUF spell list; Blizzard decides which buffs count as raid-relevant." },
+        { key = "raidInCombat", label = "Raid in combat filter", token = "RAID_IN_COMBAT", effect = "uses Blizzard's combat-aware raid-frame visibility set.", bestFor = "the cleanest raid-combat view when you only care about things Blizzard expects raid frames to show during the pull.", caution = "It can hide useful out-of-combat or low-priority buffs." },
+        { key = "includeNameplateOnly", label = "Nameplate-only filter", token = "INCLUDE_NAME_PLATE_ONLY", effect = "also allows auras Blizzard normally marks for nameplates instead of unit frames.", bestFor = "fixing a specific missing aura that appears on nameplates but not on MSUF unit frames.", caution = "Do not use it as your first raid filter; it can add nameplate-style combat noise to unit frames." },
+        { key = "cancelable", label = "Cancelable filter", token = "CANCELABLE", effect = "shows buffs that can be canceled by the player.", bestFor = "debugging or trimming personal removable buffs.", caution = "Cancelable does not mean dangerous or important. It only means the buff can be removed." },
+        { key = "notCancelable", label = "Not cancelable filter", token = "NOT_CANCELABLE", effect = "shows buffs that cannot be canceled by the player.", bestFor = "separating persistent/locked buffs from removable buffs.", caution = "It conflicts with Cancelable; using both would narrow the lane too hard." },
+        { key = "externalDefensive", label = "External defensive filter", token = "EXTERNAL_DEFENSIVE", effect = "shows defensive cooldowns placed on the unit by someone else.", bestFor = "raid tanks and healers who want to see externals like major protection cooldowns.", caution = "It is a focused cooldown-tracking filter, not a general buff filter." },
+        { key = "bigDefensive", label = "Big defensive filter", token = "BIG_DEFENSIVE", effect = "shows major defensive buffs that Blizzard classifies as big defensives.", bestFor = "tracking large personal defensives or raid survival cooldowns without all normal buffs.", caution = "It is intentionally narrow; normal buffs disappear when this is the only active buff filter." },
+    },
+    debuff = {
+        { key = "onlyMine", label = "Player filter", token = "PLAYER", effect = "shows only debuffs applied by you, your pet, or your vehicle.", bestFor = "DPS players tracking their own DoTs, bleeds, or personal debuffs on target/focus.", caution = "It hides raid mechanics and other players' debuffs, so it is bad as a general raid-warning filter." },
+        { key = "raid", label = "Raid filter", token = "RAID", effect = "keeps debuffs Blizzard marks as raid-frame relevant.", bestFor = "most raid frames: it removes random minor debuffs and keeps the ones Blizzard expects raid frames to care about.", caution = "It can still show debuffs you cannot dispel; use Dispellable if your job is dispels." },
+        { key = "raidInCombat", label = "Raid in combat filter", token = "RAID_IN_COMBAT", effect = "uses Blizzard's stricter combat-aware raid-frame debuff visibility.", bestFor = "progression raid frames where clutter is worse than missing low-priority out-of-combat debuffs.", caution = "It is stricter than Raid and may hide some debuffs outside combat." },
+        { key = "includeNameplateOnly", label = "Nameplate-only filter", token = "INCLUDE_NAME_PLATE_ONLY", effect = "also allows debuffs Blizzard normally marks for nameplates instead of unit frames.", bestFor = "a specific missing combat debuff that Blizzard expects on nameplates.", caution = "It can add extra enemy/nameplate tracking noise to unit frames." },
+        { key = "includeDispellable", label = "Dispellable filter", token = "RAID_PLAYER_DISPELLABLE", effect = "shows debuffs with a dispel type your character can remove.", bestFor = "healers and support players who need to know what they can actually cleanse right now.", caution = "It hides important mechanics you cannot dispel, so it is not a full raid-mechanics filter by itself." },
+        { key = "crowdControl", label = "Crowd-control filter", token = "CROWD_CONTROL", effect = "shows crowd-control debuffs such as control or lockout-style effects Blizzard classifies as CC.", bestFor = "PvP, crowd-control tracking, and knowing when a unit is controlled.", caution = "It is usually not the first choice for raid PvE debuff cleanup." },
+    },
+}
+
+R.AURA_GROUP_FILTER_EFFECTS = {
+    ALL = "shows the normal aura set for that group lane without applying an extra live filter token.",
+    PLAYER = "shows only auras cast by you, your pet, or your vehicle.",
+    RAID = "keeps auras Blizzard marks as raid-frame relevant.",
+    RAID_IN_COMBAT = "uses Blizzard's stricter combat-aware raid-frame visibility.",
+    INCLUDE_NAME_PLATE_ONLY = "also includes auras Blizzard normally marks for nameplates instead of unit frames.",
+    CANCELABLE = "shows buffs that can be canceled by the player.",
+    NOT_CANCELABLE = "shows buffs that cannot be canceled by the player.",
+    EXTERNAL_DEFENSIVE = "shows defensive cooldowns placed on the unit by someone else.",
+    BIG_DEFENSIVE = "shows major defensive buffs Blizzard classifies as big defensives.",
+    RAID_PLAYER_DISPELLABLE = "shows debuffs with a dispel type your character can remove.",
+    CROWD_CONTROL = "shows crowd-control debuffs.",
+}
+
+function R.AuraFilterStatusWantsAnswer(norm)
+    if not R.ContainsAny(norm, { "filter", "filters", "dispellable", "raid in combat", "nameplate", "crowd control", "cc", "cancelable", "cancellable", "defensive", "exclusive" }) then return false end
+    if R.ContainsAny(norm, {
+        "what filter", "which filter", "which filters", "active filter", "active filters", "current filter", "current filters",
+        "what does", "what do", "what is", "explain", "explain filters", "explain filter", "how does", "why use",
+        "is active", "are active", "is enabled", "are enabled", "is on", "are on",
+        "status", "show active", "show me active",
+    }) then
+        return true
+    end
+    if R.ContainsAny(norm, { "active", "current", "status" }) and R.ContainsAny(norm, { "filter", "filters" }) then return true end
+    if R.ContainsAny(norm, { "what", "which" }) and R.ContainsAny(norm, { "filter", "filters" }) then return true end
+    if R.ContainsAny(norm, { "is " }) and R.ContainsAny(norm, { " on", " off", " active", " enabled", " disabled" }) then return true end
+    return false
+end
+
+function R.AuraFilterKeyFromText(norm)
+    if R.ContainsAny(norm, { "exclusive filter", "exclusive" }) then return "exclusive" end
+    if R.ContainsAny(norm, { "raid in combat", "combat raid" }) then return "raidInCombat" end
+    if R.ContainsAny(norm, { "nameplate only", "nameplate-only", "include nameplate" }) then return "includeNameplateOnly" end
+    if R.ContainsAny(norm, { "dispellable", "dispelable", "purgeable" }) then return "includeDispellable" end
+    if R.ContainsAny(norm, { "crowd control", "cc debuff", "cc debuffs" }) then return "crowdControl" end
+    if R.ContainsAny(norm, { "not cancelable", "not cancellable", "non cancelable", "uncancelable" }) then return "notCancelable" end
+    if R.ContainsAny(norm, { "cancelable", "cancellable" }) then return "cancelable" end
+    if R.ContainsAny(norm, { "external defensive", "external defensives", "external buffs" }) then return "externalDefensive" end
+    if R.ContainsAny(norm, { "big defensive", "big defensives", "major defensive", "major defensives" }) then return "bigDefensive" end
+    if R.ContainsAny(norm, { "player filter", "only my", "only mine", "my buffs", "my debuffs", "own buffs", "own debuffs" }) then return "onlyMine" end
+    if R.ContainsAny(norm, { "raid filter", "raid buff", "raid buffs", "raid debuff", "raid debuffs" }) then return "raid" end
+    return nil
+end
+
+function R.AuraFilterLaneForKey(key, lane)
+    if lane then return lane end
+    if key == "includeDispellable" or key == "crowdControl" then return "debuff" end
+    if key == "cancelable" or key == "notCancelable" or key == "externalDefensive" or key == "bigDefensive" then return "buff" end
+    return nil
+end
+
+function R.AuraFilterScopeFromText(norm)
+    if R.ContainsAny(norm, { "shared", "global", "shared aura", "shared auras", "all unit auras" }) then return "shared", "Shared", false end
+    local groupScope, groupLabel = R.GroupScopeFromText(norm)
+    local unit, unitLabel = R.UnitScopeFromText(norm)
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit, unitLabel, false end
+    if groupScope then return groupScope, groupLabel, true end
+    return nil, nil, false
+end
+
+function R.AuraReadSettingValue(key)
+    local registry = A.Registry
+    local setting = registry and type(registry.GetSetting) == "function" and registry:GetSetting(key) or nil
+    if not setting or type(setting.get) ~= "function" then return nil, setting end
+    local ok, value = pcall(setting.get)
+    if ok then return value, setting end
+    return nil, setting
+end
+
+function R.AuraFilterEffectSentence(text)
+    text = tostring(text or "")
+    if text == "" then return text end
+    return text:gsub("^%l", string.upper)
+end
+
+function R.AuraFilterSpecLines(spec, stateLine)
+    local lines = {}
+    if stateLine and stateLine ~= "" then lines[#lines + 1] = stateLine end
+    if spec and spec.effect then lines[#lines + 1] = "Plain English: " .. R.AuraFilterEffectSentence(spec.effect) end
+    if spec and spec.bestFor then lines[#lines + 1] = "Good when: " .. R.AuraFilterEffectSentence(spec.bestFor) end
+    if spec and spec.caution then lines[#lines + 1] = "Careful: " .. R.AuraFilterEffectSentence(spec.caution) end
+    if spec and spec.token then lines[#lines + 1] = "Blizzard token MSUF sends to the native AuraContainer: " .. tostring(spec.token) .. "." end
+    return lines
+end
+
+function R.AuraFilterBoolSpec(lane, key)
+    local specs = R.AURA_UNIT_FILTER_SPECS[lane] or {}
+    for i = 1, #specs do
+        if specs[i].key == key then return specs[i] end
+    end
+    return nil
+end
+
+function R.AuraFilterTokenList(scope, lane, filtersEnabled)
+    local tokens = { lane == "buff" and "HELPFUL" or "HARMFUL" }
+    if filtersEnabled == false then return tokens end
+    local exclusive = R.AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter.exclusive")
+    if tostring(exclusive or "none") == "raid" then tokens[#tokens + 1] = "RAID" end
+    local specs = R.AURA_UNIT_FILTER_SPECS[lane] or {}
+    for i = 1, #specs do
+        local spec = specs[i]
+        if spec.token and R.AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(spec.key)) == true then
+            local seen = false
+            for j = 1, #tokens do if tokens[j] == spec.token then seen = true break end end
+            if not seen then tokens[#tokens + 1] = spec.token end
+        end
+    end
+    return tokens
+end
+
+function R.AuraExclusiveFilterLine(scope, scopeLabel, lane)
+    local value = R.AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter.exclusive")
+    value = tostring(value or "none")
+    local active = value ~= "" and value ~= "none"
+    if active then
+        return "Exclusive filter is active: " .. tostring(A.HumanizeDisplayKey and A.HumanizeDisplayKey(value) or value) .. ". Plain English: MSUF starts from that stricter base list before any other toggles narrow the lane further."
+    end
+    return "Exclusive filter is none. Plain English: the exclusive dropdown is not adding a hidden extra restriction."
+end
+
+function R.AuraFilterRecommendationWantsAnswer(norm)
+    norm = R.Normalize(norm)
+    if not R.ContainsAny(norm, { "filter", "filters" }) then return false end
+    if R.ContainsAny(norm, { "good filter", "best filter", "which filter should", "what filter should", "recommend", "recommendation", "for raid", "for raids", "raid setup", "raiding", "new player", "beginner" }) then
+        return true
+    end
+    return false
+end
+
+function R.AuraRaidFilterRecommendationReply(norm)
+    local lines = {}
+    lines[#lines + 1] = "Raid aura filter recommendation"
+    lines[#lines + 1] = "Short answer: start with Raid for general raid relevance, use Raid In Combat when you want less clutter during pulls, and use Dispellable Debuffs if your main job is cleansing."
+    lines[#lines + 1] = "For a new player, think of filters as a sieve. The aura lane still exists, but the filter decides which icons are allowed through."
+    lines[#lines + 1] = "Good raid starting points:"
+    lines[#lines + 1] = "- Raid or Mythic Raid debuffs: set the Debuff filter to RAID. If the frame is still too noisy, try RAID_IN_COMBAT."
+    lines[#lines + 1] = "- Healer dispels: use RAID_PLAYER_DISPELLABLE on debuffs when you only want debuffs your character can remove."
+    lines[#lines + 1] = "- DPS personal tracking: use PLAYER on target debuffs when you only care about your own DoTs."
+    lines[#lines + 1] = "- Defensive cooldown tracking: use BIG_DEFENSIVE for major defensives, or EXTERNAL_DEFENSIVE when you want externals on a unit."
+    lines[#lines + 1] = "I would not start with Include Nameplate-only. Use that only when you know a specific aura appears on nameplates but is missing from MSUF."
+    lines[#lines + 1] = "MSUF detail: Player/Target/Focus/Boss use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane."
+    lines[#lines + 1] = "Examples: set raid debuff filter to RAID; set raid debuff filter to RAID_IN_COMBAT; set raid debuff filter to RAID_PLAYER_DISPELLABLE; turn on target debuff player filter."
+    return {
+        kind = "answer",
+        status = "info",
+        result = "info",
+        text = table.concat(lines, "\n"),
+        summary = "Recommends beginner-friendly aura filters for raid use.",
+        searchResults = R.PageFollowupResults and R.PageFollowupResults("auras3_filters", "Aura Filters", "Aura filter recommendations live in Aura Filters.") or nil,
+    }
+end
+
+function R.AuraFilterOverviewReply(norm)
+    local lines = {}
+    lines[#lines + 1] = "Aura filters, in normal words"
+    lines[#lines + 1] = "Filters do not move icons or resize them. They decide which Buff or Debuff icons are allowed to show."
+    lines[#lines + 1] = "Common choices:"
+    lines[#lines + 1] = "- ALL: no extra narrowing on group frames."
+    lines[#lines + 1] = "- PLAYER: only your own buffs/debuffs. Good for tracking your DoTs or HoTs."
+    lines[#lines + 1] = "- RAID: Blizzard's raid-frame relevant list. Good default for raids."
+    lines[#lines + 1] = "- RAID_IN_COMBAT: stricter raid list while fighting. Good when raid frames are too noisy."
+    lines[#lines + 1] = "- RAID_PLAYER_DISPELLABLE: debuffs your character can dispel. Good for healers."
+    lines[#lines + 1] = "- BIG_DEFENSIVE / EXTERNAL_DEFENSIVE: defensive cooldown tracking."
+    lines[#lines + 1] = "- CROWD_CONTROL: CC effects, usually more useful in PvP or control-heavy situations."
+    lines[#lines + 1] = "To read the exact active state I need the frame and lane, for example Target Debuffs, Player Buffs, Raid Debuffs, or Party Buffs."
+    lines[#lines + 1] = "Examples: what active target debuff filters do I have; explain party buff filters; what is a good filter for raid."
+    return {
+        kind = "answer",
+        status = "info",
+        result = "info",
+        text = table.concat(lines, "\n"),
+        summary = "Explains aura filters for beginners.",
+        searchResults = R.PageFollowupResults and R.PageFollowupResults("auras3_filters", "Aura Filters", "Aura filters live on the Aura Filters page.") or nil,
+    }
+end
+
+function R.AuraUnitFilterStatusReply(norm, scope, scopeLabel, lane, laneLabel, requestedKey)
+    local filtersEnabled = R.AuraReadSettingValue("auras3." .. tostring(scope) .. ".filtersEnabled")
+    if filtersEnabled == nil then filtersEnabled = true end
+
+    local lines = {}
+    lines[#lines + 1] = scopeLabel .. " " .. laneLabel .. " filters"
+    lines[#lines + 1] = "Plain English: this controls which " .. laneLabel:lower() .. " icons MSUF lets through on " .. scopeLabel .. ". It does not change icon size or position."
+    lines[#lines + 1] = filtersEnabled and "Filter gate: enabled. The active toggles below affect the live native AuraContainer." or "Filter gate: disabled. The lane can still show auras, but these filter toggles will not narrow it until filters are enabled."
+
+    if requestedKey and requestedKey ~= "exclusive" then
+        local spec = R.AuraFilterBoolSpec(lane, requestedKey)
+        if spec then
+            local value = R.AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(spec.key))
+            local active = value == true and filtersEnabled ~= false
+            local stateLine = spec.label .. " is " .. (active and "active" or "inactive") .. "."
+            local specLines = R.AuraFilterSpecLines(spec, stateLine)
+            for i = 1, #specLines do lines[#lines + 1] = specLines[i] end
+        end
+    elseif requestedKey == "exclusive" then
+        lines[#lines + 1] = R.AuraExclusiveFilterLine(scope, scopeLabel, lane)
+    else
+        local active = {}
+        local specs = R.AURA_UNIT_FILTER_SPECS[lane] or {}
+        for i = 1, #specs do
+            local spec = specs[i]
+            local value = R.AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(spec.key))
+            if value == true then active[#active + 1] = spec.label .. ": " .. R.AuraFilterEffectSentence(spec.effect) end
+        end
+        lines[#lines + 1] = R.AuraExclusiveFilterLine(scope, scopeLabel, lane)
+        if #active == 0 then
+            lines[#lines + 1] = "Active filters right now: none. That means this lane is not being narrowed by MSUF's live filter toggles."
+            if lane == "debuff" then
+                lines[#lines + 1] = "Beginner tip: for raid debuffs, Raid is the normal first filter; Dispellable is the healer-cleanse view; Player is only your own debuffs."
+            else
+                lines[#lines + 1] = "Beginner tip: for raid buffs, Raid is the normal clean view; Big Defensive and External Defensive are specialized cooldown-tracking views."
+            end
+        else
+            lines[#lines + 1] = "Active filters right now:"
+            for i = 1, #active do lines[#lines + 1] = "- " .. active[i] end
+        end
+    end
+
+    local tokens = R.AuraFilterTokenList(scope, lane, filtersEnabled)
+    lines[#lines + 1] = "Native filter string MSUF builds from this: " .. table.concat(tokens, "|") .. "."
+    lines[#lines + 1] = "Safe next commands: 'turn on " .. tostring(scope) .. " " .. tostring(lane) .. " raid filter', 'turn off " .. tostring(scope) .. " " .. tostring(lane) .. " player filter', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " exclusive filter to none'."
+    local reply = {
+        kind = "answer",
+        status = "info",
+        result = "info",
+        text = table.concat(lines, "\n"),
+        summary = "Explains active unit aura filters.",
+        searchResults = R.SettingFollowupResultsByQuery(scopeLabel .. " " .. laneLabel .. " filters", scopeLabel .. " " .. laneLabel .. " Filters"),
+    }
+    return reply
+end
+
+function R.AuraGroupFilterStatusReply(norm, scope, scopeLabel, lane, laneLabel, requestedKey)
+    local rootEnabled = R.AuraReadSettingValue("gf_" .. tostring(scope) .. ".auras.enabled")
+    local laneEnabled = R.AuraReadSettingValue("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".enabled")
+    local token, tokenSetting = R.AuraReadSettingValue("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".filterToken")
+    token = tostring(token or "ALL")
+    local tokenLabel = tokenSetting and R.RegistryValueLabel(tokenSetting, token) or (A.HumanizeDisplayKey and A.HumanizeDisplayKey(token) or token)
+    local effect = R.AURA_GROUP_FILTER_EFFECTS[token] or "uses that group aura filter token for the lane."
+
+    local lines = {}
+    lines[#lines + 1] = scopeLabel .. " " .. laneLabel .. " group aura filter"
+    lines[#lines + 1] = "Plain English: group-frame aura filters are a single dropdown per lane. Pick one main job for the lane: all auras, your auras, raid-relevant auras, dispellable debuffs, defensive buffs, or crowd control."
+    lines[#lines + 1] = (rootEnabled == false) and "Group Auras are disabled for this scope, so this filter will not be visible until Group Auras are enabled." or "Group Auras are enabled or using their default enabled state."
+    lines[#lines + 1] = (laneEnabled == false) and laneLabel .. " lane is disabled, so the filter cannot show icons yet." or laneLabel .. " lane is enabled or using its default enabled state."
+    lines[#lines + 1] = "Current live filter token: " .. tostring(tokenLabel) .. ". Plain English: it " .. effect
+    if token == "ALL" then
+        lines[#lines + 1] = "That means the group lane is not currently narrowed by the live group filter dropdown."
+    else
+        lines[#lines + 1] = "That means normal auras outside this token may be hidden even when the lane itself is enabled."
+    end
+    if lane == "debuff" then
+        lines[#lines + 1] = "Raid beginner tip: RAID is the usual first pick, RAID_IN_COMBAT is cleaner during pulls, and RAID_PLAYER_DISPELLABLE is the healer-cleanse view."
+    else
+        lines[#lines + 1] = "Raid beginner tip: RAID is the usual clean buff view; BIG_DEFENSIVE and EXTERNAL_DEFENSIVE are for defensive cooldown tracking."
+    end
+    lines[#lines + 1] = "Safe next commands: 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RAID', 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RAID_IN_COMBAT', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to ALL'."
+
+    return {
+        kind = "answer",
+        status = "info",
+        result = "info",
+        text = table.concat(lines, "\n"),
+        summary = "Explains active group aura filter.",
+        searchResults = R.SettingFollowupResults("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".filterToken", scopeLabel .. " " .. laneLabel .. " filter"),
+    }
+end
+
+A.RouterTryAuraFilterStatusShortcut = function(norm)
+    norm = R.Normalize(norm)
+    if not R.AuraFilterStatusWantsAnswer(norm) then return nil end
+
+    if R.AuraFilterRecommendationWantsAnswer(norm) then
+        return R.AuraRaidFilterRecommendationReply(norm)
+    end
+
+    local requestedKey = R.AuraFilterKeyFromText(norm)
+    local lane, laneLabel = R.AuraLaneFromText(norm)
+    lane = R.AuraFilterLaneForKey(requestedKey, lane)
+    if lane and not laneLabel then laneLabel = lane == "buff" and "Buff" or "Debuff" end
+
+    local scope, scopeLabel, isGroupScope = R.AuraFilterScopeFromText(norm)
+    if requestedKey and not scope then
+        local effect
+        if requestedKey == "exclusive" then
+            effect = "Exclusive filters are stricter lane filters. 'none' means no exclusive restriction; debuff lanes can use raid/encounter style exclusive filtering where supported."
+        else
+            local buffSpec = R.AuraFilterBoolSpec("buff", requestedKey)
+            local debuffSpec = R.AuraFilterBoolSpec("debuff", requestedKey)
+            local spec = debuffSpec or buffSpec
+            if spec then
+                local detail = R.AuraFilterSpecLines(spec)
+                effect = table.concat(detail, "\n")
+            end
+        end
+        if effect then
+            return A.RouterAuraProblemReply(
+                "Aura filter explanation",
+                R.AuraFilterEffectSentence(effect) .. "\nTo tell you whether it is active, name the scope and lane, for example Target Debuffs or Party Buffs.",
+                "what active target debuff filters do I have; is player buff raid filter on; set target debuff dispellable filter on.",
+                "Open Aura Filters | Check Target Debuffs"
+            )
+        end
+    end
+
+    if not scope or not lane then
+        return R.AuraFilterOverviewReply(norm)
+    end
+
+    if isGroupScope then
+        return R.AuraGroupFilterStatusReply(norm, scope, scopeLabel, lane, laneLabel or (lane == "buff" and "Buff" or "Debuff"), requestedKey)
+    end
+    return R.AuraUnitFilterStatusReply(norm, scope, scopeLabel, lane, laneLabel or (lane == "buff" and "Buff" or "Debuff"), requestedKey)
+end
+
 A.RouterTryAuraProblemShortcut = function(text, coreHandler)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
@@ -3147,6 +3484,9 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
         or R.ContainsAny(norm, terms.text)
         or R.AuraSpecificSpellRequest(norm)
     if not mentionsAura then return nil end
+
+    local filterStatusResult = A.RouterTryAuraFilterStatusShortcut and A.RouterTryAuraFilterStatusShortcut(norm)
+    if filterStatusResult then return filterStatusResult end
 
     local detailSettingResult = A.RouterTryAuraDetailSettingShortcut and A.RouterTryAuraDetailSettingShortcut(norm, coreHandler)
     if detailSettingResult then return detailSettingResult end
@@ -3461,6 +3801,25 @@ A.RouterTryCastbarProblemShortcut = function(text, coreHandler)
             "Cast bar icons, timer text, spell text, text size, and icon position are Cast Bar options. If the bar itself is visible but a part is missing, check the unit cast bar text/icon settings before changing size.",
             "show target cast bar icon; set target cast bar text size to 14; open cast bars.",
             "Open Cast Bars | Check target cast bar"
+        )
+    end
+
+    if R.ContainsAny(norm, terms.broken) or R.HasNaturalProblemTerm(norm) then
+        local unit, unitLabel = R.CastbarUnitFromText(norm)
+        if not unit then
+            unit = R.VisibilityCastbarUnitForText and R.VisibilityCastbarUnitForText(R.VisibilityUnitForText(norm)) or nil
+        end
+        if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "boss" then unit = "target" end
+        unitLabel = unitLabel or (unit == "player" and "Player" or unit == "focus" and "Focus" or unit == "boss" and "Boss" or "Target")
+        if type(coreHandler) == "function" then
+            local result = coreHandler("diagnose " .. unit .. " castbar")
+            if result and not A.RouterIsUnknownResult(result) then return result end
+        end
+        return A.RouterCastbarProblemReply(
+            unitLabel .. " cast bar visibility help",
+            unitLabel .. " cast bar visibility depends on the Cast Bars page, the owning unit frame being enabled, the selected MSUF/Blizzard backend, Edit Mode position, and whether that unit is currently casting. I will check those first instead of guessing a setting change from a problem report.",
+            "diagnose " .. unit .. " castbar; show " .. unit .. " cast bar; open cast bars.",
+            "Check " .. unitLabel .. " cast bar | Open Cast Bars | show " .. unit .. " cast bar"
         )
     end
 
@@ -3866,7 +4225,7 @@ A.RouterTargetedSpellIndicatorTerms = A.RouterTargetedSpellIndicatorTerms or {
 
 A.RouterIndicatorProblemReply = function(title, body, examples, actions)
     return {
-        text = tostring(title or "Indicator help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open group indicators; show raid marker on target.") .. "\nYou can ask: " .. tostring(actions or "Open Group Indicators | Open Player | Open Target"),
+        text = tostring(title or "Indicator help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open group status and indicators; show raid marker on target.") .. "\nYou can ask: " .. tostring(actions or "Open Group Status & Indicators | Open Player | Open Target"),
         status = "info",
         summary = "Assistant indicator help",
     }
@@ -3936,8 +4295,8 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
             return A.RouterIndicatorProblemReply(
                 "Targeted Spell Indicators are Party-only",
                 "MSUF Targeted Spell Indicators track enemy nameplate casts that target party members. They do not have separate Raid or Mythic Raid settings, so I did not change " .. tostring(groupLabel or "that group scope") .. " frames.",
-                "open group indicators; show party targeted spell indicators; set party targeted spell icon size to 28.",
-                "Open Group Indicators | show party targeted spell indicators"
+                "open group status and indicators; show party targeted spell indicators; set party targeted spell icon size to 28.",
+                "Open Group Status & Indicators | show party targeted spell indicators"
             )
         end
         local wantsInfo = R.AsksSettingLocation(norm)
@@ -3947,9 +4306,9 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
         if wantsInfo then
             return A.RouterIndicatorProblemReply(
                 "Targeted Spell Indicators help",
-                "Party Targeted Spell Indicators live in Group Indicators. They are party-only and show enemy nameplate casts that target party members. Use exact party commands when you want a change.",
+                "Party Targeted Spell Indicators live in Group Status & Indicators. They are party-only and show enemy nameplate casts that target party members. Use exact party commands when you want a change.",
                 "show party targeted spell indicators; set party targeted spell icon size to 28; set targeted spell mode to always.",
-                "Open Group Indicators | show party targeted spell indicators"
+                "Open Group Status & Indicators | show party targeted spell indicators"
             )
         end
     end
@@ -3963,9 +4322,9 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
         local layoutLabel = R.ContainsAny(norm, { "size", "bigger", "larger", "smaller" }) and "size" or "layout"
         local reply = A.RouterIndicatorProblemReply(
             "Ready Check " .. layoutLabel .. " setting location",
-            "Ready Check " .. layoutLabel .. " for " .. groupLabel .. " frames lives in Group Indicators. Use Ready Check size, anchor, X offset, Y offset, and layer controls for that group scope.",
-            "open group indicators; set " .. groupScope .. " ready check size to 18; set " .. groupScope .. " ready check anchor top right.",
-            "Open Group Indicators | set " .. groupScope .. " ready check size to 18"
+            "Ready Check " .. layoutLabel .. " for " .. groupLabel .. " frames lives in Group Status & Indicators. Use Ready Check size, anchor, X offset, Y offset, and layer controls for that group scope.",
+            "open group status and indicators; set " .. groupScope .. " ready check size to 18; set " .. groupScope .. " ready check anchor top right.",
+            "Open Group Status & Indicators | set " .. groupScope .. " ready check size to 18"
         )
         reply.status = "applied"
         reply.result = "applied"
@@ -3977,9 +4336,9 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
     then
         return A.RouterIndicatorProblemReply(
             "Ready Check visibility help",
-            "Ready Check visibility for Party, Raid, and Mythic Raid frames lives in Group Indicators. Check the Ready Check toggle first, then size, anchor, layer, and offsets if the icon is enabled but hard to see.",
-            "show raid ready check icon; set party ready check size to 18; open group indicators.",
-            "Open Group Indicators | show raid ready check icon"
+            "Ready Check visibility for Party, Raid, and Mythic Raid frames lives in Group Status & Indicators. Check the Ready Check toggle first, then size, anchor, layer, and offsets if the icon is enabled but hard to see.",
+            "show raid ready check icon; set party ready check size to 18; open group status and indicators.",
+            "Open Group Status & Indicators | show raid ready check icon"
         )
     end
 
@@ -4021,16 +4380,16 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
             local commandNoun = settingNoun == "raid marker" and "raid marker icon" or (groupScope .. " " .. settingNoun)
             reply = A.RouterIndicatorProblemReply(
                 settingLabel .. " position setting location",
-                settingLabel .. " position for " .. groupLabel .. " frames lives in Group Indicators. Use " .. settingLabel .. " X Offset, " .. settingLabel .. " Y Offset, anchor, layer, and size controls for that group scope.",
-                "open group indicators; move " .. commandNoun .. " up 4; set " .. commandNoun .. " anchor top right.",
-                "Open Group Indicators | move " .. commandNoun .. " up 4"
+                settingLabel .. " position for " .. groupLabel .. " frames lives in Group Status & Indicators. Use " .. settingLabel .. " X Offset, " .. settingLabel .. " Y Offset, anchor, layer, and size controls for that group scope.",
+                "open group status and indicators; move " .. commandNoun .. " up 4; set " .. commandNoun .. " anchor top right.",
+                "Open Group Status & Indicators | move " .. commandNoun .. " up 4"
             )
         else
             reply = A.RouterIndicatorProblemReply(
                 settingLabel .. " position setting location",
-                settingLabel .. " position lives with the relevant frame scope. Unit-frame indicators are in the Status Icons section for Player, Target, Focus, Pet, and Boss pages. Party, Raid, and Mythic Raid indicators live in Group Indicators.",
-                "open target; open group indicators; move raid " .. settingNoun .. " up 4.",
-                "Open Group Indicators | Open Player | Open Target"
+                settingLabel .. " position lives with the relevant frame scope. Unit-frame indicators are in the Status Icons section for Player, Target, Focus, Pet, and Boss pages. Party, Raid, and Mythic Raid indicators live in Group Status & Indicators.",
+                "open target; open group status and indicators; move raid " .. settingNoun .. " up 4.",
+                "Open Group Status & Indicators | Open Player | Open Target"
             )
         end
         reply.status = "applied"
@@ -4053,16 +4412,16 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
         elseif groupScope then
             reply = A.RouterIndicatorProblemReply(
                 settingLabel .. " " .. layoutLabel .. " setting location",
-                settingLabel .. " " .. layoutLabel .. " for " .. groupLabel .. " frames lives in Group Indicators. Use size, anchor, X offset, Y offset, and layer controls for that group scope.",
-                "open group indicators; set " .. groupScope .. " " .. settingNoun .. " size to 18; set " .. groupScope .. " " .. settingNoun .. " anchor top right.",
-                "Open Group Indicators | set " .. groupScope .. " " .. settingNoun .. " size to 18"
+                settingLabel .. " " .. layoutLabel .. " for " .. groupLabel .. " frames lives in Group Status & Indicators. Use size, anchor, X offset, Y offset, and layer controls for that group scope.",
+                "open group status and indicators; set " .. groupScope .. " " .. settingNoun .. " size to 18; set " .. groupScope .. " " .. settingNoun .. " anchor top right.",
+                "Open Group Status & Indicators | set " .. groupScope .. " " .. settingNoun .. " size to 18"
             )
         else
             reply = A.RouterIndicatorProblemReply(
                 settingLabel .. " " .. layoutLabel .. " setting location",
-                settingLabel .. " " .. layoutLabel .. " lives with the relevant frame scope. Unit-frame indicators use Status Icons on the unit page; Party, Raid, and Mythic Raid indicators use Group Indicators.",
-                "open group indicators; open target; set raid " .. settingNoun .. " size to 18.",
-                "Open Group Indicators | Open Player | Open Target"
+                settingLabel .. " " .. layoutLabel .. " lives with the relevant frame scope. Unit-frame indicators use Status Icons on the unit page; Party, Raid, and Mythic Raid indicators use Group Status & Indicators.",
+                "open group status and indicators; open target; set raid " .. settingNoun .. " size to 18.",
+                "Open Group Status & Indicators | Open Player | Open Target"
             )
         end
         reply.status = "applied"
@@ -4077,10 +4436,10 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
                 and R.ContainsAny(norm, { "which page", "what page", "which menu", "what menu" })
             then
                 local reply = A.RouterIndicatorProblemReply(
-                    "Group Indicators help",
-                    settingLabel .. " for Party, Raid, and Mythic Raid frames lives in Group Indicators. Open Group Indicators when you want the page, or ask which setting controls it when you want the exact option.",
-                    "open group indicators; show raid ready check icon; set raid ready check size to 18.",
-                    "Open Group Indicators | show raid ready check icon"
+                    "Group Status & Indicators help",
+                    settingLabel .. " for Party, Raid, and Mythic Raid frames lives in Group Status & Indicators. Open Group Status & Indicators when you want the page, or ask which setting controls it when you want the exact option.",
+                    "open group status and indicators; show raid ready check icon; set raid ready check size to 18.",
+                    "Open Group Status & Indicators | show raid ready check icon"
                 )
                 reply.status = "applied"
                 reply.result = "applied"
@@ -4092,9 +4451,9 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
             if asksLocation then
                 local reply = A.RouterIndicatorProblemReply(
                     settingLabel .. " setting location",
-                    settingLabel .. " for Party, Raid, and Mythic Raid frames lives in Group Indicators. Open Group Indicators and use the " .. settingLabel .. " controls for the relevant group scope.",
-                    verb .. scope .. " " .. settingNoun .. "; open group indicators; set " .. scope .. " " .. settingNoun .. " size to 18.",
-                    "Open Group Indicators | " .. verb .. scope .. " " .. settingNoun
+                    settingLabel .. " for Party, Raid, and Mythic Raid frames lives in Group Status & Indicators. Open Group Status & Indicators and use the " .. settingLabel .. " controls for the relevant group scope.",
+                    verb .. scope .. " " .. settingNoun .. "; open group status and indicators; set " .. scope .. " " .. settingNoun .. " size to 18.",
+                    "Open Group Status & Indicators | " .. verb .. scope .. " " .. settingNoun
                 )
                 reply.status = "applied"
                 reply.result = "applied"
@@ -4105,7 +4464,7 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
             return R.CoreControl(
                 coreHandler,
                 verb .. scope .. " " .. settingNoun,
-                settingLabel .. " lives in Group Indicators. Ask: open group indicators, or " .. verb .. scope .. " " .. settingNoun .. ".",
+                settingLabel .. " lives in Group Status & Indicators. Ask: open group status and indicators, or " .. verb .. scope .. " " .. settingNoun .. ".",
                 "info"
             )
         end
@@ -4143,18 +4502,18 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
     if R.ContainsAny(norm, terms.position) then
         return A.RouterIndicatorProblemReply(
             "Indicator position help",
-            "Indicator position is controlled by the relevant unit-frame or Group Indicators settings: anchor, layer, X offset, Y offset, and size. Name the frame or group scope when you want an exact move.",
-            "move raid marker icon up 4; set raid role icon anchor top right; open group indicators.",
-            "Open Group Indicators | Open Player | Open Target"
+            "Indicator position is controlled by the relevant unit-frame or Group Status & Indicators settings: anchor, layer, X offset, Y offset, and size. Name the frame or group scope when you want an exact move.",
+            "move raid marker icon up 4; set raid role icon anchor top right; open group status and indicators.",
+            "Open Group Status & Indicators | Open Player | Open Target"
         )
     end
 
     if R.HasNaturalProblemTerm(norm) then
         return A.RouterIndicatorProblemReply(
             "Indicator visibility help",
-            "Indicator visibility depends on the relevant unit or group scope. Unit-frame indicators live on Player/Target/Focus/Boss pages, while Party/Raid/Mythic Raid indicators live in Group Indicators.",
+            "Indicator visibility depends on the relevant unit or group scope. Unit-frame indicators live on Player/Target/Focus/Boss pages, while Party/Raid/Mythic Raid indicators live in Group Status & Indicators.",
             "show raid marker on target; show raid ready check icon; show player rested indicator.",
-            "Open Group Indicators | Open Player | Open Target | Open Boss Frames"
+            "Open Group Status & Indicators | Open Player | Open Target | Open Boss Frames"
         )
     end
 
@@ -4504,7 +4863,7 @@ function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHan
     elseif R.ContainsAny(norm, R.VISIBILITY_CASTBAR_TERMS) then
         local castbarUnit = R.VisibilityCastbarUnitForText(unit)
         if castbarUnit then
-            query = "why is " .. castbarUnit .. " cast bar hidden"
+            query = "diagnose " .. castbarUnit .. " castbar"
         end
     else
         for i = 1, #R.VISIBILITY_GAMEPLAY_FEATURE_TERMS do
@@ -5691,8 +6050,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
             return A.RouterSafePlanningReply(
                 "Group indicator comparison",
                 "Raid markers identify a marked target or unit. Role icons show tank/healer/DPS roles. Ready-check icons show ready status before a pull. They all live around indicators, but they answer different questions: marked target, group role, or ready state.",
-                "open group indicators; show raid ready check icon; show raid role icon; show raid marker on target.",
-                "Open Group Indicators | Open Target"
+                "open group status and indicators; show raid ready check icon; show raid role icon; show raid marker on target.",
+                "Open Group Status & Indicators | Open Target"
             )
         end
         if R.ContainsAny(norm, { "castbar", "cast bar" }) and R.ContainsAny(norm, { "unit frame", "unit frames" }) then
@@ -5723,8 +6082,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
             return A.RouterSafePlanningReply(
                 "Group indicator comparison",
                 "Raid markers identify a marked target or unit. Role icons show tank/healer/DPS roles. Ready-check icons show ready status before a pull. They all live around indicators, but they answer different questions: marked target, group role, or ready state.",
-                "open group indicators; show raid ready check icon; show raid role icon; show raid marker on target.",
-                "Open Group Indicators | Open Target"
+                "open group status and indicators; show raid ready check icon; show raid role icon; show raid marker on target.",
+                "Open Group Status & Indicators | Open Target"
             )
         end
         if R.ContainsAny(norm, { "absorb", "absorbs", "heal prediction", "incoming heal", "incoming heals" }) then
@@ -5756,7 +6115,7 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
                 "Positioning option comparison",
                 "Anchor chooses what an element attaches to. X and Y offsets move it away from that anchor. Growth direction controls where repeated icons or groups add new entries. Set anchors first, then offsets, then growth direction.",
                 "open auras; move target buffs right 5; set raid growth direction down; set ready check anchor top right.",
-                "Open Auras | Open Group Layout | Open Group Indicators"
+                "Open Auras | Open Group Layout | Open Group Status & Indicators"
             )
         end
         if R.ContainsAny(norm, { "menu scale", "ui scale", "wow ui scale", "msuf frame scale", "frame scale" }) then
@@ -5899,9 +6258,9 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
     if R.ContainsAny(norm, terms.overload) then
         return A.RouterSafePlanningReply(
             "Information density planning",
-            "Reduce MSUF clutter by lowering aura counts first, then tuning aura filters, optional group indicators, and text density. I will not hide broad UI categories from a vague 'important info' request.",
-            "open aura filters; set target buff icon count to 8; make raid frames easier to read; open group indicators.",
-            "Open Aura Filters | Open Auras | Open Group Indicators | Guided Setup"
+            "Reduce MSUF clutter by lowering aura counts first, then tuning aura filters, optional group status and indicators, and text density. I will not hide broad UI categories from a vague 'important info' request.",
+            "open aura filters; set target buff icon count to 8; make raid frames easier to read; open group status and indicators.",
+            "Open Aura Filters | Open Auras | Open Group Status & Indicators | Guided Setup"
         )
     end
 
@@ -5911,8 +6270,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         return A.RouterSafePlanningReply(
             "Clutter planning",
             "Name the MSUF area that feels cluttered before I change anything. Once the area is clear, I can reduce icon count, spacing, text size, aura filters, indicators, or cast-bar detail without guessing.",
-            "make raid frames easier to read; make target buffs less noisy; open aura filters; open group indicators.",
-            "Guided Setup | Open Aura Filters | Open Group Indicators | What Can I Change Here"
+            "make raid frames easier to read; make target buffs less noisy; open aura filters; open group status and indicators.",
+            "Guided Setup | Open Aura Filters | Open Group Status & Indicators | What Can I Change Here"
         )
     end
 
@@ -5929,8 +6288,8 @@ A.RouterTrySafePlanningShortcut = function(text, coreHandler)
         return A.RouterSafePlanningReply(
             "Minimal UI planning",
             "For a minimal MSUF setup, start by keeping Player, Target, Focus, Cast Bars, and core Party/Raid information readable, then reduce aura counts and optional indicators. I will not hide broad systems from a vague minimal-ui request.",
-            "guided setup; open aura filters; set target buff icon count to 8; open group indicators.",
-            "Guided Setup | Open Aura Filters | Open Group Indicators | Run Checks"
+            "guided setup; open aura filters; set target buff icon count to 8; open group status and indicators.",
+            "Guided Setup | Open Aura Filters | Open Group Status & Indicators | Run Checks"
         )
     end
 
@@ -6150,12 +6509,12 @@ function R.RoleGuidanceReply(text)    local norm = R.Normalize(text)
     local detail, focus, examples, actions
     if role == "healer" then
         detail = "For healing, prioritize readable Party/Raid health text, dispel visibility, range fade, cast bars, and important buffs/debuffs."
-        focus = "Start in Group Health & Text, Group Indicators, Group Auras, and Cast Bars."
+        focus = "Start in Group Health & Text, Group Status & Indicators, Group Auras, and Cast Bars."
         examples = "turn on raid click casting; set raid range fade to 40; show only dispellable debuffs; set raid health text size to 14."
-        actions = "Open Group Health & Text | Open Group Indicators | Open Group Auras | Guided Setup"
+        actions = "Open Group Health & Text | Open Group Status & Indicators | Open Group Auras | Guided Setup"
     elseif role == "tank" then
         detail = "For tanking, prioritize Target, Target of Target, Boss frames, cast bars, debuffs, threat/status visibility, and clear health bars."
-        focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, and Group Indicators."
+        focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, and Group Status & Indicators."
         examples = "show target of target; make target cast bar height 24; open boss frames; show raid marker on target."
         actions = "Open Target | Open Target of Target | Open Boss Frames | Open Cast Bars"
     elseif role == "dps" then
@@ -6198,9 +6557,9 @@ function R.ClassGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Gameplay | Open Class Resources | Open Cast Bars | Open Aura Filters"
     elseif role == "healer" then
         detail = "For " .. label .. " healing UI, prioritize readable Party/Raid frames, dispel visibility, range fade, cast bars, important auras, and Class Resources where MSUF exposes them."
-        focus = "Start in Group Health & Text, Group Indicators, Group Auras, Aura Filters, Cast Bars, and Class Resources."
+        focus = "Start in Group Health & Text, Group Status & Indicators, Group Auras, Aura Filters, Cast Bars, and Class Resources."
         examples = "set raid range fade to 40; show only dispellable debuffs; set raid health text size to 14; open class resources."
-        actions = "Open Group Health & Text | Open Group Indicators | Open Group Auras | Open Class Resources"
+        actions = "Open Group Health & Text | Open Group Status & Indicators | Open Group Auras | Open Class Resources"
     elseif role == "tank" then
         detail = "For " .. label .. " tank UI, prioritize Target, Target of Target, Boss frames, cast bars, debuffs, threat/status readability, and Class Resources where MSUF exposes them."
         focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, Aura Filters, and Class Resources."
@@ -6231,7 +6590,7 @@ function R.ContentGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Cast Bars | Open Group Health & Text | Open Group Auras | Open Aura Filters"
     elseif context == "pvp" then
         detail = "For PvP UI, prioritize Target, Focus, cast bars, class resources, key debuffs, trinket-adjacent visibility, and clean group frames without hiding critical text."
-        focus = "Start in Target, Focus, Cast Bars, Class Resources, Aura Filters, and Group Indicators."
+        focus = "Start in Target, Focus, Cast Bars, Class Resources, Aura Filters, and Group Status & Indicators."
         examples = "show focus kick tracker; show kick ready on focus; open aura filters; make class resources wider."
         actions = "Open Cast Bars | Open Focus | Open Aura Filters | Open Class Resources"
     elseif context == "solo" then
@@ -6241,9 +6600,9 @@ function R.ContentGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Player | Open Target | Open Class Resources | Open Gameplay"
     else
         detail = "For raid UI, prioritize Raid/Mythic Raid layout, health text, range fade, dispel visibility, ready checks, boss frames, and boss cast bars."
-        focus = "Start in Group Layout, Group Health & Text, Group Indicators, Group Auras, Boss Frames, and Cast Bars."
+        focus = "Start in Group Layout, Group Health & Text, Group Status & Indicators, Group Auras, Boss Frames, and Cast Bars."
         examples = "set raid range fade to 40; show raid ready check icon; open boss frames; set boss cast bar height to 20."
-        actions = "Open Group Layout | Open Group Health & Text | Open Group Indicators | Open Boss Frames"
+        actions = "Open Group Layout | Open Group Health & Text | Open Group Status & Indicators | Open Boss Frames"
     end
 
     return {
@@ -6274,9 +6633,9 @@ function R.CombinedGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Group Health & Text | Open Group Auras | Open Cast Bars | Open Aura Filters"
     elseif role == "healer" and context == "raid" then
         detail = "For raid healing, prioritize Raid/Mythic Raid health text, range fade, dispel overlays, debuff visibility, ready checks, and auras that affect healing decisions."
-        focus = "Start in Group Layout, Group Health & Text, Group Indicators, and Group Auras."
+        focus = "Start in Group Layout, Group Health & Text, Group Status & Indicators, and Group Auras."
         examples = "set raid range fade to 40; set raid health text size to 14; show raid ready check icon; show only dispellable debuffs."
-        actions = "Open Group Layout | Open Group Health & Text | Open Group Indicators | Open Group Auras"
+        actions = "Open Group Layout | Open Group Health & Text | Open Group Status & Indicators | Open Group Auras"
     elseif role == "tank" and context == "mythic+" then
         detail = "For Mythic+ tanking, prioritize Target, Target of Target, Boss frames, interrupt feedback, debuff tracking, and readable Party status."
         focus = "Start in Target, Target of Target, Boss Frames, Cast Bars, and Group Health & Text."
@@ -6284,7 +6643,7 @@ function R.CombinedGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Target | Open Target of Target | Open Cast Bars | Open Group Health & Text"
     elseif role == "tank" and context == "raid" then
         detail = "For raid tanking, prioritize Boss frames, Target/Target of Target, raid markers, cast bars, debuffs, and enough Raid visibility for swaps and externals."
-        focus = "Start in Boss Frames, Target, Target of Target, Cast Bars, Group Indicators, and Group Health & Text."
+        focus = "Start in Boss Frames, Target, Target of Target, Cast Bars, Group Status & Indicators, and Group Health & Text."
         examples = "open boss frames; show target of target; show raid marker on target; set boss cast bar height to 20."
         actions = "Open Boss Frames | Open Target | Open Target of Target | Open Cast Bars"
     elseif role == "dps" and context == "mythic+" then
@@ -6299,7 +6658,7 @@ function R.CombinedGuidanceReply(text)    local norm = R.Normalize(text)
         actions = "Open Boss Frames | Open Cast Bars | Open Class Resources | Open Aura Filters"
     elseif context == "pvp" then
         detail = "For PvP with this role, prioritize Target and Focus readability, cast bars, class resources, key debuffs, interrupt feedback, and compact group status."
-        focus = "Start in Target, Focus, Cast Bars, Class Resources, Aura Filters, and Group Indicators."
+        focus = "Start in Target, Focus, Cast Bars, Class Resources, Aura Filters, and Group Status & Indicators."
         examples = "show focus kick tracker; show kick ready on focus; open aura filters; make class resources wider."
         actions = "Open Focus | Open Cast Bars | Open Aura Filters | Open Class Resources"
     elseif context == "solo" then
@@ -6356,7 +6715,7 @@ R.PAGE_LOCATION_TERMS = {    { label = "Support Links", terms = { "support link"
     { label = "Dashboard Scaling", terms = { "dashboard scaling", "dashboard scale", "scaling tools", "scale tools", "ui scale tools", "menu scale", "menu scaling", "msuf frame scale", "options scale" } },
     { label = "Display Recovery", terms = { "display recovery", "display and recovery", "recovery tools", "dashboard recovery", "recover menu", "reset tools" } },
     { label = "Group Health & Text", terms = { "group health and text", "group health text", "group text", "party health text", "raid health text", "mythic raid health text" } },
-    { label = "Group Indicators", terms = { "group indicator", "group indicators", "ready check", "ready checks", "role icon", "raid marker", "corner indicator", "corner indicators" } },
+    { label = "Group Status & Indicators", terms = { "group status and indicators", "group indicators", "group indicator", "ready check", "ready checks", "role icon", "raid marker", "corner indicator", "corner indicators" } },
     { label = "Group Auras", terms = { "group aura", "group auras", "party auras", "raid auras", "mythic raid auras", "group buffs", "group debuffs", "party buffs", "party debuffs", "raid buffs", "raid debuffs" } },
     { label = "Group Layout", terms = { "group layout", "group frames", "party frames", "raid frames", "mythic raid frames", "party layout", "raid layout" } },
     { label = "Target of Target", terms = { "target of target", "targettarget" } },
@@ -6435,6 +6794,7 @@ R.BROAD_PAGE_LOCATION_SUBJECTS = {
     ["support links"] = true,
     ["changelog"] = true,
     ["group layout"] = true,
+    ["group status and indicators"] = true,
     ["group indicators"] = true,
     ["group auras"] = true,
     ["auras"] = true,
@@ -8693,8 +9053,14 @@ function A.RouteInput(text, coreHandler)
     end
 
     if not hasBlockingPendingState and not pendingResultReply then
+        local earlyPageHelpResult = R.TryPageHelpShortcut(text, Core)
+        if earlyPageHelpResult then return earlyPageHelpResult end
+
         local earlyLastChangeSettingFollowupResult = R.TryLastChangeSettingFollowup and R.TryLastChangeSettingFollowup(text)
         if earlyLastChangeSettingFollowupResult then return earlyLastChangeSettingFollowupResult end
+
+        local earlyAuraFilterStatusResult = A.RouterTryAuraFilterStatusShortcut and A.RouterTryAuraFilterStatusShortcut(text)
+        if earlyAuraFilterStatusResult then return earlyAuraFilterStatusResult end
 
         local earlyRegistrySettingCurrentValueResult = A.RouterTryRegistrySettingCurrentValueShortcut and A.RouterTryRegistrySettingCurrentValueShortcut(text, Core)
         if earlyRegistrySettingCurrentValueResult then return earlyRegistrySettingCurrentValueResult end
@@ -8742,6 +9108,9 @@ function A.RouteInput(text, coreHandler)
 
         local lastChangeSettingFollowupResult = R.TryLastChangeSettingFollowup and R.TryLastChangeSettingFollowup(text)
         if lastChangeSettingFollowupResult then return lastChangeSettingFollowupResult end
+
+        local auraFilterStatusResult = A.RouterTryAuraFilterStatusShortcut and A.RouterTryAuraFilterStatusShortcut(text)
+        if auraFilterStatusResult then return auraFilterStatusResult end
 
         local registrySettingCurrentValueResult = A.RouterTryRegistrySettingCurrentValueShortcut and A.RouterTryRegistrySettingCurrentValueShortcut(text, Core)
         if registrySettingCurrentValueResult then return registrySettingCurrentValueResult end
@@ -8802,6 +9171,9 @@ function A.RouteInput(text, coreHandler)
 
         local pendingLastChangeSettingFollowupResult = R.TryLastChangeSettingFollowup and R.TryLastChangeSettingFollowup(text)
         if pendingLastChangeSettingFollowupResult then return pendingLastChangeSettingFollowupResult end
+
+        local pendingAuraFilterStatusResult = A.RouterTryAuraFilterStatusShortcut and A.RouterTryAuraFilterStatusShortcut(text)
+        if pendingAuraFilterStatusResult then return pendingAuraFilterStatusResult end
 
         local pendingRegistrySettingCurrentValueResult = A.RouterTryRegistrySettingCurrentValueShortcut and A.RouterTryRegistrySettingCurrentValueShortcut(text, Core)
         if pendingRegistrySettingCurrentValueResult then return pendingRegistrySettingCurrentValueResult end
@@ -8915,6 +9287,9 @@ function A.RouteInput(text, coreHandler)
 
     local lastChangeSettingFollowupProblemResult = R.TryLastChangeSettingFollowup and R.TryLastChangeSettingFollowup(text)
     if lastChangeSettingFollowupProblemResult then return lastChangeSettingFollowupProblemResult end
+
+    local auraFilterStatusProblemResult = A.RouterTryAuraFilterStatusShortcut and A.RouterTryAuraFilterStatusShortcut(text)
+    if auraFilterStatusProblemResult then return auraFilterStatusProblemResult end
 
     local registrySettingCurrentValueProblemResult = A.RouterTryRegistrySettingCurrentValueShortcut and A.RouterTryRegistrySettingCurrentValueShortcut(text, Core)
     if registrySettingCurrentValueProblemResult then return registrySettingCurrentValueProblemResult end

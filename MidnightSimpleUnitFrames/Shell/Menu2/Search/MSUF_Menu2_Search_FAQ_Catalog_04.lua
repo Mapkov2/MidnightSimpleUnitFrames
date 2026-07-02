@@ -225,7 +225,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "How do I show only dispellable debuffs?", "Open Auras > Filters for unit-frame and group-frame Debuff filtering. Party/Raid status indicators stay in Group Frames > Indicators.", "auras3_filters", "Opens: Auras > Filters", "Filters Indicators dispel magic curse poison disease debuffs debuff type border group frames", SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_UNIT_AURA_DISPEL_KEYWORDS, "only dispellable debuffs|dispellable debuffs|dispel debuffs|magic debuff|curse debuff|poison debuff|disease debuff|debuff type border|debuff color border|show dispels|healer dispels"), 260, },
+            { "How do I show only dispellable debuffs?", "Open Auras > Filters for unit-frame and group-frame Debuff filtering. Party/Raid status indicators stay in Group Frames > Status & Indicators.", "auras3_filters", "Opens: Auras > Filters", "Filters Status Indicators dispel magic curse poison disease debuffs debuff type border group frames", SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_UNIT_AURA_DISPEL_KEYWORDS, "only dispellable debuffs|dispellable debuffs|dispel debuffs|magic debuff|curse debuff|poison debuff|disease debuff|debuff type border|debuff color border|show dispels|healer dispels"), 260, },
         },
         {
             {
@@ -273,10 +273,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             {
                 l = "How do I make raid frames cleaner for healing?",
                 a = "Use Group Frames > Layout for frame size and spacing, Auras for Buff/Debuff placement, and" ..
-                    " Indicators for fixed-position status icons.",
+                    " Status & Indicators for fixed-position status icons.",
                 p = "gf_layout",
-                t = "Opens: Group Frames > Layout / Auras / Indicators",
-                x = "Layout Auras Buffs Debuffs Indicators healer clean raid frames HoTs fixed positions",
+                t = "Opens: Group Frames > Layout / Auras / Status & Indicators",
+                x = "Layout Auras Buffs Debuffs Status Indicators healer clean raid frames HoTs fixed positions",
                 k = SearchKeywordList(
                     "clean raid frames|healer raid frames|minimal raid frames|declutter raid frames",
                     "fixed hots positions|fixed aura positions|healer hots indicators|raid frame indicators",
@@ -286,10 +286,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I change dead, offline, AFK, or ready-check indicators?",
-                a = "Open Group Frames > Indicators for status icons, role/leader/assist, ready check, focus glow," ..
+                a = "Open Group Frames > Status & Indicators for status icons, role/leader/assist, ready check, focus glow," ..
                     " and other group-frame state indicators.",
                 p = "gf_indicators",
-                t = "Opens: Group Frames > Indicators > Status Icons",
+                t = "Opens: Group Frames > Status & Indicators > Status Icons",
                 x = "Status Icons ready check dead ghost offline afk dnd leader assist role icon",
                 k = SearchKeywordList(
                     "dead icon|offline icon|afk icon|dnd icon|ghost icon|ready check icon|leader icon|assist icon",

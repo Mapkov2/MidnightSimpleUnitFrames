@@ -526,6 +526,960 @@ local function AddAuraRegisteredChange(changes, key, value, label)
     AddAuraShortcutChange(changes, setting, value, label or (setting and setting.label) or key)
 end
 
+local function AuraBooleanValue(text)
+    local value = DetectBoolean and DetectBoolean(text)
+    if value ~= nil then return value end
+    if ContainsAny(text, { "off", "disable", "disabled", "hide", "hidden", "without", "no ", "aus", "deaktivieren" }) then
+        return false
+    end
+    return true
+end
+
+local function AuraDirectionValue(text)
+    if ContainsAny(text, { "up", "oben", "hoch" }) then return "UP" end
+    if ContainsAny(text, { "down", "unten", "runter" }) then return "DOWN" end
+    if ContainsAny(text, { "left", "links" }) then return "LEFT" end
+    if ContainsAny(text, { "right", "rechts" }) then return "RIGHT" end
+    return nil
+end
+
+local function AuraDirectSettingChange(key, value, label)
+    if value == nil then return nil end
+    local setting = Registry and Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, label = label or setting.label } },
+        label = label or setting.label or "Aura setting",
+        summary = "Changes the matched Aura option.",
+    }
+end
+
+local AURA_STYLE_BOOL_SPECS = {
+    { key = "showStackCount", label = "Show Stack Count", aliases = { "show stack count", "stack count", "stacks" } },
+    { key = "showCooldownText", label = "Show Cooldown Text", aliases = { "show cooldown text", "cooldown text", "timer text" } },
+    { key = "showCooldownSwipe", label = "Show Cooldown Swipe", aliases = { "show cooldown swipe", "cooldown swipe", "timer swipe" } },
+    { key = "showDurationBar", label = "Show Duration Bar", aliases = { "show duration bar", "duration bar", "timer bar", "aura duration bar", "aura timer bar" } },
+}
+
+local function AuraStyleScopes(text)
+    local scopes = AuraShortcutScopes(text, true)
+    if scopes then
+        local out = {}
+        for i = 1, #scopes do
+            local scope = scopes[i]
+            if scope.kind == "unit"
+                and (scope.key == "shared" or scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss")
+            then
+                AddAuraGeometryScope(out, "unit", scope.key)
+            elseif scope.kind == "group" and (scope.key == "party" or scope.key == "raid" or scope.key == "mythicraid") then
+                AddAuraGeometryScope(out, "group", scope.key)
+            end
+        end
+        if #out > 0 then return out end
+    end
+    if ContainsAny(text, { "shared", "global", "all unit auras", "unit auras", "unitframe auras" }) then
+        return { { kind = "unit", key = "shared" } }
+    end
+    return nil
+end
+
+local function ParseAuraStyleBoolShortcut(text)
+    if not ContainsAny(text, { "stack", "stacks", "cooldown text", "timer text", "cooldown swipe", "timer swipe", "duration bar", "timer bar" }) then
+        return nil
+    end
+    if ContainsAny(text, {
+        "anchor", "x offset", "offset x", " y offset", "offset y", "text x", "text y",
+        "size", "font", "height", "position", "edge", "fill mode", "direction", "reverse",
+        "decimals", "decimal", "seconds", "threshold", "filter", "exclusive", "color", "colors", "colour", "colours",
+    }) then
+        return nil
+    end
+
+    local spec
+    for i = 1, #AURA_STYLE_BOOL_SPECS do
+        if ContainsAny(text, AURA_STYLE_BOOL_SPECS[i].aliases) then
+            spec = AURA_STYLE_BOOL_SPECS[i]
+            break
+        end
+    end
+    if not spec then return nil end
+
+    local scopes = AuraStyleScopes(text)
+    if not scopes then return nil end
+    local lanes = nil
+    if ContainsAny(text, { "debuff", "debuffs" }) then
+        lanes = { "debuff" }
+    elseif ContainsAny(text, { "buff", "buffs" }) then
+        lanes = { "buff" }
+    end
+
+    local value = AuraBooleanValue(text)
+    if value == nil then return nil end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local scope = scopes[i]
+        if scope.kind == "group" then
+            if lanes then
+                for j = 1, #lanes do
+                    AddAuraRegisteredChange(changes, AuraGeometrySettingKey(scope, lanes[j], spec.key), value, spec.label)
+                end
+            end
+        elseif lanes then
+            for j = 1, #lanes do
+                AddAuraRegisteredChange(changes, "auras3." .. tostring(scope.key) .. "." .. lanes[j] .. "." .. spec.key, value, spec.label)
+            end
+        else
+            AddAuraRegisteredChange(changes, "auras3." .. tostring(scope.key) .. "." .. spec.key, value, spec.label)
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = spec.label,
+        summary = "Changes Aura display style toggles.",
+    }
+end
+
+local AURA_STYLE_NUMBER_SPECS = {
+    { key = "stackTextSize", label = "Stack Text Size", aliases = { "stack size", "stack text size", "stack count text size" }, root = true },
+    { key = "cooldownTextSize", label = "Cooldown Text Size", aliases = { "cooldown size", "cooldown text size", "timer text size", "timer size" }, root = true },
+    { key = "stackTextOffsetX", label = "Stack Text X Offset", aliases = { "stack x", "stack x offset", "stack text x", "stack text x offset" } },
+    { key = "stackTextOffsetY", label = "Stack Text Y Offset", aliases = { "stack y", "stack y offset", "stack text y", "stack text y offset" } },
+    { key = "cooldownTextOffsetX", label = "Cooldown Text X Offset", aliases = { "cooldown x", "cooldown x offset", "cooldown text x", "timer text x", "timer text x offset" } },
+    { key = "cooldownTextOffsetY", label = "Cooldown Text Y Offset", aliases = { "cooldown y", "cooldown y offset", "cooldown text y", "timer text y", "timer text y offset" } },
+    { key = "cooldownDecimalSeconds", label = "Cooldown Decimal Threshold", aliases = { "cooldown decimals", "cooldown decimal", "cooldown decimal threshold", "timer decimals", "timer decimal threshold", "decimal seconds" } },
+    { key = "durationBarHeight", label = "Duration Bar Height", aliases = { "duration bar height", "timer bar height", "aura duration bar height", "aura timer bar height" } },
+}
+
+local function ParseAuraStyleNumberShortcut(text)
+    if not ContainsAny(text, {
+        "stack size", "stack text size", "stack x", "stack y",
+        "cooldown size", "cooldown text size", "timer size", "timer text size",
+        "cooldown x", "cooldown y", "timer text x", "timer text y",
+        "cooldown decimals", "cooldown decimal", "timer decimals", "timer decimal", "decimal seconds",
+        "duration bar height", "timer bar height",
+    }) then
+        return nil
+    end
+    if ContainsAny(text, { "icon size", "icons size", "anchor", "position", "fill mode", "direction", "color", "colors", "colour", "colours", "filter", "exclusive" }) then
+        return nil
+    end
+
+    local spec
+    for i = 1, #AURA_STYLE_NUMBER_SPECS do
+        if ContainsAny(text, AURA_STYLE_NUMBER_SPECS[i].aliases) then
+            spec = AURA_STYLE_NUMBER_SPECS[i]
+            break
+        end
+    end
+    if not spec then return nil end
+
+    local scopes = AuraStyleScopes(text)
+    if not scopes then return nil end
+    local lanes = nil
+    if ContainsAny(text, { "debuff", "debuffs" }) then
+        lanes = { "debuff" }
+    elseif ContainsAny(text, { "buff", "buffs" }) then
+        lanes = { "buff" }
+    end
+
+    local changes = {}
+    local sawSetting = false
+    for i = 1, #scopes do
+        local scope = scopes[i]
+        if scope.kind == "group" then
+            if lanes then
+                for j = 1, #lanes do
+                    local setting = Registry and Registry:GetSetting(AuraGeometrySettingKey(scope, lanes[j], spec.key))
+                    if setting then
+                        sawSetting = true
+                        local value = FirstNumber(text)
+                        local relativeDelta = value == nil and P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text) or nil
+                        if value ~= nil or relativeDelta ~= nil then
+                            changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, label = tostring(setting.label or spec.label) }
+                        end
+                    end
+                end
+            end
+        elseif scope.kind == "unit" and (scope.key == "shared" or scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
+            if lanes then
+                for j = 1, #lanes do
+                    local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. lanes[j] .. "." .. spec.key)
+                    if setting then
+                        sawSetting = true
+                        local value = FirstNumber(text)
+                        local relativeDelta = value == nil and P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text) or nil
+                        if value ~= nil or relativeDelta ~= nil then
+                            changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, label = tostring(setting.label or spec.label) }
+                        end
+                    end
+                end
+            elseif spec.root then
+                local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. spec.key)
+                if setting then
+                    sawSetting = true
+                    local value = FirstNumber(text)
+                    local relativeDelta = value == nil and P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text) or nil
+                    if value ~= nil or relativeDelta ~= nil then
+                        changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, label = tostring(setting.label or spec.label) }
+                    end
+                end
+            end
+        end
+    end
+    if #changes > 0 then
+        return {
+            kind = "changes",
+            changes = changes,
+            bulkSafe = #changes > 1,
+            label = spec.label,
+            summary = "Changes Aura text and timer numeric style options.",
+        }
+    end
+    if sawSetting then
+        return {
+            kind = "answer",
+            status = "missing_value",
+            text = "Which number should I use for that Aura style option? Example: 'set target buff stack x to 0'.",
+            summary = "Asks for a numeric Aura style value.",
+        }
+    end
+    return nil
+end
+
+local function ParseAuraStyleAnchorShortcut(text)
+    local attr
+    local label
+    if ContainsAny(text, { "stack anchor", "stack count anchor", "stack text anchor" }) then
+        attr = "stackAnchor"
+        label = "Stack Count Anchor"
+    elseif ContainsAny(text, { "cooldown anchor", "cooldown text anchor", "timer anchor", "timer text anchor" }) then
+        attr = "cooldownAnchor"
+        label = "Cooldown Anchor"
+    else
+        return nil
+    end
+    if ContainsAny(text, { "x offset", "offset x", " y offset", "offset y", "text x", "text y", "size", "font", "color", "colors", "colour", "colours" }) then
+        return nil
+    end
+
+    local scopes = AuraShortcutScopes(text, true)
+    if not scopes then return nil end
+    local lanes = nil
+    if ContainsAny(text, { "debuff", "debuffs" }) then
+        lanes = { "debuff" }
+    elseif ContainsAny(text, { "buff", "buffs" }) then
+        lanes = { "buff" }
+    end
+
+    local changes = {}
+    local sawSetting = false
+    local sawMissingValue = false
+    for i = 1, #scopes do
+        local scope = scopes[i]
+        if scope.kind == "group" then
+            if lanes then
+                for j = 1, #lanes do
+                    local setting = Registry and Registry:GetSetting(AuraGeometrySettingKey(scope, lanes[j], attr))
+                    if setting then
+                        sawSetting = true
+                        local value = P.EnumValueForText and P.EnumValueForText(setting, text) or nil
+                        if value ~= nil then
+                            AddAuraShortcutChange(changes, setting, value, tostring(setting.label or label))
+                        else
+                            sawMissingValue = true
+                        end
+                    end
+                end
+            end
+        elseif scope.kind == "unit" and (scope.key == "shared" or scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
+            if lanes then
+                for j = 1, #lanes do
+                    local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. lanes[j] .. "." .. attr)
+                    if setting then
+                        sawSetting = true
+                        local value = P.EnumValueForText and P.EnumValueForText(setting, text) or nil
+                        if value ~= nil then
+                            AddAuraShortcutChange(changes, setting, value, tostring(setting.label or label))
+                        else
+                            sawMissingValue = true
+                        end
+                    end
+                end
+            else
+                local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. attr)
+                if setting then
+                    sawSetting = true
+                    local value = P.EnumValueForText and P.EnumValueForText(setting, text) or nil
+                    if value ~= nil then
+                        AddAuraShortcutChange(changes, setting, value, tostring(setting.label or label))
+                    else
+                        sawMissingValue = true
+                    end
+                end
+            end
+        end
+    end
+    if #changes > 0 then
+        return {
+            kind = "changes",
+            changes = changes,
+            bulkSafe = #changes > 1,
+            label = label,
+            summary = "Changes Aura text anchor options.",
+        }
+    end
+    if sawSetting and sawMissingValue then
+        return {
+            kind = "answer",
+            status = "missing_value",
+            text = "Use an anchor point such as TOPLEFT, TOPRIGHT, BOTTOMLEFT, BOTTOMRIGHT, or CENTER where that Aura option supports it.",
+            summary = "Asks for a concrete Aura anchor value.",
+        }
+    end
+    return nil
+end
+
+local function ParseUnitAuraTooltipShortcut(text)
+    if not ContainsAny(text, { "show tooltip", "show tooltips", "tooltip", "tooltips", "aura tooltip", "aura tooltips" }) then return nil end
+    if ContainsAny(text, { "group", "group aura", "party", "raid", "mythic", "native", "blizzard", "anchor", "position", "x offset", "offset x", "y offset", "offset y" }) then
+        return nil
+    end
+
+    local scopes = AuraShortcutScopes(text, true)
+    if not scopes then return nil end
+    local value = AuraBooleanValue(text)
+    if value == nil then return nil end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local scope = scopes[i]
+        if scope.kind == "unit" and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
+            AddAuraRegisteredChange(changes, "auras3." .. tostring(scope.key) .. ".showTooltip", value, "Aura Tooltips")
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = "Aura Tooltips",
+        summary = "Changes unit Aura tooltip display.",
+    }
+end
+
+local function ParseAuraExclusiveFilterShortcut(text)
+    if not ContainsAny(text, { "exclusive filter", "exclusive aura filter" }) then return nil end
+
+    local lane
+    if ContainsAny(text, { "debuff", "debuffs" }) then
+        lane = "debuff"
+    elseif ContainsAny(text, { "buff", "buffs" }) then
+        lane = "buff"
+    end
+    if not lane then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which Aura lane should use the exclusive filter: Buffs or Debuffs? Example: 'set target debuff exclusive filter to none'.",
+            summary = "Asks for a concrete Aura lane before changing an exclusive filter.",
+        }
+    end
+
+    local scopes = {}
+    if ContainsAny(text, { "shared", "global", "shared aura", "shared auras" }) then
+        scopes[#scopes + 1] = "shared"
+    else
+        local units = DetectUnits(text)
+        for i = 1, #units do
+            local unit = units[i]
+            if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+                scopes[#scopes + 1] = unit
+            end
+        end
+    end
+    if #scopes == 0 then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which Aura scope should use that exclusive filter: Shared, Player, Target, Focus, or Boss?",
+            summary = "Asks for a concrete Aura scope before changing an exclusive filter.",
+        }
+    end
+
+    local changes = {}
+    local sawSetting = false
+    local sawMissingValue = false
+    for i = 1, #scopes do
+        local key = "auras3." .. tostring(scopes[i]) .. "." .. lane .. ".filter.exclusive"
+        local setting = Registry and Registry:GetSetting(key)
+        if setting then
+            sawSetting = true
+            local value = P.EnumValueForText and P.EnumValueForText(setting, text) or nil
+            if value ~= nil then
+                AddAuraShortcutChange(changes, setting, value, tostring(setting.label or "Exclusive Filter"))
+            else
+                sawMissingValue = true
+            end
+        end
+    end
+    if #changes > 0 then
+        return {
+            kind = "changes",
+            changes = changes,
+            bulkSafe = #changes > 1,
+            label = "Aura Exclusive Filter",
+            summary = "Changes a unit Aura exclusive filter.",
+        }
+    end
+    if sawSetting and sawMissingValue then
+        return {
+            kind = "answer",
+            status = "missing_value",
+            text = lane == "debuff" and "Use none or raid for Debuff Exclusive Filter." or "Use none for Buff Exclusive Filter.",
+            summary = "Asks for a concrete Aura exclusive filter value.",
+        }
+    end
+    return nil
+end
+
+local function ParseGroupPrivateAuraShortcut(text)
+    if not ContainsAny(text, { "private aura", "private auras" }) then return nil end
+    if ContainsAny(text, { "native", "blizzard", "copy", "blacklist", "whitelist", "spell id", "spellid" }) then return nil end
+
+    local groups = DetectGroups(text)
+    local scopes = {}
+    for i = 1, #groups do
+        local group = groups[i]
+        if group == "party" or group == "raid" or group == "mythicraid" then
+            scopes[#scopes + 1] = group
+        end
+    end
+    if #scopes == 0 then return nil end
+
+    local keySuffix
+    local valueKind
+    local label
+    if ContainsAny(text, { "private aura countdown", "private aura timer", "private aura cooldown text" }) then
+        keySuffix = "privateAuraCountdown"
+        valueKind = "boolean"
+        label = "Private Aura Countdown"
+    elseif ContainsAny(text, { "private aura numbers", "private aura number text", "private aura stacks", "private aura stack text" }) then
+        keySuffix = "privateAuras.showNumbers"
+        valueKind = "boolean"
+        label = "Private Aura Numbers"
+    elseif ContainsAny(text, { "private aura max", "private aura count", "private aura limit", "private aura icons max" }) then
+        keySuffix = "privateAuraMax"
+        valueKind = "number"
+        label = "Private Aura Max Icons"
+    elseif ContainsAny(text, { "private aura size", "private aura icon size", "private aura icons size" }) then
+        keySuffix = "privateAuraSize"
+        valueKind = "number"
+        label = "Private Aura Icon Size"
+    elseif ContainsAny(text, { "private aura x offset", "private aura horizontal offset", "private aura x" }) then
+        keySuffix = "privateAuraX"
+        valueKind = "number"
+        label = "Private Aura X Offset"
+    elseif ContainsAny(text, { "private aura y offset", "private aura vertical offset", "private aura y" }) then
+        keySuffix = "privateAuraY"
+        valueKind = "number"
+        label = "Private Aura Y Offset"
+    elseif ContainsAny(text, { "private aura spacing", "private aura gap", "private aura icon spacing" }) then
+        keySuffix = "privateAuras.spacing"
+        valueKind = "number"
+        label = "Private Aura Spacing"
+    elseif ContainsAny(text, { "private aura growth", "private aura grow", "private auras grow", "private aura grow direction", "private aura direction" }) then
+        keySuffix = "privateAuras.growth"
+        valueKind = "enum"
+        label = "Private Aura Growth"
+    elseif ContainsAny(text, { "private aura anchor", "private aura position", "private aura corner" }) then
+        keySuffix = "privateAuraAnchor"
+        valueKind = "enum"
+        label = "Private Aura Anchor"
+    else
+        keySuffix = "privateAurasEnabled"
+        valueKind = "boolean"
+        label = "Private Auras"
+    end
+
+    local changes = {}
+    local sawSetting = false
+    local sawMissingValue = false
+    for i = 1, #scopes do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[i]) .. "." .. keySuffix)
+        if setting then
+            sawSetting = true
+            local value
+            local relativeDelta
+            if valueKind == "boolean" then
+                value = AuraBooleanValue(text)
+            elseif valueKind == "number" then
+                value = FirstNumber(text)
+                relativeDelta = value == nil and P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text) or nil
+            elseif valueKind == "enum" then
+                value = P.EnumValueForText and P.EnumValueForText(setting, text) or nil
+            end
+            if value ~= nil or relativeDelta ~= nil then
+                changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, label = tostring(setting.label or label) }
+            else
+                sawMissingValue = true
+            end
+        end
+    end
+    if #changes > 0 then
+        return {
+            kind = "changes",
+            changes = changes,
+            bulkSafe = #changes > 1,
+            label = label,
+            summary = "Changes Group Frame private aura options.",
+        }
+    end
+    if sawSetting and sawMissingValue then
+        return {
+            kind = "answer",
+            status = "missing_value",
+            text = "Which value should I use for that private aura option? Example: 'set party private aura y to 0' or 'set raid private aura growth to RIGHT'.",
+            summary = "Asks for a concrete private aura value.",
+        }
+    end
+    return nil
+end
+
+local function ParseGroupAuraLaneVisibilityDirectShortcut(text)
+    if not ContainsAny(text, { "party buff", "party buffs", "party debuff", "party debuffs", "raid buff", "raid buffs", "raid debuff", "raid debuffs", "mythic raid buff", "mythic raid buffs", "mythicraid buff", "mythicraid buffs", "mythic raid debuff", "mythic raid debuffs", "mythicraid debuff", "mythicraid debuffs" }) then
+        return nil
+    end
+    if ContainsAny(text, {
+        "filter", "filters", "only", "show only", "private", "native", "blizzard", "blacklist", "whitelist",
+        "stack", "cooldown", "timer", "duration", "x offset", "offset x", " y offset", "offset y",
+        " x ", "x ", " y ", "y ", "per row", "layer", "swipe", "direction", "dispel", "border", "mode",
+        "size", "max", "count", "spacing", "growth", "anchor", "position", "color", "colors", "colour", "colours", "stripe",
+    }) then
+        return nil
+    end
+    if FirstNumber(text) ~= nil then return nil end
+
+    local lane
+    if ContainsAny(text, { "debuff", "debuffs" }) then
+        lane = "debuff"
+    elseif ContainsAny(text, { "buff", "buffs" }) then
+        lane = "buff"
+    end
+    if not lane then return nil end
+
+    local groups = DetectGroups(text)
+    local changes = {}
+    local value = AuraBooleanValue(text)
+    if value == nil then return nil end
+    for i = 1, #groups do
+        local group = groups[i]
+        if group == "party" or group == "raid" or group == "mythicraid" then
+            AddAuraRegisteredChange(changes, "gf_" .. tostring(group) .. ".auras." .. lane .. ".enabled", value)
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = lane == "buff" and "Group Buffs" or "Group Debuffs",
+        summary = "Changes Group Aura lane visibility.",
+    }
+end
+
+local function ParseAuraDirectSettingShortcut(text, raw)
+    if not ContainsAny(text, {
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "sated", "exhaustion", "reminder",
+        "swipe darkens", "cooldown swipe darkens", "dispel type border", "dispel type borders", "debuff type border", "debuff type borders",
+        "stack count", "show stack", "stack anchor", "stack size", "stack x", "stack y",
+        "cooldown anchor", "timer anchor", "cooldown text", "timer text", "cooldown size", "timer size",
+        "cooldown x", "cooldown y", "cooldown decimal", "cooldown decimals", "timer decimal", "timer decimals",
+        "cooldown swipe", "timer swipe",
+        "duration bar", "timer bar", "show tooltip", "tooltip",
+        "exclusive filter",
+        "shared filters", "global filters", "player filters", "target filters", "focus filters", "boss filters", "unit filters",
+        "sort order",
+    }) then return nil end
+    if ContainsAny(text, { "aura blacklist spell", "hidden aura spell", "blacklist spell" }) then
+        local value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw or text, { " to ", " as ", " = " }) or nil
+        if not value or value == "" then
+            value = tostring(raw or text):match("[Ss][Pp][Ee][Ll][Ll]%s+(.+)$")
+        end
+        if value and value ~= "" then
+            return AuraDirectSettingChange("menu.auraBlacklistSpell", value, "Hidden Aura Spell")
+        end
+    end
+    if ContainsAny(text, { "blacklist", "whitelist", "spell id", "spellid", "spell:" })
+        and not ContainsAny(text, { "aura blacklist preset", "blacklist preset", "hidden aura preset" })
+    then
+        return nil
+    end
+
+    if ContainsAny(text, { "unit auras", "aura system", "auras system", "all unit auras", "unitframe auras" }) then
+        local value = AuraBooleanValue(text)
+        if value ~= nil then return AuraDirectSettingChange("auras3.enabled", value, "Unit Auras") end
+    end
+    if ContainsAny(text, { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" }) then
+        local setting = Registry and Registry:GetSetting("menu.auraScope")
+        local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
+        return AuraDirectSettingChange("menu.auraScope", value, "Aura Editing Scope")
+    end
+    if ContainsAny(text, { "aura style lane", "aura style tab", "aura buffs tab", "aura debuffs tab" }) then
+        local setting = Registry and Registry:GetSetting("menu.auraStyleGFLane")
+        local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
+        return AuraDirectSettingChange("menu.auraStyleGFLane", value, "Aura Style Lane")
+    end
+    if ContainsAny(text, { "aura filter lane", "aura filter tab", "aura buff filters tab", "aura debuff filters tab" }) then
+        local setting = Registry and Registry:GetSetting("menu.auraFilterLane")
+        local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
+        return AuraDirectSettingChange("menu.auraFilterLane", value, "Aura Filter Lane")
+    end
+    if ContainsAny(text, { "aura settings view", "aura view", "aura settings mode", "basic aura settings", "advanced aura settings", "all aura settings" }) then
+        local setting = Registry and Registry:GetSetting("menu.aurasUXMode")
+        local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
+        return AuraDirectSettingChange("menu.aurasUXMode", value, "Aura Options View")
+    end
+    if ContainsAny(text, { "aura blacklist preset", "blacklist preset", "hidden aura preset" }) then
+        local compactText = Compact(text)
+        for i = 1, #AURA_BLACKLIST_PRESETS do
+            local spec = AURA_BLACKLIST_PRESETS[i]
+            local compactKey = Compact(tostring(spec.key or ""))
+            if ContainsAny(text, spec.aliases)
+                or ContainsAny(text, { tostring(spec.key or ""):lower():gsub("_", " ") })
+                or (compactKey ~= "" and compactText:find(compactKey, 1, true))
+            then
+                return AuraDirectSettingChange("menu.auraBlacklistPreset", spec.key, "Aura Blacklist Preset")
+            end
+        end
+    end
+    if ContainsAny(text, { "custom aura caps", "custom caps", "aura caps override", "aura limits override", "custom aura layout", "custom layout", "aura layout override", "custom aura ignore", "custom ignore", "aura ignore list override" }) then
+        local attr
+        if ContainsAny(text, { "custom aura caps", "custom caps", "aura caps override", "aura limits override" }) then
+            attr = "overrideSharedLayout"
+        elseif ContainsAny(text, { "custom aura layout", "custom layout", "aura layout override" }) then
+            attr = "overrideLayout"
+        elseif ContainsAny(text, { "custom aura ignore", "custom ignore", "aura ignore list override" }) then
+            attr = "overrideIgnore"
+        end
+        local value = AuraBooleanValue(text)
+        if attr and value ~= nil then
+            local scopes = AuraScopeOverrideScopes(text)
+            local changes = {}
+            if scopes then
+                for i = 1, #scopes do
+                    local scope = scopes[i]
+                    local setting = Registry and Registry:GetSetting("auras3." .. tostring(scope.key) .. "." .. tostring(attr))
+                    AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or "Aura override"))
+                end
+            end
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    bulkSafe = #changes > 1,
+                    label = "Change Aura scope override",
+                    summary = "Adjusts Aura scope override settings.",
+                }
+            end
+        end
+    end
+    local laneUnits = DetectUnits(text)
+    if #laneUnits > 0 and ContainsAny(text, { "filters", "aura filters" })
+        and not ContainsAny(text, { "custom", "buff", "buffs", "debuff", "debuffs", "raid", "dispellable", "exclusive", "only", "player only", "nameplate", "crowd control" })
+    then
+        local value = AuraBooleanValue(text)
+        if value ~= nil then
+            local changes = {}
+            for i = 1, #laneUnits do
+                local unit = laneUnits[i]
+                if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+                    AddAuraRegisteredChange(changes, "auras3." .. tostring(unit) .. ".filtersEnabled", value)
+                end
+            end
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    bulkSafe = #changes > 1,
+                    label = "Unit Aura Filters",
+                    summary = "Changes per-unit Aura Filters toggles.",
+                }
+            end
+        end
+    end
+    do
+        local result = ParseAuraExclusiveFilterShortcut(text)
+        if result then return result end
+    end
+    do
+        local result = ParseGroupPrivateAuraShortcut(text)
+        if result then return result end
+    end
+    do
+        local result = ParseGroupAuraLaneVisibilityDirectShortcut(text)
+        if result then return result end
+    end
+    if #laneUnits > 0 and ContainsAny(text, { "filter", "filters" })
+        and ContainsAny(text, {
+            "buff", "buffs", "debuff", "debuffs", "raid", "dispellable", "purgeable",
+            "crowd control", "cc debuff", "nameplate", "cancelable", "cancellable",
+            "external defensive", "big defensive",
+        })
+    then
+        return nil
+    end
+    do
+        local result = ParseAuraStyleBoolShortcut(text)
+        if result then return result end
+    end
+    do
+        local result = ParseAuraStyleNumberShortcut(text)
+        if result then return result end
+    end
+    do
+        local result = ParseAuraStyleAnchorShortcut(text)
+        if result then return result end
+    end
+    do
+        local result = ParseUnitAuraTooltipShortcut(text)
+        if result then return result end
+    end
+    if #laneUnits > 0 and ContainsAny(text, { "buff", "buffs", "debuff", "debuffs" })
+        and ContainsAny(text, { " x", "x ", "x offset", "offset x", " y", "y ", "y offset", "offset y", "left", "right", "up", "down", "links", "rechts", "oben", "unten" })
+        and not ContainsAny(text, {
+            "cooldown", "timer", "stack", "duration", "filter", "exclusive", "custom",
+            "size", "max", "per row", "growth", "anchor", "spacing", "layer", "color", "colour",
+        })
+    then
+        local lane
+        if ContainsAny(text, { "debuff", "debuffs" }) then
+            lane = "debuff"
+        elseif ContainsAny(text, { "buff", "buffs" }) then
+            lane = "buff"
+        end
+        local direction = DetectDirection(text, {})
+        local attr
+        if ContainsAny(text, { "x offset", "offset x", " x", "x ", "left", "right", "links", "rechts" }) or direction == "left" or direction == "right" then
+            attr = "offsetX"
+        elseif ContainsAny(text, { "y offset", "offset y", " y", "y ", "up", "down", "oben", "unten" }) or direction == "up" or direction == "down" then
+            attr = "offsetY"
+        end
+        if lane and attr then
+            local value = FirstNumber(text)
+            local relativeDelta
+            if ContainsAny(text, { "move", "nudge", "shift", "verschiebe" }) and direction then
+                local amount = value or 10
+                if direction == "left" or direction == "down" then amount = -amount end
+                value = nil
+                relativeDelta = amount
+            end
+            if value ~= nil or relativeDelta ~= nil then
+                local changes = {}
+                for i = 1, #laneUnits do
+                    local unit = laneUnits[i]
+                    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+                        local setting = Registry and Registry:GetSetting("auras3." .. tostring(unit) .. "." .. lane .. "." .. attr)
+                        if setting then
+                            changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta }
+                        end
+                    end
+                end
+                if #changes > 0 then
+                    return {
+                        kind = "changes",
+                        changes = changes,
+                        bulkSafe = #changes > 1,
+                        label = "Unit Aura Lane Offset",
+                        summary = "Changes unit Buff/Debuff X/Y offset.",
+                    }
+                end
+            end
+        end
+    end
+    if #laneUnits > 0 and ContainsAny(text, { "buff", "buffs", "debuff", "debuffs" })
+        and not ContainsAny(text, {
+            "filter", "filters", "raid", "dispellable", "exclusive", "only", "custom",
+            "cooldown", "stack", "duration", "timer", "x ", " y ", "offset", "size", "max",
+            "per row", "growth", "anchor", "spacing", "layer", "swipe", "direction", "color", "colour",
+        })
+    then
+        local lane
+        if ContainsAny(text, { "debuff", "debuffs" }) then
+            lane = "debuff"
+        elseif ContainsAny(text, { "buff", "buffs" }) then
+            lane = "buff"
+        end
+        local value = lane and AuraBooleanValue(text) or nil
+        if value ~= nil then
+            local changes = {}
+            for i = 1, #laneUnits do
+                local unit = laneUnits[i]
+                if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+                    AddAuraRegisteredChange(changes, "auras3." .. tostring(unit) .. "." .. lane .. ".visible", value)
+                end
+            end
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    bulkSafe = #changes > 1,
+                    label = "Unit Aura Lane Visibility",
+                    summary = "Changes unit Buff/Debuff visibility.",
+                }
+            end
+        end
+    end
+    if ContainsAny(text, { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" })
+        and not ContainsAny(text, { "custom", "player", "target", "focus", "boss", "party", "raid", "mythic" })
+    then
+        local value = AuraBooleanValue(text)
+        if value ~= nil then return AuraDirectSettingChange("auras3.shared.filters.enabled", value, "Shared Aura Filters") end
+    end
+    if ContainsAny(text, { "shared filters", "global filters", "shared aura filters", "global aura filters" }) then
+        local value = AuraBooleanValue(text)
+        if value ~= nil then return AuraDirectSettingChange("auras3.shared.filtersEnabled", value, "Shared Filters") end
+    end
+    if ContainsAny(text, { "buff reminders", "buff reminder", "aura reminders", "aura reminder" })
+        and not ContainsAny(text, { "expiry warning", "threshold", "grow direction", "growth", "grow", "direction" })
+    then
+        local value = AuraBooleanValue(text)
+        if value ~= nil then return AuraDirectSettingChange("auras3.shared.showReminders", value, "Buff Reminders") end
+    end
+    if ContainsAny(text, { "buff reminder expiry warning", "buff reminder threshold", "reminder expiry warning", "reminder threshold" }) then
+        local value = FirstNumber(text)
+        if value ~= nil then return AuraDirectSettingChange("auras3.shared.reminderThreshold", value, "Buff Reminder Expiry Warning") end
+    end
+    do
+        local data = A.AurasRegistryData or {}
+        local reminderSpecs = data.AURA_REMINDER_SPECS or {}
+        local bestSpec
+        local bestLen = 0
+        for i = 1, #reminderSpecs do
+            local spec = reminderSpecs[i]
+            local aliases = type(spec.aliases) == "table" and spec.aliases or {}
+            for j = 1, #aliases do
+                local alias = tostring(aliases[j] or "")
+                if alias ~= "" and ContainsAny(text, { alias }) then
+                    local len = #Compact(alias)
+                    if len > bestLen then
+                        bestSpec = spec
+                        bestLen = len
+                    end
+                end
+            end
+        end
+        if bestSpec then
+            local value = AuraBooleanValue(text)
+            if value ~= nil then
+                return AuraDirectSettingChange("auras3.shared.reminders." .. tostring(bestSpec.key), value, tostring(bestSpec.label or "Buff Reminder"))
+            end
+        end
+    end
+    local explicitUnits = DetectUnits(text)
+    local explicitGroups = DetectGroups(text)
+    if #explicitUnits == 0 and #explicitGroups == 0 and not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben" }) then
+        if ContainsAny(text, { "highlight own buffs", "highlight my buffs", "own buff highlight", "my buff highlight" }) then
+            local value = AuraBooleanValue(text)
+            if value ~= nil then return AuraDirectSettingChange("auras3.shared.highlightOwnBuffs", value, "Highlight Own Buffs") end
+        end
+        if ContainsAny(text, { "highlight own debuffs", "highlight my debuffs", "own debuff highlight", "my debuff highlight" }) then
+            local value = AuraBooleanValue(text)
+            if value ~= nil then return AuraDirectSettingChange("auras3.shared.highlightOwnDebuffs", value, "Highlight Own Debuffs") end
+        end
+        if ContainsAny(text, { "show aura buffs", "show buffs", "aura buffs", "buff auras" }) then
+            local value = AuraBooleanValue(text)
+            if value ~= nil then return AuraDirectSettingChange("auras3.shared.showBuffs", value, "Show Buffs") end
+        end
+        if ContainsAny(text, { "show aura debuffs", "show debuffs", "aura debuffs", "debuff auras" }) then
+            local value = AuraBooleanValue(text)
+            if value ~= nil then return AuraDirectSettingChange("auras3.shared.showDebuffs", value, "Show Debuffs") end
+        end
+        local data = A.AurasRegistryData or {}
+        local sharedSpecs = data.AURA_SHARED_BOOLEAN_SPECS or {}
+        for i = 1, #sharedSpecs do
+            local spec = sharedSpecs[i]
+            if spec.attr ~= "showBuffs" and spec.attr ~= "showDebuffs"
+                and spec.attr ~= "highlightOwnBuffs" and spec.attr ~= "highlightOwnDebuffs"
+                and ContainsAny(text, spec.aliases)
+            then
+                local value = AuraBooleanValue(text)
+                if value ~= nil then
+                    return AuraDirectSettingChange("auras3.shared." .. tostring(spec.attr), value, spec.label)
+                end
+            end
+        end
+    end
+
+    if ContainsAny(text, { "click through auras", "click-through auras", "aura click through", "aura click-through" }) then
+        return AuraDirectSettingChange("auras3.shared.clickThroughAuras", AuraBooleanValue(text), "Click-through Auras")
+    end
+    if ContainsAny(text, { "aura edit preview", "edit mode auras", "preview auras in edit mode", "show auras in edit mode", "edit preview auras" }) then
+        return AuraDirectSettingChange("auras3.shared.showInEditMode", AuraBooleanValue(text), "Aura Edit Preview")
+    end
+    if ContainsAny(text, { "aura timer bucket colors", "aura timer color buckets", "aura cooldown bucket colors", "aura cooldown color buckets", "aura cooldown buckets", "aura timer buckets", "color aura timers by remaining time" }) then
+        return AuraDirectSettingChange("general.aurasCooldownTextUseBuckets", AuraBooleanValue(text), "Aura Timer Color Buckets")
+    end
+    if ContainsAny(text, { "show sated", "show exhaustion", "sated exhaustion", "sated buffs", "exhaustion buffs" }) then
+        return AuraDirectSettingChange("auras3.shared.showSated", AuraBooleanValue(text), "Show Sated/Exhaustion")
+    end
+
+    local direction = AuraDirectionValue(text)
+    if direction and ContainsAny(text, { "buff reminder grow direction", "buff reminder growth", "reminder grow direction", "reminder growth" }) then
+        return AuraDirectSettingChange("auras3.shared.reminderGrowth", direction, "Buff Reminder Growth")
+    end
+    if direction and ContainsAny(text, { "buff growth", "buff grow direction", "buff direction", "buff aura growth" }) then
+        return AuraDirectSettingChange("auras3.shared.buffGrowth", direction, "Buff Growth")
+    end
+    if direction and ContainsAny(text, { "debuff growth", "debuff grow direction", "debuff direction", "debuff aura growth" }) then
+        return AuraDirectSettingChange("auras3.shared.debuffGrowth", direction, "Debuff Growth")
+    end
+    if direction and ContainsAny(text, { "buff wrap rows", "buff row wrap", "buff wrap direction", "buff wrap" }) then
+        return AuraDirectSettingChange("auras3.shared.buffRowWrap", direction, "Buff Row Wrap")
+    end
+    if direction and ContainsAny(text, { "debuff wrap rows", "debuff row wrap", "debuff wrap direction", "debuff wrap" }) then
+        return AuraDirectSettingChange("auras3.shared.debuffRowWrap", direction, "Debuff Row Wrap")
+    end
+
+    local number = FirstNumber(text)
+    if number ~= nil then
+        if ContainsAny(text, { "sort order", "aura sort order", "buff sort order", "debuff sort order" }) then
+            return AuraDirectSettingChange("auras3.shared.sortOrder", number, "Aura Sort Order")
+        end
+        if ContainsAny(text, { "sated threshold", "sated show at", "sated show seconds", "exhaustion threshold", "exhaustion show at" }) then
+            return AuraDirectSettingChange("auras3.shared.satedShowAtSeconds", number, "Sated Threshold")
+        end
+        if ContainsAny(text, { "aura cooldown safe seconds", "aura timer safe seconds", "aura safe seconds", "safe aura seconds", "safe aura timer threshold", "aura safe timer threshold" }) then
+            return AuraDirectSettingChange("general.aurasCooldownTextSafeSeconds", number, "Aura Safe Timer Threshold")
+        end
+        if ContainsAny(text, { "aura cooldown warning seconds", "aura timer warning seconds", "aura warning seconds", "warning aura seconds", "warning aura timer threshold", "aura warning timer threshold" }) then
+            return AuraDirectSettingChange("general.aurasCooldownTextWarningSeconds", number, "Aura Warning Timer Threshold")
+        end
+    end
+
+    if ContainsAny(text, { "aura cooldown safe color", "aura cooldown safe text color", "cooldown text safe color", "aura timer safe color", "aura safe timer color", "safe aura timer color" }) then
+        local setting = Registry and Registry:GetSetting("general.aurasCooldownTextSafeColor")
+        local value = setting and P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text)
+        return AuraDirectSettingChange("general.aurasCooldownTextSafeColor", value, "Aura Safe Timer Color")
+    end
+    if ContainsAny(text, { "aura cooldown warning color", "aura cooldown warning text color", "cooldown text warning color", "aura timer warning color", "aura warning timer color", "warning aura timer color" }) then
+        local setting = Registry and Registry:GetSetting("general.aurasCooldownTextWarningColor")
+        local value = setting and P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text)
+        return AuraDirectSettingChange("general.aurasCooldownTextWarningColor", value, "Aura Warning Timer Color")
+    end
+    if ContainsAny(text, { "aura cooldown urgent color", "aura cooldown urgent text color", "cooldown text urgent color", "aura timer urgent color", "aura urgent timer color", "urgent aura timer color" }) then
+        local setting = Registry and Registry:GetSetting("general.aurasCooldownTextUrgentColor")
+        local value = setting and P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text)
+        return AuraDirectSettingChange("general.aurasCooldownTextUrgentColor", value, "Aura Urgent Timer Color")
+    end
+
+    return nil
+end
+
 local function UnitAuraFilterExplicitScope(text)
     if ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" }) then return "shared" end
     local units = DetectUnits(text)
@@ -588,6 +1542,11 @@ end
 local function UnitAuraFilterHasIntent(text)
     if ContainsAny(text, { "corner", "corner indicator", "corner indicators", "corner custom", "custom corner" }) then return false end
     if ContainsAny(text, { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay", "debuff overlay", "dispellable overlay", "dispellable debuff overlay" }) then return false end
+    if ContainsAny(text, { "aura custom settings", "custom aura settings", "aura override", "aura overrides", "aura scope" })
+        and ContainsAny(text, { "reset", "clear", "remove", "restore" })
+    then
+        return false
+    end
     if ContainsAny(text, { "blacklist", "whitelist", "category", "spell id", "spellid", "spell:" }) then return false end
     if ContainsAny(text, { "filter", "filters", "only", "show only", "just show", "display only" }) then return true end
     if ContainsAny(text, {
@@ -870,7 +1829,91 @@ local function ParseUnitAuraLiveFilterShortcut(text)
         changes = directChanges,
         bulkSafe = #directChanges > 1,
         label = "Change live Aura filter",
-        summary = "Changes a live unit Aura filter.",
+    summary = "Changes a live unit Aura filter.",
+    }
+end
+
+local function ParseUnitAuraFilterBooleanShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, { "blacklist", "whitelist", "category", "spell id", "spellid", "spell:" }) then return nil end
+    if ContainsAny(text, { "only", "show only", "just show", "display only", "clear filter", "clear filters", "remove filter", "remove filters", "show all", "show everything" }) then return nil end
+    if HasNativeGroupAuraRootIntent(text) then return nil end
+    local explicitUnits = DetectUnits(text)
+    local explicitShared = ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" })
+    if #explicitUnits == 0 and not explicitShared and (HasGenericGroupAuraGeometryScope(text) or HasConcreteGroupAuraGeometryScope(text)
+        or ContainsAny(text, { "party", "raid frame", "raid frames", "group frame", "group frames", "mythic raid" }))
+    then
+        return nil
+    end
+    if (#explicitUnits > 0 or explicitShared) and ContainsAny(text, { "party", "raid frame", "raid frames", "group frame", "group frames", "mythic raid" }) then
+        return nil
+    end
+    if #explicitUnits == 0 and not explicitShared then return nil end
+
+    local lane
+    if ContainsAny(text, { "buff", "buffs" }) and not ContainsAny(text, { "debuff", "debuffs" }) then
+        lane = "buff"
+    elseif ContainsAny(text, { "debuff", "debuffs" }) then
+        lane = "debuff"
+    end
+    if not lane then return nil end
+
+    local key
+    local conflicts
+    local label
+    if ContainsAny(text, { "raid in combat", "combat raid" }) then
+        key = "raidInCombat"
+        label = lane == "buff" and "Buff Raid In Combat Filter" or "Debuff Raid In Combat Filter"
+    elseif ContainsAny(text, { "raid filter", "raid buff", "raid buffs", "raid debuff", "raid debuffs" }) then
+        key = "raid"
+        label = lane == "buff" and "Buff Raid Filter" or "Debuff Raid Filter"
+    elseif ContainsAny(text, { "nameplate only", "nameplate-only", "include nameplate", "include nameplate-only" }) then
+        key = "includeNameplateOnly"
+        label = lane == "buff" and "Buff Include Nameplate-only Filter" or "Debuff Include Nameplate-only Filter"
+    elseif lane == "debuff" and ContainsAny(text, { "dispellable", "dispelable", "purgeable" }) then
+        key = "includeDispellable"
+        label = "Debuff Dispellable Filter"
+    elseif lane == "debuff" and ContainsAny(text, { "crowd control", "cc debuff", "cc debuffs" }) then
+        key = "crowdControl"
+        label = "Debuff Crowd Control Filter"
+    elseif lane == "buff" and ContainsAny(text, { "not cancelable", "not cancellable", "non cancelable", "uncancelable" }) then
+        key = "notCancelable"
+        conflicts = { "cancelable" }
+        label = "Buff Not Cancelable Filter"
+    elseif lane == "buff" and ContainsAny(text, { "cancelable", "cancellable" }) then
+        key = "cancelable"
+        conflicts = { "notCancelable" }
+        label = "Buff Cancelable Filter"
+    elseif lane == "buff" and ContainsAny(text, { "external defensive", "external defensives", "external buffs" }) then
+        key = "externalDefensive"
+        label = "Buff External Defensive Filter"
+    elseif lane == "buff" and ContainsAny(text, { "big defensive", "big defensives", "major defensive", "major defensives" }) then
+        key = "bigDefensive"
+        label = "Buff Big Defensive Filter"
+    elseif ContainsAny(text, { "player filter", "only my", "my buffs", "my debuffs", "player buffs only", "player debuffs only", "own buffs", "own debuffs" }) then
+        key = "onlyMine"
+        label = lane == "buff" and "Buff Player Filter" or "Debuff Player Filter"
+    else
+        return nil
+    end
+
+    local scope = UnitAuraFilterExplicitScope(text)
+    if not scope then return nil end
+    local value = DetectBoolean and DetectBoolean(text)
+    if value == nil then
+        value = not ContainsAny(text, { "off", "disable", "disabled", "turn off", "remove", "without", "no ", "aus", "deaktivieren" })
+    end
+
+    local changes = {}
+    AddUnitAuraFilterSetChange(changes, scope, lane, key, value, conflicts)
+    AddUnitAuraFiltersEnabled(changes, scope)
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = label,
+        summary = "Changes a live unit Aura filter directly.",
     }
 end
 
@@ -901,6 +1944,92 @@ local function AddGroupAuraRootVisibilityChoice(choices, scope, value)
         value = value,
         label = tostring(setting.label or "Group Auras Enabled") .. " -> " .. verb,
         summary = "Changes the whole Group Aura system for that scope.",
+    }
+end
+
+local function ParseGroupAuraRootSettingShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, { "blacklist", "blocklist", "filter token", "live filter", "spell id", "spellid" }) then return nil end
+    if not ContainsAny(text, {
+        "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras",
+        "mythicraid aura", "mythic raid aura", "mythicraid auras", "mythic raid auras",
+        "aura tooltip", "aura tooltips", "prefer player auras", "prefer my auras",
+        "sort auras by duration", "aura duration sort",
+        "dynamic aura scale", "dynamic icon scale", "native aura", "native auras",
+        "native group aura", "native group auras", "blizzard aura", "blizzard auras",
+        "native group private auras", "blizzard group private auras", "native private auras",
+    }) then
+        return nil
+    end
+
+    local key
+    local label
+    if ContainsAny(text, { "prefer player auras", "prefer my auras" }) then
+        key = "preferPlayer"
+        label = "Prefer Player Auras"
+    elseif ContainsAny(text, { "dynamic aura scale", "dynamic icon scale" }) then
+        key = "dynamicScale"
+        label = "Dynamic Aura Scale"
+    elseif ContainsAny(text, { "aura tooltip", "aura tooltips" }) then
+        key = "showTooltip"
+        label = "Aura Tooltips"
+    elseif ContainsAny(text, { "sort auras by duration", "aura duration sort" }) then
+        key = "sortByDuration"
+        label = "Sort Auras by Duration"
+    elseif ContainsAny(text, { "native group aura dispel border", "blizzard group aura dispel border", "native dispel border", "native dispellable border", "native aura debuff border" }) then
+        key = "blizzardDispelBorder"
+        label = "Native Dispel Border"
+    elseif ContainsAny(text, { "native group aura buffs", "blizzard group aura buffs", "native buffs", "native aura buffs" }) then
+        key = "blizzardTypes.buffs"
+        label = "Native Buffs"
+    elseif ContainsAny(text, { "native group aura debuffs", "blizzard group aura debuffs", "native debuffs", "native aura debuffs" }) then
+        key = "blizzardTypes.debuffs"
+        label = "Native Debuffs"
+    elseif ContainsAny(text, { "native group aura dispels", "blizzard group aura dispels", "native dispel auras", "native dispels", "dispellable auras" }) then
+        key = "blizzardTypes.dispels"
+        label = "Native Dispel Auras"
+    elseif ContainsAny(text, { "native group aura externals", "blizzard group aura externals", "native external auras", "native externals", "external auras" }) then
+        key = "blizzardTypes.externals"
+        label = "Native External Auras"
+    elseif ContainsAny(text, { "native group private auras", "blizzard group private auras", "native private auras", "native private aura icons" }) then
+        key = "blizzardTypes.privateAuras"
+        label = "Native Private Auras"
+    elseif ContainsAny(text, { "all group auras", "all group aura", "group aura system", "group auras enabled", "native group auras", "native group aura" }) then
+        key = "enabled"
+        label = "Group Auras Enabled"
+    else
+        return nil
+    end
+
+    local scopes = {}
+    local groups = DetectGroups(text)
+    for i = 1, #groups do
+        local scope = groups[i]
+        if scope == "party" or scope == "raid" or scope == "mythicraid" then
+            scopes[#scopes + 1] = scope
+        end
+    end
+    if #scopes == 0 then
+        if ContainsAny(text, { "all group", "all group auras", "every group", "group aura system", "group auras" }) then
+            scopes = { "party", "raid", "mythicraid" }
+        else
+            return nil
+        end
+    end
+
+    local value = AuraBooleanValue(text)
+    local changes = {}
+    for i = 1, #scopes do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[i]) .. ".auras." .. key)
+        AddAuraShortcutChange(changes, setting, value, tostring(setting and setting.label or label))
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes a Group Aura root option directly.",
     }
 end
 
@@ -1342,6 +2471,15 @@ local function AuraBlacklistSpellValue(raw)
         "[Ii]gnore%s+(.+)%s+[Oo]n%s+",
         "[Hh]ide%s+(.+)%s+[Ff]or%s+",
         "[Hh]ide%s+(.+)%s+[Oo]n%s+",
+        "[Hh]ide%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Hh]ide%s+[Hh]idden%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Hh]ide%s+[Gg]roup%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Hh]ide%s+[Pp]arty%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Hh]ide%s+[Rr]aid%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Hh]ide%s+[Pp]arty%s+[Bb]uff%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Hh]ide%s+[Rr]aid%s+[Bb]uff%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Hh]ide%s+[Pp]arty%s+[Dd]ebuff%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Hh]ide%s+[Rr]aid%s+[Dd]ebuff%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
         "[Vv]erstecke%s+(.+)%s+[Aa]uf%s+",
         "[Vv]erstecke%s+(.+)%s+[Ff]uer%s+",
         "[Aa]usblenden%s+(.+)%s+[Aa]uf%s+",
@@ -1356,6 +2494,15 @@ local function AuraBlacklistSpellValue(raw)
         "[Aa]llow%s+(.+)%s+[Oo]n%s+.+[Aa]uras?",
         "[Aa]llow%s+(.+)%s+[Ff]or%s+.+[Bb]lacklist",
         "[Aa]llow%s+(.+)%s+[Oo]n%s+.+[Bb]lacklist",
+        "[Aa]llow%s+[Hh]idden%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Aa]llow%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Aa]llow%s+[Gg]roup%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Aa]llow%s+[Pp]arty%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Aa]llow%s+[Rr]aid%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Aa]llow%s+[Pp]arty%s+[Bb]uff%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Aa]llow%s+[Rr]aid%s+[Bb]uff%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Aa]llow%s+[Pp]arty%s+[Dd]ebuff%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
+        "[Aa]llow%s+[Rr]aid%s+[Dd]ebuff%s+[Aa]ura%s+[Ss]pell%s+(.+)$",
         "[Uu]nblacklist%s+(.+)%s+[Ff]or%s+",
         "[Uu]nblacklist%s+(.+)%s+[Oo]n%s+",
         "[Uu]nblock%s+(.+)%s+[Ff]or%s+",
@@ -1384,7 +2531,10 @@ P.AuraEditScopeForText = AuraEditScopeForText
 P.ParseAuraGeometryShortcut = ParseAuraGeometryShortcut
 P.AuraGeometryShortcut = ParseAuraGeometryShortcut
 P.ParseGroupAuraLiveFilterShortcut = ParseGroupAuraLiveFilterShortcut
+P.ParseUnitAuraFilterBooleanShortcut = ParseUnitAuraFilterBooleanShortcut
 P.ParseUnitAuraLiveFilterShortcut = ParseUnitAuraLiveFilterShortcut
+P.ParseAuraDirectSettingShortcut = ParseAuraDirectSettingShortcut
+P.ParseGroupAuraRootSettingShortcut = ParseGroupAuraRootSettingShortcut
 P.ParseGroupAuraVisibilityShortcut = ParseGroupAuraVisibilityShortcut
 P.ParseAuraCooldownSwipeDirectionShortcut = ParseAuraCooldownSwipeDirectionShortcut
 P.ParseAuraDurationBarShortcut = ParseAuraDurationBarShortcut

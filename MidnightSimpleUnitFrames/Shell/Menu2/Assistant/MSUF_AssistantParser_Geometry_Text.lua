@@ -20,6 +20,7 @@ local DetectGroups = P.DetectGroups
 local OFF_WORDS = P.OFF_WORDS
 local FirstNumber = P.FirstNumber
 local DetectDirection = P.DetectDirection
+local DetectBoolean = P.DetectBoolean
 local RelativeNumberDeltaForText = P.RelativeNumberDeltaForText
 local EnumValueForText = P.EnumValueForText
 local CurrentPageUnit = P.CurrentPageUnit
@@ -407,6 +408,7 @@ function A._ParseNameTextAnchorShortcut(text)
     }) then
         return nil
     end
+    if ContainsAny(text, { "truncation", "truncate", "truncated", "clip", "clipping", "clip side", "ellipsis" }) then return nil end
 
     local tab = TextSelectorTab(text)
     if tab == "hp" or tab == "power" or tab == "advanced" then return nil end
@@ -567,6 +569,91 @@ function A._ParseNameTextAnchorShortcut(text)
         changes = changes,
         label = "Set name text anchor",
         summary = "Changes the Name anchor for the selected unit or group.",
+    }
+end
+
+function A._ParseNameTextOffsetShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, {
+        "castbar", "cast bar", "aura", "auras", "buff", "debuff",
+        "class power", "class resource", "class resources", "resource bar",
+        "power bar", "powerbar", "mana bar", "hp text", "health text", "power text", "mana text",
+    }) then
+        return nil
+    end
+    if ContainsAny(text, {
+        "raid group name", "raid group number", "group number", "pvp", "status icon",
+        "status indicator", "ready check", "raid marker", "leader", "assist", "resurrect",
+        "resurrection", "incoming rez", "summon",
+    }) then
+        return nil
+    end
+    if not ContainsAny(text, {
+        "name", "name text", "unit name", "unitframe name", "unit frame name",
+        "name label", "player name", "target name", "focus name", "pet name", "boss name",
+        "party name", "raid name", "mythic raid name", "group name",
+    }) then
+        return nil
+    end
+    if not ContainsAny(text, { "offset", "position", "pos", "x", "y", "move", "nudge", "shift", "left", "right", "up", "down" }) then
+        return nil
+    end
+
+    local axis = A._DetailOffsetAxis and A._DetailOffsetAxis(text) or nil
+    local direction
+    if ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" }) then
+        direction = "down"
+    elseif ContainsAny(text, { "up", "higher", "hoeher", "hoch", "oben" }) then
+        direction = "up"
+    else
+        direction = DetectDirection(text, {})
+    end
+    if not axis and direction then
+        axis = (direction == "left" or direction == "right") and "x" or "y"
+    end
+    if not axis then return nil end
+
+    local value
+    local relativeDelta
+    if ContainsAny(text, { "move", "nudge", "shift" }) and direction then
+        relativeDelta = FirstNumber(text) or 10
+        if direction == "left" or direction == "down" then relativeDelta = -relativeDelta end
+    else
+        value = FirstNumber(text)
+    end
+    if value == nil and relativeDelta == nil then return nil end
+
+    local groups = DetectGroups(text)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(text) end
+    if #groups == 0 and #units == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+    if #groups == 0 and #units == 0 then return nil end
+
+    local attr = axis == "x" and "nameOffsetX" or "nameOffsetY"
+    local changes = {}
+    for i = 1, #groups do
+        local scope = A._TextGroupScopeName(groups[i])
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scope) .. "." .. attr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } end
+    end
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Move name text",
+        summary = "Changes the Name text offset for the selected unit or group.",
     }
 end
 
@@ -788,6 +875,281 @@ local function TextSlotMoveValueIntent(text)
         "relocate", "transfer", "send", "shift",
         "verschieben", "umsetzen",
     })
+end
+
+function A._ParseTextSlotDropdownValueShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
+    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
+    if ContainsAny(text, {
+        "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down",
+        "layer", "size", "font size", "anchor", "anchoring", "align", "alignment",
+    }) then
+        return nil
+    end
+
+    local tab = TextSelectorTab(text)
+    if tab ~= "hp" and tab ~= "power" then return nil end
+    local slot = A._TextSlotForDetail(text, tab)
+    if not slot then return nil end
+
+    local groups = DetectGroups(text)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(text) end
+    if #groups == 0 and #units == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+    if #groups == 0 and #units == 0 then return nil end
+
+    local changes = {}
+    local function AddTarget(frameType, unitOrScope)
+        local setting = TextSlotSetting(frameType, unitOrScope, tab, slot)
+        if not setting then return end
+        local value = A._TextSlotDropdownValueForText(setting, text)
+        if value == nil then return end
+        changes[#changes + 1] = {
+            setting = setting,
+            value = value,
+            valueLabel = DisplayValue(setting, value),
+            textArea = tab,
+            textSlot = slot,
+        }
+        A._AddTextSlotVisibilityChange(changes, frameType, unitOrScope, tab)
+    end
+
+    for i = 1, #groups do
+        AddTarget("group", A._TextGroupScopeName(groups[i]))
+    end
+    for i = 1, #units do
+        AddTarget("unitframe", tostring(units[i]))
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set text slot content",
+        summary = "Changes the HP/Power left/center/right text slot for the selected unit or group.",
+    }
+end
+
+local function HPTextSeparatorValueForText(setting, text)
+    local symbols = { "-", "/", "\\", "|", "<", ">", "~", ":" }
+    for i = 1, #symbols do
+        local symbol = symbols[i]
+        if text:find(symbol, 1, true) then
+            if not setting or A._EnumAllowsValue(setting, symbol) then return symbol end
+        end
+    end
+    if HasPhrase(text, "space") or HasPhrase(text, "blank") or HasPhrase(text, "none") or HasPhrase(text, "empty") then return "" end
+    local value = EnumValueForText(setting, text)
+    if value ~= nil and A._EnumAllowsValue(setting, value) then return value end
+    return nil
+end
+
+function A._ParseHPTextOptionShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
+    if ContainsAny(text, { "power text", "mana text", "power bar", "powerbar", "mana bar" }) then return nil end
+    if not ContainsAny(text, { "hp text", "health text", "health decimals", "hp decimals", "decimal percent", "reverse hp", "reverse health" }) then return nil end
+
+    local unitAttr
+    local groupAttr
+    local label
+    local value
+    local valueForSetting
+    if ContainsAny(text, { "delimiter", "separator", "seperator", "trennzeichen", "trenner" }) then
+        unitAttr = "hpTextSeparator"
+        groupAttr = "healthTextDelimiter"
+        label = "HP Text Delimiter"
+        valueForSetting = HPTextSeparatorValueForText
+    elseif ContainsAny(text, {
+        "reverse hp text", "hp text reverse", "reverse health text", "health text reverse",
+        "reverse hp text order", "hp text reverse order", "reverse health text order", "health text reverse order",
+    }) then
+        unitAttr = "hpTextReverse"
+        groupAttr = "healthTextReverse"
+        label = "Reverse HP Text"
+        value = DetectBoolean and DetectBoolean(text) or nil
+        if value == nil then value = true end
+    elseif ContainsAny(text, { "health text decimals", "hp text decimals", "health decimals", "hp decimals", "decimal percent" }) then
+        unitAttr = "healthTextDecimals"
+        groupAttr = "healthTextDecimals"
+        label = "Health Text Decimals"
+        value = DetectBoolean and DetectBoolean(text) or nil
+        if value == nil then value = true end
+    else
+        return nil
+    end
+
+    local units = DetectUnits(text)
+    local groups = {}
+    if #units == 0 then groups = DetectGroups(text) end
+    if #units == 0 and #groups == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+    if #units == 0 and #groups == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. unitAttr)
+        local settingValue = value
+        if valueForSetting then settingValue = valueForSetting(setting, text) end
+        if setting and settingValue ~= nil then
+            changes[#changes + 1] = { setting = setting, value = settingValue, valueLabel = DisplayValue(setting, settingValue) }
+        end
+    end
+    for i = 1, #groups do
+        local scope = A._TextGroupScopeName(groups[i])
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scope) .. "." .. groupAttr)
+        local settingValue = value
+        if valueForSetting then settingValue = valueForSetting(setting, text) end
+        if setting and settingValue ~= nil then
+            changes[#changes + 1] = { setting = setting, value = settingValue, valueLabel = DisplayValue(setting, settingValue) }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes an HP/Health text option for the selected frame scope.",
+    }
+end
+
+function A._ParsePowerTextOptionShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
+    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "hp text", "health text" }) then return nil end
+    if not ContainsAny(text, { "power text delimiter", "power text separator", "mana text delimiter", "mana text separator", "power delimiter", "mana delimiter" }) then return nil end
+
+    local units = DetectUnits(text)
+    local groups = {}
+    if #units == 0 then groups = DetectGroups(text) end
+    if #units == 0 and #groups == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+    if #units == 0 and #groups == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. ".powerTextSeparator")
+        local settingValue = HPTextSeparatorValueForText(setting, text)
+        if setting and settingValue ~= nil then
+            changes[#changes + 1] = { setting = setting, value = settingValue, valueLabel = DisplayValue(setting, settingValue) }
+        end
+    end
+    for i = 1, #groups do
+        local scope = A._TextGroupScopeName(groups[i])
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scope) .. ".powerTextDelimiter")
+        local settingValue = HPTextSeparatorValueForText(setting, text)
+        if setting and settingValue ~= nil then
+            changes[#changes + 1] = { setting = setting, value = settingValue, valueLabel = DisplayValue(setting, settingValue) }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Power Text Delimiter",
+        bulkSafe = #changes > 1,
+        summary = "Changes a Power/Mana text delimiter option for the selected frame scope.",
+    }
+end
+
+function A._ParseTextAreaOffsetShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
+    if not ContainsAny(text, { "offset", "position", "pos", "x", "y", "move", "nudge", "shift", "left", "right", "up", "down" }) then return nil end
+    local tab = TextSelectorTab(text)
+    if tab ~= "hp" and tab ~= "power" then return nil end
+    if ContainsAny(text, { "slot", "left slot", "right slot", "center slot", "centre slot", "middle slot" })
+        or ContainsAny(text, {
+            "left hp text", "hp left text", "right hp text", "hp right text", "center hp text", "hp center text", "centre hp text", "hp centre text",
+            "left health text", "health left text", "right health text", "health right text", "center health text", "health center text",
+            "left power text", "power left text", "right power text", "power right text", "center power text", "power center text", "centre power text", "power centre text",
+            "left mana text", "mana left text", "right mana text", "mana right text", "center mana text", "mana center text",
+        })
+    then
+        return nil
+    end
+
+    local axis = A._DetailOffsetAxis and A._DetailOffsetAxis(text) or nil
+    local direction
+    if ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" }) then
+        direction = "down"
+    elseif ContainsAny(text, { "up", "higher", "hoeher", "hoch", "oben" }) then
+        direction = "up"
+    else
+        direction = DetectDirection(text, {})
+    end
+    if not axis and direction then
+        axis = (direction == "left" or direction == "right") and "x" or "y"
+    end
+    if not axis then return nil end
+
+    local value
+    local relativeDelta
+    if ContainsAny(text, { "move", "nudge", "shift" }) and direction then
+        relativeDelta = FirstNumber(text) or 10
+        if direction == "left" or direction == "down" then relativeDelta = -relativeDelta end
+    else
+        value = FirstNumber(text)
+    end
+    if value == nil and relativeDelta == nil then return nil end
+
+    local units = DetectUnits(text)
+    local groups = {}
+    if #units == 0 then groups = DetectGroups(text) end
+    if #units == 0 and #groups == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+    if #units == 0 and #groups == 0 then return nil end
+
+    local unitAttr = tab == "hp" and (axis == "x" and "hpOffsetX" or "hpOffsetY") or (axis == "x" and "powerOffsetX" or "powerOffsetY")
+    local groupAttr = tab == "hp" and (axis == "x" and "healthTextOffsetX" or "healthTextOffsetY") or (axis == "x" and "powerTextOffsetX" or "powerTextOffsetY")
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. unitAttr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } end
+    end
+    for i = 1, #groups do
+        local scope = A._TextGroupScopeName(groups[i])
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scope) .. "." .. groupAttr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = tab == "hp" and "Move HP text" or "Move Power text",
+        bulkSafe = #changes > 1,
+        summary = "Changes the whole HP/Power text offset for the selected frame scope.",
+    }
 end
 
 function A._ParseTextSlotValueMoveShortcut(text)

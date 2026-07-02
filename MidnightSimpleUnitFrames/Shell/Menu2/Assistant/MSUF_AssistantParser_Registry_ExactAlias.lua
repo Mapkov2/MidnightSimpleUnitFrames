@@ -107,6 +107,7 @@ local function EnsureIndex(settings)
 
     local index = { byLength = {}, maxTokens = 0, triggerTokens = {} }
     for i = 1, #settings do
+        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local exactAliases = type(setting) == "table" and setting.exactAliases or nil
         for j = 1, #(exactAliases or {}) do AddIndexAlias(index, setting, exactAliases[j], 1) end
@@ -123,6 +124,8 @@ local function EnsureIndex(settings)
     P._registryExactAliasIndex = index
     return index
 end
+
+P._EnsureRegistryExactAliasIndex = EnsureIndex
 
 local function HasTriggerToken(index, tokens)
     local triggers = index and index.triggerTokens

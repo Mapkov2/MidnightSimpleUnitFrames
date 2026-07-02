@@ -178,7 +178,7 @@ local PAGE_DISPLAY_LABELS = {
 
     gf_layout = "Group Layout",
     gf_bars = "Group Health & Text",
-    gf_indicators = "Group Indicators",
+    gf_indicators = "Group Status & Indicators",
     gf_auras = "Group Auras",
 
     auras3 = "Auras",

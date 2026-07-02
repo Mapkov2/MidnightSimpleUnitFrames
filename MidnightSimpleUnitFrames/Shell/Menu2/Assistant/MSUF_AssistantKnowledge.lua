@@ -223,7 +223,7 @@ local PAGE_LABEL_OVERRIDES = {
 
     gf_layout = "Group Layout",
     gf_bars = "Group Health & Text",
-    gf_indicators = "Group Indicators",
+    gf_indicators = "Group Status & Indicators",
     gf_auras = "Group Auras",
 
     auras3 = "Auras",
@@ -1058,12 +1058,12 @@ local PAGE_HELP = {
         actions = { "Open Group Health & Text" },
     },
     gf_indicators = {
-        title = "Group Indicators help",
+        title = "Group Status & Indicators help",
         lines = {
             "You can change group status indicators, role/ready/summon icons, targeted spell indicators, spell indicators, corner indicators, and related editor choices available in MSUF.",
             "Examples: show party targeted spell indicators; set targeted spell icon size to 28; show raid ready check icon; move raid phase icon right.",
         },
-        actions = { "Open Group Indicators" },
+        actions = { "Open Group Status & Indicators" },
     },
     gf_auras = { title = "Group Auras help", lines = { "You can change Party, Raid, and Mythic Raid aura visibility, icon size, caps/count, layout, X/Y offsets, layer, live filters, private aura options, and group aura copy behavior. Saved group category blacklist data is read-only in the native 12.1 backend.", "Examples: set raid buff icon size to 24; cap party buffs at 4; set mythic raid debuff layer to 8; copy raid auras to party." }, actions = { "Open Group Auras", "Open Aura Filters" } },
     classpower = { title = "Class Resources help", lines = { "You can change class resource mode, size, position, colors, and gameplay-specific class resource options available in MSUF." }, actions = { "Open Class Resources" } },
@@ -1236,7 +1236,7 @@ local WHAT_CAN_DIRECT_HELP_TERMS = {
 
 local WHAT_CAN_PAGE_HELP_TARGETS = {
     { page = "gf_bars", terms = { "group health and text", "group health", "group text", "party health", "party text", "raid health", "raid text", "mythic raid health", "mythic raid text" } },
-    { page = "gf_indicators", terms = { "group indicator", "group indicators", "party indicator", "party indicators", "raid indicator", "raid indicators", "corner indicator", "corner indicators", "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators", "status icon", "status icons", "ready check", "raid marker", "role icon" } },
+    { page = "gf_indicators", terms = { "group status and indicators", "group indicators", "group indicator", "party indicator", "party indicators", "raid indicator", "raid indicators", "corner indicator", "corner indicators", "targeted spell", "targeted spells", "targeted spell indicator", "targeted spell indicators", "status icon", "status icons", "ready check", "raid marker", "role icon" } },
     { page = "gf_auras", terms = { "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras", "mythic raid aura", "mythic raid auras", "group buff", "group buffs", "group debuff", "group debuffs" } },
     { page = "gf_layout", terms = { "group layout", "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames", "party layout", "raid layout" } },
     { page = "auras3_filters", terms = { "aura filter", "aura filters", "hidden aura", "hidden auras", "blacklist", "whitelist", "ignore list" } },
@@ -1583,7 +1583,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Party and raid frame help\nParty, Raid, and Mythic Raid frames are group frames: they show members of your group so you can track health, range, buffs, debuffs, role icons, ready checks, and other group status. In MSUF, their layout lives mainly in Group Layout, while health/text, indicators, and auras have their own group-frame pages.\nExamples: open group layout; make raid frames wider; set raid range fade to 40; show party ready check icon.\nYou can ask: Open Group Layout | Open Group Health & Text | Open Group Indicators | Open Group Auras",
+            text = "Party and raid frame help\nParty, Raid, and Mythic Raid frames are group frames: they show members of your group so you can track health, range, buffs, debuffs, role icons, ready checks, and other group status. In MSUF, their layout lives mainly in Group Layout, while health/text, indicators, and auras have their own group-frame pages.\nExamples: open group layout; make raid frames wider; set raid range fade to 40; show party ready check icon.\nYou can ask: Open Group Layout | Open Group Health & Text | Open Group Status & Indicators | Open Group Auras",
             status = "applied",
             summary = "Assistant group frames help",
         }
@@ -1648,7 +1648,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Ready Check help\nA ready check lets the group confirm who is ready before a pull. MSUF can show ready-check icons on Party, Raid, and Mythic Raid frames through Group Indicators, including size, anchor, layer, and offset options.\nExamples: show raid ready check icon; set party ready check size to 18; move raid ready check icon right 4.\nYou can ask: Open Group Indicators",
+            text = "Ready Check help\nA ready check lets the group confirm who is ready before a pull. MSUF can show ready-check icons on Party, Raid, and Mythic Raid frames through Group Status & Indicators, including size, anchor, layer, and offset options.\nExamples: show raid ready check icon; set party ready check size to 18; move raid ready check icon right 4.\nYou can ask: Open Group Status & Indicators",
             status = "applied",
             summary = "Assistant ready check help",
         }
@@ -1657,7 +1657,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Raid Marker help\nRaid markers are target icons such as skull, cross, square, and moon. MSUF can display raid-marker indicators on unit frames and group frames and can help with their size, anchor, layer, and offsets where the menu exposes those controls.\nExamples: show raid marker on target; set raid marker size to 18; move raid marker icon up.\nYou can ask: Open Player | Open Target | Open Group Indicators",
+            text = "Raid Marker help\nRaid markers are target icons such as skull, cross, square, and moon. MSUF can display raid-marker indicators on unit frames and group frames and can help with their size, anchor, layer, and offsets where the menu exposes those controls.\nExamples: show raid marker on target; set raid marker size to 18; move raid marker icon up.\nYou can ask: Open Player | Open Target | Open Group Status & Indicators",
             status = "applied",
             summary = "Assistant raid marker help",
         }
@@ -1704,7 +1704,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptDefinitionIntent(norm)
     then
         return {
-            text = "Anchoring help\nAn anchor tells MSUF what a frame is attached to and which point is used, such as TOPLEFT, CENTER, or BOTTOMRIGHT. Anchors plus X/Y offsets control where frames, icons, indicators, text, and helper widgets appear.\nExamples: anchor raid frames to player; set target anchor point to center; move raid ready check icon right 4; open group layout.\nYou can ask: Open Group Layout | Open Player | Open Group Indicators",
+            text = "Anchoring help\nAn anchor tells MSUF what a frame is attached to and which point is used, such as TOPLEFT, CENTER, or BOTTOMRIGHT. Anchors plus X/Y offsets control where frames, icons, indicators, text, and helper widgets appear.\nExamples: anchor raid frames to player; set target anchor point to center; move raid ready check icon right 4; open group layout.\nYou can ask: Open Group Layout | Open Player | Open Group Status & Indicators",
             status = "applied",
             summary = "Assistant anchoring help",
         }
@@ -1714,7 +1714,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptDefinitionIntent(norm)
     then
         return {
-            text = "Offset help\nOffsets move something away from its anchor. X Offset moves left or right; Y Offset moves up or down. MSUF uses offsets for unit frames, group frames, text, cast bars, icons, indicators, auras, and gameplay helpers.\nExamples: move target 20 right; move raid ready check icon up 4; set target buff x offset to 6; open edit mode.\nYou can ask: Enter Edit Mode | Open Player | Open Group Indicators",
+            text = "Offset help\nOffsets move something away from its anchor. X Offset moves left or right; Y Offset moves up or down. MSUF uses offsets for unit frames, group frames, text, cast bars, icons, indicators, auras, and gameplay helpers.\nExamples: move target 20 right; move raid ready check icon up 4; set target buff x offset to 6; open edit mode.\nYou can ask: Enter Edit Mode | Open Player | Open Group Status & Indicators",
             status = "applied",
             summary = "Assistant offset help",
         }
@@ -1836,7 +1836,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain", "debuff" })
     then
         return {
-            text = "Dispel help\nA dispel removes certain debuffs from friendly units or buffs from enemies, depending on your class and spell. In MSUF, dispel-related visibility lives in aura filters, debuff type colors, dispel borders, group indicators, and group health overlays.\nExamples: show only dispellable debuffs; open aura filters; test dispel border; set magic debuff color blue; open group indicators.\nYou can ask: Open Aura Filters | Open Group Indicators | Open Colors",
+            text = "Dispel help\nA dispel removes certain debuffs from friendly units or buffs from enemies, depending on your class and spell. In MSUF, dispel-related visibility lives in aura filters, debuff type colors, dispel borders, group status and indicators, and group health overlays.\nExamples: show only dispellable debuffs; open aura filters; test dispel border; set magic debuff color blue; open group status and indicators.\nYou can ask: Open Aura Filters | Open Group Status & Indicators | Open Colors",
             status = "applied",
             summary = "Assistant dispel help",
         }
@@ -1845,7 +1845,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain" })
     then
         return {
-            text = "Threat and aggro help\nThreat is how enemies decide whom to attack; aggro means a unit currently has enemy attention. MSUF can highlight this with Aggro Border options, aggro role filters, threat/status indicators, group indicators, and colors.\nExamples: turn on aggro border; set raid aggro shows for non tanks; test aggro border; set aggro border color red.\nYou can ask: Open Bars | Open Colors | Open Group Indicators",
+            text = "Threat and aggro help\nThreat is how enemies decide whom to attack; aggro means a unit currently has enemy attention. MSUF can highlight this with Aggro Border options, aggro role filters, threat/status indicators, group status and indicators, and colors.\nExamples: turn on aggro border; set raid aggro shows for non tanks; test aggro border; set aggro border color red.\nYou can ask: Open Bars | Open Colors | Open Group Status & Indicators",
             status = "applied",
             summary = "Assistant threat help",
         }
@@ -1854,7 +1854,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "help", "what", "what is", "what are", "what does", "how", "where", "explain", "mean", "change", "set", "show", "open" })
     then
         return {
-            text = "Targeted Spell Indicators help\nParty Targeted Spell Indicators show enemy nameplate casts that are targeting party members. They are party-only and live in Group Frames > Indicators.\nExamples: show party targeted spell indicators; set targeted spell icon size to 28; set targeted spell mode to always; move targeted spells up 4.\nYou can ask: Open Group Indicators",
+            text = "Targeted Spell Indicators help\nParty Targeted Spell Indicators show enemy nameplate casts that are targeting party members. They are party-only and live in Group Frames > Status & Indicators.\nExamples: show party targeted spell indicators; set targeted spell icon size to 28; set targeted spell mode to always; move targeted spells up 4.\nYou can ask: Open Group Status & Indicators",
             status = "applied",
             summary = "Assistant targeted spell indicator help",
         }
@@ -1882,9 +1882,9 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Group Indicators help\nIn Group Frames > Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, targeted spell, spell, and corner indicators.\nExamples: show party targeted spell indicators; show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Indicators",
+            text = "Group Status & Indicators help\nIn Group Frames > Status & Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, targeted spell, spell, and corner indicators.\nExamples: show party targeted spell indicators; show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Status & Indicators",
             status = "applied",
-            summary = "Assistant group indicators help",
+            summary = "Assistant group status and indicators help",
         }
     end
     if ContainsAny(norm, GROUP_FRAME_SCOPE_TERMS)
