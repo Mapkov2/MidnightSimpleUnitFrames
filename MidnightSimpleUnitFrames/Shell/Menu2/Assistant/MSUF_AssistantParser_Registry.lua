@@ -299,6 +299,9 @@ end
 
 local function ShouldApplyMultipleRegistryChanges(text, changes)
     if #(changes or {}) <= 1 then return false end
+    for i = 1, #changes do
+        if changes[i] and changes[i].mediaChoice == true then return false end
+    end
     -- Bulk writes must be opt-in by language or by an unmistakable two-lane aura command.
     -- Ambiguous matches stay as choices so the user can pick before anything is applied.
     if HasAllScopeIntent(text) then return true end
@@ -1919,6 +1922,7 @@ local function AddMediaResolverChanges(changes, setting, text, raw, score)
                 valueLabel = item.label or item.value,
                 label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, item.label or item.value, "Option") or (tostring(setting.label or "Option") .. ": " .. tostring(item.label or item.value)),
                 mediaType = media.mediaType,
+                mediaChoice = true,
             }
         end
         return true
@@ -1935,6 +1939,60 @@ local function AddMediaResolverChanges(changes, setting, text, raw, score)
         return true
     end
     return false
+end
+
+local function MediaNoMatchResult(media)
+    local resolver = A.MediaResolver
+    local textOut = resolver and resolver.NoMatchMessage and resolver.NoMatchMessage(media and media.mediaType, media and media.query) or "That media entry is not in the current list."
+    return { kind = "unknown", text = textOut, status = "failed" }
+end
+
+local function MediaAmbiguousResult(setting, media)
+    local choices = {}
+    local mediaChoices = media and media.choices or {}
+    for i = 1, #mediaChoices do
+        local item = mediaChoices[i]
+        choices[#choices + 1] = {
+            setting = setting,
+            value = item.value,
+            valueLabel = item.label or item.value,
+            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, item.label or item.value, "Option") or (tostring(setting.label or "Option") .. ": " .. tostring(item.label or item.value)),
+            mediaType = media.mediaType,
+            mediaChoice = true,
+        }
+    end
+    if #choices == 0 then return nil end
+    return {
+        kind = "ambiguous",
+        choices = choices,
+        label = media.mediaType == "font" and "Which font?" or "Which texture?",
+        summary = "Asks which matching media entry should be used.",
+    }
+end
+
+local function ResolveMediaChange(setting, text, raw, explicitQuery)
+    local resolver = A.MediaResolver
+    if not (resolver and type(resolver.MediaTypeForSetting) == "function") then return nil end
+    local mediaType = resolver.MediaTypeForSetting(setting)
+    if not mediaType then return nil end
+    local media
+    if explicitQuery and explicitQuery ~= "" and type(resolver.Find) == "function" then
+        media = resolver.Find(mediaType, explicitQuery, { limit = 8 })
+    elseif type(resolver.ResolveSetting) == "function" then
+        media = resolver.ResolveSetting(setting, text, raw)
+    end
+    if not media then return nil end
+    if media.status == "exact" and media.value ~= nil then
+        return {
+            setting = setting,
+            value = media.value,
+            valueLabel = media.label or media.value,
+            mediaType = media.mediaType,
+        }
+    end
+    if media.status == "none" then return nil, MediaNoMatchResult(media) end
+    if media.status == "choices" then return nil, MediaAmbiguousResult(setting, media) end
+    return nil
 end
 
 local POWER_UNIT_ORDER = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
@@ -1960,6 +2018,8 @@ local function ParseGlobalFontFamilyShortcut(text, raw)
         "set font", "change font", "make font", "use font", "choose font", "switch font",
         "set global font", "change global font", "set main font", "change main font",
         "set default font", "change default font", "set shared font", "change shared font",
+        "set all fonts", "change all fonts", "make all fonts", "use all fonts",
+        "set every font", "change every font", "all fonts to", "all font to", "every font to",
         "schriftart", "schrift setzen", "schrift aendern", "schrift andern",
     }) then return nil end
 
@@ -1968,9 +2028,15 @@ local function ParseGlobalFontFamilyShortcut(text, raw)
     local value = RawAfterLastConnector and RawAfterLastConnector(raw, SET_VALUE_CONNECTORS) or nil
     if value == nil or Trim(value) == "" then return nil end
     value = Trim(value)
-    if type(setting.normalizeValue) == "function" then
-        local ok, normalizedValue = pcall(setting.normalizeValue, value)
-        if ok and normalizedValue ~= nil then value = normalizedValue end
+    local mediaChange, mediaResult = ResolveMediaChange(setting, text, raw, value)
+    if mediaResult then return mediaResult end
+    if mediaChange then
+        return {
+            kind = "changes",
+            changes = { mediaChange },
+            label = setting.label or "Global Font",
+            summary = "Changes the global SharedMedia font family.",
+        }
     end
     return {
         kind = "changes",
@@ -2704,20 +2770,46 @@ local function ParseUnitCoreBooleanShortcut(text)
     }
 end
 
+local function RelativeLayerDeltaForRegistryText(text)
+    local amount = FirstNumber(text) or 1
+    if ContainsAny(text, {
+        "layer down", "down layer", "move layer down", "drop layer",
+        "behind", "backward", "backwards", "send back", "to back", "lower layer", "lower draw",
+        "below", "back", "down", "hinter", "nach hinten", "runter",
+    }) then
+        return -amount
+    end
+    if ContainsAny(text, {
+        "layer up", "up layer", "move layer up", "raise layer",
+        "forward", "front", "to front", "bring forward", "higher layer", "higher draw",
+        "above", "up", "nach vorne", "hoch",
+    }) then
+        return amount
+    end
+    return nil
+end
+
 local function ParseUnitStatusDetailShortcut(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, {
         "level", "level indicator", "level text", "pvp flag", "pvp indicator", "pvp icon",
         "raid marker", "raid marker icon", "raid group", "raid group name", "raid group style",
         "raid group name style", "group number style",
-        "combat indicator", "rested indicator", "incoming rez",
-        "dead text", "status text", "elite icon", "rare icon",
+        "combat indicator", "combat icon", "rested indicator", "rested icon", "resting indicator",
+        "resting icon", "rested symbol", "resting symbol",
+        "incoming rez", "incoming rez icon", "incoming resurrection", "incoming resurrection icon",
+        "resurrection icon", "rez icon", "dead text", "dead indicator", "ghost indicator", "status text",
+        "elite icon", "elite indicator", "rare icon", "rare indicator",
     }) then return nil end
     local wantsAnchor = ContainsAny(text, { "anchor", "position" })
     local wantsX = ContainsAny(text, { "x offset", "offset x", "horizontal offset", "horizontal position" })
     local wantsY = ContainsAny(text, { "y offset", "offset y", "vertical offset", "vertical position" })
     local wantsSize = ContainsAny(text, { "size", "icon size", "text size", "font size" })
-    local wantsLayer = ContainsAny(text, { "layer", "frame level", "framelevel" })
+    local wantsLayer = ContainsAny(text, {
+        "layer", "frame level", "framelevel", "draw layer", "draw order",
+        "layer up", "layer down", "bring forward", "send back",
+        "front", "behind", "backward", "backwards", "above", "below",
+    })
     local wantsStyle = ContainsAny(text, { "raid group style", "raid group name style", "group number style" })
     local wantsVisibility = ContainsAny(text, { "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off" })
     if not (wantsAnchor or wantsX or wantsY or wantsSize or wantsLayer or wantsStyle or wantsVisibility) then return nil end
@@ -2748,18 +2840,21 @@ local function ParseUnitStatusDetailShortcut(text)
             local setting = attr and Registry and Registry:GetSetting(unit .. "." .. tostring(attr))
             if setting then
                 local value
+                local relativeDelta = wantsLayer and RelativeLayerDeltaForRegistryText(text) or nil
                 if setting.type == "boolean" then
                     value = DetectBoolean(text)
                     if value == nil then value = true end
                 elseif setting.type == "number" then
-                    value = FirstNumber(text)
+                    if relativeDelta == nil then
+                        value = FirstNumber(text)
+                    end
                 elseif setting.type == "enum" then
                     value = EnumValueForText(setting, text)
                 else
                     value = ValueForRegistrySetting(setting, text)
                 end
-                if value ~= nil then
-                    changes[#changes + 1] = { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) }
+                if value ~= nil or relativeDelta ~= nil then
+                    changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, valueLabel = value ~= nil and ValueDisplay(setting, value) or nil }
                 end
             end
         end

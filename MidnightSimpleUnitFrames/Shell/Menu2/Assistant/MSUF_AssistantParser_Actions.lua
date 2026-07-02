@@ -734,10 +734,18 @@ end
 
 local function RelativeLayerDeltaForText(text)
     local amount = FirstNumber(text) or 1
-    if ContainsAny(text, { "behind", "backward", "backwards", "send back", "to back", "lower layer", "lower draw", "hinter", "nach hinten" }) then
+    if ContainsAny(text, {
+        "layer down", "down layer", "move layer down", "drop layer",
+        "behind", "backward", "backwards", "send back", "to back", "lower layer", "lower draw",
+        "below", "back", "down", "lower", "hinter", "nach hinten", "runter",
+    }) then
         return -amount
     end
-    if ContainsAny(text, { "forward", "front", "to front", "bring forward", "higher layer", "higher draw", "nach vorne" }) then
+    if ContainsAny(text, {
+        "layer up", "up layer", "move layer up", "raise layer",
+        "forward", "front", "to front", "bring forward", "higher layer", "higher draw",
+        "above", "up", "higher", "nach vorne", "hoch",
+    }) then
         return amount
     end
     return nil
@@ -911,7 +919,10 @@ local function ParseGroupStatusIconDetail(text)
         end
     end
 
-    if anchorIntent and iconSpec.anchor then
+    if anchorIntent and iconSpec.anchor
+        and not (ContainsAny(text, { "move", "nudge", "shift", "verschiebe" }) and DetectDirection(text)
+            and not ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }))
+    then
         local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[1] or "") .. "." .. tostring(iconSpec.anchor))
         local value = setting and StatusAnchorValueForText(text, GROUP_SPELL_ANCHOR_ALIASES, setting.values or { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" })
         if value ~= nil then
@@ -1319,6 +1330,8 @@ local function ParseUnitStatusIndicatorDetail(text)
     end
 
     if (ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) or StatusAnchorIntent(text))
+        and not (ContainsAny(text, { "move", "nudge", "shift", "verschiebe" }) and DetectDirection(text)
+            and not ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }))
         and type(spec.anchor) == "string" and spec.anchor ~= ""
     then
         local setting = Registry and Registry:GetSetting(unit .. "." .. spec.anchor)

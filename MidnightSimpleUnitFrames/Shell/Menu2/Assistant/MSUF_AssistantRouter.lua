@@ -55,6 +55,26 @@ R.WOW_JOKES_EN = {    "Sure. Why did the unit frame join the raid? It wanted a s
     "Sure. Target of Target text tried dating raid markers. It said the relationship was complicated.",
     "Sure. The profile import promised it was simple, then arrived with seven backups and a reload prompt.",
 }
+R.IMMEDIATE_SHORT_CONVERSATION = {
+    hi = true,
+    hello = true,
+    hey = true,
+    hallo = true,
+    moin = true,
+    servus = true,
+    thx = true,
+    danke = true,
+}
+R.IMMEDIATE_CONVERSATION_PHRASES = {
+    "how are you", "how are you doing", "are you ok", "you good", "wie gehts", "wie geht es dir", "alles gut", "gehts dir gut",
+    "good morning", "good evening",
+    "thanks", "thank you", "danke dir",
+    "who are you", "what are you", "wer bist du", "was bist du",
+    "tell me a joke", "tell joke", "tell me another joke", "another joke", "say something funny", "make me laugh", "joke", "jokes",
+    "what can you do", "what can i ask", "what can i ask you", "what can the assistant do",
+    "assistant help", "show commands", "what commands", "which commands", "available commands",
+    "chatgpt", "chat gpt", "ai assistant", "ai chat", "like chatgpt", "like chat gpt",
+}
 
 R.MUTATION_TERMS = {    "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset",
     "copy", "export", "import", "create", "delete", "remove", "add", "put", "clear", "switch", "assign", "rename", "close", "toggle",
@@ -821,6 +841,38 @@ function R.HumanConversationReply(text)    local norm = R.Normalize(text)
         }
     end
 
+    return nil
+end
+
+function A.TryImmediateConversationReply(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return nil end
+    if A.RouterHasBlockingPendingAssistantState and A.RouterHasBlockingPendingAssistantState() then return nil end
+    if R.IMMEDIATE_SHORT_CONVERSATION[norm] then
+        return R.HumanConversationReply(text)
+    end
+    for i = 1, #(R.IMMEDIATE_CONVERSATION_PHRASES or {}) do
+        if R.HasNormalizedPhrase(norm, R.IMMEDIATE_CONVERSATION_PHRASES[i]) then
+            return R.HumanConversationReply(text)
+        end
+    end
+    if R.HasNormalizedPhrase(norm, "help") and #norm <= 20 then
+        return R.HumanConversationReply(text)
+    end
+    if norm == "help me" or norm == "i need help" or norm == "show help" then
+        return R.HumanConversationReply(text)
+    end
+    if R.AsksSettingLocation(norm) and A.RouterLooksLikeVisualSettingTopic
+        and A.RouterLooksLikeVisualSettingTopic(norm)
+        and A.RouterTryVisualSettingShortcut
+    then
+        local visualHelp = A.RouterTryVisualSettingShortcut(norm, nil)
+        if visualHelp then
+            visualHelp.status = "info"
+            visualHelp.result = "info"
+            return visualHelp
+        end
+    end
     return nil
 end
 
@@ -1956,7 +2008,8 @@ function A.RouterLooksLikeVisualSettingTopic(text)
     if R.ContainsAny(norm, {
         "health color", "health bar color", "hp color", "health color scheme",
         "health color mode", "class colored", "class coloured", "class color health",
-        "opacity", "alpha", "transparent", "transparency", "bar texture", "health bar texture",
+        "opacity", "alpha", "transparent", "transparency", "texture", "textures",
+        "bar texture", "health bar texture",
         "range fade", "heal prediction", "incoming heal", "absorb", "absorb overlay",
         "aggro border", "threat border", "border color", "background color", "global font color",
     }) then

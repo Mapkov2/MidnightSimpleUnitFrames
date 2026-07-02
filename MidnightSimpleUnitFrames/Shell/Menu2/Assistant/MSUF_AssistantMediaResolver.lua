@@ -242,6 +242,48 @@ local function MediaResultBefore(a, b)
     return tostring(a.label or a.value):lower() < tostring(b.label or b.value):lower()
 end
 
+local function PreferredFontFamilyMatch(query, choices)
+    query = Trim(query or "")
+    if query == "" or type(choices) ~= "table" or #choices == 0 then return nil end
+    local normQuery = Normalize(query)
+    local compactQuery = Compact(query)
+    if normQuery == "" or compactQuery == "" then return nil end
+
+    local function eachLabel(item, fn)
+        local labels = { item and item.label, item and item.value, item and item.key, item and item.path }
+        for i = 1, #labels do
+            local label = labels[i]
+            if type(label) == "string" and label ~= "" and fn(Normalize(label), Compact(label)) then return true end
+        end
+        return false
+    end
+
+    local preferred = {
+        normQuery .. " regular",
+        normQuery .. " normal",
+        normQuery .. " book",
+    }
+    local preferredCompact = {
+        compactQuery .. "regular",
+        compactQuery .. "normal",
+        compactQuery .. "book",
+    }
+
+    for p = 1, #preferred do
+        for i = 1, #choices do
+            local item = choices[i]
+            if eachLabel(item, function(normLabel, compactLabel)
+                return normLabel == preferred[p]
+                    or compactLabel == preferredCompact[p]
+                    or compactLabel:sub(1, #preferredCompact[p]) == preferredCompact[p]
+            end) then
+                return item
+            end
+        end
+    end
+    return nil
+end
+
 local function InsertTopMediaResult(top, item, limit)
     local pos = #top + 1
     while pos > 1 and MediaResultBefore(item, top[pos - 1]) do
@@ -287,6 +329,12 @@ function R.Find(mediaType, query, opts)
     if matchCount == 0 then return { status = "none", query = query, mediaType = mediaType } end
     if #exacts == 1 then
         return { status = "exact", mediaType = mediaType, query = query, item = exacts[1], value = exacts[1].value, label = exacts[1].label }
+    end
+    if mediaType == "font" then
+        local preferred = PreferredFontFamilyMatch(query, top)
+        if preferred then
+            return { status = "exact", mediaType = mediaType, query = query, item = preferred, value = preferred.value, label = preferred.label }
+        end
     end
     if matchCount == 1 then
         local item = top[1]
