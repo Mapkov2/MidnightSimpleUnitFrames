@@ -2351,6 +2351,345 @@ function P.ParseUnitStatusSymbolRegistryShortcut(text)
     }
 end
 
+local function ExplicitUnitAndGroupScopesForRegistry(text)
+    local units, groups = ExplicitScopes(text)
+    if #units == 0 then
+        local pageUnit = CurrentRegistryPageUnit()
+        if pageUnit then units = { pageUnit } end
+    end
+    return units, groups
+end
+
+local function ParseUnitTextBooleanDetailShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if not ContainsAny(text, { "health text decimals", "hp text decimals", "health decimals", "hp decimals", "decimal percent" }) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then value = true end
+    local units, groups = ExplicitUnitAndGroupScopesForRegistry(text)
+    local changes = {}
+    for i = 1, #units do
+        AddRegisteredChange(changes, tostring(units[i]) .. ".healthTextDecimals", value)
+    end
+    for i = 1, #groups do
+        AddRegisteredChange(changes, "gf_" .. tostring(groups[i]) .. ".healthTextDecimals", value)
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Health Text Decimals",
+        bulkSafe = #changes > 1,
+        summary = "Changes Health Text Decimals for the matched frame scope.",
+    }
+end
+
+local function ParseUnitCoreBooleanShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    local attr
+    local label
+    if ContainsAny(text, { "power smooth fill", "power bar smooth fill", "smooth power bar", "smooth mana bar", "smooth resource bar" }) then
+        attr = "powerSmoothFill"
+        label = "Power Bar Smooth Fill"
+    elseif ContainsAny(text, { "reverse fill direction", "reverse health fill", "reverse bar fill" }) then
+        attr = "reverseFillBars"
+        label = "Reverse Fill Direction"
+    elseif ContainsAny(text, { "smooth fill", "smooth health fill", "smooth frame fill" }) then
+        attr = "smoothFill"
+        label = "Smooth Health Fill"
+    else
+        return nil
+    end
+    local value = DetectBoolean(text)
+    if value == nil then value = true end
+    local units, groups = ExplicitUnitAndGroupScopesForRegistry(text)
+    if #units == 0 and #groups == 0 then return nil end
+    local changes = {}
+    for i = 1, #units do
+        AddRegisteredChange(changes, tostring(units[i]) .. "." .. attr, value)
+    end
+    for i = 1, #groups do
+        AddRegisteredChange(changes, "gf_" .. tostring(groups[i]) .. "." .. attr, value)
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes the matching Unit Frame fill option.",
+    }
+end
+
+local function ParseUnitStatusDetailShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, {
+        "level", "level indicator", "level text", "pvp flag", "pvp indicator", "pvp icon",
+        "raid marker", "raid marker icon", "combat indicator", "rested indicator", "incoming rez",
+        "dead text", "status text", "elite icon", "rare icon",
+    }) then return nil end
+    local wantsAnchor = ContainsAny(text, { "anchor", "position" })
+    local wantsX = ContainsAny(text, { "x offset", "offset x", "horizontal offset", "horizontal position" })
+    local wantsY = ContainsAny(text, { "y offset", "offset y", "vertical offset", "vertical position" })
+    local wantsSize = ContainsAny(text, { "size", "icon size", "text size", "font size" })
+    local wantsLayer = ContainsAny(text, { "layer", "frame level", "framelevel" })
+    local wantsVisibility = ContainsAny(text, { "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off" })
+    if not (wantsAnchor or wantsX or wantsY or wantsSize or wantsLayer or wantsVisibility) then return nil end
+
+    local units = ExplicitUnitAndGroupScopesForRegistry(text)
+    if #units == 0 then return nil end
+    local changes = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        local spec = A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text) or nil
+        if spec then
+            local attr
+            if wantsX then
+                attr = spec.x
+            elseif wantsY then
+                attr = spec.y
+            elseif wantsAnchor then
+                attr = spec.anchor
+            elseif wantsSize then
+                attr = spec.size
+            elseif wantsLayer then
+                attr = spec.layer
+            elseif wantsVisibility then
+                attr = spec.show
+            end
+            local setting = attr and Registry and Registry:GetSetting(unit .. "." .. tostring(attr))
+            if setting then
+                local value
+                if setting.type == "boolean" then
+                    value = DetectBoolean(text)
+                    if value == nil then value = true end
+                elseif setting.type == "number" then
+                    value = FirstNumber(text)
+                elseif setting.type == "enum" then
+                    value = EnumValueForText(setting, text)
+                else
+                    value = ValueForRegistrySetting(setting, text)
+                end
+                if value ~= nil then
+                    changes[#changes + 1] = { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) }
+                end
+            end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Unit Frame Status Detail",
+        bulkSafe = #changes > 1,
+        summary = "Changes a unit-frame status indicator detail option.",
+    }
+end
+
+local function ParseBossTargetHighlightShortcut(text)
+    if ContainsAny(text, { "color", "colour", "test", "preview", "group", "party", "raid", "mythic raid" }) then return nil end
+    if not ContainsAny(text, { "boss target highlight", "boss target outline", "highlight boss target" }) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then value = true end
+    local changes = {}
+    AddRegisteredChange(changes, "general.bossTargetHighlightEnabled", value)
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Boss Target Highlight",
+        summary = "Changes Boss Target Highlight visibility.",
+    }
+end
+
+local function ConcreteGroupScopesForPriority(text)
+    local scopes = {}
+    local hasMythic = ContainsAny(text, { "mythic raid", "mythicraid", "mythic raid frame", "mythicraid frame" })
+    if ContainsAny(text, { "party", "party frame", "party frames" }) then scopes[#scopes + 1] = "party" end
+    if ContainsAny(text, { "raid", "raid frame", "raid frames" }) and not hasMythic then scopes[#scopes + 1] = "raid" end
+    if hasMythic then scopes[#scopes + 1] = "mythicraid" end
+    return scopes
+end
+
+local function ParseGroupBorderColorShortcut(text, raw)
+    if not ContainsAny(text, { "group border color", "group border colour", "frame group border color", "frame group border colour" }) then return nil end
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "stripe", "dispel", "corner" }) then return nil end
+    local scopes = ConcreteGroupScopesForPriority(text)
+    if #scopes == 0 then return nil end
+    local r, g, b, label = ExtractColor(raw, text)
+    if r == nil then return nil end
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".groupBorderColor", { r = r, g = g, b = b, label = label })
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Group Border Color",
+        bulkSafe = #changes > 1,
+        summary = "Changes the matching group-frame border color.",
+    }
+end
+
+local function ParseGroupTextureStringShortcut(text, raw)
+    if not ContainsAny(text, { "texture", "foreground texture", "background texture", "bar texture", "bar background texture", "bar bg texture" }) then return nil end
+    if ContainsAny(text, { "castbar", "cast bar", "class resource", "class resources", "detached power", "player hp", "absorb", "heal absorb" }) then return nil end
+    local scopes = ConcreteGroupScopesForPriority(text)
+    if #scopes == 0 then return nil end
+
+    local keySuffix
+    local label
+    local useBarScope = false
+    if ContainsAny(text, { "bar background texture", "background bar texture", "bar bg texture" }) then
+        keySuffix = "barBackgroundTexture"
+        label = "Group Bar Background Texture"
+        useBarScope = true
+    elseif ContainsAny(text, { "bar texture", "bars texture", "health bar texture", "power bar texture", "foreground bar texture" }) then
+        keySuffix = "barTexture"
+        label = "Group Bar Texture"
+        useBarScope = true
+    elseif ContainsAny(text, { "background texture", "health background texture" }) then
+        keySuffix = "barBgTexture"
+        label = "Group Frame Background Texture"
+    elseif ContainsAny(text, { "foreground texture" }) then
+        keySuffix = "barTexture"
+        label = "Group Frame Foreground Texture"
+    else
+        return nil
+    end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local scope = tostring(scopes[i])
+        local key = useBarScope and ("barScope.gf_" .. scope .. "." .. keySuffix) or ("gf_" .. scope .. "." .. keySuffix)
+        local setting = Registry and Registry:GetSetting(key)
+        local value = setting and ValueForRegistrySetting(setting, text, raw)
+        if value ~= nil then
+            changes[#changes + 1] = { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes the matching group texture setting.",
+    }
+end
+
+local function ParseDispelOverlayHealthOnlyShortcut(text)
+    if not ContainsAny(text, { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay", "debuff overlay", "dispellable overlay" }) then return nil end
+    if not ContainsAny(text, { "current health only", "current health", "on health only", "on current health", "on current health only" }) then return nil end
+    if ContainsAny(text, { "opacity", "alpha", "style", "trigger", "detects", "color", "colour" }) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then value = true end
+    local units, groups = ExplicitUnitAndGroupScopesForRegistry(text)
+    local changes = {}
+    for i = 1, #units do
+        AddRegisteredChange(changes, "barScope." .. tostring(units[i]) .. ".unitDispelOverlayOnHealth", value)
+    end
+    for i = 1, #groups do
+        AddRegisteredChange(changes, "gf_" .. tostring(groups[i]) .. ".dispelOverlayOnHealth", value)
+    end
+    if #changes == 0 and #units == 0 and #groups == 0 then
+        AddRegisteredChange(changes, "general.unitDispelOverlayOnHealth", value)
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Dispel Overlay Current Health Only",
+        bulkSafe = #changes > 1,
+        summary = "Changes whether dispel overlays are drawn only over the current-health part of the bar.",
+    }
+end
+
+local function HasClassPowerPriorityIntent(text)
+    return ContainsAny(text, {
+        "class resource", "class resources", "class power", "class powers",
+        "combo point", "combo points", "holy power", "soul shard", "soul shards",
+    })
+end
+
+local function ParseClassPowerBooleanDetailShortcut(text)
+    if not HasClassPowerPriorityIntent(text) then return nil end
+    if ContainsAny(text, { "color", "colour", "font size", "text size", "move", "offset", "position", "anchor", "placement" }) then return nil end
+    if HasPhrase(text, "text x") or HasPhrase(text, "text y") or HasPhrase(text, "number x") or HasPhrase(text, "number y") then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then value = true end
+
+    local key
+    local label
+    if ContainsAny(text, { "player hp smooth fill", "player health smooth fill", "hp bar smooth fill", "health bar smooth fill" }) then
+        key = "bars.playerHPBarSmoothFill"
+        label = "Class Resources Player HP Smooth Fill"
+    elseif ContainsAny(text, { "player hp bar", "player health bar", "hp bar", "health bar", "second hp", "duplicate hp" }) then
+        key = "bars.playerHPBarEnabled"
+        label = "Class Resources Player HP Bar"
+    elseif ContainsAny(text, { "class resource text", "class resources text", "class power text", "class powers text", "resource text", "resource numbers", "resource number" }) then
+        key = "bars.classPowerShowText"
+        label = "Class Resource Text"
+    elseif ContainsAny(text, { "class resource fill", "class resources fill", "class power fill", "class powers fill" }) then
+        key = "bars.classPowerFillReverse"
+        label = "Class Resource Fill Direction"
+    else
+        return nil
+    end
+
+    local changes = {}
+    AddRegisteredChange(changes, key, value)
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        summary = "Changes the matching Class Resources option.",
+    }
+end
+
+local function ParsePowerColorPriorityShortcut(text, raw)
+    if ContainsAny(text, { "class power", "class resource", "class resources", "combo point", "combo points", "holy power", "soul shard", "soul shards" }) then return nil end
+    if not ContainsAny(text, { "power color", "power colour", "power colors", "power colours", "power bar color", "power bar colour" }) then return nil end
+    return A._ParsePowerColorShortcut and A._ParsePowerColorShortcut(text, raw) or nil
+end
+
+local function ParseSharedAuraFiltersMenuShortcut(text)
+    if not ContainsAny(text, { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" }) then return nil end
+    if ContainsAny(text, {
+        "player", "target", "focus", "boss", "party", "raid", "mythic raid",
+        "buff player filter", "debuff player filter", "raid filter", "raid in combat",
+        "nameplate", "cancelable", "not cancelable", "dispellable", "crowd control",
+        "external defensive", "big defensive", "only", "show only",
+    }) then
+        return nil
+    end
+    local value = DetectBoolean(text)
+    if value == nil then value = true end
+    local changes = {}
+    AddRegisteredChange(changes, "auras3.shared.filters.enabled", value)
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Aura Filters",
+        summary = "Changes the shared Aura Filters menu toggle.",
+    }
+end
+
+P.ParseRegistryPriorityShortcut = function(text, raw)
+    return ParseBossTargetHighlightShortcut(text)
+        or ParseGroupBorderColorShortcut(text, raw)
+        or ParseGroupTextureStringShortcut(text, raw)
+        or ParseDispelOverlayHealthOnlyShortcut(text)
+        or ParseClassPowerBooleanDetailShortcut(text)
+        or ParsePowerColorPriorityShortcut(text, raw)
+        or ParseSharedAuraFiltersMenuShortcut(text)
+        or ParseUnitTextBooleanDetailShortcut(text)
+        or ParseUnitStatusDetailShortcut(text)
+        or ParseUnitCoreBooleanShortcut(text)
+end
+
 function P.ParseAlphaExcludeTextPortraitShortcut(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, {
@@ -4506,6 +4845,9 @@ end
 local function ParseRepeatedRegistryShortcut(text, raw)
     return P.ParseExactRegistryKeyShortcut(text, raw)
         or ParseScopedFontTextColorShortcut(text)
+        or ParseUnitTextBooleanDetailShortcut(text)
+        or ParseUnitStatusDetailShortcut(text)
+        or ParseUnitCoreBooleanShortcut(text)
         or P.ParseDispelTypeColorShortcut(text, raw)
         or P.ParseCastbarColorShortcut(text, raw)
         or P.ParseInterruptReadyRegistryShortcut(text, raw)
@@ -4531,8 +4873,8 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or P.ParseGroupSortShortcut(text)
         or P.ParseGroupScaleModeShortcut(text)
         or P.ParseGroupOfflineDelayShortcut(text)
-        or P.ParseDependentTargetFrameVisibilityShortcut(text)
         or ParseUnitLoadConditionShortcut(text)
+        or P.ParseDependentTargetFrameVisibilityShortcut(text)
         or ParsePowerBarRegistryShortcut(text, raw)
         or ParseStatusIconTestModeRegistryShortcut(text)
         or ParseCastbarInterruptRegistryShortcut(text)
@@ -4703,6 +5045,8 @@ local function ParseRegistryAlias(text, raw)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(raw or text) then return nil end
     local partialInline = ParseTargetInlinePartialAmbiguity(text)
     if partialInline then return partialInline end
+    local priorityAlias = P.ParseRegistryPriorityShortcut and P.ParseRegistryPriorityShortcut(text, raw)
+    if priorityAlias then return priorityAlias end
     local exactAlias = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(text, raw)
     if exactAlias then return exactAlias end
     local repeated = ParseRepeatedRegistryShortcut(text, raw)

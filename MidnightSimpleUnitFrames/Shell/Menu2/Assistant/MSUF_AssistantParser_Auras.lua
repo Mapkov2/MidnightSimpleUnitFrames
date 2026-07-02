@@ -313,7 +313,7 @@ end
 
 local function ParseAuraGeometryShortcut(text)
     if not ContainsAny(text, { "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs" }) then return nil end
-    if ContainsAny(text, { "copy", "preset", "blacklist", "category" }) then return nil end
+    if ContainsAny(text, { "copy", "preset", "blacklist", "category", "private aura", "private auras" }) then return nil end
     local explicitNonGroupAuraScope = ContainsAny(text, {
         "shared", "shared aura", "shared auras", "global", "all aura", "all auras",
         "player aura", "player auras", "player buff", "player buffs", "player debuff", "player debuffs",
@@ -327,6 +327,11 @@ local function ParseAuraGeometryShortcut(text)
         and (ContainsAny(text, { "cooldown anchor", "timer anchor", "filter token", "filter type", "inclusive filter" })
             or (ContainsAny(text, { "filter" }) and not ContainsAny(text, { "exclusive", "category", "blacklist" })))
     if ContainsAny(text, { "filter" }) and not groupFastIntent then return nil end
+    if ContainsAny(text, { "stack size", "stack text size", "stack font", "cooldown size", "cooldown text size", "cooldown font", "timer size", "timer text size", "timer font" })
+        and not ContainsAny(text, { "icon size", "icons size" })
+    then
+        return nil
+    end
     if not groupFastIntent and ContainsAny(text, { "stack", "stacks", "stack count", "cooldown text", "timer text", "cooldown", "timer" })
         and ContainsAny(text, { "text", "font", "anchor", "x offset", "offset x", "y offset", "offset y", "text x", "text y" }) then
         return nil
@@ -524,9 +529,15 @@ end
 local function UnitAuraFilterExplicitScope(text)
     if ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" }) then return "shared" end
     local units = DetectUnits(text)
+    local playerIsFilterValue = ContainsAny(text, {
+        "player filter", "only my", "my buffs", "my debuffs", "player buffs only", "player debuffs only",
+        "own buffs", "own debuffs",
+    })
     for i = 1, #units do
         local unit = units[i]
-        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+            if not (unit == "player" and playerIsFilterValue and #units > 1) then return unit end
+        end
     end
     if M then
         local scope = M.auraScope
@@ -546,7 +557,7 @@ local function UnitAuraFilterSpecForText(text)
     local specs = data.AURA_FILTER_BOOLEAN_SPECS or {}
     local compactText = Compact(text)
     local scopeStripped = " " .. Normalize(text) .. " "
-    for _, word in ipairs({ "shared", "global", "player", "target", "focus", "boss" }) do
+    for _, word in ipairs({ "shared", "global", "target", "focus", "boss" }) do
         scopeStripped = scopeStripped:gsub(" " .. word .. " ", " ")
     end
     scopeStripped = Trim(scopeStripped:gsub("%s+", " "))
@@ -575,6 +586,8 @@ local function UnitAuraFilterSpecForText(text)
 end
 
 local function UnitAuraFilterHasIntent(text)
+    if ContainsAny(text, { "corner", "corner indicator", "corner indicators", "corner custom", "custom corner" }) then return false end
+    if ContainsAny(text, { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay", "debuff overlay", "dispellable overlay", "dispellable debuff overlay" }) then return false end
     if ContainsAny(text, { "blacklist", "whitelist", "category", "spell id", "spellid", "spell:" }) then return false end
     if ContainsAny(text, { "filter", "filters", "only", "show only", "just show", "display only" }) then return true end
     if ContainsAny(text, {
@@ -623,12 +636,12 @@ local function AddUnitAuraFilterClearLaneChanges(changes, scope, lane)
 end
 
 local function AddUnitAuraFilterSetChange(changes, scope, lane, key, value, conflicts)
+    AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(key), value)
     if value == true and type(conflicts) == "table" then
         for i = 1, #conflicts do
             AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(conflicts[i]), false)
         end
     end
-    AddAuraRegisteredChange(changes, "auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(key), value)
 end
 
 local function GroupAuraFilterExplicitScopes(text, value)
@@ -672,7 +685,9 @@ local function GroupAuraFilterValueForText(text)
         "show all", "show everything", "all buffs", "all debuffs", "all auras",
         "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
         "filter off", "filters off", "normal filter", "default filter",
-    }) or (ContainsAny(text, { "clear", "remove", "reset", "default", "normal" }) and ContainsAny(text, { "filter", "filters" })) then
+    }) or (ContainsAny(text, { "clear", "remove", "reset", "default", "normal" }) and ContainsAny(text, { "filter", "filters" }))
+        or ((HasPhrase(text, "to all") or HasPhrase(text, "all filter") or HasPhrase(text, "filter all")) and ContainsAny(text, { "filter", "filters" }))
+    then
         return "ALL"
     end
     local data = A.AurasRegistryData or {}
@@ -681,6 +696,19 @@ end
 
 local function ParseGroupAuraLiveFilterShortcut(text)
     if not UnitAuraFilterHasIntent(text) then return nil end
+    if ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" }) then return nil end
+    local explicitFilterIntent = ContainsAny(text, {
+        "filter", "filters", "only", "show only", "just show", "display only",
+        "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
+    })
+    if not explicitFilterIntent and ContainsAny(text, {
+        "max", "maximum", "size", "per row", "spacing", "layer", "x", "y", "anchor", "growth",
+        "cooldown", "timer", "stack", "duration", "swipe", "dispel type border", "debuff type border",
+        "stripe", "debuff stripe",
+        "turn on", "turn off", "enable", "disable",
+    }) then
+        return nil
+    end
     local value = GroupAuraFilterValueForText(text)
     if not value then return nil end
     local scopes, concrete, genericGroup = GroupAuraFilterExplicitScopes(text, value)
@@ -717,9 +745,9 @@ local function ParseGroupAuraLiveFilterShortcut(text)
     local changes = {}
     for i = 1, #scopes do
         local scope = scopes[i]
+        AddAuraRegisteredChange(changes, "gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".filterToken", value)
         AddAuraRegisteredChange(changes, "gf_" .. tostring(scope) .. ".auras.enabled", true)
         AddAuraRegisteredChange(changes, "gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".enabled", true)
-        AddAuraRegisteredChange(changes, "gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".filterToken", value)
     end
     if #changes == 0 then return nil end
     return {
@@ -733,8 +761,24 @@ end
 
 local function ParseUnitAuraLiveFilterShortcut(text)
     if not UnitAuraFilterHasIntent(text) then return nil end
+    if ContainsAny(text, { "aura filter lane", "aura filter tab", "aura filter type", "aura buff filters tab", "aura debuff filters tab" }) then return nil end
+    if ContainsAny(text, { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" })
+        and not ContainsAny(text, {
+            "player filter", "raid filter", "raid in combat", "nameplate", "cancelable", "not cancelable",
+            "dispellable", "crowd control", "external defensive", "big defensive", "only", "show only",
+        })
+    then
+        return nil
+    end
     if HasNativeGroupAuraRootIntent(text) then return nil end
-    if HasGenericGroupAuraGeometryScope(text) or ContainsAny(text, { "party", "raid frame", "raid frames", "group frame", "group frames", "mythic raid" }) then return nil end
+    local explicitUnitAuraScope = ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" })
+    if not explicitUnitAuraScope
+        and (HasGenericGroupAuraGeometryScope(text)
+            or HasConcreteGroupAuraGeometryScope(text)
+            or ContainsAny(text, { "party", "raid frame", "raid frames", "group frame", "group frames", "mythic raid" }))
+    then
+        return nil
+    end
 
     local scope = UnitAuraFilterExplicitScope(text)
     if not scope then
@@ -788,16 +832,16 @@ local function ParseUnitAuraLiveFilterShortcut(text)
     end
 
     local directChanges = {}
-    AddUnitAuraFiltersEnabled(directChanges, scope)
     AddUnitAuraFilterSetChange(directChanges, scope, lane, spec.key, value, spec.conflicts)
+    AddUnitAuraFiltersEnabled(directChanges, scope)
     if #directChanges == 0 then return nil end
 
     local wantsOnly = value == true and ContainsAny(text, { "only", "show only", "just", "just show", "display only" })
     if wantsOnly then
         local replaceChanges = {}
-        AddUnitAuraFiltersEnabled(replaceChanges, scope)
         AddUnitAuraFilterClearLaneChanges(replaceChanges, scope, lane)
         AddUnitAuraFilterSetChange(replaceChanges, scope, lane, spec.key, true, spec.conflicts)
+        AddUnitAuraFiltersEnabled(replaceChanges, scope)
         if #replaceChanges > #directChanges then
             return {
                 kind = "ambiguous",
@@ -874,13 +918,19 @@ local function ParseGroupAuraVisibilityShortcut(text)
         return nil
     end
     if ContainsAny(text, {
+        "all group auras", "all group aura", "group aura system", "group auras enabled",
+        "aura tooltip", "aura tooltips", "prefer player auras", "prefer my auras",
+        "dynamic aura scale", "dynamic icon scale", "native group", "native private",
+        "private aura", "private auras",
+    }) then
+        return nil
+    end
+    if ContainsAny(text, {
         "aura system", "group aura system", "native aura", "native auras", "native group aura", "native group auras",
         "blizzard aura", "blizzard auras", "blizzard group aura", "blizzard group auras",
     }) then
         return nil
     end
-
-    if (hasBuff or hasDebuff) and not (hasBuff and hasDebuff) then return nil end
 
     local scopes = {}
     local groups = DetectGroups(text)
@@ -914,6 +964,21 @@ local function ParseGroupAuraVisibilityShortcut(text)
         or ContainsAny(text, { "both", "both lanes", "buffs and debuffs", "buff and debuff", "buffs debuffs" })
     local broadAllAuras = ContainsAny(text, { "all auras", "all aura", "all party auras", "all raid auras", "all mythic raid auras", "all group auras" })
     local wantsBoth = explicitBothLanes or broadAllAuras
+    if hasBuff ~= hasDebuff then
+        local lane = hasBuff and "buff" or "debuff"
+        local changes = {}
+        for i = 1, #scopes do
+            AddGroupAuraVisibilityChange(changes, scopes[i].key, lane, value)
+        end
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            bulkSafe = #changes > 1,
+            label = lane == "buff" and "Group Buff visibility" or "Group Debuff visibility",
+            summary = "Changes one Group Aura lane visibility.",
+        }
+    end
     if wantsBoth then
         if broadAllAuras and not explicitBothLanes and #scopes == 1 then
             local scope = scopes[1].key
@@ -1090,6 +1155,32 @@ local function ParseAuraDebuffBorderModeShortcut(text)
 
     local scopes = AuraShortcutScopes(text, true)
     if not scopes then return nil end
+
+    local boolValue = DetectBoolean and DetectBoolean(text)
+    if boolValue ~= nil
+        and not ContainsAny(text, { "mode", "symbol", "with symbol", "with icon", "border symbol", "border only", "just border", "outline only", "to border", "as border", "use border", "to off", "as off", "use off" })
+    then
+        local changes = {}
+        for i = 1, #scopes do
+            local scope = scopes[i]
+            local key
+            if scope.kind == "group" then
+                key = "gf_" .. tostring(scope.key) .. ".auras.debuff.showDispelBorder"
+            else
+                key = "auras3." .. tostring(scope.key) .. ".useDebuffTypeBorders"
+            end
+            local setting = Registry and Registry:GetSetting(key)
+            AddAuraShortcutChange(changes, setting, boolValue, tostring(setting and setting.label or "Debuff Dispel-type Border"))
+        end
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            bulkSafe = #changes > 1,
+            label = "Debuff Dispel-type Border",
+            summary = "Changes Debuff Dispel-type Border visibility.",
+        }
+    end
 
     local value = AuraDebuffBorderModeValue(text)
     if not value then

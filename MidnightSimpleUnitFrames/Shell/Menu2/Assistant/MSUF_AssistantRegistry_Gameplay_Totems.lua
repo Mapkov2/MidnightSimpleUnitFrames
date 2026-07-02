@@ -81,6 +81,7 @@ function A.GameplayRegistry.RegisterPlayerTotemSettings(ctx)
         reason = "MSUF_ASSISTANT_PLAYER_TOTEMS_Y",
     })
     RegisterGameplayEnum("playerTotemsAnchorFrom", "anchorFrom", "Totem Frame Anchor from", "TOPLEFT", FRAME_ANCHOR_VALUES, {
+        "totem frame from point", "totem frame anchor from point", "blizzard totem frame from point",
         "totem frame anchor from", "totem frame from", "blizzard totem frame anchor from",
         "totem rahmen anker von", "totemrahmen anker von", "totem rahmen von punkt", "statuen rahmen anker von",
     }, {
@@ -90,6 +91,7 @@ function A.GameplayRegistry.RegisterPlayerTotemSettings(ctx)
         valueAliases = FRAME_ANCHOR_ALIASES,
     })
     RegisterGameplayEnum("playerTotemsAnchorTo", "anchorTo", "Totem Frame Anchor to", "BOTTOMLEFT", FRAME_ANCHOR_VALUES, {
+        "totem frame to point", "totem frame anchor to point", "totem frame attach point", "blizzard totem frame to point",
         "totem frame anchor to", "totem frame to", "blizzard totem frame anchor to",
         "totem rahmen anker zu", "totemrahmen anker zu", "totem rahmen zu punkt", "statuen rahmen anker zu",
     }, {

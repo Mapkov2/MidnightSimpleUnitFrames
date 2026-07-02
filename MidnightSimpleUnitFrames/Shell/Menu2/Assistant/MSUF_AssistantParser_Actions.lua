@@ -593,6 +593,20 @@ local function CornerSpellIdList(raw, text)
     return table.concat(out, ",")
 end
 
+local function CornerFilterValue(text, data)
+    local compactText = Compact(text)
+    local compactFilterText = compactText:gsub("[^%w]", "")
+    if compactFilterText:find("helpfulplayer", 1, true) then return "HELPFUL|PLAYER" end
+    if compactFilterText:find("harmfulplayer", 1, true) then return "HARMFUL|PLAYER" end
+    if HasPhrase(text, "helpful") and HasPhrase(text, "player") then return "HELPFUL|PLAYER" end
+    if HasPhrase(text, "harmful") and HasPhrase(text, "player") then return "HARMFUL|PLAYER" end
+    local value = AliasValueForText(text, data and data.CI_FILTER_ALIASES, data and data.CI_FILTER_VALUES)
+    if value then return value end
+    if compactText:find("helpful", 1, true) then return "HELPFUL" end
+    if compactText:find("harmful", 1, true) then return "HARMFUL" end
+    return nil
+end
+
 local function ParseGroupCornerIndicatorSetting(text, raw)
     if not HasGroupCornerIndicatorContext(text) then return nil end
     local scope = FirstGroupOrDefault(text)
@@ -601,7 +615,7 @@ local function ParseGroupCornerIndicatorSetting(text, raw)
     if slot then
         local prefix = "gf_" .. tostring(scope) .. "."
         if ContainsAny(text, { "filter", "aura filter", "hilfreich", "schaedlich", "harmful", "helpful", "buff", "debuff" }) then
-            local value = AliasValueForText(text, data.CI_FILTER_ALIASES, data.CI_FILTER_VALUES)
+            local value = CornerFilterValue(text, data)
             return value and CornerChange(prefix .. "ciCustom" .. tostring(slot.key) .. ".filter", value, "Set corner custom filter") or nil
         end
         if ContainsAny(text, { "mode", "modus", "when", "wenn", "missing", "fehlend", "fehlt", "present", "vorhanden" }) then
@@ -611,6 +625,12 @@ local function ParseGroupCornerIndicatorSetting(text, raw)
         if ContainsAny(text, { "spell ids", "spell id", "custom spells", "custom spell ids", "zauber ids", "zauber id" }) then
             local value = CornerSpellIdList(raw, text)
             return value and CornerChange(prefix .. "ciCustom" .. tostring(slot.key) .. ".spells", value, "Set corner custom spell IDs") or nil
+        end
+        if ContainsAny(text, { "color", "colour", "farbe" }) then
+            local r, g, b, label = ExtractColor(raw, text)
+            if r then
+                return CornerChange(prefix .. "ciCustom" .. tostring(slot.key) .. ".color", { r = r, g = g, b = b, label = label }, "Set corner custom color")
+            end
         end
         local category = AliasValueForText(text, data.CI_CATEGORY_ALIASES, data.CI_CATEGORY_VALUES)
         if category then
@@ -751,6 +771,17 @@ local RAID_MARKER_SYMBOL_WORDS = {
 
 local function HasStatusOffsetIntent(text)
     return ContainsAny(text, { "x offset", "offset x", "horizontal offset", "y offset", "offset y", "vertical offset" })
+        or HasPhrase(text, "x")
+        or HasPhrase(text, "y")
+end
+
+local function HasGlobalUnitStatusTextStateIntent(text)
+    return ContainsAny(text, {
+        "dead text dead units", "status text dead units", "show dead text for dead",
+        "dead text ghost units", "status text ghost units", "show ghost text",
+        "dead text afk", "status text afk", "show afk text",
+        "dead text dnd", "status text dnd", "show dnd text",
+    })
 end
 
 local function RaidMarkerSymbolAnswer()
@@ -770,6 +801,12 @@ local function ParseGroupStatusIconDetail(text)
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
     if #explicitUnits > 0 and #explicitGroups == 0 then return nil end
+    if #explicitGroups == 0 and HasGlobalUnitStatusTextStateIntent(text) then return nil end
+    if #explicitGroups == 0 and ContainsAny(text, GROUP_STATUS_MIDNIGHT_STYLE_TERMS)
+        and ContainsAny(text, { "status icon", "status icons", "status indicator", "status indicators" })
+    then
+        return nil
+    end
     if ContainsAny(text, { "preview", "test", "test mode", "preview mode" })
         and not ContainsAny(text, { "turn on", "turn off", "enable", "disable", "hide", "show midnight", "classic style", "midnight style" })
     then
@@ -777,6 +814,30 @@ local function ParseGroupStatusIconDetail(text)
     end
 
     local scopes = GroupStatusScopesForText(text)
+    if ContainsAny(text, { "role icon", "role icons", "role indicator", "role indicators", "role symbol", "role symbols" }) then
+        local roleKey
+        if ContainsAny(text, { "tank", "tanks", "tank role", "tank players" }) then
+            roleKey = "roleIconShowTank"
+        elseif ContainsAny(text, { "healer", "healers", "heal role", "healer role" }) then
+            roleKey = "roleIconShowHealer"
+        elseif ContainsAny(text, { "dps", "damage dealer", "damage dealers", "damager", "damagers", "damage role" }) then
+            roleKey = "roleIconShowDPS"
+        end
+        if roleKey then
+            local value = DetectBoolean(text)
+            if value == nil then value = true end
+            local changes = BuildGroupStatusChanges(scopes, roleKey, value)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group Role Icon Visibility",
+                    bulkSafe = #changes > 1,
+                    summary = "Changes role-specific Group Frame role-icon visibility.",
+                }
+            end
+        end
+    end
     if ContainsAny(text, GROUP_STATUS_MIDNIGHT_STYLE_TERMS) then
         local value = DetectBoolean(text)
         if value == nil then
@@ -802,7 +863,10 @@ local function ParseGroupStatusIconDetail(text)
 
     local iconSpec = GroupStatusIconSpecForText(text)
     if not iconSpec then return nil end
-    if iconSpec.key == "raidMarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS) and not HasStatusOffsetIntent(text) then
+    if iconSpec.key == "raidMarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS)
+        and not HasStatusOffsetIntent(text)
+        and FirstNumber(text) == nil
+    then
         return RaidMarkerSymbolAnswer()
     end
     local anchorIntent = StatusAnchorIntent(text)
@@ -866,10 +930,10 @@ local function ParseGroupStatusIconDetail(text)
 
     local offsetKey
     local offsetLabel
-    if ContainsAny(text, { "x offset", "offset x", "horizontal offset" }) then
+    if ContainsAny(text, { "x offset", "offset x", "horizontal offset" }) or HasPhrase(text, "x") then
         offsetKey = iconSpec.x
         offsetLabel = "X Offset"
-    elseif ContainsAny(text, { "y offset", "offset y", "vertical offset" }) then
+    elseif ContainsAny(text, { "y offset", "offset y", "vertical offset" }) or HasPhrase(text, "y") then
         offsetKey = iconSpec.y
         offsetLabel = "Y Offset"
     end
@@ -2181,6 +2245,18 @@ end
 
 function P.ParseRegistryActionAliasShortcut(text, raw)
     if LooksLikeNumericSettingChange(text) then return nil end
+    if ContainsAny(text, { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" })
+        and ContainsAny(text, { "set", "change" })
+        and ContainsAny(text, { "to shared", "to player", "to target", "to focus", "to boss", "to party", "to raid" })
+    then
+        return nil
+    end
+    if ContainsAny(text, { "aura blacklist spell", "blacklist spell", "selected aura blacklist spell", "aura spell preset" })
+        and ContainsAny(text, { "set", "change" })
+        and (FirstNumber(text) ~= nil or ContainsAny(text, { " to ", " as ", " = " }))
+    then
+        return nil
+    end
     local actions = Registry and Registry:AllActions() or {}
     local function scan(matchText, allowFuzzy)
         local previousFuzzy = P._allowFuzzyAliasMatch

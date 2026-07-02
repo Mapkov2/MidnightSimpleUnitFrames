@@ -637,6 +637,8 @@ function A._ParseClassPowerDetachedPlayerPowerShortcut(text, raw)
 
     if ContainsAny(text, {
         "anchor to class", "anchor to class resource", "anchor to class resources",
+        "anchor detached power to class", "anchor detached power to class resource", "anchor detached power to class resources",
+        "anchor detached power bar to class", "anchor detached power bar to class resource", "anchor detached power bar to class resources",
         "anchor player power to class", "anchor player power bar to class",
         "anchor class resources player power", "anchor class resource player power", "anchor class power player power",
         "anchor class resources player power bar", "anchor class resource player power bar", "anchor class power player power bar",
@@ -649,6 +651,8 @@ function A._ParseClassPowerDetachedPlayerPowerShortcut(text, raw)
         if value == nil then value = not ContainsAny(text, { "off", "disable", "disabled", "no", "not", "detach", "disconnect", "aus", "deaktivieren", "nicht" }) end
         change = PlayerChange(key, value)
     elseif ContainsAny(text, {
+        "detached power sync class resource", "detached power sync class resources",
+        "detached power bar sync class resource", "detached power bar sync class resources",
         "sync width", "sync to class", "sync with class", "match class resource width", "same width as class resource",
         "class resources player power sync", "class resources player power sync width",
         "class resources player power bar sync", "class resources player power bar sync width",

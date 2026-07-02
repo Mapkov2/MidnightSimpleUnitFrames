@@ -63,11 +63,13 @@ local function Tokens(text)
     return out
 end
 
-local function AddIndexAlias(index, setting, alias)
+local function AddIndexAlias(index, setting, alias, minTokens)
     alias = Normalize(alias)
     if alias == "" then return end
     local tokens = Tokens(alias)
     local count = #tokens
+    minTokens = tonumber(minTokens) or 1
+    if count < minTokens then return end
     if count == 0 or count > MAX_EXACT_ALIAS_TOKENS then return end
     index.byLength[count] = index.byLength[count] or {}
     index.byLength[count][alias] = index.byLength[count][alias] or {}
@@ -77,6 +79,22 @@ local function AddIndexAlias(index, setting, alias)
         if not COMMON_EXACT_ALIAS_TOKENS[token] then index.triggerTokens[token] = true end
     end
     if count > index.maxTokens then index.maxTokens = count end
+end
+
+local function ShouldIndexNormalAlias(setting, alias)
+    local key = tostring(setting and setting.key or "")
+    if key:match("^bars%.playerHPBar") then
+        local normalized = Normalize(alias)
+        if normalized:find("player hp", 1, true)
+            and not normalized:find("class resource", 1, true)
+            and not normalized:find("class resources", 1, true)
+            and not normalized:find("second", 1, true)
+            and not normalized:find("duplicate", 1, true)
+        then
+            return false
+        end
+    end
+    return true
 end
 
 local function EnsureIndex(settings)
@@ -90,8 +108,14 @@ local function EnsureIndex(settings)
     local index = { byLength = {}, maxTokens = 0, triggerTokens = {} }
     for i = 1, #settings do
         local setting = settings[i]
-        local aliases = type(setting) == "table" and setting.exactAliases or nil
-        for j = 1, #(aliases or {}) do AddIndexAlias(index, setting, aliases[j]) end
+        local exactAliases = type(setting) == "table" and setting.exactAliases or nil
+        for j = 1, #(exactAliases or {}) do AddIndexAlias(index, setting, exactAliases[j], 1) end
+        local aliases = type(setting) == "table" and setting.aliases or nil
+        for j = 1, #(aliases or {}) do
+            if ShouldIndexNormalAlias(setting, aliases[j]) then
+                AddIndexAlias(index, setting, aliases[j], 2)
+            end
+        end
     end
 
     P._registryExactAliasSettings = settings
