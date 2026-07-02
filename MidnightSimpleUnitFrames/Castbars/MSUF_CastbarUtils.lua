@@ -527,8 +527,20 @@ local function GetInterruptUnavailableTintArgs(frame)
 end
 ExportPublic("MSUF_Castbar_GetInterruptUnavailableTintArgs", GetInterruptUnavailableTintArgs)
 
+local toPlainIsSecret = _G.issecretvalue or function(_) return false end
+local toPlainHuge = math.huge
+
 local function ToPlainNumber(value)
-    if type(value) == "number" then return tonumber(tostring(value)) end
+    -- PERF fast path: a plain finite number needs no tostring/tonumber
+    -- round-trip (that round-trip only exists to redact secrets and to map
+    -- nan/inf to nil, which the guards below preserve exactly).
+    if type(value) == "number" then
+        if toPlainIsSecret(value) ~= true
+            and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
+            return value
+        end
+        return tonumber(tostring(value))
+    end
     local fn = _G.MSUF_ToPlainNumber
     if type(fn) == "function" then
         local plain = fn(value)

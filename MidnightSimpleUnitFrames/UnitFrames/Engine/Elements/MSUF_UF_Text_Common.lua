@@ -191,17 +191,10 @@ end
 
 local function SetHealthTextColor(frame, rt, r, g, b, a)
   a = a or 1
-  if nativeSecrets then
-    -- With native secret support present, assume health-derived colors may be
-    -- protected even when this particular tuple is not inspectable offline.
-    if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
-      SetHealthTextSlotColorSecret(frame.hpTextLeft, r, g, b, a)
-      SetHealthTextSlotColorSecret(frame.hpTextCenter, r, g, b, a)
-      SetHealthTextSlotColorSecret(frame.hpTextRight, r, g, b, a)
-    end
-    frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
-    return
-  end
+  -- issecretvalue is authoritative for each component: a false result means the
+  -- value is a plain Lua number and may be compared/memoized safely. Any secret
+  -- component routes through the secret setter, which also clears the memo so a
+  -- later plain tuple can never be skipped against a stale secret write.
   if issecretvalue(r) == true or issecretvalue(g) == true
     or issecretvalue(b) == true or issecretvalue(a) == true then
     if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
@@ -309,7 +302,10 @@ local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
   end
   -- Bucket non-secret health percentages to avoid text-color churn on every
   -- health tick while preserving exact updates for secret/runtime-only values.
-  if nativeSecrets ~= true
+  -- With native secrets present, plain values are detected via issecretvalue so
+  -- fully-readable units keep the bucket fast path; secret values always take
+  -- the exact update below.
+  if (issecretvalue(hp) ~= true and issecretvalue(hpMax) ~= true)
     and type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
     local bucket = floor((hp / hpMax) * 100 + 0.5)
     if rt._textGradientPct == bucket then

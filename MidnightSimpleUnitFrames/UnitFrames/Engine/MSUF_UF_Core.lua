@@ -979,10 +979,7 @@ local function EventNeedsCentralDriver(event)
   return eventFrameCounts[event] ~= nil
 end
 
-RefreshEventDriverRegistration = function(event)
-  if not event then
-    return
-  end
+local function RunEventDriverRegistration(event)
   local registered = eventDriver and eventDriver._msufRegistered and eventDriver._msufRegistered[event]
   if EventNeedsCentralDriver(event) then
     EnsureEventDriver()
@@ -1002,6 +999,54 @@ RefreshEventDriverRegistration = function(event)
   elseif registered then
     eventDriver._msufRegistered[event] = nil
     eventDriver:UnregisterEvent(event)
+  end
+end
+
+--- PERF: header scans and spec applies register/unregister many (frame, event)
+--- pairs in one synchronous pass; recomputing the central driver's unit-source
+--- signature for every pair is O(frames x events) with table churn. A batch
+--- collects touched events and refreshes each exactly once at End. Batches are
+--- strictly same-frame (WoW delivers events only between frames), so deferral
+--- can never misroute an event; a batch left open by an error self-heals on the
+--- next frame via the GetTime fence below.
+local driverRefreshBatchDepth = 0
+local driverRefreshBatchTime
+local driverRefreshPending = {}
+
+RefreshEventDriverRegistration = function(event)
+  if not event then
+    return
+  end
+  if driverRefreshBatchDepth > 0 then
+    local now = _G.GetTime and _G.GetTime() or driverRefreshBatchTime
+    if now == driverRefreshBatchTime then
+      driverRefreshPending[event] = true
+      return
+    end
+    driverRefreshBatchDepth = 0
+    for pending in pairs(driverRefreshPending) do
+      driverRefreshPending[pending] = nil
+      RunEventDriverRegistration(pending)
+    end
+  end
+  RunEventDriverRegistration(event)
+end
+
+function UF.BeginEventRegistrationBatch()
+  driverRefreshBatchDepth = driverRefreshBatchDepth + 1
+  driverRefreshBatchTime = _G.GetTime and _G.GetTime() or driverRefreshBatchTime
+end
+
+function UF.EndEventRegistrationBatch()
+  if driverRefreshBatchDepth > 0 then
+    driverRefreshBatchDepth = driverRefreshBatchDepth - 1
+  end
+  if driverRefreshBatchDepth > 0 then
+    return
+  end
+  for event in pairs(driverRefreshPending) do
+    driverRefreshPending[event] = nil
+    RunEventDriverRegistration(event)
   end
 end
 

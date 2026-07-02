@@ -60,9 +60,20 @@ local function GeneralDB()
     return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 end
 
+local plainIsSecret = _G.issecretvalue or function(_) return false end
+local plainHuge = math.huge
+
 local function PlainNumber(value)
     if value == nil then
         return nil
+    end
+
+    -- PERF fast path: a plain finite number needs no tostring/tonumber
+    -- round-trip (that round-trip only exists to redact secrets and to map
+    -- nan/inf to nil, which the guards below preserve exactly).
+    if type(value) == "number" and plainIsSecret(value) ~= true
+        and value == value and value ~= plainHuge and value ~= -plainHuge then
+        return value
     end
 
     local toPlain = _G.ToPlain
@@ -743,6 +754,12 @@ local function CooldownEventAlreadyDisplayed()
 
     local ready = remaining <= 0.05
     if state.cooldownDisplayReady ~= ready then
+        -- Record the ready state we are about to display before running the
+        -- refresh. RefreshActive/RefreshAll only resolve a status when some
+        -- indicator actually paints; without this write the stored state goes
+        -- stale whenever no cast is active and every SPELL_UPDATE_COOLDOWN
+        -- (i.e. every player ability press) runs a full refresh pass.
+        state.cooldownDisplayReady = ready
         return false
     end
 
