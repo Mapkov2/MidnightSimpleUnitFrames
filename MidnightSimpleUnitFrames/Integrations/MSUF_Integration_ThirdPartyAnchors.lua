@@ -95,6 +95,12 @@ local function RequestSkironAnchorApply()
         if type(UF.RequestReanchorAfterCombat) == "function" then
             UF.RequestReanchorAfterCombat()
         end
+        -- ClassPower and the detached power bar are insecure frames; they may
+        -- re-anchor onto the proxy during lockdown (combat reload). Secure
+        -- unit-frame geometry stays queued for the regen driver above.
+        if type(_G.MSUF_ClassPower_Refresh) == "function" then
+            _G.MSUF_ClassPower_Refresh()
+        end
         return
     end
     local factory = UF.Factory

@@ -241,13 +241,20 @@ builders.LAYOUT = function(E)
     local function CP_Layout(playerFrame, maxPower, height, powerType)
         if not CP.container or maxPower <= 0 then return end
 
-        local inLockdown = (type(_G.MSUF_IsUnitFramePositionLocked) == "function" and _G.MSUF_IsUnitFramePositionLocked())
+        local hardLocked = (type(_G.MSUF_IsUnitFramePositionLocked) == "function" and _G.MSUF_IsUnitFramePositionLocked())
+            or false
+        local inLockdown = hardLocked
             or (InCombatLockdown and InCombatLockdown())
             or false
-        if inLockdown and CP.container._msufLayoutInitialized == true then
-            --- Once the protected frame has a valid layout, do not move it in
-            --- combat. Mark the layout dirty and let the unit-frame anchor pass
-            --- replay the requested geometry when lockdown ends.
+        if CP.container._msufLayoutInitialized == true
+            and (hardLocked or (inLockdown and CP.container.IsProtected and CP.container:IsProtected()))
+        then
+            --- The container is a plain child frame: insecure SetPoint/SetSize
+            --- on it is legal during combat lockdown (protection propagates to
+            --- parents/anchor targets of protected frames, never to plain
+            --- children). Only defer when a hard position lock is active or
+            --- something promoted the container into the protected anchor
+            --- family; then the post-combat pass replays the geometry.
             CP._layoutDirty = true
             ExportPublic("MSUF_ClassPowerLayoutDirty", true)
             RequestUFReanchorAfterCombat()
@@ -343,10 +350,24 @@ builders.LAYOUT = function(E)
         local oX = tonumber(b.classPowerOffsetX) or 0
         local oY = tonumber(b.classPowerOffsetY) or 0
 
-        --- Direct cooldown anchoring is a secure-frame edge case. In combat we
-        --- can only reuse a cached screen position; if that is missing, defer.
+        --- Direct cooldown anchoring against Blizzard's EditMode-managed
+        --- viewer stays a secure-frame edge case: in combat we can only reuse
+        --- a cached screen position. Third-party anchor proxies (Skiron
+        --- bridge) are insecure MSUF-owned frames, so anchoring to them is
+        --- legal during lockdown and preferred over the cached snapshot.
+        local lockdownProxy
+        if inLockdown and b.classPowerAnchorToCooldown == true and type(_G.MSUF_GetEffectiveCooldownFrame) == "function" then
+            local proxy = _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")
+            if proxy
+                and proxy._msufStableAnchorProxy == true
+                and not (proxy.IsProtected and proxy:IsProtected())
+                and (not proxy.IsShown or proxy:IsShown())
+            then
+                lockdownProxy = proxy
+            end
+        end
         local cachedCooldownAnchor = false
-        if inLockdown and b.classPowerAnchorToCooldown == true then
+        if inLockdown and not lockdownProxy and b.classPowerAnchorToCooldown == true then
             CP.container:SetSize(userW, h)
             if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                 and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
@@ -367,10 +388,12 @@ builders.LAYOUT = function(E)
             CP.container:SetSize(userW, h)
         end
         if b.classPowerAnchorToCooldown == true and not cachedCooldownAnchor then
-            local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
+            local ecv = lockdownProxy
+                or (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
+                or _G["EssentialCooldownViewer"]
             local anchorFrame = nil
             if ecv and ecv.IsShown and ecv:IsShown() then
-                if not anchorFrame and not inLockdown then
+                if not inLockdown or ecv == lockdownProxy then
                     anchorFrame = ecv
                 end
             end
@@ -617,13 +640,10 @@ builders.LAYOUT = function(E)
             if pf and pf.targetPowerBar then
                 local sc = pf._msufStampCache
                 if sc then sc["PBEmbedLayout"] = nil end
-                if inLockdown then
-                    pf._msufPowerBarLayoutDirty = true
-                    ExportPublic("MSUF_PowerBarLayoutDirty", true)
-                    RequestUFReanchorAfterCombat()
-                else
-                    _G.MSUF_ApplyPowerBarEmbedLayout(pf)
-                end
+                --- The detached power bar is an insecure child StatusBar; the
+                --- element pipeline applies combat-safe elements immediately
+                --- and queues anything secure for the regen driver itself.
+                _G.MSUF_ApplyPowerBarEmbedLayout(pf)
             end
         end
     end
