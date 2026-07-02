@@ -222,6 +222,7 @@ local function EarlyAuraShortcut(normalized)
     return (P.ParseAuraScopeOverrideShortcut and P.ParseAuraScopeOverrideShortcut(normalized))
         or (P.ParseGroupAuraLiveFilterShortcut and P.ParseGroupAuraLiveFilterShortcut(normalized))
         or (P.ParseUnitAuraLiveFilterShortcut and P.ParseUnitAuraLiveFilterShortcut(normalized))
+        or (P.AuraGeometryShortcut and P.AuraGeometryShortcut(normalized))
         or (P.ParseGroupAuraVisibilityShortcut and P.ParseGroupAuraVisibilityShortcut(normalized))
         or (P.ParseAuraCooldownSwipeDirectionShortcut and P.ParseAuraCooldownSwipeDirectionShortcut(normalized))
         or (P.ParseAuraDurationBarShortcut and P.ParseAuraDurationBarShortcut(normalized))
@@ -257,9 +258,11 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     result = ParseProfileStagingState(normalized, raw); if result then return result end
     result = ParseProfile(normalized, raw); if result then return result end
     result = P.ParseBossFramePreviewShortcut and P.ParseBossFramePreviewShortcut(normalized); if result then return result end
+    result = P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized); if result then return result end
     result = P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw); if result then return result end
     result = P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw); if result then return result end
     result = P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw); if result then return result end
+    result = P.ParseRegistryPriorityShortcut and P.ParseRegistryPriorityShortcut(normalized, raw); if result then return result end
     result = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw); if result then return result end
     result = A._ParseClassPowerDetachedPlayerPowerShortcut and A._ParseClassPowerDetachedPlayerPowerShortcut(normalized, raw); if result then return result end
     result = ParseClassPowerRootToggle and ParseClassPowerRootToggle(normalized); if result then return result end
@@ -403,6 +406,7 @@ function A.ParseSimpleChange(text, ctxOverride)
     if normalized == "" then return nil end
     local parsed = EarlyAuraShortcut(normalized)
         or (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
+        or (P.ParseRegistryPriorityShortcut and P.ParseRegistryPriorityShortcut(normalized, raw))
         or (P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw))
         or ExactTextDetailShortcut(normalized)
         or (A._ParseGroupOpacityShortcut and A._ParseGroupOpacityShortcut(normalized))
@@ -437,6 +441,12 @@ function A.Parse(text, ctxOverride)
         exactKeyParsed.raw = raw
         exactKeyParsed.normalized = normalized
         return exactKeyParsed
+    end
+    local priorityRegistryParsed = P.ParseRegistryPriorityShortcut and P.ParseRegistryPriorityShortcut(normalized, raw)
+    if priorityRegistryParsed then
+        priorityRegistryParsed.raw = raw
+        priorityRegistryParsed.normalized = normalized
+        return priorityRegistryParsed
     end
     local broadHumanAnchor = P.ParseBroadHumanAnchorTargetAnswer and P.ParseBroadHumanAnchorTargetAnswer(normalized, raw)
     if broadHumanAnchor then
