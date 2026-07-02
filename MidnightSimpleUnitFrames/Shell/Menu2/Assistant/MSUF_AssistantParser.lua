@@ -802,6 +802,371 @@ local function ParseGroupReverseFillFastShortcut(normalized)
     }
 end
 
+local function ParseUnitReverseFillFastShortcut(normalized)
+    if not ContainsAny(normalized, {
+        "reverse fill", "reverse fill direction", "reverse health fill", "reverse bar fill",
+        "fill backwards", "backwards fill", "right to left fill", "fill right to left",
+        "normal fill", "left to right fill", "fill left to right",
+    }) then
+        return nil
+    end
+    if ContainsAny(normalized, {
+        "party", "raid", "mythicraid", "mythic raid", "group frame", "group frames",
+        "text", "hp text", "health text", "power text", "mana text", "aura", "buff", "debuff",
+        "castbar", "cast bar", "spell indicator", "spell indicators", "color", "colour",
+    }) then
+        return nil
+    end
+
+    local units = DetectUnits(normalized)
+    if #units == 0 then return nil end
+
+    local value
+    local boolValue = DetectBoolean(normalized)
+    if ContainsAny(normalized, { "normal fill", "left to right fill", "fill left to right" }) then
+        value = false
+    elseif boolValue ~= nil then
+        value = boolValue
+    elseif ContainsAny(normalized, { "reverse", "backwards", "right to left", "fill right to left" }) then
+        value = true
+    end
+    if value == nil then return nil end
+
+    local changes = {}
+    local seen = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        if unit ~= "" and not seen[unit] then
+            seen[unit] = true
+            local setting = A.Registry and A.Registry:GetSetting(unit .. ".reverseFillBars")
+            if setting then changes[#changes + 1] = { setting = setting, value = value } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or "Reverse Fill Direction") or "Reverse Fill Direction",
+        bulkSafe = #changes > 1,
+        summary = "Changes unit-frame health bar reverse fill direction.",
+    }
+end
+
+local function ParseUnitSimpleBooleanFastShortcut(normalized)
+    if ContainsAny(normalized, {
+        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
+    }) then
+        return nil
+    end
+    if ContainsAny(normalized, {
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
+        "color", "colour", "texture", "textures", "gradient", "gradients", "anchor",
+        "offset", " x", "x ", " y", "y ", "size", "layer", "style", "font",
+    }) then
+        return nil
+    end
+
+    local attr
+    local label
+    if ContainsAny(normalized, { "power smooth fill", "power bar smooth fill", "smooth power fill", "smooth power bar", "smooth mana bar", "smooth resource bar" }) then
+        attr = "powerSmoothFill"
+        label = "Power Bar Smooth Fill"
+    elseif ContainsAny(normalized, { "smooth fill", "smooth health fill", "smooth frame fill" }) then
+        attr = "smoothFill"
+        label = "Smooth Health Fill"
+    elseif ContainsAny(normalized, { "name", "names", "name text" }) then
+        attr = "showName"
+        label = "Name"
+    else
+        return nil
+    end
+
+    local value = DetectBoolean(normalized)
+    if value == nil then return nil end
+
+    local units = DetectUnits(normalized)
+    if #units == 0 then return nil end
+
+    local changes = {}
+    local seen = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        if unit ~= "" and not seen[unit] then
+            seen[unit] = true
+            local setting = A.Registry and A.Registry:GetSetting(unit .. "." .. attr)
+            if setting then changes[#changes + 1] = { setting = setting, value = value } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or label) or label,
+        bulkSafe = #changes > 1,
+        summary = "Changes a simple unit-frame visibility/fill toggle.",
+    }
+end
+
+local function ParseUnitStatusDetailFastShortcut(normalized)
+    if ContainsAny(normalized, {
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
+        "color", "colour", "texture", "textures", "gradient", "gradients",
+    }) then
+        return nil
+    end
+    if not ContainsAny(normalized, {
+        "level", "level indicator", "level text", "pvp flag", "pvp indicator", "pvp icon",
+        "raid marker", "raid marker icon", "raid group", "raid group name", "raid group style",
+        "raid group name style", "group number style", "combat indicator", "rested indicator",
+        "combat icon", "rested icon", "resting indicator", "resting icon", "rested symbol", "resting symbol",
+        "incoming rez", "incoming rez icon", "incoming resurrection", "incoming resurrection icon",
+        "resurrection icon", "rez icon", "dead text", "dead indicator", "ghost indicator", "status text",
+        "elite icon", "elite indicator", "rare icon", "rare indicator",
+    }) then
+        return nil
+    end
+
+    local wantsAnchor = ContainsAny(normalized, { "anchor", "position" })
+    local wantsX = ContainsAny(normalized, { "x offset", "offset x", "horizontal offset", "horizontal position" })
+    local wantsY = ContainsAny(normalized, { "y offset", "offset y", "vertical offset", "vertical position" })
+    local wantsSize = ContainsAny(normalized, { "size", "icon size", "text size", "font size" })
+    local wantsLayer = ContainsAny(normalized, {
+        "layer", "frame level", "framelevel", "draw layer", "draw order",
+        "layer up", "layer down", "bring forward", "send back",
+        "front", "behind", "backward", "backwards", "above", "below",
+    })
+    local wantsStyle = ContainsAny(normalized, { "raid group style", "raid group name style", "group number style" })
+    local wantsVisibility = ContainsAny(normalized, { "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off" })
+    if not (wantsAnchor or wantsX or wantsY or wantsSize or wantsLayer or wantsStyle or wantsVisibility) then return nil end
+
+    local units = DetectUnits(normalized)
+    if #units == 0 then return nil end
+
+    local changes = {}
+    local seen = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        if unit ~= "" and not seen[unit] then
+            seen[unit] = true
+            local spec = A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, normalized) or nil
+            local attr
+            if spec then
+                if wantsX then
+                    attr = spec.x
+                elseif wantsY then
+                    attr = spec.y
+                elseif wantsAnchor then
+                    attr = spec.anchor
+                elseif wantsSize then
+                    attr = spec.size
+                elseif wantsLayer then
+                    attr = spec.layer
+                elseif wantsStyle then
+                    attr = "raidGroupNameStyle"
+                elseif wantsVisibility then
+                    attr = spec.show
+                end
+            end
+            local setting = attr and A.Registry and A.Registry:GetSetting(unit .. "." .. tostring(attr)) or nil
+            if setting then
+                local value
+                local relativeDelta
+                if wantsLayer then
+                    local amount = FirstNumber(normalized) or 1
+                    if ContainsAny(normalized, {
+                        "layer down", "down layer", "move layer down", "drop layer",
+                        "behind", "backward", "backwards", "send back", "to back", "lower layer", "lower draw",
+                        "below", "back", "down", "hinter", "nach hinten", "runter",
+                    }) then
+                        relativeDelta = -amount
+                    elseif ContainsAny(normalized, {
+                        "layer up", "up layer", "move layer up", "raise layer",
+                        "forward", "front", "to front", "bring forward", "higher layer", "higher draw",
+                        "above", "up", "nach vorne", "hoch",
+                    }) then
+                        relativeDelta = amount
+                    end
+                end
+                if setting.type == "boolean" then
+                    value = DetectBoolean(normalized)
+                    if value == nil then value = true end
+                elseif setting.type == "number" then
+                    if relativeDelta == nil then
+                        value = FirstNumber(normalized)
+                    end
+                elseif P.ValueForRegistrySetting then
+                    value = P.ValueForRegistrySetting(setting, normalized, normalized)
+                end
+                if value ~= nil or relativeDelta ~= nil then
+                    changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta }
+                end
+            end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or "Unit Frame Status Detail") or "Unit Frame Status Detail",
+        bulkSafe = #changes > 1,
+        summary = "Changes a unit-frame status indicator detail option.",
+    }
+end
+
+local function ParseGroupSimpleBooleanFastShortcut(normalized)
+    if not ContainsAny(normalized, {
+        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
+        "all group frames", "all groups", "every group frame", "every group",
+    }) then
+        return nil
+    end
+    if ContainsAny(normalized, {
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
+        "color", "colour", "texture", "textures", "gradient", "gradients", "anchor",
+        "offset", " x", "x ", " y", "y ", "size", "layer", "style", "font",
+        "raid marker", "role icon", "ready check", "summon", "resurrection",
+    }) then
+        return nil
+    end
+
+    local attr
+    local label
+    if ContainsAny(normalized, { "power smooth fill", "power bar smooth fill", "smooth power fill", "smooth power bar", "smooth mana bar", "smooth resource bar" }) then
+        attr = "powerSmoothFill"
+        label = "Power Smooth Fill"
+    elseif ContainsAny(normalized, { "smooth fill", "smooth health fill", "smooth frame fill" }) then
+        attr = "smoothFill"
+        label = "Smooth Health Fill"
+    elseif ContainsAny(normalized, { "corner indicators", "corner indicator", "corner dots", "corner dot" }) then
+        attr = "ciEnabled"
+        label = "Corner Indicators"
+    elseif ContainsAny(normalized, { "group number", "raid group number" }) then
+        attr = "showGroupNumber"
+        label = "Group Number"
+    else
+        return nil
+    end
+
+    local value = DetectBoolean(normalized)
+    if value == nil then return nil end
+
+    local groups = DetectGroups(normalized)
+    if #groups == 0 then return nil end
+
+    local changes = {}
+    local seen = {}
+    for i = 1, #groups do
+        local scope = tostring(groups[i])
+        if (scope == "party" or scope == "raid" or scope == "mythicraid") and not seen[scope] then
+            seen[scope] = true
+            local setting = A.Registry and A.Registry:GetSetting("gf_" .. scope .. "." .. attr)
+            if setting then changes[#changes + 1] = { setting = setting, value = value } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or label) or label,
+        bulkSafe = #changes > 1,
+        summary = "Changes a simple group-frame visibility/fill toggle.",
+    }
+end
+
+local function GroupCornerCustomFilterValue(text)
+    if ContainsAny(text, { "helpful player", "helpful|player", "buff by me", "my buff", "own buff", "player helpful" }) then return "HELPFUL|PLAYER" end
+    if ContainsAny(text, { "harmful player", "harmful|player", "debuff by me", "my debuff", "own debuff", "player harmful" }) then return "HARMFUL|PLAYER" end
+    if ContainsAny(text, { "helpful", "any buff", "buffs", "buff" }) then return "HELPFUL" end
+    if ContainsAny(text, { "harmful", "any debuff", "debuffs", "debuff" }) then return "HARMFUL" end
+    return nil
+end
+
+local function GroupCornerCustomValueAfterTo(raw, normalized)
+    local source = tostring(raw or "")
+    local value = source:match("%s+[Tt][Oo]%s+(.+)$")
+        or source:match("%s+[Aa][Ss]%s+(.+)$")
+        or tostring(normalized or ""):match("%s+to%s+(.+)$")
+        or tostring(normalized or ""):match("%s+as%s+(.+)$")
+    value = Trim(value or "")
+    if value == "" then return nil end
+    return value
+end
+
+local function ParseGroupCornerCustomFastShortcut(normalized, raw)
+    if not ContainsAny(normalized, { "corner", "dot", "indicator" }) then return nil end
+    if not ContainsAny(normalized, { "custom filter", "custom aura filter", "custom mode", "custom when", "custom spells", "custom spell ids", "spell ids" }) then return nil end
+    if ContainsAny(normalized, { "custom color", "spell color", "color", "colour", "reset", "clear" }) then return nil end
+
+    local groups = DetectGroups(normalized)
+    if #groups ~= 1 then return nil end
+
+    local slot = A.ResolveGroupCornerSlot and A.ResolveGroupCornerSlot(normalized) or nil
+    local slotKey = slot and slot.key
+    if not slotKey or slotKey == "" then return nil end
+
+    local attr
+    local value
+    if ContainsAny(normalized, { "custom filter", "custom aura filter" }) then
+        attr = "filter"
+        value = GroupCornerCustomFilterValue(tostring(raw or ""):lower() .. " " .. normalized)
+    elseif ContainsAny(normalized, { "custom mode", "custom when" }) then
+        attr = "mode"
+        if ContainsAny(normalized, { "missing", "absent", "not present" }) then
+            value = "missing"
+        elseif ContainsAny(normalized, { "present", "active", "shown", "showing" }) then
+            value = "present"
+        end
+    elseif ContainsAny(normalized, { "custom spells", "custom spell ids", "spell ids" }) then
+        attr = "spells"
+        value = GroupCornerCustomValueAfterTo(raw, normalized)
+    end
+    if not attr or value == nil then return nil end
+
+    local setting = A.Registry and A.Registry:GetSetting("gf_" .. tostring(groups[1]) .. ".ciCustom" .. tostring(slotKey) .. "." .. attr)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Corner Custom " .. tostring(attr),
+        summary = "Changes a group-frame corner custom spell indicator field.",
+    }
+end
+
+local function ParseGroupTextureFastShortcut(normalized, raw)
+    if not ContainsAny(normalized, { "texture", "textures" }) then return nil end
+    if ContainsAny(normalized, {
+        "absorb", "heal absorb", "castbar", "cast bar", "class resource", "class power",
+        "detached power", "portrait", "aura", "buff", "debuff", "cooldown",
+    }) then return nil end
+
+    local groups = DetectGroups(normalized)
+    if #groups ~= 1 then return nil end
+
+    local key
+    if ContainsAny(normalized, { "bar background texture", "bar bg texture", "health background texture" }) then
+        key = "barScope.gf_" .. tostring(groups[1]) .. ".barBackgroundTexture"
+    elseif ContainsAny(normalized, { "background texture", "bg texture" }) then
+        key = "gf_" .. tostring(groups[1]) .. ".barBgTexture"
+    elseif ContainsAny(normalized, { "foreground texture" }) then
+        key = "gf_" .. tostring(groups[1]) .. ".barTexture"
+    elseif ContainsAny(normalized, { "bar texture", "health bar texture" }) then
+        key = "barScope.gf_" .. tostring(groups[1]) .. ".barTexture"
+    else
+        return nil
+    end
+
+    local value = GroupCornerCustomValueAfterTo(raw, normalized)
+    if value == nil then return nil end
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Group Texture",
+        summary = "Changes a group-frame texture setting.",
+    }
+end
+
 local function GroupNameClipSideValue(normalized)
     local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(normalized) or nil
     local function valueIn(text)
@@ -1283,6 +1648,1091 @@ local function ParseGlobalUiScaleFastShortcut(normalized)
         changes = { { setting = setting, value = value } },
         label = setting.label or "Global UI Scale",
         summary = key == "general.globalUiScaleEnabled" and "Changes the global UI scale override toggle." or "Changes the global UI scale value.",
+    }
+end
+
+local function ParseDashboardScaleFastShortcut(normalized)
+    if ContainsAny(normalized, { "preset", "panel", "section", "tools", "open", "close", "toggle" }) then return nil end
+    if not ContainsAny(normalized, {
+        "scale", "bigger", "larger", "smaller", "increase", "decrease", "raise", "lower",
+        "grow", "shrink", "set", "make",
+    }) then return nil end
+
+    local key
+    local label
+    if ContainsAny(normalized, {
+        "msuf menu", "menu scale", "dashboard scale", "options menu", "config menu",
+        "configuration menu", "assistant menu",
+    }) then
+        key = "general.slashMenuScale"
+        label = "MSUF Menu Scale"
+    elseif ContainsAny(normalized, {
+        "msuf frame scale", "msuf frames", "all msuf frames", "msuf ui scale",
+        "unit frame scale", "unitframes scale", "frames globally", "all frames globally",
+    }) then
+        key = "general.msufUiScale"
+        label = "MSUF Frame Scale"
+    else
+        return nil
+    end
+
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    local relativeDelta = P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, normalized, 5) or nil
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(normalized)
+        if value ~= nil and value > 1.5 then value = value / 100 end
+    end
+    if value == nil and relativeDelta == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = label,
+        summary = "Adjusts Dashboard scale.",
+    }
+end
+
+local function ParseGlobalFontColorFastShortcut(normalized, raw)
+    if not ContainsAny(normalized, {
+        "custom font color", "global custom font color",
+    }) then return nil end
+    if ContainsAny(normalized, { "reset", "palette", "zuruecksetzen" }) then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("general.customFontColor")
+    if not setting then return nil end
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label = extract(raw or normalized, normalized)
+    if not r then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or "Global Font Color",
+        summary = "Changes the global custom font color.",
+    }
+end
+
+local CLASS_COLOR_FAST_TOKENS = {
+    { "death knight", "DEATHKNIGHT" },
+    { "demon hunter", "DEMONHUNTER" },
+    { "warrior", "WARRIOR" },
+    { "paladin", "PALADIN" },
+    { "hunter", "HUNTER" },
+    { "rogue", "ROGUE" },
+    { "priest", "PRIEST" },
+    { "deathknight", "DEATHKNIGHT" },
+    { "shaman", "SHAMAN" },
+    { "mage", "MAGE" },
+    { "warlock", "WARLOCK" },
+    { "monk", "MONK" },
+    { "druid", "DRUID" },
+    { "demonhunter", "DEMONHUNTER" },
+    { "evoker", "EVOKER" },
+}
+
+local function ParseClassColorFastShortcut(normalized, raw)
+    local hasClassColorPhrase = ContainsAny(normalized, { "class color", "class colors", "class colours", "class colour", "class bar color", "class bar colour" })
+    local hasMutationVerb = ContainsAny(normalized, { "set", "change", "make", "use", "apply", "mach", "mache", "aender", "ander", "setzen" })
+    local token
+    for i = 1, #CLASS_COLOR_FAST_TOKENS do
+        if ContainsAny(normalized, { CLASS_COLOR_FAST_TOKENS[i][1] }) then
+            token = CLASS_COLOR_FAST_TOKENS[i][2]
+            break
+        end
+    end
+    if not token then return nil end
+    if not hasClassColorPhrase and not hasMutationVerb then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("classColors." .. token)
+    if not setting then return nil end
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label = extract(raw or normalized, normalized)
+    if not r then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or "Class Bar Color",
+        summary = "Changes a class bar color override.",
+    }
+end
+
+local function ParseGlobalBarBackgroundFastShortcut(normalized, raw)
+    if ContainsAny(normalized, { "power background matches hp", "power bar background matches hp", "power background follows hp" }) then
+        if ContainsAny(normalized, { "color", "colour", "tint", "texture", "opacity", "alpha" }) then return nil end
+        local setting = A.Registry and A.Registry:GetSetting("general.powerBarBgMatchBarColor")
+        if not setting then return nil end
+        local value = DetectBoolean(normalized)
+        if value == nil then value = true end
+        return {
+            kind = "changes",
+            changes = { { setting = setting, value = value } },
+            label = setting.label or "Power Background Matches HP",
+            summary = "Changes whether the power-bar background follows the HP bar color.",
+        }
+    end
+
+    if ContainsAny(normalized, {
+        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
+        "castbar", "cast bar", "class power", "class resource", "power bar", "mana bar",
+        "power background", "mana background", "resource background",
+    }) then return nil end
+
+    local key
+    local value
+    if ContainsAny(normalized, { "bar background tint", "bar tint", "class bar background color", "bar background color" }) then
+        key = "general.classBarBgColor"
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    elseif ContainsAny(normalized, { "background follows hp color", "bar background follows hp", "background matches hp" }) then
+        key = "general.barBgMatchHPColor"
+        value = DetectBoolean(normalized)
+        if value == nil then value = true end
+    elseif ContainsAny(normalized, { "health background follows class color", "bar background class color", "background follows class color" }) then
+        key = "general.barBgClassColor"
+        value = DetectBoolean(normalized)
+        if value == nil then value = true end
+    else
+        return nil
+    end
+
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Bar Background",
+        summary = "Changes global bar background color behavior.",
+    }
+end
+
+local function ParseDarkModeCustomColorFastShortcut(normalized)
+    if not ContainsAny(normalized, { "custom color in dark mode", "dark mode custom background color", "dark mode custom color" }) then return nil end
+    if ContainsAny(normalized, { "bar color", "bar brightness", "brightness", "set color to", "to red", "to yellow", "to green", "to blue", "to white", "to black" }) then return nil end
+    local value = DetectBoolean(normalized)
+    if value == nil then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("general.darkBgCustomColor")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Custom Color In Dark Mode",
+        summary = "Changes the dark-mode custom background color toggle.",
+    }
+end
+
+local GLOBAL_BAR_COLOR_SCOPE_BLOCKERS = {
+    "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+    "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
+    "castbar", "cast bar", "class power", "class resource",
+}
+
+local function ParseGlobalUnitFrameColorFastShortcut(normalized, raw)
+    if ContainsAny(normalized, GLOBAL_BAR_COLOR_SCOPE_BLOCKERS) then return nil end
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
+
+    local key
+    local value
+    if ContainsAny(normalized, { "unified bar color", "unified color", "all frames color" }) then
+        key = "general.unifiedBarColor"
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    elseif ContainsAny(normalized, { "dark mode bar color", "dark bar color", "dark mode brightness", "dark bar brightness" }) then
+        key = "general.darkBarGray"
+        value = FirstNumber(normalized)
+        if value == nil then return nil end
+        if value > 1 then value = value / 100 end
+    elseif ContainsAny(normalized, { "power bar background color", "power background color", "mana bar background color" }) then
+        key = "general.powerBarBgColor"
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    elseif ContainsAny(normalized, { "heal absorb bar color", "heal absorb color", "heal-absorb color", "global heal absorb bar color", "bar heal absorb color", "heal absorb overlay color" }) then
+        key = "general.healAbsorbBarColor"
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    elseif ContainsAny(normalized, { "absorb bar color", "absorb color", "absorb overlay color", "global absorb bar color", "bar absorb color", "bar absorb overlay color" }) then
+        key = "general.absorbBarColor"
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    elseif ContainsAny(normalized, { "aggro border color", "threat border color", "aggro outline color" }) then
+        key = "general.aggroBorderColor"
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    elseif ContainsAny(normalized, { "purge border color", "purgeable border color", "purge outline color" }) then
+        key = "general.purgeBorderColor"
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    elseif ContainsAny(normalized, { "bar outline color", "frame outline color", "bar border color", "bars border color", "border outline color", "outline border color" }) then
+        key = "general.barOutlineColor"
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    else
+        return nil
+    end
+
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Global Bar Color",
+        summary = "Changes global unit-frame bar color behavior.",
+    }
+end
+
+local function FollowupGradientDirection(normalized)
+    if ContainsAny(normalized, { "from right", "to right", "right side", "rightward", "right", "rechts" }) then return "RIGHT" end
+    if ContainsAny(normalized, { "from left", "to left", "left side", "leftward", "left", "links" }) then return "LEFT" end
+    if ContainsAny(normalized, { "from top", "to top", "from up", "to up", "top", "up", "oben" }) then return "UP" end
+    if ContainsAny(normalized, { "from bottom", "to bottom", "from down", "to down", "bottom", "down", "unten" }) then return "DOWN" end
+    return nil
+end
+
+local function LastBarGradientIntent(ctx)
+    local bundle = ctx and ctx.lastChangeBundle
+    if type(bundle) ~= "table" then return nil end
+    local healthValue
+    local powerValue
+    local direction
+    for i = 1, #bundle do
+        local item = bundle[i]
+        local key = tostring(item and item.key or "")
+        local value = item and item.value
+        local attr = key:match("^barScope%.[^.]+%.([^.]+)$")
+        if key == "general.enableGradient" or attr == "enableGradient" then
+            healthValue = value and true or false
+        elseif key == "general.enablePowerGradient" or attr == "enablePowerGradient" then
+            powerValue = value and true or false
+        elseif key == "general.gradientDirection" or attr == "gradientDirection" then
+            if value ~= nil then direction = tostring(value) end
+        end
+    end
+    if healthValue == nil and powerValue == nil and direction == nil then return nil end
+    return healthValue, powerValue, direction
+end
+
+local function ParseLastBarGradientGroupFollowup(normalized, ctx)
+    if not ContainsAny(normalized, { "also", "same", "too", "as well", "auch", "ebenfalls" }) then return nil end
+    if not ContainsAny(normalized, {
+        "group frame", "group frames", "all groups", "all group frames", "party", "raid", "mythic raid", "mythicraid",
+    }) then return nil end
+    if ContainsAny(normalized, {
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "filter", "filters",
+        "name", "text", "font", "castbar", "cast bar", "profile", "import", "copy",
+    }) then return nil end
+
+    local healthValue, powerValue, direction = LastBarGradientIntent(ctx)
+    if healthValue == nil and powerValue == nil and direction == nil then
+        return {
+            kind = "unknown",
+            status = "ambiguous",
+            text = "I can apply a bar-gradient change to group frames, but I need the previous gradient change first so I do not guess. Example: 'turn off bar gradient for all group frames' or 'turn on power bar gradient from right for all group frames'.",
+            summary = "Asks for explicit group-frame gradient context.",
+        }
+    end
+
+    local override = DetectBoolean(normalized)
+    if override ~= nil then
+        if healthValue ~= nil then healthValue = override end
+        if powerValue ~= nil then powerValue = override end
+    end
+    local overrideDirection = FollowupGradientDirection(normalized)
+    if overrideDirection then direction = overrideDirection end
+
+    local scopes = {}
+    local function addScope(scope)
+        if scope and not scopes[scope] then scopes[scope] = true end
+    end
+    if ContainsAny(normalized, { "party" }) then addScope("gf_party") end
+    if ContainsAny(normalized, { "raid", "mythic raid", "mythicraid" }) then addScope("gf_raid") end
+    if ContainsAny(normalized, { "group frame", "group frames", "all groups", "all group frames" }) then
+        addScope("gf_party")
+        addScope("gf_raid")
+    end
+
+    local changes = {}
+    local function addChange(key, value)
+        local setting = A.Registry and A.Registry:GetSetting(key)
+        if setting then changes[#changes + 1] = { setting = setting, value = value } end
+    end
+    for scope in pairs(scopes) do
+        if healthValue ~= nil then addChange("barScope." .. scope .. ".enableGradient", healthValue) end
+        if powerValue ~= nil then addChange("barScope." .. scope .. ".enablePowerGradient", powerValue) end
+        if direction ~= nil then addChange("barScope." .. scope .. ".gradientDirection", direction) end
+    end
+    if #changes == 0 then return nil end
+
+    local label
+    if healthValue ~= nil and powerValue ~= nil then
+        label = "Group Bar Gradients"
+    elseif powerValue ~= nil then
+        label = "Group Power Bar Gradient"
+    elseif healthValue ~= nil then
+        label = "Group HP Bar Gradient"
+    else
+        label = "Group Bar Gradient Direction"
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Applies the previous bar-gradient change to group frames.",
+    }
+end
+
+local function ParseHealthColorGradientFastShortcut(normalized, raw)
+    if ContainsAny(normalized, {
+        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
+        "power", "mana", "resource", "class resource", "class power", "castbar", "cast bar",
+    }) then return nil end
+    if not ContainsAny(normalized, {
+        "health color gradient", "color health by gradient", "unitframe health gradient",
+        "health gradient low", "health gradient mid", "health gradient middle", "health gradient high",
+        "low health gradient color", "mid health gradient color", "middle health gradient color", "high health gradient color",
+        "low hp gradient color", "mid hp gradient color", "high hp gradient color",
+    }) then return nil end
+
+    local key
+    local value
+    if ContainsAny(normalized, { "health gradient low", "low health gradient color", "low hp gradient color", "low health color", "low hp color" }) then
+        key = "general.healthGradientLow"
+    elseif ContainsAny(normalized, { "health gradient mid", "health gradient middle", "mid health gradient color", "middle health gradient color", "mid health color", "yellow health gradient color" }) then
+        key = "general.healthGradientMid"
+    elseif ContainsAny(normalized, { "health gradient high", "high health gradient color", "full health gradient color", "high health color", "full hp color" }) then
+        key = "general.healthGradientHigh"
+    else
+        key = "general.enableHealthGradient"
+        value = DetectBoolean(normalized)
+        if value == nil then value = true end
+    end
+
+    if value == nil then
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    end
+
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Health Color Gradient",
+        summary = "Changes global health color gradient options.",
+    }
+end
+
+local function ParseNPCReactionColorFastShortcut(normalized, raw)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
+    local suffix
+    if ContainsAny(normalized, { "friendly npc color", "friendly reaction color" }) then
+        suffix = "friendly"
+    elseif ContainsAny(normalized, { "neutral npc color", "neutral reaction color" }) then
+        suffix = "neutral"
+    elseif ContainsAny(normalized, { "enemy npc color", "hostile npc color", "enemy reaction color" }) then
+        suffix = "enemy"
+    elseif ContainsAny(normalized, { "dead npc color", "dead unit color" }) then
+        suffix = "dead"
+    else
+        return nil
+    end
+
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label = extract(raw or normalized, normalized)
+    if not r then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("npcColors." .. suffix)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or "NPC Color",
+        summary = "Changes global NPC reaction colors.",
+    }
+end
+
+local function ParsePetFrameColorFastShortcut(normalized, raw)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
+    if not ContainsAny(normalized, { "pet frame color", "pet color", "pet bar color" }) then return nil end
+    if ContainsAny(normalized, { "pet health", "pet hp", "pet power", "pet mana", "pet name", "pet text", "pet castbar", "pet cast bar" }) then return nil end
+
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label = extract(raw or normalized, normalized)
+    if not r then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("general.petFrameColor")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or "Pet Frame Color",
+        summary = "Changes the global pet frame color.",
+    }
+end
+
+local function ParsePowerColorTokenFastShortcut(normalized, raw)
+    if ContainsAny(normalized, {
+        "power text", "powertext", "mana text", "resource text", "font color", "text color",
+        "class power", "class resource", "combo point", "combo points", "holy power", "soul shard", "soul shards",
+        "chi", "arcane charge", "arcane charges", "runes",
+    }) then return nil end
+
+    local specs = {
+        { "MANA", { "mana power color", "mana color", "color of mana" } },
+        { "RAGE", { "rage power color", "rage color", "color of rage" } },
+        { "ENERGY", { "energy power color", "energy color", "color of energy", "color energy" } },
+        { "FOCUS", { "focus power color", "hunter focus color", "color of focus power" } },
+        { "RUNIC_POWER", { "runic power color", "color of runic power" } },
+        { "INSANITY", { "insanity power color", "insanity color", "color of insanity" } },
+        { "FURY", { "fury power color", "fury color", "color of fury" } },
+        { "PAIN", { "pain power color", "pain color", "color of pain" } },
+        { "ESSENCE", { "essence power color", "essence color", "color of essence" } },
+        { "LUNAR_POWER", { "astral power color", "lunar power color", "color of astral power", "color of lunar power" } },
+        { "MAELSTROM", { "maelstrom power color", "maelstrom color", "color of maelstrom" } },
+    }
+    local token
+    for i = 1, #specs do
+        if ContainsAny(normalized, specs[i][2]) then
+            token = specs[i][1]
+            break
+        end
+    end
+    if not token then return nil end
+
+    if ContainsAny(normalized, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then
+        local action = A.Registry and A.Registry:GetAction("reset_power_color_token")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { token = token },
+            label = "Reset power bar color",
+            summary = "Resets a single Power Bar color.",
+        } or nil
+    end
+
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label = extract(raw or normalized, normalized)
+    if not r then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("general.powerColorOverrides." .. token)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or "Power Bar Color",
+        summary = "Changes a global power-bar color token.",
+    }
+end
+
+local function ParseDispelColorFastShortcut(normalized, raw)
+    if ContainsAny(normalized, {
+        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
+        "reset", "restore", "default", "defaults", "mode",
+        "aura", "auras", "buff", "buffs",
+    }) then return nil end
+    if not ContainsAny(normalized, { "dispel color", "dispel border color", "debuff color" }) then return nil end
+
+    local key
+    if ContainsAny(normalized, { "magic dispel color", "magic debuff color" }) then
+        key = "general.dispelTypeMagic"
+    elseif ContainsAny(normalized, { "curse dispel color", "curse debuff color" }) then
+        key = "general.dispelTypeCurse"
+    elseif ContainsAny(normalized, { "disease dispel color", "disease debuff color" }) then
+        key = "general.dispelTypeDisease"
+    elseif ContainsAny(normalized, { "poison dispel color", "poison debuff color" }) then
+        key = "general.dispelTypePoison"
+    elseif ContainsAny(normalized, { "bleed dispel color", "bleed debuff color" }) then
+        key = "general.dispelTypeBleed"
+    elseif ContainsAny(normalized, { "dispel color", "dispel border color", "all dispel color", "single dispel color" }) then
+        key = "general.hlDispelColor"
+    else
+        return nil
+    end
+
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label = extract(raw or normalized, normalized)
+    if not r then return nil end
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or "Dispel Color",
+        summary = "Changes global dispel color options.",
+    }
+end
+
+P.CastbarColorFastTerms = P.CastbarColorFastTerms or {
+    blocked = { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore", "default", "defaults" },
+    aura = { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "filter", "filters" },
+    root = {
+        "castbar", "cast bar", "cast color", "cast colour", "interruptible", "non interruptible", "noninterruptible",
+        "uninterruptible", "unkickable", "interrupt unavailable", "unavailable fill", "interrupt feedback",
+        "interrupted cast", "kick ready", "kick not ready", "spell name color", "spell text color",
+    },
+    kickNotReady = { "not ready", "notready", "kick cooldown", "interrupt cooldown" },
+    kick = { "kick", "interrupt" },
+    kickReady = { "kick ready", "interrupt ready" },
+    interruptUnavailable = { "interrupt unavailable fill color", "interrupt unavailable fill", "unavailable cast fill color", "unavailable cast fill", "unavailable fill color", "kick unavailable fill color", "castbar unavailable fill color", "cast bar unavailable fill color" },
+    interruptFeedback = { "interrupt feedback color", "castbar interrupt feedback color", "cast bar interrupt feedback color", "interrupted cast color", "interrupted castbar color", "interrupted cast bar color", "after interrupt cast color" },
+    nonInterruptible = { "non interruptible", "noninterruptible", "not interruptible", "uninterruptible", "unkickable", "not kickable", "cannot interrupt", "cant interrupt" },
+    playerOverride = { "player castbar override color", "player cast bar override color", "player castbar custom color", "player cast custom color", "custom player castbar color" },
+    text = { "castbar text color", "castbar font color", "cast bar text color", "cast bar font color", "castbar spell name color", "castbar spell text color", "spell name color", "spell text color" },
+    border = { "castbar border color", "cast bar border color", "castbar outline color", "cast bar outline color" },
+    background = { "castbar background color", "cast bar background color", "castbar bg color", "cast bar bg color" },
+    interruptible = { "interruptible cast color", "interruptible castbar color", "interruptible cast bar color", "castbar interruptible color", "cast bar interruptible color", "interrupt castbar color", "interrupt cast bar color", "kickable cast color", "kickable castbar color" },
+}
+
+local function ParseCastbarColorFastShortcut(normalized, raw)
+    local terms = P.CastbarColorFastTerms
+    if ContainsAny(normalized, terms.blocked) then return nil end
+    if ContainsAny(normalized, terms.aura) then return nil end
+    if not ContainsAny(normalized, terms.root) then return nil end
+
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label = extract(raw or normalized, normalized)
+    if not r then return nil end
+
+    local key
+    if ContainsAny(normalized, terms.kickNotReady)
+        and ContainsAny(normalized, terms.kick) then
+        key = "general.kickNotReadyColor"
+    elseif ContainsAny(normalized, terms.kickReady) then
+        key = "general.kickReadyColor"
+    elseif ContainsAny(normalized, terms.interruptUnavailable) then
+        key = "general.castbarInterruptUnavailableColor"
+    elseif ContainsAny(normalized, terms.interruptFeedback) then
+        key = "general.castbarInterruptFeedbackColor"
+    elseif ContainsAny(normalized, terms.nonInterruptible) then
+        key = "general.castbarNonInterruptibleColor"
+    elseif ContainsAny(normalized, terms.playerOverride) then
+        key = "general.playerCastbarOverrideColor"
+    elseif ContainsAny(normalized, terms.text) then
+        key = "general.castbarFontColor"
+    elseif ContainsAny(normalized, terms.border) then
+        key = "general.castbarBorderColor"
+    elseif ContainsAny(normalized, terms.background) then
+        key = "general.castbarBackgroundColor"
+    elseif ContainsAny(normalized, terms.interruptible) then
+        key = "general.castbarInterruptibleColor"
+    end
+
+    local setting = key and A.Registry and A.Registry:GetSetting(key) or nil
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or "Castbar Color",
+        summary = "Changes a Castbar color option.",
+    }
+end
+
+local function ParseCastbarOverrideModeFastShortcut(normalized)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore" }) then return nil end
+    if not ContainsAny(normalized, { "player castbar override mode", "player cast bar override mode", "player castbar color mode", "player cast bar color mode" }) then return nil end
+
+    local value
+    if ContainsAny(normalized, { "class", "class color", "class colour", "classcolor", "classcolour" }) then
+        value = "CLASS"
+    elseif ContainsAny(normalized, { "custom", "manual", "color", "colour" }) then
+        value = "CUSTOM"
+    end
+    if value == nil then return nil end
+
+    local setting = A.Registry and A.Registry:GetSetting("general.playerCastbarOverrideMode")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Player Castbar Override Mode",
+        summary = "Changes whether the player castbar override uses class color or a custom color.",
+    }
+end
+
+A._ParseMouseoverHighlightFastShortcut = A._ParseMouseoverHighlightFastShortcut or function(normalized, raw)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore", "default", "defaults" }) then return nil end
+    if ContainsAny(normalized, { "rounded", "round", "thickness", "size", "offset", "target", "focus", "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames", "corner" }) then return nil end
+    if not ContainsAny(normalized, { "mouseover highlight", "hover highlight", "unitframe mouseover highlight", "unit frame mouseover highlight", "unitframe highlight color", "unit frame highlight color" }) then return nil end
+
+    local key
+    local value
+    if ContainsAny(normalized, { "color", "colour", "farbe", "tint" }) then
+        key = "general.highlightColor"
+        local extract = P.ExtractColor
+        if type(extract) ~= "function" then return nil end
+        local r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+        value = { r = r, g = g, b = b, label = label }
+    else
+        key = "general.highlightEnabled"
+        value = DetectBoolean(normalized)
+        if value == nil then return nil end
+    end
+
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Mouseover Highlight",
+        summary = "Changes the global unit-frame mouseover highlight.",
+    }
+end
+
+P.GlobalHighlightColorFastSpecs = P.GlobalHighlightColorFastSpecs or {
+    { key = "general.bossTargetHighlightColor", label = "Boss Target Highlight Color", terms = { "boss target highlight color", "boss target color", "boss target border highlight color" } },
+    { key = "gameplay.combatTimerColor", label = "Combat Timer Text Color", terms = { "combat timer text color", "combat timer color" } },
+    { key = "gameplay.combatStateEnterColor", label = "Combat Enter Text Color", terms = { "combat enter text color", "combat enter color", "combat state enter color" } },
+    { key = "gameplay.combatStateLeaveColor", label = "Combat Leave Text Color", terms = { "combat leave text color", "combat leave color", "combat state leave color" } },
+    { key = "gameplay.crosshairInRangeColor", label = "Crosshair In-Range Color", terms = { "crosshair in range color", "combat crosshair in range color", "melee range in color" } },
+    { key = "gameplay.crosshairOutRangeColor", label = "Crosshair Out-of-Range Color", terms = { "crosshair out of range color", "crosshair out-of-range color", "combat crosshair out range color", "melee range out color" } },
+    { key = "general.aurasOwnBuffHighlightColor", label = "Own Buff Highlight Color", terms = { "own buff highlight color", "my buff highlight color", "aura own buff color", "own buff aura highlight color", "buff aura highlight color" } },
+    { key = "general.aurasOwnDebuffHighlightColor", label = "Own Debuff Highlight Color", terms = { "own debuff highlight color", "my debuff highlight color", "aura own debuff color", "own debuff aura highlight color", "debuff aura highlight color" } },
+}
+
+A._ParseGlobalHighlightColorFastShortcut = A._ParseGlobalHighlightColorFastShortcut or function(normalized, raw)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore", "default", "defaults" }) then return nil end
+    if not ContainsAny(normalized, { "highlight color", "highlight colour", "combat timer color", "combat timer text color", "combat enter color", "combat enter text color", "combat leave color", "combat leave text color", "crosshair in range color", "crosshair out of range color", "crosshair out-of-range color", "aura own buff color", "aura own debuff color" }) then return nil end
+
+    local specs = P.GlobalHighlightColorFastSpecs
+    local matched
+    for i = 1, #(specs or {}) do
+        local spec = specs[i]
+        if ContainsAny(normalized, spec.terms) then
+            matched = spec
+            break
+        end
+    end
+    if not matched then return nil end
+
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label = extract(raw or normalized, normalized)
+    if not r then return nil end
+    local setting = A.Registry and A.Registry:GetSetting(matched.key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or matched.label,
+        summary = "Changes a global MSUF highlight color.",
+    }
+end
+
+P._EnsureExactColorSettingIndex = P._EnsureExactColorSettingIndex or function(settings)
+    settings = settings or {}
+    if P._exactColorSettingIndexSettings == settings
+        and P._exactColorSettingIndexCount == #settings
+        and type(P._exactColorSettingIndex) == "table" then
+        return P._exactColorSettingIndex
+    end
+
+    local index = { byLength = {}, maxTokens = 0 }
+    local function addPhrase(setting, phrase)
+        phrase = Normalize(phrase)
+        if phrase == "" then return end
+        local tokens = {}
+        for token in phrase:gmatch("%S+") do tokens[#tokens + 1] = token end
+        if #tokens == 0 or #tokens > 12 then return end
+        index.byLength[#tokens] = index.byLength[#tokens] or {}
+        index.byLength[#tokens][phrase] = index.byLength[#tokens][phrase] or {}
+        index.byLength[#tokens][phrase][#index.byLength[#tokens][phrase] + 1] = setting
+        if #tokens > index.maxTokens then index.maxTokens = #tokens end
+    end
+
+    for i = 1, #settings do
+        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        local setting = settings[i]
+        if type(setting) == "table" and setting.type == "color" then
+            if setting.matchLabel ~= false then addPhrase(setting, setting.label) end
+            for j = 1, #(setting.aliases or {}) do addPhrase(setting, setting.aliases[j]) end
+            for j = 1, #(setting.exactAliases or {}) do addPhrase(setting, setting.exactAliases[j]) end
+        end
+    end
+
+    P._exactColorSettingIndexSettings = settings
+    P._exactColorSettingIndexCount = #settings
+    P._exactColorSettingIndex = index
+    return index
+end
+
+A._ParseExactColorSettingFastShortcut = A._ParseExactColorSettingFastShortcut or function(normalized, raw)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore", "default", "defaults" }) then return nil end
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label
+    if not ContainsAny(normalized, { "color", "colors", "colour", "colours", "farbe", "farben" }) then
+        r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+    end
+
+    if ContainsAny(normalized, { "global font color", "main font color", "default font color", "globale schriftfarbe" })
+        and not ContainsAny(normalized, { "custom font color", "global custom font color", "custom global font color" })
+    then
+        local fontAction = ParseFontColorAction and ParseFontColorAction(normalized, raw)
+        if fontAction then return fontAction end
+    end
+
+    if not ContainsAny(normalized, {
+        "class power", "class resource", "power class resource", "resource class power",
+        "combo point", "combo points", "holy power", "soul shard", "soul shards",
+        "chi", "arcane charge", "arcane charges", "rune", "runes",
+    }) then
+        local powerParsed = A._ParsePowerColorTokenFastShortcut and A._ParsePowerColorTokenFastShortcut(normalized, raw)
+        if powerParsed then return powerParsed end
+    end
+
+    if not r then
+        r, g, b, label = extract(raw or normalized, normalized)
+        if not r then return nil end
+    end
+
+    local registry = A.Registry
+    local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
+    if type(settings) ~= "table" or #settings == 0 then return nil end
+    local index = P._EnsureExactColorSettingIndex and P._EnsureExactColorSettingIndex(settings) or nil
+    if type(index) ~= "table" or (tonumber(index.maxTokens) or 0) <= 0 then return nil end
+
+    local matchText = Normalize(normalized)
+    while true do
+        local first, rest = matchText:match("^(%S+)%s+(.+)$")
+        local second = rest and rest:match("^(%S+)")
+        if first and second and first == second and (first == "set" or first == "change" or first == "make") then
+            matchText = rest
+        else
+            break
+        end
+    end
+
+    local tokens = {}
+    for token in matchText:gmatch("%S+") do tokens[#tokens + 1] = token end
+    local bestLen = 0
+    local best = {}
+    local seen = {}
+    local maxLen = math.min(tonumber(index.maxTokens) or 0, #tokens)
+    for len = maxLen, 1, -1 do
+        local bucket = index.byLength and index.byLength[len]
+        if bucket then
+            for startIndex = 1, (#tokens - len + 1) do
+                local phrase = table.concat(tokens, " ", startIndex, startIndex + len - 1)
+                local matches = bucket[phrase]
+                if matches then
+                    for i = 1, #matches do
+                        local setting = matches[i]
+                        local key = tostring(setting and setting.key or "")
+                        local allowed = key ~= ""
+                        if allowed and type(P.RegistrySettingMayMatchExactAlias) == "function" then
+                            allowed = P.RegistrySettingMayMatchExactAlias(setting, matchText) == true
+                        end
+                        if allowed and not seen[key] then
+                            seen[key] = true
+                            best[#best + 1] = setting
+                            bestLen = len
+                        end
+                    end
+                end
+            end
+        end
+        if bestLen > 0 then break end
+    end
+    if #best ~= 1 then return nil end
+
+    local setting = best[1]
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or "Color",
+        summary = "Changes the exact matched MSUF color setting.",
+    }
+end
+
+local function ParseScopedBarOutlineColorFastShortcut(normalized, raw)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore" }) then return nil end
+    if ContainsAny(normalized, { "group border", "group frame border", "full group border", "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(normalized, {
+        "bar outline color", "frame outline color", "bar border color", "bars border color", "border outline color", "outline border color",
+    }) then return nil end
+
+    local units = DetectUnits(normalized)
+    local groups = DetectGroups(normalized)
+    if (#units + #groups) ~= 1 then return nil end
+
+    local scope
+    if #units == 1 then
+        scope = tostring(units[1])
+    else
+        local group = tostring(groups[1])
+        scope = group == "party" and "gf_party" or "gf_raid"
+    end
+
+    local extract = P.ExtractColor
+    if type(extract) ~= "function" then return nil end
+    local r, g, b, label = extract(raw or normalized, normalized)
+    if not r then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("barScope." .. scope .. ".barOutlineColor")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = setting.label or "Bar Outline Color",
+        summary = "Changes a target-specific bar outline color.",
+    }
+end
+
+local function ParseNPCTypeColorFastShortcut(normalized)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
+    if ContainsAny(normalized, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
+    if not ContainsAny(normalized, { "npc type color", "npc type colors", "npc type coloring", "npc role color", "npc role colors" }) then return nil end
+
+    local colorKey
+    if ContainsAny(normalized, { "boss npc type color", "npc boss color", "boss type color" }) then
+        colorKey = "npcBoss"
+    elseif ContainsAny(normalized, { "miniboss npc type color", "lieutenant npc color", "npc miniboss color" }) then
+        colorKey = "npcMiniboss"
+    elseif ContainsAny(normalized, { "caster npc type color", "npc caster color", "caster type color" }) then
+        colorKey = "npcCaster"
+    elseif ContainsAny(normalized, { "melee npc type color", "npc melee color", "melee type color" }) then
+        colorKey = "npcMelee"
+    elseif ContainsAny(normalized, { "regular npc type color", "npc regular color", "regular type color" }) then
+        colorKey = "npcRegular"
+    end
+    if colorKey then
+        local extract = P.ExtractColor
+        if type(extract) == "function" then
+            local r, g, b, label = extract(normalized, normalized)
+            if r then
+                local setting = A.Registry and A.Registry:GetSetting("npcColors." .. colorKey)
+                if setting then
+                    return {
+                        kind = "changes",
+                        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+                        label = setting.label or "NPC Type Color",
+                        summary = "Changes NPC type colors.",
+                    }
+                end
+            end
+        end
+    end
+
+    local key
+    if ContainsAny(normalized, { "targettarget", "target target", "target of target", "tot" }) then
+        key = "general.npcTypeToT"
+    elseif ContainsAny(normalized, { "target" }) then
+        key = "general.npcTypeTarget"
+    elseif ContainsAny(normalized, { "focus" }) then
+        key = "general.npcTypeFocus"
+    elseif ContainsAny(normalized, { "boss" }) then
+        key = "general.npcTypeBoss"
+    elseif ContainsAny(normalized, { "hp bar", "health bar", "health", "hp" }) then
+        key = "general.npcTypeColorBar"
+    elseif ContainsAny(normalized, { "name text", "names", "name" }) then
+        key = "general.npcTypeColorText"
+    else
+        key = "general.npcColorMode"
+    end
+
+    local value = DetectBoolean(normalized)
+    if value == nil then value = true end
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "NPC Type Colors",
+        summary = "Changes NPC type color options.",
+    }
+end
+
+local function ParseClassResourceHPBarFastShortcut(normalized)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
+    if not ContainsAny(normalized, {
+        "class resource hp bar", "class resources hp bar", "class resource health bar", "class resources health bar",
+        "class resources player hp bar", "class resource player hp bar", "second player hp bar", "duplicate hp bar",
+        "duplicate health bar", "show player hp twice",
+    }) then return nil end
+    if ContainsAny(normalized, {
+        "width", "height", "size", "anchor", "position", "offset", "left", "right", "up", "down",
+        "shape", "style", "mode", "color", "colour", "texture", "opacity", "alpha", "smooth", "outline",
+        "text", "font", "gap", "layer", "frame level",
+    }) then return nil end
+
+    local value = DetectBoolean(normalized)
+    if value == nil then value = true end
+    local setting = A.Registry and A.Registry:GetSetting("bars.playerHPBarEnabled")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Class Resources Player HP Bar",
+        summary = "Changes the class-resource Player HP bar visibility.",
+    }
+end
+
+local function ParseGlobalColorModeBooleanFastShortcut(normalized)
+    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore" }) then return nil end
+    local key
+    local value
+    if ContainsAny(normalized, { "dispel color mode", "dispel colors mode", "debuff type color mode" }) then
+        key = "general.hlDispelColorMode"
+        if ContainsAny(normalized, { "single", "one" }) then
+            value = "SINGLE"
+        elseif ContainsAny(normalized, { "type", "types", "per type", "debuff type" }) then
+            value = "TYPE"
+        else
+            return nil
+        end
+    elseif ContainsAny(normalized, { "player castbar color override", "player cast bar color override" }) then
+        if ContainsAny(normalized, { "mode", "class", "custom" }) then return nil end
+        key = "general.playerCastbarOverrideEnabled"
+        value = DetectBoolean(normalized)
+        if value == nil then value = true end
+    else
+        return nil
+    end
+
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Color Setting",
+        summary = "Changes global color mode options.",
+    }
+end
+
+local function ParseRaidMarkerNumberFastShortcut(normalized)
+    if not ContainsAny(normalized, { "raid marker", "raidmarker", "target marker" }) then return nil end
+    if ContainsAny(normalized, { "reset", "preview", "status icon", "symbol", "skull", "star", "circle", "square", "moon", "triangle", "diamond", "cross" }) then return nil end
+    if not ContainsAny(normalized, { "set", "change", "make" }) then return nil end
+
+    local attr
+    if ContainsAny(normalized, { "x offset", "marker x", "raid marker x", "target marker x" }) then
+        attr = "x"
+    elseif ContainsAny(normalized, { "y offset", "marker y", "raid marker y", "target marker y" }) then
+        attr = "y"
+    elseif ContainsAny(normalized, { "size" }) then
+        attr = "size"
+    elseif ContainsAny(normalized, { "layer", "frame level", "z layer" }) then
+        attr = "layer"
+    else
+        return nil
+    end
+
+    local value = NumberAfterLastConnector(normalized)
+    if value == nil then return nil end
+    local groups = DetectGroups(normalized)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(normalized) end
+    if (#groups + #units) ~= 1 then return nil end
+
+    local key
+    if #groups == 1 then
+        local groupAttr = attr == "x" and "raidMarkerX"
+            or attr == "y" and "raidMarkerY"
+            or attr == "size" and "raidMarkerSize"
+            or "raidMarkerLayer"
+        key = "gf_" .. tostring(groups[1]) .. "." .. groupAttr
+    else
+        local unitAttr = attr == "x" and "raidMarkerOffsetX"
+            or attr == "y" and "raidMarkerOffsetY"
+            or attr == "size" and "raidMarkerSize"
+            or "raidMarkerLayer"
+        key = tostring(units[1]) .. "." .. unitAttr
+    end
+
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Raid Marker",
+        summary = "Changes raid-marker numeric settings for the requested frame.",
+    }
+end
+
+local function ParseExactTextSlotOffsetFastShortcut(normalized)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(normalized) then return nil end
+    if ContainsAny(normalized, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
+    if ContainsAny(normalized, { "move", "nudge", "shift" }) then return nil end
+    if not ContainsAny(normalized, { "set", "change", "make" }) then return nil end
+    if not ContainsAny(normalized, { "slot x", "slot y", "slot x offset", "slot y offset" }) then return nil end
+
+    local tab
+    if ContainsAny(normalized, { "hp", "health" }) then
+        tab = "hp"
+    elseif ContainsAny(normalized, { "power", "mana" }) then
+        tab = "power"
+    else
+        return nil
+    end
+
+    local slot
+    if ContainsAny(normalized, { "left slot", "slot left", tab .. " left slot", "left " .. tab .. " slot" }) then
+        slot = "Left"
+    elseif ContainsAny(normalized, { "center slot", "centre slot", "middle slot", "slot center", "slot centre", "slot middle", tab .. " center slot", tab .. " centre slot", tab .. " middle slot" }) then
+        slot = "Center"
+    elseif ContainsAny(normalized, { "right slot", "slot right", tab .. " right slot", "right " .. tab .. " slot" }) then
+        slot = "Right"
+    else
+        return nil
+    end
+
+    local axis
+    if ContainsAny(normalized, { "slot x", "slot x offset", " x offset" }) then axis = "X" end
+    if ContainsAny(normalized, { "slot y", "slot y offset", " y offset" }) then
+        if axis then return nil end
+        axis = "Y"
+    end
+    if not axis then return nil end
+
+    local value = NumberAfterLastConnector(normalized)
+    if value == nil then return nil end
+
+    local groups = DetectGroups(normalized)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(normalized) end
+    if (#groups + #units) ~= 1 then return nil end
+
+    local attr = (tab == "hp" and "hpText" or "powerText") .. slot .. "Offset" .. axis
+    local key = #groups == 1 and ("gf_" .. tostring(groups[1]) .. "." .. attr) or (tostring(units[1]) .. "." .. attr)
+    local setting = A.Registry and A.Registry:GetSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = "Set text slot offset",
+        summary = "Changes the HP/Power left/center/right text-slot offset for the selected unit or group.",
     }
 end
 
@@ -1796,6 +3246,107 @@ local function GroupTextDelimiterValue(normalized)
     if text:find("|", 1, true) then return " | " end
     if normalized:match("%s+to$") or normalized:match("%s+as$") or normalized:match("%s+is$") then return false end
     return nil
+end
+
+A._ParseGroupTextDirectFastShortcut = function(normalized)
+    if ContainsAny(normalized, {
+        "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
+        "class power", "class resource", "class resources", "name color", "color", "colour",
+        "anchor", "offset", " x", "x ", " y", "y ", "layer", "delimiter",
+        "reverse", "reversed", "reverse order", "decimal", "decimals",
+    }) then
+        return nil
+    end
+    if not ContainsAny(normalized, {
+        "hp font size", "health font size", "hp text size", "health text size",
+        "power font size", "mana font size", "power text size", "mana text size",
+        "hp left text", "left hp text", "health left text", "left health text",
+        "hp center text", "hp centre text", "center hp text", "centre hp text",
+        "health center text", "health centre text", "center health text", "centre health text",
+        "hp right text", "right hp text", "health right text", "right health text",
+        "power left text", "left power text", "mana left text", "left mana text",
+        "power center text", "power centre text", "center power text", "centre power text",
+        "mana center text", "mana centre text", "center mana text", "centre mana text",
+        "power right text", "right power text", "mana right text", "right mana text",
+        "power text", "mana text", "resource text", "hp text", "health text",
+    }) then
+        return nil
+    end
+
+    local groups = DetectGroups(normalized)
+    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+        groups = { "party", "raid", "mythicraid" }
+    end
+    if #groups == 0 then return nil end
+
+    local attr
+    local label
+    local numeric = false
+    if ContainsAny(normalized, { "hp font size", "health font size", "hp text size", "health text size" }) then
+        attr = "hpFontSize"
+        label = "HP Font Size"
+        numeric = true
+    elseif ContainsAny(normalized, { "power font size", "mana font size", "power text size", "mana text size" }) then
+        attr = "powerFontSize"
+        label = "Power Font Size"
+        numeric = true
+    elseif ContainsAny(normalized, { "power left text", "left power text", "mana left text", "left mana text" }) then
+        attr = "powerTextLeft"
+        label = "Left Power Text"
+    elseif ContainsAny(normalized, { "power center text", "power centre text", "center power text", "centre power text", "mana center text", "mana centre text", "center mana text", "centre mana text" }) then
+        attr = "powerTextCenter"
+        label = "Center Power Text"
+    elseif ContainsAny(normalized, { "power right text", "right power text", "mana right text", "right mana text" }) then
+        attr = "powerTextRight"
+        label = "Right Power Text"
+    elseif ContainsAny(normalized, { "hp left text", "left hp text", "health left text", "left health text" }) then
+        attr = "textLeft"
+        label = "Left HP Text"
+    elseif ContainsAny(normalized, { "hp center text", "hp centre text", "center hp text", "centre hp text", "health center text", "health centre text", "center health text", "centre health text" }) then
+        attr = "textCenter"
+        label = "Center HP Text"
+    elseif ContainsAny(normalized, { "hp right text", "right hp text", "health right text", "right health text" }) then
+        attr = "textRight"
+        label = "Right HP Text"
+    elseif ContainsAny(normalized, { "power text", "mana text", "resource text" }) then
+        attr = "showPowerText"
+        label = "Power Text"
+        numeric = false
+    elseif ContainsAny(normalized, { "hp text", "health text" }) then
+        attr = "showHPText"
+        label = "HP Text"
+        numeric = false
+    end
+    if not attr then return nil end
+
+    local changes = {}
+    local seen = {}
+    for i = 1, #groups do
+        local scope = tostring(groups[i])
+        if (scope == "party" or scope == "raid" or scope == "mythicraid") and not seen[scope] then
+            seen[scope] = true
+            local setting = A.Registry and A.Registry:GetSetting("gf_" .. scope .. "." .. attr)
+            local value
+            if setting then
+                if numeric then
+                    value = FirstNumber(normalized)
+                elseif setting.type == "boolean" then
+                    value = DetectBoolean(normalized)
+                elseif P.ValueForRegistrySetting then
+                    value = P.ValueForRegistrySetting(setting, normalized, normalized)
+                end
+            end
+            if setting and value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or label) or label,
+        bulkSafe = #changes > 1,
+        summary = "Changes group-frame HP/Power text controls.",
+    }
 end
 
 local function ParseGroupTextFormatFastShortcut(normalized)
@@ -2663,6 +4214,266 @@ local function ParseGlobalStatusTextStateShortcut(text)
     return nil
 end
 
+A._ParseGlobalStatusIconsStyleFastShortcut = function(text)
+    if not ContainsAny(text, {
+        "status icon midnight style", "status icons midnight style",
+        "midnight status icon style", "midnight status icons",
+        "use midnight status icons",
+    }) then
+        return nil
+    end
+    if ContainsAny(text, { "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames", "icon pack", "anchor", "offset", "size", "layer" }) then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("general.statusIconsUseMidnightStyle")
+    if not setting then return nil end
+    local value = DetectBoolean and DetectBoolean(text) or nil
+    if value == nil then value = not ContainsAny(text, { "classic", "blizzard", "default", "old" }) end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Status Icons Midnight Style",
+        summary = "Changes the global unit-frame status icon Midnight style.",
+    }
+end
+
+A._ParseUnitAnchorPointFastShortcut = function(text)
+    if not ContainsAny(text, { "anchor point", "anchor position", "frame anchor point" }) then return nil end
+    if ContainsAny(text, {
+        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
+        "aura", "auras", "buff", "debuff", "castbar", "cast bar", "text", "icon",
+        "indicator", "raid marker", "status", "level", "custom anchor", "anchor to",
+    }) then
+        return nil
+    end
+    local units = DetectUnits and DetectUnits(text) or {}
+    if #units == 0 then return nil end
+    local changes = {}
+    local seen = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        if unit ~= "" and not seen[unit] then
+            seen[unit] = true
+            local setting = A.Registry and A.Registry:GetSetting(unit .. ".point")
+            local value = setting and P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text) or nil
+            if setting and value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or "Anchor Point") or "Anchor Point",
+        bulkSafe = #changes > 1,
+        summary = "Changes unit-frame anchor point.",
+    }
+end
+
+A._ParseBossTargetHighlightFastShortcut = function(text)
+    if not ContainsAny(text, { "boss target highlight", "boss target border", "boss target outline" }) then return nil end
+    if ContainsAny(text, { "color", "colour", "test", "preview", "group", "party", "raid", "mythic raid" }) then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("general.bossTargetHighlightEnabled")
+    if not setting then return nil end
+    local value = DetectBoolean and DetectBoolean(text) or nil
+    if value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Boss Target Highlight",
+        summary = "Changes Boss Target Highlight visibility.",
+    }
+end
+
+A._ParseHumanIndicatorMoveFastShortcut = function(text)
+    if not ContainsAny(text, { "move", "nudge", "shift", "position", "verschiebe" }) then return nil end
+    if ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) then return nil end
+    local direction
+    if ContainsAny(text, { "right", "to right", "to the right", "rechts" }) then
+        direction = "right"
+    elseif ContainsAny(text, { "left", "to left", "to the left", "links" }) then
+        direction = "left"
+    elseif ContainsAny(text, { "up", "above", "to top", "to the top", "oben", "hoch" }) then
+        direction = "up"
+    elseif ContainsAny(text, { "down", "below", "to bottom", "to the bottom", "unten", "runter" }) then
+        direction = "down"
+    end
+    if not direction then return nil end
+
+    local axis = (direction == "left" or direction == "right") and "x" or "y"
+    local amount = FirstNumber(text) or 10
+    if direction == "left" or direction == "down" then amount = -amount end
+
+    local unitSpecs = {
+        { terms = { "raid group name", "raid group indicator", "raid group", "group number in name", "group number indicator", "subgroup indicator" }, x = "raidGroupNameOffsetX", y = "raidGroupNameOffsetY", label = "Raid Group Name" },
+        { terms = { "raid marker", "raid marker icon", "raid marker indicator", "target marker", "target marker icon", "target marker indicator" }, x = "raidMarkerOffsetX", y = "raidMarkerOffsetY", label = "Raid Marker" },
+        { terms = { "leader icon", "leader indicator", "assist icon", "assist indicator", "leader assist icon", "leader assist indicator" }, x = "leaderIconOffsetX", y = "leaderIconOffsetY", label = "Leader / Assist" },
+        { terms = { "level", "level indicator", "level text" }, x = "levelIndicatorOffsetX", y = "levelIndicatorOffsetY", label = "Level Indicator" },
+        { terms = { "elite icon", "rare icon", "elite indicator", "rare indicator", "elite rare icon" }, x = "eliteIconOffsetX", y = "eliteIconOffsetY", label = "Elite / Rare Icon" },
+        { terms = { "dead text", "status text", "offline text", "dead indicator", "offline indicator" }, x = "statusTextOffsetX", y = "statusTextOffsetY", label = "Dead Text" },
+        { terms = { "combat indicator", "combat state indicator", "combat status indicator", "combat icon" }, x = "combatStateIndicatorOffsetX", y = "combatStateIndicatorOffsetY", label = "Combat Indicator" },
+        { terms = { "rested indicator", "resting indicator", "rested icon", "resting icon" }, x = "restedStateIndicatorOffsetX", y = "restedStateIndicatorOffsetY", label = "Rested Indicator" },
+        { terms = { "incoming rez", "incoming rez indicator", "incoming resurrection", "incoming resurrection indicator", "resurrection indicator", "resurrection icon", "rez indicator" }, x = "incomingResIndicatorOffsetX", y = "incomingResIndicatorOffsetY", label = "Incoming Rez Indicator" },
+        { terms = { "pvp flag", "pvp indicator", "pvp icon", "war mode indicator", "flagged indicator" }, x = "pvpIndicatorOffsetX", y = "pvpIndicatorOffsetY", label = "PvP Flag Indicator" },
+    }
+    local groupSpecs = {
+        { terms = { "ready check", "ready check icon", "ready check indicator", "ready icon", "ready indicator" }, x = "readyCheckX", y = "readyCheckY", label = "Ready Check" },
+        { terms = { "role icon", "role indicator", "role symbol", "tank icon", "healer icon", "dps icon" }, x = "roleIconX", y = "roleIconY", label = "Role Icon" },
+        { terms = { "leader icon", "leader indicator", "leader symbol" }, x = "leaderIconX", y = "leaderIconY", label = "Leader Icon" },
+        { terms = { "assist icon", "assistant icon", "assist indicator", "assistant indicator" }, x = "assistIconX", y = "assistIconY", label = "Assist Icon" },
+        { terms = { "raid marker", "raid marker icon", "raid marker indicator", "target marker", "target marker icon", "target marker indicator" }, x = "raidMarkerX", y = "raidMarkerY", label = "Raid Marker" },
+        { terms = { "summon icon", "summon indicator", "summon symbol" }, x = "summonX", y = "summonY", label = "Summon Icon" },
+        { terms = { "resurrect icon", "resurrect indicator", "resurrection icon", "resurrection indicator", "incoming resurrection", "incoming rez", "rez icon", "rez indicator" }, x = "resurrectX", y = "resurrectY", label = "Resurrection Icon" },
+        { terms = { "phase icon", "phasing icon", "phase indicator", "phasing indicator" }, x = "phaseX", y = "phaseY", label = "Phase Icon" },
+        { terms = { "pvp flag", "pvp icon", "pvp indicator", "war mode indicator", "flagged indicator" }, x = "pvpIconX", y = "pvpIconY", label = "PvP Icon" },
+        { terms = { "dead text", "status text", "offline text", "offline indicator" }, x = "statusOffsetX", y = "statusOffsetY", label = "Status Text" },
+        { terms = { "ghost text", "ghost indicator", "ghost status" }, x = "statusGhostOffsetX", y = "statusGhostOffsetY", label = "Ghost Text" },
+        { terms = { "afk text", "dnd text", "afk indicator", "dnd indicator", "away text" }, x = "statusAFKOffsetX", y = "statusAFKOffsetY", label = "AFK/DND Text" },
+    }
+    local function matchSpec(specs)
+        for i = 1, #specs do
+            if ContainsAny(text, specs[i].terms) then return specs[i] end
+        end
+        return nil
+    end
+
+    local units = DetectUnits(text)
+    local groups = DetectGroups(text)
+    local unitSpec = matchSpec(unitSpecs)
+    local groupSpec = matchSpec(groupSpecs)
+    local changes = {}
+    local label
+    if #units > 0 and unitSpec
+        and (#groups == 0 or ContainsAny(text, { "raid group", "raid group name", "raid group indicator", "subgroup indicator", "group number in name" }))
+    then
+        local spec = unitSpec
+        if not spec then return nil end
+        local key = axis == "x" and spec.x or spec.y
+        local seen = {}
+        for i = 1, #units do
+            local unit = tostring(units[i])
+            if unit ~= "" and not seen[unit] then
+                seen[unit] = true
+                local setting = A.Registry and A.Registry:GetSetting(unit .. "." .. key)
+                if setting then changes[#changes + 1] = { setting = setting, relativeDelta = amount, direction = direction } end
+            end
+        end
+        label = spec.label
+    elseif #groups > 0 and groupSpec and #units == 0 then
+        local spec = groupSpec
+        if not spec then return nil end
+        local key = axis == "x" and spec.x or spec.y
+        local seen = {}
+        for i = 1, #groups do
+            local scope = tostring(groups[i])
+            if (scope == "party" or scope == "raid" or scope == "mythicraid") and not seen[scope] then
+                seen[scope] = true
+                local setting = A.Registry and A.Registry:GetSetting("gf_" .. scope .. "." .. key)
+                if setting then changes[#changes + 1] = { setting = setting, relativeDelta = amount, direction = direction } end
+            end
+        end
+        label = spec.label
+    else
+        return nil
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or label or "Indicator Position") or (label or "Indicator Position"),
+        bulkSafe = #changes > 1,
+        summary = "Moves the requested unit/group-frame indicator with its X/Y offset.",
+    }
+end
+
+local function ParseClassResourceFillFastShortcut(text)
+    if not ContainsAny(text, { "class resource", "class resources", "class power", "class powers" }) then return nil end
+    if ContainsAny(text, {
+        "color", "colour", "background", "texture", "text", "number", "numbers",
+        "width", "height", "size", "gap", "spacing", "anchor", "offset", "move",
+        "preview", "resource type", "resource token", "detached power", "player hp",
+    }) then
+        return nil
+    end
+    if not ContainsAny(text, { "fill", "direction", "reverse", "reversed", "backwards", "backward", "right to left", "left to right", "normal", "forward" }) then return nil end
+
+    local value
+    local boolValue = DetectBoolean and DetectBoolean(text) or nil
+    if ContainsAny(text, { "left to right", "normal direction", "normal fill", "fill normal", "forward fill", "fill forward" }) then
+        value = false
+    elseif ContainsAny(text, { "right to left", "fill backwards", "fill backward", "reverse fill", "reverse direction", "fill reverse", "fill reversed" }) then
+        value = true
+    elseif ContainsAny(text, { "reverse", "reversed", "fill" }) then
+        value = boolValue
+        if value == nil and ContainsAny(text, { "turn on", "enable", "enabled", "on", "true" }) then value = true end
+        if value == nil and ContainsAny(text, { "turn off", "disable", "disabled", "off", "false" }) then value = false end
+    end
+    if value == nil then return nil end
+
+    local setting = A.Registry and A.Registry:GetSetting("bars.classPowerFillReverse")
+    return setting and {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Class Resource Reverse Fill",
+        summary = "Changes the Class Resource fill direction.",
+    } or nil
+end
+
+local function ParseAuraBlacklistPresetFastShortcut(text)
+    if not ContainsAny(text, { "aura blacklist preset", "blacklist preset" }) then return nil end
+    if ContainsAny(text, { "what", "which", "where", "why", "how", "explain", "current", "active" }) then return nil end
+    if not ContainsAny(text, { "set", "change", "make", "select", "choose", "use", "to" }) then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("menu.auraBlacklistPreset")
+    if not setting then return nil end
+    local value = P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text) or nil
+    if value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Aura Blacklist Preset",
+        summary = "Changes the aura blacklist preset selector.",
+    }
+end
+
+local function ParseDispelBorderTriggerFastShortcut(text)
+    if not ContainsAny(text, { "dispel border detects", "dispel border trigger", "dispel border detection", "dispel detects" }) then return nil end
+    if ContainsAny(text, { "color", "colour", "opacity", "alpha", "size", "texture", "aura", "buff", "debuff" }) then return nil end
+    if #(DetectUnits and DetectUnits(text) or {}) > 0 or #(DetectGroups and DetectGroups(text) or {}) > 0 then return nil end
+    local setting = A.Registry and A.Registry:GetSetting("general.dispelBorderTrigger")
+    if not setting then return nil end
+    local value = P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text) or nil
+    if value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Dispel Border Detects",
+        summary = "Changes which dispellable auras can trigger the global dispel border.",
+    }
+end
+
+local function ParseUnitPortraitShapeFastShortcut(text)
+    if not ContainsAny(text, { "portrait shape", "portrait frame shape" }) then return nil end
+    if ContainsAny(text, { "color", "colour", "size", "width", "height", "anchor", "offset", "move", "texture" }) then return nil end
+    local units = DetectUnits and DetectUnits(text) or {}
+    if #units == 0 then return nil end
+    local changes = {}
+    local seen = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        if unit ~= "" and not seen[unit] then
+            seen[unit] = true
+            local setting = A.Registry and A.Registry:GetSetting(unit .. ".portraitShape")
+            local value = setting and P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text) or nil
+            if setting and value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or "Portrait Shape") or "Portrait Shape",
+        bulkSafe = #changes > 1,
+        summary = "Changes unit-frame portrait shape.",
+    }
+end
+
 local function ParseClassPowerTextOffsetShortcut(text)
     if not ContainsAny(text, { "class power", "class powers", "class resource", "class resources", "combo point", "combo points" }) then return nil end
     if ContainsAny(text, { "player hp", "player health", "second hp", "duplicate hp" }) then return nil end
@@ -3379,7 +5190,35 @@ local function ParseGlobalFontPriorityShortcut(normalized, raw)
     local setting = A.Registry and A.Registry:GetSetting(key)
     if not setting then return nil end
     if value == nil then
-        value = P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, normalized, raw or normalized) or nil
+        if key == "general.fontKey" and A.MediaResolver and type(A.MediaResolver.Find) == "function" then
+            local query = P.RawAfterLastConnector and P.RawAfterLastConnector(raw or normalized) or nil
+            if query and query ~= "" then
+                local media = A.MediaResolver.Find("font", query, { limit = 8 })
+                if media and media.status == "exact" and media.value ~= nil then
+                    value = media.value
+                elseif media and media.status == "none" then
+                    local textOut = A.MediaResolver.NoMatchMessage and A.MediaResolver.NoMatchMessage(media.mediaType, media.query) or "That font is not in the current MSUF media list."
+                    return { kind = "unknown", text = textOut, status = "failed" }
+                elseif media and media.status == "choices" and type(media.choices) == "table" then
+                    local choices = {}
+                    for i = 1, #media.choices do
+                        local item = media.choices[i]
+                        choices[#choices + 1] = {
+                            setting = setting,
+                            value = item.value,
+                            valueLabel = item.label or item.value,
+                            label = type(A.DisplaySettingValueLabel) == "function" and A.DisplaySettingValueLabel(setting, item.label or item.value, "Option") or (tostring(setting.label or "Option") .. ": " .. tostring(item.label or item.value)),
+                            mediaType = "font",
+                            mediaChoice = true,
+                        }
+                    end
+                    if #choices > 0 then
+                        return { kind = "ambiguous", choices = choices, label = "Which font?", summary = "Asks which matching font should be used." }
+                    end
+                end
+            end
+        end
+        if value == nil then value = P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, normalized, raw or normalized) or nil end
     end
     if value == nil then return nil end
     return {
@@ -3581,11 +5420,37 @@ A._ParseGroupSpellIndicatorsFastShortcut = ParseGroupSpellIndicatorsEnabledFastS
 A._ParseGroupBlizzardFallbackFastShortcut = ParseGroupBlizzardFallbackFastShortcut
 A._ParseGroupHideOfflineDelayFastShortcut = ParseGroupHideOfflineDelayFastShortcut
 A._ParseGroupReverseFillFastShortcut = ParseGroupReverseFillFastShortcut
+A._ParseUnitReverseFillFastShortcut = ParseUnitReverseFillFastShortcut
+A._ParseUnitSimpleBooleanFastShortcut = ParseUnitSimpleBooleanFastShortcut
+A._ParseUnitStatusDetailFastShortcut = ParseUnitStatusDetailFastShortcut
+A._ParseGroupSimpleBooleanFastShortcut = ParseGroupSimpleBooleanFastShortcut
+A._ParseGroupCornerCustomFastShortcut = ParseGroupCornerCustomFastShortcut
+A._ParseGroupTextureFastShortcut = ParseGroupTextureFastShortcut
 A._ParseGroupNameTextFastShortcut = ParseGroupNameTextFastShortcut
 A._ParseGroupRolePowerFastShortcut = ParseGroupRolePowerFastShortcut
 A._ParseGroupPowerBarEnabledFastShortcut = ParseGroupPowerBarEnabledFastShortcut
 A._ParseGroupOrderingFastShortcut = ParseGroupOrderingFastShortcut
 A._ParseGlobalUiScaleFastShortcut = ParseGlobalUiScaleFastShortcut
+A._ParseDashboardScaleFastShortcut = ParseDashboardScaleFastShortcut
+A._ParseGlobalFontColorFastShortcut = ParseGlobalFontColorFastShortcut
+A._ParseClassColorFastShortcut = ParseClassColorFastShortcut
+A._ParseGlobalBarBackgroundFastShortcut = ParseGlobalBarBackgroundFastShortcut
+A._ParseDarkModeCustomColorFastShortcut = ParseDarkModeCustomColorFastShortcut
+A._ParseGlobalUnitFrameColorFastShortcut = ParseGlobalUnitFrameColorFastShortcut
+A._ParseLastBarGradientGroupFollowup = ParseLastBarGradientGroupFollowup
+A._ParseHealthColorGradientFastShortcut = ParseHealthColorGradientFastShortcut
+A._ParseNPCReactionColorFastShortcut = ParseNPCReactionColorFastShortcut
+A._ParsePetFrameColorFastShortcut = ParsePetFrameColorFastShortcut
+A._ParsePowerColorTokenFastShortcut = ParsePowerColorTokenFastShortcut
+A._ParseDispelColorFastShortcut = ParseDispelColorFastShortcut
+A._ParseCastbarColorFastShortcut = ParseCastbarColorFastShortcut
+A._ParseCastbarOverrideModeFastShortcut = ParseCastbarOverrideModeFastShortcut
+A._ParseScopedBarOutlineColorFastShortcut = ParseScopedBarOutlineColorFastShortcut
+A._ParseNPCTypeColorFastShortcut = ParseNPCTypeColorFastShortcut
+A._ParseClassResourceHPBarFastShortcut = ParseClassResourceHPBarFastShortcut
+A._ParseGlobalColorModeBooleanFastShortcut = ParseGlobalColorModeBooleanFastShortcut
+A._ParseRaidMarkerNumberFastShortcut = ParseRaidMarkerNumberFastShortcut
+A._ParseExactTextSlotOffsetFastShortcut = ParseExactTextSlotOffsetFastShortcut
 A._ParseGroupScalingFastShortcut = ParseGroupScalingFastShortcut
 A._ParseGroupFrameAnchorFastShortcut = ParseGroupFrameAnchorFastShortcut
 A._ParseGroupLayoutNumberFastShortcut = ParseGroupLayoutNumberFastShortcut
@@ -3664,6 +5529,7 @@ function A.ParseSimpleChange(text, ctxOverride)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return nil end
     local parsed = (A._ParseHumanSafetyGuidanceShortcut and A._ParseHumanSafetyGuidanceShortcut(normalized))
+        or (A._ParseExactColorSettingFastShortcut and A._ParseExactColorSettingFastShortcut(normalized, raw))
         or (P.ParseAmbiguousFontTextColorShortcut and P.ParseAmbiguousFontTextColorShortcut(normalized))
         or (P.ParseAmbiguousColorShortcut and P.ParseAmbiguousColorShortcut(normalized, raw))
         or (P.ParseScopedFontTextColorShortcut and P.ParseScopedFontTextColorShortcut(normalized, raw))
@@ -3750,6 +5616,182 @@ function A.Parse(text, ctxOverride)
         humanSafetyParsed.raw = raw
         humanSafetyParsed.normalized = normalized
         return humanSafetyParsed
+    end
+    local humanIndicatorMovePriorityParsed = A._ParseHumanIndicatorMoveFastShortcut and A._ParseHumanIndicatorMoveFastShortcut(normalized)
+    if humanIndicatorMovePriorityParsed then
+        humanIndicatorMovePriorityParsed.raw = raw
+        humanIndicatorMovePriorityParsed.normalized = normalized
+        return humanIndicatorMovePriorityParsed
+    end
+    local globalStatusTextPriorityParsed = ParseGlobalStatusTextStateShortcut(normalized)
+    if globalStatusTextPriorityParsed then
+        globalStatusTextPriorityParsed.raw = raw
+        globalStatusTextPriorityParsed.normalized = normalized
+        return globalStatusTextPriorityParsed
+    end
+    local classResourceFillPriorityParsed = ParseClassResourceFillFastShortcut(normalized)
+    if classResourceFillPriorityParsed then
+        classResourceFillPriorityParsed.raw = raw
+        classResourceFillPriorityParsed.normalized = normalized
+        return classResourceFillPriorityParsed
+    end
+    local auraBlacklistPresetPriorityParsed = ParseAuraBlacklistPresetFastShortcut(normalized)
+    if auraBlacklistPresetPriorityParsed then
+        auraBlacklistPresetPriorityParsed.raw = raw
+        auraBlacklistPresetPriorityParsed.normalized = normalized
+        return auraBlacklistPresetPriorityParsed
+    end
+    local dispelBorderTriggerPriorityParsed = ParseDispelBorderTriggerFastShortcut(normalized)
+    if dispelBorderTriggerPriorityParsed then
+        dispelBorderTriggerPriorityParsed.raw = raw
+        dispelBorderTriggerPriorityParsed.normalized = normalized
+        return dispelBorderTriggerPriorityParsed
+    end
+    local unitPortraitShapePriorityParsed = ParseUnitPortraitShapeFastShortcut(normalized)
+    if unitPortraitShapePriorityParsed then
+        unitPortraitShapePriorityParsed.raw = raw
+        unitPortraitShapePriorityParsed.normalized = normalized
+        return unitPortraitShapePriorityParsed
+    end
+    local directSettingPriorityParsed = (A._ParseGlobalStatusIconsStyleFastShortcut and A._ParseGlobalStatusIconsStyleFastShortcut(normalized))
+        or (A._ParseUnitAnchorPointFastShortcut and A._ParseUnitAnchorPointFastShortcut(normalized))
+        or (A._ParseBossTargetHighlightFastShortcut and A._ParseBossTargetHighlightFastShortcut(normalized))
+    if directSettingPriorityParsed then
+        directSettingPriorityParsed.raw = raw
+        directSettingPriorityParsed.normalized = normalized
+        return directSettingPriorityParsed
+    end
+    local globalFontColorPriorityParsed = A._ParseGlobalFontColorFastShortcut and A._ParseGlobalFontColorFastShortcut(normalized, raw)
+    if globalFontColorPriorityParsed then
+        globalFontColorPriorityParsed.raw = raw
+        globalFontColorPriorityParsed.normalized = normalized
+        return globalFontColorPriorityParsed
+    end
+    local classColorPriorityParsed = A._ParseClassColorFastShortcut and A._ParseClassColorFastShortcut(normalized, raw)
+    if classColorPriorityParsed then
+        classColorPriorityParsed.raw = raw
+        classColorPriorityParsed.normalized = normalized
+        return classColorPriorityParsed
+    end
+    local globalBarBackgroundPriorityParsed = A._ParseGlobalBarBackgroundFastShortcut and A._ParseGlobalBarBackgroundFastShortcut(normalized, raw)
+    if globalBarBackgroundPriorityParsed then
+        globalBarBackgroundPriorityParsed.raw = raw
+        globalBarBackgroundPriorityParsed.normalized = normalized
+        return globalBarBackgroundPriorityParsed
+    end
+    local darkModeCustomColorPriorityParsed = A._ParseDarkModeCustomColorFastShortcut and A._ParseDarkModeCustomColorFastShortcut(normalized)
+    if darkModeCustomColorPriorityParsed then
+        darkModeCustomColorPriorityParsed.raw = raw
+        darkModeCustomColorPriorityParsed.normalized = normalized
+        return darkModeCustomColorPriorityParsed
+    end
+    local globalUnitFrameColorPriorityParsed = A._ParseGlobalUnitFrameColorFastShortcut and A._ParseGlobalUnitFrameColorFastShortcut(normalized, raw)
+    if globalUnitFrameColorPriorityParsed then
+        globalUnitFrameColorPriorityParsed.raw = raw
+        globalUnitFrameColorPriorityParsed.normalized = normalized
+        return globalUnitFrameColorPriorityParsed
+    end
+    local exactColorSettingPriorityParsed = A._ParseExactColorSettingFastShortcut and A._ParseExactColorSettingFastShortcut(normalized, raw)
+    if exactColorSettingPriorityParsed then
+        exactColorSettingPriorityParsed.raw = raw
+        exactColorSettingPriorityParsed.normalized = normalized
+        return exactColorSettingPriorityParsed
+    end
+    local lastBarGradientGroupFollowupParsed = A._ParseLastBarGradientGroupFollowup and A._ParseLastBarGradientGroupFollowup(normalized, ctx)
+    if lastBarGradientGroupFollowupParsed then
+        lastBarGradientGroupFollowupParsed.raw = raw
+        lastBarGradientGroupFollowupParsed.normalized = normalized
+        return lastBarGradientGroupFollowupParsed
+    end
+    local healthColorGradientPriorityParsed = A._ParseHealthColorGradientFastShortcut and A._ParseHealthColorGradientFastShortcut(normalized, raw)
+    if healthColorGradientPriorityParsed then
+        healthColorGradientPriorityParsed.raw = raw
+        healthColorGradientPriorityParsed.normalized = normalized
+        return healthColorGradientPriorityParsed
+    end
+    local npcReactionColorPriorityParsed = A._ParseNPCReactionColorFastShortcut and A._ParseNPCReactionColorFastShortcut(normalized, raw)
+    if npcReactionColorPriorityParsed then
+        npcReactionColorPriorityParsed.raw = raw
+        npcReactionColorPriorityParsed.normalized = normalized
+        return npcReactionColorPriorityParsed
+    end
+    local petFrameColorPriorityParsed = A._ParsePetFrameColorFastShortcut and A._ParsePetFrameColorFastShortcut(normalized, raw)
+    if petFrameColorPriorityParsed then
+        petFrameColorPriorityParsed.raw = raw
+        petFrameColorPriorityParsed.normalized = normalized
+        return petFrameColorPriorityParsed
+    end
+    local powerColorTokenPriorityParsed = A._ParsePowerColorTokenFastShortcut and A._ParsePowerColorTokenFastShortcut(normalized, raw)
+    if powerColorTokenPriorityParsed then
+        powerColorTokenPriorityParsed.raw = raw
+        powerColorTokenPriorityParsed.normalized = normalized
+        return powerColorTokenPriorityParsed
+    end
+    local dispelColorPriorityParsed = A._ParseDispelColorFastShortcut and A._ParseDispelColorFastShortcut(normalized, raw)
+    if dispelColorPriorityParsed then
+        dispelColorPriorityParsed.raw = raw
+        dispelColorPriorityParsed.normalized = normalized
+        return dispelColorPriorityParsed
+    end
+    local castbarColorPriorityParsed = A._ParseCastbarColorFastShortcut and A._ParseCastbarColorFastShortcut(normalized, raw)
+    if castbarColorPriorityParsed then
+        castbarColorPriorityParsed.raw = raw
+        castbarColorPriorityParsed.normalized = normalized
+        return castbarColorPriorityParsed
+    end
+    local castbarOverrideModePriorityParsed = A._ParseCastbarOverrideModeFastShortcut and A._ParseCastbarOverrideModeFastShortcut(normalized)
+    if castbarOverrideModePriorityParsed then
+        castbarOverrideModePriorityParsed.raw = raw
+        castbarOverrideModePriorityParsed.normalized = normalized
+        return castbarOverrideModePriorityParsed
+    end
+    local globalHighlightColorPriorityParsed = A._ParseGlobalHighlightColorFastShortcut and A._ParseGlobalHighlightColorFastShortcut(normalized, raw)
+    if globalHighlightColorPriorityParsed then
+        globalHighlightColorPriorityParsed.raw = raw
+        globalHighlightColorPriorityParsed.normalized = normalized
+        return globalHighlightColorPriorityParsed
+    end
+    local mouseoverHighlightPriorityParsed = A._ParseMouseoverHighlightFastShortcut and A._ParseMouseoverHighlightFastShortcut(normalized, raw)
+    if mouseoverHighlightPriorityParsed then
+        mouseoverHighlightPriorityParsed.raw = raw
+        mouseoverHighlightPriorityParsed.normalized = normalized
+        return mouseoverHighlightPriorityParsed
+    end
+    local scopedBarOutlineColorPriorityParsed = A._ParseScopedBarOutlineColorFastShortcut and A._ParseScopedBarOutlineColorFastShortcut(normalized, raw)
+    if scopedBarOutlineColorPriorityParsed then
+        scopedBarOutlineColorPriorityParsed.raw = raw
+        scopedBarOutlineColorPriorityParsed.normalized = normalized
+        return scopedBarOutlineColorPriorityParsed
+    end
+    local npcTypeColorPriorityParsed = A._ParseNPCTypeColorFastShortcut and A._ParseNPCTypeColorFastShortcut(normalized)
+    if npcTypeColorPriorityParsed then
+        npcTypeColorPriorityParsed.raw = raw
+        npcTypeColorPriorityParsed.normalized = normalized
+        return npcTypeColorPriorityParsed
+    end
+    local classResourceHPBarPriorityParsed = A._ParseClassResourceHPBarFastShortcut and A._ParseClassResourceHPBarFastShortcut(normalized)
+    if classResourceHPBarPriorityParsed then
+        classResourceHPBarPriorityParsed.raw = raw
+        classResourceHPBarPriorityParsed.normalized = normalized
+        return classResourceHPBarPriorityParsed
+    end
+    local globalColorModeBooleanPriorityParsed = A._ParseGlobalColorModeBooleanFastShortcut and A._ParseGlobalColorModeBooleanFastShortcut(normalized)
+    if globalColorModeBooleanPriorityParsed then
+        globalColorModeBooleanPriorityParsed.raw = raw
+        globalColorModeBooleanPriorityParsed.normalized = normalized
+        return globalColorModeBooleanPriorityParsed
+    end
+    local raidMarkerNumberPriorityParsed = A._ParseRaidMarkerNumberFastShortcut and A._ParseRaidMarkerNumberFastShortcut(normalized)
+    if raidMarkerNumberPriorityParsed then
+        raidMarkerNumberPriorityParsed.raw = raw
+        raidMarkerNumberPriorityParsed.normalized = normalized
+        return raidMarkerNumberPriorityParsed
+    end
+    local exactTextSlotOffsetPriorityParsed = A._ParseExactTextSlotOffsetFastShortcut and A._ParseExactTextSlotOffsetFastShortcut(normalized)
+    if exactTextSlotOffsetPriorityParsed then
+        exactTextSlotOffsetPriorityParsed.raw = raw
+        exactTextSlotOffsetPriorityParsed.normalized = normalized
+        return exactTextSlotOffsetPriorityParsed
     end
     local ambiguousFontTextColorParsed = P.ParseAmbiguousFontTextColorShortcut and P.ParseAmbiguousFontTextColorShortcut(normalized)
     if ambiguousFontTextColorParsed then
@@ -3841,6 +5883,12 @@ function A.Parse(text, ctxOverride)
         globalUIShellPriorityParsed.normalized = normalized
         return globalUIShellPriorityParsed
     end
+    local dashboardScalePriorityParsed = A._ParseDashboardScaleFastShortcut and A._ParseDashboardScaleFastShortcut(normalized)
+    if dashboardScalePriorityParsed then
+        dashboardScalePriorityParsed.raw = raw
+        dashboardScalePriorityParsed.normalized = normalized
+        return dashboardScalePriorityParsed
+    end
     local barGradientPriorityParsed = A._ParseBarGradientPriorityShortcut and A._ParseBarGradientPriorityShortcut(normalized)
     if barGradientPriorityParsed then
         barGradientPriorityParsed.raw = raw
@@ -3895,6 +5943,42 @@ function A.Parse(text, ctxOverride)
         groupReverseFillParsed.normalized = normalized
         return groupReverseFillParsed
     end
+    local unitReverseFillParsed = A._ParseUnitReverseFillFastShortcut and A._ParseUnitReverseFillFastShortcut(normalized)
+    if unitReverseFillParsed then
+        unitReverseFillParsed.raw = raw
+        unitReverseFillParsed.normalized = normalized
+        return unitReverseFillParsed
+    end
+    local unitSimpleBooleanParsed = A._ParseUnitSimpleBooleanFastShortcut and A._ParseUnitSimpleBooleanFastShortcut(normalized)
+    if unitSimpleBooleanParsed then
+        unitSimpleBooleanParsed.raw = raw
+        unitSimpleBooleanParsed.normalized = normalized
+        return unitSimpleBooleanParsed
+    end
+    local unitStatusDetailParsed = A._ParseUnitStatusDetailFastShortcut and A._ParseUnitStatusDetailFastShortcut(normalized)
+    if unitStatusDetailParsed then
+        unitStatusDetailParsed.raw = raw
+        unitStatusDetailParsed.normalized = normalized
+        return unitStatusDetailParsed
+    end
+    local groupSimpleBooleanParsed = A._ParseGroupSimpleBooleanFastShortcut and A._ParseGroupSimpleBooleanFastShortcut(normalized)
+    if groupSimpleBooleanParsed then
+        groupSimpleBooleanParsed.raw = raw
+        groupSimpleBooleanParsed.normalized = normalized
+        return groupSimpleBooleanParsed
+    end
+    local groupCornerCustomParsed = A._ParseGroupCornerCustomFastShortcut and A._ParseGroupCornerCustomFastShortcut(normalized, raw)
+    if groupCornerCustomParsed then
+        groupCornerCustomParsed.raw = raw
+        groupCornerCustomParsed.normalized = normalized
+        return groupCornerCustomParsed
+    end
+    local groupTextureParsed = A._ParseGroupTextureFastShortcut and A._ParseGroupTextureFastShortcut(normalized, raw)
+    if groupTextureParsed then
+        groupTextureParsed.raw = raw
+        groupTextureParsed.normalized = normalized
+        return groupTextureParsed
+    end
     local groupNameTextParsed = A._ParseGroupNameTextFastShortcut and A._ParseGroupNameTextFastShortcut(normalized)
     if groupNameTextParsed then
         groupNameTextParsed.raw = raw
@@ -3942,6 +6026,12 @@ function A.Parse(text, ctxOverride)
         groupLayoutNumberParsed.raw = raw
         groupLayoutNumberParsed.normalized = normalized
         return groupLayoutNumberParsed
+    end
+    local groupTextDirectParsed = A._ParseGroupTextDirectFastShortcut and A._ParseGroupTextDirectFastShortcut(normalized)
+    if groupTextDirectParsed then
+        groupTextDirectParsed.raw = raw
+        groupTextDirectParsed.normalized = normalized
+        return groupTextDirectParsed
     end
     local groupTextFormatParsed = A._ParseGroupTextFormatFastShortcut and A._ParseGroupTextFormatFastShortcut(normalized)
     if groupTextFormatParsed then

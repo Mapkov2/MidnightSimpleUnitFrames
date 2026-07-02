@@ -535,9 +535,9 @@ end
 local function RefreshInputState(ui)
     if not ui then return end
     local busy = A.IsBusy and A.IsBusy()
-    SetButtonText(ui.send, busy and "Busy" or "Send")
-    SetControlEnabled(ui.send, not busy)
-    SetControlEnabled(ui.input, not busy)
+    SetButtonText(ui.send, busy and "Stop" or "Send")
+    SetControlEnabled(ui.send, true)
+    SetControlEnabled(ui.input, true)
     if type(ui.chips) == "table" then
         for i = 1, #ui.chips do
             SetControlEnabled(ui.chips[i], not busy)
@@ -680,7 +680,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     cardW = tonumber(cardW) or 520
     cardH = tonumber(cardH) or 326
 
-    local kicker = Font(parent, "GameFontDisableSmall", "MSUF Assistant", T.colors and T.colors.accent or { 0.45, 0.75, 1, 1 })
+    local kicker = Font(parent, "GameFontDisableSmall", "MSUF Assistant (Early Beta)", T.colors and T.colors.accent or { 0.45, 0.75, 1, 1 })
     kicker:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -22)
     kicker:SetJustifyH("LEFT")
 
@@ -829,15 +829,10 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     A.dashboardUI = ui
 
     local function SubmitInput()
-        if A.IsBusy and A.IsBusy() then
-            if type(A.RequestRefreshUI) == "function" then
-                A.RequestRefreshUI("assistant.busy.submit")
-            elseif type(A.RefreshUI) == "function" then
-                A.RefreshUI()
-            end
-            return
-        end
         local query = Trim(input:GetText() or "")
+        if A.IsBusy and A.IsBusy() and query == "" then
+            query = "stop"
+        end
         if query == "" then
             input:SetFocus()
             return
@@ -870,6 +865,9 @@ function A.BuildDashboardCard(parent, cardW, cardH)
         SubmitInput()
     end)
     input:SetScript("OnEscapePressed", function(self)
+        if A.IsBusy and A.IsBusy() and type(A.SubmitDeferred) == "function" then
+            A.SubmitDeferred("stop")
+        end
         self:SetText("")
         self:ClearFocus()
     end)

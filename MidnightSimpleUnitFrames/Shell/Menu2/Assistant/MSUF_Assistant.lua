@@ -1165,6 +1165,17 @@ function A._RunJobPump()
             return false
         end
         local job = jobs[1]
+        if job and job.cancelled then
+            table.remove(jobs, 1)
+            if type(job.callback) == "function" then
+                job.callback({
+                    text = "Stopped. I cancelled the assistant work that was still running.",
+                    status = "info",
+                    summary = "Cancelled running Assistant work.",
+                }, job)
+            end
+            break
+        end
         local jobMaxSteps = tonumber(job and job.maxStepsPerFrame) or maxSteps
         if jobMaxSteps <= 0 then jobMaxSteps = maxSteps end
         if stepsRun >= jobMaxSteps then break end
@@ -1176,7 +1187,9 @@ function A._RunJobPump()
             if type(job.callback) == "function" then job.callback(job.result, job) end
         else
             local stepStart = PerfNowMs()
+            A._assistantCurrentJob = job
             local result, stopResult = step(job)
+            A._assistantCurrentJob = nil
             A.RecordPerfSample("assistant.job.step", stepStart, tostring(job.label or "assistant.job") .. "#" .. tostring(job.index))
             stepsRun = stepsRun + 1
             if result == false then
@@ -1229,6 +1242,13 @@ function A.CoroutineStep(fn)
     if type(fn) ~= "function" then return fn end
     local co
     return function(job)
+        if job and job.cancelled then
+            return false, {
+                text = "Stopped. I cancelled the assistant work that was still running.",
+                status = "info",
+                summary = "Cancelled running Assistant work.",
+            }
+        end
         if not co then
             co = coroutine.create(function()
                 return fn(job)
@@ -5882,6 +5902,11 @@ end
 
 function A.StopAssistantWork(reason)
     reason = tostring(reason or "cancelled")
+    A._assistantStopSerial = (tonumber(A._assistantStopSerial) or 0) + 1
+    if type(A._assistantCurrentJob) == "table" then
+        A._assistantCurrentJob.cancelled = true
+        A._assistantCurrentJob.cancelReason = reason
+    end
     local removed = A.CancelJobs and A.CancelJobs(nil, reason) or 0
     A._assistantJobPumpScheduled = nil
     A._assistantJobsCombatDeferred = nil
@@ -6180,10 +6205,111 @@ function AP.RecordAssistantResult(result)    if result and result.text then
     end
 end
 
+function AP.TryImmediateSubmitResult(text, opts)
+    if type(A.TryImmediateConversationReply) ~= "function" then return nil end
+    local startedMs = PerfNowMs()
+    local result = A.TryImmediateConversationReply(text)
+    if not result then return nil end
+    if not (opts and opts.skipUserHistory == true) then
+        A.AddHistory("user", text, "submitted")
+    end
+    result = NormalizePlanResult(result)
+    AP.RecordAssistantResult(result)
+    if type(A.RequestRefreshUI) == "function" then
+        A.RequestRefreshUI("assistant.submit.immediate")
+    elseif type(A.RefreshUI) == "function" then
+        A.RefreshUI()
+    end
+    A.RecordPerfSample("assistant.submit.immediate", startedMs, text)
+    return result
+end
+
+function AP.TryImmediateMutationResult(text, opts)
+    if InCombat() or A.pendingConfirmation or CurrentPendingChoices() then return nil end
+    local parser = A.Parser or {}
+    local normalize = parser.Normalize
+    if type(normalize) ~= "function" then return nil end
+    local normalized = normalize(text)
+    if normalized == "" then return nil end
+
+    local ctx = A.GetContext and A.GetContext() or {}
+    local plan
+    if A._ParseLastBarGradientGroupFollowup and (normalized:find("group", 1, true) or normalized:find("party", 1, true) or normalized:find("raid", 1, true)) then
+        plan = A._ParseLastBarGradientGroupFollowup(normalized, ctx)
+    end
+    if not plan and A._ParseDashboardScaleFastShortcut and normalized:find("scale", 1, true) then
+        plan = A._ParseDashboardScaleFastShortcut(normalized)
+    end
+    if not plan and parser.ParseGlobalFontFamilyShortcut and normalized:find("font", 1, true) then
+        plan = parser.ParseGlobalFontFamilyShortcut(normalized, text)
+    end
+    if not plan and A._ParseCastbarColorFastShortcut and (normalized:find("cast", 1, true) or normalized:find("interrupt", 1, true) or normalized:find("kick", 1, true)) then
+        plan = A._ParseCastbarColorFastShortcut(normalized, text)
+    end
+    if not plan and A._ParseCastbarOverrideModeFastShortcut and normalized:find("cast", 1, true) then
+        plan = A._ParseCastbarOverrideModeFastShortcut(normalized)
+    end
+    if not plan and A._ParseGlobalHighlightColorFastShortcut
+        and (normalized:find("highlight", 1, true) or normalized:find("combat timer", 1, true)) then
+        plan = A._ParseGlobalHighlightColorFastShortcut(normalized, text)
+    end
+    local exactColorCandidate = normalized:find("color", 1, true)
+        or normalized:find("colour", 1, true)
+        or normalized:find("farbe", 1, true)
+    if not exactColorCandidate and parser and type(parser.ExtractColor) == "function" then
+        exactColorCandidate = parser.ExtractColor(text, normalized) ~= nil
+    end
+    if not plan and A._ParseClassColorFastShortcut and exactColorCandidate then
+        plan = A._ParseClassColorFastShortcut(normalized, text)
+    end
+    if not plan and A._ParseExactColorSettingFastShortcut and exactColorCandidate then
+        plan = A._ParseExactColorSettingFastShortcut(normalized, text)
+    end
+    if not plan and A._ParseMouseoverHighlightFastShortcut and normalized:find("highlight", 1, true) then
+        plan = A._ParseMouseoverHighlightFastShortcut(normalized, text)
+    end
+    if not plan and A._ParseBarGradientPriorityShortcut and normalized:find("gradient", 1, true) then
+        plan = A._ParseBarGradientPriorityShortcut(normalized)
+    end
+    if not plan or plan.confirmRequired == true or plan.kind == "action" or plan.kind == "ambiguous" then return nil end
+
+    local startedMs = PerfNowMs()
+    if not (opts and opts.skipUserHistory == true) then
+        A.AddHistory("user", text, "submitted")
+    end
+    plan.raw = plan.raw or text
+    plan.normalized = plan.normalized or normalized
+    local result
+    if plan.kind == "answer" then
+        result = NormalizePlanResult({ text = plan.text or "", result = plan.status or "info", summary = plan.summary })
+    elseif plan.kind == "unknown" or plan.kind == "unsupported" then
+        result = NormalizePlanResult({
+            text = plan.text or "Which page and option do you want me to use? Example: 'set target cast bar height to 20'.",
+            result = plan.status or "failed",
+            kind = plan.kind,
+            summary = plan.summary,
+        })
+    else
+        result = NormalizePlanResult(A.ExecutePlan(plan))
+    end
+    AP.RecordAssistantResult(result)
+    if type(A.RequestRefreshUI) == "function" then
+        A.RequestRefreshUI("assistant.submit.immediate_mutation")
+    elseif type(A.RefreshUI) == "function" then
+        A.RefreshUI()
+    end
+    A.RecordPerfSample("assistant.submit.immediate_mutation", startedMs, text)
+    return result
+end
+
 function AP.SubmitNow(text, opts)    opts = opts or {}
     text = Trim(text)
     if text == "" then return nil end
+    local immediate = AP.TryImmediateSubmitResult(text, opts)
+    if immediate then return immediate end
     if InCombat() then return CombatSubmitResult() end
+    local immediateMutation = AP.TryImmediateMutationResult(text, opts)
+    if immediateMutation then return immediateMutation end
     local startedMs = PerfNowMs()
     if opts.skipUserHistory ~= true then
         A.AddHistory("user", text, "submitted")
@@ -6286,19 +6412,39 @@ function A.SubmitDeferred(text, callback)
     if A.IsBusy() then
         if AP.IsAssistantStopCommand and AP.IsAssistantStopCommand(text) then
             local removed = A.StopAssistantWork("user")
-            return NormalizePlanResult({
+            local result = NormalizePlanResult({
                 text = removed > 0 and "Stopped. I cancelled the assistant work that was still running." or "Stopped. I cleared the assistant busy state.",
-                result = "applied",
+                result = "info",
+                summary = "Cancelled running Assistant work.",
             })
+            A.AddHistory("user", text, "submitted")
+            AP.RecordAssistantResult(result)
+            if type(callback) == "function" then callback(result) end
+            if type(A.RequestRefreshUI) == "function" then
+                A.RequestRefreshUI("assistant.stop")
+            elseif type(A.RefreshUI) == "function" then
+                A.RefreshUI()
+            end
+            return result
         end
-        return NormalizePlanResult({ text = "I am still working on the previous request.", result = "busy" })
+        return NormalizePlanResult({ text = "I am still working on the previous request. Press Stop or type stop to cancel it.", result = "busy" })
     end
     if AP.IsAssistantStopCommand and AP.IsAssistantStopCommand(text) then
         return NormalizePlanResult({ text = "Nothing is running right now.", result = "info" })
     end
+    local immediate = AP.TryImmediateSubmitResult(text)
+    if immediate then
+        if type(callback) == "function" then callback(immediate) end
+        return immediate
+    end
     if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
+    local immediateMutation = AP.TryImmediateMutationResult(text)
+    if immediateMutation then
+        if type(callback) == "function" then callback(immediateMutation) end
+        return immediateMutation
+    end
 
-    A.SetBusy(true, "I am working on that")
+    A.SetBusy(true, "I am working on that. Press Stop or type stop to cancel.")
 
     A.AddHistory("user", text, "submitted")
     local steps, onDone = AP.BuildDeferredSubmitSteps(text, callback, { userHistoryRecorded = true })
@@ -6334,6 +6480,9 @@ function A.WarmupPerformanceIndexes(reason)
             end
             if parser and settings and type(parser._EnsureRegistryCandidateIndex) == "function" then
                 parser._EnsureRegistryCandidateIndex(settings, false)
+            end
+            if parser and settings and type(parser._EnsureExactColorSettingIndex) == "function" then
+                parser._EnsureExactColorSettingIndex(settings)
             end
         end),
         A.CoroutineStep(function()
