@@ -268,9 +268,12 @@ local QUICK_CDM_GAP = 2
 local QUICK_FALLBACK_Y_FRAC = 0.60
 local QUICK_BARS_KEYS = M.WordList [[
 showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints
-runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline
+runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode
 ]]
-local QUICK_PLAYER_KEYS = {}
+local QUICK_PLAYER_KEYS = M.WordList [[
+showPowerBar powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY
+detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower
+]]
 local quickSetupUndoSnapshot
 local quickSetupFirstRunChecked = false
 local function QuickTr(text)
@@ -379,17 +382,33 @@ end
 local function QuickApplyPhase1(offsets)
     local db = M.EnsureDB()
     db.bars = db.bars or {}
+    db.player = db.player or {}
     local bars = db.bars
+    local player = db.player
     QuickAssign(bars, {
-        showClassPower = true, classPowerShowText = true, classPowerWidthMode = "cooldown",
+        showClassPower = true, classPowerShowText = true, classPowerWidthMode = "cooldown", detachedPowerBarWidthMode = "cooldown",
         showEleMaelstrom = true, showEbonMight = true, showChargedComboPoints = true, runeShowTime = true, runeShowTimeText = true,
         classPowerOutline = 1,
     })
     QuickAssignOffsets(bars, offsets, { classPowerAnchorToCooldown = "anchorCPtoCDM" }, true)
     QuickAssignOffsets(bars, offsets, { classPowerOffsetX = "cpOffsetX", classPowerOffsetY = "cpOffsetY" })
+    QuickAssign(player, {
+        showPowerBar = true,
+        powerBarDetached = true,
+        detachedPowerBarAnchorToClassPower = true,
+        detachedPowerBarSyncClassPower = true,
+        detachedPowerBarShape = "FOLLOW_CLASS",
+        detachedPowerOrbSize = tonumber(player.detachedPowerOrbSize) or 54,
+        detachedPowerBarOffsetX = 0,
+        detachedPowerBarOffsetY = -4,
+        detachedPowerBarHeight = tonumber(player.detachedPowerBarHeight) or 6,
+        detachedPowerBarFrameLevelOffset = tonumber(player.detachedPowerBarFrameLevelOffset) or 6,
+    })
 end
 local function QuickRefreshAll(reason)
     ApplyClassPower()
+    CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
+    CallGlobal("MSUF_ClassPower_PlayerHP_Refresh")
     CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, false, true, reason or "ClassPowerQuickSetup")
 end
 local function QuickMarkOffered()
@@ -419,8 +438,8 @@ local function QuickEnsurePopups()
             .. "detached Class Bar positioned above your\n"
             .. "Essential Cooldowns?\n\n"
             .. "This configures class resource visibility,\n"
-            .. "anchoring and width matching in one click.\n"
-            .. "Your Player power bar is not changed.\n\n"
+            .. "anchoring, width matching and detached\n"
+            .. "Player Power in one click.\n\n"
             .. "You can always run this later via the\n"
             .. "|cff00ff00Quick Setup: Class Bar|r button below."),
         button1 = QuickTr("Setup Now"), button2 = QuickTr("Not Now"), hideOnEscape = true, showAlert = true,
@@ -443,11 +462,11 @@ local function ExecuteQuickSetup()
     ApplyClassPower()
     local popupText
     if ecv and not QuickClassPowerVisible() then
-        popupText = "Quick Setup applied!\n\nClass Resources are ready for\nEssential Cooldowns.\n\nYour spec has no class resource bar.\nIf you respec, it will appear automatically.\n\nPlayer Power was not changed."
+        popupText = "Quick Setup applied!\n\nClass Resources are ready for\nEssential Cooldowns.\n\nYour spec has no visible class\nresource bar right now.\nPlayer Power is detached and will\nfollow the stack when available."
     elseif ecv then
-        popupText = "Quick Setup applied!\n\nClass Power is now positioned\nabove Essential Cooldowns.\n\nPlayer Power was not changed.\nUse Edit Mode for fine-tuning."
+        popupText = "Quick Setup applied!\n\nClass Power is now positioned\nabove Essential Cooldowns.\n\nPlayer Power is detached and\nattached below it.\nUse Edit Mode for fine-tuning."
     else
-        popupText = "Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power was not changed.\n\nUse Edit Mode for fine-tuning."
+        popupText = "Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."
     end
     QuickRefreshAll("ClassPowerQuickSetup")
     if StaticPopup_Show then StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_RESULT", QuickTr(popupText)) end

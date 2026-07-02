@@ -41,7 +41,33 @@ local ApplyBarGradient = C.ApplyBarGradient
 local HideBarGradient = C.HideBarGradient
 local PowerColor = C.PowerColor
 local issecretvalue = _G.issecretvalue or function(_) return false end
+local InCombatLockdown = _G.InCombatLockdown
 local Power = {}
+
+--- Cooldown-viewer widths are unreliable while their Edit Mode layout has not
+--- settled (combat reload). Prefer the persisted profile cache during lockdown
+--- and refresh it from live measurements once out of combat; shares the
+--- "width:<frame>" keys that ClassPower's layout already maintains.
+local function CachedExternalFrameWidth(frameName, relativeTo)
+  if not frameName then
+    return nil
+  end
+  local cacheFn = _G.MSUF_GetProfileScopedCache
+  local cache = type(cacheFn) == "function" and cacheFn("classPowerLayoutCache") or nil
+  local key = cache and ("width:" .. frameName) or nil
+  local inLockdown = InCombatLockdown and InCombatLockdown() or false
+  if inLockdown and key then
+    local cached = tonumber(cache[key])
+    if cached and cached >= 20 then
+      return cached
+    end
+  end
+  local live = ExternalFrameWidth(frameName, relativeTo)
+  if live and key and not inLockdown then
+    cache[key] = floor(live + 0.5)
+  end
+  return live
+end
 local POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
 local POWER_SHAPE_TEXTURES = {
   ROUND = {
@@ -499,11 +525,11 @@ function Power.Apply(frame, spec)
         classWidth = nil
       end
       width = classWidth
-        or ExternalFrameWidth(power.detachedClassWidthFrameName, bar)
+        or CachedExternalFrameWidth(power.detachedClassWidthFrameName, bar)
         or tonumber(power.detachedClassWidth)
         or width
     else
-      width = ExternalFrameWidth(power.detachedWidthFrameName, bar) or width
+      width = CachedExternalFrameWidth(power.detachedWidthFrameName, bar) or width
     end
   end
   width = tonumber(width) or tonumber(spec and spec.width) or frame:GetWidth()

@@ -269,12 +269,40 @@ function UF.CreateDirtyQueue(name, opts)
   return queue
 end
 
+--- Elements whose Apply only touches insecure child frames and regions (bars,
+--- font strings, textures). Insecure SetPoint/SetSize/Show on those is legal
+--- during combat lockdown, so they may apply immediately (combat-reload fix).
+--- Everything else (RegisterUnitWatch, secure visibility, protected sizing)
+--- must keep waiting for the post-combat driver.
+local COMBAT_SAFE_ELEMENTS = {
+  Power = true,
+  Text = true,
+  PowerText = true,
+}
+
 function UF.RefreshElements(unit, names, updateReason)
   if type(names) ~= "table" then
     return false
   end
   if InCombatLockdown and InCombatLockdown() then
-    return QueueDeferredElementRefresh(unit, names, updateReason)
+    local safeNames, deferredNames
+    for i = 1, #names do
+      local name = names[i]
+      if COMBAT_SAFE_ELEMENTS[name] == true then
+        safeNames = safeNames or {}
+        safeNames[#safeNames + 1] = name
+      else
+        deferredNames = deferredNames or {}
+        deferredNames[#deferredNames + 1] = name
+      end
+    end
+    if deferredNames then
+      QueueDeferredElementRefresh(unit, deferredNames, updateReason)
+    end
+    if not safeNames then
+      return false
+    end
+    names = safeNames
   end
   local refreshedAll = false
   if not unit and UF.Config and UF.Config.Refresh then
