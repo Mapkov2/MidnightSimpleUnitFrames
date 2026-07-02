@@ -585,6 +585,7 @@ local MSUF2_DE = {
     ["Portrait Colors"] = "Porträtfarben",
     ["Portrait X"] = "Porträt X",
     ["Portrait Y"] = "Porträt Y",
+    ["Portrait zoom"] = "Portrait-Zoom",
     ["Portrait mode"] = "Porträtmodus",
     ["Power Bar"] = "Ressourcenleiste",
     ["Power Bar Colors"] = "Ressourcenleistenfarben",

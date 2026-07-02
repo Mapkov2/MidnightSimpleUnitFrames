@@ -99,6 +99,8 @@ function A.UnitframesRegistry.RegisterPortraitSettings(ctx, unit)
         0, -120, 120, MakeAliases(unit, "portrait x", "portrait x offset"), { category = "Portrait" })
     RegisterUnitNumberSetting(unit, "portraitOffsetY", "portraitOffsetY", "Portrait Y Offset",
         0, -120, 120, MakeAliases(unit, "portrait y", "portrait y offset"), { category = "Portrait" })
+    RegisterUnitNumberSetting(unit, "portraitZoom", "portraitZoom", "Portrait Zoom",
+        100, 100, 200, MakeAliases(unit, "portrait zoom", "2d portrait zoom", "portrait crop", "reinzoomen", "rauszoomen"), { category = "Portrait" })
     RegisterUnitString(unit, "portraitClassStyle", "portraitClassStyle", "Class Portrait Style", "BLIZZARD", MakeAliases(unit, "portrait class style", "class portrait style"), {
         category = "Portrait",
         normalizeValue = NormalizePortraitClassStyle,

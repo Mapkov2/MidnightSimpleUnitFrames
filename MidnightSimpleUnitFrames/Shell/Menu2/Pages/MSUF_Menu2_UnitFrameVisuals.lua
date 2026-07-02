@@ -72,7 +72,7 @@ local function PortraitClassStyleValues()
 end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 local function BuildPortrait(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("portrait", "Portrait", 558, false)
+    local sec = builder:CollapsibleSection("portrait", "Portrait", 612, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 16
     local cardGap = 28
@@ -115,9 +115,9 @@ local function BuildPortrait(ctx, builder, unit)
     end
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
     local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, -38, leftW, 168)
-    local geometryCard = W.ControlCard(sec, "Geometry", "Size and local offset.", rightX, -38, rightW, 224)
+    local geometryCard = W.ControlCard(sec, "Geometry", "Size, zoom, and local offset.", rightX, -38, rightW, 278)
     local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 312)
-    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -284, rightW, 166)
+    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -338, rightW, 166)
     local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
     M.BindBoolWidget(ctx, portraitEnable,
         function() return NormalizePortrait(unit) ~= "OFF" end,
@@ -148,6 +148,7 @@ local function BuildPortrait(ctx, builder, unit)
     local size = BindPortraitSlider(geometryCard, "Size override", 16, -62, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE")
     local x = BindPortraitSlider(geometryCard, "Portrait X", 16, -116, rightW - 58, -120, 120, 1, "portraitOffsetX", 0, "MSUF2_PORTRAIT_X")
     local y = BindPortraitSlider(geometryCard, "Portrait Y", 16, -170, rightW - 58, -120, 120, 1, "portraitOffsetY", 0, "MSUF2_PORTRAIT_Y")
+    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -224, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
     local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle", "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
     local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -112, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
@@ -159,6 +160,7 @@ local function BuildPortrait(ctx, builder, unit)
     RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
         { enable = portraitEnable },
         { controls = portraitActiveControls, on = PortraitActive },
+        { controls = zoom, on = function(conf) return PortraitActive() and ((conf.portraitRender or "2D") ~= "CLASS") end },
         { controls = { borderSize, fillBorder }, on = function(conf) return PortraitActive() and ((conf.portraitBorderStyle or "NONE") ~= "NONE") end },
         { controls = classStyle, on = function(conf) return PortraitActive() and ((conf.portraitRender or "2D") == "CLASS") end },
     }, {
@@ -766,7 +768,7 @@ local function BuildCastbar(ctx, builder, unit)
     }))
 end
 if type(UP.RegisterSection) == "function" then
-    UP.RegisterSection({ id = "portrait", title = "Portrait", height = 558, placement = "after_inline_text", order = 10, build = BuildPortrait })
+    UP.RegisterSection({ id = "portrait", title = "Portrait", height = 612, placement = "after_inline_text", order = 10, build = BuildPortrait })
     UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end, placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower })
     UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CASTBAR_TAB_HEIGHTS[CurrentCastbarTab(unit)] or CASTBAR_TAB_HEIGHTS.general end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar })
 end

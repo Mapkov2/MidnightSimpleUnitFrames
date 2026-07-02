@@ -101,6 +101,13 @@ local function SetAtlasCached(texture, atlas)
   end
 end
 
+local function Get2DPortraitTexCoords(p)
+  if p then
+    return p.texL or 0.08, p.texR or 0.92, p.texT or 0.08, p.texB or 0.92
+  end
+  return 0.08, 0.92, 0.08, 0.92
+end
+
 local function ClearPortraitGUID(texture)
   if texture then
     texture._msufPortraitGUID = nil
@@ -162,7 +169,7 @@ local function FlushQueuedPortraits()
           frame._msufPortraitForceRefresh = nil
           ClearPortraitGUID(texture)
         end
-        ApplyUnitPortrait(texture, frame.unit, frame)
+        ApplyUnitPortrait(texture, frame.unit, frame, p)
         if PortraitBorderNeedsUpdate("MSUF_PORTRAIT_FLUSH", p) then
           LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
         end
@@ -392,10 +399,11 @@ local function ApplyClassPortrait(texture, unit, p, class, frame)
   SetTexCoordCached(texture, l or 0, r or 1, t or 0, b or 1)
 end
 
-ApplyUnitPortrait = function(texture, unit, frame)
+ApplyUnitPortrait = function(texture, unit, frame, p)
+  local l, r, t, b = Get2DPortraitTexCoords(p)
   if BossPreviewActive(unit, frame) then
     SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
-    SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
+    SetTexCoordCached(texture, l, r, t, b)
     SetVertexColorCached(texture, 1, 1, 1, 1)
     return
   end
@@ -409,7 +417,7 @@ ApplyUnitPortrait = function(texture, unit, frame)
       if texture._msufPortraitGUID == false then
         return
       end
-      SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
+      SetTexCoordCached(texture, l, r, t, b)
       texture._msufTexture = nil
       texture._msufAtlas = nil
       SetPortraitTexture(texture, unit)
@@ -420,7 +428,7 @@ ApplyUnitPortrait = function(texture, unit, frame)
   if guid ~= nil and texture._msufPortraitGUID == guid then
     return
   end
-  SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
+  SetTexCoordCached(texture, l, r, t, b)
   texture._msufTexture = nil
   texture._msufAtlas = nil
   SetPortraitTexture(texture, unit)
@@ -582,6 +590,9 @@ function Portrait.Apply(frame, spec)
   LayoutPortraitBorder(holder, p, ResolvePortraitBorderColor(frame, p))
   SetShown(holder, true)
   SetShown(frame.portrait, true)
+  if p.render ~= "CLASS" and frame.portrait then
+    SetTexCoordCached(frame.portrait, Get2DPortraitTexCoords(p))
+  end
 end
 
 function Portrait.Disable(frame)
@@ -663,7 +674,7 @@ function Portrait.Update(frame, event, unit)
         frame._msufPortraitForceRefresh = nil
         ClearPortraitGUID(texture)
       end
-      ApplyUnitPortrait(texture, unit, frame)
+      ApplyUnitPortrait(texture, unit, frame, p)
     end
   end
   if PortraitBorderNeedsUpdate(event, p) then

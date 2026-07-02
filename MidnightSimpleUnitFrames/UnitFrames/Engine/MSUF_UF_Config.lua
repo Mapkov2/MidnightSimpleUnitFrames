@@ -640,6 +640,29 @@ local function NormalizePortraitBorder(style)
   return "NONE"
 end
 
+local function NormalizePortraitZoom(value)
+  value = Number(value, 100)
+  if value > 1 and value <= 2 then
+    value = value * 100
+  end
+  if value < 100 then
+    return 100
+  elseif value > 200 then
+    return 200
+  end
+  return value
+end
+
+local function CompilePortraitTexCoords(p, zoom)
+  local span = 0.84 * (100 / zoom)
+  local inset = (1 - span) * 0.5
+  p.zoom = zoom
+  p.texL = inset
+  p.texR = 1 - inset
+  p.texT = inset
+  p.texB = 1 - inset
+end
+
 local function CompileRange(out, conf, general, key)
   local range = out.range or {}
   out.range = range
@@ -1249,6 +1272,7 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.size = portraitSize
   out.portrait.x = Number(conf.portraitOffsetX, 0)
   out.portrait.y = Number(conf.portraitOffsetY, 0)
+  CompilePortraitTexCoords(out.portrait, NormalizePortraitZoom(conf.portraitZoom))
   out.portrait.border = out.portrait.border or {}
   out.portrait.border.style = NormalizePortraitBorder(conf.portraitBorderStyle)
   out.portrait.border.thickness = max(1, Number(conf.portraitBorderThickness, 2))
