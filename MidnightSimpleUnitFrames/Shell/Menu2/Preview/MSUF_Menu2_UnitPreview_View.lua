@@ -658,7 +658,7 @@ local PreviewBaseEdgeColor = PreviewCore.BaseEdgeColor
 local STATUS_PREVIEW = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.StatusPreview) or {}
 local PREVIEW_LAYERS = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.PreviewLayers) or {}
 local ZOOM_MIN = tonumber(PreviewZoomPan.MIN) or 0.35
-if PreviewZoomPan.Configure then PreviewZoomPan.Configure({ Preview = Preview, TR = TR, TEX_W8 = TEX_W8, UpdateHandleHint = UpdateHandleHint }) end
+if PreviewZoomPan.Configure then PreviewZoomPan.Configure({ Preview = Preview, T = M2.Theme, TR = TR, TEX_W8 = TEX_W8, UpdateHandleHint = UpdateHandleHint }) end
 local function ZoomOrOne(v) return tonumber(v) or 1 end
 local ClampPreviewZoom = PreviewZoomPan.Clamp or ZoomOrOne
 local UpdatePreviewZoomControls = PreviewZoomPan.UpdateControls or F.Noop
@@ -678,7 +678,8 @@ local function RefreshPreviewAnimationButton(box)
         btn.fs:SetText(active and TR("Stop") or TR("Combat"))
         btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
     end
-    if btn.SetBackdropColor then
+    if btn.MSUF2RefreshPreviewPill then btn:MSUF2RefreshPreviewPill(active) end
+    if btn.SetBackdropColor and not btn._msuf2PreviewPillFill then
         if active then
             btn:SetBackdropColor(0.020, 0.125, 0.155, 0.96)
             btn:SetBackdropBorderColor(0.10, 0.82, 0.95, 1)
@@ -701,6 +702,7 @@ local function TogglePreviewAnimation(box)
 end
 local function CreatePreviewAnimationButton(box)
     if not (box and box.canvas) or box.animateCombatButton then return end
+    local T = MenuTheme()
     local btn = CreateFrame("Button", nil, box.canvas, "BackdropTemplate")
     btn:SetSize(74, 22)
     btn:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
@@ -713,14 +715,8 @@ local function CreatePreviewAnimationButton(box)
     btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     btn.fs:SetPoint("CENTER")
     btn._preview = box
+    if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
     btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
-    btn:SetScript("OnEnter", function(self)
-        if self.SetBackdropColor and not PreviewAnimationActive() then
-            self:SetBackdropColor(0.05, 0.07, 0.11, 0.98)
-            self:SetBackdropBorderColor(0.28, 0.42, 0.68, 1)
-        end
-    end)
-    btn:SetScript("OnLeave", function(self) RefreshPreviewAnimationButton(self._preview) end)
     if M2.AddTooltip then
         M2.AddTooltip(btn, "Combat Preview", "Animates health, power, absorbs, cast progress, and combat indicators for visible previews only. Stops automatically in combat.", { hook = true })
     end
@@ -765,6 +761,8 @@ local function BuildPreview(parent, panel, width, height)
     box.canvas = canvas
     PreviewHelpers.BuildZoomBar(box, canvas, {
         texture = TEX_W8,
+        T = T,
+        themeReadout = true,
         CreateZoomButton = PreviewZoomPan.CreateButton,
         Tr = TR,
         StepZoom = StepPreviewZoom,

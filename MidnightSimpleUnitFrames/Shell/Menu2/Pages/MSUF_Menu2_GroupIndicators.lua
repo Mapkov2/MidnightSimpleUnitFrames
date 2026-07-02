@@ -3,7 +3,7 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
--- Menu2 Group indicators page.
+-- Menu2 Group Status & Indicators page.
 -- Builds party/raid status icon, placed indicator, frame effect, and spell-indicator controls.
 -- Runtime indicator dispatch remains in the GroupFrames engine.
 local W = M.Widgets
@@ -49,7 +49,7 @@ local function SetManyEnabled(enabled, ...)
 end
 
 local function BuildIndicatorsSection(ctx, b)
-    local indicators = b:CollapsibleSection("indicators", "Indicators", 650, true)
+    local indicators = b:CollapsibleSection("indicators", "Frame Indicators", 650, true)
     local indicatorsW = indicators._msuf2Width or ctx.width or 720
     local cardGap = 16
     local leftX = 20
@@ -1224,4 +1224,4 @@ local function BuildGFIndicators(ctx)
     BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_indicators", { title = "MSUF Group Indicators", build = BuildGFIndicators, version = 14 })
+M.RegisterPage("gf_indicators", { title = "MSUF Group Status & Indicators", build = BuildGFIndicators, version = 14 })

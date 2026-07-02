@@ -1019,7 +1019,7 @@ local function InstallHUDToggle()
       if not hf then return end
       local slot = _G.MSUF_EM2_HUD_PreviewAddonSlot
       _gfButton = CreateFrame("Button", nil, slot or hf)
-      _gfButton:SetSize(38, 32)
+      _gfButton:SetSize(62, 27)
       if slot then
         _gfButton:SetAllPoints(slot)
       else
@@ -1034,11 +1034,11 @@ local function InstallHUDToggle()
       label:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", 12, "")
       label:SetShadowOffset(1, -1)
       label:SetPoint("CENTER")
-      label:SetText("GF")
+      label:SetText("Groups")
       _gfButton._label = label
 
       local dot = _gfButton:CreateTexture(nil, "OVERLAY")
-      dot:SetSize(30, 2)
+      dot:SetSize(46, 2)
       dot:SetPoint("BOTTOM", _gfButton, "BOTTOM", 0, 2)
       dot:SetColorTexture(0.38, 0.65, 1.00, 0.90)
       _gfButton._dot = dot
@@ -1131,9 +1131,9 @@ local GROUP_PAGE_COMPONENT = { gf_bars = "bars", gf_auras = "auras", gf_indicato
 local GROUP_PAGE_SECTION = { gf_auras = "buffs", gf_indicators = "sicons" }
 local GROUP_PAGE_BUTTONS = {
   { "Layout", 20, 66, "gf_layout", "layout" },
-  { "Bars", 98, 58, "gf_bars", "bars" },
-  { "Auras", 168, 68, "gf_auras", "auras" },
-  { "Status", 248, 72, "gf_indicators", "status" },
+  { "Health & Text", 96, 104, "gf_bars", "bars" },
+  { "Auras", 210, 68, "gf_auras", "auras" },
+  { "Status & Indicators", 288, 126, "gf_indicators", "status" },
 }
 
 local function QuickPopup()

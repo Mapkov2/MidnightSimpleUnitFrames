@@ -83,6 +83,7 @@ if Helpers.InstallZoomPan and not ZoomPan._msufCPPreviewInstalled then
         updateHintKey = "UpdateHandleHint",
         defaultReason = "CLASSPOWER_PREVIEW_ZOOM",
         stepReason = "CLASSPOWER_PREVIEW_ZOOM_STEP",
+        themeButton = true,
         buttonTextureKey = "WHITE8",
         buttonFontField = "fs",
         refresh = function(box, reason)
@@ -1473,7 +1474,8 @@ local function RefreshAnimateButton(preview)
         btn.fs:SetText(active and TR("Stop") or TR("Animate"))
         btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
     end
-    if btn.SetBackdropColor then
+    if btn.MSUF2RefreshPreviewPill then btn:MSUF2RefreshPreviewPill(active) end
+    if btn.SetBackdropColor and not btn._msuf2PreviewPillFill then
         if active then
             btn:SetBackdropColor(0.020, 0.125, 0.155, 0.96)
             btn:SetBackdropBorderColor(0.10, 0.82, 0.95, 1)
@@ -1548,17 +1550,9 @@ local function CreateAnimateButton(preview)
     end
     btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     btn.fs:SetPoint("CENTER")
+    if Helpers.StylePreviewPillButton then Helpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
     btn:SetScript("OnClick", function(self)
         SetAnimationEnabled(self._preview, not AnimationEnabled(self._preview))
-    end)
-    btn:SetScript("OnEnter", function(self)
-        if self.SetBackdropColor and not AnimationEnabled(self._preview) then
-            self:SetBackdropColor(0.05, 0.07, 0.11, 0.98)
-            self:SetBackdropBorderColor(0.28, 0.42, 0.68, 1)
-        end
-    end)
-    btn:SetScript("OnLeave", function(self)
-        RefreshAnimateButton(self._preview)
     end)
     M.AddTooltip(btn, "Animate Preview", "Animates Class Resource, Player Power, and HP fill values in this preview only.", { hook = true })
     btn._preview = preview
@@ -1624,10 +1618,12 @@ function Preview.Create(ctx, builder)
     box.stage:SetSize(box.canvasW, box.canvasH)
     box.stage:SetPoint("CENTER", box.canvas, "CENTER", 0, 0)
     box.mock = box.stage
-    if ZoomPan.Configure then ZoomPan.Configure({ TR = TR, WHITE8 = WHITE8 }) end
+    if ZoomPan.Configure then ZoomPan.Configure({ T = T, TR = TR, WHITE8 = WHITE8 }) end
     if Helpers.BuildZoomBar then
         Helpers.BuildZoomBar(box, box.canvas, {
             texture = WHITE8,
+            T = T,
+            themeReadout = true,
             CreateZoomButton = ZoomPan.CreateButton,
             Tr = TR,
             StepZoom = ZoomPan.Step,
