@@ -1096,28 +1096,37 @@ function T.StyleCheckmark(checkButton)
         local oldStyle = (_G and _G.MSUF_StyleCheckmark) or (MSUF and MSUF.MSUF_StyleCheckmark) or (UI and UI.StyleCheckmark)
         if type(oldStyle) == "function" then oldStyle(checkButton) end
         HideQuietCheckboxNative()
+        local tick = (checkButton._msuf2QuietCheckBox and T.media.checkTickMedium) or T.media.checkTick
+        if checkButton.SetCheckedTexture then checkButton:SetCheckedTexture(tick) end
+        if checkButton.SetDisabledCheckedTexture then checkButton:SetDisabledCheckedTexture(tick) end
         local check = checkButton.GetCheckedTexture and checkButton:GetCheckedTexture()
         if not check and checkButton.GetName and checkButton:GetName() then check = _G[checkButton:GetName() .. "Check"] end
-        if check and check.SetTexture then
+        local disabledCheck = checkButton.GetDisabledCheckedTexture and checkButton:GetDisabledCheckedTexture()
+        if not disabledCheck and checkButton.GetName and checkButton:GetName() then disabledCheck = _G[checkButton:GetName() .. "DisabledCheck"] end
+        local function StyleTexture(texture)
+            if not (texture and texture.SetTexture) then return end
             local h = (checkButton.GetHeight and checkButton:GetHeight()) or 24
             local sz = checkButton._msuf2QuietCheckBox and 15 or math.floor(h * 0.8 + 0.5)
             if sz < 11 then sz = 11 end
-            check:SetTexture((checkButton._msuf2QuietCheckBox and T.media.checkTickMedium) or T.media.checkTick)
-            check:SetTexCoord(0, 1, 0, 1)
-            if check.SetBlendMode then check:SetBlendMode("BLEND") end
-            if check.ClearAllPoints then
-                check:ClearAllPoints()
-                check:SetPoint("CENTER", checkButton, "CENTER", 0, 0)
+            texture:SetTexture(tick)
+            texture:SetTexCoord(0, 1, 0, 1)
+            if texture.SetBlendMode then texture:SetBlendMode("BLEND") end
+            if texture.ClearAllPoints then
+                texture:ClearAllPoints()
+                texture:SetPoint("CENTER", checkButton, "CENTER", 0, 0)
             end
-            if check.SetSize then check:SetSize(sz, sz) end
+            if texture.SetSize then texture:SetSize(sz, sz) end
             local checked = checkButton.GetChecked and checkButton:GetChecked()
-            if check.SetAlpha then check:SetAlpha(checked and 1 or 0) end
+            if texture.SetVertexColor then texture:SetVertexColor(1, 1, 1, checked and 1 or 0) end
+            if texture.SetAlpha then texture:SetAlpha(checked and 1 or 0) end
             if checked then
-                if check.Show then check:Show() end
-            elseif check.Hide then
-                check:Hide()
+                if texture.Show then texture:Show() end
+            elseif texture.Hide then
+                texture:Hide()
             end
         end
+        StyleTexture(check)
+        StyleTexture(disabledCheck)
     end
     ApplyCheckTexture()
     HideQuietCheckboxNative()

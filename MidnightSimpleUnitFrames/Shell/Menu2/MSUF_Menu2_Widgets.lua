@@ -1029,19 +1029,29 @@ local function ClickCheckButton(button, mouseButton)
     if button._msuf2RefreshSwitchVisual then button:_msuf2RefreshSwitchVisual(button._msuf2SwitchHovered) end
     return nextValue
 end
+local function GetCheckTexture(button, getter, suffix)
+    local check = button and button[getter] and button[getter](button)
+    if (not check) and button and suffix and button.GetName and button:GetName() then check = _G[button:GetName() .. suffix] end
+    return check
+end
 local function SyncCheckedTexture(button, checked, enabled, alpha)
-    local check = button and button.GetCheckedTexture and button:GetCheckedTexture()
-    if (not check) and button and button.GetName and button:GetName() then check = _G[button:GetName() .. "Check"] end
-    if not check then return end
+    local check = GetCheckTexture(button, "GetCheckedTexture", "Check")
+    local disabledCheck = GetCheckTexture(button, "GetDisabledCheckedTexture", "DisabledCheck")
+    if not (check or disabledCheck) then return end
     checked = checked and true or false
     alpha = alpha or (enabled and 0.96 or 0.42)
-    if check.SetVertexColor then check:SetVertexColor(1, 1, 1, checked and alpha or 0) end
-    if check.SetAlpha then check:SetAlpha(checked and alpha or 0) end
-    if checked then
-        if check.Show then check:Show() end
-    elseif check.Hide then
-        check:Hide()
+    local function apply(texture)
+        if not texture then return end
+        if texture.SetVertexColor then texture:SetVertexColor(1, 1, 1, checked and alpha or 0) end
+        if texture.SetAlpha then texture:SetAlpha(checked and alpha or 0) end
+        if checked then
+            if texture.Show then texture:Show() end
+        elseif texture.Hide then
+            texture:Hide()
+        end
     end
+    apply(check)
+    apply(disabledCheck)
 end
 local function UpdateToggleProxyBounds(button)
     if not button then return end
