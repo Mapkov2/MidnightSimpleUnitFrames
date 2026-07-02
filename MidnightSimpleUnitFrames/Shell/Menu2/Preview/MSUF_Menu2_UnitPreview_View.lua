@@ -579,7 +579,7 @@ local function MakeHandle(preview, key, fields, label, color)
     local h = CreateFrame("Button", nil, preview.canvas)
     h:SetFrameLevel((preview.canvas:GetFrameLevel() or 0) + 30)
     h:SetSize(20, 20)
-    h:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
+    h:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
     if h.RegisterForDrag then h:RegisterForDrag("LeftButton") end
     h:EnableMouse(true)
     h:EnableKeyboard(true)
@@ -625,12 +625,30 @@ local function MakeHandle(preview, key, fields, label, color)
         RefreshHandleSelectionVisuals(preview)
         if GameTooltip then GameTooltip:Hide() end
     end)
-    h:SetScript("OnClick", function(self)
+    h:SetScript("OnClick", function(self, button)
         if self._suppressNextClick then
             self._suppressNextClick = nil
             return
         end
+        if button == "RightButton" then
+            SelectPreviewHandle(self, true)
+            if PreviewHelpers.ShowPreviewHandleContext then
+                PreviewHelpers.ShowPreviewHandleContext(self, {
+                    M = M2,
+                    T = MenuTheme and MenuTheme(),
+                    Tr = TR,
+                    title = self._label or self._key,
+                    openSettings = OpenPreviewHandleSettings,
+                })
+            end
+            return
+        end
         SelectPreviewHandle(self)
+    end)
+    h:SetScript("OnDoubleClick", function(self, button)
+        if button and button ~= "LeftButton" then return end
+        SelectPreviewHandle(self, true)
+        OpenPreviewHandleSettings(self, "doubleclick")
     end)
     local function StartHandleDrag(self, button)
         if button and button ~= "LeftButton" then return end

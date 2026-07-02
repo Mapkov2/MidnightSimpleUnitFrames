@@ -748,7 +748,18 @@ local function RefreshHandleSelection(box)
                 handle:SetBackdropColor(color[1] * 0.12, color[2] * 0.12, color[3] * 0.12, alpha)
             end
             if handle._cfgText and handle.SetBackdropColor then handle:SetBackdropColor(0, 0, 0, 0) end
+            if handle._msuf2SettingsGear then handle._msuf2SettingsGear:SetShown(guidesOn and isSelected) end
         end
+    end
+    if selected and guidesOn and PreviewHelpers.EnsurePreviewHandleGear then
+        PreviewHelpers.EnsurePreviewHandleGear(selected, {
+            T = T,
+            Tr = Tr,
+            shown = true,
+            openSettings = function(handle)
+                if handle and handle._sectionKey then OpenGFSection(handle._sectionKey) end
+            end,
+        })
     end
     UpdateHint(box, selected)
 end
@@ -768,6 +779,7 @@ local NativeDeps = {
     WHITE8X8 = WHITE8X8,
     H = Helpers,
     Helpers = Helpers,
+    OpenSection = OpenGFSection,
     LayerFont = LayerFont,
     LayerHeaderColor = LAYER_HEADER_COLOR,
     MakePreviewSectionButton = MakePreviewSectionButton,
