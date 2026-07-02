@@ -379,16 +379,22 @@ builders.LAYOUT = function(E)
                 lockdownProxy = proxy
             end
         end
+        CP_Trace("layout a2c=" .. tostring(b.classPowerAnchorToCooldown)
+            .. " init=" .. tostring(CP.container._msufLayoutInitialized == true)
+            .. " proxy=" .. (lockdownProxy and "usable" or "nil")
+            .. " w=" .. tostring(userW))
         local cachedCooldownAnchor = false
         if inLockdown and not lockdownProxy and b.classPowerAnchorToCooldown == true then
             CP.container:SetSize(userW, h)
             if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                 and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
             then
+                CP_Trace("cache apply OK")
                 CP.container._msufDirectCooldownAnchor = true
                 CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
                 cachedCooldownAnchor = true
             else
+                CP_Trace("cache apply FAIL -> defer to regen")
                 CP._layoutDirty = true
                 ExportPublic("MSUF_ClassPowerLayoutDirty", true)
                 RequestUFReanchorAfterCombat()
