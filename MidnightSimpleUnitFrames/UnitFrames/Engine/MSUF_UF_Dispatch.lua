@@ -26,6 +26,10 @@ local floor = math.floor
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
+local UnitHealthPercent = _G.UnitHealthPercent
+local UnitPowerPercent = _G.UnitPowerPercent
+local UnitPowerType = _G.UnitPowerType
+local SCALE_100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
 
 local EVENT_ALIAS = {
   UNIT_MAX_HEALTH_MODIFIERS_CHANGED = "UNIT_MAXHEALTH",
@@ -51,6 +55,51 @@ local function MissingHealthFromValues(hp, maxHP)
   end
   local missing = maxHP - hp
   return missing > 0 and missing or 0
+end
+
+local function NormalizePercentDecimals(decimals)
+  decimals = tonumber(decimals) or 0
+  return decimals >= 1 and 1 or 0
+end
+
+local function PercentCacheKey(pct, decimals)
+  if type(pct) ~= "number" then
+    return nil
+  end
+  if NormalizePercentDecimals(decimals) >= 1 then
+    return floor(pct * 10 + 0.5)
+  end
+  return floor(pct + 0.5)
+end
+
+local function HealthPercent(unit)
+  if not UnitHealthPercent or not SCALE_100 or type(unit) ~= "string" or unit == "" then
+    return nil
+  end
+  return UnitHealthPercent(unit, true, SCALE_100)
+end
+
+local function PowerPercent(unit)
+  if not UnitPowerPercent or not SCALE_100 or type(unit) ~= "string" or unit == "" then
+    return nil
+  end
+  local powerType = UnitPowerType and UnitPowerType(unit) or nil
+  if issecretvalue(powerType) == true then powerType = nil end
+  return UnitPowerPercent(unit, powerType, false, SCALE_100)
+end
+
+local function ClearDispatchHealthPercent(rt)
+  if rt then
+    rt._dispatchHealthPercent = nil
+    rt._dispatchHealthPercentReady = nil
+  end
+end
+
+local function ClearDispatchPowerPercent(rt)
+  if rt then
+    rt._dispatchPowerPercent = nil
+    rt._dispatchPowerPercentReady = nil
+  end
 end
 
 local function OwnerModeIsUnitless(mode)
@@ -212,13 +261,16 @@ local function PowerTextNeedsTickUpdate(frame, power, powerMax)
     return true
   end
   if nativeSecrets and (issecretvalue(power) == true or issecretvalue(powerMax) == true) then
+    ClearDispatchPowerPercent(rt)
     return true
   end
   if power == nil or powerMax == nil then
+    ClearDispatchPowerPercent(rt)
     return true
   end
   local keyPower, keyMax
   local mode = rt.powerDispatchKeyMode or 0
+  local dispatchPercent, dispatchPercentReady
   if mode == 1 then
     keyPower, keyMax = power, false
   elseif mode == 2 then
@@ -226,19 +278,34 @@ local function PowerTextNeedsTickUpdate(frame, power, powerMax)
   elseif mode == 3 then
     keyPower, keyMax = power, powerMax
   elseif mode == 4 or mode == 5 then
-    if type(power) ~= "number" or type(powerMax) ~= "number" or powerMax <= 0 then
+    dispatchPercent = PowerPercent(frame and frame.unit)
+    dispatchPercentReady = issecretvalue(dispatchPercent) == true or dispatchPercent ~= nil
+    if issecretvalue(dispatchPercent) == true then
+      rt._dispatchPowerPercent = dispatchPercent
+      rt._dispatchPowerPercentReady = true
       return true
     end
-    keyPower = floor((power / powerMax) * 100 + 0.5)
+    keyPower = PercentCacheKey(dispatchPercent, 0)
+    if keyPower == nil then
+      ClearDispatchPowerPercent(rt)
+      rt._dispatchPowerTextPower = nil
+      rt._dispatchPowerTextMax = nil
+      return true
+    end
     keyMax = mode == 5 and powerMax or false
   else
     keyPower, keyMax = false, false
   end
   if rt._dispatchPowerTextPower == keyPower and rt._dispatchPowerTextMax == keyMax then
+    ClearDispatchPowerPercent(rt)
     return false
   end
   rt._dispatchPowerTextPower = keyPower
   rt._dispatchPowerTextMax = keyMax
+  if mode == 4 or mode == 5 then
+    rt._dispatchPowerPercent = dispatchPercent
+    rt._dispatchPowerPercentReady = dispatchPercentReady
+  end
   return true
 end
 
@@ -255,12 +322,14 @@ local function HealthTextNeedsTickUpdate(frame, hp, maxHP)
     return true
   end
   if nativeSecrets and (issecretvalue(hp) == true or issecretvalue(maxHP) == true) then
+    ClearDispatchHealthPercent(rt)
     rt._dispatchHealthMissing = nil
     rt._dispatchHealthMissingReady = nil
     rt.healthMissing = nil
     return true
   end
   if hp == nil or maxHP == nil then
+    ClearDispatchHealthPercent(rt)
     rt._dispatchHealthMissing = nil
     rt._dispatchHealthMissingReady = nil
     rt.healthMissing = nil
@@ -274,6 +343,7 @@ local function HealthTextNeedsTickUpdate(frame, hp, maxHP)
       missing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
     end
     if issecretvalue(missing) == true then
+      ClearDispatchHealthPercent(rt)
       return true
     end
     rt._dispatchHealthMissing = missing
@@ -287,6 +357,7 @@ local function HealthTextNeedsTickUpdate(frame, hp, maxHP)
   end
   local keyHP, keyMax
   local mode = rt.healthDispatchKeyMode or 0
+  local dispatchPercent, dispatchPercentReady
   if mode == 1 then
     keyHP, keyMax = hp, false
   elseif mode == 2 then
@@ -294,13 +365,20 @@ local function HealthTextNeedsTickUpdate(frame, hp, maxHP)
   elseif mode == 3 then
     keyHP, keyMax = hp, maxHP
   elseif mode == 4 or mode == 5 then
-    if type(hp) ~= "number" or type(maxHP) ~= "number" or maxHP <= 0 then
+    dispatchPercent = HealthPercent(frame and frame.unit)
+    dispatchPercentReady = issecretvalue(dispatchPercent) == true or dispatchPercent ~= nil
+    if issecretvalue(dispatchPercent) == true then
+      rt._dispatchHealthPercent = dispatchPercent
+      rt._dispatchHealthPercentReady = true
       return true
     end
-    if (tonumber(rt.healthPercentDecimals) or 0) >= 1 then
-      keyHP = floor((hp / maxHP) * 1000 + 0.5)
-    else
-      keyHP = floor((hp / maxHP) * 100 + 0.5)
+    keyHP = PercentCacheKey(dispatchPercent, rt.healthPercentDecimals)
+    if keyHP == nil then
+      ClearDispatchHealthPercent(rt)
+      rt._dispatchHealthTextHP = nil
+      rt._dispatchHealthTextMax = nil
+      rt._dispatchHealthTextMissing = nil
+      return true
     end
     keyMax = mode == 5 and maxHP or false
   else
@@ -309,11 +387,16 @@ local function HealthTextNeedsTickUpdate(frame, hp, maxHP)
   if rt._dispatchHealthTextHP == keyHP
     and rt._dispatchHealthTextMax == keyMax
     and rt._dispatchHealthTextMissing == keyMissing then
+    ClearDispatchHealthPercent(rt)
     return false
   end
   rt._dispatchHealthTextHP = keyHP
   rt._dispatchHealthTextMax = keyMax
   rt._dispatchHealthTextMissing = keyMissing
+  if mode == 4 or mode == 5 then
+    rt._dispatchHealthPercent = dispatchPercent
+    rt._dispatchHealthPercentReady = dispatchPercentReady
+  end
   return true
 end
 

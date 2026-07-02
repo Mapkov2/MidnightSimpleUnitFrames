@@ -75,6 +75,31 @@ local function MissingHealthFromValues(hp, hpMax)
   return missing > 0 and missing or 0
 end
 
+local function NormalizePercentDecimals(decimals)
+  decimals = tonumber(decimals) or 0
+  return decimals >= 1 and 1 or 0
+end
+
+local function PercentCacheKeyFromValue(pct, decimals)
+  if type(pct) ~= "number" then
+    return pct or false
+  end
+  if NormalizePercentDecimals(decimals) >= 1 then
+    return floor(pct * 10 + 0.5)
+  end
+  return floor(pct + 0.5)
+end
+
+local function ConsumeDispatchPercent(rt, valueKey, readyKey)
+  if rt and rt[readyKey] == true then
+    local pct = rt[valueKey]
+    rt[valueKey] = nil
+    rt[readyKey] = nil
+    return pct, true
+  end
+  return nil, false
+end
+
 local function RegionShown(region)
   if not region then
     return false
@@ -345,7 +370,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   local needsCurrent = rt.healthNeedsCurrent == true
   local needsMax = rt.healthNeedsMax == true
   local colorByHealth = rt.healthColorByHealth == true
-  local percentNeedsValues = needsPercent and not HealthPercentAvailable
+  local percentNeedsValues = false
   local missingNeedsValues = rt.healthNeedsMissing == true
   local needHPValue = needsCurrent or colorByHealth or percentNeedsValues or missingNeedsValues
   local needMaxValue = needsMax or colorByHealth or percentNeedsValues or missingNeedsValues
@@ -425,13 +450,21 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
 
     local pctOverride, pctOverrideSet
     if needsPercent then
-      if type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
-        pctOverride = floor((hp / hpMax) * 100 + 0.5)
-        pctOverrideSet = true
-      elseif HealthPercentAvailable then
+      pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
+      if pctOverrideSet ~= true and HealthPercentAvailable then
         pctOverride = HealthPercent(unit)
-        pctOverrideSet = true
+        pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
       end
+    end
+    if nativeSecrets and pctOverrideSet == true and issecretvalue(pctOverride) == true then
+      rt._lastHealthTextHP = nil
+      rt._lastHealthTextMax = nil
+      rt._lastHealthTextMissing = nil
+      rt._dispatchHealthTextHP = nil
+      rt._dispatchHealthTextMax = nil
+      rt._dispatchHealthTextMissing = nil
+      UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt)
+      return
     end
     local keyHP, keyMax = false, false
     local canCompareText = true
@@ -444,13 +477,15 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       keyHP, keyMax = hp, hpMax
     elseif mode == 4 or mode == 5 then
       if pctOverrideSet and issecretvalue(pctOverride) ~= true then
-        keyHP = pctOverride or false
-      elseif type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
-        keyHP = floor((hp / hpMax) * 100 + 0.5)
+        keyHP = PercentCacheKeyFromValue(pctOverride, rt.healthPercentDecimals)
       else
         canCompareText = false
       end
-      keyMax = mode == 5 and hpMax or false
+      if keyHP == nil then
+        canCompareText = false
+        keyHP = false
+      end
+      keyMax = canCompareText and mode == 5 and hpMax or false
     end
     local valueRefreshEvent = healthTick or event == "UNIT_CONNECTION" or event == "UNIT_MAXHEALTH"
     if valueRefreshEvent
@@ -624,7 +659,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
   local needsPercent = rt.powerNeedsPercent == true
   local needsCurrent = rt.powerNeedsCurrent == true
   local needsMax = rt.powerNeedsMax == true
-  local percentNeedsValues = needsPercent and not PowerPercentAvailable
+  local percentNeedsValues = false
   local needPowerValue = needsCurrent or percentNeedsValues
   local needMaxValue = needsMax or percentNeedsValues
   local throttle = rt.powerThrottle or 0
@@ -679,12 +714,10 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
 
     local pctOverride, pctOverrideSet
     if needsPercent then
-      if type(power) == "number" and type(powerMax) == "number" and powerMax > 0 then
-        pctOverride = floor((power / powerMax) * 100 + 0.5)
-        pctOverrideSet = true
-      elseif PowerPercentAvailable then
+      pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
+      if pctOverrideSet ~= true and PowerPercentAvailable then
         pctOverride = PowerPercent(unit)
-        pctOverrideSet = true
+        pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
       end
     end
     local keyPower, keyMax = false, false
@@ -698,9 +731,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
       keyPower, keyMax = power, powerMax
     elseif mode == 4 or mode == 5 then
       if pctOverrideSet and issecretvalue(pctOverride) ~= true then
-        keyPower = pctOverride or false
-      elseif type(power) == "number" and type(powerMax) == "number" and powerMax > 0 then
-        keyPower = floor((power / powerMax) * 100 + 0.5)
+        keyPower = PercentCacheKeyFromValue(pctOverride, 0)
       else
         canCompareText = false
       end
