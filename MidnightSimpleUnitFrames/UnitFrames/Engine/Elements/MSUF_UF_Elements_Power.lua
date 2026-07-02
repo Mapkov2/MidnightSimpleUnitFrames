@@ -13,6 +13,7 @@ local C = MSUF.UFBarTextCommon
 if not C then return end
 
 local UF = C.UF
+local Clamp01 = UF.Clamp01
 local CreateFrame = C.CreateFrame
 local UnitPower = C.UnitPower
 local UnitPowerMax = C.UnitPowerMax
@@ -76,6 +77,16 @@ local function ShapeOutlineAlpha(value)
   if value <= 0 then return 0 end
   if value >= 8 then return 1 end
   return 0.49 + (value * 0.065)
+end
+
+local function PowerFillAlpha(frame)
+  local spec = frame and frame.MSUFSpec
+  local power = spec and spec.power
+  return Clamp01(power and power.alpha, 1)
+end
+
+local function ApplyPowerStatusColor(bar, frame, r, g, b)
+  ApplyStatusColor(bar, r, g, b, PowerFillAlpha(frame))
 end
 
 local function ClearPowerShapeFillClip(bar)
@@ -576,7 +587,7 @@ function Power.Apply(frame, spec)
   SetBarSmoothing(bar, power.smooth == true)
   SetStatusTexture(bar, power.texture or WHITE)
   local pr, pg, pb = PowerColor(frame, frame.unit)
-  ApplyStatusColor(bar, pr, pg, pb)
+  ApplyPowerStatusColor(bar, frame, pr, pg, pb)
   ApplyBackgrounds(frame)
   local shapedPower = shape ~= "BAR" and ApplyPowerShape(bar, bg, power, pr, pg, pb) or false
   if not shapedPower then
@@ -643,7 +654,7 @@ function Power.UpdateValuePlain(frame, event, unit)
   SetBarValuePlain(bar, power, true)
 
   if bar._msufStatusR == nil or powerMetaChanged then
-    ApplyStatusColor(bar, PowerColor(frame, unit, powerType, powerToken, true))
+    ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, powerType, powerToken, true))
   end
   return power, maxPower
 end
@@ -685,7 +696,7 @@ function Power.UpdateValue(frame, event, unit)
   SetBarValueKnown(bar, power, powerSecret, true)
 
   if bar._msufStatusR == nil or powerMetaChanged then
-    ApplyStatusColor(bar, PowerColor(frame, unit, powerType, powerToken, true))
+    ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, powerType, powerToken, true))
   end
   return power, maxPower
 end
@@ -712,7 +723,7 @@ function Power.Update(frame, event, unit)
   if bar._msufStatusR == nil
     or powerMetaChanged
     or (not animate and (event == "UNIT_DISPLAYPOWER" or event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_POWER_LAYOUT")) then
-    ApplyStatusColor(bar, PowerColor(frame, unit, powerType, powerToken, true))
+    ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, powerType, powerToken, true))
   end
   return power, maxPower
 end

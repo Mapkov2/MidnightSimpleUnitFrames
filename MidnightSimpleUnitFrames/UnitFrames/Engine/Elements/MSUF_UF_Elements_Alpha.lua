@@ -195,6 +195,9 @@ local function ResetFrameLayers(frame, force)
   SetPortraitLayerAlpha(frame, 1, force)
   frame._msufAlphaActive = nil
   frame._msufAlphaEffective = nil
+  frame._msufAlphaLastFrame = nil
+  frame._msufAlphaLastHP = nil
+  frame._msufAlphaLastFG = nil
 end
 
 local function ApplyAlpha(frame, cfg, force)

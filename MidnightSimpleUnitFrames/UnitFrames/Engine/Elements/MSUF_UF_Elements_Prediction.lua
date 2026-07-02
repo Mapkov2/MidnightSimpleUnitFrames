@@ -69,6 +69,8 @@ local TEST_MAX = 100
 local TEST_INCOMING = 20
 local TEST_ABSORB = 25
 local TEST_HEAL_ABSORB = 15
+local OVER_ABSORB_TEXTURE = "Interface\\RaidFrame\\Shield-Overshield"
+local OVER_ABSORB_GLOW_W = 8
 local EMPTY_EVENTS = {}
 local DERIVED_PREDICTION_TARGET_EVENTS = { "UNIT_TARGET" }
 local PREDICTION_EVENT_BITS = {
@@ -146,6 +148,7 @@ local PREDICTION_DISABLE_FIELDS = {
   "_msufPredictionHealReverse",
   "_msufPredictionAbsorbReverse",
   "_msufPredictionFollowAbsorb",
+  "_msufPredictionOverAbsorbOverlay",
   "_msufPredictionClampHealToMissing",
   "_msufPredictionClampAbsorbToMissing",
   "_msufPredictionQueuedUnit",
@@ -533,6 +536,95 @@ local function EnsureBar(frame, key, levelOffset)
   return bar
 end
 
+local function EnsureOverAbsorbGlow(frame)
+  if not frame then return nil end
+  local glow = frame.overAbsorbGlow
+  if glow then return glow end
+  local hpBar = frame.hpBar or frame.Health
+  if not (frame.CreateTexture and hpBar) then return nil end
+  glow = frame:CreateTexture(nil, "OVERLAY", nil, 5)
+  glow:SetTexture(OVER_ABSORB_TEXTURE)
+  if glow.SetBlendMode then glow:SetBlendMode("ADD") end
+  glow:SetWidth(OVER_ABSORB_GLOW_W)
+  glow:Hide()
+  frame.overAbsorbGlow = glow
+  return glow
+end
+
+local function HideOverAbsorbGlow(frame)
+  local glow = frame and frame.overAbsorbGlow
+  if glow and glow._msufOverAbsorbShown ~= false then
+    glow:SetShown(false)
+    glow._msufOverAbsorbShown = false
+  end
+end
+
+local function PositionOverAbsorbGlow(frame, reverse)
+  local glow = EnsureOverAbsorbGlow(frame)
+  local hpBar = frame and (frame.hpBar or frame.Health)
+  if not (glow and hpBar) then return nil end
+  if glow._msufOverAbsorbReverse == reverse and glow._msufOverAbsorbAnchor == hpBar then
+    return glow
+  end
+  glow:ClearAllPoints()
+  if reverse then
+    glow:SetPoint("TOPRIGHT", hpBar, "TOPLEFT", 4, 1)
+    glow:SetPoint("BOTTOMRIGHT", hpBar, "BOTTOMLEFT", 4, -1)
+  else
+    glow:SetPoint("TOPLEFT", hpBar, "TOPRIGHT", -4, 1)
+    glow:SetPoint("BOTTOMLEFT", hpBar, "BOTTOMRIGHT", -4, -1)
+  end
+  glow:SetWidth(OVER_ABSORB_GLOW_W)
+  glow._msufOverAbsorbReverse = reverse
+  glow._msufOverAbsorbAnchor = hpBar
+  return glow
+end
+
+local function PlainPositive(value)
+  if issecretvalue(value) == true or type(value) ~= "number" then return nil end
+  return value > 0 and value or nil
+end
+
+local function ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
+  if PlainPositive(hp) == nil and issecretvalue(hp) ~= true then
+    hp = CachedHealthValue(frame, unit)
+    if PlainPositive(hp) == nil and issecretvalue(hp) ~= true and UnitHealth then hp = UnitHealth(unit) end
+  end
+  if PlainPositive(maxHP) == nil and issecretvalue(maxHP) ~= true then
+    maxHP = ReadHealthMax(frame, unit)
+  end
+  return hp, maxHP
+end
+
+local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb)
+  if not (frame and cfg and cfg.overAbsorbOverlay == true and cfg.absorb == true) then
+    HideOverAbsorbGlow(frame)
+    return
+  end
+  if issecretvalue(absorb) == true or type(absorb) ~= "number" or absorb <= 0 then
+    HideOverAbsorbGlow(frame)
+    return
+  end
+  hp, maxHP = ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
+  if issecretvalue(hp) == true or issecretvalue(maxHP) == true or type(hp) ~= "number" or type(maxHP) ~= "number" or maxHP <= 0 then
+    HideOverAbsorbGlow(frame)
+    return
+  end
+  local incoming = frame._msufPredictionIncoming
+  if issecretvalue(incoming) == true or type(incoming) ~= "number" or incoming < 0 then incoming = 0 end
+  local show = (hp + incoming + absorb) >= maxHP or (hp + absorb) >= maxHP
+  if not show then
+    HideOverAbsorbGlow(frame)
+    return
+  end
+  local glow = PositionOverAbsorbGlow(frame, frame._msufPredictionHpReverse == true)
+  if not glow then return end
+  if glow._msufOverAbsorbShown ~= true then
+    glow:SetShown(true)
+    glow._msufOverAbsorbShown = true
+  end
+end
+
 local function SyncBarLayer(frame, hpBar, bar, levelOffset)
   if not (frame and hpBar and bar) then
     return
@@ -680,6 +772,9 @@ local function NeedsHealthEvent(cfg)
   if cfg.heal == true and NormalizeAnchorMode(cfg.healAnchorMode, 3) == 3 then
     return true
   end
+  if cfg.absorb == true and cfg.overAbsorbOverlay == true then
+    return true
+  end
   return false
 end
 
@@ -708,13 +803,14 @@ end
 
 local predictionPlanCache = {}
 
-local function PredictionPlanCacheKey(heal, absorb, healAbsorb, clampHeal, clampAbsorb, followAbsorb)
+local function PredictionPlanCacheKey(heal, absorb, healAbsorb, clampHeal, clampAbsorb, followAbsorb, overAbsorb)
   return (heal and 1 or 0)
     + (absorb and 2 or 0)
     + (healAbsorb and 4 or 0)
     + (clampHeal and 8 or 0)
     + (clampAbsorb and 16 or 0)
     + (followAbsorb and 32 or 0)
+    + (overAbsorb and 64 or 0)
 end
 
 local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
@@ -723,7 +819,8 @@ local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
   local healAbsorb = cfg and cfg.healAbsorb == true
   local clampHeal = heal and healMode == 3
   local clampAbsorb = absorb and absorbMode == 3
-  local key = PredictionPlanCacheKey(heal, absorb, healAbsorb, clampHeal, clampAbsorb, followAbsorb)
+  local overAbsorb = absorb and cfg and cfg.overAbsorbOverlay == true
+  local key = PredictionPlanCacheKey(heal, absorb, healAbsorb, clampHeal, clampAbsorb, followAbsorb, overAbsorb)
   local cached = predictionPlanCache[key]
   if cached then
     return cached[1], cached[2]
@@ -739,14 +836,14 @@ local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
   if healAbsorb then
     plans.UNIT_HEAL_ABSORB_AMOUNT_CHANGED = PredictionPlan(nil, nil, true, nil, nil, true, nil, true, nil)
   end
-  if clampHeal then
-    plans.UNIT_HEALTH = PredictionPlan(nil, nil, nil, true, followAbsorb, nil, nil, true, true)
+  if clampHeal or overAbsorb then
+    plans.UNIT_HEALTH = PredictionPlan(nil, nil, nil, clampHeal, followAbsorb or overAbsorb, nil, nil, true, true)
   end
   if heal or absorb or healAbsorb then
-    plans.UNIT_MAXHEALTH = PredictionPlan(clampHeal, clampAbsorb, nil, heal, absorb, healAbsorb, true, clampHeal or clampAbsorb or healAbsorb, heal or absorb or healAbsorb)
+    plans.UNIT_MAXHEALTH = PredictionPlan(clampHeal, clampAbsorb, nil, heal, absorb, healAbsorb, true, clampHeal or clampAbsorb or healAbsorb or overAbsorb, heal or absorb or healAbsorb)
   end
 
-  local fullNeedHP = healAbsorb or clampHeal or clampAbsorb
+  local fullNeedHP = healAbsorb or clampHeal or clampAbsorb or overAbsorb
   local fullNeedMaxHP = heal or absorb or healAbsorb or fullNeedHP
   local fullPlan = PredictionPlan(heal, absorb, healAbsorb, heal, absorb, healAbsorb, true, fullNeedHP, fullNeedMaxHP)
   predictionPlanCache[key] = { plans, fullPlan }
@@ -889,6 +986,7 @@ local function CompilePredictionRuntime(frame, cfg, spec)
   frame._msufPredictionAbsorbOnly = cfg.absorb == true and cfg.heal ~= true and cfg.healAbsorb ~= true
   frame._msufPredictionNeedsHealth = NeedsHealthEvent(cfg)
   frame._msufPredictionFollowAbsorb = followAbsorb
+  frame._msufPredictionOverAbsorbOverlay = cfg.overAbsorbOverlay == true
   frame._msufPredictionClampHealToMissing = cfg.heal == true and healMode == 3
   frame._msufPredictionClampAbsorbToMissing = cfg.absorb == true and absorbMode == 3
   frame._msufPredictionEventPlans, frame._msufPredictionFullPlan = CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
@@ -992,6 +1090,11 @@ function Prediction.Apply(frame, spec)
     2, absorbMode, frame._msufPredictionAbsorbReverse,
     "absorbTexture", "absorbR", "absorbG", "absorbB", "absorbA",
     VisibleFollowBar(cfg, frame.incomingHealBar))
+  if cfg.overAbsorbOverlay == true and cfg.absorb == true then
+    PositionOverAbsorbGlow(frame, frame._msufPredictionHpReverse == true)
+  else
+    HideOverAbsorbGlow(frame)
+  end
   ApplyPredictionBar(frame, cfg, spec, frame.healAbsorbBar, cfg.healAbsorb,
     3, 5, not frame._msufPredictionHpReverse,
     "healAbsorbTexture", "healAbsorbR", "healAbsorbG", "healAbsorbB", "healAbsorbA")
@@ -1005,6 +1108,7 @@ function Prediction.Disable(frame)
   for i = 1, #PREDICTION_BAR_DEFS do
     HideBar(frame[PREDICTION_BAR_DEFS[i][2]])
   end
+  HideOverAbsorbGlow(frame)
   ClearPredictionCache(frame)
   for i = 1, #PREDICTION_DISABLE_FIELDS do
     frame[PREDICTION_DISABLE_FIELDS[i]] = nil
@@ -1062,6 +1166,7 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
     maxHP = ReadHealthMax(frame, unit)
   end
   ShowValue(bar, maxHP, frame._msufPredictionAbsorb, forceMax)
+  UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, frame._msufPredictionAbsorb)
 end
 
 function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
@@ -1102,6 +1207,9 @@ function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
     local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
     LayoutBarIfNeeded(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
     ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb)
+    UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, maxHP, frame._msufPredictionAbsorb)
+  elseif frame._msufPredictionOverAbsorbOverlay == true and frame.absorbBar then
+    UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, maxHP, frame._msufPredictionAbsorb)
   end
 end
 
@@ -1253,8 +1361,10 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
       end
       ShowValue(frame.absorbBar, TEST_MAX, TEST_ABSORB)
+      UpdateOverAbsorbGlow(frame, cfg, unit, TEST_MAX, TEST_MAX, TEST_ABSORB)
     elseif frame.absorbBar then
       HideBar(frame.absorbBar)
+      HideOverAbsorbGlow(frame)
     end
     if cfg.healAbsorb == true and frame.healAbsorbBar then
       ShowValue(frame.healAbsorbBar, TEST_MAX, TEST_HEAL_ABSORB)
@@ -1349,6 +1459,7 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
       maxHP = ReadHealthMax(frame, unit)
     end
     ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb, forceMax)
+    UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, frame._msufPredictionAbsorb)
   end
 
   if showHealAbsorb and frame.healAbsorbBar then
