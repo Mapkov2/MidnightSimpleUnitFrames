@@ -75,6 +75,8 @@ local function StopTimeUpdater(frame)
     if not frame then return end
     frame.MSUF_timeUpdater = nil
     frame.MSUF_timeAccum = nil
+    frame.MSUF_lastMirrorText = nil
+    frame.MSUF_lastMirrorAlpha = nil
     if frame.SetScript then frame:SetScript("OnUpdate", nil) end
 end
 
@@ -86,13 +88,33 @@ local function SyncTimeText()
 
     local source = iconFrame.MSUF_sourceCastBar or _G.FocusCastBar or _G.MSUF_FocusCastBar
     if not (source and source.timeText) then
-        iconFrame.timeText:SetText("")
-        iconFrame.timeText:SetAlpha(0)
+        if iconFrame.MSUF_lastMirrorText ~= "" or iconFrame.MSUF_lastMirrorAlpha ~= 0 then
+            iconFrame.MSUF_lastMirrorText = ""
+            iconFrame.MSUF_lastMirrorAlpha = 0
+            iconFrame.timeText:SetText("")
+            iconFrame.timeText:SetAlpha(0)
+        end
         return
     end
 
-    iconFrame.timeText:SetText(source.timeText:GetText() or "")
-    iconFrame.timeText:SetAlpha(source.timeText:GetAlpha() or 1)
+    local text = source.timeText:GetText() or ""
+    local alpha = source.timeText:GetAlpha() or 1
+    local issecret = _G.issecretvalue
+    if issecret and (issecret(text) == true or issecret(alpha) == true) then
+        -- Never compare secret values; write through and drop the memo.
+        iconFrame.MSUF_lastMirrorText = nil
+        iconFrame.MSUF_lastMirrorAlpha = nil
+        iconFrame.timeText:SetText(text)
+        iconFrame.timeText:SetAlpha(alpha)
+        return
+    end
+    if iconFrame.MSUF_lastMirrorText == text and iconFrame.MSUF_lastMirrorAlpha == alpha then
+        return
+    end
+    iconFrame.MSUF_lastMirrorText = text
+    iconFrame.MSUF_lastMirrorAlpha = alpha
+    iconFrame.timeText:SetText(text)
+    iconFrame.timeText:SetAlpha(alpha)
 end
 
 local function OnTimeUpdate(frame, elapsed)

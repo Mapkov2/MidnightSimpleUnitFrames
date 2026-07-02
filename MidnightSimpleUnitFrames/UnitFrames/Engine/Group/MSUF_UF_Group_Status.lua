@@ -18,6 +18,7 @@ if not (UF and UF.RegisterElement) then return end
 
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
+local C_Timer = _G.C_Timer
 local next = next
 local type = type
 
@@ -555,6 +556,7 @@ end
 
 local STATUS_POLL_INTERVAL = 0.5
 local statusPollDriver
+local statusPollTicker
 local statusPollFrames = {}
 local statusPollIndex = {}
 local statusPollCount = 0
@@ -584,21 +586,29 @@ local function RunStatusPollFrame(frame)
 end
 
 local function RunStatusPollFrames()
+  if StatusPollCombatBlocked() then
+    return
+  end
   for i = 1, #statusPollFrames do
     RunStatusPollFrame(statusPollFrames[i])
   end
 end
 
+--- PERF: the poll cadence runs on a C_Timer ticker instead of a per-frame
+--- OnUpdate accumulator. The old driver ticked every render frame just to
+--- count up to 0.5s; the ticker wakes exactly twice per second and is
+--- cancelled entirely while in combat (regen events restart it).
 local function RefreshStatusPollDriver()
-  if not statusPollDriver then
-    return
-  end
   if statusPollCount > 0 and not StatusPollCombatBlocked() then
-    statusPollDriver._msufElapsed = 0
-    statusPollDriver:Show()
-  else
-    statusPollDriver._msufElapsed = 0
-    statusPollDriver:Hide()
+    if statusPollTicker then
+      return
+    end
+    if C_Timer and C_Timer.NewTicker then
+      statusPollTicker = C_Timer.NewTicker(STATUS_POLL_INTERVAL, RunStatusPollFrames)
+    end
+  elseif statusPollTicker then
+    statusPollTicker:Cancel()
+    statusPollTicker = nil
   end
 end
 
@@ -611,28 +621,10 @@ local function EnsureStatusPollDriver()
   statusPollDriver:RegisterEvent("PLAYER_REGEN_DISABLED")
   statusPollDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
   statusPollDriver:SetScript("OnEvent", function(_, event)
-    if event == "PLAYER_REGEN_DISABLED" then
-      RefreshStatusPollDriver()
-      return
-    end
     RefreshStatusPollDriver()
-    if statusPollCount > 0 and not StatusPollCombatBlocked() then
+    if event == "PLAYER_REGEN_ENABLED" and statusPollCount > 0 then
       RunStatusPollFrames()
     end
-  end)
-  statusPollDriver:SetScript("OnUpdate", function(self, elapsed)
-    if StatusPollCombatBlocked() then
-      self._msufElapsed = 0
-      self:Hide()
-      return
-    end
-    elapsed = (self._msufElapsed or 0) + (elapsed or 0)
-    if elapsed < STATUS_POLL_INTERVAL then
-      self._msufElapsed = elapsed
-      return
-    end
-    self._msufElapsed = 0
-    RunStatusPollFrames()
   end)
   return statusPollDriver
 end

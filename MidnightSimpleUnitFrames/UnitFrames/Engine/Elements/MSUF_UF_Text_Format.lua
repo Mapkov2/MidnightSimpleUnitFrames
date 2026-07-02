@@ -1360,6 +1360,15 @@ local powerTextQueueHead = 1
 local powerTextQueueTail = 0
 local TEXT_FLUSH_PER_TICK = 10
 local TEXT_MIN_DELAY = 0.01
+--- PERF: align queue deadlines to a coarse grid so frames whose throttle
+--- windows expire close together share one C_Timer callback instead of each
+--- waking its own timer. Adds at most TEXT_QUEUE_GRID (20ms) on top of the
+--- configured throttle, which is below a single render frame at 60 fps.
+local TEXT_QUEUE_GRID = 0.02
+
+local function QuantizeTextDeadline(when)
+  return (floor(when / TEXT_QUEUE_GRID) + 1) * TEXT_QUEUE_GRID
+end
 
 local function CompactTextQueue(list, head, tail)
   if head <= 1 then
@@ -1542,12 +1551,12 @@ local function QueueHealthTextFlush(frame, rt, remaining)
     return
   end
   rt.healthTimerActive = true
-  local delay = remaining > 0 and remaining or TEXT_MIN_DELAY
-  local when = (GetTime and GetTime() or 0) + delay
+  local now = GetTime and GetTime() or 0
+  local when = QuantizeTextDeadline(now + (remaining > 0 and remaining or TEXT_MIN_DELAY))
   healthTextQueueHead, healthTextQueueTail = QueueTextFrame(
     healthTextQueue, healthTextQueueList, healthTextQueueHead, healthTextQueueTail, frame, when
   )
-  ScheduleTextThrottleTimer(delay, when)
+  ScheduleTextThrottleTimer(when - now, when)
 end
 
 FlushPendingPowerText = function(frame)
@@ -1603,12 +1612,12 @@ local function QueuePowerTextFlush(frame, rt, remaining)
     return
   end
   rt.powerTimerActive = true
-  local delay = remaining > 0 and remaining or TEXT_MIN_DELAY
-  local when = (GetTime and GetTime() or 0) + delay
+  local now = GetTime and GetTime() or 0
+  local when = QuantizeTextDeadline(now + (remaining > 0 and remaining or TEXT_MIN_DELAY))
   powerTextQueueHead, powerTextQueueTail = QueueTextFrame(
     powerTextQueue, powerTextQueueList, powerTextQueueHead, powerTextQueueTail, frame, when
   )
-  ScheduleTextThrottleTimer(delay, when)
+  ScheduleTextThrottleTimer(when - now, when)
 end
 Text.HealthPercent = HealthPercent
 Text.PowerPercent = PowerPercent

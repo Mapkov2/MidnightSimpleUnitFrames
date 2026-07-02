@@ -63,7 +63,18 @@ local function EnsureGeneralDB()
     return db.general
 end
 
+local issecretvalue = _G.issecretvalue or function(_) return false end
+local mathHuge = math.huge
+
 local function ToPlainNumber(value)
+    -- PERF fast path: a plain finite number needs no tostring/tonumber
+    -- round-trip (that round-trip only exists to redact secrets and to map
+    -- nan/inf to nil, which the guards below preserve exactly).
+    if type(value) == "number" and issecretvalue(value) ~= true
+        and value == value and value ~= mathHuge and value ~= -mathHuge then
+        return value
+    end
+
     local converter = _G.MSUF_ToPlainNumber
     if type(converter) == "function" then return converter(value) end
 

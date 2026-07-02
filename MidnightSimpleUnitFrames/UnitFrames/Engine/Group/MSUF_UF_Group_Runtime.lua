@@ -782,6 +782,79 @@ function GF.RebuildAll(preInvalidated, auras3ConfigBumped)
   return true
 end
 
+--- PERF: RefreshVisuals applies a compiled spec to every live group frame; in
+--- a raid that was a single-frame 40-60ms stall (~3.5ms ApplySpec per frame).
+--- Small groups still complete fully synchronously (identical behavior), larger
+--- sets apply under a per-chunk time budget and continue next frame. Combat
+--- starting mid-slice aborts the remainder into the standard DeferGroupRuntime
+--- replay, so in-combat semantics are unchanged.
+local REFRESH_SLICE_BUDGET = 0.008
+local REFRESH_SLICE_SYNC_MAX = 6
+local refreshSliceFrames = {}
+local refreshSliceKinds = {}
+local refreshSliceCount = 0
+local refreshSliceIndex = 0
+local refreshSliceKind, refreshSliceMask
+local refreshSliceActive = false
+
+local function ResetRefreshSlice()
+  for i = refreshSliceIndex + 1, refreshSliceCount do
+    refreshSliceFrames[i] = nil
+    refreshSliceKinds[i] = nil
+  end
+  refreshSliceCount = 0
+  refreshSliceIndex = 0
+  refreshSliceKind, refreshSliceMask = nil, nil
+  refreshSliceActive = false
+end
+
+local function CollectRefreshVisualsFrame(frame, _, frameKind)
+  refreshSliceCount = refreshSliceCount + 1
+  refreshSliceFrames[refreshSliceCount] = frame
+  refreshSliceKinds[refreshSliceCount] = frameKind
+end
+
+local RefreshSliceNow = _G.GetTimePreciseSec or _G.GetTime or function() return 0 end
+
+local RunRefreshVisualsSlice
+
+local function ScheduleRefreshVisualsSlice()
+  if not ScheduleGroupRuntimeNextFrame("MSUF_GF_REFRESH_VISUALS_SLICE", RunRefreshVisualsSlice) then
+    RunRefreshVisualsSlice()
+  end
+end
+
+RunRefreshVisualsSlice = function()
+  if refreshSliceActive ~= true then
+    return
+  end
+  if InCombat() then
+    GF.DeferGroupRuntime("refresh", refreshSliceKind, refreshSliceMask)
+    ResetRefreshSlice()
+    return
+  end
+  local budgeted = refreshSliceCount > REFRESH_SLICE_SYNC_MAX
+  local deadline = budgeted and (RefreshSliceNow() + REFRESH_SLICE_BUDGET) or nil
+  local kind, mask = refreshSliceKind, refreshSliceMask
+  local live = GF.frames
+  while refreshSliceIndex < refreshSliceCount do
+    local i = refreshSliceIndex + 1
+    refreshSliceIndex = i
+    local frame = refreshSliceFrames[i]
+    refreshSliceFrames[i] = nil
+    local frameKind = refreshSliceKinds[i]
+    refreshSliceKinds[i] = nil
+    if frame and (not live or live[frame] == true) then
+      RefreshVisualsFrame(frame, nil, frameKind, kind, mask)
+    end
+    if deadline and refreshSliceIndex < refreshSliceCount and RefreshSliceNow() >= deadline then
+      ScheduleRefreshVisualsSlice()
+      return
+    end
+  end
+  ResetRefreshSlice()
+end
+
 --- Warm visual refresh. Dirty masks let option changes touch only affected
 --- runtime elements instead of reapplying every group-frame element.
 function GF.RefreshVisuals(kind, mask, preInvalidated, auras3ConfigBumped)
@@ -795,9 +868,26 @@ function GF.RefreshVisuals(kind, mask, preInvalidated, auras3ConfigBumped)
   if auras3ConfigBumped ~= true then
     BumpAuras3ConfigForGroup(mask)
   end
-  if GF.ForEachFrame then
-    GF.ForEachFrame(RefreshVisualsFrame, true, kind, mask)
+  if not GF.ForEachFrame then
+    return true
   end
+  if refreshSliceActive == true then
+    -- Merge with the in-flight sliced refresh and restart. Reapplying frames
+    -- that already finished is redundant but always correct.
+    if refreshSliceKind ~= kind then
+      kind = nil
+    end
+    mask = OrMask(refreshSliceMask, mask)
+    ResetRefreshSlice()
+  end
+  refreshSliceKind, refreshSliceMask = kind, mask
+  GF.ForEachFrame(CollectRefreshVisualsFrame, true)
+  if refreshSliceCount <= 0 then
+    ResetRefreshSlice()
+    return true
+  end
+  refreshSliceActive = true
+  RunRefreshVisualsSlice()
   return true
 end
 

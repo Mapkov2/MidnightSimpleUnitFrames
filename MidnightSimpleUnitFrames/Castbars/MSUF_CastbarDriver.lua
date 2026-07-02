@@ -145,9 +145,19 @@ local function UpdateChannelHasteMarkers(frame, force)
 end
 
 local ToPlain = _G.ToPlain
+local toPlainIsSecret = _G.issecretvalue or function(_) return false end
+local toPlainHuge = math.huge
 
 local function ToPlainNumber(value)
     if value == nil then return nil end
+
+    -- PERF fast path: a plain finite number needs no tostring/tonumber
+    -- round-trip (that round-trip only exists to redact secrets and to map
+    -- nan/inf to nil, which the guards below preserve exactly).
+    if type(value) == "number" and toPlainIsSecret(value) ~= true
+        and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
+        return value
+    end
 
     if ToPlain then
         local plain = ToPlain(value)
