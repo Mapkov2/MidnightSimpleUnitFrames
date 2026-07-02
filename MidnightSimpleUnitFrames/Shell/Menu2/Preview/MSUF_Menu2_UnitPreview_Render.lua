@@ -1128,7 +1128,10 @@ function Preview.Refresh(box, reason)
         hpCenterMode = rev[hpCenterMode] or hpCenterMode
         hpRightMode = rev[hpRightMode] or hpRightMode
     end
-    local hpPctValue = floor(data.hp * 100 + 0.5)
+    local hpPercentDecimals = R.TextScopeGet(key, "healthTextDecimals", false) == true
+        or R.TextScopeGet(key, "hpTextDecimals", false) == true
+    local hpPctValue = hpPercentDecimals and format("%.1f", floor(data.hp * 1000 + 0.5) / 10)
+        or floor(data.hp * 100 + 0.5)
     local hpSepRaw = R.TextScopeGet(key, "hpTextSeparator", "")
     mock.hpTextLeft:SetText(R.FormatMode(hpLeftMode, hpCur, hpMax, hpPctValue, hpSepRaw, false))
     mock.hpTextCenter:SetText(R.FormatMode(hpCenterMode, hpCur, hpMax, hpPctValue, hpSepRaw, false))
