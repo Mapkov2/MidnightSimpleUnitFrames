@@ -423,8 +423,8 @@ function H.EnsurePreviewHandleGear(handle, opts)
         elseif gear.SetBackdrop then
             gear:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
         end
-        local fs = T and T.Font and T.Font(gear, "GameFontDisableSmall", "...", { 0.78, 0.92, 1.00, 1 }) or gear:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        fs:SetText("...")
+        local fs = T and T.Font and T.Font(gear, "GameFontDisableSmall", "⚙", { 0.78, 0.92, 1.00, 1 }) or gear:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        fs:SetText("⚙")
         fs:SetPoint("CENTER", gear, "CENTER", 0, 1)
         gear.fs = fs
         local bg, br = { 0.018, 0.150, 0.230, 0.98 }, { 0.120, 0.600, 0.780, 0.98 }
