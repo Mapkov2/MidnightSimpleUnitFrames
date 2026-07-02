@@ -416,6 +416,9 @@ builders.LAYOUT = function(E)
                     anchorFrame = ecv
                 end
             end
+            CP_Trace("ecv=" .. tostring(ecv and ((ecv.GetName and ecv:GetName()) or "unnamed") or "nil")
+                .. " shown=" .. tostring((ecv and ecv.IsShown and ecv:IsShown()) == true)
+                .. " -> " .. (anchorFrame and "anchor direct" or "no anchor"))
             if anchorFrame then
                 CP.container:SetPoint("TOP", anchorFrame, "BOTTOM", oX, oY)
                 CP.container._msufDirectCooldownAnchor = true
@@ -432,18 +435,23 @@ builders.LAYOUT = function(E)
                 if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                     and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
                 then
+                    CP_Trace("late cache apply OK")
                     CP.container._msufDirectCooldownAnchor = true
                     CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
                 else
+                    CP_Trace("late cache FAIL -> playerFrame fallback")
                     CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
                     CP.container._msufDirectCooldownAnchor = nil
                     CP.container._msufHardLockPoint = nil
                 end
             end
         else
-            CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
-            CP.container._msufDirectCooldownAnchor = nil
-            CP.container._msufHardLockPoint = nil
+            if not cachedCooldownAnchor then
+                CP_Trace("anchor playerFrame (a2c off)")
+                CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                CP.container._msufDirectCooldownAnchor = nil
+                CP.container._msufHardLockPoint = nil
+            end
         end
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
