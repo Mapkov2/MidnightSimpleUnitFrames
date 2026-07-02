@@ -2354,18 +2354,23 @@ aurasOwnBuffHighlightColor = true,
 local function MSUF_IsAuraGeneralKey(key)
     return (type(key) == "string") and (MSUF_AURA_GENERAL_KEYS[key] == true)
 end
--- Unified, coldpath alpha keys: HP fill opacity, background opacity, and a toggle to
--- keep text + portrait opaque. Note hpBarAlpha/hpBgAlpha are NOT colour keys here
+-- Unified, coldpath alpha keys: HP fill opacity, power fill opacity, background
+-- opacity, and a toggle to keep text + portrait opaque. Note hpBarAlpha,
+-- powerBarAlpha, hpBgAlpha, and powerBarBgAlpha are NOT colour keys here
 -- (MSUF_IsColorKey matches "bg"); listing them keeps them travelling with unitframe
 -- settings rather than colour settings.
 local MSUF_UNITFRAME_ALPHA_KEYS = {
     hpBarAlpha = true,
+    powerBarAlpha = true,
     hpBgAlpha = true,
+    powerBarBgAlpha = true,
     alphaExcludeTextPortrait = true,
 }
 local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
     hpBarAlpha = 1,
+    powerBarAlpha = 1,
     hpBgAlpha = 0.85,
+    powerBarBgAlpha = 0.85,
     alphaExcludeTextPortrait = false,
 }
 local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
@@ -3605,8 +3610,12 @@ local function MSUF_ProfileIO_MakeUUFUnitVisible(dst)
     dst.showHealth = true
     dst.hpBarAlpha = tonumber(dst.hpBarAlpha) or 1
     if dst.hpBarAlpha <= 0 then dst.hpBarAlpha = 1 end
+    dst.powerBarAlpha = tonumber(dst.powerBarAlpha) or 1
+    if dst.powerBarAlpha <= 0 then dst.powerBarAlpha = 1 end
     dst.hpBgAlpha = tonumber(dst.hpBgAlpha) or 0.85
     if dst.hpBgAlpha <= 0 then dst.hpBgAlpha = 0.85 end
+    dst.powerBarBgAlpha = tonumber(dst.powerBarBgAlpha) or dst.hpBgAlpha or 0.85
+    if dst.powerBarBgAlpha <= 0 then dst.powerBarBgAlpha = 0.85 end
     dst.alphaExcludeTextPortrait = dst.alphaExcludeTextPortrait == true
     dst.loadCondHideMounted = false
     dst.loadCondHideOutOfCombat = false
@@ -3655,8 +3664,12 @@ local function MSUF_ProfileIO_ConvertUUFUnit(unitKey, src, outProfile)
     dst.smoothFill = health.Smooth ~= false
     dst.hpBarAlpha = tonumber(health.ForegroundOpacity) or dst.hpBarAlpha
     if dst.hpBarAlpha <= 0 then dst.hpBarAlpha = 1 end
+    dst.powerBarAlpha = tonumber(health.PowerOpacity or health.ForegroundOpacity) or dst.powerBarAlpha
+    if dst.powerBarAlpha <= 0 then dst.powerBarAlpha = 1 end
     dst.hpBgAlpha = tonumber(health.BackgroundOpacity) or dst.hpBgAlpha
     if dst.hpBgAlpha <= 0 then dst.hpBgAlpha = 0.85 end
+    dst.powerBarBgAlpha = tonumber(health.PowerBackgroundOpacity or health.BackgroundOpacity) or dst.powerBarBgAlpha
+    if dst.powerBarBgAlpha <= 0 then dst.powerBarBgAlpha = 0.85 end
     local fg = MSUF_ProfileIO_CopyColorTable(health.Foreground)
     local bg = MSUF_ProfileIO_CopyColorTable(health.Background)
     if fg then dst.importHealthForeground = fg end

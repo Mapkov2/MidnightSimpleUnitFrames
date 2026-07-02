@@ -677,13 +677,15 @@ ExportPublic("MSUF_GetDefaultUnitOffsets", MSUF_GetDefaultUnitOffsets)
 local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     if not db then  return end
     MSUF_Defaults_DisableFactoryNameShortening(db)
-    --- Unified alpha defaults: HP fill opacity, background texture opacity, and a
-    --- toggle to keep text + portrait opaque while bars dim. Identical for unit and
-    --- group frames.
+    --- Unified alpha defaults: HP fill opacity, power fill opacity, background
+    --- texture opacity, and a toggle to keep text + portrait opaque while bars dim.
+    --- Group frames still use the HP/background subset.
     local function EnsureUnitAlphaDefaults(conf)
         if not conf then  return end
         if conf.hpBarAlpha == nil then conf.hpBarAlpha = 1 end
+        if conf.powerBarAlpha == nil then conf.powerBarAlpha = 1 end
         if conf.hpBgAlpha == nil then conf.hpBgAlpha = 0.85 end
+        if conf.powerBarBgAlpha == nil then conf.powerBarBgAlpha = conf.hpBgAlpha or 0.85 end
         if conf.alphaExcludeTextPortrait == nil then conf.alphaExcludeTextPortrait = false end
      end
     local function ForceFreshUnitframeScreenPosition(conf, x, y)
@@ -2230,9 +2232,12 @@ end
             g.enableAbsorbBar = true
         end
     end
-	    if g.absorbAnchorMode == nil then
+    if g.absorbAnchorMode == nil then
 	        --- 1 = Left Absorb, Right Heal-Absorb; 2 = Right Absorb, Left Heal-Absorb (default); 3 = Follow current HP edge (Blizzard-style)
         g.absorbAnchorMode = 2
+    end
+    if g.overAbsorbOverlay == nil then
+        g.overAbsorbOverlay = false
     end
 
     --- v2 absorb-colour cleanup. Pre-v2 the picker in MSUF_ColorsCore wrote to
@@ -3214,11 +3219,13 @@ local function fill(key, defaults)
         if u.smoothFill == nil then
             u.smoothFill = true
         end
-        --- Unified alpha: HP fill opacity + background texture opacity + a toggle to
-        --- keep text/portrait opaque. Legacy combat/layered keys are wiped once by the
-        --- _msufAlphaUnified_v1 migration below.
+        --- Unified alpha: HP fill opacity + power fill opacity + background texture
+        --- opacity + a toggle to keep text/portrait opaque. Legacy combat/layered keys
+        --- are wiped once by the _msufAlphaUnified_v1 migration below.
         if u.hpBarAlpha == nil then u.hpBarAlpha = 1 end
+        if u.powerBarAlpha == nil then u.powerBarAlpha = 1 end
         if u.hpBgAlpha == nil then u.hpBgAlpha = 0.85 end
+        if u.powerBarBgAlpha == nil then u.powerBarBgAlpha = u.hpBgAlpha or 0.85 end
         if u.alphaExcludeTextPortrait == nil then u.alphaExcludeTextPortrait = false end
         --- Portrait defaults used by the clean UF Portrait element.
         --- v4.324+: portraits are always per-unit. Older shared/override profiles
@@ -3265,7 +3272,9 @@ local function fill(key, defaults)
     end
     g._msufPortraitPerUnitMigrated_v4324 = true
     --- Unified alpha migration (hard reset): the old combat/layered alpha model was
-    --- replaced by hpBarAlpha (HP fill) + hpBgAlpha (background) + alphaExcludeTextPortrait.
+    --- replaced by hpBarAlpha (HP fill) + powerBarAlpha (power fill) + hpBgAlpha
+    --- (health background) + powerBarBgAlpha (resource background) +
+    --- alphaExcludeTextPortrait.
     --- Wipe every retired key once across all unit and group confs and seed the new
     --- defaults. dead/offline tint (deadBg*) and background RGB (bgR/bgG/bgB) are kept.
     if g._msufAlphaUnified_v1 ~= true then
@@ -3285,7 +3294,9 @@ local function fill(key, defaults)
                     conf[RETIRED_ALPHA_KEYS[i]] = nil
                 end
                 if conf.hpBarAlpha == nil then conf.hpBarAlpha = 1 end
+                if conf.powerBarAlpha == nil then conf.powerBarAlpha = 1 end
                 if conf.hpBgAlpha == nil then conf.hpBgAlpha = 0.85 end
+                if conf.powerBarBgAlpha == nil then conf.powerBarBgAlpha = conf.hpBgAlpha or 0.85 end
                 if conf.alphaExcludeTextPortrait == nil then conf.alphaExcludeTextPortrait = false end
             end
         end

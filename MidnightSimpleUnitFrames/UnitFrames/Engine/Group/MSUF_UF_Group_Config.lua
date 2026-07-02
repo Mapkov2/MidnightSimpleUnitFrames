@@ -599,6 +599,7 @@ local function CompilePrediction(kind, conf, texture)
     test = test == true,
     healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", 3), 3),
     absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", 2), 2),
+    overAbsorbOverlay = ScopedValue(conf, general, "overAbsorbOverlay", false) == true,
     texture = texture,
     absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil),
     healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil),

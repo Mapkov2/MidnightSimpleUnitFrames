@@ -354,6 +354,14 @@ local function ResolveBgAlpha(general, bars, conf)
   return Clamp01(general and general.barBackgroundAlpha, 0.9)
 end
 
+local function ResolvePowerBgAlpha(general, bars, conf)
+  local perUnit = conf and conf.powerBarBgAlpha
+  if type(perUnit) == "number" then
+    return Clamp01(perUnit, 0.85)
+  end
+  return ResolveBgAlpha(general, bars, conf)
+end
+
 local function DarkTint(general, r, g, b)
   if general and general.darkMode == true and general.darkBgCustomColor ~= true then
     local brightness = Clamp01(general.darkBgBrightness, 0.25)
@@ -379,7 +387,7 @@ local function ResolveHealthBackground(general, bars, health, dst, conf)
   return dst
 end
 
-local function ResolvePowerBackground(general, bars, health, dst)
+local function ResolvePowerBackground(general, bars, health, dst, conf)
   dst = dst or {}
   local r, g, b, a
   local getBg = _G.MSUF_GetPowerBarBackgroundTintRGBA
@@ -392,7 +400,7 @@ local function ResolvePowerBackground(general, bars, health, dst)
   if (general and general.powerBarBgMatchBarColor == true) or (bars and bars.powerBarBgMatchBarColor == true) then
     r, g, b = DarkTint(general, health and health.r or r, health and health.g or g, health and health.b or b)
   end
-  CopyColor(dst, r, g, b, (Number(a, 0.9)) * ResolveBgAlpha(general, bars))
+  CopyColor(dst, r, g, b, (Number(a, 0.9)) * ResolvePowerBgAlpha(general, bars, conf))
   return dst
 end
 
@@ -1522,6 +1530,7 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   power.texture = out.texture
   power.backgroundTexture = out.backgroundTexture
   power.frequent = unit == "player" and bars.realtimePowerText == true
+  power.alpha = Clamp01(conf.powerBarAlpha, 1)
   power.mode = ResolvePowerMode(general)
   power.colors = power.colors or {}
   wipe(power.colors)
@@ -1583,7 +1592,7 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   else
     CopyColor(power, 0.1, 0.35, 0.95, 1)
   end
-  power.background = ResolvePowerBackground(general, bars, health, power.background or {})
+  power.background = ResolvePowerBackground(general, bars, health, power.background or {}, conf)
   power.backgroundMatchHealth = general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true
   power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
   power.reverse = health.reverse == true
@@ -1615,6 +1624,7 @@ local function CompileUnitPrediction(out, conf, general, key)
   pred.texture = out.texture
   pred.healAnchorMode = Number(ScopedValue(conf, general, "healPredAnchorMode", 3), 3)
   pred.absorbAnchorMode = Number(ScopedValue(conf, general, "absorbAnchorMode", 2), 2)
+  pred.overAbsorbOverlay = ScopedValue(conf, general, "overAbsorbOverlay", false) == true
   pred.absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil)
   pred.healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil)
   FillPredictionColors(pred, general, conf, ScopedValue, Number)
