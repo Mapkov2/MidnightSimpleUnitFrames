@@ -98,6 +98,45 @@ local function ResolveAnchor(spec, frame)
   return anchor, nil, nil
 end
 
+local MAX_ANCHOR_DEPENDENCY_DEPTH = 16
+
+local function AnchorDependsOn(region, target, seen, depth)
+  if not (region and target) then
+    return false
+  end
+  if region == target then
+    return true
+  end
+  depth = (tonumber(depth) or 0) + 1
+  if depth > MAX_ANCHOR_DEPENDENCY_DEPTH then
+    return false
+  end
+  seen = seen or {}
+  if seen[region] then
+    return false
+  end
+  seen[region] = true
+  if type(region.GetNumPoints) ~= "function" or type(region.GetPoint) ~= "function" then
+    return false
+  end
+
+  local count = region:GetNumPoints() or 0
+  for i = 1, count do
+    local _, relativeTo = region:GetPoint(i)
+    if relativeTo == target or AnchorDependsOn(relativeTo, target, seen, depth) then
+      return true
+    end
+  end
+  return false
+end
+
+local function AnchorWouldCreateCycle(frame, anchor)
+  if not (frame and anchor) or anchor == UIParent then
+    return false
+  end
+  return AnchorDependsOn(anchor, frame)
+end
+
 local function ShouldCacheScreenPosition(spec, requestedAnchor)
   if type(spec.anchorFrameName) == "string" and spec.anchorFrameName ~= "" then
     return true
@@ -181,6 +220,19 @@ local function ApplyPosition(frame, spec)
     or frame._msufRelativePoint ~= relativePoint
     or frame._msufX ~= x
     or frame._msufY ~= y then
+    if AnchorWouldCreateCycle(frame, anchor) then
+      frame._msufRejectedAnchor, frame._msufRejectedAnchorReason = requestedAnchor, "cycle"
+      if frame._msufPositionInitialized == true then
+        return true
+      end
+      local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
+      if type(applyCached) == "function" and applyCached(frame, key, frame.unit) then
+        return true
+      end
+      anchor, missingAnchorName, requestedAnchor = UIParent, requestedAnchor, nil
+    else
+      frame._msufRejectedAnchor, frame._msufRejectedAnchorReason = nil, nil
+    end
     frame:ClearAllPoints()
     frame:SetPoint(point, anchor, relativePoint, x, y)
     frame._msufPoint, frame._msufAnchor, frame._msufRelativePoint = point, anchor, relativePoint
