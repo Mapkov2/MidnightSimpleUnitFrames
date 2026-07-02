@@ -13,9 +13,12 @@ local UnitClass = V.UnitClass or UnitClass
 local UnitReaction = V.UnitReaction or UnitReaction
 local UnitGUID = V.UnitGUID or UnitGUID
 local UnitExists = V.UnitExists or UnitExists
+local UnitIsConnected = V.UnitIsConnected or UnitIsConnected
+local UnitIsVisible = V.UnitIsVisible or UnitIsVisible
 local SetPortraitTexture = V.SetPortraitTexture or SetPortraitTexture
 local tonumber = V.tonumber or tonumber
 local type = V.type or type
+local tostring = V.tostring or tostring
 local max = V.max or math.max
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local PORTRAIT_2D_EVENTS = V.PORTRAIT_2D_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
@@ -81,6 +84,7 @@ local function SetTextureCached(texture, value)
     texture._msufTexture = value
     texture._msufAtlas = nil
     texture._msufPortraitGUID = nil
+    texture._msufPortraitKey = nil
   end
 end
 
@@ -97,6 +101,7 @@ local function SetAtlasCached(texture, atlas)
     texture._msufAtlas = atlas
     texture._msufTexture = nil
     texture._msufPortraitGUID = nil
+    texture._msufPortraitKey = nil
     texture._msufL, texture._msufR, texture._msufT, texture._msufB = nil, nil, nil, nil
   end
 end
@@ -111,6 +116,7 @@ end
 local function ClearPortraitGUID(texture)
   if texture then
     texture._msufPortraitGUID = nil
+    texture._msufPortraitKey = nil
   end
 end
 
@@ -129,6 +135,7 @@ local function ClearPortraitTexture(texture)
   texture._msufTexture = nil
   texture._msufAtlas = nil
   texture._msufPortraitGUID = nil
+  texture._msufPortraitKey = nil
 end
 
 local function PortraitFrameVisible(frame)
@@ -167,7 +174,6 @@ local function FlushQueuedPortraits()
         frame._msufPortraitNeedsVisibleRefresh = nil
         if frame._msufPortraitForceRefresh == true then
           frame._msufPortraitForceRefresh = nil
-          ClearPortraitGUID(texture)
         end
         ApplyUnitPortrait(texture, frame.unit, frame, p)
         if PortraitBorderNeedsUpdate("MSUF_PORTRAIT_FLUSH", p) then
@@ -236,6 +242,76 @@ local function UnitExistsPlain(unit)
     return true
   end
   return exists == true or exists == 1
+end
+
+local function PlainUnitBool(fn, unit, fallback)
+  if not (fn and unit) then
+    return fallback == true
+  end
+  local value = fn(unit)
+  if issecretvalue(value) == true then
+    return fallback == true
+  end
+  return value == true or value == 1
+end
+
+local function PortraitUnitAvailable(unit)
+  if not UnitExistsPlain(unit) then
+    return false
+  end
+  return PlainUnitBool(UnitIsConnected, unit, true) and PlainUnitBool(UnitIsVisible, unit, true)
+end
+
+local function PortraitKeyPart(value)
+  if value == nil then
+    return ""
+  end
+  return tostring(value)
+end
+
+local function BuildUnitPortraitKey(unit, frame, p, guid)
+  local exists = UnitExistsPlain(unit)
+  local available = exists and PortraitUnitAvailable(unit)
+  if exists and guid == nil then
+    return nil, exists, available
+  end
+  return "2D|"
+    .. PortraitKeyPart(unit) .. "|"
+    .. PortraitKeyPart(frame and frame.unit) .. "|"
+    .. PortraitKeyPart(guid) .. "|"
+    .. (exists and "1" or "0") .. "|"
+    .. (available and "1" or "0") .. "|"
+    .. PortraitKeyPart(p and p.render) .. "|"
+    .. PortraitKeyPart(p and p.texL) .. "|"
+    .. PortraitKeyPart(p and p.texR) .. "|"
+    .. PortraitKeyPart(p and p.texT) .. "|"
+    .. PortraitKeyPart(p and p.texB), exists, available
+end
+
+local function UnitPortraitKeyChanged(texture, unit, frame, p)
+  if not texture then
+    return false
+  end
+  local guid
+  if unit then
+    guid = UnitGUID(unit)
+    if issecretvalue(guid) == true then
+      guid = nil
+    end
+  end
+  local key = BuildUnitPortraitKey(unit, frame, p, guid)
+  if key == nil then
+    return true
+  end
+  return texture._msufPortraitKey ~= key
+end
+
+local function BuildClassPortraitKey(unit, frame, p, class)
+  return "CLASS|"
+    .. PortraitKeyPart(unit) .. "|"
+    .. PortraitKeyPart(frame and frame.unit) .. "|"
+    .. PortraitKeyPart(class) .. "|"
+    .. PortraitKeyPart(p and p.classStyle)
 end
 
 local function EnsurePortrait(frame)
@@ -378,9 +454,14 @@ end
 
 local function ApplyClassPortrait(texture, unit, p, class, frame)
   class = class or BossPreviewClassToken(unit, frame) or UnitClassToken(unit)
+  local key = BuildClassPortraitKey(unit, frame, p, class)
+  if texture and texture._msufPortraitKey == key then
+    return
+  end
   local classStyle = p and p.classStyle or "BLIZZARD"
   if class and classStyle == "BLIZZARD" and texture and texture.SetAtlas then
     SetAtlasCached(texture, "classicon-" .. class)
+    texture._msufPortraitKey = key
     return
   end
 
@@ -397,6 +478,9 @@ local function ApplyClassPortrait(texture, unit, p, class, frame)
   end
   SetTextureCached(texture, path)
   SetTexCoordCached(texture, l or 0, r or 1, t or 0, b or 1)
+  if texture then
+    texture._msufPortraitKey = key
+  end
 end
 
 ApplyUnitPortrait = function(texture, unit, frame, p)
@@ -405,6 +489,7 @@ ApplyUnitPortrait = function(texture, unit, frame, p)
     SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
     SetTexCoordCached(texture, l, r, t, b)
     SetVertexColorCached(texture, 1, 1, 1, 1)
+    texture._msufPortraitKey = "BOSS_PREVIEW|" .. PortraitKeyPart(unit)
     return
   end
   local guid
@@ -413,26 +498,19 @@ ApplyUnitPortrait = function(texture, unit, frame, p)
     if issecretvalue(guid) == true then
       guid = nil
     end
-    if guid == nil and not UnitExistsPlain(unit) then
-      if texture._msufPortraitGUID == false then
-        return
-      end
-      SetTexCoordCached(texture, l, r, t, b)
-      texture._msufTexture = nil
-      texture._msufAtlas = nil
-      SetPortraitTexture(texture, unit)
-      texture._msufPortraitGUID = false
-      return
-    end
   end
-  if guid ~= nil and texture._msufPortraitGUID == guid then
+
+  local key, exists = BuildUnitPortraitKey(unit, frame, p, guid)
+  if key ~= nil and texture._msufPortraitKey == key then
     return
   end
+
   SetTexCoordCached(texture, l, r, t, b)
   texture._msufTexture = nil
   texture._msufAtlas = nil
   SetPortraitTexture(texture, unit)
-  texture._msufPortraitGUID = guid
+  texture._msufPortraitGUID = guid or (exists and nil or false)
+  texture._msufPortraitKey = key
 end
 
 ResolvePortraitBorderColor = function(frame, p, class)
@@ -626,12 +704,17 @@ function Portrait.UpdateConnectionState(frame, event, unit)
     return
   end
   frame._msufPortraitForceRefresh = true
-  ClearPortraitGUID(texture)
   if not PortraitFrameVisible(frame) then
     frame._msufPortraitNeedsVisibleRefresh = true
     return
   end
-  QueuePortraitUpdate(frame)
+  unit = unit or frame.unit
+  if UnitPortraitKeyChanged(texture, unit, frame, p) then
+    QueuePortraitUpdate(frame)
+  else
+    frame._msufPortraitNeedsVisibleRefresh = nil
+    frame._msufPortraitForceRefresh = nil
+  end
   if PortraitBorderNeedsUpdate(event, p) then
     LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
   end
@@ -650,7 +733,6 @@ function Portrait.Update(frame, event, unit)
   local forceRefresh = PORTRAIT_GUID_BUST_EVENTS[event] == true
   if forceRefresh then
     frame._msufPortraitForceRefresh = true
-    ClearPortraitGUID(texture)
   end
   if not PortraitFrameVisible(frame) then
     frame._msufPortraitNeedsVisibleRefresh = true
@@ -666,13 +748,18 @@ function Portrait.Update(frame, event, unit)
     ApplyClassPortrait(texture, unit, p, class, frame)
   else
     if Queue2DPortraitEvent(event, identityVisual) then
-      QueuePortraitUpdate(frame)
+      if UnitPortraitKeyChanged(texture, unit, frame, p) then
+        QueuePortraitUpdate(frame)
+      else
+        frame._msufPortraitNeedsVisibleRefresh = nil
+        frame._msufPortraitQueued = nil
+        frame._msufPortraitForceRefresh = nil
+      end
     else
       frame._msufPortraitNeedsVisibleRefresh = nil
       frame._msufPortraitQueued = nil
       if frame._msufPortraitForceRefresh == true then
         frame._msufPortraitForceRefresh = nil
-        ClearPortraitGUID(texture)
       end
       ApplyUnitPortrait(texture, unit, frame, p)
     end
