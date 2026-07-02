@@ -344,6 +344,129 @@ function H.StylePreviewPillButton(btn, T, opts)
     btn:MSUF2RefreshPreviewPill(false, false, false)
     return btn
 end
+function H.HidePreviewHandleContext()
+    local popup = H._previewHandleContextPopup
+    if popup and popup.Hide then popup:Hide() end
+end
+function H.ShowPreviewHandleContext(handle, opts)
+    opts = opts or {}
+    if not handle then return end
+    local M2 = opts.M or M
+    local T = opts.T or (M2 and M2.Theme)
+    local W = opts.W or (M2 and M2.Widgets)
+    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or F.Identity
+    local openSettings = opts.openSettings
+    if type(openSettings) ~= "function" then return end
+    local popup = H._previewHandleContextPopup
+    if not popup then
+        if M2 and type(M2.CreateMenuPopupPanel) == "function" then
+            popup = M2.CreateMenuPopupPanel(UIParent, { name = "MSUF2PreviewHandleContextMenu", glass = "popup" })
+        else
+            popup = CreateFrame("Frame", "MSUF2PreviewHandleContextMenu", UIParent, "BackdropTemplate")
+            popup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
+            popup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
+        end
+        popup:SetSize(176, 74)
+        popup:SetFrameStrata("FULLSCREEN_DIALOG")
+        popup:EnableMouse(true)
+        local title = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        title:SetPoint("TOPLEFT", popup, "TOPLEFT", 10, -8)
+        title:SetPoint("RIGHT", popup, "RIGHT", -10, 0)
+        title:SetJustifyH("LEFT")
+        popup._title = title
+        local function MakeButton(label, y)
+            local btn = W and W.TopButton and W.TopButton(popup, tr(label), 154, 22) or (T and T.Button and T.Button(popup, tr(label), 154, 22)) or CreateFrame("Button", nil, popup, "BackdropTemplate")
+            btn:SetPoint("TOPLEFT", popup, "TOPLEFT", 10, y)
+            if not btn.GetText then btn:SetText(tr(label)) end
+            return btn
+        end
+        popup._open = MakeButton("Open Settings", -28)
+        popup._keep = MakeButton("Keep Selected", -52)
+        popup._keep:SetScript("OnClick", function(self)
+            local p = self:GetParent()
+            if p then p:Hide() end
+        end)
+        H._previewHandleContextPopup = popup
+    end
+    popup._handle = handle
+    popup._openSettings = openSettings
+    if popup._title and popup._title.SetText then popup._title:SetText(tr(opts.title or (handle._label or handle._previewText or handle._key or "Preview Element"))) end
+    popup._open:SetScript("OnClick", function(self)
+        local p = self:GetParent()
+        local h = p and p._handle
+        local fn = p and p._openSettings
+        if p then p:Hide() end
+        if type(fn) == "function" then fn(h, "context") end
+    end)
+    if M2 and type(M2.ApplyPopupFramePriority) == "function" then M2.ApplyPopupFramePriority(popup) end
+    popup:ClearAllPoints()
+    popup:SetPoint("TOPLEFT", handle, "BOTTOMRIGHT", 8, -2)
+    popup:Show()
+    return popup
+end
+function H.EnsurePreviewHandleGear(handle, opts)
+    opts = opts or {}
+    if not handle then return nil end
+    local T = opts.T or (M and M.Theme)
+    local tr = opts.Tr or opts.TR or (M and M.Tr) or F.Identity
+    local gear = handle._msuf2SettingsGear
+    if not gear then
+        local template = T and T.Template and T.Template() or "BackdropTemplate"
+        gear = CreateFrame("Button", nil, handle, template)
+        gear:SetSize(18, 18)
+        gear:SetPoint("BOTTOMLEFT", handle, "TOPRIGHT", -8, -8)
+        if gear.SetHitRectInsets then gear:SetHitRectInsets(-2, -2, -2, -2) end
+        if T and T.CreateSuperellipseLayers then
+            local fill, edge = T.CreateSuperellipseLayers(gear, "_msuf2PreviewGear", 2, "BACKGROUND", "BORDER")
+            gear._fill, gear._edge = fill, edge
+        elseif gear.SetBackdrop then
+            gear:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        end
+        local fs = T and T.Font and T.Font(gear, "GameFontDisableSmall", "...", { 0.78, 0.92, 1.00, 1 }) or gear:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        fs:SetText("...")
+        fs:SetPoint("CENTER", gear, "CENTER", 0, 1)
+        gear.fs = fs
+        local bg, br = { 0.018, 0.150, 0.230, 0.98 }, { 0.120, 0.600, 0.780, 0.98 }
+        local function Paint(self, hover)
+            local mul = hover and 1.10 or 1
+            if self._fill then
+                if T and T.SetFillGradient then T.SetFillGradient(self._fill, bg, 0.12, -0.18) else self._fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4]) end
+            elseif self.SetBackdropColor then
+                self:SetBackdropColor(bg[1], bg[2], bg[3], bg[4])
+            end
+            if self._edge then
+                self._edge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4])
+            elseif self.SetBackdropBorderColor then
+                self:SetBackdropBorderColor(br[1], br[2], br[3], br[4])
+            end
+        end
+        gear:SetScript("OnEnter", function(self)
+            Paint(self, true)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(tr("Open Settings"), 1, 1, 1)
+                GameTooltip:Show()
+            end
+        end)
+        gear:SetScript("OnLeave", function(self)
+            Paint(self, false)
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+        gear:SetScript("OnClick", function(self)
+            local h = self._handle
+            local fn = self._openSettings
+            if type(fn) == "function" then fn(h, "gear") end
+        end)
+        Paint(gear, false)
+        gear:Hide()
+        handle._msuf2SettingsGear = gear
+    end
+    gear._handle = handle
+    gear._openSettings = opts.openSettings
+    gear:SetShown(opts.shown == true)
+    return gear
+end
 function H.InstallZoomPan(ZoomPan, opts)
     if type(ZoomPan) ~= "table" then return end
     opts = opts or {}
