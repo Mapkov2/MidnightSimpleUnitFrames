@@ -574,8 +574,20 @@ local function ForEachCastbar(callback)
     end
 end
 
+--- PERF: RefreshAll/RefreshActive/KickReady_RefreshFrame run per cooldown or
+--- castbar event; a fresh status table per call is steady combat garbage. The
+--- shared scratch is safe because the status never escapes these calls and the
+--- three entry points never nest into each other.
+local scratchStatus = {}
+local function AcquireScratchStatus()
+    scratchStatus.resolved = nil
+    scratchStatus.ready = nil
+    scratchStatus.remaining = nil
+    return scratchStatus
+end
+
 local function RefreshAll(updateFillColor)
-    local status = {}
+    local status = AcquireScratchStatus()
     local general = GeneralDB()
 
     ForEachCastbar(function(frame)
@@ -613,7 +625,7 @@ local function QueueActiveRefreshFrames(frames)
 end
 
 local function RefreshActive(updateFillColor)
-    local status = {}
+    local status = AcquireScratchStatus()
     local general = GeneralDB()
 
     QueueActiveRefreshFrames(activeIndicatorFrames)
@@ -725,7 +737,7 @@ local function KickReady_ApplyLayout(frame)
 end
 
 local function KickReady_RefreshFrame(frame, castState)
-    local status = {}
+    local status = AcquireScratchStatus()
     RefreshFrame(frame, castState, status)
     if status.resolved then
         ScheduleCooldownRefresh(status.remaining, true)
@@ -748,17 +760,31 @@ end
 
 local function CooldownEventAlreadyDisplayed()
     local remaining = InterruptRemaining()
-    if remaining == nil then
+    local ready
+    if remaining ~= nil then
+        ready = remaining <= 0.05
+    else
+        -- Secret-cooldown fallback: the numeric remaining is unreadable, but
+        -- IsZero can still yield a plain boolean readiness. Without this the
+        -- guard exits before recording state and every SPELL_UPDATE_COOLDOWN
+        -- (i.e. every player ability press) runs a full refresh pass.
+        local cooldown = InterruptCooldown()
+        if cooldown and cooldown.IsZero then
+            local zero = cooldown:IsZero()
+            if zero ~= nil and plainIsSecret(zero) ~= true then
+                ready = zero == true
+            end
+        end
+    end
+    if ready == nil then
         return false
     end
 
-    local ready = remaining <= 0.05
     if state.cooldownDisplayReady ~= ready then
         -- Record the ready state we are about to display before running the
         -- refresh. RefreshActive/RefreshAll only resolve a status when some
         -- indicator actually paints; without this write the stored state goes
-        -- stale whenever no cast is active and every SPELL_UPDATE_COOLDOWN
-        -- (i.e. every player ability press) runs a full refresh pass.
+        -- stale whenever no cast is active.
         state.cooldownDisplayReady = ready
         return false
     end
@@ -803,6 +829,19 @@ eventFrame:SetScript("OnEvent", function(_, event)
     elseif CooldownEventAlreadyDisplayed() then
         UpdateCooldownEventRegistration()
         return
+    else
+        -- PERF: one ability press fires SPELL_UPDATE_COOLDOWN several times in
+        -- the same frame, and with secret cooldowns the ready-state guard above
+        -- cannot dedupe. Cooldown state is constant within a frame (WoW settles
+        -- game state before Lua events fire), so refreshing once per frame is
+        -- lossless. Cast-driven repaints bypass this handler entirely.
+        -- GetTime (not GetTimePreciseSec) is frame-constant by design.
+        local now = _G.GetTime and _G.GetTime()
+        if now ~= nil and state.cooldownRefreshFrameStamp == now then
+            UpdateCooldownEventRegistration()
+            return
+        end
+        state.cooldownRefreshFrameStamp = now
     end
 
     local remaining, resolved

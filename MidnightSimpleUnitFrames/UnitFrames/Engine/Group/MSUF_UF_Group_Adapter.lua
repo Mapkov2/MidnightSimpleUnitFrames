@@ -709,7 +709,13 @@ function GF.ScanHeader(key, kind)
   GF._scanSeenToken = (GF._scanSeenToken or 0) + 1
   local token = GF._scanSeenToken
   if header.GetChildren then
+    -- PERF: a scan applies specs to every child; batch the central event
+    -- driver refresh so each touched event re-registers once per scan instead
+    -- of once per (child, element, event).
+    local batched = UF and UF.BeginEventRegistrationBatch
+    if batched then UF.BeginEventRegistrationBatch() end
     local found, first = ScanChildVarargs(kind, token, header:GetChildren())
+    if batched then UF.EndEventRegistrationBatch() end
     if first then
       MeasureFirstCenterDelta(header, key, kind, first)
     end
