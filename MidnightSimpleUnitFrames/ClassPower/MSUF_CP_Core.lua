@@ -453,6 +453,13 @@ builders.LAYOUT = function(E)
                 CP.container._msufHardLockPoint = nil
             end
         end
+        if _G.MSUF_CPTraceBuffer and CP.container.GetPoint then
+            local p, rel, rp, px, py = CP.container:GetPoint(1)
+            local relName = rel and ((rel.GetName and rel:GetName()) or "unnamed") or "nil"
+            CP_Trace(string.format("final pts=%d p1=%s->%s:%s (%.0f,%.0f)",
+                CP.container:GetNumPoints() or 0, tostring(p), relName, tostring(rp),
+                tonumber(px) or 0, tonumber(py) or 0))
+        end
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
         CP._layoutDirty = nil
