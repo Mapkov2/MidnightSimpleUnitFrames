@@ -701,7 +701,7 @@ function M.StatusBarTextureItems(followText)
     local out = {}
     if followText then out[#out + 1] = { value = "", text = followText } end
     for _, name in ipairs({ "Blizzard", "Flat", "RaidHP", "RaidPower", "Skills", "Outline" }) do
-        out[#out + 1] = { value = name, text = name }
+        out[#out + 1] = { value = name, text = name, previewKind = "statusbar" }
     end
     return out
 end

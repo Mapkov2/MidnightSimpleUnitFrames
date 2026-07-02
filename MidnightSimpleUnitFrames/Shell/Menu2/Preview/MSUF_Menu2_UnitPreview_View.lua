@@ -125,7 +125,7 @@ local function PreviewGuidesVisible(box)
 end
 local function DefaultPreviewHint(box)
     if box and not PreviewGuidesVisible(box) then return TR("guides hidden - selected element still nudges with arrows - turn Guides on to drag another element") end
-    return TR("drag elements - arrows nudge selected - Ctrl+wheel zoom - Ctrl+left drag pans")
+    return TR("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom")
 end
 local function UpdateHandleHint(box, handle)
     if not box or not box.hint then return end
@@ -135,7 +135,7 @@ local function UpdateHandleHint(box, handle)
     end
     local x, y = ReadHandleOffsets(handle)
     local help = PreviewGuidesVisible(box)
-        and TR("arrows nudge, Shift=5, Ctrl=10 - Ctrl+left drag pans")
+        and TR("double-click/settings opens options - right-click actions - arrows nudge")
         or TR("guides hidden - arrows still nudge selected element")
     box.hint:SetText(format("%s   x: %d   y: %d   %s", TR(handle._label or handle._key or "?"), x, y, help))
 end
@@ -324,6 +324,7 @@ local UNIT_SECTION_IDS = {
     power = "power_bar",
     castbar = "castbar",
     auras = "auras",
+    auras3 = "auras",
 }
 OpenPreviewHandleSettings = function(handle, source)
     if not handle then return false end
@@ -331,6 +332,40 @@ OpenPreviewHandleSettings = function(handle, source)
     local fields = handle._fields or {}
     local section = fields.section
     local menu = _G.MSUF2 or M2
+    if fields.statusRefresh then
+        local unit = box and box.key or "player"
+        local selected = NormalizeStatusPreviewId(handle._key)
+        Preview.selectedStatusId = selected
+        if menu then
+            menu.unitStatusSelection = menu.unitStatusSelection or {}
+            menu.unitStatusSelection[unit] = selected
+            menu.unitStatusTabSelection = menu.unitStatusTabSelection or {}
+            menu.unitStatusTabSelection[unit] = "basic"
+        end
+    end
+    if section == "auras3" then
+        local unit = box and box.key or "player"
+        local lane = handle._key == "auraDebuffs" and "debuff" or "buff"
+        if menu then
+            menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
+            menu.unitAuraTabSelection[unit] = lane
+        end
+        local pageKey = "uf_" .. tostring(unit)
+        if menu and type(menu.SelectPage) == "function" then
+            _G.MSUF_EM2_MenuFocusRequest = {
+                key = unit,
+                component = handle._key,
+                lane = lane,
+                pageKey = pageKey,
+                sectionId = "auras3",
+                source = "unit-preview-" .. tostring(source or "settings"),
+                explicit = true,
+                changedAt = GetTime and GetTime() or 0,
+            }
+            return menu.SelectPage(pageKey) ~= false
+        end
+        return false
+    end
     if section == "classPower" then
         if menu and type(menu.SelectPage) == "function" then
             ExportPublic("MSUF_EM2_MenuFocusRequest", {
@@ -615,6 +650,8 @@ local function MakeHandle(preview, key, fields, label, color)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(TR(label), 1, 1, 1)
             GameTooltip:AddLine(TR("Drag this preview element to adjust the same X/Y offsets used by Edit Mode."), 0.82, 0.82, 0.82, true)
+            GameTooltip:AddLine(TR("Double-click or use the settings button to open this element's settings."), 0.50, 0.78, 0.92, true)
+            GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
             GameTooltip:AddLine(TR("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10."), 0.55, 0.62, 0.72, true)
             GameTooltip:AddLine(TR("Ctrl + left-drag pans the preview canvas without moving this element."), 0.55, 0.68, 0.86, true)
             GameTooltip:Show()
@@ -844,6 +881,9 @@ local function BuildPreview(parent, panel, width, height)
         fitReason = "UNIT_PREVIEW_ZOOM_FIT",
         oneReason = "UNIT_PREVIEW_ZOOM_1TO1",
     })
+    if PreviewHelpers.EnsurePreviewControlsHint then
+        PreviewHelpers.EnsurePreviewControlsHint(box, canvas, { M = M2, T = T, Tr = TR })
+    end
     CreatePreviewAnimationButton(box)
     local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
     sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 6, 0)

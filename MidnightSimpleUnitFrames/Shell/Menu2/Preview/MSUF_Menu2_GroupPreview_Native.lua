@@ -114,9 +114,21 @@ local function OpenGFSection(sectionKey)
     local pageKey = PageForGFSection(sectionKey)
     if pageKey and M.SelectPage then
         local scope = CurrentScope()
+        if M.SetMenuStateValue then
+            M.SetMenuStateValue("gfScope", scope)
+            if pageKey == "gf_auras" then
+                M.SetMenuStateValue("auraStyleGFScope", scope == "mythicraid" and "raid" or scope)
+                if sectionKey == "buffs" then
+                    M.SetMenuStateValue("auraStyleGFLane", "buff")
+                elseif sectionKey == "debuffs" then
+                    M.SetMenuStateValue("auraStyleGFLane", "debuff")
+                end
+            end
+        end
         ExportPublic("MSUF_EM2_MenuFocusRequest", {
             key = (scope == "raid" and "gf_raid") or (scope == "mythicraid" and "gf_mythicraid") or "gf_party",
             component = sectionKey,
+            lane = sectionKey == "buffs" and "buff" or (sectionKey == "debuffs" and "debuff" or nil),
             pageKey = pageKey,
             sectionId = sectionKey,
             source = "group-preview",
@@ -704,11 +716,11 @@ end
 UpdateHint = function(box, handle)
     if not (box and box._hint) then return end
     if not handle then
-        box._hint:SetText(Tr("click layers to hide - drag handles - arrows nudge selected - Ctrl+wheel zoom - Ctrl+left drag pans"))
+        box._hint:SetText(Tr("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"))
         return
     end
     local anchor, x, y = HandleOffsets(handle)
-    local nudgeHint = Tr("arrows nudge, Shift=5, Ctrl=10 - Ctrl+left drag pans")
+    local nudgeHint = Tr("double-click/settings opens options - right-click actions - arrows nudge")
     if anchor then
         box._hint:SetText(string.format("%s   %s   x: %d   y: %d   %s",
             HandleText(handle), tostring(anchor or "CENTER"), Round(x or 0), Round(y or 0), nudgeHint))
@@ -853,7 +865,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
     title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", H.PreviewScopeLabel(H.CurrentScope())))
     box._title = title
-    local hint = T.Font(box, "GameFontDisableSmall", R.Tr("click layers to hide - drag handles - arrows nudge selected - Ctrl+wheel zoom - Ctrl+left drag pans"), T.colors.muted)
+    local hint = T.Font(box, "GameFontDisableSmall", R.Tr("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     box._hint = hint
     local stage = T.Panel(box, nil, { 0, 0, 0, 1 }, T.colors.borderSoft)
@@ -880,6 +892,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         fitReason = "GROUP_PREVIEW_ZOOM_FIT",
         oneReason = "GROUP_PREVIEW_ZOOM_1TO1",
     })
+    if PreviewHelpers.EnsurePreviewControlsHint then
+        PreviewHelpers.EnsurePreviewControlsHint(box, stage, { M = M, T = T, Tr = R.Tr })
+    end
     R.ZoomWheel = box._zoomWheel or R.ZoomWheel
     CreatePreviewAnimationButton(box)
     local bounds = CreateFrame("Frame", nil, stage, T.Template())
@@ -1015,7 +1030,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             box._dragFrame:Hide()
         end
     end
-    local footer = T.Font(box, "GameFontDisableSmall", R.Tr("Click a handle to select - drag layers - Ctrl+wheel zoom - Ctrl+left drag pans"), T.colors.muted)
+    local footer = T.Font(box, "GameFontDisableSmall", R.Tr("Click a handle to select - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
     footer:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
     if M.GroupPreviewRender and M.GroupPreviewRender.Install then
         local renderDeps = ShallowCopy(R) or {}

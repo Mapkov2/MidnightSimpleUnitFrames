@@ -43,6 +43,9 @@ local DROPDOWN_ROW_H = 24
 local DROPDOWN_ICON_SIZE = 18
 local DROPDOWN_ICON_LEFT = 10
 local DROPDOWN_ICON_TEXT_LEFT = 34
+local DROPDOWN_TEXTURE_PREVIEW_W = 72
+local DROPDOWN_TEXTURE_PREVIEW_H = 12
+local DROPDOWN_TEXTURE_TEXT_LEFT = 92
 local DROPDOWN_SCROLLBAR_W = 10
 local DROPDOWN_POSITION_INTERVAL = 0.10
 local CloseDropdown
@@ -368,8 +371,21 @@ local function DropdownItemText(item)
 end
 local function DropdownItemIcon(item)
     if type(item) ~= "table" then return nil end
+    if item.previewKind == "statusbar" or item.statusbarPreview == true then return nil end
     if item.icon or item.texture then return item.icon or item.texture end
     return (type(item.swatch) == "string") and item.swatch or nil
+end
+local function DropdownItemStatusbarTexture(item)
+    if type(item) ~= "table" then return nil end
+    if item.previewKind ~= "statusbar" and item.statusbarPreview ~= true then return nil end
+    local texture = item.texturePreview or item.statusbarTexture or item.texture
+    if type(texture) == "string" and texture ~= "" then return texture end
+    local value = DropdownItemValue(item)
+    if type(value) == "string" and value ~= "" then
+        local resolve = _G.MSUF_ResolveStatusbarTextureKey
+        if type(resolve) == "function" then return resolve(value) end
+    end
+    return nil
 end
 local function DropdownColorTuple(color)
     if type(color) == "function" then color = color() end
@@ -460,20 +476,35 @@ local function SetDropdownIconTexture(texture, icon)
     texture:SetVertexColor(1, 1, 1, 1)
     texture:Show()
 end
-local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInset)
+local function PaintDropdownChoice(frame, label, icon, sr, sg, sb, sa, rightInset, statusbarTexture)
     local left = 10
-    if icon then
+    if statusbarTexture and frame._msuf2TexturePreview then
+        if frame._msuf2Icon then frame._msuf2Icon:Hide() end
+        if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
+        if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
+        if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Show() end
+        frame._msuf2TexturePreview:SetTexture(statusbarTexture)
+        frame._msuf2TexturePreview:SetVertexColor(1, 1, 1, 1)
+        frame._msuf2TexturePreview:Show()
+        left = DROPDOWN_TEXTURE_TEXT_LEFT
+    elseif icon then
+        if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
+        if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
         SetDropdownIconTexture(frame._msuf2Icon, icon)
         if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
         if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
         left = DROPDOWN_ICON_TEXT_LEFT
     elseif sr then
+        if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
+        if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
         if frame._msuf2Icon then frame._msuf2Icon:Hide() end
         frame._msuf2Swatch:SetColorTexture(sr, sg, sb, sa or 1)
         frame._msuf2Swatch:Show()
         frame._msuf2SwatchBorder:Show()
         left = 34
     else
+        if frame._msuf2TexturePreview then frame._msuf2TexturePreview:Hide() end
+        if frame._msuf2TexturePreviewBorder then frame._msuf2TexturePreviewBorder:Hide() end
         if frame._msuf2Icon then frame._msuf2Icon:Hide() end
         if frame._msuf2Swatch then frame._msuf2Swatch:Hide() end
         if frame._msuf2SwatchBorder then frame._msuf2SwatchBorder:Hide() end
@@ -499,6 +530,17 @@ local function AddDropdownChoiceAssets(frame, borderLeft, borderAlpha)
     icon:SetSize(DROPDOWN_ICON_SIZE, DROPDOWN_ICON_SIZE)
     icon:Hide()
     frame._msuf2Icon = icon
+    local texturePreviewBorder = frame:CreateTexture(nil, "ARTWORK")
+    texturePreviewBorder:SetPoint("LEFT", frame, "LEFT", borderLeft or 10, 0)
+    texturePreviewBorder:SetSize(DROPDOWN_TEXTURE_PREVIEW_W + 2, DROPDOWN_TEXTURE_PREVIEW_H + 2)
+    texturePreviewBorder:SetColorTexture(0, 0, 0, borderAlpha or 0.85)
+    texturePreviewBorder:Hide()
+    frame._msuf2TexturePreviewBorder = texturePreviewBorder
+    local texturePreview = frame:CreateTexture(nil, "OVERLAY")
+    texturePreview:SetPoint("CENTER", texturePreviewBorder, "CENTER", 0, 0)
+    texturePreview:SetSize(DROPDOWN_TEXTURE_PREVIEW_W, DROPDOWN_TEXTURE_PREVIEW_H)
+    texturePreview:Hide()
+    frame._msuf2TexturePreview = texturePreview
 end
 local function DropdownRow(index)
     local row = dropdownRows[index]
@@ -574,16 +616,17 @@ local function OpenDropdown(owner, valuesTable)
     dropdownClosing = nil
     dropdownClosingOwner = nil
     dropdownFrame._msuf2CloseToken = (dropdownFrame._msuf2CloseToken or 0) + 1
-    local hasIcons = false
+    local hasIcons, hasStatusbarPreviews = false, false
     for i = 1, #valuesTable do
-        if DropdownItemIcon(valuesTable[i]) then
+        if DropdownItemStatusbarTexture(valuesTable[i]) then
+            hasStatusbarPreviews = true
+        elseif DropdownItemIcon(valuesTable[i]) then
             hasIcons = true
-            break
         end
     end
     local ownerWidth = (owner.GetWidth and owner:GetWidth()) or 240
-    local rowWidth = math.max(ownerWidth, hasIcons and 300 or 180)
-    local visible, openAbove = DropdownVisibleRows(owner, #valuesTable, hasIcons and 12 or 14)
+    local rowWidth = math.max(ownerWidth, hasStatusbarPreviews and 360 or (hasIcons and 300 or 180))
+    local visible, openAbove = DropdownVisibleRows(owner, #valuesTable, (hasIcons or hasStatusbarPreviews) and 12 or 14)
     owner._msuf2DropdownOpenAbove = openAbove
     local listHeight = visible * DROPDOWN_ROW_H + 4
     local totalHeight = #valuesTable * DROPDOWN_ROW_H
@@ -608,6 +651,7 @@ local function OpenDropdown(owner, valuesTable)
         local row = DropdownRow(i)
         local value = DropdownItemValue(item)
         local icon = DropdownItemIcon(item)
+        local statusbarTexture = DropdownItemStatusbarTexture(item)
         local selectedValue = owner._msuf2DropdownListValue
         local isHeader = DropdownItemHeader(item)
         local disabled = DropdownItemDisabled(item)
@@ -638,7 +682,7 @@ local function OpenDropdown(owner, valuesTable)
         end
         local rightInset = showFontPreview and -88 or -6
         local sr, sg, sb, sa = DropdownItemSwatch(item)
-        PaintDropdownChoice(row, row._msuf2Text, isHeader and nil or icon, isHeader and nil or sr, sg, sb, sa, rightInset)
+        PaintDropdownChoice(row, row._msuf2Text, isHeader and nil or icon, isHeader and nil or sr, sg, sb, sa, rightInset, isHeader and nil or statusbarTexture)
         row:Show()
     end
     for i = #valuesTable + 1, #dropdownRows do
@@ -716,8 +760,9 @@ function W.Dropdown(section, label, values, width)
             end
         end
         local icon = DropdownItemIcon(selectedItem)
+        local statusbarTexture = DropdownItemStatusbarTexture(selectedItem)
         local sr, sg, sb, sa = DropdownItemSwatch(selectedItem)
-        PaintDropdownChoice(self, self._msuf2Label, icon, sr, sg, sb, sa, -26)
+        PaintDropdownChoice(self, self._msuf2Label, icon, sr, sg, sb, sa, -26, statusbarTexture)
         RestoreDropdownDefaultFont(self._msuf2Label)
         self:SetText(selectedItem and DropdownItemText(selectedItem) or TextFor(value))
     end

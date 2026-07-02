@@ -390,12 +390,14 @@ function Core.InCombat()
     return inCombat == true
 end
 
--- Unified preview alpha: hp = hpBarAlpha (HP fill + prediction bars), bg = hpBgAlpha
--- (bar backgrounds). Foreground (text, portrait, power, cast, icons) follows the HP
--- value unless the "keep text + portrait visible" toggle is on.
+-- Unified preview alpha: hp/resource each have foreground and background opacity.
+-- Foreground text, portrait, cast, and icons follow the HP value unless the
+-- "keep text + portrait visible" toggle is on.
 local function PreviewAlphaState(conf)
     local hp = Clamp01(conf and conf.hpBarAlpha, 1)
+    local power = Clamp01(conf and conf.powerBarAlpha, 1)
     local bg = Clamp01(conf and conf.hpBgAlpha, 0.85)
+    local powerBg = Clamp01(conf and conf.powerBarBgAlpha, bg)
     if _G.MSUF_UnitEditModeActive == true and hp < 0.35 then hp = 0.35 end
     local fg = (conf and conf.alphaExcludeTextPortrait == true) and 1 or hp
     return {
@@ -403,8 +405,9 @@ local function PreviewAlphaState(conf)
         frame = 1,
         fg = fg,
         bg = bg,
+        powerBg = powerBg,
         hp = hp,
-        power = fg,
+        power = power,
         text = fg,
         portrait = fg,
         preserveHPColor = false,
@@ -443,7 +446,7 @@ function Core.ApplyPreviewTransparency(box, conf)
     Core.SetRegionAlpha(mock.hp, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.healPred, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.absorb, alpha.flat and alpha.frame or alpha.hp)
-    Core.SetRegionAlpha(mock.powerBG, alpha.flat and alpha.frame or alpha.bg)
+    Core.SetRegionAlpha(mock.powerBG, alpha.flat and alpha.frame or alpha.powerBg)
     Core.SetRegionAlpha(mock.power, alpha.flat and alpha.frame or alpha.power)
     Core.SetRegionAlpha(mock.classPower, alpha.flat and alpha.frame or alpha.power)
     Core.SetRegionAlpha(mock.detachedPower, alpha.flat and alpha.frame or alpha.power)
