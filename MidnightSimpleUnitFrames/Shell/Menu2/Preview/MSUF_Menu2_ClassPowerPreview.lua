@@ -452,6 +452,25 @@ local function WriteHandle(handle, x, y, skipApply)
     RequestClassPowerPreviewRefresh(handle._preview, "CLASSPOWER_PREVIEW_DRAG")
     if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_MOVE") end
 end
+local function ClassPowerSectionForHandle(handle)
+    if not handle then return "classpower_display" end
+    local kind = handle._applyKind or handle._layerKey or handle._key
+    if kind == "power" or kind == "powerText" or kind == "detachedPower" or kind == "detachedPowerText" then return "classpower_detached_power" end
+    if kind == "hp" or kind == "hpText" or kind == "playerHP" or kind == "playerHPText" then return "classpower_player_hp" end
+    return "classpower_display"
+end
+local function OpenClassPowerHandleSettings(handle)
+    if not (M and type(M.SelectPage) == "function") then return false end
+    _G.MSUF_EM2_MenuFocusRequest = {
+        pageKey = "classpower",
+        sectionId = ClassPowerSectionForHandle(handle),
+        component = handle and handle._key,
+        source = "classpower-preview",
+        explicit = true,
+        changedAt = GetTime and GetTime() or 0,
+    }
+    return M.SelectPage("classpower") ~= false
+end
 local function RefreshHandleVisuals(preview)
     if not (preview and preview.handles) then return end
     local guidesOn = GuidesOn(preview)
@@ -466,6 +485,16 @@ local function RefreshHandleVisuals(preview)
         local c = h._color or { 1, 1, 1 }
         if h.SetBackdropColor then h:SetBackdropColor(c[1], c[2], c[3], active and 0.16 or 0.035) end
         if h.SetBackdropBorderColor then h:SetBackdropBorderColor(c[1], c[2], c[3], active and 0.95 or 0.44) end
+        if h._msuf2SettingsGear then h._msuf2SettingsGear:SetShown(guidesOn and h == preview.selectedHandle and h._msufPlaced == true) end
+    end
+    local selected = preview.selectedHandle
+    if selected and selected._msufPlaced == true and guidesOn and Helpers.EnsurePreviewHandleGear then
+        Helpers.EnsurePreviewHandleGear(selected, {
+            T = T,
+            Tr = TR,
+            shown = true,
+            openSettings = OpenClassPowerHandleSettings,
+        })
     end
 end
 -- Shared preview-keyboard helpers keep ClassPower and Unit preview nudging in
@@ -579,7 +608,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h:EnableMouse(true)
     h:EnableKeyboard(true)
     if h.SetPropagateKeyboardInput then h:SetPropagateKeyboardInput(true) end
-    if h.RegisterForClicks then h:RegisterForClicks("LeftButtonDown", "LeftButtonUp") end
+    if h.RegisterForClicks then h:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp") end
     if h.RegisterForDrag then h:RegisterForDrag("LeftButton") end
     h._preview, h._key, h._store = preview, key, store
     h._xKey, h._yKey = xKey, yKey
@@ -602,7 +631,27 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
         RefreshHandleVisuals(preview)
         if GameTooltip then GameTooltip:Hide() end
     end)
-    h:SetScript("OnClick", function(self) SelectHandle(self) end)
+    h:SetScript("OnClick", function(self, button)
+        if button == "RightButton" then
+            SelectHandle(self)
+            if Helpers.ShowPreviewHandleContext then
+                Helpers.ShowPreviewHandleContext(self, {
+                    M = M,
+                    T = T,
+                    Tr = TR,
+                    title = self._label or self._key,
+                    openSettings = OpenClassPowerHandleSettings,
+                })
+            end
+            return
+        end
+        SelectHandle(self)
+    end)
+    h:SetScript("OnDoubleClick", function(self, button)
+        if button and button ~= "LeftButton" then return end
+        SelectHandle(self)
+        OpenClassPowerHandleSettings(self)
+    end)
     h:SetScript("OnKeyDown", HandleKeyDown)
     h:SetScript("OnMouseDown", function(self, button)
         if button ~= "LeftButton" then return end
