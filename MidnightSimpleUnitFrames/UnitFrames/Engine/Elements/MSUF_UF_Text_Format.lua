@@ -64,12 +64,19 @@ local pairs = pairs
 
 local INT_TEXT_0_100 = {}
 local PERCENT_TEXT_0_100 = {}
+local DECIMAL_TEXT_0_1000 = {}
+local DECIMAL_PERCENT_TEXT_0_1000 = {}
 -- Precompute the common 0..100 strings used by percent displays; this avoids rebuilding
 -- identical strings during health/power updates across many frames.
 for i = 0, 100 do
   local text = format("%d", i)
   INT_TEXT_0_100[i] = text
   PERCENT_TEXT_0_100[i] = text .. "%"
+end
+for i = 0, 1000 do
+  local text = format("%.1f", i / 10)
+  DECIMAL_TEXT_0_1000[i] = text
+  DECIMAL_PERCENT_TEXT_0_1000[i] = text .. "%"
 end
 
 local function SmallIntegerText(value)
@@ -140,44 +147,24 @@ local function ValueArg(value, canSecret)
 end
 
 local function HealthPercent(unit)
-  if not UnitHealthPercent or type(unit) ~= "string" or unit == "" then
+  if not UnitHealthPercent or not SCALE_100 or type(unit) ~= "string" or unit == "" then
     return nil
   end
-  if SCALE_100 then
-    return UnitHealthPercent(unit, true, SCALE_100)
-  end
-  return UnitHealthPercent(unit, true)
+  return UnitHealthPercent(unit, true, SCALE_100)
 end
 
 local function PowerPercent(unit)
-  if not UnitPowerPercent or type(unit) ~= "string" or unit == "" then
+  if not UnitPowerPercent or not SCALE_100 or type(unit) ~= "string" or unit == "" then
     return nil
   end
   local powerType = UnitPowerType and UnitPowerType(unit) or nil
   if issecretvalue(powerType) == true then powerType = nil end
-  if SCALE_100 then
-    return UnitPowerPercent(unit, powerType, false, SCALE_100)
-  end
-  return UnitPowerPercent(unit, powerType, false, true)
+  return UnitPowerPercent(unit, powerType, false, SCALE_100)
 end
 
 local function NormalizePercentDecimals(decimals)
   decimals = tonumber(decimals) or 0
   return decimals >= 1 and 1 or 0
-end
-
-local function PercentFromPlainValues(cur, maxValue, decimals)
-  if nativeSecrets and (issecretvalue(cur) == true or issecretvalue(maxValue) == true) then
-    return nil
-  end
-  if type(cur) ~= "number" or type(maxValue) ~= "number" or maxValue <= 0 then
-    return nil
-  end
-  local pct = (cur / maxValue) * 100
-  if NormalizePercentDecimals(decimals) >= 1 then
-    return floor(pct * 10 + 0.5) / 10
-  end
-  return floor(pct + 0.5)
 end
 
 local function MissingHealthFromValues(cur, maxValue)
@@ -242,7 +229,11 @@ local function FormatPercentValue(value, hideSymbol, canSecret, decimals)
   end
   decimals = NormalizePercentDecimals(decimals)
   if decimals >= 1 and type(value) == "number" then
-    local text = format("%.1f", floor(value * 10 + 0.5) / 10)
+    local key = floor(value * 10 + 0.5)
+    if key >= 0 and key <= 1000 then
+      return hideSymbol and DECIMAL_TEXT_0_1000[key] or DECIMAL_PERCENT_TEXT_0_1000[key]
+    end
+    local text = format("%.1f", key / 10)
     return hideSymbol and text or (text .. "%")
   end
   local text = SmallIntegerText(value) or format("%d", value or 0)
@@ -332,7 +323,11 @@ local function SlotPercentPlain(slot, pct)
     return nil
   end
   if NormalizePercentDecimals(slot.percentDecimals) >= 1 and type(pct) == "number" then
-    local text = format("%.1f", floor(pct * 10 + 0.5) / 10)
+    local key = floor(pct * 10 + 0.5)
+    if key >= 0 and key <= 1000 then
+      return slot.hidePercentSymbol and DECIMAL_TEXT_0_1000[key] or DECIMAL_PERCENT_TEXT_0_1000[key]
+    end
+    local text = format("%.1f", key / 10)
     return slot.hidePercentSymbol and text or (text .. "%")
   end
   if not slot.hidePercentSymbol and type(pct) == "number" and pct >= 0 and pct <= 100 then
@@ -359,6 +354,9 @@ end
 
 local function SlotFormattedPercent(slot, pct)
   if issecretvalue(pct) == true then
+    if NormalizePercentDecimals(slot.percentDecimals) >= 1 then
+      return ValueArg(pct, slot.canSecret), slot.hidePercentSymbol and "%.1f" or "%.1f%%"
+    end
     return ValueArg(pct, slot.canSecret), slot.hidePercentSymbol and "%d" or "%d%%"
   end
   return SlotPercent(slot, pct), "%s"
@@ -778,6 +776,13 @@ local function BuildSecretPattern(mode, vf, pf)
   return nil
 end
 
+local function SecretPercentFormat(slot)
+  if NormalizePercentDecimals(slot and slot.percentDecimals) >= 1 then
+    return slot.hidePercentSymbol and "%.1f" or "%.1f%%"
+  end
+  return slot.hidePercentSymbol and "%d" or "%d%%"
+end
+
 local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
   if not (fs and mode and mode ~= "NONE") then
     return index, false, false
@@ -808,7 +813,7 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
     slot.secretValueFn = secretValueFn
     slot.secretPattern = BuildSecretPattern(mode,
       secretValueFn and "%s" or "%d",
-      slot.hidePercentSymbol and "%d" or "%d%%")
+      SecretPercentFormat(slot))
   else
     slot.secretValueFn = nil
     slot.secretPattern = nil
@@ -1072,9 +1077,6 @@ local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, nee
     if pctOverrideSet == true then
       pct = pctOverride
     else
-      pct = PercentFromPlainValues(cur, max, rt and rt.healthPercentDecimals)
-    end
-    if pct == nil and pctOverrideSet ~= true then
       pct = percentFn(unit)
     end
     if issecretvalue(pct) == true then
@@ -1099,12 +1101,7 @@ UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsP
   end
   local pct
   if needsPercent == true and percentFn then
-    if NormalizePercentDecimals(rt and rt.healthPercentDecimals) >= 1 then
-      pct = PercentFromPlainValues(cur, max, rt and rt.healthPercentDecimals)
-    end
-    if pct == nil then
-      pct = percentFn(unit)
-    end
+    pct = percentFn(unit)
   end
   for i = 1, count do
     local slot = slots[i]
@@ -1127,7 +1124,7 @@ local FlushPendingPowerText
 local function ResolvePendingHealth(frame, rt, hp, hpMax)
   local unit = frame and frame.unit
   if unit then
-    local percentNeedsValues = rt.healthNeedsPercent == true and UnitHealthPercent == nil
+    local percentNeedsValues = false
     local missingNeedsValues = rt.healthNeedsMissing == true
     local needsCurrent = rt.healthNeedsCurrent == true or rt.healthColorByHealth == true or percentNeedsValues or missingNeedsValues
     local needsMax = rt.healthNeedsMax == true or rt.healthColorByHealth == true or percentNeedsValues or missingNeedsValues
@@ -1177,7 +1174,7 @@ end
 
 local function ResolvePendingPower(frame, rt, power, powerMax)
   local unit = frame and frame.unit
-  local percentNeedsValues = rt.powerNeedsPercent == true and UnitPowerPercent == nil
+  local percentNeedsValues = false
   local needsPower = rt.powerNeedsCurrent == true or percentNeedsValues
   local needsMax = rt.powerNeedsMax == true or percentNeedsValues
   local needPower = needsPower and issecretvalue(power) ~= true and power == nil
@@ -1245,16 +1242,10 @@ local function PlainHealthTextKey(rt, hp, hpMax, pctOverride, pctOverrideSet)
   elseif mode == 4 or mode == 5 then
     local decimalPct = NormalizePercentDecimals(rt and rt.healthPercentDecimals) >= 1
     if pctOverrideSet == true and issecretvalue(pctOverride) ~= true then
-      if decimalPct and type(pctOverride) == "number" then
-        keyHP = floor(pctOverride * 10 + 0.5)
+      if type(pctOverride) == "number" then
+        keyHP = decimalPct and floor(pctOverride * 10 + 0.5) or floor(pctOverride + 0.5)
       else
         keyHP = pctOverride or false
-      end
-    elseif type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
-      if decimalPct then
-        keyHP = floor((hp / hpMax) * 1000 + 0.5)
-      else
-        keyHP = floor((hp / hpMax) * 100 + 0.5)
       end
     else
       return false
@@ -1280,15 +1271,23 @@ local function PlainPowerTextKey(rt, power, powerMax, pctOverride, pctOverrideSe
     keyPower, keyMax = power, powerMax
   elseif mode == 4 or mode == 5 then
     if pctOverrideSet == true and issecretvalue(pctOverride) ~= true then
-      keyPower = pctOverride or false
-    elseif type(power) == "number" and type(powerMax) == "number" and powerMax > 0 then
-      keyPower = floor((power / powerMax) * 100 + 0.5)
+      keyPower = type(pctOverride) == "number" and floor(pctOverride + 0.5) or (pctOverride or false)
     else
       return false
     end
     keyMax = mode == 5 and powerMax or false
   end
   return true, keyPower, keyMax
+end
+
+local function ConsumeDispatchPercent(rt, valueKey, readyKey)
+  if rt and rt[readyKey] == true then
+    local pct = rt[valueKey]
+    rt[valueKey] = nil
+    rt[readyKey] = nil
+    return pct, true
+  end
+  return nil, false
 end
 
 local function FlushPendingHealthText(frame)
@@ -1312,12 +1311,10 @@ local function FlushPendingHealthText(frame)
   if rt.healthPlain == true then
     local pctOverride, pctOverrideSet
     if rt.healthNeedsPercent == true then
-      pctOverride = PercentFromPlainValues(hp, hpMax, rt and rt.healthPercentDecimals)
-      if pctOverride ~= nil then
-        pctOverrideSet = true
-      elseif UnitHealthPercent then
+      pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchHealthPercent", "_dispatchHealthPercentReady")
+      if pctOverrideSet ~= true and UnitHealthPercent then
         pctOverride = HealthPercent(frame.unit)
-        pctOverrideSet = true
+        pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
       end
     end
     local comparable, keyHP, keyMax = PlainHealthTextKey(rt, hp, hpMax, pctOverride, pctOverrideSet)
@@ -1580,12 +1577,10 @@ FlushPendingPowerText = function(frame)
   if rt.powerPlain == true then
     local pctOverride, pctOverrideSet
     if rt.powerNeedsPercent == true then
-      pctOverride = PercentFromPlainValues(power, powerMax)
-      if pctOverride ~= nil then
-        pctOverrideSet = true
-      elseif UnitPowerPercent then
+      pctOverride, pctOverrideSet = ConsumeDispatchPercent(rt, "_dispatchPowerPercent", "_dispatchPowerPercentReady")
+      if pctOverrideSet ~= true and UnitPowerPercent then
         pctOverride = PowerPercent(frame.unit)
-        pctOverrideSet = true
+        pctOverrideSet = issecretvalue(pctOverride) == true or pctOverride ~= nil
       end
     end
     local comparable, keyPower, keyMax = PlainPowerTextKey(rt, power, powerMax, pctOverride, pctOverrideSet)

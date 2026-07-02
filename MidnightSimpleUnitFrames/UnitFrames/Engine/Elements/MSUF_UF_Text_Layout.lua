@@ -695,7 +695,7 @@ local SIG_TEXT_KEYS = {
   "anchorToBars", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
   "nameShortenMaskPx",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY",
-  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthDelimiter", "healthColorByHealth", "healthThrottle", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
+  "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthColorByHealth", "healthThrottle", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
   "directHealthLeftPoint", "directHealthLeftRelativePoint", "directHealthLeftX", "directHealthLeftY", "directHealthCenterPoint", "directHealthCenterRelativePoint", "directHealthCenterX", "directHealthCenterY", "directHealthRightPoint", "directHealthRightRelativePoint", "directHealthRightX", "directHealthRightY",
   "powerLayer", "powerLeft", "powerCenter", "powerRight", "powerDelimiter", "powerColorByType", "powerThrottle", "powerLeftX", "powerLeftY", "powerCenterX", "powerCenterY", "powerRightX", "powerRightY",
   "directPowerLeftPoint", "directPowerLeftRelativePoint", "directPowerLeftX", "directPowerLeftY", "directPowerCenterPoint", "directPowerCenterRelativePoint", "directPowerCenterX", "directPowerCenterY", "directPowerRightPoint", "directPowerRightRelativePoint", "directPowerRightX", "directPowerRightY",
