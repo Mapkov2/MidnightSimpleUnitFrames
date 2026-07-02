@@ -292,6 +292,7 @@ end
 
 local function FinishQuickButton(btn, opts)
     opts = opts or {}
+    if btn and btn.SetPropagateMouseClicks then btn:SetPropagateMouseClicks(false) end
     if opts.peelSkin then Quick.KeepButtonSkin(btn) end
     if opts.hoverWash then
         Quick.AttachHoverWash(btn, { key = opts.hoverKey, alpha = opts.hoverAlpha })
@@ -372,6 +373,7 @@ function Quick.Box(parent, width, opts)
         b:SetBackdropColor(c.inputBg[1], c.inputBg[2], c.inputBg[3], c.inputBg[4] or 0.90)
         b:SetBackdropBorderColor(c.inputEdge[1], c.inputEdge[2], c.inputEdge[3], c.inputEdge[4] or 0.70)
     end
+    if b.SetPropagateMouseClicks then b:SetPropagateMouseClicks(false) end
     if Menu2Style.EditBox then Menu2Style.EditBox(b) end
     if opts and opts.peelSkin then Quick.KeepEditSkin(b) end
     return b
@@ -483,13 +485,16 @@ function Quick.CreateShell(name, opts)
     local pf = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
     pf:SetSize(opts.width or 440, opts.height or 244)
     pf:SetPoint("CENTER", UIParent, "CENTER", opts.x or 250, opts.y or 0)
-    pf:SetFrameStrata("DIALOG")
-    pf:SetFrameLevel(opts.frameLevel or 220)
+    pf:SetFrameStrata(opts.strata or "FULLSCREEN_DIALOG")
+    pf:SetFrameLevel(opts.frameLevel or 900)
     pf:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     pf:SetBackdropColor(c.panelBg[1], c.panelBg[2], c.panelBg[3], 0.96)
     pf:SetBackdropBorderColor(c.panelEdge[1], c.panelEdge[2], c.panelEdge[3], 0.95)
     if Menu2Style.Shell then Menu2Style.Shell(pf) end
     pf:EnableMouse(true)
+    if pf.SetPropagateMouseClicks then pf:SetPropagateMouseClicks(false) end
+    pf:SetScript("OnMouseDown", function() end)
+    pf:SetScript("OnMouseUp", function() end)
     pf:SetMovable(true)
     pf:SetClampedToScreen(true)
     pf:RegisterForDrag("LeftButton")
