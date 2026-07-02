@@ -63,6 +63,14 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
         apply = ApplyAbsorbBars,
         reason = "MSUF_ASSISTANT_SCOPED_ABSORB_ANCHOR",
     })
+    RegisterScopedSetting("barScope", scope, "overAbsorbOverlay", "overAbsorbOverlay", "Over-Absorb Overlay", "boolean", false, GlobalScopeAliases(scope, {
+        "over absorb overlay", "over-absorb overlay", "over absorb glow", "overshield overlay",
+        "full hp absorb overlay", "full health absorb overlay",
+    }), {
+        flag = "hlOverride",
+        apply = ApplyAbsorbBars,
+        reason = "MSUF_ASSISTANT_SCOPED_OVER_ABSORB_OVERLAY",
+    })
     RegisterScopedSetting("barScope", scope, "absorbBarOpacity", "absorbOpacity", "Absorb Bar Opacity", "number", 0.75, GlobalScopeAliases(scope, {
         "absorb bar opacity", "absorb opacity", "absorb alpha",
     }), {

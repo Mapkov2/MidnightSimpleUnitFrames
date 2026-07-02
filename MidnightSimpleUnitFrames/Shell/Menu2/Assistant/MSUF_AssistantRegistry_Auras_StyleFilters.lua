@@ -26,6 +26,8 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES or {}
     local AURA_DURATION_BAR_POSITION_VALUES = ctx.AURA_DURATION_BAR_POSITION_VALUES or {}
     local AURA_DURATION_BAR_POSITION_ALIASES = ctx.AURA_DURATION_BAR_POSITION_ALIASES or {}
+    local AURA_DURATION_BAR_DISPLAY_VALUES = ctx.AURA_DURATION_BAR_DISPLAY_VALUES or {}
+    local AURA_DURATION_BAR_DISPLAY_ALIASES = ctx.AURA_DURATION_BAR_DISPLAY_ALIASES or {}
     local AURA_DURATION_BAR_DIRECTION_VALUES = ctx.AURA_DURATION_BAR_DIRECTION_VALUES or {}
     local AURA_DURATION_BAR_DIRECTION_ALIASES = ctx.AURA_DURATION_BAR_DIRECTION_ALIASES or {}
     local AURA_LANE_STYLE_BOOLEAN_SPECS = ctx.AURA_LANE_STYLE_BOOLEAN_SPECS or {}
@@ -77,6 +79,9 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     if #AURA_DURATION_BAR_POSITION_VALUES == 0 then
         AURA_DURATION_BAR_POSITION_VALUES = { "BOTTOM", "TOP" }
     end
+    if #AURA_DURATION_BAR_DISPLAY_VALUES == 0 then
+        AURA_DURATION_BAR_DISPLAY_VALUES = { "BAR_ONLY", "OVERLAY" }
+    end
     if #AURA_DURATION_BAR_DIRECTION_VALUES == 0 then
         AURA_DURATION_BAR_DIRECTION_VALUES = { "REMAINING", "ELAPSED" }
     end
@@ -85,6 +90,8 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
 
     local durationBarPositionAllowed = {}
     for i = 1, #AURA_DURATION_BAR_POSITION_VALUES do durationBarPositionAllowed[AURA_DURATION_BAR_POSITION_VALUES[i]] = true end
+    local durationBarDisplayAllowed = {}
+    for i = 1, #AURA_DURATION_BAR_DISPLAY_VALUES do durationBarDisplayAllowed[AURA_DURATION_BAR_DISPLAY_VALUES[i]] = true end
     local durationBarDirectionAllowed = {}
     for i = 1, #AURA_DURATION_BAR_DIRECTION_VALUES do durationBarDirectionAllowed[AURA_DURATION_BAR_DIRECTION_VALUES[i]] = true end
 
@@ -101,6 +108,12 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
     local function NormalizeDurationBarPosition(value)
         value = tostring(value or "BOTTOM"):upper()
         return durationBarPositionAllowed[value] and value or "BOTTOM"
+    end
+
+    local function NormalizeDurationBarDisplay(value)
+        value = tostring(value or "BAR_ONLY"):upper()
+        if value == "ICON" or value == "ICON_BAR" then value = "OVERLAY" end
+        return durationBarDisplayAllowed[value] and value or "BAR_ONLY"
     end
 
     local function NormalizeDurationBarDirection(value)
@@ -132,6 +145,32 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
         end
         if Model and type(Model.WriteValue) == "function" then
             Model.WriteValue(scope, LaneStyleKey(lane, "durationBarPosition"), value)
+        end
+    end
+
+    local function AuraReadLaneDurationBarDisplay(scope, lane)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.ReadLaneDurationBarDisplay) == "function" then
+            return NormalizeDurationBarDisplay(Model.ReadLaneDurationBarDisplay(scope, lane))
+        end
+        if Model and type(Model.ReadValue) == "function" then
+            local laneKey = LaneStyleKey(lane, "durationBarDisplay")
+            local value = Model.ReadValue(scope, laneKey, nil)
+            if value == nil then value = Model.ReadValue(scope, "durationBarDisplay", "BAR_ONLY") end
+            return NormalizeDurationBarDisplay(value)
+        end
+        return "BAR_ONLY"
+    end
+
+    local function AuraWriteLaneDurationBarDisplay(scope, lane, value)
+        value = NormalizeDurationBarDisplay(value)
+        local Model = type(AuraModel) == "function" and AuraModel() or nil
+        if Model and type(Model.WriteLaneDurationBarDisplay) == "function" then
+            Model.WriteLaneDurationBarDisplay(scope, lane, value)
+            return
+        end
+        if Model and type(Model.WriteValue) == "function" then
+            Model.WriteValue(scope, LaneStyleKey(lane, "durationBarDisplay"), value)
         end
     end
 
@@ -341,6 +380,17 @@ function A.AurasRegistry.RegisterStyleAndFilterSettings(ctx)
             RegisterAuraScopeLaneEnum(settingScope, settingLane, "durationBarPosition", "Duration Bar Position", AURA_DURATION_BAR_POSITION_VALUES, AURA_DURATION_BAR_POSITION_ALIASES, aliases,
                 function() return AuraReadLaneDurationBarPosition(settingScope, settingLane) end,
                 function(value) AuraWriteLaneDurationBarPosition(settingScope, settingLane, value) end,
+                true)
+
+            aliases = {}
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "duration bar display")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "timer bar display")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "duration bar mode")
+            AddAuraLaneAliases(aliases, settingScope, settingLane, "timer bar mode")
+            A._AssistantAddAuraAllLaneNouns(aliases, settingScope, { "duration bar display", "timer bar display", "duration bar mode", "timer bar mode" })
+            RegisterAuraScopeLaneEnum(settingScope, settingLane, "durationBarDisplay", "Duration Bar Display", AURA_DURATION_BAR_DISPLAY_VALUES, AURA_DURATION_BAR_DISPLAY_ALIASES, aliases,
+                function() return AuraReadLaneDurationBarDisplay(settingScope, settingLane) end,
+                function(value) AuraWriteLaneDurationBarDisplay(settingScope, settingLane, value) end,
                 true)
 
             aliases = {}

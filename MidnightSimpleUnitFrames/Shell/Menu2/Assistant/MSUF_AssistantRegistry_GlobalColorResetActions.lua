@@ -69,6 +69,31 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "reset_health_gradient_colors",
+    label = "Reset Health Gradient Colors",
+    type = "color",
+    aliases = {
+        "reset health gradient colors",
+        "reset health gradient colours",
+        "reset hp gradient colors",
+        "reset hp gradient colours",
+        "restore health gradient colors",
+        "restore hp gradient colors",
+    },
+    aliasNoArgs = true,
+    combatSafe = false,
+    captureSnapshot = true,
+    run = function()
+        local g = GeneralDB()
+        g.healthGradientLowR, g.healthGradientLowG, g.healthGradientLowB = 1, 0, 0
+        g.healthGradientMidR, g.healthGradientMidG, g.healthGradientMidB = 1, 1, 0
+        g.healthGradientHighR, g.healthGradientHighG, g.healthGradientHighB = 0, 1, 0
+        ApplyColors("MSUF_ASSISTANT_RESET_HEALTH_GRADIENT_COLORS")
+        return true, "Done. Health gradient colors reset."
+    end,
+})
+
+Registry:RegisterAction({
     key = "reset_npc_type_colors",
     label = "Reset NPC Type Colors",
     type = "color",

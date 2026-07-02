@@ -9029,6 +9029,14 @@ function A.RouteInput(text, coreHandler)
     local hasPendingChoices = A.RouterHasPendingChoices()
     local hasPendingResults = A.RouterHasPendingSearchResults()
     local pendingResultReply = hasPendingResults and R.LooksLikePendingResultReply(text)
+    local auraFilterAnswerIntent = A.RouterTryAuraFilterStatusShortcut
+        and R.AuraFilterStatusWantsAnswer
+        and R.AuraFilterStatusWantsAnswer(text)
+    if auraFilterAnswerIntent
+        and not R.ContainsAny(text, { "result", "results", "option", "options", "entry", "entries" })
+    then
+        pendingResultReply = false
+    end
     local explicitSearchRequest = A.RouterLooksLikeExplicitSearchRequest(text)
     if hasPendingChoices
         and not pendingResultReply

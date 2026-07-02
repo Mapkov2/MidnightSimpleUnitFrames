@@ -54,9 +54,12 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
     })
     RegisterGeneralBoolean("enableGradient", "healthGradient", "HP Bar Gradient", false, {
         "hp bar gradient", "health bar gradient", "health gradient", "hp gradient",
+        "bar gradient", "bars gradient", "bar gradients", "unitframe gradient",
+        "unit frame gradient", "unitframe bar gradient", "unit frame bar gradient",
     }, { category = "Global / Bars / Gradient", frameType = "globalBars", apply = ApplyBarGradients, reason = "MSUF_ASSISTANT_HP_GRADIENT" })
     RegisterGeneralBoolean("enablePowerGradient", "powerGradient", "Power Bar Gradient", false, {
-        "power bar gradient", "power gradient", "mana gradient",
+        "power bar gradient", "power gradient", "mana gradient", "mana bar gradient",
+        "resource gradient", "resource bar gradient",
     }, { category = "Global / Bars / Gradient", frameType = "globalBars", apply = ApplyBarGradients, reason = "MSUF_ASSISTANT_POWER_GRADIENT" })
     RegisterGeneralNumberSetting("gradientStrength", "gradientStrength", "Bar Gradient Strength", 0.45, 0, 1, {
         "gradient strength", "bar gradient strength", "health gradient strength", "power gradient strength",
@@ -74,6 +77,8 @@ function A.GlobalBarRegistry.RegisterTextureGradientSettings(ctx)
             "global bar gradient direction", "global bars gradient direction",
             "global bar right", "global bar right gradient", "global bar right direction",
             "global bar right color", "bar right gradient", "bar right direction", "right bar gradient",
+            "gradient from right", "gradient from left", "gradient from top", "gradient from bottom",
+            "bar gradient from right", "bar gradient from left", "bar gradient from top", "bar gradient from bottom",
         },
         values = GRADIENT_DIRECTION_VALUES,
         valueAliases = GRADIENT_DIRECTION_ALIASES,

@@ -2946,6 +2946,7 @@ end
 local function AbsorbBarGlobalKey(attr)
     if attr == "absorbTextMode" then return "general.absorbTextMode" end
     if attr == "absorbAnchorMode" then return "general.absorbAnchorMode" end
+    if attr == "overAbsorbOverlay" then return "general.overAbsorbOverlay" end
     if attr == "showSelfHealPrediction" then return "general.showSelfHealPrediction" end
     if attr == "healPredAnchorMode" then return "general.healPredAnchorMode" end
     if attr == "absorbBarOpacity" then return "general.absorbBarOpacity" end
@@ -2973,6 +2974,9 @@ local function AbsorbBarSpec(text)
     end
     if ContainsAny(text, { "absorb bar anchor", "absorb anchor", "absorb anchoring" }) then
         return "absorbAnchorMode", "Absorb Bar Anchor", "enum", false
+    end
+    if ContainsAny(text, { "over absorb overlay", "over-absorb overlay", "over absorb glow", "overshield overlay", "full hp absorb overlay", "full health absorb overlay" }) then
+        return "overAbsorbOverlay", "Over-Absorb Overlay", "boolean", false
     end
     if ContainsAny(text, { "absorb bar texture", "absorb texture" }) then
         return "absorbBarTexture", "Absorb Bar Texture", "string", false
@@ -3434,6 +3438,7 @@ local function ParseUnitOpacityShortcut(text)
         "highlight border", "group border", "dead background", "dead bg", "health fade",
     }) then return nil end
     if DetectGroups(text)[1] then return nil end
+    local powerOpacity = ContainsAny(text, { "power bar", "powerbar", "power opacity", "power alpha", "mana bar", "mana opacity", "mana alpha", "resource bar", "resource opacity", "resource alpha" })
     local backgroundOpacity = ContainsAny(text, { "background", "backdrop", "track", "hp track", "health track", "bg", "bar background" })
     if ContainsAny(text, {
         "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target",
@@ -3473,7 +3478,10 @@ local function ParseUnitOpacityShortcut(text)
         end
     end
     local changes = {}
-    local attr = backgroundOpacity and "hpBgAlpha" or "hpBarAlpha"
+    local attr = powerOpacity and backgroundOpacity and "powerBarBgAlpha"
+        or powerOpacity and "powerBarAlpha"
+        or backgroundOpacity and "hpBgAlpha"
+        or "hpBarAlpha"
     for i = 1, #units do
         local unit = tostring(units[i])
         local hp = Registry and Registry:GetSetting(unit .. "." .. attr)
@@ -3483,8 +3491,14 @@ local function ParseUnitOpacityShortcut(text)
     return {
         kind = "changes",
         changes = changes,
-        label = backgroundOpacity and "Set unit background opacity" or "Set unit opacity",
-        summary = backgroundOpacity and "Sets the bar background opacity for the requested unit frame." or "Sets the HP bar opacity for the requested unit frame.",
+        label = powerOpacity and backgroundOpacity and "Set unit resource background opacity"
+            or powerOpacity and "Set unit power bar opacity"
+            or backgroundOpacity and "Set unit background opacity"
+            or "Set unit opacity",
+        summary = powerOpacity and backgroundOpacity and "Sets the resource bar background opacity for the requested unit frame."
+            or powerOpacity and "Sets the power bar opacity for the requested unit frame."
+            or backgroundOpacity and "Sets the bar background opacity for the requested unit frame."
+            or "Sets the HP bar opacity for the requested unit frame.",
     }
 end
 

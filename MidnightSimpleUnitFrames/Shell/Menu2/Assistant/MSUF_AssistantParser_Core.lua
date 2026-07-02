@@ -66,6 +66,10 @@ local NORMALIZE_WORD_REPLACEMENTS = {
     availble = "available",
     avaiable = "available",
     rang = "range",
+    gradiant = "gradient",
+    gradiants = "gradients",
+    gradent = "gradient",
+    gradents = "gradients",
     frist = "first",
     firts = "first",
     frst = "first",
@@ -889,7 +893,7 @@ local GAMEPLAY_TERMS = {
     "statuen rahmen", "statuenrahmen", "combat crosshair",
     "crosshair", "fadenkreuz", "melee range spell", "nahkampf zauber", "reichweiten zauber",
 }
-local GLOBAL_BARS_TERMS = { "bar texture", "bar background", "bar gradient", "gradient direction", "absorb bar", "absorb bars", "heal prediction", "heal absorb", "bar outline", "rounded frames", "rounded frame", "rounded texture", "highlight border", "highlight priority", "custom highlight priority", "aggro border", "aggro role filter", "aggro shows for", "dispel border", "purge border", "boss target border", "dispel overlay", "power text" }
+local GLOBAL_BARS_TERMS = { "bar texture", "bar background", "bar gradient", "bar gradients", "bars gradient", "gradient direction", "hp gradient", "health gradient", "power gradient", "unitframe bar gradient", "unit frame bar gradient", "absorb bar", "absorb bars", "heal prediction", "heal absorb", "bar outline", "rounded frames", "rounded frame", "rounded texture", "highlight border", "highlight priority", "custom highlight priority", "aggro border", "aggro role filter", "aggro shows for", "dispel border", "purge border", "boss target border", "dispel overlay", "power text" }
 local CASTBAR_ROOT_DETAIL_TERMS = {
     "castbar time", "cast time", "time text", "timer",
     "castbar icon", "cast icon", "spell icon",

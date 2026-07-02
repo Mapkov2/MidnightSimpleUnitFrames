@@ -5861,6 +5861,39 @@ function A.SetBusy(active, text)
     return A._busy
 end
 
+function AP.IsAssistantStopCommand(text)
+    local normalized = NormalizeReply(text)
+    return normalized == "stop"
+        or normalized == "cancel"
+        or normalized == "abort"
+        or normalized == "stop assistant"
+        or normalized == "cancel assistant"
+        or normalized == "abort assistant"
+        or normalized == "stop that"
+        or normalized == "stop it"
+        or normalized == "cancel that"
+        or normalized == "cancel request"
+        or normalized == "cancel current request"
+        or normalized == "cancel previous request"
+        or normalized == "abbrechen"
+        or normalized == "stopp"
+        or normalized == "stoppen"
+end
+
+function A.StopAssistantWork(reason)
+    reason = tostring(reason or "cancelled")
+    local removed = A.CancelJobs and A.CancelJobs(nil, reason) or 0
+    A._assistantJobPumpScheduled = nil
+    A._assistantJobsCombatDeferred = nil
+    A._assistantJobsCombatReason = nil
+    A._performanceWarmupStarted = nil
+    A._performanceWarmupCompleted = nil
+    A._performanceWarmupSuppressed = reason
+    A._performanceWarmupReason = nil
+    A.SetBusy(false)
+    return removed
+end
+
 -- Build incrementally; this chunk has many top-level locals, and WoW's Lua 5.1
 -- parser can exceed its temporary register limit on a large table literal here.
 AP.BATCH_COMMAND_STARTERS = {}
@@ -6250,10 +6283,20 @@ end
 function A.SubmitDeferred(text, callback)
     text = Trim(text)
     if text == "" then return nil end
-    if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
     if A.IsBusy() then
+        if AP.IsAssistantStopCommand and AP.IsAssistantStopCommand(text) then
+            local removed = A.StopAssistantWork("user")
+            return NormalizePlanResult({
+                text = removed > 0 and "Stopped. I cancelled the assistant work that was still running." or "Stopped. I cleared the assistant busy state.",
+                result = "applied",
+            })
+        end
         return NormalizePlanResult({ text = "I am still working on the previous request.", result = "busy" })
     end
+    if AP.IsAssistantStopCommand and AP.IsAssistantStopCommand(text) then
+        return NormalizePlanResult({ text = "Nothing is running right now.", result = "info" })
+    end
+    if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
 
     A.SetBusy(true, "I am working on that")
 

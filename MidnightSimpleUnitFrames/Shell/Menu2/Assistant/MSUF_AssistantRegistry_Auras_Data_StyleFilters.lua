@@ -52,6 +52,21 @@ Data.AURA_DURATION_BAR_POSITION_ALIASES = {
     ["top edge"] = "TOP",
 }
 
+Data.AURA_DURATION_BAR_DISPLAY_VALUES = { "BAR_ONLY", "OVERLAY" }
+Data.AURA_DURATION_BAR_DISPLAY_ALIASES = {
+    bar = "BAR_ONLY",
+    ["bar only"] = "BAR_ONLY",
+    onlybar = "BAR_ONLY",
+    separate = "BAR_ONLY",
+    ["separate bar"] = "BAR_ONLY",
+    icon = "OVERLAY",
+    overlay = "OVERLAY",
+    ["icon bar"] = "OVERLAY",
+    ["icon and bar"] = "OVERLAY",
+    ["icon plus bar"] = "OVERLAY",
+    ["icon + bar"] = "OVERLAY",
+}
+
 Data.AURA_DURATION_BAR_DIRECTION_VALUES = { "REMAINING", "ELAPSED" }
 Data.AURA_DURATION_BAR_DIRECTION_ALIASES = {
     remaining = "REMAINING",

@@ -70,13 +70,16 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
         end
         RegisterScopedSetting("barScope", scope, "enableGradient", "healthGradient", "HP Bar Gradient", "boolean", false, GlobalScopeAliases(scope, {
             "hp bar gradient", "health bar gradient", "health gradient", "hp gradient",
+            "bar gradient", "bars gradient", "bar gradients", "unitframe gradient",
+            "unit frame gradient", "unitframe bar gradient", "unit frame bar gradient",
         }), {
             flag = "hlOverride",
             apply = ApplyBarGradients,
             reason = "MSUF_ASSISTANT_SCOPED_HP_GRADIENT",
         })
         RegisterScopedSetting("barScope", scope, "enablePowerGradient", "powerGradient", "Power Bar Gradient", "boolean", false, GlobalScopeAliases(scope, {
-            "power bar gradient", "power gradient", "mana gradient",
+            "power bar gradient", "power gradient", "mana gradient", "mana bar gradient",
+            "resource gradient", "resource bar gradient",
         }), {
             flag = "hlOverride",
             apply = ApplyBarGradients,
@@ -96,6 +99,8 @@ function A.GlobalBarRegistry.RegisterScopedBarSettings(ctx)
         RegisterScopedSetting("barScope", scope, "gradientDirection", "gradientDirection", "Bar Gradient Direction", "enum", "RIGHT", GlobalScopeAliases(scope, {
             "gradient direction", "bar gradient direction", "health gradient direction", "power gradient direction",
             "bar right gradient", "bar right direction", "right bar gradient",
+            "gradient from right", "gradient from left", "gradient from top", "gradient from bottom",
+            "bar gradient from right", "bar gradient from left", "bar gradient from top", "bar gradient from bottom",
         }), {
             flag = "hlOverride",
             values = GRADIENT_DIRECTION_VALUES,

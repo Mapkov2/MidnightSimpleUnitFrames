@@ -62,6 +62,7 @@ if type(RegisterCastbarUnitSettings) == "function" then
         AddAliasesForUnit = AddAliasesForUnit,
         RegisterUnitCastbarBoolean = RegisterUnitCastbarBoolean,
         RegisterGeneralNumber = RegisterGeneralNumber,
+        RegisterGeneralEnumSetting = RegisterGeneralEnumSetting,
         RegisterCastbarUnitGeneralBoolean = RegisterCastbarUnitGeneralBoolean,
         RegisterPlayerCastbarProvider = RegisterPlayerCastbarProvider,
     })
