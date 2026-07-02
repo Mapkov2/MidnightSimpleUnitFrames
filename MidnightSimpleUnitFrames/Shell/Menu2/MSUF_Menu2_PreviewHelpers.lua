@@ -12,6 +12,7 @@ M.ClassPowerPreview = CP
 -- Centralizes mock class-power colors, shape helpers, and small rendering utilities used by
 -- preview modules. Keep preview-only fallbacks here instead of coupling pages to live runtime.
 local floor = math.floor
+local min = math.min
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
 function CP.ShapeTextures(prefix, axis)
@@ -279,6 +280,70 @@ function CP.ResolveTexture(key, fallback)
     end
     return CP.WHITE8
 end
+function H.StylePreviewPillButton(btn, T, opts)
+    if not btn then return btn end
+    opts = opts or {}
+    if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
+    local fontField = opts.fontField or "fs"
+    local useSuperellipse = T and T.CreateSuperellipseLayers
+    if useSuperellipse and not btn._msuf2PreviewPillFill then
+        local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2PreviewPill", 2, "BACKGROUND", "BORDER")
+        btn._msuf2PreviewPillFill = fill
+        btn._msuf2PreviewPillEdge = edge
+        if btn.SetBackdropColor then btn:SetBackdropColor(0, 0, 0, 0) end
+        if btn.SetBackdropBorderColor then btn:SetBackdropBorderColor(0, 0, 0, 0) end
+    end
+    local bgIdle, bgHover, bgActive, bgDown = { 0.018, 0.026, 0.050, 0.92 }, { 0.032, 0.058, 0.098, 0.98 }, { 0.018, 0.150, 0.230, 0.98 }, { 0.014, 0.115, 0.178, 1.00 }
+    local brIdle, brHover, brActive = { 0.085, 0.128, 0.238, 0.72 }, { 0.145, 0.265, 0.470, 0.92 }, { 0.120, 0.600, 0.780, 0.98 }
+    local bgScratch = { 0, 0, 0, 1 }
+    function btn:MSUF2RefreshPreviewPill(active, hover, down)
+        active = active == true
+        if hover == nil then hover = self._msuf2PreviewPillHover == true end
+        if down == nil then down = self._msuf2PreviewPillDown == true end
+        self._msuf2PreviewPillActive = active
+        local alpha = (self.IsEnabled and not self:IsEnabled()) and 0.42 or 1
+        local bg = down and bgDown or (active and bgActive or (hover and bgHover or bgIdle))
+        local br = active and brActive or (hover and brHover or brIdle)
+        if useSuperellipse and self._msuf2PreviewPillFill then
+            if T.SetFillGradient then
+                bgScratch[1], bgScratch[2], bgScratch[3], bgScratch[4] = bg[1], bg[2], bg[3], (bg[4] or 1) * alpha
+                T.SetFillGradient(self._msuf2PreviewPillFill, bgScratch, 0.12, -0.18)
+            else
+                self._msuf2PreviewPillFill:SetVertexColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
+            end
+            if self._msuf2PreviewPillEdge then
+                self._msuf2PreviewPillEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1), min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
+            end
+        elseif self.SetBackdropColor then
+            self:SetBackdropColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
+            self:SetBackdropBorderColor(br[1], br[2], br[3], (br[4] or 1) * alpha)
+        end
+        if self[fontField] and self[fontField].SetTextColor then
+            self[fontField]:SetTextColor(active and 0.06 or (hover and 0.88 or 0.78), active and 0.95 or (hover and 0.94 or 0.84), active and 1.00 or 0.96, alpha)
+        end
+    end
+    btn:SetScript("OnEnter", function(self)
+        self._msuf2PreviewPillHover = true
+        self:MSUF2RefreshPreviewPill(self._msuf2PreviewPillActive, true, self._msuf2PreviewPillDown)
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self._msuf2PreviewPillHover = nil
+        self._msuf2PreviewPillDown = nil
+        self:MSUF2RefreshPreviewPill(self._msuf2PreviewPillActive, false, false)
+    end)
+    btn:SetScript("OnMouseDown", function(self)
+        self._msuf2PreviewPillDown = true
+        self:MSUF2RefreshPreviewPill(self._msuf2PreviewPillActive, self._msuf2PreviewPillHover, true)
+    end)
+    btn:SetScript("OnMouseUp", function(self)
+        self._msuf2PreviewPillDown = nil
+        self:MSUF2RefreshPreviewPill(self._msuf2PreviewPillActive, self._msuf2PreviewPillHover, false)
+    end)
+    btn:SetScript("OnEnable", function(self) self:MSUF2RefreshPreviewPill(self._msuf2PreviewPillActive) end)
+    btn:SetScript("OnDisable", function(self) self:MSUF2RefreshPreviewPill(false, false, false) end)
+    btn:MSUF2RefreshPreviewPill(false, false, false)
+    return btn
+end
 function H.InstallZoomPan(ZoomPan, opts)
     if type(ZoomPan) ~= "table" then return end
     opts = opts or {}
@@ -441,13 +506,21 @@ function H.InstallZoomPan(ZoomPan, opts)
     end
     function ZoomPan.CreateButton(parent, text, width, tooltip, onClick)
         local T = deps.T
-        local template = opts.themeButton and (T and T.Template and T.Template() or nil) or (opts.buttonTemplate or "BackdropTemplate")
+        local template = (opts.themeButton and T and T.Template and T.Template()) or (opts.buttonTemplate or "BackdropTemplate")
         local btn = CreateFrame("Button", nil, parent, template)
         local tex = deps[opts.buttonTextureKey or "TEX_W8"] or white
-        btn:SetSize(width or 24, 18)
-        btn:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
-        btn:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
-        btn:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
+        btn:SetSize(width or 24, opts.buttonHeight or 20)
+        if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
+        local useSuperellipse = opts.themeButton and T and T.CreateSuperellipseLayers
+        if useSuperellipse then
+            local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2PreviewZoom", 2, "BACKGROUND", "BORDER")
+            btn._msuf2PreviewZoomFill = fill
+            btn._msuf2PreviewZoomEdge = edge
+        elseif btn.SetBackdrop then
+            btn:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
+            btn:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
+            btn:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
+        end
         local fontField = opts.buttonFontField or "fs"
         if opts.themeButton and T and T.Font then
             btn[fontField] = T.Font(btn, "GameFontDisableSmall", text, { 0.78, 0.84, 0.96, 1 })
@@ -458,9 +531,44 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         if btn[fontField] then btn[fontField]:SetPoint("CENTER") end
         btn:SetScript("OnClick", onClick)
+        local bgIdle, bgHover, bgDown = { 0.018, 0.026, 0.050, 0.92 }, { 0.032, 0.058, 0.098, 0.98 }, { 0.018, 0.150, 0.230, 0.98 }
+        local brIdle, brHover, brDown = { 0.085, 0.128, 0.238, 0.72 }, { 0.145, 0.265, 0.470, 0.92 }, { 0.120, 0.600, 0.780, 0.98 }
+        local bgScratch = { 0, 0, 0, 1 }
+        local function ApplyButtonVisual(self, hover, down)
+            if useSuperellipse then
+                local alpha = (self.IsEnabled and not self:IsEnabled()) and 0.42 or 1
+                local bg = down and bgDown or (hover and bgHover or bgIdle)
+                local br = down and brDown or (hover and brHover or brIdle)
+                if self._msuf2PreviewZoomFill then
+                    if T.SetFillGradient then
+                        bgScratch[1], bgScratch[2], bgScratch[3], bgScratch[4] = bg[1], bg[2], bg[3], (bg[4] or 1) * alpha
+                        T.SetFillGradient(self._msuf2PreviewZoomFill, bgScratch, 0.12, -0.18)
+                    else
+                        self._msuf2PreviewZoomFill:SetVertexColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
+                    end
+                end
+                if self._msuf2PreviewZoomEdge then
+                    self._msuf2PreviewZoomEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1), min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
+                end
+                if self[fontField] and self[fontField].SetTextColor then
+                    self[fontField]:SetTextColor(hover and 0.88 or 0.78, hover and 0.94 or 0.84, 1.00, alpha)
+                end
+                return
+            end
+            if self.SetBackdropColor then self:SetBackdropColor(hover and 0.05 or 0.025, hover and 0.07 or 0.030, hover and 0.11 or 0.045, hover and 0.98 or 0.88) end
+            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(hover and 0.28 or 0.12, hover and 0.42 or 0.16, hover and 0.68 or 0.24, hover and 1 or 0.92) end
+        end
+        btn:SetScript("OnMouseDown", function(self)
+            self._msuf2PreviewZoomDown = true
+            ApplyButtonVisual(self, self._msuf2PreviewZoomHover, true)
+        end)
+        btn:SetScript("OnMouseUp", function(self)
+            self._msuf2PreviewZoomDown = nil
+            ApplyButtonVisual(self, self._msuf2PreviewZoomHover, false)
+        end)
         btn:SetScript("OnEnter", function(self)
-            self:SetBackdropColor(0.05, 0.07, 0.11, 0.98)
-            self:SetBackdropBorderColor(0.28, 0.42, 0.68, 1)
+            self._msuf2PreviewZoomHover = true
+            ApplyButtonVisual(self, true, self._msuf2PreviewZoomDown)
             if GameTooltip and tooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(TR(tooltip), 1, 1, 1)
@@ -468,10 +576,14 @@ function H.InstallZoomPan(ZoomPan, opts)
             end
         end)
         btn:SetScript("OnLeave", function(self)
-            self:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
-            self:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
+            self._msuf2PreviewZoomHover = nil
+            self._msuf2PreviewZoomDown = nil
+            ApplyButtonVisual(self, false, false)
             if GameTooltip then GameTooltip:Hide() end
         end)
+        btn:SetScript("OnEnable", function(self) ApplyButtonVisual(self, self._msuf2PreviewZoomHover, self._msuf2PreviewZoomDown) end)
+        btn:SetScript("OnDisable", function(self) ApplyButtonVisual(self, false, false) end)
+        ApplyButtonVisual(btn, false, false)
         return btn
     end
 end
@@ -485,9 +597,10 @@ function H.BuildZoomBar(box, surface, opts)
     local setZoom = opts.SetZoom or F.Noop
     local startPan = opts.StartPan or F.False
     local stopPan = opts.StopPan or F.Noop
+    local buttonH = tonumber(opts.buttonHeight) or 20
     local createButton = opts.CreateZoomButton or function(parent, text, width, tooltip, onClick)
         local btn = CreateFrame("Button", nil, parent, template)
-        btn:SetSize(width or 24, 18)
+        btn:SetSize(width or 24, buttonH)
         btn:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
         btn:SetText(text)
         btn:SetScript("OnClick", onClick)
@@ -495,11 +608,16 @@ function H.BuildZoomBar(box, surface, opts)
     end
     local prefix = opts.fieldPrefix or ""
     local zoomBar = CreateFrame("Frame", nil, surface, template)
-    zoomBar:SetSize(opts.width or 160, opts.height or 22)
+    zoomBar:SetSize(opts.width or 176, opts.height or 24)
     zoomBar:SetPoint("TOPRIGHT", surface, "TOPRIGHT", -8, -6)
     zoomBar:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
-    zoomBar:SetBackdropColor(0.015, 0.018, 0.030, 0.86)
-    zoomBar:SetBackdropBorderColor(0.10, 0.14, 0.22, 0.92)
+    if opts.flatChrome ~= false and (opts.T or opts.flatChrome == true) then
+        zoomBar:SetBackdropColor(0, 0, 0, 0)
+        zoomBar:SetBackdropBorderColor(0, 0, 0, 0)
+    else
+        zoomBar:SetBackdropColor(0.015, 0.018, 0.030, 0.86)
+        zoomBar:SetBackdropBorderColor(0.10, 0.14, 0.22, 0.92)
+    end
     if zoomBar.SetFrameLevel then zoomBar:SetFrameLevel((surface.GetFrameLevel and surface:GetFrameLevel() or 0) + 80) end
     zoomBar:EnableMouse(true)
     zoomBar:EnableMouseWheel(true)
@@ -527,7 +645,7 @@ function H.BuildZoomBar(box, surface, opts)
     zoomBar:SetScript("OnLeave", function()
         if GameTooltip then GameTooltip:Hide() end
     end)
-    local zoomOut = AddZoomButton("zoomOutButton", "-", 18, "Zoom out", function() stepZoom(box, -1) end)
+    local zoomOut = AddZoomButton("zoomOutButton", "-", 20, "Zoom out", function() stepZoom(box, -1) end)
     local T = opts.T
     local readout
     if opts.themeReadout and T and T.Font then
@@ -537,12 +655,12 @@ function H.BuildZoomBar(box, surface, opts)
         readout:SetTextColor(0.72, 0.78, 0.90, 1)
     end
     readout:SetPoint("LEFT", zoomOut, "RIGHT", 3, 0)
-    readout:SetSize(54, 18)
+    readout:SetSize(54, buttonH)
     readout:SetJustifyH("CENTER")
     box[prefix .. "zoomReadout"] = readout
-    local fitButton = AddZoomButton("zoomFitButton", "Fit", 28, "Fit preview", function() setZoom(box, nil, opts.fitReason) end, readout)
-    local oneButton = AddZoomButton("zoomOneButton", "1:1", 30, "Pixel preview", function() setZoom(box, 1, opts.oneReason) end, fitButton)
-    AddZoomButton("zoomInButton", "+", 18, "Zoom in", function() stepZoom(box, 1) end, oneButton)
+    local fitButton = AddZoomButton("zoomFitButton", "Fit", 30, "Fit preview", function() setZoom(box, nil, opts.fitReason) end, readout)
+    local oneButton = AddZoomButton("zoomOneButton", "1:1", 32, "Pixel preview", function() setZoom(box, 1, opts.oneReason) end, fitButton)
+    AddZoomButton("zoomInButton", "+", 20, "Zoom in", function() stepZoom(box, 1) end, oneButton)
     local function ZoomWheel(self, delta)
         local dir = (delta or 0) > 0 and 1 or -1
         if IsControlKeyDown and IsControlKeyDown() then

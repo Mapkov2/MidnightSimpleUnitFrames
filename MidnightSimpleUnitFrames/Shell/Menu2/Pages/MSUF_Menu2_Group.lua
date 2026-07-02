@@ -194,7 +194,7 @@ local GF_COPY_CATEGORIES = {
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline useGlobalFontColor fontR fontG fontB]] },
     { key = "border", label = "Background & Opacity", keys = WL [[bgR bgG bgB hpBarAlpha hpBgAlpha alphaExcludeTextPortrait]] },
     { key = "range", label = "Range Fade", keys = WL [[rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha]] },
-    { key = "indicators", label = "Indicators & Status Icons", keys = GF_INDICATOR_COPY_FIELDS, prefix = WL [[si_ statusIcon indicator]] },
+    { key = "indicators", label = "Status & Indicators", keys = GF_INDICATOR_COPY_FIELDS, prefix = WL [[si_ statusIcon indicator]] },
     { key = "auras", label = "Auras", tables = WL [[auras]] },
     { key = "highlight", label = "Highlight & Aggro", keys = WL [[targetIndicator targetR targetG targetB aggroMode]], prefix = WL [[hl dispel]] },
     { key = "dstripe", label = "Debuff Stripe", prefix = WL [[debuffStripe]] },

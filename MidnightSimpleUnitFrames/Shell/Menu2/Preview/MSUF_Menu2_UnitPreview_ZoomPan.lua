@@ -15,6 +15,7 @@ if H and H.InstallZoomPan then
         updateHintKey = "UpdateHandleHint",
         defaultReason = "UNIT_PREVIEW_ZOOM",
         stepReason = "UNIT_PREVIEW_ZOOM_STEP",
+        themeButton = true,
         buttonTextureKey = "TEX_W8",
         buttonFontField = "fs",
         refresh = function(box, reason, deps)

@@ -36,12 +36,16 @@ local helpBtn, tutorialPanel, tourState
 local bgWidget, gridWidget
 local HelpText
 
-local R1_H    = 42
+local R1_H    = 44
 local R2_H    = 34
 local BTN_H   = 32
 local BTN_H2  = 26
 local BTN_GAP = 5
 local SEP_W   = 16
+local CLUSTER_H     = 42
+local CLUSTER_BTN_H = 27
+local CLUSTER_GAP   = 8
+local CLUSTER_PAD_X = 6
 
 local TH = {
     r1Bg   = { 0.026, 0.032, 0.052, 0.94 },
@@ -146,8 +150,8 @@ local COMPONENT_LABEL = {
     castbar = "Castbar",
     cast = "Castbar",
     bars = "Bars",
-    status = "Status",
-    indicators = "Status",
+    status = "Status & Indicators",
+    indicators = "Status & Indicators",
     sicons = "Status Icons",
 }
 
@@ -381,6 +385,55 @@ local function LayoutCenter(anchor, items, gap, sepW)
         b:SetPoint("LEFT", anchor, "CENTER", b._isSep and (x + w/2) or x, 0)
         x = x + w + gap
     end
+end
+
+local function RowItemsWidth(items, gap, sepW)
+    local totalW = 0
+    for i, b in ipairs(items) do
+        totalW = totalW + (b._isSep and sepW or b:GetWidth())
+        if i < #items then totalW = totalW + gap end
+    end
+    return totalW
+end
+
+local function MakeCluster(parent, label, height, showLabel)
+    local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    f:SetSize(1, height or CLUSTER_H)
+    f:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
+                    insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    f:SetBackdropColor(TH.r2Bg[1], TH.r2Bg[2], TH.r2Bg[3], 0.38)
+    f:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.34)
+
+    if showLabel ~= false and label then
+        local fs = MakeFS(f, 8, TH.mutedR, TH.mutedG, TH.mutedB, 0.70)
+        fs:SetPoint("TOPLEFT", f, "TOPLEFT", 7, -3)
+        fs:SetText(HelpText(label))
+        f._clusterLabel = fs
+    end
+    return f
+end
+
+local function AddCluster(row, parent, label, height, showLabel)
+    local cluster = MakeCluster(parent, label, height, showLabel)
+    row[#row + 1] = cluster
+    return cluster, {}
+end
+
+local function FinishCluster(cluster, items, height, yOff)
+    local w = RowItemsWidth(items, BTN_GAP, SEP_W) + CLUSTER_PAD_X * 2
+    cluster:SetSize(w, height or CLUSTER_H)
+    local x = CLUSTER_PAD_X
+    for _, b in ipairs(items) do
+        local bw = b._isSep and SEP_W or b:GetWidth()
+        b:ClearAllPoints()
+        if b._isSep then
+            b:SetPoint("LEFT", cluster, "LEFT", x + bw * 0.5, yOff or 0)
+        else
+            b:SetPoint("LEFT", cluster, "LEFT", x, yOff or 0)
+        end
+        x = x + bw + BTN_GAP
+    end
+    return cluster
 end
 
 local function AddRowButton(row, parent, text, width, height, fontSize, onClick, tip)
@@ -980,23 +1033,24 @@ local function EnsureHUD()
     cancelAllBtn._dot:Hide()
     SetTip(cancelAllBtn, "Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened.")
 
-    --- Center toggles
+    --- Center controls: grouped by task so the HUD scans as Preview | Layout | Tools.
     local c1 = CreateFrame("Frame", nil, hudFrame)
-    c1:SetSize(1, BTN_H); c1:SetPoint("CENTER", hudFrame, "CENTER", 0, 0)
+    c1:SetSize(1, CLUSTER_H); c1:SetPoint("CENTER", hudFrame, "CENTER", 0, 0)
     local r1 = {}
 
-    previewBtn = AddRowButton(r1, c1, "Preview", 64, BTN_H, 12, function()
+    local previewCluster, previewItems = AddCluster(r1, c1, "Preview", CLUSTER_H, true)
+    previewBtn = AddRowButton(previewItems, previewCluster, "Preview", 64, CLUSTER_BTN_H, 11, function()
         ExportPublic("MSUF_UnitPreviewActive", not (_G.MSUF_UnitPreviewActive and true or false))
         if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
         SetActive(previewBtn, _G.MSUF_UnitPreviewActive)
         HUD.SetStatus(HelpText(_G.MSUF_UnitPreviewActive and "EM_PREVIEW_ON" or "EM_PREVIEW_OFF"), "info")
     end, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
 
-    previewAddonSlot = CreateFrame("Frame", "MSUF_EM2_HUD_PreviewAddonSlot", c1)
-    previewAddonSlot:SetSize(38, BTN_H)
-    r1[#r1+1] = previewAddonSlot
+    previewAddonSlot = CreateFrame("Frame", "MSUF_EM2_HUD_PreviewAddonSlot", previewCluster)
+    previewAddonSlot:SetSize(62, CLUSTER_BTN_H)
+    previewItems[#previewItems+1] = previewAddonSlot
 
-    previewAnimBtn = AddRowButton(r1, c1, "Anim", 46, BTN_H, 12, function()
+    previewAnimBtn = AddRowButton(previewItems, previewCluster, "Motion", 58, CLUSTER_BTN_H, 11, function()
         local toggle = _G.MSUF_TogglePreviewAnimation
         if type(toggle) ~= "function" then
             HUD.SetStatus(HelpText("Preview animation unavailable"), "warn")
@@ -1017,7 +1071,7 @@ local function EnsureHUD()
         end)
     end
 
-    auraBtn = AddRowButton(r1, c1, "Auras", 52, BTN_H, 12, function()
+    auraBtn = AddRowButton(previewItems, previewCluster, "Auras", 52, CLUSTER_BTN_H, 11, function()
         local db = _G.MSUF_DB; if not db then return end
         local a2 = db.auras3; if not a2 then return end
         local sh = a2.shared; if not sh then return end
@@ -1031,8 +1085,10 @@ local function EnsureHUD()
         end
         HUD.SetStatus(HelpText(sh.showInEditMode and "EM_AURAS_ON" or "EM_AURAS_OFF"), "info")
     end, "Toggle aura preview icons\nand aura mover boxes.")
+    FinishCluster(previewCluster, previewItems, CLUSTER_H, -6)
 
-    snapToggle = AddRowButton(r1, c1, "Snap", 48, BTN_H, 12, function()
+    local layoutCluster, layoutItems = AddCluster(r1, c1, "Layout", CLUSTER_H, true)
+    snapToggle = AddRowButton(layoutItems, layoutCluster, "Snap", 48, CLUSTER_BTN_H, 11, function()
         if EM2.Snap then
             local on = not EM2.Snap.IsEnabled()
             EM2.Snap.SetEnabled(on); SetActive(snapToggle, on)
@@ -1040,17 +1096,17 @@ local function EnsureHUD()
         end
     end, "Snap frames to edges of\nother frames while dragging.")
 
-    resetBtn = AddRowButton(r1, c1, "Reset", 52, BTN_H, 12, function()
+    resetBtn = AddRowButton(layoutItems, layoutCluster, "Reset", 52, CLUSTER_BTN_H, 11, function()
         HUD.ResetCurrentPosition()
     end, "Reset the selected frame position.\nSize stays unchanged.")
+    FinishCluster(layoutCluster, layoutItems, CLUSTER_H, -6)
 
-    settingsBtn = AddRowButton(r1, c1, "Settings", 66, BTN_H, 12, function()
+    local linksCluster, linksItems = AddCluster(r1, c1, "Tools", CLUSTER_H, true)
+    settingsBtn = AddRowButton(linksItems, linksCluster, "Settings", 66, CLUSTER_BTN_H, 11, function()
         HUD.OpenSelectedSettings()
     end, "Open Menu2 at the selected\nframe or component settings.")
 
-    AddRowSep(r1, c1, BTN_H)
-
-    cdmBtn = AddRowButton(r1, c1, "CDM", 46, BTN_H, 12, function()
+    cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 72, CLUSTER_BTN_H, 11, function()
         local db = _G.MSUF_DB; if not db then return end
         db.general = db.general or {}
         db.general.anchorToCooldown = not (db.general.anchorToCooldown and true or false)
@@ -1063,7 +1119,7 @@ local function EnsureHUD()
         end)
     end, "Anchor all unitframes to the\nEssential Cooldown Manager.")
 
-    anchorBtn = AddRowButton(r1, c1, "Anchor", 58, BTN_H, 12, function()
+    anchorBtn = AddRowButton(linksItems, linksCluster, "Anchor", 58, CLUSTER_BTN_H, 11, function()
         local ov = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker()
         if not ov then return end
         ov._onPick = function(frameName)
@@ -1080,8 +1136,9 @@ local function EnsureHUD()
         end
         ov:Show()
     end, "Pick any frame as global anchor\nfor all unitframes.\nOverrides CDM anchor.")
+    FinishCluster(linksCluster, linksItems, CLUSTER_H, -6)
 
-    LayoutCenter(c1, r1, BTN_GAP, SEP_W)
+    LayoutCenter(c1, r1, CLUSTER_GAP, SEP_W)
 
     --- --- ROW 2 ---
     row2Frame = CreateFrame("Frame", "MSUF_EM2_HUD_Row2", hudFrame, "BackdropTemplate")
@@ -1110,24 +1167,25 @@ local function EnsureHUD()
     c2:SetSize(1, BTN_H2); c2:SetPoint("CENTER", row2Frame, "CENTER", 0, 0)
     local r2 = {}
 
-    undoBtn = AddRowButton(r2, c2, "", 42, BTN_H2, 11, function()
+    local historyCluster, historyItems = AddCluster(r2, c2, nil, BTN_H2 + 4, false)
+    undoBtn = AddRowButton(historyItems, historyCluster, "", 42, BTN_H2, 11, function()
         if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
         HUD.RefreshControls()
     end, "Undo last position change.")
     ExportPublic("MSUF_EditModeUndoBtn", undoBtn)
     AttachHistoryIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png")
 
-    redoBtn = AddRowButton(r2, c2, "", 42, BTN_H2, 11, function()
+    redoBtn = AddRowButton(historyItems, historyCluster, "", 42, BTN_H2, 11, function()
         if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
         HUD.RefreshControls()
     end, "Redo last undone change.")
     ExportPublic("MSUF_EditModeRedoBtn", redoBtn)
     AttachHistoryIcon(redoBtn, MEDIA .. "msuf_history_redo_green.png")
+    FinishCluster(historyCluster, historyItems, BTN_H2 + 4, 0)
 
-    AddRowSep(r2, c2, BTN_H2)
-
+    local gridCluster, gridItems = AddCluster(r2, c2, nil, BTN_H2 + 4, false)
     do
-        gridWidget, stepFS = AddAdjustWidget(r2, c2, 80, BTN_H2, true, function(_, d)
+        gridWidget, stepFS = AddAdjustWidget(gridItems, gridCluster, 80, BTN_H2, true, function(_, d)
             if not EM2.Grid then return end
             EM2.Grid.SetGridStep(max(4, min(80, EM2.Grid.GetGridStep() + d * 4)))
             HUD.RefreshControls()
@@ -1140,14 +1198,15 @@ local function EnsureHUD()
     end
 
     do
-        bgWidget, alphaFS = AddAdjustWidget(r2, c2, 74, BTN_H2, false, function(_, d)
+        bgWidget, alphaFS = AddAdjustWidget(gridItems, gridCluster, 74, BTN_H2, false, function(_, d)
             if not EM2.Grid then return end
             EM2.Grid.SetBgAlpha(max(0, min(1, EM2.Grid.GetBgAlpha() + d * 0.05)))
             HUD.RefreshControls()
         end, nil, "Background overlay opacity.\nScroll to adjust.")
     end
+    FinishCluster(gridCluster, gridItems, BTN_H2 + 4, 0)
 
-    LayoutCenter(c2, r2, BTN_GAP, SEP_W)
+    LayoutCenter(c2, r2, CLUSTER_GAP, SEP_W)
 end
 
 function HUD.RefreshUnitSelector()
