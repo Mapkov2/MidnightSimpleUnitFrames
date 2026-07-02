@@ -488,6 +488,11 @@ local function AuraDurationBarPositionValue(text)
     return AuraEnumAliasValue(text, data.AURA_DURATION_BAR_POSITION_ALIASES)
 end
 
+local function AuraDurationBarDisplayValue(text)
+    local data = A.AurasRegistryData or {}
+    return AuraEnumAliasValue(text, data.AURA_DURATION_BAR_DISPLAY_ALIASES)
+end
+
 local function AuraDurationBarDirectionValue(text)
     local data = A.AurasRegistryData or {}
     return AuraEnumAliasValue(text, data.AURA_DURATION_BAR_DIRECTION_ALIASES)
@@ -520,6 +525,179 @@ local UNIT_AURA_FILTER_KEYS = {
     buff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "cancelable", "notCancelable", "externalDefensive", "bigDefensive" },
     debuff = { "onlyMine", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "crowdControl" },
 }
+
+local AURA_FILTER_LABELS = {
+    onlyMine = "Player",
+    raid = "Raid",
+    raidInCombat = "Raid In Combat",
+    includeNameplateOnly = "Include Nameplate-only",
+    cancelable = "Cancelable",
+    notCancelable = "Not Cancelable",
+    externalDefensive = "External Defensive",
+    bigDefensive = "Big Defensive",
+    includeDispellable = "Dispellable",
+    crowdControl = "Crowd Control",
+}
+
+local AURA_FILTER_EFFECTS = {
+    onlyMine = "only your own auras pass through.",
+    raid = "uses Blizzard's raid-relevant aura filter.",
+    raidInCombat = "uses the stricter raid-relevant filter while in combat.",
+    includeNameplateOnly = "also allows auras Blizzard marks as nameplate-only.",
+    cancelable = "shows buffs you can cancel.",
+    notCancelable = "shows buffs you cannot cancel.",
+    externalDefensive = "focuses external defensive cooldown buffs.",
+    bigDefensive = "focuses major personal defensive cooldown buffs.",
+    includeDispellable = "shows debuffs your character can dispel.",
+    crowdControl = "focuses crowd-control debuffs.",
+}
+
+local GROUP_AURA_FILTER_EFFECTS = {
+    ALL = "shows the normal aura set without an extra live group-filter token.",
+    PLAYER = "shows only your own auras.",
+    RAID = "shows raid-relevant auras.",
+    RAID_IN_COMBAT = "shows a cleaner raid-relevant set during combat.",
+    RAID_PLAYER_DISPELLABLE = "shows debuffs your character can dispel.",
+    BIG_DEFENSIVE = "shows major defensive cooldown buffs.",
+    EXTERNAL_DEFENSIVE = "shows external defensive cooldown buffs.",
+    CROWD_CONTROL = "shows crowd-control effects.",
+}
+
+local function AuraReadSettingValue(key)
+    local setting = Registry and Registry:GetSetting(key)
+    if setting and type(setting.get) == "function" then
+        local ok, value = pcall(setting.get)
+        if ok then return value, setting end
+    end
+    return nil, setting
+end
+
+local function AuraFilterDisplayScope(text)
+    local groups = DetectGroups(text)
+    for i = 1, #groups do
+        local group = groups[i]
+        if group == "party" or group == "raid" or group == "mythicraid" then
+            local label = group == "mythicraid" and "Mythic Raid" or (group:gsub("^%l", string.upper))
+            return "group", group, label
+        end
+    end
+    local units = DetectUnits(text)
+    for i = 1, #units do
+        local unit = units[i]
+        if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
+            return "unit", unit, unit:gsub("^%l", string.upper)
+        end
+    end
+    return nil, nil, nil
+end
+
+local function AuraFilterDisplayLane(text)
+    if ContainsAny(text, { "debuff", "debuffs" }) then return "debuff", "Debuff" end
+    if ContainsAny(text, { "buff", "buffs" }) then return "buff", "Buff" end
+    return nil, nil
+end
+
+local function AuraFilterGuidanceRecommendation()
+    local lines = {
+        "Raid aura filter recommendation",
+        "Short answer: start with Raid for general raid relevance, use Raid In Combat when you want less clutter during pulls, and use Dispellable Debuffs if your main job is cleansing.",
+        "For a new player, filters are a sieve: the aura lane still exists, but the filter decides which icons are allowed through.",
+        "Good raid starting points:",
+        "- Raid or Mythic Raid debuffs: set the Debuff filter to RAID. If the frame is still too noisy, try RAID_IN_COMBAT.",
+        "- Healer dispels: use RAID_PLAYER_DISPELLABLE on debuffs when you only want debuffs your character can remove.",
+        "- DPS personal tracking: use PLAYER on target debuffs when you only care about your own DoTs.",
+        "- Defensive cooldown tracking: use BIG_DEFENSIVE for major defensives, or EXTERNAL_DEFENSIVE for externals.",
+        "MSUF detail: Player/Target/Focus/Boss use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane.",
+        "Examples: set raid debuff filter to RAID; set raid debuff filter to RAID_IN_COMBAT; set raid debuff filter to RAID_PLAYER_DISPELLABLE; turn on target debuff player filter.",
+    }
+    return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Recommends beginner-friendly aura filters for raid use." }
+end
+
+local function AuraFilterGuidanceOverview()
+    local lines = {
+        "Aura filters, in normal words",
+        "Filters do not move icons or resize them. They decide which Buff or Debuff icons are allowed to show.",
+        "Common choices:",
+        "- PLAYER: only your own buffs/debuffs. Good for tracking your DoTs or HoTs.",
+        "- RAID: Blizzard's raid-frame relevant list. Good default for raids.",
+        "- RAID_IN_COMBAT: stricter raid list while fighting. Good when raid frames are too noisy.",
+        "- RAID_PLAYER_DISPELLABLE: debuffs your character can dispel. Good for healers.",
+        "- BIG_DEFENSIVE / EXTERNAL_DEFENSIVE: defensive cooldown tracking.",
+        "To read the exact active state I need the frame and lane, for example Target Debuffs, Player Buffs, Raid Debuffs, or Party Buffs.",
+    }
+    return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Explains aura filters for beginners." }
+end
+
+local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
+    local filtersEnabled = AuraReadSettingValue("auras3." .. tostring(scope) .. ".filtersEnabled")
+    if filtersEnabled == nil then filtersEnabled = true end
+    local lines = {}
+    lines[#lines + 1] = scopeLabel .. " " .. laneLabel .. " filters"
+    lines[#lines + 1] = "Plain English: this controls which " .. laneLabel:lower() .. " icons MSUF lets through on " .. scopeLabel .. ". It does not change icon size or position."
+    lines[#lines + 1] = filtersEnabled and "Filter gate: enabled. The active toggles below affect the live native AuraContainer." or "Filter gate: disabled. These filter toggles will not narrow the lane until filters are enabled."
+    local active = {}
+    local tokens = { lane == "buff" and "HELPFUL" or "HARMFUL" }
+    local exclusive = AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter.exclusive")
+    if tostring(exclusive or "none") ~= "none" then
+        active[#active + 1] = "Exclusive: starts from the stricter " .. tostring(exclusive) .. " list."
+        if tostring(exclusive) == "raid" then tokens[#tokens + 1] = "RAID" end
+    end
+    local keys = UNIT_AURA_FILTER_KEYS[lane] or {}
+    for i = 1, #keys do
+        local key = keys[i]
+        local value = AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(key))
+        if value == true then
+            active[#active + 1] = tostring(AURA_FILTER_LABELS[key] or key) .. ": " .. tostring(AURA_FILTER_EFFECTS[key] or "narrows this lane.")
+            if key == "onlyMine" then tokens[#tokens + 1] = "PLAYER" end
+            if key == "raid" then tokens[#tokens + 1] = "RAID" end
+            if key == "raidInCombat" then tokens[#tokens + 1] = "RAID_IN_COMBAT" end
+        end
+    end
+    if #active == 0 then
+        lines[#lines + 1] = "Active filters right now: none. This lane is not being narrowed by MSUF's live filter toggles."
+        lines[#lines + 1] = lane == "debuff"
+            and "Beginner tip: for raid debuffs, Raid is the normal first filter; Dispellable is the healer-cleanse view; Player is only your own debuffs."
+            or "Beginner tip: for raid buffs, Raid is the normal clean view; Big Defensive and External Defensive are specialized cooldown-tracking views."
+    else
+        lines[#lines + 1] = "Active filters right now:"
+        for i = 1, #active do lines[#lines + 1] = "- " .. active[i] end
+    end
+    lines[#lines + 1] = "Native filter string MSUF builds from this: " .. table.concat(tokens, "|") .. "."
+    lines[#lines + 1] = "Safe next commands: 'turn on " .. tostring(scope) .. " " .. tostring(lane) .. " raid filter', 'turn off " .. tostring(scope) .. " " .. tostring(lane) .. " player filter', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " exclusive filter to none'."
+    return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Explains active unit aura filters." }
+end
+
+local function AuraGroupFilterGuidance(scope, scopeLabel, lane, laneLabel)
+    local rootEnabled = AuraReadSettingValue("gf_" .. tostring(scope) .. ".auras.enabled")
+    local laneEnabled = AuraReadSettingValue("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".enabled")
+    local token = AuraReadSettingValue("gf_" .. tostring(scope) .. ".auras." .. tostring(lane) .. ".filterToken")
+    token = tostring(token or "ALL")
+    local lines = {}
+    lines[#lines + 1] = scopeLabel .. " " .. laneLabel .. " group aura filter"
+    lines[#lines + 1] = "Plain English: group-frame aura filters are a single dropdown per lane. Pick one main job for the lane: all auras, your auras, raid-relevant auras, dispellable debuffs, defensive buffs, or crowd control."
+    lines[#lines + 1] = (rootEnabled == false) and "Group Auras are disabled for this scope, so this filter will not be visible until Group Auras are enabled." or "Group Auras are enabled or using their default enabled state."
+    lines[#lines + 1] = (laneEnabled == false) and laneLabel .. " lane is disabled, so the filter cannot show icons yet." or laneLabel .. " lane is enabled or using its default enabled state."
+    lines[#lines + 1] = "Current live filter token: " .. token .. ". Plain English: it " .. tostring(GROUP_AURA_FILTER_EFFECTS[token] or "uses that group aura filter token for the lane.")
+    lines[#lines + 1] = lane == "debuff"
+        and "Raid beginner tip: RAID is the usual first pick, RAID_IN_COMBAT is cleaner during pulls, and RAID_PLAYER_DISPELLABLE is the healer-cleanse view."
+        or "Raid beginner tip: RAID is the usual clean buff view; BIG_DEFENSIVE and EXTERNAL_DEFENSIVE are for defensive cooldown tracking."
+    lines[#lines + 1] = "Safe next commands: 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RAID', 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RAID_IN_COMBAT', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to ALL'."
+    return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Explains active group aura filter." }
+end
+
+local function ParseAuraFilterGuidanceShortcut(text)
+    if not ContainsAny(text, { "filter", "filters" }) then return nil end
+    if ContainsAny(text, { "good filter", "best filter", "which filter should", "what filter should", "recommend", "recommendation", "for raid", "for raids", "raid setup", "raiding", "new player", "beginner" }) then
+        return AuraFilterGuidanceRecommendation()
+    end
+    local wantsStatus = ContainsAny(text, { "active", "current", "enabled", "what", "which", "explain", "check", "status", "do i have", "is on", "are on" })
+    if not wantsStatus then return nil end
+    local kind, scope, scopeLabel = AuraFilterDisplayScope(text)
+    local lane, laneLabel = AuraFilterDisplayLane(text)
+    if not kind or not scope or not lane then return AuraFilterGuidanceOverview() end
+    if kind == "group" then return AuraGroupFilterGuidance(scope, scopeLabel, lane, laneLabel) end
+    return AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
+end
 
 local function AddAuraRegisteredChange(changes, key, value, label)
     local setting = Registry and Registry:GetSetting(key)
@@ -591,6 +769,8 @@ local function ParseAuraStyleBoolShortcut(text)
     if ContainsAny(text, {
         "anchor", "x offset", "offset x", " y offset", "offset y", "text x", "text y",
         "size", "font", "height", "position", "edge", "fill mode", "direction", "reverse",
+        "display", "display mode", "mode", "bar only", "separate bar", "icon bar",
+        "icon and bar", "icon plus bar", "icon + bar", "overlay",
         "decimals", "decimal", "seconds", "threshold", "filter", "exclusive", "color", "colors", "colour", "colours",
     }) then
         return nil
@@ -1459,6 +1639,9 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         if ContainsAny(text, { "aura cooldown warning seconds", "aura timer warning seconds", "aura warning seconds", "warning aura seconds", "warning aura timer threshold", "aura warning timer threshold" }) then
             return AuraDirectSettingChange("general.aurasCooldownTextWarningSeconds", number, "Aura Warning Timer Threshold")
         end
+        if ContainsAny(text, { "aura cooldown urgent seconds", "aura timer urgent seconds", "aura urgent seconds", "urgent aura seconds", "urgent aura timer threshold", "aura urgent timer threshold" }) then
+            return AuraDirectSettingChange("general.aurasCooldownTextUrgentSeconds", number, "Aura Urgent Timer Threshold")
+        end
     end
 
     if ContainsAny(text, { "aura cooldown safe color", "aura cooldown safe text color", "cooldown text safe color", "aura timer safe color", "aura safe timer color", "safe aura timer color" }) then
@@ -2228,17 +2411,27 @@ local function ParseAuraDurationBarShortcut(text)
         "top", "upper", "on top", "at top", "top edge", "above",
         "bottom", "lower", "on bottom", "at bottom", "bottom edge", "below",
     })
+    local wantsDisplay = ContainsAny(text, {
+        "duration bar display", "timer bar display", "duration bar mode", "timer bar mode",
+        "bar only", "separate bar", "icon bar", "icon and bar", "icon plus bar", "icon + bar", "overlay",
+    })
     local wantsDirection = ContainsAny(text, {
         "duration bar fill mode", "duration bar direction", "timer bar fill mode", "timer bar direction",
         "fill mode", "remaining", "elapsed", "count up", "count down", "countdown", "deplete", "depletion", "drain", "progress",
     })
 
-    if wantsPosition and not wantsDirection then
+    if wantsPosition and not wantsDirection and not wantsDisplay then
         attr = "durationBarPosition"
         value = AuraDurationBarPositionValue(text)
         missingText = "Use top or bottom for Aura Duration Bar Position. Example: put target buff duration bar on top."
         label = "Change Aura duration bar position"
         summary = "Adjusts Aura Duration Bar Position."
+    elseif wantsDisplay and not wantsDirection then
+        attr = "durationBarDisplay"
+        value = AuraDurationBarDisplayValue(text)
+        missingText = "Use bar only or icon + bar for Aura Duration Bar Display. Example: set target buff duration bar display to icon + bar."
+        label = "Change Aura duration bar display"
+        summary = "Adjusts Aura Duration Bar Display."
     elseif wantsDirection then
         attr = "durationBarDirection"
         value = AuraDurationBarDirectionValue(text)
@@ -2533,6 +2726,7 @@ P.AuraGeometryShortcut = ParseAuraGeometryShortcut
 P.ParseGroupAuraLiveFilterShortcut = ParseGroupAuraLiveFilterShortcut
 P.ParseUnitAuraFilterBooleanShortcut = ParseUnitAuraFilterBooleanShortcut
 P.ParseUnitAuraLiveFilterShortcut = ParseUnitAuraLiveFilterShortcut
+P.ParseAuraFilterGuidanceShortcut = ParseAuraFilterGuidanceShortcut
 P.ParseAuraDirectSettingShortcut = ParseAuraDirectSettingShortcut
 P.ParseGroupAuraRootSettingShortcut = ParseGroupAuraRootSettingShortcut
 P.ParseGroupAuraVisibilityShortcut = ParseGroupAuraVisibilityShortcut

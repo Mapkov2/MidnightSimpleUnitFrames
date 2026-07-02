@@ -34,6 +34,24 @@ function A.UnitframesRegistry.RegisterTransparencyAndRangeSettings(ctx, unit)
         step = 0.05,
         percent = true,
     })
+    RegisterUnitNumberSetting(unit, "powerBarAlpha", "powerBarAlpha", "Power Bar Opacity", 1, 0, 1,
+        MakeAliases(unit, "power bar opacity", "power opacity", "power alpha", "mana bar opacity", "mana opacity"), {
+        category = "Transparency",
+        alpha = true,
+        power = true,
+        step = 0.05,
+        percent = true,
+    })
+    RegisterUnitNumberSetting(unit, "powerBarBgAlpha", "powerBarBgAlpha", "Resource Bar Background Opacity", 0.85, 0, 1,
+        MakeAliases(unit,
+            "resource bar background opacity", "resource background opacity", "power bar background opacity",
+            "power background opacity", "mana bar background opacity", "mana background opacity"
+        ), {
+        category = "Transparency",
+        power = true,
+        step = 0.05,
+        percent = true,
+    })
     RegisterUnitNumberSetting(unit, "hpBgAlpha", "hpBgAlpha", "Background Opacity", 0.85, 0, 1,
         MakeAliases(unit,
             "background opacity", "backdrop opacity", "background alpha", "bg opacity",

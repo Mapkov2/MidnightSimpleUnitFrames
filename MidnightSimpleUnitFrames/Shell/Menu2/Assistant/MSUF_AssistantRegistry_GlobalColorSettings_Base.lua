@@ -159,4 +159,31 @@ function A.GlobalRegistry.RegisterBaseColorSettings(ctx)
     RegisterGeneralBoolean("enableHealthGradient", "healthColorGradient", "Health Color Gradient", true, {
         "health color gradient", "color health by gradient", "unitframe health gradient",
     }, { category = "Colors / Unit Frame Global Coloring", frameType = "colors", apply = ApplyColors, reason = "MSUF_ASSISTANT_HEALTH_COLOR_GRADIENT" })
+
+    ColorSetting("general.healthGradientLow", "Health Gradient Low Color", {
+        "health gradient low", "health gradient low color", "low health gradient color",
+        "low health color", "low hp gradient color", "low hp color",
+    }, function()
+        return GeneralRGB("healthGradientLow", 1, 0, 0)
+    end, function(r, g, b)
+        SetGeneralRGB("healthGradientLow", r, g, b)
+    end, { category = "Colors / Unit Frame Global Coloring", attribute = "healthGradientLowColor", defaultR = 1, defaultG = 0, defaultB = 0, apply = ApplyColors })
+
+    ColorSetting("general.healthGradientMid", "Health Gradient Mid Color", {
+        "health gradient mid", "health gradient middle", "health gradient mid color",
+        "middle health gradient color", "mid health color", "yellow health gradient color",
+    }, function()
+        return GeneralRGB("healthGradientMid", 1, 1, 0)
+    end, function(r, g, b)
+        SetGeneralRGB("healthGradientMid", r, g, b)
+    end, { category = "Colors / Unit Frame Global Coloring", attribute = "healthGradientMidColor", defaultR = 1, defaultG = 1, defaultB = 0, apply = ApplyColors })
+
+    ColorSetting("general.healthGradientHigh", "Health Gradient High Color", {
+        "health gradient high", "health gradient high color", "high health gradient color",
+        "high health color", "full health gradient color", "full hp color",
+    }, function()
+        return GeneralRGB("healthGradientHigh", 0, 1, 0)
+    end, function(r, g, b)
+        SetGeneralRGB("healthGradientHigh", r, g, b)
+    end, { category = "Colors / Unit Frame Global Coloring", attribute = "healthGradientHighColor", defaultR = 0, defaultG = 1, defaultB = 0, apply = ApplyColors })
 end

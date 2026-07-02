@@ -1941,6 +1941,180 @@ local POWER_UNIT_ORDER = { "player", "target", "focus", "targettarget", "focusta
 local POWER_GROUP_ORDER = { "party", "raid", "mythicraid" }
 local CASTBAR_INTERRUPT_UNITS = { "player", "target", "focus", "boss" }
 
+local function ParseGlobalFontFamilyShortcut(text, raw)
+    if not ContainsAny(text, { "font", "fonts", "schrift", "schriftart" }) then return nil end
+    if ContainsAny(text, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "show me" }) then return nil end
+    if ContainsAny(text, {
+        "font color", "font colour", "font palette", "text color", "text colour", "custom font color",
+        "font size", "text size", "font scale", "outline", "shadow", "shorten", "shortening", "truncate",
+        "rendering", "font rendering", "monochrome", "anti alias", "anti-alias", "antialias",
+        "font smoothing", "text smoothing", "smooth font", "smooth text",
+        "name font", "name text", "health font", "health text", "hp font", "hp text",
+        "power font", "power text", "castbar", "cast bar", "spell name", "timer font", "time font",
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "cooldown", "stack",
+        "combat timer", "combat text", "targeted spell", "targeted spells", "anchor", "offset",
+        "x position", "y position", "line 1", "line 2", "slot 1", "slot 2", "override",
+    }) then return nil end
+    if #(DetectUnits(text) or {}) > 0 or #(DetectGroups(text) or {}) > 0 then return nil end
+    if not ContainsAny(text, {
+        "set font", "change font", "make font", "use font", "choose font", "switch font",
+        "set global font", "change global font", "set main font", "change main font",
+        "set default font", "change default font", "set shared font", "change shared font",
+        "schriftart", "schrift setzen", "schrift aendern", "schrift andern",
+    }) then return nil end
+
+    local setting = Registry and Registry:GetSetting("general.fontKey")
+    if not setting then return nil end
+    local value = RawAfterLastConnector and RawAfterLastConnector(raw, SET_VALUE_CONNECTORS) or nil
+    if value == nil or Trim(value) == "" then return nil end
+    value = Trim(value)
+    if type(setting.normalizeValue) == "function" then
+        local ok, normalizedValue = pcall(setting.normalizeValue, value)
+        if ok and normalizedValue ~= nil then value = normalizedValue end
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) } },
+        label = setting.label or "Global Font",
+        summary = "Changes the global SharedMedia font family.",
+    }
+end
+P.ParseGlobalFontFamilyShortcut = ParseGlobalFontFamilyShortcut
+
+local FONT_RENDERING_UNIT_SCOPES = {
+    player = "player",
+    target = "target",
+    targettarget = "targettarget",
+    focustarget = "focustarget",
+    focus = "focus",
+    pet = "pet",
+    boss = "boss",
+}
+
+local FONT_RENDERING_GROUP_SCOPES = {
+    party = "gf_party",
+    raid = "gf_raid",
+    mythicraid = "gf_raid",
+}
+
+local function FontRenderingValueForText(text)
+    local boolValue = DetectBoolean(text)
+    if ContainsAny(text, { "monochrome", "mono", "sharp", "crisp", "pixel", "pixel sharp", "pixelscharf" }) then
+        if boolValue == false then return "SMOOTH" end
+        return "SHARP"
+    end
+    if ContainsAny(text, { "smooth", "smoothing", "soft", "normal" }) then
+        if boolValue == false then return "SHARP" end
+        return "SMOOTH"
+    end
+    return nil
+end
+
+local function ParseFontRenderingShortcut(text)
+    if not ContainsAny(text, { "font", "fonts", "text", "schrift" }) then return nil end
+    if ContainsAny(text, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "show me" }) then return nil end
+    if not ContainsAny(text, {
+        "font rendering", "text rendering", "font smoothing", "text smoothing",
+        "sharp text", "sharp font", "pixel font", "monochrome font", "font monochrome",
+        "global font rendering", "shared font rendering", "default font rendering",
+    }) then return nil end
+
+    local value = FontRenderingValueForText(text)
+    if value == nil then return nil end
+
+    local scopes = {}
+    local seen = {}
+    local units = DetectUnits(text) or {}
+    local groups = DetectGroups(text) or {}
+    for i = 1, #units do
+        local scope = FONT_RENDERING_UNIT_SCOPES[units[i]]
+        if scope and not seen[scope] then
+            seen[scope] = true
+            scopes[#scopes + 1] = scope
+        end
+    end
+    for i = 1, #groups do
+        local scope = FONT_RENDERING_GROUP_SCOPES[groups[i]]
+        if scope and not seen[scope] then
+            seen[scope] = true
+            scopes[#scopes + 1] = scope
+        end
+    end
+    if #scopes == 0 then scopes[1] = "shared" end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local setting = Registry and Registry:GetSetting("fontScope." .. tostring(scopes[i]) .. ".fontMonochrome")
+        if setting then
+            changes[#changes + 1] = { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or "Font Rendering") or "Font Rendering",
+        bulkSafe = #changes > 1,
+        summary = "Changes font rendering between smooth and sharp monochrome text.",
+    }
+end
+P.ParseFontRenderingShortcut = ParseFontRenderingShortcut
+
+local function FontScopeTargetsForText(text)
+    local scopes = {}
+    local seen = {}
+    local units = DetectUnits(text) or {}
+    local groups = DetectGroups(text) or {}
+    for i = 1, #units do
+        local scope = FONT_RENDERING_UNIT_SCOPES[units[i]]
+        if scope and not seen[scope] then
+            seen[scope] = true
+            scopes[#scopes + 1] = scope
+        end
+    end
+    for i = 1, #groups do
+        local scope = FONT_RENDERING_GROUP_SCOPES[groups[i]]
+        if scope and not seen[scope] then
+            seen[scope] = true
+            scopes[#scopes + 1] = scope
+        end
+    end
+    if #scopes == 0 then scopes[1] = "shared" end
+    return scopes
+end
+
+local function ParseFontTextOpacityShortcut(text)
+    if not ContainsAny(text, { "text opacity", "text alpha", "font opacity", "font alpha" }) then return nil end
+    if ContainsAny(text, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "show me" }) then return nil end
+    if ContainsAny(text, {
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
+        "combat", "edit mode", "editmode", "background", "bar opacity", "bar alpha",
+        "outline", "border", "shadow opacity", "shadow alpha",
+    }) then return nil end
+
+    local value = FirstNumber(text)
+    if value == nil then return nil end
+    if value > 1 then value = value / 100 end
+
+    local changes = {}
+    local scopes = FontScopeTargetsForText(text)
+    for i = 1, #scopes do
+        local setting = Registry and Registry:GetSetting("fontScope." .. tostring(scopes[i]) .. ".fontTextAlpha")
+        if setting then
+            changes[#changes + 1] = { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or "Text Opacity") or "Text Opacity",
+        bulkSafe = #changes > 1,
+        summary = "Changes scoped font text opacity.",
+    }
+end
+P.ParseFontTextOpacityShortcut = ParseFontTextOpacityShortcut
+
 P._AddFontTextColorChange = function(changes, key, value)
     local setting = Registry and Registry:GetSetting(key)
     if setting then changes[#changes + 1] = { setting = setting, value = value } end
@@ -2037,6 +2211,11 @@ local function ParseScopedFontTextColorShortcut(text)
 
     local scope = DetectGlobalScope(text)
     if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if ContainsAny(text, {
+        "class resource color", "class resource colors", "class resource colour", "class resource colours",
+        "class power color", "class power colors", "class power colour", "class power colours",
+        "resource text class resource color", "resource text class resource colour",
+    }) then return nil end
 
     local spec
     if ContainsAny(text, {
@@ -2053,6 +2232,17 @@ local function ParseScopedFontTextColorShortcut(text)
             "power color", "power colour", "power colors", "power colours",
             "resource color", "resource colour", "mana color", "mana colour",
             "font color",
+        })
+    ) or (
+        ContainsAny(text, {
+            "power text", "powertext", "mana text", "resource text", "power value", "mana value", "resource value",
+        }) and ContainsAny(text, {
+            "default", "standard",
+        }) and not ContainsAny(text, {
+            "show", "hide", "enable", "disable", "turn on", "turn off",
+            "size", "font size", "text size", "x offset", "y offset", "offset",
+            " x", "x ", " y", "y ", "delimiter", "separator", "format",
+            "anchor", "position", "format", "template", "custom text", "layer",
         })
     ) then
         spec = { key = "colorPowerTextByType", on = "RESOURCE", label = "Power Text Color Mode" }
@@ -2113,6 +2303,71 @@ local function ParseScopedFontTextColorShortcut(text)
     }
 end
 
+function P.ParseAmbiguousFontTextColorShortcut(text)
+    if not ContainsAny(text, {
+        "text color", "text colour", "text colors", "text colours",
+        "color text", "colour text", "font text color", "font text colour",
+    }) then return nil end
+    if ContainsAny(text, {
+        "name text color", "name text colour", "name color", "name colour",
+        "health text color", "health text colour", "hp text color", "hp text colour",
+        "power text color", "power text colour", "powertext color", "powertext colour",
+        "mana text color", "mana text colour", "resource text color", "resource text colour",
+        "dead text", "status text", "offline text", "afk text", "dnd text",
+    }) then return nil end
+    if ContainsAny(text, {
+        "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
+        "border", "outline", "background", "bar color", "bar colour",
+        "combat", "timer", "enter text", "leave text", "stack count", "cooldown text",
+        "pandemic", "crosshair", "kick", "interrupt", "cast color", "cast colour",
+    }) then return nil end
+
+    local units = DetectUnits(text)
+    local groups = DetectGroups(text)
+    local scopeText
+    if #units > 0 then
+        scopeText = tostring(units[1]):gsub("^%l", string.upper)
+    elseif #groups > 0 then
+        scopeText = tostring(groups[1] == "mythicraid" and "Mythic Raid" or groups[1]):gsub("^%l", string.upper)
+    else
+        scopeText = "the frame"
+    end
+
+    return {
+        kind = "answer",
+        status = "ambiguous",
+        result = "ambiguous",
+        text = "Which " .. scopeText .. " text color do you mean: Name Text, Health Text, or Power Text?\nI did not change anything because those are separate MSUF settings.\nExamples: 'set target name text color to class', 'set target health text color to health', or 'set target power text color to default'.",
+        summary = "Clarifies generic text color before changing a specific text-color mode.",
+    }
+end
+
+function P.ParseAmbiguousColorShortcut(text, raw)
+    if not ContainsAny(text, { "color", "colors", "colour", "colours", "tint", "farbe", "farben" }) then return nil end
+    if not ContainsAny(text, { "set", "change", "make", "turn", "use", "to " }) then return nil end
+    if not (P.ColorShortcutValue and P.ColorShortcutValue(text, raw)) then return nil end
+    if ContainsAny(text, {
+        "player", "target", "focus", "pet", "boss", "party", "raid", "mythic raid", "mythicraid",
+        "health", "hp", "power", "mana", "energy", "rage", "focus power", "class resource", "class power",
+        "class color", "class colour", "warrior", "paladin", "hunter", "rogue", "priest", "death knight",
+        "shaman", "mage", "warlock", "monk", "druid", "demon hunter", "evoker",
+        "npc", "npc type", "friendly npc", "neutral npc", "enemy npc", "dead npc",
+        "combo", "name", "text", "font", "bar", "bars", "castbar", "cast bar", "cast color", "cast colour",
+        "interrupt", "kick", "mouseover", "combat", "timer", "enter text", "leave text",
+        "crosshair", "pandemic", "stack count", "border", "outline",
+        "background", "aura", "auras", "buff", "buffs", "debuff", "debuffs", "dispel", "aggro",
+        "gradient", "raid marker", "role icon", "status icon",
+    }) then return nil end
+
+    return {
+        kind = "answer",
+        status = "ambiguous",
+        result = "ambiguous",
+        text = "Which color do you want to change? MSUF has separate colors for health bar, power bar, name text, health text, power text, class resources, cast bars, group borders, aura borders, and status indicators.\nI did not change anything from the generic color request.\nExamples: 'set target health bar color to yellow', 'set target name text color to class', or 'set party group border color to yellow'.",
+        summary = "Clarifies a color request without a setting target.",
+    }
+end
+
 local function CurrentRegistryPageUnit()
     local page = M and M.activeKey
     if type(page) ~= "string" then return nil end
@@ -2145,6 +2400,8 @@ local DEPENDENT_TARGET_FRAME_DETAIL_BLOCKERS = {
     "hp", "health", "power", "mana", "castbar", "cast bar", "buff", "buffs", "debuff", "debuffs",
     "aura", "auras", "icon", "icons", "indicator", "indicators", "portrait", "range fade",
     "alpha", "opacity", "width", "height", "size", "anchor", "position", "move", "offset",
+    "bar", "bars", "bar gradient", "bar gradients", "gradient", "gradients", "gradient direction",
+    "gradient strength", "texture", "textures", "foreground", "background",
     "load condition", "load conditions", "visibility condition", "when", "while", "in group",
     "grouped", "solo", "mounted", "vehicle", "instance", "combat", "resting", "stealth", "housing",
 }
@@ -3121,6 +3378,141 @@ function P.ParsePowerBarGradientRegistryShortcut(text)
     }
 end
 
+local BAR_GRADIENT_COLOR_TERMS = {
+    "color", "colors", "colour", "colours", "farbe", "farben", "tint",
+    "gradient color", "gradient colors", "gradient colour", "gradient colours",
+    "gradient stop", "gradient stops", "low color", "mid color", "middle color",
+    "high color", "low hp", "mid hp", "high hp", "low health", "mid health", "high health",
+}
+
+local function BarGradientDirectionValue(text)
+    if ContainsAny(text, { "from right", "to right", "right side", "rightward", "right", "rechts", "von rechts", "nach rechts" }) then return "RIGHT" end
+    if ContainsAny(text, { "from left", "to left", "left side", "leftward", "left", "links", "von links", "nach links" }) then return "LEFT" end
+    if ContainsAny(text, { "from top", "to top", "from up", "to up", "top", "up", "above", "oben", "hoch", "von oben", "nach oben" }) then return "UP" end
+    if ContainsAny(text, { "from bottom", "to bottom", "from down", "to down", "bottom", "down", "below", "unten", "runter", "von unten", "nach unten" }) then return "DOWN" end
+    return nil
+end
+
+function P.ParseBarGradientRegistryShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return nil end
+    if ContainsAny(text, BAR_GRADIENT_COLOR_TERMS) then return nil end
+    if not ContainsAny(text, {
+        "gradient", "gradients", "bar gradient", "bar gradients", "bars gradient",
+        "hp gradient", "health gradient", "power gradient", "mana gradient",
+        "gradient direction", "gradient strength",
+    }) then
+        return nil
+    end
+    if ContainsAny(text, { "gradient strength", "strength", "intensity", "staerke", "starke" }) then return nil end
+
+    local direction = BarGradientDirectionValue(text)
+    local value = DetectBoolean(text)
+    if value == nil and direction == nil then return nil end
+
+    local power = ContainsAny(text, { "power", "power bar", "power bars", "mana", "mana bar", "mana bars", "resource", "resource bar", "resource bars", "energie", "ressource" })
+    local health = ContainsAny(text, { "hp", "health", "health bar", "health bars", "hp bar", "hp bars", "leben", "gesundheit" })
+    local both = ContainsAny(text, {
+        "both", "both bars", "all bars", "all bar gradients", "bar gradients", "gradients",
+        "health and power", "hp and power", "power and health", "power and hp",
+        "health plus power", "hp plus power", "health power",
+    })
+    if both then
+        health = true
+        power = true
+    elseif not health and not power then
+        health = true
+    end
+
+    local explicitUnits, explicitGroups = ExplicitScopes(text)
+    local units = {}
+    local groups = {}
+    local concrete = false
+    local hasUnitFrameIntent = ContainsAny(text, {
+        "unitframe", "unit frame", "unitframes", "unit frames", "all units", "all unitframes", "all unit frames",
+        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
+    })
+    local hasGroupFrameIntent = ContainsAny(text, {
+        "group frame", "group frames", "all groups", "all group frames", "party", "raid", "mythic raid", "mythicraid",
+    })
+
+    if HasAllScopeIntent(text) then
+        if hasGroupFrameIntent and not hasUnitFrameIntent then
+            for i = 1, #ALL_GROUPS do groups[#groups + 1] = ALL_GROUPS[i] end
+            concrete = true
+        elseif hasUnitFrameIntent and not hasGroupFrameIntent then
+            for i = 1, #ALL_UNITFRAMES do units[#units + 1] = ALL_UNITFRAMES[i] end
+            concrete = true
+        elseif #explicitUnits > 0 or #explicitGroups > 0 then
+            for i = 1, #explicitUnits do units[#units + 1] = explicitUnits[i] end
+            for i = 1, #explicitGroups do groups[#groups + 1] = explicitGroups[i] end
+            concrete = true
+        elseif ContainsAny(text, { "all frames", "all bar scopes", "every frame" }) then
+            for i = 1, #ALL_UNITFRAMES do units[#units + 1] = ALL_UNITFRAMES[i] end
+            for i = 1, #ALL_GROUPS do groups[#groups + 1] = ALL_GROUPS[i] end
+            concrete = true
+        end
+    else
+        for i = 1, #explicitUnits do units[#units + 1] = explicitUnits[i] end
+        for i = 1, #explicitGroups do groups[#groups + 1] = explicitGroups[i] end
+        concrete = #units > 0 or #groups > 0
+    end
+
+    if #units == 0 and #groups == 0 then
+        local pageUnit = CurrentRegistryPageUnit()
+        if pageUnit then
+            units[#units + 1] = pageUnit
+            concrete = true
+        elseif M and (M.activeKey == "gf_layout" or M.activeKey == "gf_bars" or M.activeKey == "gf_indicators") then
+            local scope = CurrentGroupScopeForRegistry()
+            if scope then
+                groups[#groups + 1] = scope
+                concrete = true
+            end
+        end
+    end
+
+    local changes = {}
+    local only = ContainsAny(text, { "only", "just", "nur" })
+    local seenScopes = {}
+    local function AddScopedBarGradient(scope)
+        if scope == "gf_mythicraid" then scope = "gf_raid" end
+        if seenScopes[scope] then return end
+        seenScopes[scope] = true
+        if only and scope ~= "shared" then AddRegisteredChange(changes, "barScope." .. tostring(scope) .. ".override", true) end
+        if value ~= nil and health then AddRegisteredChange(changes, "barScope." .. tostring(scope) .. ".enableGradient", value) end
+        if value ~= nil and power then AddRegisteredChange(changes, "barScope." .. tostring(scope) .. ".enablePowerGradient", value) end
+        if direction then AddRegisteredChange(changes, "barScope." .. tostring(scope) .. ".gradientDirection", direction) end
+    end
+
+    for i = 1, #units do AddScopedBarGradient(units[i]) end
+    for i = 1, #groups do AddScopedBarGradient("gf_" .. tostring(groups[i])) end
+
+    if #changes == 0 then
+        if value ~= nil and health then AddRegisteredChange(changes, "general.enableGradient", value) end
+        if value ~= nil and power then AddRegisteredChange(changes, "general.enablePowerGradient", value) end
+        if direction then AddRegisteredChange(changes, "general.gradientDirection", direction) end
+    end
+
+    if #changes == 0 then return nil end
+    local label
+    if direction and value == nil then
+        label = "Bar Gradient Direction"
+    elseif health and power then
+        label = "Bar Gradients"
+    elseif power then
+        label = "Power Bar Gradient"
+    else
+        label = "HP Bar Gradient"
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = concrete and "Changes target-specific bar gradient options." or "Changes Global Bars gradient options.",
+    }
+end
+
 P.GroupShortcutScopes = function(text)
     local scopes, concrete = GroupAvailabilityScopes(text)
     local allGroups = HasAllScopeIntent(text) or ContainsAny(text, {
@@ -3697,8 +4089,12 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if castbarBackend then return castbarBackend end
     local castbarPosition = P.ParseCastbarPositionRegistryShortcut and P.ParseCastbarPositionRegistryShortcut(text)
     if castbarPosition then return castbarPosition end
+    local barGradient = P.ParseBarGradientRegistryShortcut and P.ParseBarGradientRegistryShortcut(text)
+    if barGradient then return barGradient end
     local powerGradient = P.ParsePowerBarGradientRegistryShortcut and P.ParsePowerBarGradientRegistryShortcut(text)
     if powerGradient then return powerGradient end
+    local globalFont = ParseGlobalFontFamilyShortcut(text, raw)
+    if globalFont then return globalFont end
     local alphaExclude = P.ParseAlphaExcludeTextPortraitShortcut and P.ParseAlphaExcludeTextPortraitShortcut(text)
     if alphaExclude then return alphaExclude end
     local unitHPTextReverse = P.ParseUnitHPTextReverseShortcut and P.ParseUnitHPTextReverseShortcut(text)
@@ -4490,7 +4886,9 @@ end
 
 P.GROUP_COLOR_TARGETS = {
     { key = "groupBorderColor", title = "Group Border Color", terms = { "group border color", "full group border color", "whole group border color", "outer group border color", "group block border color" } },
+    { key = "targetColor", title = "Target Highlight Color", terms = { "target highlight color", "target border color", "selected target border color" } },
     { key = "hlFocusColor", title = "Focus Highlight Color", terms = { "focus highlight color", "focus border color", "focus glow color" } },
+    { key = "debuffStripeColor", title = "Debuff Stripe Color", terms = { "debuff stripe color", "stripe color" } },
     { key = "deadBgColor", title = "Dead Background Color", terms = { "dead background color", "dead member background color", "dead offline background color", "dead bg color" } },
     { key = "bgColor", title = "Backdrop Color", terms = { "group backdrop color", "group background color", "frame background color", "backdrop color", "background color", "bar background color", "hp track color", "health track color", "track color" } },
     { key = "healthCustomColor", title = "Custom Health Color", terms = { "custom health color", "health custom color", "health bar custom color" } },
@@ -4500,7 +4898,8 @@ P.GROUP_COLOR_TARGETS = {
 }
 
 P.HasGroupFrameColorIntent = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return false end
+    if ContainsAny(text, { "aura", "auras", "buff", "buffs" }) then return false end
+    if ContainsAny(text, { "debuff", "debuffs" }) and not ContainsAny(text, { "debuff stripe", "debuff stripes" }) then return false end
     if not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then return false end
     return ContainsAny(text, {
         "group", "group frame", "group frames", "groupframe", "groupframes", "gruppenframe", "gruppenframes",
@@ -4889,6 +5288,7 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or P.ParseCastbarBackendShortcut(text)
         or P.ParseCastbarPositionRegistryShortcut(text)
         or (P.ParseFocusKickRegistryShortcut and P.ParseFocusKickRegistryShortcut(text))
+        or (P.ParseBarGradientRegistryShortcut and P.ParseBarGradientRegistryShortcut(text))
         or P.ParsePowerBarGradientRegistryShortcut(text)
         or P.ParseGroupFrameOutlineColorShortcut(text, raw)
         or P.ParseGroupFrameColorShortcut(text, raw)

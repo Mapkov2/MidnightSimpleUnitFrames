@@ -20,12 +20,36 @@ function A.CastbarsRegistry.RegisterUnitSettings(ctx)
     local AddAliasesForUnit = ctx.AddAliasesForUnit
     local RegisterUnitCastbarBoolean = ctx.RegisterUnitCastbarBoolean
     local RegisterGeneralNumber = ctx.RegisterGeneralNumber
+    local RegisterGeneralEnumSetting = ctx.RegisterGeneralEnumSetting
     local RegisterCastbarUnitGeneralBoolean = ctx.RegisterCastbarUnitGeneralBoolean
     local RegisterPlayerCastbarProvider = ctx.RegisterPlayerCastbarProvider
 
     if type(AddAliasesForUnit) ~= "function" then return end
     if type(RegisterUnitCastbarBoolean) ~= "function" or type(RegisterGeneralNumber) ~= "function" then return end
-    if type(RegisterCastbarUnitGeneralBoolean) ~= "function" then return end
+    if type(RegisterGeneralEnumSetting) ~= "function" or type(RegisterCastbarUnitGeneralBoolean) ~= "function" then return end
+
+    local WIDTH_SOURCE_VALUES = { "manual", "unitframe", "essential", "utility" }
+    local WIDTH_SOURCE_ALIASES = {
+        manual = "manual",
+        ["manual width"] = "manual",
+        custom = "manual",
+        fixed = "manual",
+        own = "unitframe",
+        unit = "unitframe",
+        unitframe = "unitframe",
+        ["unit frame"] = "unitframe",
+        ["auto unit frame"] = "unitframe",
+        ["follow unit frame"] = "unitframe",
+        cdm = "essential",
+        cooldown = "essential",
+        cooldowns = "essential",
+        essential = "essential",
+        ["essential cooldown"] = "essential",
+        ["essential cooldowns"] = "essential",
+        utility = "utility",
+        ["utility cooldown"] = "utility",
+        ["utility cooldowns"] = "utility",
+    }
 
     for unit, keys in pairs(CASTBAR_KEYS) do
         RegisterUnitCastbarBoolean(unit)
@@ -33,6 +57,17 @@ function A.CastbarsRegistry.RegisterUnitSettings(ctx)
         AddAliasesForUnit(aliases, unit, "castbar width", "castbar breite")
         AddAliasesForUnit(aliases, unit, "cast bar width", "zauberleiste breite")
         RegisterGeneralNumber(keys.w, unit, "castbar", "width", "Castbar Width", unit == "boss" and 176 or (unit == "focus" and 175 or 272), 40, 900, aliases)
+
+        if keys.match then
+            aliases = {}
+            AddAliasesForUnit(aliases, unit, "castbar width mode")
+            AddAliasesForUnit(aliases, unit, "castbar width behavior")
+            AddAliasesForUnit(aliases, unit, "castbar width source")
+            AddAliasesForUnit(aliases, unit, "castbar match width")
+            AddAliasesForUnit(aliases, unit, "castbar auto width")
+            AddAliasesForUnit(aliases, unit, "cast bar width mode")
+            RegisterGeneralEnumSetting(keys.match, unit, "castbar", "widthSource", "Castbar Width Mode", "manual", WIDTH_SOURCE_VALUES, aliases, WIDTH_SOURCE_ALIASES)
+        end
 
         aliases = {}
         AddAliasesForUnit(aliases, unit, "castbar height", "castbar hoehe")

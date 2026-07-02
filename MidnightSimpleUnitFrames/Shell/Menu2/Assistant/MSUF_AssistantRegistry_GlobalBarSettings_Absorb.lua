@@ -46,6 +46,10 @@ function A.GlobalBarRegistry.RegisterAbsorbSettings(ctx)
         "global bar right absorb", "global absorb right", "right absorb bar", "right absorb anchor",
         "absorb right side", "absorb anchor right", "absorb bar right side",
     }, { category = "Global / Bars / Absorb", frameType = "globalBars", apply = ApplyAbsorbBars, reason = "MSUF_ASSISTANT_ABSORB_ANCHOR", valueAliases = ABSORB_ANCHOR_ALIASES })
+    RegisterGeneralBoolean("overAbsorbOverlay", "overAbsorbOverlay", "Over-Absorb Overlay", false, {
+        "over absorb overlay", "over-absorb overlay", "over absorb glow", "overshield overlay",
+        "full hp absorb overlay", "full health absorb overlay",
+    }, { category = "Global / Bars / Absorb", frameType = "globalBars", apply = ApplyAbsorbBars, reason = "MSUF_ASSISTANT_OVER_ABSORB_OVERLAY" })
     RegisterGeneralBoolean("showSelfHealPrediction", "healPrediction", "Heal Prediction Overlay", false, {
         "heal prediction", "heal prediction overlay", "incoming heal prediction", "self heal prediction",
     }, {

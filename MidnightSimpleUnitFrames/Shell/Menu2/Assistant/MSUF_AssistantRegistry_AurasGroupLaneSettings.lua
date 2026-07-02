@@ -35,6 +35,8 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     local AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES = ctx.AURA_COOLDOWN_SWIPE_DIRECTION_ALIASES or {}
     local AURA_DURATION_BAR_POSITION_VALUES = ctx.AURA_DURATION_BAR_POSITION_VALUES or {}
     local AURA_DURATION_BAR_POSITION_ALIASES = ctx.AURA_DURATION_BAR_POSITION_ALIASES or {}
+    local AURA_DURATION_BAR_DISPLAY_VALUES = ctx.AURA_DURATION_BAR_DISPLAY_VALUES or {}
+    local AURA_DURATION_BAR_DISPLAY_ALIASES = ctx.AURA_DURATION_BAR_DISPLAY_ALIASES or {}
     local AURA_DURATION_BAR_DIRECTION_VALUES = ctx.AURA_DURATION_BAR_DIRECTION_VALUES or {}
     local AURA_DURATION_BAR_DIRECTION_ALIASES = ctx.AURA_DURATION_BAR_DIRECTION_ALIASES or {}
     local AURA_DEBUFF_TYPE_BORDER_VALUES = ctx.AURA_DEBUFF_TYPE_BORDER_VALUES or {}
@@ -62,6 +64,9 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
     end
     if #AURA_DURATION_BAR_POSITION_VALUES == 0 then
         AURA_DURATION_BAR_POSITION_VALUES = { "BOTTOM", "TOP" }
+    end
+    if #AURA_DURATION_BAR_DISPLAY_VALUES == 0 then
+        AURA_DURATION_BAR_DISPLAY_VALUES = { "BAR_ONLY", "OVERLAY" }
     end
     if #AURA_DURATION_BAR_DIRECTION_VALUES == 0 then
         AURA_DURATION_BAR_DIRECTION_VALUES = { "REMAINING", "ELAPSED" }
@@ -599,6 +604,14 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             AddGFAuraAliases(aliases, scope, lane, "duration bar edge")
             Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "duration bar position", "timer bar position", "duration bar edge" })
             RegisterGFAuraEnum(scope, lane, "DurationBarPosition", "durationBarPosition", laneInfo.label .. " Duration Bar Position", AURA_DURATION_BAR_POSITION_VALUES, AURA_DURATION_BAR_POSITION_ALIASES, "BOTTOM", aliases, "visual")
+
+            aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "duration bar display")
+            AddGFAuraAliases(aliases, scope, lane, "timer bar display")
+            AddGFAuraAliases(aliases, scope, lane, "duration bar mode")
+            AddGFAuraAliases(aliases, scope, lane, "timer bar mode")
+            Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "duration bar display", "timer bar display", "duration bar mode", "timer bar mode" })
+            RegisterGFAuraEnum(scope, lane, "DurationBarDisplay", "durationBarDisplay", laneInfo.label .. " Duration Bar Display", AURA_DURATION_BAR_DISPLAY_VALUES, AURA_DURATION_BAR_DISPLAY_ALIASES, "BAR_ONLY", aliases, "visual")
 
             aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "duration bar fill mode")

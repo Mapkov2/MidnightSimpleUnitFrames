@@ -86,7 +86,8 @@ local CLASS_POWER_DETAIL_TERMS = {
     "font", "opacity", "alpha", "background", "foreground", "texture", "separator", "tick",
     "outline", "border", "gap", "hide out of combat", "hide when full",
     "hide when empty", "out of combat", "full", "empty", "alt mana",
-    "alternative mana", "detached power",
+    "alternative mana", "detached power", "hp", "health", "hp bar", "health bar",
+    "player hp", "player health", "second hp", "duplicate hp",
 }
 
 local function ClassPowerMentionIsNegated(text)
@@ -170,7 +171,8 @@ function A._ParseClassPowerWidthModeShortcut(text)
 end
 
 local function ClassPowerHideRuleValue(text)
-    if ContainsAny(text, { "show", "visible", "turn on" }) and ContainsAny(text, {
+    local explicitHideIntent = ContainsAny(text, { "hide", "hide when", "hide while", "hide out of combat", "hide ooc" })
+    if (ContainsAny(text, { "show", "visible" }) or (ContainsAny(text, { "turn on" }) and not explicitHideIntent)) and ContainsAny(text, {
         "when full", "if full", "full resource", "full resources",
         "when empty", "if empty", "empty resource", "empty resources",
         "out of combat", "ooc",
@@ -219,7 +221,11 @@ end
 
 function A._ParseClassPowerAnchorShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "detached power", "alt mana", "alternative mana", "text anchor" }) then return nil end
+    if ContainsAny(text, {
+        "detached power", "alt mana", "alternative mana", "text anchor",
+        "player hp", "player hp bar", "hp bar", "class resource hp", "class resources hp",
+        "class resource health", "class resources health", "second hp", "duplicate hp",
+    }) then return nil end
     local hasAnchorIntent = ContainsAny(text, {
         "anchor", "anchored", "follow", "attach", "attached", "dock", "to cooldown", "to cooldowns",
         "to player", "player frame", "cooldownmanager", "cooldown manager",
@@ -311,6 +317,11 @@ end
 
 function A._ParseClassPowerDisplayStyleShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, {
+        "player hp", "player hp bar", "player health", "player health bar",
+        "class resource hp", "class resources hp", "class resource health", "class resources health",
+        "second hp", "second player hp", "duplicate hp", "duplicate health",
+    }) then return nil end
     if ContainsAny(text, { "color", "colour", "background", "font size", "text size", "move", "offset" }) then return nil end
     local value
     if ContainsAny(text, { "as text", "show text", "show numbers", "show number", "numbers only", "text only" })
@@ -331,7 +342,7 @@ function A._ParseClassPowerDisplayStyleShortcut(text)
     local changes = { { setting = textSetting, value = value } }
     if ContainsAny(text, { "show", "turn on", "enable" }) then
         local root = ClassPowerSetting("bars.showClassPower")
-        if root then table.insert(changes, 1, { setting = root, value = true }) end
+        if root then changes[#changes + 1] = { setting = root, value = true } end
     end
     return {
         kind = "changes",
@@ -339,6 +350,48 @@ function A._ParseClassPowerDisplayStyleShortcut(text)
         label = value and "Show Class Resource Text" or "Show Class Resource Pips",
         bulkSafe = #changes > 1,
         summary = "Switches Class Resources between text and pips.",
+    }
+end
+
+function A._ParseClassPowerShapeShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, {
+        "player hp", "player hp bar", "player health", "second hp", "duplicate hp",
+        "hp", "hp bar", "health", "health bar",
+        "detached power", "detached power bar", "player power", "player power bar",
+        "alt mana", "alternative mana",
+    }) then return nil end
+    if ContainsAny(text, { "color", "colors", "colour", "colours", "reset", "default", "defaults", "restore" }) then return nil end
+    if not ContainsAny(text, {
+        "shape", "form", "as bar", "as bars", "as circle", "as circles", "as dots",
+        "as diamond", "as diamonds", "as hex", "as hexagons",
+        "bar shape", "circle shape", "dot shape", "orb shape", "diamond shape",
+        "gem shape", "crystal shape", "hex shape", "hexagon shape",
+        "alignment", "align pips", "pip alignment",
+    }) then return nil end
+
+    local key
+    local label
+    if ContainsAny(text, { "alignment", "align pips", "pip alignment", "shape align", "left", "center", "centre", "middle", "right" })
+        and ContainsAny(text, { "alignment", "align", "left", "center", "centre", "middle", "right" })
+        and not ContainsAny(text, { "left to right", "right to left", "fill left", "fill right" })
+    then
+        key = "bars.classPowerShapeAlign"
+        label = "Class Resource Shape Alignment"
+    elseif ContainsAny(text, { "shape", "form", "bar", "circle", "round", "dot", "orb", "diamond", "gem", "crystal", "hex", "hexagon" }) then
+        key = "bars.classPowerShape"
+        label = "Class Resource Shape"
+    end
+    if not key then return nil end
+
+    local setting = ClassPowerSetting(key)
+    local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+    if value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or label,
+        summary = "Changes the Class Resource shape option.",
     }
 end
 
@@ -427,6 +480,7 @@ end
 function A._ParseClassPowerTextSizeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
     if ContainsAny(text, { "move", "nudge", "shift", "offset", "position" }) then return nil end
+    if ContainsAny(text, { "text x", "text y", "text left", "text right", "text up", "text down", "x to", "y to" }) then return nil end
     if not ContainsAny(text, { "text", "number", "numbers", "font", "font size", "text size", "number size" }) then return nil end
     if not ContainsAny(text, { "size", "bigger", "larger", "smaller", "increase", "decrease", "raise", "reduce", "set", "make" }) then return nil end
     local setting = ClassPowerSetting("bars.classPowerFontSize")
@@ -479,6 +533,283 @@ function A._ParseClassPowerSizeShortcut(text)
     }
 end
 
+function A._ParseClassPowerFrameLevelShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "player hp", "player hp bar", "second hp", "duplicate hp", "detached power", "alt mana" }) then return nil end
+    if not ContainsAny(text, { "frame level", "framelevel", "layer", "z layer", "z level", "strata" }) then return nil end
+    if ContainsAny(text, { "text", "number", "numbers", "font", "aura", "buff", "debuff", "status icon", "raid marker" }) then return nil end
+    local setting = ClassPowerSetting("bars.classPowerFrameLevelOffset")
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 1)
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = "Class Resource Frame Level",
+        summary = "Adjusts the Class Resource frame level offset.",
+    }
+end
+
+function A._ParseClassPowerPlayerHPDetailShortcut(text, raw)
+    if not ContainsAny(text, {
+        "player hp", "player hp bar", "player health", "player health bar",
+        "class resource hp", "class resources hp", "class resource health", "class resources health",
+        "second hp", "second player hp", "duplicate hp", "duplicate health",
+    }) then return nil end
+    if ContainsAny(text, { "player hp", "player hp bar", "player health", "player health bar" })
+        and not ContainsAny(text, {
+            "class power", "class powers", "class resource", "class resources",
+            "second hp", "second player hp", "duplicate hp", "duplicate health",
+        }) then
+        return nil
+    end
+
+    local key
+    local label
+    local summary
+    local fallback = 1
+
+    if ContainsAny(text, { "use player text", "player text" }) then
+        key = "bars.playerHPBarUsePlayerText"
+        label = "Class Resources Player HP Use Player Text"
+    elseif ContainsAny(text, { "reverse text", "reversed text" }) then
+        key = "bars.playerHPBarTextReverse"
+        label = "Class Resources Player HP Reverse Text"
+    elseif ContainsAny(text, { "left text", "left slot" }) then
+        key = "bars.playerHPBarTextLeft"
+        label = "Class Resources Player HP Left Text"
+    elseif ContainsAny(text, { "center text", "centre text", "middle text", "center slot", "centre slot", "middle slot" }) then
+        key = "bars.playerHPBarTextCenter"
+        label = "Class Resources Player HP Center Text"
+    elseif ContainsAny(text, { "right text", "right slot" }) then
+        key = "bars.playerHPBarTextRight"
+        label = "Class Resources Player HP Right Text"
+    elseif ContainsAny(text, { "text delimiter", "text separator", "delimiter", "separator" }) then
+        key = "bars.playerHPBarTextSeparator"
+        label = "Class Resources Player HP Text Delimiter"
+    elseif ContainsAny(text, { "text size", "font size", "text font" }) then
+        key = "bars.playerHPBarTextSize"
+        label = "Class Resources Player HP Text Size"
+    elseif ContainsAny(text, { "text x", "text offset x" }) then
+        key = "bars.playerHPBarTextOffsetX"
+        label = "Class Resources Player HP Text Offset X"
+    elseif ContainsAny(text, { "text y", "text offset y" }) then
+        key = "bars.playerHPBarTextOffsetY"
+        label = "Class Resources Player HP Text Offset Y"
+    elseif ContainsAny(text, { " text", " hp text", "health text" }) then
+        key = "bars.playerHPBarTextEnabled"
+        label = "Class Resources Player HP Text"
+    elseif ContainsAny(text, { "background texture", "bg texture" }) then
+        key = "bars.playerHPBarBgTexture"
+        label = "Class Resources Player HP Background Texture"
+    elseif ContainsAny(text, { "foreground texture", "texture" }) then
+        key = "bars.playerHPBarTexture"
+        label = "Class Resources Player HP Foreground Texture"
+    elseif ContainsAny(text, { "background opacity", "background alpha", "bg opacity", "bg alpha" }) then
+        key = "bars.playerHPBarBgAlpha"
+        label = "Class Resources Player HP Background Opacity"
+        fallback = 0.05
+    elseif ContainsAny(text, { "width mode", "follows class resource", "follow class resource", "follows class", "follow class" }) then
+        key = "bars.playerHPBarWidthMode"
+        label = "Class Resources Player HP Width Mode"
+    elseif ContainsAny(text, { "anchor", "anchoring", "above", "below", "top", "bottom" }) then
+        key = "bars.playerHPBarAnchor"
+        label = "Class Resources Player HP Anchor"
+    elseif ContainsAny(text, { "smooth fill", "smooth hp", "smooth health" }) then
+        key = "bars.playerHPBarSmoothFill"
+        label = "Class Resources Player HP Smooth Fill"
+    elseif ContainsAny(text, { "color mode", "colour mode", " hp color", " hp colour", "health color", "health colour" }) then
+        key = "bars.playerHPBarColorMode"
+        label = "Class Resources Player HP Color Mode"
+    elseif ContainsAny(text, { "orb size", "sphere size" }) then
+        key = "bars.playerHPBarOrbSize"
+        label = "Class Resources Player HP Orb Size"
+    elseif ContainsAny(text, { "shape", "orb", "bar shape" }) then
+        key = "bars.playerHPBarShape"
+        label = "Class Resources Player HP Shape"
+    elseif ContainsAny(text, { "frame level", "framelevel", "layer", "z layer", "z level", "strata" }) then
+        key = "bars.playerHPBarFrameLevelOffset"
+        label = "Class Resources Player HP Frame Level"
+    elseif ContainsAny(text, { "gap", "gaps", "spacing", "space", "distance" }) then
+        key = "bars.playerHPBarGap"
+        label = "Class Resources Player HP Gap"
+    elseif ContainsAny(text, { "outline", "border", "outline width", "border width", "outline thickness", "border thickness" }) then
+        key = "bars.playerHPBarOutline"
+        label = "Class Resources Player HP Outline"
+    elseif ContainsAny(text, { " x", "x offset", "offset x", "left", "right" }) then
+        key = "bars.playerHPBarOffsetX"
+        label = "Class Resources Player HP Offset X"
+    elseif ContainsAny(text, { " y", "y offset", "offset y", "up", "down" }) then
+        key = "bars.playerHPBarOffsetY"
+        label = "Class Resources Player HP Offset Y"
+    elseif ContainsAny(text, { "width", "wide", "wider", "narrower" }) then
+        key = "bars.playerHPBarWidth"
+        label = "Class Resources Player HP Width"
+        fallback = 10
+    elseif ContainsAny(text, { "height", "tall", "taller", "shorter" }) then
+        key = "bars.playerHPBarHeight"
+        label = "Class Resources Player HP Height"
+    elseif ContainsAny(text, { "hp bar", "health bar", "player hp", "player health", "second hp", "duplicate hp" }) then
+        key = "bars.playerHPBarEnabled"
+        label = "Class Resources Player HP Bar"
+    else
+        return nil
+    end
+
+    local setting = ClassPowerSetting(key)
+    if not setting then return nil end
+    local relativeDelta
+    local value
+    if setting.type == "number" then
+        relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, fallback)
+        if relativeDelta == nil then
+            value = ValueForRegistrySetting and ValueForRegistrySetting(setting, text, raw or text) or nil
+        end
+    else
+        value = ValueForRegistrySetting and ValueForRegistrySetting(setting, text, raw or text) or nil
+    end
+    if value == nil and relativeDelta == nil then return nil end
+    summary = "Changes the optional second Player HP bar shown with Class Resources."
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = label,
+        summary = summary,
+    }
+end
+
+function A._ParseClassPowerEmpoweredComboShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if not ContainsAny(text, {
+        "empowered combo point", "empowered combo points",
+        "charged combo point", "charged combo points",
+        "combo point charges",
+    }) then return nil end
+    if ContainsAny(text, {
+        "color", "colour", "background", "bg", "text", "number", "font",
+        "size", "width", "height", "gap", "spacing", "anchor", "move",
+    }) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then return nil end
+    local setting = ClassPowerSetting("bars.showChargedComboPoints")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = "Empowered Combo Points",
+        summary = "Controls whether Class Resources show empowered combo point states.",
+    }
+end
+
+function A._ParseClassPowerRuneTimeShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if not ContainsAny(text, { "rune time", "rune timer", "rune timers", "rune cooldown", "rune cooldowns" }) then return nil end
+    if ContainsAny(text, {
+        "color", "colour", "background", "bg", "font", "size",
+        "width", "height", "gap", "spacing", "anchor", "move",
+    }) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then return nil end
+    local setting = ClassPowerSetting("bars.runeShowTime")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = "Rune Time",
+        summary = "Controls whether Class Resources show rune timing per rune.",
+    }
+end
+
+local CLASS_POWER_DISPLAY_BOOLEAN_SHORTCUTS = {
+    {
+        terms = { "elemental maelstrom", "maelstrom bar", "ele maelstrom" },
+        key = "bars.showEleMaelstrom",
+        label = "Elemental Maelstrom Bar",
+        summary = "Controls whether Class Resources show the Elemental Maelstrom bar.",
+    },
+    {
+        terms = { "ebon might", "ebon might timer", "augmentation ebon might" },
+        key = "bars.showEbonMight",
+        label = "Ebon Might Timer",
+        summary = "Controls whether Class Resources show the Ebon Might timer.",
+    },
+    {
+        terms = { "shadow insanity", "insanity bar", "shadow mana", "shadow resource bar" },
+        key = "bars.showShadowMana",
+        label = "Shadow Insanity Bar",
+        summary = "Controls whether Class Resources show the Shadow Insanity bar.",
+    },
+    {
+        terms = { "resource prediction", "class resource prediction", "class power prediction", "incoming resource" },
+        key = "bars.classPowerShowPrediction",
+        label = "Class Resource Prediction",
+        summary = "Controls whether Class Resources show incoming resource prediction.",
+    },
+}
+
+function A._ParseClassPowerDisplayBooleanShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, {
+        "color", "colour", "background", "bg", "font", "size",
+        "width", "height", "gap", "spacing", "anchor", "move",
+    }) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then return nil end
+    for i = 1, #CLASS_POWER_DISPLAY_BOOLEAN_SHORTCUTS do
+        local spec = CLASS_POWER_DISPLAY_BOOLEAN_SHORTCUTS[i]
+        if ContainsAny(text, spec.terms) then
+            local setting = ClassPowerSetting(spec.key)
+            if setting then
+                return {
+                    kind = "changes",
+                    changes = { { setting = setting, value = value } },
+                    label = spec.label,
+                    summary = spec.summary,
+                }
+            end
+        end
+    end
+    return nil
+end
+
+function A._ParseClassPowerColorModeShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "background", "bg", "font", "size", "width", "height", "anchor", "move" }) then return nil end
+
+    if ContainsAny(text, { "color by type", "colour by type", "resource type colors", "resource type colours", "class resource class colors", "class resource class colours" }) then
+        local value = DetectBoolean(text)
+        if value == nil then return nil end
+        local setting = ClassPowerSetting("bars.classPowerColorByType")
+        if not setting then return nil end
+        return {
+            kind = "changes",
+            changes = { { setting = setting, value = value } },
+            label = "Class Resource Color by Type",
+            summary = "Controls whether Class Resources use resource-type coloring.",
+        }
+    end
+
+    if ContainsAny(text, { "combo point color mode", "combo point colour mode", "combo point slot mode", "combo slot mode", "combo point colors", "combo point colours", "combo colors", "combo colours" }) then
+        if ExtractColor and ExtractColor(text) ~= nil then return nil end
+        local setting = ClassPowerSetting("bars.classPowerComboPointColorMode")
+        if not setting then return nil end
+        local value = EnumValueForText and EnumValueForText(setting, text) or nil
+        if value == nil then return nil end
+        return {
+            kind = "changes",
+            changes = { { setting = setting, value = value } },
+            label = "Combo Point Color Mode",
+            summary = "Changes how combo point colors are chosen.",
+        }
+    end
+
+    return nil
+end
+
 function A._ParseClassPowerSeparatorShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
     if not ContainsAny(text, { "separator", "separators", "divider", "dividers", "tick", "ticks" }) then return nil end
@@ -501,6 +832,11 @@ end
 
 function A._ParseClassPowerGapShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, {
+        "player hp", "player hp bar", "player health", "player health bar",
+        "class resource hp", "class resources hp", "class resource health", "class resources health",
+        "second hp", "second player hp", "duplicate hp", "duplicate health",
+    }) then return nil end
     if not ContainsAny(text, { "gap", "gaps", "spacing", "space", "spaces", "distance", "pip gap", "point gap" }) then return nil end
     if ContainsAny(text, { "text", "font", "outline", "border" }) then return nil end
     local setting = ClassPowerSetting("bars.classPowerGap")
@@ -521,6 +857,15 @@ end
 
 function A._ParseClassPowerBackgroundShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "resource bar", "resource bars", "power bar", "power bars" })
+        and not ContainsAny(text, {
+            "class power", "class powers", "class resource", "class resources",
+            "combo point", "combo points", "holy power", "soul shard", "soul shards",
+            "rune", "runes", "chi", "arcane charge", "arcane charges", "essence",
+            "maelstrom", "ebon might", "insanity", "stagger", "eclipse",
+        }) then
+        return nil
+    end
     if not ContainsAny(text, { "background", "bg", "empty background" }) then return nil end
     if ContainsAny(text, { "color", "colour", "texture" }) then return nil end
     local setting = ClassPowerSetting("bars.classPowerBgAlpha")
@@ -543,6 +888,185 @@ function A._ParseClassPowerBackgroundShortcut(text)
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
         label = "Class Resource Background Opacity",
         summary = "Adjusts Class Resource background visibility.",
+    }
+end
+
+function A._ParseClassPowerOutlineOpacityShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, {
+        "player hp", "player hp bar", "player health", "player health bar",
+        "class resource hp", "class resources hp", "class resource health", "class resources health",
+        "second hp", "second player hp", "duplicate hp", "duplicate health",
+    }) then return nil end
+
+    local key
+    local label
+    local summary
+    local fallback = 1
+    if ContainsAny(text, { "outline", "border", "outline width", "border width", "outline thickness", "border thickness" }) then
+        key = "bars.classPowerOutline"
+        label = "Class Resource Outline"
+        summary = "Adjusts Class Resource outline thickness."
+    elseif ContainsAny(text, { "filled opacity", "filled alpha", "active opacity" }) then
+        key = "bars.classPowerFilledAlpha"
+        label = "Class Resource Filled Opacity"
+        summary = "Adjusts the opacity of filled Class Resource pips."
+        fallback = 0.05
+    elseif ContainsAny(text, { "empty opacity", "empty alpha", "inactive opacity" }) then
+        key = "bars.classPowerEmptyAlpha"
+        label = "Class Resource Empty Opacity"
+        summary = "Adjusts the opacity of empty Class Resource pips."
+        fallback = 0.05
+    else
+        return nil
+    end
+
+    local setting = ClassPowerSetting(key)
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, fallback)
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value ~= nil and (key == "bars.classPowerFilledAlpha" or key == "bars.classPowerEmptyAlpha") and value > 1 then
+            value = value / 100
+        end
+    end
+    if value == nil and relativeDelta == nil and key == "bars.classPowerOutline" then
+        local bool = DetectBoolean(text)
+        if bool == nil then return nil end
+        value = bool and 1 or 0
+    end
+    if value == nil and relativeDelta == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = label,
+        summary = summary,
+    }
+end
+
+function A._ParseClassPowerTextureShortcut(text, raw)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, {
+        "player hp", "player hp bar", "player health", "player health bar",
+        "class resource hp", "class resources hp", "class resource health", "class resources health",
+        "second hp", "second player hp", "duplicate hp", "duplicate health",
+        "detached power", "alt mana", "alternative mana",
+    }) then return nil end
+    if not ContainsAny(text, { "texture", "foreground texture", "background texture", "bg texture" }) then return nil end
+
+    local key
+    local label
+    if ContainsAny(text, { "background texture", "bg texture" }) then
+        key = "bars.classPowerBgTexture"
+        label = "Class Resource Background Texture"
+    else
+        key = "bars.classPowerTexture"
+        label = "Class Resource Foreground Texture"
+    end
+
+    local setting = ClassPowerSetting(key)
+    if not setting then return nil end
+    local value = ValueForRegistrySetting and ValueForRegistrySetting(setting, text, raw or text) or nil
+    if value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = label,
+        summary = "Changes the Class Resource SharedMedia texture.",
+    }
+end
+
+function A._ParseClassPowerDetachedPowerBarDetailShortcut(text, raw)
+    if not ContainsAny(text, {
+        "detached power", "detached power bar", "detached mana", "detached mana bar",
+        "class resources player power", "class resources player power bar",
+        "class resource player power", "class resource player power bar",
+        "player power in class resources", "player power bar in class resources",
+    }) then return nil end
+    if ContainsAny(text, { "player hp", "player health", "second hp", "duplicate hp", "alt mana", "alternative mana" }) then return nil end
+
+    local key
+    local label
+    local value
+    local relativeDelta
+
+    if ContainsAny(text, { "width mode", "width source", "follows cooldown", "follows tracked buff" }) then
+        key = "bars.detachedPowerBarWidthMode"
+        label = "Detached Power Bar Width Mode"
+        local setting = ClassPowerSetting(key)
+        value = setting and EnumValueForText(setting, text) or nil
+    elseif ContainsAny(text, { "texture", "foreground texture", "background texture", "bg texture" }) then
+        if ContainsAny(text, { "background texture", "bg texture" }) then
+            key = "bars.detachedPowerBarBgTexture"
+            label = "Detached Power Bar Background Texture"
+        else
+            key = "bars.detachedPowerBarTexture"
+            label = "Detached Power Bar Foreground Texture"
+        end
+        local setting = ClassPowerSetting(key)
+        value = setting and ValueForRegistrySetting and ValueForRegistrySetting(setting, text, raw or text) or nil
+    elseif ContainsAny(text, { "outline", "border", "outline width", "border width", "outline thickness", "border thickness" }) then
+        key = "bars.detachedPowerBarOutline"
+        label = "Detached Power Bar Outline"
+        local setting = ClassPowerSetting(key)
+        relativeDelta = setting and RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 1) or nil
+        if relativeDelta == nil then
+            value = FirstNumber(text)
+            if value == nil then
+                local bool = DetectBoolean(text)
+                if bool ~= nil then value = bool and 1 or 0 end
+            end
+        end
+    else
+        return nil
+    end
+
+    local setting = ClassPowerSetting(key)
+    if not setting then return nil end
+    if value == nil and relativeDelta == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = label,
+        summary = "Changes the detached Player Power Bar options managed by Class Resources.",
+    }
+end
+
+function A._ParseClassPowerAltManaShortcut(text, raw)
+    if not ContainsAny(text, { "alt mana", "alternative mana", "secondary mana", "dual resource mana" }) then return nil end
+    if ContainsAny(text, { "detached power", "player hp", "second hp", "duplicate hp" }) then return nil end
+
+    local key
+    local label
+    local fallback = 1
+    if ContainsAny(text, { "height", "tall", "taller", "shorter" }) then
+        key = "bars.altManaHeight"
+        label = "Alternative Mana Height"
+    elseif ContainsAny(text, { "y offset", "offset y", " y", "up", "down" }) then
+        key = "bars.altManaOffsetY"
+        label = "Alternative Mana Offset Y"
+    else
+        key = "bars.showAltMana"
+        label = "Alternative Mana Bar"
+    end
+
+    local setting = ClassPowerSetting(key)
+    if not setting then return nil end
+    local relativeDelta
+    local value
+    if setting.type == "number" then
+        relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, fallback)
+        if relativeDelta == nil then value = ValueForRegistrySetting and ValueForRegistrySetting(setting, text, raw or text) or nil end
+    else
+        value = ValueForRegistrySetting and ValueForRegistrySetting(setting, text, raw or text) or nil
+    end
+    if value == nil and relativeDelta == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = label,
+        summary = "Changes the Alternative Mana bar shown on the Class Resources page.",
     }
 end
 
@@ -808,6 +1332,31 @@ function A._GameplayShortcutChange(key, value, relativeDelta, direction, label, 
     } or nil
 end
 
+function A._ParseGameplayTextValueShortcut(text, raw)
+    if ContainsAny(text, { "color", "colour", "farbe" }) then return nil end
+    local key
+    local label
+    if ContainsAny(text, { "combat enter text", "enter combat text", "combat state enter text" }) then
+        key = "gameplay.combatStateEnterText"
+        label = "Combat Enter Text"
+    elseif ContainsAny(text, { "combat leave text", "leave combat text", "combat state leave text" }) then
+        key = "gameplay.combatStateLeaveText"
+        label = "Combat Leave Text"
+    else
+        return nil
+    end
+    local setting = Registry and Registry:GetSetting(key)
+    if not setting then return nil end
+    local value = ValueForRegistrySetting and ValueForRegistrySetting(setting, text, raw or text) or nil
+    if value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = label,
+        summary = "Changes a Gameplay text value.",
+    }
+end
+
 function A._ParseGameplayBooleanShortcut(text)
     local value = DetectBoolean(text)
     local spec = A._GameplayShortcutSpec(text)
@@ -863,6 +1412,26 @@ function A._ParseGameplayAnchorShortcut(text)
         changes = { { setting = setting, value = value } },
         label = setting.label or spec.label,
         summary = "Changes the selected Gameplay anchor.",
+    }
+end
+
+function A._ParseGameplaySpellIDShortcut(text)
+    if not ContainsAny(text, { "melee range spell", "crosshair melee spell", "crosshair spell id", "combat crosshair spell id", "range check spell" }) then return nil end
+    if ContainsAny(text, { "crosshair", "combat crosshair", "fadenkreuz" }) then return nil end
+    local setting = Registry and Registry:GetSetting("gameplay.nameplateMeleeSpellID")
+    if not setting then return nil end
+    local value
+    if ContainsAny(text, { "clear", "reset", "none", "no spell" }) then
+        value = 0
+    else
+        value = FirstNumber(text)
+    end
+    if value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = "Crosshair Melee Range Spell",
+        summary = "Changes the Combat Crosshair melee range spell ID.",
     }
 end
 
@@ -1288,7 +1857,7 @@ end
 
 local function ParseColorAction(text)
     if not ContainsAny(text, { "reset", "default", "defaults", "restore", "zuruecksetzen" }) then return nil end
-    if not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then return nil end
+    if not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint", "gradient" }) then return nil end
     if ContainsAny(text, {
         "combo point slot", "combo point slots", "combo slot", "combo slots",
         "combo point colors", "combo colors", "all combo point colors",
@@ -1336,6 +1905,9 @@ local function ParseColorAction(text)
     end
     if ContainsAny(text, { "npc type", "npc role" }) then
         return BuildColorResetAction("reset_npc_type_colors", "Reset NPC type colors", "Resets NPC type colors.")
+    end
+    if ContainsAny(text, { "health gradient", "hp gradient", "gradient stop", "gradient stops", "reset gradient" }) then
+        return BuildColorResetAction("reset_health_gradient_colors", "Reset health gradient colors", "Resets the low, mid, and high Health Gradient color stops.")
     end
     if ContainsAny(text, { "unitframe", "unit frame", "npc reaction", "reaction color" }) then
         return BuildColorResetAction("reset_unitframe_colors", "Reset unit frame colors", "Resets unit frame NPC reaction colors.")
@@ -2275,6 +2847,7 @@ local function ParseClassPowerPreviewResource(text)
         summary = "Selects the Class Resources preview without changing saved layout options.",
     }
 end
+A._ParseClassPowerPreviewResourceShortcut = ParseClassPowerPreviewResource
 
 local function ParseClassPowerAction(text)
     text = tostring(text or "")
