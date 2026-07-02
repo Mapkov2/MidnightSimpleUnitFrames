@@ -103,6 +103,7 @@ local PORTRAIT_STYLE_DEFAULTS = {
     portraitSizeOverride = 0,
     portraitOffsetX = 0,
     portraitOffsetY = 0,
+    portraitZoom = 100,
     portraitBorderStyle = "NONE",
     portraitBorderThickness = 2,
     portraitBorderColorR = 1,

@@ -296,6 +296,13 @@ local function ParsePortraitDetailShortcut(text)
         attr = "portraitBorderThickness"
         relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
         if relativeDelta == nil then value = FirstNumber(text) end
+    elseif ContainsAny(text, { "zoom", "portrait zoom", "2d portrait zoom", "reinzoomen", "rauszoomen", "crop" }) then
+        attr = "portraitZoom"
+        relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 10)
+        if relativeDelta == nil then
+            value = FirstNumber(text)
+            if type(value) == "number" and value > 1 and value <= 2 then value = value * 100 end
+        end
     elseif ContainsAny(text, { "size", "size override", "bigger", "smaller", "larger", "groesser", "kleiner" }) then
         attr = "portraitSizeOverride"
         relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 4)

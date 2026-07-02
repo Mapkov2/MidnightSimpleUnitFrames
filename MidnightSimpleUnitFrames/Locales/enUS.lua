@@ -303,6 +303,7 @@ local MSUF_LOCALE_COVERAGE_enUS = {
     ["Pinned"] = "Pinned",
     ["Poison"] = "Poison",
     ["Portrait"] = "Portrait",
+    ["Portrait zoom"] = "Portrait zoom",
     ["Portrait Y"] = "Portrait Y",
     ["Position"] = "Position",
     ["Positions class bar ABOVE Essential Cooldowns"] = "Positions class bar ABOVE Essential Cooldowns",
