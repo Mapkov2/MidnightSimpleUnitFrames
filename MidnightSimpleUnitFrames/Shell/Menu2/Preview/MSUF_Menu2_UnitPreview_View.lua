@@ -139,6 +139,8 @@ local function UpdateHandleHint(box, handle)
         or TR("guides hidden - arrows still nudge selected element")
     box.hint:SetText(format("%s   x: %d   y: %d   %s", TR(handle._label or handle._key or "?"), x, y, help))
 end
+local OpenPreviewHandleSettings
+local MenuTheme
 local function RefreshHandleSelectionVisuals(box)
     if not box then return end
     local guidesOn = PreviewGuidesVisible(box)
@@ -164,7 +166,16 @@ local function RefreshHandleSelectionVisuals(box)
                 h.edge:SetColorTexture(c[1], c[2], c[3], a)
             end
             if h.SetAlpha then h:SetAlpha(1) end
+            if h._msuf2SettingsGear then h._msuf2SettingsGear:SetShown(guidesOn and isSel) end
         end
+    end
+    if selected and guidesOn and PreviewHelpers.EnsurePreviewHandleGear then
+        PreviewHelpers.EnsurePreviewHandleGear(selected, {
+            T = MenuTheme and MenuTheme(),
+            Tr = TR,
+            shown = true,
+            openSettings = function(handle) return OpenPreviewHandleSettings(handle, "gear") end,
+        })
     end
     UpdateHandleHint(box, selected)
 end
@@ -304,6 +315,49 @@ end
 local function CheckpointMenuHistory(handle, action)
     local h = _G.MSUF2
     if h and type(h.CheckpointHistory) == "function" then return h.CheckpointHistory(MenuHistoryLabel(handle, action), MenuHistorySource(handle, action)) end
+    return false
+end
+local UNIT_SECTION_IDS = {
+    text = "text",
+    status = "status_icons",
+    portrait = "portrait",
+    power = "power_bar",
+    castbar = "castbar",
+    auras = "auras",
+}
+OpenPreviewHandleSettings = function(handle, source)
+    if not handle then return false end
+    local box = handle._preview or Preview.active
+    local fields = handle._fields or {}
+    local section = fields.section
+    local menu = _G.MSUF2 or M2
+    if section == "classPower" then
+        if menu and type(menu.SelectPage) == "function" then
+            ExportPublic("MSUF_EM2_MenuFocusRequest", {
+                pageKey = "classpower",
+                sectionId = handle._key == "detachedPower" and "classpower_detached_power" or "classpower_display",
+                source = "unit-preview-" .. tostring(source or "settings"),
+                explicit = true,
+                changedAt = GetTime and GetTime() or 0,
+            })
+            return menu.SelectPage("classpower") ~= false
+        end
+        return false
+    end
+    local sectionId = UNIT_SECTION_IDS[section or ""] or UNIT_SECTION_IDS.text
+    local pageKey = box and (box._msuf2PinnedPreviewPageKey or ("uf_" .. tostring(box.key or "player"))) or nil
+    if menu and type(menu.SelectPage) == "function" and pageKey then
+        ExportPublic("MSUF_EM2_MenuFocusRequest", {
+            key = box and box.key,
+            component = handle._key,
+            pageKey = pageKey,
+            sectionId = sectionId,
+            source = "unit-preview-" .. tostring(source or "settings"),
+            explicit = true,
+            changedAt = GetTime and GetTime() or 0,
+        })
+        return menu.SelectPage(pageKey) ~= false
+    end
     return false
 end
 local function WriteHandleOffsets(handle, x, y, reason)
@@ -652,7 +706,7 @@ end
 local CreateIcon = PreviewStatus.CreateIcon
 local SetPreviewIconTexture = PreviewStatus.SetIconTexture
 local ResolveStatusPreviewAnchor = PreviewStatus.ResolveAnchor
-local MenuTheme = PreviewCore.MenuTheme
+MenuTheme = PreviewCore.MenuTheme
 local ApplyPreviewBackdrop = PreviewCore.ApplyBackdrop
 local PreviewBaseEdgeColor = PreviewCore.BaseEdgeColor
 local STATUS_PREVIEW = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.StatusPreview) or {}
