@@ -25,6 +25,8 @@ function Handles.Install(box, deps)
     local M = deps.M or _G.MSUF2 or {}
     local MSUF = deps.MSUF or MSUF or {}
     local T = deps.T or M.Theme or {}
+    local PreviewHelpers = M.PreviewHelpers or {}
+    local OpenSection = deps.OpenSection or (M.GroupPreview and M.GroupPreview.OpenSection)
     local WHITE8X8 = deps.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
     local Tr, Round, ResolveAnchor, PointOffset, HandleOffset, OffsetToConfig, CurrentStatusSpec, CurrentSpellConfig, CurrentSpellPlaced, HandleText, HandleOffsets, UpdateHint, RefreshHandleSelection, StatusLabel, StartPan, StopPan, ZoomWheel = M.PickFallbacks(deps, HANDLE_FALLBACKS, [[
         TR Round ResolveAnchor PointOffset HandleOffset OffsetToConfig CurrentStatusSpec CurrentSpellConfig CurrentSpellPlaced HandleText HandleOffsets UpdateHint RefreshHandleSelection StatusLabel StartPan StopPan ZoomWheel
@@ -58,6 +60,13 @@ function Handles.Install(box, deps)
             end
         end
         RefreshHandleSelection(box)
+    end
+    local function OpenHandleSettings(handle)
+        if handle and handle._sectionKey and type(OpenSection) == "function" then
+            OpenSection(handle._sectionKey)
+            return true
+        end
+        return false
     end
     local function HandleHistoryLabel(handle, action)
         local text = HandleText(handle)
@@ -351,7 +360,7 @@ function Handles.Install(box, deps)
         handle:EnableMouse(true)
         handle:EnableMouseWheel(true)
         if handle.SetPropagateMouseWheel then handle:SetPropagateMouseWheel(true) end
-        if handle.RegisterForClicks then handle:RegisterForClicks("LeftButtonDown", "LeftButtonUp") end
+        if handle.RegisterForClicks then handle:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp") end
         if handle.RegisterForDrag then handle:RegisterForDrag("LeftButton") end
         handle:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
         handle:SetBackdropColor(color[1] * 0.12, color[2] * 0.12, color[3] * 0.12, 0.42)
@@ -398,12 +407,30 @@ function Handles.Install(box, deps)
             RefreshHandleSelection(box)
             if GameTooltip then GameTooltip:Hide() end
         end)
-        handle:SetScript("OnClick", function(self)
+        handle:SetScript("OnClick", function(self, button)
             if self._suppressNextClick then
                 self._suppressNextClick = nil
                 return
             end
+            if button == "RightButton" then
+                SelectHandle(self)
+                if PreviewHelpers.ShowPreviewHandleContext then
+                    PreviewHelpers.ShowPreviewHandleContext(self, {
+                        M = M,
+                        T = T,
+                        Tr = Tr,
+                        title = HandleText(self),
+                        openSettings = OpenHandleSettings,
+                    })
+                end
+                return
+            end
             SelectHandle(self)
+        end)
+        handle:SetScript("OnDoubleClick", function(self, button)
+            if button and button ~= "LeftButton" then return end
+            SelectHandle(self)
+            OpenHandleSettings(self)
         end)
         handle:SetScript("OnMouseWheel", ZoomWheel)
         handle:SetScript("OnMouseDown", StartHandleDrag)
