@@ -718,6 +718,8 @@ local function AddStatusbarItem(out, used, value, text, texture, translate)
         value = value,
         text = text or value,
         texture = texture,
+        texturePreview = texture,
+        previewKind = "statusbar",
         translate = translate,
     }
 end

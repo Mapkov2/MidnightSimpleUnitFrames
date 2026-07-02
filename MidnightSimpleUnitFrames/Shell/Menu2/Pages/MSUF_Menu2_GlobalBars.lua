@@ -729,7 +729,7 @@ local function BuildBars(ctx)
             SetControlEnabled(btn, valueControlsActive)
         end
     end))
-    local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 390, true)
+    local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 420, true)
     local absorbW = absorb._msuf2Width or ctx.width or 720
     local absorbLeftX = 30
     local absorbRightX = max(430, min(560, floor(absorbW * 0.52)))
@@ -824,7 +824,15 @@ local function BuildBars(ctx)
         function() return _G.MSUF_AbsorbTextureTestMode and true or false end,
         function(v) SetAbsorbTextureTest(v and true or false) end)
     absorbTest:HookScript("OnHide", function() ClearAbsorbTextureTest() end)
-    local absorbBarControls = { absorbControls.anchor, absorbControls.texture, absorbControls.healTexture, absorbControls.opacity, absorbControls.healOpacity }
+    local overAbsorbOverlay = W.ToggleAt(absorb, "Over-absorb overlay", absorbRightX, -240, absorbRightW)
+    M.BindBoolWidget(ctx, overAbsorbOverlay,
+        function() return BarScopeGet("overAbsorbOverlay", ReadGBool("overAbsorbOverlay", false)) == true end,
+        function(v)
+            BarScopeSet("overAbsorbOverlay", v and true or false, "MSUF2_OVER_ABSORB_OVERLAY")
+            ApplyAbsorbRuntime("MSUF2_OVER_ABSORB_OVERLAY")
+            SyncAbsorbControls()
+        end)
+    local absorbBarControls = { absorbControls.anchor, absorbControls.texture, absorbControls.healTexture, absorbControls.opacity, absorbControls.healOpacity, overAbsorbOverlay }
     M.TrackRefresh(ctx, SyncAbsorbControls(function()
         local mode = ReadAbsorbDisplayMode()
         local showBar = mode == 2

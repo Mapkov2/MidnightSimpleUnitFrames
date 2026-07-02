@@ -467,6 +467,126 @@ function H.EnsurePreviewHandleGear(handle, opts)
     gear:SetShown(opts.shown == true)
     return gear
 end
+local function PreviewControlsLines(tr)
+    tr = tr or F.Identity
+    return {
+        tr("Drag handles to move."),
+        tr("Double-click/settings: open options."),
+        tr("Right-click: quick actions."),
+        tr("Arrows nudge. Shift=5, Ctrl=10."),
+        tr("Ctrl+wheel: zoom. Ctrl+drag: pan."),
+        tr("Fit recenters."),
+    }
+end
+function H.ShowPreviewControlsHelp(anchor, opts)
+    opts = opts or {}
+    local M2 = opts.M or M
+    local T = opts.T or (M2 and M2.Theme)
+    local W = opts.W or (M2 and M2.Widgets)
+    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or F.Identity
+    local popup = H._previewControlsHelpPopup
+    if not popup then
+        if M2 and type(M2.CreateMenuPopupPanel) == "function" then
+            popup = M2.CreateMenuPopupPanel(UIParent, { name = "MSUF2PreviewControlsHelp", glass = "popup" })
+        else
+            popup = CreateFrame("Frame", "MSUF2PreviewControlsHelp", UIParent, "BackdropTemplate")
+            popup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            popup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
+            popup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
+        end
+        popup:SetSize(328, 186)
+        popup:SetFrameStrata("FULLSCREEN_DIALOG")
+        popup:EnableMouse(true)
+        popup._title = T and T.Font and T.Font(popup, "GameFontNormalSmall", "", (T.colors and T.colors.accent) or { 0.78, 0.92, 1, 1 }) or popup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        popup._title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -10)
+        popup._title:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
+        popup._title:SetJustifyH("LEFT")
+        popup._lines = {}
+        for i = 1, 6 do
+            local fs = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            fs:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -32 - ((i - 1) * 20))
+            fs:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
+            fs:SetJustifyH("LEFT")
+            if fs.SetWordWrap then fs:SetWordWrap(false) end
+            if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(false) end
+            if fs.SetMaxLines then fs:SetMaxLines(1) end
+            popup._lines[i] = fs
+        end
+        local close = W and W.TopButton and W.TopButton(popup, tr("Got it"), 82, 22) or (T and T.Button and T.Button(popup, tr("Got it"), 82, 22)) or CreateFrame("Button", nil, popup, "BackdropTemplate")
+        close:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -10, 10)
+        if not close.GetText then close:SetText(tr("Got it")) end
+        close:SetScript("OnClick", function(self)
+            local p = self:GetParent()
+            if p then p:Hide() end
+        end)
+        popup._close = close
+        H._previewControlsHelpPopup = popup
+    end
+    popup._title:SetText(tr("Preview Controls"))
+    local lines = PreviewControlsLines(tr)
+    for i = 1, #(popup._lines or {}) do
+        local fs = popup._lines[i]
+        if fs then fs:SetText(lines[i] and ("- " .. lines[i]) or "") end
+    end
+    if M2 and type(M2.ApplyPopupFramePriority) == "function" then M2.ApplyPopupFramePriority(popup) end
+    popup:ClearAllPoints()
+    if anchor and anchor.GetLeft then
+        popup:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -6)
+    else
+        popup:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    end
+    popup:Show()
+    return popup
+end
+function H.EnsurePreviewControlsHint(box, anchor, opts)
+    opts = opts or {}
+    if not box then return nil end
+    local M2 = opts.M or M
+    local T = opts.T or (M2 and M2.Theme)
+    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or F.Identity
+    local state = M2 and M2.GetPersistentMenuStateTable and M2.GetPersistentMenuStateTable("previewControlsHintState") or nil
+    if state and state.seen == true then return nil end
+    local parent = anchor or box.canvas or box._stage or box
+    if not parent then return nil end
+    local hint = box._msuf2PreviewControlsHint
+    if not hint then
+        local template = T and T.Template and T.Template() or "BackdropTemplate"
+        hint = CreateFrame("Frame", nil, parent, template)
+        hint:SetSize(286, 48)
+        hint:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 8, 8)
+        if hint.SetFrameLevel and parent.GetFrameLevel then hint:SetFrameLevel((parent:GetFrameLevel() or 0) + 90) end
+        if hint.SetBackdrop then
+            hint:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            hint:SetBackdropColor(0.012, 0.020, 0.040, 0.94)
+            hint:SetBackdropBorderColor(0.10, 0.32, 0.54, 0.92)
+        end
+        hint:EnableMouse(true)
+        local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", (T.colors and T.colors.text) or { 0.86, 0.90, 0.98, 1 }) or hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        text:SetPoint("TOPLEFT", hint, "TOPLEFT", 10, -8)
+        text:SetPoint("RIGHT", hint, "RIGHT", -58, 0)
+        text:SetJustifyH("LEFT")
+        text:SetWordWrap(true)
+        hint._text = text
+        local close = CreateFrame("Button", nil, hint, "BackdropTemplate")
+        close:SetSize(44, 22)
+        close:SetPoint("RIGHT", hint, "RIGHT", -8, 0)
+        close.fs = close.fs or close:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        close.fs:SetPoint("CENTER")
+        close.fs:SetText(tr("OK"))
+        if T and H.StylePreviewPillButton then H.StylePreviewPillButton(close, T, { fontField = "fs" }) end
+        close:SetScript("OnClick", function(self)
+            local p = self:GetParent()
+            local s = M2 and M2.GetPersistentMenuStateTable and M2.GetPersistentMenuStateTable("previewControlsHintState") or state
+            if s then s.seen = true end
+            if p then p:Hide() end
+        end)
+        hint._close = close
+        box._msuf2PreviewControlsHint = hint
+    end
+    if hint._text then hint._text:SetText(tr("Preview tip: drag handles to move, double-click or use settings to open options, right-click for actions.")) end
+    hint:Show()
+    return hint
+end
 function H.InstallZoomPan(ZoomPan, opts)
     if type(ZoomPan) ~= "table" then return end
     opts = opts or {}
@@ -731,7 +851,7 @@ function H.BuildZoomBar(box, surface, opts)
     end
     local prefix = opts.fieldPrefix or ""
     local zoomBar = CreateFrame("Frame", nil, surface, template)
-    zoomBar:SetSize(opts.width or 176, opts.height or 24)
+    zoomBar:SetSize(opts.width or 199, opts.height or 24)
     zoomBar:SetPoint("TOPRIGHT", surface, "TOPRIGHT", -8, -6)
     zoomBar:SetBackdrop({ bgFile = tex, edgeFile = tex, edgeSize = 1 })
     if opts.flatChrome ~= false and (opts.T or opts.flatChrome == true) then
@@ -762,6 +882,7 @@ function H.BuildZoomBar(box, surface, opts)
             GameTooltip:SetText(tr("Preview zoom"), 1, 1, 1)
             GameTooltip:AddLine(tr("Use the buttons or Ctrl + mouse wheel to zoom."), 0.82, 0.82, 0.82, true)
             GameTooltip:AddLine(tr("Ctrl + left-drag moves the preview canvas. Fit recenters it."), 0.55, 0.68, 0.86, true)
+            GameTooltip:AddLine(tr("Use ? for all preview controls."), 0.50, 0.78, 0.92, true)
             GameTooltip:Show()
         end
     end)
@@ -783,7 +904,10 @@ function H.BuildZoomBar(box, surface, opts)
     box[prefix .. "zoomReadout"] = readout
     local fitButton = AddZoomButton("zoomFitButton", "Fit", 30, "Fit preview", function() setZoom(box, nil, opts.fitReason) end, readout)
     local oneButton = AddZoomButton("zoomOneButton", "1:1", 32, "Pixel preview", function() setZoom(box, 1, opts.oneReason) end, fitButton)
-    AddZoomButton("zoomInButton", "+", 20, "Zoom in", function() stepZoom(box, 1) end, oneButton)
+    local zoomIn = AddZoomButton("zoomInButton", "+", 20, "Zoom in", function() stepZoom(box, 1) end, oneButton)
+    AddZoomButton("zoomHelpButton", "?", 20, "Preview controls", function(self)
+        H.ShowPreviewControlsHelp(self, { M = opts.M or M, T = opts.T, W = opts.W, Tr = tr })
+    end, zoomIn)
     local function ZoomWheel(self, delta)
         local dir = (delta or 0) > 0 and 1 or -1
         if IsControlKeyDown and IsControlKeyDown() then

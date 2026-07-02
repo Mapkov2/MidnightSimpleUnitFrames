@@ -496,6 +496,16 @@ local function RefreshHandleVisuals(preview)
             openSettings = OpenClassPowerHandleSettings,
         })
     end
+    if preview.hint then
+        if selected and selected._msufPlaced == true then
+            local x, y = ReadHandle(selected)
+            preview.hint:SetText(string.format("%s   x: %d   y: %d   %s",
+                TR(selected._label or selected._key or "Element"), Round(x or 0), Round(y or 0),
+                TR("double-click/settings opens options - right-click actions - arrows nudge")))
+        else
+            preview.hint:SetText(TR("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"))
+        end
+    end
 end
 -- Shared preview-keyboard helpers keep ClassPower and Unit preview nudging in
 -- lockstep while the DB write/apply behavior remains local to this module.
@@ -622,6 +632,8 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(TR(label), 1, 1, 1)
             GameTooltip:AddLine(TR("Drag to move this Class Resources preview element."), 0.82, 0.82, 0.82, true)
+            GameTooltip:AddLine(TR("Double-click or use the settings button to open this element's settings."), 0.50, 0.78, 0.92, true)
+            GameTooltip:AddLine(TR("Right-click opens quick actions."), 0.50, 0.78, 0.92, true)
             GameTooltip:AddLine(TR("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10."), 0.55, 0.68, 0.86, true)
             GameTooltip:Show()
         end
@@ -1646,7 +1658,7 @@ function Preview.Create(ctx, builder)
     box:SetScript("OnKeyDown", HandleKeyDown)
     local title = T.Font(box, "GameFontNormal", TR("Class Resources Preview"), T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
-    local hint = T.Font(box, "GameFontDisableSmall", TR("drag CP / Power / HP handles - arrows nudge selected - Ctrl+wheel zoom - right drag pans"), T.colors.muted)
+    local hint = T.Font(box, "GameFontDisableSmall", TR("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 14, 0)
     hint:SetPoint("RIGHT", box, "RIGHT", -12, 0)
     hint:SetJustifyH("LEFT")
@@ -1682,6 +1694,9 @@ function Preview.Create(ctx, builder)
             fitReason = "CLASSPOWER_PREVIEW_ZOOM_FIT",
             oneReason = "CLASSPOWER_PREVIEW_ZOOM_1TO1",
         })
+    end
+    if Helpers.EnsurePreviewControlsHint then
+        Helpers.EnsurePreviewControlsHint(box, box.canvas, { M = M, T = T, Tr = TR })
     end
     box._animationEnabled = General().classPowerPreviewAnimate == true
     CreateAnimateButton(box)
