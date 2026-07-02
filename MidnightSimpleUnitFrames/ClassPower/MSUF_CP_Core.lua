@@ -235,6 +235,18 @@ builders.LAYOUT = function(E)
         end
     end
 
+    --- Combat-reload anchor trace. Armed via /msufcptrace (persists across
+    --- /reload through MSUF_GlobalDB); a single nil-check when disarmed.
+    local function CP_Trace(msg)
+        local buf = _G.MSUF_CPTraceBuffer
+        if not buf then return end
+        local n = #buf
+        if n >= 80 then return end
+        local t = _G.GetTime and _G.GetTime() or 0
+        buf[n + 1] = string.format("[%.2f]%s %s", t % 10000,
+            (InCombatLockdown and InCombatLockdown()) and "C" or "o", msg)
+    end
+
     --- Applies size, anchor, segment placement, tick separators, and outline.
     --- This is warm-path code: it can run often during option changes, but it
     --- must not be called for every power value update.
@@ -255,6 +267,7 @@ builders.LAYOUT = function(E)
             --- children). Only defer when a hard position lock is active or
             --- something promoted the container into the protected anchor
             --- family; then the post-combat pass replays the geometry.
+            CP_Trace("defer: guard hardLock=" .. tostring(hardLocked))
             CP._layoutDirty = true
             ExportPublic("MSUF_ClassPowerLayoutDirty", true)
             RequestUFReanchorAfterCombat()
