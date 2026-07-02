@@ -1033,6 +1033,20 @@ RefreshEventDriverRegistration = function(event)
 end
 
 function UF.BeginEventRegistrationBatch()
+  if driverRefreshBatchDepth > 0 then
+    -- Fence: a batch is only valid within the frame that opened it. If an
+    -- earlier batch was left open by an error, heal it here (flush its pending
+    -- events) before opening a new one, so registrations can never stay
+    -- deferred across frames.
+    local now = _G.GetTime and _G.GetTime() or driverRefreshBatchTime
+    if now ~= driverRefreshBatchTime then
+      driverRefreshBatchDepth = 0
+      for pending in pairs(driverRefreshPending) do
+        driverRefreshPending[pending] = nil
+        RunEventDriverRegistration(pending)
+      end
+    end
+  end
   driverRefreshBatchDepth = driverRefreshBatchDepth + 1
   driverRefreshBatchTime = _G.GetTime and _G.GetTime() or driverRefreshBatchTime
 end
@@ -1110,6 +1124,9 @@ RefreshFrameUnitEventRouting = function(frame)
   if not ownersByEvent then
     return
   end
+  -- Unit changes touch every registered event of the frame; refresh the
+  -- central driver once per event at the end instead of once per add/remove.
+  UF.BeginEventRegistrationBatch()
   local unit = frame.unit
   for event in pairs(ownersByEvent) do
     if UNIT_EVENT_HAS_UNIT[event] then
@@ -1144,6 +1161,7 @@ RefreshFrameUnitEventRouting = function(frame)
       RefreshEventDriverRegistration(event)
     end
   end
+  UF.EndEventRegistrationBatch()
 end
 
 local function RegisterDriverFrameEvent(frame, event)
@@ -1623,6 +1641,9 @@ function UF.DetachFrame(frame)
   if not frame then
     return false
   end
+  -- Detaching unwinds every element/event pair; batch the central-driver
+  -- refresh so each touched event re-registers once per detach.
+  UF.BeginEventRegistrationBatch()
   if frame._msufActiveElements then
     while true do
       local name = next(frame._msufActiveElements)
@@ -1672,6 +1693,7 @@ function UF.DetachFrame(frame)
       break
     end
   end
+  UF.EndEventRegistrationBatch()
   return true
 end
 
@@ -1760,6 +1782,10 @@ function UF.ApplySpec(frame, spec, reason, mask)
   if not (frame and spec) then
     return false
   end
+  -- Elements share events (health/prediction/text all ride UNIT_HEALTH); batch
+  -- the central-driver refresh so each touched event re-registers once per
+  -- apply instead of once per element.
+  UF.BeginEventRegistrationBatch()
   UF.AttachFrame(frame, {
     scope = frame._msufCoreScope,
     visualRoot = frame._msufVisualRoot,
@@ -1773,6 +1799,7 @@ function UF.ApplySpec(frame, spec, reason, mask)
       ApplyElementToFrame(frame, name, nil, nil)
     end
   end
+  UF.EndEventRegistrationBatch()
   if reason then
     UF.FrameRuntimeUpdate(frame, reason)
   end

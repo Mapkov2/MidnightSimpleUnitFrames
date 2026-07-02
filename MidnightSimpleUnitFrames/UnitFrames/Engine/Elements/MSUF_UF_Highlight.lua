@@ -122,11 +122,21 @@ local function EnsureBorder(frame)
     frame._msufHL = hb
   end
 
+  -- PERF: strata/level writes invalidate render batching even when the value
+  -- is unchanged; every mouseover lands here, so only write on real change.
   if hb.SetFrameStrata and frame.GetFrameStrata then
-    hb:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
+    local strata = frame:GetFrameStrata() or "MEDIUM"
+    if hb._appliedStrata ~= strata then
+      hb._appliedStrata = strata
+      hb:SetFrameStrata(strata)
+    end
   end
   if hb.SetFrameLevel and frame.GetFrameLevel then
-    hb:SetFrameLevel((frame:GetFrameLevel() or 0) + 5)
+    local level = (frame:GetFrameLevel() or 0) + 5
+    if hb._appliedLevel ~= level then
+      hb._appliedLevel = level
+      hb:SetFrameLevel(level)
+    end
   end
 
   local w = hb.GetWidth and hb:GetWidth() or 0

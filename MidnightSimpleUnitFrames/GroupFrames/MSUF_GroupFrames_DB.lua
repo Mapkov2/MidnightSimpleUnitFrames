@@ -1087,9 +1087,24 @@ local function NormalizeAuraRenderer(conf)
     end
 end
 
+--- PERF: rebuild/scan storms call EnsureDB dozens of times within one frame;
+--- the migrate+defaults walk is idempotent, so repeats within the same frame
+--- are skipped. The memo is defensive: it misses when the frame time changes,
+--- when any gf_* table was replaced (profile switch/import changes identity),
+--- or when a table was wiped in place (next() canary), so resets always rerun.
+local ensureDBStamp, ensureDBRoot, ensureDBParty, ensureDBRaid, ensureDBMythic
+
 function GF.EnsureDB()
     local db = _G.MSUF_DB
     if not db then return end
+    local now = _G.GetTime and _G.GetTime() or nil
+    if now ~= nil and ensureDBStamp == now and ensureDBRoot == db
+        and ensureDBParty == db.gf_party and next(ensureDBParty) ~= nil
+        and ensureDBRaid == db.gf_raid and next(ensureDBRaid) ~= nil
+        and ensureDBMythic == db.gf_mythicraid and next(ensureDBMythic) ~= nil
+    then
+        return
+    end
     local _partyFresh = type(db.gf_party) ~= "table"
     local _raidFresh  = type(db.gf_raid)  ~= "table"
     local _mythicFresh = type(db.gf_mythicraid) ~= "table"
@@ -1253,6 +1268,10 @@ function GF.EnsureDB()
     if GF.SeedCurrentSpecSpellIndicatorDefaults and not _G.MSUF_ProfileIO_SuppressRuntimeSideEffects then
         GF.SeedCurrentSpecSpellIndicatorDefaults()
     end
+
+    ensureDBStamp = now
+    ensureDBRoot = db
+    ensureDBParty, ensureDBRaid, ensureDBMythic = db.gf_party, db.gf_raid, db.gf_mythicraid
 end
 
 ---
