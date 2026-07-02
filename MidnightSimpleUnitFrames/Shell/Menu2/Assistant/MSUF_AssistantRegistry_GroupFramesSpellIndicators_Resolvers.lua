@@ -30,6 +30,77 @@ function A.GroupFramesRegistry.BuildSpellIndicatorResolvers(ctx)
         return (gf and gf.SpellIndicators) or _G.MSUF_GF_SpellIndicators
     end
 
+    local FALLBACK_TRACKABLE_AURAS = {
+        PreservationEvoker = { "Echo", "Reversion", "EchoReversion", "DreamBreath", "EchoDreamBreath", "DreamFlight", "Lifebind", "TimeDilation", "Rewind", "VerdantEmbrace" },
+        AugmentationEvoker = { "Prescience", "ShiftingSands", "BlisteringScales", "InfernosBlessing", "SymbioticBloom", "EbonMight", "SourceOfMagic", "SensePower" },
+        RestorationDruid = { "Rejuvenation", "Regrowth", "Lifebloom", "Germination", "WildGrowth", "SymbioticRelationship", "SymbioticBlooms", "IronBark" },
+        DisciplinePriest = { "Atonement", "PowerWordShield", "PrayerOfMending", "VoidShield", "PainSuppression", "PowerInfusion" },
+        HolyPriest = { "Renew", "EchoOfLight", "PrayerOfMending", "GuardianSpirit", "PowerInfusion" },
+        ShadowPriest = { "PowerInfusion" },
+        MistweaverMonk = { "RenewingMist", "EnvelopingMist", "SoothingMist", "AspectOfHarmony", "Coalescence", "LifeCocoon", "StrengthOfTheBlackOx" },
+        RestorationShaman = { "Riptide", "EarthShield", "AncestralVigor", "EarthlivingWeapon", "Hydrobubble" },
+        HolyPaladin = { "BeaconOfLight", "BeaconOfFaith", "BeaconOfVirtue", "BeaconOfTheSavior", "EternalFlame", "Dawnlight", "BlessingOfProtection", "HolyArmaments", "BlessingOfSacrifice", "BlessingOfFreedom" },
+        ProtectionPaladin = { "BlessingOfProtection", "BlessingOfSacrifice", "BlessingOfFreedom" },
+        RetributionPaladin = { "BlessingOfProtection", "BlessingOfSacrifice", "BlessingOfFreedom" },
+    }
+
+    local FALLBACK_AURA_LABELS = {
+        EchoReversion = "Echo Reversion",
+        DreamBreath = "Dream Breath",
+        EchoDreamBreath = "Echo Dream Breath",
+        DreamFlight = "Dream Flight",
+        TimeDilation = "Time Dilation",
+        VerdantEmbrace = "Verdant Embrace",
+        ShiftingSands = "Shifting Sands",
+        BlisteringScales = "Blistering Scales",
+        InfernosBlessing = "Infernos Blessing",
+        SymbioticRelationship = "Symbiotic Relationship",
+        SymbioticBlooms = "Symbiotic Blooms",
+        IronBark = "Ironbark",
+        PowerWordShield = "Power Word Shield",
+        PrayerOfMending = "Prayer of Mending",
+        VoidShield = "Void Shield",
+        PainSuppression = "Pain Suppression",
+        PowerInfusion = "Power Infusion",
+        EchoOfLight = "Echo of Light",
+        GuardianSpirit = "Guardian Spirit",
+        RenewingMist = "Renewing Mist",
+        EnvelopingMist = "Enveloping Mist",
+        SoothingMist = "Soothing Mist",
+        AspectOfHarmony = "Aspect of Harmony",
+        LifeCocoon = "Life Cocoon",
+        StrengthOfTheBlackOx = "Strength of the Black Ox",
+        EarthShield = "Earth Shield",
+        AncestralVigor = "Ancestral Vigor",
+        EarthlivingWeapon = "Earthliving Weapon",
+        BeaconOfLight = "Beacon of Light",
+        BeaconOfFaith = "Beacon of Faith",
+        BeaconOfVirtue = "Beacon of Virtue",
+        BeaconOfTheSavior = "Beacon of the Savior",
+        EternalFlame = "Eternal Flame",
+        BlessingOfProtection = "Blessing of Protection",
+        HolyArmaments = "Holy Armaments",
+        BlessingOfSacrifice = "Blessing of Sacrifice",
+        BlessingOfFreedom = "Blessing of Freedom",
+    }
+
+    local function FallbackTrackableList(specKey)
+        local names = FALLBACK_TRACKABLE_AURAS[specKey]
+        if type(names) ~= "table" then return nil end
+        local out = {}
+        for i = 1, #names do
+            local name = names[i]
+            out[#out + 1] = { name = name, display = FALLBACK_AURA_LABELS[name] or tostring(name):gsub("(%l)(%u)", "%1 %2") }
+        end
+        return out
+    end
+
+    local function TrackableAuras()
+        local runtime = SpellRuntime()
+        if runtime and type(runtime.TrackableAuras) == "table" then return runtime.TrackableAuras end
+        return FALLBACK_TRACKABLE_AURAS
+    end
+
     local function CamelCaseDisplay(value)
         value = tostring(value or "")
         if value == "" then return "" end
@@ -45,10 +116,20 @@ function A.GroupFramesRegistry.BuildSpellIndicatorResolvers(ctx)
     local function ResolveSpec(value)
         local compact = LookupKey(value)
         if compact == "" then return nil end
+        local bestSpecKey, bestScore
         for alias, specKey in pairs(SPEC_ALIASES) do
             local aliasKey = LookupKey(alias)
-            if compact == aliasKey or (#aliasKey >= 5 and compact:find(aliasKey, 1, true)) then return specKey end
+            local score
+            if compact == aliasKey then
+                score = 10000 + #aliasKey
+            elseif #aliasKey >= 5 and compact:find(aliasKey, 1, true) then
+                score = #aliasKey
+            end
+            if score and (not bestScore or score > bestScore) then
+                bestSpecKey, bestScore = specKey, score
+            end
         end
+        if bestSpecKey then return bestSpecKey end
         for i = 1, #SPEC_VALUES do
             local specKey = SPEC_VALUES[i]
             if compact == LookupKey(specKey) or compact == LookupKey(SpecDisplay(specKey)) then return specKey end
@@ -68,6 +149,7 @@ function A.GroupFramesRegistry.BuildSpellIndicatorResolvers(ctx)
         local compact = LookupKey(text)
         local runtime = SpellRuntime()
         local list = runtime and runtime.TrackableAuras and runtime.TrackableAuras[specKey]
+        if type(list) ~= "table" then list = FallbackTrackableList(specKey) end
         local bestName, bestDisplay, bestScore
         if type(list) == "table" then
             for i = 1, #list do
@@ -101,7 +183,7 @@ function A.GroupFramesRegistry.BuildSpellIndicatorResolvers(ctx)
             local aura, display = FindAuraInSpec(specKey, text)
             return aura, specKey, display
         end
-        local trackable = SpellRuntime() and SpellRuntime().TrackableAuras
+        local trackable = TrackableAuras()
         local bestAura, bestSpec, bestDisplay, bestScore
         if type(trackable) == "table" then
             for key in pairs(trackable) do

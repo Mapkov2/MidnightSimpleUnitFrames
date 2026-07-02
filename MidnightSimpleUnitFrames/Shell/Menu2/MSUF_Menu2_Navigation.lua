@@ -48,7 +48,7 @@ P|uf_focustarget|Focus Target|unitframes
 H|Group Frames|groupframes|1
 P|gf_layout|Layout|groupframes
 P|gf_bars|Health & Text|groupframes
-P|gf_indicators|Indicators|groupframes
+P|gf_indicators|Status & Indicators|groupframes
 P|gf_auras|Auras|groupframes
 H|Auras|auras|1
 P|auras3_styling|Style|auras
@@ -100,6 +100,7 @@ gameplay=gameplay
 profiles=profiles
 gf_layout=layout|group|groupframes
 gf_bars=health
+gf_indicators=status|statuses|indicator|indicators|status_indicators|statusindicator|group_status|group_indicators|groupindicators
 modules=modules
 search=search
 ]]

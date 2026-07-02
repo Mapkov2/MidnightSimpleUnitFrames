@@ -257,7 +257,17 @@ local function ParsePortraitDetailShortcut(text)
     local relativeDelta
     local direction
 
-    if ContainsAny(text, { "render", "type", "2d", "2d portrait", "class portrait", "to class" }) and not ContainsAny(text, { "class portrait style", "portrait class style", "border" }) then
+    if ContainsAny(text, { "x offset", "offset x", "portrait x", "horizontal offset" }) or HasPhrase(text, "x") then
+        attr = "portraitOffsetX"
+        value = FirstNumber(text)
+    elseif ContainsAny(text, { "y offset", "offset y", "portrait y", "vertical offset" }) or HasPhrase(text, "y") then
+        attr = "portraitOffsetY"
+        value = FirstNumber(text)
+    elseif ContainsAny(text, { "class portrait style", "portrait class style" }) then
+        attr = "portraitClassStyle"
+        value = RawAfterLastConnector and RawAfterLastConnector(text) or nil
+        if value == nil and ContainsAny(text, { "default" }) then value = "default" end
+    elseif ContainsAny(text, { "render", "type", "2d", "2d portrait", "class portrait", "to class" }) and not ContainsAny(text, { "class portrait style", "portrait class style", "border" }) then
         attr = "portraitRender"
         if ContainsAny(text, { "2d", "2d portrait", "normal portrait", "normal render" }) then
             value = "2D"
@@ -560,6 +570,7 @@ OM.unitRootFrameDetailTerms = OM.unitRootFrameDetailTerms or {
     "portrait", "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
     "bar", "health bar", "power bar", "mana bar", "border", "outline", "icon", "label", "text",
     "ready check", "raid marker", "status", "indicator", "combat", "resting", "leader", "assist",
+    "level", "level indicator", "level text", "pvp", "pvp flag", "pvp icon",
     "leben", "gesundheit", "lebenspunkte", "lebensanzeige", "energie", "ressource", "ressourcen",
 }
 
@@ -1859,6 +1870,7 @@ P.GROUP_ROOT_FRAME_DETAIL_TERMS = {
     "name", "name text", "hp", "health", "hp text", "health text", "power", "mana", "power text", "mana text", "text slot",
     "status", "status text", "status icon", "indicator", "icon", "ready check", "raid marker",
     "summon", "resurrect", "resurrection", "ghost", "dead", "afk", "dnd", "group number",
+    "pvp", "pvp flag", "targeted spell", "targeted spells", "targeted",
     "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar", "portrait",
     "bar", "health bar", "power bar", "mana bar", "border", "outline",
 }
@@ -2010,6 +2022,77 @@ end
 function P.FrameResizeSettingKey(kind, target, attr)
     if kind == "group" then return "gf_" .. tostring(A._TextGroupScopeName and A._TextGroupScopeName(target) or target) .. "." .. attr end
     return tostring(target) .. "." .. attr
+end
+
+function P.ParseFrameSizeExactShortcut(text)
+    if ContainsAny(text, P.FRAME_RESIZE_DETAIL_BLOCKERS) then return nil end
+    if ContainsAny(text, { "detached", "detached power", "detached power bar", "detached mana", "detached mana bar" }) then return nil end
+    if ContainsAny(text, { "power", "mana", "role power", "healer power", "tank power" }) then return nil end
+    local dimension
+    if ContainsAny(text, { "width", "frame width", "unit frame width", "unitframe width", "breite", "frame breite" }) then
+        dimension = "width"
+    elseif ContainsAny(text, { "height", "frame height", "unit frame height", "unitframe height", "hoehe", "frame hoehe" }) then
+        dimension = "height"
+    else
+        return nil
+    end
+    if ContainsAny(text, {
+        "wider", "narrower", "taller", "shorter", "bigger", "larger", "smaller",
+        "increase", "decrease", "reduce", "raise", "lower", "grow", "shrink", "by",
+        "breiter", "schmaler", "hoeher", "duenner", "groesser", "kleiner",
+    }) then return nil end
+
+    local value = A._NumberValueForText and A._NumberValueForText(nil, text) or FirstNumber(text)
+    if value == nil then return nil end
+
+    local groups = DetectGroups(text)
+    local units = {}
+    local kind
+    local targets
+    if #groups > 0 then
+        kind = "group"
+        targets = groups
+    else
+        units = DetectUnits(text)
+        if #units > 0 then
+            kind = "unitframe"
+            targets = units
+        end
+    end
+
+    if not targets or #targets == 0 then
+        local pageGroups = GroupScopesOrCurrentPage(text)
+        if #pageGroups > 0 then
+            kind = "group"
+            targets = pageGroups
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then
+                kind = "unitframe"
+                targets = { pageUnit }
+            end
+        end
+    end
+    if not targets or #targets == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #targets do
+        local setting = Registry and Registry:GetSetting(P.FrameResizeSettingKey(kind, targets[i], dimension))
+        if setting then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = value,
+            }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = P.FrameResizeTargetLabel(kind, targets) .. " " .. (dimension == "width" and "width" or "height"),
+        bulkSafe = #changes > 1,
+        summary = "Sets the root frame width/height option directly.",
+    }
 end
 
 function P.BuildFrameResizeChanges(kind, targets, dimension, widthDelta, heightDelta)
@@ -2335,7 +2418,11 @@ P.TEXT_VISIBILITY_VALUE_TERMS = {
     "center mana text", "centre mana text", "middle mana text", "mana center text", "mana centre text", "mana middle text",
     "slot", "slots", "text slot", "anchor", "anchoring", "side", "left side", "right side",
     "offset", "position", "pos", "x offset", "y offset", "move", "nudge", "shift",
-    "layer", "size", "font size", "color", "colour", "by health", "by power", "by resource", "by mana",
+    "layer", "size", "font", "font size", "decimal", "decimals", "color", "colour",
+    "shorten", "shortened", "shortening", "short names", "shorten names", "shorten group names",
+    "raid group name", "raid group in name", "group name",
+    "realtime", "real time", "real-time",
+    "by health", "by power", "by resource", "by mana",
 }
 
 P.TEXT_VISIBILITY_VERBS = {
@@ -2359,6 +2446,10 @@ function P.ParseTextVisibilityShortcut(text)
         return nil
     end
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, {
+        "show me", "tell me", "what is", "whats", "which", "where", "why",
+        "explain", "help", "option", "options", "setting", "settings", "page", "tab",
+    }) then return nil end
     if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
     if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
     if ContainsAny(text, {
@@ -2380,7 +2471,7 @@ function P.ParseTextVisibilityShortcut(text)
         "hp number", "hp numbers", "health number", "health numbers", "life number", "life numbers",
     }) then
         spec = { unitAttr = "showHP", groupAttr = "showHPText", label = "HP Text" }
-    elseif ContainsAny(text, { "name text" }) then
+    elseif ContainsAny(text, { "name text", "unit name", "unit names", "names", "name" }) then
         spec = { unitAttr = "showName", groupAttr = "showName", label = "Name Text" }
     end
     if not spec then return nil end
@@ -2680,6 +2771,360 @@ local function ParseBorderThicknessShortcut(text)
     }
 end
 
+local BAR_OUTLINE_HIGHLIGHT_BLOCK_TERMS = {
+    "portrait", "castbar", "cast bar", "zauberleiste",
+    "class power", "class resource", "class resources",
+    "power bar", "powerbar", "mana bar", "mana border", "power border",
+    "detached power", "detached mana",
+    "group border", "full group border", "whole group border", "outer group border", "group block border",
+    "boss target", "dead background", "dead bg",
+    "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay", "debuff overlay",
+    "heal absorb", "absorb bar", "heal prediction",
+    "color", "colors", "colour", "colours", "farbe", "farben", "tint",
+    "texture", "font", "text",
+}
+
+local function BarScopeForGroupScope(scope)
+    if scope == "party" then return "gf_party" end
+    if scope == "raid" or scope == "mythicraid" then return "gf_raid" end
+    return nil
+end
+
+local function AddBarOutlineHighlightScope(scopes, seen, scope)
+    scope = tostring(scope or "")
+    if scope == "" or seen[scope] then return end
+    seen[scope] = true
+    scopes[#scopes + 1] = scope
+end
+
+local function BarOutlineHighlightScopes(text)
+    local scopes, seen = {}, {}
+    local groups = DetectGroups(text)
+    for i = 1, #groups do
+        AddBarOutlineHighlightScope(scopes, seen, BarScopeForGroupScope(groups[i]))
+    end
+
+    local units = DetectUnits(text)
+    for i = 1, #units do
+        AddBarOutlineHighlightScope(scopes, seen, units[i])
+    end
+
+    if #scopes == 0 and not ContainsAny(text, { "global", "shared", "all scopes" }) then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then AddBarOutlineHighlightScope(scopes, seen, pageUnit) end
+    end
+    return scopes
+end
+
+local function BarOutlineHighlightGlobalKey(attr)
+    if attr == "barOutlineThickness" then return "bars.barOutlineThickness" end
+    if attr == "barOutlineColorA" then return "general.barOutlineColorA" end
+    if attr == "highlightBorderThickness" then return "general.highlightBorderThickness" end
+    if attr == "hlPrioEnabled" then return "general.hlPrioEnabled" end
+    return nil
+end
+
+local function BarOutlineHighlightSpec(text)
+    if ContainsAny(text, {
+        "custom highlight priority", "highlight priority", "border priority", "highlight border priority",
+        "highlight prio", "border prio", "custom highlight prio", "highlight prioritaet", "border prioritaet",
+    }) then
+        return "hlPrioEnabled", "Custom Highlight Priority"
+    end
+    if ContainsAny(text, {
+        "highlight border thickness", "highlight border size", "highlight border width",
+        "aggro border size", "aggro border thickness", "aggro border width",
+        "dispel border size", "dispel border thickness", "dispel border width",
+    }) then
+        return "highlightBorderThickness", "Highlight Border Thickness"
+    end
+    if ContainsAny(text, {
+        "bar outline opacity", "bar outline alpha", "frame outline opacity", "frame outline alpha",
+        "bar border opacity", "bar border alpha", "frame border opacity", "frame border alpha",
+        "outline opacity", "outline alpha", "border opacity", "border alpha",
+    }) then
+        return "barOutlineColorA", "Bar Outline Opacity"
+    end
+    if ContainsAny(text, {
+        "bar outline thickness", "bar outline size", "bar outline width", "bar outline",
+        "frame outline thickness", "frame outline size", "frame outline width", "frame outline",
+        "bar border thickness", "bar border size", "bar border width",
+        "frame border thickness", "frame border size", "frame border width",
+        "outline thickness", "outline size", "outline width",
+        "border thickness", "border size", "border width",
+        "outline thicker", "outline thinner", "border thicker", "border thinner",
+        "outline bigger", "outline smaller", "border bigger", "border smaller",
+    }) then
+        return "barOutlineThickness", "Bar Outline Thickness"
+    end
+    return nil, nil
+end
+
+local function BarOutlineHighlightValue(setting, attr, text)
+    if attr == "hlPrioEnabled" then
+        local bool = DetectBoolean(text)
+        if bool == nil then return nil, nil end
+        return bool, nil
+    end
+
+    local bool = DetectBoolean(text)
+    local hasNumber = FirstNumber(text) ~= nil
+    if bool ~= nil and not hasNumber and (attr == "barOutlineThickness" or attr == "barOutlineColorA") then
+        return bool and 1 or 0, nil
+    end
+
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, attr == "barOutlineThickness" and 1 or nil) or nil
+    if relativeDelta ~= nil then return nil, relativeDelta end
+
+    local value = A._NumberValueForText and A._NumberValueForText(setting, text) or FirstNumber(text)
+    if value == nil then return nil, nil end
+    if attr == "barOutlineColorA" and value > 1 then value = value / 100 end
+    return value, nil
+end
+
+local function ParseBarOutlineHighlightShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if not ContainsAny(text, { "outline", "border", "highlight", "prio", "priority" }) then return nil end
+    if ContainsAny(text, BAR_OUTLINE_HIGHLIGHT_BLOCK_TERMS) then return nil end
+
+    local attr, label = BarOutlineHighlightSpec(text)
+    if not attr then return nil end
+
+    local scopes = BarOutlineHighlightScopes(text)
+    local changes = {}
+    if #scopes == 0 then
+        local setting = Registry and Registry:GetSetting(BarOutlineHighlightGlobalKey(attr))
+        local value, relativeDelta = setting and BarOutlineHighlightValue(setting, attr, text)
+        if setting and (value ~= nil or relativeDelta ~= nil) then
+            changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta }
+        end
+    else
+        for i = 1, #scopes do
+            local setting = Registry and Registry:GetSetting("barScope." .. tostring(scopes[i]) .. "." .. attr)
+            local value, relativeDelta = setting and BarOutlineHighlightValue(setting, attr, text)
+            if setting and (value ~= nil or relativeDelta ~= nil) then
+                changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta }
+            end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes the bar outline or highlight border option without falling back to broad registry matching.",
+    }
+end
+
+local function BarOverlayScopes(text, groupOnly)
+    local scopes, seen = {}, {}
+    local groups = DetectGroups(text)
+    for i = 1, #groups do
+        AddBarOutlineHighlightScope(scopes, seen, BarScopeForGroupScope(groups[i]))
+    end
+    if not groupOnly then
+        local units = DetectUnits(text)
+        for i = 1, #units do
+            AddBarOutlineHighlightScope(scopes, seen, units[i])
+        end
+    end
+    if #scopes == 0 and not groupOnly and not ContainsAny(text, { "global", "shared", "all scopes" }) then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then AddBarOutlineHighlightScope(scopes, seen, pageUnit) end
+    end
+    return scopes
+end
+
+local function AbsorbBarGlobalKey(attr)
+    if attr == "absorbTextMode" then return "general.absorbTextMode" end
+    if attr == "absorbAnchorMode" then return "general.absorbAnchorMode" end
+    if attr == "showSelfHealPrediction" then return "general.showSelfHealPrediction" end
+    if attr == "healPredAnchorMode" then return "general.healPredAnchorMode" end
+    if attr == "absorbBarOpacity" then return "general.absorbBarOpacity" end
+    if attr == "absorbBarTexture" then return "general.absorbBarTexture" end
+    if attr == "healAbsorbBarTexture" then return "general.healAbsorbBarTexture" end
+    if attr == "healAbsorbBarOpacity" then return "general.healAbsorbBarOpacity" end
+    return nil
+end
+
+local function AbsorbBarSpec(text)
+    if ContainsAny(text, { "heal prediction anchor", "heal prediction anchoring", "incoming heal anchor" }) then
+        return "healPredAnchorMode", "Heal Prediction Anchor", "enum", true
+    end
+    if ContainsAny(text, { "heal prediction", "heal prediction overlay", "incoming heal prediction" }) then
+        return "showSelfHealPrediction", "Heal Prediction Overlay", "boolean", true
+    end
+    if ContainsAny(text, { "heal absorb texture", "heal-absorb texture", "heal absorb bar texture" }) then
+        return "healAbsorbBarTexture", "Heal Absorb Bar Texture", "string", false
+    end
+    if ContainsAny(text, { "heal absorb opacity", "heal-absorb opacity", "heal absorb bar opacity", "heal absorb alpha" }) then
+        return "healAbsorbBarOpacity", "Heal Absorb Bar Opacity", "number", false
+    end
+    if ContainsAny(text, { "absorb display mode", "absorb mode", "absorb bars" }) then
+        return "absorbTextMode", "Absorb Display Mode", "enum", false
+    end
+    if ContainsAny(text, { "absorb bar anchor", "absorb anchor", "absorb anchoring" }) then
+        return "absorbAnchorMode", "Absorb Bar Anchor", "enum", false
+    end
+    if ContainsAny(text, { "absorb bar texture", "absorb texture" }) then
+        return "absorbBarTexture", "Absorb Bar Texture", "string", false
+    end
+    if ContainsAny(text, { "absorb bar opacity", "absorb opacity", "absorb alpha" }) then
+        return "absorbBarOpacity", "Absorb Bar Opacity", "number", false
+    end
+    return nil, nil, nil, nil
+end
+
+local function AbsorbStringValue(text, raw)
+    local source = raw or text
+    local value = RawAfterLastConnector and RawAfterLastConnector(source, { " to ", " as ", " value ", " texture ", " = ", " auf ", " zu ", " als ", " wert " }) or nil
+    value = Trim(value or "")
+    value = value:gsub("^texture%s+", ""):gsub("^to%s+", ""):gsub("^as%s+", "")
+    if value == "" then return nil end
+    return value
+end
+
+local function AbsorbBarValue(setting, attrType, text, raw)
+    if attrType == "boolean" then
+        local bool = DetectBoolean(text)
+        if bool == nil then return nil, nil end
+        return bool, nil
+    end
+    if attrType == "enum" then
+        local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+        return value, nil
+    end
+    if attrType == "string" then
+        return AbsorbStringValue(text, raw), nil
+    end
+    if attrType == "number" then
+        local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text) or nil
+        if relativeDelta ~= nil then return nil, relativeDelta end
+        local value = A._NumberValueForText and A._NumberValueForText(setting, text) or FirstNumber(text)
+        if value ~= nil and value > 1 then value = value / 100 end
+        return value, nil
+    end
+    return nil, nil
+end
+
+local function ParseAbsorbBarShortcut(text, raw)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if not ContainsAny(text, { "absorb", "heal prediction", "incoming heal" }) then return nil end
+    if ContainsAny(text, {
+        "color", "colors", "colour", "colours", "farbe", "farben", "tint",
+        "test", "preview", "show preview", "hide preview",
+        "aura", "auras", "buff", "debuff", "castbar", "cast bar", "power bar", "class resource", "class power",
+    }) then return nil end
+
+    local attr, label, attrType, groupOnly = AbsorbBarSpec(text)
+    if not attr then return nil end
+    local scopes = BarOverlayScopes(text, groupOnly)
+    local changes = {}
+    if #scopes == 0 then
+        local setting = Registry and Registry:GetSetting(AbsorbBarGlobalKey(attr))
+        local value, relativeDelta = setting and AbsorbBarValue(setting, attrType, text, raw)
+        if setting and (value ~= nil or relativeDelta ~= nil) then
+            changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta }
+        end
+    else
+        local scopedAttr = attr == "showSelfHealPrediction" and "healPredEnabled" or attr
+        for i = 1, #scopes do
+            local setting = Registry and Registry:GetSetting("barScope." .. tostring(scopes[i]) .. "." .. scopedAttr)
+            local value, relativeDelta = setting and AbsorbBarValue(setting, attrType, text, raw)
+            if setting and (value ~= nil or relativeDelta ~= nil) then
+                changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta }
+            end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes absorb bar or heal-prediction bar settings directly.",
+    }
+end
+
+local function BarBorderEnumSpec(text)
+    if ContainsAny(text, { "boss target border", "boss target outline" }) then
+        return "bossTargetOutlineMode", "Boss Target Border"
+    end
+    if ContainsAny(text, {
+        "aggro shows for", "aggro role filter", "aggro non tanks", "aggro not tank",
+        "threat shows for", "threat role filter", "threat non tanks",
+    }) then
+        return "aggroMode", "Aggro Shows For"
+    end
+    if ContainsAny(text, { "dispel border detects", "dispel border trigger", "dispel detection" }) then
+        return "dispelBorderTrigger", "Dispel Border Detects"
+    end
+    if ContainsAny(text, { "aggro border", "threat border", "aggro outline", "threat outline" }) then
+        return "aggroOutlineMode", "Aggro Border"
+    end
+    if ContainsAny(text, { "dispel border", "dispellable border", "dispel outline" }) then
+        return "dispelOutlineMode", "Dispel Border"
+    end
+    if ContainsAny(text, { "purge border", "purge outline", "purgeable border" }) then
+        return "purgeOutlineMode", "Purge Border"
+    end
+    return nil, nil
+end
+
+local function BarBorderEnumGlobalKey(attr)
+    if attr == "aggroOutlineMode" then return "general.aggroOutlineMode" end
+    if attr == "aggroMode" then return "general.aggroMode" end
+    if attr == "dispelOutlineMode" then return "general.dispelOutlineMode" end
+    if attr == "dispelBorderTrigger" then return "general.dispelBorderTrigger" end
+    if attr == "purgeOutlineMode" then return "general.purgeOutlineMode" end
+    if attr == "bossTargetOutlineMode" then return "general.bossTargetOutlineMode" end
+    return nil
+end
+
+local function ParseBarBorderEnumShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if not ContainsAny(text, { "aggro", "threat", "dispel", "dispellable", "purge", "purgeable", "boss target" }) then return nil end
+    if ContainsAny(text, {
+        "fallback", "fallback aggro", "fallback threat",
+        "aura", "auras", "buff", "debuff", "native group aura",
+        "overlay", "unitframe dispel overlay", "unit frame dispel overlay", "debuff overlay",
+        "color", "colors", "colour", "colours", "opacity", "alpha",
+        "thickness", "size", "width",
+        "test", "preview", "castbar", "cast bar", "class resource", "class power",
+    }) then return nil end
+
+    local attr, label = BarBorderEnumSpec(text)
+    if not attr then return nil end
+    local changes = {}
+    if attr == "bossTargetOutlineMode" then
+        local setting = Registry and Registry:GetSetting(BarBorderEnumGlobalKey(attr))
+        local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+        if setting and value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
+    else
+        local scopes = BarOverlayScopes(text, false)
+        if #scopes == 0 then
+            local setting = Registry and Registry:GetSetting(BarBorderEnumGlobalKey(attr))
+            local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+            if setting and value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
+        else
+            for i = 1, #scopes do
+                local setting = Registry and Registry:GetSetting("barScope." .. tostring(scopes[i]) .. "." .. attr)
+                local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+                if setting and value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
+            end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes aggro, dispel, purge, or boss-target border settings directly.",
+    }
+end
+
 local function ParseUnitDetailOffsetShortcut(text)
     if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
     if not ContainsAny(text, { "offset" }) then return nil end
@@ -2941,11 +3386,51 @@ end
 
 local function ParseUnitOpacityShortcut(text)
     if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
+    if ContainsAny(text, { "edit mode", "editmode", "editor mode" }) then return nil end
     if ContainsAny(text, { "class power", "class resource", "class resources", "resource bar", "alt mana", "alternative mana", "secondary mana", "dual resource mana" }) then return nil end
+    if ContainsAny(text, { "player hp bar opacity", "player health bar opacity" })
+        and not ContainsAny(text, {
+            "second", "duplicate", "class resource", "class power", "background", "backdrop", "bg",
+            "text", "font", "outline", "border", "color", "colour", "texture",
+        })
+    then
+        local relativeDelta
+        if ContainsAny(text, { "more transparent", "more transparency", "more see through", "transparenter" }) then
+            local amount = FirstNumber(text) or 0.05
+            if amount > 1 then amount = amount / 100 end
+            relativeDelta = -amount
+        elseif ContainsAny(text, { "less transparent", "less transparency", "more opaque", "opaquer" }) then
+            local amount = FirstNumber(text) or 0.05
+            if amount > 1 then amount = amount / 100 end
+            relativeDelta = amount
+        else
+            relativeDelta = RelativeNumberDeltaForText({ percent = true, step = 0.05 }, text)
+        end
+        local value
+        if relativeDelta == nil then
+            value = FirstNumber(text)
+            if value == nil then return nil end
+            if value > 1 then value = value / 100 end
+        end
+        local setting = Registry and Registry:GetSetting("player.hpBarAlpha")
+        if not setting then return nil end
+        return {
+            kind = "changes",
+            changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+            label = "Set player HP bar opacity",
+            summary = "Sets the Player unit-frame HP bar opacity.",
+        }
+    end
+    if ContainsAny(text, {
+        "second hp", "duplicate hp", "second health", "duplicate health", "player hp bar",
+        "bar outline", "outline opacity", "outline alpha", "border opacity", "border alpha",
+        "highlight border", "group border", "dead background", "dead bg", "health fade",
+    }) then return nil end
     if DetectGroups(text)[1] then return nil end
+    local backgroundOpacity = ContainsAny(text, { "background", "backdrop", "track", "hp track", "health track", "bg", "bar background" })
     if ContainsAny(text, {
         "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target",
-        "preserve hp", "background", "backdrop", "track", "hp track", "health track", "bg",
+        "preserve hp",
         "text opacity", "text alpha", "font opacity", "font alpha", "absorb", "heal absorb",
         "dispel overlay", "debuff overlay", "unitframe dispel overlay", "unit frame dispel overlay",
     }) then return nil end
@@ -2981,23 +3466,31 @@ local function ParseUnitOpacityShortcut(text)
         end
     end
     local changes = {}
+    local attr = backgroundOpacity and "hpBgAlpha" or "hpBarAlpha"
     for i = 1, #units do
         local unit = tostring(units[i])
-        local hp = Registry and Registry:GetSetting(unit .. ".hpBarAlpha")
+        local hp = Registry and Registry:GetSetting(unit .. "." .. attr)
         if hp then changes[#changes + 1] = { setting = hp, value = value, relativeDelta = relativeDelta } end
     end
     if #changes == 0 then return nil end
     return {
         kind = "changes",
         changes = changes,
-        label = "Set unit opacity",
-        summary = "Sets the HP bar opacity for the requested unit frame.",
+        label = backgroundOpacity and "Set unit background opacity" or "Set unit opacity",
+        summary = backgroundOpacity and "Sets the bar background opacity for the requested unit frame." or "Sets the HP bar opacity for the requested unit frame.",
     }
 end
 
 function A._ParseGroupOpacityShortcut(text)
     if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
-    if ContainsAny(text, { "range fade", "background", "backdrop", "track", "hp track", "health track", "bg", "dispel overlay", "debuff overlay" }) then return nil end
+    if ContainsAny(text, { "edit mode", "editmode", "editor mode" }) then return nil end
+    if ContainsAny(text, {
+        "bar outline", "outline opacity", "outline alpha", "border opacity", "border alpha",
+        "highlight border", "group border", "dead background", "dead bg", "dead member",
+        "dead offline", "offline opacity", "health fade",
+    }) then return nil end
+    local backgroundOpacity = ContainsAny(text, { "background", "backdrop", "track", "hp track", "health track", "bg", "bar background" })
+    if ContainsAny(text, { "range fade", "dispel overlay", "debuff overlay" }) then return nil end
     if ContainsAny(text, {
         "debuff stripe opacity", "debuff stripe alpha", "offline opacity", "offline alpha", "offline member opacity",
         "corner indicator opacity", "corner indicator alpha", "corner dot opacity", "corner dot alpha",
@@ -3034,17 +3527,415 @@ function A._ParseGroupOpacityShortcut(text)
     end
 
     local changes = {}
+    local attr = backgroundOpacity and "hpBgAlpha" or "hpBarAlpha"
     for i = 1, #groups do
         local scope = tostring(groups[i])
-        local hp = Registry and Registry:GetSetting("gf_" .. scope .. ".hpBarAlpha")
+        local hp = Registry and Registry:GetSetting("gf_" .. scope .. "." .. attr)
         if hp then changes[#changes + 1] = { setting = hp, value = value, relativeDelta = relativeDelta } end
     end
     if #changes == 0 then return nil end
     return {
         kind = "changes",
         changes = changes,
-        label = "Set group opacity",
-        summary = "Sets the HP bar opacity for the requested group-frame target.",
+        label = backgroundOpacity and "Set group background opacity" or "Set group opacity",
+        summary = backgroundOpacity and "Sets the bar background opacity for the requested group-frame target." or "Sets the HP bar opacity for the requested group-frame target.",
+    }
+end
+
+function P.ParseUnitRangeFadeShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, { "keep text visible", "keep names visible", "text visible", "names visible" }) then return nil end
+    if not ContainsAny(text, {
+        "range fade", "range fading", "out of range", "outside range",
+        "when out of range", "while out of range",
+    }) then
+        return nil
+    end
+
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then units[1] = pageUnit end
+    end
+    if #units == 0 then return nil end
+
+    local number = FirstNumber(text)
+    local alphaIntent = ContainsAny(text, {
+        "alpha", "opacity", "transparency", "transparent", "out of range alpha",
+        "out of range opacity", "range fade alpha", "range fade opacity",
+        "more visible", "less visible", "more faded", "less faded",
+    }) or number ~= nil
+    local layerIntent = ContainsAny(text, {
+        "affects", "layer", "mode", "health only", "current health only", "hp only",
+        "frame only", "whole frame", "to frame", "to health",
+    })
+
+    local value
+    local relativeDelta
+    if alphaIntent then
+        if ContainsAny(text, { "more transparent", "more transparency", "less visible", "fade more", "more faded", "stronger fade" }) then
+            local amount = number or 0.05
+            if amount > 1 then amount = amount / 100 end
+            relativeDelta = -amount
+        elseif ContainsAny(text, { "less transparent", "less transparency", "more visible", "more opaque", "fade less", "less faded", "weaker fade" }) then
+            local amount = number or 0.05
+            if amount > 1 then amount = amount / 100 end
+            relativeDelta = amount
+        else
+            relativeDelta = RelativeNumberDeltaForText({ percent = true, step = 0.05 }, text)
+            if relativeDelta == nil then
+                if number == nil then return nil end
+                value = number
+                if value > 1 then value = value / 100 end
+            end
+        end
+    end
+
+    local bool = DetectBoolean(text)
+    local enableIntent = not alphaIntent and not layerIntent and (bool ~= nil
+        or ContainsAny(text, {
+            "transparent when out of range", "transparent out of range",
+            "fade when out of range", "fade out of range", "fade outside range",
+            "range fade", "range fading",
+        }))
+
+    local changes = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        if enableIntent then
+            local setting = Registry and Registry:GetSetting(unit .. ".rangeFadeEnabled")
+            if setting then
+                changes[#changes + 1] = {
+                    setting = setting,
+                    value = bool ~= false,
+                }
+            end
+        end
+        if alphaIntent then
+            local setting = Registry and Registry:GetSetting(unit .. ".rangeFadeAlpha")
+            if setting then
+                changes[#changes + 1] = {
+                    setting = setting,
+                    value = value,
+                    relativeDelta = relativeDelta,
+                }
+            end
+        end
+        if layerIntent then
+            local setting = Registry and Registry:GetSetting(unit .. ".rangeFadeLayerMode")
+            local enumValue = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+            if enumValue == nil and ContainsAny(text, { "health only", "current health only", "hp only", "to health" }) then
+                enumValue = "health"
+            elseif enumValue == nil and ContainsAny(text, { "frame only", "whole frame", "to frame" }) then
+                enumValue = "frame"
+            end
+            if setting and enumValue ~= nil then
+                changes[#changes + 1] = {
+                    setting = setting,
+                    value = enumValue,
+                }
+            end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Range Fade",
+        bulkSafe = #changes > 1,
+        summary = "Changes unit-frame Range Fade settings.",
+    }
+end
+
+function P.ParseUnitHealthColorSchemeShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if not ContainsAny(text, {
+        "health color scheme", "health color mode",
+        "health bar color scheme", "health bar color mode",
+        "unitframe color scheme", "unit frame color scheme",
+    }) then
+        return nil
+    end
+    if ContainsAny(text, { "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames" }) then return nil end
+
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then units[1] = pageUnit end
+    end
+    if #units == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. ".healthColorMode")
+        local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+        if setting and value ~= nil then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = value,
+            }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Health Color Scheme",
+        bulkSafe = #changes > 1,
+        summary = "Changes the unit-frame health color scheme.",
+    }
+end
+
+function P.ParseUnitAnchorTargetShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if not ContainsAny(text, { "anchor to", "anchor target", "anchor frame" }) then return nil end
+    if ContainsAny(text, {
+        "anchor point", "frame anchor point", "anchor position", "custom anchor",
+        "custom anchor frame", "anchor frame name", "clear custom anchor",
+        "remove custom anchor", "reset custom anchor", "picker",
+    }) then return nil end
+    if ContainsAny(text, {
+        "class power", "class resource", "detached power", "detached mana", "castbar", "cast bar",
+        "name text", "health text", "hp text", "power text", "mana text", "status", "indicator", "icon",
+        "aura", "auras", "buff", "debuff", "group frame", "group frames", "party", "raid", "mythic raid",
+    }) then return nil end
+
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then units[1] = pageUnit end
+    end
+    if #units == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. ".anchorToUnitframe")
+        local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+        if setting and value ~= nil then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = value,
+            }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Anchor Target",
+        bulkSafe = #changes > 1,
+        summary = "Changes the unit-frame anchor target.",
+    }
+end
+
+function P.ParseUnitAnchorPointShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if not ContainsAny(text, { "anchor point", "frame anchor point", "anchor position" }) then return nil end
+    if ContainsAny(text, {
+        "custom anchor", "custom anchor frame", "anchor frame name", "anchor to", "anchor target",
+        "class power", "class resource", "detached power", "detached mana", "castbar", "cast bar",
+        "name text", "health text", "hp text", "power text", "mana text", "status", "indicator", "icon",
+        "level", "pvp", "pvp flag", "aura", "auras", "buff", "debuff", "group frame", "group frames",
+        "party", "raid", "mythic raid",
+    }) then return nil end
+
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then units[1] = pageUnit end
+    end
+    if #units == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. ".point")
+        local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+        if setting and value ~= nil then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = value,
+            }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Anchor Point",
+        bulkSafe = #changes > 1,
+        summary = "Changes the unit-frame anchor point.",
+    }
+end
+
+function P.ParseUnitPowerBarBorderThicknessShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if not ContainsAny(text, {
+        "power bar border thickness", "power bar border size",
+        "power border thickness", "power border size",
+        "mana bar border thickness", "mana bar border size",
+    }) then
+        return nil
+    end
+    if ContainsAny(text, {
+        "detached", "detached power", "detached power bar", "class power", "class resource",
+        "aura", "auras", "buff", "debuff", "text", "font", "castbar", "cast bar",
+        "health bar", "hp bar", "portrait", "group frame", "group frames", "party", "raid", "mythic raid",
+    }) then return nil end
+
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then units[1] = pageUnit end
+    end
+    if #units == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. ".powerBarBorderThickness")
+        if setting then
+            local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text) or nil
+            local value
+            if relativeDelta == nil then
+                value = A._NumberValueForText and A._NumberValueForText(setting, text) or FirstNumber(text)
+            end
+            if value ~= nil or relativeDelta ~= nil then
+                changes[#changes + 1] = {
+                    setting = setting,
+                    value = value,
+                    relativeDelta = relativeDelta,
+                }
+            end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Power Bar Border Thickness",
+        bulkSafe = #changes > 1,
+        summary = "Changes the unit Power Bar Border Thickness option.",
+    }
+end
+
+function P.ParseUnitPowerBarBooleanShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if not ContainsAny(text, { "power bar", "mana bar", "powerbar", "mana bar", "power balken", "mana balken" }) then return nil end
+    if ContainsAny(text, {
+        "class power", "class resource", "class resources", "power text", "mana text", "resource text",
+        "text on", "sync", "anchor", "width", "height", "x offset", "y offset", "offset x", "offset y",
+        "frame level", "layer", "shape", "orb", "border thickness", "border size", "smooth",
+        "aura", "auras", "buff", "debuff", "castbar", "cast bar", "group frame", "group frames",
+        "party", "raid", "mythic raid",
+    }) then return nil end
+
+    local attr = "showPowerBar"
+    local label = "Power Bar"
+    local value
+    if ContainsAny(text, { "border", "outline", "rand" }) then
+        attr = "powerBarBorderEnabled"
+        label = "Power Bar Border"
+        value = DetectBoolean(text)
+    elseif ContainsAny(text, { "embed", "embedded", "into health", "into hp", "inside health", "inside hp", "within health", "within hp" }) then
+        attr = "embedPowerBarIntoHealth"
+        label = "Embed Power Bar"
+        value = DetectBoolean(text)
+        if value == nil then value = true end
+    elseif ContainsAny(text, { "detach", "detached", "undock", "undocked", "separate", "separated", "abkoppeln" }) then
+        if ContainsAny(text, { "left", "right", "up", "down", "links", "rechts", "oben", "unten", "x", "y", "position", "pos", "move", "nudge", "shift" }) then return nil end
+        attr = "powerBarDetached"
+        label = "Detach Power Bar"
+        value = true
+    elseif ContainsAny(text, { "attach", "attached", "reattach", "dock", "docked", "back to frame", "into frame", "ankoppeln" }) then
+        attr = "powerBarDetached"
+        label = "Attach Power Bar"
+        value = false
+    else
+        value = DetectBoolean(text)
+    end
+    if value == nil then return nil end
+
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then units[1] = pageUnit end
+    end
+    if #units == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
+        if setting then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = value,
+            }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes a unit Power Bar toggle.",
+    }
+end
+
+function P.ParsePlayerPowerBarShapeShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if not ContainsAny(text, {
+        "player power shape", "player power bar shape",
+        "detached power shape", "detached power bar shape",
+        "class resources player power shape", "class resources player power bar shape",
+        "class resource player power shape", "class power player power shape",
+    }) then
+        return nil
+    end
+    if ContainsAny(text, {
+        "texture", "foreground", "background", "outline", "border", "color", "colour",
+        "text", "font", "width", "height", "x", "y", "offset", "layer",
+    }) then return nil end
+
+    local setting = Registry and Registry:GetSetting("player.detachedPowerBarShape")
+    local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
+    if not setting or value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = "Detached Power Bar Shape",
+        summary = "Changes the Player detached Power Bar shape.",
+    }
+end
+
+function P.ParsePlayerPowerOrbSizeShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
+    if ContainsAny(text, {
+        "health", "hp", "player hp", "second hp", "duplicate hp", "health orb",
+        "hp orb", "player health", "class resource health", "class resources hp",
+    }) then return nil end
+    if not ContainsAny(text, {
+        "mana orb size", "power orb size", "detached power orb size", "detached power bar orb size",
+        "player power orb size", "player power bar orb size", "mana ball size", "power ball size",
+        "class resources player power orb size", "class resources player power bar orb size",
+        "class resource player power orb size", "class power player power orb size",
+    }) then
+        return nil
+    end
+
+    local setting = Registry and Registry:GetSetting("player.detachedPowerOrbSize")
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 4) or nil
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = "Detached Power Orb Size",
+        summary = "Changes the Player detached Power Bar orb size.",
     }
 end
 
@@ -3090,12 +3981,12 @@ function A._ParseGroupRangeFadeShortcut(text)
     end
 
     local bool = DetectBoolean(text)
-    local enableIntent = bool ~= nil
+    local enableIntent = not alphaIntent and (bool ~= nil
         or ContainsAny(text, {
             "transparent when out of range", "transparent out of range",
             "fade when out of range", "fade out of range", "fade outside range",
             "range fade", "range fading",
-        })
+        }))
 
     local changes = {}
     for i = 1, #groups do
@@ -3211,6 +4102,9 @@ P.GroupScopesOrCurrentPage = GroupScopesOrCurrentPage
 P.ParseGroupDetailMove = ParseGroupDetailMove
 P.OutlineScopeSettingForText = OutlineScopeSettingForText
 P.ParseBorderThicknessShortcut = ParseBorderThicknessShortcut
+P.ParseBarOutlineHighlightShortcut = ParseBarOutlineHighlightShortcut
+P.ParseAbsorbBarShortcut = ParseAbsorbBarShortcut
+P.ParseBarBorderEnumShortcut = ParseBarBorderEnumShortcut
 P.ParseUnitDetailOffsetShortcut = ParseUnitDetailOffsetShortcut
 P.CASTBAR_DETAIL_PREFIXES = CASTBAR_DETAIL_PREFIXES
 P.CastbarDetailUnitsOrCurrentPage = CastbarDetailUnitsOrCurrentPage

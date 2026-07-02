@@ -1,4 +1,4 @@
-﻿--- Shell/Menu2/Assistant/MSUF_AssistantParser_Features.lua
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Features.lua
 --- Feature shortcut parser for Assistant workflows.
 ---
 --- Narrows broad class-power/gameplay/global-bars phrasing into registry plans
@@ -1340,6 +1340,9 @@ local function ParseColorAction(text)
     if ContainsAny(text, { "unitframe", "unit frame", "npc reaction", "reaction color" }) then
         return BuildColorResetAction("reset_unitframe_colors", "Reset unit frame colors", "Resets unit frame NPC reaction colors.")
     end
+    if ContainsAny(text, { "class color", "class colors", "class bar" }) then
+        return BuildColorResetAction("reset_class_colors", "Reset class bar colors", "Resets class bar color overrides.")
+    end
     if ContainsAny(text, { "bar background", "background tint", "bar tint" }) then
         return BuildColorResetAction("reset_bar_background_color", "Reset bar background tint", "Resets the global bar background tint.")
     end
@@ -1360,9 +1363,6 @@ local function ParseColorAction(text)
     end
     if ContainsAny(text, { "resource", "power color", "class power", "class resource", "combo point" }) then
         return BuildColorResetAction("reset_resource_colors", "Reset resource colors", "Resets power and class-resource color overrides.")
-    end
-    if ContainsAny(text, { "class color", "class colors", "class bar" }) then
-        return BuildColorResetAction("reset_class_colors", "Reset class bar colors", "Resets class bar color overrides.")
     end
     return nil
 end
@@ -1486,7 +1486,7 @@ local function ParseDiagnostic(text)
             summary = "Checks Aura visibility options and suggests clear next steps.",
         } or nil
     end
-    if ContainsAny(text, { "castbar", "zauberleiste" }) then
+    if ContainsAny(text, { "castbar", "cast bar", "cast bars", "casting bar", "zauberleiste" }) then
         local units = DetectUnits(text)
         local unit = units[1] or "target"
         local action = Registry and Registry:GetAction("diagnose_castbar_visibility")
@@ -1523,7 +1523,7 @@ local function ParseDiagnostic(text)
             kind = "action",
             action = action,
             args = { page = "gf_indicators", frameType = "group" },
-            label = "Group Indicators help",
+            label = "Group Status & Indicators help",
             summary = "Shows Group Indicator help instead of running a visibility diagnosis.",
         } or nil
     end
@@ -2220,6 +2220,12 @@ local function ParseScopedOverrideReset(text)
         "all font overrides", "all fonts overrides", "all global font overrides", "all global fonts overrides",
         "every bar override", "every bars override", "every font override", "every fonts override",
     })
+    local explicitOverride = ContainsAny(text, {
+        "override", "overrides", "custom", "customized", "customised",
+        "follow shared", "use shared", "remove override", "remove custom",
+        "disable custom", "turn off custom",
+    })
+    if not all and not explicitOverride then return nil end
     local scope = DetectGlobalScope(text)
     if not all and (not scope or scope == "shared") then return nil end
     local actionKey
@@ -3172,6 +3178,7 @@ P.ParseSupportWorkflow = ParseSupportWorkflow
 P.GlobalScalePresetForText = GlobalScalePresetForText
 P.ParsePresetWorkflow = ParsePresetWorkflow
 P.ParseBossFramePreviewShortcut = ParseBossFramePreviewShortcut
+P.ParseEditModeHUDControl = ParseEditModeHUDControl
 P.ParseDashboardScaleShortcut = ParseDashboardScaleShortcut
 P.ParseScopedOverrideReset = ParseScopedOverrideReset
 P.ParseClassPowerAction = ParseClassPowerAction

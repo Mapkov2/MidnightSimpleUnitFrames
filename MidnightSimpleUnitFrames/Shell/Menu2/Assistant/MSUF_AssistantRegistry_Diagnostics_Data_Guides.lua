@@ -57,7 +57,7 @@ Guides.group_frames = {
         },
         {
             key = "group_indicators",
-            title = "Group Indicators",
+            title = "Group Status & Indicators",
             page = "gf_indicators",
             goal = "Verify group status icons and editor selections after layout and text feel stable.",
             body = "Selection requests help with editor choices; then check visibility if an icon still looks wrong.",

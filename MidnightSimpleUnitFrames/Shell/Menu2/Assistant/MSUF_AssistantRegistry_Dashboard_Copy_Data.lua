@@ -31,7 +31,7 @@ A.DashboardRegistry.CopyCategoryFallbacks = {
         { key = "font", label = "Font Override", aliases = { "font", "fonts", "font override", "font color", "font outline" } },
         { key = "border", label = "Background & Opacity", aliases = { "background", "opacity", "alpha", "transparency", "background opacity" } },
         { key = "range", label = "Range Fade", aliases = { "range", "range fade", "offline alpha" } },
-        { key = "indicators", label = "Indicators & Status Icons", aliases = { "indicators", "status icons", "status icon", "role icon", "leader icon", "assist icon", "raid marker", "pvp flag", "pvp indicator" } },
+        { key = "indicators", label = "Status & Indicators", aliases = { "indicators", "status and indicators", "status icons", "status icon", "role icon", "leader icon", "assist icon", "raid marker", "pvp flag", "pvp indicator" } },
         { key = "auras", label = "Auras", aliases = { "auras", "aura", "buffs", "debuffs" } },
         { key = "highlight", label = "Highlight & Aggro", aliases = { "highlight", "aggro", "dispel border", "purge border" } },
         { key = "dstripe", label = "Debuff Stripe", aliases = { "debuff stripe", "stripe" } },

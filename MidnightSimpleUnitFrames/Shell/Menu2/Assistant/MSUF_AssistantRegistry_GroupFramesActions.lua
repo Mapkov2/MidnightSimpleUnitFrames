@@ -70,11 +70,11 @@ Registry:RegisterAction({
     combatSafe = true,
     aliases = {
         "preview group status icon", "preview group status indicator",
-        "preview group indicator", "preview group indicators",
+        "preview group indicator", "preview group indicators", "preview group status and indicators",
         "group status icon test mode", "group status indicator test mode",
-        "group indicator test mode", "group indicators test mode",
-        "test group status icons", "test group status indicators", "test group indicators",
-        "show all group status icons", "show all group status indicators", "show all group indicators",
+        "group indicator test mode", "group indicators test mode", "group status and indicators test mode",
+        "test group status icons", "test group status indicators", "test group indicators", "test group status and indicators",
+        "show all group status icons", "show all group status indicators", "show all group indicators", "show all group status and indicators",
     },
     run = function(args)
         local mode = args and args.mode == "all" and "all" or "current"
@@ -95,7 +95,7 @@ local GROUP_COPY_SCOPE_LABELS = {
     { key = "font", label = "Font Override" },
     { key = "border", label = "Background & Opacity" },
     { key = "range", label = "Range Fade" },
-    { key = "indicators", label = "Indicators & Status Icons" },
+    { key = "indicators", label = "Status & Indicators" },
     { key = "auras", label = "Auras" },
     { key = "highlight", label = "Highlight & Aggro" },
     { key = "dstripe", label = "Debuff Stripe" },

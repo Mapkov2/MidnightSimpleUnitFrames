@@ -908,7 +908,7 @@ local PAGE_TEXT_TARGETS = {
     { page = "gameplay", label = "Gameplay", terms = GAMEPLAY_TERMS },
     { page = "classpower", label = "Class Resources", terms = CLASS_POWER_TERMS },
 
-    { page = "gf_indicators", label = "Group Indicators", terms = { "group indicators", "group indicator", "party indicators", "raid indicators", "group status icons", "raid status icons", "ready check", "summon icon", "role icon", "leader icon", "assist icon" } },
+    { page = "gf_indicators", label = "Group Status & Indicators", terms = { "group status and indicators", "group indicators", "group indicator", "party indicators", "raid indicators", "group status icons", "raid status icons", "ready check", "summon icon", "role icon", "leader icon", "assist icon" } },
     { page = "gf_auras", label = "Group Auras", terms = { "group auras", "group aura", "party auras", "raid auras", "group buffs", "group debuffs", "party buffs", "raid debuffs" } },
     { page = "gf_bars", label = "Group Health & Text", terms = { "group health", "group text", "group bars", "party health", "party text", "party bars", "raid health", "raid text", "raid bars", "health and text" } },
     { page = "gf_layout", label = "Group Layout", terms = { "group layout", "party layout", "raid layout", "group settings", "party settings", "raid settings", "group frames", "groupframes", "party frames", "raid frames", "mythic raid", "mythicraid", "gruppenframes", "group", "party", "raid" } },

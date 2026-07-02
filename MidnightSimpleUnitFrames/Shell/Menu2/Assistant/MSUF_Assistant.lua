@@ -1,4 +1,4 @@
-﻿--- Shell/Menu2/Assistant/MSUF_Assistant.lua
+--- Shell/Menu2/Assistant/MSUF_Assistant.lua
 --- Command execution layer for the Menu2 assistant.
 ---
 --- Owns job scheduling, combat deferral, confirmations, choice handling, undo
@@ -2119,7 +2119,7 @@ local PENDING_PAGE_LABEL_OVERRIDES = {
     opt_misc = "Miscellaneous",
     gf_layout = "Group Layout",
     gf_bars = "Group Health & Text",
-    gf_indicators = "Group Indicators",
+    gf_indicators = "Group Status & Indicators",
     gf_auras = "Group Auras",
     auras3 = "Auras",
     auras3_buffs = "Aura Buffs",
@@ -6286,6 +6286,9 @@ function A.WarmupPerformanceIndexes(reason)
             local parser = A.Parser
             local registry = A.Registry
             local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
+            if registry and type(registry.BuildFindSettingsIndex) == "function" then
+                registry:BuildFindSettingsIndex()
+            end
             if parser and settings and type(parser._EnsureRegistryCandidateIndex) == "function" then
                 parser._EnsureRegistryCandidateIndex(settings, false)
             end
@@ -6296,6 +6299,17 @@ function A.WarmupPerformanceIndexes(reason)
             local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
             if parser and settings and type(parser._EnsureRegistryCandidateIndex) == "function" then
                 parser._EnsureRegistryCandidateIndex(settings, true)
+            end
+        end),
+        A.CoroutineStep(function()
+            local parser = A.Parser
+            local registry = A.Registry
+            local actions = registry and type(registry.AllActions) == "function" and registry:AllActions() or nil
+            if parser and actions and type(parser._EnsureExactActionPhraseIndex) == "function" then
+                parser._EnsureExactActionPhraseIndex(actions)
+            end
+            if parser and actions and type(parser._EnsureRegistryActionAliasIndex) == "function" then
+                parser._EnsureRegistryActionAliasIndex(actions)
             end
         end),
         A.CoroutineStep(function()

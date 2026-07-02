@@ -497,7 +497,7 @@ local function ParseGroupSpellIndicatorAction(text, raw)
         return action and {
             kind = "action",
             action = action,
-            args = { scope = scope, spec = spec, aura = text, position = position or 1 },
+            args = { scope = scope, spec = spec, aura = aura, position = position or 1 },
             label = "Move group spell indicator order",
             summary = "Changes the tracked spell display order.",
         } or nil
@@ -552,7 +552,7 @@ local function ParseGroupSpellIndicatorAction(text, raw)
     return action and {
         kind = "action",
         action = action,
-        args = { scope = scope, spec = spec, aura = text, field = field, value = value },
+        args = { scope = scope, spec = spec, aura = aura, field = field, value = value },
         label = "Set group spell indicator",
         summary = "Configures one tracked spell indicator entry.",
     } or nil
@@ -1886,7 +1886,19 @@ function A._ParseMenuHistoryAction(text)
     local label
     local summary
     local confirmRequired
-    if ContainsAny(text, { "reset all", "reset", "restore all", "discard all", "revert all", "clear all", "zuruecksetzen", "zurucksetzen", "alles zuruecksetzen", "alle zuruecksetzen", "verwerfen", "alles verwerfen" }) then
+    if ContainsAny(text, { "assistant change", "assistant changes", "assistant session", "assistant edits", "assistant aenderung", "assistant aenderungen" })
+        and ContainsAny(text, { "redo", "reapply", "wiederholen", "erneut anwenden" })
+    then
+        actionKey = "assistant.action.history.redo"
+        label = "Redo Assistant change"
+        summary = "Reapplies the last undone Assistant change."
+    elseif ContainsAny(text, { "assistant change", "assistant changes", "assistant session", "assistant edits", "assistant aenderung", "assistant aenderungen" })
+        and ContainsAny(text, { "undo", "revert", "rueckgaengig", "zuruecknehmen" })
+    then
+        actionKey = "assistant.action.history.undo"
+        label = "Undo Assistant change"
+        summary = "Undoes the last Assistant-made change."
+    elseif ContainsAny(text, { "reset all", "reset", "restore all", "discard all", "revert all", "clear all", "zuruecksetzen", "zurucksetzen", "alles zuruecksetzen", "alle zuruecksetzen", "verwerfen", "alles verwerfen" }) then
         actionKey = "menu_history_reset_session"
         label = "Reset menu session changes"
         summary = "Clears this MSUF menu change history."
@@ -2034,6 +2046,8 @@ local function EnsureRegistryActionAliasIndex(actions)
     P._registryActionAliasIndex = index
     return index
 end
+
+P._EnsureRegistryActionAliasIndex = EnsureRegistryActionAliasIndex
 
 local function AddActionAliasCandidates(candidateSet, index, tokens)
     for i = 1, #(tokens or {}) do
@@ -2183,6 +2197,8 @@ local function EnsureExactActionPhraseIndex(actions)
     return index
 end
 
+P._EnsureExactActionPhraseIndex = EnsureExactActionPhraseIndex
+
 function P.ParseExactActionPhraseShortcut(text, raw)
     local phrase = ExactActionPhraseText(raw or text)
     if phrase == "" then return nil end
@@ -2223,6 +2239,111 @@ function P.ParseExactActionPhraseShortcut(text, raw)
         confirmRequired = action.confirmRequired == true,
         label = type(A.DisplayActionLabel) == "function" and A.DisplayActionLabel(action) or action.label or "Assistant shortcut",
         summary = "Runs the matching Assistant shortcut.",
+    }
+end
+
+local ACTION_EXPLAIN_PREFIXES = {
+    "explain ", "describe ", "tell me about ", "what is ", "what are ",
+    "what does ", "why use ", "why should i use ", "why would i use ",
+    "why should i run ", "why would i run ",
+}
+
+local function ActionExplainTargetText(text)
+    text = Normalize(text)
+    if text == "" then return nil end
+    for i = 1, #ACTION_EXPLAIN_PREFIXES do
+        local prefix = ACTION_EXPLAIN_PREFIXES[i]
+        if text:sub(1, #prefix) == prefix then
+            local target = Trim(text:sub(#prefix + 1))
+            target = target:gsub("%s+do$", ""):gsub("%s+mean$", ""):gsub("%s+help with$", "")
+            return Trim(target)
+        end
+    end
+    return nil
+end
+
+local function ActionExplainMatchScore(action, target)
+    if type(action) ~= "table" or target == "" then return 0 end
+    local best = 0
+    local function consider(value)
+        value = Normalize(value)
+        if value == "" then return end
+        if value == target then
+            local score = 10000 + #Compact(value)
+            if score > best then best = score end
+        elseif HasPhrase(target, value) or HasPhrase(value, target) then
+            local score = #Compact(value)
+            if score > best then best = score end
+        end
+    end
+    consider(action.label)
+    if type(A.DisplayActionLabel) == "function" then
+        consider(A.DisplayActionLabel(action))
+    end
+    if action.key ~= nil then
+        consider((tostring(action.key):gsub("[_%.-]+", " ")))
+    end
+    for i = 1, #(action.aliases or {}) do consider(action.aliases[i]) end
+    return best
+end
+
+function P.ParseRegistryActionExplainShortcut(text)
+    local target = ActionExplainTargetText(text)
+    if not target or target == "" then return nil end
+    local actions = Registry and Registry:AllActions() or {}
+    local bestAction
+    local bestActions = {}
+    local bestScore = 0
+    for i = 1, #actions do
+        local action = actions[i]
+        local score = ActionExplainMatchScore(action, target)
+        if score > bestScore then
+            bestAction = action
+            bestActions = { action }
+            bestScore = score
+        elseif score > 0 and score == bestScore then
+            bestActions[#bestActions + 1] = action
+        end
+    end
+    if not bestAction or bestScore == 0 then return nil end
+    if #bestActions > 1 then
+        local lines = { "I found more than one Assistant action with that wording. I did not run anything." }
+        for i = 1, #bestActions do
+            local action = bestActions[i]
+            local label = type(A.DisplayActionLabel) == "function" and A.DisplayActionLabel(action) or action.label or action.key or "Assistant action"
+            lines[#lines + 1] = tostring(i) .. ". " .. tostring(label)
+        end
+        lines[#lines + 1] = "Ask with the exact action name, or use a result number after searching."
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            label = "Multiple Assistant Actions",
+            text = table.concat(lines, "\n"),
+            summary = "Asks which action to explain instead of running an ambiguous action.",
+        }
+    end
+
+    local label = type(A.DisplayActionLabel) == "function" and A.DisplayActionLabel(bestAction) or bestAction.label or bestAction.key or "Assistant action"
+    local lines = {}
+    lines[#lines + 1] = tostring(label)
+    if type(bestAction.description) == "string" and bestAction.description ~= "" then
+        lines[#lines + 1] = bestAction.description
+    else
+        lines[#lines + 1] = "This is an MSUF Assistant task, not a saved setting value."
+    end
+    local details = {}
+    if bestAction.type then details[#details + 1] = "type: " .. tostring(bestAction.type) end
+    if bestAction.page then details[#details + 1] = "page: " .. tostring(bestAction.page) end
+    if bestAction.confirmRequired == true then details[#details + 1] = "requires confirmation" end
+    if bestAction.combatSafe == false then details[#details + 1] = "not combat-safe" end
+    if #details > 0 then lines[#lines + 1] = table.concat(details, ", ") .. "." end
+    lines[#lines + 1] = "I did not run it from this explanation question."
+    return {
+        kind = "answer",
+        status = "info",
+        label = tostring(label),
+        text = table.concat(lines, "\n"),
+        summary = "Explains a registry action without running it.",
     }
 end
 
