@@ -8,10 +8,83 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta1",
-    previousVersion = "5.60",
-    rangeLabel = "5.60 -> 6.0-Beta1",
+    currentVersion = "6.0-Beta2",
+    previousVersion = "6.0-Beta1",
+    rangeLabel = "6.0-Beta1 -> 6.0-Beta2",
     entries = {
+        {
+            version = "6.0-Beta2",
+            date = "2026-07-03",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Better previews: quick settings access, context controls, gear buttons, and improved preview handle behavior.",
+                        "Better visuals: 2D portrait zoom, resource-bar opacity, live power alpha, and optional over-absorb glow.",
+                        "Better stability: castbar border fixes, class-power reload fixes, faster Assistant routing, and less redundant runtime work.",
+                    },
+                },
+                {
+                    title = "Menu And Preview Improvements",
+                    bullets = {
+                        "Quick settings access from unit, group, and class-resource preview handles.",
+                        "New preview-handle context controls and gear buttons.",
+                        "Improved moving, nudging, zooming, panning, and fit behavior in previews.",
+                        "Fixed preview checkbox/text sync issues.",
+                        "Refined group preview controls and native group preview behavior.",
+                    },
+                },
+                {
+                    title = "Unit Frames, Bars, And Visuals",
+                    bullets = {
+                        "Added 2D portrait zoom.",
+                        "Added separate resource-bar foreground/background opacity.",
+                        "Added live power-bar alpha support.",
+                        "Added optional over-absorb overlay/glow.",
+                        "Fixed live HP percent formatting.",
+                        "Reduced redundant unit-frame and portrait refresh work.",
+                    },
+                },
+                {
+                    title = "Castbars And Class Resources",
+                    bullets = {
+                        "Fixed long-standing castbar border/layout inset issues.",
+                        "Fixed boss castbar border/layout inset handling.",
+                        "Reduced redundant castbar text/time updates.",
+                        "Stabilized detached class-power and Player Power anchors.",
+                        "Fixed class power placement after /reload in combat.",
+                    },
+                },
+                {
+                    title = "Assistant And Search",
+                    bullets = {
+                        "More Assistant coverage for frame settings, geometry/text, auras, castbars, global bars, colors, transparency, portrait zoom, over-absorb, and group-frame actions.",
+                        "Faster Assistant routing and cancellable work.",
+                        "Better followups, exact aliases, media resolution, and changelog/dashboard answers.",
+                        "Added Assistant coverage documentation.",
+                    },
+                },
+                {
+                    title = "Edit Mode, Popups, And Diagnostics",
+                    bullets = {
+                        "Fixed Edit Mode popups letting clicks pass through.",
+                        "Added debug position diagnostics.",
+                        "Added runtime localization fallbacks for new menu/search strings.",
+                    },
+                },
+                {
+                    title = "What To Test First",
+                    bullets = {
+                        "Preview gear/context shortcuts.",
+                        "2D portrait zoom on all unit frames.",
+                        "Health/resource opacity on live frames.",
+                        "Absorb and over-absorb display.",
+                        "Castbar borders, including boss castbars.",
+                        "Class resources and detached Player Power after /reload.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta1",
             date = "2026-07-01",
