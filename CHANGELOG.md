@@ -51,6 +51,11 @@
 - Prefer embedded full MSUF6 data on import when available.
 - Normalized aura and group-frame payloads for Wago compatibility.
 
+### Release And Publishing
+- Fixed compact prerelease tags like `MSUF_6.0B3` so Wago and CurseForge publish them as beta instead of stable/release.
+- Added `MSUF_*` tag support to the release workflow and normalized compact A/B tags to addon versions like `6.0-alpha3` and `6.0-beta3`.
+- Updated the release version marker to `6.0-beta3`.
+
 ### Class Resources And Power Text
 - Added left/center/right slot controls for detached Player Power text.
 - Added per-slot value modes, delimiter, size, global offsets, per-slot offsets, and text layer.
