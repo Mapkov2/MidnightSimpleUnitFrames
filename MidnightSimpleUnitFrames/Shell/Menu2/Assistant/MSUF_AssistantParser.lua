@@ -1917,41 +1917,6 @@ local function ParsePowerColorTokenFastShortcut(normalized, raw)
     }
 end
 
-local function ParseDispelColorFastShortcut(normalized, raw)
-    if ContainsAny(normalized, P.RootPhrases[262]) then return nil end
-    if not ContainsAny(normalized, P.RootPhrases[263]) then return nil end
-
-    local key
-    if ContainsAny(normalized, P.RootPhrases[264]) then
-        key = "general.dispelTypeMagic"
-    elseif ContainsAny(normalized, P.RootPhrases[265]) then
-        key = "general.dispelTypeCurse"
-    elseif ContainsAny(normalized, P.RootPhrases[266]) then
-        key = "general.dispelTypeDisease"
-    elseif ContainsAny(normalized, P.RootPhrases[267]) then
-        key = "general.dispelTypePoison"
-    elseif ContainsAny(normalized, P.RootPhrases[268]) then
-        key = "general.dispelTypeBleed"
-    elseif ContainsAny(normalized, P.RootPhrases[269]) then
-        key = "general.hlDispelColor"
-    else
-        return nil
-    end
-
-    local extract = P.ExtractColor
-    if type(extract) ~= "function" then return nil end
-    local r, g, b, label = extract(raw or normalized, normalized)
-    if not r then return nil end
-    local setting = A.Registry and A.Registry:GetSetting(key)
-    if not setting then return nil end
-    return {
-        kind = "changes",
-        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
-        label = setting.label or "Dispel Color",
-        summary = "Changes global dispel color options.",
-    }
-end
-
 P.CastbarColorFastTerms = P.CastbarColorFastTerms or {
     blocked = { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore", "default", "defaults" },
     aura = { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "filter", "filters" },
@@ -2349,16 +2314,7 @@ local function ParseGlobalColorModeBooleanFastShortcut(normalized)
     if ContainsAny(normalized, P.RootPhrases[305]) then return nil end
     local key
     local value
-    if ContainsAny(normalized, P.RootPhrases[306]) then
-        key = "general.hlDispelColorMode"
-        if ContainsAny(normalized, P.RootPhrases[307]) then
-            value = "SINGLE"
-        elseif ContainsAny(normalized, P.RootPhrases[308]) then
-            value = "TYPE"
-        else
-            return nil
-        end
-    elseif ContainsAny(normalized, P.RootPhrases[309]) then
+    if ContainsAny(normalized, P.RootPhrases[309]) then
         if ContainsAny(normalized, P.RootPhrases[310]) then return nil end
         key = "general.playerCastbarOverrideEnabled"
         value = DetectBoolean(normalized)
@@ -4996,7 +4952,6 @@ A._ParseHealthColorGradientFastShortcut = ParseHealthColorGradientFastShortcut
 A._ParseNPCReactionColorFastShortcut = ParseNPCReactionColorFastShortcut
 A._ParsePetFrameColorFastShortcut = ParsePetFrameColorFastShortcut
 A._ParsePowerColorTokenFastShortcut = ParsePowerColorTokenFastShortcut
-A._ParseDispelColorFastShortcut = ParseDispelColorFastShortcut
 A._ParseCastbarColorFastShortcut = ParseCastbarColorFastShortcut
 A._ParseCastbarOverrideModeFastShortcut = ParseCastbarOverrideModeFastShortcut
 A._ParseScopedBarOutlineColorFastShortcut = ParseScopedBarOutlineColorFastShortcut
@@ -5165,6 +5120,17 @@ function A.Parse(text, ctxOverride)
         continuationPriorityParsed.normalized = normalized
         return continuationPriorityParsed
     end
+    -- Long exact-alias phrases are the most specific statement of intent a
+    -- sentence can carry; resolve them before any topical fast path so a
+    -- broad shortcut (opacity, portrait, combat state, ...) cannot swallow a
+    -- precisely named option. Full-phrase mode: the whole command minus verb
+    -- and value must equal exactly one alias; everything else falls through.
+    local exactAliasPriorityParsed = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
+    if exactAliasPriorityParsed then
+        exactAliasPriorityParsed.raw = raw
+        exactAliasPriorityParsed.normalized = normalized
+        return exactAliasPriorityParsed
+    end
     local humanIndicatorMovePriorityParsed = A._ParseHumanIndicatorMoveFastShortcut and A._ParseHumanIndicatorMoveFastShortcut(normalized)
     if humanIndicatorMovePriorityParsed then
         humanIndicatorMovePriorityParsed.raw = raw
@@ -5274,12 +5240,6 @@ function A.Parse(text, ctxOverride)
         powerColorTokenPriorityParsed.raw = raw
         powerColorTokenPriorityParsed.normalized = normalized
         return powerColorTokenPriorityParsed
-    end
-    local dispelColorPriorityParsed = A._ParseDispelColorFastShortcut and A._ParseDispelColorFastShortcut(normalized, raw)
-    if dispelColorPriorityParsed then
-        dispelColorPriorityParsed.raw = raw
-        dispelColorPriorityParsed.normalized = normalized
-        return dispelColorPriorityParsed
     end
     local castbarColorPriorityParsed = A._ParseCastbarColorFastShortcut and A._ParseCastbarColorFastShortcut(normalized, raw)
     if castbarColorPriorityParsed then

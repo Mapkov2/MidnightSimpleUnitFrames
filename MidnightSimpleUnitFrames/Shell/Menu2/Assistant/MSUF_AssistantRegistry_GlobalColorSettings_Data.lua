@@ -102,14 +102,6 @@ Data.COLOR_NPC_TYPE_ROWS = {
     { key = "npcRegular", label = "Regular NPC Type Color", dr = 0.70, dg = 0.56, db = 0.33, aliases = { "regular npc type color", "npc regular color", "regular type color" } },
 }
 
-Data.COLOR_DISPEL_TYPE_ROWS = {
-    { key = "Magic", label = "Magic Dispel Color", dr = 0.20, dg = 0.60, db = 1.00, aliases = { "magic dispel color", "magic debuff color" } },
-    { key = "Curse", label = "Curse Dispel Color", dr = 0.60, dg = 0.00, db = 1.00, aliases = { "curse dispel color", "curse debuff color" } },
-    { key = "Disease", label = "Disease Dispel Color", dr = 0.60, dg = 0.40, db = 0.00, aliases = { "disease dispel color", "disease debuff color" } },
-    { key = "Poison", label = "Poison Dispel Color", dr = 0.00, dg = 0.60, db = 0.00, aliases = { "poison dispel color", "poison debuff color" } },
-    { key = "Bleed", label = "Bleed Dispel Color", dr = 0.80, dg = 0.10, db = 0.10, aliases = { "bleed dispel color", "bleed debuff color" } },
-}
-
 Data.COLOR_CASTBAR_ROWS = {
     { key = "castbarInterruptible", label = "Interruptible Cast Color", get = "GetInterruptibleCastColor", set = "SetInterruptibleCastColor", dr = 0, dg = 0.9, db = 0.8, aliases = { "interruptible cast color", "interruptible castbar color", "castbar interruptible color", "interrupt castbar color", "castbar interrupt color", "kickable cast color", "kickable castbar color" } },
     { key = "castbarNonInterruptible", label = "Non-Interruptible Cast Color", get = "GetNonInterruptibleCastColor", set = "SetNonInterruptibleCastColor", dr = 0.4, dg = 0.01, db = 0.01, aliases = { "non interruptible cast color", "non interruptible castbar color", "noninterruptible cast color", "noninterruptible castbar color", "not interruptible castbar color", "uninterruptible cast color", "uninterruptible castbar color", "unkickable cast color", "unkickable castbar color", "not kickable castbar color" } },

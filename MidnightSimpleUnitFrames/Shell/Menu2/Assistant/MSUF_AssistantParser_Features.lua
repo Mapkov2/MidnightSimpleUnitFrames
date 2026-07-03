@@ -1762,9 +1762,6 @@ local function ParseColorAction(text)
     if ContainsAny(text, FeaturesPhrases[210]) then
         return BuildColorResetAction("reset_bar_colors", "Reset bar colors", "Resets bar overlay and border colors.")
     end
-    if ContainsAny(text, FeaturesPhrases[211]) then
-        return BuildColorResetAction("reset_dispel_colors", "Reset dispel colors", "Resets dispel border and debuff-type colors.")
-    end
     if ContainsAny(text, FeaturesPhrases[212]) then
         return BuildColorResetAction("reset_gameplay_colors", "Reset gameplay colors", "Resets Gameplay color options.")
     end

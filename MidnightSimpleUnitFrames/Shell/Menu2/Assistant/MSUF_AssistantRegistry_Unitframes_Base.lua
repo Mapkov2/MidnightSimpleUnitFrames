@@ -43,7 +43,7 @@ for i = 1, #UNIT_KEYS do
     aliases = {}
     AddAliasesForUnit(aliases, unit, "power text", "power text")
     AddAliasesForUnit(aliases, unit, "mana text", "mana text")
-    RegisterUnitBoolean(unit, "powerText", "showPower", "Power Text", UnitDefaultPower(unit), aliases, { category = "Text", reason = "MSUF_ASSISTANT_POWER_TEXT", text = true })
+    RegisterUnitBoolean(unit, "powerText", "showPowerText", "Power Text", UnitDefaultPower(unit), aliases, { category = "Text", reason = "MSUF_ASSISTANT_POWER_TEXT", text = true })
 
     aliases = {}
     AddAliasesForUnit(aliases, unit, "width", "breite")

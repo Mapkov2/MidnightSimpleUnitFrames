@@ -128,26 +128,6 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
-    key = "reset_dispel_colors",
-    label = "Reset Dispel Colors",
-    type = "color",
-    combatSafe = false,
-    captureSnapshot = true,
-    run = function()
-        local g = GeneralDB()
-        g.dispelBorderColorR, g.dispelBorderColorG, g.dispelBorderColorB = nil, nil, nil
-        g.hlDispelColorR, g.hlDispelColorG, g.hlDispelColorB = nil, nil, nil
-        g.hlDispelColorMode = nil
-        for _, key in ipairs({ "Magic", "Curse", "Disease", "Poison", "Bleed" }) do
-            local prefix = "dispelType" .. key
-            g[prefix .. "R"], g[prefix .. "G"], g[prefix .. "B"] = nil, nil, nil
-        end
-        ApplyColors("MSUF_ASSISTANT_RESET_DISPEL_COLORS")
-        return true, "Done. Dispel colors reset."
-    end,
-})
-
-Registry:RegisterAction({
     key = "reset_castbar_colors",
     label = "Reset Cast Bar Colors",
     type = "color",

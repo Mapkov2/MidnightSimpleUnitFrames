@@ -40,7 +40,39 @@ Audit.ignore = Audit.ignore or {
         version = true,
         migrated = true,
     },
+    -- Editor/preview runtime state and keys owned by curated assistant
+    -- actions: generating settings for these would shadow the actions
+    -- ("set global font color to yellow" is the set_global_font_color action).
+    general = {
+        bossPreviewEnabled = true,
+        editModeSnapToGrid = true,
+        fontColor = true,
+    },
+    -- Legacy flat mirrors copied from unit-frame fields into the group scopes;
+    -- the canonical group settings are nameShortenEnabled, powerHeight, and
+    -- the nested auras.buff/debuff tables that curated registrations control.
+    gf_party = { auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true },
+    gf_raid = { auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true },
+    gf_mythicraid = { auraIconSize = true, auraMaxIcons = true, powerBarHeight = true, shortenNames = true },
 }
+
+-- Coverage keys are compared in a normalized form as a fallback so naming
+-- variants of the same DB field ("barBackgroundTexture" vs "barBgTexture",
+-- "override" under fontScope vs "fontOverride") do not read as gaps.
+local function NormalizeCoverageKey(key)
+    key = tostring(key or ""):lower():gsub("[^%w]", "")
+    return (key:gsub("background", "bg"))
+end
+Audit.NormalizeCoverageKey = NormalizeCoverageKey
+
+local function IsCoveredKey(coveredSet, key)
+    if type(coveredSet) ~= "table" then return nil end
+    local direct = coveredSet[key]
+    if direct then return direct end
+    local norm = coveredSet._norm
+    return norm and norm[NormalizeCoverageKey(key)] or nil
+end
+Audit.IsCoveredKey = IsCoveredKey
 
 local function IsIgnored(scope, key)
     if type(key) ~= "string" or key == "" then return true end
@@ -88,6 +120,22 @@ local function SettingScope(setting)
     if prefix and IsValidScope(prefix) then
         out[#out + 1] = { scope = prefix, dbKey = rest }
     end
+    -- Three-segment keys ("fontScope.focus.npcNameRed", "barScope.player.X")
+    -- wrap a per-scope DB key in a domain prefix. Treat the middle segment as
+    -- the scope so these hand-written settings mark their DB keys covered and
+    -- AutoCoverage never generates duplicates for them. The domain word is
+    -- also prepended as a normalized variant because the raw DB key often
+    -- carries it ("fontScope.focus.override" stores db.focus.fontOverride).
+    local domainSeg, midScope, midKey = key:match("^([^.]+)%.([^.]+)%.(.+)$")
+    if midScope then
+        if midScope == "tot" then midScope = "targettarget" end
+        if IsValidScope(midScope) and not midKey:find(".", 1, true) then
+            local norms = { NormalizeCoverageKey(midKey) }
+            local domain = domainSeg:match("^(%a+)[Ss]cope$")
+            if domain then norms[#norms + 1] = NormalizeCoverageKey(domain .. midKey) end
+            out[#out + 1] = { scope = midScope, dbKey = midKey, norms = norms }
+        end
+    end
     local unit = setting.unit
     local attr = setting.attribute
     if type(unit) == "string" and type(attr) == "string" and attr ~= "" then
@@ -122,12 +170,23 @@ local function BuildCoveredSets()
             else
                 for t = 1, #targets do
                     local target = targets[t]
-                    covered[target.scope] = covered[target.scope] or {}
+                    local scopeSet = covered[target.scope]
+                    if not scopeSet then
+                        scopeSet = { _norm = {} }
+                        covered[target.scope] = scopeSet
+                    end
                     -- Keep the hand-written entry when both cover the same key
                     -- so stale classification can skip generated fallbacks.
-                    local prev = covered[target.scope][target.dbKey]
+                    local prev = scopeSet[target.dbKey]
                     if not prev or (prev.generated and not setting.generated) then
-                        covered[target.scope][target.dbKey] = setting
+                        scopeSet[target.dbKey] = setting
+                    end
+                    local norms = target.norms or { NormalizeCoverageKey(target.dbKey) }
+                    for n = 1, #norms do
+                        local prevNorm = scopeSet._norm[norms[n]]
+                        if not prevNorm or (prevNorm.generated and not setting.generated) then
+                            scopeSet._norm[norms[n]] = setting
+                        end
                     end
                 end
             end
@@ -157,7 +216,7 @@ local function AuditScope(scope, covered)
                 result.nested[#result.nested + 1] = key
             elseif valueType == "boolean" or valueType == "number" or valueType == "string" then
                 result.total = result.total + 1
-                if coveredSet[key] then
+                if IsCoveredKey(coveredSet, key) then
                     result.coveredCount = result.coveredCount + 1
                 else
                     result.gaps[#result.gaps + 1] = { key = key, valueType = valueType, value = value }
@@ -168,7 +227,7 @@ local function AuditScope(scope, covered)
     for dbKey, setting in pairs(coveredSet) do
         -- Generated fallbacks mirror the DB by construction; a missing value
         -- there is just an untouched default, not a stale registration.
-        if db[dbKey] == nil and not (type(setting) == "table" and setting.generated) then
+        if dbKey ~= "_norm" and db[dbKey] == nil and not (type(setting) == "table" and setting.generated) then
             result.stale[#result.stale + 1] = dbKey
         end
     end
@@ -217,7 +276,9 @@ end
 -- closing a gap is an edit, not archaeology.
 -- ---------------------------------------------------------------------------
 local function LabelFromKey(key)
-    local label = key:gsub("(%l)(%u)", "%1 %2"):gsub("(%a)(%d)", "%1 %2"):gsub("_", " ")
+    local label = key:gsub("(%l)(%u)", "%1 %2")
+        :gsub("(%u)(%u%l)", "%1 %2")
+        :gsub("(%a)(%d)", "%1 %2"):gsub("_", " ")
     label = label:gsub("^%l", string.upper)
     return label
 end
@@ -379,7 +440,7 @@ local function AppendGeneratedReport(lines, scope, covered)
     local coveredSet = covered[scope] or {}
     local keys = {}
     for dbKey, setting in pairs(coveredSet) do
-        if type(setting) == "table" and setting.generated then
+        if dbKey ~= "_norm" and type(setting) == "table" and setting.generated then
             keys[#keys + 1] = dbKey
         end
     end

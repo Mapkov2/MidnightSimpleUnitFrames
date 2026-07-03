@@ -228,13 +228,6 @@ P.NON_AURA_DEBUFF_CONTROL_TERMS = P.NON_AURA_DEBUFF_CONTROL_TERMS or {
     "dispellable overlay", "dispellable overlays", "dispellable debuff overlay", "dispellable debuff overlays",
     "dispel health overlay", "dispellable health overlay",
     "health bar dispel overlay", "healthbar dispel overlay",
-    "debuff type color", "debuff type colors", "debuff type colour", "debuff type colours",
-    "dispel color", "dispel colors", "dispel colour", "dispel colours",
-    "magic debuff color", "magic debuff colour", "magic dispel color", "magic dispel colour",
-    "curse debuff color", "curse debuff colour", "curse dispel color", "curse dispel colour",
-    "disease debuff color", "disease debuff colour", "disease dispel color", "disease dispel colour",
-    "poison debuff color", "poison debuff colour", "poison dispel color", "poison dispel colour",
-    "bleed debuff color", "bleed debuff colour", "bleed dispel color", "bleed dispel colour",
 }
 
 local function HasAuraSettingIntent(text)
@@ -4457,70 +4450,6 @@ P.ColorShortcutResponse = function(changes, title, concrete, summary)
     }
 end
 
-local DISPEL_TYPE_COLOR_SPECS = {
-    { key = "Magic", label = "Magic", terms = { "magic" } },
-    { key = "Curse", label = "Curse", terms = { "curse" } },
-    { key = "Disease", label = "Disease", terms = { "disease" } },
-    { key = "Poison", label = "Poison", terms = { "poison" } },
-    { key = "Bleed", label = "Bleed", terms = { "bleed" } },
-}
-
-local function DispelTypeColorSpecForText(text)
-    for i = 1, #DISPEL_TYPE_COLOR_SPECS do
-        local spec = DISPEL_TYPE_COLOR_SPECS[i]
-        if ContainsAny(text, spec.terms) then return spec end
-    end
-    return nil
-end
-
-P.ParseDispelTypeColorShortcut = function(text, raw)
-    if not ContainsAny(text, RegistryPhrases[362]) then return nil end
-    local specificType = DispelTypeColorSpecForText(text)
-    local typeColorIntent = ContainsAny(text, RegistryPhrases[363])
-    local singleDispelIntent = ContainsAny(text, RegistryPhrases[364]) and not ContainsAny(text, RegistryPhrases[365])
-    if not typeColorIntent and not singleDispelIntent then return nil end
-
-    local value, valueLabel = P.ColorShortcutValue(text, raw)
-    if not value then
-        return {
-            kind = "answer",
-            status = "ambiguous",
-            text = "Which color should I use? Examples: 'set magic debuff color blue' or 'set dispel color #33ccff'.",
-            summary = "Asks for a concrete dispel color value.",
-        }
-    end
-
-    local changes = {}
-    if specificType then
-        AddRegisteredChange(changes, "general.hlDispelColorMode", "TYPE")
-        local change = P.BuildColorShortcutChange("general.dispelType" .. specificType.key, value, valueLabel)
-        if change then changes[#changes + 1] = change end
-        return P.ColorShortcutResponse(changes, specificType.label .. " Dispel Color", true, "Sets Dispel Color Mode to per-type colors and changes that debuff-type color.")
-    end
-
-    if typeColorIntent then
-        if not HasAllScopeIntent(text) then
-            return {
-                kind = "answer",
-                status = "ambiguous",
-                text = "Which debuff type color do you mean: Magic, Curse, Disease, Poison, or Bleed? You can also say 'set all debuff type colors blue'.",
-                summary = "Clarifies the debuff type before changing a dispel type color.",
-            }
-        end
-        AddRegisteredChange(changes, "general.hlDispelColorMode", "TYPE")
-        for i = 1, #DISPEL_TYPE_COLOR_SPECS do
-            local change = P.BuildColorShortcutChange("general.dispelType" .. DISPEL_TYPE_COLOR_SPECS[i].key, value, valueLabel)
-            if change then changes[#changes + 1] = change end
-        end
-        return P.ColorShortcutResponse(changes, "Dispel Type Colors", true, "Sets Dispel Color Mode to per-type colors and changes every debuff-type color.")
-    end
-
-    AddRegisteredChange(changes, "general.hlDispelColorMode", "SINGLE")
-    local change = P.BuildColorShortcutChange("general.hlDispelColor", value, valueLabel)
-    if change then changes[#changes + 1] = change end
-    return P.ColorShortcutResponse(changes, "Dispel Color", true, "Sets Dispel Color Mode to single color and changes the shared dispel color.")
-end
-
 P.BuildCastbarColorChoices = function(keys, value, valueLabel)
     local changes = {}
     for i = 1, #(keys or {}) do
@@ -5015,7 +4944,6 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or ParseUnitTextBooleanDetailShortcut(text)
         or ParseUnitStatusDetailShortcut(text)
         or ParseUnitCoreBooleanShortcut(text)
-        or P.ParseDispelTypeColorShortcut(text, raw)
         or P.ParseCastbarColorShortcut(text, raw)
         or P.ParseInterruptReadyRegistryShortcut(text, raw)
         or P.ParseUnitStatusSymbolRegistryShortcut(text)

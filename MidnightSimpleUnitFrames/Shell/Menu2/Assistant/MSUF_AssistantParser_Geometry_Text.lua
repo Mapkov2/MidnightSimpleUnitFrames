@@ -774,7 +774,7 @@ function A._AddTextSlotVisibilityChange(out, frameType, unitOrScope, tab)
     if frameType == "group" then
         key = "gf_" .. tostring(A._TextGroupScopeName(unitOrScope)) .. "." .. (tab == "hp" and "showHPText" or "showPowerText")
     else
-        key = tostring(unitOrScope) .. "." .. (tab == "hp" and "showHP" or "showPower")
+        key = tostring(unitOrScope) .. "." .. (tab == "hp" and "showHP" or "showPowerText")
     end
     local setting = Registry and Registry:GetSetting(key)
     if not setting then return end

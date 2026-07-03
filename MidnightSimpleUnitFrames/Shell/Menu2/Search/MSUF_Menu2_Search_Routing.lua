@@ -664,7 +664,6 @@ colors_appearance=unitframe global coloring|appearance|dark mode
 colors_unit=unitframe colors|unit frame colors|reaction color
 colors_npc_type=npc type colors|npc color
 colors_bar_colors=bar colors|health color|hp color
-colors_dispel=dispel|magic color|curse color|poison color|disease color
 colors_castbar=castbar colors|castbar color|spell color
 colors_highlight=mouseover highlight|hover highlight
 colors_gameplay=gameplay|crosshair|target sound

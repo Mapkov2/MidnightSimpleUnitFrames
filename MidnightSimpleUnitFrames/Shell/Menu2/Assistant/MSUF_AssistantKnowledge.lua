@@ -1836,7 +1836,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain", "debuff" })
     then
         return {
-            text = "Dispel help\nA dispel removes certain debuffs from friendly units or buffs from enemies, depending on your class and spell. In MSUF, dispel-related visibility lives in aura filters, debuff type colors, dispel borders, group status and indicators, and group health overlays.\nExamples: show only dispellable debuffs; open aura filters; test dispel border; set magic debuff color blue; open group status and indicators.\nYou can ask: Open Aura Filters | Open Group Status & Indicators | Open Colors",
+            text = "Dispel help\nA dispel removes certain debuffs from friendly units or buffs from enemies, depending on your class and spell. In MSUF, dispel-related visibility lives in aura filters, dispel borders, group status and indicators, and group health overlays.\nExamples: show only dispellable debuffs; open aura filters; test dispel border; open group status and indicators.\nYou can ask: Open Aura Filters | Open Group Status & Indicators | Open Group Auras",
             status = "applied",
             summary = "Assistant dispel help",
         }

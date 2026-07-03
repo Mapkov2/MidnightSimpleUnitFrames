@@ -47,8 +47,17 @@ local function AddIndexAlias(index, setting, alias, minTokens)
     if count < minTokens then return end
     if count == 0 or count > MAX_EXACT_ALIAS_TOKENS then return end
     index.byLength[count] = index.byLength[count] or {}
-    index.byLength[count][alias] = index.byLength[count][alias] or {}
-    index.byLength[count][alias][#index.byLength[count][alias] + 1] = setting
+    local bucket = index.byLength[count][alias]
+    if not bucket then
+        bucket = {}
+        index.byLength[count][alias] = bucket
+    end
+    -- Distinct alias spellings can normalize to the same phrase ("colour" ->
+    -- "color"); keep each setting once per bucket so uniqueness checks hold.
+    for i = 1, #bucket do
+        if bucket[i] == setting then return end
+    end
+    bucket[#bucket + 1] = setting
     for i = 1, #tokens do
         local token = tokens[i]
         if not COMMON_EXACT_ALIAS_TOKENS[token] then index.triggerTokens[token] = true end
@@ -129,9 +138,9 @@ local function HasExactAliasBulkScope(text)
         or text:find("group debuffs", 1, true) ~= nil
 end
 
-local function AddMatches(out, seen, index, tokens)
+local function AddMatches(out, seen, index, tokens, minLen)
     local maxLen = math.min(index.maxTokens or 0, #tokens, MAX_EXACT_ALIAS_TOKENS)
-    for len = maxLen, 1, -1 do
+    for len = maxLen, math.max(1, tonumber(minLen) or 1), -1 do
         local bucket = index.byLength and index.byLength[len]
         if bucket then
             for startIndex = 1, (#tokens - len + 1) do
@@ -151,6 +160,121 @@ local function AddMatches(out, seen, index, tokens)
         if #out > 0 then return len end
     end
     return nil
+end
+
+-- Full-phrase pre-pass support: the priority call from A.Parse only fires when
+-- the WHOLE command (minus a leading command verb and a trailing "to <value>")
+-- equals exactly one indexed alias. Floating n-gram windows are far too eager
+-- for a stage that runs before the topical fast paths.
+local COMMAND_VERB_TOKENS = {
+    set = true, change = true, make = true, turn = true, toggle = true,
+    enable = true, disable = true, show = true, hide = true, use = true,
+    put = true, switch = true, adjust = true,
+}
+local POSITIVE_VERBS = { enable = true, show = true }
+local NEGATIVE_VERBS = { disable = true, hide = true }
+
+local function SubjectPhrase(tokens)
+    local i = 1
+    local boolFromVerb
+    while tokens[i] and COMMAND_VERB_TOKENS[tokens[i]] do
+        if POSITIVE_VERBS[tokens[i]] then boolFromVerb = true end
+        if NEGATIVE_VERBS[tokens[i]] then boolFromVerb = false end
+        i = i + 1
+    end
+    if i == 1 then return nil end
+    if tokens[i] == "on" then
+        boolFromVerb = true
+        i = i + 1
+    elseif tokens[i] == "off" then
+        boolFromVerb = false
+        i = i + 1
+    end
+    local j = #tokens
+    -- Boolean commands carry no value, so "to" belongs to the option name
+    -- ("detached power bar anchor to class power"); only cut a value tail for
+    -- set-style commands.
+    if boolFromVerb == nil then
+        local lastTo
+        for k = i + 1, #tokens - 1 do
+            if tokens[k] == "to" then lastTo = k end
+        end
+        if lastTo then j = lastTo - 1 end
+    end
+    if j < i then return nil end
+    return table.concat(tokens, " ", i, j), (j - i + 1), boolFromVerb
+end
+
+-- Action aliases outrank the pre-pass: in the regular pipeline the action
+-- alias shortcut runs before the setting exact-alias stage, and the pre-pass
+-- must not invert that.
+local function ActionAliasSet()
+    local actions = Registry and Registry.AllActions and Registry:AllActions() or {}
+    if P._exactActionAliasSet and P._exactActionAliasCount == #actions then
+        return P._exactActionAliasSet
+    end
+    local set = {}
+    for i = 1, #actions do
+        local action = actions[i]
+        if type(action) == "table" then
+            local lists = { action.aliases, action.exactAliases }
+            for l = 1, 2 do
+                local list = lists[l]
+                for j = 1, #(list or {}) do
+                    local norm = Normalize(list[j])
+                    if norm ~= "" then set[norm] = true end
+                end
+            end
+        end
+    end
+    P._exactActionAliasSet = set
+    P._exactActionAliasCount = #actions
+    return set
+end
+
+-- Registration domains can register the same feature twice (e.g.
+-- "gf_party.dispelColorMode" and "barScope.gf_party.dispelColorMode"). When
+-- every hit shares the same attribute and effective scope, the hits are
+-- equivalent and the canonical two-segment key wins deterministically.
+local function ReduceEquivalentHits(hits)
+    local function normText(value)
+        value = tostring(value or ""):lower():gsub("[^%w]", "")
+        return (value:gsub("background", "bg"))
+    end
+    local function keyParts(setting)
+        local key = tostring(setting.key or "")
+        local midScope = key:match("^[^.]+%.([^.]+)%.")
+        local firstSeg = key:match("^([^.]+)%.")
+        return midScope or firstSeg or key, select(2, key:gsub("%.", ""))
+    end
+    local baseScope = keyParts(hits[1])
+    local baseAttr = normText(hits[1].attribute)
+    if baseAttr == "" then return nil end
+    local best, bestDots
+    for i = 1, #hits do
+        local setting = hits[i]
+        local scope, dots = keyParts(setting)
+        if scope ~= baseScope or normText(setting.attribute) ~= baseAttr then return nil end
+        if not best or dots < bestDots then
+            best, bestDots = setting, dots
+        end
+    end
+    return best
+end
+
+local function FullPhraseMatch(index, tokens, minTokens)
+    local subject, count, boolFromVerb = SubjectPhrase(tokens)
+    if not subject or count < (tonumber(minTokens) or 4) then return nil end
+    local bucket = index.byLength and index.byLength[count]
+    local hits = bucket and bucket[subject]
+    if not hits or #hits == 0 then return nil end
+    if ActionAliasSet()[subject] then return nil end
+    local setting = hits[1]
+    if #hits > 1 then
+        setting = ReduceEquivalentHits(hits)
+        if not setting then return nil end
+    end
+    return setting, subject, boolFromVerb
 end
 
 local function GuardedSettingResponse(setting, text, raw)
@@ -224,20 +348,59 @@ local function AddExactAliasChange(changes, seenKeys, setting, value, relativeDe
     end
 end
 
-function P.ParseRegistryExactAliasShortcut(text, raw)
+function P.ParseRegistryExactAliasShortcut(text, raw, opts)
     local allSettings = Registry and Registry:AllSettings() or {}
     if #allSettings == 0 then return nil end
 
     local index = EnsureIndex(allSettings)
     if (index.maxTokens or 0) <= 0 then return nil end
 
+    -- opts.minTokens: only accept matches of at least this many tokens.
+    -- opts.fullPhrase: priority pre-pass mode used by A.Parse. The command
+    -- (minus leading verb and trailing "to <value>") must equal exactly one
+    -- indexed alias; anything looser defers to the topical fast paths.
+    local minTokens = type(opts) == "table" and tonumber(opts.minTokens) or nil
+    local fullPhrase = type(opts) == "table" and opts.fullPhrase == true
+
     local tokens = Tokens(text)
     if not HasTriggerToken(index, tokens) then return nil end
 
     local matches, seen = {}, {}
-    AddMatches(matches, seen, index, tokens)
-    local relation = AliasRelationText(text)
-    if relation ~= text then AddMatches(matches, seen, index, Tokens(relation)) end
+    local forcedBooleanValue
+    if fullPhrase then
+        local setting, subject, boolFromVerb = FullPhraseMatch(index, tokens, minTokens)
+        if not setting then return nil end
+        -- Hand-written settings often have dedicated parsers with richer
+        -- value handling; only claim them when value parsing is trivially
+        -- safe: booleans, numbers, and plain enum words. Pipe-styled filter
+        -- values ("HELPFUL|PLAYER") and free strings stay on their dedicated
+        -- routes. Generated settings have no dedicated parser, so the
+        -- pre-pass is their only path.
+        if not setting.generated and setting.type ~= "boolean" and setting.type ~= "number" then
+            if setting.type ~= "enum" or text:find("|", 1, true) then return nil end
+        end
+        matches[1] = { setting = setting, score = #Compact(subject) }
+        seen[setting] = true
+        if setting.type == "boolean" and boolFromVerb ~= nil then
+            -- When the stored flag is inverted relative to the spoken feature
+            -- ("class resource when full" -> classPowerHideWhenFull), "turn on"
+            -- means show the feature, so flip the verb-derived value. Only
+            -- applies when the negation word is absent from the alias itself.
+            local hay = (tostring(setting.attribute or "") .. " " .. tostring(setting.label or "")):lower()
+            local subjectText = " " .. subject .. " "
+            for word in ("hide hidden disable disabled suppress"):gmatch("%S+") do
+                if hay:find(word, 1, true) and not subjectText:find(" " .. word .. " ", 1, true) then
+                    boolFromVerb = not boolFromVerb
+                    break
+                end
+            end
+            forcedBooleanValue = boolFromVerb
+        end
+    else
+        AddMatches(matches, seen, index, tokens, minTokens)
+        local relation = AliasRelationText(text)
+        if relation ~= text then AddMatches(matches, seen, index, Tokens(relation), minTokens) end
+    end
     if #matches == 0 then return nil end
 
     local bestScore = 0
@@ -257,7 +420,16 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
                 if guarded then return guarded end
                 local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text) or nil
                 local value
-                if relativeDelta == nil then value = ValueForRegistrySetting(setting, text, raw) end
+                if relativeDelta == nil then
+                    -- Full-phrase mode derives booleans from the command verb
+                    -- ("turn on X no ellipsis" is true even though the alias
+                    -- itself contains a negation word).
+                    if forcedBooleanValue ~= nil and setting.type == "boolean" then
+                        value = forcedBooleanValue
+                    else
+                        value = ValueForRegistrySetting(setting, text, raw)
+                    end
+                end
                 if value ~= nil or relativeDelta ~= nil then
                     AddExactAliasChange(changes, seenChangeKeys, setting, value, relativeDelta, match.score, text)
                 elseif setting.type ~= "boolean" then
@@ -267,7 +439,12 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
         end
     end
 
-    if #changes == 0 then return MissingValueResponse and MissingValueResponse(missingValue, raw) or nil end
+    if #changes == 0 then
+        -- Pre-pass mode must stay silent so the sentence keeps flowing through
+        -- the regular pipeline instead of dead-ending in a value question.
+        if fullPhrase then return nil end
+        return MissingValueResponse and MissingValueResponse(missingValue, raw) or nil
+    end
     local primaryChangeCount = 0
     for i = 1, #changes do
         if not changes[i].companion then primaryChangeCount = primaryChangeCount + 1 end

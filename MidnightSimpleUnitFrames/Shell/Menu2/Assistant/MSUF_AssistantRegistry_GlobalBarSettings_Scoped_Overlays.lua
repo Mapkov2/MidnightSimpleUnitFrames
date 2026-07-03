@@ -38,6 +38,8 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
     local ABSORB_MODE_ALIASES = ctx.ABSORB_MODE_ALIASES
     local DISPEL_TRIGGER_VALUES = ctx.DISPEL_TRIGGER_VALUES
     local DISPEL_TRIGGER_ALIASES = ctx.DISPEL_TRIGGER_ALIASES
+    local DISPEL_COLOR_MODE_VALUES = ctx.DISPEL_COLOR_MODE_VALUES
+    local DISPEL_COLOR_MODE_ALIASES = ctx.DISPEL_COLOR_MODE_ALIASES
     local UNIT_DISPEL_TRIGGER_VALUES = ctx.UNIT_DISPEL_TRIGGER_VALUES
     local UNIT_DISPEL_TRIGGER_ALIASES = ctx.UNIT_DISPEL_TRIGGER_ALIASES
     local UNIT_DISPEL_STYLE_VALUES = ctx.UNIT_DISPEL_STYLE_VALUES
@@ -175,6 +177,16 @@ function A.GlobalBarRegistry.RegisterScopedOverlaySettings(ctx, scope)
         valueAliases = DISPEL_TRIGGER_ALIASES,
         apply = ApplyDispelPurgeBorder,
         reason = "MSUF_ASSISTANT_SCOPED_DISPEL_TRIGGER",
+    })
+    RegisterScopedSetting("barScope", scope, "dispelColorMode", "dispelColorMode", "Dispel Color Mode", "enum", "TYPE", GlobalScopeAliases(scope, {
+        "dispel color mode", "dispel color", "dispel border color", "dispel overlay color",
+        "debuff type color", "debuff type coloring", "per debuff type", "unified dispel color",
+    }), {
+        flag = "hlOverride",
+        values = DISPEL_COLOR_MODE_VALUES,
+        valueAliases = DISPEL_COLOR_MODE_ALIASES,
+        apply = ApplyDispelPurgeBorder,
+        reason = "MSUF_ASSISTANT_SCOPED_DISPEL_COLOR_MODE",
     })
     RegisterScopedMappedEnum("barScope", scope, "purgeOutlineMode", "purgeBorder", "Purge Border", "off", ON_OFF_VALUES, ON_OFF_STORAGE, GlobalScopeAliases(scope, {
         "purge border", "purge outline", "purgeable border",

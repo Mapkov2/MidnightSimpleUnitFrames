@@ -105,15 +105,6 @@ function A.GroupFramesRegistry.RegisterStatusIconSettings(ctx, scope)
         AddGroupStatusIconAliases(aliases, scope, spec, "draw layer")
         RegisterGroupNumber(scope, "statusIcon" .. spec.value .. "Layer", spec.layer, spec.label .. " Layer", spec.defaultLayer, 0, 30, 1, "visual", aliases)
 
-        if spec.iconStyle and IsRoleStatusIconSpec(spec) then
-            aliases = {}
-            AddGroupStatusIconAliases(aliases, scope, spec, "role icon style")
-            AddGroupStatusIconAliases(aliases, scope, spec, "indicator style")
-            AddGroupStatusIconAliases(aliases, scope, spec, "icon design")
-            AddGroupStatusIconAliases(aliases, scope, spec, "icon pack")
-            AddGroupStatusIconAliases(aliases, scope, spec, "style")
-            RegisterGroupEnum(scope, "statusIcon" .. spec.value .. "Style", spec.iconStyle, StatusIconStyleLabel(spec), "DEFAULT", GROUP_STATUS_ICON_PACK_VALUES, GROUP_STATUS_ICON_PACK_ALIASES, "visual", aliases)
-        end
     end
 end
 
