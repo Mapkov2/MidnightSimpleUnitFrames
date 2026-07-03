@@ -71,6 +71,12 @@ local function PrefixForUnit(unit)
     return nil
 end
 
+local function CastbarFrameInset(g)
+    local thickness = tonumber(g and g.castbarOutlineThickness)
+    if thickness == nil then thickness = 1 end
+    return thickness > 0 and 1 or 0
+end
+
 local function Num(value, fallback)
     value = tonumber(value)
     if value == nil then return fallback end
@@ -285,7 +291,16 @@ local function ApplyIconBorder(frame, host, g, prefix)
         return
     end
     local border = EnsureIconBorder(frame)
-    local thickness = style == "CASTBAR" and Clamp(g.castbarOutlineThickness or 1, 1, 8) or 1
+    local thickness = 1
+    if style == "CASTBAR" then
+        thickness = tonumber(g.castbarOutlineThickness)
+        if thickness == nil then thickness = 1 end
+        if thickness <= 0 then
+            HideIconBorder(frame)
+            return
+        end
+        thickness = Clamp(thickness, 1, 8)
+    end
     local r, green, b, a = 0, 0, 0, 0.95
     if style == "CASTBAR" then
         r = Num(g.castbarBorderR, 0)
@@ -376,11 +391,12 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     if leftInset + rightInset > barW - 8 then
         leftInset, rightInset = 0, 0
     end
+    local frameInset = CastbarFrameInset(g)
     statusBar:ClearAllPoints()
-    statusBar:SetPoint("TOPLEFT", frame, "TOPLEFT", leftInset, -1)
-    statusBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -rightInset, 1)
+    statusBar:SetPoint("TOPLEFT", frame, "TOPLEFT", leftInset + frameInset, -frameInset)
+    statusBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(rightInset + frameInset), frameInset)
     if statusBar.SetSize then
-        statusBar:SetSize(math.max(1, barW - leftInset - rightInset), math.max(1, barH - 2))
+        statusBar:SetSize(math.max(1, barW - leftInset - rightInset - (frameInset * 2)), math.max(1, barH - (frameInset * 2)))
     end
     if frame.backgroundBar and frame.backgroundBar.SetAllPoints then
         frame.backgroundBar:ClearAllPoints()

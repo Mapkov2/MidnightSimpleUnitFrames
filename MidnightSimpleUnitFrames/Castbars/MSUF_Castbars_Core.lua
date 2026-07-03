@@ -52,6 +52,12 @@ local function IsKnownAsset(path)
     return true
 end
 
+local function CastbarFrameInset(general)
+    local thickness = tonumber(general and general.castbarOutlineThickness)
+    if thickness == nil then thickness = 1 end
+    return thickness > 0 and 1 or 0
+end
+
 local function ResolveFontPath(path, size, flags)
     local resolver = _G.MSUF_ResolveFontPath
     if type(resolver) == "function" then
@@ -757,15 +763,16 @@ local function ApplyCastbarVisualFrame(frame, context)
             if icon.SetDrawLayer then icon:SetDrawLayer("OVERLAY", 7) end
         end
 
+        local frameInset = CastbarFrameInset(general)
         statusBar:ClearAllPoints()
         if showIcon and icon and not hasDetachedIconOffset then
             statusBar:SetPoint("LEFT", frame, "LEFT", iconSize + 1, 0)
-            statusBar:SetWidth(width - (iconSize + 1))
+            statusBar:SetWidth(math_max(1, width - (iconSize + 1) - frameInset))
         else
-            statusBar:SetPoint("LEFT", frame, "LEFT", 0, 0)
-            statusBar:SetWidth(width)
+            statusBar:SetPoint("LEFT", frame, "LEFT", frameInset, 0)
+            statusBar:SetWidth(math_max(1, width - (frameInset * 2)))
         end
-        statusBar:SetHeight(height - 2)
+        statusBar:SetHeight(math_max(1, height - (frameInset * 2)))
         if backgroundBar then
             backgroundBar:ClearAllPoints()
             backgroundBar:SetAllPoints(statusBar)

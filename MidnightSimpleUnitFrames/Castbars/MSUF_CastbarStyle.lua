@@ -70,13 +70,60 @@ end
 
 --- Outlines are built from simple textures so all castbar variants can share
 --- the same border behavior without depending on BackdropTemplate.
+local function EnsureOutlineHost(frame)
+    local host = frame and frame._msufOutlineHost
+    if not host then
+        host = CreateFrame("Frame", nil, frame)
+        host:EnableMouse(false)
+        frame._msufOutlineHost = host
+    end
+
+    if host.SetFrameLevel then
+        local baseLevel = 0
+        if frame.statusBar and frame.statusBar.GetFrameLevel then
+            baseLevel = frame.statusBar:GetFrameLevel() or 0
+        elseif frame.GetFrameLevel then
+            baseLevel = frame:GetFrameLevel() or 0
+        end
+        local level = baseLevel + 20
+        if host._msufOutlineHostLevel ~= level then
+            host:SetFrameLevel(level)
+            host._msufOutlineHostLevel = level
+        end
+    end
+
+    return host
+end
+
 local function EnsureOutline(frame)
-    if not frame or frame._msufOutline then
+    if not frame then
         return
     end
 
+    local host = EnsureOutlineHost(frame)
+    if not host then
+        return
+    end
+
+    if frame._msufOutline and frame._msufOutline._host == host then
+        return
+    end
+
+    local old = frame._msufOutline
+    if old then
+        if old.top then old.top:Hide() end
+        if old.bottom then old.bottom:Hide() end
+        if old.left then old.left:Hide() end
+        if old.right then old.right:Hide() end
+        frame._msufOutlineT = nil
+        frame._msufOutlineR = nil
+        frame._msufOutlineG = nil
+        frame._msufOutlineB = nil
+        frame._msufOutlineA = nil
+    end
+
     local function CreateEdge()
-        local texture = frame:CreateTexture(nil, "OVERLAY")
+        local texture = host:CreateTexture(nil, "OVERLAY")
         texture:SetColorTexture(1, 1, 1, 1)
         texture:Hide()
         return texture
@@ -87,6 +134,7 @@ local function EnsureOutline(frame)
         bottom = CreateEdge(),
         left = CreateEdge(),
         right = CreateEdge(),
+        _host = host,
     }
 end
 
@@ -98,6 +146,10 @@ function Style:ApplyCastbarOutline(frame, force)
     EnsureOutline(frame)
 
     local outline = frame._msufOutline
+    local host = outline and outline._host
+    if not (outline and host) then
+        return
+    end
     local general = GeneralDB()
     local thickness = math.max(0, math.min(math.floor((tonumber(general.castbarOutlineThickness) or 1) + 0.5), 12))
 
@@ -106,6 +158,7 @@ function Style:ApplyCastbarOutline(frame, force)
         outline.bottom:Hide()
         outline.left:Hide()
         outline.right:Hide()
+        host:Hide()
         frame._msufOutlineT = 0
         return
     end
@@ -116,24 +169,28 @@ function Style:ApplyCastbarOutline(frame, force)
     local alpha = tonumber(general.castbarBorderA) or 1
 
     if force or frame._msufOutlineT ~= thickness then
+        host:ClearAllPoints()
+        host:SetPoint("TOPLEFT", frame, "TOPLEFT", -thickness, thickness)
+        host:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", thickness, -thickness)
+
         outline.top:ClearAllPoints()
-        outline.top:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, thickness)
-        outline.top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, thickness)
+        outline.top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+        outline.top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
         outline.top:SetHeight(thickness)
 
         outline.bottom:ClearAllPoints()
-        outline.bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, -thickness)
-        outline.bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -thickness)
+        outline.bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+        outline.bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
         outline.bottom:SetHeight(thickness)
 
         outline.left:ClearAllPoints()
-        outline.left:SetPoint("TOPLEFT", frame, "TOPLEFT", -thickness, thickness)
-        outline.left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -thickness, -thickness)
+        outline.left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+        outline.left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
         outline.left:SetWidth(thickness)
 
         outline.right:ClearAllPoints()
-        outline.right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", thickness, thickness)
-        outline.right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", thickness, -thickness)
+        outline.right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+        outline.right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
         outline.right:SetWidth(thickness)
 
         frame._msufOutlineT = thickness
@@ -160,6 +217,7 @@ function Style:ApplyCastbarOutline(frame, force)
     outline.bottom:Show()
     outline.left:Show()
     outline.right:Show()
+    host:Show()
 end
 
 function Style:ApplyCastbarOutlineToAll(force)
