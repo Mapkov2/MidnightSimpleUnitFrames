@@ -477,27 +477,30 @@ do
         seen[value] = nil
         return out
     end
-    local function TryEncodeCompactPayload(E, tbl)
+    local function TryEncodeCompactPayload(E, tbl, prefix)
         local ok1, bin = pcall(E.SerializeCBOR, tbl)
         if not ok1 or type(bin) ~= "string" then  return nil end
         --- Prefer smaller strings when compression exists.
         local payload = TryBlizzardCompress(E, bin) or bin
         local ok2, b64 = pcall(E.EncodeBase64, payload)
         if not ok2 or type(b64) ~= "string" then  return nil end
-        return "MSUF4:" .. b64
+        return tostring(prefix or "MSUF4") .. ":" .. b64
     end
-    local function EncodeCompactTable(tbl)
+    local function EncodeCompactTable(tbl, prefix)
         local E = GetEncodingUtil()
         if not E then  return nil end
-        local compact = TryEncodeCompactPayload(E, tbl)
+        local compact = TryEncodeCompactPayload(E, tbl, prefix)
         if compact then  return compact end
         --- Some dirty runtime profiles can contain transient values that cannot
         --- be CBOR-encoded. Drop those the same way the Lua fallback would.
         local safe = CompactSerializableCopy(tbl)
         if safe then
-            return TryEncodeCompactPayload(E, safe)
+            return TryEncodeCompactPayload(E, safe, prefix)
         end
         return nil
+    end
+    local function EncodeCompactTableMSUF3(tbl)
+        return EncodeCompactTable(tbl, "MSUF3")
     end
     local function TryDecodeCompactString(str)
         if type(str) ~= "string" then  return nil end
@@ -562,6 +565,7 @@ do
         end
      end
     ExportPublic("MSUF_EncodeCompactTable", _G.MSUF_EncodeCompactTable or EncodeCompactTable)
+    ExportPublic("MSUF_EncodeCompactTableMSUF3", EncodeCompactTableMSUF3)
     ExportPublic("MSUF_TryDecodeCompactString", _G.MSUF_TryDecodeCompactString or TryDecodeCompactString)
 end
 
@@ -2582,6 +2586,256 @@ local function MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload)
     return payload
 end
 
+local MSUF_PROFILEIO_WAGO_SCHEMA = 1
+local MSUF_PROFILEIO_WAGO_FULL_KEY = "msuf6"
+local MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS = {
+    auras2 = true,
+    bars = true,
+    boss = true,
+    classColors = true,
+    classPowerPerSpec = true,
+    classPowerPresets = true,
+    focus = true,
+    gameplay = true,
+    general = true,
+    gf_mythicraid = true,
+    gf_party = true,
+    gf_raid = true,
+    group = true,
+    groupFrames = true,
+    groupframes = true,
+    npcColors = true,
+    party = true,
+    pet = true,
+    player = true,
+    shortenNames = true,
+    target = true,
+    targettarget = true,
+    tot = true,
+}
+local MSUF_PROFILEIO_WAGO_AURA_DROP_KEYS = {
+    buffGroupOffsetX = true,
+    buffGroupOffsetY = true,
+    debuffGroupOffsetX = true,
+    debuffGroupOffsetY = true,
+    buffGroupIconSize = true,
+    debuffGroupIconSize = true,
+    buffGrowthX = true,
+    buffGrowthY = true,
+    debuffGrowthX = true,
+    debuffGrowthY = true,
+    showCooldownText = true,
+    cooldownSwipeReverse = true,
+    showDurationBar = true,
+    durationBarHeight = true,
+    durationBarDisplay = true,
+    durationBarPosition = true,
+    durationBarDirection = true,
+    stackTextOffsetX = true,
+    stackTextOffsetY = true,
+    cooldownTextAnchor = true,
+    cooldownTextOffsetX = true,
+    cooldownTextOffsetY = true,
+    cooldownDecimalSeconds = true,
+    buffAnchor = true,
+    debuffAnchor = true,
+    buffLayer = true,
+    debuffLayer = true,
+    debuffTypeBorderMode = true,
+    useDebuffTypeBorders = true,
+}
+
+local function MSUF_ProfileIO_CopyIfMissingValue(tbl, toKey, ...)
+    if type(tbl) ~= "table" or tbl[toKey] ~= nil then return end
+    for i = 1, select("#", ...) do
+        local fromKey = select(i, ...)
+        if tbl[fromKey] ~= nil then
+            tbl[toKey] = MSUF_DeepCopy(tbl[fromKey])
+            return
+        end
+    end
+end
+
+local function MSUF_ProfileIO_CopyMissingFrom(tbl, defaults)
+    if type(tbl) ~= "table" or type(defaults) ~= "table" then return end
+    for key, value in pairs(defaults) do
+        if tbl[key] == nil then
+            tbl[key] = MSUF_DeepCopy(value)
+        end
+    end
+end
+
+local function MSUF_ProfileIO_StripPrivateMSUFKeys(tbl, seen)
+    if type(tbl) ~= "table" then return end
+    seen = seen or {}
+    if seen[tbl] then return end
+    seen[tbl] = true
+    for key, value in pairs(tbl) do
+        if type(key) == "string" and key:match("^_msuf") then
+            tbl[key] = nil
+        elseif type(value) == "table" then
+            MSUF_ProfileIO_StripPrivateMSUFKeys(value, seen)
+        end
+    end
+end
+
+local function MSUF_ProfileIO_NormalizeAuraFilterForWago(filter)
+    if type(filter) ~= "table" then return end
+    filter.onlyImportantAuras = nil
+    local function normalizeGroup(group)
+        if type(group) ~= "table" then return end
+        group.includeNameplateOnly = nil
+        group.onlyImportant = nil
+        group.cancelable = nil
+        group.notCancelable = nil
+        group.externalDefensive = nil
+        group.bigDefensive = nil
+        group.exclusive = nil
+        group.crowdControl = nil
+        if group.filterToken == nil or group.filterToken == "IMPORTANT" then
+            group.filterToken = "ALL"
+        end
+    end
+    normalizeGroup(filter.buffs)
+    normalizeGroup(filter.debuffs)
+end
+
+local function MSUF_ProfileIO_NormalizeAuraLayoutForWago(layout, layoutShared)
+    if type(layout) ~= "table" then return end
+    MSUF_ProfileIO_CopyMissingFrom(layout, layoutShared)
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "iconSize", "buffGroupIconSize", "debuffGroupIconSize")
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "buffIconSize", "buffGroupIconSize", "iconSize")
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "debuffIconSize", "debuffGroupIconSize", "iconSize")
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "buffOffsetX", "buffGroupOffsetX", "offsetX")
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "buffOffsetY", "buffGroupOffsetY", "offsetY")
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "debuffOffsetX", "debuffGroupOffsetX", "offsetX")
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "debuffOffsetY", "debuffGroupOffsetY", "offsetY")
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "offsetX", "buffGroupOffsetX", "debuffGroupOffsetX")
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "offsetY", "debuffGroupOffsetY", "buffGroupOffsetY")
+    MSUF_ProfileIO_CopyIfMissingValue(layout, "growth", "buffGrowthX", "debuffGrowthX")
+    if layout.layoutMode == "SEPARATE" then
+        layout.layoutMode = "SINGLE"
+    end
+    for key in pairs(MSUF_PROFILEIO_WAGO_AURA_DROP_KEYS) do
+        layout[key] = nil
+    end
+end
+
+local function MSUF_ProfileIO_NormalizeAurasForWago(auras)
+    if type(auras) ~= "table" then return end
+    MSUF_ProfileIO_StripPrivateMSUFKeys(auras)
+    MSUF_ProfileIO_NormalizeAuraLayoutForWago(auras.shared)
+    MSUF_ProfileIO_NormalizeAuraFilterForWago(auras.shared and auras.shared.filters)
+    if type(auras.perUnit) == "table" then
+        for _, unit in pairs(auras.perUnit) do
+            if type(unit) == "table" then
+                MSUF_ProfileIO_NormalizeAuraLayoutForWago(unit.layout, unit.layoutShared)
+                unit.layoutShared = nil
+                unit.overrideSharedLayout = nil
+                MSUF_ProfileIO_NormalizeAuraFilterForWago(unit.filters)
+            end
+        end
+    end
+end
+
+local function MSUF_ProfileIO_NormalizeGFAuraGroupForWago(auras, groupKey, defaultToken)
+    local group = auras and auras[groupKey]
+    if type(group) ~= "table" then return end
+    if group.filterToken == nil or group.filterToken == "IMPORTANT" then
+        group.filterToken = defaultToken
+    end
+    if type(group.blacklist) == "table" then
+        group.blacklist.spells = nil
+    end
+    group.cooldownSwipeReverse = nil
+end
+
+local function MSUF_ProfileIO_NormalizeGroupFrameForWago(conf)
+    if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
+    local auras = conf.auras
+    if auras.renderer ~= "CUSTOM" and auras.renderer ~= "BLIZZARD" then
+        auras.renderer = "BLIZZARD"
+    end
+    if auras.renderer == nil then auras.renderer = "BLIZZARD" end
+    if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
+    for key, value in pairs(MSUF_GF_BLIZZARD_TYPE_DEFAULTS) do
+        if auras.blizzardTypes[key] == nil then
+            auras.blizzardTypes[key] = value
+        end
+    end
+    if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
+    if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
+    if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
+    if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+    if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
+    auras.blizzardContainerAnchor = "FRAME"
+    auras.blizzardContainerX = 0
+    auras.blizzardContainerY = 0
+    MSUF_ProfileIO_NormalizeGFAuraGroupForWago(auras, "buff", "RAID")
+    MSUF_ProfileIO_NormalizeGFAuraGroupForWago(auras, "debuff", "ALL")
+    MSUF_ProfileIO_NormalizeGFAuraGroupForWago(auras, "externals", "RAID")
+end
+
+local function MSUF_ProfileIO_MakeWagoPayload(payload)
+    if type(payload) ~= "table" then return {} end
+    local out = {}
+    for key, value in pairs(payload) do
+        if MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS[key] then
+            out[key] = MSUF_DeepCopy(value)
+        end
+    end
+    if type(payload.auras3) == "table" then
+        out.auras2 = MSUF_DeepCopy(payload.auras3)
+    end
+    out.auras3 = nil
+    out.auras = nil
+    out._msufProfileSchema = nil
+    out._msufLegacyProfileSchema = nil
+    MSUF_ProfileIO_NormalizeAurasForWago(out.auras2)
+    MSUF_ProfileIO_NormalizeGroupFrameForWago(out.gf_party)
+    MSUF_ProfileIO_NormalizeGroupFrameForWago(out.gf_raid)
+    MSUF_ProfileIO_NormalizeGroupFrameForWago(out.gf_mythicraid)
+    return out
+end
+
+local function MSUF_ProfileIO_MakeWagoSnapshot(snapshot)
+    if type(snapshot) ~= "table" or snapshot.kind ~= "all" or type(snapshot.payload) ~= "table" then
+        return snapshot, false
+    end
+    return {
+        addon   = "MSUF",
+        fmt     = 2,
+        schema  = MSUF_PROFILEIO_WAGO_SCHEMA,
+        kind    = "all",
+        profile = snapshot.profile,
+        payload = MSUF_ProfileIO_MakeWagoPayload(snapshot.payload),
+        [MSUF_PROFILEIO_WAGO_FULL_KEY] = {
+            schema  = MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA,
+            kind    = "all",
+            profile = snapshot.profile,
+            payload = MSUF_DeepCopy(snapshot.payload),
+        },
+    }, true
+end
+
+local function MSUF_ProfileIO_SelectWagoFullSnapshot(snapshot)
+    if type(snapshot) ~= "table" then return snapshot end
+    local full = snapshot[MSUF_PROFILEIO_WAGO_FULL_KEY]
+    if type(full) == "table"
+        and tonumber(full.schema) == MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
+        and type(full.payload) == "table" then
+        return {
+            addon   = "MSUF",
+            fmt     = 2,
+            schema  = full.schema,
+            kind    = type(full.kind) == "string" and full.kind or snapshot.kind,
+            profile = type(full.profile) == "string" and full.profile or snapshot.profile,
+            payload = full.payload,
+        }
+    end
+    return snapshot
+end
+
 local function MSUF_CopyGroupFramePayload()
     local payload = {}
     if type(MSUF_DB) ~= "table" then
@@ -2762,6 +3016,7 @@ local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
 end
 local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if not snapshot then  return false, "not a table" end
+    snapshot = MSUF_ProfileIO_SelectWagoFullSnapshot(snapshot)
     local kind = snapshot.kind
     if kind == "groupframes" then
         kind = "groupframe"
@@ -2916,6 +3171,17 @@ function MSUF_ExportSelectionToString(kind)
     local snap = MSUF_SnapshotForKind(kind)
     if not snap then
          return nil
+    end
+    local exportSnap, wagoExport = MSUF_ProfileIO_MakeWagoSnapshot(snap)
+    if wagoExport == true then
+        local enc3 = _G.MSUF_EncodeCompactTableMSUF3
+        if type(enc3) == "function" then
+            local compact = enc3(exportSnap)
+            if compact then
+                 return compact
+            end
+        end
+        return MSUF_SerializeLuaTable(exportSnap)
     end
     local enc = _G.MSUF_EncodeCompactTable
     if type(enc) == "function" then
@@ -4143,6 +4409,7 @@ function MSUF_ImportLegacyFromString(str)
     end
     local function ImportDecodedLegacyTable(tbl)
         if type(tbl) == "table" and tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" then
+            tbl = MSUF_ProfileIO_SelectWagoFullSnapshot(tbl)
             local kind = (tbl.kind == "groupframes") and "groupframe" or tbl.kind
             if kind == "all" then
                 return MSUF_ApplyLegacyTableToActiveProfile(tbl.payload)
@@ -4384,15 +4651,16 @@ function MSUF_ExportExternal(profileKey)
         profile = profileKey,
         payload = MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload),
     }
-    local enc = _G.MSUF_EncodeCompactTable
+    local exportSnap = MSUF_ProfileIO_MakeWagoSnapshot(snap)
+    local enc = _G.MSUF_EncodeCompactTableMSUF3
     if type(enc) == "function" then
-        local compact = enc(snap)
+        local compact = enc(exportSnap)
         if type(compact) == "string" and compact:match("%S") then
              return true, compact
         end
     end
     --- 0-regression fallback (rare): return Lua snapshot.
-    return true, MSUF_SerializeLuaTable(snap)
+    return true, MSUF_SerializeLuaTable(exportSnap)
 end
 function MSUF_ImportExternal(profileString, profileKey)
     MSUF_ProfileIO_ResetImportWarnings()
@@ -4421,6 +4689,7 @@ function MSUF_ImportExternal(profileString, profileKey)
             local tbl = decoded
             --- Snapshot format? (fmt=2)
             if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
+                tbl = MSUF_ProfileIO_SelectWagoFullSnapshot(tbl)
                 --- For external import we treat snapshot.payload as the full profile table when kind == "all".
                 if tbl.kind == "all" then
                     return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl.payload)
@@ -4447,6 +4716,7 @@ function MSUF_ImportExternal(profileString, profileKey)
          return false, "lua decode failed"
     end
     if tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" and type(tbl.kind) == "string" then
+        tbl = MSUF_ProfileIO_SelectWagoFullSnapshot(tbl)
         if tbl.kind == "all" then
             return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl.payload)
         end
