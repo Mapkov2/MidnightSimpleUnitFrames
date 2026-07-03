@@ -83,6 +83,12 @@ local function GeneralDB()
     return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 end
 
+local function CastbarFrameInset(g)
+    local thickness = tonumber(g and g.castbarOutlineThickness)
+    if thickness == nil then thickness = 1 end
+    return thickness > 0 and 1 or 0
+end
+
 local function GetUnitFrames()
     unitFramesCache = _G.MSUF_UnitFrames or unitFramesCache or _G.UnitFrames
     return unitFramesCache
@@ -600,15 +606,20 @@ function MSUF_ApplyPlayerCastbarIconLayout(bar, g, topInset, bottomInset)
     end
 
     -- StatusBar anchoring (only re-anchor when the layout state changes).
-    local layoutKey = (showIcon and icon and not iconDetached) and ("G:" .. iconSize) or "F"
+    local frameInset = CastbarFrameInset(g)
+    if frameInset <= 0 then
+        topInset = 0
+        bottomInset = 0
+    end
+    local layoutKey = "I" .. frameInset .. ":" .. ((showIcon and icon and not iconDetached) and ("G:" .. iconSize) or "F")
     if statusBar._msufPCLayoutKey ~= layoutKey then
         statusBar:ClearAllPoints()
         if showIcon and icon and not iconDetached then
             statusBar:SetPoint("TOPLEFT", bar, "TOPLEFT", iconSize + 1, topInset)
-            statusBar:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, bottomInset)
+            statusBar:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -frameInset, bottomInset)
         else
-            statusBar:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, topInset)
-            statusBar:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, bottomInset)
+            statusBar:SetPoint("TOPLEFT", bar, "TOPLEFT", frameInset, topInset)
+            statusBar:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -frameInset, bottomInset)
         end
         statusBar._msufPCLayoutKey = layoutKey
     end
@@ -618,9 +629,9 @@ function MSUF_ApplyPlayerCastbarIconLayout(bar, g, topInset, bottomInset)
     -- full new width immediately (fixes black bar on CDM sync).
     local barWidth = (bar.GetWidth and bar:GetWidth()) or 250
     if barWidth <= 0 then barWidth = 250 end
-    local sbWidth = (showIcon and icon and not iconDetached) and (barWidth - iconSize - 1) or barWidth
+    local sbWidth = (showIcon and icon and not iconDetached) and (barWidth - iconSize - 1 - frameInset) or (barWidth - (frameInset * 2))
     if sbWidth < 1 then sbWidth = 1 end
-    local sbHeight = height - 2
+    local sbHeight = height - (frameInset * 2)
     if sbHeight < 1 then sbHeight = 1 end
 
     if statusBar._msufPCSbW ~= sbWidth then
