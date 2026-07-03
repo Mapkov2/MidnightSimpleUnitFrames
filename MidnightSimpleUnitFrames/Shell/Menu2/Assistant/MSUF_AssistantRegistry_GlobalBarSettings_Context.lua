@@ -69,8 +69,6 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     local ABSORB_ANCHOR_ALIASES = GlobalBarData.ABSORB_ANCHOR_ALIASES
     local DISPEL_TRIGGER_VALUES = GlobalBarData.DISPEL_TRIGGER_VALUES
     local DISPEL_TRIGGER_ALIASES = GlobalBarData.DISPEL_TRIGGER_ALIASES
-    local DISPEL_COLOR_MODE_VALUES = GlobalBarData.DISPEL_COLOR_MODE_VALUES
-    local DISPEL_COLOR_MODE_ALIASES = GlobalBarData.DISPEL_COLOR_MODE_ALIASES
     local UNIT_DISPEL_TRIGGER_VALUES = GlobalBarData.UNIT_DISPEL_TRIGGER_VALUES
     local UNIT_DISPEL_TRIGGER_ALIASES = GlobalBarData.UNIT_DISPEL_TRIGGER_ALIASES
     local UNIT_DISPEL_STYLE_VALUES = GlobalBarData.UNIT_DISPEL_STYLE_VALUES
@@ -82,7 +80,6 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
     if type(ABSORB_MODE_STORAGE) ~= "table" or type(ABSORB_MODE_VALUES) ~= "table" or type(ABSORB_MODE_ALIASES) ~= "table" then return nil end
     if type(ABSORB_ANCHOR_STORAGE) ~= "table" or type(ABSORB_ANCHOR_VALUES) ~= "table" or type(ABSORB_ANCHOR_ALIASES) ~= "table" then return nil end
     if type(DISPEL_TRIGGER_VALUES) ~= "table" or type(DISPEL_TRIGGER_ALIASES) ~= "table" then return nil end
-    if type(DISPEL_COLOR_MODE_VALUES) ~= "table" or type(DISPEL_COLOR_MODE_ALIASES) ~= "table" then return nil end
     if type(UNIT_DISPEL_TRIGGER_VALUES) ~= "table" or type(UNIT_DISPEL_TRIGGER_ALIASES) ~= "table" then return nil end
     if type(UNIT_DISPEL_STYLE_VALUES) ~= "table" or type(UNIT_DISPEL_STYLE_ALIASES) ~= "table" then return nil end
 
@@ -133,8 +130,6 @@ function A.GlobalBarRegistry.BuildGlobalBarSettingsContext(ctx)
         ABSORB_ANCHOR_ALIASES = ABSORB_ANCHOR_ALIASES,
         DISPEL_TRIGGER_VALUES = DISPEL_TRIGGER_VALUES,
         DISPEL_TRIGGER_ALIASES = DISPEL_TRIGGER_ALIASES,
-        DISPEL_COLOR_MODE_VALUES = DISPEL_COLOR_MODE_VALUES,
-        DISPEL_COLOR_MODE_ALIASES = DISPEL_COLOR_MODE_ALIASES,
         UNIT_DISPEL_TRIGGER_VALUES = UNIT_DISPEL_TRIGGER_VALUES,
         UNIT_DISPEL_TRIGGER_ALIASES = UNIT_DISPEL_TRIGGER_ALIASES,
         UNIT_DISPEL_STYLE_VALUES = UNIT_DISPEL_STYLE_VALUES,

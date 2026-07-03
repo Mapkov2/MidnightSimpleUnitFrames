@@ -831,7 +831,6 @@ local MSUF2_MENU_AUTO_frFR = {
     ["Dispel Glow"] = "Dissiper la lueur",
     ["Dispel Overlay"] = "Dissiper la superposition",
     ["Dispel border"] = "Dissiper la frontière",
-    ["Dispel color shared by Highlight Border and Group Frame Dispel Overlay."] = "Dissipez la couleur partagée par Highlight Border et Group Frame Dispel Overlay.",
     ["Dispel test type"] = "Type de test de dissipation",
     ["Display mode"] = "Mode d'affichage",
     ["Dropdown style"] = "Style déroulant",

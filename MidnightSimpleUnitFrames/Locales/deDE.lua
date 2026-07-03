@@ -429,7 +429,6 @@ local MSUF2_DE = {
     ["Dispel Glow"] = "Dispel-Leuchten",
     ["Dispel Overlay"] = "Dispel-Overlay",
     ["Dispel border"] = "Dispel-Rahmen",
-    ["Dispel color shared by Highlight Border and Group Frame Dispel Overlay."] = "Dispel-Farbe wird vom Hervorhebungsrahmen und dem Gruppenframe-Dispel-Overlay gemeinsam genutzt.",
     ["Dispel test type"] = "Dispel-Testtyp",
     ["Display"] = "Anzeige",
     ["Display mode"] = "Anzeigemodus",

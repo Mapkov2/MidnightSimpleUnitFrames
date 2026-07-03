@@ -420,7 +420,6 @@ local MSUF2_MENU_AUTO_ruRU = {
     ["Dispel Glow"] = "Рассеять свечение",
     ["Dispel Overlay"] = "Рассеивание наложения",
     ["Dispel border"] = "Рассеять границу",
-    ["Dispel color shared by Highlight Border and Group Frame Dispel Overlay."] = "Цвет Dispel, общий для рамки выделения и наложения Dispel Dispel группы.",
     ["Dispel test type"] = "Тип теста рассеивания",
     ["Display mode"] = "Режим отображения",
     ["Dropdown style"] = "Выпадающий стиль",
@@ -2014,7 +2013,6 @@ L["Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other pr
 L["Discard all changes and exit?"] = "Отменить все изменения и выйти?"
 L["Discard ALL changes made in Edit Mode\nand restore settings to the state\nbefore Edit Mode was opened."] = "Отменить ВСЕ изменения, сделанные в режиме редактирования,\nи восстановить настройки к состоянию\nдо открытия режима редактирования."
 L["Discord"] = "Discord"
-L["Dispel color shared by Highlight Border and Group Frame Dispel Overlay."] = "Цвет рассеивания, общий для границы подсветки и наложения рассеивания группового фрейма."
 L["Display & recovery"] = "Отображение и восстановление"
 L["Drag & Move"] = "Перетаскивание"
 L["Drag frames to move them before tuning detailed settings."] = "Перетащите рамки, чтобы переместить их перед детальной настройкой."

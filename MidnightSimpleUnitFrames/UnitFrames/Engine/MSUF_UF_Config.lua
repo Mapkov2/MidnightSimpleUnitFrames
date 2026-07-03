@@ -50,26 +50,6 @@ local CompileBorderPriority = UF.CompileBorderPriority
 local ResolveBarGradient = UF.ResolveBarGradient
 local FillPredictionColors = UF.FillPredictionColors
 
-local DISPEL_TYPE_COLORS = {
-  { "Magic", 0.20, 0.60, 1.00 },
-  { "Curse", 0.60, 0.00, 1.00 },
-  { "Disease", 0.60, 0.40, 0.00 },
-  { "Poison", 0.00, 0.60, 0.00 },
-  { "Bleed", 0.80, 0.10, 0.10 },
-}
-
-local function FallbackFillDispelTypeColors(dst, general, numberFn)
-  for i = 1, #DISPEL_TYPE_COLORS do
-    local color = DISPEL_TYPE_COLORS[i]
-    local key = "type" .. color[1]
-    dst[key .. "R"] = numberFn(general and general["dispelType" .. color[1] .. "R"], color[2])
-    dst[key .. "G"] = numberFn(general and general["dispelType" .. color[1] .. "G"], color[3])
-    dst[key .. "B"] = numberFn(general and general["dispelType" .. color[1] .. "B"], color[4])
-  end
-end
-
-local FillDispelTypeColors = UF.FillDispelTypeColors or FallbackFillDispelTypeColors
-
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local DEFAULT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local CDM_WIDTH_FRAMES = {
@@ -1657,13 +1637,10 @@ end
 local function CompileUnitDispel(out, conf, general)
   local dispel = out.dispel or {}
   out.dispel = dispel
-  local dispelColorMode = general.hlDispelColorMode or "SINGLE"
-  dispel.colorMode = dispelColorMode == "TYPE" and "TYPE" or "SINGLE"
-  dispel.r = Number(general.hlDispelColorR or general.dispelBorderColorR, 0.25)
-  dispel.g = Number(general.hlDispelColorG or general.dispelBorderColorG, 0.75)
-  dispel.b = Number(general.hlDispelColorB or general.dispelBorderColorB, 1)
+  dispel.r = 0.25
+  dispel.g = 0.75
+  dispel.b = 1
   dispel.a = 1
-  FillDispelTypeColors(dispel, general, Number)
   local overlay = out.dispelOverlay or {}
   out.dispelOverlay = overlay
   overlay.enabled = ScopedValue(conf, general, "unitDispelOverlayEnabled", false) == true

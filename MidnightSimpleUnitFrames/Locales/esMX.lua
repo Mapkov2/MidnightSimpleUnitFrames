@@ -571,7 +571,6 @@ local MSUF2_MENU_AUTO_esMX = {
     ["Dispel Glow"] = "Disipar resplandor",
     ["Dispel Overlay"] = "Disipar superposición",
     ["Dispel border"] = "Disipar borde",
-    ["Dispel color shared by Highlight Border and Group Frame Dispel Overlay."] = "Disipar el color compartido por el borde resaltado y la superposición de disipar marco de grupo.",
     ["Dispel test type"] = "Tipo de prueba de disipación",
     ["Display mode"] = "Modo de visualización",
     ["Dropdown style"] = "Estilo desplegable",
