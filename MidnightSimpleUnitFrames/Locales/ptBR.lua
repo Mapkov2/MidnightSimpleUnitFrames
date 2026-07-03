@@ -273,7 +273,6 @@ local MSUF2_MENU_AUTO_ptBR = {
     ["Dispel Glow"] = "Dissipar Brilho",
     ["Dispel Overlay"] = "Dissipar sobreposição",
     ["Dispel border"] = "Dissipar borda",
-    ["Dispel color shared by Highlight Border and Group Frame Dispel Overlay."] = "Dissipar cor compartilhada por Highlight Border e Group Frame Dispel Overlay.",
     ["Dispel test type"] = "Dissipar tipo de teste",
     ["Display mode"] = "Modo de exibição",
     ["Dropdown style"] = "Estilo suspenso",

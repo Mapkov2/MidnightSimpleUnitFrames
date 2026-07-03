@@ -273,7 +273,6 @@ local MSUF2_MENU_AUTO_itIT = {
     ["Dispel Glow"] = "Dissipa il bagliore",
     ["Dispel Overlay"] = "Sovrapposizione di dissipazione",
     ["Dispel border"] = "Dissipare il confine",
-    ["Dispel color shared by Highlight Border and Group Frame Dispel Overlay."] = "Colore di dissolvenza condiviso da Evidenzia bordo e Sovrapposizione di dissolvenza di cornici di gruppo.",
     ["Dispel test type"] = "Tipo di test di dissipazione",
     ["Display mode"] = "Modalità di visualizzazione",
     ["Dropdown style"] = "Stile a discesa",

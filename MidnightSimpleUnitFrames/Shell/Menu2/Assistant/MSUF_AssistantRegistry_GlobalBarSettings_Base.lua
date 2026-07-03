@@ -36,8 +36,6 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     local AGGRO_MODE_ALIASES = ctx.AGGRO_MODE_ALIASES
     local DISPEL_TRIGGER_VALUES = ctx.DISPEL_TRIGGER_VALUES or {}
     local DISPEL_TRIGGER_ALIASES = ctx.DISPEL_TRIGGER_ALIASES
-    local DISPEL_COLOR_MODE_VALUES = ctx.DISPEL_COLOR_MODE_VALUES or {}
-    local DISPEL_COLOR_MODE_ALIASES = ctx.DISPEL_COLOR_MODE_ALIASES
     local UNIT_DISPEL_TRIGGER_VALUES = ctx.UNIT_DISPEL_TRIGGER_VALUES or {}
     local UNIT_DISPEL_TRIGGER_ALIASES = ctx.UNIT_DISPEL_TRIGGER_ALIASES
     local UNIT_DISPEL_STYLE_VALUES = ctx.UNIT_DISPEL_STYLE_VALUES or {}
@@ -108,10 +106,6 @@ function A.GlobalBarRegistry.RegisterBaseBarSettings(ctx)
     RegisterGeneralEnum("dispelBorderTrigger", "dispelBorderTrigger", "Dispel Border Detects", "DISPEL_TYPE", DISPEL_TRIGGER_VALUES, {
         "dispel border detects", "dispel border trigger", "dispel detection",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_DISPEL_BORDER_TRIGGER", valueAliases = DISPEL_TRIGGER_ALIASES })
-    RegisterGeneralEnum("dispelColorMode", "dispelColorMode", "Dispel Color Mode", "TYPE", DISPEL_COLOR_MODE_VALUES, {
-        "dispel color mode", "dispel color", "dispel border color", "dispel overlay color",
-        "debuff type color", "debuff type coloring", "per debuff type", "unified dispel color",
-    }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_DISPEL_COLOR_MODE", valueAliases = DISPEL_COLOR_MODE_ALIASES })
     RegisterGeneralMappedEnum("purgeOutlineMode", "purgeBorder", "Purge Border", "off", ON_OFF_VALUES, ON_OFF_STORAGE, {
         "purge border", "purge outline", "purgeable border",
     }, { category = "Global / Bars / Highlight Borders", frameType = "globalBars", apply = ApplyDispelPurgeBorder, reason = "MSUF_ASSISTANT_PURGE_BORDER", valueAliases = ON_OFF_ALIASES })

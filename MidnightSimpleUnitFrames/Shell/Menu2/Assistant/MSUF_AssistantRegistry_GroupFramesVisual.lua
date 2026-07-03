@@ -26,7 +26,6 @@ function A.GroupFramesRegistry.RegisterVisualSettings(ctx, scope)
     local RegisterGroupColor = ctx.RegisterGroupColor
     local NormalizeGroupDispelTrigger = ctx.NormalizeGroupDispelTrigger
     local GROUP_DISPEL_TRIGGER_VALUES = ctx.GROUP_DISPEL_TRIGGER_VALUES or {}
-    local GROUP_DISPEL_COLOR_MODE_VALUES = ctx.GROUP_DISPEL_COLOR_MODE_VALUES or {}
     local GROUP_DISPEL_STYLE_VALUES = ctx.GROUP_DISPEL_STYLE_VALUES or {}
     local GROUP_STRIPE_EDGE_VALUES = ctx.GROUP_STRIPE_EDGE_VALUES or {}
     local GROUP_RANGE_LAYER_VALUES = ctx.GROUP_RANGE_LAYER_VALUES or {}
@@ -75,28 +74,6 @@ function A.GroupFramesRegistry.RegisterVisualSettings(ctx, scope)
         get = function(scopeKey) return NormalizeGroupDispelTrigger(GroupDB(scopeKey).dispelOverlayTrigger) end,
         set = function(scopeKey, value) GroupDB(scopeKey).dispelOverlayTrigger = NormalizeGroupDispelTrigger(value) end,
     })
-
-    aliases = {}
-    AddAliasesForUnit(aliases, scope, "dispel overlay color")
-    AddAliasesForUnit(aliases, scope, "dispel color mode")
-    AddAliasesForUnit(aliases, scope, "debuff type color")
-    AddAliasesForUnit(aliases, scope, "debuff type coloring")
-    AddAliasesForUnit(aliases, scope, "unified dispel color")
-    RegisterGroupEnum(scope, "dispelColorMode", "dispelColorMode", "Dispel Color Mode", "TYPE", GROUP_DISPEL_COLOR_MODE_VALUES, {
-        type = "TYPE",
-        pertype = "TYPE",
-        ["per type"] = "TYPE",
-        ["per debuff type"] = "TYPE",
-        dispeltype = "TYPE",
-        ["dispel type"] = "TYPE",
-        debufftype = "TYPE",
-        ["debuff type"] = "TYPE",
-        single = "SINGLE",
-        unified = "SINGLE",
-        ["unified color"] = "SINGLE",
-        same = "SINGLE",
-        one = "SINGLE",
-    }, "visual", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "dispel overlay style")

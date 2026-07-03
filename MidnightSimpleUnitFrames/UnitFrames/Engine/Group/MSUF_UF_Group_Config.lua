@@ -143,24 +143,6 @@ local function FallbackResolveBarGradient(conf, general, enabledKey)
   }
 end
 
-local DISPEL_TYPE_COLORS = {
-  { "Magic", 0.20, 0.60, 1.00 },
-  { "Curse", 0.60, 0.00, 1.00 },
-  { "Disease", 0.60, 0.40, 0.00 },
-  { "Poison", 0.00, 0.60, 0.00 },
-  { "Bleed", 0.80, 0.10, 0.10 },
-}
-
-local function FallbackFillDispelTypeColors(dst, general, numberFn)
-  for i = 1, #DISPEL_TYPE_COLORS do
-    local color = DISPEL_TYPE_COLORS[i]
-    local key = "type" .. color[1]
-    dst[key .. "R"] = numberFn(general and general["dispelType" .. color[1] .. "R"], color[2])
-    dst[key .. "G"] = numberFn(general and general["dispelType" .. color[1] .. "G"], color[3])
-    dst[key .. "B"] = numberFn(general and general["dispelType" .. color[1] .. "B"], color[4])
-  end
-end
-
 local function FallbackFillPredictionColors(dst, general, conf, scopedValue, numberFn)
   dst.healR = numberFn(general and general.healPredictionColorR, 0)
   dst.healG = numberFn(general and general.healPredictionColorG, 1)
@@ -179,7 +161,6 @@ end
 -- These mirrors keep isolated compiler tests/load-order probes deterministic.
 -- The live addon still uses the shared UF core helpers whenever they are loaded.
 local ResolveBarGradient = UF.ResolveBarGradient or FallbackResolveBarGradient
-local FillDispelTypeColors = UF.FillDispelTypeColors or FallbackFillDispelTypeColors
 local FillPredictionColors = UF.FillPredictionColors or FallbackFillPredictionColors
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
@@ -625,16 +606,12 @@ local function CompilePrediction(kind, conf, texture)
 end
 
 local function CompileDispelVisual(kind, conf)
-  local general = GeneralDB() or {}
-  local mode = general.hlDispelColorMode or "SINGLE"
   local out = {
-    colorMode = mode == "TYPE" and "TYPE" or "SINGLE",
-    r = Num(general.hlDispelColorR or general.dispelBorderColorR, 0.25),
-    g = Num(general.hlDispelColorG or general.dispelBorderColorG, 0.75),
-    b = Num(general.hlDispelColorB or general.dispelBorderColorB, 1),
+    r = 0.25,
+    g = 0.75,
+    b = 1,
     a = 1,
   }
-  FillDispelTypeColors(out, general, Num)
   return out
 end
 

@@ -233,7 +233,7 @@ local function ActionAliasSet()
 end
 
 -- Registration domains can register the same feature twice (e.g.
--- "gf_party.dispelColorMode" and "barScope.gf_party.dispelColorMode"). When
+-- "gf_party.dispelOverlayStyle" and "barScope.gf_party.dispelOverlayStyle"). When
 -- every hit shares the same attribute and effective scope, the hits are
 -- equivalent and the canonical two-segment key wins deterministically.
 local function ReduceEquivalentHits(hits)

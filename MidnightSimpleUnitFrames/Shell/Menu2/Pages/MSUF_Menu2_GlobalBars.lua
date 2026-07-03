@@ -425,7 +425,6 @@ local function BuildBars(ctx)
         "DISPEL_TYPE", "Any dispel-type debuff", "ANY_DEBUFF", "Any debuff")
     local unitDispelOverlayStyles = VT(
         "FULL", "Full Frame", "TOP", "Top Fade", "BOTTOM", "Bottom Fade", "LEFT", "Left Fade", "RIGHT", "Right Fade")
-    local dispelColorModes = VT("TYPE", "Per debuff type", "SINGLE", "Unified color")
     local function NormalizeDispelTrigger(v)
         local fn = _G.MSUF_NormalizeDispelBorderTrigger
         if type(fn) == "function" then return fn(v) end
@@ -438,11 +437,6 @@ local function BuildBars(ctx)
         if type(fn) == "function" then return fn(v) end
         if v == "BORDER" or v == "INHERIT" or v == "SAME" then return "BORDER" end
         return NormalizeDispelTrigger(v)
-    end
-    local function NormalizeDispelColorMode(v)
-        v = tostring(v or "TYPE"):upper()
-        if v == "SINGLE" or v == "UNIFIED" or v == "ONE" then return "SINGLE" end
-        return "TYPE"
     end
     local function GradientKeyActive(entry, key)
         return entry and entry.hlOverride == true
@@ -1041,16 +1035,9 @@ local function BuildBars(ctx)
             BarScopeSet("dispelBorderTrigger", NormalizeDispelTrigger(v), "MSUF2_DISPEL_TRIGGER")
             RequestDispelPurgeBorderRuntime()
         end)
-    local dispelColor = BindHighlightDropdown("Dispel color", dispelColorModes, -352,
-        function() return NormalizeDispelColorMode(BarScopeGet("dispelColorMode", "TYPE")) end,
-        function(v)
-            BarScopeSet("dispelColorMode", NormalizeDispelColorMode(v), "MSUF2_DISPEL_COLOR_MODE")
-            RequestDispelPurgeBorderRuntime()
-            RequestUnitDispelOverlayRuntime("MSUF2_DISPEL_COLOR_MODE")
-        end)
-    local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -406,
+    local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -352,
         "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", RequestDispelPurgeBorderRuntime)
-    local bossTarget = BindHighlightDropdown("Boss target border", borderModes, -460,
+    local bossTarget = BindHighlightDropdown("Boss target border", borderModes, -406,
         function()
             local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
             return tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback
@@ -1063,9 +1050,9 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_BOSS_TARGET_BORDER")
             RequestBossTargetBorderRuntime()
         end)
-    local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -510, hlLeftW, T.colors.dim)
+    local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -456, hlLeftW, T.colors.dim)
     if dispelPurgePtrHint.SetWordWrap then dispelPurgePtrHint:SetWordWrap(true) end
-    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -540, hlLeftW, T.colors.dim)
+    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -486, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
     local function ScopeBorderModeOn(key, defaultValue) return tonumber(BarScopeGet(key, defaultValue)) == 1 end
     local function BossTargetBorderOn()
@@ -1101,7 +1088,7 @@ local function BuildBars(ctx)
     local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", function() return ScopeBorderModeOn("purgeOutlineMode", 0) end)
     local bossTargetTest = BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true)
     local scopedBorderControls = { highlight, aggro, dispelBorder, purge }
-    local dispelBorderControls = { dispelTrigger, dispelColor, dispelTest }
+    local dispelBorderControls = { dispelTrigger, dispelTest }
     local function ClearBorderTestIfDisabled(flagName, setterName, enabled)
         local fn = _G[setterName]
         if _G[flagName] and not enabled and type(fn) == "function" then fn(false) end
@@ -1133,13 +1120,13 @@ local function BuildBars(ctx)
     local overlaySectionW = ctx.width or 720
     local overlayCardWProbe = min(900, max(320, overlaySectionW - 40))
     local overlayWide = overlayCardWProbe >= 760
-    local overlaySectionH = overlayWide and 410 or 520
-    local overlayCardH = overlayWide and 346 or 456
+    local overlaySectionH = overlayWide and 358 or 468
+    local overlayCardH = overlayWide and 294 or 404
     local ufOverlay = b:CollapsibleSection("bars_unit_dispel_overlay", "UnitFrame Dispel Overlay", overlaySectionH, false)
     local ufOverlayW = ufOverlay._msuf2Width or ctx.width or 720
     local ufOverlayCardW = min(900, max(320, ufOverlayW - 40))
     overlayWide = ufOverlayCardW >= 760
-    overlayCardH = overlayWide and 346 or 456
+    overlayCardH = overlayWide and 294 or 404
     local ufOverlayCard = W.ControlCard(ufOverlay, "UnitFrame Dispel Overlay", "Tints unit-frame health bars when a configured debuff condition is active.", 20, -38, ufOverlayCardW, overlayCardH)
     local function BindUFOverlayDropdown(label, values, key, defaultValue, normalizer, reason, y)
         local dropdown = W.Dropdown(ufOverlayCard, label, values, 280)
@@ -1188,12 +1175,11 @@ local function BuildBars(ctx)
             SyncUFOverlayControls()
         end)
     local ufOverlayTrigger = BindUFOverlayDropdown("Overlay detects", unitDispelOverlayTriggers, "unitDispelOverlayTrigger", "BORDER", NormalizeUnitDispelOverlayTrigger, "MSUF2_UF_DISPEL_OVERLAY_TRIGGER", -74)
-    local ufOverlayColor = BindUFOverlayDropdown("Overlay color", dispelColorModes, "dispelColorMode", "TYPE", NormalizeDispelColorMode, "MSUF2_UF_DISPEL_OVERLAY_COLOR", -126)
-    local ufOverlayStyle = BindUFOverlayDropdown("Overlay style", unitDispelOverlayStyles, "unitDispelOverlayStyle", "FULL", nil, "MSUF2_UF_DISPEL_OVERLAY_STYLE", -178)
-    local ufOverlayCurrent = BindUFOverlayToggle("Show on current health only", "unitDispelOverlayOnHealth", true, "MSUF2_UF_DISPEL_OVERLAY_HEALTH", -226)
-    local ufOverlayAlpha = BindUFOverlaySlider("Overlay opacity", "unitDispelOverlayAlpha", 0.35, "MSUF2_UF_DISPEL_OVERLAY_ALPHA", -270)
-    local ufOverlayControls = { ufOverlayTrigger, ufOverlayColor, ufOverlayStyle, ufOverlayCurrent, ufOverlayAlpha }
-    local ufOverlayGroupHintY = overlayWide and -336 or -436
+    local ufOverlayStyle = BindUFOverlayDropdown("Overlay style", unitDispelOverlayStyles, "unitDispelOverlayStyle", "FULL", nil, "MSUF2_UF_DISPEL_OVERLAY_STYLE", -126)
+    local ufOverlayCurrent = BindUFOverlayToggle("Show on current health only", "unitDispelOverlayOnHealth", true, "MSUF2_UF_DISPEL_OVERLAY_HEALTH", -174)
+    local ufOverlayAlpha = BindUFOverlaySlider("Overlay opacity", "unitDispelOverlayAlpha", 0.35, "MSUF2_UF_DISPEL_OVERLAY_ALPHA", -218)
+    local ufOverlayControls = { ufOverlayTrigger, ufOverlayStyle, ufOverlayCurrent, ufOverlayAlpha }
+    local ufOverlayGroupHintY = overlayWide and -284 or -384
     local ufOverlayGroupHint = W.Text(ufOverlayCard, "Group frame scopes use Group Frames > Health & Bars > Dispel Overlay.", 16, ufOverlayGroupHintY, ufOverlayCardW - 32, T.colors.muted)
     if ufOverlayGroupHint.SetWordWrap then ufOverlayGroupHint:SetWordWrap(true) end
     M.TrackRefresh(ctx, SyncUFOverlayControls(function()

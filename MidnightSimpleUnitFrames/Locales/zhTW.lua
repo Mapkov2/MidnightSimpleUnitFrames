@@ -435,7 +435,6 @@ local MSUF2_MENU_AUTO_zhTW = {
     ["Dispel Glow"] = "消除輝光",
     ["Dispel Overlay"] = "消除疊加",
     ["Dispel border"] = "消除邊框",
-    ["Dispel color shared by Highlight Border and Group Frame Dispel Overlay."] = "消除高亮邊框和組框消除疊加共享的顏色。",
     ["Dispel test type"] = "消除測試類型",
     ["Display mode"] = "顯示方式",
     ["Dropdown style"] = "下拉樣式",

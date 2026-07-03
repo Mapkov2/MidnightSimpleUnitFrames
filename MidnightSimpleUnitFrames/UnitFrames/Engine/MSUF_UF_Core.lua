@@ -275,15 +275,6 @@ local function NormalizeDispelOverlayStyle(value)
 end
 UF.NormalizeDispelOverlayStyle = NormalizeDispelOverlayStyle
 
-local function NormalizeDispelColorMode(value)
-  value = tostring(value or "TYPE"):upper()
-  if value == "SINGLE" or value == "UNIFIED" or value == "ONE" then
-    return "SINGLE"
-  end
-  return "TYPE"
-end
-UF.NormalizeDispelColorMode = NormalizeDispelColorMode
-
 local function NormalizeRangeFadeLayerMode(value)
   if value == "health" or value == "hp" or value == "hpbar" or value == "HP" or value == 2 then
     return "health"

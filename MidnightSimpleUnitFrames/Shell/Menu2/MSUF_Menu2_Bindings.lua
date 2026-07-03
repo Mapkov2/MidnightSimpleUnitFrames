@@ -624,7 +624,7 @@ end
 local BARS_GENERAL_KEYS = KSW [[
     barTexture barBackgroundTexture enableGradient enablePowerGradient gradientStrength gradientDirection
     gradientDirRight gradientDirLeft gradientDirUp gradientDirDown showSelfHealPrediction healPredAnchorMode
-    overAbsorbOverlay absorbBarTexture healAbsorbBarTexture dispelBorderTrigger dispelColorMode unitDispelOverlayEnabled unitDispelOverlayStyle
+    overAbsorbOverlay absorbBarTexture healAbsorbBarTexture dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
     unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger bossTargetOutlineMode
     bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedMouseover barOutlineColorR barOutlineColorG
@@ -633,7 +633,7 @@ local BARS_GENERAL_KEYS = KSW [[
 local BARS_SCOPE_KEYS = KSW [[
     hlOverride hpPowerTextOverride barTexture barBackgroundTexture barBgTexture absorbTextMode absorbAnchorMode healPredEnabled healPredAnchorMode
     overAbsorbOverlay absorbBarOpacity healAbsorbBarOpacity barOutlineThickness highlightBorderThickness hlAggroSize
-    aggroOutlineMode dispelOutlineMode dispelBorderTrigger dispelColorMode unitDispelOverlayEnabled unitDispelOverlayStyle
+    aggroOutlineMode dispelOutlineMode dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
     unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill

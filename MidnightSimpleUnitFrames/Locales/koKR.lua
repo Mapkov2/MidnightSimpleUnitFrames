@@ -342,7 +342,6 @@ local MSUF2_MENU_AUTO_koKR = {
     ["Dispel Glow"] = "디스펠 글로우",
     ["Dispel Overlay"] = "오버레이 해제",
     ["Dispel border"] = "경계를 없애다",
-    ["Dispel color shared by Highlight Border and Group Frame Dispel Overlay."] = "강조 표시 테두리 및 그룹 프레임 표시 오버레이가 공유하는 표시 색상을 표시합니다.",
     ["Dispel test type"] = "디스펠 테스트 유형",
     ["Display mode"] = "디스플레이 모드",
     ["Dropdown style"] = "드롭다운 스타일",
