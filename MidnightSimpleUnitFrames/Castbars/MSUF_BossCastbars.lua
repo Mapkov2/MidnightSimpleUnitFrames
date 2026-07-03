@@ -40,6 +40,12 @@ local function EnsureDB()
     end
 end
 
+local function CastbarFrameInset(general)
+    local thickness = tonumber(general and general.castbarOutlineThickness)
+    if thickness == nil then thickness = 1 end
+    return thickness > 0 and 1 or 0
+end
+
 local function InCombat()
     return _G.MSUF_InCombat == true
         or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
@@ -153,15 +159,16 @@ local function ApplyBossCastbarLayout(frame)
     end
 
     frame.statusBar:ClearAllPoints()
+    local frameInset = CastbarFrameInset(general)
     if showIcon and frame.icon and iconOffsetX == 0 and iconOffsetY == 0 then
         frame.statusBar:SetPoint("LEFT", frame, "LEFT", iconSize + 1, 0)
     else
-        frame.statusBar:SetPoint("LEFT", frame, "LEFT", 0, 0)
+        frame.statusBar:SetPoint("LEFT", frame, "LEFT", frameInset, 0)
     end
 
-    frame.statusBar:SetPoint("TOP", frame, "TOP", 0, -1)
-    frame.statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, 1)
-    frame.statusBar:SetPoint("RIGHT", frame, "RIGHT", -1, 0)
+    frame.statusBar:SetPoint("TOP", frame, "TOP", 0, -frameInset)
+    frame.statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, frameInset)
+    frame.statusBar:SetPoint("RIGHT", frame, "RIGHT", -frameInset, 0)
 
     if frame.backgroundBar then
         frame.backgroundBar:ClearAllPoints()
