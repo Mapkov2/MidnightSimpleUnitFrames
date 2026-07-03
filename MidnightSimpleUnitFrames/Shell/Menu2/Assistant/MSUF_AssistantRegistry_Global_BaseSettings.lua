@@ -62,6 +62,13 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         "navigation symbole", "menue symbole", "menu symbole", "seitenleisten symbole", "navi icons", "navi symbole anzeigen",
         "navigationssymbole anzeigen", "navigationssymbole ausblenden",
     }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_NAV_ICONS" })
+    RegisterGeneralBoolean("showGameMenuButton", "gameMenuButton", "MSUF Game Menu Button", true, {
+        "game menu button", "msuf game menu button", "escape menu button", "esc menu button", "game menu entry",
+        "msuf escape menu", "msuf esc menu", "show game menu button", "hide game menu button",
+        "show msuf button in game menu", "hide msuf button in game menu", "spielmenue button",
+        "spielmenue knopf", "game menu knopf", "escape menue button", "esc menue button",
+        "msuf button im spielmenue", "msuf knopf im spielmenue", "msuf im escape menue",
+    }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_GAME_MENU_BUTTON" })
     Registry:RegisterSetting({
         key = "general.navHoverScale",
         label = "Navigation Hover Size",

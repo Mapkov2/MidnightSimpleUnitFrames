@@ -16,19 +16,21 @@ local function BuildAlpha(ctx, builder, unit)
     local ReadNumber = UP.ReadNumber
     local SetNumber = UP.SetNumber
     if not (ReadBool and SetBool and ReadNumber and SetNumber) then return end
-    local sec = builder:CollapsibleSection("transparency", "Transparency", 254, false)
+    local sec = builder:CollapsibleSection("transparency", "Transparency", nil, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 16
     local leftX = 20
     local innerW = max(320, sectionW - 40)
     local cardW = math.floor((innerW - (gap * 2)) / 3)
+    local cardH = 168
     local healthX = leftX
     local resourceX = healthX + cardW + gap
     local optionsX = resourceX + cardW + gap
     local optionsW = innerW - (cardW * 2) - (gap * 2)
-    local healthCard = W.ControlCard(sec, "Opacity Health", "Fade the health bar foreground and background.", healthX, -38, cardW, 168)
-    local resourceCard = W.ControlCard(sec, "Opacity Resource Bar", "Fade the resource bar foreground and background.", resourceX, -38, cardW, 168)
-    local optionsCard = W.ControlCard(sec, "Options", "Keep text and portrait readable while bars fade.", optionsX, -38, optionsW, 168)
+    local _, cardY = W.NextRow(sec, cardH)
+    local healthCard = W.ControlCard(sec, "Opacity Health", "Fade the health bar foreground and background.", healthX, cardY, cardW, cardH)
+    local resourceCard = W.ControlCard(sec, "Opacity Resource Bar", "Fade the resource bar foreground and background.", resourceX, cardY, cardW, cardH)
+    local optionsCard = W.ControlCard(sec, "Options", "Keep text and portrait readable while bars fade.", optionsX, cardY, optionsW, cardH)
     local function AddAlphaSlider(parent, width, spec)
         local slider = W.Slider(parent, "", 0, 1, 0.05, width)
         M.BindNumberWidget(ctx, slider,
@@ -52,12 +54,13 @@ local function BuildAlpha(ctx, builder, unit)
     local hint = W.Text(optionsCard, "", 16, -94, optionsW - 32, nil)
     if hint and hint.SetWordWrap then hint:SetWordWrap(true) end
     if hint and hint.SetText then hint:SetText(M.Tr("On: bars and background fade while text and portrait stay visible. Off: text and portrait fade with them.")) end
+    if builder.FinishSection then builder:FinishSection(sec, 48) end
 end
 if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
         id = "transparency",
         title = "Transparency",
-        height = 254,
+        autoHeight = true,
         placement = "after_load_conditions",
         order = 20,
         build = BuildAlpha,

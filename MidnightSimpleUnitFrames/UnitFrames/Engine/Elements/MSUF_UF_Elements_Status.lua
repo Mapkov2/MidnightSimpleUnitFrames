@@ -545,6 +545,11 @@ local function ApplyPVPTexture(tex, atlas)
 end
 
 local function ApplyLeaderTexture(tex, cfg, status, assist)
+  if cfg and type(cfg.customIcon) == "string" and cfg.customIcon ~= "" then
+    SetTexture(tex, cfg.customIcon)
+    SetTexCoord(tex, 0, 1, 0, 1)
+    return
+  end
   local gf = MSUF and MSUF.GF
   local kind = status and status.kind
   if gf and kind then
@@ -575,6 +580,11 @@ local function ApplyLeaderTexture(tex, cfg, status, assist)
 end
 
 local function ApplyRoleTexture(tex, cfg, status, role)
+  if cfg and type(cfg.customIcon) == "string" and cfg.customIcon ~= "" then
+    SetTexture(tex, cfg.customIcon)
+    SetTexCoord(tex, 0, 1, 0, 1)
+    return true
+  end
   local gf = MSUF and MSUF.GF
   local kind = status and status.kind
   if gf and kind and type(gf.GetRoleTexture) == "function" then
@@ -597,7 +607,58 @@ local function ApplyRoleTexture(tex, cfg, status, role)
   return false
 end
 
+local function EffectiveStatusIconStyle(cfg, status)
+  local style = cfg and cfg.style
+  if type(style) ~= "string" or style == "" or style == "DEFAULT" then
+    style = status and status.iconStyle
+  end
+  if type(style) ~= "string" or style == "" or style == "DEFAULT" or style == "BLIZZARD" then
+    return nil
+  end
+  return style
+end
+
+local function ApplyStatusIconPackTexture(tex, cfg, status, iconType, variant)
+  if not tex then return false end
+  if cfg and type(cfg.customIcon) == "string" and cfg.customIcon ~= "" then
+    SetTexture(tex, cfg.customIcon)
+    SetTexCoord(tex, 0, 1, 0, 1)
+    return true
+  end
+  local style = EffectiveStatusIconStyle(cfg, status)
+  if not style then return false end
+  local resolver = _G.MSUF_GetStatusIconTexture
+  if type(resolver) ~= "function" then
+    local gf = MSUF and MSUF.GF
+    resolver = gf and gf.GetStatusIconTexture
+  end
+  if type(resolver) ~= "function" then return false end
+  local path, l, r, t, b = resolver(style, iconType, variant, status and status.useMidnight == true)
+  if type(path) ~= "string" or path == "" then return false end
+  SetTexture(tex, path)
+  SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
+  return true
+end
+
+local function ApplyStateOrPackIconTexture(tex, kind, cfg, status, variant)
+  if SymbolPath(cfg and cfg.symbol, status and status.useMidnight == true) then
+    ApplyStateIconTexture(tex, kind, cfg, status)
+    return true
+  end
+  if ApplyStatusIconPackTexture(tex, cfg, status, kind, variant or kind) then
+    return true
+  end
+  ApplyStateIconTexture(tex, kind, cfg, status)
+  return true
+end
+
 local function HideField(frame, field)
+  if type(field) == "table" then
+    for i = 1, #field do
+      HideField(frame, field[i])
+    end
+    return
+  end
   SetShown(frame and frame[field], false)
 end
 
@@ -656,7 +717,7 @@ local function ApplyConfiguredRegion(frame, spec, status, def)
     SetTexCoord(region, 0, 1, 0, 1)
   end
   if state then
-    ApplyStateIconTexture(region, state, cfg, status)
+    ApplyStateOrPackIconTexture(region, state, cfg, status, state)
   end
   LayoutRegion(region, frame, spec, cfg, text)
 end
@@ -693,6 +754,11 @@ local function UpdateRaidMarker(frame, status)
   if not index then
     tex._msufRaidMarkerIndex = nil
     SetShown(tex, false)
+    return
+  end
+  if ApplyStatusIconPackTexture(tex, cfg, status, "raidMarker", index) then
+    tex._msufRaidMarkerIndex = index
+    SetShown(tex, true)
     return
   end
   if (status and status.group) or issecretvalue(index) == true then
@@ -958,8 +1024,10 @@ local function UpdateReadyCheck(frame, status, event)
   local texture = READY_TEXTURES[ready]
   if texture then
     CancelReadyCheckTimer(frame)
-    SetTexture(tex, texture)
-    SetTexCoord(tex, 0, 1, 0, 1)
+    if not ApplyStatusIconPackTexture(tex, cfg, status, "readyCheck", ready) then
+      SetTexture(tex, texture)
+      SetTexCoord(tex, 0, 1, 0, 1)
+    end
     SetShown(tex, true)
   elseif event == "READY_CHECK_FINISHED" and tex.IsShown and tex:IsShown() then
     -- Blizzard leaves ready-check result icons visible briefly after finish; queue a delayed
@@ -989,8 +1057,10 @@ local function UpdateSummon(frame, status)
   end
   local texture = summonStatus and SUMMON_TEXTURES[summonStatus]
   if texture then
-    SetTexture(tex, texture)
-    SetTexCoord(tex, 0, 1, 0, 1)
+    if not ApplyStatusIconPackTexture(tex, cfg, status, "summon", summonStatus) then
+      SetTexture(tex, texture)
+      SetTexCoord(tex, 0, 1, 0, 1)
+    end
     SetShown(tex, true)
     frame._msufGFSummonActive = true
   else
@@ -1013,8 +1083,10 @@ local function UpdatePhase(frame, status)
     reason = UnitPhaseReason(unit)
   end
   if issecretvalue(reason) ~= true and reason then
-    SetTexture(tex, PHASE_TEXTURE)
-    SetTexCoord(tex, 0, 1, 0, 1)
+    if not ApplyStatusIconPackTexture(tex, cfg, status, "phase", reason) then
+      SetTexture(tex, PHASE_TEXTURE)
+      SetTexCoord(tex, 0, 1, 0, 1)
+    end
     SetShown(tex, true)
   else
     SetShown(tex, false)
@@ -1131,7 +1203,10 @@ local function UpdateElite(frame, status)
   end
   local state = status.testMode and "BOSS" or EliteState(frame.unit)
   if state then
-    if tex.SetAtlas then
+    if ApplyStatusIconPackTexture(tex, cfg, status, "elite", state) then
+      SetShown(tex, true)
+      return
+    elseif tex.SetAtlas then
       SetAtlas(tex, EliteAtlas(state))
     else
       SetTexture(tex, "Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
@@ -1360,7 +1435,12 @@ local function UpdateCombat(frame, status)
     local activeRaw = UnitAffectingCombat(unit)
     active = BoolTrue(activeRaw)
   end
-  SetShown(tex, active == true)
+  if active == true then
+    ApplyStateOrPackIconTexture(tex, "combat", cfg, status, "combat")
+    SetShown(tex, true)
+  else
+    SetShown(tex, false)
+  end
 end
 
 local function UpdateResting(frame, status)
@@ -1375,7 +1455,12 @@ local function UpdateResting(frame, status)
     local activeRaw = IsResting()
     active = BoolTrue(activeRaw)
   end
-  SetShown(tex, active == true)
+  if active == true then
+    ApplyStateOrPackIconTexture(tex, "resting", cfg, status, "resting")
+    SetShown(tex, true)
+  else
+    SetShown(tex, false)
+  end
 end
 
 local function UpdateIncomingRes(frame, status)
@@ -1396,7 +1481,18 @@ local function UpdateIncomingRes(frame, status)
     local activeRaw = UnitHasIncomingResurrection(unit)
     active = BoolTrue(activeRaw)
   end
-  SetShown(tex, active == true)
+  if active == true then
+    ApplyStateOrPackIconTexture(tex, "incomingRes", cfg, status, "resurrect")
+    SetShown(tex, true)
+  else
+    SetShown(tex, false)
+  end
+end
+
+local function PVPVariantForAtlas(atlas)
+  if atlas == PVP_HORDE_ATLAS then return "Horde" end
+  if atlas == PVP_FFA_ATLAS then return "FFA" end
+  return "Alliance"
 end
 
 local function UpdatePVP(frame, status)
@@ -1408,7 +1504,9 @@ local function UpdatePVP(frame, status)
     return
   end
   local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(unit)
-  if ApplyPVPTexture(tex, atlas) then
+  if atlas and ApplyStatusIconPackTexture(tex, cfg, status, "pvp", PVPVariantForAtlas(atlas)) then
+    SetShown(tex, true)
+  elseif ApplyPVPTexture(tex, atlas) then
     SetShown(tex, true)
   else
     SetShown(tex, false)
@@ -1460,6 +1558,8 @@ local STATUS_TEXT_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS" }
 local STATUS_TEXT_CONNECTION_EVENTS = { "UNIT_CONNECTION" }
 local STATUS_TEXT_FLAGS_EVENTS = { "UNIT_FLAGS" }
 local STATUS_TEXT_UNITLESS_EVENTS = { "PLAYER_FLAGS_CHANGED" }
+local STATUS_TEXT_LIFECYCLE_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
+local STATUS_TEXT_PLAYER_UNITLESS_EVENTS = { "PLAYER_FLAGS_CHANGED", "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 local COMBAT_EVENTS = { "UNIT_FLAGS" }
 local COMBAT_PLAYER_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
 local RESTING_PLAYER_EVENTS = { "PLAYER_UPDATE_RESTING", "PLAYER_ENTERING_WORLD" }
@@ -1469,6 +1569,10 @@ local PVP_EVENTS = { "UNIT_FACTION" }
 local function StatusEnabled(spec, key)
   local status = spec and spec.status
   local cfg = status and status[key]
+  if key == "leader" and not (cfg and cfg.enabled == true) then
+    local assist = status and status.assist
+    return status and status.enabled == true and assist and assist.enabled == true
+  end
   return status and status.enabled == true and cfg and cfg.enabled == true
 end
 
@@ -1494,7 +1598,16 @@ local function StatusTextUnitlessEvents(spec, frame)
     return EMPTY_EVENTS
   end
   local cfg = spec.status.statusText
-  return (cfg.showAFK == true or cfg.showDND == true) and STATUS_TEXT_UNITLESS_EVENTS or EMPTY_EVENTS
+  local needsFlags = cfg.showAFK == true or cfg.showDND == true
+  local needsLifecycle = cfg.showDead == true or cfg.showGhost == true
+  if needsFlags and needsLifecycle then
+    return STATUS_TEXT_PLAYER_UNITLESS_EVENTS
+  elseif needsFlags then
+    return STATUS_TEXT_UNITLESS_EVENTS
+  elseif needsLifecycle then
+    return STATUS_TEXT_LIFECYCLE_EVENTS
+  end
+  return EMPTY_EVENTS
 end
 
 local function PVPEvents(spec)
@@ -1626,7 +1739,7 @@ end
 
 local STATUS_INDICATOR_DEFS = {
   { "RaidMarkerIndicator", "raidMarker", nil, RAID_MARKER_EVENTS, UpdateRaidMarker, "raidTargetIcon", true },
-  { "LeaderIndicator", "leader", nil, LEADER_EVENTS, UpdateLeader, "LeaderIndicator", true },
+  { "LeaderIndicator", "leader", nil, LEADER_EVENTS, UpdateLeaderPair, { "LeaderIndicator", "leaderIcon", "assistIcon" }, true },
   { "LevelIndicator", "level", LEVEL_EVENTS, LEVEL_UNITLESS_EVENTS, UpdateLevel, "levelText" },
   { "RaidGroupIndicator", "raidGroup", nil, RAID_GROUP_EVENTS, UpdateRaidGroup, "raidGroupNameText", true },
   { "EliteIndicator", "elite", ELITE_EVENTS, nil, UpdateElite, "eliteIcon" },

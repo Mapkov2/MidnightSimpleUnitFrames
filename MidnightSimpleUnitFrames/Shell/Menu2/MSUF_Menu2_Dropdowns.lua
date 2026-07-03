@@ -48,6 +48,9 @@ local DROPDOWN_TEXTURE_PREVIEW_H = 12
 local DROPDOWN_TEXTURE_TEXT_LEFT = 92
 local DROPDOWN_SCROLLBAR_W = 10
 local DROPDOWN_POSITION_INTERVAL = 0.10
+local DROPDOWN_SMOOTH_SCROLL_SPEED = 14
+local DROPDOWN_SMOOTH_SCROLL_MAX_ELAPSED = 0.050
+local DROPDOWN_SMOOTH_SCROLL_EPSILON = 0.45
 local CloseDropdown
 local IsDescendantOf
 local function PixelBarTexture(texture)
@@ -119,11 +122,16 @@ local function DropdownMaxScroll()
     if not (dropdownScroll and dropdownChild) then return 0 end
     return math.max(0, (dropdownChild:GetHeight() or 0) - (dropdownScroll:GetHeight() or 0))
 end
-local function SetDropdownScroll(value)
-    if not dropdownScroll then return end
+local function ClampDropdownScroll(value)
     local maxScroll = DropdownMaxScroll()
     value = tonumber(value) or 0
     if value < 0 then value = 0 elseif value > maxScroll then value = maxScroll end
+    return value, maxScroll
+end
+local function ApplyDropdownScroll(value)
+    if not dropdownScroll then return end
+    local maxScroll
+    value, maxScroll = ClampDropdownScroll(value)
     dropdownScroll:SetVerticalScroll(value)
     if dropdownSlider then
         dropdownSlider._msuf2Refreshing = true
@@ -131,6 +139,75 @@ local function SetDropdownScroll(value)
         dropdownSlider:SetValue(value)
         dropdownSlider._msuf2Refreshing = nil
     end
+    return value
+end
+local function StopDropdownSmoothScroll()
+    if dropdownScroll then dropdownScroll._msuf2SmoothScrollTarget = nil end
+    local driver = dropdownFrame and dropdownFrame._msuf2SmoothScrollDriver
+    if driver then driver:Hide() end
+end
+local function DropdownSmoothScrollOnUpdate(_, elapsed)
+    if not (dropdownFrame and dropdownFrame.IsShown and dropdownFrame:IsShown() and dropdownScroll) then
+        StopDropdownSmoothScroll()
+        return
+    end
+    local target = dropdownScroll._msuf2SmoothScrollTarget
+    if target == nil then
+        StopDropdownSmoothScroll()
+        return
+    end
+    target = ClampDropdownScroll(target)
+    dropdownScroll._msuf2SmoothScrollTarget = target
+    local current = (dropdownScroll.GetVerticalScroll and dropdownScroll:GetVerticalScroll()) or 0
+    local delta = target - current
+    if (T.ReducedMotionEnabled and T.ReducedMotionEnabled()) or math.abs(delta) <= DROPDOWN_SMOOTH_SCROLL_EPSILON then
+        ApplyDropdownScroll(target)
+        StopDropdownSmoothScroll()
+        return
+    end
+    elapsed = tonumber(elapsed) or 0
+    if elapsed > DROPDOWN_SMOOTH_SCROLL_MAX_ELAPSED then elapsed = DROPDOWN_SMOOTH_SCROLL_MAX_ELAPSED end
+    local blend = min(1, elapsed * DROPDOWN_SMOOTH_SCROLL_SPEED)
+    if blend <= 0 then return end
+    ApplyDropdownScroll(current + delta * blend)
+end
+local function EnsureDropdownSmoothScrollDriver()
+    if not dropdownFrame then return nil end
+    local driver = dropdownFrame._msuf2SmoothScrollDriver
+    if driver then return driver end
+    driver = CreateFrame("Frame", nil, dropdownFrame)
+    driver:Hide()
+    driver:SetScript("OnUpdate", DropdownSmoothScrollOnUpdate)
+    dropdownFrame._msuf2SmoothScrollDriver = driver
+    return driver
+end
+local function SmoothDropdownScrollTo(value)
+    if not dropdownScroll then return end
+    local target = ClampDropdownScroll(value)
+    if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then
+        ApplyDropdownScroll(target)
+        StopDropdownSmoothScroll()
+        return
+    end
+    local current = (dropdownScroll.GetVerticalScroll and dropdownScroll:GetVerticalScroll()) or 0
+    if math.abs(target - current) <= DROPDOWN_SMOOTH_SCROLL_EPSILON then
+        ApplyDropdownScroll(target)
+        StopDropdownSmoothScroll()
+        return
+    end
+    dropdownScroll._msuf2SmoothScrollTarget = target
+    local driver = EnsureDropdownSmoothScrollDriver()
+    if driver then driver:Show() end
+end
+local function DropdownWheel(delta)
+    if not (dropdownScroll and delta and delta ~= 0) then return end
+    local current = dropdownScroll._msuf2SmoothScrollTarget or (dropdownScroll:GetVerticalScroll() or 0)
+    SmoothDropdownScrollTo(current - (delta or 0) * DROPDOWN_ROW_H * 3)
+end
+local function SetDropdownScroll(value)
+    if not dropdownScroll then return end
+    StopDropdownSmoothScroll()
+    ApplyDropdownScroll(value)
 end
 IsDescendantOf = function(frame, ancestor)
     local current = frame
@@ -282,10 +359,7 @@ local function EnsureDropdownFrame()
     dropdownScroll:SetPoint("TOPLEFT", dropdownFrame, "TOPLEFT", 2, -2)
     dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -18, 2)
     dropdownScroll:EnableMouseWheel(true)
-    dropdownScroll:SetScript("OnMouseWheel", function(self, delta)
-        local nextScroll = (self:GetVerticalScroll() or 0) - (delta or 0) * DROPDOWN_ROW_H * 3
-        SetDropdownScroll(nextScroll)
-    end)
+    dropdownScroll:SetScript("OnMouseWheel", function(_, delta) DropdownWheel(delta) end)
     dropdownChild = CreateFrame("Frame", nil, dropdownScroll)
     dropdownScroll:SetScrollChild(dropdownChild)
     dropdownSlider = CreateFrame("Slider", nil, dropdownFrame)
@@ -315,7 +389,11 @@ local function EnsureDropdownFrame()
     dropdownSlider._msuf2ThumbHover = { 0.320, 0.420, 0.560 }
     dropdownSlider:SetScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
-        if dropdownScroll then dropdownScroll:SetVerticalScroll(value or 0) end
+        StopDropdownSmoothScroll()
+        if dropdownScroll then
+            local nextValue = ClampDropdownScroll(value or 0)
+            dropdownScroll:SetVerticalScroll(nextValue)
+        end
         PaintDropdownScrollbar(self._msuf2Hover)
     end)
     dropdownSlider:SetScript("OnEnter", function(self)
@@ -327,16 +405,13 @@ local function EnsureDropdownFrame()
         PaintDropdownScrollbar(false)
     end)
     dropdownSlider:EnableMouseWheel(true)
-    dropdownSlider:SetScript("OnMouseWheel", function(_, delta)
-        if dropdownScroll then SetDropdownScroll((dropdownScroll:GetVerticalScroll() or 0) - (delta or 0) * DROPDOWN_ROW_H * 3) end
-    end)
+    dropdownSlider:SetScript("OnMouseWheel", function(_, delta) DropdownWheel(delta) end)
     dropdownSlider:Hide()
     PaintDropdownScrollbar(false)
     dropdownFrame:EnableMouseWheel(true)
-    dropdownFrame:SetScript("OnMouseWheel", function(_, delta)
-        if dropdownScroll then SetDropdownScroll((dropdownScroll:GetVerticalScroll() or 0) - (delta or 0) * DROPDOWN_ROW_H * 3) end
-    end)
+    dropdownFrame:SetScript("OnMouseWheel", function(_, delta) DropdownWheel(delta) end)
     dropdownFrame:SetScript("OnHide", function()
+        StopDropdownSmoothScroll()
         HideDropdownFocus(true)
         SetDropdownOwnerMouseWheel(dropdownOwner or dropdownClosingOwner, false)
         dropdownOwner = nil

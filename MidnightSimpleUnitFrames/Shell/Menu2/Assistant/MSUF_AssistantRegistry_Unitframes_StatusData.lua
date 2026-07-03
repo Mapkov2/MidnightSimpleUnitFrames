@@ -15,16 +15,31 @@ A.UnitframeRegistryData = Data
 
 Data.STATUS_CONTROL_SPECS = {
     {
-        value = "leader", label = "Leader / Assist", show = "showLeaderIcon",
+        value = "leader", label = "Leader Icon", show = "showLeaderIcon",
         defaultShow = true, size = "leaderIconSize", defaultSize = 14,
         anchor = "leaderIconAnchor", defaultAnchor = "TOPLEFT",
         x = "leaderIconOffsetX", defaultX = 0, y = "leaderIconOffsetY", defaultY = 3,
         layer = "leaderIconLayer", defaultLayer = 7,
         refresh = "MSUF_RefreshLeaderIconFrames", iconStyle = "leaderIconStyle",
+        customIcon = "leaderIconCustomIcon",
         defaultIconStyle = "BLIZZARD", units = { player = true, target = true },
         aliases = {
-            "leader icon", "leader indicator", "assist icon",
-            "assist indicator", "leader assist icon", "leader assist indicator",
+            "leader icon", "leader indicator", "leader symbol",
+            "leader assist icon", "leader assist indicator",
+        },
+    },
+    {
+        value = "assist", label = "Assist Icon", show = "showLeaderIcon",
+        defaultShow = true, size = "leaderIconSize", defaultSize = 14,
+        anchor = "leaderIconAnchor", defaultAnchor = "TOPLEFT",
+        x = "leaderIconOffsetX", defaultX = 0, y = "leaderIconOffsetY", defaultY = 3,
+        layer = "leaderIconLayer", defaultLayer = 7,
+        refresh = "MSUF_RefreshLeaderIconFrames", iconStyle = "assistIconStyle",
+        customIcon = "assistIconCustomIcon",
+        defaultIconStyle = "BLIZZARD", units = { player = true, target = true },
+        aliases = {
+            "assist icon", "assistant icon", "assist indicator", "assistant indicator",
+            "assist symbol", "assistant symbol", "leader assist icon", "leader assist indicator",
         },
     },
     {
@@ -34,6 +49,8 @@ Data.STATUS_CONTROL_SPECS = {
         x = "raidMarkerOffsetX", defaultX = 16, y = "raidMarkerOffsetY", defaultY = 3,
         layer = "raidMarkerLayer", defaultLayer = 7,
         refresh = "MSUF_RefreshRaidMarkerFrames",
+        iconStyle = "raidMarkerIconStyle", defaultIconStyle = "BLIZZARD",
+        customIcon = "raidMarkerCustomIcon",
         aliases = {
             "raid marker", "raid marker icon", "raid marker indicator",
             "raid target marker", "raid target icon", "raid indicator", "raid icon", "raid symbol",
@@ -78,6 +95,8 @@ Data.STATUS_CONTROL_SPECS = {
         x = "eliteIconOffsetX", defaultX = 2, y = "eliteIconOffsetY", defaultY = 2,
         layer = "eliteIconLayer", defaultLayer = 7,
         refresh = "MSUF_RefreshEliteIconFrames",
+        iconStyle = "eliteIconStyle", defaultIconStyle = "BLIZZARD",
+        customIcon = "eliteIconCustomIcon",
         units = { target = true, focus = true, targettarget = true, focustarget = true, boss = true },
         aliases = { "elite icon", "rare icon", "elite rare icon" },
     },
@@ -103,6 +122,8 @@ Data.STATUS_CONTROL_SPECS = {
         refresh = "MSUF_RequestStatusCombatIndicatorRefresh",
         symbol = "combatStateIndicatorSymbol",
         symbolValues = Data.COMBAT_SYMBOL_VALUES,
+        iconStyle = "combatStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD",
+        customIcon = "combatStateIndicatorCustomIcon",
         statusRuntime = true,
         units = { player = true, target = true },
         aliases = {
@@ -120,6 +141,8 @@ Data.STATUS_CONTROL_SPECS = {
         refresh = "MSUF_RequestStatusRestingIndicatorRefresh",
         symbol = "restedStateIndicatorSymbol",
         symbolValues = Data.RESTED_SYMBOL_VALUES,
+        iconStyle = "restedStateIndicatorIconStyle", defaultIconStyle = "BLIZZARD",
+        customIcon = "restedStateIndicatorCustomIcon",
         statusRuntime = true,
         units = { player = true },
         aliases = {
@@ -138,6 +161,8 @@ Data.STATUS_CONTROL_SPECS = {
         refresh = "MSUF_RequestStatusIncomingResIndicatorRefresh",
         symbol = "incomingResIndicatorSymbol",
         symbolValues = Data.RESS_SYMBOL_VALUES,
+        iconStyle = "incomingResIndicatorIconStyle", defaultIconStyle = "BLIZZARD",
+        customIcon = "incomingResIndicatorCustomIcon",
         statusRuntime = true,
         units = { player = true, target = true },
         aliases = {
@@ -156,6 +181,8 @@ Data.STATUS_CONTROL_SPECS = {
         x = "pvpIndicatorOffsetX", defaultX = 0, y = "pvpIndicatorOffsetY", defaultY = 0,
         layer = "pvpIndicatorLayer", defaultLayer = 7,
         refresh = "MSUF_RequestStatusPvpIndicatorRefresh", statusRuntime = true,
+        iconStyle = "pvpIndicatorIconStyle", defaultIconStyle = "BLIZZARD",
+        customIcon = "pvpIndicatorCustomIcon",
         units = { player = true, target = true, focus = true, targettarget = true, focustarget = true },
         description = "Only active in War Mode, Arena/Battleground, or while the player is PvP flagged; PvE instances keep it cold.",
         aliases = {

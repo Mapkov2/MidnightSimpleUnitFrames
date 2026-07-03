@@ -45,6 +45,23 @@ A.JOB_YIELD = A.JOB_YIELD or {}
 if A.allowPerformanceWarmup == nil then A.allowPerformanceWarmup = true end
 if A.jobBudgetMs == nil then A.jobBudgetMs = JOB_BUDGET_MS end
 if A.jobMaxStepsPerFrame == nil then A.jobMaxStepsPerFrame = JOB_MAX_STEPS end
+if A.ContextEngineEnabled == nil then A.ContextEngineEnabled = true end
+
+A.RELATIVE_INTENT_MARKERS = A.RELATIVE_INTENT_MARKERS or {
+    "more",
+    "further",
+    "farther",
+    "a bit",
+    "bit more",
+    "slightly",
+    "a little",
+    "little more",
+    "again",
+    "keep going",
+    "even more",
+    "much more",
+    "way more",
+}
 
 local function InCombat()
     return ((_G.InCombatLockdown and _G.InCombatLockdown())
@@ -1111,6 +1128,28 @@ local function JobMatches(job, match)
     return tostring(job and job.label or "") == tostring(match)
 end
 
+function AP.AssistantJobErrorResult(err, job)
+    local message = type(err) == "table" and err.message or err
+    message = tostring(message or "unknown error")
+    A.lastAssistantJobError = {
+        label = tostring(job and job.label or "assistant.job"),
+        message = message,
+        stack = type(err) == "table" and err.stack or nil,
+    }
+    return {
+        text = "Something went wrong while MSUF processed that request. I stopped that Assistant job so follow-up prompts can continue.",
+        status = "failed",
+        summary = "Assistant job failed: " .. message,
+    }
+end
+
+function AP.AssistantJobErrorHandler(err)
+    return {
+        message = tostring(err or "unknown error"),
+        stack = type(_G.debugstack) == "function" and _G.debugstack(2) or nil,
+    }
+end
+
 function A.CancelJobs(match, reason)
     local jobs = A._assistantJobs
     if type(jobs) ~= "table" or #jobs == 0 then
@@ -1188,11 +1227,17 @@ function A._RunJobPump()
         else
             local stepStart = PerfNowMs()
             A._assistantCurrentJob = job
-            local result, stopResult = step(job)
+            local ok, result, stopResult = xpcall(function()
+                return step(job)
+            end, AP.AssistantJobErrorHandler)
             A._assistantCurrentJob = nil
             A.RecordPerfSample("assistant.job.step", stepStart, tostring(job.label or "assistant.job") .. "#" .. tostring(job.index))
             stepsRun = stepsRun + 1
-            if result == false then
+            if not ok then
+                table.remove(jobs, 1)
+                job.result = AP.AssistantJobErrorResult(result, job)
+                if type(job.callback) == "function" then job.callback(job.result, job) end
+            elseif result == false then
                 table.remove(jobs, 1)
                 if stopResult ~= nil then job.result = stopResult end
                 if type(job.callback) == "function" then job.callback(job.result, job) end
@@ -1588,6 +1633,37 @@ local function RehydrateChoices(serialized)
     return choices
 end
 
+function AP.ClearPendingCandidates()
+    A.pendingCandidates = nil
+    local ctx = A.GetContext and A.GetContext()
+    if ctx then ctx.pendingCandidates = nil end
+end
+
+function AP.SetPendingCandidates(choices)
+    if type(choices) ~= "table" or #choices == 0 then
+        AP.ClearPendingCandidates()
+        return nil
+    end
+    A.pendingCandidates = choices
+    local ctx = A.GetContext and A.GetContext()
+    if ctx then ctx.pendingCandidates = SerializeChoices(choices) end
+    return choices
+end
+
+function AP.CurrentPendingCandidates()
+    if type(A.pendingCandidates) == "table" and #A.pendingCandidates > 0 then return A.pendingCandidates end
+    local ctx = A.GetContext and A.GetContext()
+    if ctx and type(ctx.pendingCandidates) == "table" then
+        local candidates = RehydrateChoices(ctx.pendingCandidates)
+        if #candidates > 0 then
+            A.pendingCandidates = candidates
+            return candidates
+        end
+        ctx.pendingCandidates = nil
+    end
+    return nil
+end
+
 local function CurrentPendingChoices()
     if type(A.pendingChoices) == "table" and #A.pendingChoices > 0 then return A.pendingChoices end
     local ctx = A.GetContext and A.GetContext()
@@ -1809,6 +1885,71 @@ local function ReplyHasPhrase(text, phrase)
     phrase = NormalizeReply(phrase)
     if phrase == "" then return false end
     return text:find(" " .. phrase .. " ", 1, true) ~= nil
+end
+
+function AP.ContextNormalizedHasPhrase(normalized, phrase)
+    normalized = tostring(normalized or "")
+    phrase = NormalizeReply(phrase)
+    if normalized == "" or phrase == "" then return false end
+    return (" " .. normalized .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
+end
+
+function A.HasRelativeIntentMarker(text)
+    local normalized = NormalizeReply(text)
+    local markers = A.RELATIVE_INTENT_MARKERS or {}
+    for i = 1, #markers do
+        if AP.ContextNormalizedHasPhrase(normalized, markers[i]) then return true end
+    end
+    return false
+end
+
+function A.HasSmallNudgeIntent(text)
+    local normalized = NormalizeReply(text)
+    return AP.ContextNormalizedHasPhrase(normalized, "a bit")
+        or AP.ContextNormalizedHasPhrase(normalized, "bit more")
+        or AP.ContextNormalizedHasPhrase(normalized, "slightly")
+        or AP.ContextNormalizedHasPhrase(normalized, "a little")
+        or AP.ContextNormalizedHasPhrase(normalized, "little more")
+        or AP.ContextNormalizedHasPhrase(normalized, "tiny")
+end
+
+function A.HasNudgeMovementVerb(text)
+    local normalized = NormalizeReply(text)
+    return AP.ContextNormalizedHasPhrase(normalized, "move")
+        or AP.ContextNormalizedHasPhrase(normalized, "nudge")
+        or AP.ContextNormalizedHasPhrase(normalized, "shift")
+        or AP.ContextNormalizedHasPhrase(normalized, "push")
+        or AP.ContextNormalizedHasPhrase(normalized, "raise")
+        or AP.ContextNormalizedHasPhrase(normalized, "lower")
+end
+
+function A.ExtractNudgeDirection(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "" then return nil end
+    if AP.ContextNormalizedHasPhrase(normalized, "to the right")
+        or AP.ContextNormalizedHasPhrase(normalized, "rightward")
+        or AP.ContextNormalizedHasPhrase(normalized, "rightwards")
+        or AP.ContextNormalizedHasPhrase(normalized, "right") then
+        return "right"
+    end
+    if AP.ContextNormalizedHasPhrase(normalized, "to the left")
+        or AP.ContextNormalizedHasPhrase(normalized, "leftward")
+        or AP.ContextNormalizedHasPhrase(normalized, "leftwards")
+        or AP.ContextNormalizedHasPhrase(normalized, "left") then
+        return "left"
+    end
+    if AP.ContextNormalizedHasPhrase(normalized, "upward")
+        or AP.ContextNormalizedHasPhrase(normalized, "upwards")
+        or AP.ContextNormalizedHasPhrase(normalized, "up") then
+        return "up"
+    end
+    if AP.ContextNormalizedHasPhrase(normalized, "downward")
+        or AP.ContextNormalizedHasPhrase(normalized, "downwards")
+        or AP.ContextNormalizedHasPhrase(normalized, "down")
+        or AP.ContextNormalizedHasPhrase(normalized, "lower") then
+        return "down"
+    end
+    return nil
 end
 
 local function IsYes(text)
@@ -2044,6 +2185,7 @@ local ExecuteChoice
 
 ClearPendingChoices = function()
     A.pendingChoices = nil
+    AP.ClearPendingCandidates()
     local ctx = A.GetContext and A.GetContext()
     if ctx then ctx.pendingChoices = nil end
 end
@@ -2054,13 +2196,63 @@ function A.SetPendingChoices(choices)
         return nil
     end
     A.pendingChoices = choices
+    AP.SetPendingCandidates(choices)
     local ctx = A.GetContext and A.GetContext()
     if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
     return ChoiceText(A.pendingChoices)
 end
 
+function AP.PendingCandidateIndex(text, choices)
+    choices = choices or {}
+    local normalized = NormalizeReply(text)
+    normalized = normalized
+        :gsub("^the%s+", "")
+        :gsub("%s+one$", "")
+        :gsub("%s+item$", "")
+        :gsub("%s+option$", "")
+        :gsub("%s+choice$", "")
+    normalized = Trim(normalized:gsub("%s+", " "))
+
+    local n = tonumber(normalized)
+    if n and choices[n] then return n end
+    n = tonumber(normalized:match("^(%d+)[a-z]+$"))
+    if n and choices[n] then return n end
+    n = tonumber(normalized:match("^option%s+(%d+)$")) or tonumber(normalized:match("^choice%s+(%d+)$")) or tonumber(normalized:match("^result%s+(%d+)$"))
+    if n and choices[n] then return n end
+
+    local stripped = normalized
+        :gsub("^apply%s+", "")
+        :gsub("^choose%s+", "")
+        :gsub("^pick%s+", "")
+        :gsub("^select%s+", "")
+        :gsub("^use%s+", "")
+        :gsub("^run%s+", "")
+        :gsub("^execute%s+", "")
+        :gsub("^option%s+", "")
+        :gsub("^choice%s+", "")
+        :gsub("^result%s+", "")
+        :gsub("^number%s+", "")
+    stripped = Trim(stripped:gsub("^the%s+", ""):gsub("%s+one$", ""):gsub("%s+", " "))
+    n = tonumber(stripped)
+    if n and choices[n] then return n end
+    n = tonumber(stripped:match("^(%d+)[a-z]+$"))
+    if n and choices[n] then return n end
+
+    local wordToNumber = {
+        first = 1, second = 2, third = 3, fourth = 4, fifth = 5,
+        sixth = 6, seventh = 7, eighth = 8, ninth = 9, tenth = 10,
+        one = 1, two = 2, three = 3, four = 4, five = 5,
+        six = 6, seven = 7, eight = 8, nine = 9, ten = 10,
+    }
+    n = wordToNumber[stripped] or wordToNumber[normalized]
+    if n and choices[n] then return n end
+    return nil
+end
+
 local function FindChoice(text, choices)
     local normalized = NormalizeReply(text)
+    local candidateIndex = AP.PendingCandidateIndex and AP.PendingCandidateIndex(text, choices)
+    if candidateIndex and choices[candidateIndex] then return choices[candidateIndex] end
     local n = tonumber(normalized)
     if n and choices[n] then return choices[n] end
 
@@ -5375,6 +5567,151 @@ local function RefreshChangeBundle(bundle, changes, lastSetting, lastUnit, lastF
     bundle.serializable = BuildSerializable(changes)
 end
 
+function AP.AddContextAxisCandidate(out, seen, attr)
+    attr = tostring(attr or "")
+    if attr == "" or seen[attr] then return end
+    seen[attr] = true
+    out[#out + 1] = attr
+end
+
+function AP.AddContextAxisStemCandidates(out, seen, stem, axisSuffix)
+    stem = tostring(stem or "")
+    if stem == "" then return end
+    AP.AddContextAxisCandidate(out, seen, stem .. "Offset" .. axisSuffix)
+    AP.AddContextAxisCandidate(out, seen, stem .. axisSuffix)
+    local textStem = stem:gsub("Text$", "")
+    if textStem ~= stem and textStem ~= "" then
+        AP.AddContextAxisCandidate(out, seen, textStem .. "Offset" .. axisSuffix)
+        AP.AddContextAxisCandidate(out, seen, textStem .. axisSuffix)
+    end
+end
+
+function AP.ContextAxisAttributeStem(attribute)
+    attribute = tostring(attribute or "")
+    local suffixes = { "Alignment", "Anchor", "Align", "Side" }
+    for i = 1, #suffixes do
+        local suffix = suffixes[i]
+        if #attribute > #suffix and attribute:sub(-#suffix) == suffix then
+            return attribute:sub(1, #attribute - #suffix)
+        end
+    end
+    return attribute
+end
+
+function AP.PickContextAxisSetting(candidates)
+    local first
+    for i = 1, #(candidates or {}) do
+        local candidate = candidates[i]
+        if candidate and candidate.type == "number" then
+            if not first then first = candidate end
+            if candidate.generated ~= true then return candidate end
+        end
+    end
+    return first
+end
+
+function A.ResolveContextAxisSetting(setting, direction)
+    if type(setting) ~= "table" then return nil end
+    direction = tostring(direction or "")
+    local axisSuffix
+    if direction == "left" or direction == "right" then
+        axisSuffix = "X"
+    elseif direction == "up" or direction == "down" then
+        axisSuffix = "Y"
+    else
+        return nil
+    end
+
+    local attrs, seen = {}, {}
+    local axisLower = axisSuffix:lower()
+    local declaredAxis = tostring(setting.moveAxis or "")
+    if declaredAxis ~= "" then
+        if declaredAxis:lower() == axisLower then
+            AP.AddContextAxisCandidate(attrs, seen, setting.attribute)
+        else
+            AP.AddContextAxisCandidate(attrs, seen, declaredAxis)
+        end
+    end
+
+    local stem = AP.ContextAxisAttributeStem(setting.attribute)
+    AP.AddContextAxisStemCandidates(attrs, seen, stem, axisSuffix)
+
+    local ctx = A.GetContext and A.GetContext() or nil
+    if ctx and ctx.lastTextUnit == setting.unit and (setting.text == true or tostring(setting.category or ""):find("Text", 1, true)) then
+        local area = tostring(ctx.lastTextArea or "")
+        local slot = tostring(ctx.lastTextSlot or "")
+        if area ~= "" then
+            if slot == "left" or slot == "center" or slot == "right" then
+                AP.AddContextAxisCandidate(attrs, seen, area .. "Text" .. slot:sub(1, 1):upper() .. slot:sub(2) .. "Offset" .. axisSuffix)
+            end
+            AP.AddContextAxisCandidate(attrs, seen, area .. "Offset" .. axisSuffix)
+        end
+    end
+
+    AP.AddContextAxisCandidate(attrs, seen, "offset" .. axisSuffix)
+    AP.AddContextAxisCandidate(attrs, seen, axisLower)
+
+    local registry = A.Registry or Registry
+    if not (registry and type(registry.FindSettings) == "function") then return nil end
+    for i = 1, #attrs do
+        local candidates = registry:FindSettings({
+            unit = setting.unit,
+            frameType = setting.frameType,
+            attribute = attrs[i],
+        })
+        local match = AP.PickContextAxisSetting(candidates)
+        if match then return match end
+    end
+    return nil
+end
+
+function AP.ContextEscalationAmount(axisSetting, sourceText)
+    local amount = tonumber(axisSetting and (axisSetting.moveStep or axisSetting.moveAmount)) or 10
+    if A.HasSmallNudgeIntent and A.HasSmallNudgeIntent(sourceText) then
+        amount = amount / 2
+        if amount < 2 then amount = 2 end
+    end
+    return amount
+end
+
+function AP.TryNoOpEscalation(plan, changes)
+    if type(plan) ~= "table" or plan._noOpEscalated == true then return nil end
+    if type(changes) ~= "table" or #changes ~= 1 then return nil end
+    local change = changes[1]
+    if type(change) ~= "table" or change.relativeDelta ~= nil then return nil end
+    local setting = change.setting
+    if type(setting) ~= "table" or setting.type == "number" then return nil end
+
+    local sourceText = tostring(plan.sourceText or A._currentInputText or "")
+    if sourceText == "" then return nil end
+    local direction = A.ExtractNudgeDirection and A.ExtractNudgeDirection(sourceText) or nil
+    if not direction then return nil end
+
+    local hasRelativeMarker = A.HasRelativeIntentMarker and A.HasRelativeIntentMarker(sourceText)
+    if not hasRelativeMarker and not (A.HasNudgeMovementVerb and A.HasNudgeMovementVerb(sourceText)) then return nil end
+
+    local axisSetting = A.ResolveContextAxisSetting(setting, direction)
+    if not axisSetting then return nil end
+    local amount = AP.ContextEscalationAmount(axisSetting, sourceText)
+    if direction == "left" or direction == "down" then amount = -math.abs(amount) else amount = math.abs(amount) end
+    if amount == 0 then return nil end
+
+    return AP.ExecuteChanges({
+        kind = "changes",
+        changes = {
+            {
+                setting = axisSetting,
+                relativeDelta = amount,
+                direction = direction,
+            },
+        },
+        summary = plan.summary,
+        label = plan.label,
+        sourceText = sourceText,
+        _noOpEscalated = true,
+    })
+end
+
 local function ExecuteChanges(plan)
     local changes = plan.changes or {}
     local undoChanges = {}
@@ -5445,6 +5782,10 @@ local function ExecuteChanges(plan)
     end
 
     if #undoChanges == 0 then
+        if A.ContextEngineEnabled ~= false then
+            local escalated = AP.TryNoOpEscalation(plan, changes)
+            if escalated then return escalated end
+        end
         RememberUnchangedChangeContext(plan, changes)
         if #unchangedApplySettings > 0 then
             RunApplies(unchangedApplySettings)
@@ -5468,6 +5809,8 @@ local function ExecuteChanges(plan)
     text = AppendUndoFollowupHint(text)
     return { text = text, result = "applied", summary = plan.summary }
 end
+
+AP.ExecuteChanges = ExecuteChanges
 
 local function ActionResponse(action, plan, message)
     message = Trim(message or "")
@@ -5552,10 +5895,98 @@ local function ClearPendingConfirmationContext()
     if ctx then ctx.pendingConfirmation = nil end
 end
 
+function AP._MentionedSettingFromItem(item)
+    if type(item) ~= "table" then return nil end
+    if type(item.setting) == "table" then return item.setting end
+    if type(item.key) == "string" and item.key ~= "" and Registry and type(Registry.GetSetting) == "function" then
+        local setting = Registry:GetSetting(item.key)
+        if setting then return setting end
+    end
+    if type(item.settingKey) == "string" and item.settingKey ~= "" and Registry and type(Registry.GetSetting) == "function" then
+        local setting = Registry:GetSetting(item.settingKey)
+        if setting then return setting end
+    end
+    if type(item.changes) == "table" then
+        for i = 1, #item.changes do
+            local setting = AP._MentionedSettingFromItem(item.changes[i])
+            if setting then return setting end
+        end
+    end
+    return nil
+end
+
+function AP._MentionedContextFromList(items)
+    if type(items) ~= "table" then return nil, nil end
+    local commonUnit, commonCategory
+    local sawUnit, sawCategory = false, false
+    for i = 1, #items do
+        local item = items[i]
+        local setting = AP._MentionedSettingFromItem(item)
+        local unit = setting and setting.unit or item and item.unit
+        local category = setting and setting.category or item and item.category
+        if item and type(item.args) == "table" then
+            if unit == nil then unit = item.args.unit or item.args.scope end
+            if category == nil then category = item.args.category end
+        end
+        if unit ~= nil then
+            if not sawUnit then
+                commonUnit = unit
+                sawUnit = true
+            elseif commonUnit ~= unit then
+                commonUnit = nil
+            end
+        end
+        if category ~= nil then
+            if not sawCategory then
+                commonCategory = category
+                sawCategory = true
+            elseif commonCategory ~= category then
+                commonCategory = nil
+            end
+        end
+    end
+    return commonUnit, commonCategory
+end
+
+function AP.RememberMentionedContext(source)
+    if type(source) ~= "table" then return end
+    local setting = AP._MentionedSettingFromItem(source)
+    local unit = setting and setting.unit or source.unit or source.lastUnit or source.mentionedUnit
+    local category = setting and setting.category or source.category or source.lastCategory or source.mentionedCategory
+    if (unit == nil or category == nil) and type(source.args) == "table" then
+        if unit == nil then unit = source.args.unit or source.args.scope end
+        if category == nil then category = source.args.category end
+    end
+
+    if (unit == nil or category == nil) and type(source.changes) == "table" then
+        local listUnit, listCategory = AP._MentionedContextFromList(source.changes)
+        if unit == nil then unit = listUnit end
+        if category == nil then category = listCategory end
+    end
+    if (unit == nil or category == nil) and type(source.choices) == "table" then
+        local listUnit, listCategory = AP._MentionedContextFromList(source.choices)
+        if unit == nil then unit = listUnit end
+        if category == nil then category = listCategory end
+    end
+    if (unit == nil or category == nil) and type(source.searchResults) == "table" then
+        local listUnit, listCategory = AP._MentionedContextFromList(source.searchResults)
+        if unit == nil then unit = listUnit end
+        if category == nil then category = listCategory end
+    end
+
+    if unit == nil and category == nil then return end
+    local ctx = A.GetContext and A.GetContext()
+    if not ctx then return end
+    if unit ~= nil then ctx.lastMentionedUnit = unit end
+    if category ~= nil then ctx.lastMentionedCategory = category end
+    ctx.lastMentionedTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or ctx.lastMentionedTurn
+end
+
 local function NormalizePlanResult(result)
     if type(result) ~= "table" then return result end
     if result.status == nil and result.result ~= nil then result.status = result.result end
     if result.result == nil and result.status ~= nil then result.result = result.status end
+    AP.RememberMentionedContext(result)
     if type(result.searchResults) == "table" and type(A.SetPendingResults) == "function" then
         A.SetPendingResults(result.searchResults)
     end
@@ -5565,6 +5996,7 @@ end
 function A.ExecutePlan(plan, opts)
     opts = opts or {}
     if type(plan) ~= "table" then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
+    AP.RememberMentionedContext(plan)
     if PlanNeedsConfirmation(plan) and opts.confirmed ~= true then
         A.pendingConfirmation = plan
         ClearPendingConfirmationContext()
@@ -5709,11 +6141,22 @@ function A._PendingConfirmationFollowupResult(text, plan)
     return nil
 end
 
+function AP.PendingCandidateFollowupResult(text)
+    local candidates = AP.CurrentPendingCandidates and AP.CurrentPendingCandidates() or nil
+    if type(candidates) ~= "table" or #candidates == 0 then return nil end
+    local choice = FindChoice(text, candidates)
+    if not choice then return nil end
+    ClearPendingChoices()
+    return ExecuteChoice(choice)
+end
+
 local function HandlePending(text)
     if type(A.HandlePendingFlow) == "function" then
         local flowResult = A.HandlePendingFlow(text)
         if flowResult then return flowResult end
     end
+    local candidateFollowup = AP.PendingCandidateFollowupResult(text)
+    if candidateFollowup then return candidateFollowup end
     if A.pendingConfirmation then
         if LooksLikeUndoRedoCommand(text) then
             A.pendingConfirmation = nil
@@ -5797,6 +6240,7 @@ function A.HandleCommandInput(text)
 
     local parsed = A.Parse and A.Parse(text) or nil
     if not parsed then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
+    AP.RememberMentionedContext(parsed)
 
     if parsed.kind == "empty" then return nil end
     if parsed.kind == "undo" then
@@ -5809,6 +6253,7 @@ function A.HandleCommandInput(text)
     end
     if parsed.kind == "ambiguous" then
         A.pendingChoices = parsed.choices or {}
+        AP.SetPendingCandidates(A.pendingChoices)
         local ctx = A.GetContext and A.GetContext()
         if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
         return NormalizePlanResult({ text = ChoiceText(A.pendingChoices), result = "ambiguous", summary = parsed.summary })
@@ -5824,6 +6269,7 @@ function A.HandleCommandInput(text)
     if parsed.kind == "answer" then
         return NormalizePlanResult({ text = parsed.text or "", result = parsed.status or "info", summary = parsed.summary })
     end
+    if parsed.kind == "changes" and parsed.sourceText == nil then parsed.sourceText = NormalizeReply(text) end
     return NormalizePlanResult(A.ExecutePlan(parsed))
 end
 
@@ -5845,8 +6291,22 @@ local function ShouldClearPendingResultsAfterHandledInput(result, hadPendingResu
     return true
 end
 
+function AP.AdvanceTurnSerial()
+    local ctx = A.GetContext and A.GetContext() or nil
+    if not ctx then return nil end
+    local serial = (tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0) + 1
+    ctx.turnSerial = serial
+    ctx.lastTurnSerial = serial
+    return serial
+end
+
 function A.HandleInput(text)
     if InCombat() then return NormalizePlanResult(CombatSubmitResult()) end
+    if A._skipTurnSerialAdvance == true then
+        A._skipTurnSerialAdvance = nil
+    else
+        AP.AdvanceTurnSerial()
+    end
     local hadPendingResults = CurrentPendingResults() ~= nil
     A._pendingResultFollowupHandled = nil
     local result
@@ -6224,6 +6684,62 @@ function AP.TryImmediateSubmitResult(text, opts)
     return result
 end
 
+function AP.LastChangeBundleAvailable(ctx)
+    return type(ctx) == "table" and type(ctx.lastChangeBundle) == "table" and #ctx.lastChangeBundle > 0
+end
+
+function AP.NormalizedHasPhrase(text, phrase)
+    text = tostring(text or "")
+    phrase = tostring(phrase or "")
+    if text == "" or phrase == "" then return false end
+    return (" " .. text .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
+end
+
+function AP.NormalizedHasAnyPhrase(text, phrases)
+    for i = 1, #(phrases or {}) do
+        if AP.NormalizedHasPhrase(text, phrases[i]) then return true end
+    end
+    return false
+end
+
+function AP.LooksLikeImmediateLastChangeFollowup(normalized)
+    normalized = Trim(tostring(normalized or ""))
+    if normalized == "" then return false end
+    if normalized:match("^(what|why|where|how|explain|describe|show|open)%s") then return false end
+    if AP.NormalizedHasAnyPhrase(normalized, {
+        "tell me more", "more details", "more options", "more settings", "more like this",
+        "show more", "open more", "result", "results", "option", "options",
+    }) then
+        return false
+    end
+    if normalized == "more"
+        or normalized == "less"
+        or normalized == "again"
+        or normalized == "same again"
+        or normalized == "do it again"
+        or normalized == "once more"
+        or normalized == "one more"
+        or normalized == "continue"
+        or normalized == "keep going"
+        or normalized == "mehr"
+        or normalized == "weniger"
+        or normalized == "weiter"
+        or normalized == "nochmal"
+        or normalized == "noch mal"
+    then
+        return true
+    end
+    return AP.NormalizedHasAnyPhrase(normalized, {
+        "a bit more", "a little more", "still more", "more still",
+        "not enough", "needs more", "need more", "not far enough",
+        "too much", "too far", "not that much", "went too far",
+        "go back a bit", "back a bit", "a bit back",
+        "opposite", "opposite way", "other way", "reverse it",
+        "nicht genug", "mehr noch", "zu viel", "zu weit", "etwas zurueck",
+        "andersrum", "umgekehrt",
+    })
+end
+
 function AP.TryImmediateMutationResult(text, opts)
     if InCombat() or A.pendingConfirmation or CurrentPendingChoices() then return nil end
     local parser = A.Parser or {}
@@ -6234,7 +6750,19 @@ function AP.TryImmediateMutationResult(text, opts)
 
     local ctx = A.GetContext and A.GetContext() or {}
     local plan
-    if A._ParseLastBarGradientGroupFollowup and (normalized:find("group", 1, true) or normalized:find("party", 1, true) or normalized:find("raid", 1, true)) then
+    if parser.BuildContinuationFollowup then
+        plan = parser.BuildContinuationFollowup(normalized, ctx)
+    end
+    if not plan and AP.LastChangeBundleAvailable(ctx)
+        and AP.LooksLikeImmediateLastChangeFollowup(normalized)
+        and type(A.ParseSimpleChange) == "function"
+    then
+        local followupPlan = A.ParseSimpleChange(text, ctx)
+        if followupPlan and followupPlan.kind == "changes" and followupPlan.confirmRequired ~= true then
+            plan = followupPlan
+        end
+    end
+    if not plan and A._ParseLastBarGradientGroupFollowup and (normalized:find("group", 1, true) or normalized:find("party", 1, true) or normalized:find("raid", 1, true)) then
         plan = A._ParseLastBarGradientGroupFollowup(normalized, ctx)
     end
     if not plan and A._ParseDashboardScaleFastShortcut and normalized:find("scale", 1, true) then
@@ -6315,6 +6843,7 @@ function AP.TryImmediateMutationResult(text, opts)
     end
     plan.raw = plan.raw or text
     plan.normalized = plan.normalized or normalized
+    if plan.kind == "changes" and plan.sourceText == nil then plan.sourceText = normalized end
     local result
     if plan.kind == "answer" then
         result = NormalizePlanResult({ text = plan.text or "", result = plan.status or "info", summary = plan.summary })
@@ -6341,6 +6870,7 @@ end
 function AP.SubmitNow(text, opts)    opts = opts or {}
     text = Trim(text)
     if text == "" then return nil end
+    AP.AdvanceTurnSerial()
     local immediate = AP.TryImmediateSubmitResult(text, opts)
     if immediate then return immediate end
     if InCombat() then return CombatSubmitResult() end
@@ -6350,7 +6880,9 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     if opts.skipUserHistory ~= true then
         A.AddHistory("user", text, "submitted")
     end
+    A._skipTurnSerialAdvance = true
     local result = NormalizePlanResult(AP.LongInputResult(text) or AP.TrySubmitBatch(text) or A.HandleInput(text))
+    A._skipTurnSerialAdvance = nil
     AP.RecordAssistantResult(result)
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.submit")
@@ -6376,9 +6908,9 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
         if finished then return end
         finished = true
         finalResult = NormalizePlanResult(result)
+        A.SetBusy(false)
         AP.RecordAssistantResult(finalResult)
         A.RecordPerfSample("assistant.submit.deferred", startedMs, text)
-        A.SetBusy(false)
         if type(callback) == "function" then callback(finalResult) end
     end
 

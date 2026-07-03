@@ -77,6 +77,43 @@ local ApplyUnitPortrait
 local ResolvePortraitBorderColor
 local PortraitBorderNeedsUpdate
 local LayoutPortraitBorder
+local portraitUnitGeneration = {
+  target = 0,
+  focus = 0,
+}
+local portraitGenerationEventStamp = {}
+
+local function BumpPortraitUnitGeneration(unit)
+  if portraitUnitGeneration[unit] ~= nil then
+    portraitUnitGeneration[unit] = portraitUnitGeneration[unit] + 1
+  end
+end
+
+local function BumpPortraitGenerationForEvent(event)
+  local now = (_G.GetTime and _G.GetTime()) or 0
+  if portraitGenerationEventStamp[event] == now then
+    return
+  end
+  portraitGenerationEventStamp[event] = now
+  if event == "PLAYER_TARGET_CHANGED" then
+    BumpPortraitUnitGeneration("target")
+  elseif event == "PLAYER_FOCUS_CHANGED" then
+    BumpPortraitUnitGeneration("focus")
+  elseif event == "PORTRAITS_UPDATED" then
+    BumpPortraitUnitGeneration("target")
+    BumpPortraitUnitGeneration("focus")
+  end
+end
+
+if CreateFrame then
+  local generationFrame = CreateFrame("Frame")
+  generationFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+  generationFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
+  generationFrame:RegisterEvent("PORTRAITS_UPDATED")
+  generationFrame:SetScript("OnEvent", function(_, event)
+    BumpPortraitGenerationForEvent(event)
+  end)
+end
 
 local function SetTextureCached(texture, value)
   if texture and texture._msufTexture ~= value then
@@ -273,7 +310,20 @@ local function BuildUnitPortraitKey(unit, frame, p, guid)
   local exists = UnitExistsPlain(unit)
   local available = exists and PortraitUnitAvailable(unit)
   if exists and guid == nil then
-    return nil, exists, available
+    local generation = portraitUnitGeneration[unit]
+    if generation == nil then
+      return nil, exists, available
+    end
+    return "2D_PENDING|"
+      .. PortraitKeyPart(unit) .. "|"
+      .. PortraitKeyPart(frame and frame.unit) .. "|"
+      .. PortraitKeyPart(generation) .. "|"
+      .. (available and "1" or "0") .. "|"
+      .. PortraitKeyPart(p and p.render) .. "|"
+      .. PortraitKeyPart(p and p.texL) .. "|"
+      .. PortraitKeyPart(p and p.texR) .. "|"
+      .. PortraitKeyPart(p and p.texT) .. "|"
+      .. PortraitKeyPart(p and p.texB), exists, available
   end
   return "2D|"
     .. PortraitKeyPart(unit) .. "|"
@@ -727,6 +777,7 @@ function Portrait.Update(frame, event, unit)
     return
   end
   unit = unit or frame.unit
+  BumpPortraitGenerationForEvent(event)
   local identityVisual = event == "MSUF_UNIT_IDENTITY_VISUAL"
     or event == "MSUF_UNIT_IDENTITY_SOFT"
     or event == "MSUF_UNIT_IDENTITY_SOFT_VISUAL"

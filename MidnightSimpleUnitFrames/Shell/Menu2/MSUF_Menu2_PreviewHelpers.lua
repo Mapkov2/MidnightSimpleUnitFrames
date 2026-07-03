@@ -405,6 +405,35 @@ function H.ShowPreviewHandleContext(handle, opts)
     popup:Show()
     return popup
 end
+local SETTINGS_ICON_RECTS = {
+    { 10, 1, "CENTER", 0, 4, 0.70 }, { 10, 1, "CENTER", 0, 0, 0.70 }, { 10, 1, "CENTER", 0, -4, 0.70 },
+    { 3, 3, "CENTER", -3, 4, 1.00 }, { 3, 3, "CENTER", 3, 0, 1.00 }, { 3, 3, "CENTER", -1, -4, 1.00 },
+}
+local function CreatePreviewSettingsIcon(button)
+    if not (button and button.CreateTexture) or button._msuf2PreviewSettingsParts then return end
+    local parts = {}
+    for i = 1, #SETTINGS_ICON_RECTS do
+        local r = SETTINGS_ICON_RECTS[i]
+        local tex = button:CreateTexture(nil, "ARTWORK", nil, 6)
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+        tex:SetSize(r[1], r[2])
+        tex:SetPoint(r[3], button, r[3], r[4], r[5])
+        parts[i] = tex
+    end
+    button._msuf2PreviewSettingsParts = parts
+end
+
+local function PaintPreviewSettingsIcon(button, hover)
+    local parts = button and button._msuf2PreviewSettingsParts
+    local mul = hover and 1.16 or 1
+    if parts then
+        for i = 1, #parts do
+            local alpha = SETTINGS_ICON_RECTS[i][6] or 1
+            parts[i]:SetVertexColor(min(0.76 * mul, 1), min(0.94 * mul, 1), 1, hover and 1 or alpha)
+        end
+    end
+end
+
 function H.EnsurePreviewHandleGear(handle, opts)
     opts = opts or {}
     if not handle then return nil end
@@ -423,11 +452,8 @@ function H.EnsurePreviewHandleGear(handle, opts)
         elseif gear.SetBackdrop then
             gear:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
         end
-        local fs = T and T.Font and T.Font(gear, "GameFontDisableSmall", "⚙", { 0.78, 0.92, 1.00, 1 }) or gear:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        fs:SetText("⚙")
-        fs:SetPoint("CENTER", gear, "CENTER", 0, 1)
-        gear.fs = fs
-        local bg, br = { 0.018, 0.150, 0.230, 0.98 }, { 0.120, 0.600, 0.780, 0.98 }
+        CreatePreviewSettingsIcon(gear)
+        local bg, br = { 0.010, 0.022, 0.040, 0.96 }, { 0.160, 0.560, 0.720, 0.92 }
         local function Paint(self, hover)
             local mul = hover and 1.10 or 1
             if self._fill then
@@ -440,6 +466,7 @@ function H.EnsurePreviewHandleGear(handle, opts)
             elseif self.SetBackdropBorderColor then
                 self:SetBackdropBorderColor(br[1], br[2], br[3], br[4])
             end
+            PaintPreviewSettingsIcon(self, hover)
         end
         gear:SetScript("OnEnter", function(self)
             Paint(self, true)

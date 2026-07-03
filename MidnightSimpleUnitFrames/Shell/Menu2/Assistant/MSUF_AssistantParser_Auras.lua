@@ -13,6 +13,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Data = A.ParserData or {}
+A.ParserData = Data
+local AurasData = Data.AURAS_PARSER or {}
+local AurasPhrases = AurasData.PHRASES or {}
 
 -- Aura parser shard for quick presets, blacklist commands, and aura-lane bulk intent.
 -- Keep the language matching here separate from Auras3 runtime code: this file decides what
@@ -49,7 +53,7 @@ local AURA_BLACKLIST_PRESETS = {
 }
 
 local function AuraBlacklistScope(text)
-    if ContainsAny(text, { "shared", "global", "all auras", "all aura" }) then return "shared" end
+    if ContainsAny(text, AurasPhrases[1]) then return "shared" end
     local units = DetectUnits(text)
     for i = 1, #units do
         local unit = units[i]
@@ -137,33 +141,16 @@ local function HasUnitAuraGeometryScope(text)
 end
 
 local function HasGenericGroupAuraGeometryScope(text)
-    return ContainsAny(text, {
-        "group aura", "group auras", "group aura icon", "group aura icons",
-        "group buff", "group buffs", "group buff icon", "group buff icons",
-        "group debuff", "group debuffs", "group debuff icon", "group debuff icons",
-        "group frame aura", "group frame auras", "group frame buff", "group frame buffs",
-        "group frame debuff", "group frame debuffs",
-        "gruppen aura", "gruppen auren", "gruppen buff", "gruppen buffs",
-        "gruppen debuff", "gruppen debuffs", "gruppenframe aura", "gruppenframe auren",
-    })
+    return ContainsAny(text, AurasPhrases[2])
 end
 
 local function HasConcreteGroupAuraGeometryScope(text)
-    return ContainsAny(text, {
-        "party", "party frame", "party frames", "party aura", "party auras",
-        "party buff", "party buffs", "party debuff", "party debuffs",
-        "raid", "raid frame", "raid frames", "raid aura", "raid auras",
-        "raid buff", "raid buffs", "raid debuff", "raid debuffs",
-        "mythic", "mythic raid", "mythicraid", "mythic raid aura", "mythic raid auras",
-        "all group", "all group aura", "all group auras", "all group buffs", "all group debuffs",
-        "alle gruppen aura", "alle gruppen auren", "alle gruppen buffs", "alle gruppen debuffs",
-        "every group aura", "every group buff", "every group debuff",
-    })
+    return ContainsAny(text, AurasPhrases[3])
 end
 local function AuraGeometryLanes(text)
-    if ContainsAny(text, { "buff", "buffs" }) then return { "buff" } end
-    if ContainsAny(text, { "debuff", "debuffs" }) then return { "debuff" } end
-    if ContainsAny(text, { "aura", "auras", "auren", "aura icon", "aura icons", "aura symbole", "auren symbole" }) then return { "buff", "debuff" } end
+    if ContainsAny(text, AurasPhrases[4]) then return { "buff" } end
+    if ContainsAny(text, AurasPhrases[5]) then return { "debuff" } end
+    if ContainsAny(text, AurasPhrases[6]) then return { "buff", "debuff" } end
     return nil
 end
 
@@ -209,50 +196,45 @@ local function AuraGeometrySettingKey(scope, lane, attr)
 end
 
 local function AuraGeometryAxis(text, direction)
-    if ContainsAny(text, { "x offset", "offset x", "horizontal offset", "left", "right", "links", "rechts" }) then return "offsetX" end
-    if ContainsAny(text, { "y offset", "offset y", "vertical offset", "up", "down", "oben", "unten", "hoch", "runter" }) then return "offsetY" end
+    if ContainsAny(text, AurasPhrases[7]) then return "offsetX" end
+    if ContainsAny(text, AurasPhrases[8]) then return "offsetY" end
     if direction == "left" or direction == "right" then return "offsetX" end
     if direction == "up" or direction == "down" then return "offsetY" end
     return nil
 end
 
 local function AuraGeometryAttribute(text, direction)
-    if ContainsAny(text, { "cooldown anchor", "timer anchor", "cooldown text anchor", "timer text anchor" }) then
+    if ContainsAny(text, AurasPhrases[9]) then
         return "cooldownAnchor"
     end
-    if ContainsAny(text, { "filter token", "filter type", "inclusive filter" })
-        or (ContainsAny(text, { "filter" }) and not ContainsAny(text, { "exclusive", "category", "blacklist" })) then
+    if ContainsAny(text, AurasPhrases[10])
+        or (ContainsAny(text, AurasPhrases[11]) and not ContainsAny(text, AurasPhrases[12])) then
         return "filterToken"
     end
-    if ContainsAny(text, { "growth direction", "growth", "grow direction" })
-        or (ContainsAny(text, { "grow", "grows" }) and direction) then
+    if ContainsAny(text, AurasPhrases[13])
+        or (ContainsAny(text, AurasPhrases[14]) and direction) then
         return "growth"
     end
-    if ContainsAny(text, { "anchor", "anchor point", "position anchor", "bottom left", "bottom right", "top left", "top right", "bottomleft", "bottomright", "topleft", "topright" }) then
+    if ContainsAny(text, AurasPhrases[15]) then
         return "anchor"
     end
-    local hasSizeIntent = ContainsAny(text, { "icon size", "icons size", "size", "bigger", "larger", "smaller", "shrink", "groesse", "grosse" })
-    if not hasSizeIntent and ContainsAny(text, {
-        "max", "maximum", "max icons", "maximum icons", "max count", "maximum count",
-        "icon count", "aura count", "buff count", "debuff count", "count",
-        "cap", "caps", "capped", "aura cap", "buff cap", "debuff cap",
-        "limit", "limits", "limited", "icon limit", "aura limit", "buff limit", "debuff limit",
-    }) then
+    local hasSizeIntent = ContainsAny(text, AurasPhrases[16])
+    if not hasSizeIntent and ContainsAny(text, AurasPhrases[17]) then
         return "max"
     end
-    if ContainsAny(text, { "per row", "icons per row", "wrap count", "row count" }) then
+    if ContainsAny(text, AurasPhrases[18]) then
         return "perRow"
     end
-    if ContainsAny(text, { "spacing", "gap", "icon gap" }) then
+    if ContainsAny(text, AurasPhrases[19]) then
         return "spacing"
     end
-    if ContainsAny(text, { "layer", "z", "z layer", "z level", "z-level", "z order", "z-order", "z index", "z-index", "draw layer", "frame level", "strata", "frame strata" }) then
+    if ContainsAny(text, AurasPhrases[20]) then
         return "layer"
     end
     if hasSizeIntent then
         return "size"
     end
-    if ContainsAny(text, { "move", "nudge", "shift", "offset", "left", "right", "up", "down", "verschiebe", "links", "rechts", "oben", "unten" }) then
+    if ContainsAny(text, AurasPhrases[21]) then
         return AuraGeometryAxis(text, direction)
     end
     return nil
@@ -299,8 +281,8 @@ local function AuraGeometryDelta(text, setting, attr, direction)
     if attr == "size" then
         local value = FirstNumber(text)
         if value ~= nil then return value, nil end
-        if ContainsAny(text, { "bigger", "larger", "grow", "increase", "raise", "more", "groesser", "mehr" }) then return nil, 1 end
-        if ContainsAny(text, { "smaller", "shrink", "decrease", "lower", "less", "kleiner", "weniger" }) then return nil, -1 end
+        if ContainsAny(text, AurasPhrases[22]) then return nil, 1 end
+        if ContainsAny(text, AurasPhrases[23]) then return nil, -1 end
         return nil, nil
     end
     if direction then
@@ -312,28 +294,21 @@ local function AuraGeometryDelta(text, setting, attr, direction)
 end
 
 local function ParseAuraGeometryShortcut(text)
-    if not ContainsAny(text, { "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs" }) then return nil end
-    if ContainsAny(text, { "copy", "preset", "blacklist", "category", "private aura", "private auras" }) then return nil end
-    local explicitNonGroupAuraScope = ContainsAny(text, {
-        "shared", "shared aura", "shared auras", "global", "all aura", "all auras",
-        "player aura", "player auras", "player buff", "player buffs", "player debuff", "player debuffs",
-        "target aura", "target auras", "target buff", "target buffs", "target debuff", "target debuffs",
-        "focus aura", "focus auras", "focus buff", "focus buffs", "focus debuff", "focus debuffs",
-        "pet aura", "pet auras", "pet buff", "pet buffs", "pet debuff", "pet debuffs",
-        "boss aura", "boss auras", "boss buff", "boss buffs", "boss debuff", "boss debuffs",
-    })
+    if not ContainsAny(text, AurasPhrases[24]) then return nil end
+    if ContainsAny(text, AurasPhrases[25]) then return nil end
+    local explicitNonGroupAuraScope = ContainsAny(text, AurasPhrases[26])
     local groupFastIntent = not explicitNonGroupAuraScope
-        and ContainsAny(text, { "party", "party frame", "party frames", "raid", "raid frame", "raid frames", "mythic raid", "group frame", "group frames" })
-        and (ContainsAny(text, { "cooldown anchor", "timer anchor", "filter token", "filter type", "inclusive filter" })
-            or (ContainsAny(text, { "filter" }) and not ContainsAny(text, { "exclusive", "category", "blacklist" })))
-    if ContainsAny(text, { "filter" }) and not groupFastIntent then return nil end
-    if ContainsAny(text, { "stack size", "stack text size", "stack font", "cooldown size", "cooldown text size", "cooldown font", "timer size", "timer text size", "timer font" })
-        and not ContainsAny(text, { "icon size", "icons size" })
+        and ContainsAny(text, AurasPhrases[27])
+        and (ContainsAny(text, AurasPhrases[28])
+            or (ContainsAny(text, AurasPhrases[29]) and not ContainsAny(text, AurasPhrases[30])))
+    if ContainsAny(text, AurasPhrases[31]) and not groupFastIntent then return nil end
+    if ContainsAny(text, AurasPhrases[32])
+        and not ContainsAny(text, AurasPhrases[33])
     then
         return nil
     end
-    if not groupFastIntent and ContainsAny(text, { "stack", "stacks", "stack count", "cooldown text", "timer text", "cooldown", "timer" })
-        and ContainsAny(text, { "text", "font", "anchor", "x offset", "offset x", "y offset", "offset y", "text x", "text y" }) then
+    if not groupFastIntent and ContainsAny(text, AurasPhrases[34])
+        and ContainsAny(text, AurasPhrases[35]) then
         return nil
     end
     if HasGenericGroupAuraGeometryScope(text) and not HasConcreteGroupAuraGeometryScope(text) then return nil end
@@ -383,13 +358,13 @@ local function AuraQuickPresetForText(text)
 end
 
 local function AuraEditScopeForText(text)
-    if ContainsAny(text, { "shared", "global", "all auras", "shared auras" }) then return "shared" end
-    if ContainsAny(text, { "player aura", "player auras", "spieler aura", "spieler auren" }) then return "player" end
-    if ContainsAny(text, { "target aura", "target auras", "ziel aura", "ziel auren" }) then return "target" end
-    if ContainsAny(text, { "focus aura", "focus auras", "fokus aura", "fokus auren" }) then return "focus" end
-    if ContainsAny(text, { "boss aura", "boss auras", "boss1 aura", "boss1 auras", "boss 1 aura", "boss 1 auras" }) then return "boss" end
-    if ContainsAny(text, { "party aura", "party auras", "party frame aura", "party frame auras", "group aura", "group auras", "gruppen aura", "gruppen auren" }) then return "party" end
-    if ContainsAny(text, { "raid aura", "raid auras", "raid frame aura", "raid frame auras", "mythic raid aura", "mythic raid auras", "schlachtzug aura", "schlachtzug auren" }) then return "raid" end
+    if ContainsAny(text, AurasPhrases[36]) then return "shared" end
+    if ContainsAny(text, AurasPhrases[37]) then return "player" end
+    if ContainsAny(text, AurasPhrases[38]) then return "target" end
+    if ContainsAny(text, AurasPhrases[39]) then return "focus" end
+    if ContainsAny(text, AurasPhrases[40]) then return "boss" end
+    if ContainsAny(text, AurasPhrases[41]) then return "party" end
+    if ContainsAny(text, AurasPhrases[42]) then return "raid" end
     local units = DetectUnits(text)
     for i = 1, #units do
         if units[i] == "player" or units[i] == "target" or units[i] == "focus" or units[i] == "boss" then return units[i] end
@@ -406,7 +381,7 @@ end
 
 local function AuraShortcutScopes(text, allowShared)
     local out = {}
-    if allowShared and ContainsAny(text, { "shared", "global", "shared aura", "shared auras" }) then
+    if allowShared and ContainsAny(text, AurasPhrases[43]) then
         AddAuraGeometryScope(out, "unit", "shared")
     end
 
@@ -499,9 +474,9 @@ local function AuraDurationBarDirectionValue(text)
 end
 
 local function AuraDebuffBorderModeValue(text)
-    if ContainsAny(text, { "symbol", "with symbol", "with icon", "border symbol", "border and symbol", "border plus symbol" }) then return "SYMBOL" end
-    if ContainsAny(text, { "off", "none", "disabled", "hide", "hidden", "turn off" }) then return "OFF" end
-    if ContainsAny(text, { "border only", "just border", "outline", "outline only" }) then return "BORDER" end
+    if ContainsAny(text, AurasPhrases[44]) then return "SYMBOL" end
+    if ContainsAny(text, AurasPhrases[45]) then return "OFF" end
+    if ContainsAny(text, AurasPhrases[46]) then return "BORDER" end
     if HasPhrase(text, "to border") or HasPhrase(text, "as border") or HasPhrase(text, "mode border") or HasPhrase(text, "use border") then return "BORDER" end
     return nil
 end
@@ -592,8 +567,8 @@ local function AuraFilterDisplayScope(text)
 end
 
 local function AuraFilterDisplayLane(text)
-    if ContainsAny(text, { "debuff", "debuffs" }) then return "debuff", "Debuff" end
-    if ContainsAny(text, { "buff", "buffs" }) then return "buff", "Buff" end
+    if ContainsAny(text, AurasPhrases[47]) then return "debuff", "Debuff" end
+    if ContainsAny(text, AurasPhrases[48]) then return "buff", "Buff" end
     return nil, nil
 end
 
@@ -686,11 +661,11 @@ local function AuraGroupFilterGuidance(scope, scopeLabel, lane, laneLabel)
 end
 
 local function ParseAuraFilterGuidanceShortcut(text)
-    if not ContainsAny(text, { "filter", "filters" }) then return nil end
-    if ContainsAny(text, { "good filter", "best filter", "which filter should", "what filter should", "recommend", "recommendation", "for raid", "for raids", "raid setup", "raiding", "new player", "beginner" }) then
+    if not ContainsAny(text, AurasPhrases[49]) then return nil end
+    if ContainsAny(text, AurasPhrases[50]) then
         return AuraFilterGuidanceRecommendation()
     end
-    local wantsStatus = ContainsAny(text, { "active", "current", "enabled", "what", "which", "explain", "check", "status", "do i have", "is on", "are on" })
+    local wantsStatus = ContainsAny(text, AurasPhrases[51])
     if not wantsStatus then return nil end
     local kind, scope, scopeLabel = AuraFilterDisplayScope(text)
     local lane, laneLabel = AuraFilterDisplayLane(text)
@@ -707,17 +682,17 @@ end
 local function AuraBooleanValue(text)
     local value = DetectBoolean and DetectBoolean(text)
     if value ~= nil then return value end
-    if ContainsAny(text, { "off", "disable", "disabled", "hide", "hidden", "without", "no ", "aus", "deaktivieren" }) then
+    if ContainsAny(text, AurasPhrases[52]) then
         return false
     end
     return true
 end
 
 local function AuraDirectionValue(text)
-    if ContainsAny(text, { "up", "oben", "hoch" }) then return "UP" end
-    if ContainsAny(text, { "down", "unten", "runter" }) then return "DOWN" end
-    if ContainsAny(text, { "left", "links" }) then return "LEFT" end
-    if ContainsAny(text, { "right", "rechts" }) then return "RIGHT" end
+    if ContainsAny(text, AurasPhrases[53]) then return "UP" end
+    if ContainsAny(text, AurasPhrases[54]) then return "DOWN" end
+    if ContainsAny(text, AurasPhrases[55]) then return "LEFT" end
+    if ContainsAny(text, AurasPhrases[56]) then return "RIGHT" end
     return nil
 end
 
@@ -756,23 +731,17 @@ local function AuraStyleScopes(text)
         end
         if #out > 0 then return out end
     end
-    if ContainsAny(text, { "shared", "global", "all unit auras", "unit auras", "unitframe auras" }) then
+    if ContainsAny(text, AurasPhrases[57]) then
         return { { kind = "unit", key = "shared" } }
     end
     return nil
 end
 
 local function ParseAuraStyleBoolShortcut(text)
-    if not ContainsAny(text, { "stack", "stacks", "cooldown text", "timer text", "cooldown swipe", "timer swipe", "duration bar", "timer bar" }) then
+    if not ContainsAny(text, AurasPhrases[58]) then
         return nil
     end
-    if ContainsAny(text, {
-        "anchor", "x offset", "offset x", " y offset", "offset y", "text x", "text y",
-        "size", "font", "height", "position", "edge", "fill mode", "direction", "reverse",
-        "display", "display mode", "mode", "bar only", "separate bar", "icon bar",
-        "icon and bar", "icon plus bar", "icon + bar", "overlay",
-        "decimals", "decimal", "seconds", "threshold", "filter", "exclusive", "color", "colors", "colour", "colours",
-    }) then
+    if ContainsAny(text, AurasPhrases[59]) then
         return nil
     end
 
@@ -788,9 +757,9 @@ local function ParseAuraStyleBoolShortcut(text)
     local scopes = AuraStyleScopes(text)
     if not scopes then return nil end
     local lanes = nil
-    if ContainsAny(text, { "debuff", "debuffs" }) then
+    if ContainsAny(text, AurasPhrases[60]) then
         lanes = { "debuff" }
-    elseif ContainsAny(text, { "buff", "buffs" }) then
+    elseif ContainsAny(text, AurasPhrases[61]) then
         lanes = { "buff" }
     end
 
@@ -836,16 +805,10 @@ local AURA_STYLE_NUMBER_SPECS = {
 }
 
 local function ParseAuraStyleNumberShortcut(text)
-    if not ContainsAny(text, {
-        "stack size", "stack text size", "stack x", "stack y",
-        "cooldown size", "cooldown text size", "timer size", "timer text size",
-        "cooldown x", "cooldown y", "timer text x", "timer text y",
-        "cooldown decimals", "cooldown decimal", "timer decimals", "timer decimal", "decimal seconds",
-        "duration bar height", "timer bar height",
-    }) then
+    if not ContainsAny(text, AurasPhrases[62]) then
         return nil
     end
-    if ContainsAny(text, { "icon size", "icons size", "anchor", "position", "fill mode", "direction", "color", "colors", "colour", "colours", "filter", "exclusive" }) then
+    if ContainsAny(text, AurasPhrases[63]) then
         return nil
     end
 
@@ -861,9 +824,9 @@ local function ParseAuraStyleNumberShortcut(text)
     local scopes = AuraStyleScopes(text)
     if not scopes then return nil end
     local lanes = nil
-    if ContainsAny(text, { "debuff", "debuffs" }) then
+    if ContainsAny(text, AurasPhrases[64]) then
         lanes = { "debuff" }
-    elseif ContainsAny(text, { "buff", "buffs" }) then
+    elseif ContainsAny(text, AurasPhrases[65]) then
         lanes = { "buff" }
     end
 
@@ -934,25 +897,25 @@ end
 local function ParseAuraStyleAnchorShortcut(text)
     local attr
     local label
-    if ContainsAny(text, { "stack anchor", "stack count anchor", "stack text anchor" }) then
+    if ContainsAny(text, AurasPhrases[66]) then
         attr = "stackAnchor"
         label = "Stack Count Anchor"
-    elseif ContainsAny(text, { "cooldown anchor", "cooldown text anchor", "timer anchor", "timer text anchor" }) then
+    elseif ContainsAny(text, AurasPhrases[67]) then
         attr = "cooldownAnchor"
         label = "Cooldown Anchor"
     else
         return nil
     end
-    if ContainsAny(text, { "x offset", "offset x", " y offset", "offset y", "text x", "text y", "size", "font", "color", "colors", "colour", "colours" }) then
+    if ContainsAny(text, AurasPhrases[68]) then
         return nil
     end
 
     local scopes = AuraShortcutScopes(text, true)
     if not scopes then return nil end
     local lanes = nil
-    if ContainsAny(text, { "debuff", "debuffs" }) then
+    if ContainsAny(text, AurasPhrases[69]) then
         lanes = { "debuff" }
-    elseif ContainsAny(text, { "buff", "buffs" }) then
+    elseif ContainsAny(text, AurasPhrases[70]) then
         lanes = { "buff" }
     end
 
@@ -1025,8 +988,8 @@ local function ParseAuraStyleAnchorShortcut(text)
 end
 
 local function ParseUnitAuraTooltipShortcut(text)
-    if not ContainsAny(text, { "show tooltip", "show tooltips", "tooltip", "tooltips", "aura tooltip", "aura tooltips" }) then return nil end
-    if ContainsAny(text, { "group", "group aura", "party", "raid", "mythic", "native", "blizzard", "anchor", "position", "x offset", "offset x", "y offset", "offset y" }) then
+    if not ContainsAny(text, AurasPhrases[71]) then return nil end
+    if ContainsAny(text, AurasPhrases[72]) then
         return nil
     end
 
@@ -1053,12 +1016,12 @@ local function ParseUnitAuraTooltipShortcut(text)
 end
 
 local function ParseAuraExclusiveFilterShortcut(text)
-    if not ContainsAny(text, { "exclusive filter", "exclusive aura filter" }) then return nil end
+    if not ContainsAny(text, AurasPhrases[73]) then return nil end
 
     local lane
-    if ContainsAny(text, { "debuff", "debuffs" }) then
+    if ContainsAny(text, AurasPhrases[74]) then
         lane = "debuff"
-    elseif ContainsAny(text, { "buff", "buffs" }) then
+    elseif ContainsAny(text, AurasPhrases[75]) then
         lane = "buff"
     end
     if not lane then
@@ -1071,7 +1034,7 @@ local function ParseAuraExclusiveFilterShortcut(text)
     end
 
     local scopes = {}
-    if ContainsAny(text, { "shared", "global", "shared aura", "shared auras" }) then
+    if ContainsAny(text, AurasPhrases[76]) then
         scopes[#scopes + 1] = "shared"
     else
         local units = DetectUnits(text)
@@ -1128,8 +1091,8 @@ local function ParseAuraExclusiveFilterShortcut(text)
 end
 
 local function ParseGroupPrivateAuraShortcut(text)
-    if not ContainsAny(text, { "private aura", "private auras" }) then return nil end
-    if ContainsAny(text, { "native", "blizzard", "copy", "blacklist", "whitelist", "spell id", "spellid" }) then return nil end
+    if not ContainsAny(text, AurasPhrases[77]) then return nil end
+    if ContainsAny(text, AurasPhrases[78]) then return nil end
 
     local groups = DetectGroups(text)
     local scopes = {}
@@ -1144,39 +1107,39 @@ local function ParseGroupPrivateAuraShortcut(text)
     local keySuffix
     local valueKind
     local label
-    if ContainsAny(text, { "private aura countdown", "private aura timer", "private aura cooldown text" }) then
+    if ContainsAny(text, AurasPhrases[79]) then
         keySuffix = "privateAuraCountdown"
         valueKind = "boolean"
         label = "Private Aura Countdown"
-    elseif ContainsAny(text, { "private aura numbers", "private aura number text", "private aura stacks", "private aura stack text" }) then
+    elseif ContainsAny(text, AurasPhrases[80]) then
         keySuffix = "privateAuras.showNumbers"
         valueKind = "boolean"
         label = "Private Aura Numbers"
-    elseif ContainsAny(text, { "private aura max", "private aura count", "private aura limit", "private aura icons max" }) then
+    elseif ContainsAny(text, AurasPhrases[81]) then
         keySuffix = "privateAuraMax"
         valueKind = "number"
         label = "Private Aura Max Icons"
-    elseif ContainsAny(text, { "private aura size", "private aura icon size", "private aura icons size" }) then
+    elseif ContainsAny(text, AurasPhrases[82]) then
         keySuffix = "privateAuraSize"
         valueKind = "number"
         label = "Private Aura Icon Size"
-    elseif ContainsAny(text, { "private aura x offset", "private aura horizontal offset", "private aura x" }) then
+    elseif ContainsAny(text, AurasPhrases[83]) then
         keySuffix = "privateAuraX"
         valueKind = "number"
         label = "Private Aura X Offset"
-    elseif ContainsAny(text, { "private aura y offset", "private aura vertical offset", "private aura y" }) then
+    elseif ContainsAny(text, AurasPhrases[84]) then
         keySuffix = "privateAuraY"
         valueKind = "number"
         label = "Private Aura Y Offset"
-    elseif ContainsAny(text, { "private aura spacing", "private aura gap", "private aura icon spacing" }) then
+    elseif ContainsAny(text, AurasPhrases[85]) then
         keySuffix = "privateAuras.spacing"
         valueKind = "number"
         label = "Private Aura Spacing"
-    elseif ContainsAny(text, { "private aura growth", "private aura grow", "private auras grow", "private aura grow direction", "private aura direction" }) then
+    elseif ContainsAny(text, AurasPhrases[86]) then
         keySuffix = "privateAuras.growth"
         valueKind = "enum"
         label = "Private Aura Growth"
-    elseif ContainsAny(text, { "private aura anchor", "private aura position", "private aura corner" }) then
+    elseif ContainsAny(text, AurasPhrases[87]) then
         keySuffix = "privateAuraAnchor"
         valueKind = "enum"
         label = "Private Aura Anchor"
@@ -1231,23 +1194,18 @@ local function ParseGroupPrivateAuraShortcut(text)
 end
 
 local function ParseGroupAuraLaneVisibilityDirectShortcut(text)
-    if not ContainsAny(text, { "party buff", "party buffs", "party debuff", "party debuffs", "raid buff", "raid buffs", "raid debuff", "raid debuffs", "mythic raid buff", "mythic raid buffs", "mythicraid buff", "mythicraid buffs", "mythic raid debuff", "mythic raid debuffs", "mythicraid debuff", "mythicraid debuffs" }) then
+    if not ContainsAny(text, AurasPhrases[88]) then
         return nil
     end
-    if ContainsAny(text, {
-        "filter", "filters", "only", "show only", "private", "native", "blizzard", "blacklist", "whitelist",
-        "stack", "cooldown", "timer", "duration", "x offset", "offset x", " y offset", "offset y",
-        " x ", "x ", " y ", "y ", "per row", "layer", "swipe", "direction", "dispel", "border", "mode",
-        "size", "max", "count", "spacing", "growth", "anchor", "position", "color", "colors", "colour", "colours", "stripe",
-    }) then
+    if ContainsAny(text, AurasPhrases[89]) then
         return nil
     end
     if FirstNumber(text) ~= nil then return nil end
 
     local lane
-    if ContainsAny(text, { "debuff", "debuffs" }) then
+    if ContainsAny(text, AurasPhrases[90]) then
         lane = "debuff"
-    elseif ContainsAny(text, { "buff", "buffs" }) then
+    elseif ContainsAny(text, AurasPhrases[91]) then
         lane = "buff"
     end
     if not lane then return nil end
@@ -1273,19 +1231,8 @@ local function ParseGroupAuraLaneVisibilityDirectShortcut(text)
 end
 
 local function ParseAuraDirectSettingShortcut(text, raw)
-    if not ContainsAny(text, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "sated", "exhaustion", "reminder",
-        "swipe darkens", "cooldown swipe darkens", "dispel type border", "dispel type borders", "debuff type border", "debuff type borders",
-        "stack count", "show stack", "stack anchor", "stack size", "stack x", "stack y",
-        "cooldown anchor", "timer anchor", "cooldown text", "timer text", "cooldown size", "timer size",
-        "cooldown x", "cooldown y", "cooldown decimal", "cooldown decimals", "timer decimal", "timer decimals",
-        "cooldown swipe", "timer swipe",
-        "duration bar", "timer bar", "show tooltip", "tooltip",
-        "exclusive filter",
-        "shared filters", "global filters", "player filters", "target filters", "focus filters", "boss filters", "unit filters",
-        "sort order",
-    }) then return nil end
-    if ContainsAny(text, { "aura blacklist spell", "hidden aura spell", "blacklist spell" }) then
+    if not ContainsAny(text, AurasPhrases[92]) then return nil end
+    if ContainsAny(text, AurasPhrases[93]) then
         local value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw or text, { " to ", " as ", " = " }) or nil
         if not value or value == "" then
             value = tostring(raw or text):match("[Ss][Pp][Ee][Ll][Ll]%s+(.+)$")
@@ -1294,56 +1241,57 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             return AuraDirectSettingChange("menu.auraBlacklistSpell", value, "Hidden Aura Spell")
         end
     end
-    if ContainsAny(text, { "blacklist", "whitelist", "spell id", "spellid", "spell:" })
-        and not ContainsAny(text, { "aura blacklist preset", "blacklist preset", "hidden aura preset" })
+    if ContainsAny(text, AurasPhrases[94])
+        and not ContainsAny(text, AurasPhrases[95])
     then
         return nil
     end
 
-    if ContainsAny(text, { "unit auras", "aura system", "auras system", "all unit auras", "unitframe auras" }) then
+    if ContainsAny(text, AurasPhrases[96]) then
         local value = AuraBooleanValue(text)
         if value ~= nil then return AuraDirectSettingChange("auras3.enabled", value, "Unit Auras") end
     end
-    if ContainsAny(text, { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" }) then
+    if ContainsAny(text, AurasPhrases[97]) then
         local setting = Registry and Registry:GetSetting("menu.auraScope")
         local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
         return AuraDirectSettingChange("menu.auraScope", value, "Aura Editing Scope")
     end
-    if ContainsAny(text, { "aura style lane", "aura style tab", "aura buffs tab", "aura debuffs tab" }) then
+    if ContainsAny(text, AurasPhrases[98]) then
         local setting = Registry and Registry:GetSetting("menu.auraStyleGFLane")
         local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
         return AuraDirectSettingChange("menu.auraStyleGFLane", value, "Aura Style Lane")
     end
-    if ContainsAny(text, { "aura filter lane", "aura filter tab", "aura buff filters tab", "aura debuff filters tab" }) then
+    if ContainsAny(text, AurasPhrases[99]) then
         local setting = Registry and Registry:GetSetting("menu.auraFilterLane")
         local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
         return AuraDirectSettingChange("menu.auraFilterLane", value, "Aura Filter Lane")
     end
-    if ContainsAny(text, { "aura settings view", "aura view", "aura settings mode", "basic aura settings", "advanced aura settings", "all aura settings" }) then
+    if ContainsAny(text, AurasPhrases[100]) then
         local setting = Registry and Registry:GetSetting("menu.aurasUXMode")
         local value = setting and P.EnumValueForText and P.EnumValueForText(setting, text) or nil
         return AuraDirectSettingChange("menu.aurasUXMode", value, "Aura Options View")
     end
-    if ContainsAny(text, { "aura blacklist preset", "blacklist preset", "hidden aura preset" }) then
+    if ContainsAny(text, AurasPhrases[101]) then
         local compactText = Compact(text)
         for i = 1, #AURA_BLACKLIST_PRESETS do
             local spec = AURA_BLACKLIST_PRESETS[i]
             local compactKey = Compact(tostring(spec.key or ""))
+            local readableKey = tostring(spec.key or ""):lower():gsub("_", " ")
             if ContainsAny(text, spec.aliases)
-                or ContainsAny(text, { tostring(spec.key or ""):lower():gsub("_", " ") })
+                or (readableKey ~= "" and text:find(readableKey, 1, true))
                 or (compactKey ~= "" and compactText:find(compactKey, 1, true))
             then
                 return AuraDirectSettingChange("menu.auraBlacklistPreset", spec.key, "Aura Blacklist Preset")
             end
         end
     end
-    if ContainsAny(text, { "custom aura caps", "custom caps", "aura caps override", "aura limits override", "custom aura layout", "custom layout", "aura layout override", "custom aura ignore", "custom ignore", "aura ignore list override" }) then
+    if ContainsAny(text, AurasPhrases[103]) then
         local attr
-        if ContainsAny(text, { "custom aura caps", "custom caps", "aura caps override", "aura limits override" }) then
+        if ContainsAny(text, AurasPhrases[104]) then
             attr = "overrideSharedLayout"
-        elseif ContainsAny(text, { "custom aura layout", "custom layout", "aura layout override" }) then
+        elseif ContainsAny(text, AurasPhrases[105]) then
             attr = "overrideLayout"
-        elseif ContainsAny(text, { "custom aura ignore", "custom ignore", "aura ignore list override" }) then
+        elseif ContainsAny(text, AurasPhrases[106]) then
             attr = "overrideIgnore"
         end
         local value = AuraBooleanValue(text)
@@ -1369,8 +1317,8 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         end
     end
     local laneUnits = DetectUnits(text)
-    if #laneUnits > 0 and ContainsAny(text, { "filters", "aura filters" })
-        and not ContainsAny(text, { "custom", "buff", "buffs", "debuff", "debuffs", "raid", "dispellable", "exclusive", "only", "player only", "nameplate", "crowd control" })
+    if #laneUnits > 0 and ContainsAny(text, AurasPhrases[107])
+        and not ContainsAny(text, AurasPhrases[108])
     then
         local value = AuraBooleanValue(text)
         if value ~= nil then
@@ -1404,12 +1352,8 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         local result = ParseGroupAuraLaneVisibilityDirectShortcut(text)
         if result then return result end
     end
-    if #laneUnits > 0 and ContainsAny(text, { "filter", "filters" })
-        and ContainsAny(text, {
-            "buff", "buffs", "debuff", "debuffs", "raid", "dispellable", "purgeable",
-            "crowd control", "cc debuff", "nameplate", "cancelable", "cancellable",
-            "external defensive", "big defensive",
-        })
+    if #laneUnits > 0 and ContainsAny(text, AurasPhrases[109])
+        and ContainsAny(text, AurasPhrases[110])
     then
         return nil
     end
@@ -1429,30 +1373,27 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         local result = ParseUnitAuraTooltipShortcut(text)
         if result then return result end
     end
-    if #laneUnits > 0 and ContainsAny(text, { "buff", "buffs", "debuff", "debuffs" })
-        and ContainsAny(text, { " x", "x ", "x offset", "offset x", " y", "y ", "y offset", "offset y", "left", "right", "up", "down", "links", "rechts", "oben", "unten" })
-        and not ContainsAny(text, {
-            "cooldown", "timer", "stack", "duration", "filter", "exclusive", "custom",
-            "size", "max", "per row", "growth", "anchor", "spacing", "layer", "color", "colour",
-        })
+    if #laneUnits > 0 and ContainsAny(text, AurasPhrases[111])
+        and ContainsAny(text, AurasPhrases[112])
+        and not ContainsAny(text, AurasPhrases[113])
     then
         local lane
-        if ContainsAny(text, { "debuff", "debuffs" }) then
+        if ContainsAny(text, AurasPhrases[114]) then
             lane = "debuff"
-        elseif ContainsAny(text, { "buff", "buffs" }) then
+        elseif ContainsAny(text, AurasPhrases[115]) then
             lane = "buff"
         end
         local direction = DetectDirection(text, {})
         local attr
-        if ContainsAny(text, { "x offset", "offset x", " x", "x ", "left", "right", "links", "rechts" }) or direction == "left" or direction == "right" then
+        if ContainsAny(text, AurasPhrases[116]) or direction == "left" or direction == "right" then
             attr = "offsetX"
-        elseif ContainsAny(text, { "y offset", "offset y", " y", "y ", "up", "down", "oben", "unten" }) or direction == "up" or direction == "down" then
+        elseif ContainsAny(text, AurasPhrases[117]) or direction == "up" or direction == "down" then
             attr = "offsetY"
         end
         if lane and attr then
             local value = FirstNumber(text)
             local relativeDelta
-            if ContainsAny(text, { "move", "nudge", "shift", "verschiebe" }) and direction then
+            if ContainsAny(text, AurasPhrases[118]) and direction then
                 local amount = value or 10
                 if direction == "left" or direction == "down" then amount = -amount end
                 value = nil
@@ -1481,17 +1422,13 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             end
         end
     end
-    if #laneUnits > 0 and ContainsAny(text, { "buff", "buffs", "debuff", "debuffs" })
-        and not ContainsAny(text, {
-            "filter", "filters", "raid", "dispellable", "exclusive", "only", "custom",
-            "cooldown", "stack", "duration", "timer", "x ", " y ", "offset", "size", "max",
-            "per row", "growth", "anchor", "spacing", "layer", "swipe", "direction", "color", "colour",
-        })
+    if #laneUnits > 0 and ContainsAny(text, AurasPhrases[119])
+        and not ContainsAny(text, AurasPhrases[120])
     then
         local lane
-        if ContainsAny(text, { "debuff", "debuffs" }) then
+        if ContainsAny(text, AurasPhrases[121]) then
             lane = "debuff"
-        elseif ContainsAny(text, { "buff", "buffs" }) then
+        elseif ContainsAny(text, AurasPhrases[122]) then
             lane = "buff"
         end
         local value = lane and AuraBooleanValue(text) or nil
@@ -1514,23 +1451,23 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             end
         end
     end
-    if ContainsAny(text, { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" })
-        and not ContainsAny(text, { "custom", "player", "target", "focus", "boss", "party", "raid", "mythic" })
+    if ContainsAny(text, AurasPhrases[123])
+        and not ContainsAny(text, AurasPhrases[124])
     then
         local value = AuraBooleanValue(text)
         if value ~= nil then return AuraDirectSettingChange("auras3.shared.filters.enabled", value, "Shared Aura Filters") end
     end
-    if ContainsAny(text, { "shared filters", "global filters", "shared aura filters", "global aura filters" }) then
+    if ContainsAny(text, AurasPhrases[125]) then
         local value = AuraBooleanValue(text)
         if value ~= nil then return AuraDirectSettingChange("auras3.shared.filtersEnabled", value, "Shared Filters") end
     end
-    if ContainsAny(text, { "buff reminders", "buff reminder", "aura reminders", "aura reminder" })
-        and not ContainsAny(text, { "expiry warning", "threshold", "grow direction", "growth", "grow", "direction" })
+    if ContainsAny(text, AurasPhrases[126])
+        and not ContainsAny(text, AurasPhrases[127])
     then
         local value = AuraBooleanValue(text)
         if value ~= nil then return AuraDirectSettingChange("auras3.shared.showReminders", value, "Buff Reminders") end
     end
-    if ContainsAny(text, { "buff reminder expiry warning", "buff reminder threshold", "reminder expiry warning", "reminder threshold" }) then
+    if ContainsAny(text, AurasPhrases[128]) then
         local value = FirstNumber(text)
         if value ~= nil then return AuraDirectSettingChange("auras3.shared.reminderThreshold", value, "Buff Reminder Expiry Warning") end
     end
@@ -1544,7 +1481,7 @@ local function ParseAuraDirectSettingShortcut(text, raw)
             local aliases = type(spec.aliases) == "table" and spec.aliases or {}
             for j = 1, #aliases do
                 local alias = tostring(aliases[j] or "")
-                if alias ~= "" and ContainsAny(text, { alias }) then
+                if alias ~= "" and ContainsAny(text, AurasPhrases[129]) then
                     local len = #Compact(alias)
                     if len > bestLen then
                         bestSpec = spec
@@ -1562,20 +1499,20 @@ local function ParseAuraDirectSettingShortcut(text, raw)
     end
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
-    if #explicitUnits == 0 and #explicitGroups == 0 and not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben" }) then
-        if ContainsAny(text, { "highlight own buffs", "highlight my buffs", "own buff highlight", "my buff highlight" }) then
+    if #explicitUnits == 0 and #explicitGroups == 0 and not ContainsAny(text, AurasPhrases[130]) then
+        if ContainsAny(text, AurasPhrases[131]) then
             local value = AuraBooleanValue(text)
             if value ~= nil then return AuraDirectSettingChange("auras3.shared.highlightOwnBuffs", value, "Highlight Own Buffs") end
         end
-        if ContainsAny(text, { "highlight own debuffs", "highlight my debuffs", "own debuff highlight", "my debuff highlight" }) then
+        if ContainsAny(text, AurasPhrases[132]) then
             local value = AuraBooleanValue(text)
             if value ~= nil then return AuraDirectSettingChange("auras3.shared.highlightOwnDebuffs", value, "Highlight Own Debuffs") end
         end
-        if ContainsAny(text, { "show aura buffs", "show buffs", "aura buffs", "buff auras" }) then
+        if ContainsAny(text, AurasPhrases[133]) then
             local value = AuraBooleanValue(text)
             if value ~= nil then return AuraDirectSettingChange("auras3.shared.showBuffs", value, "Show Buffs") end
         end
-        if ContainsAny(text, { "show aura debuffs", "show debuffs", "aura debuffs", "debuff auras" }) then
+        if ContainsAny(text, AurasPhrases[134]) then
             local value = AuraBooleanValue(text)
             if value ~= nil then return AuraDirectSettingChange("auras3.shared.showDebuffs", value, "Show Debuffs") end
         end
@@ -1595,66 +1532,66 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         end
     end
 
-    if ContainsAny(text, { "click through auras", "click-through auras", "aura click through", "aura click-through" }) then
+    if ContainsAny(text, AurasPhrases[135]) then
         return AuraDirectSettingChange("auras3.shared.clickThroughAuras", AuraBooleanValue(text), "Click-through Auras")
     end
-    if ContainsAny(text, { "aura edit preview", "edit mode auras", "preview auras in edit mode", "show auras in edit mode", "edit preview auras" }) then
+    if ContainsAny(text, AurasPhrases[136]) then
         return AuraDirectSettingChange("auras3.shared.showInEditMode", AuraBooleanValue(text), "Aura Edit Preview")
     end
-    if ContainsAny(text, { "aura timer bucket colors", "aura timer color buckets", "aura cooldown bucket colors", "aura cooldown color buckets", "aura cooldown buckets", "aura timer buckets", "color aura timers by remaining time" }) then
+    if ContainsAny(text, AurasPhrases[137]) then
         return AuraDirectSettingChange("general.aurasCooldownTextUseBuckets", AuraBooleanValue(text), "Aura Timer Color Buckets")
     end
-    if ContainsAny(text, { "show sated", "show exhaustion", "sated exhaustion", "sated buffs", "exhaustion buffs" }) then
+    if ContainsAny(text, AurasPhrases[138]) then
         return AuraDirectSettingChange("auras3.shared.showSated", AuraBooleanValue(text), "Show Sated/Exhaustion")
     end
 
     local direction = AuraDirectionValue(text)
-    if direction and ContainsAny(text, { "buff reminder grow direction", "buff reminder growth", "reminder grow direction", "reminder growth" }) then
+    if direction and ContainsAny(text, AurasPhrases[139]) then
         return AuraDirectSettingChange("auras3.shared.reminderGrowth", direction, "Buff Reminder Growth")
     end
-    if direction and ContainsAny(text, { "buff growth", "buff grow direction", "buff direction", "buff aura growth" }) then
+    if direction and ContainsAny(text, AurasPhrases[140]) then
         return AuraDirectSettingChange("auras3.shared.buffGrowth", direction, "Buff Growth")
     end
-    if direction and ContainsAny(text, { "debuff growth", "debuff grow direction", "debuff direction", "debuff aura growth" }) then
+    if direction and ContainsAny(text, AurasPhrases[141]) then
         return AuraDirectSettingChange("auras3.shared.debuffGrowth", direction, "Debuff Growth")
     end
-    if direction and ContainsAny(text, { "buff wrap rows", "buff row wrap", "buff wrap direction", "buff wrap" }) then
+    if direction and ContainsAny(text, AurasPhrases[142]) then
         return AuraDirectSettingChange("auras3.shared.buffRowWrap", direction, "Buff Row Wrap")
     end
-    if direction and ContainsAny(text, { "debuff wrap rows", "debuff row wrap", "debuff wrap direction", "debuff wrap" }) then
+    if direction and ContainsAny(text, AurasPhrases[143]) then
         return AuraDirectSettingChange("auras3.shared.debuffRowWrap", direction, "Debuff Row Wrap")
     end
 
     local number = FirstNumber(text)
     if number ~= nil then
-        if ContainsAny(text, { "sort order", "aura sort order", "buff sort order", "debuff sort order" }) then
+        if ContainsAny(text, AurasPhrases[144]) then
             return AuraDirectSettingChange("auras3.shared.sortOrder", number, "Aura Sort Order")
         end
-        if ContainsAny(text, { "sated threshold", "sated show at", "sated show seconds", "exhaustion threshold", "exhaustion show at" }) then
+        if ContainsAny(text, AurasPhrases[145]) then
             return AuraDirectSettingChange("auras3.shared.satedShowAtSeconds", number, "Sated Threshold")
         end
-        if ContainsAny(text, { "aura cooldown safe seconds", "aura timer safe seconds", "aura safe seconds", "safe aura seconds", "safe aura timer threshold", "aura safe timer threshold" }) then
+        if ContainsAny(text, AurasPhrases[146]) then
             return AuraDirectSettingChange("general.aurasCooldownTextSafeSeconds", number, "Aura Safe Timer Threshold")
         end
-        if ContainsAny(text, { "aura cooldown warning seconds", "aura timer warning seconds", "aura warning seconds", "warning aura seconds", "warning aura timer threshold", "aura warning timer threshold" }) then
+        if ContainsAny(text, AurasPhrases[147]) then
             return AuraDirectSettingChange("general.aurasCooldownTextWarningSeconds", number, "Aura Warning Timer Threshold")
         end
-        if ContainsAny(text, { "aura cooldown urgent seconds", "aura timer urgent seconds", "aura urgent seconds", "urgent aura seconds", "urgent aura timer threshold", "aura urgent timer threshold" }) then
+        if ContainsAny(text, AurasPhrases[148]) then
             return AuraDirectSettingChange("general.aurasCooldownTextUrgentSeconds", number, "Aura Urgent Timer Threshold")
         end
     end
 
-    if ContainsAny(text, { "aura cooldown safe color", "aura cooldown safe text color", "cooldown text safe color", "aura timer safe color", "aura safe timer color", "safe aura timer color" }) then
+    if ContainsAny(text, AurasPhrases[149]) then
         local setting = Registry and Registry:GetSetting("general.aurasCooldownTextSafeColor")
         local value = setting and P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text)
         return AuraDirectSettingChange("general.aurasCooldownTextSafeColor", value, "Aura Safe Timer Color")
     end
-    if ContainsAny(text, { "aura cooldown warning color", "aura cooldown warning text color", "cooldown text warning color", "aura timer warning color", "aura warning timer color", "warning aura timer color" }) then
+    if ContainsAny(text, AurasPhrases[150]) then
         local setting = Registry and Registry:GetSetting("general.aurasCooldownTextWarningColor")
         local value = setting and P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text)
         return AuraDirectSettingChange("general.aurasCooldownTextWarningColor", value, "Aura Warning Timer Color")
     end
-    if ContainsAny(text, { "aura cooldown urgent color", "aura cooldown urgent text color", "cooldown text urgent color", "aura timer urgent color", "aura urgent timer color", "urgent aura timer color" }) then
+    if ContainsAny(text, AurasPhrases[151]) then
         local setting = Registry and Registry:GetSetting("general.aurasCooldownTextUrgentColor")
         local value = setting and P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text)
         return AuraDirectSettingChange("general.aurasCooldownTextUrgentColor", value, "Aura Urgent Timer Color")
@@ -1664,12 +1601,9 @@ local function ParseAuraDirectSettingShortcut(text, raw)
 end
 
 local function UnitAuraFilterExplicitScope(text)
-    if ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" }) then return "shared" end
+    if ContainsAny(text, AurasPhrases[152]) then return "shared" end
     local units = DetectUnits(text)
-    local playerIsFilterValue = ContainsAny(text, {
-        "player filter", "only my", "my buffs", "my debuffs", "player buffs only", "player debuffs only",
-        "own buffs", "own debuffs",
-    })
+    local playerIsFilterValue = ContainsAny(text, AurasPhrases[153])
     for i = 1, #units do
         local unit = units[i]
         if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then
@@ -1684,8 +1618,8 @@ local function UnitAuraFilterExplicitScope(text)
 end
 
 local function UnitAuraFilterLaneFromSpec(text, spec)
-    if ContainsAny(text, { "buff", "buffs" }) then return "buff" end
-    if ContainsAny(text, { "debuff", "debuffs" }) then return "debuff" end
+    if ContainsAny(text, AurasPhrases[154]) then return "buff" end
+    if ContainsAny(text, AurasPhrases[155]) then return "debuff" end
     return spec and spec.lane or nil
 end
 
@@ -1723,46 +1657,25 @@ local function UnitAuraFilterSpecForText(text)
 end
 
 local function UnitAuraFilterHasIntent(text)
-    if ContainsAny(text, { "corner", "corner indicator", "corner indicators", "corner custom", "custom corner" }) then return false end
-    if ContainsAny(text, { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay", "debuff overlay", "dispellable overlay", "dispellable debuff overlay" }) then return false end
-    if ContainsAny(text, { "aura custom settings", "custom aura settings", "aura override", "aura overrides", "aura scope" })
-        and ContainsAny(text, { "reset", "clear", "remove", "restore" })
+    if ContainsAny(text, AurasPhrases[156]) then return false end
+    if ContainsAny(text, AurasPhrases[157]) then return false end
+    if ContainsAny(text, AurasPhrases[158])
+        and ContainsAny(text, AurasPhrases[159])
     then
         return false
     end
-    if ContainsAny(text, { "blacklist", "whitelist", "category", "spell id", "spellid", "spell:" }) then return false end
-    if ContainsAny(text, { "filter", "filters", "only", "show only", "just show", "display only" }) then return true end
-    if ContainsAny(text, {
-        "show all", "show everything", "all buffs", "all debuffs", "all auras",
-        "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
-        "filter off", "filters off", "normal filter", "default filter",
-    }) then return true end
-    return ContainsAny(text, {
-        "dispellable", "dispelable", "purgeable",
-        "crowd control", "cc debuff", "cc debuffs",
-        "raid buff", "raid buffs", "raid debuff", "raid debuffs",
-        "raid in combat", "combat raid",
-        "nameplate only", "nameplate-only", "include nameplate", "include nameplate-only",
-        "external defensive", "external defensives", "big defensive", "big defensives", "major defensive", "major defensives",
-        "cancelable buff", "cancelable buffs", "cancellable buff", "cancellable buffs",
-        "not cancelable buff", "not cancelable buffs", "not cancellable buff", "not cancellable buffs",
-        "non cancelable buff", "non cancelable buffs", "uncancelable buff", "uncancelable buffs",
-    })
+    if ContainsAny(text, AurasPhrases[160]) then return false end
+    if ContainsAny(text, AurasPhrases[161]) then return true end
+    if ContainsAny(text, AurasPhrases[162]) then return true end
+    return ContainsAny(text, AurasPhrases[163])
 end
 
 local function HasNativeGroupAuraRootIntent(text)
-    if not ContainsAny(text, { "native", "blizzard" }) then return false end
-    if not ContainsAny(text, {
-        "party", "raid", "mythic raid", "mythicraid",
-        "group aura", "group auras", "group frame", "group frames",
-    }) then
+    if not ContainsAny(text, AurasPhrases[164]) then return false end
+    if not ContainsAny(text, AurasPhrases[165]) then
         return false
     end
-    return ContainsAny(text, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-        "dispel", "dispels", "dispellable", "external", "externals",
-        "private aura", "private auras",
-    })
+    return ContainsAny(text, AurasPhrases[166])
 end
 
 local function AddUnitAuraFiltersEnabled(changes, scope)
@@ -1789,18 +1702,15 @@ end
 local function GroupAuraFilterExplicitScopes(text, value)
     if #DetectUnits(text) > 0 then return nil, false, false end
 
-    local explicitAll = ContainsAny(text, {
-        "all group auras", "all group aura", "all group buffs", "all group debuffs",
-        "all group frames", "all groups", "every group aura", "every group buff", "every group debuff",
-    })
+    local explicitAll = ContainsAny(text, AurasPhrases[167])
     if explicitAll then return { "party", "raid", "mythicraid" }, true end
 
     local scopes = {}
-    local hasParty = ContainsAny(text, { "party", "party frame", "party frames", "party aura", "party auras", "party buff", "party buffs", "party debuff", "party debuffs" })
-    local hasMythic = ContainsAny(text, { "mythic raid", "mythicraid", "mythic raid frame", "mythic raid frames", "mythic raid aura", "mythic raid auras", "mythic raid buff", "mythic raid buffs", "mythic raid debuff", "mythic raid debuffs" })
-    local hasRaidFrameScope = ContainsAny(text, { "raid frame", "raid frames", "raid aura", "raid auras" })
-    local hasRaidLanePhrase = ContainsAny(text, { "raid buff", "raid buffs", "raid debuff", "raid debuffs" })
-    local hasRaidScope = not hasMythic and ContainsAny(text, { "raid", "raid frame", "raid frames", "raid aura", "raid auras", "raid buff", "raid buffs", "raid debuff", "raid debuffs" })
+    local hasParty = ContainsAny(text, AurasPhrases[168])
+    local hasMythic = ContainsAny(text, AurasPhrases[169])
+    local hasRaidFrameScope = ContainsAny(text, AurasPhrases[170])
+    local hasRaidLanePhrase = ContainsAny(text, AurasPhrases[171])
+    local hasRaidScope = not hasMythic and ContainsAny(text, AurasPhrases[172])
     if hasParty then scopes[#scopes + 1] = "party" end
     if hasMythic then scopes[#scopes + 1] = "mythicraid" end
     if hasRaidScope then
@@ -1808,27 +1718,23 @@ local function GroupAuraFilterExplicitScopes(text, value)
         if not raidPhraseLooksLikeFilterValue then scopes[#scopes + 1] = "raid" end
     end
     if #scopes > 0 then return scopes, true end
-    if HasGenericGroupAuraGeometryScope(text) or ContainsAny(text, { "group frame", "group frames", "group debuff", "group debuffs", "group buff", "group buffs" }) then
+    if HasGenericGroupAuraGeometryScope(text) or ContainsAny(text, AurasPhrases[173]) then
         return nil, false, true
     end
     return nil, false, false
 end
 
 local function GroupAuraFilterLaneForText(text, value)
-    if ContainsAny(text, { "buff", "buffs" }) and not ContainsAny(text, { "debuff", "debuffs" }) then return "buff" end
-    if ContainsAny(text, { "debuff", "debuffs" }) then return "debuff" end
+    if ContainsAny(text, AurasPhrases[174]) and not ContainsAny(text, AurasPhrases[175]) then return "buff" end
+    if ContainsAny(text, AurasPhrases[176]) then return "debuff" end
     if value == "CANCELABLE" or value == "NOT_CANCELABLE" or value == "EXTERNAL_DEFENSIVE" or value == "BIG_DEFENSIVE" then return "buff" end
     if value == "RAID_PLAYER_DISPELLABLE" or value == "CROWD_CONTROL" then return "debuff" end
     return nil
 end
 
 local function GroupAuraFilterValueForText(text)
-    if ContainsAny(text, {
-        "show all", "show everything", "all buffs", "all debuffs", "all auras",
-        "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
-        "filter off", "filters off", "normal filter", "default filter",
-    }) or (ContainsAny(text, { "clear", "remove", "reset", "default", "normal" }) and ContainsAny(text, { "filter", "filters" }))
-        or ((HasPhrase(text, "to all") or HasPhrase(text, "all filter") or HasPhrase(text, "filter all")) and ContainsAny(text, { "filter", "filters" }))
+    if ContainsAny(text, AurasPhrases[177]) or (ContainsAny(text, AurasPhrases[178]) and ContainsAny(text, AurasPhrases[179]))
+        or ((HasPhrase(text, "to all") or HasPhrase(text, "all filter") or HasPhrase(text, "filter all")) and ContainsAny(text, AurasPhrases[180]))
     then
         return "ALL"
     end
@@ -1838,17 +1744,9 @@ end
 
 local function ParseGroupAuraLiveFilterShortcut(text)
     if not UnitAuraFilterHasIntent(text) then return nil end
-    if ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" }) then return nil end
-    local explicitFilterIntent = ContainsAny(text, {
-        "filter", "filters", "only", "show only", "just show", "display only",
-        "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
-    })
-    if not explicitFilterIntent and ContainsAny(text, {
-        "max", "maximum", "size", "per row", "spacing", "layer", "x", "y", "anchor", "growth",
-        "cooldown", "timer", "stack", "duration", "swipe", "dispel type border", "debuff type border",
-        "stripe", "debuff stripe",
-        "turn on", "turn off", "enable", "disable",
-    }) then
+    if ContainsAny(text, AurasPhrases[181]) then return nil end
+    local explicitFilterIntent = ContainsAny(text, AurasPhrases[182])
+    if not explicitFilterIntent and ContainsAny(text, AurasPhrases[183]) then
         return nil
     end
     local value = GroupAuraFilterValueForText(text)
@@ -1903,21 +1801,18 @@ end
 
 local function ParseUnitAuraLiveFilterShortcut(text)
     if not UnitAuraFilterHasIntent(text) then return nil end
-    if ContainsAny(text, { "aura filter lane", "aura filter tab", "aura filter type", "aura buff filters tab", "aura debuff filters tab" }) then return nil end
-    if ContainsAny(text, { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" })
-        and not ContainsAny(text, {
-            "player filter", "raid filter", "raid in combat", "nameplate", "cancelable", "not cancelable",
-            "dispellable", "crowd control", "external defensive", "big defensive", "only", "show only",
-        })
+    if ContainsAny(text, AurasPhrases[184]) then return nil end
+    if ContainsAny(text, AurasPhrases[185])
+        and not ContainsAny(text, AurasPhrases[186])
     then
         return nil
     end
     if HasNativeGroupAuraRootIntent(text) then return nil end
-    local explicitUnitAuraScope = ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" })
+    local explicitUnitAuraScope = ContainsAny(text, AurasPhrases[187])
     if not explicitUnitAuraScope
         and (HasGenericGroupAuraGeometryScope(text)
             or HasConcreteGroupAuraGeometryScope(text)
-            or ContainsAny(text, { "party", "raid frame", "raid frames", "group frame", "group frames", "mythic raid" }))
+            or ContainsAny(text, AurasPhrases[188]))
     then
         return nil
     end
@@ -1932,11 +1827,7 @@ local function ParseUnitAuraLiveFilterShortcut(text)
         }
     end
 
-    local clearAll = ContainsAny(text, {
-        "show all", "show everything", "all buffs", "all debuffs", "all auras",
-        "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
-        "filter off", "filters off", "normal filter", "default filter",
-    })
+    local clearAll = ContainsAny(text, AurasPhrases[189])
     if clearAll then
         local lanes = AuraShortcutLanes(text)
         local changes = {}
@@ -1966,7 +1857,7 @@ local function ParseUnitAuraLiveFilterShortcut(text)
 
     local value = DetectBoolean and DetectBoolean(text)
     if value == nil then
-        if ContainsAny(text, { "off", "disable", "disabled", "turn off", "remove", "clear", "without", "no ", "aus", "deaktivieren" }) then
+        if ContainsAny(text, AurasPhrases[190]) then
             value = false
         else
             value = true
@@ -1978,7 +1869,7 @@ local function ParseUnitAuraLiveFilterShortcut(text)
     AddUnitAuraFiltersEnabled(directChanges, scope)
     if #directChanges == 0 then return nil end
 
-    local wantsOnly = value == true and ContainsAny(text, { "only", "show only", "just", "just show", "display only" })
+    local wantsOnly = value == true and ContainsAny(text, AurasPhrases[191])
     if wantsOnly then
         local replaceChanges = {}
         AddUnitAuraFilterClearLaneChanges(replaceChanges, scope, lane)
@@ -2018,25 +1909,25 @@ end
 
 local function ParseUnitAuraFilterBooleanShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "blacklist", "whitelist", "category", "spell id", "spellid", "spell:" }) then return nil end
-    if ContainsAny(text, { "only", "show only", "just show", "display only", "clear filter", "clear filters", "remove filter", "remove filters", "show all", "show everything" }) then return nil end
+    if ContainsAny(text, AurasPhrases[192]) then return nil end
+    if ContainsAny(text, AurasPhrases[193]) then return nil end
     if HasNativeGroupAuraRootIntent(text) then return nil end
     local explicitUnits = DetectUnits(text)
-    local explicitShared = ContainsAny(text, { "shared", "global", "shared aura", "shared auras", "all unit auras" })
+    local explicitShared = ContainsAny(text, AurasPhrases[194])
     if #explicitUnits == 0 and not explicitShared and (HasGenericGroupAuraGeometryScope(text) or HasConcreteGroupAuraGeometryScope(text)
-        or ContainsAny(text, { "party", "raid frame", "raid frames", "group frame", "group frames", "mythic raid" }))
+        or ContainsAny(text, AurasPhrases[195]))
     then
         return nil
     end
-    if (#explicitUnits > 0 or explicitShared) and ContainsAny(text, { "party", "raid frame", "raid frames", "group frame", "group frames", "mythic raid" }) then
+    if (#explicitUnits > 0 or explicitShared) and ContainsAny(text, AurasPhrases[196]) then
         return nil
     end
     if #explicitUnits == 0 and not explicitShared then return nil end
 
     local lane
-    if ContainsAny(text, { "buff", "buffs" }) and not ContainsAny(text, { "debuff", "debuffs" }) then
+    if ContainsAny(text, AurasPhrases[197]) and not ContainsAny(text, AurasPhrases[198]) then
         lane = "buff"
-    elseif ContainsAny(text, { "debuff", "debuffs" }) then
+    elseif ContainsAny(text, AurasPhrases[199]) then
         lane = "debuff"
     end
     if not lane then return nil end
@@ -2044,36 +1935,36 @@ local function ParseUnitAuraFilterBooleanShortcut(text)
     local key
     local conflicts
     local label
-    if ContainsAny(text, { "raid in combat", "combat raid" }) then
+    if ContainsAny(text, AurasPhrases[200]) then
         key = "raidInCombat"
         label = lane == "buff" and "Buff Raid In Combat Filter" or "Debuff Raid In Combat Filter"
-    elseif ContainsAny(text, { "raid filter", "raid buff", "raid buffs", "raid debuff", "raid debuffs" }) then
+    elseif ContainsAny(text, AurasPhrases[201]) then
         key = "raid"
         label = lane == "buff" and "Buff Raid Filter" or "Debuff Raid Filter"
-    elseif ContainsAny(text, { "nameplate only", "nameplate-only", "include nameplate", "include nameplate-only" }) then
+    elseif ContainsAny(text, AurasPhrases[202]) then
         key = "includeNameplateOnly"
         label = lane == "buff" and "Buff Include Nameplate-only Filter" or "Debuff Include Nameplate-only Filter"
-    elseif lane == "debuff" and ContainsAny(text, { "dispellable", "dispelable", "purgeable" }) then
+    elseif lane == "debuff" and ContainsAny(text, AurasPhrases[203]) then
         key = "includeDispellable"
         label = "Debuff Dispellable Filter"
-    elseif lane == "debuff" and ContainsAny(text, { "crowd control", "cc debuff", "cc debuffs" }) then
+    elseif lane == "debuff" and ContainsAny(text, AurasPhrases[204]) then
         key = "crowdControl"
         label = "Debuff Crowd Control Filter"
-    elseif lane == "buff" and ContainsAny(text, { "not cancelable", "not cancellable", "non cancelable", "uncancelable" }) then
+    elseif lane == "buff" and ContainsAny(text, AurasPhrases[205]) then
         key = "notCancelable"
         conflicts = { "cancelable" }
         label = "Buff Not Cancelable Filter"
-    elseif lane == "buff" and ContainsAny(text, { "cancelable", "cancellable" }) then
+    elseif lane == "buff" and ContainsAny(text, AurasPhrases[206]) then
         key = "cancelable"
         conflicts = { "notCancelable" }
         label = "Buff Cancelable Filter"
-    elseif lane == "buff" and ContainsAny(text, { "external defensive", "external defensives", "external buffs" }) then
+    elseif lane == "buff" and ContainsAny(text, AurasPhrases[207]) then
         key = "externalDefensive"
         label = "Buff External Defensive Filter"
-    elseif lane == "buff" and ContainsAny(text, { "big defensive", "big defensives", "major defensive", "major defensives" }) then
+    elseif lane == "buff" and ContainsAny(text, AurasPhrases[208]) then
         key = "bigDefensive"
         label = "Buff Big Defensive Filter"
-    elseif ContainsAny(text, { "player filter", "only my", "my buffs", "my debuffs", "player buffs only", "player debuffs only", "own buffs", "own debuffs" }) then
+    elseif ContainsAny(text, AurasPhrases[209]) then
         key = "onlyMine"
         label = lane == "buff" and "Buff Player Filter" or "Debuff Player Filter"
     else
@@ -2084,7 +1975,7 @@ local function ParseUnitAuraFilterBooleanShortcut(text)
     if not scope then return nil end
     local value = DetectBoolean and DetectBoolean(text)
     if value == nil then
-        value = not ContainsAny(text, { "off", "disable", "disabled", "turn off", "remove", "without", "no ", "aus", "deaktivieren" })
+        value = not ContainsAny(text, AurasPhrases[210])
     end
 
     local changes = {}
@@ -2132,52 +2023,44 @@ end
 
 local function ParseGroupAuraRootSettingShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "blacklist", "blocklist", "filter token", "live filter", "spell id", "spellid" }) then return nil end
-    if not ContainsAny(text, {
-        "group aura", "group auras", "party aura", "party auras", "raid aura", "raid auras",
-        "mythicraid aura", "mythic raid aura", "mythicraid auras", "mythic raid auras",
-        "aura tooltip", "aura tooltips", "prefer player auras", "prefer my auras",
-        "sort auras by duration", "aura duration sort",
-        "dynamic aura scale", "dynamic icon scale", "native aura", "native auras",
-        "native group aura", "native group auras", "blizzard aura", "blizzard auras",
-        "native group private auras", "blizzard group private auras", "native private auras",
-    }) then
+    if ContainsAny(text, AurasPhrases[211]) then return nil end
+    if not ContainsAny(text, AurasPhrases[212]) then
         return nil
     end
 
     local key
     local label
-    if ContainsAny(text, { "prefer player auras", "prefer my auras" }) then
+    if ContainsAny(text, AurasPhrases[213]) then
         key = "preferPlayer"
         label = "Prefer Player Auras"
-    elseif ContainsAny(text, { "dynamic aura scale", "dynamic icon scale" }) then
+    elseif ContainsAny(text, AurasPhrases[214]) then
         key = "dynamicScale"
         label = "Dynamic Aura Scale"
-    elseif ContainsAny(text, { "aura tooltip", "aura tooltips" }) then
+    elseif ContainsAny(text, AurasPhrases[215]) then
         key = "showTooltip"
         label = "Aura Tooltips"
-    elseif ContainsAny(text, { "sort auras by duration", "aura duration sort" }) then
+    elseif ContainsAny(text, AurasPhrases[216]) then
         key = "sortByDuration"
         label = "Sort Auras by Duration"
-    elseif ContainsAny(text, { "native group aura dispel border", "blizzard group aura dispel border", "native dispel border", "native dispellable border", "native aura debuff border" }) then
+    elseif ContainsAny(text, AurasPhrases[217]) then
         key = "blizzardDispelBorder"
         label = "Native Dispel Border"
-    elseif ContainsAny(text, { "native group aura buffs", "blizzard group aura buffs", "native buffs", "native aura buffs" }) then
+    elseif ContainsAny(text, AurasPhrases[218]) then
         key = "blizzardTypes.buffs"
         label = "Native Buffs"
-    elseif ContainsAny(text, { "native group aura debuffs", "blizzard group aura debuffs", "native debuffs", "native aura debuffs" }) then
+    elseif ContainsAny(text, AurasPhrases[219]) then
         key = "blizzardTypes.debuffs"
         label = "Native Debuffs"
-    elseif ContainsAny(text, { "native group aura dispels", "blizzard group aura dispels", "native dispel auras", "native dispels", "dispellable auras" }) then
+    elseif ContainsAny(text, AurasPhrases[220]) then
         key = "blizzardTypes.dispels"
         label = "Native Dispel Auras"
-    elseif ContainsAny(text, { "native group aura externals", "blizzard group aura externals", "native external auras", "native externals", "external auras" }) then
+    elseif ContainsAny(text, AurasPhrases[221]) then
         key = "blizzardTypes.externals"
         label = "Native External Auras"
-    elseif ContainsAny(text, { "native group private auras", "blizzard group private auras", "native private auras", "native private aura icons" }) then
+    elseif ContainsAny(text, AurasPhrases[222]) then
         key = "blizzardTypes.privateAuras"
         label = "Native Private Auras"
-    elseif ContainsAny(text, { "all group auras", "all group aura", "group aura system", "group auras enabled", "native group auras", "native group aura" }) then
+    elseif ContainsAny(text, AurasPhrases[223]) then
         key = "enabled"
         label = "Group Auras Enabled"
     else
@@ -2193,7 +2076,7 @@ local function ParseGroupAuraRootSettingShortcut(text)
         end
     end
     if #scopes == 0 then
-        if ContainsAny(text, { "all group", "all group auras", "every group", "group aura system", "group auras" }) then
+        if ContainsAny(text, AurasPhrases[224]) then
             scopes = { "party", "raid", "mythicraid" }
         else
             return nil
@@ -2217,30 +2100,17 @@ local function ParseGroupAuraRootSettingShortcut(text)
 end
 
 local function ParseGroupAuraVisibilityShortcut(text)
-    local hasBuff = ContainsAny(text, { "buff", "buffs" })
-    local hasDebuff = ContainsAny(text, { "debuff", "debuffs" })
-    if not ContainsAny(text, { "aura", "auras", "auren" }) and not (hasBuff and hasDebuff) then return nil end
-    if not ContainsAny(text, {
-        "show", "enable", "enabled", "turn on", "on",
-        "hide", "disable", "disabled", "turn off", "off",
-        "anzeigen", "einblenden", "aktivieren", "an",
-        "ausblenden", "verstecken", "deaktivieren", "aus",
-    }) then return nil end
-    if ContainsAny(text, { "size", "count", "max", "maximum", "cap", "limit", "spacing", "gap", "growth", "anchor", "position", "offset", "filter", "blacklist", "cooldown", "timer", "duration", "stack", "copy", "preset" }) then
+    local hasBuff = ContainsAny(text, AurasPhrases[225])
+    local hasDebuff = ContainsAny(text, AurasPhrases[226])
+    if not ContainsAny(text, AurasPhrases[227]) and not (hasBuff and hasDebuff) then return nil end
+    if not ContainsAny(text, AurasPhrases[228]) then return nil end
+    if ContainsAny(text, AurasPhrases[229]) then
         return nil
     end
-    if ContainsAny(text, {
-        "all group auras", "all group aura", "group aura system", "group auras enabled",
-        "aura tooltip", "aura tooltips", "prefer player auras", "prefer my auras",
-        "dynamic aura scale", "dynamic icon scale", "native group", "native private",
-        "private aura", "private auras",
-    }) then
+    if ContainsAny(text, AurasPhrases[230]) then
         return nil
     end
-    if ContainsAny(text, {
-        "aura system", "group aura system", "native aura", "native auras", "native group aura", "native group auras",
-        "blizzard aura", "blizzard auras", "blizzard group aura", "blizzard group auras",
-    }) then
+    if ContainsAny(text, AurasPhrases[231]) then
         return nil
     end
 
@@ -2254,7 +2124,7 @@ local function ParseGroupAuraVisibilityShortcut(text)
     end
 
     if #scopes == 0 then
-        if HasGenericGroupAuraGeometryScope(text) or ContainsAny(text, { "group", "group frame", "group frames" }) then
+        if HasGenericGroupAuraGeometryScope(text) or ContainsAny(text, AurasPhrases[232]) then
             return {
                 kind = "answer",
                 status = "ambiguous",
@@ -2267,14 +2137,14 @@ local function ParseGroupAuraVisibilityShortcut(text)
 
     local value = DetectBoolean and DetectBoolean(text)
     if value == nil then
-        if ContainsAny(text, { "show", "enable", "enabled", "turn on", "on", "anzeigen", "einblenden", "aktivieren", "an" }) then value = true end
-        if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "ausblenden", "verstecken", "deaktivieren", "aus" }) then value = false end
+        if ContainsAny(text, AurasPhrases[233]) then value = true end
+        if ContainsAny(text, AurasPhrases[234]) then value = false end
     end
     if value == nil then return nil end
 
     local explicitBothLanes = hasBuff and hasDebuff
-        or ContainsAny(text, { "both", "both lanes", "buffs and debuffs", "buff and debuff", "buffs debuffs" })
-    local broadAllAuras = ContainsAny(text, { "all auras", "all aura", "all party auras", "all raid auras", "all mythic raid auras", "all group auras" })
+        or ContainsAny(text, AurasPhrases[235])
+    local broadAllAuras = ContainsAny(text, AurasPhrases[236])
     local wantsBoth = explicitBothLanes or broadAllAuras
     if hasBuff ~= hasDebuff then
         local lane = hasBuff and "buff" or "debuff"
@@ -2368,8 +2238,8 @@ local function ParseGroupAuraVisibilityShortcut(text)
 end
 
 local function ParseAuraCooldownSwipeDirectionShortcut(text)
-    if not ContainsAny(text, { "cooldown swipe direction", "timer swipe direction", "reverse cooldown swipe", "swipe direction" }) then return nil end
-    if not ContainsAny(text, { "swipe" }) then return nil end
+    if not ContainsAny(text, AurasPhrases[237]) then return nil end
+    if not ContainsAny(text, AurasPhrases[238]) then return nil end
 
     local scopes = AuraShortcutScopes(text, true)
     if not scopes then return nil end
@@ -2403,22 +2273,12 @@ local function ParseAuraCooldownSwipeDirectionShortcut(text)
 end
 
 local function ParseAuraDurationBarShortcut(text)
-    if not ContainsAny(text, { "duration bar", "timer bar" }) then return nil end
+    if not ContainsAny(text, AurasPhrases[239]) then return nil end
 
     local attr, value, missingText, label, summary
-    local wantsPosition = ContainsAny(text, {
-        "duration bar position", "timer bar position", "duration bar edge",
-        "top", "upper", "on top", "at top", "top edge", "above",
-        "bottom", "lower", "on bottom", "at bottom", "bottom edge", "below",
-    })
-    local wantsDisplay = ContainsAny(text, {
-        "duration bar display", "timer bar display", "duration bar mode", "timer bar mode",
-        "bar only", "separate bar", "icon bar", "icon and bar", "icon plus bar", "icon + bar", "overlay",
-    })
-    local wantsDirection = ContainsAny(text, {
-        "duration bar fill mode", "duration bar direction", "timer bar fill mode", "timer bar direction",
-        "fill mode", "remaining", "elapsed", "count up", "count down", "countdown", "deplete", "depletion", "drain", "progress",
-    })
+    local wantsPosition = ContainsAny(text, AurasPhrases[240])
+    local wantsDisplay = ContainsAny(text, AurasPhrases[241])
+    local wantsDirection = ContainsAny(text, AurasPhrases[242])
 
     if wantsPosition and not wantsDirection and not wantsDisplay then
         attr = "durationBarPosition"
@@ -2473,14 +2333,14 @@ local function ParseAuraDurationBarShortcut(text)
 end
 
 local function ParseAuraDebuffBorderModeShortcut(text)
-    if not ContainsAny(text, { "debuff type border", "dispel type border", "debuff border mode", "dispel border mode", "aura debuff border" }) then return nil end
+    if not ContainsAny(text, AurasPhrases[243]) then return nil end
 
     local scopes = AuraShortcutScopes(text, true)
     if not scopes then return nil end
 
     local boolValue = DetectBoolean and DetectBoolean(text)
     if boolValue ~= nil
-        and not ContainsAny(text, { "mode", "symbol", "with symbol", "with icon", "border symbol", "border only", "just border", "outline only", "to border", "as border", "use border", "to off", "as off", "use off" })
+        and not ContainsAny(text, AurasPhrases[244])
     then
         local changes = {}
         for i = 1, #scopes do
@@ -2536,34 +2396,28 @@ local function ParseAuraDebuffBorderModeShortcut(text)
 end
 
 local function ParseAuraScopeOverrideShortcut(text)
-    if ContainsAny(text, { "what", "where", "why", "help", "explain", "how" }) then return nil end
-    if not ContainsAny(text, {
-        "custom aura style", "use custom aura style", "aura style override", "custom aura visuals",
-        "use shared style", "shared aura style", "inherit style", "follow shared style",
-        "custom aura filters", "custom filters", "use custom aura filters", "use custom filters", "aura filter override", "aura filters override", "custom filter override",
-        "use shared filters", "shared filters", "shared aura filters", "inherit filters", "follow shared filters",
-        "use shared rules", "shared aura rules", "inherit rules", "follow shared rules",
-    }) then return nil end
+    if ContainsAny(text, AurasPhrases[245]) then return nil end
+    if not ContainsAny(text, AurasPhrases[246]) then return nil end
 
     local attr, value
     local bool = DetectBoolean and DetectBoolean(text)
-    if ContainsAny(text, { "custom aura style", "use custom aura style", "aura style override", "custom aura visuals" }) then
+    if ContainsAny(text, AurasPhrases[247]) then
         attr = "customStyle"
         value = bool == nil and true or bool
-    elseif ContainsAny(text, { "use shared style", "shared aura style", "inherit style", "follow shared style" }) then
+    elseif ContainsAny(text, AurasPhrases[248]) then
         attr = "useSharedStyle"
         value = bool == nil and true or bool
-    elseif ContainsAny(text, { "custom aura filters", "custom filters", "use custom aura filters", "use custom filters", "aura filter override", "aura filters override", "custom filter override" }) then
+    elseif ContainsAny(text, AurasPhrases[249]) then
         attr = "overrideFilters"
         value = bool == nil and true or bool
-    elseif ContainsAny(text, { "use shared filters", "shared filters", "shared aura filters", "inherit filters", "follow shared filters" }) then
+    elseif ContainsAny(text, AurasPhrases[250]) then
         attr = "overrideFilters"
         if bool == nil then
             value = false
         else
             value = not bool
         end
-    elseif ContainsAny(text, { "use shared rules", "shared aura rules", "inherit rules", "follow shared rules" }) then
+    elseif ContainsAny(text, AurasPhrases[251]) then
         attr = "useSharedRules"
         value = bool == nil and true or bool
     end
@@ -2597,9 +2451,9 @@ local function AuraBlacklistPresetForText(text)
 end
 
 local function AuraGroupBlacklistScope(text)
-    if ContainsAny(text, { "party", "party frames", "gruppe" }) then return "party" end
-    if ContainsAny(text, { "raid", "raid frames", "mythic raid", "mythicraid", "schlachtzug" }) then return "raid" end
-    if ContainsAny(text, { "group frames", "gruppenframes", "all groups" }) then return "raid" end
+    if ContainsAny(text, AurasPhrases[252]) then return "party" end
+    if ContainsAny(text, AurasPhrases[253]) then return "raid" end
+    if ContainsAny(text, AurasPhrases[254]) then return "raid" end
     local groups = DetectGroups(text)
     for i = 1, #groups do
         if groups[i] == "party" then return "party" end
@@ -2611,7 +2465,7 @@ local function AuraGroupBlacklistScope(text)
 end
 
 local function AuraGroupBlacklistLane(text)
-    if ContainsAny(text, { "debuff", "debuffs" }) then return "debuff" end
+    if ContainsAny(text, AurasPhrases[255]) then return "debuff" end
     return "buff"
 end
 

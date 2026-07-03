@@ -25,8 +25,14 @@ A.GroupFramesRegistryData.GROUP_DISPEL_STYLE_VALUES = { "FULL", "BOTTOM", "TOP",
 A.GroupFramesRegistryData.GROUP_STRIPE_EDGE_VALUES = { "BOTTOM", "TOP" }
 A.GroupFramesRegistryData.GROUP_RANGE_LAYER_VALUES = { "frame", "health" }
 A.GroupFramesRegistryData.GROUP_DELIMITER_VALUES = { " ", "  ", " / ", " - ", " : ", " | " }
-A.GroupFramesRegistryData.GROUP_STATUS_ICON_STYLE_VALUES = { "BLIZZARD", "CLASSIC", "MIDNIGHT" }
-A.GroupFramesRegistryData.GROUP_STATUS_ICON_PACK_VALUES = { "DEFAULT", "BLIZZARD", "CLASSIC", "MIDNIGHT" }
+A.GroupFramesRegistryData.GROUP_STATUS_ICON_STYLE_VALUES = {
+    "BLIZZARD", "CLASSIC", "MIDNIGHT", "UXPRO", "GLOSSY_ORBS", "DARK_EMBOSS",
+    "GLASS_PANELS", "NEON_OUTLINE", "RING_SYMBOLS", "DOTS", "SHAPES", "DIAMONDS", "SQUARES",
+}
+A.GroupFramesRegistryData.GROUP_STATUS_ICON_PACK_VALUES = {
+    "DEFAULT", "BLIZZARD", "CLASSIC", "MIDNIGHT", "UXPRO", "GLOSSY_ORBS", "DARK_EMBOSS",
+    "GLASS_PANELS", "NEON_OUTLINE", "RING_SYMBOLS", "DOTS", "SHAPES", "DIAMONDS", "SQUARES",
+}
 A.GroupFramesRegistryData.GROUP_STATUS_ANCHOR_VALUES = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" }
 
 A.GroupFramesRegistryData.GROUP_REVERSE_FILL_BOOLEAN_ALIASES = {
@@ -148,6 +154,23 @@ A.GroupFramesRegistryData.GROUP_STATUS_ICON_STYLE_ALIASES = {
     old = "CLASSIC",
     midnight = "MIDNIGHT",
     msuf = "MIDNIGHT",
+    ux = "UXPRO",
+    uxpro = "UXPRO",
+    ["ux pro"] = "UXPRO",
+    glossy = "GLOSSY_ORBS",
+    ["glossy orbs"] = "GLOSSY_ORBS",
+    dark = "DARK_EMBOSS",
+    ["dark emboss"] = "DARK_EMBOSS",
+    glass = "GLASS_PANELS",
+    ["glass panels"] = "GLASS_PANELS",
+    neon = "NEON_OUTLINE",
+    ["neon outline"] = "NEON_OUTLINE",
+    ring = "RING_SYMBOLS",
+    ["ring symbols"] = "RING_SYMBOLS",
+    dots = "DOTS",
+    shapes = "SHAPES",
+    diamonds = "DIAMONDS",
+    squares = "SQUARES",
 }
 
 A.GroupFramesRegistryData.GROUP_STATUS_ICON_PACK_ALIASES = {
@@ -160,4 +183,21 @@ A.GroupFramesRegistryData.GROUP_STATUS_ICON_PACK_ALIASES = {
     old = "CLASSIC",
     midnight = "MIDNIGHT",
     msuf = "MIDNIGHT",
+    ux = "UXPRO",
+    uxpro = "UXPRO",
+    ["ux pro"] = "UXPRO",
+    glossy = "GLOSSY_ORBS",
+    ["glossy orbs"] = "GLOSSY_ORBS",
+    dark = "DARK_EMBOSS",
+    ["dark emboss"] = "DARK_EMBOSS",
+    glass = "GLASS_PANELS",
+    ["glass panels"] = "GLASS_PANELS",
+    neon = "NEON_OUTLINE",
+    ["neon outline"] = "NEON_OUTLINE",
+    ring = "RING_SYMBOLS",
+    ["ring symbols"] = "RING_SYMBOLS",
+    dots = "DOTS",
+    shapes = "SHAPES",
+    diamonds = "DIAMONDS",
+    squares = "SQUARES",
 }

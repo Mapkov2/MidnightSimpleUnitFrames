@@ -36,10 +36,12 @@ function A.GroupFramesRegistry.RegisterStatusIconSettings(ctx, scope)
     if type(RegisterGroupEnum) ~= "function" then return end
 
     local aliases = {}
+    AddAliasesForUnit(aliases, scope, "default role icon style")
+    AddAliasesForUnit(aliases, scope, "role icon style")
     AddAliasesForUnit(aliases, scope, "status icon style")
     AddAliasesForUnit(aliases, scope, "status icons style")
     AddAliasesForUnit(aliases, scope, "group icon style")
-    RegisterGroupEnum(scope, "statusIconStyle", "iconStyle", "Status Icon Style", "BLIZZARD", GROUP_STATUS_ICON_STYLE_VALUES, GROUP_STATUS_ICON_STYLE_ALIASES, "visual", aliases)
+    RegisterGroupEnum(scope, "statusIconStyle", "iconStyle", "Default Role Icon Style", "BLIZZARD", GROUP_STATUS_ICON_STYLE_VALUES, GROUP_STATUS_ICON_STYLE_ALIASES, "visual", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "midnight status icons")
@@ -64,6 +66,14 @@ function A.GroupFramesRegistry.RegisterStatusIconSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "show role icon for dps")
     AddAliasesForUnit(aliases, scope, "dps role icon")
     RegisterGroupBoolean(scope, "roleIconShowDPS", "roleIconShowDPS", "Role Icon for DPS", true, "visual", aliases)
+
+    local function IsRoleStatusIconSpec(spec)
+        local value = spec and spec.value
+        return value == "roleIcon" or value == "leaderIcon" or value == "assistIcon"
+    end
+    local function StatusIconStyleLabel(spec)
+        return tostring(spec and spec.label or "Status Indicator") .. (IsRoleStatusIconSpec(spec) and " Role Icon Style" or " Indicator Icon Set")
+    end
 
     for _, spec in ipairs(GROUP_STATUS_ICON_SPECS) do
         aliases = {}
@@ -95,11 +105,14 @@ function A.GroupFramesRegistry.RegisterStatusIconSettings(ctx, scope)
         AddGroupStatusIconAliases(aliases, scope, spec, "draw layer")
         RegisterGroupNumber(scope, "statusIcon" .. spec.value .. "Layer", spec.layer, spec.label .. " Layer", spec.defaultLayer, 0, 30, 1, "visual", aliases)
 
-        if spec.iconStyle then
+        if spec.iconStyle and IsRoleStatusIconSpec(spec) then
             aliases = {}
+            AddGroupStatusIconAliases(aliases, scope, spec, "role icon style")
+            AddGroupStatusIconAliases(aliases, scope, spec, "indicator style")
+            AddGroupStatusIconAliases(aliases, scope, spec, "icon design")
             AddGroupStatusIconAliases(aliases, scope, spec, "icon pack")
             AddGroupStatusIconAliases(aliases, scope, spec, "style")
-            RegisterGroupEnum(scope, "statusIcon" .. spec.value .. "Style", spec.iconStyle, spec.label .. " Icon Pack", "DEFAULT", GROUP_STATUS_ICON_PACK_VALUES, GROUP_STATUS_ICON_PACK_ALIASES, "visual", aliases)
+            RegisterGroupEnum(scope, "statusIcon" .. spec.value .. "Style", spec.iconStyle, StatusIconStyleLabel(spec), "DEFAULT", GROUP_STATUS_ICON_PACK_VALUES, GROUP_STATUS_ICON_PACK_ALIASES, "visual", aliases)
         end
     end
 end

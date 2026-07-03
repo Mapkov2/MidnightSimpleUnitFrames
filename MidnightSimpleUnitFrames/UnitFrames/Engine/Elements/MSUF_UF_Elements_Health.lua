@@ -52,6 +52,7 @@ local Health = {
 }
 local HEALTH_EVENTS_NO_FACTION = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_CONNECTION", "UNIT_FLAGS" }
 local HEALTH_EVENTS_PLAYER = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_FLAGS" }
+local HEALTH_PLAYER_LIFECYCLE_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 local GROUP_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED" }
 
 local function StoreHealthValue(bar, unit, hp, hpSecret)
@@ -219,6 +220,14 @@ function Health.GetEvents(frame, spec)
     return HEALTH_EVENTS_NO_FACTION
   end
   return Health.events
+end
+
+function Health.GetUnitlessEvents(frame, spec)
+  local unit = frame and frame.unit
+  if unit == "player" or (spec and spec.key == "player") then
+    return HEALTH_PLAYER_LIFECYCLE_EVENTS
+  end
+  return nil
 end
 
 function Health.UpdateValuePlain(frame, event, unit)

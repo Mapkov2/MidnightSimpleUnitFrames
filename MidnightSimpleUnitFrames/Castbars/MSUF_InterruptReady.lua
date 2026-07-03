@@ -441,7 +441,10 @@ end
 local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
     local color = ColorForReady(isReady, general)
 
-    if HasKnownValue(rawNotInterruptible)
+    if rawNotInterruptible == true then
+        color = NotInterruptibleColor()
+    elseif rawNotInterruptible ~= false
+        and HasKnownValue(rawNotInterruptible)
         and _G.CreateColor
         and _G.C_CurveUtil
         and _G.C_CurveUtil.EvaluateColorFromBoolean
@@ -456,10 +459,28 @@ local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
     return isReady and 0 or 1, isReady and 1 or 0, 0, 1
 end
 
+local function RawInterruptibleKey(value)
+    if value == nil then
+        return ""
+    end
+    if value == true then
+        return "1"
+    end
+    if value == false then
+        return "0"
+    end
+    if plainIsSecret(value) == true then
+        return nil
+    end
+    return tostring(value)
+end
+
 local function HideIndicatorVisual(frame)
     if not frame then
         return
     end
+
+    frame._msufKickReadyVisualKey = nil
 
     if frame.kickReadyBox then
         frame.kickReadyBox:Hide()
@@ -536,6 +557,20 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
     local isReady = ResolveStatus(status)
     local rawNotInterruptible = ResolveRawNotInterruptible(frame, castStateTable)
     local red, green, blue, alpha = EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
+    local rawKey = RawInterruptibleKey(rawNotInterruptible)
+    local visualKey
+    if rawKey ~= nil then
+        visualKey = style .. "|"
+            .. (isReady and "1" or "0") .. "|"
+            .. rawKey .. "|"
+            .. tostring(red) .. "|"
+            .. tostring(green) .. "|"
+            .. tostring(blue) .. "|"
+            .. tostring(alpha)
+        if frame._msufKickReadyVisualKey == visualKey then
+            return
+        end
+    end
 
     if style == "border" then
         if frame.kickReadyBox then
@@ -544,6 +579,7 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
         end
 
         TintOutline(frame, red, green, blue, alpha)
+        frame._msufKickReadyVisualKey = visualKey
         return
     end
 
@@ -560,6 +596,7 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
 
     box:Show()
     box._kickReadyShown = true
+    frame._msufKickReadyVisualKey = visualKey
 end
 
 local function ForEachCastbar(callback)

@@ -4304,7 +4304,7 @@ function R.IndicatorSettingFromText(norm)
         return "raid marker", "Raid Marker", "unit"
     end
     if R.ContainsAny(norm, { "leader icon", "leader indicator", "assist icon", "assist indicator", "leader assist icon", "leader assist indicator" }) then
-        return "leader icon", "Leader / Assist", "unit"
+        return "leader icon", "Leader/Assist Icon", "unit"
     end
     if R.ContainsAny(norm, { "combat indicator", "combat state indicator", "combat status indicator", "combat icon", "combat state icon", "combat symbol" }) then
         return "combat indicator", "Combat Indicator", "unit"

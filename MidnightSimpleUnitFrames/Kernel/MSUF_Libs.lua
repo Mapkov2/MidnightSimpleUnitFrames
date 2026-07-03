@@ -368,11 +368,13 @@ end
 
 local _MSUF_StatusbarMediaRefreshPending = false
 local _MSUF_StatusbarMediaRefreshFrame
+local _MSUF_StatusIconMediaRefreshPending = false
+local _MSUF_StatusIconMediaRefreshFrame
 local _MSUF_FontMediaRefreshPending = false
 local _MSUF_FontMediaRefreshFrame
 local _MSUF_LSMCombatFrame
 local _MSUF_LSMCallbackActive = false
-local _MSUF_LSMMediaCounts = { font = 0, statusbar = 0 }
+local _MSUF_LSMMediaCounts = { font = 0, statusbar = 0, background = 0, msuf_statusicon = 0 }
 local _MSUF_BundledMediaRegistrationPending = false
 
 local RegisterBundledFonts
@@ -435,6 +437,50 @@ local function EnsureStatusbarMediaRefreshFrame()
         end
     end)
     _MSUF_StatusbarMediaRefreshFrame = frame
+    return frame
+end
+
+local function RunStatusIconMediaRefresh()
+    _MSUF_StatusIconMediaRefreshPending = false
+
+    if type(_G.MSUF_RefreshStatusIconPacks) == "function" then
+        _G.MSUF_RefreshStatusIconPacks()
+    end
+
+    if type(_G.MSUF_RequestStatusIconsRefreshForCurrent) == "function" then
+        _G.MSUF_RequestStatusIconsRefreshForCurrent()
+    end
+
+    local gf = (_G.MSUF_NS and _G.MSUF_NS.GF) or (MSUF and MSUF.GF)
+    if gf then
+        if type(gf.InvalidateConfCache) == "function" then gf.InvalidateConfCache() end
+        if type(gf.RefreshVisuals) == "function" then
+            gf.RefreshVisuals(nil, gf.DIRTY_VISUAL)
+        elseif type(_G.MSUF_GF_RefreshVisuals) == "function" then
+            _G.MSUF_GF_RefreshVisuals()
+        end
+    elseif type(_G.MSUF_GF_RefreshVisuals) == "function" then
+        _G.MSUF_GF_RefreshVisuals()
+    end
+end
+
+local function EnsureStatusIconMediaRefreshFrame()
+    if _MSUF_StatusIconMediaRefreshFrame or type(_G.CreateFrame) ~= "function" then
+        return _MSUF_StatusIconMediaRefreshFrame
+    end
+    local frame = _G.CreateFrame("Frame")
+    frame:SetScript("OnEvent", function(self, event)
+        if event ~= "PLAYER_REGEN_ENABLED" then return end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        if _MSUF_StatusIconMediaRefreshPending then
+            if IsCombatLocked() then
+                self:RegisterEvent("PLAYER_REGEN_ENABLED")
+            else
+                RunStatusIconMediaRefresh()
+            end
+        end
+    end)
+    _MSUF_StatusIconMediaRefreshFrame = frame
     return frame
 end
 
@@ -521,6 +567,34 @@ local function ScheduleStatusbarMediaRefresh()
     end
 end
 
+local function FlushStatusIconMediaRefresh()
+    if IsCombatLocked() then
+        local frame = EnsureStatusIconMediaRefreshFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+    end
+    RunStatusIconMediaRefresh()
+end
+
+local function ScheduleStatusIconMediaRefresh()
+    if _MSUF_StatusIconMediaRefreshPending then return end
+    _MSUF_StatusIconMediaRefreshPending = true
+    if IsCombatLocked() then
+        local frame = EnsureStatusIconMediaRefreshFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+    end
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("LSM_STATUS_ICON_MEDIA_REFRESH", FlushStatusIconMediaRefresh)
+    else
+        _G.C_Timer.After(0, FlushStatusIconMediaRefresh)
+    end
+end
+
 local function CountLSMMediaType(LSM, mediatype)
     if not (LSM and type(LSM.HashTable) == "function") then return 0 end
     local media = LSM:HashTable(mediatype)
@@ -536,6 +610,8 @@ local function SnapshotLSMMediaCounts(LSM)
     LSM = LSM or MSUF.LSM
     _MSUF_LSMMediaCounts.font = CountLSMMediaType(LSM, "font")
     _MSUF_LSMMediaCounts.statusbar = CountLSMMediaType(LSM, "statusbar")
+    _MSUF_LSMMediaCounts.background = CountLSMMediaType(LSM, "background")
+    _MSUF_LSMMediaCounts.msuf_statusicon = CountLSMMediaType(LSM, "msuf_statusicon")
 end
 
 local function RefreshFontMedia(key, forceApply)
@@ -564,21 +640,35 @@ local function RefreshStatusbarMedia()
     ScheduleStatusbarMediaRefresh()
 end
 
+local function RefreshStatusIconMedia()
+    ScheduleStatusIconMediaRefresh()
+end
+
 local function RefreshChangedMediaAfterCombat()
     local LSM = MSUF.LSM
     local fontCount = CountLSMMediaType(LSM, "font")
     local statusbarCount = CountLSMMediaType(LSM, "statusbar")
+    local backgroundCount = CountLSMMediaType(LSM, "background")
+    local statusIconCount = CountLSMMediaType(LSM, "msuf_statusicon")
     local fontChanged = fontCount ~= _MSUF_LSMMediaCounts.font
     local statusbarChanged = statusbarCount ~= _MSUF_LSMMediaCounts.statusbar
+    local statusIconChanged = backgroundCount ~= _MSUF_LSMMediaCounts.background
+        or statusIconCount ~= _MSUF_LSMMediaCounts.msuf_statusicon
+        or statusbarChanged
 
     _MSUF_LSMMediaCounts.font = fontCount
     _MSUF_LSMMediaCounts.statusbar = statusbarCount
+    _MSUF_LSMMediaCounts.background = backgroundCount
+    _MSUF_LSMMediaCounts.msuf_statusicon = statusIconCount
 
     if fontChanged then
         RefreshFontMedia(nil, true)
     end
     if statusbarChanged then
         RefreshStatusbarMedia()
+    end
+    if statusIconChanged then
+        RefreshStatusIconMedia()
     end
 end
 
@@ -599,6 +689,9 @@ local function OnLSMRegistered(_, mediatype, key)
         RefreshFontMedia(key, false)
     elseif mediatype == "statusbar" then
         RefreshStatusbarMedia()
+        RefreshStatusIconMedia()
+    elseif mediatype == "background" or mediatype == "msuf_statusicon" then
+        RefreshStatusIconMedia()
     end
     SnapshotLSMMediaCounts(MSUF.LSM)
 end

@@ -24,13 +24,14 @@ local GroupStatusIconForText = P.GroupStatusIconForText
 local TextSelectorTab = P.TextSelectorTab
 local TextSelectorSlot = P.TextSelectorSlot
 local TextSelectorIntent = P.TextSelectorIntent
+local Data = A.ParserData or {}
+A.ParserData = Data
+local GS = Data.GEOMETRY_SELECTOR_TERMS or {}
 
 -- Menu selector parser for UI-only changes.
 -- Selecting a visible tab/dropdown/slot should not mutate the underlying setting value; it
 -- only changes the active editor selection so the user lands on the relevant control.
-local MENU_SELECTOR_VERBS = {
-    "select", "choose", "pick", "open", "show", "switch to", "go to", "edit",
-}
+local MENU_SELECTOR_VERBS = GS.MENU_SELECTOR_VERBS or {}
 
 local function HasMenuSelectorVerb(text)
     return ContainsAny(text, MENU_SELECTOR_VERBS)
@@ -60,35 +61,23 @@ local function SelectorGroupScope(text)
 end
 
 local function TextMoveTogetherIntent(text)
-    if ContainsAny(text, { "individual", "separate", "separately", "each" })
-        and ContainsAny(text, { "hp text", "health text", "power text", "mana text" })
-        and ContainsAny(text, { "unit", "units", "slot", "slots", "text unit", "text units", "text slot", "text slots" })
+    if ContainsAny(text, GS.TEXT_MOVE_SEPARATE_TERMS)
+        and ContainsAny(text, GS.TEXT_MOVE_TEXT_TERMS)
+        and ContainsAny(text, GS.TEXT_MOVE_UNIT_TERMS)
     then
         return true
     end
-    return ContainsAny(text, {
-        "move text as one group", "move as one group", "text as one group",
-        "move text together", "text move together", "move together",
-        "move text per slot", "text per slot", "per slot", "selected slot mode",
-        "individual slot", "individual slots", "separate slot", "separate slots",
-        "move text separately", "text separately", "individual text unit", "individual text units",
-        "separate text unit", "separate text units", "move individual text", "move each text",
-    })
+    return ContainsAny(text, GS.TEXT_MOVE_INTENT_TERMS)
 end
 
 local function TextMoveTogetherValue(text)
-    if ContainsAny(text, { "individual", "separate", "separately", "each" })
-        and ContainsAny(text, { "hp text", "health text", "power text", "mana text" })
-        and ContainsAny(text, { "unit", "units", "slot", "slots", "text unit", "text units", "text slot", "text slots" })
+    if ContainsAny(text, GS.TEXT_MOVE_SEPARATE_TERMS)
+        and ContainsAny(text, GS.TEXT_MOVE_TEXT_TERMS)
+        and ContainsAny(text, GS.TEXT_MOVE_UNIT_TERMS)
     then
         return false
     end
-    if ContainsAny(text, {
-        "per slot", "selected slot mode", "individual slot", "individual slots",
-        "separate slot", "separate slots", "separately", "text separately",
-        "individual text unit", "individual text units", "separate text unit", "separate text units",
-        "move individual text", "move each text",
-    }) then
+    if ContainsAny(text, GS.TEXT_MOVE_SEPARATE_SLOT_TERMS) then
         return false
     end
     local value = DetectBoolean(text)
@@ -97,17 +86,13 @@ local function TextMoveTogetherValue(text)
 end
 
 local function NaturalTextSelectorSlot(text)
-    if not ContainsAny(text, { "put", "place", "align", "anchor", "anchoring" }) then return nil end
-    if ContainsAny(text, {
-        "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down",
-        "size", "font size", "layer", "current", "percent", "percentage", "max", "maximum",
-        "deficit", "missing", "hide", "clear", "remove", "none", "off",
-    }) then
+    if not ContainsAny(text, GS.NATURAL_TEXT_SELECTOR_ACTION_TERMS) then return nil end
+    if ContainsAny(text, GS.NATURAL_TEXT_SELECTOR_REJECT_TERMS) then
         return nil
     end
-    local left = ContainsAny(text, { "left", "links" })
-    local center = ContainsAny(text, { "center", "centre", "middle", "mitte" })
-    local right = ContainsAny(text, { "right", "rechts" })
+    local left = ContainsAny(text, GS.TEXT_LEFT_TERMS)
+    local center = ContainsAny(text, GS.TEXT_CENTER_TERMS)
+    local right = ContainsAny(text, GS.TEXT_RIGHT_TERMS)
     local count = (left and 1 or 0) + (center and 1 or 0) + (right and 1 or 0)
     if count ~= 1 then return nil end
     if left then return "left" end
@@ -117,74 +102,51 @@ local function NaturalTextSelectorSlot(text)
 end
 
 local function StatusSelectorTab(text)
-    if ContainsAny(text, { "advanced status tab", "advanced status icon tab", "advanced indicator tab", "advanced status controls", "advanced status" }) then return "advanced" end
-    if ContainsAny(text, { "basic status tab", "basic status icon tab", "basic indicator tab", "basic status controls", "basic status" }) then return "basic" end
+    if ContainsAny(text, GS.STATUS_ADVANCED_TAB_TERMS) then return "advanced" end
+    if ContainsAny(text, GS.STATUS_BASIC_TAB_TERMS) then return "basic" end
     return nil
 end
 
 local function StatusSelectorIntent(text)
-    if ContainsAny(text, {
-        "status tab", "status icon tab", "status indicator tab", "indicator tab",
-        "status selector", "status dropdown", "indicator selector", "indicator dropdown",
-        "status controls", "status icon controls", "selected indicator",
-    }) then
+    if ContainsAny(text, GS.STATUS_SELECTOR_INTENT_TERMS) then
         return true
     end
-    return ContainsAny(text, { "indicator", "status icon" })
+    return ContainsAny(text, GS.STATUS_SELECTOR_FALLBACK_TERMS)
 end
 
 function P.ClassPowerStyleTab(text)
-    if ContainsAny(text, { "textures tab", "texture tab", "resources tab", "resource tab", "style textures", "style resources" }) then return "resources" end
-    if ContainsAny(text, { "text tab", "style text", "class power text tab", "class resource text tab" }) then return "text" end
-    if ContainsAny(text, { "opacity tab", "alpha tab", "transparency tab", "style opacity", "style alpha" }) then return "opacity" end
-    if ContainsAny(text, { "pips tab", "pip tab", "separator tab", "separators tab", "style pips" }) then return "pips" end
+    if ContainsAny(text, GS.CLASS_POWER_STYLE_RESOURCES_TERMS) then return "resources" end
+    if ContainsAny(text, GS.CLASS_POWER_STYLE_TEXT_TERMS) then return "text" end
+    if ContainsAny(text, GS.CLASS_POWER_STYLE_OPACITY_TERMS) then return "opacity" end
+    if ContainsAny(text, GS.CLASS_POWER_STYLE_PIPS_TERMS) then return "pips" end
     return nil
 end
 
 function P.ClassPowerStyleIntent(text)
-    return ContainsAny(text, {
-        "class power style", "class resource style", "class resources style", "class power style tab",
-        "class resource style tab", "class resources style area", "class power style area",
-    })
+    return ContainsAny(text, GS.CLASS_POWER_STYLE_INTENT_TERMS)
 end
 
 function P.BarsHighlightTab(text)
-    if ContainsAny(text, { "modes tab", "mode tab", "border modes", "highlight modes", "highlight mode" }) then return "modes" end
-    if ContainsAny(text, { "preview tab", "test tab", "highlight preview", "highlight test" }) then return "preview" end
-    if ContainsAny(text, { "priority tab", "priorities tab", "priority order", "order tab", "highlight priority" }) then return "priority" end
+    if ContainsAny(text, GS.BARS_HIGHLIGHT_MODES_TERMS) then return "modes" end
+    if ContainsAny(text, GS.BARS_HIGHLIGHT_PREVIEW_TERMS) then return "preview" end
+    if ContainsAny(text, GS.BARS_HIGHLIGHT_PRIORITY_TERMS) then return "priority" end
     return nil
 end
 
 function P.BarsHighlightIntent(text)
-    return ContainsAny(text, {
-        "highlight borders tab", "highlight border tab", "highlight borders", "bar highlight tab",
-        "bars highlight tab", "highlight area", "highlight border area",
-        "highlight modes", "highlight mode", "highlight preview", "highlight test", "highlight priority",
-    })
+    return ContainsAny(text, GS.BARS_HIGHLIGHT_INTENT_TERMS)
 end
 
 local function ParseMenuSelectorState(text)
     text = tostring(text or "")
-    if not (text:find("select", 1, true) or text:find("choose", 1, true)
-        or text:find("pick", 1, true) or text:find("open", 1, true)
-        or text:find("show", 1, true) or text:find("switch", 1, true)
-        or text:find("edit", 1, true) or text:find("tab", 1, true)
-        or text:find("slot", 1, true) or text:find("selector", 1, true)
-        or text:find("dropdown", 1, true) or text:find("status", 1, true)
-        or text:find("indicator", 1, true) or text:find("text", 1, true)
-        or text:find("put", 1, true) or text:find("place", 1, true)
-        or text:find("align", 1, true) or text:find("anchor", 1, true)
-        or text:find("class power", 1, true) or text:find("class resource", 1, true)
-        or text:find("highlight", 1, true) or text:find("copy", 1, true)
-        or text:find("category", 1, true) or text:find("categories", 1, true)
-        or text:find("scope", 1, true) or text:find("scopes", 1, true)) then
+    if not ContainsAny(text, GS.MENU_SELECTOR_GATE_TERMS) then
         return nil
     end
     if TextMoveTogetherIntent(text) then
         local textTab = TextSelectorTab(text)
         if textTab == "hp" or textTab == "power" then
             local groups = DetectGroups(text)
-            if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then
+            if groups[1] or ContainsAny(text, GS.GROUP_TEXT_TERMS) then
                 return MenuSelectorAction({
                     selector = "group_text_move_together",
                     scope = groups[1] or SelectorGroupScope(text),
@@ -209,7 +171,7 @@ local function ParseMenuSelectorState(text)
     if not anchorTextSlot then anchorTextSlot = NaturalTextSelectorSlot(text) end
     if (anchorTextTab == "hp" or anchorTextTab == "power") and TextSelectorIntent(text, anchorTextTab, anchorTextSlot) then
         local groups = DetectGroups(text)
-        if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then
+        if groups[1] or ContainsAny(text, GS.GROUP_TEXT_TERMS) then
             return MenuSelectorAction({
                 selector = "group_text",
                 scope = groups[1] or SelectorGroupScope(text),
@@ -228,16 +190,7 @@ local function ParseMenuSelectorState(text)
         end
     end
 
-    local genericMenuSelectorIntent = ContainsAny(text, {
-        "select text tab", "select text slot", "text move together", "move text as one group", "move text per slot",
-        "select status tab", "select status indicator", "select group status icon",
-        "select spell indicator", "select corner editor slot",
-        "select power color token", "select class resource color token", "select class power color token",
-        "select class power style tab", "select class resource style tab", "select class resources style area",
-        "select highlight borders tab", "select bars highlight tab", "select highlight area",
-        "set profile staging field", "set profile string field",
-        "set unit copy category", "select unit copy categories", "set group copy category", "select group copy categories",
-    })
+    local genericMenuSelectorIntent = ContainsAny(text, GS.GENERIC_MENU_SELECTOR_INTENT_TERMS)
     if not HasMenuSelectorVerb(text) and not genericMenuSelectorIntent then return nil end
 
     local classPowerStyleTab = P.ClassPowerStyleTab(text)
@@ -256,17 +209,17 @@ local function ParseMenuSelectorState(text)
         }, "Select Highlight Borders tab")
     end
 
-    if ContainsAny(text, { "class power color token", "class resource color token", "class power token", "class resource token" })
-        or (ContainsAny(text, { "class power color", "class resource color", "resource color" })
-            and ContainsAny(text, { "combo point", "combo points", "holy power", "soul shard", "soul shards", "chi", "arcane charge", "arcane charges", "runes", "essence", "maelstrom", "astral", "stagger", "ebon", "whirlwind", "tip of the spear", "insanity" }))
+    if ContainsAny(text, GS.CLASS_POWER_COLOR_TOKEN_TERMS)
+        or (ContainsAny(text, GS.CLASS_POWER_COLOR_TERMS)
+            and ContainsAny(text, GS.CLASS_POWER_RESOURCE_TOKEN_TERMS))
     then
         local token = ClassPowerColorTokenForText(text)
         if token then
             return MenuSelectorAction({ selector = "color_token", kind = "classPower", token = token }, "Select class resource color slot")
         end
     end
-    if ContainsAny(text, { "power color token", "power token", "power type", "resource type", "resource color token" })
-        and not ContainsAny(text, { "class power", "class resource", "combo point", "combo points" })
+    if ContainsAny(text, GS.POWER_COLOR_TOKEN_TERMS)
+        and not ContainsAny(text, GS.CLASS_POWER_REJECT_TERMS)
     then
         local token = PowerColorTokenForText(text)
         if token then
@@ -278,7 +231,7 @@ local function ParseMenuSelectorState(text)
     local textSlot = TextSelectorSlot(text)
     if textTab and TextSelectorIntent(text, textTab, textSlot) then
         local groups = DetectGroups(text)
-        if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then
+        if groups[1] or ContainsAny(text, GS.GROUP_TEXT_TERMS) then
             return MenuSelectorAction({
                 selector = "group_text",
                 scope = groups[1] or SelectorGroupScope(text),
@@ -297,7 +250,7 @@ local function ParseMenuSelectorState(text)
         end
     end
 
-    if ContainsAny(text, { "spell indicator selector", "spell indicator dropdown", "spell indicator spec", "tracked spell selector", "tracked spells selector", "tracked spell", "multi spec entry", "multi-spec entry" }) then
+    if ContainsAny(text, GS.SPELL_INDICATOR_TERMS) then
         local spec = A.ResolveGroupSpellSpec and A.ResolveGroupSpellSpec(text) or nil
         local aura, resolvedSpec
         if type(A.ResolveGroupSpellAura) == "function" then
@@ -315,7 +268,7 @@ local function ParseMenuSelectorState(text)
         end
     end
 
-    if ContainsAny(text, { "corner editor slot", "editor slot", "corner slot", "custom spell editor" }) then
+    if ContainsAny(text, GS.CORNER_EDITOR_TERMS) then
         local slot = A.ResolveGroupCornerSlot and A.ResolveGroupCornerSlot(text) or nil
         if slot then
             return MenuSelectorAction({
@@ -332,7 +285,7 @@ local function ParseMenuSelectorState(text)
     if statusIntent then
         local groups = DetectGroups(text)
         local groupStatusIcon = GroupStatusIconForText(text)
-        if groups[1] or ContainsAny(text, { "group status", "group indicator", "party indicator", "raid indicator", "mythic raid indicator" }) then
+        if groups[1] or ContainsAny(text, GS.GROUP_STATUS_TERMS) then
             if statusTab or groupStatusIcon then
                 return MenuSelectorAction({
                     selector = "group_status",
@@ -366,7 +319,7 @@ local function ParseMenuSelectorState(text)
         end
     end
 
-    if ContainsAny(text, { "select text tab", "select text slot", "text move together", "move text as one group", "move text per slot" }) then
+    if ContainsAny(text, GS.TEXT_SELECTOR_QUESTION_TERMS) then
         return {
             kind = "answer",
             status = "info",
@@ -374,7 +327,7 @@ local function ParseMenuSelectorState(text)
             summary = "Asks which text choice to use.",
         }
     end
-    if ContainsAny(text, { "select status tab", "select status indicator", "select group status icon" }) then
+    if ContainsAny(text, GS.STATUS_SELECTOR_QUESTION_TERMS) then
         return {
             kind = "answer",
             status = "info",
@@ -382,7 +335,7 @@ local function ParseMenuSelectorState(text)
             summary = "Asks which status indicator to select.",
         }
     end
-    if ContainsAny(text, { "select spell indicator" }) then
+    if ContainsAny(text, GS.SPELL_INDICATOR_QUESTION_TERMS) then
         return {
             kind = "answer",
             status = "info",
@@ -390,7 +343,7 @@ local function ParseMenuSelectorState(text)
             summary = "Asks which spell indicator to select.",
         }
     end
-    if ContainsAny(text, { "select corner editor slot", "corner editor slot", "editor slot" }) then
+    if ContainsAny(text, GS.CORNER_EDITOR_QUESTION_TERMS) then
         return {
             kind = "answer",
             status = "info",
@@ -398,7 +351,7 @@ local function ParseMenuSelectorState(text)
             summary = "Asks which corner slot to select.",
         }
     end
-    if ContainsAny(text, { "select power color token", "select class resource color token", "select class power color token" }) then
+    if ContainsAny(text, GS.POWER_COLOR_QUESTION_TERMS) then
         return {
             kind = "answer",
             status = "info",
@@ -406,7 +359,7 @@ local function ParseMenuSelectorState(text)
             summary = "Asks which color slot to select.",
         }
     end
-    if ContainsAny(text, { "select class power style tab", "select class resource style tab", "class resources style area" }) then
+    if ContainsAny(text, GS.CLASS_POWER_STYLE_QUESTION_TERMS) then
         return {
             kind = "answer",
             status = "info",
@@ -414,7 +367,7 @@ local function ParseMenuSelectorState(text)
             summary = "Asks for the Class Resources style tab.",
         }
     end
-    if ContainsAny(text, { "select highlight borders tab", "select bars highlight tab", "select highlight area" }) then
+    if ContainsAny(text, GS.BARS_HIGHLIGHT_QUESTION_TERMS) then
         return {
             kind = "answer",
             status = "info",
@@ -422,7 +375,7 @@ local function ParseMenuSelectorState(text)
             summary = "Asks for the Highlight Borders tab.",
         }
     end
-    if ContainsAny(text, { "set profile staging field", "set profile string field" }) then
+    if ContainsAny(text, GS.PROFILE_STAGING_QUESTION_TERMS) then
         return {
             kind = "answer",
             status = "info",
@@ -430,7 +383,7 @@ local function ParseMenuSelectorState(text)
             summary = "Asks which profile value to select.",
         }
     end
-    if ContainsAny(text, { "set unit copy category", "select unit copy categories", "set group copy category", "select group copy categories" }) then
+    if ContainsAny(text, GS.COPY_CATEGORY_QUESTION_TERMS) then
         return {
             kind = "answer",
             status = "info",

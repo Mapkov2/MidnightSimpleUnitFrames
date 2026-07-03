@@ -14,7 +14,7 @@ local Data = A.UnitframeRegistryData or {}
 A.UnitframeRegistryData = Data
 
 Data.STATUS_ICON_PACK_FALLBACK_VALUES = {
-    "BLIZZARD", "CLASSIC", "MIDNIGHT", "GLOSSY_ORBS",
+    "BLIZZARD", "CLASSIC", "MIDNIGHT", "UXPRO", "GLOSSY_ORBS",
     "DARK_EMBOSS", "GLASS_PANELS", "NEON_OUTLINE", "RING_SYMBOLS",
     "DOTS", "SHAPES", "DIAMONDS", "SQUARES",
 }

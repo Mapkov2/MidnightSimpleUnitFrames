@@ -101,6 +101,25 @@ function Render.Install(box, ctx, deps)
         local runtimeBorder = (runtimeSpec and runtimeSpec.border) or {}
         local runtimePrediction = (runtimeSpec and runtimeSpec.prediction) or {}
         local runtimeStatus = (runtimeSpec and runtimeSpec.status) or {}
+        local function ResolveStatusPreviewTexture(spec, runtimeCfg, iconType, variant)
+            local customIcon = runtimeCfg and runtimeCfg.customIcon
+            if (type(customIcon) ~= "string" or customIcon == "") and spec and spec.customIcon then
+                customIcon = conf[spec.customIcon]
+            end
+            if type(customIcon) == "string" and customIcon ~= "" then return customIcon, 0, 1, 0, 1 end
+            local resolver = _G.MSUF_GetStatusIconTexture or (gf and gf.GetStatusIconTexture)
+            if type(resolver) == "function" then
+                local path, l, r, t, b = resolver("BLIZZARD", iconType, variant, runtimeStatus and runtimeStatus.useMidnight == true)
+                if type(path) == "string" and path ~= "" then return path, l, r, t, b end
+            end
+            if iconType == "raidMarker" then return "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 0, 0.25, 0, 0.25 end
+            if iconType == "readyCheck" then return "Interface\\RaidFrame\\ReadyCheck-Ready", 0, 1, 0, 1 end
+            if iconType == "summon" then return "Interface\\RaidFrame\\Raid-Icon-SummonPending", 0, 1, 0, 1 end
+            if iconType == "incomingRes" then return "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 end
+            if iconType == "pvp" then return "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
+            if iconType == "phase" then return "Interface\\TargetingFrame\\UI-PhasingIcon", 0, 1, 0, 1 end
+            return nil
+        end
         local focus = H.PreviewFocusForPage(ctx.key)
         local layerVisible = M.gfPreviewLayerVisible or {}
         local soloLayer = M.gfPreviewSoloLayer
@@ -1037,25 +1056,28 @@ function Render.Install(box, ctx, deps)
                 if tex then
                     local path, atlas, l, r, t, b = nil, nil, 0, 1, 0, 1
                     local value = spec.value
-                    if value == "roleIcon" and gf and gf.GetRoleTexture then
+                    if runtimeCfg and type(runtimeCfg.customIcon) == "string" and runtimeCfg.customIcon ~= "" then
+                        path, l, r, t, b = runtimeCfg.customIcon, 0, 1, 0, 1
+                    elseif spec.customIcon and type(conf[spec.customIcon]) == "string" and conf[spec.customIcon] ~= "" then
+                        path, l, r, t, b = conf[spec.customIcon], 0, 1, 0, 1
+                    elseif value == "roleIcon" and gf and gf.GetRoleTexture then
                         path, l, r, t, b = gf.GetRoleTexture(kind, GF_PREVIEW_ROLE, runtimeCfg and runtimeCfg.style)
                     elseif value == "leaderIcon" and gf and gf.GetLeaderTexture then
                         path, l, r, t, b = gf.GetLeaderTexture(kind, runtimeCfg and runtimeCfg.style)
                     elseif value == "assistIcon" and gf and gf.GetAssistTexture then
                         path, l, r, t, b = gf.GetAssistTexture(kind, runtimeCfg and runtimeCfg.style)
                     elseif value == "raidMarker" then
-                        path = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
-                        l, r, t, b = 0, 0.25, 0, 0.25
+                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "raidMarker", 1)
                     elseif value == "readyCheckIcon" then
-                        path = "Interface\\RaidFrame\\ReadyCheck-Ready"
+                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "readyCheck", "ready")
                     elseif value == "summonIcon" then
-                        path = "Interface\\RaidFrame\\Raid-Icon-SummonPending"
+                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "summon", 1)
                     elseif value == "resurrectIcon" then
-                        path = "Interface\\RaidFrame\\Raid-Icon-Rez"
+                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "incomingRes", "resurrect")
                     elseif value == "pvpIcon" then
-                        atlas = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
+                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "pvp", "Alliance")
                     elseif value == "phaseIcon" then
-                        path = "Interface\\TargetingFrame\\UI-PhasingIcon"
+                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "phase", "phase")
                     end
                     if atlas or path then
                         if atlas and tex.SetAtlas then

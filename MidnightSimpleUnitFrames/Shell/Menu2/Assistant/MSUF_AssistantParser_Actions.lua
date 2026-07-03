@@ -17,6 +17,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Data = A.ParserData or {}
+A.ParserData = Data
+local ActionsData = Data.ACTIONS_PARSER or {}
+local ActionsPhrases = ActionsData.PHRASES or {}
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -201,11 +205,7 @@ local function ParseGroupCopy(text)
                 local dstGroups = DetectGroups(dstText)
                 if (#srcUnits > 0 and #dstGroups > 0) or (#srcGroups > 0 and #dstUnits > 0) then return nil end
             end
-            if ContainsAny(text, {
-                "group setting", "group settings", "group frame setting", "group frame settings",
-                "group frames", "group frame", "party setting", "party settings",
-                "raid setting", "raid settings", "mythic raid setting", "mythic raid settings",
-            }) then
+            if ContainsAny(text, ActionsPhrases[1]) then
                 return {
                     kind = "answer",
                     status = "info",
@@ -221,7 +221,7 @@ local function ParseGroupCopy(text)
     end
     local action = Registry and Registry:GetAction("copy_group")
     if not action then return nil end
-    local confirm = (WantsFullGroupCopy and WantsFullGroupCopy(text)) or ContainsAny(text, { "all", "alle" }) or #targets > 1
+    local confirm = (WantsFullGroupCopy and WantsFullGroupCopy(text)) or ContainsAny(text, ActionsPhrases[2]) or #targets > 1
     local scopes = GroupCopyScopesForText(text)
     if not HasEnabledCopyScope(scopes) then
         return {
@@ -293,7 +293,7 @@ local function ParseCopy(text)
     end
     local action = Registry and Registry:GetAction("copy_unit")
     if not action then return nil end
-    local confirm = (WantsFullUnitCopy and WantsFullUnitCopy(text)) or ContainsAny(text, { "all", "alle" }) or #targets > 2
+    local confirm = (WantsFullUnitCopy and WantsFullUnitCopy(text)) or ContainsAny(text, ActionsPhrases[3]) or #targets > 2
     return {
         kind = "action",
         action = action,
@@ -306,7 +306,7 @@ end
 
 local function BuildContextReset(text, ctx)
     if not (ctx and type(ctx.lastUnit) == "string") then return nil end
-    if not ContainsAny(text, { "reset", "restore", "zuruecksetzen", "zurucksetzen", "default", "defaults", "werksreset", "werkseinstellungen", "vollreset" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[4]) then return nil end
     if not (HasPhrase(text, "it") or HasPhrase(text, "that") or HasPhrase(text, "das")) then return nil end
     local setting = ctx.lastSetting and Registry:GetSetting(ctx.lastSetting) or nil
     local isPosition = setting and (setting.attribute == "offsetX" or setting.attribute == "offsetY")
@@ -325,12 +325,12 @@ local GROUP_STATUS_ICON_ALIASES = {
     { key = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", style = "roleIconStyle", aliases = { "role icon", "role icons", "role indicator", "role indicators", "role symbol", "role symbols", "rollen icon", "rollen icons", "rollen indikator", "rollen symbol" } },
     { key = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", style = "leaderIconStyle", aliases = { "leader icon", "leader icons", "leader indicator", "leader indicators", "leader symbol", "leader symbols", "gruppenleiter icon", "leiter icon", "anfuehrer icon" } },
     { key = "assistIcon", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", style = "assistIconStyle", aliases = { "assist icon", "assist icons", "assistant icon", "assistant icons", "assist indicator", "assist indicators", "assistant indicator", "assistant indicators", "assist symbol", "assist symbols", "assistant symbol", "assistant symbols" } },
-    { key = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol", "raid markierung", "ziel markierung", "zielmarker" } },
-    { key = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol", "bereitschaftscheck", "bereitschaftscheck icon", "readycheck icon" } },
-    { key = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", aliases = { "summon icon", "summon indicator", "summon symbol", "beschwoerung icon", "beschwoeren icon" } },
-    { key = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", x = "resurrectX", y = "resurrectY", layer = "resurrectLayer", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol", "wiederbelebung icon", "wiederbelebungs icon", "eingehende wiederbelebung" } },
-    { key = "pvpIcon", size = "pvpIconSize", anchor = "pvpIconAnchor", x = "pvpIconX", y = "pvpIconY", layer = "pvpIconLayer", aliases = { "pvp flag", "pvp icon", "pvp flag icon", "pvp indicator", "pvp flag indicator", "pvp status", "war mode indicator", "flagged indicator" } },
-    { key = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", x = "phaseX", y = "phaseY", layer = "phaseLayer", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
+    { key = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", style = "raidMarkerStyle", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol", "raid markierung", "ziel markierung", "zielmarker" } },
+    { key = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", style = "readyCheckIconStyle", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol", "bereitschaftscheck", "bereitschaftscheck icon", "readycheck icon" } },
+    { key = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", style = "summonIconStyle", aliases = { "summon icon", "summon indicator", "summon symbol", "beschwoerung icon", "beschwoeren icon" } },
+    { key = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", x = "resurrectX", y = "resurrectY", layer = "resurrectLayer", style = "resurrectIconStyle", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol", "wiederbelebung icon", "wiederbelebungs icon", "eingehende wiederbelebung" } },
+    { key = "pvpIcon", size = "pvpIconSize", anchor = "pvpIconAnchor", x = "pvpIconX", y = "pvpIconY", layer = "pvpIconLayer", style = "pvpIconStyle", aliases = { "pvp flag", "pvp icon", "pvp flag icon", "pvp indicator", "pvp flag indicator", "pvp status", "war mode indicator", "flagged indicator" } },
+    { key = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", x = "phaseX", y = "phaseY", layer = "phaseLayer", style = "phaseIconStyle", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
     { key = "statusText", size = "statusTextSize", anchor = "statusTextAnchor", x = "statusOffsetX", y = "statusOffsetY", layer = "statusTextLayer", aliases = { "dead text", "dead status text", "status text", "offline text", "offline status text", "offline indicator", "disconnected text", "connection text" } },
     { key = "statusGhostText", size = "statusGhostTextSize", anchor = "statusGhostTextAnchor", x = "statusGhostOffsetX", y = "statusGhostOffsetY", layer = "statusGhostTextLayer", aliases = { "ghost text", "ghost status text" } },
     { key = "statusAFKText", size = "statusAFKTextSize", anchor = "statusAFKTextAnchor", x = "statusAFKOffsetX", y = "statusAFKOffsetY", layer = "statusAFKTextLayer", aliases = { "afk text", "dnd text", "afk dnd text", "away text" } },
@@ -346,6 +346,27 @@ local GROUP_STATUS_ICON_PACK_ALIASES = {
     old = "CLASSIC",
     midnight = "MIDNIGHT",
     msuf = "MIDNIGHT",
+    ux = "UXPRO",
+    uxpro = "UXPRO",
+    ["ux pro"] = "UXPRO",
+    glossy = "GLOSSY_ORBS",
+    ["glossy orbs"] = "GLOSSY_ORBS",
+    dark = "DARK_EMBOSS",
+    ["dark emboss"] = "DARK_EMBOSS",
+    glass = "GLASS_PANELS",
+    ["glass panels"] = "GLASS_PANELS",
+    neon = "NEON_OUTLINE",
+    ["neon outline"] = "NEON_OUTLINE",
+    ring = "RING_SYMBOLS",
+    ["ring symbols"] = "RING_SYMBOLS",
+    dots = "DOTS",
+    shapes = "SHAPES",
+    diamonds = "DIAMONDS",
+    squares = "SQUARES",
+}
+local STATUS_ICON_PACK_VALUES = {
+    "DEFAULT", "BLIZZARD", "CLASSIC", "MIDNIGHT", "UXPRO", "GLOSSY_ORBS", "DARK_EMBOSS",
+    "GLASS_PANELS", "NEON_OUTLINE", "RING_SYMBOLS", "DOTS", "SHAPES", "DIAMONDS", "SQUARES",
 }
 
 local function GroupStatusIconForText(text)
@@ -358,10 +379,7 @@ end
 
 local function HasGroupStatusScopeIntent(text)
     if #DetectGroups(text) > 0 then return true end
-    if ContainsAny(text, {
-        "group", "groups", "group frame", "group frames", "group status", "group icon", "group icons",
-        "party", "party frame", "party frames", "raid", "raid frame", "raid frames", "mythic raid",
-    }) then return true end
+    if ContainsAny(text, ActionsPhrases[5]) then return true end
     local icon = GroupStatusIconForText(text)
     return icon == "readyCheckIcon" or icon == "summonIcon" or icon == "phaseIcon"
 end
@@ -421,19 +439,13 @@ local GROUP_SPELL_GROWTH_ALIASES = { rightdown = "RIGHTDOWN", ["right down"] = "
 local GROUP_SPELL_ANCHOR_ALIASES = { topleft = "TOPLEFT", ["top left"] = "TOPLEFT", ["oben links"] = "TOPLEFT", topright = "TOPRIGHT", ["top right"] = "TOPRIGHT", ["oben rechts"] = "TOPRIGHT", bottomleft = "BOTTOMLEFT", ["bottom left"] = "BOTTOMLEFT", ["unten links"] = "BOTTOMLEFT", bottomright = "BOTTOMRIGHT", ["bottom right"] = "BOTTOMRIGHT", ["unten rechts"] = "BOTTOMRIGHT", center = "CENTER", centre = "CENTER", middle = "CENTER", mitte = "CENTER", top = "TOP", oben = "TOP", bottom = "BOTTOM", unten = "BOTTOM", left = "LEFT", links = "LEFT", right = "RIGHT", rechts = "RIGHT" }
 
 local function StatusAnchorIntent(text)
-    if ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown", "anker", "ankerpunkt", "anker position" }) then return true end
-    if ContainsAny(text, {
-        "to top", "to the top", "to bottom", "to the bottom", "to left", "to the left", "to right", "to the right",
-        "on top", "on the top", "on bottom", "on the bottom", "on left", "on the left", "on right", "on the right",
-        "top left", "top right", "bottom left", "bottom right", "upper left", "upper right", "lower left", "lower right",
-        "above frame", "above the frame", "over frame", "over the frame", "below frame", "below the frame", "under frame", "under the frame",
-        "left side", "right side", "right of name", "left of name", "right to name", "left to name",
-    }) and ContainsAny(text, { "put", "place", "set", "move", "position", "stick", "keep" }) then
+    if ContainsAny(text, ActionsPhrases[6]) then return true end
+    if ContainsAny(text, ActionsPhrases[7]) and ContainsAny(text, ActionsPhrases[8]) then
         return true
     end
-    if ContainsAny(text, { "above", "over", "below", "under" })
-        and ContainsAny(text, { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" })
-        and ContainsAny(text, { "put", "place", "set", "move", "position", "stick", "keep" })
+    if ContainsAny(text, ActionsPhrases[9])
+        and ContainsAny(text, ActionsPhrases[10])
+        and ContainsAny(text, ActionsPhrases[11])
     then
         return true
     end
@@ -442,13 +454,13 @@ end
 
 local function StatusAnchorValueForText(text, aliases, values)
     if not StatusAnchorIntent(text) then return nil end
-    if ContainsAny(text, { "above frame", "above the frame", "over frame", "over the frame" })
-        or (ContainsAny(text, { "above", "over" }) and ContainsAny(text, { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" }))
+    if ContainsAny(text, ActionsPhrases[12])
+        or (ContainsAny(text, ActionsPhrases[13]) and ContainsAny(text, ActionsPhrases[14]))
     then
         return AliasValueForText("top", aliases, values) or AliasValueForText("top left", aliases, values)
     end
-    if ContainsAny(text, { "below frame", "below the frame", "under frame", "under the frame" })
-        or (ContainsAny(text, { "below", "under" }) and ContainsAny(text, { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" }))
+    if ContainsAny(text, ActionsPhrases[15])
+        or (ContainsAny(text, ActionsPhrases[16]) and ContainsAny(text, ActionsPhrases[17]))
     then
         return AliasValueForText("bottom", aliases, values) or AliasValueForText("bottom left", aliases, values)
     end
@@ -456,14 +468,14 @@ local function StatusAnchorValueForText(text, aliases, values)
 end
 
 local function ParseGroupSpellIndicatorAction(text, raw)
-    if not ContainsAny(text, { "spell indicator", "spell indicators", "tracked spell", "tracked spells", "zauber indikator", "zauber indikatoren", "zauberindikator", "zauberindikatoren", "verfolgte zauber" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[18]) then return nil end
     local scope = FirstGroupOrDefault(text)
     local spec = A.ResolveGroupSpellSpec and A.ResolveGroupSpellSpec(text) or nil
 
-    if ContainsAny(text, { "multi spec", "multispec", "track selected multi spec", "track spec", "mehrere specs", "spec verfolgen" }) and spec and spec ~= "auto" and spec ~= "multi" then
+    if ContainsAny(text, ActionsPhrases[19]) and spec and spec ~= "auto" and spec ~= "multi" then
         local action = Registry and Registry:GetAction("set_group_spell_indicator_multi_spec")
         local value = DetectBoolean(text)
-        if value == nil then value = not ContainsAny(text, { "remove", "clear", "stop", "entfernen", "loeschen", "deaktivieren" }) end
+        if value == nil then value = not ContainsAny(text, ActionsPhrases[20]) end
         return action and {
             kind = "action",
             action = action,
@@ -478,7 +490,7 @@ local function ParseGroupSpellIndicatorAction(text, raw)
         aura, resolvedSpec = A.ResolveGroupSpellAura(spec, text)
     end
     spec = spec or resolvedSpec
-    if ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen", "zurucksetzen" }) then
+    if ContainsAny(text, ActionsPhrases[21]) then
         local action = Registry and Registry:GetAction("reset_group_spell_indicator_aura")
         return action and {
             kind = "action",
@@ -489,11 +501,11 @@ local function ParseGroupSpellIndicatorAction(text, raw)
         } or nil
     end
 
-    if ContainsAny(text, { "move", "order", "reorder", "first", "last", "slot", "position", "verschiebe", "reihenfolge", "erste", "letzte" }) and aura then
+    if ContainsAny(text, ActionsPhrases[22]) and aura then
         local action = Registry and Registry:GetAction("move_group_spell_indicator_order")
         local position = FirstNumber(text)
-        if ContainsAny(text, { "first", "top", "front", "erste", "oben", "vorne" }) then position = 1 end
-        if ContainsAny(text, { "last", "bottom", "end", "letzte", "unten", "ende" }) then position = 999 end
+        if ContainsAny(text, ActionsPhrases[23]) then position = 1 end
+        if ContainsAny(text, ActionsPhrases[24]) then position = 999 end
         return action and {
             kind = "action",
             action = action,
@@ -504,43 +516,43 @@ local function ParseGroupSpellIndicatorAction(text, raw)
     end
 
     local field, value
-    if ContainsAny(text, { "only my cast", "only mine", "own cast", "cast by me", "nur meine", "nur eigener", "von mir" }) then
+    if ContainsAny(text, ActionsPhrases[25]) then
         field, value = "onlyOwn", DetectBoolean(text)
         if value == nil then value = true end
-    elseif ContainsAny(text, { "cooldown text size", "cooldown font size" }) then
+    elseif ContainsAny(text, ActionsPhrases[26]) then
         field, value = "placedCooldownSize", FirstNumber(text)
-    elseif ContainsAny(text, { "cooldown swipe" }) then
+    elseif ContainsAny(text, ActionsPhrases[27]) then
         field, value = "placedCooldownSwipe", DetectBoolean(text)
-    elseif ContainsAny(text, { "cooldown text", "show cooldown" }) then
+    elseif ContainsAny(text, ActionsPhrases[28]) then
         field, value = "placedCooldown", DetectBoolean(text)
-    elseif ContainsAny(text, { "show when missing", "when missing", "missing indicator", "anzeigen wenn fehlt", "wenn fehlt", "fehlend anzeigen" }) then
+    elseif ContainsAny(text, ActionsPhrases[29]) then
         field, value = "placedMissing", DetectBoolean(text)
         if value == nil then value = true end
-    elseif ContainsAny(text, { "bar width", "balken breite" }) then
+    elseif ContainsAny(text, ActionsPhrases[30]) then
         field, value = "placedBarWidth", FirstNumber(text)
-    elseif ContainsAny(text, { "growth", "grow", "wachstum", "richtung" }) then
+    elseif ContainsAny(text, ActionsPhrases[31]) then
         field, value = "placedGrowth", AliasValueForText(text, GROUP_SPELL_GROWTH_ALIASES, { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP" })
-    elseif ContainsAny(text, { "frame color", "effect color", "tint color", "glow color", "border color" }) then
+    elseif ContainsAny(text, ActionsPhrases[32]) then
         local r, g, b, label = ExtractColor(raw, text)
         if r then field, value = "frameColor", { r = r, g = g, b = b, label = label } end
-    elseif ContainsAny(text, { "frame effect", "effect type", "frame type", "frame effekt", "effekt typ" }) then
+    elseif ContainsAny(text, ActionsPhrases[33]) then
         field, value = "frameType", AliasValueForText(text, GROUP_SPELL_FRAME_ALIASES, { "none", "healthtint", "border", "glow", "pulse", "namecolor" })
-    elseif ContainsAny(text, { "frame priority", "effect priority", "priority", "prioritaet" }) then
+    elseif ContainsAny(text, ActionsPhrases[34]) then
         field, value = "framePriority", FirstNumber(text)
-    elseif ContainsAny(text, { "tint alpha", "frame alpha", "effect alpha", "effekt alpha", "deckkraft" }) then
+    elseif ContainsAny(text, ActionsPhrases[35]) then
         field, value = "frameAlpha", FirstNumber(text)
         if value and value > 1 then value = value / 100 end
-    elseif ContainsAny(text, { "thickness", "border thickness", "glow thickness", "dicke", "staerke", "rand dicke" }) then
+    elseif ContainsAny(text, ActionsPhrases[36]) then
         field, value = "frameThickness", FirstNumber(text)
-    elseif ContainsAny(text, { "indicator type", "placed indicator", "placed type", "type", "indikator typ", "anzeige typ", "typ" }) then
+    elseif ContainsAny(text, ActionsPhrases[37]) then
         field, value = "placedType", AliasValueForText(text, GROUP_SPELL_PLACED_ALIASES, { "none", "icon", "square", "bar", "number" })
-    elseif ContainsAny(text, { "anchor", "anker", "position" }) then
+    elseif ContainsAny(text, ActionsPhrases[38]) then
         field, value = "placedAnchor", AliasValueForText(text, GROUP_SPELL_ANCHOR_ALIASES, { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" })
-    elseif ContainsAny(text, { "x offset", "x position", "x" }) then
+    elseif ContainsAny(text, ActionsPhrases[39]) then
         field, value = "placedX", FirstNumber(text)
-    elseif ContainsAny(text, { "y offset", "y position", "y" }) then
+    elseif ContainsAny(text, ActionsPhrases[40]) then
         field, value = "placedY", FirstNumber(text)
-    elseif ContainsAny(text, { "size", "icon size", "groesse", "symbol groesse" }) then
+    elseif ContainsAny(text, ActionsPhrases[41]) then
         field, value = "placedSize", FirstNumber(text)
     else
         value = DetectBoolean(text)
@@ -559,15 +571,9 @@ local function ParseGroupSpellIndicatorAction(text, raw)
 end
 
 local function HasGroupCornerIndicatorContext(text)
-    if ContainsAny(text, {
-        "corner indicator", "corner indicators", "corner dot", "corner dots",
-        "ecken indikator", "ecken indikatoren", "eckenindikator", "eckenindikatoren", "ecken punkt", "ecken punkte",
-    }) then return true end
+    if ContainsAny(text, ActionsPhrases[42]) then return true end
     if not (A.ResolveGroupCornerSlot and A.ResolveGroupCornerSlot(text)) then return false end
-    return ContainsAny(text, {
-        "corner", "ecke", "custom", "spell ids", "spell id", "zauber ids", "zauber id",
-        "mode", "modus", "filter", "missing", "fehlend", "fehlt", "present", "vorhanden",
-    })
+    return ContainsAny(text, ActionsPhrases[43])
 end
 
 local function GroupCornerData()
@@ -614,19 +620,19 @@ local function ParseGroupCornerIndicatorSetting(text, raw)
     local slot = A.ResolveGroupCornerSlot and A.ResolveGroupCornerSlot(text) or nil
     if slot then
         local prefix = "gf_" .. tostring(scope) .. "."
-        if ContainsAny(text, { "filter", "aura filter", "hilfreich", "schaedlich", "harmful", "helpful", "buff", "debuff" }) then
+        if ContainsAny(text, ActionsPhrases[44]) then
             local value = CornerFilterValue(text, data)
             return value and CornerChange(prefix .. "ciCustom" .. tostring(slot.key) .. ".filter", value, "Set corner custom filter") or nil
         end
-        if ContainsAny(text, { "mode", "modus", "when", "wenn", "missing", "fehlend", "fehlt", "present", "vorhanden" }) then
+        if ContainsAny(text, ActionsPhrases[45]) then
             local value = AliasValueForText(text, data.CI_MODE_ALIASES, data.CI_MODE_VALUES)
             return value and CornerChange(prefix .. "ciCustom" .. tostring(slot.key) .. ".mode", value, "Set corner custom mode") or nil
         end
-        if ContainsAny(text, { "spell ids", "spell id", "custom spells", "custom spell ids", "zauber ids", "zauber id" }) then
+        if ContainsAny(text, ActionsPhrases[46]) then
             local value = CornerSpellIdList(raw, text)
             return value and CornerChange(prefix .. "ciCustom" .. tostring(slot.key) .. ".spells", value, "Set corner custom spell IDs") or nil
         end
-        if ContainsAny(text, { "color", "colour", "farbe" }) then
+        if ContainsAny(text, ActionsPhrases[47]) then
             local r, g, b, label = ExtractColor(raw, text)
             if r then
                 return CornerChange(prefix .. "ciCustom" .. tostring(slot.key) .. ".color", { r = r, g = g, b = b, label = label }, "Set corner custom color")
@@ -638,13 +644,13 @@ local function ParseGroupCornerIndicatorSetting(text, raw)
         end
     end
 
-    if ContainsAny(text, { "alpha", "opacity", "deckkraft", "transparenz" }) then
+    if ContainsAny(text, ActionsPhrases[48]) then
         local value = FirstNumber(text)
         if value == nil then return nil end
         if value > 1 then value = value / 100 end
         return CornerChange("gf_" .. tostring(scope) .. ".ciAlpha", value, "Set corner indicator opacity")
     end
-    if ContainsAny(text, { "size", "groesse", "icon size", "punkt groesse" }) then
+    if ContainsAny(text, ActionsPhrases[49]) then
         local value = FirstNumber(text)
         return value and CornerChange("gf_" .. tostring(scope) .. ".ciSize", value, "Set corner indicator size") or nil
     end
@@ -655,8 +661,8 @@ local function ParseGroupCornerIndicatorSetting(text, raw)
     return nil
 end
 local function ParseGroupCornerIndicatorReset(text)
-    if not ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
-    if not ContainsAny(text, { "corner indicator", "corner indicators", "corner dot", "corner dots", "custom spell", "ecken indikator", "ecken indikatoren", "eckenindikator", "eckenindikatoren", "ecken punkt", "custom zauber", "eigener zauber" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[50]) then return nil end
+    if not ContainsAny(text, ActionsPhrases[51]) then return nil end
     local scope = FirstGroupOrDefault(text)
     local slot = A.ResolveGroupCornerSlot and A.ResolveGroupCornerSlot(text) or nil
     if slot then
@@ -681,13 +687,13 @@ local function ParseGroupCornerIndicatorReset(text)
 end
 
 local function ParseGroupStatusIconReset(text)
-    if not ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[52]) then return nil end
     if not ContainsAny(text, GROUP_STATUS_ICON_TERMS) then return nil end
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
     if #explicitUnits > 0 and #explicitGroups == 0 then return nil end
     if #explicitGroups == 0 and not HasGroupStatusScopeIntent(text) then return nil end
-    if #explicitGroups == 0 and ContainsAny(text, { "selected status indicator", "selected status icon", "current status indicator", "current status icon", "unit status indicator", "unit status icon" }) then return nil end
+    if #explicitGroups == 0 and ContainsAny(text, ActionsPhrases[53]) then return nil end
     local scope = FirstGroupOrDefault(text)
     local icon = GroupStatusIconForText(text)
     if icon then
@@ -697,7 +703,7 @@ local function ParseGroupStatusIconReset(text)
             action = action,
             args = { scope = scope, icon = icon },
             label = "Reset group status icon",
-            summary = "Resets placement and icon pack for one group status icon.",
+            summary = "Resets placement and icon style for one group status icon.",
         } or nil
     end
     local action = Registry and Registry:GetAction("reset_group_status_icons")
@@ -707,21 +713,21 @@ local function ParseGroupStatusIconReset(text)
         args = { scope = scope },
         confirmRequired = true,
         label = "Reset group status icons",
-        summary = "Resets placement and icon packs for all group status icons in the selected group.",
+        summary = "Resets placement and icon styles for all group status icons in the selected group.",
     } or nil
 end
 
 local function ParseGroupStatusPreview(text)
-    if not ContainsAny(text, { "preview", "show all", "current indicator", "all indicators", "all status icons", "test", "test mode", "preview mode" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[54]) then return nil end
     if not ContainsAny(text, GROUP_STATUS_ICON_TERMS) then return nil end
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
     if #explicitUnits > 0 and #explicitGroups == 0 then return nil end
     if #explicitGroups == 0 and not HasGroupStatusScopeIntent(text) then return nil end
-    if #explicitGroups == 0 and ContainsAny(text, { "selected status indicator", "selected status icon", "current status indicator", "current status icon", "unit status indicator", "unit status icon" }) then return nil end
+    if #explicitGroups == 0 and ContainsAny(text, ActionsPhrases[55]) then return nil end
     local scope = FirstGroupOrDefault(text)
     local icon = GroupStatusIconForText(text)
-    local mode = ContainsAny(text, { "show all", "all indicators", "all status icons", "preview all" }) and "all" or "current"
+    local mode = ContainsAny(text, ActionsPhrases[56]) and "all" or "current"
     local action = Registry and Registry:GetAction("preview_group_status_icon")
     return action and {
         kind = "action",
@@ -734,18 +740,10 @@ end
 
 local function RelativeLayerDeltaForText(text)
     local amount = FirstNumber(text) or 1
-    if ContainsAny(text, {
-        "layer down", "down layer", "move layer down", "drop layer",
-        "behind", "backward", "backwards", "send back", "to back", "lower layer", "lower draw",
-        "below", "back", "down", "lower", "hinter", "nach hinten", "runter",
-    }) then
+    if ContainsAny(text, ActionsPhrases[57]) then
         return -amount
     end
-    if ContainsAny(text, {
-        "layer up", "up layer", "move layer up", "raise layer",
-        "forward", "front", "to front", "bring forward", "higher layer", "higher draw",
-        "above", "up", "higher", "nach vorne", "hoch",
-    }) then
+    if ContainsAny(text, ActionsPhrases[58]) then
         return amount
     end
     return nil
@@ -753,7 +751,7 @@ end
 
 local function GroupStatusScopesForText(text)
     local scopes = {}
-    if ContainsAny(text, { "all group frames", "all groups", "every group frame", "each group frame", "for all group frames", "alle gruppen", "alle gruppenframes" }) then
+    if ContainsAny(text, ActionsPhrases[59]) then
         scopes[1], scopes[2], scopes[3] = "party", "raid", "mythicraid"
         return scopes
     end
@@ -778,18 +776,13 @@ local RAID_MARKER_SYMBOL_WORDS = {
 }
 
 local function HasStatusOffsetIntent(text)
-    return ContainsAny(text, { "x offset", "offset x", "horizontal offset", "y offset", "offset y", "vertical offset" })
+    return ContainsAny(text, ActionsPhrases[60])
         or HasPhrase(text, "x")
         or HasPhrase(text, "y")
 end
 
 local function HasGlobalUnitStatusTextStateIntent(text)
-    return ContainsAny(text, {
-        "dead text dead units", "status text dead units", "show dead text for dead",
-        "dead text ghost units", "status text ghost units", "show ghost text",
-        "dead text afk", "status text afk", "show afk text",
-        "dead text dnd", "status text dnd", "show dnd text",
-    })
+    return ContainsAny(text, ActionsPhrases[61])
 end
 
 local function RaidMarkerSymbolAnswer()
@@ -811,24 +804,24 @@ local function ParseGroupStatusIconDetail(text)
     if #explicitUnits > 0 and #explicitGroups == 0 then return nil end
     if #explicitGroups == 0 and HasGlobalUnitStatusTextStateIntent(text) then return nil end
     if #explicitGroups == 0 and ContainsAny(text, GROUP_STATUS_MIDNIGHT_STYLE_TERMS)
-        and ContainsAny(text, { "status icon", "status icons", "status indicator", "status indicators" })
+        and ContainsAny(text, ActionsPhrases[62])
     then
         return nil
     end
-    if ContainsAny(text, { "preview", "test", "test mode", "preview mode" })
-        and not ContainsAny(text, { "turn on", "turn off", "enable", "disable", "hide", "show midnight", "classic style", "midnight style" })
+    if ContainsAny(text, ActionsPhrases[63])
+        and not ContainsAny(text, ActionsPhrases[64])
     then
         return nil
     end
 
     local scopes = GroupStatusScopesForText(text)
-    if ContainsAny(text, { "role icon", "role icons", "role indicator", "role indicators", "role symbol", "role symbols" }) then
+    if ContainsAny(text, ActionsPhrases[65]) then
         local roleKey
-        if ContainsAny(text, { "tank", "tanks", "tank role", "tank players" }) then
+        if ContainsAny(text, ActionsPhrases[66]) then
             roleKey = "roleIconShowTank"
-        elseif ContainsAny(text, { "healer", "healers", "heal role", "healer role" }) then
+        elseif ContainsAny(text, ActionsPhrases[67]) then
             roleKey = "roleIconShowHealer"
-        elseif ContainsAny(text, { "dps", "damage dealer", "damage dealers", "damager", "damagers", "damage role" }) then
+        elseif ContainsAny(text, ActionsPhrases[68]) then
             roleKey = "roleIconShowDPS"
         end
         if roleKey then
@@ -849,9 +842,9 @@ local function ParseGroupStatusIconDetail(text)
     if ContainsAny(text, GROUP_STATUS_MIDNIGHT_STYLE_TERMS) then
         local value = DetectBoolean(text)
         if value == nil then
-            if ContainsAny(text, { "classic style", "classic icons", "classic status icons" }) then
+            if ContainsAny(text, ActionsPhrases[69]) then
                 value = false
-            elseif ContainsAny(text, { "midnight style", "midnight icons", "midnight status icons" }) then
+            elseif ContainsAny(text, ActionsPhrases[70]) then
                 value = true
             end
         end
@@ -871,6 +864,13 @@ local function ParseGroupStatusIconDetail(text)
 
     local iconSpec = GroupStatusIconSpecForText(text)
     if not iconSpec then return nil end
+    if #explicitGroups == 0
+        and iconSpec.key == "raidMarker"
+        and ContainsAny(text, ActionsPhrases[73])
+        and HasPhrase(text, "raid marker")
+    then
+        scopes = { "raid" }
+    end
     if iconSpec.key == "raidMarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS)
         and not HasStatusOffsetIntent(text)
         and FirstNumber(text) == nil
@@ -883,9 +883,9 @@ local function ParseGroupStatusIconDetail(text)
     if enabledKey and not anchorIntent then
         local value = DetectBoolean(text)
         if value == nil then
-            if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "remove" }) then
+            if ContainsAny(text, ActionsPhrases[71]) then
                 value = false
-            elseif ContainsAny(text, { "show", "enable", "enabled", "turn on", "on", "display" }) then
+            elseif ContainsAny(text, ActionsPhrases[72]) then
                 value = true
             end
         end
@@ -903,25 +903,28 @@ local function ParseGroupStatusIconDetail(text)
         end
     end
 
-    if ContainsAny(text, { "icon pack", "icon style" }) and iconSpec.style then
-        local value = AliasValueForText(text, GROUP_STATUS_ICON_PACK_ALIASES, { "DEFAULT", "BLIZZARD", "CLASSIC", "MIDNIGHT" })
+    if ContainsAny(text, ActionsPhrases[73]) and iconSpec.style then
+        local iconValue = iconSpec and iconSpec.value
+        local roleStyle = iconValue == "roleIcon" or iconValue == "leaderIcon" or iconValue == "assistIcon"
+        if not roleStyle then return nil end
+        local value = AliasValueForText(text, GROUP_STATUS_ICON_PACK_ALIASES, STATUS_ICON_PACK_VALUES)
         if value ~= nil then
             local changes = BuildGroupStatusChanges(scopes, iconSpec.style, value)
             if #changes > 0 then
                 return {
                     kind = "changes",
                     changes = changes,
-                    label = "Group Status Icon Pack",
+                    label = "Group Role Icon Style",
                     bulkSafe = #changes > 1,
-                    summary = "Changes the selected group status icon pack or style.",
+                    summary = "Changes the selected group role icon style.",
                 }
             end
         end
     end
 
     if anchorIntent and iconSpec.anchor
-        and not (ContainsAny(text, { "move", "nudge", "shift", "verschiebe" }) and DetectDirection(text)
-            and not ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }))
+        and not (ContainsAny(text, ActionsPhrases[74]) and DetectDirection(text)
+            and not ContainsAny(text, ActionsPhrases[75]))
     then
         local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[1] or "") .. "." .. tostring(iconSpec.anchor))
         local value = setting and StatusAnchorValueForText(text, GROUP_SPELL_ANCHOR_ALIASES, setting.values or { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" })
@@ -941,10 +944,10 @@ local function ParseGroupStatusIconDetail(text)
 
     local offsetKey
     local offsetLabel
-    if ContainsAny(text, { "x offset", "offset x", "horizontal offset" }) or HasPhrase(text, "x") then
+    if ContainsAny(text, ActionsPhrases[76]) or HasPhrase(text, "x") then
         offsetKey = iconSpec.x
         offsetLabel = "X Offset"
-    elseif ContainsAny(text, { "y offset", "offset y", "vertical offset" }) or HasPhrase(text, "y") then
+    elseif ContainsAny(text, ActionsPhrases[77]) or HasPhrase(text, "y") then
         offsetKey = iconSpec.y
         offsetLabel = "Y Offset"
     end
@@ -964,7 +967,7 @@ local function ParseGroupStatusIconDetail(text)
         end
     end
 
-    if ContainsAny(text, { "move", "nudge", "shift", "position", "verschiebe" }) then
+    if ContainsAny(text, ActionsPhrases[78]) then
         local direction = DetectDirection(text)
         local moveKey = direction and ((direction == "left" or direction == "right") and iconSpec.x or iconSpec.y)
         if type(moveKey) == "string" and moveKey ~= "" then
@@ -983,7 +986,7 @@ local function ParseGroupStatusIconDetail(text)
         end
     end
 
-    if ContainsAny(text, { "layer", "draw layer", "draw order", "behind", "forward", "front", "backward", "backwards", "ebene", "zeichenebene" }) then
+    if ContainsAny(text, ActionsPhrases[79]) then
         local relativeDelta = RelativeLayerDeltaForText(text)
         local value
         if relativeDelta == nil then value = FirstNumber(text) end
@@ -1001,8 +1004,8 @@ local function ParseGroupStatusIconDetail(text)
         end
     end
 
-    if ContainsAny(text, { "size", "icon size", "indicator size", "symbol size", "scale", "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink", "groesse", "grosse", "symbol groesse", "icon groesse", "groesser", "kleiner" }) then
-        if ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "verschiebe" }) and DetectDirection(text) then return nil end
+    if ContainsAny(text, ActionsPhrases[80]) then
+        if ContainsAny(text, ActionsPhrases[81]) and DetectDirection(text) then return nil end
         local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[1] or "") .. "." .. tostring(iconSpec.size))
         local relativeDelta = P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text, 1) or nil
         local value
@@ -1098,6 +1101,23 @@ local UNIT_STATUS_ICON_PACK_ALIASES = {
     old = "CLASSIC",
     midnight = "MIDNIGHT",
     msuf = "MIDNIGHT",
+    ux = "UXPRO",
+    uxpro = "UXPRO",
+    ["ux pro"] = "UXPRO",
+    glossy = "GLOSSY_ORBS",
+    ["glossy orbs"] = "GLOSSY_ORBS",
+    dark = "DARK_EMBOSS",
+    ["dark emboss"] = "DARK_EMBOSS",
+    glass = "GLASS_PANELS",
+    ["glass panels"] = "GLASS_PANELS",
+    neon = "NEON_OUTLINE",
+    ["neon outline"] = "NEON_OUTLINE",
+    ring = "RING_SYMBOLS",
+    ["ring symbols"] = "RING_SYMBOLS",
+    dots = "DOTS",
+    shapes = "SHAPES",
+    diamonds = "DIAMONDS",
+    squares = "SQUARES",
 }
 
 local UNIT_STATUS_ANCHOR_ALIASES = {
@@ -1177,7 +1197,7 @@ end
 local function ResolveUnitStatusSpecOrSelected(unit, text)
     local spec = ResolveUnitStatusSpecForText(unit, text)
     if spec then return spec end
-    if ContainsAny(text, { "selected status indicator", "selected status icon", "current status indicator", "current status icon" }) then
+    if ContainsAny(text, ActionsPhrases[82]) then
         local selected = CurrentUnitStatusValue(unit)
         if selected then return ResolveUnitStatusSpecForText(unit, selected) end
     end
@@ -1185,14 +1205,11 @@ local function ResolveUnitStatusSpecOrSelected(unit, text)
 end
 
 local function UnitStatusNeedsUnitContext(text)
-    return ContainsAny(text, {
-        "selected status indicator", "selected status icon", "current status indicator", "current status icon",
-        "unit status indicator", "unit status icon", "status indicator", "status icon",
-    })
+    return ContainsAny(text, ActionsPhrases[83])
 end
 
 local function ParseUnitStatusIndicatorReset(text, ctx)
-    if not ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[84]) then return nil end
     if not UnitStatusHasIntent(text) then return nil end
     local units = UnitStatusUnitsOrCurrent(text)
     if #units == 0 and ctx and ctx.lastUnit then units = { ctx.lastUnit } end
@@ -1229,12 +1246,12 @@ local function ParseUnitStatusIndicatorReset(text, ctx)
 end
 
 local function ParseUnitStatusPreview(text, ctx)
-    if not ContainsAny(text, { "preview", "show all", "current indicator", "all indicators", "all status icons" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[85]) then return nil end
     if not UnitStatusHasIntent(text) then return nil end
     local units = UnitStatusUnitsOrCurrent(text)
     local unit = units[1] or (ctx and ctx.lastUnit) or "player"
     local spec = ResolveUnitStatusSpecOrSelected(unit, text)
-    local mode = ContainsAny(text, { "show all", "all indicators", "all status icons", "preview all" }) and "all" or "current"
+    local mode = ContainsAny(text, ActionsPhrases[86]) and "all" or "current"
     local action = Registry and Registry:GetAction("preview_unit_status_indicator")
     return action and {
         kind = "action",
@@ -1247,13 +1264,13 @@ end
 
 local function ParseUnitStatusIconStyle(text)
     if not ContainsAny(text, UNIT_STATUS_MIDNIGHT_STYLE_TERMS) then return nil end
-    if not UnitStatusHasIntent(text) and not ContainsAny(text, { "status icon", "status icons", "status indicator", "status indicators" }) then return nil end
+    if not UnitStatusHasIntent(text) and not ContainsAny(text, ActionsPhrases[87]) then return nil end
 
     local value = DetectBoolean(text)
     if value == nil then
-        if ContainsAny(text, { "classic style", "classic icon", "classic icons", "classic status icon", "classic status icons" }) then
+        if ContainsAny(text, ActionsPhrases[88]) then
             value = false
-        elseif ContainsAny(text, { "midnight style", "midnight icon", "midnight icons", "midnight status icon", "midnight status icons" }) then
+        elseif ContainsAny(text, ActionsPhrases[89]) then
             value = true
         end
     end
@@ -1316,22 +1333,25 @@ local function ParseUnitStatusIndicatorDetail(text)
         end
     end
 
-    if ContainsAny(text, { "icon pack", "icon style" }) and spec.iconStyle then
-        local value = AliasValueForText(text, UNIT_STATUS_ICON_PACK_ALIASES, { "BLIZZARD", "CLASSIC", "MIDNIGHT" })
+    if ContainsAny(text, ActionsPhrases[90]) and spec.iconStyle then
+        local specValue = spec and spec.value
+        local roleStyle = specValue == "leader" or specValue == "assist"
+        if not roleStyle then return nil end
+        local value = AliasValueForText(text, UNIT_STATUS_ICON_PACK_ALIASES, STATUS_ICON_PACK_VALUES)
         local setting = value and Registry and Registry:GetSetting(unit .. "." .. spec.iconStyle) or nil
         if setting then
             return {
                 kind = "changes",
                 changes = { { setting = setting, value = value } },
-                label = UnitDisplayLabel(unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Icon Pack",
-                summary = "Changes the icon pack for one unit-frame status indicator.",
+                label = UnitDisplayLabel(unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Role Icon Style",
+                summary = "Changes the role icon style for one unit-frame status indicator.",
             }
         end
     end
 
-    if (ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) or StatusAnchorIntent(text))
-        and not (ContainsAny(text, { "move", "nudge", "shift", "verschiebe" }) and DetectDirection(text)
-            and not ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }))
+    if (ContainsAny(text, ActionsPhrases[91]) or StatusAnchorIntent(text))
+        and not (ContainsAny(text, ActionsPhrases[92]) and DetectDirection(text)
+            and not ContainsAny(text, ActionsPhrases[93]))
         and type(spec.anchor) == "string" and spec.anchor ~= ""
     then
         local setting = Registry and Registry:GetSetting(unit .. "." .. spec.anchor)
@@ -1348,7 +1368,7 @@ local function ParseUnitStatusIndicatorDetail(text)
         end
     end
 
-    if ContainsAny(text, { "layer", "draw layer", "draw order", "behind", "forward", "front", "backward", "backwards" })
+    if ContainsAny(text, ActionsPhrases[94])
         and type(spec.layer) == "string" and spec.layer ~= ""
     then
         local setting = Registry and Registry:GetSetting(unit .. "." .. spec.layer)
@@ -1367,10 +1387,10 @@ local function ParseUnitStatusIndicatorDetail(text)
 
     local offsetKey
     local offsetLabel
-    if ContainsAny(text, { "x offset", "offset x", "horizontal offset" }) then
+    if ContainsAny(text, ActionsPhrases[95]) then
         offsetKey = spec.x
         offsetLabel = "X Offset"
-    elseif ContainsAny(text, { "y offset", "offset y", "vertical offset" }) then
+    elseif ContainsAny(text, ActionsPhrases[96]) then
         offsetKey = spec.y
         offsetLabel = "Y Offset"
     end
@@ -1388,14 +1408,14 @@ local function ParseUnitStatusIndicatorDetail(text)
     end
 
     if ContainsAny(text, UNIT_STATUS_SIZE_TERMS) and type(spec.size) == "string" and spec.size ~= "" then
-        if ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "verschiebe" }) and DetectDirection(text) then return nil end
+        if ContainsAny(text, ActionsPhrases[97]) and DetectDirection(text) then return nil end
         local setting = Registry and Registry:GetSetting(unit .. "." .. spec.size)
         if not setting then return nil end
 
         local relativeDelta = P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text, 1) or nil
         local value
         if relativeDelta == nil then
-            if not ContainsAny(text, { "size", "font size", "text size", "icon size", "indicator size", "symbol size", "scale", "groesse" }) then return nil end
+            if not ContainsAny(text, ActionsPhrases[98]) then return nil end
             value = FirstNumber(text)
         end
         if value == nil and relativeDelta == nil then return nil end
@@ -1412,7 +1432,7 @@ local function ParseUnitStatusIndicatorDetail(text)
 end
 
 local function ParseUnitStatusIndicatorMove(text)
-    if not ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "verschiebe" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[99]) then return nil end
     local direction = DetectDirection(text)
     if not direction then return nil end
     if not UnitStatusHasIntent(text) then return nil end
@@ -1436,8 +1456,8 @@ local function ParseUnitStatusIndicatorMove(text)
 end
 
 local function ParseCustomAnchorWorkflow(text)
-    if not ContainsAny(text, { "custom anchor", "custom anchor picker", "anchor picker", "anchor frame picker", "anker picker" }) then return nil end
-    if ContainsAny(text, { "cancel", "close", "stop", "abort" }) then
+    if not ContainsAny(text, ActionsPhrases[100]) then return nil end
+    if ContainsAny(text, ActionsPhrases[101]) then
         local action = Registry and Registry:GetAction("cancel_custom_anchor_picker")
         return action and {
             kind = "action",
@@ -1447,7 +1467,7 @@ local function ParseCustomAnchorWorkflow(text)
             summary = "Closes the custom anchor picker if it is active.",
         } or nil
     end
-    if ContainsAny(text, { "status", "active", "is picker", "show picker" }) then
+    if ContainsAny(text, ActionsPhrases[102]) then
         local action = Registry and Registry:GetAction("custom_anchor_picker_status")
         return action and {
             kind = "action",
@@ -1457,7 +1477,7 @@ local function ParseCustomAnchorWorkflow(text)
             summary = "Reports whether the custom anchor picker overlay is active.",
         } or nil
     end
-    if not ContainsAny(text, { "pick", "picker", "start", "open", "select", "choose" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[103]) then return nil end
     local groups = DetectGroups(text)
     if groups[1] then
         local action = Registry and Registry:GetAction("start_group_custom_anchor_picker")
@@ -1485,7 +1505,7 @@ local function ParseCustomAnchorWorkflow(text)
                 summary = "Starts the custom anchor picker for a group frame.",
             } or nil
         end
-        if ContainsAny(text, { "where", "where is", "where are", "how", "help", "settings", "setting" }) then
+        if ContainsAny(text, ActionsPhrases[104]) then
             return {
                 kind = "answer",
                 status = "info",
@@ -1545,8 +1565,8 @@ local function RawCustomAnchorFrameName(raw)
 end
 
 local function ParseCustomAnchorSet(text, raw)
-    if not ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name" }) then return nil end
-    if not ContainsAny(text, { "set", "change", "use", "assign", "write", "apply" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[105]) then return nil end
+    if not ContainsAny(text, ActionsPhrases[106]) then return nil end
     local frameName = (P.CooldownManagerAnchorValueForText and P.CooldownManagerAnchorValueForText(text)) or RawCustomAnchorFrameName(raw)
     if frameName == nil then return nil end
 
@@ -1579,8 +1599,8 @@ local function ParseCustomAnchorSet(text, raw)
 end
 
 local function ParseCustomAnchorClear(text)
-    if not ContainsAny(text, { "clear", "remove", "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
-    if not ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[107]) then return nil end
+    if not ContainsAny(text, ActionsPhrases[108]) then return nil end
     local groups = DetectGroups(text)
     if groups[1] then
         local action = Registry and Registry:GetAction("clear_group_custom_anchor")
@@ -1628,8 +1648,8 @@ local function ParseCustomAnchorClear(text)
 end
 
 local function ParseReset(text)
-    if not ContainsAny(text, { "reset", "restore", "zuruecksetzen", "zurucksetzen", "default", "defaults", "werksreset", "werkseinstellungen", "vollreset" }) then return nil end
-    if ContainsAny(text, { "factory reset", "full reset", "fullreset", "reset all settings", "reset all profiles", "werksreset", "werkseinstellungen", "vollreset", "alles zuruecksetzen", "alle einstellungen zuruecksetzen", "alle profile zuruecksetzen" }) then
+    if not ContainsAny(text, ActionsPhrases[109]) then return nil end
+    if ContainsAny(text, ActionsPhrases[110]) then
         local action = Registry and Registry:GetAction("factory_reset_all")
         return action and {
             kind = "action",
@@ -1640,7 +1660,7 @@ local function ParseReset(text)
             summary = "Opens confirmation for a full MSUF factory reset.",
         } or nil
     end
-    if ContainsAny(text, { "profile", "profil" }) then
+    if ContainsAny(text, ActionsPhrases[111]) then
         local action = Registry and Registry:GetAction("reset_profile")
         return action and {
             kind = "action",
@@ -1651,12 +1671,8 @@ local function ParseReset(text)
             summary = "Resets the active profile.",
         } or nil
     end
-    if ContainsAny(text, {
-        "focus kick", "focus interrupt tracker", "focus interrupt", "kick tracker",
-        "fokus kick", "fokus interrupt tracker", "fokus interrupt", "kick anzeige",
-        "fokus kick anzeige", "fokus kick tracker", "fokus interrupt anzeige",
-    })
-        and ContainsAny(text, { "position", "pos", "placement", "x", "y", "platzierung", "stelle" })
+    if ContainsAny(text, ActionsPhrases[112])
+        and ContainsAny(text, ActionsPhrases[113])
     then
         local action = Registry and Registry:GetAction("reset_focus_kick_position")
         return action and {
@@ -1667,7 +1683,7 @@ local function ParseReset(text)
             summary = "Resets the Focus Kick on-screen tracker offsets.",
         } or nil
     end
-    if ContainsAny(text, { "all positions", "frame positions", "reset positions", "reset movers", "offscreen", "off screen", "broken layout", "alle positionen" }) then
+    if ContainsAny(text, ActionsPhrases[114]) then
         local action = Registry and Registry:GetAction("reset_all_unit_positions")
         return action and {
             kind = "action",
@@ -1681,7 +1697,7 @@ local function ParseReset(text)
     local units = DetectUnits(text)
     if #units == 0 then return nil end
     local unit = units[1]
-    if ContainsAny(text, { "position", "pos", "placement", "frame position", "x", "y" }) then
+    if ContainsAny(text, ActionsPhrases[115]) then
         local action = Registry and Registry:GetAction("reset_unit_position")
         return action and {
             kind = "action",
@@ -1703,10 +1719,10 @@ local function ParseReset(text)
 end
 
 local function ParseOpen(text, raw)
-    local explicit = ContainsAny(text, { "open", "go to", "show settings", "show me", "find", "search", "where", "where is", "where are", "wo", "oeffne" })
+    local explicit = ContainsAny(text, ActionsPhrases[116])
     local shortcut = false
     if not explicit and DetectBoolean(text) == nil and FirstNumber(text) == nil then
-        shortcut = ContainsAny(text, { "settings", "menu", "page", "options", "config", "configuration", "einstellungen", "menue", "seite" })
+        shortcut = ContainsAny(text, ActionsPhrases[117])
         if not shortcut then
             for i = 1, #PAGE_TEXT_TARGETS do
                 local spec = PAGE_TEXT_TARGETS[i]
@@ -1734,27 +1750,22 @@ local function ParseOpen(text, raw)
 end
 
 local function DashboardPanelForText(text)
-    if ContainsAny(text, { "recovery tools", "display recovery", "recover menu", "reset tools", "dashboard recovery", "recovery panel", "recovery section", "display panel", "wiederherstellung", "wiederherstellungs tools", "anzeige reparatur", "anzeigereparatur", "reparatur tools", "rettungswerkzeuge" }) then return "recovery", "recovery tools" end
-    if ContainsAny(text, {
-        "scaling tools", "dashboard scaling", "scale tools", "ui scale tools", "scaling panel", "scale panel",
-        "scale section", "scaling section", "ui scaling panel", "ui scaling section", "menu scale", "menu scaling", "skalierung", "skalierungs tools", "skalierungswerkzeuge", "ui skalierung", "menue skalierung",
-        "menu bigger", "menu smaller", "make menu bigger", "make menu smaller", "options scale", "options scaling",
-        "ui scale", "ui scaling", "msuf frame scale", "msuf frames scale",
-    }) then return "scaling", "scaling tools" end
-    if ContainsAny(text, { "changelog", "change log", "release notes", "latest changes", "build notes", "changelog panel", "aenderungen", "aenderungslog", "versionshinweise", "neuerungen" }) then return "changelog", "changelog" end
+    if ContainsAny(text, ActionsPhrases[118]) then return "recovery", "recovery tools" end
+    if ContainsAny(text, ActionsPhrases[119]) then return "scaling", "scaling tools" end
+    if ContainsAny(text, ActionsPhrases[120]) then return "changelog", "changelog" end
     return nil, nil
 end
 
 local function ParseDashboardPanelAction(text)
     local panel, label = DashboardPanelForText(text)
-    local explicit = ContainsAny(text, { "open", "show", "close", "hide", "collapse", "expand", "toggle", "oeffne", "oeffnen", "anzeigen", "schliessen", "verstecken", "ausblenden", "einklappen", "aufklappen", "umschalten" })
+    local explicit = ContainsAny(text, ActionsPhrases[121])
         or (panel ~= nil and P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text))
     if not explicit then return nil end
-    if not panel and ContainsAny(text, { "dashboard panel", "dashboard panels" }) then
+    if not panel and ContainsAny(text, ActionsPhrases[122]) then
         local open
-        if ContainsAny(text, { "close", "hide", "collapse", "schliessen", "verstecken", "ausblenden", "einklappen" }) then
+        if ContainsAny(text, ActionsPhrases[123]) then
             open = false
-        elseif ContainsAny(text, { "toggle", "umschalten" }) then
+        elseif ContainsAny(text, ActionsPhrases[124]) then
             open = nil
         else
             open = true
@@ -1770,9 +1781,9 @@ local function ParseDashboardPanelAction(text)
     end
     if not panel then return nil end
     local open
-    if ContainsAny(text, { "close", "hide", "collapse", "schliessen", "verstecken", "ausblenden", "einklappen" }) then
+    if ContainsAny(text, ActionsPhrases[125]) then
         open = false
-    elseif ContainsAny(text, { "toggle", "umschalten" }) then
+    elseif ContainsAny(text, ActionsPhrases[126]) then
         open = nil
     else
         open = true
@@ -1804,13 +1815,13 @@ local function NavSectionForText(text)
 end
 
 local function ParseNavRailAction(text)
-    if ContainsAny(text, { "search intro", "ask msuf intro", "assistant search intro", "search help intro", "such intro", "suche intro", "suchhilfe intro", "ask msuf einfuehrung" }) then
+    if ContainsAny(text, ActionsPhrases[127]) then
         local command
-        if ContainsAny(text, { "hide", "close", "dismiss", "mark seen", "mark as seen", "mark search intro seen", "dont show", "ausblenden", "verstecken", "schliessen", "als gesehen markieren", "nicht anzeigen" }) then
+        if ContainsAny(text, ActionsPhrases[128]) then
             command = "seen"
-        elseif ContainsAny(text, { "reset", "show again", "next time", "zuruecksetzen", "wieder anzeigen", "naechstes mal" }) then
+        elseif ContainsAny(text, ActionsPhrases[129]) then
             command = "reset"
-        elseif ContainsAny(text, { "show", "open", "anzeigen", "oeffnen", "oeffne" }) then
+        elseif ContainsAny(text, ActionsPhrases[130]) then
             command = "show"
         end
         if not command then return nil end
@@ -1824,13 +1835,13 @@ local function ParseNavRailAction(text)
         } or nil
     end
 
-    if not ContainsAny(text, { "navigation section", "nav section", "sidebar section", "left nav section", "section", "navigation group", "nav group", "sidebar group", "navigations sektion", "nav sektion", "seitenleiste", "seitenleisten bereich", "sektion", "bereich", "navigation gruppe" }) then return nil end
-    if not ContainsAny(text, { "open", "show", "close", "hide", "collapse", "expand", "toggle", "oeffne", "oeffnen", "anzeigen", "schliessen", "verstecken", "ausblenden", "einklappen", "aufklappen", "umschalten" }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[131]) then return nil end
+    if not ContainsAny(text, ActionsPhrases[132]) then return nil end
     local section, label = NavSectionForText(text)
     local open
-    if ContainsAny(text, { "close", "hide", "collapse", "schliessen", "verstecken", "ausblenden", "einklappen" }) then
+    if ContainsAny(text, ActionsPhrases[133]) then
         open = false
-    elseif ContainsAny(text, { "toggle", "umschalten" }) then
+    elseif ContainsAny(text, ActionsPhrases[134]) then
         open = nil
     else
         open = true
@@ -1855,20 +1866,20 @@ local function ParseNavRailAction(text)
 end
 
 local function ParseMenuWindowAction(text)
-    if ContainsAny(text, { "panel", "tools", "changelog", "change log", "release notes", "werkzeuge", "aenderungen", "versionshinweise" }) then return nil end
-    if not ContainsAny(text, { "menu", "menue", "dashboard", "options", "optionen", "options window", "msuf menu", "msuf menue", "msuf window", "msuf fenster", "fenster" }) then return nil end
+    if ContainsAny(text, ActionsPhrases[135]) then return nil end
+    if not ContainsAny(text, ActionsPhrases[136]) then return nil end
     local actionKey
     local label
-    if ContainsAny(text, { "restore", "unminimize", "unminimise", "show minimized", "wiederherstellen", "minimierung aufheben" }) then
+    if ContainsAny(text, ActionsPhrases[137]) then
         actionKey = "menu_window_restore"
         label = "Restore MSUF menu"
-    elseif ContainsAny(text, { "minimize", "minimise", "collapse", "minimieren", "einklappen" }) then
+    elseif ContainsAny(text, ActionsPhrases[138]) then
         actionKey = "menu_window_minimize"
         label = "Minimize MSUF menu"
-    elseif ContainsAny(text, { "maximize", "maximise", "fullscreen", "full screen", "maximieren", "vollbild" }) then
+    elseif ContainsAny(text, ActionsPhrases[139]) then
         actionKey = "menu_window_maximize"
         label = "Maximize MSUF menu"
-    elseif ContainsAny(text, { "close", "hide", "schliessen", "verstecken", "ausblenden" }) then
+    elseif ContainsAny(text, ActionsPhrases[140]) then
         actionKey = "menu_window_close"
         label = "Close MSUF menu"
     end
@@ -1890,37 +1901,33 @@ function A._ParseMenuHistoryAction(text)
         or text:find("sitzung", 1, true)) then
         return nil
     end
-    if not ContainsAny(text, {
-        "menu history", "menu change", "menu changes", "menu session", "session changes",
-        "msuf2 menu changes", "ui change", "ui changes", "navrail history",
-        "assistant change", "assistant changes", "assistant session", "assistant edits", "menue verlauf", "menue aenderung", "menue aenderungen", "menue sitzung", "sitzungs aenderungen", "ui aenderung", "ui aenderungen", "assistant aenderung", "assistant aenderungen",
-    }) then return nil end
+    if not ContainsAny(text, ActionsPhrases[141]) then return nil end
     local actionKey
     local label
     local summary
     local confirmRequired
-    if ContainsAny(text, { "assistant change", "assistant changes", "assistant session", "assistant edits", "assistant aenderung", "assistant aenderungen" })
-        and ContainsAny(text, { "redo", "reapply", "wiederholen", "erneut anwenden" })
+    if ContainsAny(text, ActionsPhrases[142])
+        and ContainsAny(text, ActionsPhrases[143])
     then
         actionKey = "assistant.action.history.redo"
         label = "Redo Assistant change"
         summary = "Reapplies the last undone Assistant change."
-    elseif ContainsAny(text, { "assistant change", "assistant changes", "assistant session", "assistant edits", "assistant aenderung", "assistant aenderungen" })
-        and ContainsAny(text, { "undo", "revert", "rueckgaengig", "zuruecknehmen" })
+    elseif ContainsAny(text, ActionsPhrases[144])
+        and ContainsAny(text, ActionsPhrases[145])
     then
         actionKey = "assistant.action.history.undo"
         label = "Undo Assistant change"
         summary = "Undoes the last Assistant-made change."
-    elseif ContainsAny(text, { "reset all", "reset", "restore all", "discard all", "revert all", "clear all", "zuruecksetzen", "zurucksetzen", "alles zuruecksetzen", "alle zuruecksetzen", "verwerfen", "alles verwerfen" }) then
+    elseif ContainsAny(text, ActionsPhrases[146]) then
         actionKey = "menu_history_reset_session"
         label = "Reset menu session changes"
         summary = "Clears this MSUF menu change history."
         confirmRequired = true
-    elseif ContainsAny(text, { "redo", "reapply", "wiederholen", "erneut anwenden" }) then
+    elseif ContainsAny(text, ActionsPhrases[147]) then
         actionKey = "menu_history_redo"
         label = "Redo menu change"
         summary = "Reapplies the last undone MSUF menu change."
-    elseif ContainsAny(text, { "undo", "revert", "rueckgaengig", "zuruecknehmen" }) then
+    elseif ContainsAny(text, ActionsPhrases[148]) then
         actionKey = "menu_history_undo"
         label = "Undo menu change"
         summary = "Undoes the last MSUF menu change."
@@ -2362,32 +2369,24 @@ end
 
 local function LooksLikeNumericSettingChange(text)
     if FirstNumber(text) == nil then return false end
-    if ContainsAny(text, { "import", "export", "profile string", "copy", "backup", "reset", "open", "diagnose", "test" }) then return false end
-    if not ContainsAny(text, {
-        "width", "height", "size", "scale", "font size", "text size",
-        "x offset", "y offset", "offset", "spacing", "alpha", "opacity",
-        "breite", "hoehe", "groesse", "schriftgroesse", "text groesse",
-    }) then
+    if ContainsAny(text, ActionsPhrases[149]) then return false end
+    if not ContainsAny(text, ActionsPhrases[150]) then
         return false
     end
-    return ContainsAny(text, {
-        "player", "target", "focus", "pet", "boss", "party", "raid", "mythic",
-        "frame", "unit", "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-        "name", "health", "hp", "power", "mana", "text", "spieler", "ziel", "fokus",
-    })
+    return ContainsAny(text, ActionsPhrases[151])
 end
 
 function P.ParseRegistryActionAliasShortcut(text, raw)
     if LooksLikeNumericSettingChange(text) then return nil end
-    if ContainsAny(text, { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" })
-        and ContainsAny(text, { "set", "change" })
-        and ContainsAny(text, { "to shared", "to player", "to target", "to focus", "to boss", "to party", "to raid" })
+    if ContainsAny(text, ActionsPhrases[152])
+        and ContainsAny(text, ActionsPhrases[153])
+        and ContainsAny(text, ActionsPhrases[154])
     then
         return nil
     end
-    if ContainsAny(text, { "aura blacklist spell", "blacklist spell", "selected aura blacklist spell", "aura spell preset" })
-        and ContainsAny(text, { "set", "change" })
-        and (FirstNumber(text) ~= nil or ContainsAny(text, { " to ", " as ", " = " }))
+    if ContainsAny(text, ActionsPhrases[155])
+        and ContainsAny(text, ActionsPhrases[156])
+        and (FirstNumber(text) ~= nil or ContainsAny(text, ActionsPhrases[157]))
     then
         return nil
     end

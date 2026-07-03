@@ -25,7 +25,7 @@ local SCOPE_LABELS = { party = "Party", raid = "Raid", mythicraid = "Mythic Raid
 local SCOPE_SHORT_LABELS = { mythicraid = "Mythic" }
 local GROUP_SECTION_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
 local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, "pvpIcon statusText statusGhostText statusAFKText",
-    [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle]], "enabled iconStyle size anchor x y layer")
+    [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon]], "enabled iconStyle customIcon size anchor x y layer")
 local function GF()
     return MSUF and MSUF.GF
 end
@@ -782,7 +782,7 @@ local function IconStyleValues()
     if gf and type(gf.ICON_STYLE_ITEMS) == "table" then return gf.ICON_STYLE_ITEMS end
     return VT(
         "BLIZZARD", "Blizzard (Default)", "CLASSIC", "Classic", "MIDNIGHT", "Midnight",
-        "GLOSSY_ORBS", "Glossy Orbs", "DARK_EMBOSS", "Dark Emboss", "GLASS_PANELS", "Glass Panels",
+        "UXPRO", "UX Pro", "GLOSSY_ORBS", "Glossy Orbs", "DARK_EMBOSS", "Dark Emboss", "GLASS_PANELS", "Glass Panels",
         "NEON_OUTLINE", "Neon Outline", "RING_SYMBOLS", "Ring Symbols", "DOTS", "Dots",
         "SHAPES", "Shapes", "DIAMONDS", "Diamonds", "SQUARES", "Squares")
 end

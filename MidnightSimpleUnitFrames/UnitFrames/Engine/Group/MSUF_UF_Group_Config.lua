@@ -517,13 +517,16 @@ local function CompileStatus(kind, conf)
 
   local role = StatusRegionDef(conf, roleEnabled, "role")
   role.style = conf.roleIconStyle
+  role.customIcon = conf.roleIconCustomIcon
   role.showTank = conf.roleIconShowTank ~= false
   role.showHealer = conf.roleIconShowHealer ~= false
   role.showDPS = conf.roleIconShowDPS ~= false
   local leader = StatusRegionDef(conf, leaderEnabled, "leader")
   leader.style = conf.leaderIconStyle
+  leader.customIcon = conf.leaderIconCustomIcon
   local assist = StatusRegionDef(conf, assistEnabled, "assist")
   assist.style = conf.assistIconStyle
+  assist.customIcon = conf.assistIconCustomIcon
   local statusText = StatusRegionDef(conf, statusTextEnabled, "statusText")
   statusText.showDead = conf.statusText == true
   statusText.showGhost = conf.statusGhostText == true
@@ -534,6 +537,18 @@ local function CompileStatus(kind, conf)
   statusText.afk = StatusRegionDef(conf, conf.statusAFKText == true, "statusAFK")
   local raidGroup = StatusRegionDef(conf, raidGroupEnabled, "raidGroup")
   raidGroup.style = conf.groupNumberStyle or "PAREN"
+  local raidMarker = StatusRegionDef(conf, raidMarkerEnabled, "raidMarker")
+  raidMarker.customIcon = conf.raidMarkerCustomIcon
+  local readyCheck = StatusRegionDef(conf, readyCheckEnabled, "readyCheck")
+  readyCheck.customIcon = conf.readyCheckIconCustomIcon
+  local summon = StatusRegionDef(conf, summonEnabled, "summon")
+  summon.customIcon = conf.summonIconCustomIcon
+  local incomingRes = StatusRegionDef(conf, incomingResEnabled, "incomingRes")
+  incomingRes.customIcon = conf.resurrectIconCustomIcon
+  local pvp = StatusRegionDef(conf, pvpEnabled, "pvp")
+  pvp.customIcon = conf.pvpIconCustomIcon
+  local phase = StatusRegionDef(conf, phaseEnabled, "phase")
+  phase.customIcon = conf.phaseIconCustomIcon
 
   return {
     enabled = roleEnabled or raidMarkerEnabled or leaderEnabled or assistEnabled
@@ -554,16 +569,17 @@ local function CompileStatus(kind, conf)
     runtimePVP = pvpEnabled,
     kind = kind,
     alpha = 1,
+    iconStyle = conf.iconStyle or "BLIZZARD",
     useMidnight = conf.useMidnightIcons == true,
     role = role,
-    raidMarker = StatusRegionDef(conf, raidMarkerEnabled, "raidMarker"),
+    raidMarker = raidMarker,
     leader = leader,
     assist = assist,
-    readyCheck = StatusRegionDef(conf, readyCheckEnabled, "readyCheck"),
-    summon = StatusRegionDef(conf, summonEnabled, "summon"),
-    incomingRes = StatusRegionDef(conf, incomingResEnabled, "incomingRes"),
-    pvp = StatusRegionDef(conf, pvpEnabled, "pvp"),
-    phase = StatusRegionDef(conf, phaseEnabled, "phase"),
+    readyCheck = readyCheck,
+    summon = summon,
+    incomingRes = incomingRes,
+    pvp = pvp,
+    phase = phase,
     statusText = statusText,
     raidGroup = raidGroup,
   }

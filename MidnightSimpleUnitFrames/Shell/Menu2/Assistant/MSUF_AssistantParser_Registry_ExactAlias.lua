@@ -14,6 +14,9 @@ local P = A.Parser or {}
 A.Parser = P
 
 local Registry = A.Registry
+local Data = A.ParserData or {}
+A.ParserData = Data
+local ExactAliasData = Data.REGISTRY_EXACT_ALIAS or {}
 local Normalize = P.Normalize
 local Compact = P.Compact
 local AliasRelationText = P.AliasRelationText
@@ -26,36 +29,8 @@ if not (Normalize and Compact and AliasRelationText and ValueForRegistrySetting)
 -- Exact-alias acceleration for registry options.
 -- This index catches precise multi-word aliases before slower fuzzy scoring. Common command
 -- words are ignored as triggers so broad phrases do not fan out across the whole registry.
-local MAX_EXACT_ALIAS_TOKENS = 8
-local COMMON_EXACT_ALIAS_TOKENS = {
-    a = true,
-    an = true,
-    ["and"] = true,
-    change = true,
-    disable = true,
-    enable = true,
-    ["for"] = true,
-    make = true,
-    move = true,
-    nudge = true,
-    of = true,
-    off = true,
-    on = true,
-    set = true,
-    shift = true,
-    the = true,
-    to = true,
-    turn = true,
-    player = true,
-    target = true,
-    focus = true,
-    pet = true,
-    boss = true,
-    party = true,
-    raid = true,
-    frame = true,
-    frames = true,
-}
+local MAX_EXACT_ALIAS_TOKENS = ExactAliasData.MAX_EXACT_ALIAS_TOKENS or 8
+local COMMON_EXACT_ALIAS_TOKENS = ExactAliasData.COMMON_EXACT_ALIAS_TOKENS or {}
 
 local function Tokens(text)
     local out = {}
@@ -325,6 +300,12 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
                 summary = "Changes multiple matched options.",
             }
         end
+        if A.ContextEngineEnabled ~= false and P.ScoreSettingCandidates then
+            local scored = P.ScoreSettingCandidates(changes, { context = A.ConversationContext and A.ConversationContext() or nil })
+            if type(scored) == "table" and #scored > 0 then changes = scored end
+        end
+    end
+    if #changes > 1 then
         return {
             kind = "ambiguous",
             choices = changes,

@@ -46,6 +46,17 @@ local function CastbarFrameInset(general)
     return thickness > 0 and 1 or 0
 end
 
+local function KeyPart(value)
+    if value == nil then
+        return ""
+    end
+    return tostring(value)
+end
+
+local function BoolKey(value)
+    return value and "1" or "0"
+end
+
 local function InCombat()
     return _G.MSUF_InCombat == true
         or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
@@ -145,34 +156,45 @@ local function ApplyBossCastbarLayout(frame)
         iconSize = 128
     end
 
-    if frame.icon then
-        local iconParent = ((iconOffsetX ~= 0 or iconOffsetY ~= 0) and frame.statusBar) or frame
+    local frameInset = CastbarFrameInset(general)
+    local coreLayoutKey = KeyPart(height) .. "|"
+        .. BoolKey(frame.icon ~= nil) .. "|"
+        .. BoolKey(showIcon) .. "|"
+        .. KeyPart(iconOffsetX) .. "|"
+        .. KeyPart(iconOffsetY) .. "|"
+        .. KeyPart(iconSize) .. "|"
+        .. KeyPart(frameInset)
+    if frame._msufBossCastbarCoreLayoutKey ~= coreLayoutKey then
+        frame._msufBossCastbarCoreLayoutKey = coreLayoutKey
 
-        if frame.icon.SetParent and frame.icon:GetParent() ~= iconParent then
-            frame.icon:SetParent(iconParent)
+        if frame.icon then
+            local iconParent = ((iconOffsetX ~= 0 or iconOffsetY ~= 0) and frame.statusBar) or frame
+
+            if frame.icon.SetParent and frame.icon:GetParent() ~= iconParent then
+                frame.icon:SetParent(iconParent)
+            end
+
+            frame.icon:ClearAllPoints()
+            frame.icon:SetPoint("LEFT", frame, "LEFT", iconOffsetX, iconOffsetY)
+            frame.icon:SetSize(iconSize, iconSize)
+            frame.icon:SetShown(showIcon)
         end
 
-        frame.icon:ClearAllPoints()
-        frame.icon:SetPoint("LEFT", frame, "LEFT", iconOffsetX, iconOffsetY)
-        frame.icon:SetSize(iconSize, iconSize)
-        frame.icon:SetShown(showIcon)
-    end
+        frame.statusBar:ClearAllPoints()
+        if showIcon and frame.icon and iconOffsetX == 0 and iconOffsetY == 0 then
+            frame.statusBar:SetPoint("LEFT", frame, "LEFT", iconSize + 1, 0)
+        else
+            frame.statusBar:SetPoint("LEFT", frame, "LEFT", frameInset, 0)
+        end
 
-    frame.statusBar:ClearAllPoints()
-    local frameInset = CastbarFrameInset(general)
-    if showIcon and frame.icon and iconOffsetX == 0 and iconOffsetY == 0 then
-        frame.statusBar:SetPoint("LEFT", frame, "LEFT", iconSize + 1, 0)
-    else
-        frame.statusBar:SetPoint("LEFT", frame, "LEFT", frameInset, 0)
-    end
+        frame.statusBar:SetPoint("TOP", frame, "TOP", 0, -frameInset)
+        frame.statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, frameInset)
+        frame.statusBar:SetPoint("RIGHT", frame, "RIGHT", -frameInset, 0)
 
-    frame.statusBar:SetPoint("TOP", frame, "TOP", 0, -frameInset)
-    frame.statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, frameInset)
-    frame.statusBar:SetPoint("RIGHT", frame, "RIGHT", -frameInset, 0)
-
-    if frame.backgroundBar then
-        frame.backgroundBar:ClearAllPoints()
-        frame.backgroundBar:SetAllPoints(frame.statusBar)
+        if frame.backgroundBar then
+            frame.backgroundBar:ClearAllPoints()
+            frame.backgroundBar:SetAllPoints(frame.statusBar)
+        end
     end
 
     if type(_G.MSUF_ApplyBossCastbarTextsLayout) == "function" then
@@ -188,7 +210,17 @@ local function ApplyBossCastbarLayout(frame)
         if timeFontSize <= 0 then timeFontSize = nameFontSize end
         if timeFontSize < 6 then timeFontSize = 6 elseif timeFontSize > 128 then timeFontSize = 128 end
 
-        _G.MSUF_ApplyBossCastbarTextsLayout(frame, {
+        local textLayoutKey = KeyPart(tonumber(general.bossCastTextOffsetX) or 0) .. "|"
+            .. KeyPart(tonumber(general.bossCastTextOffsetY) or 0) .. "|"
+            .. KeyPart(tonumber(general.bossCastTimeOffsetX) or -2) .. "|"
+            .. KeyPart(tonumber(general.bossCastTimeOffsetY) or 0) .. "|"
+            .. BoolKey(general.showBossCastName ~= false) .. "|"
+            .. BoolKey(general.showBossCastTime ~= false) .. "|"
+            .. KeyPart(nameFontSize) .. "|"
+            .. KeyPart(timeFontSize)
+        if frame._msufBossCastbarTextLayoutKey ~= textLayoutKey then
+            frame._msufBossCastbarTextLayoutKey = textLayoutKey
+            _G.MSUF_ApplyBossCastbarTextsLayout(frame, {
             baselineTimeX = -2,
             baselineTimeY = 0,
             textOffsetX = tonumber(general.bossCastTextOffsetX) or 0,
@@ -199,11 +231,12 @@ local function ApplyBossCastbarLayout(frame)
             showTime = general.showBossCastTime ~= false,
             nameFontSize = nameFontSize,
             timeFontSize = timeFontSize,
-        })
+            })
+        end
     end
 
     if type(_G.MSUF_ApplyCastbarOutline) == "function" then
-        _G.MSUF_ApplyCastbarOutline(frame, true)
+        _G.MSUF_ApplyCastbarOutline(frame, false)
     end
 
     if type(_G.MSUF_ApplyCastbarDetailLayout) == "function" then

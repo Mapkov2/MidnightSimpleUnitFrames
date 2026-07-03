@@ -23,27 +23,19 @@ local ContainsAny = P.ContainsAny
 local DetectUnits = P.DetectUnits
 local DetectGroups = P.DetectGroups
 local ExtractColor = P.ExtractColor
+local Data = A.ParserData or {}
+A.ParserData = Data
+local CompoundData = Data.COMPOUND_PARSER or {}
 
 local function MaybeYield()
     if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
 end
 
-local COMMAND_STARTERS = {
-    "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift",
-    "increase", "decrease", "raise", "lower", "select", "use", "apply",
-    "setze", "stelle", "mach", "mache", "aktivieren", "deaktivieren", "einschalten", "ausschalten",
-    "anzeigen", "verstecken", "einblenden", "ausblenden", "verschiebe", "verschieben", "waehle", "nutze",
-}
-
-local SKIP_TERMS = {
-    "copy", "copy profile", "profile copy", "copy from profile", "rename profile", "profile import", "profile export",
-    "import profile", "export profile", "guided setup", "setup guide", "blacklist", "whitelist",
-    "kopiere", "kopieren", "profil kopieren", "profil umbenennen",
-}
-
-local VALUE_CONNECTORS = { " to ", " as ", " is ", " be ", " value ", " = ", " auf ", " zu ", " als ", " wert " }
-local RELATIVE_VALUE_CONNECTORS = { " by ", " um " }
-local SCOPE_RELATIONS = { " for ", " on ", " of ", " fuer ", " fur ", " vom ", " von " }
+local COMMAND_STARTERS = CompoundData.COMMAND_STARTERS or {}
+local SKIP_TERMS = CompoundData.SKIP_TERMS or {}
+local VALUE_CONNECTORS = CompoundData.VALUE_CONNECTORS or {}
+local RELATIVE_VALUE_CONNECTORS = CompoundData.RELATIVE_VALUE_CONNECTORS or {}
+local SCOPE_RELATIONS = CompoundData.SCOPE_RELATIONS or {}
 
 local function HasStarter(text)
     text = Normalize(text)
@@ -56,7 +48,7 @@ end
 
 local function ShouldSkip(text)
     if not ContainsAny(text, SKIP_TERMS) then return false end
-    return not ContainsAny(text, { "width", "height", "alpha", "opacity", "name", "portrait", "color", "colour", "background" })
+    return not ContainsAny(text, CompoundData.SKIP_ALLOW_TERMS)
 end
 
 local function SafeText(raw)
@@ -286,7 +278,7 @@ end
 local function HasScope(text)
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
-    return (#units + #groups) > 0 or ContainsAny(text, { "all", "every", "alle", "jede", "jeder", "jedes" })
+    return (#units + #groups) > 0 or ContainsAny(text, CompoundData.BROAD_SCOPE_TERMS)
 end
 
 local function SegmentCommand(segment, prefix, verb)
@@ -338,10 +330,10 @@ local function ScopeLabels(tail)
     for i = 1, #explicitUnits do
         if ContainsAny(tail, explicitUnits[i].terms) then add(explicitUnits[i].label) end
     end
-    if ContainsAny(tail, { "party" }) then add("party") end
-    local hasMythicRaid = ContainsAny(tail, { "mythic raid", "mythicraid" })
+    if ContainsAny(tail, CompoundData.PARTY_TERMS) then add("party") end
+    local hasMythicRaid = ContainsAny(tail, CompoundData.MYTHIC_RAID_TERMS)
     if hasMythicRaid then add("mythic raid") end
-    if not hasMythicRaid and ContainsAny(tail, { "raid" }) then add("raid") end
+    if not hasMythicRaid and ContainsAny(tail, CompoundData.RAID_TERMS) then add("raid") end
     local units = DetectUnits(tail)
     for i = 1, #units do add(units[i]) end
     local groups = DetectGroups(tail)
@@ -352,12 +344,7 @@ local function ScopeLabels(tail)
     return out
 end
 
-local SCOPE_REMOVE_TERMS = {
-    "targettarget", "target of target", "tot", "focustarget", "focus target",
-    "mythic raid", "mythicraid", "player", "target", "focus", "pet", "boss", "party", "raid",
-    "frame", "frames", "unitframe", "unitframes", "group frame", "group frames",
-    "and", "und",
-}
+local SCOPE_REMOVE_TERMS = CompoundData.SCOPE_REMOVE_TERMS or {}
 
 local function RemoveScopeTerms(text)
     local out = " " .. Normalize(text) .. " "
@@ -517,20 +504,7 @@ local function SizePair(text)
     return ParseWidthHeight(scope, widthValue, heightValue)
 end
 
-local ATTR_SPECS = {
-    { phrase = "portrait border thickness", terms = { "portrait border thickness", "portrait border size" } },
-    { phrase = "power bar height", terms = { "power bar height", "mana bar height", "energy bar height" } },
-    { phrase = "background opacity", terms = { "background opacity", "bg opacity", "track opacity", "hp track opacity" } },
-    { phrase = "border thickness", terms = { "border thickness", "outline thickness", "border size", "outline size" } },
-    { phrase = "icon size", terms = { "icon size", "spell icon size" } },
-    { phrase = "text size", terms = { "text size", "font size" } },
-    { phrase = "portrait size", terms = { "portrait size" } },
-    { phrase = "height", terms = { "height", "heights", "tall", "high", "hoehe" } },
-    { phrase = "width", terms = { "width", "widths", "wide", "breite" } },
-    { phrase = "x offset", terms = { "x offset", "x offsets", "offset x", "x" } },
-    { phrase = "y offset", terms = { "y offset", "y offsets", "offset y", "y" } },
-    { phrase = "alpha", terms = { "alpha", "opacity" } },
-}
+local ATTR_SPECS = CompoundData.ATTR_SPECS or {}
 
 local ATTR_TERMS_BY_LENGTH
 
@@ -734,7 +708,7 @@ local function RepeatedAttributeListTrailingNumbers(text)
         if not s then
             if blocks < 2 then return nil end
             local scope = table.concat(touchedScopes, " ")
-            if #ScopeLabels(rest) > 0 or #touchedScopes <= 1 or not ContainsAny(rest, { "names", "portraits", "power bars", "mana bars", "health bars", "hp bars" }) then
+            if #ScopeLabels(rest) > 0 or #touchedScopes <= 1 or not ContainsAny(rest, CompoundData.AMBIGUOUS_TAIL_ITEMS) then
                 scope = touchedScopes[#touchedScopes] or scope
             end
             if scope == "" or not AddScopedBooleanTailCommands(commands, scope, rest) then return nil end
@@ -769,13 +743,13 @@ local function DetailScopeForAttr(scope, attr)
     scope = Trim(scope or "")
     attr = Normalize(attr or "")
     if scope == "" then return "" end
-    if attr:sub(1, 8) == "portrait" and not ContainsAny(scope, { "portrait" }) then
+    if attr:sub(1, 8) == "portrait" and not ContainsAny(scope, CompoundData.PORTRAIT_SCOPE_TERMS) then
         return Trim(scope .. " portrait")
     end
-    if (attr:sub(1, 7) == "hp text" or attr:sub(1, 11) == "health text") and not ContainsAny(scope, { "hp text", "health text" }) then
+    if (attr:sub(1, 7) == "hp text" or attr:sub(1, 11) == "health text") and not ContainsAny(scope, CompoundData.HP_TEXT_SCOPE_TERMS) then
         return Trim(scope .. " hp text")
     end
-    if attr:sub(1, 10) == "power text" and not ContainsAny(scope, { "power text" }) then
+    if attr:sub(1, 10) == "power text" and not ContainsAny(scope, CompoundData.POWER_TEXT_SCOPE_TERMS) then
         return Trim(scope .. " power text")
     end
     return scope
@@ -798,9 +772,7 @@ local function DistributableScopePrefixes(scope)
     local scopes = ScopeLabels(scope)
     if #scopes <= 1 then return nil end
     local detail = RemoveScopeTerms(scope)
-    if detail ~= "" and not ContainsAny(detail, {
-        "castbar", "cast bar", "portrait", "power bar", "mana bar", "hp text", "health text", "power text", "name text",
-    }) then
+    if detail ~= "" and not ContainsAny(detail, CompoundData.DISTRIBUTABLE_DETAIL_TERMS) then
         return nil
     end
     local out = {}
@@ -826,8 +798,8 @@ end
 
 local function BooleanVerbForText(text)
     text = Normalize(text)
-    if ContainsAny(text, { "off", "disable", "disabled", "false", "no", "hide", "hidden", "aus", "deaktivieren", "ausschalten" }) then return "turn off" end
-    if ContainsAny(text, { "on", "enable", "enabled", "true", "yes", "show", "visible", "keep", "an", "aktivieren", "einschalten" }) then return "turn on" end
+    if ContainsAny(text, CompoundData.BOOL_OFF_TERMS) then return "turn off" end
+    if ContainsAny(text, CompoundData.BOOL_ON_TERMS) then return "turn on" end
     return nil
 end
 
@@ -845,22 +817,7 @@ local function BooleanWordVerb(word)
     return nil
 end
 
-local BOOLEAN_TAIL_ITEM_TERMS = {
-    { term = "castbar icon", item = "castbar icon" },
-    { term = "cast bar icon", item = "castbar icon" },
-    { term = "status icon", item = "status icon" },
-    { term = "power bar", item = "power bar" },
-    { term = "mana bar", item = "mana bar" },
-    { term = "health bar", item = "health bar" },
-    { term = "hp bar", item = "hp bar" },
-    { term = "background", item = "background" },
-    { term = "bg", item = "background" },
-    { term = "portrait", item = "portrait" },
-    { term = "name", item = "name" },
-    { term = "castbar", item = "castbar" },
-    { term = "cast bar", item = "castbar" },
-    { term = "icon", item = "icon" },
-}
+local BOOLEAN_TAIL_ITEM_TERMS = CompoundData.BOOLEAN_TAIL_ITEM_TERMS or {}
 
 local function BooleanTailItemsFromText(text)
     text = SingularItem(Normalize(text or ""))
@@ -1223,7 +1180,7 @@ local function FastAttributeListTrailingNumbers(text)
         if not s then
             if blocks < 1 then return nil end
             local scopeText = table.concat(touchedScopes, " ")
-            if #ScopeLabels(rest) > 0 or #touchedScopes <= 1 or not ContainsAny(rest, { "names", "portraits", "power bars", "mana bars" }) then
+            if #ScopeLabels(rest) > 0 or #touchedScopes <= 1 or not ContainsAny(rest, CompoundData.AMBIGUOUS_TAIL_ITEMS_SHORT) then
                 scopeText = touchedScopes[#touchedScopes] or scopeText
             end
             local scopes = ScopeLabels(scopeText)
@@ -1298,15 +1255,15 @@ local function PrefixPrePlanAllowedForAttribute(prePlan, prefix, attr)
     if not (prePlan and type(prePlan.changes) == "table") then return false end
     attr = tostring(attr or "")
     if (attr == "width" or attr == "height")
-        and ContainsAny(prefix, { "castbar", "cast bar" })
+        and ContainsAny(prefix, CompoundData.CASTBAR_TERMS)
         and #prePlan.changes == 1 then
         local setting = prePlan.changes[1] and prePlan.changes[1].setting
         if setting and setting.frameType == "castbar" and setting.attribute == "iconBorderStyle" then
             return false
         end
     end
-    if ContainsAny(prefix, { "power bar", "powerbar" })
-        and not ContainsAny(prefix, { "shape", "style" })
+    if ContainsAny(prefix, CompoundData.POWER_BAR_TERMS)
+        and not ContainsAny(prefix, CompoundData.SHAPE_STYLE_TERMS)
         and #prePlan.changes == 1 then
         local setting = prePlan.changes[1] and prePlan.changes[1].setting
         if setting and setting.attribute == "detachedPowerBarShape" then
@@ -1377,7 +1334,7 @@ local function AttributeNumberPairs(text)
     end
     if tail ~= "" then
         local scope = detailScope ~= "" and detailScope or firstPrefix
-        if #ScopeLabels(tail) == 0 and #touchedScopes > 1 and ContainsAny(tail, { "names", "portraits", "power bars", "mana bars", "health bars", "hp bars" }) then
+        if #ScopeLabels(tail) == 0 and #touchedScopes > 1 and ContainsAny(tail, CompoundData.AMBIGUOUS_TAIL_ITEMS) then
             scope = table.concat(touchedScopes, " ")
         end
         if not AddScopedBooleanTailCommands(commands, scope, tail) then return nil end
@@ -1428,8 +1385,8 @@ local function RelativeLead(text)
     for _, lead in ipairs({ "increase", "raise", "decrease", "lower" }) do
         if text == lead or text:sub(1, #lead + 1) == lead .. " " then return lead end
     end
-    if ContainsAny(text, { "bigger", "larger", "wider", "taller", "higher", "more", "grow", "increase", "raise" }) then return "increase" end
-    if ContainsAny(text, { "smaller", "shorter", "narrower", "lower", "less", "decrease", "reduce" }) then return "decrease" end
+    if ContainsAny(text, CompoundData.RELATIVE_INCREASE_TERMS) then return "increase" end
+    if ContainsAny(text, CompoundData.RELATIVE_DECREASE_TERMS) then return "decrease" end
     return nil
 end
 
@@ -1682,10 +1639,7 @@ local function ScopeTailConcrete(tail)
     if tail == "" then return false end
     local units = DetectUnits(tail)
     local groups = DetectGroups(tail)
-    return (#units + #groups) > 0 or ContainsAny(tail, {
-        "all unitframes", "all unit frames", "all group frames", "all groups",
-        "every unitframe", "every group frame", "alle unitframes", "alle gruppenframes",
-    })
+    return (#units + #groups) > 0 or ContainsAny(tail, CompoundData.SCOPE_TAIL_CONCRETE_TERMS)
 end
 
 local function SharedScope(text)
@@ -1735,35 +1689,9 @@ local function KeepButBoolean(text)
     return ParseCommands(commands)
 end
 
-local BOOL_WORDS = {
-    on = "turn on", enabled = "turn on", ["true"] = "turn on", yes = "turn on", show = "turn on",
-    off = "turn off", disabled = "turn off", ["false"] = "turn off", no = "turn off", hide = "turn off",
-}
+local BOOL_WORDS = CompoundData.BOOL_WORDS or {}
 
-local BOOLEAN_ITEM_TERMS = {
-    { term = "castbar icons", item = "castbar icon" },
-    { term = "cast bar icons", item = "castbar icon" },
-    { term = "castbar icon", item = "castbar icon" },
-    { term = "cast bar icon", item = "castbar icon" },
-    { term = "status icons", item = "status icon" },
-    { term = "status icon", item = "status icon" },
-    { term = "health bars", item = "health bar" },
-    { term = "power bars", item = "power bar" },
-    { term = "mana bars", item = "mana bar" },
-    { term = "castbars", item = "castbar" },
-    { term = "cast bars", item = "castbar" },
-    { term = "portraits", item = "portrait" },
-    { term = "names", item = "name" },
-    { term = "icons", item = "icon" },
-    { term = "health bar", item = "health bar" },
-    { term = "power bar", item = "power bar" },
-    { term = "mana bar", item = "mana bar" },
-    { term = "castbar", item = "castbar" },
-    { term = "cast bar", item = "castbar" },
-    { term = "portrait", item = "portrait" },
-    { term = "name", item = "name" },
-    { term = "icon", item = "icon" },
-}
+local BOOLEAN_ITEM_TERMS = CompoundData.BOOLEAN_ITEM_TERMS or {}
 
 local function BooleanItemsFromText(text)
     text = Trim(SingularItem(text or ""))
@@ -1839,10 +1767,7 @@ local function AddBooleanScopeItemCommands(commands, verb, scopes, items)
     return true
 end
 
-local BOOLEAN_CHAIN_SCOPE_WORDS = {
-    player = true, target = true, focus = true, pet = true, boss = true, party = true, raid = true,
-    targettarget = true, focustarget = true,
-}
+local BOOLEAN_CHAIN_SCOPE_WORDS = CompoundData.BOOLEAN_CHAIN_SCOPE_WORDS or {}
 
 local function NoJoinAlternatingScopeItems(text)
     local words = {}
@@ -1948,14 +1873,14 @@ end
 local function BooleanTailItemList(text)
     local body, verb = ExtractTrailingBoolean(text)
     if not (body and verb) then return nil end
-    if ContainsAny(body, { " turn on ", " turn off " }) then return nil end
+    if ContainsAny(body, CompoundData.BOOLEAN_TOGGLE_GUARD_TERMS) then return nil end
     return BooleanScopeItemList(verb, body)
 end
 
 local function BooleanLeadItemList(text)
     local body, verb = ExtractLeadingBoolean(text)
     if not (body and verb) then return nil end
-    if ContainsAny(body, { " turn on ", " turn off " }) then return nil end
+    if ContainsAny(body, CompoundData.BOOLEAN_TOGGLE_GUARD_TERMS) then return nil end
     return BooleanScopeItemList(verb, body)
 end
 
@@ -1964,7 +1889,7 @@ local function BooleanItemPairs(text)
     if keep then return keep end
 
     local body = StripCommandLead(text)
-    if body == "" or body == text and not ContainsAny(text, { " on ", " off " }) then return nil end
+    if body == "" or body == text and not ContainsAny(text, CompoundData.BOOLEAN_ON_OFF_TERMS) then return nil end
     local words = {}
     for word in body:gmatch("%S+") do words[#words + 1] = word end
     local pairsOut = {}
@@ -2049,15 +1974,12 @@ local function SharedLeadingScopesItems(text)
     return plan
 end
 
-local CHAIN_SCOPE_WORDS = {
-    player = true, target = true, focus = true, pet = true, boss = true, party = true, raid = true,
-    targettarget = true, focustarget = true,
-}
+local CHAIN_SCOPE_WORDS = CompoundData.CHAIN_SCOPE_WORDS or {}
 
 local function BooleanScopeItemChain(text)
     local lead, rest = BooleanLead(text)
     if not lead then return nil end
-    if ContainsAny(rest, { "turn on", "turn off", "enable", "disable", "show", "hide" }) then return nil end
+    if ContainsAny(rest, CompoundData.BOOLEAN_COMMAND_TERMS) then return nil end
     local words = {}
     for word in Normalize(rest):gmatch("%S+") do words[#words + 1] = word end
     local starts = {}
@@ -2083,14 +2005,14 @@ local function BooleanScopeItemChain(text)
         for j = from, to do segment[#segment + 1] = words[j] end
         local phrase = Trim(table.concat(segment, " "))
         local item = RemoveScopeTerms(phrase)
-        if ContainsAny(item, { "on", "off", "enable", "disable", "show", "hide" }) then return nil end
+        if ContainsAny(item, CompoundData.BOOLEAN_ITEM_REJECT_TERMS) then return nil end
         if item == "" then return nil end
         commands[#commands + 1] = Trim(lead .. " " .. phrase)
     end
     return ParseCommands(commands)
 end
 
-local SLOT_WORDS = { left = true, right = true, center = true }
+local SLOT_WORDS = CompoundData.SLOT_WORDS or {}
 
 local function CleanSlotValue(text)
     text = Trim(text or "")
@@ -2112,7 +2034,7 @@ local function SlotValuePairs(text)
     for i = 1, slotIndexes[1] - 1 do prefixWords[#prefixWords + 1] = words[i] end
     local prefix = Trim(table.concat(prefixWords, " "))
     if prefix == "" then return nil end
-    if not ContainsAny(prefix, { "text", "label" }) then prefix = Trim(prefix .. " text") end
+    if not ContainsAny(prefix, CompoundData.TEXT_LABEL_TERMS) then prefix = Trim(prefix .. " text") end
     if not HasStarter(prefix) then prefix = "set " .. prefix end
 
     local commands = {}
@@ -2154,7 +2076,7 @@ local function SlotBlockStart(words, index)
     end
     if not slotIndex or slotIndex <= start then return false end
     local prefix = SlotWordsText(words, start, slotIndex - 1)
-    return HasScope(prefix) and ContainsAny(prefix, { "text", "label" })
+    return HasScope(prefix) and ContainsAny(prefix, CompoundData.TEXT_LABEL_TERMS)
 end
 
 local function SkipSlotBlockLead(words, index)
@@ -2184,7 +2106,7 @@ local function RepeatedSlotValueBlocks(text)
         end
         if not slotIndex then return nil end
         local prefix = SlotWordsText(words, index, slotIndex - 1)
-        if prefix == "" or not ContainsAny(prefix, { "text", "label" }) or not HasScope(prefix) then return nil end
+        if prefix == "" or not ContainsAny(prefix, CompoundData.TEXT_LABEL_TERMS) or not HasScope(prefix) then return nil end
         blocks = blocks + 1
         if blocks > 5 then return nil end
 
@@ -2211,7 +2133,7 @@ local function RepeatedSlotValueBlocks(text)
     return plan
 end
 
-local DIRECTION_WORDS = { left = true, right = true, up = true, down = true }
+local DIRECTION_WORDS = CompoundData.DIRECTION_WORDS or {}
 
 local function DirectionPairs(text)
     local words = {}
@@ -2257,19 +2179,12 @@ local function ContextSplit(text)
     return ParseCommands(commands)
 end
 
-local COLOR_VALUE_WORDS = {
-    white = true, black = true, red = true, green = true, blue = true, yellow = true, cyan = true, magenta = true,
-    orange = true, purple = true, pink = true, turquoise = true, grey = true, gray = true, brown = true, gold = true,
-    violet = true, aqua = true, teal = true,
-    weiss = true, schwarz = true, rot = true, gruen = true, blau = true, gelb = true, lila = true, rosa = true, tuerkis = true,
-}
+local COLOR_VALUE_WORDS = CompoundData.COLOR_VALUE_WORDS or {}
 
-local FONT_MODE_VALUE_WORDS = {
-    default = true, palette = true, class = true, health = true, hp = true, resource = true, power = true, npc = true, red = true,
-}
+local FONT_MODE_VALUE_WORDS = CompoundData.FONT_MODE_VALUE_WORDS or {}
 
-local SHAPE_VALUE_WORDS = { square = true, circle = true, round = true, rounded = true, diamond = true }
-local BORDER_VALUE_WORDS = { none = true, off = true, hide = true, hidden = true, disabled = true, solid = true, class = true, reaction = true, custom = true }
+local SHAPE_VALUE_WORDS = CompoundData.SHAPE_VALUE_WORDS or {}
+local BORDER_VALUE_WORDS = CompoundData.BORDER_VALUE_WORDS or {}
 
 local function Words(text)
     local out = {}
@@ -2360,7 +2275,7 @@ local function ValueChainCommand(segment, prefix, verb)
         return Trim(tostring(verb or "set") .. " " .. segment)
     end
     local normalizedPrefix = Normalize(prefix)
-    if StartsWithAny(segment, { "portrait" }) and ContainsAny(normalizedPrefix, { "portrait" }) then
+    if StartsWithAny(segment, CompoundData.PORTRAIT_SCOPE_TERMS) and ContainsAny(normalizedPrefix, CompoundData.PORTRAIT_SCOPE_TERMS) then
         segment = Trim(segment:gsub("^portrait%s+", ""))
     end
     return SegmentCommand(segment, prefix, verb)
@@ -2522,7 +2437,7 @@ local function HasTrailingBooleanMultiScope(text)
 end
 
 local function LooksLikeCompoundCandidate(text, hasJoin)
-    if ContainsAny(text, { "filter", "filters" }) and ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return false end
+    if ContainsAny(text, CompoundData.AURA_FILTER_TERMS) and ContainsAny(text, CompoundData.AURA_KIND_TERMS) then return false end
     if hasJoin then return true end
     if CountNumbers(text) >= 2 then return true end
     if text:find("%d+%.?%d*%s*x%s*%d+%.?%d*") or text:find("%d+%.?%d*%s+by%s+%d+%.?%d*") then return true end
@@ -2532,10 +2447,8 @@ local function LooksLikeCompoundCandidate(text, hasJoin)
     local lead, rest = BooleanLead(text)
     if lead and #ScopeLabels(rest) >= 2 then return true end
     if HasTrailingBooleanMultiScope(text) then return true end
-    if CountNumbers(text) == 1 and #ScopeLabels(text) >= 2 and ContainsAny(text, {
-        "width", "widths", "height", "heights", "x offset", "x offsets", "y offset", "y offsets",
-    }) then return true end
-    if CountNumbers(text) == 1 and ContainsAny(text, { "portrait shape", "border thickness", "border size", "background on", "background off" }) then return true end
+    if CountNumbers(text) == 1 and #ScopeLabels(text) >= 2 and ContainsAny(text, CompoundData.MULTISCOPE_NUMERIC_ATTR_TERMS) then return true end
+    if CountNumbers(text) == 1 and ContainsAny(text, CompoundData.SINGLE_NUMBER_SPECIAL_TERMS) then return true end
     if ValueTokenSegments(text) then return true end
     return false
 end

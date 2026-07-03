@@ -1540,6 +1540,9 @@ local function ClampScrollValue(value, maxValue)
     if value > maxValue then return maxValue end
     return value
 end
+local SMOOTH_SCROLL_SPEED = 14
+local SMOOTH_SCROLL_MAX_ELAPSED = 0.050
+local SMOOTH_SCROLL_EPSILON = 0.45
 local function PixelBarTexture(texture)
     if not texture then return texture end
     texture:SetTexture("Interface\\Buttons\\WHITE8X8")
@@ -1595,13 +1598,87 @@ function T.StyleScrollFrame(scroll, anchor)
         end
     end
     local rawSetVerticalScroll = scroll.SetVerticalScroll
+    local function CurrentMaxScroll()
+        local maxScroll = scroll._msuf2MaxScroll
+        if maxScroll == nil then
+            local child = scroll.GetScrollChild and scroll:GetScrollChild()
+            local childH = (child and child.GetHeight and child:GetHeight()) or 0
+            local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
+            maxScroll = math.max(0, childH - frameH)
+        end
+        return maxScroll
+    end
+    local function SetRawScroll(offset)
+        local maxScroll = CurrentMaxScroll()
+        offset = ClampScrollValue(offset, maxScroll)
+        if rawSetVerticalScroll then rawSetVerticalScroll(scroll, offset) end
+        if bar then
+            bar._msuf2Refreshing = true
+            bar:SetValue(offset)
+            bar._msuf2Refreshing = nil
+        end
+        return offset
+    end
+    local function StopSmoothScroll()
+        scroll._msuf2SmoothScrollTarget = nil
+        local driver = scroll._msuf2SmoothScrollDriver
+        if driver then driver:Hide() end
+    end
+    local function SmoothScrollOnUpdate(_, elapsed)
+        local target = scroll._msuf2SmoothScrollTarget
+        if target == nil then
+            StopSmoothScroll()
+            return
+        end
+        target = ClampScrollValue(target, CurrentMaxScroll())
+        scroll._msuf2SmoothScrollTarget = target
+        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        local delta = target - current
+        if (T.ReducedMotionEnabled and T.ReducedMotionEnabled()) or math.abs(delta) <= SMOOTH_SCROLL_EPSILON then
+            SetRawScroll(target)
+            StopSmoothScroll()
+            return
+        end
+        elapsed = tonumber(elapsed) or 0
+        if elapsed > SMOOTH_SCROLL_MAX_ELAPSED then elapsed = SMOOTH_SCROLL_MAX_ELAPSED end
+        local blend = math.min(1, elapsed * SMOOTH_SCROLL_SPEED)
+        if blend <= 0 then return end
+        SetRawScroll(current + delta * blend)
+    end
+    local function EnsureSmoothScrollDriver()
+        local driver = scroll._msuf2SmoothScrollDriver
+        if driver then return driver end
+        driver = CreateFrame("Frame", nil, scroll)
+        driver:Hide()
+        driver:SetScript("OnUpdate", SmoothScrollOnUpdate)
+        scroll._msuf2SmoothScrollDriver = driver
+        return driver
+    end
+    local function SmoothScrollTo(offset)
+        local target = ClampScrollValue(offset, CurrentMaxScroll())
+        if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then
+            SetRawScroll(target)
+            StopSmoothScroll()
+            return
+        end
+        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        if math.abs(target - current) <= SMOOTH_SCROLL_EPSILON then
+            SetRawScroll(target)
+            StopSmoothScroll()
+            return
+        end
+        scroll._msuf2SmoothScrollTarget = target
+        EnsureSmoothScrollDriver():Show()
+    end
     local function Refresh()
         local child = scroll.GetScrollChild and scroll:GetScrollChild()
         local childH = (child and child.GetHeight and child:GetHeight()) or 0
         local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
         local maxScroll = math.max(0, childH - frameH)
         scroll._msuf2MaxScroll = maxScroll
+        if scroll._msuf2SmoothScrollTarget ~= nil then scroll._msuf2SmoothScrollTarget = ClampScrollValue(scroll._msuf2SmoothScrollTarget, maxScroll) end
         if maxScroll <= 1 or frameH <= 0 then
+            StopSmoothScroll()
             if rawSetVerticalScroll and (scroll:GetVerticalScroll() or 0) ~= 0 then rawSetVerticalScroll(scroll, 0) end
             bar._msuf2Refreshing = true
             bar:SetValue(0)
@@ -1623,6 +1700,7 @@ function T.StyleScrollFrame(scroll, anchor)
     end
     scroll._msuf2RefreshScrollBar = Refresh
     scroll.SetVerticalScroll = function(self, offset)
+        StopSmoothScroll()
         local maxScroll = self._msuf2MaxScroll
         if maxScroll == nil then
             local child = self.GetScrollChild and self:GetScrollChild()
@@ -1638,7 +1716,7 @@ function T.StyleScrollFrame(scroll, anchor)
         local step = 64
         if IsShiftKeyDown and IsShiftKeyDown() then step = 180 end
         if IsControlKeyDown and IsControlKeyDown() then step = math.max(step, (scroll.GetHeight and scroll:GetHeight()) or step) end
-        scroll:SetVerticalScroll((scroll:GetVerticalScroll() or 0) - delta * step)
+        SmoothScrollTo((scroll._msuf2SmoothScrollTarget or (scroll:GetVerticalScroll() or 0)) - delta * step)
     end
     scroll:EnableMouseWheel(true)
     scroll:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
@@ -1659,12 +1737,14 @@ function T.StyleScrollFrame(scroll, anchor)
     end)
     bar:SetScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
+        StopSmoothScroll()
         local maxScroll = scroll._msuf2MaxScroll or 0
         if rawSetVerticalScroll then rawSetVerticalScroll(scroll, ClampScrollValue(value, maxScroll)) end
         Refresh()
     end)
     scroll:HookScript("OnScrollRangeChanged", Refresh)
     scroll:HookScript("OnSizeChanged", Refresh)
+    scroll:HookScript("OnHide", StopSmoothScroll)
     if bar.HookScript then bar:HookScript("OnShow", function() Paint(bar._msuf2Hover) end) end
     Refresh()
     scroll._msuf2ScrollBar = bar

@@ -23,6 +23,7 @@ local function StatusRows(rows)
             defaultLayer = tonumber(c[8]), defaultSize = tonumber(c[9]), defaultAnchor = c[10],
             defaultX = tonumber(c[11]), defaultY = tonumber(c[12]), text = c[13], color = Color(c[14]),
             label = c[15], refresh = c[16], defaultShow = c[17] == "false" and false or nil, allowed = Allowed(c[18]),
+            customIcon = c[19] ~= "" and c[19] or nil,
         }
     end
     return out
@@ -35,15 +36,16 @@ local function LayerRows(rows)
     return out
 end
 specs.StatusPreview = StatusRows [[
-raidmarker|showRaidMarker|raidMarkerSize|raidMarkerAnchor|raidMarkerOffsetX|raidMarkerOffsetY|raidMarkerLayer|7|18|TOPLEFT|16|3|8|1,0.82,0.05|Raid marker|MSUF_RefreshRaidMarkerFrames||
-leader|showLeaderIcon|leaderIconSize|leaderIconAnchor|leaderIconOffsetX|leaderIconOffsetY|leaderIconLayer|7|14|TOPLEFT|0|3|L|0.95,0.82,0.20|Leader icon|MSUF_RefreshLeaderIconFrames||player target
+raidmarker|showRaidMarker|raidMarkerSize|raidMarkerAnchor|raidMarkerOffsetX|raidMarkerOffsetY|raidMarkerLayer|7|18|TOPLEFT|16|3|8|1,0.82,0.05|Raid marker|MSUF_RefreshRaidMarkerFrames|||raidMarkerCustomIcon
+leader|showLeaderIcon|leaderIconSize|leaderIconAnchor|leaderIconOffsetX|leaderIconOffsetY|leaderIconLayer|7|14|TOPLEFT|0|3|L|0.95,0.82,0.20|Leader icon|MSUF_RefreshLeaderIconFrames||player target|leaderIconCustomIcon
+assist|showLeaderIcon|leaderIconSize|leaderIconAnchor|leaderIconOffsetX|leaderIconOffsetY|leaderIconLayer|7|14|TOPLEFT|0|3|A|0.58,0.82,1.00|Assist icon|MSUF_RefreshLeaderIconFrames||player target|assistIconCustomIcon
 level|showLevelIndicator|levelIndicatorSize|levelIndicatorAnchor|levelIndicatorOffsetX|levelIndicatorOffsetY|levelIndicatorLayer|7|14|NAMERIGHT|0|0|80|0.45,0.70,1.0|Level indicator|MSUF_RefreshLevelIndicatorFrames||
-elite|showEliteIcon|eliteIconSize|eliteIconAnchor|eliteIconOffsetX|eliteIconOffsetY|eliteIconLayer|7|20|TOPRIGHT|2|2|*|1.0,0.58,0.16|Elite icon|MSUF_RefreshEliteIconFrames||target focus targettarget focustarget boss
+elite|showEliteIcon|eliteIconSize|eliteIconAnchor|eliteIconOffsetX|eliteIconOffsetY|eliteIconLayer|7|20|TOPRIGHT|2|2|*|1.0,0.58,0.16|Elite icon|MSUF_RefreshEliteIconFrames||target focus targettarget focustarget boss|eliteIconCustomIcon
 statusText|statusTextEnabled|statusTextSize|statusTextAnchor|statusTextOffsetX|statusTextOffsetY|statusTextLayer|7|16|CENTER|0|0|DEAD|0.68,0.70,0.74|Dead text|MSUF_RequestStatusTextRefresh||
-statusCombat|showCombatStateIndicator|combatStateIndicatorSize|combatStateIndicatorAnchor|combatStateIndicatorOffsetX|combatStateIndicatorOffsetY|combatStateIndicatorLayer|7|18|TOPLEFT|0|0|C|1.0,0.22,0.16|Combat icon|MSUF_RequestStatusCombatIndicatorRefresh||player target
-statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicatorAnchor|restedStateIndicatorOffsetX|restedStateIndicatorOffsetY|restedStateIndicatorLayer|7|18|TOPLEFT|0|0|Z|0.34,0.62,1.0|Rested icon|MSUF_RequestStatusRestingIndicatorRefresh|false|player
-statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|MSUF_RequestStatusIncomingResIndicatorRefresh||player target
-statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget
+statusCombat|showCombatStateIndicator|combatStateIndicatorSize|combatStateIndicatorAnchor|combatStateIndicatorOffsetX|combatStateIndicatorOffsetY|combatStateIndicatorLayer|7|18|TOPLEFT|0|0|C|1.0,0.22,0.16|Combat icon|MSUF_RequestStatusCombatIndicatorRefresh||player target|combatStateIndicatorCustomIcon
+statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicatorAnchor|restedStateIndicatorOffsetX|restedStateIndicatorOffsetY|restedStateIndicatorLayer|7|18|TOPLEFT|0|0|Z|0.34,0.62,1.0|Rested icon|MSUF_RequestStatusRestingIndicatorRefresh|false|player|restedStateIndicatorCustomIcon
+statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|MSUF_RequestStatusIncomingResIndicatorRefresh||player target|incomingResIndicatorCustomIcon
+statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget|pvpIndicatorCustomIcon
 ]]
 specs.PreviewLayers = LayerRows [[
 guides|Guides|0.42,0.72,1.00|Mover highlights and selected borders.

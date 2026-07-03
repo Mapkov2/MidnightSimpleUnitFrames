@@ -15,6 +15,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Data = A.ParserData or {}
+A.ParserData = Data
+local CoreData = Data.CORE_PARSER or {}
+local UnitTerms = CoreData.UNIT_TERMS or {}
 
 A.UUFBestEffortConfirmText = A.UUFBestEffortConfirmText or function()
     return "This is an UnhaltedUnitFrames profile. MSUF can import it as closely as possible. Auras are not imported, and some UUF-only options may not have an MSUF equivalent. Answer with 'yes', 'do it', or 'apply' to import anyway, or 'cancel'."
@@ -1001,13 +1005,13 @@ local function DetectUnits(text)
         end
     end
     if #units == 0 then
-        if ContainsAny(text, { "player", "player frame", "player unitframe", "spieler", "self", "ich" }) then AddUnique(units, "player") end
-        if ContainsAny(text, { "target", "target frame", "target unitframe", "ziel" }) then AddUnique(units, "target") end
-        if ContainsAny(text, { "focus", "focus frame", "focus unitframe", "fokus" }) then AddUnique(units, "focus") end
-        if ContainsAny(text, { "pet", "pet frame", "pet unitframe", "begleiter" }) then AddUnique(units, "pet") end
-        if ContainsAny(text, { "boss", "boss frame", "boss frames", "bossframe", "bossframes" }) then AddUnique(units, "boss") end
-        if ContainsAny(text, { "targettarget", "target of target", "target of target frame", "tot", "ziel des ziels" }) then AddUnique(units, "targettarget") end
-        if ContainsAny(text, { "focustarget", "focus target", "focus target frame", "fokus ziel" }) then AddUnique(units, "focustarget") end
+        if ContainsAny(text, UnitTerms.player) then AddUnique(units, "player") end
+        if ContainsAny(text, UnitTerms.target) then AddUnique(units, "target") end
+        if ContainsAny(text, UnitTerms.focus) then AddUnique(units, "focus") end
+        if ContainsAny(text, UnitTerms.pet) then AddUnique(units, "pet") end
+        if ContainsAny(text, UnitTerms.boss) then AddUnique(units, "boss") end
+        if ContainsAny(text, UnitTerms.targettarget) then AddUnique(units, "targettarget") end
+        if ContainsAny(text, UnitTerms.focustarget) then AddUnique(units, "focustarget") end
     end
     return units
 end
@@ -1020,7 +1024,7 @@ local function DetectGroups(text)
     end
     -- Mythic raid contains the word "raid", so consume its aliases first before testing
     -- the generic raid scope. Otherwise a single command can accidentally target both.
-    local mythicAliases = { "mythic raid frames", "mythic raid frame", "mythicraidframes", "mythicraidframe", "mythic raid", "mythicraid" }
+    local mythicAliases = CoreData.MYTHIC_GROUP_TERMS
     local scopeText = text
     if ContainsAny(scopeText, mythicAliases) then
         AddUnique(groups, "mythicraid")
@@ -1031,19 +1035,19 @@ local function DetectGroups(text)
         end
         scopeText = Normalize(scopeText)
     end
-    if ContainsAny(scopeText, { "party", "party frame", "party frames", "partyframe", "partyframes" }) then AddUnique(groups, "party") end
+    if ContainsAny(scopeText, CoreData.PARTY_GROUP_TERMS) then AddUnique(groups, "party") end
     local raidScopeText = " " .. Normalize(scopeText) .. " "
-    local raidDetailTerms = { "preserve raid groups", "raid marker icon", "raid marker indicator", "raid marker symbol", "raid marker", "raid markers" }
+    local raidDetailTerms = CoreData.RAID_DETAIL_TERMS
     for i = 1, #raidDetailTerms do
         local alias = raidDetailTerms[i]
         alias = Normalize(alias)
         if alias ~= "" then raidScopeText = raidScopeText:gsub(" " .. alias:gsub("([^%w%s])", "%%%1") .. " ", " ") end
     end
     raidScopeText = Normalize(raidScopeText)
-    if ContainsAny(raidScopeText, { "raid", "raid frame", "raid frames", "raidframe", "raidframes", "schlachtzug" }) then AddUnique(groups, "raid") end
+    if ContainsAny(raidScopeText, CoreData.RAID_GROUP_TERMS) then AddUnique(groups, "raid") end
     if #groups == 0
-        and not ContainsAny(text, { "group copy", "copy group", "copy category", "copy categories", "copy scope" })
-        and ContainsAny(text, { "group frames", "group frame", "groups", "group", "gruppenframes", "gruppe", "gruppen" }) then
+        and not ContainsAny(text, CoreData.GROUP_COPY_GUARD_TERMS)
+        and ContainsAny(text, CoreData.GROUP_FRAME_TERMS) then
         for i = 1, #ALL_GROUPS do AddUnique(groups, ALL_GROUPS[i]) end
     end
     return groups
@@ -1055,7 +1059,7 @@ local function DetectGlobalScope(text)
     if HasPhrase(text, "raid") or HasPhrase(text, "raid frames") or HasPhrase(text, "mythic raid") or HasPhrase(text, "mythicraid") then return "gf_raid" end
     local units = DetectUnits(text)
     if units[1] then return units[1] end
-    if ContainsAny(text, { "shared", "global" }) then return "shared" end
+    if ContainsAny(text, CoreData.GLOBAL_SCOPE_TERMS) then return "shared" end
     return nil
 end
 
@@ -1316,16 +1320,16 @@ local function ExtractColor(raw, text)
 end
 
 local function DetectFrameType(text, ctx)
-    if ContainsAny(text, { "alt mana", "alternative mana", "secondary mana", "dual resource mana" }) then return "altMana" end
+    if ContainsAny(text, CoreData.ALT_MANA_TERMS) then return "altMana" end
     if ContainsAny(text, CLASS_POWER_TERMS) then return "classPower" end
     if ContainsAny(text, GLOBAL_BARS_TERMS) then return "globalBars" end
-    if ContainsAny(text, { "combat timer" }) then return "combatTimer" end
-    if ContainsAny(text, { "combat state", "combat enter", "combat leave", "combat enter leave" }) then return "combatState" end
-    if ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem rahmen", "totemrahmen", "statuen rahmen", "statuenrahmen", "statue rahmen" }) then return "playerTotems" end
-    if ContainsAny(text, { "combat crosshair", "crosshair", "fadenkreuz", "melee range spell" }) then return "combatCrosshair" end
+    if ContainsAny(text, CoreData.COMBAT_TIMER_TERMS) then return "combatTimer" end
+    if ContainsAny(text, CoreData.COMBAT_STATE_TERMS) then return "combatState" end
+    if ContainsAny(text, CoreData.PLAYER_TOTEMS_TERMS) then return "playerTotems" end
+    if ContainsAny(text, CoreData.COMBAT_CROSSHAIR_TERMS) then return "combatCrosshair" end
     if HasPhrase(text, "castbar") or HasPhrase(text, "zauberleiste") then return "castbar" end
-    if ContainsAny(text, { "raid marker", "raidmarker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker" })
-        and not ContainsAny(text, { "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames" }) then
+    if ContainsAny(text, CoreData.RAID_MARKER_FRAME_TERMS)
+        and not ContainsAny(text, CoreData.RAID_MARKER_GROUP_GUARD_TERMS) then
         return "unitframe"
     end
     if HasPhrase(text, "group frames") or HasPhrase(text, "gruppenframes") or HasPhrase(text, "party") or HasPhrase(text, "raid") then return "group" end
@@ -1337,10 +1341,10 @@ end
 
 local function DetectDirection(text, ctx)
     local function directionIn(segment)
-        if ContainsAny(segment, { "right", "rechts" }) then return "right" end
-        if ContainsAny(segment, { "left", "links" }) then return "left" end
-        if ContainsAny(segment, { "down", "lower", "tiefer", "runter", "unten" }) then return "down" end
-        if ContainsAny(segment, { "up", "higher", "hoeher", "hoch", "oben" }) then return "up" end
+        if ContainsAny(segment, CoreData.DIRECTION_RIGHT_TERMS) then return "right" end
+        if ContainsAny(segment, CoreData.DIRECTION_LEFT_TERMS) then return "left" end
+        if ContainsAny(segment, CoreData.DIRECTION_DOWN_TERMS) then return "down" end
+        if ContainsAny(segment, CoreData.DIRECTION_UP_TERMS) then return "up" end
         return nil
     end
     local target = TargetAfterLastConnector(text)
@@ -1348,37 +1352,32 @@ local function DetectDirection(text, ctx)
     if targetDirection then return targetDirection end
     local direction = directionIn(text)
     if direction then return direction end
-    if ContainsAny(text, { "more", "mehr", "weiter" }) and ctx and type(ctx.lastDirection) == "string" then
+    if ContainsAny(text, CoreData.DIRECTION_REPEAT_TERMS) and ctx and type(ctx.lastDirection) == "string" then
         return ctx.lastDirection
     end
     return nil
 end
 
 local function DetectAttribute(text, frameType)
-    if ContainsAny(text, { "range fade", "range fading", "reichweite fade" }) then return "rangeFade" end
-    if ContainsAny(text, { "raid marker", "raidmarker", "raid marker icon", "schlachtzug marker" }) then return "raidMarker" end
-    if frameType == "castbar" and ContainsAny(text, { "castbar", "zauberleiste" }) then
-        if ContainsAny(text, { "spell icon", "cast icon", "icon", "symbol" }) then return "icon" end
-        if ContainsAny(text, { "cast time", "castbar time", "time text", "timer", "time" }) then return "time" end
-        if ContainsAny(text, { "spell name", "spell text", "castbar name", "castbar text", "name text", "name", "text" }) then return "text" end
-        if ContainsAny(text, { "interrupt", "interruptible", "kick", "kickable", "unterbrechen" }) then return "showInterrupt" end
+    if ContainsAny(text, CoreData.RANGE_FADE_TERMS) then return "rangeFade" end
+    if ContainsAny(text, CoreData.RAID_MARKER_ATTR_TERMS) then return "raidMarker" end
+    if frameType == "castbar" and ContainsAny(text, CoreData.CASTBAR_TERMS) then
+        if ContainsAny(text, CoreData.CASTBAR_ICON_TERMS) then return "icon" end
+        if ContainsAny(text, CoreData.CASTBAR_TIME_TERMS) then return "time" end
+        if ContainsAny(text, CoreData.CASTBAR_TEXT_TERMS) then return "text" end
+        if ContainsAny(text, CoreData.CASTBAR_INTERRUPT_TERMS) then return "showInterrupt" end
     end
-    if frameType == "castbar" and ContainsAny(text, { "castbar", "zauberleiste" }) and not ContainsAny(text, CASTBAR_ROOT_DETAIL_TERMS) and not ContainsAny(text, { "width", "height", "breite", "hoehe", "x", "y", "left", "right", "up", "down", "links", "rechts", "hoch", "tiefer" }) then
+    if frameType == "castbar" and ContainsAny(text, CoreData.CASTBAR_TERMS) and not ContainsAny(text, CASTBAR_ROOT_DETAIL_TERMS) and not ContainsAny(text, CoreData.CASTBAR_ROOT_GUARD_TERMS) then
         return "enabled"
     end
-    if ContainsAny(text, { "hp text", "health text", "health value", "life text", "leben text", "leben", "gesundheit", "lebenspunkte", "lebensanzeige" }) then return "hpText" end
-    if ContainsAny(text, { "power text", "mana text", "power value", "mana value", "energie text", "energie", "ressource", "ressourcen" }) then return "powerText" end
-    if ContainsAny(text, { "name text", "unit name", "name", "namen" }) then return "name" end
-    if ContainsAny(text, { "width", "wide", "wider", "narrower", "breite", "breiter", "schmaler" }) then return "width" end
-    if ContainsAny(text, { "height", "tall", "taller", "shorter", "hoehe", "hoeher", "kleiner" }) then return "height" end
-    if ContainsAny(text, { "enable", "disable", "show", "hide", "on", "off", "an", "aus", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken", "einblenden", "ausblenden" })
-        and ContainsAny(text, { "frame", "frames", "unitframe", "unitframes", "group", "gruppe" })
-        and not ContainsAny(text, {
-            "indicator", "indicators", "status icon", "status indicator", "icon", "icons", "symbol", "symbols",
-            "border", "outline", "portrait", "alpha", "opacity", "texture", "font", "text", "name", "names", "color", "farbe",
-            "power bar", "mana bar", "health bar", "hp bar", "castbar", "cast bar", "load condition",
-            "offline", "solo", "sort", "sorting", "role", "scale", "scaling", "shorten", "shortening", "truncate", "truncation",
-        }) then
+    if ContainsAny(text, CoreData.HP_TEXT_TERMS) then return "hpText" end
+    if ContainsAny(text, CoreData.POWER_TEXT_TERMS) then return "powerText" end
+    if ContainsAny(text, CoreData.NAME_TEXT_TERMS) then return "name" end
+    if ContainsAny(text, CoreData.WIDTH_TERMS) then return "width" end
+    if ContainsAny(text, CoreData.HEIGHT_TERMS) then return "height" end
+    if ContainsAny(text, CoreData.ENABLED_VERB_TERMS)
+        and ContainsAny(text, CoreData.FRAME_SCOPE_TERMS)
+        and not ContainsAny(text, CoreData.ENABLED_EXCLUDE_TERMS) then
         return "enabled"
     end
     return nil

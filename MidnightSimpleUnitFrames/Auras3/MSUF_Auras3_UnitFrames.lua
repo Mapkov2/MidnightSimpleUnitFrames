@@ -460,6 +460,7 @@ local function ReadGroupDebuffTypeBorderMode(source)
 end
 
 local function GetAuraBorderOptions(showIcon)
+    AURA_BORDER_OPTIONS.style = nil
     AURA_BORDER_OPTIONS.showIcon = showIcon == true
     return AURA_BORDER_OPTIONS
 end
@@ -1124,12 +1125,27 @@ local function ColorEscape(r, g, b)
     return string.format("|cff%02x%02x%02x", Round(Clamp01(r, 1) * 255), Round(Clamp01(g, 1) * 255), Round(Clamp01(b, 1) * 255))
 end
 
+local AURA_TIMER_MINUTE_SUFFIX_KEY = "MSUF_AURA_TIMER_MINUTE_SUFFIX"
+
+local function EscapeFormatLiteral(text)
+    return tostring(text or ""):gsub("%%", "%%%%")
+end
+
+local function LocalizedMinuteSuffix()
+    local suffix
+    if type(MSUF.Translate) == "function" then
+        suffix = MSUF.Translate(AURA_TIMER_MINUTE_SUFFIX_KEY)
+        if suffix == AURA_TIMER_MINUTE_SUFFIX_KEY then suffix = nil end
+    end
+    if suffix == nil or suffix == "" then suffix = "M" end
+    return tostring(suffix)
+end
+
 local function BuildAuraDurationFormatter(lane)
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     if not general then return nil end
     local buckets = general.aurasCooldownTextUseBuckets == true
     local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)
-    if not buckets and decimalSec <= 0 then return nil end
 
     local C_StringUtil = _G.C_StringUtil
     if not (C_StringUtil and type(C_StringUtil.CreateNumericRuleFormatter) == "function") then return nil end
@@ -1163,8 +1179,10 @@ local function BuildAuraDurationFormatter(lane)
     if warningSec < urgentSec then warningSec = urgentSec end
     if safeSec < warningSec then safeSec = warningSec end
 
+    local minuteSuffix = LocalizedMinuteSuffix()
+    local minuteFormatSuffix = EscapeFormatLiteral(minuteSuffix)
     local sig = table_concat({
-        "unitless-minutes-color", buckets and 1 or 0, decimalSec, sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
+        "minutes-suffix-color", buckets and 1 or 0, decimalSec, minuteSuffix, sr, sg, sb, wr, wg, wb, ur, ug, ub, urgentSec, warningSec, safeSec,
     }, "\030")
     if _durationFormatterCache and _durationFormatterCache[sig] then return _durationFormatterCache[sig] end
 
@@ -1202,18 +1220,21 @@ local function BuildAuraDurationFormatter(lane)
                 step = 1,
                 rounding = roundingDown,
                 min = 1,
-                format = colorPrefix .. "%.0f" .. colorSuffix,
+                format = colorPrefix .. "%.0f" .. minuteFormatSuffix .. colorSuffix,
                 components = {
                     { div = 60, step = 1, rounding = roundingDown },
                 },
             }
         end
+        local decimalBreakpoint = threshold < decimalSec
         return {
             threshold = threshold,
-            step = threshold < decimalSec and 0.1 or 1,
+            step = decimalBreakpoint and 0.1 or 1,
             rounding = roundingDown,
-            min = threshold < decimalSec and nil or 1,
-            format = colorPrefix .. (threshold < decimalSec and "%.1f" or "%.0f") .. colorSuffix,
+            -- Blizzard's native duration binding defaults missing minima to 1.
+            -- Decimal aura timers must be allowed below one second.
+            min = decimalBreakpoint and 0.1 or 1,
+            format = colorPrefix .. (decimalBreakpoint and "%.1f" or "%.0f") .. colorSuffix,
         }
     end
 
@@ -1594,8 +1615,8 @@ local function PrepareAuraButton(button, lane, index)
         duration:Show()
         -- Hand Blizzard a C-side formatter so the duration text is
         -- formatted from the secret duration object with no addon cost. MSUF caps
-        -- long buffs at whole minutes, with no unit suffix, instead of raw seconds
-        -- or hour/day units.
+        -- long buffs at localized whole minutes instead of raw seconds or
+        -- hour/day units.
         local formatter = BuildAuraDurationFormatter(lane)
         if formatter then
             _durationTextOptions.formatter = formatter
@@ -2374,6 +2395,13 @@ end
 
 function A3.RequestApply()
     return A3.RefreshAll()
+end
+
+if type(MSUF.RegisterLocaleCallback) == "function" then
+    MSUF.RegisterLocaleCallback("MSUF_Auras3_DurationFormatter", function()
+        _durationFormatterCache = nil
+        if type(A3.RequestApply) == "function" then A3.RequestApply() end
+    end)
 end
 
 function A3.RefreshUnit(unit)
