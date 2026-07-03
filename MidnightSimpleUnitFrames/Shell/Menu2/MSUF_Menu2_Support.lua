@@ -1077,17 +1077,20 @@ local function EnsureCopyLinkPopup()
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOP", frame, "TOP", 0, -14)
     title:SetText(Tr("Link"))
+    if M.Theme and M.Theme.StyleFontString then M.Theme.StyleFontString(title, M.Theme.colors and M.Theme.colors.text or { 1, 1, 1, 1 }, 1) end
     frame._msufTitleFS = title
     local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     hint:SetPoint("TOP", title, "BOTTOM", 0, -6)
     hint:SetText(Tr("Press Ctrl+C to copy:"))
     hint:SetTextColor(0.90, 0.90, 0.90, 1)
+    if M.Theme and M.Theme.StyleFontString then M.Theme.StyleFontString(hint, M.Theme.colors and M.Theme.colors.text or { 0.90, 0.90, 0.90, 1 }, 0) end
     local editBox = _G.CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
     editBox:EnableMouse(true)
     editBox:SetAutoFocus(false)
     editBox:SetSize(360, 32)
     editBox:SetPoint("TOP", hint, "BOTTOM", 0, -10)
     if editBox.SetTextInsets then editBox:SetTextInsets(8, 8, 0, 0) end
+    if M.Theme and M.Theme.SkinEditBox then M.Theme.SkinEditBox(editBox) end
     editBox:SetScript("OnEscapePressed", function() frame:Hide() end)
     editBox:SetScript("OnEnterPressed", function() frame:Hide() end)
     frame._msufEditBox = editBox

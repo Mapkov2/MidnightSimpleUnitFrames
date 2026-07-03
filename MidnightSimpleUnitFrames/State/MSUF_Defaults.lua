@@ -784,6 +784,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.unitInfoTooltipStyle = "classic"
         g.showGameMenuButton = true
         g.navHoverScale = 1.05
+        g.menuFontKey = ""
         g.tooltipPosX = nil
         g.tooltipPosY = nil
         g._msufFactoryNameShorteningFixed_v1 = true
@@ -1294,6 +1295,9 @@ if g.showGameMenuButton == nil then
 end
 if g.navHoverScale == nil then
     g.navHoverScale = 1.05
+end
+if g.menuFontKey == nil then
+    g.menuFontKey = ""
 end
     if g.editModeSnapToGrid == nil then
         g.editModeSnapToGrid = false --- Default: Snap OFF

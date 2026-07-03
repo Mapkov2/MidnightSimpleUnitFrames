@@ -339,9 +339,11 @@ local function EnsureWindow()
     frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 0.97)
     frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 0.8)
 
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local title = T and T.Font and T.Font(frame, "GameFontNormal", "MSUF Assistant Coverage", T.colors and T.colors.text or nil)
+        or frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", 14, -12)
-    title:SetText("MSUF Assistant Coverage")
+    if not (T and T.Font) then title:SetText("MSUF Assistant Coverage") end
+    if T and T.StyleFontString then T.StyleFontString(title, T.colors and T.colors.text or { 1, 1, 1, 1 }, 1) end
     frame.title = title
 
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
@@ -354,6 +356,7 @@ local function EnsureWindow()
     local edit = CreateFrame("EditBox", nil, scroll)
     edit:SetMultiLine(true)
     edit:SetFontObject(_G.ChatFontNormal)
+    if T and T.StyleFontString then T.StyleFontString(edit, T.colors and T.colors.text or { 1, 1, 1, 1 }, 0) end
     edit:SetWidth(620)
     edit:SetAutoFocus(false)
     edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)

@@ -68,7 +68,7 @@ local function SetB(key, value, reason, opts)
     M.RequestGeneralApply(reason or ("MSUF2_BARS_" .. tostring(key)), Targeted(opts))
 end
 local UNIT_SCOPE_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet boss"
-local TEXT_SCOPE_KEYS = M.KeySetFromWords "hpTextMode textLeft textCenter textRight hpTextReverse hpTextSeparator powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextSeparator"
+local TEXT_SCOPE_KEYS = M.KeySetFromWords "hpTextMode textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextReverse hpTextSeparator powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextSeparator"
 local POWER_BAR_SCOPE_UNITS = M.KeySetFromWords "player target focus boss"
 local function NormalizeScopeKey(scope)
     scope = tostring(scope or "shared"):lower()
@@ -267,6 +267,28 @@ local function FontKeySet(value)
     value = FontSelectionValue(value)
     G().fontKey = value or FontSelectionValue("FRIZQT", "Fonts\\FRIZQT___CYR.TTF")
     ClearUFFontKeyOverrides()
+end
+local function MenuFontValues()
+    local out = {
+        { value = "", text = "Blizzard default" },
+    }
+    local fonts = FontValues(false)
+    for i = 1, #(fonts or {}) do
+        out[#out + 1] = fonts[i]
+    end
+    return out
+end
+local function MenuFontKeyGet()
+    local value = ReadG("menuFontKey", "")
+    if value == nil or value == "" then return "" end
+    return FontSelectionValue(value)
+end
+local function MenuFontKeySet(value)
+    if value == nil or value == "" then
+        G().menuFontKey = ""
+        return
+    end
+    G().menuFontKey = FontSelectionValue(value) or ""
 end
 local TextureValues = M.StatusBarTextureItems
 local GLOBAL_SCOPE_VALUES = VTP "shared=Shared|player=Player|target=Target|targettarget=ToT|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss|gf_party=Party|gf_raid=Raid"
@@ -534,7 +556,9 @@ M.Assign(GlobalPage, {
     CurrentFontScope = CurrentFontScope, CurrentBarsScope = CurrentBarsScope, IsGFScope = IsGFScope, BarsFlagForKey = BarsFlagForKey,
     FontScopeGet = FontScopeGet, FontScopeSet = FontScopeSet, BarScopeGet = BarScopeGet, BarScopeSet = BarScopeSet,
     BarScopeGetBars = BarScopeGetBars, BarScopeSetBars = BarScopeSetBars, NormalizeFontKey = NormalizeFontKey,
-    FontValues = FontValues, FontKeyGet = FontKeyGet, FontKeySet = FontKeySet, TextureValues = TextureValues,
+    FontValues = FontValues, FontKeyGet = FontKeyGet, FontKeySet = FontKeySet,
+    MenuFontValues = MenuFontValues, MenuFontKeyGet = MenuFontKeyGet, MenuFontKeySet = MenuFontKeySet,
+    TextureValues = TextureValues,
     SCOPE_VALUES = GLOBAL_SCOPE_VALUES, CurrentPowerBarScopeUnit = CurrentPowerBarScopeUnit,
     BuildScopeOverrideSection = BuildScopeOverrideSection, SmoothPowerGet = SmoothPowerGet, SmoothPowerSet = SmoothPowerSet,
     NormalizeHpMode = NormalizeHpMode, NormalizePowerMode = NormalizePowerMode,

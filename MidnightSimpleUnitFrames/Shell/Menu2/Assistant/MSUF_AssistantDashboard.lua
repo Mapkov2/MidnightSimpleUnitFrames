@@ -155,6 +155,7 @@ local function Font(parent, template, text, color, bump)
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
     SetAssistantText(fs, text)
     if color and fs.SetTextColor then fs:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
+    if T.StyleFontString then T.StyleFontString(fs, color or (T.colors and T.colors.text) or { 1, 1, 1, 1 }, bump or 0) end
     return fs
 end
 
@@ -749,6 +750,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     panel.box:SetJustifyV("TOP")
     panel.box:EnableMouse(true)
     if panel.box.SetFontObject then panel.box:SetFontObject(_G.GameFontHighlightSmall) end
+    if T.StyleFontString then T.StyleFontString(panel.box, T.colors and T.colors.text or { 1, 1, 1, 1 }, 0) end
     if panel.box.SetTextColor then
         local c = T.colors and T.colors.text or { 1, 1, 1, 1 }
         panel.box:SetTextColor(c[1], c[2], c[3], c[4] or 1)

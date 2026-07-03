@@ -236,6 +236,61 @@ local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMu
 end
 M.AssignNamedValues(T, "Tr Template SetColor ShadeColor ApplyTextureGradient SetFillGradient",
     M.Tr, Template, SetColor, ShadeColor, ApplyTextureGradient, SetFillGradient)
+local menuFontCacheKey, menuFontCachePath
+local function MenuGeneralDB()
+    if type(M.GetGeneralDB) == "function" then return M.GetGeneralDB() end
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then ensureDB() end
+    local db = _G.MSUF_DB
+    if type(db) ~= "table" then return nil end
+    db.general = type(db.general) == "table" and db.general or {}
+    return db.general
+end
+local function ResolveMenuFontPath(size, flags)
+    local g = MenuGeneralDB()
+    local key = type(g) == "table" and g.menuFontKey or nil
+    if type(key) ~= "string" or key == "" then return nil end
+    size = tonumber(size) or 14
+    flags = flags or ""
+    local cacheKey = key .. "|" .. tostring(size) .. "|" .. tostring(flags)
+    if cacheKey == menuFontCacheKey then return menuFontCachePath end
+    local path = key
+    if not (path:find("\\", 1, true) or path:find("/", 1, true)) then
+        local getPath = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (MSUF and MSUF.MSUF_GetFontPathForKey)
+        if type(getPath) == "function" then path = getPath(key, size, flags) or path end
+    end
+    local resolveSafe = _G.MSUF_ResolveSafeFontPath
+    if type(resolveSafe) == "function" then path = resolveSafe(path, size, flags, key) end
+    if type(path) ~= "string" or path == "" then path = nil end
+    menuFontCacheKey, menuFontCachePath = cacheKey, path
+    return path
+end
+function T.ClearMenuFontCache()
+    menuFontCacheKey, menuFontCachePath = nil, nil
+end
+local function ApplyStyledFont(fs)
+    if not (fs and fs.GetFont and fs.SetFont) then return false end
+    local font, size, flags = fs:GetFont()
+    if font and size and not fs._msuf2FontOriginal then fs._msuf2FontOriginal = { font = font, size = size, flags = flags } end
+    local orig = fs._msuf2FontOriginal
+    if not orig then return false end
+    local bump = tonumber(fs._msuf2FontBump) or T.fontBump or 0
+    local nextSize = math.max(8, (tonumber(orig.size) or tonumber(size) or 12) + bump)
+    local nextFlags = orig.flags or flags or ""
+    local menuFont = ResolveMenuFontPath(nextSize, nextFlags)
+    local nextFont = menuFont or orig.font or font
+    local ok, applied = pcall(fs.SetFont, fs, nextFont, nextSize, nextFlags)
+    if (not ok or applied == false) and nextFont ~= orig.font and orig.font then
+        ok, applied = pcall(fs.SetFont, fs, orig.font, nextSize, nextFlags)
+    end
+    if ok and applied ~= false and fs._msuf2DropdownDefaultFont then
+        local appliedFont, appliedSize, appliedFlags = fs:GetFont()
+        if appliedFont and appliedSize then
+            fs._msuf2DropdownDefaultFont = { appliedFont, appliedSize, appliedFlags or "" }
+        end
+    end
+    return ok and applied ~= false
+end
 function T.StyleFontString(fs, color, bump)
     if not fs then return fs end
     local c = color or T.colors.text
@@ -243,15 +298,36 @@ function T.StyleFontString(fs, color, bump)
     if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0.70) end
     if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
     if fs.GetFont and fs.SetFont then
-        local font, size, flags = fs:GetFont()
-        if font and size then
-            if not fs._msuf2FontOriginal then fs._msuf2FontOriginal = { font = font, size = size, flags = flags } end
-            local orig = fs._msuf2FontOriginal
-            local nextSize = math.max(8, (tonumber(orig.size) or size) + (tonumber(bump) or T.fontBump or 0))
-            fs:SetFont(orig.font or font, nextSize, orig.flags or flags or "")
-        end
+        fs._msuf2FontBump = tonumber(bump) or T.fontBump or 0
+        ApplyStyledFont(fs)
     end
     return fs
+end
+local function RefreshMenuFonts(root, seen)
+    if not root or seen[root] then return end
+    seen[root] = true
+    if root._msuf2FontOriginal then ApplyStyledFont(root) end
+    if root.GetRegions then
+        local regions = { root:GetRegions() }
+        for i = 1, #regions do
+            local region = regions[i]
+            if region and region._msuf2FontOriginal then ApplyStyledFont(region) end
+        end
+    end
+    if root.GetChildren then
+        local children = { root:GetChildren() }
+        for i = 1, #children do RefreshMenuFonts(children[i], seen) end
+    end
+end
+function T.RefreshMenuFonts(root)
+    T.ClearMenuFontCache()
+    local seen = {}
+    if root then
+        RefreshMenuFonts(root, seen)
+        return
+    end
+    RefreshMenuFonts(M.frame, seen)
+    RefreshMenuFonts(M.minimizedBar, seen)
 end
 local function CreateSuperellipseParts(frame, layer, subLevel)
     local parts = {}

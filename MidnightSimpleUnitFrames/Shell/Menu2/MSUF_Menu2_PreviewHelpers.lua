@@ -600,6 +600,7 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
         close.fs = close.fs or close:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         close.fs:SetPoint("CENTER")
         close.fs:SetText(tr("OK"))
+        if T and T.StyleFontString then T.StyleFontString(close.fs, (T.colors and T.colors.text) or { 1, 1, 1, 1 }, 0) end
         if T and H.StylePreviewPillButton then H.StylePreviewPillButton(close, T, { fontField = "fs" }) end
         close:SetScript("OnClick", function(self)
             local p = self:GetParent()
@@ -798,6 +799,7 @@ function H.InstallZoomPan(ZoomPan, opts)
             btn[fontField] = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
             btn[fontField]:SetText(text)
             btn[fontField]:SetTextColor(0.78, 0.84, 0.96, 1)
+            if T and T.StyleFontString then T.StyleFontString(btn[fontField], { 0.78, 0.84, 0.96, 1 }, 0) end
         end
         if btn[fontField] then btn[fontField]:SetPoint("CENTER") end
         btn:SetScript("OnClick", onClick)
@@ -924,6 +926,7 @@ function H.BuildZoomBar(box, surface, opts)
     else
         readout = zoomBar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         readout:SetTextColor(0.72, 0.78, 0.90, 1)
+        if T and T.StyleFontString then T.StyleFontString(readout, { 0.72, 0.78, 0.90, 1 }, 0) end
     end
     readout:SetPoint("LEFT", zoomOut, "RIGHT", 3, 0)
     readout:SetSize(54, buttonH)
@@ -1162,10 +1165,12 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn.fs:SetPoint("RIGHT", btn, "RIGHT", -18, 0)
     btn.fs:SetJustifyH("LEFT")
     btn.fs:SetText(tr(def.label))
+    if T and T.StyleFontString then T.StyleFontString(btn.fs, { 0.78, 0.84, 0.96, 1 }, 0) end
     btn.off = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     btn.off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
     btn.off:SetText(opts.offText or "OFF")
     btn.off:SetJustifyH("RIGHT")
+    if T and T.StyleFontString then T.StyleFontString(btn.off, { 0.55, 0.60, 0.70, 1 }, 0) end
     function btn:Refresh() H.RefreshLayerButton(self, owner, opts) end
     btn.refresh = btn.Refresh
     btn:SetScript("OnClick", function(self)
