@@ -827,6 +827,7 @@ local function CreatePreviewAnimationButton(box)
     if btn.SetFrameLevel and box.canvas.GetFrameLevel then btn:SetFrameLevel((box.canvas:GetFrameLevel() or 0) + 82) end
     btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     btn.fs:SetPoint("CENTER")
+    if T and T.StyleFontString then T.StyleFontString(btn.fs, T.colors and T.colors.text or { 1, 1, 1, 1 }, 0) end
     btn._preview = box
     if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
     btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
@@ -836,6 +837,23 @@ local function CreatePreviewAnimationButton(box)
     box.animateCombatButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
     RefreshPreviewAnimationButton(box)
+end
+local function ApplyPreviewCanvasGradient(canvas, T)
+    if not (canvas and canvas.CreateTexture) then return end
+    local bg = canvas._msufUnitPreviewGradient
+    if not bg then
+        bg = canvas:CreateTexture(nil, "BACKGROUND", nil, -7)
+        bg:SetAllPoints(canvas)
+        bg:SetTexture(TEX_W8)
+        canvas._msufUnitPreviewGradient = bg
+    end
+    if T and type(T.ApplyTextureGradient) == "function" then
+        T.ApplyTextureGradient(bg, "VERTICAL", { 0.000, 0.000, 0.000, 0.98 }, { 0.050, 0.052, 0.058, 0.98 })
+    elseif bg.SetGradientAlpha then
+        bg:SetGradientAlpha("VERTICAL", 0.000, 0.000, 0.000, 0.98, 0.050, 0.052, 0.058, 0.98)
+    elseif bg.SetColorTexture then
+        bg:SetColorTexture(0.018, 0.019, 0.022, 0.98)
+    end
 end
 local function BuildPreview(parent, panel, width, height)
     local sideW = 72
@@ -853,20 +871,23 @@ local function BuildPreview(parent, panel, width, height)
     local title = box:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     title:SetText(TR("Unit Frame Preview"))
+    if T and T.StyleFontString then T.StyleFontString(title, colors.accent or colors.text or { 1, 1, 1, 1 }, 1) end
     box.title = title
     local hint = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     hint:SetText(DefaultPreviewHint())
+    if T and T.StyleFontString then T.StyleFontString(hint, colors.muted or { 0.55, 0.60, 0.70, 0.90 }, 0) end
     box.hint = hint
     local canvas = CreateFrame("Frame", nil, box, "BackdropTemplate")
     canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-    canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(sideW + 18), 12)
+    canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -(sideW + 18), 28)
     ApplyPreviewBackdrop(
         canvas,
-        { 0, 0, 0, 1 },
+        { 0, 0, 0, 0.62 },
         colors.borderSoft or { 1, 1, 1, 0.06 },
-        { backdrop = { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 }, bg = { 0.01, 0.012, 0.018, 0.86 } }
+        { backdrop = { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 }, bg = { 0.01, 0.012, 0.018, 0.62 } }
     )
+    ApplyPreviewCanvasGradient(canvas, T)
     if canvas.SetClipsChildren then canvas:SetClipsChildren(true) end
     canvas:EnableMouse(true)
     canvas:EnableMouseWheel(true)
@@ -889,9 +910,16 @@ local function BuildPreview(parent, panel, width, height)
         PreviewHelpers.EnsurePreviewControlsHint(box, canvas, { M = M2, T = T, Tr = TR })
     end
     CreatePreviewAnimationButton(box)
+    local footer = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    footer:SetPoint("TOPLEFT", canvas, "BOTTOMLEFT", 0, -8)
+    footer:SetText(TR("Click a handle to select - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"))
+    local muted = colors.muted or { 0.55, 0.60, 0.70, 0.90 }
+    footer:SetTextColor(muted[1], muted[2], muted[3], muted[4] or 1)
+    if T and T.StyleFontString then T.StyleFontString(footer, muted, 0) end
+    box.footer = footer
     local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
     sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 6, 0)
-    sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
+    sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 28)
     ApplyPreviewBackdrop(
         sidebar,
         colors.panel or { 0.025, 0.028, 0.04, 0.82 },
@@ -903,6 +931,7 @@ local function BuildPreview(parent, panel, width, height)
     sHdr:SetPoint("TOP", sidebar, "TOP", 0, -5)
     sHdr:SetText(TR("LAYERS"))
     sHdr:SetTextColor(0.45, 0.50, 0.62, 0.8)
+    if T and T.StyleFontString then T.StyleFontString(sHdr, { 0.45, 0.50, 0.62, 0.8 }, 0) end
     box.layerVisibility = {}
     box.layerButtons = {}
     local function UnitLayerAvailable(owner, key)
@@ -991,6 +1020,7 @@ local function BuildPreview(parent, panel, width, height)
     mock.sizeTag = mock.bounds:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     mock.sizeTag:SetPoint("BOTTOM", mock.bounds, "TOP", 0, 2)
     mock.sizeTag:SetTextColor(1, 0.35, 0.25, 0.95)
+    if T and T.StyleFontString then T.StyleFontString(mock.sizeTag, { 1, 0.35, 0.25, 0.95 }, 0) end
     MockTexture("hpBG", "BACKGROUND", TEX_W8, { 0, 0, 0, 0.82 }, "color")
     MockTexture("hp", "ARTWORK", type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8, nil, "settex")
     MockTexture("healPred", "ARTWORK", TEX_W8, { 0, 1, 0.4, 0.55 })
@@ -1113,6 +1143,7 @@ local function BuildPreview(parent, panel, width, height)
     mock.cast.sizeTag = mock.cast:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     mock.cast.sizeTag:SetPoint("BOTTOM", mock.cast, "TOP", 0, 2)
     mock.cast.sizeTag:SetTextColor(0.20, 0.90, 0.85, 0.95)
+    if T and T.StyleFontString then T.StyleFontString(mock.cast.sizeTag, { 0.20, 0.90, 0.85, 0.95 }, 0) end
     mock.icons = {}
     for i = 1, #STATUS_PREVIEW do
         local spec = STATUS_PREVIEW[i]

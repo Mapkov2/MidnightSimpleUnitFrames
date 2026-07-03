@@ -53,6 +53,7 @@ local function LayerFont(parent, text, color)
     local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     fs:SetText((M.Tr and M.Tr(text or "")) or (text or ""))
     SetFSColor(fs, color or LAYER_TEXT_ON)
+    if T and T.StyleFontString then T.StyleFontString(fs, color or LAYER_TEXT_ON, 0) end
     return fs
 end
 local function GroupPage()
@@ -146,8 +147,17 @@ local function RefreshPreviewAnimationButton(box)
     local btn = box and box._previewAnimationButton
     if not btn then return end
     local active = PreviewAnimationActive()
-    if btn.SetText then btn:SetText(active and "Stop" or "Combat") end
-    if btn.SetActive then btn:SetActive(active) end
+    local text = active and "Stop" or "Combat"
+    if btn.fs then
+        btn.fs:SetText(text)
+    elseif btn.SetText then
+        btn:SetText(text)
+    end
+    if btn.MSUF2RefreshPreviewPill then
+        btn:MSUF2RefreshPreviewPill(active)
+    elseif btn.SetActive then
+        btn:SetActive(active)
+    end
 end
 local function TogglePreviewAnimation(box)
     local toggle = _G.MSUF_TogglePreviewAnimation
@@ -166,8 +176,18 @@ local function TogglePreviewAnimation(box)
     end
 end
 local function CreatePreviewAnimationButton(box)
-    if not (box and T and T.Button) or box._previewAnimationButton then return end
-    local btn = T.Button(box, "Combat", 74, 22)
+    if not box or box._previewAnimationButton then return end
+    local parent = box._stage or box
+    local template = (T and T.Template and T.Template()) or "BackdropTemplate"
+    local btn = CreateFrame("Button", nil, parent, template)
+    btn:SetSize(74, 22)
+    if btn.SetBackdrop then btn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 }) end
+    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    btn.fs:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    btn.fs:SetJustifyH("CENTER")
+    if btn.fs.SetJustifyV then btn.fs:SetJustifyV("MIDDLE") end
+    if T and T.StyleFontString then T.StyleFontString(btn.fs, T.colors and T.colors.text or LAYER_TEXT_ON, 0) end
+    btn._preview = box
     btn._msuf2AllowCombatClick = true
     if box._zoomBar then
         btn:SetPoint("RIGHT", box._zoomBar, "LEFT", -6, 0)
@@ -176,14 +196,44 @@ local function CreatePreviewAnimationButton(box)
     else
         btn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -104, -34)
     end
-    if btn.SetFrameLevel and box.GetFrameLevel then btn:SetFrameLevel((box:GetFrameLevel() or 0) + 85) end
-    btn:SetScript("OnClick", function() TogglePreviewAnimation(box) end)
+    if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
+    if btn.SetFrameLevel and parent.GetFrameLevel then btn:SetFrameLevel((parent:GetFrameLevel() or 0) + 85) end
+    btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
     if M.AddTooltip then
         M.AddTooltip(btn, "Combat Preview", "Animates health, power, prediction bars, text values, and combat-state indicators for visible group previews only. Stops automatically in combat.", { hook = true })
     end
     box._previewAnimationButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
     RefreshPreviewAnimationButton(box)
+end
+local function ApplyGroupPreviewFlatBackdrop(frame, texture, bg, border)
+    if not (frame and frame.SetBackdrop) then return end
+    texture = texture or "Interface\\Buttons\\WHITE8X8"
+    frame:SetBackdrop({ bgFile = texture, edgeFile = texture, edgeSize = 1 })
+    bg = bg or { 0, 0, 0, 1 }
+    frame:SetBackdropColor(bg[1] or 0, bg[2] or 0, bg[3] or 0, bg[4] or 1)
+    if border and frame.SetBackdropBorderColor then
+        frame:SetBackdropBorderColor(border[1] or 0, border[2] or 0, border[3] or 0, border[4] or 1)
+    end
+end
+local function ApplyGroupPreviewBodyTint(box, stage, texture, T)
+    if not (box and stage and box.CreateTexture) then return end
+    local tint = box._msufGFPreviewBodyTint
+    if not tint then
+        tint = box:CreateTexture(nil, "BACKGROUND", nil, 3)
+        box._msufGFPreviewBodyTint = tint
+    end
+    tint:ClearAllPoints()
+    tint:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
+    tint:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1)
+    if texture and tint.SetTexture then tint:SetTexture(texture) end
+    if T and type(T.ApplyTextureGradient) == "function" then
+        T.ApplyTextureGradient(tint, "VERTICAL", { 0.004, 0.006, 0.014, 0.98 }, { 0.010, 0.018, 0.040, 0.98 })
+    elseif tint.SetGradientAlpha then
+        tint:SetGradientAlpha("VERTICAL", 0.004, 0.006, 0.014, 0.98, 0.010, 0.018, 0.040, 0.98)
+    elseif tint.SetColorTexture then
+        tint:SetColorTexture(0.008, 0.014, 0.032, 0.98)
+    end
 end
 local function PreviewScopeLabel(kind)
     if kind == "raid" then return "Raid" end
@@ -868,9 +918,10 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local hint = T.Font(box, "GameFontDisableSmall", R.Tr("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     box._hint = hint
-    local stage = T.Panel(box, nil, { 0, 0, 0, 1 }, T.colors.borderSoft)
+    local stage = CreateFrame("Frame", nil, box, T.Template())
     stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -34)
     stage:SetSize(width - 98, 218)
+    ApplyGroupPreviewFlatBackdrop(stage, R.WHITE8X8, { 0, 0, 0, 1 }, T.colors.borderSoft)
     if stage.SetClipsChildren then stage:SetClipsChildren(true) end
     stage:EnableMouse(true)
     stage:EnableMouseWheel(true)
@@ -902,10 +953,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     bounds:SetBackdropColor(0, 0, 0, 0)
     bounds:SetBackdropBorderColor(0.90, 0.05, 0.02, 0.95)
     box._bounds = bounds
-    local layers = T.Panel(box, nil, T.colors.panel, T.colors.borderSoft)
+    local layers = CreateFrame("Frame", nil, box, T.Template())
+    ApplyGroupPreviewFlatBackdrop(layers, R.WHITE8X8, { 0.006, 0.010, 0.024, 0.96 }, T.colors.borderSoft)
     layers:SetPoint("TOPLEFT", stage, "TOPRIGHT", 8, 0)
     layers:SetSize(78, 218)
     box._layers = layers
+    ApplyGroupPreviewBodyTint(box, stage, R.WHITE8X8, T)
     local layersTitle = R.LayerFont(layers, "LAYERS", R.LayerHeaderColor)
     layersTitle:SetPoint("TOPLEFT", layers, "TOPLEFT", 10, -10)
     M.gfPreviewLayerVisible = M.gfPreviewLayerVisible or {
