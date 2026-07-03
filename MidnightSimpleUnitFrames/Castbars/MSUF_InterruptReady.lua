@@ -440,10 +440,11 @@ end
 
 local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
     local color = ColorForReady(isReady, general)
+    local rawSecret = plainIsSecret(rawNotInterruptible) == true
 
-    if rawNotInterruptible == true then
+    if not rawSecret and rawNotInterruptible == true then
         color = NotInterruptibleColor()
-    elseif rawNotInterruptible ~= false
+    elseif (rawSecret or rawNotInterruptible ~= false)
         and HasKnownValue(rawNotInterruptible)
         and _G.CreateColor
         and _G.C_CurveUtil
@@ -463,14 +464,14 @@ local function RawInterruptibleKey(value)
     if value == nil then
         return ""
     end
+    if plainIsSecret(value) == true then
+        return nil
+    end
     if value == true then
         return "1"
     end
     if value == false then
         return "0"
-    end
-    if plainIsSecret(value) == true then
-        return nil
     end
     return tostring(value)
 end
