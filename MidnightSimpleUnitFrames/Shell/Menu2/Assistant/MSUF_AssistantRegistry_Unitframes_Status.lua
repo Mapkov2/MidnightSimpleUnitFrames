@@ -41,6 +41,13 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
     local STATUS_ANCHOR_ALIASES = ctx.STATUS_ANCHOR_ALIASES
     local RAID_GROUP_STYLE_VALUES = ctx.RAID_GROUP_STYLE_VALUES
     local RAID_GROUP_STYLE_ALIASES = ctx.RAID_GROUP_STYLE_ALIASES
+    local function IsRoleStatusSpec(spec)
+        local value = spec and spec.value
+        return value == "leader" or value == "assist"
+    end
+    local function StatusIconStyleLabel(spec)
+        return tostring(spec and spec.label or "Status Indicator") .. (IsRoleStatusSpec(spec) and " Role Icon Style" or " Indicator Icon Set")
+    end
 
     for s = 1, #STATUS_CONTROL_SPECS do
         local spec = STATUS_CONTROL_SPECS[s]
@@ -57,23 +64,25 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
                 description = spec.description or ("Status icon visibility for " .. spec.label .. "."),
             }))
 
-            if spec.iconStyle then
+            if spec.iconStyle and IsRoleStatusSpec(spec) then
                 aliases = {}
                 for a = 1, #(spec.aliases or {}) do
                     local base = tostring(spec.aliases[a] or "")
-                    local alias
-                    if base:match(" icon pack$") then
-                        alias = base
-                    elseif base:match(" icon$") then
-                        alias = base .. " pack"
-                    else
-                        alias = base .. " icon pack"
-                    end
-                    aliases[#aliases + 1] = alias
-                    AddAliasesForUnit(aliases, unit, alias)
+                    local indicatorAlias = base:match(" indicator style$") and base or (base .. " indicator style")
+                    local roleStyleAlias = base:match(" role icon style$") and base or (base .. " role icon style")
+                    local designAlias = base:match(" icon design$") and base or (base .. " icon design")
+                    local packAlias = base:match(" icon pack$") and base or (base .. " icon pack")
+                    aliases[#aliases + 1] = indicatorAlias
+                    aliases[#aliases + 1] = roleStyleAlias
+                    aliases[#aliases + 1] = designAlias
+                    aliases[#aliases + 1] = packAlias
+                    AddAliasesForUnit(aliases, unit, indicatorAlias)
+                    AddAliasesForUnit(aliases, unit, roleStyleAlias)
+                    AddAliasesForUnit(aliases, unit, designAlias)
+                    AddAliasesForUnit(aliases, unit, packAlias)
                 end
-                RegisterUnitString(unit, spec.iconStyle, spec.iconStyle, spec.label .. " Icon Pack", spec.defaultIconStyle or "BLIZZARD", aliases, StatusIconOpts(spec, {
-                    description = "Status icon pack. Default options include " .. table.concat(STATUS_ICON_PACK_FALLBACK_VALUES, ", ") .. ".",
+                RegisterUnitString(unit, spec.iconStyle, spec.iconStyle, StatusIconStyleLabel(spec), spec.defaultIconStyle or "BLIZZARD", aliases, StatusIconOpts(spec, {
+                    description = "Role icon style for this status indicator. Default options include " .. table.concat(STATUS_ICON_PACK_FALLBACK_VALUES, ", ") .. ".",
                 }))
             end
 

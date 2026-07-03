@@ -3,7 +3,7 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.0-beta2
+## Version: 6.0-beta3
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI
@@ -79,6 +79,7 @@ Castbars\MSUF_Castbars_Backend.lua
 Castbars\MSUF_Castbars_Bridge.lua
 Shell\MSUF_MinimapButton.lua
 Shell\MSUF_AddonCompartment.lua
+Shell\MSUF_GameMenu.lua
 Media\MSUF_Media.lua
 Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua

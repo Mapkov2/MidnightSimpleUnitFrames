@@ -782,6 +782,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.unitTooltipModifier = "ALT"
         g.disableUnitInfoTooltips = true
         g.unitInfoTooltipStyle = "classic"
+        g.showGameMenuButton = true
         g.navHoverScale = 1.05
         g.tooltipPosX = nil
         g.tooltipPosY = nil
@@ -1287,6 +1288,9 @@ if g.hideAdvancedMenu == nil then
 end
 if g.showNavigationIcons == nil then
     g.showNavigationIcons = false
+end
+if g.showGameMenuButton == nil then
+    g.showGameMenuButton = true
 end
 if g.navHoverScale == nil then
     g.navHoverScale = 1.05

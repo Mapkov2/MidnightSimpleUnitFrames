@@ -25,58 +25,14 @@ local ALL_UNITFRAMES = P.ALL_UNITFRAMES
 local DetectUnits = P.DetectUnits
 local DetectBoolean = P.DetectBoolean
 local UnitPageKey = P.UnitPageKey
+local Data = A.ParserData or {}
+A.ParserData = Data
+local ProfileData = Data.PROFILE_PARSER or {}
 
-local COPY_SCOPE_DEFAULTS = {
-    basics = true,
-    text = true,
-    portrait = true,
-    power = true,
-    castbar = true,
-    status = true,
-    load = true,
-    transparency = true,
-    layout = false,
-}
-
-local UNIT_COPY_SCOPE_SPECS = {
-    { key = "layout", aliases = { "layout", "position", "positioning", "placement", "location", "size", "anchoring", "anchor", "width", "height" } },
-    { key = "text", aliases = { "text", "name", "hp", "health text", "hp text", "power text", "mana text", "energy text", "resource text", "font", "fonts" } },
-    { key = "portrait", aliases = { "portrait", "portrait settings" } },
-    { key = "power", aliases = { "power", "mana", "energy", "resource", "power settings", "mana settings", "energy settings", "resource settings", "power bar", "powerbar", "detached power", "detached power bar", "resource bar" } },
-    { key = "castbar", aliases = { "castbar", "cast bar" } },
-    { key = "status", aliases = { "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators", "level indicator", "raid marker" } },
-    { key = "load", aliases = { "load condition", "load conditions", "hide mounted", "hide out of combat" } },
-    { key = "transparency", aliases = { "transparency", "opacity", "alpha", "range fade" } },
-    { key = "basics", aliases = { "frame basics", "basic settings", "basics", "enable state", "smooth fill", "reverse fill" } },
-}
-
-local GROUP_COPY_SCOPE_DEFAULTS = {
-    general = true,
-    health = true,
-    text = true,
-    font = true,
-    border = true,
-    range = true,
-    indicators = true,
-    auras = true,
-    highlight = true,
-    dstripe = true,
-    features = true,
-}
-
-local GROUP_COPY_SCOPE_SPECS = {
-    { key = "general", aliases = { "general", "basics", "basic settings", "layout", "position", "positioning", "placement", "size", "width", "height", "spacing", "growth", "sort", "sorting", "columns", "raid groups" } },
-    { key = "health", aliases = { "health", "health bars", "bars", "power", "power bar", "power text", "bar texture", "dispel overlay" } },
-    { key = "text", aliases = { "text", "name", "health text", "hp text", "text and name" } },
-    { key = "font", aliases = { "font", "fonts", "font override", "font color", "font outline" } },
-    { key = "border", aliases = { "background", "opacity", "alpha", "transparency", "background opacity" } },
-    { key = "range", aliases = { "range", "range fade", "offline alpha" } },
-    { key = "indicators", aliases = { "indicators", "status icons", "status icon", "role icon", "leader icon", "assist icon", "raid marker", "ready check", "summon icon" } },
-    { key = "auras", aliases = { "auras", "aura", "buffs", "buff", "debuffs", "debuff" } },
-    { key = "highlight", aliases = { "highlight", "aggro", "aggro highlight", "dispel border", "purge border" } },
-    { key = "dstripe", aliases = { "debuff stripe", "stripe" } },
-    { key = "features", aliases = { "corner", "corner indicator", "corner indicators", "corner dots", "spell indicator", "spell indicators", "corner spell" } },
-}
+local COPY_SCOPE_DEFAULTS = ProfileData.COPY_SCOPE_DEFAULTS or {}
+local UNIT_COPY_SCOPE_SPECS = ProfileData.UNIT_COPY_SCOPE_SPECS or {}
+local GROUP_COPY_SCOPE_DEFAULTS = ProfileData.GROUP_COPY_SCOPE_DEFAULTS or {}
+local GROUP_COPY_SCOPE_SPECS = ProfileData.GROUP_COPY_SCOPE_SPECS or {}
 
 local function CopyScopeDefaults()
     local UP = M and M.UnitPage
@@ -101,27 +57,7 @@ local function CopyScopeDefaults()
     return scopes
 end
 
-local COPY_SCOPE_NEGATIVE_PREFIXES = {
-    "without ",
-    "with no ",
-    "except ",
-    "except for ",
-    "excluding ",
-    "exclude ",
-    "but not ",
-    "not ",
-    "no ",
-    "minus ",
-    "skip ",
-    "leave out ",
-    "ohne ",
-    "ohne die ",
-    "ohne den ",
-    "ausser ",
-    "ausser die ",
-    "ausser den ",
-    "nicht ",
-}
+local COPY_SCOPE_NEGATIVE_PREFIXES = ProfileData.COPY_SCOPE_NEGATIVE_PREFIXES or {}
 
 local function ScopeAliasHasNegativePrefix(text, alias)
     if not alias or alias == "" then return false end
@@ -173,10 +109,10 @@ local function ApplyCopyScopeMatches(scopes, matches)
 end
 
 local function WantsFullUnitCopy(text, matches)
-    if ContainsAny(text, { "all settings", "all categories", "everything", "complete settings", "entire unit", "whole unit", "copy to function", "copy-to function", "copyto function", "copy to workflow" }) then
+    if ContainsAny(text, ProfileData.FULL_COPY_TERMS) or ContainsAny(text, ProfileData.FULL_UNIT_COPY_TERMS) then
         return true
     end
-    if ContainsAny(text, { "profile", "profil", "unit profile", "unitframe profile", "unit frame profile", "frame profile" }) then
+    if ContainsAny(text, ProfileData.UNIT_PROFILE_COPY_TERMS) then
         if not matches then
             matches = CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS, CopyScopeNegativeKeySet(text, UNIT_COPY_SCOPE_SPECS))
         end
@@ -186,10 +122,10 @@ local function WantsFullUnitCopy(text, matches)
 end
 
 local function WantsFullGroupCopy(text, matches)
-    if ContainsAny(text, { "all settings", "all categories", "everything", "complete settings", "entire group", "whole group", "copy to function", "copy-to function", "copyto function", "copy to workflow" }) then
+    if ContainsAny(text, ProfileData.FULL_COPY_TERMS) or ContainsAny(text, ProfileData.FULL_GROUP_COPY_TERMS) then
         return true
     end
-    if ContainsAny(text, { "profile", "profil", "group profile", "groupframe profile", "group frame profile", "frame profile" }) then
+    if ContainsAny(text, ProfileData.GROUP_PROFILE_COPY_TERMS) then
         if not matches then
             matches = CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS, CopyScopeNegativeKeySet(text, GROUP_COPY_SCOPE_SPECS))
         end
@@ -212,7 +148,7 @@ local function CopyScopesForText(text)
         for key in pairs(scopes) do scopes[key] = true end
     else
         local matched = ApplyCopyScopeMatches(scopes, matches)
-        if matched and ContainsAny(text, { "size", "width", "height" }) then scopes.basics = true end
+        if matched and ContainsAny(text, ProfileData.COPY_SCOPE_SIZE_TERMS) then scopes.basics = true end
     end
     ApplyCopyScopeExclusions(scopes, negativeKeys)
     return scopes
@@ -692,68 +628,37 @@ local function RawRenameProfileNames(raw)
     return nil, nil
 end
 
-local PROFILE_EXPORT_KIND_LABELS = {
-    all = "Full profile",
-    unitframe = "Unit Frames",
-    castbar = "Cast Bars",
-    colors = "Colors",
-    gameplay = "Gameplay",
-    groupframe = "Group Frames",
-}
+local PROFILE_EXPORT_KIND_LABELS = ProfileData.PROFILE_EXPORT_KIND_LABELS or {}
 
 local function ProfileExportKindForText(text)
-    if ContainsAny(text, { "colors", "color palette", "color settings", "farben", "farbprofil", "farbeinstellungen" }) then return "colors" end
-    if ContainsAny(text, { "castbar", "castbars", "zauberleiste", "zauberleisten" }) then return "castbar" end
-    if ContainsAny(text, { "gameplay", "combat timer", "crosshair", "totem frame", "spielhilfe", "kampftimer", "fadenkreuz", "totemrahmen" }) then return "gameplay" end
-    if ContainsAny(text, { "group frame", "group frames", "groupframe", "party", "raid", "mythicraid", "gruppenframes", "gruppen frames", "gruppenrahmen", "gruppe" }) then return "groupframe" end
-    if ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames", "player", "target", "focus", "boss", "pet", "einheitenfenster", "spieler", "ziel", "fokus" }) then return "unitframe" end
+    if ContainsAny(text, ProfileData.PROFILE_EXPORT_COLOR_TERMS) then return "colors" end
+    if ContainsAny(text, ProfileData.PROFILE_EXPORT_CASTBAR_TERMS) then return "castbar" end
+    if ContainsAny(text, ProfileData.PROFILE_EXPORT_GAMEPLAY_TERMS) then return "gameplay" end
+    if ContainsAny(text, ProfileData.PROFILE_EXPORT_GROUPFRAME_TERMS) then return "groupframe" end
+    if ContainsAny(text, ProfileData.PROFILE_EXPORT_UNITFRAME_TERMS) then return "unitframe" end
     return "all"
 end
 
 local function HasProfileExportIntent(text)
-    if ContainsAny(text, { "restore", "recover", "rollback", "use backup", "use last backup", "load backup", "load last backup", "switch to backup", "switch to last backup" })
-        and ContainsAny(text, { "backup", "backup profile", "profile backup", "last backup" })
+    if ContainsAny(text, ProfileData.PROFILE_RESTORE_ACTION_TERMS)
+        and ContainsAny(text, ProfileData.PROFILE_BACKUP_TERMS)
     then
         return false
     end
-    if ContainsAny(text, {
-        "profile string", "export string", "profile export string", "copy profile string",
-    }) and ContainsAny(text, {
-        "show", "show me", "copy", "export", "share", "give me", "generate",
-    }) and not ContainsAny(text, {
-        "where", "paste", "import", "how", "how do", "how to", "why",
-    }) then
+    if ContainsAny(text, ProfileData.PROFILE_STRING_TERMS)
+        and ContainsAny(text, ProfileData.PROFILE_EXPORT_ACTION_TERMS)
+        and not ContainsAny(text, ProfileData.PROFILE_EXPORT_REJECT_TERMS)
+    then
         return true
     end
-    if ContainsAny(text, {
-        "where", "where is", "where are", "find", "search", "show me",
-        "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
-        "how", "how do", "how to", "why", "faq", "broken", "not working", "doesnt work",
-        "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
-    }) then
+    if ContainsAny(text, ProfileData.PROFILE_READONLY_QUERY_TERMS) then
         return false
     end
-    if ContainsAny(text, {
-        "export", "exportieren", "share profile", "share current profile", "share active profile",
-        "profil exportieren", "aktuelles profil exportieren", "profilexport", "profil string",
-        "profilstring", "export string", "exportiere profil", "exportiere aktuelles profil",
-        "exportiere aktives profil", "teile profil", "profil teilen",
-        "share my profile", "share msuf profile", "share my msuf profile",
-        "copy string", "copy profile string", "profile string", "export string", "profile export string",
-        "save backup", "save a backup", "save profile backup",
-        "backup msuf settings", "backup my msuf settings", "backup settings", "backup my settings",
-        "backup current settings", "backup my current settings", "make backup before import",
-        "make a backup before import", "backup before import",
-        "make backup before importing", "make a backup before importing", "backup before importing",
-        "backup before profile import", "backup before importing profile",
-        "backup raid profile", "backup party profile", "backup group profile",
-        "backup group frame profile", "backup group frames profile",
-        "backup raid settings", "backup party settings", "backup group frame settings", "backup group frames settings",
-    }) then
+    if ContainsAny(text, ProfileData.PROFILE_EXPORT_TERMS) then
         return true
     end
-    if ContainsAny(text, { "backup profile", "backup current profile", "backup active profile", "profile backup" })
-        and not ContainsAny(text, { " as ", " to ", " named ", " called " })
+    if ContainsAny(text, ProfileData.PROFILE_SIMPLE_BACKUP_TERMS)
+        and not ContainsAny(text, ProfileData.PROFILE_NAME_CONNECTOR_TERMS)
     then
         return true
     end
@@ -761,49 +666,19 @@ local function HasProfileExportIntent(text)
 end
 
 local function HasProfileReadOnlyQueryIntent(text)
-    return ContainsAny(text, {
-        "where", "where is", "where are", "find", "search", "show me",
-        "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
-        "how", "how do", "how to", "why", "faq", "broken", "not working", "doesnt work",
-        "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
-    })
+    return ContainsAny(text, ProfileData.PROFILE_READONLY_QUERY_TERMS)
 end
 
 local function IsBackupBeforeProfileImportIntent(text)
-    return ContainsAny(text, {
-        "make backup before import", "make a backup before import", "backup before import",
-        "backup vor import", "backup vor profil import", "sicherung vor import",
-        "sichere profil vor import", "profil sichern vor import",
-        "make backup before importing", "make a backup before importing", "backup before importing",
-        "backup before profile import", "backup before importing profile",
-        "backup first then import", "backup first and import", "backup then import",
-        "make backup then import", "make a backup then import",
-        "make backup first then import", "make a backup first then import",
-    })
+    return ContainsAny(text, ProfileData.BACKUP_BEFORE_IMPORT_TERMS)
 end
 
 local function IsSafeProfileImportIntent(text)
-    return ContainsAny(text, {
-        "import safely", "import safe", "safe import", "safe profile import",
-        "import profile safely", "import profile safe", "profile import safely",
-        "import after backup", "import after backing up", "paste safely", "paste this safely",
-        "paste profile safely", "paste profile after backup",
-        "sicher importieren", "sicherer import", "profil sicher importieren",
-        "import nach backup", "nach backup importieren", "erst sichern dann importieren",
-        "backup dann importieren", "profil nach sicherung importieren",
-    }) or IsBackupBeforeProfileImportIntent(text)
+    return ContainsAny(text, ProfileData.SAFE_PROFILE_IMPORT_TERMS) or IsBackupBeforeProfileImportIntent(text)
 end
 
 local function BuildProfileBackupRestoreClarification(text)
-    if not ContainsAny(text, {
-        "restore backup", "restore my backup", "restore my backup profile",
-        "restore backup profile", "restore profile backup",
-        "restore last backup", "restore last backup profile",
-        "recover backup", "recover my backup", "recover my backup profile",
-        "use backup profile", "use my backup profile", "use last backup profile",
-        "load backup profile", "load my backup profile", "load last backup profile",
-        "switch to backup profile", "switch to last backup profile",
-    }) then
+    if not ContainsAny(text, ProfileData.PROFILE_BACKUP_RESTORE_TERMS) then
         return nil
     end
     return {
@@ -899,7 +774,7 @@ local function ImportNewProfileName(raw, startIndex, endIndex, text)
 end
 
 local function BuildMissingImportNewProfileNameAnswer(text)
-    if not ContainsAny(text, { "new profile", "new-profile", "as new profile", "to new profile", "neues profil", "als neues profil", "in neues profil" }) then return nil end
+    if not ContainsAny(text, ProfileData.IMPORT_NEW_PROFILE_PROMPT_TERMS) then return nil end
     return {
         kind = "answer",
         status = "info",
@@ -909,13 +784,7 @@ local function BuildMissingImportNewProfileNameAnswer(text)
 end
 
 local function BuildSpecAutoSwitch(text)
-    if not ContainsAny(text, {
-        "auto switch profile", "auto-switch profile", "profile auto switch",
-        "profile by specialization", "profile by spec", "spec profile switching",
-        "specialization profile switching",
-        "profil auto switch", "profil automatisch wechseln", "profil nach spec",
-        "profil nach spezialisierung", "spec profil wechsel", "spezialisierungs profil wechsel",
-    }) then return nil end
+    if not ContainsAny(text, ProfileData.SPEC_AUTO_SWITCH_TERMS) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     local setting = Registry and Registry:GetSetting("profiles.specAutoSwitch")
@@ -928,17 +797,13 @@ local function BuildSpecAutoSwitch(text)
 end
 
 local function BuildSpecProfileAction(text)
-    if not (ContainsAny(text, {
-            "spec profile", "specialization profile", "profile by spec", "profile by specialization",
-            "spec profil", "spezialisierung profil", "profil nach spec", "profil nach spezialisierung",
-            "profil fuer spec", "profil fuer spezialisierung",
-        })
+    if not (ContainsAny(text, ProfileData.SPEC_PROFILE_TERMS)
         or ((HasPhrase(text, "profile") or HasPhrase(text, "profil"))
             and (HasPhrase(text, "spec") or HasPhrase(text, "specialization") or HasPhrase(text, "spezialisierung"))))
     then
         return nil
     end
-    if ContainsAny(text, { "clear", "remove", "unset", "loeschen", "entfernen", "aufheben", "zuruecksetzen" }) then
+    if ContainsAny(text, ProfileData.SPEC_PROFILE_CLEAR_TERMS) then
         local spec = text:match("clear%s+spec%s+profile%s+(.+)$")
             or text:match("clear%s+(.+)%s+spec%s+profile$")
             or text:match("remove%s+spec%s+profile%s+(.+)$")
@@ -958,7 +823,7 @@ local function BuildSpecProfileAction(text)
             summary = "Clears the selected specialization profile assignment.",
         } or nil
     end
-    if ContainsAny(text, { "assign", "set", "zuweisen", "setze", "nutze", "verwende" }) then
+    if ContainsAny(text, ProfileData.SPEC_PROFILE_ASSIGN_TERMS) then
         local spec, name = text:match("set%s+spec%s+profile%s+(.+)%s+to%s+(.+)$")
         if not spec then spec, name = text:match("set%s+(.+)%s+spec%s+profile%s+to%s+(.+)$") end
         if not spec then name, spec = text:match("assign%s+(.+)%s+profile%s+to%s+(.+)%s+spec$") end
@@ -993,7 +858,7 @@ end
 
 
 local function ParseWorkflowLifecycle(text)
-    if ContainsAny(text, { "workflow status", "assistant workflow status", "pending workflow", "pending flow", "active workflow", "what workflow", "what is pending", "assistant current step", "current assistant step", "current step", "show current step", "show assistant current step", "assistant step status", "step status", "what is the current step" }) then
+    if ContainsAny(text, ProfileData.WORKFLOW_STATUS_TERMS) then
         local action = Registry and Registry:GetAction("assistant.workflow.status")
         return action and {
             kind = "action",
@@ -1003,7 +868,7 @@ local function ParseWorkflowLifecycle(text)
             summary = "Shows current confirmations, open panels, guided steps, and Edit Mode status.",
         } or nil
     end
-    if text == "back" or ContainsAny(text, { "go back", "open previous page", "previous page", "return to previous page", "back to previous page" }) then
+    if text == "back" or ContainsAny(text, ProfileData.WORKFLOW_BACK_TERMS) then
         local action = Registry and Registry:GetAction("dashboard_page_back")
         return action and {
             kind = "action",
@@ -1013,10 +878,7 @@ local function ParseWorkflowLifecycle(text)
             summary = "Goes back through the Assistant page history, then the MSUF menu history.",
         } or nil
     end
-    if text == "forward" or text == "forwards" or text == "vorwaerts" or ContainsAny(text, {
-        "go forward", "open next page", "next page", "forward page", "return forward", "page forward",
-        "go to next page", "naechste seite", "seite vorwaerts",
-    }) then
+    if text == "forward" or text == "forwards" or text == "vorwaerts" or ContainsAny(text, ProfileData.WORKFLOW_FORWARD_TERMS) then
         local action = Registry and Registry:GetAction("dashboard_page_forward")
         return action and {
             kind = "action",
@@ -1026,7 +888,7 @@ local function ParseWorkflowLifecycle(text)
             summary = "Goes forward through the MSUF menu history.",
         } or nil
     end
-    if text == "cancel" or ContainsAny(text, { "cancel workflow", "cancel current workflow", "cancel assistant workflow", "stop assistant workflow", "abort workflow" }) then
+    if text == "cancel" or ContainsAny(text, ProfileData.WORKFLOW_CANCEL_TERMS) then
         local action = Registry and Registry:GetAction("assistant.workflow.cancel")
         return action and {
             kind = "action",
@@ -1036,7 +898,7 @@ local function ParseWorkflowLifecycle(text)
             summary = "Cancels the active Assistant confirmation, flow, panel, or guide when one is open.",
         } or nil
     end
-    if ContainsAny(text, { "close import", "cancel import", "close export", "close assistant panel", "close profile import", "cancel profile import", "close profile export" }) then
+    if ContainsAny(text, ProfileData.PROFILE_PANEL_CLOSE_TERMS) then
         local action = Registry and Registry:GetAction("assistant.panel.close")
         return action and {
             kind = "action",
@@ -1061,14 +923,11 @@ local function BuildMenuSelectorState(args, label, summary)
 end
 
 local function ParseProfileStagingState(text, raw)
-    if not ContainsAny(text, { "profile", "profiles", "profil" }) then return nil end
-    local hasStagingIntent = ContainsAny(text, {
-        "field", "input", "text box", "textbox", "staging", "stage", "select", "choose", "set", "fill", "paste into",
-        "turn on", "turn off", "enable", "disable",
-    })
+    if not ContainsAny(text, ProfileData.PROFILE_WORD_TERMS) then return nil end
+    local hasStagingIntent = ContainsAny(text, ProfileData.PROFILE_STAGING_INTENT_TERMS)
     if not hasStagingIntent then return nil end
 
-    if ContainsAny(text, { "export kind", "export type", "export dropdown", "profile export kind", "profile export type" }) then
+    if ContainsAny(text, ProfileData.PROFILE_EXPORT_KIND_SELECTOR_TERMS) then
         return BuildMenuSelectorState({
             selector = "profile_staging",
             field = "profileExportKind",
@@ -1076,9 +935,9 @@ local function ParseProfileStagingState(text, raw)
         }, "Select profile export kind", "Selects the Profiles export-kind dropdown without immediately exporting.")
     end
 
-    if ContainsAny(text, { "import and create new profile", "import create new", "new profile import", "new-profile import", "import into new profile", "create new profile import" }) then
+    if ContainsAny(text, ProfileData.PROFILE_IMPORT_CREATE_NEW_TERMS) then
         local value = DetectBoolean(text)
-        if value == nil then value = not ContainsAny(text, { "off", "disable", "disabled", "current profile", "active profile" }) end
+        if value == nil then value = not ContainsAny(text, ProfileData.PROFILE_IMPORT_CURRENT_PROFILE_TERMS) end
         return BuildMenuSelectorState({
             selector = "profile_staging",
             field = "profileImportCreateNew",
@@ -1086,10 +945,10 @@ local function ParseProfileStagingState(text, raw)
         }, "Set profile import mode", "Sets the Profiles import-and-create-new-profile toggle.")
     end
 
-    if ContainsAny(text, { "new profile name", "new-profile name", "import new profile name", "import profile name" })
-        and ContainsAny(text, { "import", "new profile", "new-profile" })
+    if ContainsAny(text, ProfileData.PROFILE_IMPORT_NEW_NAME_TERMS)
+        and ContainsAny(text, ProfileData.PROFILE_IMPORT_NAME_CONTEXT_TERMS)
     then
-        local value = CleanProfileName(RawAfterLastConnector(raw, { " to ", " as ", " named ", " called ", " name ", " value " }))
+        local value = CleanProfileName(RawAfterLastConnector(raw, ProfileData.PROFILE_NAME_VALUE_CONNECTORS))
         if value then
             return BuildMenuSelectorState({
                 selector = "profile_staging",
@@ -1099,10 +958,10 @@ local function ParseProfileStagingState(text, raw)
         end
     end
 
-    if ContainsAny(text, { "profile string", "import string", "profile import string" })
-        and ContainsAny(text, { "field", "input", "text box", "textbox", "stage", "staging", "set", "fill", "paste into" })
+    if ContainsAny(text, ProfileData.PROFILE_IMPORT_STRING_TERMS)
+        and ContainsAny(text, ProfileData.PROFILE_IMPORT_STRING_FIELD_TERMS)
     then
-        local value = RawAfterLastConnector(raw, { " to ", " with ", " value ", " text ", " string ", " paste " })
+        local value = RawAfterLastConnector(raw, ProfileData.PROFILE_IMPORT_STRING_CONNECTORS)
         if value then
             return BuildMenuSelectorState({
                 selector = "profile_staging",
@@ -1112,8 +971,8 @@ local function ParseProfileStagingState(text, raw)
         end
     end
 
-    if ContainsAny(text, { "profile name field", "profile name input", "create copy name", "create/copy name", "profile create name", "profile copy name", "profile name for create", "profile name for copy" }) then
-        local value = CleanProfileName(RawAfterLastConnector(raw, { " to ", " as ", " named ", " called ", " name ", " value " }))
+    if ContainsAny(text, ProfileData.PROFILE_CREATE_COPY_NAME_TERMS) then
+        local value = CleanProfileName(RawAfterLastConnector(raw, ProfileData.PROFILE_NAME_VALUE_CONNECTORS))
         if value then
             return BuildMenuSelectorState({
                 selector = "profile_staging",
@@ -1127,19 +986,19 @@ local function ParseProfileStagingState(text, raw)
 end
 
 local function ParseGroupCopyScopeState(text)
-    if not ContainsAny(text, { "group copy", "group frame copy", "group frames copy", "copy category", "copy categories", "copy scope", "copy scopes" }) then return nil end
-    if not ContainsAny(text, { "category", "categories", "scope", "scopes" }) then return nil end
+    if not ContainsAny(text, ProfileData.GROUP_COPY_SCOPE_SELECTOR_TERMS) then return nil end
+    if not ContainsAny(text, ProfileData.COPY_SCOPE_KIND_TERMS) then return nil end
 
-    if ContainsAny(text, { "all categories", "select all", "turn on all", "enable all" })
-        or (ContainsAny(text, { "all" }) and ContainsAny(text, { "turn on", "enable", "select" }))
+    if ContainsAny(text, ProfileData.COPY_SCOPE_ALL_TERMS)
+        or (ContainsAny(text, ProfileData.COPY_SCOPE_ALL_CONTEXT_TERMS) and ContainsAny(text, ProfileData.COPY_SCOPE_ENABLE_TERMS))
     then
         return BuildMenuSelectorState({
             selector = "group_copy_scope",
             command = "all",
         }, "Select all group copy categories", "Sets every Group Frames copy-popup category checkbox on.")
     end
-    if ContainsAny(text, { "no categories", "none", "select none", "clear categories", "turn off all", "disable all" })
-        or (ContainsAny(text, { "clear", "disable" }) and ContainsAny(text, { "category", "categories", "scope", "scopes" }))
+    if ContainsAny(text, ProfileData.COPY_SCOPE_NONE_TERMS)
+        or (ContainsAny(text, ProfileData.COPY_SCOPE_CLEAR_TERMS) and ContainsAny(text, ProfileData.COPY_SCOPE_KIND_TERMS))
     then
         return BuildMenuSelectorState({
             selector = "group_copy_scope",
@@ -1149,7 +1008,7 @@ local function ParseGroupCopyScopeState(text)
 
     local matches = CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS)
     if #matches == 0 then return nil end
-    if ContainsAny(text, { "only", "only these", "just" }) then
+    if ContainsAny(text, ProfileData.COPY_SCOPE_ONLY_TERMS) then
         return BuildMenuSelectorState({
             selector = "group_copy_scope",
             command = "only",
@@ -1159,7 +1018,7 @@ local function ParseGroupCopyScopeState(text)
 
     local value = DetectBoolean(text)
     if value == nil then
-        if ContainsAny(text, { "exclude", "without", "remove", "disable" }) then value = false else value = true end
+        if ContainsAny(text, ProfileData.COPY_SCOPE_FALSE_TERMS) then value = false else value = true end
     end
     return BuildMenuSelectorState({
         selector = "group_copy_scope",
@@ -1169,8 +1028,8 @@ local function ParseGroupCopyScopeState(text)
 end
 
 local function ParseUnitCopyScopeState(text)
-    if ContainsAny(text, { "group copy", "group frame copy", "group frames copy", "group copy category", "group copy categories", "group copy scope", "group copy scopes" }) then return nil end
-    if not ContainsAny(text, { "category", "categories", "scope", "scopes" }) then return nil end
+    if ContainsAny(text, ProfileData.GROUP_COPY_SCOPE_REJECT_TERMS) then return nil end
+    if not ContainsAny(text, ProfileData.COPY_SCOPE_KIND_TERMS) then return nil end
     local units = DetectUnits(text)
     local pageUnit
     local page = M and M.activeKey
@@ -1181,10 +1040,10 @@ local function ParseUnitCopyScopeState(text)
             break
         end
     end
-    local explicit = ContainsAny(text, { "unit copy", "unit frame copy", "unit frames copy", "unitframe copy", "unitframes copy", "frame copy" })
+    local explicit = ContainsAny(text, ProfileData.UNIT_COPY_SCOPE_SELECTOR_TERMS)
     if not explicit and #units == 0 and not pageUnit then return nil end
-    if ContainsAny(text, { "all categories", "select all", "turn on all", "enable all" })
-        or (ContainsAny(text, { "all" }) and ContainsAny(text, { "turn on", "enable", "select" }))
+    if ContainsAny(text, ProfileData.COPY_SCOPE_ALL_TERMS)
+        or (ContainsAny(text, ProfileData.COPY_SCOPE_ALL_CONTEXT_TERMS) and ContainsAny(text, ProfileData.COPY_SCOPE_ENABLE_TERMS))
     then
         return BuildMenuSelectorState({
             selector = "unit_copy_scope",
@@ -1192,8 +1051,8 @@ local function ParseUnitCopyScopeState(text)
             command = "all",
         }, "Select all unit copy categories", "Sets every Unit Copy popup category checkbox on.")
     end
-    if ContainsAny(text, { "no categories", "none", "select none", "clear categories", "turn off all", "disable all" })
-        or (ContainsAny(text, { "clear", "disable" }) and ContainsAny(text, { "category", "categories", "scope", "scopes" }))
+    if ContainsAny(text, ProfileData.COPY_SCOPE_NONE_TERMS)
+        or (ContainsAny(text, ProfileData.COPY_SCOPE_CLEAR_TERMS) and ContainsAny(text, ProfileData.COPY_SCOPE_KIND_TERMS))
     then
         return BuildMenuSelectorState({
             selector = "unit_copy_scope",
@@ -1204,7 +1063,7 @@ local function ParseUnitCopyScopeState(text)
 
     local matches = CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS)
     if #matches == 0 then return nil end
-    if ContainsAny(text, { "only", "only these", "just" }) then
+    if ContainsAny(text, ProfileData.COPY_SCOPE_ONLY_TERMS) then
         return BuildMenuSelectorState({
             selector = "unit_copy_scope",
             unit = units[1] or pageUnit,
@@ -1215,7 +1074,7 @@ local function ParseUnitCopyScopeState(text)
 
     local value = DetectBoolean(text)
     if value == nil then
-        if ContainsAny(text, { "exclude", "without", "remove", "disable" }) then value = false else value = true end
+        if ContainsAny(text, ProfileData.COPY_SCOPE_FALSE_TERMS) then value = false else value = true end
     end
     return BuildMenuSelectorState({
         selector = "unit_copy_scope",
@@ -1229,14 +1088,14 @@ local function ParseProfile(text, raw)
     local rawText = tostring(raw or "")
     local compactStart, endIndex, compact = rawText:find("(MSUF%d+:%S+)")
     local uufStart, uufEndIndex, uufCompact = rawText:find("(!UUF_%S+)")
-    local hasProfileWord = ContainsAny(text, { "profile", "profiles", "profil" })
+    local hasProfileWord = ContainsAny(text, ProfileData.PROFILE_WORD_TERMS)
     local hasExportIntent = HasProfileExportIntent(text)
     local safeImportIntent = IsSafeProfileImportIntent(text)
     local hasProfile = hasProfileWord or hasExportIntent or safeImportIntent
     local rawLower = tostring(raw or ""):lower()
     local implicitSwitchName
-    if not hasProfile and ContainsAny(text, { "switch to", "wechsel zu" }) then
-        local maybeName = CleanProfileName(RawAfterPrefix(rawText, { "switch to ", "wechsel zu " })
+    if not hasProfile and ContainsAny(text, ProfileData.PROFILE_SWITCH_SHORT_TERMS) then
+        local maybeName = CleanProfileName(RawAfterPrefix(rawText, ProfileData.PROFILE_SWITCH_SHORT_PREFIXES)
             or text:match("^switch%s+to%s+(.+)$")
             or text:match("^wechsel%s+zu%s+(.+)$"))
         if maybeName then
@@ -1250,8 +1109,8 @@ local function ParseProfile(text, raw)
     end
     local backupRestoreClarification = BuildProfileBackupRestoreClarification(text)
     if backupRestoreClarification then return backupRestoreClarification end
-    if compact and (hasProfileWord or ContainsAny(text, { "import", "importiere", "paste", "einfuegen", "einfuege" }) or rawLower:find("^msuf%d+:")) then
-        local legacy = ContainsAny(text, { "legacy import", "import legacy", "old profile import", "legacy profile" })
+    if compact and (hasProfileWord or ContainsAny(text, ProfileData.PROFILE_IMPORT_ACTION_TERMS) or rawLower:find("^msuf%d+:")) then
+        local legacy = ContainsAny(text, ProfileData.PROFILE_LEGACY_IMPORT_TERMS)
         local newName = ImportNewProfileName(rawText, compactStart, endIndex, text)
         if not newName then
             local missingName = BuildMissingImportNewProfileNameAnswer(text)
@@ -1267,7 +1126,7 @@ local function ParseProfile(text, raw)
             summary = newName and "Imports profile data into a new profile." or "Imports profile data into the active profile.",
         } or nil
     end
-    if uufCompact and (hasProfileWord or ContainsAny(text, { "import", "importiere", "paste", "einfuegen", "einfuege" }) or rawLower:find("^%s*!uuf_")) then
+    if uufCompact and (hasProfileWord or ContainsAny(text, ProfileData.PROFILE_IMPORT_ACTION_TERMS) or rawLower:find("^%s*!uuf_")) then
         local newName = ImportNewProfileName(rawText, uufStart, uufEndIndex, text)
         if not newName then
             local missingName = BuildMissingImportNewProfileNameAnswer(text)
@@ -1288,10 +1147,7 @@ local function ParseProfile(text, raw)
     end
     if not hasProfile then return nil end
 
-    if ContainsAny(text, {
-        "profile mapping", "profile mappings", "spec profile mapping", "spec profile mappings",
-        "broken profile mapping", "broken profile mappings", "broken spec mapping", "broken spec mappings",
-    }) and ContainsAny(text, { "clear", "fix", "repair", "remove", "clean" }) then
+    if ContainsAny(text, ProfileData.PROFILE_MAPPING_TERMS) and ContainsAny(text, ProfileData.PROFILE_MAPPING_CLEAN_TERMS) then
         local action = Registry and Registry:GetAction("clear_broken_spec_profile_mappings")
         return action and {
             kind = "action",
@@ -1308,7 +1164,7 @@ local function ParseProfile(text, raw)
     local specProfile = BuildSpecProfileAction(text)
     if specProfile then return specProfile end
 
-    if ContainsAny(text, { "wago profile", "wago profiles", "browse wago profiles", "profile hub", "wago profile suchen", "wago profile durchsuchen" }) then
+    if ContainsAny(text, ProfileData.WAGO_PROFILE_TERMS) then
         local action = Registry and Registry:GetAction("copy_wago_profiles_link")
         return action and {
             kind = "action",
@@ -1330,7 +1186,7 @@ local function ParseProfile(text, raw)
         } or nil
     end
 
-    if ContainsAny(text, { "import", "importieren", "paste", "einfuegen", "einfuege" }) and not HasProfileReadOnlyQueryIntent(text) then
+    if ContainsAny(text, ProfileData.PROFILE_IMPORT_ACTION_TERMS) and not HasProfileReadOnlyQueryIntent(text) then
         local action = Registry and Registry:GetAction("open_profile_import")
         return action and {
             kind = "action",
@@ -1341,15 +1197,10 @@ local function ParseProfile(text, raw)
         } or nil
     end
 
-    if ContainsAny(text, { "reset", "zuruecksetzen", "zurucksetzen", "defaults", "factory defaults", "standardwerte", "werkseinstellungen" })
+    if ContainsAny(text, ProfileData.PROFILE_RESET_TERMS)
         and not HasProfileReadOnlyQueryIntent(text)
     then
-        local name = RawAfterPrefix(rawText, {
-                "reset current profile ", "reset active profile ", "reset profile ",
-                "zuruecksetzen aktuelles profil ", "aktuelles profil zuruecksetzen ",
-                "zurucksetzen aktuelles profil ", "aktuelles profil zurucksetzen ",
-                "profil zuruecksetzen ", "profil zurucksetzen ",
-            })
+        local name = RawAfterPrefix(rawText, ProfileData.PROFILE_RESET_PREFIXES)
             or text:match("reset%s+current%s+profile%s*(.*)$")
             or text:match("reset%s+active%s+profile%s*(.*)$")
             or text:match("reset%s+profile%s*(.*)$")
@@ -1380,8 +1231,8 @@ local function ParseProfile(text, raw)
         }
     end
 
-    if ContainsAny(text, { "delete", "remove", "loeschen", "entfernen", "profil loeschen", "profil entfernen" }) then
-        local name = RawAfterPrefix(rawText, { "delete profile ", "delete the profile ", "remove profile ", "remove the profile " })
+    if ContainsAny(text, ProfileData.PROFILE_DELETE_TERMS) then
+        local name = RawAfterPrefix(rawText, ProfileData.PROFILE_DELETE_PREFIXES)
             or text:match("delete%s+profile%s+(.+)$")
             or text:match("delete%s+the%s+profile%s+(.+)$")
             or text:match("delete%s+(.+)%s+profile$")
@@ -1406,39 +1257,8 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if implicitSwitchName or ContainsAny(text, {
-        "switch", "wechsel", "wechsle", "change profile", "use", "use profile", "use the", "use my",
-        "activate", "load", "select profile", "aktiviere", "lade", "nutze profil", "verwende profil",
-        "waehle profil", "profil wechseln", "profil aktivieren", "profil laden",
-    }) then
-        local name = implicitSwitchName or RawAfterPrefix(rawText, {
-                "switch to profile ",
-                "switch profile to ",
-                "switch profile ",
-                "switch to ",
-                "use profile ",
-                "use the ",
-                "use my ",
-                "use ",
-                "activate profile ",
-                "activate ",
-                "load profile ",
-                "load ",
-                "select profile ",
-                "wechsel zu profil ",
-                "wechsle zu profil ",
-                "wechsel profil zu ",
-                "wechsle profil zu ",
-                "wechsel zu ",
-                "wechsle zu ",
-                "nutze profil ",
-                "verwende profil ",
-                "aktiviere profil ",
-                "aktiviere ",
-                "lade profil ",
-                "lade ",
-                "waehle profil ",
-            })
+    if implicitSwitchName or ContainsAny(text, ProfileData.PROFILE_SWITCH_TERMS) then
+        local name = implicitSwitchName or RawAfterPrefix(rawText, ProfileData.PROFILE_SWITCH_PREFIXES)
             or text:match("switch%s+to%s+(.+)$")
             or text:match("switch%s+profile%s+to%s+(.+)$")
             or text:match("switch%s+profile%s+(.+)$")
@@ -1491,7 +1311,7 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if ContainsAny(text, { "create", "new profile", "erstellen", "erstelle", "anlegen", "neues profil" }) then
+    if ContainsAny(text, ProfileData.PROFILE_CREATE_TERMS) then
         local name = RawCreateProfileName(rawText)
             or text:match("create%s+profile%s+(.+)$")
             or text:match("create%s+(.+)%s+profile$")
@@ -1516,7 +1336,7 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if ContainsAny(text, { "rename", "umbenennen", "benenne", "benenn", "profile rename" }) then
+    if ContainsAny(text, ProfileData.PROFILE_RENAME_TERMS) then
         local source, dest = RawRenameProfileNames(rawText)
         if not source and not dest then source, dest = text:match("rename%s+profile%s+(.+)%s+to%s+(.+)$") end
         if not source then source, dest = text:match("rename%s+(.+)%s+profile%s+to%s+(.+)$") end
@@ -1547,12 +1367,7 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if ContainsAny(text, {
-        "copy", "duplicate", "clone", "dupe", "backup", "duplizieren",
-        "kopiere", "kopieren", "dupliziere", "sichere", "sichern",
-        "save current profile", "save active profile", "save my profile",
-        "save my current profile", "save my active profile",
-    }) then
+    if ContainsAny(text, ProfileData.PROFILE_COPY_TERMS) then
         local source, dest = RawCopyProfileSourceDestination(rawText)
         if not source then source, dest = text:match("copy%s+profile%s+(.+)%s+to%s+(.+)$") end
         if not source then source, dest = text:match("copy%s+profile%s+(.+)%s+as%s+(.+)$") end
@@ -1633,14 +1448,7 @@ local function ParseProfile(text, raw)
             } or nil
         end
 
-        local sourceOnly = RawAfterPrefix(rawText, {
-                "copy from profile ",
-                "copy existing profile ",
-                "copy source profile ",
-                "kopiere von profil ",
-                "kopiere vorhandenes profil ",
-                "kopiere quellprofil ",
-            })
+        local sourceOnly = RawAfterPrefix(rawText, ProfileData.PROFILE_COPY_SOURCE_PREFIXES)
             or text:match("^copy%s+from%s+profile%s+(.+)$")
             or text:match("^copy%s+existing%s+profile%s+(.+)$")
             or text:match("^copy%s+source%s+profile%s+(.+)$")
@@ -1672,20 +1480,7 @@ local function ParseProfile(text, raw)
         } or nil
     end
 
-    if ContainsAny(text, {
-        "list profiles", "show profiles", "profile list", "profile summary",
-        "profile status", "current profile", "active profile", "which profile",
-        "what profile", "what profile am i using", "which profile am i using",
-        "profile am i using", "profile i am using",
-        "spec profiles", "specialization profiles",
-        "liste profile", "zeige profile", "profil liste", "profil uebersicht",
-        "profil status", "aktuelles profil", "aktives profil", "welches profil",
-        "welches profil nutze ich", "welches profil verwende ich", "spec profile", "spezialisierungs profile",
-    }) and not ContainsAny(text, {
-        "reset", "delete", "remove", "switch", "wechsel", "copy", "duplicate", "clone", "dupe",
-        "create", "new profile", "import", "export", "backup", "loeschen", "entfernen",
-        "kopiere", "duplizieren", "dupliziere", "erstellen", "erstelle", "neues profil",
-    }) then
+    if ContainsAny(text, ProfileData.PROFILE_SUMMARY_TERMS) and not ContainsAny(text, ProfileData.PROFILE_SUMMARY_REJECT_TERMS) then
         local action = Registry and Registry:GetAction("profile_summary")
         return action and {
             kind = "action",
@@ -1699,13 +1494,10 @@ local function ParseProfile(text, raw)
 end
 
 function P.ParseProfileRepairShortcut(text)
-    if not ContainsAny(text, {
-        "profile mapping", "profile mappings", "spec profile mapping", "spec profile mappings",
-        "broken profile mapping", "broken profile mappings", "broken spec mapping", "broken spec mappings",
-    }) then
+    if not ContainsAny(text, ProfileData.PROFILE_MAPPING_TERMS) then
         return nil
     end
-    if not ContainsAny(text, { "clear", "fix", "repair", "remove", "clean" }) then return nil end
+    if not ContainsAny(text, ProfileData.PROFILE_MAPPING_CLEAN_TERMS) then return nil end
     local action = Registry and Registry:GetAction("clear_broken_spec_profile_mappings")
     return action and {
         kind = "action",

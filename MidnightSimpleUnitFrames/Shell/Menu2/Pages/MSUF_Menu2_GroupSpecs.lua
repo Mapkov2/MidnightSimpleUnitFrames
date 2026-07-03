@@ -14,6 +14,7 @@ local function StatusIconSpecs(rows)
             value = cols[1], text = cols[2], enabled = cols[3], iconStyle = cols[4] ~= "0" and cols[4] or nil,
             size = cols[5], anchor = cols[6], x = cols[7], y = cols[8], layer = cols[9],
             defaultSize = tonumber(cols[10]), defaultAnchor = cols[11], defaultLayer = tonumber(cols[12]),
+            customIcon = cols[13] ~= "0" and cols[13] or nil,
         }
     end
     return specs
@@ -33,18 +34,18 @@ local Specs = {
     GF_ANCHOR_POINTS = VTP "TOPLEFT=TOPLEFT|TOP=TOP|TOPRIGHT=TOPRIGHT|LEFT=LEFT|CENTER=CENTER|RIGHT=RIGHT|BOTTOMLEFT=BOTTOMLEFT|BOTTOM=BOTTOM|BOTTOMRIGHT=BOTTOMRIGHT",
     STATUS_ICON_ANCHORS = VTP "TOPLEFT=Top Left|TOPRIGHT=Top Right|BOTTOMLEFT=Bottom Left|BOTTOMRIGHT=Bottom Right|CENTER=Center|TOP=Top|BOTTOM=Bottom|LEFT=Left|RIGHT=Right",
     GF_STATUS_ICON_SPECS = StatusIconSpecs [[
-roleIcon|Role Icon|roleIcon|roleIconStyle|roleIconSize|roleIconAnchor|roleIconX|roleIconY|roleIconLayer|12|TOPLEFT|1
-leaderIcon|Leader|leaderIcon|leaderIconStyle|leaderIconSize|leaderIconAnchor|leaderIconX|leaderIconY|leaderIconLayer|12|TOPRIGHT|2
-assistIcon|Assist|assistIcon|assistIconStyle|assistIconSize|assistIconAnchor|assistIconX|assistIconY|assistIconLayer|12|TOPRIGHT|2
-raidMarker|Raid Marker|raidMarker|0|raidMarkerSize|raidMarkerAnchor|raidMarkerX|raidMarkerY|raidMarkerLayer|14|CENTER|3
-readyCheckIcon|Ready Check|readyCheckIcon|0|readyCheckSize|readyCheckAnchor|readyCheckX|readyCheckY|readyCheckLayer|16|CENTER|4
-summonIcon|Summon|summonIcon|0|summonIconSize|summonAnchor|summonX|summonY|summonLayer|16|CENTER|4
-resurrectIcon|Resurrect|resurrectIcon|0|resurrectIconSize|resurrectAnchor|resurrectX|resurrectY|resurrectLayer|16|CENTER|4
-pvpIcon|PvP Flag (War Mode/PvP)|pvpIcon|0|pvpIconSize|pvpIconAnchor|pvpIconX|pvpIconY|pvpIconLayer|14|TOPLEFT|3
-phaseIcon|Phase|phaseIcon|0|phaseIconSize|phaseAnchor|phaseX|phaseY|phaseLayer|14|TOPLEFT|3
-statusText|Dead Text|statusText|0|statusTextSize|statusTextAnchor|statusOffsetX|statusOffsetY|statusTextLayer|14|CENTER|7
-statusGhostText|Ghost Text|statusGhostText|0|statusGhostTextSize|statusGhostTextAnchor|statusGhostOffsetX|statusGhostOffsetY|statusGhostTextLayer|14|CENTER|7
-statusAFKText|AFK / DND Text|statusAFKText|0|statusAFKTextSize|statusAFKTextAnchor|statusAFKOffsetX|statusAFKOffsetY|statusAFKTextLayer|14|CENTER|7
+roleIcon|Role Icon|roleIcon|roleIconStyle|roleIconSize|roleIconAnchor|roleIconX|roleIconY|roleIconLayer|12|TOPLEFT|1|roleIconCustomIcon
+leaderIcon|Leader|leaderIcon|leaderIconStyle|leaderIconSize|leaderIconAnchor|leaderIconX|leaderIconY|leaderIconLayer|12|TOPRIGHT|2|leaderIconCustomIcon
+assistIcon|Assist|assistIcon|assistIconStyle|assistIconSize|assistIconAnchor|assistIconX|assistIconY|assistIconLayer|12|TOPRIGHT|2|assistIconCustomIcon
+raidMarker|Raid Marker|raidMarker|raidMarkerStyle|raidMarkerSize|raidMarkerAnchor|raidMarkerX|raidMarkerY|raidMarkerLayer|14|CENTER|3|raidMarkerCustomIcon
+readyCheckIcon|Ready Check|readyCheckIcon|readyCheckIconStyle|readyCheckSize|readyCheckAnchor|readyCheckX|readyCheckY|readyCheckLayer|16|CENTER|4|readyCheckIconCustomIcon
+summonIcon|Summon|summonIcon|summonIconStyle|summonIconSize|summonAnchor|summonX|summonY|summonLayer|16|CENTER|4|summonIconCustomIcon
+resurrectIcon|Resurrect|resurrectIcon|resurrectIconStyle|resurrectIconSize|resurrectAnchor|resurrectX|resurrectY|resurrectLayer|16|CENTER|4|resurrectIconCustomIcon
+pvpIcon|PvP Flag (War Mode/PvP)|pvpIcon|pvpIconStyle|pvpIconSize|pvpIconAnchor|pvpIconX|pvpIconY|pvpIconLayer|14|TOPLEFT|3|pvpIconCustomIcon
+phaseIcon|Phase|phaseIcon|phaseIconStyle|phaseIconSize|phaseAnchor|phaseX|phaseY|phaseLayer|14|TOPLEFT|3|phaseIconCustomIcon
+statusText|Dead Text|statusText|0|statusTextSize|statusTextAnchor|statusOffsetX|statusOffsetY|statusTextLayer|14|CENTER|7|0
+statusGhostText|Ghost Text|statusGhostText|0|statusGhostTextSize|statusGhostTextAnchor|statusGhostOffsetX|statusGhostOffsetY|statusGhostTextLayer|14|CENTER|7|0
+statusAFKText|AFK / DND Text|statusAFKText|0|statusAFKTextSize|statusAFKTextAnchor|statusAFKOffsetX|statusAFKOffsetY|statusAFKTextLayer|14|CENTER|7|0
 ]],
     PLACED_INDICATOR_TYPES = VTP "none=None|icon=Icon|square=Square|bar=Bar|number=Number",
     FRAME_EFFECT_TYPES = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Color",

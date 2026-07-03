@@ -83,6 +83,15 @@ local function Num(value, fallback)
     return value
 end
 
+local function KeyPart(value)
+    if value == nil then return "" end
+    return tostring(value)
+end
+
+local function BoolKey(value)
+    return value and "1" or "0"
+end
+
 --- Width/height reads can be secret/protected on some clients. Treat those as
 --- "unknown" and keep the caller's fallback instead of propagating wrappers.
 local function RegionNumber(region, method, fallback)
@@ -229,16 +238,29 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     local outline = DetailString(g, prefix, suffix .. "Outline", nil, "GLOBAL")
     local flags = ComposeFontFlags(outline, globalFlags)
     size = Clamp(size, 6, 128)
+    local r, green, b = CastbarTextColor(g, prefix, colorSuffix)
+    local alpha = Clamp(g.fontTextAlpha or 1, 0.7, 1)
+    local shadow = tostring(g.textBackdrop ~= false and (g.fontShadowStrength or "NORMAL") or "NONE"):upper()
+    local fontCacheKey = fontPath .. "|"
+        .. KeyPart(size) .. "|"
+        .. KeyPart(flags) .. "|"
+        .. KeyPart(r) .. "|"
+        .. KeyPart(green) .. "|"
+        .. KeyPart(b) .. "|"
+        .. KeyPart(alpha) .. "|"
+        .. shadow
+    if fontString._msufCastbarFontKey == fontCacheKey then
+        return
+    end
+    fontString._msufCastbarFontKey = fontCacheKey
+
     if fontString.SetFont then
         pcall(fontString.SetFont, fontString, fontPath, size, flags)
     end
 
-    local r, green, b = CastbarTextColor(g, prefix, colorSuffix)
-    local alpha = Clamp(g.fontTextAlpha or 1, 0.7, 1)
     if fontString.SetTextColor then fontString:SetTextColor(r, green, b, alpha) end
 
     if g.textBackdrop ~= false then
-        local shadow = tostring(g.fontShadowStrength or "NORMAL"):upper()
         local sa, sx, sy = 1, 1, -1
         if shadow == "SOFT" then
             sa, sx, sy = 0.55, 1, -1
@@ -279,6 +301,7 @@ end
 local function HideIconBorder(frame)
     local border = frame and frame._msufDetailIconBorder
     if not border then return end
+    frame._msufDetailIconBorderKey = nil
     for _, key in ipairs({ "top", "bottom", "left", "right" }) do
         if border[key] then border[key]:Hide() end
     end
@@ -290,7 +313,6 @@ local function ApplyIconBorder(frame, host, g, prefix)
         HideIconBorder(frame)
         return
     end
-    local border = EnsureIconBorder(frame)
     local thickness = 1
     if style == "CASTBAR" then
         thickness = tonumber(g.castbarOutlineThickness)
@@ -308,6 +330,19 @@ local function ApplyIconBorder(frame, host, g, prefix)
         b = Num(g.castbarBorderB, 0)
         a = Num(g.castbarBorderA, 1)
     end
+    local key = style .. "|"
+        .. KeyPart(thickness) .. "|"
+        .. KeyPart(r) .. "|"
+        .. KeyPart(green) .. "|"
+        .. KeyPart(b) .. "|"
+        .. KeyPart(a)
+    if frame and frame._msufDetailIconBorderKey == key then
+        return
+    end
+    if frame then
+        frame._msufDetailIconBorderKey = key
+    end
+    local border = EnsureIconBorder(frame)
     border.top:ClearAllPoints()
     border.top:SetPoint("TOPLEFT", host, "TOPLEFT", -thickness, thickness)
     border.top:SetPoint("TOPRIGHT", host, "TOPRIGHT", thickness, thickness)
@@ -347,6 +382,28 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     local x = DetailNum(g, prefix, "IconOffsetX", "castbarIconOffsetX", 0)
     local y = DetailNum(g, prefix, "IconOffsetY", "castbarIconOffsetY", 0)
     local position = NormalizeIconPosition(DetailString(g, prefix, "IconPosition", "castbarIconPosition", "LEFT"))
+    local frameInset = CastbarFrameInset(g)
+    local layoutKey = KeyPart(unit) .. "|"
+        .. BoolKey(icon ~= nil) .. "|"
+        .. BoolKey(showIcon) .. "|"
+        .. KeyPart(barW) .. "|"
+        .. KeyPart(barH) .. "|"
+        .. KeyPart(size) .. "|"
+        .. KeyPart(spacing) .. "|"
+        .. KeyPart(x) .. "|"
+        .. KeyPart(y) .. "|"
+        .. position .. "|"
+        .. KeyPart(frameInset) .. "|"
+        .. KeyPart(DetailString(g, prefix, "IconBorderStyle", nil, "NONE")) .. "|"
+        .. KeyPart(g.castbarOutlineThickness) .. "|"
+        .. KeyPart(g.castbarBorderR) .. "|"
+        .. KeyPart(g.castbarBorderG) .. "|"
+        .. KeyPart(g.castbarBorderB) .. "|"
+        .. KeyPart(g.castbarBorderA)
+    if frame._msufDetailIconLayoutKey == layoutKey then
+        return
+    end
+    frame._msufDetailIconLayoutKey = layoutKey
 
     if icon then
         if showIcon then
@@ -391,7 +448,6 @@ local function ApplyIconLayout(frame, g, unit, prefix)
     if leftInset + rightInset > barW - 8 then
         leftInset, rightInset = 0, 0
     end
-    local frameInset = CastbarFrameInset(g)
     statusBar:ClearAllPoints()
     statusBar:SetPoint("TOPLEFT", frame, "TOPLEFT", leftInset + frameInset, -frameInset)
     statusBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -(rightInset + frameInset), frameInset)
@@ -414,22 +470,45 @@ end
 
 local function AnchorFontString(fs, relativeTo, position, x, y, defaultJustify)
     if not (fs and relativeTo) then return end
+    local justify
+    if position == "CENTER" then
+        justify = defaultJustify or "CENTER"
+    elseif position == "RIGHT" then
+        justify = defaultJustify or "RIGHT"
+    elseif position == "ABOVE" or position == "BELOW" then
+        justify = defaultJustify or "CENTER"
+    else
+        justify = defaultJustify or "LEFT"
+    end
+    if fs._msufCastbarAnchorRelativeTo == relativeTo
+        and fs._msufCastbarAnchorPosition == position
+        and fs._msufCastbarAnchorX == x
+        and fs._msufCastbarAnchorY == y
+        and fs._msufCastbarAnchorJustify == justify
+    then
+        return
+    end
+    fs._msufCastbarAnchorRelativeTo = relativeTo
+    fs._msufCastbarAnchorPosition = position
+    fs._msufCastbarAnchorX = x
+    fs._msufCastbarAnchorY = y
+    fs._msufCastbarAnchorJustify = justify
     fs:ClearAllPoints()
     if position == "CENTER" then
         fs:SetPoint("CENTER", relativeTo, "CENTER", x, y)
-        fs:SetJustifyH(defaultJustify or "CENTER")
+        fs:SetJustifyH(justify)
     elseif position == "RIGHT" then
         fs:SetPoint("RIGHT", relativeTo, "RIGHT", x, y)
-        fs:SetJustifyH(defaultJustify or "RIGHT")
+        fs:SetJustifyH(justify)
     elseif position == "ABOVE" then
         fs:SetPoint("BOTTOM", relativeTo, "TOP", x, y + 2)
-        fs:SetJustifyH(defaultJustify or "CENTER")
+        fs:SetJustifyH(justify)
     elseif position == "BELOW" then
         fs:SetPoint("TOP", relativeTo, "BOTTOM", x, y - 2)
-        fs:SetJustifyH(defaultJustify or "CENTER")
+        fs:SetJustifyH(justify)
     else
         fs:SetPoint("LEFT", relativeTo, "LEFT", 2 + x, y)
-        fs:SetJustifyH(defaultJustify or "LEFT")
+        fs:SetJustifyH(justify)
     end
 end
 

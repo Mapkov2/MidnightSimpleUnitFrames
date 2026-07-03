@@ -18,13 +18,13 @@ local VT = M.ValueTextList
 local WHITE_RGB = { 1, 1, 1 }
 local SPELL_INDICATORS_121_PTR_DISABLED = true
 local SPELL_INDICATORS_121_PTR_MESSAGE = "Disabled for 12.1 PTR; currently not working."
-local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle"
+local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
 local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
 local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 OptionText = OptionText or M.OptionText
 local function IconPackValues()
-    -- Icon pack options come from the group runtime when available, with a small fallback for
+    -- Style options come from the group runtime when available, with a small fallback for
     -- early load or test contexts where the runtime has not registered styles yet.
     local gf = GF()
     if gf and type(gf.GetIconStyleItems) == "function" then return gf.GetIconStyleItems(true) end
@@ -169,9 +169,9 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         defaultTab = "basic", x = siconLeftX, y = -50,
     })
     local styleCard = W.ControlCard(siconBasicTab, "Style", nil, siconLeftX, -38, siconLeftW, 132)
-    local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 258)
-    local previewCard = W.ControlCard(siconBasicTab, "Status Preview", nil, siconRightX, -38, siconRightW, 118)
-    local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -174, siconRightW, 322)
+    local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 316)
+    local previewCard = W.ControlCard(siconBasicTab, "Status Preview", nil, siconRightX, -38, siconRightW, 164)
+    local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -220, siconRightW, 322)
     local function RefreshStatusIconMenu()
         if M.RequestRefresh then
             M.RequestRefresh(ctx, "gf-indicators-status-icon")
@@ -232,7 +232,90 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
             slider = function(s, i) return BindStatusSlider(parent, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s[13]), s[14] or s[7] or i end,
         })
     end
-    local iconStyle = ScopeDropdown(ctx, styleCard, "Icon style", IconStyleValues, siconLeftW, "iconStyle", "BLIZZARD", "visual", 16, -56, siconLeftW - 32)
+    local function StatusIconPreviewEntries(spec)
+        local value = spec and spec.value
+        if value == "raidMarker" then return { { "raidMarker", 1 }, { "raidMarker", 5 }, { "raidMarker", 8 } } end
+        if value == "readyCheckIcon" then return { { "readyCheck", "ready" }, { "readyCheck", "notready" }, { "readyCheck", "waiting" } } end
+        if value == "summonIcon" then return { { "summon", 1 }, { "summon", 2 }, { "summon", 3 } } end
+        if value == "resurrectIcon" then return { { "incomingRes", "resurrect" } } end
+        if value == "pvpIcon" then return { { "pvp", "Alliance" }, { "pvp", "Horde" }, { "pvp", "FFA" } } end
+        if value == "phaseIcon" then return { { "phase", "phase" } } end
+        if value == "leaderIcon" then return { { "leader" } } end
+        if value == "assistIcon" then return { { "assist" } } end
+        if value == "roleIcon" then return { { "role", "TANK" }, { "role", "HEALER" }, { "role", "DAMAGER" } } end
+        return nil
+    end
+    local function IsRoleStatusIconSpec(spec)
+        local value = spec and spec.value
+        return value == "roleIcon" or value == "leaderIcon" or value == "assistIcon"
+    end
+    local function StatusIconStyleLabel(spec)
+        return "Role icon style"
+    end
+    local function SpecificIconLabel(spec)
+        return "Custom icon override"
+    end
+    local function SetDropdownTitle(control, label)
+        if control and control._msuf2Title and control._msuf2Title.SetText then
+            control._msuf2Title:SetText(Tr(label))
+        end
+    end
+    local function IconPackValuesForCurrentStatus()
+        local values = IconPackValues()
+        local spec = CurrentGFStatusSpec()
+        local entries = StatusIconPreviewEntries(spec)
+        local supports = _G.MSUF_StatusIconPackSupports
+        if type(supports) ~= "function" or type(entries) ~= "table" then return values end
+        local out = {}
+        local useMidnight = Bool(CurrentScope(), "useMidnightIcons", false)
+        for i = 1, #values do
+            local item = values[i]
+            local value = item and (item.value or item.key)
+            local keep = value == "DEFAULT"
+            for j = 1, #entries do
+                local entry = entries[j]
+                if supports(value, entry[1], entry[2], useMidnight) then
+                    keep = true
+                    break
+                end
+            end
+            if keep then out[#out + 1] = item end
+        end
+        return out
+    end
+    local function IconAssetValuesForCurrentStatus()
+        local spec = CurrentGFStatusSpec()
+        local entries = StatusIconPreviewEntries(spec)
+        local valuesFn = _G.MSUF_GetStatusIconAssetValues
+        if type(valuesFn) ~= "function" or type(entries) ~= "table" then
+            return { { value = "", text = "Use default icon" } }
+        end
+        local out, used = {}, {}
+        for i = 1, #entries do
+            local entry = entries[i]
+            local values = valuesFn(entry[1], entry[2], i == 1)
+            for j = 1, #(values or {}) do
+                local item = values[j]
+                local value = item and item.value
+                if type(value) == "string" and not used[value] then
+                    used[value] = true
+                    out[#out + 1] = item
+                end
+            end
+        end
+        if #out == 0 then out[1] = { value = "", text = "Use default icon" } end
+        return out
+    end
+    local function ResolvePreviewStatusIcon(style, iconType, variant, useMidnight)
+        local resolver = _G.MSUF_GetStatusIconTexture
+        if type(resolver) ~= "function" then
+            local gf = GF()
+            resolver = gf and gf.GetStatusIconTexture
+        end
+        if type(resolver) ~= "function" then return nil end
+        return resolver(style, iconType, variant, useMidnight == true)
+    end
+    local iconStyle = ScopeDropdown(ctx, styleCard, "Default role icon style", IconStyleValues, siconLeftW, "iconStyle", "BLIZZARD", "visual", 16, -56, siconLeftW - 32)
     local midnightStyle = BindScopeToggle(ctx, W.ToggleAt(styleCard, "Use Midnight Style", 16, -106, siconLeftW - 32), "useMidnightIcons", false, "visual")
     local statusSelector = W.Dropdown(selectedCard, "Indicator", GF_STATUS_ICON_VALUES, siconLeftW)
     M.BindDropdownWidget(ctx, statusSelector,
@@ -261,12 +344,21 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
             Set(CurrentScope(), spec.enabled, value and true or false, "visual")
             RefreshStatusIconMenu()
         end)
-    local iconPack = BindStatusDropdown(selectedCard, "Icon pack", IconPackValues, siconLeftW, "iconStyle", "DEFAULT", "visual", 16, -106, siconLeftW - 32,
-        function() M.CallIf(RefreshGFPreview) end)
+    local RefreshStatusIconState
+    local iconPack = BindStatusDropdown(selectedCard, "Role icon style", IconPackValuesForCurrentStatus, siconLeftW, "iconStyle", "DEFAULT", "visual", 16, -106, siconLeftW - 32,
+        function()
+            M.CallIf(RefreshGFPreview)
+            if RefreshStatusIconState then RefreshStatusIconState() end
+        end)
+    local customIcon = BindStatusDropdown(selectedCard, "Custom icon override", IconAssetValuesForCurrentStatus, siconLeftW, "customIcon", "", "visual", 16, -158, siconLeftW - 32,
+        function()
+            M.CallIf(RefreshGFPreview)
+            if RefreshStatusIconState then RefreshStatusIconState() end
+        end)
 
     --- Role filter group: only visible when Role Icon indicator is selected
     local roleFilterGroup = CreateFrame("Frame", nil, selectedCard)
-    roleFilterGroup:SetPoint("TOPLEFT", selectedCard, "TOPLEFT", 0, -164)
+    roleFilterGroup:SetPoint("TOPLEFT", selectedCard, "TOPLEFT", 0, -216)
     local roleFilterW = max(180, siconLeftW - 32)
     roleFilterGroup:SetSize(roleFilterW, 60)
     W.LabelAt(roleFilterGroup, "Show for:", 16, -8, siconLeftW - 32, "GameFontNormalSmall", T.colors.accent)
@@ -321,6 +413,60 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     statusReset:ClearAllPoints()
     statusReset:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -86)
     statusReset:SetSize(min(160, previewInnerW), 24)
+    local iconPreviewLabel = W.LabelAt(previewCard, "Icon preview", 16, -120, previewInnerW, "GameFontNormalSmall", T.colors.accent)
+    local iconPreviewStrip = CreateFrame("Frame", nil, previewCard)
+    iconPreviewStrip:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -132)
+    iconPreviewStrip:SetSize(previewInnerW, 24)
+    local iconPreviewTextures = {}
+    for i = 1, 5 do
+        local holder = CreateFrame("Frame", nil, iconPreviewStrip)
+        holder:SetSize(24, 24)
+        holder:SetPoint("LEFT", iconPreviewStrip, "LEFT", (i - 1) * 28, 0)
+        holder.bg = holder:CreateTexture(nil, "BACKGROUND")
+        holder.bg:SetAllPoints()
+        holder.bg:SetColorTexture(0.020, 0.026, 0.052, 0.70)
+        holder.tex = holder:CreateTexture(nil, "ARTWORK")
+        holder.tex:SetPoint("CENTER", holder, "CENTER", 0, 0)
+        holder.tex:SetSize(22, 22)
+        iconPreviewTextures[i] = holder
+    end
+    local function RefreshIconPreviewStrip(spec, enabled)
+        local entries = StatusIconPreviewEntries(spec)
+        local shown = entries and spec and (IsRoleStatusIconSpec(spec) or spec.customIcon)
+        iconPreviewLabel:SetShown(shown and true or false)
+        iconPreviewStrip:SetShown(shown and true or false)
+        if not shown then return end
+        local style = IsRoleStatusIconSpec(spec) and Val(CurrentScope(), spec.iconStyle, "DEFAULT") or "BLIZZARD"
+        if IsRoleStatusIconSpec(spec) and (type(style) ~= "string" or style == "" or style == "DEFAULT") then
+            style = Val(CurrentScope(), "iconStyle", "BLIZZARD")
+        end
+        if type(style) ~= "string" or style == "" or style == "DEFAULT" then style = "BLIZZARD" end
+        local customPath = spec and spec.customIcon and Val(CurrentScope(), spec.customIcon, "") or ""
+        local useMidnight = Bool(CurrentScope(), "useMidnightIcons", false)
+        iconPreviewStrip:SetAlpha(enabled and 1 or 0.46)
+        for i = 1, #iconPreviewTextures do
+            local holder = iconPreviewTextures[i]
+            local entry = entries[i]
+            if entry then
+                local path, l, r, t, b
+                if type(customPath) == "string" and customPath ~= "" then
+                    path, l, r, t, b = customPath, 0, 1, 0, 1
+                else
+                    path, l, r, t, b = ResolvePreviewStatusIcon(style, entry[1], entry[2], useMidnight)
+                end
+                if type(path) == "string" and path ~= "" then
+                    holder.tex:SetTexture(path)
+                    holder.tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
+                    holder.tex:SetVertexColor(1, 1, 1, 1)
+                    holder:Show()
+                else
+                    holder:Hide()
+                end
+            else
+                holder:Hide()
+            end
+        end
+    end
     local statusControls = BuildStatusControls(placementCard, {
         { "slider", "Size", 6, 40, 1, siconRightW, "size", function(spec) return spec.defaultSize end, "visual", 16, -58, siconRightW - 58 },
         { "dropdown", "Anchor", STATUS_ICON_ANCHORS, siconRightW, "anchor", function(spec) return spec.defaultAnchor end, "geometry", 16, -108, siconRightW - 32 },
@@ -353,23 +499,34 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
     advanced.previewAll:SetPoint("LEFT", advanced.previewCurrent, "RIGHT", 10, 0)
     local statusPlacementControls = { statusControls.size, statusControls.anchor, statusControls.x, statusControls.y, statusControls.layer, advanced.x, advanced.y, advanced.layer }
     local statusActionControls = { advanced.reset, advanced.previewCurrent, statusReset, previewCurrent }
-    local function RefreshStatusIconState()
+    RefreshStatusIconState = function()
         local spec = CurrentGFStatusSpec()
         local enabled = Bool(CurrentScope(), spec.enabled, false)
+        SetDropdownTitle(iconPack, StatusIconStyleLabel(spec))
+        SetDropdownTitle(customIcon, SpecificIconLabel(spec))
+        if iconPreviewLabel and iconPreviewLabel.SetText then
+            iconPreviewLabel:SetText(IsRoleStatusIconSpec(spec) and Tr("Role icon preview") or Tr("Icon preview"))
+        end
         SetOptionsEnabled(statusPlacementControls, enabled)
         SetOptionsEnabled(statusActionControls, spec ~= nil)
         SetManyEnabled(true, advanced.previewAll, previewAll, midnightStyle, statusEnabled)
-        local hasIconPack = spec and spec.iconStyle
+        local hasIconPack = spec and spec.iconStyle and IsRoleStatusIconSpec(spec)
+        local hasCustomIcon = spec and spec.customIcon
         if W.SetControlShown then
             W.SetControlShown(iconPack, hasIconPack and true or false)
+            W.SetControlShown(customIcon, hasCustomIcon and true or false)
         else
             iconPack:SetShown(hasIconPack and true or false)
             if iconPack._msuf2Title then iconPack._msuf2Title:SetShown(hasIconPack and true or false) end
+            customIcon:SetShown(hasCustomIcon and true or false)
+            if customIcon._msuf2Title then customIcon._msuf2Title:SetShown(hasCustomIcon and true or false) end
         end
         SetOptionEnabled(iconPack, hasIconPack and enabled)
+        SetOptionEnabled(customIcon, hasCustomIcon and enabled)
         local isRoleIcon = spec.value == "roleIcon"
         roleFilterGroup:SetShown(isRoleIcon)
         if isRoleIcon then SetOptionsEnabled(roleFilterControls, enabled) end
+        RefreshIconPreviewStrip(spec, enabled)
         SetSectionBadgesAndStatus(sicons, {
             OnOffBadge(enabled, "Shown", "Hidden"),
             { text = spec and (spec.text or spec.value) or "Selected", kind = enabled and "info" or "muted" },

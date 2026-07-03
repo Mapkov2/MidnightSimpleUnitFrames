@@ -855,7 +855,7 @@ local function StatusString(conf, general, key, fallback, legacyKey)
 end
 
 local function StatusAllowed(key, id)
-  if id == "leader" or id == "combat" or id == "incomingRes" then
+  if id == "leader" or id == "assist" or id == "combat" or id == "incomingRes" then
     return key == "player" or key == "target"
   elseif id == "pvp" then
     return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
@@ -891,28 +891,29 @@ local function CompileStatusEntry(status, id, conf, general, key, showKey, fallb
   return entry
 end
 
-local function StatusEntryDef(id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style, symbol)
-  return { id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style = style, symbol = symbol }
+local function StatusEntryDef(id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style, symbol, customIcon)
+  return { id, showKey, showDefault, sizeKey, sizeDefault, anchorKey, anchorDefault, xKey, xDefault, yKey, yDefault, layerKey, layerDefault, style = style, symbol = symbol, customIcon = customIcon }
 end
 
-local function PrefixedStatusDef(id, showKey, showDefault, prefix, sizeDefault, anchorDefault, xDefault, yDefault, layerDefault, style, symbol)
+local function PrefixedStatusDef(id, showKey, showDefault, prefix, sizeDefault, anchorDefault, xDefault, yDefault, layerDefault, style, symbol, customIcon)
   return StatusEntryDef(id, showKey, showDefault,
     prefix .. "Size", sizeDefault, prefix .. "Anchor", anchorDefault,
     prefix .. "OffsetX", xDefault, prefix .. "OffsetY", yDefault,
-    prefix .. "Layer", layerDefault, style, symbol)
+    prefix .. "Layer", layerDefault, style, symbol, customIcon)
 end
 
 local UNIT_STATUS_ENTRY_DEFS = {
-  PrefixedStatusDef("leader", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7, { "leaderIconStyle", "BLIZZARD" }),
-  PrefixedStatusDef("raidMarker", "showRaidMarker", true, "raidMarker", 18, "TOPLEFT", 16, 3, 7),
+  PrefixedStatusDef("leader", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7, { "leaderIconStyle", "BLIZZARD" }, nil, { "leaderIconCustomIcon", "" }),
+  PrefixedStatusDef("assist", "showLeaderIcon", true, "leaderIcon", 14, "TOPLEFT", 0, 3, 7, { "assistIconStyle", "BLIZZARD", "leaderIconStyle" }, nil, { "assistIconCustomIcon", "" }),
+  PrefixedStatusDef("raidMarker", "showRaidMarker", true, "raidMarker", 18, "TOPLEFT", 16, 3, 7, nil, nil, { "raidMarkerCustomIcon", "" }),
   PrefixedStatusDef("level", "showLevelIndicator", true, "levelIndicator", 14, "NAMERIGHT", 0, 0, 7),
   StatusEntryDef("raidGroup", "showRaidGroupInName", false, "nameFontSize", 12, "raidGroupNameAnchor", "NAMERIGHT", "raidGroupNameOffsetX", 3, "raidGroupNameOffsetY", 0, "nameTextLayer", 5, { "raidGroupNameStyle", "PAREN" }),
-  PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7),
+  PrefixedStatusDef("elite", "showEliteIcon", true, "eliteIcon", 20, "TOPRIGHT", 2, 2, 7, nil, nil, { "eliteIconCustomIcon", "" }),
   PrefixedStatusDef("statusText", "statusTextEnabled", true, "statusText", 14, "CENTER", 0, 0, 7),
-  PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "combatStateIndicatorSymbol", "DEFAULT" }),
-  PrefixedStatusDef("resting", "showRestingIndicator", false, "restedStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol" }),
-  PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }),
-  PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7),
+  PrefixedStatusDef("combat", "showCombatStateIndicator", true, "combatStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "combatStateIndicatorSymbol", "DEFAULT" }, { "combatStateIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("resting", "showRestingIndicator", false, "restedStateIndicator", 18, "TOPLEFT", 0, 0, 7, nil, { "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol" }, { "restedStateIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("incomingRes", "showIncomingResIndicator", true, "incomingResIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, { "incomingResIndicatorSymbol", "DEFAULT" }, { "incomingResIndicatorCustomIcon", "" }),
+  PrefixedStatusDef("pvp", "showPvpIndicator", true, "pvpIndicator", 18, "TOPRIGHT", 0, 0, 7, nil, nil, { "pvpIndicatorCustomIcon", "" }),
 }
 
 local function CompileStatusEntryDef(status, conf, general, key, def, fallbackSize)
@@ -926,6 +927,10 @@ local function CompileStatusEntryDef(status, conf, general, key, def, fallbackSi
   local symbol = def.symbol
   if symbol then
     entry.symbol = StatusString(conf, general, symbol[1], symbol[2], symbol[3])
+  end
+  local customIcon = def.customIcon
+  if customIcon then
+    entry.customIcon = StatusString(conf, general, customIcon[1], customIcon[2])
   end
   return entry
 end

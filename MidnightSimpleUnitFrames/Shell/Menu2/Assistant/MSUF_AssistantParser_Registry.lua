@@ -17,6 +17,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Data = A.ParserData or {}
+A.ParserData = Data
+local RegistryData = Data.REGISTRY_PARSER or {}
+local RegistryPhrases = RegistryData.PHRASES or {}
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -102,7 +106,7 @@ local function ScopeAdjustedTextForSetting(setting, text)
     local unit = tostring(setting.unit)
     local keyScope = SettingKeyScope(setting)
     local settingKey = tostring(setting.key or ""):lower()
-    if settingKey:find("bosstarget", 1, true) and ContainsAny(text, { "boss target", "boss targets" }) then return text end
+    if settingKey:find("bosstarget", 1, true) and ContainsAny(text, RegistryPhrases[1]) then return text end
     local units, groups = ExplicitScopes(text)
     local adjusted = text
     if setting.frameType == "group" or setting.frameType == "groupAura" then
@@ -124,14 +128,11 @@ local function ScopeAdjustedTextForSetting(setting, text)
 end
 
 local function HasAllScopeIntent(text)
-    return ContainsAny(text, {
-        "all", "all of", "for all", "every", "everyone", "everything", "each",
-        "alle", "alles", "fuer alle", "jede", "jeder", "jedes", "jeweils",
-    })
+    return ContainsAny(text, RegistryPhrases[2])
 end
 
 P.ExplicitAuraFilterScope = P.ExplicitAuraFilterScope or function(text)
-    if not (ContainsAny(text, { "filter", "filters" }) and ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })) then return nil end
+    if not (ContainsAny(text, RegistryPhrases[3]) and ContainsAny(text, RegistryPhrases[4])) then return nil end
     local scopes = {
         { scope = "shared", terms = { "shared", "global" } },
         { scope = "player", terms = { "player", "spieler", "self", "ich" } },
@@ -195,8 +196,8 @@ end
 local function AuraLaneVisibilityBlockedByDetail(setting, text)
     if not IsAuraLaneVisibilitySetting(setting) then return false end
     if ContainsAny(text, AURA_LANE_VISIBILITY_DETAIL_TERMS) then return true end
-    if ContainsAny(text, { " icon", " icons" })
-        and not ContainsAny(text, { "buff icons", "debuff icons", "aura icons", "buff icon", "debuff icon", "aura icon" })
+    if ContainsAny(text, RegistryPhrases[5])
+        and not ContainsAny(text, RegistryPhrases[6])
     then
         return true
     end
@@ -204,13 +205,7 @@ local function AuraLaneVisibilityBlockedByDetail(setting, text)
 end
 
 local function ClassPowerMentionIsNegated(text)
-    return ContainsAny(text, {
-        "not class resource", "not class resources", "not class power", "not class bar", "not resource bar",
-        "no class resource", "no class resources", "no class power", "no class bar", "no resource bar",
-        "dont class resource", "do not class resource",
-        "nicht class resource", "nicht class power", "nicht klassenressource", "keine class resource",
-        "kein class resource", "keine klassenressource", "nicht ressourcenleiste",
-    })
+    return ContainsAny(text, RegistryPhrases[7])
 end
 
 local function HasClassPowerIntent(text)
@@ -246,7 +241,7 @@ local function HasAuraSettingIntent(text)
     -- "Debuff stripe" and "dispel overlay" belong to unitframe visuals, not aura filtering.
     -- Guard them here before broad buff/debuff words pull the command into the aura registry.
     if ContainsAny(text, P.NON_AURA_DEBUFF_CONTROL_TERMS) then return false end
-    return ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+    return ContainsAny(text, RegistryPhrases[8])
 end
 
 P.AURA_VAGUE_ICON_SIZE_TERMS = P.AURA_VAGUE_ICON_SIZE_TERMS or {
@@ -312,7 +307,7 @@ end
 
 P.ShouldApplyMultipleAuraLaneChanges = P.ShouldApplyMultipleAuraLaneChanges or function(text, changes)
     if #(changes or {}) ~= 2 then return false end
-    if not ContainsAny(text, { "aura", "auras", "aura icon", "aura icons" }) then return false end
+    if not ContainsAny(text, RegistryPhrases[9]) then return false end
     local base
     local sawBuff, sawDebuff = false, false
     for i = 1, #changes do
@@ -363,7 +358,7 @@ local function SettingAllowedByExplicitScopes(setting, text)
     if frameType == "aura"
         and unit == "shared"
         and (#units > 0 or #groups > 0)
-        and not ContainsAny(text, { "shared", "global", "all aura", "all auras", "all buffs", "all debuffs", "every aura", "every auras", "every buff", "every buffs", "every debuff", "every debuffs" })
+        and not ContainsAny(text, RegistryPhrases[10])
     then
         return false
     end
@@ -373,13 +368,13 @@ local function SettingAllowedByExplicitScopes(setting, text)
     if frameType == "aura"
         and unit == "shared"
         and HasAllScopeIntent(text)
-        and ContainsAny(text, { "growth", "grow", "growth direction", "grow direction" })
-        and ContainsAny(text, { "all buffs", "all debuffs", "all aura", "all auras" })
+        and ContainsAny(text, RegistryPhrases[11])
+        and ContainsAny(text, RegistryPhrases[12])
     then
         local key = tostring(setting.key or ""):lower()
         if key == "auras3.shared.buffgrowth" or key == "auras3.shared.debuffgrowth" then return false end
     end
-    if setting.frameType == "aura" and ContainsAny(text, { "filter", "filters" })
+    if setting.frameType == "aura" and ContainsAny(text, RegistryPhrases[13])
         and not tostring(setting.attribute or ""):lower():find("filter", 1, true) then
         return false
     end
@@ -387,7 +382,7 @@ local function SettingAllowedByExplicitScopes(setting, text)
     if setting.frameType == "aura" and auraFilterScope then
         return unit == auraFilterScope or keyScope == auraFilterScope
     end
-    if setting.frameType == "aura" and unit == "shared" and ContainsAny(text, { "shared", "global", "all auras", "all aura" }) then
+    if setting.frameType == "aura" and unit == "shared" and ContainsAny(text, RegistryPhrases[14]) then
         return true
     end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
@@ -396,7 +391,7 @@ local function SettingAllowedByExplicitScopes(setting, text)
         return true
     end
     local settingKey = tostring(setting.key or ""):lower()
-    if settingKey:find("bosstarget", 1, true) and ContainsAny(text, { "boss target", "boss targets" }) then return true end
+    if settingKey:find("bosstarget", 1, true) and ContainsAny(text, RegistryPhrases[15]) then return true end
     if #units > 0 and unit ~= "" and unit ~= "global" and not ListContains(units, unit) and not ListContains(units, keyScope) then return false end
     if #groups > 0 and #units == 0 and unit ~= "" and unit ~= "global" and not ListContains(groups, unit) and not ListContains(groups, keyScope) then return false end
     return true
@@ -472,10 +467,10 @@ local function SettingMatchScore(setting, text)
     if setting.frameType == "castbar" and setting.attribute == "enabled" and ContainsAny(text, CASTBAR_ROOT_DETAIL_TERMS) then
         return 0
     end
-    if setting.frameType == "classPower" and ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) and not ContainsAny(text, CLASS_POWER_TERMS) then
+    if setting.frameType == "classPower" and ContainsAny(text, RegistryPhrases[16]) and not ContainsAny(text, CLASS_POWER_TERMS) then
         return 0
     end
-    if setting.frameType == "classPower" and ContainsAny(text, { "portrait", "portrait border" }) and not ContainsAny(text, CLASS_POWER_TERMS) then
+    if setting.frameType == "classPower" and ContainsAny(text, RegistryPhrases[17]) and not ContainsAny(text, CLASS_POWER_TERMS) then
         return 0
     end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
@@ -510,6 +505,79 @@ local function SettingMatchScore(setting, text)
     end
     if best > 0 and P.SettingMatchScoreCachePut then return P.SettingMatchScoreCachePut(setting, text, best) end
     return best
+end
+
+function P.ScoreSettingCandidates(candidates, features)
+    if type(candidates) ~= "table" or #candidates <= 1 then return candidates end
+    features = type(features) == "table" and features or {}
+    local ctx = features.context
+    if type(ctx) ~= "table" and A.ConversationContext then ctx = A.ConversationContext() end
+    local subject = type(ctx) == "table" and ctx.subject or {}
+    local subjectUnit = subject and subject.unit
+    local subjectCategory = subject and subject.category
+    local subjectTextArea = subject and subject.textArea
+
+    local maxAlias = 1
+    for i = 1, #candidates do
+        local score = tonumber(candidates[i] and candidates[i].matchScore or candidates[i] and candidates[i].score) or 0
+        if score > maxAlias then maxAlias = score end
+        candidates[i]._contextScoreIndex = i
+    end
+
+    local bestScore
+    local out = {}
+    for i = 1, #candidates do
+        local item = candidates[i]
+        local setting = item and item.setting
+        local aliasScore = tonumber(item and (item.matchScore or item.score)) or 0
+        local score = aliasScore / maxAlias
+        if setting and subjectUnit ~= nil and setting.unit == subjectUnit then score = score + 0.25 end
+        if setting and subjectCategory ~= nil and setting.category == subjectCategory then score = score + 0.25 end
+        if setting and subjectTextArea ~= nil then
+            local area = tostring(subjectTextArea or "")
+            local hay = tostring(setting.attribute or "") .. " " .. tostring(setting.key or "") .. " " .. tostring(setting.label or "")
+            if area ~= "" and hay:lower():find(area:lower(), 1, true) then score = score + 0.15 end
+        end
+        if setting and setting.generated == true then score = score - 0.10 end
+        if setting and item and item.value ~= nil and item.relativeDelta == nil and type(setting.get) == "function" then
+            local ok, current = pcall(setting.get)
+            if ok then
+                local same
+                if type(setting.sameValue) == "function" then
+                    local sameOk, sameResult = pcall(setting.sameValue, current, item.value)
+                    same = sameOk and sameResult == true
+                elseif setting.type == "number" then
+                    local oldNumber = tonumber(current)
+                    local newNumber = tonumber(item.value)
+                    same = oldNumber ~= nil and newNumber ~= nil and math.abs(oldNumber - newNumber) < 0.0001
+                else
+                    same = current == item.value
+                end
+                if same then score = score - 0.40 end
+            end
+        end
+        item.contextScore = score
+        if bestScore == nil or score > bestScore then
+            bestScore = score
+            out = { item }
+        elseif score == bestScore then
+            out[#out + 1] = item
+        end
+    end
+
+    if #out <= 1 then return out end
+    local bestAlias
+    local aliasFiltered = {}
+    for i = 1, #out do
+        local aliasScore = tonumber(out[i] and (out[i].matchScore or out[i].score)) or 0
+        if bestAlias == nil or aliasScore > bestAlias then
+            bestAlias = aliasScore
+            aliasFiltered = { out[i] }
+        elseif aliasScore == bestAlias then
+            aliasFiltered[#aliasFiltered + 1] = out[i]
+        end
+    end
+    return aliasFiltered
 end
 
 local function EnumValueForText(setting, text)
@@ -883,9 +951,9 @@ local function ValueDisplay(setting, value)
 end
 
 local function TooltipModifierValueForText(text)
-    if ContainsAny(text, { "shift", "umschalt", "umschalttaste", "shift taste" }) then return "SHIFT" end
-    if ContainsAny(text, { "ctrl", "control", "strg", "steuerung", "strg taste" }) then return "CTRL" end
-    if ContainsAny(text, { "alt", "option", "alt taste" }) then return "ALT" end
+    if ContainsAny(text, RegistryPhrases[18]) then return "SHIFT" end
+    if ContainsAny(text, RegistryPhrases[19]) then return "CTRL" end
+    if ContainsAny(text, RegistryPhrases[20]) then return "ALT" end
     return nil
 end
 
@@ -1081,7 +1149,7 @@ local function SettingPartialSuggestionScore(setting, text)
     if setting.frameType == "castbar" and setting.attribute == "enabled" and ContainsAny(text, CASTBAR_ROOT_DETAIL_TERMS) then
         return 0
     end
-    if setting.frameType == "classPower" and ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) and not ContainsAny(text, CLASS_POWER_TERMS) then
+    if setting.frameType == "classPower" and ContainsAny(text, RegistryPhrases[21]) and not ContainsAny(text, CLASS_POWER_TERMS) then
         return 0
     end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
@@ -1433,11 +1501,11 @@ end
 local function HideSettingValueForText(text, defaultValue)
     local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(text) or nil
     if target then
-        if ContainsAny(target, { "not show", "dont show", "do not show", "never show", "nicht anzeigen", "nicht zeigen", "nicht einblenden" }) then return true end
+        if ContainsAny(target, RegistryPhrases[22]) then return true end
         if ContainsAny(target, HIDE_OFF_TERMS) then return false end
         if ContainsAny(target, HIDE_ON_TERMS) then return true end
     end
-    if ContainsAny(text, { "not show", "dont show", "do not show", "never show", "nicht anzeigen", "nicht zeigen", "nicht einblenden" }) then return true end
+    if ContainsAny(text, RegistryPhrases[23]) then return true end
     if ContainsAny(text, HIDE_OFF_TERMS) then return false end
     if ContainsAny(text, HIDE_ON_TERMS) then return true end
     local value = DetectBoolean(text)
@@ -1505,83 +1573,39 @@ local function HasUnitLoadConditionIntent(text, spec)
     if #groups > 0 then
         return spec.key == "loadCondHideInGroup"
             and #units > 0
-            and not ContainsAny(text, { "group frame", "group frames", "group when solo", "player in group when solo", "when solo", "while solo" })
-            and ContainsAny(text, { "hide in group", "hide while in group", "hide when in group", "group load condition" })
+            and not ContainsAny(text, RegistryPhrases[24])
+            and ContainsAny(text, RegistryPhrases[25])
     end
     return #units > 0 and HasVisibilityVerb(text)
 end
 
 local function GroupAvailabilityAttributeForText(text)
-    if ContainsAny(text, { "tint offline", "tint offline members", "also tint offline members", "dead background offline", "dead background offline members", "dead offline tint" }) then
+    if ContainsAny(text, RegistryPhrases[26]) then
         return nil
     end
-    if (ContainsAny(text, { "offline", "offline member", "offline members", "offline player", "offline players" })
-        and ContainsAny(text, { "combat", "in combat" })
-        and ContainsAny(text, { "hide", "hidden", "not show", "dont show", "do not show", "never show" }))
-        or ContainsAny(text, {
-        "offline in combat", "offline members in combat", "offline players in combat",
-        "hide offline in combat", "hide offline members in combat", "hide offline players in combat",
-        "only hide offline in combat", "only hide offline members in combat", "only hide offline players in combat",
-        "combat offline hide", "offline im kampf",
-    }) then
+    if (ContainsAny(text, RegistryPhrases[27])
+        and ContainsAny(text, RegistryPhrases[28])
+        and ContainsAny(text, RegistryPhrases[29]))
+        or ContainsAny(text, RegistryPhrases[30]) then
         return "hideOfflineInCombat", "hide"
     end
-    if ContainsAny(text, { "offline members", "offline member", "offline players", "hide offline members", "offline spieler" }) then
+    if ContainsAny(text, RegistryPhrases[31]) then
         return "hideOfflineEnabled", "hide"
     end
-    if ContainsAny(text, { "client scene", "client scenes", "hide during client scene", "hide in client scene", "client szene" }) then
+    if ContainsAny(text, RegistryPhrases[32]) then
         return "hideInClientScene", "hide"
     end
     local groupScopesForHousing = DetectGroups(text)
-    if #groupScopesForHousing > 0 and ContainsAny(text, { "housing", "house", "in housing", "while in housing", "when in housing", "player housing", "haus", "spielerhaus" }) then
+    if #groupScopesForHousing > 0 and ContainsAny(text, RegistryPhrases[33]) then
         return "hideInHousing", "hide"
     end
-    if ContainsAny(text, {
-        "player in group", "player in group frames", "show player in group",
-        "show player in group frames", "show player when solo", "show player in group when solo",
-        "hide player in group", "hide player in group frames", "player when solo",
-        "spieler in gruppe", "spieler anzeigen",
-    }) then
+    if ContainsAny(text, RegistryPhrases[34]) then
         return "showPlayer", "show"
     end
-    if ContainsAny(text, {
-        "show while solo", "show solo", "solo mode", "show group while solo",
-        "show party frames while solo", "show raid frames while solo", "show mythic raid frames while solo",
-        "show party frame while solo", "show raid frame while solo", "show mythic raid frame while solo",
-        "show party frame when solo", "show raid frame when solo", "show mythic raid frame when solo",
-        "show group frame while solo", "show group frame when solo",
-        "show group frames while solo", "group while solo", "group frames while solo",
-        "group frame while solo", "group frame when solo",
-        "hide while solo", "hide solo", "not show while solo", "dont show while solo", "do not show while solo",
-        "hide party frames while solo", "hide raid frames while solo", "hide mythic raid frames while solo",
-        "hide party frame while solo", "hide raid frame while solo", "hide mythic raid frame while solo",
-        "hide party frame when solo", "hide raid frame when solo", "hide mythic raid frame when solo",
-        "hide group frame while solo", "hide group frame when solo",
-        "solo anzeigen", "solo modus",
-    }) then
+    if ContainsAny(text, RegistryPhrases[35]) then
         return "showSolo", "show"
     end
-    if ContainsAny(text, {
-        "use msuf group frames", "msuf group frames", "group frames enabled",
-        "party frames enabled", "raid frames enabled", "enable group frames",
-        "disable group frames", "turn on group frames", "turn off group frames",
-        "enable party frames", "disable party frames", "turn on party frames", "turn off party frames",
-        "enable party frame", "disable party frame", "turn on party frame", "turn off party frame",
-        "enable raid frames", "disable raid frames", "turn on raid frames", "turn off raid frames",
-        "enable raid frame", "disable raid frame", "turn on raid frame", "turn off raid frame",
-        "enable mythic raid frames", "disable mythic raid frames", "turn on mythic raid frames", "turn off mythic raid frames",
-        "enable mythicraid frames", "disable mythicraid frames", "turn on mythicraid frames", "turn off mythicraid frames",
-        "party frames from off to on", "party frames from on to off", "party frames off to on", "party frames on to off",
-        "party frame from off to on", "party frame from on to off", "party frame off to on", "party frame on to off",
-        "raid frames from off to on", "raid frames from on to off", "raid frames off to on", "raid frames on to off",
-        "raid frame from off to on", "raid frame from on to off", "raid frame off to on", "raid frame on to off",
-        "mythic raid frames from off to on", "mythic raid frames from on to off",
-        "mythicraid frames from off to on", "mythicraid frames from on to off",
-    }) and not ContainsAny(text, {
-        "preview", "power bar", "name", "text", "status icon", "indicator",
-        "scaling", "scale", "raid marker", "marker", "role icon", "ready check",
-        "summon", "resurrection", "phase", "pvp", "war mode", "icon",
-    }) then
+    if ContainsAny(text, RegistryPhrases[36]) and not ContainsAny(text, RegistryPhrases[37]) then
         return "enabled", "show"
     end
     return nil
@@ -1766,12 +1790,9 @@ end
 RelativeNumberDeltaAllowedForSetting = function(setting, text, relativeDelta)
     if relativeDelta == nil then return true end
     if not HasAuraSettingIntent(text) then return true end
-    if not ContainsAny(text, { "bigger", "larger", "smaller", "shrink", "groesser", "kleiner" }) then return true end
+    if not ContainsAny(text, RegistryPhrases[38]) then return true end
     if P.HasVagueAuraIconSizeIntent(text) then return P.IsAuraIconSizeSetting(setting) end
-    if ContainsAny(text, {
-        "size", "icon size", "text size", "font size", "spacing", "gap", "offset", "x offset", "y offset",
-        "x ", " y ", "layer", "per row", "icons per row", "max", "count", "stack", "cooldown", "timer",
-    }) then
+    if ContainsAny(text, RegistryPhrases[39]) then
         return true
     end
     local hay = (tostring(setting and setting.key or "") .. " " .. tostring(setting and setting.label or "") .. " " .. tostring(setting and setting.attribute or "")):lower()
@@ -1789,7 +1810,7 @@ end
 
 local function BooleanValueForNumberSetting(setting, text)
     if not NumberSettingSupportsBooleanToggle(setting) then return nil end
-    local hasBooleanCue = ContainsAny(text, { "on", "off", "enable", "disable", "show", "hide", "remove", "without", "no ", "with ", "an", "aus", "aktivieren", "deaktivieren" })
+    local hasBooleanCue = ContainsAny(text, RegistryPhrases[40])
     if not hasBooleanCue then return nil end
     local aliasValue = P.BooleanAliasValueForText and P.BooleanAliasValueForText(setting, text)
     if aliasValue ~= nil then return aliasValue end
@@ -1815,7 +1836,7 @@ end
 
 local function ContextualBooleanValueForRegistrySetting(setting, text)
     if type(setting) ~= "table" then return nil end
-    if ContainsAny(text, { "what", "where", "why", "help", "explain", "how" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[41]) then return nil end
 
     local hay = (tostring(setting.key or "") .. " " .. tostring(setting.label or "") .. " " .. tostring(setting.attribute or "")):lower()
     local customSetting = hay:find("custom", 1, true) ~= nil or hay:find("override", 1, true) ~= nil
@@ -1824,14 +1845,8 @@ local function ContextualBooleanValueForRegistrySetting(setting, text)
         or hay:find("shared", 1, true) ~= nil
         or hay:find("inherit", 1, true) ~= nil
 
-    local customIntent = ContainsAny(text, {
-        "use custom", "custom aura", "custom style", "custom filters", "custom rules",
-        "custom layout", "custom caps", "override", "own aura", "own filters",
-    })
-    local sharedIntent = ContainsAny(text, {
-        "use shared", "shared aura", "shared style", "shared filters", "shared rules",
-        "inherit", "inherited", "follow shared", "use defaults", "default aura",
-    })
+    local customIntent = ContainsAny(text, RegistryPhrases[42])
+    local sharedIntent = ContainsAny(text, RegistryPhrases[43])
 
     if customSetting and customIntent then return true end
     if customSetting and sharedIntent then return false end
@@ -1842,7 +1857,7 @@ end
 
 local function ToggleBooleanValueForRegistrySetting(setting, text)
     if type(setting) ~= "table" or setting.type ~= "boolean" then return nil end
-    if not ContainsAny(text, { "toggle", "switch", "flip", "invert", "umschalten", "wechseln" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[44]) then return nil end
     if type(setting.get) ~= "function" then return nil end
     local ok, current = pcall(setting.get)
     if not ok or type(current) ~= "boolean" then return nil end
@@ -1855,22 +1870,22 @@ ValueForRegistrySetting = function(setting, text, raw)
         local attr = tostring(setting.attribute or ""):lower()
         local key = tostring(setting.key or ""):lower()
         if attr == "powerbardetached" or key:find("%.powerbardetached", 1, true) then
-            if ContainsAny(text, { "attach", "attached", "reattach", "dock", "docked", "anchor to frame", "back to frame", "into frame", "ankoppeln" }) then return false end
-            if ContainsAny(text, { "detach", "detached", "undock", "undocked", "separate", "separated", "abkoppeln" }) then return true end
+            if ContainsAny(text, RegistryPhrases[45]) then return false end
+            if ContainsAny(text, RegistryPhrases[46]) then return true end
         end
         if key == "general.hardkillblizzardplayerframe" then
-            if ContainsAny(text, { "turn off", "disable", "disabled", "off", "false", "no" }) then return false end
-            if ContainsAny(text, { "fully hide", "hard hide", "hard kill", "enable", "enabled", "turn on", "on", "true", "yes" }) then return true end
+            if ContainsAny(text, RegistryPhrases[47]) then return false end
+            if ContainsAny(text, RegistryPhrases[48]) then return true end
             return DetectBoolean(text)
         end
         if key == "general.hideadvancedmenu" then
-            if ContainsAny(text, { "hide", "hidden", "disable", "disabled", "turn off", "off", "false", "no" }) then return false end
-            if ContainsAny(text, { "show", "visible", "enable", "enabled", "turn on", "on", "true", "yes" }) then return true end
+            if ContainsAny(text, RegistryPhrases[49]) then return false end
+            if ContainsAny(text, RegistryPhrases[50]) then return true end
             return DetectBoolean(text)
         end
         if attr:find("^hide") or key:find("hide") then
-            if ContainsAny(text, { "turn off", "disable", "disabled", "off", "false", "no", "dont hide", "do not hide", "never hide", "always show", "show" }) then return false end
-            if ContainsAny(text, { "hide", "enable", "enabled", "turn on", "on", "true", "yes" }) then return true end
+            if ContainsAny(text, RegistryPhrases[51]) then return false end
+            if ContainsAny(text, RegistryPhrases[52]) then return true end
         end
         local aliasValue = P.BooleanAliasValueForText and P.BooleanAliasValueForText(setting, text)
         if aliasValue ~= nil then return aliasValue end
@@ -2000,28 +2015,11 @@ local POWER_GROUP_ORDER = { "party", "raid", "mythicraid" }
 local CASTBAR_INTERRUPT_UNITS = { "player", "target", "focus", "boss" }
 
 local function ParseGlobalFontFamilyShortcut(text, raw)
-    if not ContainsAny(text, { "font", "fonts", "schrift", "schriftart" }) then return nil end
-    if ContainsAny(text, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "show me" }) then return nil end
-    if ContainsAny(text, {
-        "font color", "font colour", "font palette", "text color", "text colour", "custom font color",
-        "font size", "text size", "font scale", "outline", "shadow", "shorten", "shortening", "truncate",
-        "rendering", "font rendering", "monochrome", "anti alias", "anti-alias", "antialias",
-        "font smoothing", "text smoothing", "smooth font", "smooth text",
-        "name font", "name text", "health font", "health text", "hp font", "hp text",
-        "power font", "power text", "castbar", "cast bar", "spell name", "timer font", "time font",
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "cooldown", "stack",
-        "combat timer", "combat text", "targeted spell", "targeted spells", "anchor", "offset",
-        "x position", "y position", "line 1", "line 2", "slot 1", "slot 2", "override",
-    }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[53]) then return nil end
+    if ContainsAny(text, RegistryPhrases[54]) then return nil end
+    if ContainsAny(text, RegistryPhrases[55]) then return nil end
     if #(DetectUnits(text) or {}) > 0 or #(DetectGroups(text) or {}) > 0 then return nil end
-    if not ContainsAny(text, {
-        "set font", "change font", "make font", "use font", "choose font", "switch font",
-        "set global font", "change global font", "set main font", "change main font",
-        "set default font", "change default font", "set shared font", "change shared font",
-        "set all fonts", "change all fonts", "make all fonts", "use all fonts",
-        "set every font", "change every font", "all fonts to", "all font to", "every font to",
-        "schriftart", "schrift setzen", "schrift aendern", "schrift andern",
-    }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[56]) then return nil end
 
     local setting = Registry and Registry:GetSetting("general.fontKey")
     if not setting then return nil end
@@ -2065,11 +2063,11 @@ local FONT_RENDERING_GROUP_SCOPES = {
 
 local function FontRenderingValueForText(text)
     local boolValue = DetectBoolean(text)
-    if ContainsAny(text, { "monochrome", "mono", "sharp", "crisp", "pixel", "pixel sharp", "pixelscharf" }) then
+    if ContainsAny(text, RegistryPhrases[57]) then
         if boolValue == false then return "SMOOTH" end
         return "SHARP"
     end
-    if ContainsAny(text, { "smooth", "smoothing", "soft", "normal" }) then
+    if ContainsAny(text, RegistryPhrases[58]) then
         if boolValue == false then return "SHARP" end
         return "SMOOTH"
     end
@@ -2077,13 +2075,9 @@ local function FontRenderingValueForText(text)
 end
 
 local function ParseFontRenderingShortcut(text)
-    if not ContainsAny(text, { "font", "fonts", "text", "schrift" }) then return nil end
-    if ContainsAny(text, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "show me" }) then return nil end
-    if not ContainsAny(text, {
-        "font rendering", "text rendering", "font smoothing", "text smoothing",
-        "sharp text", "sharp font", "pixel font", "monochrome font", "font monochrome",
-        "global font rendering", "shared font rendering", "default font rendering",
-    }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[59]) then return nil end
+    if ContainsAny(text, RegistryPhrases[60]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[61]) then return nil end
 
     local value = FontRenderingValueForText(text)
     if value == nil then return nil end
@@ -2150,13 +2144,9 @@ local function FontScopeTargetsForText(text)
 end
 
 local function ParseFontTextOpacityShortcut(text)
-    if not ContainsAny(text, { "text opacity", "text alpha", "font opacity", "font alpha" }) then return nil end
-    if ContainsAny(text, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "show me" }) then return nil end
-    if ContainsAny(text, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
-        "combat", "edit mode", "editmode", "background", "bar opacity", "bar alpha",
-        "outline", "border", "shadow opacity", "shadow alpha",
-    }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[62]) then return nil end
+    if ContainsAny(text, RegistryPhrases[63]) then return nil end
+    if ContainsAny(text, RegistryPhrases[64]) then return nil end
 
     local value = FirstNumber(text)
     if value == nil then return nil end
@@ -2187,17 +2177,9 @@ P._AddFontTextColorChange = function(changes, key, value)
 end
 
 P._ParseAllTextWhiteShortcut = function(text)
-    if not ContainsAny(text, { "white", "weiss" }) then return nil end
-    if not ContainsAny(text, {
-        "everything", "all text", "all texts", "all font", "all fonts", "all names",
-        "all unitframe text", "all unit frame text", "all msuf text", "make everything",
-        "color everything", "colour everything", "text white", "font white",
-    }) then return nil end
-    if ContainsAny(text, {
-        "bar", "bars", "castbar", "cast bar", "border", "outline", "background",
-        "aura", "auras", "buff", "debuff", "class resource", "class resources",
-        "class power", "resource bar",
-    }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[65]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[66]) then return nil end
+    if ContainsAny(text, RegistryPhrases[67]) then return nil end
 
     local changes = {}
     P._AddFontTextColorChange(changes, "general.fontColor", "white")
@@ -2220,53 +2202,25 @@ P._FontTextColorDefaultIntent = function(text, spec)
     local boolValue = DetectBoolean(text)
     local targetValue = P.TargetAfterLastConnector and P.TargetAfterLastConnector(text) or tostring(text or ""):match("%s+to%s+(.+)$")
     if targetValue and spec then
-        if ContainsAny(targetValue, { "default", "font color", "palette", "standard" }) then return true end
-        if spec.key == "nameColorMode" and ContainsAny(targetValue, {
-            "class", "class color", "class colour", "by class", "class colored", "class coloured",
-        }) then return false end
-        if spec.key == "colorHealthTextByHealth" and ContainsAny(targetValue, {
-            "health", "hp", "by health", "health color", "health colour", "health gradient",
-        }) then return false end
-        if spec.key == "colorPowerTextByType" and ContainsAny(targetValue, {
-            "resource", "power", "power type", "by power", "by power type",
-            "energy", "mana", "rage", "focus", "runic power", "insanity", "fury", "pain",
-            "essence", "astral power", "lunar power", "maelstrom",
-        }) then return false end
-        if spec.key == "npcNameRed" and ContainsAny(targetValue, {
-            "npc", "red", "class", "class color", "class colour", "by class", "npc red",
-        }) then return false end
+        if ContainsAny(targetValue, RegistryPhrases[68]) then return true end
+        if spec.key == "nameColorMode" and ContainsAny(targetValue, RegistryPhrases[69]) then return false end
+        if spec.key == "colorHealthTextByHealth" and ContainsAny(targetValue, RegistryPhrases[70]) then return false end
+        if spec.key == "colorPowerTextByType" and ContainsAny(targetValue, RegistryPhrases[71]) then return false end
+        if spec.key == "npcNameRed" and ContainsAny(targetValue, RegistryPhrases[72]) then return false end
     end
-    if boolValue == false or ContainsAny(text, { "default", "font color", "palette", "standard" }) then return true end
+    if boolValue == false or ContainsAny(text, RegistryPhrases[73]) then return true end
     if not spec then return false end
     if spec.key == "nameColorMode" then
-        return ContainsAny(text, {
-            "not by class", "not class color", "not class colored", "not colored by class",
-            "without class color", "without class", "no class color", "no class colours",
-            "dont color name by class", "do not color name by class",
-            "dont use class color", "do not use class color", "disable class color names",
-            "turn off class color names", "turn off name class color",
-        })
+        return ContainsAny(text, RegistryPhrases[74])
     end
     if spec.key == "colorHealthTextByHealth" then
-        return ContainsAny(text, {
-            "not by health", "not health color", "without health color", "no health color",
-            "dont color by health", "do not color by health", "disable health color",
-        })
+        return ContainsAny(text, RegistryPhrases[75])
     end
     if spec.key == "colorPowerTextByType" then
-        return ContainsAny(text, {
-            "not by power", "not by resource", "not power color", "not resource color",
-            "without power color", "without resource color", "no power color", "no resource color",
-            "dont color by power", "do not color by power", "disable power color",
-        })
+        return ContainsAny(text, RegistryPhrases[76])
     end
     if spec.key == "npcNameRed" then
-        return ContainsAny(text, {
-            "not red", "not npc red", "without npc red", "without red", "no npc red",
-            "dont make npc red", "do not make npc red",
-            "no npc color", "no npc name color", "without npc color", "disable npc color",
-            "turn off npc color", "no npc class color", "disable npc class color",
-        })
+        return ContainsAny(text, RegistryPhrases[77])
     end
     return false
 end
@@ -2276,66 +2230,26 @@ local function ParseScopedFontTextColorShortcut(text)
     if allWhite then return allWhite end
 
     local scope = DetectGlobalScope(text)
-    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if ContainsAny(text, {
-        "class resource color", "class resource colors", "class resource colour", "class resource colours",
-        "class power color", "class power colors", "class power colour", "class power colours",
-        "resource text class resource color", "resource text class resource colour",
-    }) then return nil end
+    if ContainsAny(text, RegistryPhrases[78]) then return nil end
+    if ContainsAny(text, RegistryPhrases[79]) then return nil end
 
     local spec
-    if ContainsAny(text, {
-        "color text by power", "text color by power", "color text by resource", "text color by resource",
-        "color text by mana", "text color by mana", "color power text", "power color text",
-        "mana color text", "resource color text", "power text color", "mana text color",
-        "resource text color", "power text by type", "power text by power",
-        "powertext color", "powertext colour", "color of power text", "colour of power text",
-        "color of powertext", "colour of powertext",
-    }) or (
-        ContainsAny(text, {
-            "power text", "powertext", "mana text", "resource text", "power value", "mana value", "resource value",
-        }) and ContainsAny(text, {
-            "power color", "power colour", "power colors", "power colours",
-            "resource color", "resource colour", "mana color", "mana colour",
-            "font color",
-        })
+    if ContainsAny(text, RegistryPhrases[80]) or (
+        ContainsAny(text, RegistryPhrases[81]) and ContainsAny(text, RegistryPhrases[82])
     ) or (
-        ContainsAny(text, {
-            "power text", "powertext", "mana text", "resource text", "power value", "mana value", "resource value",
-        }) and ContainsAny(text, {
-            "default", "standard",
-        }) and not ContainsAny(text, {
-            "show", "hide", "enable", "disable", "turn on", "turn off",
-            "size", "font size", "text size", "x offset", "y offset", "offset",
-            " x", "x ", " y", "y ", "delimiter", "separator", "format",
-            "anchor", "position", "format", "template", "custom text", "layer",
-        })
+        ContainsAny(text, RegistryPhrases[83]) and ContainsAny(text, RegistryPhrases[84]) and not ContainsAny(text, RegistryPhrases[85])
     ) then
         spec = { key = "colorPowerTextByType", on = "RESOURCE", label = "Power Text Color Mode" }
-    elseif ContainsAny(text, {
-        "color text by health", "text color by health", "color health text", "health color text",
-        "hp color text", "health text color", "hp text color", "health text by health",
-    }) then
+    elseif ContainsAny(text, RegistryPhrases[86]) then
         spec = { key = "colorHealthTextByHealth", on = "HEALTH", label = "Health Text Color Mode" }
-    elseif ContainsAny(text, {
-        "npc name color", "npc text color", "npc name red", "npc red name",
-        "npc name class color", "npc class color name", "color npc name by class",
-        "npc name by class", "npc class colored name",
-    }) then
-        local npcClass = ContainsAny(text, {
-            "class color", "class colour", "by class", "class colored", "class coloured",
-        })
+    elseif ContainsAny(text, RegistryPhrases[87]) then
+        local npcClass = ContainsAny(text, RegistryPhrases[88])
         spec = {
             key = "npcNameRed",
             on = npcClass and "CLASS" or "NPC",
             label = "NPC Name Text Color",
         }
-    elseif ContainsAny(text, {
-        "name text color", "name color", "color name by class", "color name text by class",
-        "color name not by class", "name text by class", "name text not by class",
-        "name not by class", "names not by class", "unit name not by class",
-        "class color name text", "class colored name text", "not class color name",
-    }) then
+    elseif ContainsAny(text, RegistryPhrases[89]) then
         spec = { key = "nameColorMode", on = "CLASS", label = "Name Text Color Mode" }
     end
     if not spec then return nil end
@@ -2354,7 +2268,7 @@ local function ParseScopedFontTextColorShortcut(text)
 
     local changes = {}
     local override = Registry and Registry:GetSetting("fontScope." .. tostring(scope) .. ".override")
-    if ContainsAny(text, { "only", "nur", "just" }) and override then
+    if ContainsAny(text, RegistryPhrases[90]) and override then
         changes[#changes + 1] = { setting = override, value = true }
     end
     changes[#changes + 1] = { setting = setting, value = value }
@@ -2370,23 +2284,9 @@ local function ParseScopedFontTextColorShortcut(text)
 end
 
 function P.ParseAmbiguousFontTextColorShortcut(text)
-    if not ContainsAny(text, {
-        "text color", "text colour", "text colors", "text colours",
-        "color text", "colour text", "font text color", "font text colour",
-    }) then return nil end
-    if ContainsAny(text, {
-        "name text color", "name text colour", "name color", "name colour",
-        "health text color", "health text colour", "hp text color", "hp text colour",
-        "power text color", "power text colour", "powertext color", "powertext colour",
-        "mana text color", "mana text colour", "resource text color", "resource text colour",
-        "dead text", "status text", "offline text", "afk text", "dnd text",
-    }) then return nil end
-    if ContainsAny(text, {
-        "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-        "border", "outline", "background", "bar color", "bar colour",
-        "combat", "timer", "enter text", "leave text", "stack count", "cooldown text",
-        "pandemic", "crosshair", "kick", "interrupt", "cast color", "cast colour",
-    }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[91]) then return nil end
+    if ContainsAny(text, RegistryPhrases[92]) then return nil end
+    if ContainsAny(text, RegistryPhrases[93]) then return nil end
 
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
@@ -2409,21 +2309,10 @@ function P.ParseAmbiguousFontTextColorShortcut(text)
 end
 
 function P.ParseAmbiguousColorShortcut(text, raw)
-    if not ContainsAny(text, { "color", "colors", "colour", "colours", "tint", "farbe", "farben" }) then return nil end
-    if not ContainsAny(text, { "set", "change", "make", "turn", "use", "to " }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[94]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[95]) then return nil end
     if not (P.ColorShortcutValue and P.ColorShortcutValue(text, raw)) then return nil end
-    if ContainsAny(text, {
-        "player", "target", "focus", "pet", "boss", "party", "raid", "mythic raid", "mythicraid",
-        "health", "hp", "power", "mana", "energy", "rage", "focus power", "class resource", "class power",
-        "class color", "class colour", "warrior", "paladin", "hunter", "rogue", "priest", "death knight",
-        "shaman", "mage", "warlock", "monk", "druid", "demon hunter", "evoker",
-        "npc", "npc type", "friendly npc", "neutral npc", "enemy npc", "dead npc",
-        "combo", "name", "text", "font", "bar", "bars", "castbar", "cast bar", "cast color", "cast colour",
-        "interrupt", "kick", "mouseover", "combat", "timer", "enter text", "leave text",
-        "crosshair", "pandemic", "stack count", "border", "outline",
-        "background", "aura", "auras", "buff", "buffs", "debuff", "debuffs", "dispel", "aggro",
-        "gradient", "raid marker", "role icon", "status icon",
-    }) then return nil end
+    if ContainsAny(text, RegistryPhrases[96]) then return nil end
 
     return {
         kind = "answer",
@@ -2498,49 +2387,43 @@ P.ParseDependentTargetFrameVisibilityShortcut = function(text)
 end
 
 function P.HasInterruptReadyIntent(text)
-    if ContainsAny(text, {
-        "interrupt ready", "kick ready", "ready interrupt", "ready kick",
-        "interrupt bereit", "kick bereit", "unterbrechung bereit", "unterbrechen bereit",
-    }) then return true end
-    return ContainsAny(text, { "interrupt", "kick", "unterbrechen", "unterbrechung" })
-        and ContainsAny(text, {
-            "ready indicator", "ready icon", "ready border", "ready box",
-            "bereit anzeige", "bereit symbol", "bereit rand", "bereit box",
-        })
+    if ContainsAny(text, RegistryPhrases[97]) then return true end
+    return ContainsAny(text, RegistryPhrases[98])
+        and ContainsAny(text, RegistryPhrases[99])
 end
 
 function P.ParseInterruptReadyRegistryShortcut(text, raw)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[100]) then return nil end
+    if ContainsAny(text, RegistryPhrases[101]) then return nil end
     if not P.HasInterruptReadyIntent(text) then return nil end
 
     local key
     local relativeDelta
     local direction = DetectDirection(text, {})
-    if ContainsAny(text, { "auto size", "autosize", "automatic size", "automatic sizing", "auto-size", "automatische groesse", "automatisch groesse" }) then
+    if ContainsAny(text, RegistryPhrases[102]) then
         key = "general.kickReadyAutoSize"
-    elseif ContainsAny(text, { "style", "border", "box", "fill", "outline", "square", "unavailable fill", "castbar fill", "stil", "rand", "kasten", "quadrat" }) then
+    elseif ContainsAny(text, RegistryPhrases[103]) then
         key = "general.kickReadyStyle"
-    elseif ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown", "put", "place", "position", "anker", "ankerpunkt", "platzieren" })
+    elseif ContainsAny(text, RegistryPhrases[104])
         and direction
-        and not ContainsAny(text, { "move", "nudge", "shift", "offset", "x offset", "y offset", "verschiebe", "verschieben", "versatz" })
+        and not ContainsAny(text, RegistryPhrases[105])
     then
         key = "general.kickReadyAnchor"
-    elseif ContainsAny(text, { "x offset", "horizontal offset", "offset x", "move left", "move right", "nudge left", "nudge right", "left by", "right by", "x versatz", "horizontaler versatz", "nach links", "nach rechts", "links um", "rechts um" }) then
+    elseif ContainsAny(text, RegistryPhrases[106]) then
         key = "general.kickReadyOffsetX"
-    elseif ContainsAny(text, { "y offset", "vertical offset", "offset y", "move up", "move down", "nudge up", "nudge down", "up by", "down by", "y versatz", "vertikaler versatz", "nach oben", "nach unten", "hoch um", "runter um" }) then
+    elseif ContainsAny(text, RegistryPhrases[107]) then
         key = "general.kickReadyOffsetY"
-    elseif ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "verschieben" }) and (direction == "left" or direction == "right") then
+    elseif ContainsAny(text, RegistryPhrases[108]) and (direction == "left" or direction == "right") then
         key = "general.kickReadyOffsetX"
-    elseif ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "verschieben" }) and (direction == "up" or direction == "down") then
+    elseif ContainsAny(text, RegistryPhrases[109]) and (direction == "up" or direction == "down") then
         key = "general.kickReadyOffsetY"
-    elseif ContainsAny(text, { "size", "scale", "groesse", "grosse", "bigger", "larger", "smaller", "grow", "shrink", "icon bigger", "icon smaller", "groesser", "kleiner", "symbol groesser", "symbol kleiner" }) then
+    elseif ContainsAny(text, RegistryPhrases[110]) then
         key = "general.kickReadySize"
-    elseif ContainsAny(text, { "target", "target castbar", "target cast bar", "ziel", "ziel castbar", "ziel zauberleiste" }) then
+    elseif ContainsAny(text, RegistryPhrases[111]) then
         key = "general.kickReadyShowTarget"
-    elseif ContainsAny(text, { "focus", "focus castbar", "focus cast bar", "fokus", "fokus castbar", "fokus zauberleiste" }) then
+    elseif ContainsAny(text, RegistryPhrases[112]) then
         key = "general.kickReadyShowFocus"
-    elseif ContainsAny(text, { "boss", "bosses", "boss castbar", "boss castbars", "boss cast bar", "boss cast bars", "boss zauberleiste", "boss zauberleisten" }) then
+    elseif ContainsAny(text, RegistryPhrases[113]) then
         key = "general.kickReadyShowBoss"
     end
     if not key then return nil end
@@ -2566,8 +2449,8 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
         end
         if value == nil then value = ValueForRegistrySetting(setting, text, raw) end
         if value == nil and setting.type == "boolean" then
-            if ContainsAny(text, { "show", "enable", "enabled", "turn on", "on", "true", "yes", "anzeigen", "einblenden", "aktivieren", "an" }) then value = true end
-            if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "false", "no", "ausblenden", "deaktivieren", "aus" }) then value = false end
+            if ContainsAny(text, RegistryPhrases[114]) then value = true end
+            if ContainsAny(text, RegistryPhrases[115]) then value = false end
         end
     end
     if value == nil and relativeDelta == nil then return nil end
@@ -2581,39 +2464,35 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
 end
 
 function P.ParseFocusKickRegistryShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, {
-        "focus kick", "focus interrupt tracker", "focus interrupt icon", "focus kick tracker", "focus kick icon",
-        "fokus kick", "fokus interrupt tracker", "fokus interrupt symbol", "fokus kick tracker", "fokus kick symbol",
-        "fokus kick anzeige", "fokus interrupt anzeige",
-    }) then return nil end
-    if ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen", "zurucksetzen", "standard" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[116]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[117]) then return nil end
+    if ContainsAny(text, RegistryPhrases[118]) then return nil end
 
     local changes = {}
     local direction = DetectDirection(text, {})
-    if ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "x", "y", "horizontal", "vertical", "verschiebe", "verschieben", "versatz", "platzierung" }) and direction then
+    if ContainsAny(text, RegistryPhrases[119]) and direction then
         local key = (direction == "left" or direction == "right") and "general.focusKickIconOffsetX" or "general.focusKickIconOffsetY"
         local amount = FirstNumber(text) or 10
         if direction == "left" or direction == "down" then amount = -amount end
         AddRegisteredChange(changes, key, nil, amount, direction)
-    elseif ContainsAny(text, { "x offset", "offset x", "horizontal", "x versatz", "horizontaler versatz" }) then
+    elseif ContainsAny(text, RegistryPhrases[120]) then
         AddRegisteredChange(changes, "general.focusKickIconOffsetX", FirstNumber(text))
-    elseif ContainsAny(text, { "y offset", "offset y", "vertical", "y versatz", "vertikaler versatz" }) then
+    elseif ContainsAny(text, RegistryPhrases[121]) then
         AddRegisteredChange(changes, "general.focusKickIconOffsetY", FirstNumber(text))
-    elseif ContainsAny(text, { "text size", "font size", "text bigger", "text smaller", "textgroesse", "schriftgroesse", "text groesser", "text kleiner", "schrift groesser", "schrift kleiner" }) then
+    elseif ContainsAny(text, RegistryPhrases[122]) then
         local setting = Registry and Registry:GetSetting("general.focusKickTextSize")
         local relativeDelta = setting and RelativeNumberDeltaForText(setting, text) or nil
         local value = relativeDelta == nil and FirstNumber(text) or nil
         AddRegisteredChange(changes, "general.focusKickTextSize", value, relativeDelta)
-    elseif ContainsAny(text, { "size", "scale", "bigger", "larger", "smaller", "grow", "shrink", "width", "height", "groesse", "grosse", "groesser", "kleiner", "breite", "hoehe" }) then
+    elseif ContainsAny(text, RegistryPhrases[123]) then
         local width = Registry and Registry:GetSetting("general.focusKickIconWidth")
         local height = Registry and Registry:GetSetting("general.focusKickIconHeight")
         local relativeWidth = width and RelativeNumberDeltaForText(width, text) or nil
         local relativeHeight = height and RelativeNumberDeltaForText(height, text) or nil
         local value = (relativeWidth == nil and relativeHeight == nil) and FirstNumber(text) or nil
-        if ContainsAny(text, { "width", "wide", "wider", "narrower", "breite", "breiter", "schmaler" }) and not ContainsAny(text, { "height", "tall", "taller", "shorter", "hoehe", "hoeher", "niedriger" }) then
+        if ContainsAny(text, RegistryPhrases[124]) and not ContainsAny(text, RegistryPhrases[125]) then
             AddRegisteredChange(changes, "general.focusKickIconWidth", value, relativeWidth)
-        elseif ContainsAny(text, { "height", "tall", "taller", "shorter", "hoehe", "hoeher", "niedriger" }) and not ContainsAny(text, { "width", "wide", "wider", "narrower", "breite", "breiter", "schmaler" }) then
+        elseif ContainsAny(text, RegistryPhrases[126]) and not ContainsAny(text, RegistryPhrases[127]) then
             AddRegisteredChange(changes, "general.focusKickIconHeight", value, relativeHeight)
         else
             AddRegisteredChange(changes, "general.focusKickIconWidth", value, relativeWidth)
@@ -2621,8 +2500,8 @@ function P.ParseFocusKickRegistryShortcut(text)
         end
     else
         local value = DetectBoolean(text)
-        if value == nil and ContainsAny(text, { "show", "enable", "turn on", "on", "anzeigen", "einblenden", "aktivieren", "an" }) then value = true end
-        if value == nil and ContainsAny(text, { "hide", "disable", "turn off", "off", "ausblenden", "deaktivieren", "aus" }) then value = false end
+        if value == nil and ContainsAny(text, RegistryPhrases[128]) then value = true end
+        if value == nil and ContainsAny(text, RegistryPhrases[129]) then value = false end
         if value ~= nil then AddRegisteredChange(changes, "general.enableFocusKickIcon", value) end
     end
 
@@ -2655,8 +2534,8 @@ P.UNIT_STATUS_SYMBOL_SPECS = {
 }
 
 function P.UnitStatusSymbolSpecForText(text)
-    if not ContainsAny(text, { "symbol", "icon" }) then return nil end
-    if ContainsAny(text, { "icon pack", "icon style", "midnight style", "classic style" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[130]) then return nil end
+    if ContainsAny(text, RegistryPhrases[131]) then return nil end
     for i = 1, #(P.UNIT_STATUS_SYMBOL_SPECS or {}) do
         local spec = P.UNIT_STATUS_SYMBOL_SPECS[i]
         if ContainsAny(text, spec.terms) then return spec end
@@ -2665,7 +2544,7 @@ function P.UnitStatusSymbolSpecForText(text)
 end
 
 function P.ParseUnitStatusSymbolRegistryShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[132]) then return nil end
     local spec = P.UnitStatusSymbolSpecForText(text)
     if not spec then return nil end
 
@@ -2686,7 +2565,7 @@ function P.ParseUnitStatusSymbolRegistryShortcut(text)
     for i = 1, #units do
         local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. spec.attr)
         local value = setting and EnumValueForText(setting, text) or nil
-        if value == nil and setting and ContainsAny(text, { "default", "reset", "restore", "standard" }) then value = "DEFAULT" end
+        if value == nil and setting and ContainsAny(text, RegistryPhrases[133]) then value = "DEFAULT" end
         if setting and value ~= nil then
             changes[#changes + 1] = { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) }
         end
@@ -2711,8 +2590,8 @@ local function ExplicitUnitAndGroupScopesForRegistry(text)
 end
 
 local function ParseUnitTextBooleanDetailShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if not ContainsAny(text, { "health text decimals", "hp text decimals", "health decimals", "hp decimals", "decimal percent" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[134]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[135]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then value = true end
     local units, groups = ExplicitUnitAndGroupScopesForRegistry(text)
@@ -2734,16 +2613,16 @@ local function ParseUnitTextBooleanDetailShortcut(text)
 end
 
 local function ParseUnitCoreBooleanShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[136]) then return nil end
     local attr
     local label
-    if ContainsAny(text, { "power smooth fill", "power bar smooth fill", "smooth power bar", "smooth mana bar", "smooth resource bar" }) then
+    if ContainsAny(text, RegistryPhrases[137]) then
         attr = "powerSmoothFill"
         label = "Power Bar Smooth Fill"
-    elseif ContainsAny(text, { "reverse fill direction", "reverse health fill", "reverse bar fill" }) then
+    elseif ContainsAny(text, RegistryPhrases[138]) then
         attr = "reverseFillBars"
         label = "Reverse Fill Direction"
-    elseif ContainsAny(text, { "smooth fill", "smooth health fill", "smooth frame fill" }) then
+    elseif ContainsAny(text, RegistryPhrases[139]) then
         attr = "smoothFill"
         label = "Smooth Health Fill"
     else
@@ -2772,46 +2651,25 @@ end
 
 local function RelativeLayerDeltaForRegistryText(text)
     local amount = FirstNumber(text) or 1
-    if ContainsAny(text, {
-        "layer down", "down layer", "move layer down", "drop layer",
-        "behind", "backward", "backwards", "send back", "to back", "lower layer", "lower draw",
-        "below", "back", "down", "hinter", "nach hinten", "runter",
-    }) then
+    if ContainsAny(text, RegistryPhrases[140]) then
         return -amount
     end
-    if ContainsAny(text, {
-        "layer up", "up layer", "move layer up", "raise layer",
-        "forward", "front", "to front", "bring forward", "higher layer", "higher draw",
-        "above", "up", "nach vorne", "hoch",
-    }) then
+    if ContainsAny(text, RegistryPhrases[141]) then
         return amount
     end
     return nil
 end
 
 local function ParseUnitStatusDetailShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, {
-        "level", "level indicator", "level text", "pvp flag", "pvp indicator", "pvp icon",
-        "raid marker", "raid marker icon", "raid group", "raid group name", "raid group style",
-        "raid group name style", "group number style",
-        "combat indicator", "combat icon", "rested indicator", "rested icon", "resting indicator",
-        "resting icon", "rested symbol", "resting symbol",
-        "incoming rez", "incoming rez icon", "incoming resurrection", "incoming resurrection icon",
-        "resurrection icon", "rez icon", "dead text", "dead indicator", "ghost indicator", "status text",
-        "elite icon", "elite indicator", "rare icon", "rare indicator",
-    }) then return nil end
-    local wantsAnchor = ContainsAny(text, { "anchor", "position" })
-    local wantsX = ContainsAny(text, { "x offset", "offset x", "horizontal offset", "horizontal position" })
-    local wantsY = ContainsAny(text, { "y offset", "offset y", "vertical offset", "vertical position" })
-    local wantsSize = ContainsAny(text, { "size", "icon size", "text size", "font size" })
-    local wantsLayer = ContainsAny(text, {
-        "layer", "frame level", "framelevel", "draw layer", "draw order",
-        "layer up", "layer down", "bring forward", "send back",
-        "front", "behind", "backward", "backwards", "above", "below",
-    })
-    local wantsStyle = ContainsAny(text, { "raid group style", "raid group name style", "group number style" })
-    local wantsVisibility = ContainsAny(text, { "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off" })
+    if ContainsAny(text, RegistryPhrases[142]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[143]) then return nil end
+    local wantsAnchor = ContainsAny(text, RegistryPhrases[144])
+    local wantsX = ContainsAny(text, RegistryPhrases[145])
+    local wantsY = ContainsAny(text, RegistryPhrases[146])
+    local wantsSize = ContainsAny(text, RegistryPhrases[147])
+    local wantsLayer = ContainsAny(text, RegistryPhrases[148])
+    local wantsStyle = ContainsAny(text, RegistryPhrases[149])
+    local wantsVisibility = ContainsAny(text, RegistryPhrases[150])
     if not (wantsAnchor or wantsX or wantsY or wantsSize or wantsLayer or wantsStyle or wantsVisibility) then return nil end
 
     local units = ExplicitUnitAndGroupScopesForRegistry(text)
@@ -2870,8 +2728,8 @@ local function ParseUnitStatusDetailShortcut(text)
 end
 
 local function ParseBossTargetHighlightShortcut(text)
-    if ContainsAny(text, { "color", "colour", "test", "preview", "group", "party", "raid", "mythic raid" }) then return nil end
-    if not ContainsAny(text, { "boss target highlight", "boss target outline", "highlight boss target" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[151]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[152]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then value = true end
     local changes = {}
@@ -2887,16 +2745,16 @@ end
 
 local function ConcreteGroupScopesForPriority(text)
     local scopes = {}
-    local hasMythic = ContainsAny(text, { "mythic raid", "mythicraid", "mythic raid frame", "mythicraid frame" })
-    if ContainsAny(text, { "party", "party frame", "party frames" }) then scopes[#scopes + 1] = "party" end
-    if ContainsAny(text, { "raid", "raid frame", "raid frames" }) and not hasMythic then scopes[#scopes + 1] = "raid" end
+    local hasMythic = ContainsAny(text, RegistryPhrases[153])
+    if ContainsAny(text, RegistryPhrases[154]) then scopes[#scopes + 1] = "party" end
+    if ContainsAny(text, RegistryPhrases[155]) and not hasMythic then scopes[#scopes + 1] = "raid" end
     if hasMythic then scopes[#scopes + 1] = "mythicraid" end
     return scopes
 end
 
 local function ParseGroupBorderColorShortcut(text, raw)
-    if not ContainsAny(text, { "group border color", "group border colour", "frame group border color", "frame group border colour" }) then return nil end
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "stripe", "dispel", "corner" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[156]) then return nil end
+    if ContainsAny(text, RegistryPhrases[157]) then return nil end
     local scopes = ConcreteGroupScopesForPriority(text)
     if #scopes == 0 then return nil end
     local r, g, b, label = ExtractColor(raw, text)
@@ -2916,26 +2774,26 @@ local function ParseGroupBorderColorShortcut(text, raw)
 end
 
 local function ParseGroupTextureStringShortcut(text, raw)
-    if not ContainsAny(text, { "texture", "foreground texture", "background texture", "bar texture", "bar background texture", "bar bg texture" }) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "class resource", "class resources", "detached power", "player hp", "absorb", "heal absorb" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[158]) then return nil end
+    if ContainsAny(text, RegistryPhrases[159]) then return nil end
     local scopes = ConcreteGroupScopesForPriority(text)
     if #scopes == 0 then return nil end
 
     local keySuffix
     local label
     local useBarScope = false
-    if ContainsAny(text, { "bar background texture", "background bar texture", "bar bg texture" }) then
+    if ContainsAny(text, RegistryPhrases[160]) then
         keySuffix = "barBackgroundTexture"
         label = "Group Bar Background Texture"
         useBarScope = true
-    elseif ContainsAny(text, { "bar texture", "bars texture", "health bar texture", "power bar texture", "foreground bar texture" }) then
+    elseif ContainsAny(text, RegistryPhrases[161]) then
         keySuffix = "barTexture"
         label = "Group Bar Texture"
         useBarScope = true
-    elseif ContainsAny(text, { "background texture", "health background texture" }) then
+    elseif ContainsAny(text, RegistryPhrases[162]) then
         keySuffix = "barBgTexture"
         label = "Group Frame Background Texture"
-    elseif ContainsAny(text, { "foreground texture" }) then
+    elseif ContainsAny(text, RegistryPhrases[163]) then
         keySuffix = "barTexture"
         label = "Group Frame Foreground Texture"
     else
@@ -2963,9 +2821,9 @@ local function ParseGroupTextureStringShortcut(text, raw)
 end
 
 local function ParseDispelOverlayHealthOnlyShortcut(text)
-    if not ContainsAny(text, { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay", "debuff overlay", "dispellable overlay" }) then return nil end
-    if not ContainsAny(text, { "current health only", "current health", "on health only", "on current health", "on current health only" }) then return nil end
-    if ContainsAny(text, { "opacity", "alpha", "style", "trigger", "detects", "color", "colour" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[164]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[165]) then return nil end
+    if ContainsAny(text, RegistryPhrases[166]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then value = true end
     local units, groups = ExplicitUnitAndGroupScopesForRegistry(text)
@@ -2990,31 +2848,28 @@ local function ParseDispelOverlayHealthOnlyShortcut(text)
 end
 
 local function HasClassPowerPriorityIntent(text)
-    return ContainsAny(text, {
-        "class resource", "class resources", "class power", "class powers",
-        "combo point", "combo points", "holy power", "soul shard", "soul shards",
-    })
+    return ContainsAny(text, RegistryPhrases[167])
 end
 
 local function ParseClassPowerBooleanDetailShortcut(text)
     if not HasClassPowerPriorityIntent(text) then return nil end
-    if ContainsAny(text, { "color", "colour", "font size", "text size", "move", "offset", "position", "anchor", "placement" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[168]) then return nil end
     if HasPhrase(text, "text x") or HasPhrase(text, "text y") or HasPhrase(text, "number x") or HasPhrase(text, "number y") then return nil end
     local value = DetectBoolean(text)
     if value == nil then value = true end
 
     local key
     local label
-    if ContainsAny(text, { "player hp smooth fill", "player health smooth fill", "hp bar smooth fill", "health bar smooth fill" }) then
+    if ContainsAny(text, RegistryPhrases[169]) then
         key = "bars.playerHPBarSmoothFill"
         label = "Class Resources Player HP Smooth Fill"
-    elseif ContainsAny(text, { "player hp bar", "player health bar", "hp bar", "health bar", "second hp", "duplicate hp" }) then
+    elseif ContainsAny(text, RegistryPhrases[170]) then
         key = "bars.playerHPBarEnabled"
         label = "Class Resources Player HP Bar"
-    elseif ContainsAny(text, { "class resource text", "class resources text", "class power text", "class powers text", "resource text", "resource numbers", "resource number" }) then
+    elseif ContainsAny(text, RegistryPhrases[171]) then
         key = "bars.classPowerShowText"
         label = "Class Resource Text"
-    elseif ContainsAny(text, { "class resource fill", "class resources fill", "class power fill", "class powers fill" }) then
+    elseif ContainsAny(text, RegistryPhrases[172]) then
         key = "bars.classPowerFillReverse"
         label = "Class Resource Fill Direction"
     else
@@ -3033,19 +2888,14 @@ local function ParseClassPowerBooleanDetailShortcut(text)
 end
 
 local function ParsePowerColorPriorityShortcut(text, raw)
-    if ContainsAny(text, { "class power", "class resource", "class resources", "combo point", "combo points", "holy power", "soul shard", "soul shards" }) then return nil end
-    if not ContainsAny(text, { "power color", "power colour", "power colors", "power colours", "power bar color", "power bar colour" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[173]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[174]) then return nil end
     return A._ParsePowerColorShortcut and A._ParsePowerColorShortcut(text, raw) or nil
 end
 
 local function ParseSharedAuraFiltersMenuShortcut(text)
-    if not ContainsAny(text, { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" }) then return nil end
-    if ContainsAny(text, {
-        "player", "target", "focus", "boss", "party", "raid", "mythic raid",
-        "buff player filter", "debuff player filter", "raid filter", "raid in combat",
-        "nameplate", "cancelable", "not cancelable", "dispellable", "crowd control",
-        "external defensive", "big defensive", "only", "show only",
-    }) then
+    if not ContainsAny(text, RegistryPhrases[175]) then return nil end
+    if ContainsAny(text, RegistryPhrases[176]) then
         return nil
     end
     local value = DetectBoolean(text)
@@ -3075,18 +2925,8 @@ P.ParseRegistryPriorityShortcut = function(text, raw)
 end
 
 function P.ParseAlphaExcludeTextPortraitShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, {
-        "keep text portrait visible", "keep text and portrait visible", "keep text & portrait visible",
-        "keep text visible", "keep portrait visible", "exclude text from opacity", "exclude portrait from opacity",
-        "text portrait opacity", "text and portrait opacity", "text & portrait opacity",
-        "keep names visible when transparent", "keep name visible when transparent",
-        "names visible when transparent", "name visible when transparent",
-        "keep text visible when transparent", "text visible when transparent",
-        "keep names visible when faded", "keep name visible when faded",
-        "names visible when faded", "name visible when faded",
-        "keep text visible when faded", "text visible when faded",
-    }) then return nil end
+    if ContainsAny(text, RegistryPhrases[177]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[178]) then return nil end
 
     local value = DetectBoolean(text)
     if value == nil then value = true end
@@ -3096,10 +2936,10 @@ function P.ParseAlphaExcludeTextPortraitShortcut(text)
     local concrete = false
 
     if HasAllScopeIntent(text) then
-        if ContainsAny(text, { "group frame", "group frames", "all groups", "all group" }) or #explicitGroups > 0 then
+        if ContainsAny(text, RegistryPhrases[179]) or #explicitGroups > 0 then
             for i = 1, #ALL_GROUPS do groups[#groups + 1] = ALL_GROUPS[i] end
             concrete = true
-        elseif ContainsAny(text, { "unitframe", "unit frame", "unitframes", "unit frames", "all units" }) or #explicitUnits > 0 then
+        elseif ContainsAny(text, RegistryPhrases[180]) or #explicitUnits > 0 then
             for i = 1, #ALL_UNITFRAMES do units[#units + 1] = ALL_UNITFRAMES[i] end
             concrete = true
         end
@@ -3119,7 +2959,7 @@ function P.ParseAlphaExcludeTextPortraitShortcut(text)
             if groupScope and GROUP_AVAILABILITY_PAGES[M and M.activeKey] then
                 groups[#groups + 1] = groupScope
                 concrete = true
-            elseif ContainsAny(text, { "group", "groups", "group frame", "group frames" }) then
+            elseif ContainsAny(text, RegistryPhrases[181]) then
                 local scopeChoices = GroupAvailabilityScopes(text)
                 for i = 1, #scopeChoices do groups[#groups + 1] = scopeChoices[i] end
             end
@@ -3181,35 +3021,23 @@ local CASTBAR_BACKEND_PROVIDER_TERMS = {
 }
 
 local function HasCastbarBackendIntent(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "zauberleisten" }) then return false end
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return false end
+    if not ContainsAny(text, RegistryPhrases[182]) then return false end
+    if ContainsAny(text, RegistryPhrases[183]) then return false end
     if ContainsAny(text, CASTBAR_BACKEND_PROVIDER_TERMS) then return true end
     if ContainsAny(text, CASTBAR_BACKEND_BLOCKERS) then return false end
-    if ContainsAny(text, { "blizzard", "msuf", "hide castbar", "hide cast bar", "hide zauberleiste", "verstecke zauberleiste", "zauberleiste ausblenden", "deaktiviere zauberleiste" }) then return true end
-    if ContainsAny(text, {
-        "hide", "disable", "disabled", "turn off", "off",
-        "ausblenden", "verstecken", "verstecke", "deaktivieren", "deaktiviere", "ausschalten", "aus",
-    }) then return true end
+    if ContainsAny(text, RegistryPhrases[184]) then return true end
+    if ContainsAny(text, RegistryPhrases[185]) then return true end
     return false
 end
 
 local function CastbarBackendValueForText(text)
-    if ContainsAny(text, {
-        "hide", "hidden", "disable", "disabled", "turn off", "off",
-        "ausblenden", "verstecken", "verstecke", "deaktivieren", "deaktiviere", "ausschalten", "aus",
-    }) and not ContainsAny(text, { "blizzard", "msuf" }) then
+    if ContainsAny(text, RegistryPhrases[186]) and not ContainsAny(text, RegistryPhrases[187]) then
         return "HIDE"
     end
-    if ContainsAny(text, {
-        "blizzard", "blizzard castbar", "blizzard cast bar", "blizzard zauberleiste",
-        "wow castbar", "wow zauberleiste", "standard castbar", "standard zauberleiste",
-    }) then
+    if ContainsAny(text, RegistryPhrases[188]) then
         return "BLIZZARD"
     end
-    if ContainsAny(text, {
-        "msuf", "msuf castbar", "msuf cast bar", "msuf zauberleiste",
-        "own castbar", "custom castbar", "eigene castbar", "eigene zauberleiste",
-    }) then
+    if ContainsAny(text, RegistryPhrases[189]) then
         return "MSUF"
     end
     return nil
@@ -3227,7 +3055,7 @@ local function CastbarBackendUnitsForText(text, value)
         end
     end
     if #units > 0 then return units, concrete end
-    if HasAllScopeIntent(text) or ContainsAny(text, { "all castbars", "all cast bars", "alle castbar", "alle castbars", "alle zauberleisten" }) then
+    if HasAllScopeIntent(text) or ContainsAny(text, RegistryPhrases[190]) then
         for i = 1, #CASTBAR_BACKEND_UNITS do units[#units + 1] = CASTBAR_BACKEND_UNITS[i] end
         return units, true
     end
@@ -3300,32 +3128,29 @@ P.ParseCastbarBackendShortcut = function(text)
 end
 
 function P.ParseCastbarPositionRegistryShortcut(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if ContainsAny(text, {
-        "alignment", "align", "text alignment", "text align",
-        "spell name alignment", "spell text alignment", "castbar text alignment", "cast bar text alignment",
-    }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[191]) then return nil end
+    if ContainsAny(text, RegistryPhrases[192]) then return nil end
+    if ContainsAny(text, RegistryPhrases[193]) then return nil end
     local direction = DetectDirection(text, {})
-    local naturalPlacement = (direction or ContainsAny(text, { "middle", "center", "centre", "mitte" }))
-        and ContainsAny(text, { "put", "place", "set", "position", "on the", "to the", "in the", "middle", "center", "centre", "mitte" })
-    if not ContainsAny(text, { "position", "position preset", "placement" }) and not naturalPlacement then return nil end
-    if ContainsAny(text, { "move", "nudge", "shift", "offset", "x offset", "y offset" }) then return nil end
+    local naturalPlacement = (direction or ContainsAny(text, RegistryPhrases[194]))
+        and ContainsAny(text, RegistryPhrases[195])
+    if not ContainsAny(text, RegistryPhrases[196]) and not naturalPlacement then return nil end
+    if ContainsAny(text, RegistryPhrases[197]) then return nil end
 
     local field
     local label
-    if ContainsAny(text, { "icon position", "spell icon position", "castbar icon position", "cast bar icon position" })
-        or (naturalPlacement and ContainsAny(text, { "icon", "spell icon" }))
+    if ContainsAny(text, RegistryPhrases[198])
+        or (naturalPlacement and ContainsAny(text, RegistryPhrases[199]))
     then
         field = "IconPosition"
         label = "Cast Bar Icon Position"
-    elseif ContainsAny(text, { "spell name position", "spell text position", "castbar text position", "cast bar text position", "castbar name position" })
-        or (naturalPlacement and ContainsAny(text, { "spell name", "spell text", "castbar text", "cast bar text", "text", "name" }))
+    elseif ContainsAny(text, RegistryPhrases[200])
+        or (naturalPlacement and ContainsAny(text, RegistryPhrases[201]))
     then
         field = "SpellNamePosition"
         label = "Cast Bar Spell Name Position"
-    elseif ContainsAny(text, { "time position", "time text position", "timer position", "cast time position", "castbar time position", "cast bar time position" })
-        or (naturalPlacement and ContainsAny(text, { "time", "timer", "cast time" }))
+    elseif ContainsAny(text, RegistryPhrases[202])
+        or (naturalPlacement and ContainsAny(text, RegistryPhrases[203]))
     then
         field = "TimePosition"
         label = "Cast Bar rime Position"
@@ -3373,7 +3198,7 @@ function P.ParseCastbarPositionRegistryShortcut(text)
                 or direction == "down" and "BELOW"
                 or nil
         end
-        if setting and value == nil and ContainsAny(text, { "middle", "center", "centre", "mitte" }) then
+        if setting and value == nil and ContainsAny(text, RegistryPhrases[204]) then
             value = "CENTER"
         end
         if setting and value ~= nil then
@@ -3399,8 +3224,8 @@ function P.ParseCastbarPositionRegistryShortcut(text)
 end
 
 function P.ParsePowerBarGradientRegistryShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, { "power bar gradient", "power gradient", "mana gradient" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[205]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[206]) then return nil end
 
     local value = DetectBoolean(text)
     if value == nil then value = true end
@@ -3411,10 +3236,10 @@ function P.ParsePowerBarGradientRegistryShortcut(text)
     local concrete = false
 
     if HasAllScopeIntent(text) then
-        if ContainsAny(text, { "group frame", "group frames", "all groups", "all group" }) or #explicitGroups > 0 then
+        if ContainsAny(text, RegistryPhrases[207]) or #explicitGroups > 0 then
             for i = 1, #ALL_GROUPS do groups[#groups + 1] = ALL_GROUPS[i] end
             concrete = true
-        elseif ContainsAny(text, { "unitframe", "unit frame", "unitframes", "unit frames", "all units" }) or #explicitUnits > 0 then
+        elseif ContainsAny(text, RegistryPhrases[208]) or #explicitUnits > 0 then
             for i = 1, #ALL_UNITFRAMES do units[#units + 1] = ALL_UNITFRAMES[i] end
             concrete = true
         end
@@ -3439,7 +3264,7 @@ function P.ParsePowerBarGradientRegistryShortcut(text)
     end
 
     local changes = {}
-    local only = ContainsAny(text, { "only", "just", "nur" })
+    local only = ContainsAny(text, RegistryPhrases[209])
     local seenScopes = {}
     local function AddScopedGradient(scope)
         if scope == "gf_mythicraid" then scope = "gf_raid" end
@@ -3481,36 +3306,28 @@ local BAR_GRADIENT_COLOR_TERMS = {
 }
 
 local function BarGradientDirectionValue(text)
-    if ContainsAny(text, { "from right", "to right", "right side", "rightward", "right", "rechts", "von rechts", "nach rechts" }) then return "RIGHT" end
-    if ContainsAny(text, { "from left", "to left", "left side", "leftward", "left", "links", "von links", "nach links" }) then return "LEFT" end
-    if ContainsAny(text, { "from top", "to top", "from up", "to up", "top", "up", "above", "oben", "hoch", "von oben", "nach oben" }) then return "UP" end
-    if ContainsAny(text, { "from bottom", "to bottom", "from down", "to down", "bottom", "down", "below", "unten", "runter", "von unten", "nach unten" }) then return "DOWN" end
+    if ContainsAny(text, RegistryPhrases[210]) then return "RIGHT" end
+    if ContainsAny(text, RegistryPhrases[211]) then return "LEFT" end
+    if ContainsAny(text, RegistryPhrases[212]) then return "UP" end
+    if ContainsAny(text, RegistryPhrases[213]) then return "DOWN" end
     return nil
 end
 
 function P.ParseBarGradientRegistryShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[214]) then return nil end
     if ContainsAny(text, BAR_GRADIENT_COLOR_TERMS) then return nil end
-    if not ContainsAny(text, {
-        "gradient", "gradients", "bar gradient", "bar gradients", "bars gradient",
-        "hp gradient", "health gradient", "power gradient", "mana gradient",
-        "gradient direction", "gradient strength",
-    }) then
+    if not ContainsAny(text, RegistryPhrases[215]) then
         return nil
     end
-    if ContainsAny(text, { "gradient strength", "strength", "intensity", "staerke", "starke" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[216]) then return nil end
 
     local direction = BarGradientDirectionValue(text)
     local value = DetectBoolean(text)
     if value == nil and direction == nil then return nil end
 
-    local power = ContainsAny(text, { "power", "power bar", "power bars", "mana", "mana bar", "mana bars", "resource", "resource bar", "resource bars", "energie", "ressource" })
-    local health = ContainsAny(text, { "hp", "health", "health bar", "health bars", "hp bar", "hp bars", "leben", "gesundheit" })
-    local both = ContainsAny(text, {
-        "both", "both bars", "all bars", "all bar gradients", "bar gradients", "gradients",
-        "health and power", "hp and power", "power and health", "power and hp",
-        "health plus power", "hp plus power", "health power",
-    })
+    local power = ContainsAny(text, RegistryPhrases[217])
+    local health = ContainsAny(text, RegistryPhrases[218])
+    local both = ContainsAny(text, RegistryPhrases[219])
     if both then
         health = true
         power = true
@@ -3522,13 +3339,8 @@ function P.ParseBarGradientRegistryShortcut(text)
     local units = {}
     local groups = {}
     local concrete = false
-    local hasUnitFrameIntent = ContainsAny(text, {
-        "unitframe", "unit frame", "unitframes", "unit frames", "all units", "all unitframes", "all unit frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
-    })
-    local hasGroupFrameIntent = ContainsAny(text, {
-        "group frame", "group frames", "all groups", "all group frames", "party", "raid", "mythic raid", "mythicraid",
-    })
+    local hasUnitFrameIntent = ContainsAny(text, RegistryPhrases[220])
+    local hasGroupFrameIntent = ContainsAny(text, RegistryPhrases[221])
 
     if HasAllScopeIntent(text) then
         if hasGroupFrameIntent and not hasUnitFrameIntent then
@@ -3541,7 +3353,7 @@ function P.ParseBarGradientRegistryShortcut(text)
             for i = 1, #explicitUnits do units[#units + 1] = explicitUnits[i] end
             for i = 1, #explicitGroups do groups[#groups + 1] = explicitGroups[i] end
             concrete = true
-        elseif ContainsAny(text, { "all frames", "all bar scopes", "every frame" }) then
+        elseif ContainsAny(text, RegistryPhrases[222]) then
             for i = 1, #ALL_UNITFRAMES do units[#units + 1] = ALL_UNITFRAMES[i] end
             for i = 1, #ALL_GROUPS do groups[#groups + 1] = ALL_GROUPS[i] end
             concrete = true
@@ -3567,7 +3379,7 @@ function P.ParseBarGradientRegistryShortcut(text)
     end
 
     local changes = {}
-    local only = ContainsAny(text, { "only", "just", "nur" })
+    local only = ContainsAny(text, RegistryPhrases[223])
     local seenScopes = {}
     local function AddScopedBarGradient(scope)
         if scope == "gf_mythicraid" then scope = "gf_raid" end
@@ -3610,9 +3422,7 @@ end
 
 P.GroupShortcutScopes = function(text)
     local scopes, concrete = GroupAvailabilityScopes(text)
-    local allGroups = HasAllScopeIntent(text) or ContainsAny(text, {
-        "all group frames", "all groups", "group frames", "party raid", "party and raid",
-    })
+    local allGroups = HasAllScopeIntent(text) or ContainsAny(text, RegistryPhrases[224])
     return scopes, concrete or allGroups
 end
 
@@ -3636,19 +3446,19 @@ P.GroupShortcutResponse = function(text, changes, concrete, title, summary)
 end
 
 P.ParseGroupRolePowerVisibilityShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if ContainsAny(text, { "role icon", "role indicator", "status icon", "status indicator", "symbol" }) then return nil end
-    if not ContainsAny(text, { "power", "mana", "resource", "resources", "power bar", "power bars", "mana bar", "mana bars", "resource bar", "resource bars" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[225]) then return nil end
+    if ContainsAny(text, RegistryPhrases[226]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[227]) then return nil end
 
     local attr
     local label
-    if ContainsAny(text, { "tank", "tanks", "tank role", "tank players" }) then
+    if ContainsAny(text, RegistryPhrases[228]) then
         attr = "powerShowTank"
         label = "Tank Power"
-    elseif ContainsAny(text, { "healer", "healers", "heal role", "healer role", "healer mana", "healer power" }) then
+    elseif ContainsAny(text, RegistryPhrases[229]) then
         attr = "powerShowHealer"
         label = "Healer Power"
-    elseif ContainsAny(text, { "dps", "damage dealer", "damage dealers", "damager", "damagers", "damage role" }) then
+    elseif ContainsAny(text, RegistryPhrases[230]) then
         attr = "powerShowDamager"
         label = "DPS Power"
     else
@@ -3666,18 +3476,18 @@ P.ParseGroupRolePowerVisibilityShortcut = function(text)
 end
 
 P.ParseGroupRoleIconVisibilityShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if not ContainsAny(text, { "role icon", "role icons", "role indicator", "role indicators", "role symbol", "role symbols" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[231]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[232]) then return nil end
 
     local attr
     local label
-    if ContainsAny(text, { "tank", "tanks", "tank role", "tank players" }) then
+    if ContainsAny(text, RegistryPhrases[233]) then
         attr = "roleIconShowTank"
         label = "Tank Role Icon"
-    elseif ContainsAny(text, { "healer", "healers", "heal role", "healer role" }) then
+    elseif ContainsAny(text, RegistryPhrases[234]) then
         attr = "roleIconShowHealer"
         label = "Healer Role Icon"
-    elseif ContainsAny(text, { "dps", "damage dealer", "damage dealers", "damager", "damagers", "damage role" }) then
+    elseif ContainsAny(text, RegistryPhrases[235]) then
         attr = "roleIconShowDPS"
         label = "DPS Role Icon"
     else
@@ -3695,23 +3505,20 @@ P.ParseGroupRoleIconVisibilityShortcut = function(text)
 end
 
 P.ParseGroupOfflineAlphaShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if not ContainsAny(text, { "offline", "offline member", "offline members", "offline player", "offline players" }) then return nil end
-    if ContainsAny(text, { "delay", "after", "seconds", "in combat", "hide offline in combat", "offline members in combat", "offline players in combat" }) then return nil end
-    if not ContainsAny(text, {
-        "alpha", "opacity", "transparency", "transparent", "fade", "faded",
-        "more visible", "less visible", "more transparent", "less transparent",
-    }) then
+    if ContainsAny(text, RegistryPhrases[236]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[237]) then return nil end
+    if ContainsAny(text, RegistryPhrases[238]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[239]) then
         return nil
     end
 
     local value
     local relativeDelta
-    if ContainsAny(text, { "more transparent", "less visible", "fade more", "more faded", "stronger fade" }) then
+    if ContainsAny(text, RegistryPhrases[240]) then
         local amount = FirstNumber(text) or 0.05
         if amount > 1 then amount = amount / 100 end
         relativeDelta = -amount
-    elseif ContainsAny(text, { "less transparent", "more visible", "fade less", "less faded", "weaker fade" }) then
+    elseif ContainsAny(text, RegistryPhrases[241]) then
         local amount = FirstNumber(text) or 0.05
         if amount > 1 then amount = amount / 100 end
         relativeDelta = amount
@@ -3730,13 +3537,8 @@ P.ParseGroupOfflineAlphaShortcut = function(text)
 end
 
 P.ParseGroupHealthFadeShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if not ContainsAny(text, {
-        "health fade", "healthy fade", "healer health fade",
-        "fade healthy", "fade healthy members", "fade healthy frames",
-        "dim healthy", "dim healthy members", "dim healthy frames",
-        "fade full health", "dim full health",
-    }) then
+    if ContainsAny(text, RegistryPhrases[242]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[243]) then
         return nil
     end
 
@@ -3752,27 +3554,16 @@ P.ParseGroupHealthFadeShortcut = function(text)
 
     local value = FirstNumber(text)
     local relativeDelta
-    local alphaIntent = ContainsAny(text, {
-        "opacity", "alpha", "transparent", "transparency", "visibility",
-        "dimmed opacity", "dimmed health opacity", "healthy opacity",
-    }) or (ContainsAny(text, {
-        "dim healthy", "dim healthy members", "dim healthy frames",
-        "fade healthy", "fade healthy members", "fade healthy frames",
-        "dim full health", "fade full health",
-    }) and HasPhrase(text, "to"))
-    local thresholdIntent = ContainsAny(text, {
-        "threshold", "percent", "health percent", "hp percent",
-        "above health", "above health percent", "above hp", "above hp percent",
-        "fade above", "dim above", "when above", "at health",
-    }) or (value ~= nil and HasPhrase(text, "above")) or (value ~= nil and HasPhrase(text, "over")) or (value ~= nil and HasPhrase(text, "at") and not alphaIntent)
+    local alphaIntent = ContainsAny(text, RegistryPhrases[244]) or (ContainsAny(text, RegistryPhrases[245]) and HasPhrase(text, "to"))
+    local thresholdIntent = ContainsAny(text, RegistryPhrases[246]) or (value ~= nil and HasPhrase(text, "above")) or (value ~= nil and HasPhrase(text, "over")) or (value ~= nil and HasPhrase(text, "at") and not alphaIntent)
 
-    if ContainsAny(text, { "more transparent", "less visible", "fade more", "more faded", "stronger fade", "dim more" }) then
+    if ContainsAny(text, RegistryPhrases[247]) then
         local amount = value or 0.05
         if amount > 1 then amount = amount / 100 end
         relativeDelta = -amount
         alphaIntent = true
         thresholdIntent = false
-    elseif ContainsAny(text, { "less transparent", "more visible", "fade less", "less faded", "weaker fade", "dim less" }) then
+    elseif ContainsAny(text, RegistryPhrases[248]) then
         local amount = value or 0.05
         if amount > 1 then amount = amount / 100 end
         relativeDelta = amount
@@ -3811,9 +3602,9 @@ P.ParseGroupHealthFadeShortcut = function(text)
 
     local enabled = ShowSettingValueForText(text)
     if enabled == nil then
-        if ContainsAny(text, { "stop", "stop fading", "stop dimming", "do not dim", "dont dim", "don't dim", "never dim", "do not fade", "dont fade", "don't fade", "never fade" }) then
+        if ContainsAny(text, RegistryPhrases[249]) then
             enabled = false
-        elseif ContainsAny(text, { "dim", "fade", "health fade", "healthy fade" }) then
+        elseif ContainsAny(text, RegistryPhrases[250]) then
             enabled = true
         end
     end
@@ -3826,9 +3617,9 @@ P.ParseGroupHealthFadeShortcut = function(text)
 end
 
 P.ParseGroupColumnLayoutShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if not ContainsAny(text, { "column", "columns", "per column", "spalte", "spalten" }) then return nil end
-    if not ContainsAny(text, { "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames", "frames", "member", "members", "players" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[251]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[252]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[253]) then return nil end
     local value = FirstNumber(text)
     if value == nil then
         if HasPhrase(text, "one") then value = 1
@@ -3846,11 +3637,7 @@ P.ParseGroupColumnLayoutShortcut = function(text)
 
     local attr = "maxColumns"
     local label = "Group frame max columns"
-    if ContainsAny(text, {
-        "per column", "members per column", "players per column", "frames per column", "units per column",
-        "new column after", "column after", "columns after", "start new column after", "break column after",
-        "break columns after", "after players", "after members",
-    }) then
+    if ContainsAny(text, RegistryPhrases[254]) then
         attr = "unitsPerColumn"
         label = "Group frame units per column"
     end
@@ -3864,17 +3651,14 @@ P.ParseGroupColumnLayoutShortcut = function(text)
 end
 
 P.ParseGroupPreserveRaidGroupsShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if not ContainsAny(text, {
-        "preserve raid groups", "keep raid groups", "keep raid groups together",
-        "keep groups together", "preserve groups", "preserve group order",
-    }) then
+    if ContainsAny(text, RegistryPhrases[255]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[256]) then
         return nil
     end
 
     local value = DetectBoolean(text)
     if value == nil then
-        value = not ContainsAny(text, { "do not", "dont", "don't", "disable", "turn off", "off", "false", "no", "stop" })
+        value = not ContainsAny(text, RegistryPhrases[257])
     end
 
     local scopes, concrete = P.GroupShortcutScopes(text)
@@ -3886,19 +3670,13 @@ P.ParseGroupPreserveRaidGroupsShortcut = function(text)
 end
 
 P.ParseGroupPlayerFirstInRoleShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, { "role", "role sorting", "sort by role", "sorting" }) then return nil end
-    if not ContainsAny(text, {
-        "player first", "me first", "myself first", "put me first", "put myself first",
-        "keep me first", "keep myself first", "me at top", "me at the top",
-        "myself at top", "myself at the top", "put me at top", "put me at the top",
-        "put myself at top", "put myself at the top", "keep me at top", "keep me at the top",
-        "keep myself at top", "keep myself at the top",
-    }) then
+    if ContainsAny(text, RegistryPhrases[258]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[259]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[260]) then
         return nil
     end
     local value = DetectBoolean(text)
-    if value == nil then value = not ContainsAny(text, { "do not", "dont", "don't", "disable", "turn off", "off", "false", "no" }) end
+    if value == nil then value = not ContainsAny(text, RegistryPhrases[261]) end
 
     local scopes, concrete = P.GroupShortcutScopes(text)
     local changes = {}
@@ -3926,46 +3704,26 @@ local GROUP_BLIZZARD_FRAME_TERMS = {
 }
 
 local function HasGroupBlizzardFallbackIntent(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar", "unitframe", "unit frame", "unitframes", "unit frames" }) then return false end
+    if ContainsAny(text, RegistryPhrases[262]) then return false end
     local groups = DetectGroups(text)
     if ContainsAny(text, GROUP_BLIZZARD_FALLBACK_TERMS) then return true end
     if #groups == 0 then return false end
     if not ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return false end
-    return ContainsAny(text, {
-        "show", "hide", "force", "auto", "automatic", "fallback", "when disabled", "if off",
-        "anzeigen", "einblenden", "ausblenden", "verstecken", "erzwingen", "automatisch",
-        "wenn aus", "wenn deaktiviert", "wenn ausgeschaltet",
-    })
+    return ContainsAny(text, RegistryPhrases[263])
 end
 
 local function GroupBlizzardFallbackValueForText(text)
-    if ContainsAny(text, {
-        "auto", "automatic", "automatically", "blizzard default", "blizzard decides",
-        "normal behavior", "default behavior", "automatisch", "blizzard entscheidet",
-        "standard verhalten", "normales verhalten",
-    }) then
+    if ContainsAny(text, RegistryPhrases[264]) then
         return "AUTO"
     end
-    if ContainsAny(text, {
-        "hide all", "hide both", "hide blizzard", "hide default", "hide standard",
-        "none", "no blizzard", "no default frames", "no standard frames",
-        "alles ausblenden", "alle verstecken", "beide ausblenden", "blizzard ausblenden",
-        "blizzard verstecken", "standardrahmen ausblenden", "standard rahmen ausblenden",
-        "keine blizzard frames", "keine standardrahmen", "nichts anzeigen",
-    }) then
+    if ContainsAny(text, RegistryPhrases[265]) then
         return "NONE"
     end
-    if ContainsAny(text, {
-        "show blizzard", "show default", "show standard", "force blizzard",
-        "restore blizzard", "use blizzard", "blizzard visible", "blizzard frames visible",
-        "blizzard anzeigen", "blizzard einblenden", "standardrahmen anzeigen",
-        "standard rahmen anzeigen", "standardframes anzeigen", "blizzard erzwingen",
-        "blizzard sichtbar", "blizzard frames sichtbar",
-    }) then
+    if ContainsAny(text, RegistryPhrases[266]) then
         return "SHOW"
     end
-    if ContainsAny(text, { "show", "visible", "anzeigen", "einblenden", "sichtbar" }) and ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return "SHOW" end
-    if ContainsAny(text, { "hide", "hidden", "off", "ausblenden", "verstecken", "aus" }) and ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return "NONE" end
+    if ContainsAny(text, RegistryPhrases[267]) and ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return "SHOW" end
+    if ContainsAny(text, RegistryPhrases[268]) and ContainsAny(text, GROUP_BLIZZARD_FRAME_TERMS) then return "NONE" end
     return nil
 end
 
@@ -3996,19 +3754,16 @@ local GROUP_AGGRO_ROLE_SCOPE_TERMS = {
 }
 
 local function GroupAggroRoleValueForText(text)
-    if ContainsAny(text, { "non tank", "non tanks", "nontank", "nontanks", "not tank", "not tanks", "non-tank", "non-tanks" }) then
+    if ContainsAny(text, RegistryPhrases[269]) then
         return "NON_TANK"
     end
-    if ContainsAny(text, { "healer", "healers", "heal role", "healer role", "healing role" }) then
+    if ContainsAny(text, RegistryPhrases[270]) then
         return "HEALER"
     end
-    if ContainsAny(text, { "tank", "tanks", "tank role" }) then
+    if ContainsAny(text, RegistryPhrases[271]) then
         return "TANK"
     end
-    if ContainsAny(text, {
-        "shows for all", "show for all", "role filter to all", "filter to all",
-        "for everyone", "for anyone", "all roles", "all players",
-    }) then
+    if ContainsAny(text, RegistryPhrases[272]) then
         return "ALL"
     end
     return nil
@@ -4016,29 +3771,26 @@ end
 
 local function GroupAggroExplicitScopes(text)
     local scopes = {}
-    local mythic = ContainsAny(text, {
-        "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid",
-        "mythicraidframe", "mythicraidframes",
-    })
+    local mythic = ContainsAny(text, RegistryPhrases[273])
     if mythic then scopes[#scopes + 1] = "mythicraid" end
-    if ContainsAny(text, { "party", "party frame", "party frames", "partyframe", "partyframes" }) then scopes[#scopes + 1] = "party" end
-    if ContainsAny(text, { "raid", "raid frame", "raid frames", "raidframe", "raidframes" }) and not mythic then scopes[#scopes + 1] = "raid" end
+    if ContainsAny(text, RegistryPhrases[274]) then scopes[#scopes + 1] = "party" end
+    if ContainsAny(text, RegistryPhrases[275]) and not mythic then scopes[#scopes + 1] = "raid" end
     if #scopes > 0 then return scopes, true end
-    if ContainsAny(text, { "all group frames", "all groups", "every group frame", "each group frame", "party and raid", "party raid" }) then
+    if ContainsAny(text, RegistryPhrases[276]) then
         return { "party", "raid", "mythicraid" }, true
     end
-    if ContainsAny(text, { "group", "groups", "group frame", "group frames" }) then return nil, false, true end
+    if ContainsAny(text, RegistryPhrases[277]) then return nil, false, true end
     return nil, false, false
 end
 
 P.ParseGroupAggroRoleFilterShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar", "boss target", "corner indicator", "spell indicator" }) then return nil end
-    if ContainsAny(text, { "fallback aggro", "fallback threat", "group fallback aggro", "group fallback threat" }) then return nil end
-    if not ContainsAny(text, { "aggro", "threat" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[278]) then return nil end
+    if ContainsAny(text, RegistryPhrases[279]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[280]) then return nil end
     if not ContainsAny(text, GROUP_AGGRO_ROLE_SCOPE_TERMS) then return nil end
     local roleValue = GroupAggroRoleValueForText(text)
     local hasRoleIntent = ContainsAny(text, GROUP_AGGRO_ROLE_INTENT_TERMS)
-        or (roleValue ~= nil and not ContainsAny(text, { "color", "colour", "opacity", "alpha", "thickness", "size" }))
+        or (roleValue ~= nil and not ContainsAny(text, RegistryPhrases[281]))
     if not hasRoleIntent then return nil end
 
     local scopes, concrete, genericGroup = GroupAggroExplicitScopes(text)
@@ -4070,40 +3822,28 @@ P.ParseGroupAggroRoleFilterShortcut = function(text)
 end
 
 P.ParseGroupSortShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, { "sort", "sorting", "order", "first" }) then return nil end
-    if DetectBoolean(text) ~= nil and ContainsAny(text, { "sort by role", "role sorting", "sort roles" }) then return nil end
-    if not ContainsAny(text, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames", "frames",
-        "role", "roles", "tank", "tanks", "healer", "healers", "heal", "dps", "damager", "name", "alphabetical", "group",
-    }) then return nil end
+    if ContainsAny(text, RegistryPhrases[282]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[283]) then return nil end
+    if DetectBoolean(text) ~= nil and ContainsAny(text, RegistryPhrases[284]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[285]) then return nil end
 
     local sortValue
     local roleOrderValue
-    if ContainsAny(text, {
-        "sort by group and role", "sort by group role", "group and role", "group plus role",
-        "group role", "group then role", "group then roles", "groups then role", "groups then roles",
-        "by group then role", "by group then roles", "by groups then role", "by groups then roles",
-        "raid groups then roles", "raid groups then role", "groups first then roles", "groups first then role",
-    }) then
+    if ContainsAny(text, RegistryPhrases[286]) then
         sortValue = "GROUP_ROLE"
-    elseif ContainsAny(text, { "sort by group", "raid group order", "by raid group", "by group" }) then
+    elseif ContainsAny(text, RegistryPhrases[287]) then
         sortValue = "GROUP"
-    elseif ContainsAny(text, { "sort by name", "by name", "alphabetical", "alphabetically", "name order" }) then
+    elseif ContainsAny(text, RegistryPhrases[288]) then
         sortValue = "NAME"
-    elseif ContainsAny(text, { "sort by role", "by role", "role sorting", "sort roles", "roles" }) then
+    elseif ContainsAny(text, RegistryPhrases[289]) then
         sortValue = "ROLE"
-    elseif ContainsAny(text, {
-        "tank first", "tanks first", "tank on top", "tanks on top", "tank at top", "tanks at top",
-        "tank at the top", "tanks at the top", "with tanks at top", "with tanks at the top",
-        "tank role first", "tanks role first",
-    }) then
+    elseif ContainsAny(text, RegistryPhrases[290]) then
         sortValue = "ROLE"
         roleOrderValue = "TANK,HEALER,DAMAGER"
-    elseif ContainsAny(text, { "healer first", "healers first", "heal first", "heals first", "healer on top", "healers on top" }) then
+    elseif ContainsAny(text, RegistryPhrases[291]) then
         sortValue = "ROLE"
         roleOrderValue = "HEALER,TANK,DAMAGER"
-    elseif ContainsAny(text, { "dps first", "damage first", "damager first", "damagers first", "dps on top" }) then
+    elseif ContainsAny(text, RegistryPhrases[292]) then
         sortValue = "ROLE"
         roleOrderValue = "DAMAGER,TANK,HEALER"
     else
@@ -4120,28 +3860,19 @@ P.ParseGroupSortShortcut = function(text)
 end
 
 P.ParseGroupScaleModeShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, { "scale", "scaling", "frame scale", "frame scaling", "group scale", "group scaling" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[293]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[294]) then return nil end
     if FirstNumber(text) ~= nil then return nil end
-    local explicitMode = ContainsAny(text, {
-        "scale mode", "scaling mode", "frame scale mode", "frame scaling mode",
-        "group scale mode", "group scaling mode",
-    })
+    local explicitMode = ContainsAny(text, RegistryPhrases[295])
 
     local value
-    if ContainsAny(text, {
-        "auto", "automatic", "automatically", "breakpoint", "breakpoints", "dynamic",
-        "by player count", "by players", "by group size", "by raid size",
-        "based on player count", "based on players", "based on group size", "based on raid size",
-        "depending on player count", "depending on players", "depending on group size", "depending on raid size",
-        "scale by player count", "scale by raid size", "scale by group size",
-    }) then
+    if ContainsAny(text, RegistryPhrases[296]) then
         value = "auto"
-    elseif ContainsAny(text, { "manual", "custom" }) then
+    elseif ContainsAny(text, RegistryPhrases[297]) then
         value = "manual"
-    elseif explicitMode and ContainsAny(text, { "off", "disable", "disabled", "turn off", "none", "no scaling" }) then
+    elseif explicitMode and ContainsAny(text, RegistryPhrases[298]) then
         value = "off"
-    elseif explicitMode and ContainsAny(text, { "on", "enable", "enabled", "turn on" }) then
+    elseif explicitMode and ContainsAny(text, RegistryPhrases[299]) then
         value = "manual"
     end
     if value == nil then return nil end
@@ -4155,15 +3886,15 @@ P.ParseGroupScaleModeShortcut = function(text)
 end
 
 P.ParseGroupOfflineDelayShortcut = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, { "offline", "offline members", "offline players" }) then return nil end
-    if not ContainsAny(text, { "delay", "after", "seconds", "sec", "hide offline" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[300]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[301]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[302]) then return nil end
     local value = FirstNumber(text)
     if value == nil then return nil end
 
     local scopes, concrete = P.GroupShortcutScopes(text)
     local changes = {}
-    local enableHide = ContainsAny(text, { "hide", "hide offline", "offline members", "offline players" })
+    local enableHide = ContainsAny(text, RegistryPhrases[303])
     for i = 1, #scopes do
         if enableHide then AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".hideOfflineEnabled", true) end
         AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".hideOfflineDelay", value)
@@ -4172,8 +3903,8 @@ P.ParseGroupOfflineDelayShortcut = function(text)
 end
 
 P.ParseMiscRegistryShortcut = function(text, raw)
-    if ContainsAny(text, { "aura", "auras", "buff" }) then return nil end
-    if ContainsAny(text, { "debuff" }) and not ContainsAny(text, { "debuff stripe" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[304]) then return nil end
+    if ContainsAny(text, RegistryPhrases[305]) and not ContainsAny(text, RegistryPhrases[306]) then return nil end
     local interruptReady = P.ParseInterruptReadyRegistryShortcut and P.ParseInterruptReadyRegistryShortcut(text, raw)
     if interruptReady then return interruptReady end
     local focusKick = P.ParseFocusKickRegistryShortcut and P.ParseFocusKickRegistryShortcut(text)
@@ -4220,89 +3951,76 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if detachedPower then return detachedPower end
     local key
     local forcedValue
-    if ContainsAny(text, { "midnight status icons", "status icons midnight style", "status icon midnight style", "midnight status icon style", "use midnight status icons" }) then
+    if ContainsAny(text, RegistryPhrases[307]) then
         if #DetectGroups(text) > 0 and #DetectUnits(text) == 0 then return nil end
         key = "general.statusIconsUseMidnightStyle"
         forcedValue = DetectBoolean(text)
         if forcedValue == nil then forcedValue = true end
-    elseif ContainsAny(text, { "global ui scale", "global ui scale override", "wow ui scale", "wow ui scale override", "ui scale override" }) then
+    elseif ContainsAny(text, RegistryPhrases[308]) then
         key = "general.globalUiScaleEnabled"
-    elseif ContainsAny(text, { "realtime power text", "real time power text", "live power text", "instant power text" }) then
+    elseif ContainsAny(text, RegistryPhrases[309]) then
         key = "bars.realtimePowerText"
-    elseif ContainsAny(text, { "sync combat state colors", "sync combat enter leave colors", "same combat state colors", "combat state color sync" }) then
+    elseif ContainsAny(text, RegistryPhrases[310]) then
         key = "gameplay.combatStateColorSync"
         forcedValue = DetectBoolean(text)
-        if forcedValue == nil and ContainsAny(text, { "sync", "same" }) then forcedValue = true end
-    elseif ContainsAny(text, { "castbar fill left to right", "cast bar fill left to right", "castbar fills left to right", "cast bar fills left to right", "castbar direction left to right", "cast bar direction left to right" }) then
+        if forcedValue == nil and ContainsAny(text, RegistryPhrases[311]) then forcedValue = true end
+    elseif ContainsAny(text, RegistryPhrases[312]) then
         key = "general.castbarFillDirection"
         forcedValue = "LTR"
-    elseif ContainsAny(text, { "castbar fill right to left", "cast bar fill right to left", "castbar fills right to left", "cast bar fills right to left", "castbar direction right to left", "cast bar direction right to left" }) then
+    elseif ContainsAny(text, RegistryPhrases[313]) then
         key = "general.castbarFillDirection"
         forcedValue = "RTL"
-    elseif ContainsAny(text, {
-        "castbar fill backwards", "cast bar fill backwards", "castbar fills backwards", "cast bar fills backwards",
-        "castbar fill backward", "cast bar fill backward", "castbar reverse fill", "cast bar reverse fill",
-        "reverse castbar fill", "reverse cast bar fill", "castbar reverse direction", "cast bar reverse direction",
-    }) then
+    elseif ContainsAny(text, RegistryPhrases[314]) then
         key = "general.castbarFillDirection"
         forcedValue = "RTL"
-    elseif ContainsAny(text, {
-        "castbar fill normal", "cast bar fill normal", "castbar normal fill", "cast bar normal fill",
-        "castbar normal direction", "cast bar normal direction", "castbar fill forward", "cast bar fill forward",
-        "castbar forward fill", "cast bar forward fill",
-    }) then
+    elseif ContainsAny(text, RegistryPhrases[315]) then
         key = "general.castbarFillDirection"
         forcedValue = "LTR"
-    elseif ContainsAny(text, { "nameplate melee spell id", "melee nameplate spell id", "melee range spell id", "crosshair melee spell id", "crosshair spell id" }) then
+    elseif ContainsAny(text, RegistryPhrases[316]) then
         key = "gameplay.nameplateMeleeSpellID"
-    elseif ContainsAny(text, { "snap", "snapping", "edge snap", "window snap", "menu snap", "snapping feature", "snap feature", "menue snap", "menue einrasten", "menue andocken", "fenster einrasten", "fenster andocken", "kante andocken" }) then
-        if ContainsAny(text, { "edit mode", "grid snap", "snap to grid", "snap frames", "mover snap", "raster snap" }) then return nil end
+    elseif ContainsAny(text, RegistryPhrases[317]) then
+        if ContainsAny(text, RegistryPhrases[318]) then return nil end
         key = "general.slashMenuSnapEnabled"
-    elseif ContainsAny(text, { "advanced menu", "advanced menu section", "advanced section", "erweitertes menu", "erweitertes menue", "advanced menue" }) then
+    elseif ContainsAny(text, RegistryPhrases[319]) then
         key = "general.hideAdvancedMenu"
-    elseif ContainsAny(text, { "reduce motion", "menu motion", "reduce animations", "menu animations", "bewegung reduzieren", "menue bewegung reduzieren", "animationen reduzieren", "weniger bewegung", "weniger animationen", "reduzierte bewegung" }) then
+    elseif ContainsAny(text, RegistryPhrases[320]) then
         key = "general.reduceMotion"
-    elseif ContainsAny(text, { "navigation icons", "nav icons", "menu icons", "sidebar icons", "rail icons", "navigation symbols", "nav symbols", "menu symbols", "sidebar symbols", "rail symbols", "navi symbole", "navigationssymbole", "navigation symbole", "menue symbole", "menu symbole", "navi icons" }) then
+    elseif ContainsAny(text, RegistryPhrases[321]) then
         key = "general.showNavigationIcons"
-    elseif ContainsAny(text, { "welcome message", "startup welcome", "startup message", "start message", "willkommensnachricht", "willkommens nachricht", "willkommens meldung", "willkommen nachricht", "login nachricht", "start meldung" }) then
+    elseif ContainsAny(text, RegistryPhrases[322]) then
         key = "general.showWelcomeMessage"
-    elseif ContainsAny(text, { "version check", "peer version check", "peer-to-peer version check", "update check", "versionscheck", "versions pruefung", "version pruefung", "versionspruefung", "peer versionspruefung", "update pruefung" }) then
+    elseif ContainsAny(text, RegistryPhrases[323]) then
         key = "general.versionCheckEnabled"
-    elseif ContainsAny(text, { "minimap icon", "minimap button", "msuf minimap icon", "msuf minimap button", "minikarten symbol", "minimap symbol", "minimap knopf", "minikarten icon", "minikarten button", "minikarten knopf" }) then
+    elseif ContainsAny(text, RegistryPhrases[324]) then
         key = "general.showMinimapIcon"
-    elseif ContainsAny(text, { "target sounds", "target sound", "target lost sound", "target lost sounds", "target select sound", "target select sounds", "target select lost sounds", "play sound on target", "play sound on target lost", "play sound on target select", "ziel sound", "ziel sounds", "zielauswahl sound", "ziel verloren sound", "ziel verloren sounds", "sound bei ziel", "sound bei zielwechsel", "spiele sound bei ziel" }) then
+    elseif ContainsAny(text, RegistryPhrases[325]) then
         key = "general.playTargetSelectLostSounds"
-    elseif ContainsAny(text, { "fully hide blizzard playerframe", "fully hide blizzard player frame", "hard hide blizzard playerframe", "hard hide blizzard player frame", "hard kill blizzard playerframe", "hard kill blizzard player frame", "resource bar compatibility", "blizzard spieler rahmen komplett verstecken", "blizzard spieler frame komplett verstecken", "playerframe hart verstecken", "spieler frame hart verstecken", "ressourcenleisten kompatibilitaet" }) then
+    elseif ContainsAny(text, RegistryPhrases[326]) then
         key = "general.hardKillBlizzardPlayerFrame"
-    elseif ContainsAny(text, { "blizzard unitframes", "blizzard unit frames", "blizzard frames", "standard frames", "default frames", "blizzard unitframe", "blizzard rahmen", "standardrahmen", "standard rahmen", "wow unitframes", "wow rahmen", "original frames" }) then
+    elseif ContainsAny(text, RegistryPhrases[327]) then
         key = "general.disableBlizzardUnitFrames"
-    elseif ContainsAny(text, { "menu language", "msuf language", "menu locale", "locale", "language", "sprache", "menue sprache", "menuesprache", "msuf sprache", "optionen sprache" }) then
+    elseif ContainsAny(text, RegistryPhrases[328]) then
         key = "general.menuLocale"
-    elseif ContainsAny(text, { "dropdown style", "dropdown style mode", "dropdown module style", "menu dropdown style", "dropdown skin", "dropdown design", "dropdown stil", "menue dropdown stil", "dropdown modus", "dropdown aussehen", "auswahlmenue stil", "menue auswahl stil" }) then
+    elseif ContainsAny(text, RegistryPhrases[329]) then
         key = "general.dropdownStyleMode"
-    elseif ContainsAny(text, { "msuf style", "msuf style module", "midnight style", "midnight design", "style module", "module style", "msuf skin", "msuf stil", "midnight stil", "stil modul", "style modul", "design modul", "msuf design", "skin modul" }) then
-        if ContainsAny(text, {
-            "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators",
-            "ready check", "readycheck", "combat icon", "combat indicator", "rested icon", "resting icon",
-            "leader icon", "assist icon", "role icon", "raid marker", "pvp flag", "phase icon", "summon icon",
-            "party", "party frame", "raid", "raid frame", "group frame", "group frames",
-        }) then return nil end
+    elseif ContainsAny(text, RegistryPhrases[330]) then
+        if ContainsAny(text, RegistryPhrases[331]) then return nil end
         key = "general.styleEnabled"
-    elseif ContainsAny(text, { "tooltip modifier", "tooltip modifier key", "unit tooltip modifier", "unitframe tooltip modifier", "modifier key", "tooltip taste", "tooltip modifier taste", "tooltip hotkey", "tooltip aktivierungstaste" }) and ContainsAny(text, { "tooltip", "tooltips" }) then
+    elseif ContainsAny(text, RegistryPhrases[332]) and ContainsAny(text, RegistryPhrases[333]) then
         key = "general.unitTooltipModifier"
-    elseif ContainsAny(text, { "use msuf tooltip", "use msuf tooltips", "use msuf unitframe tooltip", "nutze msuf tooltip", "nutze msuf tooltips", "verwende msuf tooltip", "verwende msuf tooltips" }) then
+    elseif ContainsAny(text, RegistryPhrases[334]) then
         key = "general.unitTooltipProvider"
         forcedValue = "MSUF"
-    elseif ContainsAny(text, { "use gametooltip", "use game tooltip", "use game tooltips", "use blizzard tooltip", "nutze gametooltip", "nutze game tooltip", "verwende gametooltip", "verwende blizzard tooltip" }) then
+    elseif ContainsAny(text, RegistryPhrases[335]) then
         key = "general.unitTooltipProvider"
         forcedValue = "GAME"
-    elseif ContainsAny(text, { "tooltip source", "unitframe tooltip source", "unit tooltip source", "group frame tooltip source", "game tooltip source", "gametooltip source", "tooltip quelle", "tooltip anbieter", "unitframe tooltip quelle", "einheiten tooltip quelle", "gruppen tooltip quelle", "game tooltip quelle", "msuf tooltip quelle" }) then
+    elseif ContainsAny(text, RegistryPhrases[336]) then
         key = "general.unitTooltipProvider"
-    elseif ContainsAny(text, { "tooltip anchor", "unitframe tooltip anchor", "unit tooltip anchor", "tooltip position", "tooltip location", "tooltip anker", "unitframe tooltip anker", "tooltip ort", "tooltip platzierung" })
-        or (ContainsAny(text, { "tooltip", "tooltips" }) and ContainsAny(text, { "cursor", "mouse", "maus", "mauszeiger", "fixed", "fest", "fixiert", "external", "extern", "addon kontrolliert", "am cursor", "an der maus" })) then
+    elseif ContainsAny(text, RegistryPhrases[337])
+        or (ContainsAny(text, RegistryPhrases[338]) and ContainsAny(text, RegistryPhrases[339])) then
         key = "general.unitTooltipAnchor"
-    elseif ContainsAny(text, { "unitframe tooltips", "unit frame tooltips", "unit tooltips", "group frame tooltips", "show tooltips", "tooltips", "tooltip mode", "tooltip visibility", "tooltip anzeigen", "tooltips anzeigen", "tooltip modus", "tooltip sichtbarkeit", "unitframe tooltip anzeigen", "einheiten tooltips", "gruppen tooltips" })
-        or (ContainsAny(text, { "tooltip", "tooltips" }) and ContainsAny(text, { "always", "immer", "ooc", "out of combat", "ausserhalb kampf", "modifier", "alt", "ctrl", "strg", "shift", "umschalt", "never", "nie", "niemals", "aus", "an" })) then
+    elseif ContainsAny(text, RegistryPhrases[340])
+        or (ContainsAny(text, RegistryPhrases[341]) and ContainsAny(text, RegistryPhrases[342])) then
         key = "general.unitTooltipMode"
     end
     if not key then return nil end
@@ -4446,37 +4164,20 @@ local function PowerBarScopes(text, unitOnly)
 end
 
 local function PowerBarBorderBooleanValue(text)
-    if ContainsAny(text, {
-        "remove border", "remove outline", "without border", "without outline",
-        "no border", "no outline", "turn off border", "turn off outline",
-        "disable border", "disable outline", "hide border", "hide outline",
-        "border off", "outline off", "border aus", "outline aus", "rand aus",
-        "ohne rand", "rand entfernen", "rand ausschalten",
-    }) then
+    if ContainsAny(text, RegistryPhrases[343]) then
         return false
     end
-    if ContainsAny(text, {
-        "add border", "add outline", "with border", "with outline",
-        "turn on border", "turn on outline", "enable border", "enable outline",
-        "show border", "show outline", "border on", "outline on",
-        "border enabled", "outline enabled", "border an", "outline an",
-        "rand an", "rand aktivieren", "rand einschalten", "mit rand",
-    }) then
+    if ContainsAny(text, RegistryPhrases[344]) then
         return true
     end
-    if ContainsAny(text, { "add", "give", "with", "enable", "show", "an", "aktivieren", "einschalten", "mit" }) then
+    if ContainsAny(text, RegistryPhrases[345]) then
         return true
     end
     return DetectBoolean(text)
 end
 
 local function PowerBarBorderThicknessIntent(text)
-    if ContainsAny(text, {
-        "thickness", "size", "width", "border thickness", "border size", "border width",
-        "outline thickness", "outline size", "outline width",
-        "thicker", "thinner", "increase", "decrease", "raise", "lower", "more", "less",
-        "bigger", "smaller", "dicker", "duenner", "groesser", "kleiner",
-    }) then
+    if ContainsAny(text, RegistryPhrases[346]) then
         return true
     end
     return FirstNumber(text) ~= nil
@@ -4503,25 +4204,25 @@ function P.PowerBarEmbedValue(text)
 end
 
 function P.ParseDetachedPowerBarRegistryShortcut(text, raw)
-    if not ContainsAny(text, { "detached power", "detached power bar", "detached mana", "detached mana bar" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[347]) then return nil end
     if HasClassPowerIntent(text) then return nil end
 
     local attr
     local label
     local value
     local relativeDelta
-    if ContainsAny(text, { "text on bar", "text on detached", "text on detached power", "text on detached power bar", "detached power text on bar" }) then
+    if ContainsAny(text, RegistryPhrases[348]) then
         attr = "detachedPowerBarTextOnBar"
         label = "Text On Detached Power Bar"
         value = DetectBoolean(text)
         if value == nil then value = true end
-    elseif ContainsAny(text, { "frame level", "framelevel", "layer", "strata offset" }) then
+    elseif ContainsAny(text, RegistryPhrases[349]) then
         attr = "detachedPowerBarFrameLevelOffset"
         label = "Detached Power Bar Layer"
-    elseif ContainsAny(text, { "width", "wide", "wider", "narrower" }) and not ContainsAny(text, { "width mode", "width source" }) then
+    elseif ContainsAny(text, RegistryPhrases[350]) and not ContainsAny(text, RegistryPhrases[351]) then
         attr = "detachedPowerBarWidth"
         label = "Detached Power Bar Width"
-    elseif ContainsAny(text, { "height", "tall", "higher", "lower" }) then
+    elseif ContainsAny(text, RegistryPhrases[352]) then
         attr = "detachedPowerBarHeight"
         label = "Detached Power Bar Height"
     else
@@ -4554,14 +4255,14 @@ function P.ParseDetachedPowerBarRegistryShortcut(text, raw)
 end
 
 local function ParsePowerBarRegistryShortcut(text, raw)
-    if not ContainsAny(text, { "power bar", "mana bar", "power border", "mana border", "power outline", "mana outline", "power balken", "mana balken" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[353]) then return nil end
     if HasClassPowerIntent(text) then return nil end
 
     local changes = {}
     local detachedDetail = P.ParseDetachedPowerBarRegistryShortcut(text, raw)
     if detachedDetail then return detachedDetail end
 
-    if ContainsAny(text, { "detach", "detached", "undock", "attach", "reattach", "dock", "abkoppeln", "ankoppeln" }) then
+    if ContainsAny(text, RegistryPhrases[354]) then
         local units = PowerBarScopes(text, true)
         for i = 1, #units do
             local setting = Registry and Registry:GetSetting(tostring(units[i]) .. ".powerBarDetached")
@@ -4580,7 +4281,7 @@ local function ParsePowerBarRegistryShortcut(text, raw)
         return nil
     end
 
-    if ContainsAny(text, { "embed", "embedded", "unembed", "unembedded", "into health", "into hp", "inside health", "inside hp", "within health", "within hp", "outside health", "outside hp", "out of health", "out of hp" }) then
+    if ContainsAny(text, RegistryPhrases[355]) then
         local value = P.PowerBarEmbedValue(text)
         if value == nil then return nil end
         local units = PowerBarScopes(text, true)
@@ -4597,7 +4298,7 @@ local function ParsePowerBarRegistryShortcut(text, raw)
         return nil
     end
 
-    if ContainsAny(text, { "border", "outline", "rand" }) then
+    if ContainsAny(text, RegistryPhrases[356]) then
         local units = PowerBarScopes(text, true)
         if PowerBarBorderThicknessIntent(text) then
             for i = 1, #units do
@@ -4636,7 +4337,7 @@ local function ParsePowerBarRegistryShortcut(text, raw)
         return nil
     end
 
-    if ContainsAny(text, { "height", "hoehe", "higher", "lower", "increase", "decrease", "raise", "reduce", "hoeher", "erhoehe", "erhoehen", "senke", "reduziere" }) then
+    if ContainsAny(text, RegistryPhrases[357]) then
         local units, groups = PowerBarScopes(text, false)
         for i = 1, #units do
             local setting = Registry and Registry:GetSetting(tostring(units[i]) .. ".powerBarHeight")
@@ -4668,7 +4369,7 @@ local function ParsePowerBarRegistryShortcut(text, raw)
         return nil
     end
 
-    if ContainsAny(text, { "smooth", "embed", "embedded", "text", "sync", "anchor", "width", "x", "y", "layer" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[358]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     local units, groups = PowerBarScopes(text, false)
@@ -4685,15 +4386,15 @@ local function ParsePowerBarRegistryShortcut(text, raw)
 end
 
 local function ParseCastbarInterruptRegistryShortcut(text)
-    if not ContainsAny(text, { "interrupt", "interruptible", "kick", "kickable", "unterbrechen" }) then return nil end
-    if ContainsAny(text, { "ready", "tracker", "focus kick", "indicator" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[359]) then return nil end
+    if ContainsAny(text, RegistryPhrases[360]) then return nil end
     local explicitUnits = {}
     local pageUnit
     if not HasAllScopeIntent(text) then
         explicitUnits = ExplicitScopes(text)
         pageUnit = CurrentRegistryPageUnit()
     end
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) and not explicitUnits[1] and not pageUnit then return nil end
+    if not ContainsAny(text, RegistryPhrases[361]) and not explicitUnits[1] and not pageUnit then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
 
@@ -4773,20 +4474,10 @@ local function DispelTypeColorSpecForText(text)
 end
 
 P.ParseDispelTypeColorShortcut = function(text, raw)
-    if not ContainsAny(text, { "color", "colors", "colour", "colours" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[362]) then return nil end
     local specificType = DispelTypeColorSpecForText(text)
-    local typeColorIntent = ContainsAny(text, {
-        "debuff type color", "debuff type colors", "debuff type colour", "debuff type colours",
-        "magic debuff color", "magic debuff colour", "magic dispel color", "magic dispel colour",
-        "curse debuff color", "curse debuff colour", "curse dispel color", "curse dispel colour",
-        "disease debuff color", "disease debuff colour", "disease dispel color", "disease dispel colour",
-        "poison debuff color", "poison debuff colour", "poison dispel color", "poison dispel colour",
-        "bleed debuff color", "bleed debuff colour", "bleed dispel color", "bleed dispel colour",
-    })
-    local singleDispelIntent = ContainsAny(text, {
-        "dispel color", "dispel colour", "dispel border color", "dispel border colour",
-        "single dispel color", "single dispel colour", "all dispel color", "all dispel colour",
-    }) and not ContainsAny(text, { "debuff type", "magic", "curse", "disease", "poison", "bleed" })
+    local typeColorIntent = ContainsAny(text, RegistryPhrases[363])
+    local singleDispelIntent = ContainsAny(text, RegistryPhrases[364]) and not ContainsAny(text, RegistryPhrases[365])
     if not typeColorIntent and not singleDispelIntent then return nil end
 
     local value, valueLabel = P.ColorShortcutValue(text, raw)
@@ -4840,50 +4531,45 @@ P.BuildCastbarColorChoices = function(keys, value, valueLabel)
 end
 
 P.ParseCastbarColorShortcut = function(text, raw)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, {
-        "castbar", "cast bar", "cast color", "cast colour", "zauberleiste",
-        "interrupt color", "interrupt colour", "interrupt feedback", "interrupted cast", "after interrupt",
-        "interruptible", "kickable", "unkickable",
-        "non interruptible", "noninterruptible", "uninterruptible", "kick ready", "kick not ready",
-    }) then return nil end
+    if ContainsAny(text, RegistryPhrases[366]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[367]) then return nil end
 
     local value, valueLabel = P.ColorShortcutValue(text, raw)
     if not value then return nil end
     local key
-    if ContainsAny(text, { "not ready", "notready", "cooldown", "on cooldown", "kick cooldown", "interrupt cooldown" })
-        and ContainsAny(text, { "kick", "interrupt" }) then
+    if ContainsAny(text, RegistryPhrases[368])
+        and ContainsAny(text, RegistryPhrases[369]) then
         key = "general.kickNotReadyColor"
-    elseif ContainsAny(text, { "ready", "available", "kick ready", "interrupt ready" })
-        and ContainsAny(text, { "kick", "interrupt" }) then
+    elseif ContainsAny(text, RegistryPhrases[370])
+        and ContainsAny(text, RegistryPhrases[371]) then
         key = "general.kickReadyColor"
-    elseif ContainsAny(text, { "text color", "font color", "spell name color", "spell text color", "castbar text", "cast bar text" }) then
+    elseif ContainsAny(text, RegistryPhrases[372]) then
         key = "general.castbarFontColor"
-    elseif ContainsAny(text, { "border color", "outline color", "castbar border", "cast bar border" }) then
+    elseif ContainsAny(text, RegistryPhrases[373]) then
         key = "general.castbarBorderColor"
-    elseif ContainsAny(text, { "background color", "bg color", "castbar background", "cast bar background" }) then
+    elseif ContainsAny(text, RegistryPhrases[374]) then
         key = "general.castbarBackgroundColor"
-    elseif ContainsAny(text, { "player castbar override color", "player castbar custom color", "player cast custom color", "custom player castbar color" }) then
+    elseif ContainsAny(text, RegistryPhrases[375]) then
         key = "general.playerCastbarOverrideColor"
-    elseif ContainsAny(text, { "non interruptible", "noninterruptible", "not interruptible", "uninterruptible", "unkickable", "not kickable", "cannot interrupt", "cant interrupt" }) then
+    elseif ContainsAny(text, RegistryPhrases[376]) then
         key = "general.castbarNonInterruptibleColor"
-    elseif ContainsAny(text, { "interrupt feedback", "interrupted cast", "interrupted castbar", "after interrupt", "interrupt color all castbars", "interrupt color for all castbars" }) then
+    elseif ContainsAny(text, RegistryPhrases[377]) then
         key = "general.castbarInterruptFeedbackColor"
-    elseif ContainsAny(text, { "interruptible", "kickable", "interrupt castbar", "castbar interrupt", "interrupt cast color" }) then
+    elseif ContainsAny(text, RegistryPhrases[378]) then
         key = "general.castbarInterruptibleColor"
     end
 
     if key then
         return P.ColorShortcutResponse(P.BuildCastbarColorChoices({ key }, value, valueLabel), "Castbar color", true, "Changes the Castbar color option.")
     end
-    if ContainsAny(text, { "interrupt color", "interrupt colour" }) then
+    if ContainsAny(text, RegistryPhrases[379]) then
         return P.ColorShortcutResponse(P.BuildCastbarColorChoices({
             "general.castbarInterruptibleColor",
             "general.castbarNonInterruptibleColor",
             "general.castbarInterruptFeedbackColor",
         }, value, valueLabel), "Which castbar interrupt color?", false, "The request mentions interrupt color, which maps to several real Castbar color options.")
     end
-    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then
+    if ContainsAny(text, RegistryPhrases[380]) then
         return P.ColorShortcutResponse(P.BuildCastbarColorChoices({
             "general.castbarInterruptibleColor",
             "general.castbarNonInterruptibleColor",
@@ -4897,68 +4583,36 @@ P.ParseCastbarColorShortcut = function(text, raw)
 end
 
 local function HasExplicitFullGroupBorderIntent(text)
-    return ContainsAny(text, {
-        "group border", "full group border", "whole group border", "outer group border", "group block border",
-    })
+    return ContainsAny(text, RegistryPhrases[381])
 end
 
 local function HasGroupFrameOutlineColorIntent(text)
-    if not ContainsAny(text, {
-        "border color", "border colour", "outline color", "outline colour",
-        "frame border color", "frame outline color", "bar border color", "bar outline color",
-    }) then
+    if not ContainsAny(text, RegistryPhrases[382]) then
         return false
     end
     if HasExplicitFullGroupBorderIntent(text) then return false end
-    if ContainsAny(text, {
-        "aura", "auras", "buff", "debuff",
-        "castbar", "cast bar", "portrait", "power bar", "mana bar",
-        "aggro", "threat", "focus", "target", "dispel", "dispellable", "purge", "purgeable", "highlight",
-    }) then
+    if ContainsAny(text, RegistryPhrases[383]) then
         return false
     end
-    return ContainsAny(text, {
-        "group", "group frame", "group frames",
-        "party", "party frame", "party frames",
-        "raid", "raid frame", "raid frames", "mythic raid", "mythicraid",
-    })
+    return ContainsAny(text, RegistryPhrases[384])
 end
 
 local function HasAmbiguousGroupFrameBorderSizeIntent(text)
     if HasExplicitFullGroupBorderIntent(text) then return false end
-    if ContainsAny(text, { "opacity", "alpha", "transparent", "transparency", "color", "colour" }) then return false end
-    if ContainsAny(text, {
-        "bar outline", "frame outline", "outline thickness", "outline size", "outline width",
-        "bar border thickness", "bar border size", "bar border width",
-        "party frame border", "raid frame border", "mythic raid frame border",
-    }) then
+    if ContainsAny(text, RegistryPhrases[385]) then return false end
+    if ContainsAny(text, RegistryPhrases[386]) then
         return false
     end
-    if not ContainsAny(text, {
-        "thickness", "size", "width", "thicker", "thinner", "bigger", "smaller",
-        "increase", "decrease", "reduce", "dicker", "duenner",
-    }) then
+    if not ContainsAny(text, RegistryPhrases[387]) then
         return false
     end
-    if not ContainsAny(text, {
-        "group frame border", "group frame outline", "frame border", "frame outline",
-        "border thickness", "outline thickness", "border size", "outline size",
-        "border width", "outline width",
-    }) then
+    if not ContainsAny(text, RegistryPhrases[388]) then
         return false
     end
-    if ContainsAny(text, {
-        "aura", "auras", "buff", "debuff",
-        "castbar", "cast bar", "portrait", "power bar", "mana bar",
-        "aggro", "threat", "focus", "target", "dispel", "dispellable", "purge", "purgeable", "highlight",
-    }) then
+    if ContainsAny(text, RegistryPhrases[389]) then
         return false
     end
-    return ContainsAny(text, {
-        "group", "group frame", "group frames",
-        "party", "party frame", "party frames",
-        "raid", "raid frame", "raid frames", "mythic raid", "mythicraid",
-    })
+    return ContainsAny(text, RegistryPhrases[390])
 end
 
 local function BarOutlineScopeForGroup(scope)
@@ -4993,13 +4647,10 @@ P.GROUP_COLOR_TARGETS = {
 }
 
 P.HasGroupFrameColorIntent = function(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "buffs" }) then return false end
-    if ContainsAny(text, { "debuff", "debuffs" }) and not ContainsAny(text, { "debuff stripe", "debuff stripes" }) then return false end
-    if not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then return false end
-    return ContainsAny(text, {
-        "group", "group frame", "group frames", "groupframe", "groupframes", "gruppenframe", "gruppenframes",
-        "party", "party frame", "party frames", "raid", "raid frame", "raid frames", "mythic raid", "mythicraid",
-    })
+    if ContainsAny(text, RegistryPhrases[391]) then return false end
+    if ContainsAny(text, RegistryPhrases[392]) and not ContainsAny(text, RegistryPhrases[393]) then return false end
+    if not ContainsAny(text, RegistryPhrases[394]) then return false end
+    return ContainsAny(text, RegistryPhrases[395])
 end
 
 P.GroupColorTargetForText = function(text)
@@ -5074,22 +4725,19 @@ end
 local STATUS_TEST_UNITS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
 
 local function StatusTestModeValue(text)
-    if ContainsAny(text, { "off", "disable", "disabled", "hide", "stop", "clear", "aus", "deaktivieren", "ausschalten", "ausblenden" }) then
+    if ContainsAny(text, RegistryPhrases[396]) then
         return false
     end
-    if ContainsAny(text, { "on", "enable", "enabled", "show", "test", "preview", "an", "aktivieren", "einschalten", "anzeigen" }) then
+    if ContainsAny(text, RegistryPhrases[397]) then
         return true
     end
     return nil
 end
 
 local function ParseStatusIconTestModeRegistryShortcut(text)
-    if not ContainsAny(text, {
-        "status icon", "status icons", "status indicator", "status indicators",
-        "status preview", "test status", "test mode",
-    }) then return nil end
-    if not ContainsAny(text, { "test", "preview", "test mode", "status preview" }) then return nil end
-    if ContainsAny(text, { "show all", "all indicators", "all status icons", "preview all", "current indicator", "preview current" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[398]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[399]) then return nil end
+    if ContainsAny(text, RegistryPhrases[400]) then return nil end
 
     local value = StatusTestModeValue(text)
     if value == nil then return nil end
@@ -5121,7 +4769,7 @@ end
 P.ParseStatusIconTestModeRegistryShortcut = ParseStatusIconTestModeRegistryShortcut
 
 function P.ParseGroupBooleanRegistryShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[401]) then return nil end
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
     if #explicitUnits > 0 then return nil end
@@ -5129,27 +4777,21 @@ function P.ParseGroupBooleanRegistryShortcut(text)
     local label
     local value = DetectBoolean(text)
 
-    if ContainsAny(text, {
-        "hide name on dead", "hide name when dead", "hide name on offline", "hide name when offline",
-        "hide name on dead or offline", "hide name when dead or offline", "dead or offline",
-    }) then
+    if ContainsAny(text, RegistryPhrases[402]) then
         attr = "hideNameOnDeadOffline"
             label = "Hide Name on Dead or Offline"
-        if ContainsAny(text, { "turn off", "disable", "disabled", "deactivate", "deactivated", "ausschalten", "deaktivieren" }) then
+        if ContainsAny(text, RegistryPhrases[403]) then
             value = false
         else
             value = true
         end
-    elseif ContainsAny(text, { "reverse hp text", "hp text reverse", "reverse health text", "health text reverse" }) then
+    elseif ContainsAny(text, RegistryPhrases[404]) then
         attr = "hpTextReverse"
         label = "Reverse HP Text"
         if value == nil then value = true end
-    elseif ContainsAny(text, { "group number", "group index", "group number label" })
-        and not ContainsAny(text, { "size", "font size", "anchor", "x offset", "y offset", "offset", "color", "colour", "style" })
-        and not ContainsAny(text, {
-            "move", "nudge", "shift", "position", "right", "left", "up", "down", "oben", "unten", "links", "rechts",
-            "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink", "groesser", "kleiner",
-        })
+    elseif ContainsAny(text, RegistryPhrases[405])
+        and not ContainsAny(text, RegistryPhrases[406])
+        and not ContainsAny(text, RegistryPhrases[407])
         and FirstNumber(text) == nil
     then
         attr = "showGroupNumber"
@@ -5169,15 +4811,12 @@ function P.ParseGroupBooleanRegistryShortcut(text)
 end
 
 function P.ParseUnitHPTextReverseShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, {
-        "reverse hp text", "hp text reverse", "reverse health text", "health text reverse",
-        "reverse hp text order", "hp text reverse order", "reverse health text order", "health text reverse order",
-    }) then return nil end
+    if ContainsAny(text, RegistryPhrases[408]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[409]) then return nil end
 
     local explicitUnits, explicitGroups = ExplicitScopes(text)
-    local hasUnitFrameIntent = ContainsAny(text, { "unitframe", "unit frame", "unitframes", "unit frames" })
-    local hasGroupFrameIntent = ContainsAny(text, { "group frame", "group frames", "groupframe", "groupframes" })
+    local hasUnitFrameIntent = ContainsAny(text, RegistryPhrases[410])
+    local hasGroupFrameIntent = ContainsAny(text, RegistryPhrases[411])
     if #explicitUnits == 0 and hasGroupFrameIntent and not hasUnitFrameIntent then return nil end
     if #explicitGroups > 0 and #explicitUnits == 0 and not hasUnitFrameIntent then return nil end
 
@@ -5319,15 +4958,15 @@ function P.ParseExactRegistryKeyShortcut(text, raw)
 end
 
 function P.ParseGroupNumberRegistryShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff" }) then return nil end
+    if ContainsAny(text, RegistryPhrases[412]) then return nil end
     local attr
     local label
-    if ContainsAny(text, { "group number", "group index", "group number label" })
-        and ContainsAny(text, { "size", "font size", "scale", "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink", "groesser", "kleiner" })
+    if ContainsAny(text, RegistryPhrases[413])
+        and ContainsAny(text, RegistryPhrases[414])
     then
         attr = "groupNumberSize"
         label = "Group Number Size"
-    elseif ContainsAny(text, { "group border padding", "border padding", "padding around", "padding around frames", "padding around group", "frame padding" }) then
+    elseif ContainsAny(text, RegistryPhrases[415]) then
         attr = "groupBorderPadding"
         label = "Group Border Padding"
     elseif HasAmbiguousGroupFrameBorderSizeIntent(text) then
@@ -5338,14 +4977,14 @@ function P.ParseGroupNumberRegistryShortcut(text)
             summary = "Clarifies group frame border thickness instead of changing the wrong border.",
         }
     elseif HasExplicitFullGroupBorderIntent(text)
-        and ContainsAny(text, { "thickness", "size", "border size", "border thickness", "thicker", "thinner", "increase", "decrease", "reduce", "bigger", "smaller", "dicker", "duenner" })
+        and ContainsAny(text, RegistryPhrases[416])
     then
         attr = "groupBorderSize"
         label = "Group Border Thickness"
-    elseif ContainsAny(text, { "power height", "power bar height", "mana height", "mana bar height" }) then
+    elseif ContainsAny(text, RegistryPhrases[417]) then
         attr = "powerHeight"
         label = "Power Bar Height"
-    elseif ContainsAny(text, { "debuff stripe height", "debuff stripe size" }) then
+    elseif ContainsAny(text, RegistryPhrases[418]) then
         attr = "debuffStripeHeight"
         label = "Debuff Stripe Height"
     else
@@ -5355,7 +4994,7 @@ function P.ParseGroupNumberRegistryShortcut(text)
     local explicitGroups = DetectGroups(text)
     local activePage = M and M.activeKey
     local groupPage = activePage == "gf_layout" or activePage == "gf_bars" or activePage == "gf_indicators"
-    if #explicitGroups == 0 and not groupPage and not ContainsAny(text, { "group frame", "group frames", "all group", "all groups" }) then return nil end
+    if #explicitGroups == 0 and not groupPage and not ContainsAny(text, RegistryPhrases[419]) then return nil end
     local scopes, concrete = P.GroupShortcutScopes(text)
     local changes = {}
     for i = 1, #scopes do
@@ -5478,7 +5117,15 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings, suppressNoMatch)
             summary = "Changes multiple matched options.",
         }
     end
-    if #changes > 1 and bestScore > 0 then
+    local contextScored = false
+    if #changes > 1 and A.ContextEngineEnabled ~= false and P.ScoreSettingCandidates then
+        local scored = P.ScoreSettingCandidates(changes, { context = A.ConversationContext and A.ConversationContext() or nil })
+        if type(scored) == "table" and #scored > 0 then
+            changes = scored
+            contextScored = true
+        end
+    end
+    if not contextScored and #changes > 1 and bestScore > 0 then
         local filtered = {}
         for i = 1, #changes do
             if changes[i].matchScore == bestScore then filtered[#filtered + 1] = changes[i] end
@@ -5549,9 +5196,9 @@ end
 
 local function ParseTargetInlinePartialAmbiguity(text)
     text = Normalize(text)
-    if not ContainsAny(text, { "inline" }) then return nil end
-    if ContainsAny(text, { "inline text", "target target inline text", "target of target inline text", "separator", "seperator", "delimiter" }) then return nil end
-    if not ContainsAny(text, { "target of target", "targettarget", "target inline", "target target", "tot" }) then return nil end
+    if not ContainsAny(text, RegistryPhrases[420]) then return nil end
+    if ContainsAny(text, RegistryPhrases[421]) then return nil end
+    if not ContainsAny(text, RegistryPhrases[422]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     local setting = Registry and Registry.GetSetting and Registry:GetSetting("targettarget.showToTInTargetName") or nil
@@ -5608,19 +5255,13 @@ local function ParseRegistryAlias(text, raw)
 end
 
 local function ScopedOnlyKind(text)
-    if not ContainsAny(text, { "only", "nur", "just" }) then return nil end
-    if ContainsAny(text, { "current health only", "on current health only", "on health only" }) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if ContainsAny(text, {
-        "font", "fonts", "schrift", "text outline", "font outline", "text shadow",
-        "name color", "name text color", "name shortening", "text size",
-        "text color", "color text", "health text color", "hp text color",
-        "power text color", "mana text color", "resource text color",
-        "color text by power", "color text by health",
-    }) then
+    if not ContainsAny(text, RegistryPhrases[423]) then return nil end
+    if ContainsAny(text, RegistryPhrases[424]) then return nil end
+    if ContainsAny(text, RegistryPhrases[425]) then return nil end
+    if ContainsAny(text, RegistryPhrases[426]) then
         return "fonts"
     end
-    if ContainsAny(text, { "bars", "bar", "bar texture", "health bar", "hp bar", "power bar", "gradient", "absorb", "outline", "border", "dispel", "aggro", "purge" }) then
+    if ContainsAny(text, RegistryPhrases[427]) then
         return "globalBars"
     end
     return nil

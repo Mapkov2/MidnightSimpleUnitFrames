@@ -2094,6 +2094,20 @@ local function CP_DeferAuraUpdate()
     C_Timer.After(0, CP_RunDeferredAuraUpdate)
 end
 
+local _cpCDMWidthDeferred = false
+local function CP_RunDeferredCDMWidthSync()
+    _cpCDMWidthDeferred = false
+    if CP._cdmWidthEventsActive then
+        CP.CDMWidthSyncLayouts(false)
+    end
+end
+
+local function CP_DeferCDMWidthSync()
+    if _cpCDMWidthDeferred then return end
+    _cpCDMWidthDeferred = true
+    C_Timer.After(0, CP_RunDeferredCDMWidthSync)
+end
+
 eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     if event == "UNIT_POWER_UPDATE" then
         if arg1 == "player" then
@@ -2122,7 +2136,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     or event == "ACTIONBAR_UPDATE_COOLDOWN"
     or event == "BAG_UPDATE_COOLDOWN"
     then
-        CP.CDMWidthSyncLayouts(false)
+        CP_DeferCDMWidthSync()
         return
     end
 

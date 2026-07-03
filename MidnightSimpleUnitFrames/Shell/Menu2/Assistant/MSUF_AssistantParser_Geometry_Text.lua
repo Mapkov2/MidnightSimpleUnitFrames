@@ -13,6 +13,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Data = A.ParserData or {}
+A.ParserData = Data
+local GeometryTextData = Data.GEOMETRY_TEXT_PARSER or {}
+local GeometryTextPhrases = GeometryTextData.PHRASES or {}
 local HasPhrase = P.HasPhrase
 local ContainsAny = P.ContainsAny
 local DetectUnits = P.DetectUnits
@@ -42,27 +46,27 @@ end
 -- These identify text tabs, anchor slots, and font-size/offset intent before the broader
 -- geometry parser maps the result to settings.
 local function TextSelectorTab(text)
-    if ContainsAny(text, { "advanced text tab", "advanced text", "text advanced", "text layers", "advanced tab" }) then return "advanced" end
-    if ContainsAny(text, { "power text tab", "power text", "mana text", "power number", "power numbers", "mana number", "mana numbers", "power tab", "mana tab", "power", "mana" }) then return "power" end
-    if ContainsAny(text, { "hp text tab", "health text tab", "hp text", "health text", "hp number", "hp numbers", "health number", "health numbers", "hp tab", "health tab", "hp", "health" }) then return "hp" end
-    if ContainsAny(text, { "name text tab", "name text", "name tab", "name", "names" }) then return "name" end
+    if ContainsAny(text, GeometryTextPhrases[1]) then return "advanced" end
+    if ContainsAny(text, GeometryTextPhrases[2]) then return "power" end
+    if ContainsAny(text, GeometryTextPhrases[3]) then return "hp" end
+    if ContainsAny(text, GeometryTextPhrases[4]) then return "name" end
     return nil
 end
 
 local function TextSelectorSlot(text)
-    if ContainsAny(text, { "left slot", "slot left", "left text slot", "left anchor", "anchor left", "anchor to left", "to left", "on left", "on the left", "left side" })
-        or (HasPhrase(text, "left") and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
+    if ContainsAny(text, GeometryTextPhrases[5])
+        or (HasPhrase(text, "left") and ContainsAny(text, GeometryTextPhrases[6]))
     then
         return "left"
     end
-    if ContainsAny(text, { "center slot", "centre slot", "middle slot", "slot center", "slot centre", "slot middle", "center text slot", "centre text slot", "middle text slot" })
-        or ContainsAny(text, { "center anchor", "centre anchor", "middle anchor", "anchor center", "anchor centre", "anchor middle", "anchor to center", "anchor to centre", "anchor to middle", "to center", "to centre", "to middle", "in center", "in centre", "in middle", "in the center", "in the centre", "in the middle", "on center", "on centre", "on middle", "on the center", "on the centre", "on the middle", "center side", "centre side", "middle" })
-        or ((HasPhrase(text, "center") or HasPhrase(text, "centre") or HasPhrase(text, "middle")) and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
+    if ContainsAny(text, GeometryTextPhrases[7])
+        or ContainsAny(text, GeometryTextPhrases[8])
+        or ((HasPhrase(text, "center") or HasPhrase(text, "centre") or HasPhrase(text, "middle")) and ContainsAny(text, GeometryTextPhrases[9]))
     then
         return "center"
     end
-    if ContainsAny(text, { "right slot", "slot right", "right text slot", "right anchor", "anchor right", "anchor to right", "to right", "on right", "on the right", "right side" })
-        or (HasPhrase(text, "right") and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
+    if ContainsAny(text, GeometryTextPhrases[10])
+        or (HasPhrase(text, "right") and ContainsAny(text, GeometryTextPhrases[11]))
     then
         return "right"
     end
@@ -70,62 +74,31 @@ local function TextSelectorSlot(text)
 end
 
 local function TextSelectorIntent(text, tab, slot)
-    if tab == "name" and ContainsAny(text, { "anchor", "anchoring", "align", "alignment" }) then return false end
-    if (tab == "hp" or tab == "power") and slot and ContainsAny(text, { "anchor", "anchoring", "align", "alignment" }) then return true end
-    if ContainsAny(text, {
-        "text area", "text tab", "text tabs", "text editor", "text slot", "slot selector", "slot dropdown",
-        "selected slot", "left slot", "center slot", "centre slot", "right slot",
-    }) then
+    if tab == "name" and ContainsAny(text, GeometryTextPhrases[12]) then return false end
+    if (tab == "hp" or tab == "power") and slot and ContainsAny(text, GeometryTextPhrases[13]) then return true end
+    if ContainsAny(text, GeometryTextPhrases[14]) then
         return true
     end
-    return tab and ContainsAny(text, { "name text", "hp text", "health text", "power text", "mana text" }) and (HasPhrase(text, "tab") or slot ~= nil)
+    return tab and ContainsAny(text, GeometryTextPhrases[15]) and (HasPhrase(text, "tab") or slot ~= nil)
 end
 
 local function TextFontSizeIntent(text)
-    if ContainsAny(text, {
-        "font size", "text size", "name size", "name font size", "names size", "names font size",
-        "hp font size", "health font size", "power font size", "mana font size",
-        "hp text size", "health text size", "power text size", "mana text size",
-        "hp number size", "hp numbers size", "health number size", "health numbers size",
-        "power number size", "power numbers size", "mana number size", "mana numbers size",
-        "text groesse", "name groesse", "name text groesse",
-        "hp text groesse", "health text groesse", "power text groesse", "mana text groesse",
-        "schriftgroesse", "schrift groesse",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[16]) then
         return true
     end
-    if not ContainsAny(text, {
-        "bigger", "larger", "increase", "raise", "grow", "higher",
-        "smaller", "decrease", "reduce", "lower", "shrink",
-        "groesser", "kleiner", "erhoehe", "senke", "reduziere",
-    }) then
+    if not ContainsAny(text, GeometryTextPhrases[17]) then
         return false
     end
-    return ContainsAny(text, {
-        "name", "names", "name text", "hp text", "health text", "power text", "mana text",
-        "hp number", "hp numbers", "health number", "health numbers",
-        "power number", "power numbers", "mana number", "mana numbers",
-    })
+    return ContainsAny(text, GeometryTextPhrases[18])
 end
 
 function A._ParseTextFontSizeShortcut(text)
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff" }) then return nil end
-    if ContainsAny(text, { "status icon", "status icons", "status indicator", "status indicators", "raid marker", "ready check", "leader icon", "assist icon" }) then return nil end
-    if ContainsAny(text, {
-        "layer", "text layer", "draw layer", "draw level", "level",
-        "offset", "position", "pos", "x offset", "y offset",
-        "move", "nudge", "shift", "anchor", "anchoring", "align", "alignment",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[19]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[20]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[21]) then
         return nil
     end
-    local allTextIntent = ContainsAny(text, {
-        "all text", "all texts", "all frame text", "all unit text", "all unitframe text",
-        "every text", "every text label", "all labels", "all numbers",
-    }) and ContainsAny(text, {
-        "font size", "text size", "bigger", "larger", "increase", "raise", "grow",
-        "smaller", "decrease", "reduce", "lower", "shrink",
-        "groesser", "kleiner", "erhoehe", "senke", "reduziere",
-    })
+    local allTextIntent = ContainsAny(text, GeometryTextPhrases[22]) and ContainsAny(text, GeometryTextPhrases[23])
     if not allTextIntent and not TextFontSizeIntent(text) then
         return nil
     end
@@ -191,17 +164,17 @@ function A._ParseTextFontSizeShortcut(text)
 end
 
 function A._ParseTextLayerShortcut(text)
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff" }) then return nil end
-    if ContainsAny(text, { "class power", "class resource", "class resources", "resource bar" }) then return nil end
-    if not ContainsAny(text, { "text layer", "draw layer", "text level", "draw level", "layer" }) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[24]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[25]) then return nil end
+    if not ContainsAny(text, GeometryTextPhrases[26]) then return nil end
     local tab = TextSelectorTab(text)
     if tab ~= "name" and tab ~= "hp" and tab ~= "power" then return nil end
 
     local relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
     if relativeDelta == nil then
-        if ContainsAny(text, { "bring forward", "move forward", "raise forward", "forward", "front", "above", "up" }) then
+        if ContainsAny(text, GeometryTextPhrases[27]) then
             relativeDelta = 1
-        elseif ContainsAny(text, { "send back", "move back", "backward", "behind", "below" }) then
+        elseif ContainsAny(text, GeometryTextPhrases[28]) then
             relativeDelta = -1
         end
     end
@@ -253,25 +226,20 @@ end
 function A._TextSlotForDetail(text, tab)
     if tab ~= "hp" and tab ~= "power" then return nil end
     if tab == "hp" then
-        if ContainsAny(text, { "left hp text", "hp left text", "hp text left", "left health text", "health left text", "health text left", "left hp slot", "hp left slot", "hp slot left", "left health slot", "health left slot", "health slot left", "left hp label", "hp left label", "hp label left", "left health label", "health left label", "health label left" }) then return "Left" end
-        if ContainsAny(text, { "center hp text", "centre hp text", "middle hp text", "hp center text", "hp centre text", "hp middle text", "hp text center", "hp text centre", "hp text middle", "center health text", "centre health text", "middle health text", "health center text", "health centre text", "health middle text", "health text center", "health text centre", "health text middle", "center hp slot", "centre hp slot", "middle hp slot", "hp center slot", "hp centre slot", "hp middle slot", "hp slot center", "hp slot centre", "hp slot middle", "center health slot", "centre health slot", "middle health slot", "health center slot", "health centre slot", "health middle slot", "health slot center", "health slot centre", "health slot middle", "center hp label", "centre hp label", "middle hp label", "hp center label", "hp centre label", "hp middle label", "hp label center", "hp label centre", "hp label middle", "center health label", "centre health label", "middle health label", "health center label", "health centre label", "health middle label", "health label center", "health label centre", "health label middle" }) then return "Center" end
-        if ContainsAny(text, { "right hp text", "hp right text", "hp text right", "right health text", "health right text", "health text right", "right hp slot", "hp right slot", "hp slot right", "right health slot", "health right slot", "health slot right", "right hp label", "hp right label", "hp label right", "right health label", "health right label", "health label right" }) then return "Right" end
+        if ContainsAny(text, GeometryTextPhrases[29]) then return "Left" end
+        if ContainsAny(text, GeometryTextPhrases[30]) then return "Center" end
+        if ContainsAny(text, GeometryTextPhrases[31]) then return "Right" end
     else
-        if ContainsAny(text, { "left power text", "power left text", "power text left", "left mana text", "mana left text", "mana text left", "left power slot", "power left slot", "power slot left", "left mana slot", "mana left slot", "mana slot left", "left power label", "power left label", "power label left", "left mana label", "mana left label", "mana label left" }) then return "Left" end
-        if ContainsAny(text, { "center power text", "centre power text", "middle power text", "power center text", "power centre text", "power middle text", "power text center", "power text centre", "power text middle", "center mana text", "centre mana text", "middle mana text", "mana center text", "mana centre text", "mana middle text", "mana text center", "mana text centre", "mana text middle", "center power slot", "centre power slot", "middle power slot", "power center slot", "power centre slot", "power middle slot", "power slot center", "power slot centre", "power slot middle", "center mana slot", "centre mana slot", "middle mana slot", "mana center slot", "mana centre slot", "mana middle slot", "mana slot center", "mana slot centre", "mana slot middle", "center power label", "centre power label", "middle power label", "power center label", "power centre label", "power middle label", "power label center", "power label centre", "power label middle", "center mana label", "centre mana label", "middle mana label", "mana center label", "mana centre label", "mana middle label", "mana label center", "mana label centre", "mana label middle" }) then return "Center" end
-        if ContainsAny(text, { "right power text", "power right text", "power text right", "right mana text", "mana right text", "mana text right", "right power slot", "power right slot", "power slot right", "right mana slot", "mana right slot", "mana slot right", "right power label", "power right label", "power label right", "right mana label", "mana right label", "mana label right" }) then return "Right" end
+        if ContainsAny(text, GeometryTextPhrases[32]) then return "Left" end
+        if ContainsAny(text, GeometryTextPhrases[33]) then return "Center" end
+        if ContainsAny(text, GeometryTextPhrases[34]) then return "Right" end
     end
-    if ContainsAny(text, { "left of", "left side of", "to left of", "to the left of", "in left of", "in the left of" }) then return "Left" end
-    if ContainsAny(text, { "center of", "centre of", "middle of", "center side of", "centre side of", "middle side of", "to center of", "to centre of", "to middle of", "to the center of", "to the centre of", "to the middle of", "in center of", "in centre of", "in middle of", "in the center of", "in the centre of", "in the middle of" }) then return "Center" end
-    if ContainsAny(text, { "right of", "right side of", "to right of", "to the right of", "in right of", "in the right of" }) then return "Right" end
+    if ContainsAny(text, GeometryTextPhrases[35]) then return "Left" end
+    if ContainsAny(text, GeometryTextPhrases[36]) then return "Center" end
+    if ContainsAny(text, GeometryTextPhrases[37]) then return "Right" end
     local slot = TextSelectorSlot(text)
     if (slot == "left" or slot == "center" or slot == "right")
-        and ContainsAny(text, {
-            "slot", "text slot", "anchor", "anchoring", "side", "left side", "right side", "center side", "centre side", "middle side",
-            "to left", "to right", "to center", "to centre", "to middle",
-            "on left", "on the left", "on right", "on the right", "on center", "on centre", "on middle", "on the center", "on the centre", "on the middle",
-            "in center", "in centre", "in middle", "in the center", "in the centre", "in the middle",
-        })
+        and ContainsAny(text, GeometryTextPhrases[38])
     then
         return slot == "left" and "Left" or (slot == "right" and "Right" or "Center")
     end
@@ -295,15 +263,12 @@ function A._TextSlotLower(slot)
 end
 
 function A._BareTextSlotForValueText(text)
-    if ContainsAny(text, {
-        "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down",
-        "layer", "size", "font size", "anchor", "anchoring", "align", "alignment",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[39]) then
         return nil
     end
-    local left = ContainsAny(text, { "left", "links" })
-    local center = ContainsAny(text, { "center", "centre", "middle", "mitte" })
-    local right = ContainsAny(text, { "right", "rechts" })
+    local left = ContainsAny(text, GeometryTextPhrases[40])
+    local center = ContainsAny(text, GeometryTextPhrases[41])
+    local right = ContainsAny(text, GeometryTextPhrases[42])
     local count = (left and 1 or 0) + (center and 1 or 0) + (right and 1 or 0)
     if count ~= 1 then return nil end
     if left then return "Left" end
@@ -401,61 +366,34 @@ function A._SelectedTextTargetFromContext(tab)
 end
 
 function A._ParseNameTextAnchorShortcut(text)
-    if ContainsAny(text, {
-        "castbar", "cast bar", "aura", "auras", "buff", "debuff",
-        "class power", "class resource", "class resources", "resource bar",
-        "power bar", "powerbar", "mana bar",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[43]) then
         return nil
     end
-    if ContainsAny(text, { "truncation", "truncate", "truncated", "clip", "clipping", "clip side", "ellipsis" }) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[44]) then return nil end
 
     local tab = TextSelectorTab(text)
     if tab == "hp" or tab == "power" or tab == "advanced" then return nil end
-    if ContainsAny(text, {
-        "status", "status text", "status icon", "indicator", "icon",
-        "raid marker", "ready check", "summon", "resurrect", "resurrection",
-        "ghost", "dead", "afk", "dnd", "group number",
-    }) and not ContainsAny(text, {
-        "name", "name text", "unit name", "unitframe name", "unit frame name", "name label",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[45]) and not ContainsAny(text, GeometryTextPhrases[46]) then
         return nil
     end
 
     local value
-    if ContainsAny(text, {
-        "middle", "center", "centre", "centered", "centred",
-        "to middle", "to the middle", "in middle", "in the middle",
-        "to center", "to the center", "in center", "in the center",
-        "to centre", "to the centre", "in centre", "in the centre",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[47]) then
         value = "CENTER"
-    elseif ContainsAny(text, {
-        "to left", "to the left", "on left", "on the left", "left side",
-        "anchor left", "left anchor", "anchor to left", "align left",
-    }) or (HasPhrase(text, "left") and ContainsAny(text, { "anchor", "anchoring", "align", "alignment", "justify" })) then
+    elseif ContainsAny(text, GeometryTextPhrases[48]) or (HasPhrase(text, "left") and ContainsAny(text, GeometryTextPhrases[49])) then
         value = "LEFT"
-    elseif ContainsAny(text, {
-        "to right", "to the right", "on right", "on the right", "right side",
-        "anchor right", "right anchor", "anchor to right", "align right",
-    }) or (HasPhrase(text, "right") and ContainsAny(text, { "anchor", "anchoring", "align", "alignment", "justify" })) then
+    elseif ContainsAny(text, GeometryTextPhrases[50]) or (HasPhrase(text, "right") and ContainsAny(text, GeometryTextPhrases[51])) then
         value = "RIGHT"
     end
     if not value then return nil end
 
     local ctx = A.GetContext and A.GetContext() or nil
-    local contextReference = ContainsAny(text, { "it", "that", "this", "selected", "same" })
-    local explicitName = tab == "name" or ContainsAny(text, {
-        "name", "name text", "unit name", "unitframe name", "unit frame name",
-        "name label", "player name", "target name", "focus name", "pet name", "boss name",
-    })
+    local contextReference = ContainsAny(text, GeometryTextPhrases[52])
+    local explicitName = tab == "name" or ContainsAny(text, GeometryTextPhrases[53])
     local genericText = tab == nil
-        and ContainsAny(text, { "text", "unit text", "unitframe text", "unit frame text", "frame text" })
-        and ContainsAny(text, { "unitframe", "unit frame", "frame", "middle of", "center of", "centre of" })
-    local placementIntent = ContainsAny(text, {
-        "move", "put", "place", "set", "align", "anchor", "position",
-        "center", "centre", "middle", "justify",
-    })
+        and ContainsAny(text, GeometryTextPhrases[54])
+        and ContainsAny(text, GeometryTextPhrases[55])
+    local placementIntent = ContainsAny(text, GeometryTextPhrases[56])
     if not placementIntent then return nil end
     if not explicitName and not genericText and not contextReference then return nil end
 
@@ -574,36 +512,24 @@ end
 
 function A._ParseNameTextOffsetShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, {
-        "castbar", "cast bar", "aura", "auras", "buff", "debuff",
-        "class power", "class resource", "class resources", "resource bar",
-        "power bar", "powerbar", "mana bar", "hp text", "health text", "power text", "mana text",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[57]) then
         return nil
     end
-    if ContainsAny(text, {
-        "raid group name", "raid group number", "group number", "pvp", "status icon",
-        "status indicator", "ready check", "raid marker", "leader", "assist", "resurrect",
-        "resurrection", "incoming rez", "summon",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[58]) then
         return nil
     end
-    if not ContainsAny(text, {
-        "name", "name text", "unit name", "unitframe name", "unit frame name",
-        "name label", "player name", "target name", "focus name", "pet name", "boss name",
-        "party name", "raid name", "mythic raid name", "group name",
-    }) then
+    if not ContainsAny(text, GeometryTextPhrases[59]) then
         return nil
     end
-    if not ContainsAny(text, { "offset", "position", "pos", "x", "y", "move", "nudge", "shift", "left", "right", "up", "down" }) then
+    if not ContainsAny(text, GeometryTextPhrases[60]) then
         return nil
     end
 
     local axis = A._DetailOffsetAxis and A._DetailOffsetAxis(text) or nil
     local direction
-    if ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" }) then
+    if ContainsAny(text, GeometryTextPhrases[61]) then
         direction = "down"
-    elseif ContainsAny(text, { "up", "higher", "hoeher", "hoch", "oben" }) then
+    elseif ContainsAny(text, GeometryTextPhrases[62]) then
         direction = "up"
     else
         direction = DetectDirection(text, {})
@@ -615,7 +541,7 @@ function A._ParseNameTextOffsetShortcut(text)
 
     local value
     local relativeDelta
-    if ContainsAny(text, { "move", "nudge", "shift" }) and direction then
+    if ContainsAny(text, GeometryTextPhrases[63]) and direction then
         relativeDelta = FirstNumber(text) or 10
         if direction == "left" or direction == "down" then relativeDelta = -relativeDelta end
     else
@@ -658,32 +584,24 @@ function A._ParseNameTextOffsetShortcut(text)
 end
 
 function A._ParseNameTextVerticalPlacementShortcut(text)
-    if ContainsAny(text, {
-        "castbar", "cast bar", "aura", "auras", "buff", "debuff",
-        "class power", "class resource", "class resources", "resource bar",
-        "power bar", "powerbar", "mana bar",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[64]) then
         return nil
     end
-    if not ContainsAny(text, {
-        "name", "name text", "unit name", "unitframe name", "unit frame name",
-        "names", "name label", "player name", "target name", "focus name", "pet name", "boss name",
-        "party name", "party names", "raid name", "raid names", "group name", "group names",
-    }) then
+    if not ContainsAny(text, GeometryTextPhrases[65]) then
         return nil
     end
-    if not ContainsAny(text, { "put", "place", "set", "move", "position", "stick", "keep" }) then return nil end
-    local verticalAnchorIntent = ContainsAny(text, { "anchor", "anchoring", "position" })
-        and ContainsAny(text, { "top", "upper", "above", "over", "bottom", "lower", "below", "under" })
-    if not verticalAnchorIntent and not ContainsAny(text, { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" }) then return nil end
+    if not ContainsAny(text, GeometryTextPhrases[66]) then return nil end
+    local verticalAnchorIntent = ContainsAny(text, GeometryTextPhrases[67])
+        and ContainsAny(text, GeometryTextPhrases[68])
+    if not verticalAnchorIntent and not ContainsAny(text, GeometryTextPhrases[69]) then return nil end
 
     local direction
-    if ContainsAny(text, { "above", "over", "top of", "on top of" })
-        or (verticalAnchorIntent and ContainsAny(text, { "top", "upper" }))
+    if ContainsAny(text, GeometryTextPhrases[70])
+        or (verticalAnchorIntent and ContainsAny(text, GeometryTextPhrases[71]))
     then
         direction = "up"
-    elseif ContainsAny(text, { "below", "under", "bottom of", "underneath" })
-        or (verticalAnchorIntent and ContainsAny(text, { "bottom", "lower" }))
+    elseif ContainsAny(text, GeometryTextPhrases[72])
+        or (verticalAnchorIntent and ContainsAny(text, GeometryTextPhrases[73]))
     then
         direction = "down"
     end
@@ -870,21 +788,14 @@ function A._AddTextSlotVisibilityChange(out, frameType, unitOrScope, tab)
 end
 
 local function TextSlotMoveValueIntent(text)
-    return ContainsAny(text, {
-        "move", "move the", "move max", "move current", "move percent",
-        "relocate", "transfer", "send", "shift",
-        "verschieben", "umsetzen",
-    })
+    return ContainsAny(text, GeometryTextPhrases[74])
 end
 
 function A._ParseTextSlotDropdownValueShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
-    if ContainsAny(text, {
-        "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down",
-        "layer", "size", "font size", "anchor", "anchoring", "align", "alignment",
-    }) then
+    if ContainsAny(text, GeometryTextPhrases[75]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[76]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[77]) then
         return nil
     end
 
@@ -954,30 +865,27 @@ end
 
 function A._ParseHPTextOptionShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if ContainsAny(text, { "power text", "mana text", "power bar", "powerbar", "mana bar" }) then return nil end
-    if not ContainsAny(text, { "hp text", "health text", "health decimals", "hp decimals", "decimal percent", "reverse hp", "reverse health" }) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[78]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[79]) then return nil end
+    if not ContainsAny(text, GeometryTextPhrases[80]) then return nil end
 
     local unitAttr
     local groupAttr
     local label
     local value
     local valueForSetting
-    if ContainsAny(text, { "delimiter", "separator", "seperator", "trennzeichen", "trenner" }) then
+    if ContainsAny(text, GeometryTextPhrases[81]) then
         unitAttr = "hpTextSeparator"
         groupAttr = "healthTextDelimiter"
         label = "HP Text Delimiter"
         valueForSetting = HPTextSeparatorValueForText
-    elseif ContainsAny(text, {
-        "reverse hp text", "hp text reverse", "reverse health text", "health text reverse",
-        "reverse hp text order", "hp text reverse order", "reverse health text order", "health text reverse order",
-    }) then
+    elseif ContainsAny(text, GeometryTextPhrases[82]) then
         unitAttr = "hpTextReverse"
         groupAttr = "healthTextReverse"
         label = "Reverse HP Text"
         value = DetectBoolean and DetectBoolean(text) or nil
         if value == nil then value = true end
-    elseif ContainsAny(text, { "health text decimals", "hp text decimals", "health decimals", "hp decimals", "decimal percent" }) then
+    elseif ContainsAny(text, GeometryTextPhrases[83]) then
         unitAttr = "healthTextDecimals"
         groupAttr = "healthTextDecimals"
         label = "Health Text Decimals"
@@ -1031,9 +939,9 @@ end
 
 function A._ParsePowerTextOptionShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "hp text", "health text" }) then return nil end
-    if not ContainsAny(text, { "power text delimiter", "power text separator", "mana text delimiter", "mana text separator", "power delimiter", "mana delimiter" }) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[84]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[85]) then return nil end
+    if not ContainsAny(text, GeometryTextPhrases[86]) then return nil end
 
     local units = DetectUnits(text)
     local groups = {}
@@ -1077,26 +985,21 @@ end
 
 function A._ParseTextAreaOffsetShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if not ContainsAny(text, { "offset", "position", "pos", "x", "y", "move", "nudge", "shift", "left", "right", "up", "down" }) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[87]) then return nil end
+    if not ContainsAny(text, GeometryTextPhrases[88]) then return nil end
     local tab = TextSelectorTab(text)
     if tab ~= "hp" and tab ~= "power" then return nil end
-    if ContainsAny(text, { "slot", "left slot", "right slot", "center slot", "centre slot", "middle slot" })
-        or ContainsAny(text, {
-            "left hp text", "hp left text", "right hp text", "hp right text", "center hp text", "hp center text", "centre hp text", "hp centre text",
-            "left health text", "health left text", "right health text", "health right text", "center health text", "health center text",
-            "left power text", "power left text", "right power text", "power right text", "center power text", "power center text", "centre power text", "power centre text",
-            "left mana text", "mana left text", "right mana text", "mana right text", "center mana text", "mana center text",
-        })
+    if ContainsAny(text, GeometryTextPhrases[89])
+        or ContainsAny(text, GeometryTextPhrases[90])
     then
         return nil
     end
 
     local axis = A._DetailOffsetAxis and A._DetailOffsetAxis(text) or nil
     local direction
-    if ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" }) then
+    if ContainsAny(text, GeometryTextPhrases[91]) then
         direction = "down"
-    elseif ContainsAny(text, { "up", "higher", "hoeher", "hoch", "oben" }) then
+    elseif ContainsAny(text, GeometryTextPhrases[92]) then
         direction = "up"
     else
         direction = DetectDirection(text, {})
@@ -1108,7 +1011,7 @@ function A._ParseTextAreaOffsetShortcut(text)
 
     local value
     local relativeDelta
-    if ContainsAny(text, { "move", "nudge", "shift" }) and direction then
+    if ContainsAny(text, GeometryTextPhrases[93]) and direction then
         relativeDelta = FirstNumber(text) or 10
         if direction == "left" or direction == "down" then relativeDelta = -relativeDelta end
     else
@@ -1154,8 +1057,8 @@ end
 
 function A._ParseTextSlotValueMoveShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[94]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[95]) then return nil end
     if not TextSlotMoveValueIntent(text) then return nil end
     local tab = TextSelectorTab(text)
     if tab ~= "hp" and tab ~= "power" then return nil end
@@ -1248,10 +1151,10 @@ end
 
 function A._ParseTextSlotDropdownShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
-    if ContainsAny(text, { "dispel overlay", "debuff overlay", "current health only", "on current health only", "on health only" }) then return nil end
-    if ContainsAny(text, { "dark mode", "dark bars", "dark bar", "bar color", "brightness" }) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[96]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[97]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[98]) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[99]) then return nil end
     if not (text:find("text", 1, true) or text:find("slot", 1, true)
         or text:find("hp", 1, true) or text:find("health", 1, true)
         or text:find("power", 1, true) or text:find("mana", 1, true)
@@ -1261,15 +1164,15 @@ function A._ParseTextSlotDropdownShortcut(text)
         or text:find("same", 1, true) or text:find("now", 1, true)) then
         return nil
     end
-    if not ContainsAny(text, { "set", "show", "display", "use", "put", "make", "change", "hide", "turn off", "turn on", "create", "create new", "add", "new", "remove", "clear" }) then return nil end
+    if not ContainsAny(text, GeometryTextPhrases[100]) then return nil end
     local tab = TextSelectorTab(text)
     local ctxFrame, ctxUnit, ctxTab, ctxSlot = A._SelectedTextTargetFromContext(tab)
-    local contextReference = ContainsAny(text, { "it", "that", "this", "selected", "here", "there", "same", "now" })
+    local contextReference = ContainsAny(text, GeometryTextPhrases[101])
     if not tab and contextReference then tab = ctxTab end
     if tab ~= "hp" and tab ~= "power" then return nil end
     local slot = A._TextSlotForDetail(text, tab)
     if not slot then slot = A._BareTextSlotForValueText(text) end
-    if ContainsAny(text, { "offset", "position", "pos", "x", "y", "up", "down", "move", "nudge", "shift", "layer", "size", "font size" }) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[102]) then return nil end
 
     local groups = DetectGroups(text)
     local units = {}
@@ -1299,8 +1202,8 @@ function A._ParseTextSlotDropdownShortcut(text)
     end
 
     local clearAllSlots = slot == nil
-        and ContainsAny(text, { "remove", "clear", "hide", "turn off", "disable", "empty", "none", "off" })
-        and not ContainsAny(text, { "it", "that", "this", "selected", "here" })
+        and ContainsAny(text, GeometryTextPhrases[103])
+        and not ContainsAny(text, GeometryTextPhrases[104])
     local ambiguousActiveSlots
 
     if not slot and contextReference then
@@ -1406,10 +1309,7 @@ function A._ParseTextSlotDropdownShortcut(text)
             end
         end
     end
-    local combinedTextValue = ContainsAny(text, {
-        "current and percent", "current and percentage", "current and max", "current and maximum",
-        "max and percent", "maximum and percent", "max and percentage", "maximum and percentage",
-    })
+    local combinedTextValue = ContainsAny(text, GeometryTextPhrases[105])
     return {
         kind = "changes",
         changes = changes,
@@ -1421,8 +1321,8 @@ end
 
 function A._ParseTextSlotOffsetShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if not ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down" }) then return nil end
+    if ContainsAny(text, GeometryTextPhrases[106]) then return nil end
+    if not ContainsAny(text, GeometryTextPhrases[107]) then return nil end
     local tab = TextSelectorTab(text)
     if tab ~= "hp" and tab ~= "power" then return nil end
     local slot = A._TextSlotForDetail(text, tab)
@@ -1430,19 +1330,15 @@ function A._ParseTextSlotOffsetShortcut(text)
 
     local axis = A._DetailOffsetAxis(text)
     local direction
-    if ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" }) then
+    if ContainsAny(text, GeometryTextPhrases[108]) then
         direction = "down"
-    elseif ContainsAny(text, { "up", "higher", "hoeher", "hoch", "oben" }) then
+    elseif ContainsAny(text, GeometryTextPhrases[109]) then
         direction = "up"
     else
         direction = DetectDirection(text, {})
     end
     if (direction == "left" or direction == "right") and (slot == "Left" or slot == "Right")
-        and not ContainsAny(text, {
-            "left hp text", "hp left text", "left health text", "health left text", "left power text", "power left text", "left mana text", "mana left text",
-            "right hp text", "hp right text", "right health text", "health right text", "right power text", "power right text", "right mana text", "mana right text",
-            "left slot", "slot left", "right slot", "slot right", "left side", "right side", "left label", "right label",
-        })
+        and not ContainsAny(text, GeometryTextPhrases[110])
     then
         return nil
     end
@@ -1453,7 +1349,7 @@ function A._ParseTextSlotOffsetShortcut(text)
 
     local value
     local relativeDelta
-    if ContainsAny(text, { "move", "nudge", "shift" }) and direction then
+    if ContainsAny(text, GeometryTextPhrases[111]) and direction then
         relativeDelta = FirstNumber(text) or 10
         if direction == "left" or direction == "down" then relativeDelta = -relativeDelta end
     else

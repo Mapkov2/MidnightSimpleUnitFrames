@@ -603,6 +603,9 @@ local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
     if profile.general.navHoverScale == nil then
         profile.general.navHoverScale = 1.05
     end
+    if profile.general.showGameMenuButton == nil then
+        profile.general.showGameMenuButton = true
+    end
 end
 local MSUF_ProfileIO_TranslateProfileToCurrent
 local MSUF_ProfileIO_TranslateProfilesToCurrent

@@ -6,7 +6,7 @@ Diese Datei beschreibt, was der MSUF Assistant aktuell kann, wie nah er am Ziel 
 
 ## Kurzfazit
 
-Der externe Training-Harness ist aktuell gruen: `3711/3711` Cases bestanden, `0` Parser-Fehler, `0` Assistant-Load-Misses und `3243` Registry-Settings geladen.
+Der externe Training-Harness ist aktuell gruen: `3770/3770` Cases bestanden, `0` Parser-Fehler, `0` Assistant-Load-Misses und `3283` Registry-Settings geladen.
 
 Das bedeutet: Die rohe Registry- und Parser-Abdeckung ist fuer die aktuell bekannten generierten Testfaelle sehr stark. Es bedeutet aber noch nicht, dass jeder echte Spieler-Satz, jede Folgefrage, jede UI-Situation und jeder In-Game-Apply-Pfad wirklich bei 100% ist.
 
@@ -21,7 +21,7 @@ Aktuelle realistische Einschaetzung:
 | Aura/filter explanations | 80-85% | Der Assistant kann Filter besser erklaeren und aktive Filterzustaende einordnen, aber echte Einsteiger-Fuehrung fuer Raid, Mythic+, Rollen und konkrete Beispiele muss weiter ausgebaut werden. |
 | Follow-up context | 70-80% | Einfache Folgewuensche wie "also for group frames" sind besser, aber komplexe Ketten wie "same as before but only raid and keep colors" brauchen noch Arbeit. |
 | Safety and ambiguity handling | 85-90% | Er fragt oefter nach, statt riskant zu raten. Einige ueberlappende Begriffe bleiben gefaehrlich, z. B. power text vs. power color oder raid marker vs. raid group. |
-| Runtime performance | 75-85% | Viele Stuck-/Slow-Faelle wurden durch Fast Paths geloest. Im letzten Harness bleiben `57` slow cases ueber dem 8ms-Schwellenwert. |
+| Runtime performance | 75-85% | Viele Stuck-/Slow-Faelle wurden durch Fast Paths geloest. Im letzten Harness bleiben `50` slow cases ueber dem 8ms-Schwellenwert. |
 | Overall real-world readiness | 85-90% | Sehr brauchbar fuer viele Einstellungen, aber noch nicht "ChatGPT fuer jede MSUF-Frage ohne Kante". |
 
 ## Was der Assistant aktuell kann
@@ -83,7 +83,7 @@ Aktuelle realistische Einschaetzung:
 
 - Ein externer Training-Harness wurde aufgebaut, der generierte und manuelle Regression-Cases ausfuehrt.
 - Es gibt Reports unter `tools/AssistantTraining/out/report.md`.
-- Der Harness laedt aktuell `3243` Registry Settings ohne Load Misses.
+- Der Harness laedt aktuell `3283` Registry Settings ohne Load Misses.
 - Power Text, Power Color und Default-/Energy-Formulierungen wurden verbessert.
 - Bar Gradient wurde gegen falsche Treffer wie "Focus Target Frame Enabled" abgesichert.
 - Fast Paths fuer einfache Scale-, Texture-, Gradient-, Boolean-, Enum- und Color-Commands wurden ausgebaut.
@@ -91,11 +91,108 @@ Aktuelle realistische Einschaetzung:
 - Indikator-Begriffe fuer Unit Frames und Group Frames wurden normalisiert.
 - Konkrete Problemfaelle wie `move playerframe raidgroup indicator to the right` werden jetzt direkt auf den passenden Key gemappt.
 
+## Automatisiertes Coverage-Audit (in-game)
+
+Seit 2026-07-03 gibt es ein automatisiertes DB-Matrix-Audit, das den manuellen
+Scope-Abgleich in dieser Datei ersetzt:
+
+- `/msufcoverage` - Zusammenfassung pro Scope (player/target/.../gf_party/general/bars/gameplay) im Chat.
+- `/msufcoverage <scope|all>` - Detailreport (Gaps + Stale-Eintraege) in einem kopierbaren Fenster.
+- `/msufcoverage stubs <scope>` - generiert fertige `RegisterUnit*`/`RegisterGroup*`-Stubs fuer alle Gaps.
+- `/msufcoverage generated <scope|all>` - listet generierte Fallbacks als Alias-Curation-Arbeitsliste.
+- `/msufcoverage manifest` - exportiert einen copybaren `Manifest.defaults = { ... }` Block aus einer frisch geseedeten DB.
+- `/msufcoverage smoke` - oeffnet die In-game-Akzeptanz-Checkliste fuer die Plan-Saetze.
+- `/msufcoverage smoke pass|fail|block <id> [note]` - protokolliert echte WoW-Smoke-Ergebnisse nach `MSUF_GlobalDB.assistantAcceptance`.
+- `/msufcoverage gate` - fasst Smoke, Manifest und Coverage als Abschluss-Gate in `MSUF_GlobalDB.assistantAcceptanceGate` zusammen.
+
+Das Audit vergleicht jeden skalaren Key der Live-DB gegen `A.Registry` (Setting-Key-Prefix
+und `unit`+`attribute`). Ergebnis wird zusaetzlich nach `MSUF_GlobalDB.assistantCoverage`
+geschrieben, damit der externe Harness es aus den SavedVariables lesen kann.
+Nested Tables (Auras-Lanes etc.) und Nicht-Scope-Settings (Farben, Workflows, Actions)
+sind bewusst ausserhalb dieser Matrix und werden separat gezaehlt.
+Interne Keys via `A.CoverageAudit.ignore` ausschliessen. Quelle: `MSUF_AssistantAudit.lua`.
+
+Wichtige Einordnung der Zahlen: Die DB speichert nur angepasste Werte (nil-preserving
+defaults). "Stale" heisst deshalb meist "Default nie angefasst" oder "custom get/set-Pfad",
+nicht "kaputte Registrierung". Der erste echte Matrix-Lauf am 2026-07-03 zeigte 39-81%
+Raw-Coverage pro Scope - deutlich unter der Harness-Schaetzung, weil der Harness Registry
+gegen Testfaelle misst, nicht Registry gegen die reale DB.
+
+## Auto-Coverage-Fallback (generierte Settings)
+
+`MSUF_AssistantRegistry_AutoCoverage.lua` schliesst die Matrix-Luecken mechanisch: bei
+PLAYER_LOGIN (und via `/msufcoverage fill`) wird fuer jeden ungedeckten skalaren DB-Key
+ein generiertes englisches Setting registriert (Label/Aliases aus dem camelCase-Key,
+direktes get/set, breitester sicherer Apply pro Scope). Handgeschriebene Eintraege haben
+immer Vorrang; generierte sind mit `generated = true` markiert und als Kategorie
+"Auto (generated)" erkennbar. Sie sind der Boden, nicht die Decke: fuer wichtige Settings
+weiterhin per `/msufcoverage generated <scope|all>` und `/msufcoverage stubs <scope>`
+kuratierte Registrierungen nachziehen (bessere Aliases, praeziser Apply, min/max).
+
+`MSUF_AssistantRegistry_AutoCoverage_Manifest.lua` ergaenzt nil-preserving Defaults:
+`AutoCoverage.Fill()` registriert Manifest-Keys, die in der Live-DB fehlen, mit
+Fallback auf den Manifest-Default. Dadurch misst `/msufcoverage` gegen den vollen
+skalaren Default-Raum statt nur gegen bereits materialisierte SavedVariables-Keys.
+
+**Status 2026-07-03: Das Manifest ist befuellt** - 2044 skalare Defaults ueber 12 Scopes,
+offline generiert durch Dekodieren des Factory-Default-Profils
+(`MSUF_FACTORY_DEFAULT_PROFILE_COMPACT` in `State/MSUF_Defaults.lua`, Base64 + raw
+Deflate + CBOR, dieselbe Pipeline wie `C_EncodingUtil` in-game; `tot` wurde in
+`targettarget` gemerged). Einzige Luecke: `focustarget` hat keinen Factory-Block im
+Profil-Payload - dessen unberuehrte Defaults bleiben Live-DB-only. Zum Aktualisieren
+(z. B. nach neuen Factory-Defaults): in einem frisch geseedeten Profil
+`/msufcoverage manifest` ausfuehren und den erzeugten `Manifest.defaults`-Block aus dem
+Fenster oder aus `MSUF_GlobalDB.assistantAutoCoverageManifest.text` in die Datei uebernehmen.
+
+## In-game Acceptance Smoke
+
+`/msufcoverage smoke` liefert die konkrete manuelle Smoke-Suite fuer die Context-Engine:
+Phase-0-No-op-Nudges, Partial-Subject-Followups, Context-Scoring, Ambiguity-Ordinal,
+Generated-Curation und Manifest-Dump. Die Liste ist copybar und speichert den Status
+jedes Checks in `MSUF_GlobalDB.assistantAcceptance`, z. B.:
+
+- `/msufcoverage smoke pass p0_2_target_leader_continuation`
+- `/msufcoverage smoke fail p0_1_relative_noop_nudge changed the anchor instead`
+- `/msufcoverage smoke block p2_3_manifest_dump needs freshly seeded profile`
+
+Diese Smoke-Suite ersetzt den fehlenden lokalen WoW-Client nicht; sie macht die In-game
+Akzeptanz aber reproduzierbar und als SavedVariables-Artefakt nachweisbar.
+`/msufcoverage gate` ist der abschliessende In-game-Nachweis: PASS nur wenn alle Smoke-Cases
+als pass gespeichert sind, ein Manifest-Export vorhanden ist und eine Coverage-Summary
+gespeichert wurde.
+
+Lokale Public-Path-Smokes vom 2026-07-03, mit WoW-Stubs und XML-Ladereihenfolge. Diese acht Checks laufen jetzt dauerhaft als `Public path smoke cases` im externen Harness:
+
+- Phase 0.1: `move target of target name more to the right` bei bereits rechter
+  Anchor-Enum aendert `targettarget.nameOffsetX` von `0` auf `10`.
+- Phase 0.1: `move target of target name to the right` bei linker Anchor-Enum setzt
+  weiter den Anchor auf `RIGHT` und laesst `targettarget.nameOffsetX` bei `0`.
+- Phase 0.1: `set target of target name anchor to right` bei rechter Anchor-Enum
+  bleibt `Already set` und nudged nicht.
+- Phase 0.2: `enable target leader icon` -> `now move target leader up` ueber
+  `A.HandleInput()` aendert `target.leaderIconOffsetY` von `0` auf `10` und
+  laesst `target.offsetY` bei `0`.
+- Phase 0.1/0.2: `move target frame up` ohne vorigen Subject-Kontext aendert
+  `target.offsetY` von `0` auf `10` und laesst `target.leaderIconOffsetY` bei `0`.
+- Phase 0.2: `set target hp bar opacity to 80%` -> `now move target leader up`
+  nutzt den stale HP-Kontext nicht und faellt auf `target.offsetY` zurueck.
+- Phase 0.2: abgelaufener Leader-Kontext (>3 Turns) faellt fuer
+  `now move target leader up` ebenfalls auf `target.offsetY` zurueck.
+- Phase 1.3: `change castbar color from green to red` erzeugt `6` Pending-Choices;
+  `the second one` resolved gegen diese Liste und applied eine konkrete Aenderung.
+- Gate API: `A.CoverageAudit.BuildAcceptanceGate()` meldet mit synthetisch
+  vollstaendigen SavedVariables `smoke=11/11`, `manifest=true`, `coverage=true`.
+- Generated/Manifest API: `A.CoverageAudit.BuildGeneratedReport()` und
+  `A.AutoCoverage.BuildManifestText()`/`StoreManifestExport()` liefern und
+  speichern die Phase-2b/2c-Artefakte ohne UI-Abhaengigkeit.
+
 ## Was noch fehlt bis echte 100%
 
 ### 1. Vollstaendiger Menu-Widget-Audit
 
-Jedes sichtbare Menu-Control muss gegen Registry und Assistant Actions gemappt werden:
+Der DB-Matrix-Teil davon ist jetzt automatisiert (siehe oben). Offen bleibt der
+UI-seitige Abgleich: jedes sichtbare Menu-Control muss gegen Registry und Assistant
+Actions gemappt werden:
 
 - Toggle
 - Slider
@@ -200,11 +297,11 @@ Fuer echte 100% braucht es zusaetzlich:
 
 Quelle: `tools/AssistantTraining/out/report.md`
 
-- Total cases: `3711`
-- Passed: `3711`
+- Total cases: `3770`
+- Passed: `3770`
 - Failed: `0`
-- Slow cases: `57`
-- Registry settings loaded: `3243`
+- Slow cases: `50`
+- Registry settings loaded: `3283`
 - Assistant file load misses: `0`
 
 Der Slow-Schwellenwert im Tool liegt bei `8ms`. Das ist ein Parser-/Tooling-Signal und kein direkter FPS-Wert im Spiel.

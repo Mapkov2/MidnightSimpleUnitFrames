@@ -1,0 +1,238 @@
+-- Assistant geometry text parser data.
+-- Generated phrase lists for MSUF_AssistantParser_Geometry_Text.lua.
+local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or {}
+
+local M = MSUF.MSUF2 or _G.MSUF2 or {}
+MSUF.MSUF2 = M
+
+local A = MSUF.Assistant or {}
+MSUF.Assistant = A
+M.Assistant = A
+
+local Data = A.ParserData or {}
+A.ParserData = Data
+
+Data.GEOMETRY_TEXT_PARSER = {
+    PHRASES = {
+        [1] = { "advanced text tab", "advanced text", "text advanced", "text layers", "advanced tab" },
+        [2] = { "power text tab", "power text", "mana text", "power number", "power numbers", "mana number", "mana numbers", "power tab", "mana tab", "power", "mana" },
+        [3] = { "hp text tab", "health text tab", "hp text", "health text", "hp number", "hp numbers", "health number", "health numbers", "hp tab", "health tab", "hp", "health" },
+        [4] = { "name text tab", "name text", "name tab", "name", "names" },
+        [5] = { "left slot", "slot left", "left text slot", "left anchor", "anchor left", "anchor to left", "to left", "on left", "on the left", "left side" },
+        [6] = { "slot", "text slot", "anchor", "anchoring", "align", "alignment" },
+        [7] = { "center slot", "centre slot", "middle slot", "slot center", "slot centre", "slot middle", "center text slot", "centre text slot", "middle text slot" },
+        [8] = { "center anchor", "centre anchor", "middle anchor", "anchor center", "anchor centre", "anchor middle", "anchor to center", "anchor to centre", "anchor to middle", "to center", "to centre", "to middle", "in center", "in centre", "in middle", "in the center", "in the centre", "in the middle", "on center", "on centre", "on middle", "on the center", "on the centre", "on the middle", "center side", "centre side", "middle" },
+        [9] = { "slot", "text slot", "anchor", "anchoring", "align", "alignment" },
+        [10] = { "right slot", "slot right", "right text slot", "right anchor", "anchor right", "anchor to right", "to right", "on right", "on the right", "right side" },
+        [11] = { "slot", "text slot", "anchor", "anchoring", "align", "alignment" },
+        [12] = { "anchor", "anchoring", "align", "alignment" },
+        [13] = { "anchor", "anchoring", "align", "alignment" },
+        [14] = {
+        "text area", "text tab", "text tabs", "text editor", "text slot", "slot selector", "slot dropdown",
+        "selected slot", "left slot", "center slot", "centre slot", "right slot",
+    },
+        [15] = { "name text", "hp text", "health text", "power text", "mana text" },
+        [16] = {
+        "font size", "text size", "name size", "name font size", "names size", "names font size",
+        "hp font size", "health font size", "power font size", "mana font size",
+        "hp text size", "health text size", "power text size", "mana text size",
+        "hp number size", "hp numbers size", "health number size", "health numbers size",
+        "power number size", "power numbers size", "mana number size", "mana numbers size",
+        "text groesse", "name groesse", "name text groesse",
+        "hp text groesse", "health text groesse", "power text groesse", "mana text groesse",
+        "schriftgroesse", "schrift groesse",
+    },
+        [17] = {
+        "bigger", "larger", "increase", "raise", "grow", "higher",
+        "smaller", "decrease", "reduce", "lower", "shrink",
+        "groesser", "kleiner", "erhoehe", "senke", "reduziere",
+    },
+        [18] = {
+        "name", "names", "name text", "hp text", "health text", "power text", "mana text",
+        "hp number", "hp numbers", "health number", "health numbers",
+        "power number", "power numbers", "mana number", "mana numbers",
+    },
+        [19] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff" },
+        [20] = { "status icon", "status icons", "status indicator", "status indicators", "raid marker", "ready check", "leader icon", "assist icon" },
+        [21] = {
+        "layer", "text layer", "draw layer", "draw level", "level",
+        "offset", "position", "pos", "x offset", "y offset",
+        "move", "nudge", "shift", "anchor", "anchoring", "align", "alignment",
+    },
+        [22] = {
+        "all text", "all texts", "all frame text", "all unit text", "all unitframe text",
+        "every text", "every text label", "all labels", "all numbers",
+    },
+        [23] = {
+        "font size", "text size", "bigger", "larger", "increase", "raise", "grow",
+        "smaller", "decrease", "reduce", "lower", "shrink",
+        "groesser", "kleiner", "erhoehe", "senke", "reduziere",
+    },
+        [24] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff" },
+        [25] = { "class power", "class resource", "class resources", "resource bar" },
+        [26] = { "text layer", "draw layer", "text level", "draw level", "layer" },
+        [27] = { "bring forward", "move forward", "raise forward", "forward", "front", "above", "up" },
+        [28] = { "send back", "move back", "backward", "behind", "below" },
+        [29] = { "left hp text", "hp left text", "hp text left", "left health text", "health left text", "health text left", "left hp slot", "hp left slot", "hp slot left", "left health slot", "health left slot", "health slot left", "left hp label", "hp left label", "hp label left", "left health label", "health left label", "health label left" },
+        [30] = { "center hp text", "centre hp text", "middle hp text", "hp center text", "hp centre text", "hp middle text", "hp text center", "hp text centre", "hp text middle", "center health text", "centre health text", "middle health text", "health center text", "health centre text", "health middle text", "health text center", "health text centre", "health text middle", "center hp slot", "centre hp slot", "middle hp slot", "hp center slot", "hp centre slot", "hp middle slot", "hp slot center", "hp slot centre", "hp slot middle", "center health slot", "centre health slot", "middle health slot", "health center slot", "health centre slot", "health middle slot", "health slot center", "health slot centre", "health slot middle", "center hp label", "centre hp label", "middle hp label", "hp center label", "hp centre label", "hp middle label", "hp label center", "hp label centre", "hp label middle", "center health label", "centre health label", "middle health label", "health center label", "health centre label", "health middle label", "health label center", "health label centre", "health label middle" },
+        [31] = { "right hp text", "hp right text", "hp text right", "right health text", "health right text", "health text right", "right hp slot", "hp right slot", "hp slot right", "right health slot", "health right slot", "health slot right", "right hp label", "hp right label", "hp label right", "right health label", "health right label", "health label right" },
+        [32] = { "left power text", "power left text", "power text left", "left mana text", "mana left text", "mana text left", "left power slot", "power left slot", "power slot left", "left mana slot", "mana left slot", "mana slot left", "left power label", "power left label", "power label left", "left mana label", "mana left label", "mana label left" },
+        [33] = { "center power text", "centre power text", "middle power text", "power center text", "power centre text", "power middle text", "power text center", "power text centre", "power text middle", "center mana text", "centre mana text", "middle mana text", "mana center text", "mana centre text", "mana middle text", "mana text center", "mana text centre", "mana text middle", "center power slot", "centre power slot", "middle power slot", "power center slot", "power centre slot", "power middle slot", "power slot center", "power slot centre", "power slot middle", "center mana slot", "centre mana slot", "middle mana slot", "mana center slot", "mana centre slot", "mana middle slot", "mana slot center", "mana slot centre", "mana slot middle", "center power label", "centre power label", "middle power label", "power center label", "power centre label", "power middle label", "power label center", "power label centre", "power label middle", "center mana label", "centre mana label", "middle mana label", "mana center label", "mana centre label", "mana middle label", "mana label center", "mana label centre", "mana label middle" },
+        [34] = { "right power text", "power right text", "power text right", "right mana text", "mana right text", "mana text right", "right power slot", "power right slot", "power slot right", "right mana slot", "mana right slot", "mana slot right", "right power label", "power right label", "power label right", "right mana label", "mana right label", "mana label right" },
+        [35] = { "left of", "left side of", "to left of", "to the left of", "in left of", "in the left of" },
+        [36] = { "center of", "centre of", "middle of", "center side of", "centre side of", "middle side of", "to center of", "to centre of", "to middle of", "to the center of", "to the centre of", "to the middle of", "in center of", "in centre of", "in middle of", "in the center of", "in the centre of", "in the middle of" },
+        [37] = { "right of", "right side of", "to right of", "to the right of", "in right of", "in the right of" },
+        [38] = {
+            "slot", "text slot", "anchor", "anchoring", "side", "left side", "right side", "center side", "centre side", "middle side",
+            "to left", "to right", "to center", "to centre", "to middle",
+            "on left", "on the left", "on right", "on the right", "on center", "on centre", "on middle", "on the center", "on the centre", "on the middle",
+            "in center", "in centre", "in middle", "in the center", "in the centre", "in the middle",
+        },
+        [39] = {
+        "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down",
+        "layer", "size", "font size", "anchor", "anchoring", "align", "alignment",
+    },
+        [40] = { "left", "links" },
+        [41] = { "center", "centre", "middle", "mitte" },
+        [42] = { "right", "rechts" },
+        [43] = {
+        "castbar", "cast bar", "aura", "auras", "buff", "debuff",
+        "class power", "class resource", "class resources", "resource bar",
+        "power bar", "powerbar", "mana bar",
+    },
+        [44] = { "truncation", "truncate", "truncated", "clip", "clipping", "clip side", "ellipsis" },
+        [45] = {
+        "status", "status text", "status icon", "indicator", "icon",
+        "raid marker", "ready check", "summon", "resurrect", "resurrection",
+        "ghost", "dead", "afk", "dnd", "group number",
+    },
+        [46] = {
+        "name", "name text", "unit name", "unitframe name", "unit frame name", "name label",
+    },
+        [47] = {
+        "middle", "center", "centre", "centered", "centred",
+        "to middle", "to the middle", "in middle", "in the middle",
+        "to center", "to the center", "in center", "in the center",
+        "to centre", "to the centre", "in centre", "in the centre",
+    },
+        [48] = {
+        "to left", "to the left", "on left", "on the left", "left side",
+        "anchor left", "left anchor", "anchor to left", "align left",
+    },
+        [49] = { "anchor", "anchoring", "align", "alignment", "justify" },
+        [50] = {
+        "to right", "to the right", "on right", "on the right", "right side",
+        "anchor right", "right anchor", "anchor to right", "align right",
+    },
+        [51] = { "anchor", "anchoring", "align", "alignment", "justify" },
+        [52] = { "it", "that", "this", "selected", "same" },
+        [53] = {
+        "name", "name text", "unit name", "unitframe name", "unit frame name",
+        "name label", "player name", "target name", "focus name", "pet name", "boss name",
+    },
+        [54] = { "text", "unit text", "unitframe text", "unit frame text", "frame text" },
+        [55] = { "unitframe", "unit frame", "frame", "middle of", "center of", "centre of" },
+        [56] = {
+        "move", "put", "place", "set", "align", "anchor", "position",
+        "center", "centre", "middle", "justify",
+    },
+        [57] = {
+        "castbar", "cast bar", "aura", "auras", "buff", "debuff",
+        "class power", "class resource", "class resources", "resource bar",
+        "power bar", "powerbar", "mana bar", "hp text", "health text", "power text", "mana text",
+    },
+        [58] = {
+        "raid group name", "raid group number", "group number", "pvp", "status icon",
+        "status indicator", "ready check", "raid marker", "leader", "assist", "resurrect",
+        "resurrection", "incoming rez", "summon",
+    },
+        [59] = {
+        "name", "name text", "unit name", "unitframe name", "unit frame name",
+        "name label", "player name", "target name", "focus name", "pet name", "boss name",
+        "party name", "raid name", "mythic raid name", "group name",
+    },
+        [60] = { "offset", "position", "pos", "x", "y", "move", "nudge", "shift", "left", "right", "up", "down" },
+        [61] = { "down", "lower", "tiefer", "runter", "unten" },
+        [62] = { "up", "higher", "hoeher", "hoch", "oben" },
+        [63] = { "move", "nudge", "shift" },
+        [64] = {
+        "castbar", "cast bar", "aura", "auras", "buff", "debuff",
+        "class power", "class resource", "class resources", "resource bar",
+        "power bar", "powerbar", "mana bar",
+    },
+        [65] = {
+        "name", "name text", "unit name", "unitframe name", "unit frame name",
+        "names", "name label", "player name", "target name", "focus name", "pet name", "boss name",
+        "party name", "party names", "raid name", "raid names", "group name", "group names",
+    },
+        [66] = { "put", "place", "set", "move", "position", "stick", "keep" },
+        [67] = { "anchor", "anchoring", "position" },
+        [68] = { "top", "upper", "above", "over", "bottom", "lower", "below", "under" },
+        [69] = { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" },
+        [70] = { "above", "over", "top of", "on top of" },
+        [71] = { "top", "upper" },
+        [72] = { "below", "under", "bottom of", "underneath" },
+        [73] = { "bottom", "lower" },
+        [74] = {
+        "move", "move the", "move max", "move current", "move percent",
+        "relocate", "transfer", "send", "shift",
+        "verschieben", "umsetzen",
+    },
+        [75] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" },
+        [76] = { "power bar", "powerbar", "mana bar", "mana balken", "power balken" },
+        [77] = {
+        "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down",
+        "layer", "size", "font size", "anchor", "anchoring", "align", "alignment",
+    },
+        [78] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" },
+        [79] = { "power text", "mana text", "power bar", "powerbar", "mana bar" },
+        [80] = { "hp text", "health text", "health decimals", "hp decimals", "decimal percent", "reverse hp", "reverse health" },
+        [81] = { "delimiter", "separator", "seperator", "trennzeichen", "trenner" },
+        [82] = {
+        "reverse hp text", "hp text reverse", "reverse health text", "health text reverse",
+        "reverse hp text order", "hp text reverse order", "reverse health text order", "health text reverse order",
+    },
+        [83] = { "health text decimals", "hp text decimals", "health decimals", "hp decimals", "decimal percent" },
+        [84] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" },
+        [85] = { "power bar", "powerbar", "mana bar", "hp text", "health text" },
+        [86] = { "power text delimiter", "power text separator", "mana text delimiter", "mana text separator", "power delimiter", "mana delimiter" },
+        [87] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" },
+        [88] = { "offset", "position", "pos", "x", "y", "move", "nudge", "shift", "left", "right", "up", "down" },
+        [89] = { "slot", "left slot", "right slot", "center slot", "centre slot", "middle slot" },
+        [90] = {
+            "left hp text", "hp left text", "right hp text", "hp right text", "center hp text", "hp center text", "centre hp text", "hp centre text",
+            "left health text", "health left text", "right health text", "health right text", "center health text", "health center text",
+            "left power text", "power left text", "right power text", "power right text", "center power text", "power center text", "centre power text", "power centre text",
+            "left mana text", "mana left text", "right mana text", "mana right text", "center mana text", "mana center text",
+        },
+        [91] = { "down", "lower", "tiefer", "runter", "unten" },
+        [92] = { "up", "higher", "hoeher", "hoch", "oben" },
+        [93] = { "move", "nudge", "shift" },
+        [94] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" },
+        [95] = { "power bar", "powerbar", "mana bar", "mana balken", "power balken" },
+        [96] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" },
+        [97] = { "power bar", "powerbar", "mana bar", "mana balken", "power balken" },
+        [98] = { "dispel overlay", "debuff overlay", "current health only", "on current health only", "on health only" },
+        [99] = { "dark mode", "dark bars", "dark bar", "bar color", "brightness" },
+        [100] = { "set", "show", "display", "use", "put", "make", "change", "hide", "turn off", "turn on", "create", "create new", "add", "new", "remove", "clear" },
+        [101] = { "it", "that", "this", "selected", "here", "there", "same", "now" },
+        [102] = { "offset", "position", "pos", "x", "y", "up", "down", "move", "nudge", "shift", "layer", "size", "font size" },
+        [103] = { "remove", "clear", "hide", "turn off", "disable", "empty", "none", "off" },
+        [104] = { "it", "that", "this", "selected", "here" },
+        [105] = {
+        "current and percent", "current and percentage", "current and max", "current and maximum",
+        "max and percent", "maximum and percent", "max and percentage", "maximum and percentage",
+    },
+        [106] = { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" },
+        [107] = { "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down" },
+        [108] = { "down", "lower", "tiefer", "runter", "unten" },
+        [109] = { "up", "higher", "hoeher", "hoch", "oben" },
+        [110] = {
+            "left hp text", "hp left text", "left health text", "health left text", "left power text", "power left text", "left mana text", "mana left text",
+            "right hp text", "hp right text", "right health text", "health right text", "right power text", "power right text", "right mana text", "mana right text",
+            "left slot", "slot left", "right slot", "slot right", "left side", "right side", "left label", "right label",
+        },
+        [111] = { "move", "nudge", "shift" },
+    },
+}

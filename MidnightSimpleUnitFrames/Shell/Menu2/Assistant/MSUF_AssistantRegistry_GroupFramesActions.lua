@@ -45,7 +45,7 @@ Registry:RegisterAction({
         local spec = ResolveGroupStatusIcon(args and args.icon)
         if not spec then return false, "Which group status icon do you want me to reset?" end
         ResetGroupStatusIcon(scope, spec)
-        return true, "Done. Reset " .. GroupLabel(scope) .. " " .. tostring(spec.label) .. " placement and icon pack."
+        return true, "Done. Reset " .. GroupLabel(scope) .. " " .. tostring(spec.label) .. " placement and icon style."
     end,
 })
 
@@ -59,7 +59,7 @@ Registry:RegisterAction({
         local scope = args and args.scope
         if scope ~= "raid" and scope ~= "mythicraid" then scope = "party" end
         for i = 1, #GROUP_STATUS_ICON_SPECS do ResetGroupStatusIcon(scope, GROUP_STATUS_ICON_SPECS[i]) end
-        return true, "Done. Reset " .. GroupLabel(scope) .. " status icon placement and icon packs."
+        return true, "Done. Reset " .. GroupLabel(scope) .. " status icon placement and icon styles."
     end,
 })
 
@@ -136,7 +136,7 @@ local GROUP_COPY_CATEGORIES = {
     { key = "font", keys = WordList("fontOverride fontOutline useGlobalFontColor fontR fontG fontB") },
     { key = "border", keys = WordList("bgR bgG bgB hpBarAlpha hpBgAlpha alphaExcludeTextPortrait") },
     { key = "range", keys = WordList("rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha") },
-    { key = "indicators", keys = WordList("pvpIcon statusText statusGhostText statusAFKText showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle"), prefix = WordList("si_ statusIcon indicator") },
+    { key = "indicators", keys = WordList("pvpIcon statusText statusGhostText statusAFKText showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon"), prefix = WordList("si_ statusIcon indicator") },
     { key = "auras", tables = WordList("auras") },
     { key = "highlight", keys = WordList("targetIndicator targetR targetG targetB"), prefix = WordList("hl dispel") },
     { key = "dstripe", prefix = WordList("debuffStripe") },

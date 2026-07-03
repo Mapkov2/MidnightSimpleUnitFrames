@@ -179,6 +179,28 @@ function A.SetContextValue(key, value)
     return value
 end
 
+function A.ConversationContext()
+    local ctx = A.GetContext()
+    local turnSerial = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
+    local subjectTurn = tonumber(ctx.lastSubjectTurn)
+    local ageTurns
+    if subjectTurn then ageTurns = turnSerial - subjectTurn end
+    return {
+        subject = {
+            settingKey = ctx.lastSetting,
+            unit = ctx.lastUnit,
+            frameType = ctx.lastFrameType,
+            category = ctx.lastCategory,
+            textArea = ctx.lastTextArea,
+            textSlot = ctx.lastTextSlot,
+        },
+        lastValue = ctx.lastValue,
+        lastDirection = ctx.lastDirection,
+        turnSerial = turnSerial,
+        ageTurns = ageTurns,
+    }
+end
+
 function A.RememberAppliedBundle(bundle)
     local ctx = A.GetContext()
     ctx.lastAction = bundle and bundle.action or "change"
@@ -192,6 +214,9 @@ function A.RememberAppliedBundle(bundle)
     ctx.lastFrameType = bundle and bundle.lastFrameType
     ctx.lastCategory = bundle and bundle.lastCategory
     ctx.lastChangeBundle = bundle and bundle.serializable or nil
+    if bundle and bundle.lastSetting ~= nil then
+        ctx.lastSubjectTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or ctx.lastSubjectTurn
+    end
 end
 
 if type(_G.CreateFrame) == "function" then

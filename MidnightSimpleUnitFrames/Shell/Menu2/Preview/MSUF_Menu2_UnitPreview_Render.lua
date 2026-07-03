@@ -293,7 +293,7 @@ function Render.Install(Preview, deps)
     renderState.UnitPreviewPortraitTexture = deps.UnitPreviewPortraitTexture
     renderState.ClassPortraitVisual = deps.ClassPortraitVisual
     renderState.PreviewStatus = MSUF.UFPreviewStatus or {}
-    renderState.STATUS_RUNTIME_KEYS = { raidmarker = "raidMarker", leader = "leader", level = "level", elite = "elite", statusText = "statusText", statusCombat = "combat", statusResting = "resting", statusIncomingRes = "incomingRes", statusPvp = "pvp" }
+    renderState.STATUS_RUNTIME_KEYS = { raidmarker = "raidMarker", leader = "leader", assist = "assist", level = "level", elite = "elite", statusText = "statusText", statusCombat = "combat", statusResting = "resting", statusIncomingRes = "incomingRes", statusPvp = "pvp" }
     renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
     local PowerColor = renderState.PowerColor
     local SharedCPPreview = MenuState.ClassPowerPreview or {}
@@ -1464,7 +1464,7 @@ function Preview.Refresh(box, reason)
                 local anchor, x, y = StatusAnchorOffsets(spec, statusCfg)
                 if spec.id == "raidmarker" then
                     R.PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, true)
-                elseif spec.id == "leader" or spec.id == "elite" then
+                elseif spec.id == "leader" or spec.id == "assist" or spec.id == "elite" then
                     R.PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, false)
                 elseif spec.id == "statusCombat" or spec.id == "statusResting" or spec.id == "statusIncomingRes" or spec.id == "statusPvp" then
                     R.PositionStatusCornerPreview(icon, anchor, x, y, mock, S(2))

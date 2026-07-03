@@ -67,6 +67,38 @@ local function StatusSymbolTexture(symbolKey)
     end
     return SYMBOL_MEDIA .. folder .. "\\" .. symbolKey .. suffix
 end
+local function EffectiveIconPackStyle(spec, conf, g, runtimeCfg)
+    if not (spec and (spec.id == "leader" or spec.id == "assist")) then return nil end
+    local style = runtimeCfg and runtimeCfg.style
+    if (type(style) ~= "string" or style == "" or style == "DEFAULT") and spec and spec.iconStyle then
+        style = (conf and conf[spec.iconStyle]) or (g and g[spec.iconStyle]) or spec.defaultIconStyle
+    end
+    if type(style) ~= "string" or style == "" or style == "DEFAULT" or style == "BLIZZARD" then return nil end
+    return style
+end
+local function ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, iconType, variant)
+    if not tex then return false end
+    local customIcon = runtimeCfg and runtimeCfg.customIcon
+    if (type(customIcon) ~= "string" or customIcon == "") and spec and spec.customIcon then
+        customIcon = (conf and conf[spec.customIcon]) or (g and g[spec.customIcon])
+    end
+    if type(customIcon) == "string" and customIcon ~= "" then
+        tex:SetTexture(customIcon)
+        if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+        return true
+    end
+    local style = EffectiveIconPackStyle(spec, conf, g, runtimeCfg)
+    if not style then return false end
+    local resolver = _G.MSUF_GetStatusIconTexture
+    if type(resolver) ~= "function" then return false end
+    local useMidnight = runtimeCfg and runtimeCfg.useMidnight == true
+    if not useMidnight then useMidnight = g and g.statusIconsUseMidnightStyle == true end
+    local path, l, r, t, b = resolver(style, iconType, variant, useMidnight)
+    if type(path) ~= "string" or path == "" then return false end
+    tex:SetTexture(path)
+    if tex.SetTexCoord then tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1) end
+    return true
+end
 function Status.StatusTextPreviewText(source)
     local cfg
     if type(source) == "table" and (source.showDead ~= nil or source.showGhost ~= nil or source.showAFK ~= nil or source.showDND ~= nil) then
@@ -109,14 +141,24 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
     if txt then txt:Hide() end
     if spec.id == "raidmarker" then
         if tex then
-            tex:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
-            if SetRaidTargetIconTexture then SetRaidTargetIconTexture(tex, 8) end
+            if not ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "raidMarker", 8) then
+                tex:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcons")
+                if SetRaidTargetIconTexture then SetRaidTargetIconTexture(tex, 8) end
+            end
         end
-    elseif spec.id == "leader" then
+    elseif spec.id == "leader" or spec.id == "assist" then
         if tex then
-            local isAssist = key == "target"
+            local isAssist = spec.id == "assist"
             local path = isAssist and "Interface\\GroupFrame\\UI-Group-AssistantIcon" or "Interface\\GroupFrame\\UI-Group-LeaderIcon"
-            local style = (runtimeCfg and runtimeCfg.style) or (conf and conf.leaderIconStyle) or (g and g.leaderIconStyle) or "BLIZZARD"
+            local styleKey = isAssist and "assistIconStyle" or "leaderIconStyle"
+            local customKey = isAssist and "assistIconCustomIcon" or "leaderIconCustomIcon"
+            local customIcon = (runtimeCfg and runtimeCfg.customIcon) or (conf and conf[customKey]) or (g and g[customKey])
+            if type(customIcon) == "string" and customIcon ~= "" then
+                tex:SetTexture(customIcon)
+                if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+                return
+            end
+            local style = (runtimeCfg and runtimeCfg.style) or (conf and conf[styleKey]) or (g and g[styleKey]) or (isAssist and ((conf and conf.leaderIconStyle) or (g and g.leaderIconStyle))) or "BLIZZARD"
             if type(style) == "string" and style ~= "" and style ~= "DEFAULT" and style ~= "BLIZZARD" then
                 local resolver = isAssist and _G.MSUF_GetAssistStatusIconTexture or _G.MSUF_GetLeaderStatusIconTexture
                 if type(resolver) == "function" then
@@ -130,7 +172,9 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
             tex:SetTexture(path)
         end
     elseif spec.id == "elite" then
-        if tex and tex.SetAtlas then
+        if tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "elite", (key == "boss") and "BOSS" or "ELITE") then
+            -- Custom texture applied above.
+        elseif tex and tex.SetAtlas then
             tex:SetAtlas((key == "boss") and "nameplates-icon-elite-gold" or "nameplates-icon-elite-silver")
         elseif tex then
             tex:SetTexture("Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
@@ -139,6 +183,8 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
         local path = StatusSymbolTexture((runtimeCfg and runtimeCfg.symbol) or conf.combatStateIndicatorSymbol or g.combatStateIndicatorSymbol)
         if tex and path then
             tex:SetTexture(path)
+        elseif tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "combat", "combat") then
+            -- Custom texture applied above.
         elseif tex and tex.SetAtlas then
             tex:SetAtlas("UI-HUD-UnitFrame-Player-PortraitCombatIcon")
         elseif tex then
@@ -149,15 +195,26 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
         local path = StatusSymbolTexture((runtimeCfg and runtimeCfg.symbol) or conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol or g.restingStateIndicatorSymbol)
         if tex and path then
             tex:SetTexture(path)
+        elseif tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "resting", "resting") then
+            -- Custom texture applied above.
         elseif tex then
             tex:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
             if tex.SetTexCoord then tex:SetTexCoord(0, 0.5, 0, 0.5) end
         end
     elseif spec.id == "statusIncomingRes" then
         local path = StatusSymbolTexture((runtimeCfg and runtimeCfg.symbol) or conf.incomingResIndicatorSymbol or g.incomingResIndicatorSymbol)
-        if tex then tex:SetTexture(path or "Interface\\RaidFrame\\Raid-Icon-Rez") end
+        if tex and path then
+            tex:SetTexture(path)
+        elseif tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "incomingRes", "resurrect") then
+            -- Custom texture applied above.
+        elseif tex then
+            tex:SetTexture("Interface\\RaidFrame\\Raid-Icon-Rez")
+        end
     elseif spec.id == "statusPvp" then
-        if tex and tex.SetAtlas then
+        local variant = (key == "target" or key == "focus") and "Horde" or "Alliance"
+        if tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "pvp", variant) then
+            -- Custom texture applied above.
+        elseif tex and tex.SetAtlas then
             tex:SetAtlas((key == "target" or key == "focus") and PVP_HORDE_ATLAS or PVP_ALLIANCE_ATLAS)
         elseif tex then
             tex:SetTexture((key == "target" or key == "focus") and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance")

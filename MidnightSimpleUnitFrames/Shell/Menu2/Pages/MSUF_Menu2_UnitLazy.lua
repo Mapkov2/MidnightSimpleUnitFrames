@@ -57,7 +57,12 @@ local function ResolveLazyMeta(ctx, builder, unit, spec)
     if type(sectionId) ~= "string" or sectionId == "" then return nil end
     if type(title) ~= "string" or title == "" then return nil end
     height = tonumber(height)
-    if not height then return nil end
+    if not height then
+        -- autoHeight sections declare no height: the shell gets a provisional
+        -- one and the build fn corrects it via builder:FinishSection.
+        if spec.autoHeight ~= true then return nil end
+        height = 120
+    end
     return sectionId, title, height, ResolveLazyValue(spec.defaultOpen, ctx, builder, unit, spec) == true
 end
 local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)

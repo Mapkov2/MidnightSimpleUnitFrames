@@ -17,6 +17,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Data = A.ParserData or {}
+A.ParserData = Data
+local FeaturesData = Data.FEATURES_PARSER or {}
+local FeaturesPhrases = FeaturesData.PHRASES or {}
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
 local ContainsAny = P.ContainsAny
@@ -91,24 +95,18 @@ local CLASS_POWER_DETAIL_TERMS = {
 }
 
 local function ClassPowerMentionIsNegated(text)
-    return ContainsAny(text, {
-        "not class resource", "not class resources", "not class power", "not class bar", "not resource bar",
-        "no class resource", "no class resources", "no class power", "no class bar", "no resource bar",
-        "dont class resource", "do not class resource",
-        "nicht class resource", "nicht class power", "nicht klassenressource", "keine class resource",
-        "kein class resource", "keine klassenressource", "nicht ressourcenleiste",
-    })
+    return ContainsAny(text, FeaturesPhrases[1])
 end
 
 local function HasClassPowerIntent(text)
     if ClassPowerMentionIsNegated(text) then return false end
     return ContainsAny(text, CLASS_POWER_TERMS)
-        or ContainsAny(text, { "resource numbers", "resource number", "resource text", "resource texts" })
+        or ContainsAny(text, FeaturesPhrases[2])
 end
 
 local function ParseClassPowerRootToggle(text)
-    if ContainsAny(text, { "setting", "settings", "option", "options", "page", "menu" })
-        and ContainsAny(text, { "show me", "show", "open", "where", "find", "help" }) then
+    if ContainsAny(text, FeaturesPhrases[3])
+        and ContainsAny(text, FeaturesPhrases[4]) then
         return nil
     end
     local value = DetectBoolean(text)
@@ -139,26 +137,23 @@ local function ClassPowerSetting(key)
 end
 
 local function ClassPowerWidthModeForText(text)
-    if ContainsAny(text, { "auto fit", "autofit", "auto-fit", "auto fit pips", "fit pips", "compact pips", "pip width" }) then return "auto_pips" end
+    if ContainsAny(text, FeaturesPhrases[5]) then return "auto_pips" end
     if ContainsAny(text, CLASS_POWER_COOLDOWN_TARGET_TERMS) then return "cooldown" end
-    if ContainsAny(text, { "utility cooldown", "utility cooldowns", "utility cooldown manager", "utility cooldownmanager" }) then return "utility" end
-    if ContainsAny(text, { "tracked buff", "tracked buffs", "buff tracker", "tracked-buffs" }) then return "tracked_buffs" end
-    if ContainsAny(text, { "custom width", "manual width", "custom mode", "manual mode" }) then return "custom" end
+    if ContainsAny(text, FeaturesPhrases[6]) then return "utility" end
+    if ContainsAny(text, FeaturesPhrases[7]) then return "tracked_buffs" end
+    if ContainsAny(text, FeaturesPhrases[8]) then return "custom" end
     if ContainsAny(text, CLASS_POWER_PLAYER_TARGET_TERMS) then return "player" end
     return nil
 end
 
 function A._ParseClassPowerWidthModeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "detached power", "alt mana", "alternative mana" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[9]) then return nil end
     local mode = ClassPowerWidthModeForText(text)
     if not mode then return nil end
-    local widthIntent = ContainsAny(text, {
-        "width", "wide", "match", "same width", "width mode", "width source", "match width",
-        "player width", "player frame width", "auto fit", "fit pips", "pip width",
-    })
+    local widthIntent = ContainsAny(text, FeaturesPhrases[10])
     if not widthIntent then return nil end
-    if FirstNumber(text) and not ContainsAny(text, { "width mode", "width source", "match", "same width", "player width", "cooldown", "cooldowns", "tracked buff", "utility", "auto fit", "fit pips", "pip width" }) then
+    if FirstNumber(text) and not ContainsAny(text, FeaturesPhrases[11]) then
         return nil
     end
     local setting = ClassPowerSetting("bars.classPowerWidthMode")
@@ -171,24 +166,17 @@ function A._ParseClassPowerWidthModeShortcut(text)
 end
 
 local function ClassPowerHideRuleValue(text)
-    local explicitHideIntent = ContainsAny(text, { "hide", "hide when", "hide while", "hide out of combat", "hide ooc" })
-    if (ContainsAny(text, { "show", "visible" }) or (ContainsAny(text, { "turn on" }) and not explicitHideIntent)) and ContainsAny(text, {
-        "when full", "if full", "full resource", "full resources",
-        "when empty", "if empty", "empty resource", "empty resources",
-        "out of combat", "ooc",
-    }) then
+    local explicitHideIntent = ContainsAny(text, FeaturesPhrases[12])
+    if (ContainsAny(text, FeaturesPhrases[13]) or (ContainsAny(text, FeaturesPhrases[14]) and not explicitHideIntent)) and ContainsAny(text, FeaturesPhrases[15]) then
         return false
     end
-    if ContainsAny(text, {
-        "turn off hide", "disable hide", "dont hide", "do not hide", "never hide",
-        "always show", "show when", "show while", "show out of combat", "show class resource",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[16]) then
         return false
     end
-    if ContainsAny(text, { "turn on hide", "enable hide", "hide when", "hide while", "hide out of combat", "hide ooc" }) then
+    if ContainsAny(text, FeaturesPhrases[17]) then
         return true
     end
-    if ContainsAny(text, { "hide class resource", "hide class resources", "hide class power", "hide class bar", "hide resource bar", "hide" }) then
+    if ContainsAny(text, FeaturesPhrases[18]) then
         return true
     end
     local value = DetectBoolean(text)
@@ -200,11 +188,11 @@ end
 function A._ParseClassPowerVisibilityShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
     local rule
-    if ContainsAny(text, { "out of combat", "ooc" }) then
+    if ContainsAny(text, FeaturesPhrases[19]) then
         rule = { key = "bars.classPowerHideOOC", label = "Class Resource Hide Out of Combat" }
-    elseif ContainsAny(text, { "when full", "if full", "full resource", "full resources", "full" }) then
+    elseif ContainsAny(text, FeaturesPhrases[20]) then
         rule = { key = "bars.classPowerHideWhenFull", label = "Hide Class Resource When Full" }
-    elseif ContainsAny(text, { "when empty", "if empty", "empty resource", "empty resources", "empty" }) then
+    elseif ContainsAny(text, FeaturesPhrases[21]) then
         rule = { key = "bars.classPowerHideWhenEmpty", label = "Hide Class Resource When Empty" }
     end
     if not rule then return nil end
@@ -221,29 +209,19 @@ end
 
 function A._ParseClassPowerAnchorShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, {
-        "detached power", "alt mana", "alternative mana", "text anchor",
-        "player hp", "player hp bar", "hp bar", "class resource hp", "class resources hp",
-        "class resource health", "class resources health", "second hp", "duplicate hp",
-    }) then return nil end
-    local hasAnchorIntent = ContainsAny(text, {
-        "anchor", "anchored", "follow", "attach", "attached", "dock", "to cooldown", "to cooldowns",
-        "to player", "player frame", "cooldownmanager", "cooldown manager",
-    })
+    if ContainsAny(text, FeaturesPhrases[22]) then return nil end
+    local hasAnchorIntent = ContainsAny(text, FeaturesPhrases[23])
     if not hasAnchorIntent then return nil end
     local targetCooldown = ContainsAny(text, CLASS_POWER_COOLDOWN_TARGET_TERMS)
     local targetPlayer = ContainsAny(text, CLASS_POWER_PLAYER_TARGET_TERMS)
     local value = DetectBoolean(text)
-    if targetCooldown and ContainsAny(text, {
-        "detach", "detach from", "undock", "undock from", "disconnect", "disconnect from",
-        "stop following", "dont follow", "do not follow", "remove from",
-    }) then
+    if targetCooldown and ContainsAny(text, FeaturesPhrases[24]) then
         value = false
     elseif targetCooldown then
         value = value ~= false
     elseif targetPlayer then
         value = false
-    elseif value == nil and ContainsAny(text, { "anchor", "follow", "attach", "dock" }) then
+    elseif value == nil and ContainsAny(text, FeaturesPhrases[25]) then
         value = true
     end
     if value == nil then return nil end
@@ -253,7 +231,7 @@ function A._ParseClassPowerAnchorShortcut(text)
     if targetPlayer then
         local widthMode = ClassPowerSetting("bars.classPowerWidthMode")
         if widthMode then changes[#changes + 1] = { setting = widthMode, value = "player" } end
-    elseif value == true and ContainsAny(text, { "width", "match width", "same width" }) then
+    elseif value == true and ContainsAny(text, FeaturesPhrases[26]) then
         local widthMode = ClassPowerSetting("bars.classPowerWidthMode")
         if widthMode then changes[#changes + 1] = { setting = widthMode, value = "cooldown" } end
     end
@@ -266,9 +244,9 @@ function A._ParseClassPowerAnchorShortcut(text)
 end
 
 local function ClassPowerPlacement(text)
-    if ContainsAny(text, { "under", "below", "beneath", "bottom of", "underneath", "unter", "darunter" }) then return "below" end
-    if ContainsAny(text, { "above", "over", "top of", "ueber", "darueber" }) then return "above" end
-    if ContainsAny(text, { "on player", "on the player", "inside player", "inside the player" }) then return "top" end
+    if ContainsAny(text, FeaturesPhrases[27]) then return "below" end
+    if ContainsAny(text, FeaturesPhrases[28]) then return "above" end
+    if ContainsAny(text, FeaturesPhrases[29]) then return "top" end
     return nil
 end
 
@@ -285,7 +263,7 @@ end
 
 function A._ParseClassPowerPlacementShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "detached power", "alt mana", "alternative mana", "text" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[30]) then return nil end
     local placement = ClassPowerPlacement(text)
     if not placement then return nil end
     local units = DetectUnits(text)
@@ -317,22 +295,13 @@ end
 
 function A._ParseClassPowerDisplayStyleShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, {
-        "player hp", "player hp bar", "player health", "player health bar",
-        "class resource hp", "class resources hp", "class resource health", "class resources health",
-        "second hp", "second player hp", "duplicate hp", "duplicate health",
-    }) then return nil end
-    if ContainsAny(text, { "color", "colour", "background", "font size", "text size", "move", "offset" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[31]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[32]) then return nil end
     local value
-    if ContainsAny(text, { "as text", "show text", "show numbers", "show number", "numbers only", "text only" })
-        or (ContainsAny(text, { "show", "turn on", "enable" }) and ContainsAny(text, { "number", "numbers", "text" })) then
+    if ContainsAny(text, FeaturesPhrases[33])
+        or (ContainsAny(text, FeaturesPhrases[34]) and ContainsAny(text, FeaturesPhrases[35])) then
         value = true
-    elseif ContainsAny(text, {
-        "as pips", "as dots", "as bars", "show pips", "show dots", "show bars",
-        "pips only", "dots only", "hide numbers", "hide number", "hide text",
-        "turn off numbers", "turn off number", "turn off text", "disable numbers",
-        "disable number", "disable text", "without numbers", "no numbers",
-    }) or (ContainsAny(text, { "hide", "turn off", "disable", "without", "no" }) and ContainsAny(text, { "number", "numbers", "text" })) then
+    elseif ContainsAny(text, FeaturesPhrases[36]) or (ContainsAny(text, FeaturesPhrases[37]) and ContainsAny(text, FeaturesPhrases[38])) then
         value = false
     else
         return nil
@@ -340,7 +309,7 @@ function A._ParseClassPowerDisplayStyleShortcut(text)
     local textSetting = ClassPowerSetting("bars.classPowerShowText")
     if not textSetting then return nil end
     local changes = { { setting = textSetting, value = value } }
-    if ContainsAny(text, { "show", "turn on", "enable" }) then
+    if ContainsAny(text, FeaturesPhrases[39]) then
         local root = ClassPowerSetting("bars.showClassPower")
         if root then changes[#changes + 1] = { setting = root, value = true } end
     end
@@ -355,30 +324,19 @@ end
 
 function A._ParseClassPowerShapeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, {
-        "player hp", "player hp bar", "player health", "second hp", "duplicate hp",
-        "hp", "hp bar", "health", "health bar",
-        "detached power", "detached power bar", "player power", "player power bar",
-        "alt mana", "alternative mana",
-    }) then return nil end
-    if ContainsAny(text, { "color", "colors", "colour", "colours", "reset", "default", "defaults", "restore" }) then return nil end
-    if not ContainsAny(text, {
-        "shape", "form", "as bar", "as bars", "as circle", "as circles", "as dots",
-        "as diamond", "as diamonds", "as hex", "as hexagons",
-        "bar shape", "circle shape", "dot shape", "orb shape", "diamond shape",
-        "gem shape", "crystal shape", "hex shape", "hexagon shape",
-        "alignment", "align pips", "pip alignment",
-    }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[40]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[41]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[42]) then return nil end
 
     local key
     local label
-    if ContainsAny(text, { "alignment", "align pips", "pip alignment", "shape align", "left", "center", "centre", "middle", "right" })
-        and ContainsAny(text, { "alignment", "align", "left", "center", "centre", "middle", "right" })
-        and not ContainsAny(text, { "left to right", "right to left", "fill left", "fill right" })
+    if ContainsAny(text, FeaturesPhrases[43])
+        and ContainsAny(text, FeaturesPhrases[44])
+        and not ContainsAny(text, FeaturesPhrases[45])
     then
         key = "bars.classPowerShapeAlign"
         label = "Class Resource Shape Alignment"
-    elseif ContainsAny(text, { "shape", "form", "bar", "circle", "round", "dot", "orb", "diamond", "gem", "crystal", "hex", "hexagon" }) then
+    elseif ContainsAny(text, FeaturesPhrases[46]) then
         key = "bars.classPowerShape"
         label = "Class Resource Shape"
     end
@@ -397,28 +355,18 @@ end
 
 function A._ParseClassPowerFillDirectionShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "detached power", "alternative mana", "alt mana" }) then return nil end
-    if not ContainsAny(text, {
-        "fill", "direction", "reverse", "reversed", "backwards", "backward",
-        "right to left", "left to right", "normal", "forward",
-    }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[47]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[48]) then return nil end
 
     local value
     local boolValue = DetectBoolean(text)
-    if boolValue == false and ContainsAny(text, { "reverse", "reversed", "backwards", "backward", "right to left" }) then
+    if boolValue == false and ContainsAny(text, FeaturesPhrases[49]) then
         value = false
-    elseif ContainsAny(text, {
-        "right to left", "fill right", "fill backwards", "fill backward",
-        "fills backwards", "fills backward", "reverse fill", "reverse direction",
-        "fill reverse", "fill reversed", "other way",
-    }) then
+    elseif ContainsAny(text, FeaturesPhrases[50]) then
         value = true
-    elseif ContainsAny(text, {
-        "left to right", "fill left", "normal direction", "normal fill",
-        "fill normal", "forward fill", "fill forward", "same direction",
-    }) then
+    elseif ContainsAny(text, FeaturesPhrases[51]) then
         value = false
-    elseif ContainsAny(text, { "reverse", "reversed" }) then
+    elseif ContainsAny(text, FeaturesPhrases[52]) then
         value = boolValue
         if value == nil then value = true end
     end
@@ -436,27 +384,17 @@ end
 P.ParseGroupFrameFillDirectionShortcut = function(text)
     local scopes = DetectGroups(text)
     if #scopes == 0 then return nil end
-    if not ContainsAny(text, {
-        "fill", "direction", "reverse", "reversed", "backwards", "backward",
-        "right to left", "left to right", "normal", "forward",
-    }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[53]) then return nil end
 
     local value
     local boolValue = DetectBoolean(text)
-    if boolValue == false and ContainsAny(text, { "reverse", "reversed", "backwards", "backward", "right to left" }) then
+    if boolValue == false and ContainsAny(text, FeaturesPhrases[54]) then
         value = false
-    elseif ContainsAny(text, {
-        "right to left", "fill right", "fill backwards", "fill backward",
-        "fills backwards", "fills backward", "reverse fill", "reverse direction",
-        "fill reverse", "fill reversed", "other way",
-    }) then
+    elseif ContainsAny(text, FeaturesPhrases[55]) then
         value = true
-    elseif ContainsAny(text, {
-        "left to right", "fill left", "normal direction", "normal fill",
-        "fill normal", "forward fill", "fill forward", "same direction",
-    }) then
+    elseif ContainsAny(text, FeaturesPhrases[56]) then
         value = false
-    elseif ContainsAny(text, { "reverse", "reversed" }) then
+    elseif ContainsAny(text, FeaturesPhrases[57]) then
         value = boolValue
         if value == nil then value = true end
     end
@@ -479,10 +417,10 @@ end
 
 function A._ParseClassPowerTextSizeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "move", "nudge", "shift", "offset", "position" }) then return nil end
-    if ContainsAny(text, { "text x", "text y", "text left", "text right", "text up", "text down", "x to", "y to" }) then return nil end
-    if not ContainsAny(text, { "text", "number", "numbers", "font", "font size", "text size", "number size" }) then return nil end
-    if not ContainsAny(text, { "size", "bigger", "larger", "smaller", "increase", "decrease", "raise", "reduce", "set", "make" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[58]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[59]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[60]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[61]) then return nil end
     local setting = ClassPowerSetting("bars.classPowerFontSize")
     if not setting then return nil end
     local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 1)
@@ -501,16 +439,12 @@ end
 
 function A._ParseClassPowerSizeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "player hp", "player hp bar", "second hp", "duplicate hp" }) then return nil end
-    if ContainsAny(text, {
-        "text", "number", "numbers", "font", "outline", "border", "gap", "gaps", "spacing",
-        "space", "spaces", "distance", "separator", "separators", "divider", "dividers", "tick",
-        "ticks", "background", "opacity", "alpha", "texture",
-    }) then return nil end
-    if not ContainsAny(text, { "width", "wide", "wider", "narrower", "height", "tall", "taller", "shorter", "size", "bigger", "larger", "smaller" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[62]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[63]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[64]) then return nil end
     local key
     local fallback
-    if ContainsAny(text, { "width", "wide", "wider", "narrower" }) then
+    if ContainsAny(text, FeaturesPhrases[65]) then
         key = "bars.classPowerWidth"
         fallback = 10
     else
@@ -535,9 +469,9 @@ end
 
 function A._ParseClassPowerFrameLevelShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "player hp", "player hp bar", "second hp", "duplicate hp", "detached power", "alt mana" }) then return nil end
-    if not ContainsAny(text, { "frame level", "framelevel", "layer", "z layer", "z level", "strata" }) then return nil end
-    if ContainsAny(text, { "text", "number", "numbers", "font", "aura", "buff", "debuff", "status icon", "raid marker" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[66]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[67]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[68]) then return nil end
     local setting = ClassPowerSetting("bars.classPowerFrameLevelOffset")
     if not setting then return nil end
     local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 1)
@@ -555,16 +489,9 @@ function A._ParseClassPowerFrameLevelShortcut(text)
 end
 
 function A._ParseClassPowerPlayerHPDetailShortcut(text, raw)
-    if not ContainsAny(text, {
-        "player hp", "player hp bar", "player health", "player health bar",
-        "class resource hp", "class resources hp", "class resource health", "class resources health",
-        "second hp", "second player hp", "duplicate hp", "duplicate health",
-    }) then return nil end
-    if ContainsAny(text, { "player hp", "player hp bar", "player health", "player health bar" })
-        and not ContainsAny(text, {
-            "class power", "class powers", "class resource", "class resources",
-            "second hp", "second player hp", "duplicate hp", "duplicate health",
-        }) then
+    if not ContainsAny(text, FeaturesPhrases[69]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[70])
+        and not ContainsAny(text, FeaturesPhrases[71]) then
         return nil
     end
 
@@ -573,87 +500,87 @@ function A._ParseClassPowerPlayerHPDetailShortcut(text, raw)
     local summary
     local fallback = 1
 
-    if ContainsAny(text, { "use player text", "player text" }) then
+    if ContainsAny(text, FeaturesPhrases[72]) then
         key = "bars.playerHPBarUsePlayerText"
         label = "Class Resources Player HP Use Player Text"
-    elseif ContainsAny(text, { "reverse text", "reversed text" }) then
+    elseif ContainsAny(text, FeaturesPhrases[73]) then
         key = "bars.playerHPBarTextReverse"
         label = "Class Resources Player HP Reverse Text"
-    elseif ContainsAny(text, { "left text", "left slot" }) then
+    elseif ContainsAny(text, FeaturesPhrases[74]) then
         key = "bars.playerHPBarTextLeft"
         label = "Class Resources Player HP Left Text"
-    elseif ContainsAny(text, { "center text", "centre text", "middle text", "center slot", "centre slot", "middle slot" }) then
+    elseif ContainsAny(text, FeaturesPhrases[75]) then
         key = "bars.playerHPBarTextCenter"
         label = "Class Resources Player HP Center Text"
-    elseif ContainsAny(text, { "right text", "right slot" }) then
+    elseif ContainsAny(text, FeaturesPhrases[76]) then
         key = "bars.playerHPBarTextRight"
         label = "Class Resources Player HP Right Text"
-    elseif ContainsAny(text, { "text delimiter", "text separator", "delimiter", "separator" }) then
+    elseif ContainsAny(text, FeaturesPhrases[77]) then
         key = "bars.playerHPBarTextSeparator"
         label = "Class Resources Player HP Text Delimiter"
-    elseif ContainsAny(text, { "text size", "font size", "text font" }) then
+    elseif ContainsAny(text, FeaturesPhrases[78]) then
         key = "bars.playerHPBarTextSize"
         label = "Class Resources Player HP Text Size"
-    elseif ContainsAny(text, { "text x", "text offset x" }) then
+    elseif ContainsAny(text, FeaturesPhrases[79]) then
         key = "bars.playerHPBarTextOffsetX"
         label = "Class Resources Player HP Text Offset X"
-    elseif ContainsAny(text, { "text y", "text offset y" }) then
+    elseif ContainsAny(text, FeaturesPhrases[80]) then
         key = "bars.playerHPBarTextOffsetY"
         label = "Class Resources Player HP Text Offset Y"
-    elseif ContainsAny(text, { " text", " hp text", "health text" }) then
+    elseif ContainsAny(text, FeaturesPhrases[81]) then
         key = "bars.playerHPBarTextEnabled"
         label = "Class Resources Player HP Text"
-    elseif ContainsAny(text, { "background texture", "bg texture" }) then
+    elseif ContainsAny(text, FeaturesPhrases[82]) then
         key = "bars.playerHPBarBgTexture"
         label = "Class Resources Player HP Background Texture"
-    elseif ContainsAny(text, { "foreground texture", "texture" }) then
+    elseif ContainsAny(text, FeaturesPhrases[83]) then
         key = "bars.playerHPBarTexture"
         label = "Class Resources Player HP Foreground Texture"
-    elseif ContainsAny(text, { "background opacity", "background alpha", "bg opacity", "bg alpha" }) then
+    elseif ContainsAny(text, FeaturesPhrases[84]) then
         key = "bars.playerHPBarBgAlpha"
         label = "Class Resources Player HP Background Opacity"
         fallback = 0.05
-    elseif ContainsAny(text, { "width mode", "follows class resource", "follow class resource", "follows class", "follow class" }) then
+    elseif ContainsAny(text, FeaturesPhrases[85]) then
         key = "bars.playerHPBarWidthMode"
         label = "Class Resources Player HP Width Mode"
-    elseif ContainsAny(text, { "anchor", "anchoring", "above", "below", "top", "bottom" }) then
+    elseif ContainsAny(text, FeaturesPhrases[86]) then
         key = "bars.playerHPBarAnchor"
         label = "Class Resources Player HP Anchor"
-    elseif ContainsAny(text, { "smooth fill", "smooth hp", "smooth health" }) then
+    elseif ContainsAny(text, FeaturesPhrases[87]) then
         key = "bars.playerHPBarSmoothFill"
         label = "Class Resources Player HP Smooth Fill"
-    elseif ContainsAny(text, { "color mode", "colour mode", " hp color", " hp colour", "health color", "health colour" }) then
+    elseif ContainsAny(text, FeaturesPhrases[88]) then
         key = "bars.playerHPBarColorMode"
         label = "Class Resources Player HP Color Mode"
-    elseif ContainsAny(text, { "orb size", "sphere size" }) then
+    elseif ContainsAny(text, FeaturesPhrases[89]) then
         key = "bars.playerHPBarOrbSize"
         label = "Class Resources Player HP Orb Size"
-    elseif ContainsAny(text, { "shape", "orb", "bar shape" }) then
+    elseif ContainsAny(text, FeaturesPhrases[90]) then
         key = "bars.playerHPBarShape"
         label = "Class Resources Player HP Shape"
-    elseif ContainsAny(text, { "frame level", "framelevel", "layer", "z layer", "z level", "strata" }) then
+    elseif ContainsAny(text, FeaturesPhrases[91]) then
         key = "bars.playerHPBarFrameLevelOffset"
         label = "Class Resources Player HP Frame Level"
-    elseif ContainsAny(text, { "gap", "gaps", "spacing", "space", "distance" }) then
+    elseif ContainsAny(text, FeaturesPhrases[92]) then
         key = "bars.playerHPBarGap"
         label = "Class Resources Player HP Gap"
-    elseif ContainsAny(text, { "outline", "border", "outline width", "border width", "outline thickness", "border thickness" }) then
+    elseif ContainsAny(text, FeaturesPhrases[93]) then
         key = "bars.playerHPBarOutline"
         label = "Class Resources Player HP Outline"
-    elseif ContainsAny(text, { " x", "x offset", "offset x", "left", "right" }) then
+    elseif ContainsAny(text, FeaturesPhrases[94]) then
         key = "bars.playerHPBarOffsetX"
         label = "Class Resources Player HP Offset X"
-    elseif ContainsAny(text, { " y", "y offset", "offset y", "up", "down" }) then
+    elseif ContainsAny(text, FeaturesPhrases[95]) then
         key = "bars.playerHPBarOffsetY"
         label = "Class Resources Player HP Offset Y"
-    elseif ContainsAny(text, { "width", "wide", "wider", "narrower" }) then
+    elseif ContainsAny(text, FeaturesPhrases[96]) then
         key = "bars.playerHPBarWidth"
         label = "Class Resources Player HP Width"
         fallback = 10
-    elseif ContainsAny(text, { "height", "tall", "taller", "shorter" }) then
+    elseif ContainsAny(text, FeaturesPhrases[97]) then
         key = "bars.playerHPBarHeight"
         label = "Class Resources Player HP Height"
-    elseif ContainsAny(text, { "hp bar", "health bar", "player hp", "player health", "second hp", "duplicate hp" }) then
+    elseif ContainsAny(text, FeaturesPhrases[98]) then
         key = "bars.playerHPBarEnabled"
         label = "Class Resources Player HP Bar"
     else
@@ -684,15 +611,8 @@ end
 
 function A._ParseClassPowerEmpoweredComboShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if not ContainsAny(text, {
-        "empowered combo point", "empowered combo points",
-        "charged combo point", "charged combo points",
-        "combo point charges",
-    }) then return nil end
-    if ContainsAny(text, {
-        "color", "colour", "background", "bg", "text", "number", "font",
-        "size", "width", "height", "gap", "spacing", "anchor", "move",
-    }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[99]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[100]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     local setting = ClassPowerSetting("bars.showChargedComboPoints")
@@ -707,11 +627,8 @@ end
 
 function A._ParseClassPowerRuneTimeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if not ContainsAny(text, { "rune time", "rune timer", "rune timers", "rune cooldown", "rune cooldowns" }) then return nil end
-    if ContainsAny(text, {
-        "color", "colour", "background", "bg", "font", "size",
-        "width", "height", "gap", "spacing", "anchor", "move",
-    }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[101]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[102]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     local setting = ClassPowerSetting("bars.runeShowTime")
@@ -753,10 +670,7 @@ local CLASS_POWER_DISPLAY_BOOLEAN_SHORTCUTS = {
 
 function A._ParseClassPowerDisplayBooleanShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, {
-        "color", "colour", "background", "bg", "font", "size",
-        "width", "height", "gap", "spacing", "anchor", "move",
-    }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[103]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     for i = 1, #CLASS_POWER_DISPLAY_BOOLEAN_SHORTCUTS do
@@ -778,9 +692,9 @@ end
 
 function A._ParseClassPowerColorModeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "background", "bg", "font", "size", "width", "height", "anchor", "move" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[104]) then return nil end
 
-    if ContainsAny(text, { "color by type", "colour by type", "resource type colors", "resource type colours", "class resource class colors", "class resource class colours" }) then
+    if ContainsAny(text, FeaturesPhrases[105]) then
         local value = DetectBoolean(text)
         if value == nil then return nil end
         local setting = ClassPowerSetting("bars.classPowerColorByType")
@@ -793,7 +707,7 @@ function A._ParseClassPowerColorModeShortcut(text)
         }
     end
 
-    if ContainsAny(text, { "combo point color mode", "combo point colour mode", "combo point slot mode", "combo slot mode", "combo point colors", "combo point colours", "combo colors", "combo colours" }) then
+    if ContainsAny(text, FeaturesPhrases[106]) then
         if ExtractColor and ExtractColor(text) ~= nil then return nil end
         local setting = ClassPowerSetting("bars.classPowerComboPointColorMode")
         if not setting then return nil end
@@ -812,8 +726,8 @@ end
 
 function A._ParseClassPowerSeparatorShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if not ContainsAny(text, { "separator", "separators", "divider", "dividers", "tick", "ticks" }) then return nil end
-    if ContainsAny(text, { "gap", "gaps", "spacing", "space", "spaces", "distance", "text", "font" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[107]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[108]) then return nil end
     local setting = ClassPowerSetting("bars.classPowerTickWidth")
     if not setting then return nil end
     local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 1)
@@ -832,13 +746,9 @@ end
 
 function A._ParseClassPowerGapShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, {
-        "player hp", "player hp bar", "player health", "player health bar",
-        "class resource hp", "class resources hp", "class resource health", "class resources health",
-        "second hp", "second player hp", "duplicate hp", "duplicate health",
-    }) then return nil end
-    if not ContainsAny(text, { "gap", "gaps", "spacing", "space", "spaces", "distance", "pip gap", "point gap" }) then return nil end
-    if ContainsAny(text, { "text", "font", "outline", "border" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[109]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[110]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[111]) then return nil end
     local setting = ClassPowerSetting("bars.classPowerGap")
     if not setting then return nil end
     local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 1)
@@ -857,17 +767,12 @@ end
 
 function A._ParseClassPowerBackgroundShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "resource bar", "resource bars", "power bar", "power bars" })
-        and not ContainsAny(text, {
-            "class power", "class powers", "class resource", "class resources",
-            "combo point", "combo points", "holy power", "soul shard", "soul shards",
-            "rune", "runes", "chi", "arcane charge", "arcane charges", "essence",
-            "maelstrom", "ebon might", "insanity", "stagger", "eclipse",
-        }) then
+    if ContainsAny(text, FeaturesPhrases[112])
+        and not ContainsAny(text, FeaturesPhrases[113]) then
         return nil
     end
-    if not ContainsAny(text, { "background", "bg", "empty background" }) then return nil end
-    if ContainsAny(text, { "color", "colour", "texture" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[114]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[115]) then return nil end
     local setting = ClassPowerSetting("bars.classPowerBgAlpha")
     if not setting then return nil end
     local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 0.05)
@@ -878,8 +783,8 @@ function A._ParseClassPowerBackgroundShortcut(text)
     end
     if value == nil and relativeDelta == nil then
         local bool = DetectBoolean(text)
-        if bool == nil and ContainsAny(text, { "hide", "remove", "without", "no background" }) then bool = false end
-        if bool == nil and ContainsAny(text, { "show", "enable", "turn on", "with background" }) then bool = true end
+        if bool == nil and ContainsAny(text, FeaturesPhrases[116]) then bool = false end
+        if bool == nil and ContainsAny(text, FeaturesPhrases[117]) then bool = true end
         if bool == nil then return nil end
         value = bool and 0.3 or 0
     end
@@ -893,26 +798,22 @@ end
 
 function A._ParseClassPowerOutlineOpacityShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, {
-        "player hp", "player hp bar", "player health", "player health bar",
-        "class resource hp", "class resources hp", "class resource health", "class resources health",
-        "second hp", "second player hp", "duplicate hp", "duplicate health",
-    }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[118]) then return nil end
 
     local key
     local label
     local summary
     local fallback = 1
-    if ContainsAny(text, { "outline", "border", "outline width", "border width", "outline thickness", "border thickness" }) then
+    if ContainsAny(text, FeaturesPhrases[119]) then
         key = "bars.classPowerOutline"
         label = "Class Resource Outline"
         summary = "Adjusts Class Resource outline thickness."
-    elseif ContainsAny(text, { "filled opacity", "filled alpha", "active opacity" }) then
+    elseif ContainsAny(text, FeaturesPhrases[120]) then
         key = "bars.classPowerFilledAlpha"
         label = "Class Resource Filled Opacity"
         summary = "Adjusts the opacity of filled Class Resource pips."
         fallback = 0.05
-    elseif ContainsAny(text, { "empty opacity", "empty alpha", "inactive opacity" }) then
+    elseif ContainsAny(text, FeaturesPhrases[121]) then
         key = "bars.classPowerEmptyAlpha"
         label = "Class Resource Empty Opacity"
         summary = "Adjusts the opacity of empty Class Resource pips."
@@ -947,17 +848,12 @@ end
 
 function A._ParseClassPowerTextureShortcut(text, raw)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, {
-        "player hp", "player hp bar", "player health", "player health bar",
-        "class resource hp", "class resources hp", "class resource health", "class resources health",
-        "second hp", "second player hp", "duplicate hp", "duplicate health",
-        "detached power", "alt mana", "alternative mana",
-    }) then return nil end
-    if not ContainsAny(text, { "texture", "foreground texture", "background texture", "bg texture" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[122]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[123]) then return nil end
 
     local key
     local label
-    if ContainsAny(text, { "background texture", "bg texture" }) then
+    if ContainsAny(text, FeaturesPhrases[124]) then
         key = "bars.classPowerBgTexture"
         label = "Class Resource Background Texture"
     else
@@ -978,26 +874,21 @@ function A._ParseClassPowerTextureShortcut(text, raw)
 end
 
 function A._ParseClassPowerDetachedPowerBarDetailShortcut(text, raw)
-    if not ContainsAny(text, {
-        "detached power", "detached power bar", "detached mana", "detached mana bar",
-        "class resources player power", "class resources player power bar",
-        "class resource player power", "class resource player power bar",
-        "player power in class resources", "player power bar in class resources",
-    }) then return nil end
-    if ContainsAny(text, { "player hp", "player health", "second hp", "duplicate hp", "alt mana", "alternative mana" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[125]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[126]) then return nil end
 
     local key
     local label
     local value
     local relativeDelta
 
-    if ContainsAny(text, { "width mode", "width source", "follows cooldown", "follows tracked buff" }) then
+    if ContainsAny(text, FeaturesPhrases[127]) then
         key = "bars.detachedPowerBarWidthMode"
         label = "Detached Power Bar Width Mode"
         local setting = ClassPowerSetting(key)
         value = setting and EnumValueForText(setting, text) or nil
-    elseif ContainsAny(text, { "texture", "foreground texture", "background texture", "bg texture" }) then
-        if ContainsAny(text, { "background texture", "bg texture" }) then
+    elseif ContainsAny(text, FeaturesPhrases[128]) then
+        if ContainsAny(text, FeaturesPhrases[129]) then
             key = "bars.detachedPowerBarBgTexture"
             label = "Detached Power Bar Background Texture"
         else
@@ -1006,7 +897,7 @@ function A._ParseClassPowerDetachedPowerBarDetailShortcut(text, raw)
         end
         local setting = ClassPowerSetting(key)
         value = setting and ValueForRegistrySetting and ValueForRegistrySetting(setting, text, raw or text) or nil
-    elseif ContainsAny(text, { "outline", "border", "outline width", "border width", "outline thickness", "border thickness" }) then
+    elseif ContainsAny(text, FeaturesPhrases[130]) then
         key = "bars.detachedPowerBarOutline"
         label = "Detached Power Bar Outline"
         local setting = ClassPowerSetting(key)
@@ -1034,16 +925,16 @@ function A._ParseClassPowerDetachedPowerBarDetailShortcut(text, raw)
 end
 
 function A._ParseClassPowerAltManaShortcut(text, raw)
-    if not ContainsAny(text, { "alt mana", "alternative mana", "secondary mana", "dual resource mana" }) then return nil end
-    if ContainsAny(text, { "detached power", "player hp", "second hp", "duplicate hp" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[131]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[132]) then return nil end
 
     local key
     local label
     local fallback = 1
-    if ContainsAny(text, { "height", "tall", "taller", "shorter" }) then
+    if ContainsAny(text, FeaturesPhrases[133]) then
         key = "bars.altManaHeight"
         label = "Alternative Mana Height"
-    elseif ContainsAny(text, { "y offset", "offset y", " y", "up", "down" }) then
+    elseif ContainsAny(text, FeaturesPhrases[134]) then
         key = "bars.altManaOffsetY"
         label = "Alternative Mana Offset Y"
     else
@@ -1072,8 +963,8 @@ end
 
 function A._ParseClassPowerMoveShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "text", "number", "font", "detached power", "alt mana", "alternative mana" }) then return nil end
-    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[135]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[136]) then return nil end
     local direction = DetectDirection(text, {})
     if not direction then return nil end
     local key = (direction == "left" or direction == "right") and "bars.classPowerOffsetX" or "bars.classPowerOffsetY"
@@ -1090,26 +981,14 @@ function A._ParseClassPowerMoveShortcut(text)
 end
 
 local function HasClassPowerDetachedPlayerPowerIntent(text)
-    if ContainsAny(text, { "player hp", "player health", "second hp", "second player hp", "duplicate hp", "alt mana", "alternative mana" }) then return false end
-    if ContainsAny(text, {
-        "class resources player power", "class resource player power", "class power player power",
-        "class resources player power bar", "class resource player power bar", "class power player power bar",
-        "attached player power", "attached player power bar", "detached player power", "detached player power bar",
-        "klassenressourcen spieler energie", "klassenressourcen spieler energieleiste",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[137]) then return false end
+    if ContainsAny(text, FeaturesPhrases[138]) then
         return true
     end
-    if HasClassPowerIntent(text) and ContainsAny(text, {
-        "detached power", "detached power bar", "detached mana", "detached mana bar",
-        "player power", "player power bar", "player mana", "player mana bar",
-        "spieler energie", "spieler energieleiste", "abgekoppelte energie", "abgekoppelte energieleiste",
-    }) then
+    if HasClassPowerIntent(text) and ContainsAny(text, FeaturesPhrases[139]) then
         return true
     end
-    if M and M.activeKey == "classpower" and ContainsAny(text, {
-        "detached power", "detached power bar", "player power", "player power bar",
-        "power area", "power section", "spieler energie", "energieleiste",
-    }) then
+    if M and M.activeKey == "classpower" and ContainsAny(text, FeaturesPhrases[140]) then
         return true
     end
     return false
@@ -1159,71 +1038,51 @@ function A._ParseClassPowerDetachedPlayerPowerShortcut(text, raw)
     local direction = DetectDirection(text, {})
     local change
 
-    if ContainsAny(text, {
-        "anchor to class", "anchor to class resource", "anchor to class resources",
-        "anchor detached power to class", "anchor detached power to class resource", "anchor detached power to class resources",
-        "anchor detached power bar to class", "anchor detached power bar to class resource", "anchor detached power bar to class resources",
-        "anchor player power to class", "anchor player power bar to class",
-        "anchor class resources player power", "anchor class resource player power", "anchor class power player power",
-        "anchor class resources player power bar", "anchor class resource player power bar", "anchor class power player power bar",
-        "player power to class resource", "player power to class resources", "player power bar to class resource",
-        "power bar to class resource", "attached to class resource", "follow class resource",
-        "an klassenressource ankern", "an klassenressourcen ankern",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[141]) then
         key = "detachedPowerBarAnchorToClassPower"
         value = DetectBoolean(text)
-        if value == nil then value = not ContainsAny(text, { "off", "disable", "disabled", "no", "not", "detach", "disconnect", "aus", "deaktivieren", "nicht" }) end
+        if value == nil then value = not ContainsAny(text, FeaturesPhrases[142]) end
         change = PlayerChange(key, value)
-    elseif ContainsAny(text, {
-        "detached power sync class resource", "detached power sync class resources",
-        "detached power bar sync class resource", "detached power bar sync class resources",
-        "sync width", "sync to class", "sync with class", "match class resource width", "same width as class resource",
-        "class resources player power sync", "class resources player power sync width",
-        "class resources player power bar sync", "class resources player power bar sync width",
-        "player power sync class resource", "player power bar sync class resource",
-        "sync class resources player power", "sync class resources player power width",
-        "sync class resources player power bar", "sync class resources player power bar width",
-        "breite synchron", "gleiche breite",
-    }) then
+    elseif ContainsAny(text, FeaturesPhrases[143]) then
         key = "detachedPowerBarSyncClassPower"
         value = DetectBoolean(text)
-        if value == nil then value = not ContainsAny(text, { "manual", "off", "disable", "disabled", "no", "not", "aus", "deaktivieren", "nicht" }) end
+        if value == nil then value = not ContainsAny(text, FeaturesPhrases[144]) end
         change = PlayerChange(key, value)
-    elseif ContainsAny(text, { "detach", "detached", "undock", "separate", "separated", "enable", "show", "attach", "reattach", "dock", "hide", "disable", "abkoppeln", "abgekoppelt", "ankoppeln", "anzeigen", "ausblenden" }) then
+    elseif ContainsAny(text, FeaturesPhrases[145]) then
         key = "powerBarDetached"
-        if ContainsAny(text, { "attach", "reattach", "dock", "ankoppeln" }) then
+        if ContainsAny(text, FeaturesPhrases[146]) then
             value = false
-        elseif ContainsAny(text, { "detach", "detached", "undock", "separate", "separated", "abkoppeln", "abgekoppelt" }) then
+        elseif ContainsAny(text, FeaturesPhrases[147]) then
             value = true
         else
             value = DetectBoolean(text)
         end
         if value ~= nil then change = PlayerChange(key, value) end
-    elseif ContainsAny(text, { "text on bar", "power text on bar", "text inside", "text auf leiste", "text in leiste" }) then
+    elseif ContainsAny(text, FeaturesPhrases[148]) then
         key = "detachedPowerBarTextOnBar"
         value = DetectBoolean(text)
         if value == nil then value = true end
         change = PlayerChange(key, value)
-    elseif ContainsAny(text, { "width", "wide", "wider", "narrower", "breite", "breiter", "schmaler" }) then
+    elseif ContainsAny(text, FeaturesPhrases[149]) then
         change = NumberPlayerChange("detachedPowerBarWidth", text, 10)
-    elseif ContainsAny(text, { "shape", "form", "orb", "round", "crystal", "bar", "follow class", "sphere", "kugel", "rund", "kristall" })
-        and not ContainsAny(text, { "texture", "foreground", "background", "outline", "border", "color", "colour", "textur", "vordergrund", "hintergrund", "rahmen", "farbe" }) then
+    elseif ContainsAny(text, FeaturesPhrases[150])
+        and not ContainsAny(text, FeaturesPhrases[151]) then
         key = "detachedPowerBarShape"
         local setting = PlayerSetting(key)
         value = setting and EnumValueForText(setting, text) or nil
         if value ~= nil then change = PlayerChange(key, value) end
-    elseif ContainsAny(text, { "orb size", "sphere size", "kugel groesse", "orb groesse" }) then
+    elseif ContainsAny(text, FeaturesPhrases[152]) then
         change = NumberPlayerChange("detachedPowerOrbSize", text, 4)
-    elseif ContainsAny(text, { "text size", "font size", "power text size", "schriftgroesse", "textgroesse" }) then
+    elseif ContainsAny(text, FeaturesPhrases[153]) then
         change = NumberPlayerChange("powerFontSize", text, 1)
-    elseif ContainsAny(text, { "frame level", "framelevel", "layer", "strata", "ebene", "schicht" }) then
+    elseif ContainsAny(text, FeaturesPhrases[154]) then
         change = NumberPlayerChange("detachedPowerBarFrameLevelOffset", text, 1)
-    elseif ContainsAny(text, { "height", "tall", "higher", "lower", "hoehe", "hoeher", "niedriger" }) then
+    elseif ContainsAny(text, FeaturesPhrases[155]) then
         change = NumberPlayerChange("detachedPowerBarHeight", text, 1)
-    elseif direction or ContainsAny(text, { "x", "y", "offset", "move", "nudge", "shift", "verschiebe", "versatz", "position" }) then
+    elseif direction or ContainsAny(text, FeaturesPhrases[156]) then
         local axis
-        if ContainsAny(text, { "x", "x offset", "offset x", "horizontal", "x versatz" }) then axis = "x" end
-        if ContainsAny(text, { "y", "y offset", "offset y", "vertical", "y versatz" }) then axis = "y" end
+        if ContainsAny(text, FeaturesPhrases[157]) then axis = "x" end
+        if ContainsAny(text, FeaturesPhrases[158]) then axis = "y" end
         if not axis and direction then axis = (direction == "left" or direction == "right") and "x" or "y" end
         if axis == "x" then
             change = NumberPlayerChange("detachedPowerBarOffsetX", text, 10, direction)
@@ -1315,7 +1174,7 @@ function A._GameplayShortcutSpec(text)
             local spec = specs[i]
             if ContainsAny(text, spec.pageTerms) then return spec end
         end
-        if ContainsAny(text, { "timer" }) and not ContainsAny(text, { "enter", "leave", "state" }) then
+        if ContainsAny(text, FeaturesPhrases[159]) and not ContainsAny(text, FeaturesPhrases[160]) then
             return specs[1]
         end
     end
@@ -1333,13 +1192,13 @@ function A._GameplayShortcutChange(key, value, relativeDelta, direction, label, 
 end
 
 function A._ParseGameplayTextValueShortcut(text, raw)
-    if ContainsAny(text, { "color", "colour", "farbe" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[161]) then return nil end
     local key
     local label
-    if ContainsAny(text, { "combat enter text", "enter combat text", "combat state enter text" }) then
+    if ContainsAny(text, FeaturesPhrases[162]) then
         key = "gameplay.combatStateEnterText"
         label = "Combat Enter Text"
-    elseif ContainsAny(text, { "combat leave text", "leave combat text", "combat state leave text" }) then
+    elseif ContainsAny(text, FeaturesPhrases[163]) then
         key = "gameplay.combatStateLeaveText"
         label = "Combat Leave Text"
     else
@@ -1370,17 +1229,17 @@ function A._ParseGameplayBooleanShortcut(text)
         end
     end
     if key and value == nil then
-        if ContainsAny(text, { "unlock", "unlocked" }) then
+        if ContainsAny(text, FeaturesPhrases[164]) then
             value = false
-        elseif ContainsAny(text, { "clickable", "mouse input on", "enable mouse input", "accept clicks" }) and tostring(key):find("ClickThrough", 1, true) then
+        elseif ContainsAny(text, FeaturesPhrases[165]) and tostring(key):find("ClickThrough", 1, true) then
             value = false
-        elseif ContainsAny(text, { "lock", "locked", "click through", "click-through", "sync", "same", "ready", "icon", "cooldown swipe" }) then
+        elseif ContainsAny(text, FeaturesPhrases[166]) then
             value = true
         end
     end
     if value == nil then return nil end
     if not key then
-        if ContainsAny(text, { "anchor", "attach", "size", "groesse", "grosse", "font", "duration", "dauer", "offset", "position", "move", "verschiebe", "x", "y", "thickness", "thick", "thin", "dicke", "staerke", "spell", "zauber" }) then
+        if ContainsAny(text, FeaturesPhrases[167]) then
             return nil
         end
         key = spec.enable
@@ -1389,16 +1248,16 @@ function A._ParseGameplayBooleanShortcut(text)
 end
 
 function A._ParseGameplayAnchorShortcut(text)
-    if not ContainsAny(text, { "anchor", "attach", "attached", "from point", "to point", "anker", "ankerpunkt", "anhaengen", "anhaengen an", "von punkt", "zu punkt" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[168]) then return nil end
     local spec = A._GameplayShortcutSpec(text)
     if not spec then return nil end
     local key
     if spec.id == "combatTimer" then
         key = spec.anchor
     elseif spec.id == "playerTotems" then
-        if ContainsAny(text, { "from anchor", "anchor from", "from point", "von anker", "anker von", "von punkt" }) then
+        if ContainsAny(text, FeaturesPhrases[169]) then
             key = spec.anchorFrom
-        elseif ContainsAny(text, { "to anchor", "anchor to", "to point", "attach to", "zu anker", "anker zu", "zu punkt", "anhaengen an" }) then
+        elseif ContainsAny(text, FeaturesPhrases[170]) then
             key = spec.anchorTo
         end
     end
@@ -1416,12 +1275,12 @@ function A._ParseGameplayAnchorShortcut(text)
 end
 
 function A._ParseGameplaySpellIDShortcut(text)
-    if not ContainsAny(text, { "melee range spell", "crosshair melee spell", "crosshair spell id", "combat crosshair spell id", "range check spell" }) then return nil end
-    if ContainsAny(text, { "crosshair", "combat crosshair", "fadenkreuz" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[171]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[172]) then return nil end
     local setting = Registry and Registry:GetSetting("gameplay.nameplateMeleeSpellID")
     if not setting then return nil end
     local value
-    if ContainsAny(text, { "clear", "reset", "none", "no spell" }) then
+    if ContainsAny(text, FeaturesPhrases[173]) then
         value = 0
     else
         value = FirstNumber(text)
@@ -1438,13 +1297,13 @@ end
 function A._ParseGameplayNumberShortcut(text)
     local spec = A._GameplayShortcutSpec(text)
     if not spec then return nil end
-    if ContainsAny(text, { "spell", "spell id", "range check spell" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[174]) then return nil end
     local key
-    if spec.id == "combatState" and ContainsAny(text, { "duration", "time visible", "visible time", "dauer", "anzeigedauer", "sichtbar dauer" }) then
+    if spec.id == "combatState" and ContainsAny(text, FeaturesPhrases[175]) then
         key = spec.duration
-    elseif spec.id == "combatCrosshair" and ContainsAny(text, { "thickness", "thick", "thicker", "thin", "thinner", "dicke", "staerke", "strichstaerke", "duenner", "dunner" }) then
+    elseif spec.id == "combatCrosshair" and ContainsAny(text, FeaturesPhrases[176]) then
         key = spec.thickness
-    elseif ContainsAny(text, { "size", "font size", "text size", "icon size", "bigger", "larger", "smaller", "grow", "shrink", "groesse", "grosse", "groesser", "kleiner" }) then
+    elseif ContainsAny(text, FeaturesPhrases[177]) then
         key = spec.size
     end
     if not key then return nil end
@@ -1483,11 +1342,11 @@ local UNIT_PRESET_DEFAULTS = {
 }
 
 local function GameplayPresetPlacement(text)
-    if ContainsAny(text, { "under", "below", "beneath", "bottom of", "unter", "darunter" }) then return "below" end
-    if ContainsAny(text, { "above", "over", "top of", "ueber", "darueber", "oben" }) then return "above" end
-    if ContainsAny(text, { "left of", "to the left of", "links von" }) then return "left" end
-    if ContainsAny(text, { "right of", "to the right of", "rechts von" }) then return "right" end
-    if ContainsAny(text, { "center on", "centered on", "middle of", "zentriert", "mitte" }) then return "center" end
+    if ContainsAny(text, FeaturesPhrases[178]) then return "below" end
+    if ContainsAny(text, FeaturesPhrases[179]) then return "above" end
+    if ContainsAny(text, FeaturesPhrases[180]) then return "left" end
+    if ContainsAny(text, FeaturesPhrases[181]) then return "right" end
+    if ContainsAny(text, FeaturesPhrases[182]) then return "center" end
     return nil
 end
 
@@ -1591,7 +1450,7 @@ local function GameplayPresetPosition(spec, text, placement)
 end
 
 function A._ParseGameplayPositionPreset(text)
-    if not ContainsAny(text, { "move", "place", "put", "position", "set", "verschiebe", "stelle", "setze" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[183]) then return nil end
     local placement = GameplayPresetPlacement(text)
     if not placement then return nil end
     local spec = A._GameplayShortcutSpec(text)
@@ -1626,13 +1485,13 @@ end
 
 function A._ParseGameplayMoveShortcut(text)
     local direction = DetectDirection(text, {})
-    local movementIntent = ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "x", "y", "horizontal", "vertical" }) or (direction and FirstNumber(text) ~= nil)
+    local movementIntent = ContainsAny(text, FeaturesPhrases[184]) or (direction and FirstNumber(text) ~= nil)
     if not movementIntent then return nil end
     local spec = A._GameplayShortcutSpec(text)
     if not spec then return nil end
     local axis
-    if ContainsAny(text, { "x", "x offset", "offset x", "horizontal" }) then axis = "x" end
-    if ContainsAny(text, { "y", "y offset", "offset y", "vertical" }) then axis = "y" end
+    if ContainsAny(text, FeaturesPhrases[185]) then axis = "x" end
+    if ContainsAny(text, FeaturesPhrases[186]) then axis = "y" end
     if not axis and direction then
         axis = (direction == "left" or direction == "right") and "x" or "y"
     end
@@ -1666,16 +1525,13 @@ function A._ParseGameplayMoveShortcut(text)
 end
 
 local function ParseFontColorAction(text, raw)
-    if not ContainsAny(text, { "font color", "text color", "global font color", "schriftfarbe", "textfarbe" }) then return nil end
-    if ContainsAny(text, {
-            "castbar", "combat", "aura", "stack", "cooldown", "power", "hp", "health",
-            "name", "boss target", "mouseover", "dispel", "bar", "npc", "portrait",
-        })
-        and not ContainsAny(text, { "global", "main", "default" })
+    if not ContainsAny(text, FeaturesPhrases[187]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[188])
+        and not ContainsAny(text, FeaturesPhrases[189])
     then
         return nil
     end
-    if ContainsAny(text, { "reset", "default", "palette", "zuruecksetzen" }) then
+    if ContainsAny(text, FeaturesPhrases[190]) then
         local action = Registry and Registry:GetAction("reset_global_font_color")
         return action and {
             kind = "action",
@@ -1800,12 +1656,12 @@ end
 
 function A._ParseClassPowerColorShortcut(text, raw)
     if not HasClassPowerIntent(text) then return nil end
-    if ContainsAny(text, { "reset", "default", "defaults", "restore", "zuruecksetzen" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[191]) then return nil end
     local token = ClassPowerColorTokenForText(text)
     if not token then return nil end
     local r, g, b, label = ExtractColor(raw, text)
     if not r then return nil end
-    local background = ContainsAny(text, { "background", "bg", "backdrop" })
+    local background = ContainsAny(text, FeaturesPhrases[192])
     local key = (background and "general.classPowerBgColorOverrides." or "general.classPowerColorOverrides.") .. token
     local setting = ClassPowerSetting(key)
     if not setting then return nil end
@@ -1820,19 +1676,11 @@ end
 function A._ParsePowerColorShortcut(text, raw)
     local token = PowerColorTokenForText(text)
     if not token then return nil end
-    if ContainsAny(text, {
-        "power text", "powertext", "mana text", "resource text", "font color", "text color",
-    }) then return nil end
-    if ContainsAny(text, {
-        "class power", "class resource", "combo point", "combo points", "holy power",
-        "soul shard", "soul shards", "chi", "arcane charge", "arcane charges", "runes",
-    }) then return nil end
-    if not ContainsAny(text, {
-        "color", "colors", "colour", "colours", "tint", "power bar", "powerbar",
-        "resource bar", "mana bar", "energy bar", "rage bar",
-    }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[193]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[194]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[195]) then return nil end
 
-    if ContainsAny(text, { "reset", "default", "defaults", "restore", "zuruecksetzen" }) then
+    if ContainsAny(text, FeaturesPhrases[196]) then
         local action = Registry and Registry:GetAction("reset_power_color_token")
         return action and {
             kind = "action",
@@ -1856,12 +1704,9 @@ function A._ParsePowerColorShortcut(text, raw)
 end
 
 local function ParseColorAction(text)
-    if not ContainsAny(text, { "reset", "default", "defaults", "restore", "zuruecksetzen" }) then return nil end
-    if not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint", "gradient" }) then return nil end
-    if ContainsAny(text, {
-        "combo point slot", "combo point slots", "combo slot", "combo slots",
-        "combo point colors", "combo colors", "all combo point colors",
-    }) then
+    if not ContainsAny(text, FeaturesPhrases[197]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[198]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[199]) then
         local action = Registry and Registry:GetAction("reset_class_power_combo_slot_colors")
         return action and {
             kind = "action",
@@ -1873,8 +1718,8 @@ local function ParseColorAction(text)
     end
     local powerToken = PowerColorTokenForText(text)
     if powerToken
-        and ContainsAny(text, { "power color", "power bar", "powerbar", "resource color", "resource bar", "mana color", "rage color", "energy color", "runic power", "astral power", "maelstrom color" })
-        and not ContainsAny(text, { "class power", "class resource", "combo point", "combo points", "holy power", "soul shard", "soul shards", "chi", "arcane charge", "arcane charges", "runes" })
+        and ContainsAny(text, FeaturesPhrases[200])
+        and not ContainsAny(text, FeaturesPhrases[201])
     then
         local action = Registry and Registry:GetAction("reset_power_color_token")
         return action and {
@@ -1886,54 +1731,50 @@ local function ParseColorAction(text)
         } or nil
     end
     local cpToken = ClassPowerColorTokenForText(text)
-    if cpToken and ContainsAny(text, {
-        "class power", "class resource", "resource", "combo", "holy power", "soul", "soul shard",
-        "maelstrom", "astral", "arcane charge", "arcane charges", "eclipse", "stagger",
-        "icicles", "ebon", "whirlwind", "tip of the spear", "insanity", "runes", "chi", "essence",
-    }) then
+    if cpToken and ContainsAny(text, FeaturesPhrases[202]) then
         local action = Registry and Registry:GetAction("reset_class_power_color_token")
         return action and {
             kind = "action",
             action = action,
-            args = { token = cpToken, background = ContainsAny(text, { "background", "bg" }) },
+            args = { token = cpToken, background = ContainsAny(text, FeaturesPhrases[203]) },
             label = "Reset class resource color",
             summary = "Resets a single Class Resource foreground or background color.",
         } or nil
     end
-    if ContainsAny(text, { "castbar", "cast bar" }) then
+    if ContainsAny(text, FeaturesPhrases[204]) then
         return BuildColorResetAction("reset_castbar_colors", "Reset cast bar colors", "Resets cast bar colors through the existing Colors page state.")
     end
-    if ContainsAny(text, { "npc type", "npc role" }) then
+    if ContainsAny(text, FeaturesPhrases[205]) then
         return BuildColorResetAction("reset_npc_type_colors", "Reset NPC type colors", "Resets NPC type colors.")
     end
-    if ContainsAny(text, { "health gradient", "hp gradient", "gradient stop", "gradient stops", "reset gradient" }) then
+    if ContainsAny(text, FeaturesPhrases[206]) then
         return BuildColorResetAction("reset_health_gradient_colors", "Reset health gradient colors", "Resets the low, mid, and high Health Gradient color stops.")
     end
-    if ContainsAny(text, { "unitframe", "unit frame", "npc reaction", "reaction color" }) then
+    if ContainsAny(text, FeaturesPhrases[207]) then
         return BuildColorResetAction("reset_unitframe_colors", "Reset unit frame colors", "Resets unit frame NPC reaction colors.")
     end
-    if ContainsAny(text, { "class color", "class colors", "class bar" }) then
+    if ContainsAny(text, FeaturesPhrases[208]) then
         return BuildColorResetAction("reset_class_colors", "Reset class bar colors", "Resets class bar color overrides.")
     end
-    if ContainsAny(text, { "bar background", "background tint", "bar tint" }) then
+    if ContainsAny(text, FeaturesPhrases[209]) then
         return BuildColorResetAction("reset_bar_background_color", "Reset bar background tint", "Resets the global bar background tint.")
     end
-    if ContainsAny(text, { "bar color", "bar colors", "absorb", "aggro", "purge", "outline", "border" }) then
+    if ContainsAny(text, FeaturesPhrases[210]) then
         return BuildColorResetAction("reset_bar_colors", "Reset bar colors", "Resets bar overlay and border colors.")
     end
-    if ContainsAny(text, { "dispel", "debuff type" }) then
+    if ContainsAny(text, FeaturesPhrases[211]) then
         return BuildColorResetAction("reset_dispel_colors", "Reset dispel colors", "Resets dispel border and debuff-type colors.")
     end
-    if ContainsAny(text, { "gameplay", "combat timer", "combat state", "crosshair" }) then
+    if ContainsAny(text, FeaturesPhrases[212]) then
         return BuildColorResetAction("reset_gameplay_colors", "Reset gameplay colors", "Resets Gameplay color options.")
     end
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "pandemic" }) then
+    if ContainsAny(text, FeaturesPhrases[213]) then
         return BuildColorResetAction("reset_aura_colors", "Reset aura colors", "Resets Aura color options.")
     end
-    if ContainsAny(text, { "portrait" }) then
+    if ContainsAny(text, FeaturesPhrases[214]) then
         return BuildColorResetAction("reset_portrait_colors", "Reset portrait colors", "Resets portrait color options.")
     end
-    if ContainsAny(text, { "resource", "power color", "class power", "class resource", "combo point" }) then
+    if ContainsAny(text, FeaturesPhrases[215]) then
         return BuildColorResetAction("reset_resource_colors", "Reset resource colors", "Resets power and class-resource color overrides.")
     end
     return nil
@@ -1957,57 +1798,25 @@ local function ParseDiagnostic(text)
         } or nil
     end
 
-    local directChangeIntent = ContainsAny(text, {
-        "turn on", "turn off", "enable", "disable", "show", "hide", "set", "make",
-        "move", "put", "send", "bring", "increase", "decrease", "raise", "lower",
-        "an", "aus", "einschalten", "ausschalten", "aktivieren", "deaktivieren",
-        "einblenden", "ausblenden", "zeige", "anzeigen", "verstecke", "setze",
-        "stelle", "mach", "mache", "verschiebe", "erhoehe", "reduziere", "senke",
-    })
-    local explicitTroubleIntent = ContainsAny(text, {
-        "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum",
-        "diagnostik", "diagnosebericht", "fehlersuche", "fehleranalyse",
-        "not showing", "not visible", "not appearing", "not displayed", "not there",
-        "doesnt show", "does not show", "doesnt appear", "does not appear",
-        "cant see", "can't see", "cannot see", "can not see", "missing", "hidden", "invisible",
-        "filtered out", "filtered", "blacklisted", "blocked",
-        "disappeared", "disappear", "gone", "vanished", "broken", "not working", "doesnt work",
-        "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
-        "nicht sichtbar", "zeigt nicht", "verschwunden", "kaputt", "haengt",
-        "fehlt", "versteckt", "unsichtbar", "funktioniert nicht", "geht nicht", "fehler",
-    })
+    local directChangeIntent = ContainsAny(text, FeaturesPhrases[216])
+    local explicitTroubleIntent = ContainsAny(text, FeaturesPhrases[217])
     if directChangeIntent and not explicitTroubleIntent then return nil end
-    if not ContainsAny(text, {
-        "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum",
-        "diagnostik", "diagnosebericht", "fehlersuche", "fehleranalyse",
-        "pruefe", "pruefen", "ueberpruefe", "ueberpruefen", "checke", "check",
-        "not showing", "not visible", "not appearing", "not displayed", "not there",
-        "doesnt show", "does not show", "doesnt appear", "does not appear",
-        "cant see", "can't see", "cannot see", "can not see", "missing", "hidden", "invisible",
-        "filtered out", "filtered", "blacklisted", "blocked",
-        "disappeared", "disappear", "gone", "vanished", "broken", "not working", "doesnt work",
-        "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
-        "nicht sichtbar", "zeigt nicht", "verschwunden", "kaputt", "haengt",
-        "fehlt", "versteckt", "unsichtbar", "funktioniert nicht", "geht nicht", "fehler",
-    }) then return nil end
-    if ContainsAny(text, {
-        "profile mapping", "profile mappings", "spec profile mapping", "spec profile mappings",
-        "broken profile mapping", "broken profile mappings", "broken spec mapping", "broken spec mappings",
-    }) and ContainsAny(text, { "fix", "repair", "clear", "remove", "delete", "loeschen", "reparieren", "beheben" }) then
+    if not ContainsAny(text, FeaturesPhrases[218]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[219]) and ContainsAny(text, FeaturesPhrases[220]) then
         return nil
     end
     local gameplayFeature
-    if ContainsAny(text, { "combat timer", "kampf timer", "kampftimer" }) then
+    if ContainsAny(text, FeaturesPhrases[221]) then
         gameplayFeature = "combatTimer"
-    elseif ContainsAny(text, { "combat enter", "combat leave", "combat state", "combat text", "enter leave", "kampf text", "kampfanzeige" }) then
+    elseif ContainsAny(text, FeaturesPhrases[222]) then
         gameplayFeature = "combatState"
-    elseif ContainsAny(text, { "totem", "totem frame", "statue", "statue frame" }) then
+    elseif ContainsAny(text, FeaturesPhrases[223]) then
         gameplayFeature = "playerTotems"
-    elseif ContainsAny(text, { "crosshair", "combat crosshair", "fadenkreuz" }) then
+    elseif ContainsAny(text, FeaturesPhrases[224]) then
         gameplayFeature = "combatCrosshair"
-    elseif ContainsAny(text, { "gameplay", "gameplay helper", "gameplay helpers", "spielhilfe", "spielhilfen" }) then
+    elseif ContainsAny(text, FeaturesPhrases[225]) then
         gameplayFeature = "all"
-    elseif M and M.activeKey == "gameplay" and ContainsAny(text, { "timer", "helper", "helpers", "not visible", "missing", "hidden", "nicht sichtbar" }) then
+    elseif M and M.activeKey == "gameplay" and ContainsAny(text, FeaturesPhrases[226]) then
         gameplayFeature = "all"
     end
     if gameplayFeature then
@@ -2020,7 +1829,7 @@ local function ParseDiagnostic(text)
             summary = "Checks Gameplay options and suggests clear next steps.",
         } or nil
     end
-    if ContainsAny(text, { "profile", "profiles", "profil", "profile import", "profile export", "spec profile", "profil import", "profil export", "spec profil" }) then
+    if ContainsAny(text, FeaturesPhrases[227]) then
         local action = Registry and Registry:GetAction("diagnose_profile_status")
         return action and {
             kind = "action",
@@ -2031,7 +1840,7 @@ local function ParseDiagnostic(text)
         } or nil
     end
     if ContainsAny(text, CLASS_POWER_TERMS)
-        or ContainsAny(text, { "class resource", "class resources", "class power", "class bar", "resource bar", "combo point", "combo points", "holy power", "soul shard", "soul shards", "rune", "runes" })
+        or ContainsAny(text, FeaturesPhrases[228])
     then
         local action = Registry and Registry:GetAction("diagnose_class_power_status")
         return action and {
@@ -2042,13 +1851,13 @@ local function ParseDiagnostic(text)
             summary = "Checks Class Resource visibility, sizing, opacity, width mode, and hide rules.",
         } or nil
     end
-    if ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then
+    if ContainsAny(text, FeaturesPhrases[229]) then
         local groups = DetectGroups(text)
         local units = DetectUnits(text)
         local scope = groups[1] or units[1] or "target"
         if scope == "targettarget" or scope == "focustarget" or scope == "pet" then scope = "target" end
         local lane
-        if ContainsAny(text, { "debuff", "debuffs" }) then lane = "debuff" elseif ContainsAny(text, { "buff", "buffs" }) then lane = "buff" end
+        if ContainsAny(text, FeaturesPhrases[230]) then lane = "debuff" elseif ContainsAny(text, FeaturesPhrases[231]) then lane = "buff" end
         local action = Registry and Registry:GetAction("diagnose_aura_visibility")
         return action and {
             kind = "action",
@@ -2058,7 +1867,7 @@ local function ParseDiagnostic(text)
             summary = "Checks Aura visibility options and suggests clear next steps.",
         } or nil
     end
-    if ContainsAny(text, { "castbar", "cast bar", "cast bars", "casting bar", "zauberleiste" }) then
+    if ContainsAny(text, FeaturesPhrases[232]) then
         local units = DetectUnits(text)
         local unit = units[1] or "target"
         local action = Registry and Registry:GetAction("diagnose_castbar_visibility")
@@ -2070,7 +1879,7 @@ local function ParseDiagnostic(text)
             summary = "Checks current cast bar options and suggests the next step.",
         } or nil
     end
-    if ContainsAny(text, { "detached power", "detached power bar", "power bar", "powerbar", "resource bar" }) then
+    if ContainsAny(text, FeaturesPhrases[233]) then
         local units = DetectUnits(text)
         if #units == 0 then
             return {
@@ -2082,13 +1891,9 @@ local function ParseDiagnostic(text)
         end
     end
     local groups = DetectGroups(text)
-    if ContainsAny(text, { "how", "where", "where can", "where do", "help", "explain", "what", "which" })
-        and ContainsAny(text, {
-            "ready check", "readycheck", "status icon", "status icons", "indicator", "indicators",
-            "role icon", "leader icon", "assist icon", "summon icon", "phase icon", "pvp icon",
-            "war mode", "spell indicator", "corner indicator", "raid marker",
-        })
-        and (#groups > 0 or ContainsAny(text, { "group frames", "party frames", "raid frames", "mythic raid frames" }))
+    if ContainsAny(text, FeaturesPhrases[234])
+        and ContainsAny(text, FeaturesPhrases[235])
+        and (#groups > 0 or ContainsAny(text, FeaturesPhrases[236]))
     then
         local action = Registry and Registry:GetAction("assistant_scope_help")
         return action and {
@@ -2099,7 +1904,7 @@ local function ParseDiagnostic(text)
             summary = "Shows Group Indicator help instead of running a visibility diagnosis.",
         } or nil
     end
-    if #groups > 0 or ContainsAny(text, { "group frames", "gruppenframes", "party frames", "raid frames", "mythic raid frames" }) then
+    if #groups > 0 or ContainsAny(text, FeaturesPhrases[237]) then
         local scope = groups[1] or "party"
         if scope == "mythicraid" then scope = "mythicraid" end
         local action = Registry and Registry:GetAction("diagnose_group_visibility")
@@ -2123,7 +1928,7 @@ local function ParseDiagnostic(text)
             summary = "Checks current unit-frame options and suggests the next step.",
         } or nil
     end
-    if ContainsAny(text, { "dashboard", "assistant", "menu", "menu2", "setup", "assistant setup", "menu setup", "navigation", "page stack", "workflow", "setup checklist", "guided setup", "assistent", "menue", "einrichtung", "setup checkliste" })
+    if ContainsAny(text, FeaturesPhrases[238])
         or text == "diagnose setup"
         or text == "diagnostic setup"
         or text == "troubleshoot setup"
@@ -2144,51 +1949,32 @@ local function ParseDiagnostic(text)
 end
 
 local function HasScopedHelpIntent(text, page)
-    if ContainsAny(text, {
-        "help me setup", "help me set up", "help me configure", "help me build",
-        "guide me", "setup guide", "guided setup", "start guide", "start tour",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[239]) then
         return false
     end
-    if ContainsAny(text, {
-        "what can i change", "what can change", "what settings can i change",
-        "what can i do here", "what can i change here", "commands for",
-        "show commands for", "help for", "help with", "help me with",
-        "what can i do on this page", "what can i do on current page",
-        "what can i change on this page", "what can i change on current page",
-        "explain this page", "explain current page", "page help",
-        "help on this page", "help for this page", "commands on this page",
-        "how can i configure this page", "how do i configure this page",
-        "how can i use this page",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[240]) then
         return true
     end
-    if not page and not ContainsAny(text, { "edit mode", "editmode" }) then return false end
-    if ContainsAny(text, {
-        "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
-        "commands", "command examples",
-    }) then
+    if not page and not ContainsAny(text, FeaturesPhrases[241]) then return false end
+    if ContainsAny(text, FeaturesPhrases[242]) then
         return true
     end
-    if page and ContainsAny(text, { "how", "how do", "how can", "how to", "where", "where do", "where can", "where is" })
-        and ContainsAny(text, {
-            "change", "set", "make", "move", "hide", "show", "turn on", "turn off", "enable", "disable",
-            "configure", "adjust", "bigger", "larger", "smaller", "wider", "taller", "lock", "unlock",
-        })
+    if page and ContainsAny(text, FeaturesPhrases[243])
+        and ContainsAny(text, FeaturesPhrases[244])
     then
         return true
     end
-    return page == "profiles" and ContainsAny(text, { "how", "how do", "how to", "why" })
+    return page == "profiles" and ContainsAny(text, FeaturesPhrases[245])
 end
 
 local function ParseScopedHelp(text)
     local action = Registry and Registry:GetAction("assistant_scope_help")
     if not action then return nil end
     local page, label = PageForText(text)
-    local editModeHelp = ContainsAny(text, { "edit mode", "editmode" })
-        and ContainsAny(text, { "help", "hilfe", "explain", "erklaere", "what is", "what can", "how", "how do", "how to", "commands" })
+    local editModeHelp = ContainsAny(text, FeaturesPhrases[246])
+        and ContainsAny(text, FeaturesPhrases[247])
     if not HasScopedHelpIntent(text, page) and not editModeHelp then return nil end
-    if not page and ContainsAny(text, { "here", "current page", "this page" }) then
+    if not page and ContainsAny(text, FeaturesPhrases[248]) then
         page = M and M.activeKey
         label = "current page"
     end
@@ -2203,10 +1989,10 @@ local function ParseScopedHelp(text)
     local frameType = FrameTypeForPage(page)
     if editModeHelp then frameType = "editMode" end
     if group then
-        frameType = ContainsAny(text, { "aura", "auras", "buff", "debuff" }) and "groupAura" or "group"
+        frameType = ContainsAny(text, FeaturesPhrases[249]) and "groupAura" or "group"
         label = GroupDisplayLabel(group)
     elseif unit then
-        frameType = ContainsAny(text, { "castbar", "cast bar" }) and "castbar" or "unitframe"
+        frameType = ContainsAny(text, FeaturesPhrases[250]) and "castbar" or "unitframe"
         label = UnitDisplayLabel(unit)
     elseif not frameType then
         frameType = DetectFrameType(text, {})
@@ -2221,11 +2007,11 @@ local function ParseScopedHelp(text)
 end
 
 local function SupportLinkForText(text)
-    if ContainsAny(text, { "discord", "discord link", "support discord" }) then return "discord" end
-    if ContainsAny(text, { "patreon", "patreon link" }) then return "patreon" end
-    if ContainsAny(text, { "paypal", "pay pal", "paypal link" }) then return "paypal" end
-    if ContainsAny(text, { "ko fi", "kofi", "ko-fi" }) then return "kofi" end
-    if ContainsAny(text, { "github", "repository", "repo link" }) then return "github" end
+    if ContainsAny(text, FeaturesPhrases[251]) then return "discord" end
+    if ContainsAny(text, FeaturesPhrases[252]) then return "patreon" end
+    if ContainsAny(text, FeaturesPhrases[253]) then return "paypal" end
+    if ContainsAny(text, FeaturesPhrases[254]) then return "kofi" end
+    if ContainsAny(text, FeaturesPhrases[255]) then return "github" end
     return nil
 end
 
@@ -2250,16 +2036,7 @@ local function EditModeAction(actionKey, args, label, summary)
 end
 
 local function IsBossFramePreviewText(text)
-    return ContainsAny(text, {
-        "boss preview", "boss previews", "boss frame preview", "boss frame previews",
-        "boss frames preview", "boss frames previews", "boss unit preview",
-        "boss unit previews", "boss unitframe preview", "boss unitframe previews",
-        "boss unit frame preview", "boss unit frame previews", "boss vorschau",
-        "boss frames vorschau", "boss frame vorschau",
-    }) and not ContainsAny(text, {
-        "castbar", "cast bar", "castbars", "cast bars", "zauberleiste",
-        "boss target", "target border", "target highlight",
-    })
+    return ContainsAny(text, FeaturesPhrases[256]) and not ContainsAny(text, FeaturesPhrases[257])
 end
 
 local function ParseBossFramePreviewShortcut(text)
@@ -2268,13 +2045,13 @@ local function ParseBossFramePreviewShortcut(text)
 end
 
 local function GroupPreviewScopeForText(text)
-    if ContainsAny(text, { "mythic raid", "mythicraid", "mythic raid frame", "mythic raid frames", "mythicraid frame", "mythicraid frames" }) then
+    if ContainsAny(text, FeaturesPhrases[258]) then
         return "mythicraid"
     end
-    if ContainsAny(text, { "raid", "raid frame", "raid frames", "raidframe", "raidframes", "schlachtzug" }) then
+    if ContainsAny(text, FeaturesPhrases[259]) then
         return "raid"
     end
-    if ContainsAny(text, { "party", "party frame", "party frames", "partyframe", "partyframes", "gruppe" }) then
+    if ContainsAny(text, FeaturesPhrases[260]) then
         return "party"
     end
     local groups = DetectGroups(text)
@@ -2283,102 +2060,30 @@ end
 
 local function HasEditModeHUDControlIntent(text)
     if not HasEditModeContext(text) then return false end
-    return ContainsAny(text, {
-        "preview", "previews", "aura", "auras", "group preview", "group previews",
-        "party preview", "party previews", "raid preview", "raid previews",
-        "mythic raid preview", "mythic raid previews", "snap", "snapping",
-        "grid", "grid lines", "grid spacing", "grid size", "raster", "raster groesse", "raster abstand",
-        "rasterlinien", "hilfsraster", "background opacity",
-        "background alpha", "bg opacity", "bg alpha", "background overlay",
-        "hintergrund transparenz", "hintergrund deckkraft", "hintergrund overlay",
-        "cdm", "cooldown manager", "anchor picker", "pick anchor", "select anchor",
-        "ankerwahl", "anker auswahl", "reset", "undo", "redo",
-    })
+    return ContainsAny(text, FeaturesPhrases[261])
 end
 
 local function ParseEditModeHUDControl(text)
     local hasEditContext = HasEditModeContext(text)
-    local previewWord = ContainsAny(text, { "preview", "previews", "preview mode", "preview modes", "vorschau", "platzhalter", "testdaten" })
-    local hasExplicitAuraPreview = ContainsAny(text, {
-        "preview auras", "preview aura", "preview aura icons", "preview auras icons",
-        "aura preview", "aura previews", "aura icon preview", "aura icon previews", "aura icons",
-        "aura preview icons", "aura mover", "aura movers", "aura mover boxes",
-        "auren vorschau", "vorschau auren", "auren symbole", "auren icons",
-        "auren platzhalter", "aura platzhalter",
-    }) and (hasEditContext or previewWord or ContainsAny(text, { "mover", "movers", "vorschau", "toggle", "umschalten" }))
+    local previewWord = ContainsAny(text, FeaturesPhrases[262])
+    local hasExplicitAuraPreview = ContainsAny(text, FeaturesPhrases[263]) and (hasEditContext or previewWord or ContainsAny(text, FeaturesPhrases[264]))
     local hasAuraPreview = hasExplicitAuraPreview
-        or (hasEditContext and ContainsAny(text, { "auras", "aura", "auren" }) and (previewWord or DetectBoolean(text) ~= nil or ContainsAny(text, { "toggle", "umschalten" })))
-    local hasGroupPreview = ContainsAny(text, {
-        "gf preview", "gf previews", "group frame preview", "group frame previews",
-        "group frames preview", "group frames previews", "group preview", "group previews",
-        "party frame preview", "party frame previews", "party frames preview",
-        "party frames previews", "party preview", "party previews",
-        "raid frame preview", "raid frame previews", "raid frames preview",
-        "raid frames previews", "raid preview", "raid previews",
-        "mythic raid frame preview", "mythic raid frame previews",
-        "mythic raid frames preview", "mythic raid frames previews",
-        "mythic raid preview", "mythic raid previews",
-        "party raid preview", "party raid previews", "gruppenframes preview",
-        "gruppenframes previews", "gruppen preview", "gruppen previews",
-        "gruppenframes vorschau", "gruppen vorschau", "gruppe vorschau",
-        "party vorschau", "raid vorschau", "schlachtzug vorschau",
-    }) or (hasEditContext and previewWord and ContainsAny(text, {
-        "gf", "group frame", "group frames", "party", "party frame", "party frames",
-        "raid", "raid frame", "raid frames", "mythic raid", "mythicraid",
-    }))
-        or (hasEditContext and ContainsAny(text, { "gf" }) and (DetectBoolean(text) ~= nil or ContainsAny(text, { "toggle", "umschalten" })))
+        or (hasEditContext and ContainsAny(text, FeaturesPhrases[265]) and (previewWord or DetectBoolean(text) ~= nil or ContainsAny(text, FeaturesPhrases[266])))
+    local hasGroupPreview = ContainsAny(text, FeaturesPhrases[267]) or (hasEditContext and previewWord and ContainsAny(text, FeaturesPhrases[268]))
+        or (hasEditContext and ContainsAny(text, FeaturesPhrases[269]) and (DetectBoolean(text) ~= nil or ContainsAny(text, FeaturesPhrases[270])))
     local hasBossPreview = previewWord and IsBossFramePreviewText(text)
-    local hasUnitPreview = ContainsAny(text, {
-        "edit mode preview", "edit mode previews", "unit preview", "unit previews",
-        "unit frame preview", "unit frame previews", "unitframe preview", "unitframe previews",
-        "preview frames", "preview frame", "frame preview", "frame previews",
-        "mover preview", "mover previews", "placeholder data", "placeholder frame",
-        "placeholder frames", "preview placeholders", "fake frame", "fake frames",
-        "test frame", "test frames", "vorschau frames", "frame vorschau",
-        "platzhalter", "platzhalter frames", "testdaten", "vorschau daten",
-    }) or (hasEditContext and previewWord and not hasAuraPreview and not hasGroupPreview)
-    local hasSnap = ContainsAny(text, {
-        "snap", "snapping", "grid snap", "snap frames", "snap to grid", "einrasten",
-        "raster snap", "raster einrasten", "am raster ausrichten", "einrasten am raster", "rasterfang",
-    })
-    local hasGrid = (hasEditContext and ContainsAny(text, {
-        "grid", "grid line", "grid lines", "grid overlay", "grid overlays",
-        "edit mode grid", "raster", "raster lines", "rasterlinien", "hilfsraster",
-    })) or ContainsAny(text, { "edit mode grid", "msuf edit mode grid", "grid lines in edit mode", "raster groesse", "raster abstand", "rasterweite", "rasterlinien im bearbeitungsmodus" })
-    local hasGridStep = hasGrid and FirstNumber(text) ~= nil and ContainsAny(text, {
-        "grid", "grid spacing", "grid size", "grid step", "spacing", "space",
-        "size", "groesse", "abstand", "rasterweite", "step", "pixel", "pixels", "px",
-    })
-    local hasBackgroundOpacity = (hasEditContext and ContainsAny(text, {
-        "background opacity", "background alpha", "bg opacity", "bg alpha",
-        "background overlay", "overlay opacity", "edit mode background", "edit mode bg",
-        "hintergrund transparenz", "hintergrund deckkraft", "hintergrund alpha", "overlay transparenz",
-    })) or ContainsAny(text, { "edit mode background opacity", "edit mode bg opacity", "bearbeitungsmodus hintergrund transparenz", "bearbeitungsmodus hintergrund deckkraft" })
-    local hasCDM = ContainsAny(text, {
-        "cdm", "cooldown manager", "essential cooldown manager", "anchor to cooldown",
-        "cooldown anchor", "cooldown manager anchor", "cooldownmanager", "cooldownmanager anker", "cdm anker",
-    })
-    local hasAnchorPicker = ContainsAny(text, {
-        "anchor picker", "global anchor picker", "pick anchor", "select anchor",
-        "choose anchor", "open anchor", "anker picker", "anker auswahl", "anker auswaehlen",
-        "anker waehlen", "ankerwahl", "anker waehler",
-    }) and not ContainsAny(text, {
-        "custom anchor", "custom anchor picker", "custom anchor frame", "anchor frame picker",
-        "status", "active", "is picker", "show picker",
-    })
-        and (hasEditContext or ContainsAny(text, { "global anchor picker", "anchor picker", "anker picker", "anker auswahl" }))
-    local hasResetPosition = hasEditContext and ContainsAny(text, { "reset", "restore", "default", "zuruecksetzen", "zurucksetzen" })
-        and ContainsAny(text, { "position", "selected frame", "current frame", "selected", "selection", "frame position", "mover", "auswahl", "ausgewaehlter frame", "aktueller frame", "rahmen position" })
-    local hasUndo = hasEditContext and ContainsAny(text, {
-        "edit mode undo", "undo edit mode", "undo in edit mode", "undo last edit mode",
-        "undo edit mode position", "undo last position", "undo position change",
-        "undo last change", "undo edit mode change", "rueckgaengig", "rueckgaengig machen", "position rueckgaengig", "bearbeitungsmodus rueckgaengig",
-    })
-    local hasRedo = hasEditContext and ContainsAny(text, {
-        "edit mode redo", "redo edit mode", "redo in edit mode", "redo last edit mode",
-        "redo edit mode position", "redo last position", "redo position change",
-        "redo last change", "redo edit mode change", "wiederholen", "erneut anwenden", "bearbeitungsmodus wiederholen",
-    })
+    local hasUnitPreview = ContainsAny(text, FeaturesPhrases[271]) or (hasEditContext and previewWord and not hasAuraPreview and not hasGroupPreview)
+    local hasSnap = ContainsAny(text, FeaturesPhrases[272])
+    local hasGrid = (hasEditContext and ContainsAny(text, FeaturesPhrases[273])) or ContainsAny(text, FeaturesPhrases[274])
+    local hasGridStep = hasGrid and FirstNumber(text) ~= nil and ContainsAny(text, FeaturesPhrases[275])
+    local hasBackgroundOpacity = (hasEditContext and ContainsAny(text, FeaturesPhrases[276])) or ContainsAny(text, FeaturesPhrases[277])
+    local hasCDM = ContainsAny(text, FeaturesPhrases[278])
+    local hasAnchorPicker = ContainsAny(text, FeaturesPhrases[279]) and not ContainsAny(text, FeaturesPhrases[280])
+        and (hasEditContext or ContainsAny(text, FeaturesPhrases[281]))
+    local hasResetPosition = hasEditContext and ContainsAny(text, FeaturesPhrases[282])
+        and ContainsAny(text, FeaturesPhrases[283])
+    local hasUndo = hasEditContext and ContainsAny(text, FeaturesPhrases[284])
+    local hasRedo = hasEditContext and ContainsAny(text, FeaturesPhrases[285])
 
     if hasAnchorPicker then
         return EditModeAction("assistant.action.editMode.anchorPicker", {}, "Open Edit Mode Anchor picker")
@@ -2406,7 +2111,7 @@ local function ParseEditModeHUDControl(text)
     if hasUnitPreview then
         return EditModeAction("assistant.action.editMode.preview", { value = value }, "Set Edit Mode Preview")
     end
-    if hasSnap and (hasEditContext or ContainsAny(text, { "snap frames", "grid snap", "snap to grid", "raster snap", "raster einrasten" })) then
+    if hasSnap and (hasEditContext or ContainsAny(text, FeaturesPhrases[286])) then
         return EditModeAction("assistant.action.editMode.snap", { value = value }, "Set Edit Mode Snap")
     end
     if hasGridStep then
@@ -2427,13 +2132,7 @@ local function ParseEditModeHUDControl(text)
 end
 
 local function ParseSupportWorkflow(text)
-    if ContainsAny(text, {
-        "clear no match telemetry", "clear nomatch telemetry", "clear assistant no match telemetry",
-        "reset no match telemetry", "reset nomatch telemetry", "reset assistant misses",
-        "clear unmatched commands", "clear missed commands",
-        "loesche unbekannte befehle", "loesche nicht erkannte befehle",
-        "leere nomatch telemetry", "leere no match telemetry", "assistant misses loeschen",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[287]) then
         local action = Registry and Registry:GetAction("assistant_nomatch_clear")
         return action and {
             kind = "action",
@@ -2446,67 +2145,49 @@ local function ParseSupportWorkflow(text)
     end
 
     local function NoMatchOwnerFilterForText(value)
-        if ContainsAny(value, { "all no match", "all nomatch", "all missed", "all unmatched" }) then return nil end
-        if ContainsAny(value, { "aura action", "aura actions", "aura workflow", "aura workflows" }) then return "aura-action/backend" end
-        if ContainsAny(value, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return "aura-registry/backend" end
-        if ContainsAny(value, { "anchor", "anchors", "anchoring", "cooldownmanager", "cooldown manager", "cdm" }) then return "anchor-intent" end
-        if ContainsAny(value, { "registry", "registry alias", "aliases", "alias", "setting", "settings", "intent metadata" }) then return "registry-alias" end
-        if ContainsAny(value, { "media", "font", "texture", "sound", "sharedmedia" }) then return "media-alias" end
-        if ContainsAny(value, { "knowledge", "help", "search", "faq", "where", "explain" }) then return "knowledge/help" end
-        if ContainsAny(value, { "action", "actions", "workflow", "workflows", "copy", "profile", "preset" }) then return "action-parser" end
-        if ContainsAny(value, { "parser", "triage", "generic" }) then return "parser-or-help" end
+        if ContainsAny(value, FeaturesPhrases[288]) then return nil end
+        if ContainsAny(value, FeaturesPhrases[289]) then return "aura-action/backend" end
+        if ContainsAny(value, FeaturesPhrases[290]) then return "aura-registry/backend" end
+        if ContainsAny(value, FeaturesPhrases[291]) then return "anchor-intent" end
+        if ContainsAny(value, FeaturesPhrases[292]) then return "registry-alias" end
+        if ContainsAny(value, FeaturesPhrases[293]) then return "media-alias" end
+        if ContainsAny(value, FeaturesPhrases[294]) then return "knowledge/help" end
+        if ContainsAny(value, FeaturesPhrases[295]) then return "action-parser" end
+        if ContainsAny(value, FeaturesPhrases[296]) then return "parser-or-help" end
         return nil
     end
 
     local function NoMatchResolutionFilterForText(value)
-        if ContainsAny(value, { "all no match", "all nomatch", "all missed", "all unmatched" }) then return nil end
-        if ContainsAny(value, { "unresolved", "open no match", "open nomatch", "open misses", "not resolved", "still failing" }) then return "unresolved" end
-        if ContainsAny(value, { "needs clarification", "needs-clarification", "ambiguous no match", "ambiguous nomatch" }) then return "needs-clarification" end
-        if ContainsAny(value, { "resolved", "fixed no match", "fixed nomatch", "solved no match", "covered no match" }) then return "resolved" end
+        if ContainsAny(value, FeaturesPhrases[297]) then return nil end
+        if ContainsAny(value, FeaturesPhrases[298]) then return "unresolved" end
+        if ContainsAny(value, FeaturesPhrases[299]) then return "needs-clarification" end
+        if ContainsAny(value, FeaturesPhrases[300]) then return "resolved" end
         return nil
     end
 
     local function NoMatchPriorityFilterForText(value)
-        if ContainsAny(value, { "all no match", "all nomatch", "all missed", "all unmatched" }) then return nil end
-        if ContainsAny(value, { "high priority", "high-priority", "urgent no match", "urgent nomatch", "top priority", "top misses" }) then return "high" end
-        if ContainsAny(value, { "medium priority", "medium-priority", "normal priority" }) then return "medium" end
-        if ContainsAny(value, { "low priority", "low-priority", "minor no match", "minor nomatch" }) then return "low" end
+        if ContainsAny(value, FeaturesPhrases[301]) then return nil end
+        if ContainsAny(value, FeaturesPhrases[302]) then return "high" end
+        if ContainsAny(value, FeaturesPhrases[303]) then return "medium" end
+        if ContainsAny(value, FeaturesPhrases[304]) then return "low" end
         return nil
     end
 
     local function NoMatchTagFilterForText(value)
-        if ContainsAny(value, { "all no match", "all nomatch", "all missed", "all unmatched" }) then return nil end
-        if ContainsAny(value, { "uncategorized", "untagged" }) then return "uncategorized" end
-        if ContainsAny(value, { "geometry tag", "geometry tagged", "geometry no match", "geometry misses", "movement no match", "movement misses", "layout no match", "layout misses" }) then return "geometry" end
-        if ContainsAny(value, { "media tag", "media tagged", "media no match", "media misses", "texture no match", "texture misses", "font no match", "font misses" }) then return "media" end
-        if ContainsAny(value, { "setting tag", "setting tagged", "setting no match", "setting misses", "control no match", "control misses" }) then return "setting" end
-        if ContainsAny(value, { "scope tag", "scope tagged", "scope no match", "scope misses", "unit no match", "unit misses", "frame no match", "frame misses" }) then return "scope" end
-        if ContainsAny(value, { "aura tag", "aura tagged", "aura no match", "aura misses", "buff no match", "debuff no match" }) then return "aura" end
-        if ContainsAny(value, { "anchor tag", "anchor tagged", "anchor no match", "anchor misses" }) then return "anchor" end
-        if ContainsAny(value, { "action tag", "action tagged", "action no match", "action misses", "workflow no match", "workflow misses" }) then return "action" end
-        if ContainsAny(value, { "knowledge tag", "knowledge tagged", "knowledge no match", "knowledge misses", "help no match", "help misses" }) then return "knowledge" end
+        if ContainsAny(value, FeaturesPhrases[305]) then return nil end
+        if ContainsAny(value, FeaturesPhrases[306]) then return "uncategorized" end
+        if ContainsAny(value, FeaturesPhrases[307]) then return "geometry" end
+        if ContainsAny(value, FeaturesPhrases[308]) then return "media" end
+        if ContainsAny(value, FeaturesPhrases[309]) then return "setting" end
+        if ContainsAny(value, FeaturesPhrases[310]) then return "scope" end
+        if ContainsAny(value, FeaturesPhrases[311]) then return "aura" end
+        if ContainsAny(value, FeaturesPhrases[312]) then return "anchor" end
+        if ContainsAny(value, FeaturesPhrases[313]) then return "action" end
+        if ContainsAny(value, FeaturesPhrases[314]) then return "knowledge" end
         return nil
     end
 
-    if ContainsAny(text, {
-        "no match worklist", "nomatch worklist", "assistant no match worklist",
-        "assistant learning worklist", "learning worklist", "missed command worklist",
-        "unmatched command worklist", "unmatched wording worklist",
-        "alias review worklist", "alias worklist", "registry alias worklist",
-        "registry alias candidates", "registry review candidates",
-        "anchor review candidates", "anchor no match worklist", "anchor nomatch worklist",
-        "aura review candidates", "aura no match worklist", "aura nomatch worklist",
-        "knowledge review candidates", "knowledge no match worklist", "knowledge nomatch worklist",
-        "media review candidates", "media no match worklist", "media nomatch worklist",
-        "action review candidates", "action no match worklist", "action nomatch worklist",
-        "geometry review candidates", "geometry no match worklist", "geometry nomatch worklist",
-        "scope review candidates", "scope no match worklist", "scope nomatch worklist",
-        "tagged no match worklist", "tagged nomatch worklist", "tagged misses",
-        "show learning candidates", "show review candidates", "show alias candidates",
-        "unbekannte befehle arbeitsliste", "nicht erkannte befehle arbeitsliste",
-        "assistant arbeitsliste", "alias arbeitsliste", "fehlende aliases",
-        "zeige unbekannte befehle", "zeige nicht erkannte befehle",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[315]) then
         local action = Registry and Registry:GetAction("assistant_nomatch_worklist")
         local owner = NoMatchOwnerFilterForText(text)
         local resolution = NoMatchResolutionFilterForText(text)
@@ -2526,14 +2207,7 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    if ContainsAny(text, {
-        "no match telemetry", "nomatch telemetry", "assistant no match telemetry",
-        "assistant misses", "assistant missed commands", "missed commands",
-        "unmatched commands", "unmatched wording", "show no match", "show nomatch",
-        "assistant learning report", "learning report", "no match report",
-        "unbekannte befehle", "nicht erkannte befehle", "nicht erkannte eingaben",
-        "assistant lernbericht", "no match bericht", "nomatch bericht",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[316]) then
         local action = Registry and Registry:GetAction("assistant_nomatch_telemetry")
         return action and {
             kind = "action",
@@ -2544,17 +2218,7 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    if ContainsAny(text, {
-        "msuf status", "assistant status", "status report", "diagnostic report",
-        "run checks", "run check", "run diagnostics", "health check", "run health check",
-        "assistant support text", "support text", "support report", "support summary", "build support text", "make support text",
-        "diagnostics", "diagnose", "diagnosen", "diagnose starten", "diagnosebericht", "debug summary", "debug report", "debug info", "debug bericht", "status bericht",
-        "diagnostik", "fehlerbericht", "statusbericht", "diagnostik bericht",
-        "assistant debug report", "version info", "locale info",
-        "assistant performance", "assistant timing", "assistant slow",
-        "is the assistant slow", "performance report", "perf report", "lag report",
-        "assistant leistung", "assistant langsam", "performance bericht", "lag bericht",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[317]) then
         local action = Registry and Registry:GetAction("assistant_status")
         return action and {
             kind = "action",
@@ -2565,11 +2229,7 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    if text == "help" or text == "hilfe" or ContainsAny(text, {
-        "assistant help", "command help", "commands help", "help commands",
-        "print help", "show help", "what can you do", "what settings can you change",
-        "command examples",
-    }) then
+    if text == "help" or text == "hilfe" or ContainsAny(text, FeaturesPhrases[318]) then
         local action = Registry and Registry:GetAction("assistant_help")
         return action and {
             kind = "action",
@@ -2583,35 +2243,21 @@ local function ParseSupportWorkflow(text)
     local editModeControl = ParseEditModeHUDControl(text)
     if editModeControl then return editModeControl end
 
-    if ContainsAny(text, {
-        "edit mode", "editmode", "msuf edit mode", "bearbeitungsmodus", "bearbeitungs modus",
-        "editmodus", "move frames", "drag frames", "position frames", "frames verschieben",
-        "rahmen verschieben", "frames bewegen", "rahmen bewegen",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[319]) then
         local actionKey
         local label
         local args = {}
-        if ContainsAny(text, {
-            "am i in edit mode", "is edit mode on", "is edit mode active", "edit mode status", "bearbeitungsmodus status", "ist bearbeitungsmodus an", "ist edit mode an",
-            "why can't i exit edit mode", "why cant i exit edit mode", "why can not i exit edit mode",
-            "why can't leave edit mode", "why cant leave edit mode",
-            "bin ich im bearbeitungsmodus", "ist der bearbeitungsmodus aktiv", "ist editmodus aktiv",
-            "warum kann ich bearbeitungsmodus nicht verlassen", "warum kann ich bearbeitungsmodus nicht beenden",
-        }) then
+        if ContainsAny(text, FeaturesPhrases[320]) then
             actionKey = "assistant.diagnostic.editMode.status"
             label = "Show MSUF Edit Mode status"
-            if ContainsAny(text, { "why can't", "why cant", "why can not", "warum kann" }) then args.reason = "why_exit" end
-        elseif ContainsAny(text, { "cancel edit mode", "discard edit mode", "cancel msuf edit mode", "cancel all edit mode", "bearbeitungsmodus abbrechen", "edit mode abbrechen", "bearbeitungsmodus verwerfen", "editmodus abbrechen" }) then
+            if ContainsAny(text, FeaturesPhrases[321]) then args.reason = "why_exit" end
+        elseif ContainsAny(text, FeaturesPhrases[322]) then
             actionKey = "assistant.action.editMode.cancel"
             label = "Cancel MSUF Edit Mode"
-        elseif ContainsAny(text, { "toggle edit mode", "toggle msuf edit mode", "bearbeitungsmodus umschalten", "edit mode umschalten", "editmodus umschalten", "bearbeitungsmodus toggeln" }) then
+        elseif ContainsAny(text, FeaturesPhrases[323]) then
             actionKey = "assistant.action.editMode.toggle"
             label = "Toggle MSUF Edit Mode"
-        elseif ContainsAny(text, {
-            "stop edit mode", "exit edit mode", "exit msuf edit mode", "leave edit mode", "leave msuf edit mode",
-            "close edit mode", "close msuf edit mode", "disable edit mode", "turn off edit mode", "edit mode off", "edit mode aus", "bearbeitungsmodus aus", "bearbeitungsmodus beenden", "bearbeitungsmodus verlassen", "bearbeitungsmodus deaktivieren",
-            "editmodus aus", "editmodus beenden", "editmodus verlassen", "rahmen verschieben beenden",
-        }) then
+        elseif ContainsAny(text, FeaturesPhrases[324]) then
             actionKey = "assistant.action.editMode.exit"
             label = "Exit MSUF Edit Mode"
         elseif not HasEditModeHUDControlIntent(text) then
@@ -2630,8 +2276,8 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    if ContainsAny(text, { "wago backup", "profile backup confirmed", "backup confirmed" }) then
-        local clear = ContainsAny(text, { "clear", "reset", "unconfirm", "not confirmed" })
+    if ContainsAny(text, FeaturesPhrases[325]) then
+        local clear = ContainsAny(text, FeaturesPhrases[326])
         local action = Registry and Registry:GetAction("confirm_wago_backup")
         return action and {
             kind = "action",
@@ -2642,7 +2288,7 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    if ContainsAny(text, { "recovery tools", "display recovery", "recover menu", "reset tools", "dashboard recovery" }) then
+    if ContainsAny(text, FeaturesPhrases[327]) then
         local action = Registry and Registry:GetAction("open_recovery_tools")
         return action and {
             kind = "action",
@@ -2653,7 +2299,7 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    if ContainsAny(text, { "scaling tools", "dashboard scaling", "scale tools", "ui scale tools", "open scaling" }) then
+    if ContainsAny(text, FeaturesPhrases[328]) then
         local action = Registry and Registry:GetAction("open_dashboard_panel")
         return action and {
             kind = "action",
@@ -2664,7 +2310,7 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    if ContainsAny(text, { "changelog", "change log", "release notes", "latest changes", "build notes" }) then
+    if ContainsAny(text, FeaturesPhrases[329]) then
         local action = Registry and Registry:GetAction("open_dashboard_panel")
         return action and {
             kind = "action",
@@ -2676,7 +2322,7 @@ local function ParseSupportWorkflow(text)
     end
 
     local link = SupportLinkForText(text)
-    if link and ContainsAny(text, { "copy", "open", "link", "support", "join", "repo", "repository", "donate" }) then
+    if link and ContainsAny(text, FeaturesPhrases[330]) then
         local action = Registry and Registry:GetAction("copy_support_link")
         return action and {
             kind = "action",
@@ -2687,10 +2333,7 @@ local function ParseSupportWorkflow(text)
         } or nil
     end
 
-    if ContainsAny(text, {
-        "support links", "support msuf", "donate links", "development links",
-        "hilfe links", "support link liste", "spenden links", "entwicklungs links",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[331]) then
         local action = Registry and Registry:GetAction("support_links_summary")
         return action and {
             kind = "action",
@@ -2704,18 +2347,18 @@ local function ParseSupportWorkflow(text)
 end
 
 local function GlobalScalePresetForText(text)
-    if ContainsAny(text, { "1080p", "1080" }) then return "1080p" end
-    if ContainsAny(text, { "1440p", "1440" }) then return "1440p" end
-    if ContainsAny(text, { "4k", "2160p", "2160" }) then return "4k" end
-    if ContainsAny(text, { "pixel perfect", "pixel" }) then return "pixel" end
-    if ContainsAny(text, { "auto" }) then return "off" end
-    if ContainsAny(text, { "turn off", "disable", "off" }) and ContainsAny(text, { "preset", "scale preset" }) then return "off" end
+    if ContainsAny(text, FeaturesPhrases[332]) then return "1080p" end
+    if ContainsAny(text, FeaturesPhrases[333]) then return "1440p" end
+    if ContainsAny(text, FeaturesPhrases[334]) then return "4k" end
+    if ContainsAny(text, FeaturesPhrases[335]) then return "pixel" end
+    if ContainsAny(text, FeaturesPhrases[336]) then return "off" end
+    if ContainsAny(text, FeaturesPhrases[337]) and ContainsAny(text, FeaturesPhrases[338]) then return "off" end
     return nil
 end
 
 local function ParsePresetWorkflow(text)
-    if not ContainsAny(text, { "preset", "global ui scale", "wow ui scale", "global scale", "scale preset", "ui preset", "ui scale preset" }) then return nil end
-    if not ContainsAny(text, { "global ui scale", "wow ui scale", "global scale", "scale preset", "ui preset", "ui scale preset" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[339]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[340]) then return nil end
     local preset = GlobalScalePresetForText(text)
     if not preset then return nil end
     local action = Registry and Registry:GetAction("apply_global_scale_preset")
@@ -2729,23 +2372,14 @@ local function ParsePresetWorkflow(text)
 end
 
 local function DashboardScaleTargetForText(text)
-    if ContainsAny(text, { "preset", "panel", "section", "tools", "open", "close", "toggle" }) then return nil end
-    if ContainsAny(text, {
-        "msuf menu", "menu scale", "dashboard scale", "options menu", "config menu",
-        "configuration menu", "assistant menu",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[341]) then return nil end
+    if ContainsAny(text, FeaturesPhrases[342]) then
         return "general.slashMenuScale", "MSUF Menu Scale"
     end
-    if ContainsAny(text, {
-        "msuf frame scale", "msuf frames", "all msuf frames", "msuf ui scale",
-        "unit frame scale", "unitframes scale", "frames globally", "all frames globally",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[343]) then
         return "general.msufUiScale", "MSUF Frame Scale"
     end
-    if ContainsAny(text, {
-        "wow ui", "global ui", "global scale", "wow scale", "whole ui",
-        "ui scale", "interface scale",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[344]) then
         return "general.globalUiScale", "Global WoW UI Scale"
     end
     return nil
@@ -2754,10 +2388,7 @@ end
 local function ParseDashboardScaleShortcut(text)
     local key, label = DashboardScaleTargetForText(text)
     if not key then return nil end
-    if not ContainsAny(text, {
-        "scale", "bigger", "larger", "smaller", "increase", "decrease", "raise", "lower",
-        "grow", "shrink", "set", "make",
-    }) then
+    if not ContainsAny(text, FeaturesPhrases[345]) then
         return nil
     end
     local setting = Registry and Registry:GetSetting(key)
@@ -2778,25 +2409,13 @@ local function ParseDashboardScaleShortcut(text)
 end
 
 local function ParseScopedOverrideReset(text)
-    local font = ContainsAny(text, { "font", "fonts", "text style", "name color", "text color" })
-    local bars = ContainsAny(text, { "bars", "bar", "bar texture", "global bars", "gradient", "absorb", "highlight border", "dispel overlay", "aggro border", "purge border" })
+    local font = ContainsAny(text, FeaturesPhrases[346])
+    local bars = ContainsAny(text, FeaturesPhrases[347])
     if not font and not bars then return nil end
-    local reset = ContainsAny(text, {
-        "reset", "clear", "restore", "default", "defaults", "follow shared", "use shared",
-        "remove override", "remove custom", "disable custom", "turn off custom",
-    })
+    local reset = ContainsAny(text, FeaturesPhrases[348])
     if not reset then return nil end
-    local all = ContainsAny(text, {
-        "all overrides", "every override", "all custom", "all scopes",
-        "all bar overrides", "all bars overrides", "all global bar overrides", "all global bars overrides",
-        "all font overrides", "all fonts overrides", "all global font overrides", "all global fonts overrides",
-        "every bar override", "every bars override", "every font override", "every fonts override",
-    })
-    local explicitOverride = ContainsAny(text, {
-        "override", "overrides", "custom", "customized", "customised",
-        "follow shared", "use shared", "remove override", "remove custom",
-        "disable custom", "turn off custom",
-    })
+    local all = ContainsAny(text, FeaturesPhrases[349])
+    local explicitOverride = ContainsAny(text, FeaturesPhrases[350])
     if not all and not explicitOverride then return nil end
     local scope = DetectGlobalScope(text)
     if not all and (not scope or scope == "shared") then return nil end
@@ -2820,12 +2439,7 @@ local function ParseScopedOverrideReset(text)
 end
 
 local function HasClassPowerPreviewResourceIntent(text)
-    return ContainsAny(text, {
-        "preview resource", "resource preview", "preview class resource", "preview class resources",
-        "preview class power", "preview class bar", "class resource preview", "class resources preview",
-        "class power preview", "class bar preview", "class resource preview resource",
-        "class power preview resource",
-    })
+    return ContainsAny(text, FeaturesPhrases[351])
 end
 
 local function ParseClassPowerPreviewResource(text)
@@ -2860,20 +2474,17 @@ local function ParseClassPowerAction(text)
     local previewResource = ParseClassPowerPreviewResource(text)
     if previewResource then return previewResource end
 
-    if (HasClassPowerIntent(text) or ContainsAny(text, { "resource preview animation", "preview resource animation" }))
-        and ContainsAny(text, {
-            "preview animation", "animate preview", "animate", "animation", "start preview", "stop preview",
-            "play preview", "pause preview", "toggle preview animation", "start", "stop", "play", "pause",
-        })
-        and ContainsAny(text, { "preview", "animate", "animation" }) then
+    if (HasClassPowerIntent(text) or ContainsAny(text, FeaturesPhrases[352]))
+        and ContainsAny(text, FeaturesPhrases[353])
+        and ContainsAny(text, FeaturesPhrases[354]) then
         local action = Registry and Registry:GetAction("class_power_preview_animate")
         local value = DetectBoolean(text)
-        if ContainsAny(text, { "stop", "pause", "off", "disable" }) then
+        if ContainsAny(text, FeaturesPhrases[355]) then
             value = false
-        elseif ContainsAny(text, { "start", "play", "animate", "on", "enable" }) then
+        elseif ContainsAny(text, FeaturesPhrases[356]) then
             value = true
         end
-        if ContainsAny(text, { "toggle", "switch", "umschalten" }) then value = nil end
+        if ContainsAny(text, FeaturesPhrases[357]) then value = nil end
         return action and {
             kind = "action",
             action = action,
@@ -2882,7 +2493,7 @@ local function ParseClassPowerAction(text)
             summary = "Changes the Class Resources inline preview animation.",
         } or nil
     end
-    if not ContainsAny(text, { "quick setup", "quicksetup", "setup" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[358]) then return nil end
     if not HasClassPowerIntent(text) then return nil end
     local action = Registry and Registry:GetAction("class_power_quick_setup")
     return action and {
@@ -2941,10 +2552,10 @@ local function ParseGameplayRootToggle(text)
 end
 
 local function ParseGameplayAction(text, raw)
-    if ContainsAny(text, { "crosshair", "fadenkreuz", "melee range spell", "range check spell", "nahkampf zauber", "reichweiten zauber" }) and ContainsAny(text, { "spell", "zauber", "range check", "reichweite" }) then
+    if ContainsAny(text, FeaturesPhrases[359]) and ContainsAny(text, FeaturesPhrases[360]) then
         local rawText = tostring(raw or "")
         local value
-        if ContainsAny(text, { "clear", "reset", "none", "no spell", "loeschen", "zuruecksetzen", "kein zauber", "ohne zauber" }) then
+        if ContainsAny(text, FeaturesPhrases[361]) then
             value = "0"
         else
             value = rawText:match("([Ss][Pp][Ee][Ll][Ll]:%d+)") or rawText:match("#%s*(%d+)") or rawText:match("(%d%d+)")
@@ -2985,7 +2596,7 @@ local function ParseGameplayAction(text, raw)
             } or nil
         end
     end
-    if ContainsAny(text, { "preview", "test", "vorschau" }) and ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem", "totems", "totem rahmen", "statuen rahmen", "statue rahmen" }) then
+    if ContainsAny(text, FeaturesPhrases[362]) and ContainsAny(text, FeaturesPhrases[363]) then
         local action = Registry and Registry:GetAction("preview_player_totems")
         return action and {
             kind = "action",
@@ -2995,7 +2606,7 @@ local function ParseGameplayAction(text, raw)
             summary = "Toggles the Totem Frame preview.",
         } or nil
     end
-    if ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen", "zurucksetzen", "standard" }) and ContainsAny(text, { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem", "totems", "totem rahmen", "statuen rahmen", "statue rahmen" }) then
+    if ContainsAny(text, FeaturesPhrases[364]) and ContainsAny(text, FeaturesPhrases[365]) then
         local action = Registry and Registry:GetAction("reset_player_totems_layout")
         return action and {
             kind = "action",
@@ -3013,13 +2624,13 @@ local function ParseGlobalBarsAction(text)
     local previewTerms = { "test", "preview", "vorschau" }
     local offTerms = { "off", "disable", "stop", "clear", "aus", "deaktiviere", "deaktivieren", "beende", "beenden" }
 
-    if ContainsAny(text, { "dispel test type", "dispel border test type", "dispel border preview type", "dispel vorschau typ", "dispel border vorschau typ", "dispel rand vorschau typ" }) then
+    if ContainsAny(text, FeaturesPhrases[366]) then
         local value
-        if ContainsAny(text, { "curse" }) then value = "Curse"
-        elseif ContainsAny(text, { "disease" }) then value = "Disease"
-        elseif ContainsAny(text, { "poison" }) then value = "Poison"
-        elseif ContainsAny(text, { "bleed" }) then value = "Bleed"
-        elseif ContainsAny(text, { "magic" }) then value = "Magic" end
+        if ContainsAny(text, FeaturesPhrases[367]) then value = "Curse"
+        elseif ContainsAny(text, FeaturesPhrases[368]) then value = "Disease"
+        elseif ContainsAny(text, FeaturesPhrases[369]) then value = "Poison"
+        elseif ContainsAny(text, FeaturesPhrases[370]) then value = "Bleed"
+        elseif ContainsAny(text, FeaturesPhrases[371]) then value = "Magic" end
         local action = Registry and Registry:GetAction("set_dispel_border_test_type")
         return action and {
             kind = "action",
@@ -3029,12 +2640,7 @@ local function ParseGlobalBarsAction(text)
             summary = "Changes the transient dispel border preview type.",
         } or nil
     end
-    if ContainsAny(text, previewTerms) and ContainsAny(text, {
-        "absorb bar", "absorb bars", "absorb test", "absorb test bar", "absorb test bars",
-        "test absorb bar", "test absorb bars", "absorb prediction bar", "absorb prediction bars",
-        "prediction bars", "heal absorb", "absorb vorschau", "absorb balken",
-        "absorb balken test", "absorb balken vorschau", "heil absorb", "heal absorb vorschau",
-    }) then
+    if ContainsAny(text, previewTerms) and ContainsAny(text, FeaturesPhrases[372]) then
         local action = Registry and Registry:GetAction("toggle_absorb_bar_test")
         return action and {
             kind = "action",
@@ -3044,7 +2650,7 @@ local function ParseGlobalBarsAction(text)
             summary = "Toggles the absorb prediction bar test display.",
         } or nil
     end
-    if ContainsAny(text, offTerms) and ContainsAny(text, { "absorb test", "prediction bar test", "absorb vorschau", "absorb balken", "absorb balken test", "absorb balken vorschau" }) then
+    if ContainsAny(text, offTerms) and ContainsAny(text, FeaturesPhrases[373]) then
         local action = Registry and Registry:GetAction("toggle_absorb_bar_test")
         return action and {
             kind = "action",
@@ -3054,42 +2660,19 @@ local function ParseGlobalBarsAction(text)
             summary = "Turns off the absorb prediction bar test display.",
         } or nil
     end
-    if ContainsAny(text, previewTerms) and ContainsAny(text, {
-        "aggro border", "threat border", "aggro test border", "aggro border test",
-        "threat test border", "threat border test", "border test aggro", "border test for aggro",
-        "border test threat", "border test for threat", "aggro rand", "aggro rand test",
-        "aggro rand vorschau", "bedrohung rand", "bedrohung rand test",
-        "bedrohung rand vorschau", "bedrohungsrand",
-    }) then
+    if ContainsAny(text, previewTerms) and ContainsAny(text, FeaturesPhrases[374]) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
         return action and { kind = "action", action = action, args = { kind = "aggro", value = not ContainsAny(text, offTerms) }, label = "Test aggro border", summary = "Toggles the aggro border test." } or nil
     end
-    if ContainsAny(text, previewTerms) and ContainsAny(text, {
-        "dispel border", "dispellable border", "dispel test border", "dispel border test",
-        "dispellable test border", "dispellable border test", "border test dispel",
-        "border test for dispel", "border test dispellable", "border test for dispellable",
-        "dispel rand", "dispel rand test", "dispel rand vorschau", "dispellable rand",
-        "entzauber rand", "entzauber rand vorschau", "entzauberbar rand",
-    }) then
+    if ContainsAny(text, previewTerms) and ContainsAny(text, FeaturesPhrases[375]) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
         return action and { kind = "action", action = action, args = { kind = "dispel", value = not ContainsAny(text, offTerms) }, label = "Test dispel border", summary = "Toggles the dispel border test." } or nil
     end
-    if ContainsAny(text, previewTerms) and ContainsAny(text, {
-        "purge border", "purgeable border", "purge test border", "purge border test",
-        "purgeable test border", "purgeable border test", "border test purge",
-        "border test for purge", "border test purgeable", "border test for purgeable",
-        "purge rand", "purge rand test", "purge rand vorschau", "purgeable rand",
-        "offensiv dispel rand", "offensiv dispel rand vorschau",
-    }) then
+    if ContainsAny(text, previewTerms) and ContainsAny(text, FeaturesPhrases[376]) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
         return action and { kind = "action", action = action, args = { kind = "purge", value = not ContainsAny(text, offTerms) }, label = "Test purge border", summary = "Toggles the purge border test." } or nil
     end
-    if ContainsAny(text, previewTerms) and ContainsAny(text, {
-        "boss target border", "boss target highlight", "boss target test border",
-        "boss target border test", "boss target highlight test", "border test boss target",
-        "border test for boss target", "boss ziel border", "boss ziel rand",
-        "boss ziel rand test", "boss ziel rand vorschau", "bossziel rand",
-    }) then
+    if ContainsAny(text, previewTerms) and ContainsAny(text, FeaturesPhrases[377]) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
         return action and { kind = "action", action = action, args = { kind = "bossTarget", value = not ContainsAny(text, offTerms) }, label = "Test boss target border", summary = "Toggles the boss target border test." } or nil
     end
@@ -3097,12 +2680,8 @@ local function ParseGlobalBarsAction(text)
 end
 
 local function ParseDarkModeBrightnessShortcut(text)
-    if not ContainsAny(text, { "dark mode", "dark bars", "dark bar", "dark mode bar color", "dark bar brightness" }) then return nil end
-    if not ContainsAny(text, {
-        "lighter", "brighter", "brighten", "heller",
-        "darker", "darken", "dunkler", "super dark", "very dark", "black", "almost black",
-        "brightness", "bar color", "percent", "percentage", "slider", "value", "set", "make", "change", "adjust",
-    }) then
+    if not ContainsAny(text, FeaturesPhrases[378]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[379]) then
         return nil
     end
     local setting = Registry and Registry:GetSetting("general.darkBarGray")
@@ -3111,19 +2690,17 @@ local function ParseDarkModeBrightnessShortcut(text)
     local value
     local relativeDelta
     local amount = FirstNumber(text)
-    local relativeIntent = ContainsAny(text, { "lighter", "brighter", "brighten", "heller", "darker", "darken", "dunkler" })
-    local exactIntent = amount ~= nil and not relativeIntent and (ContainsAny(text, {
-        "to", "set", "value", "percent", "percentage", "slider", "brightness", "bar color", "make", "change", "adjust",
-    }) or text:find("%%", 1, true) ~= nil)
+    local relativeIntent = ContainsAny(text, FeaturesPhrases[380])
+    local exactIntent = amount ~= nil and not relativeIntent and (ContainsAny(text, FeaturesPhrases[381]) or text:find("%%", 1, true) ~= nil)
     if exactIntent then
         value = amount > 1 and (amount / 100) or amount
-    elseif ContainsAny(text, { "super dark", "very dark", "almost black", "black" }) then
+    elseif ContainsAny(text, FeaturesPhrases[382]) then
         value = 0.01
-    elseif ContainsAny(text, { "lighter", "brighter", "brighten", "heller" }) then
-        local fallback = ContainsAny(text, { "bit", "a bit", "slightly", "little", "etwas" }) and 0.03 or 0.08
+    elseif ContainsAny(text, FeaturesPhrases[383]) then
+        local fallback = ContainsAny(text, FeaturesPhrases[384]) and 0.03 or 0.08
         relativeDelta = amount and (amount > 1 and amount / 100 or amount) or fallback
-    elseif ContainsAny(text, { "darker", "darken", "dunkler" }) then
-        local fallback = ContainsAny(text, { "bit", "a bit", "slightly", "little", "etwas" }) and 0.03 or 0.08
+    elseif ContainsAny(text, FeaturesPhrases[385]) then
+        local fallback = ContainsAny(text, FeaturesPhrases[386]) and 0.03 or 0.08
         relativeDelta = -((amount and (amount > 1 and amount / 100 or amount)) or fallback)
     end
     if value == nil and relativeDelta == nil then return nil end
@@ -3171,18 +2748,15 @@ local NAME_SHORTENING_KEEP_END_TERMS = {
 
 local function HasNameShorteningIntent(text)
     if ContainsAny(text, NAME_SHORTENING_TERMS) then return true end
-    if ContainsAny(text, { "shorten", "truncate", "truncation" })
-        and ContainsAny(text, { "name", "names", "unit name", "unit names" }) then
+    if ContainsAny(text, FeaturesPhrases[387])
+        and ContainsAny(text, FeaturesPhrases[388]) then
         return true
     end
     return false
 end
 
 local function NameShorteningScope(text)
-    if ContainsAny(text, {
-        "everything", "all names", "all unit names", "all unitframes", "all unitframe",
-        "every unitframe", "every unitframes", "all frames", "every frame",
-    }) then
+    if ContainsAny(text, FeaturesPhrases[389]) then
         return "shared"
     end
     local groups = DetectGroups and DetectGroups(text) or {}
@@ -3223,9 +2797,9 @@ local function NameShorteningSide(text)
     if ContainsAny(text, NAME_SHORTENING_KEEP_END_TERMS) then
         return "LEFT", "Keep end (last letters)"
     end
-    if ContainsAny(text, { "truncation style", "name truncation", "name clip side", "shortening side", "clip side" }) then
-        if ContainsAny(text, { "left", "to left", "left side" }) then return "LEFT", "Left" end
-        if ContainsAny(text, { "right", "to right", "right side" }) then return "RIGHT", "Right" end
+    if ContainsAny(text, FeaturesPhrases[390]) then
+        if ContainsAny(text, FeaturesPhrases[391]) then return "LEFT", "Left" end
+        if ContainsAny(text, FeaturesPhrases[392]) then return "RIGHT", "Right" end
     end
     return nil
 end
@@ -3292,9 +2866,9 @@ end
 local function ParseNameShorteningDots(text, ctx)
     if not ContainsAny(text, NAME_SHORTENING_DOT_TERMS) then return nil end
     if ContainsAny(text, NAME_SHORTENING_NON_NAME_DOT_TERMS) and not HasNameShorteningIntent(text) then return nil end
-    if ContainsAny(text, { "castbar", "spell name", "spell names" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[393]) then return nil end
     local explicitNameContext = HasNameShorteningIntent(text)
-        or ContainsAny(text, { "name", "names", "unit name", "unit names", "truncate", "truncation" })
+        or ContainsAny(text, FeaturesPhrases[394])
     if not explicitNameContext and not IsNameShorteningContext(ctx) then
         local value = DetectBoolean(text)
         if value == nil then return nil end
@@ -3302,9 +2876,9 @@ local function ParseNameShorteningDots(text, ctx)
 
     local value = DetectBoolean(text)
     local noEllipsis
-    if ContainsAny(text, { "no dots", "without dots", "hide dots", "no ellipsis", "without ellipsis", "hide ellipsis" }) then
+    if ContainsAny(text, FeaturesPhrases[395]) then
         noEllipsis = true
-    elseif ContainsAny(text, { "show dots", "with dots", "dots on", "show ellipsis", "with ellipsis", "ellipsis on" }) then
+    elseif ContainsAny(text, FeaturesPhrases[396]) then
         noEllipsis = false
     elseif value ~= nil then
         noEllipsis = not value
@@ -3337,7 +2911,7 @@ end
 local function ParseNameShorteningShortcut(text, ctx)
     local dots = ParseNameShorteningDots(text, ctx)
     if dots then return dots end
-    if ContainsAny(text, { "castbar", "spell name", "spell names" }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[397]) then return nil end
     if not HasNameShorteningIntent(text) then return nil end
 
     local scope = NameShorteningScope(text)
@@ -3422,16 +2996,16 @@ local function ParseNameShorteningShortcut(text, ctx)
 end
 
 local function ParseCastbarPreviewAction(text)
-    if not ContainsAny(text, { "test", "preview", "show preview", "vorschau", "zeige vorschau", "preview anzeigen" }) then return nil end
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "zauberleisten" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[398]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[399]) then return nil end
     local action = Registry and Registry:GetAction("preview_castbar")
     if not action then return nil end
     local units = DetectUnits(text)
     local unit = units[1] or "player"
     local kind = "normal"
-    if ContainsAny(text, { "channel", "channeled", "channelled", "kanal", "kanalisiert" }) then
+    if ContainsAny(text, FeaturesPhrases[400]) then
         kind = "channel"
-    elseif ContainsAny(text, { "empowered", "empower", "evoker", "verstaerkt", "verstaerken", "ermaechtigt", "ermaechtigen" }) then
+    elseif ContainsAny(text, FeaturesPhrases[401]) then
         kind = "empowered"
     end
     return {
@@ -3440,7 +3014,7 @@ local function ParseCastbarPreviewAction(text)
         args = {
             unit = unit,
             kind = kind,
-            interrupt = ContainsAny(text, { "interrupt", "interrupted", "shake", "kick", "unterbrechen", "unterbrochen", "schuetteln", "schutteln" }),
+            interrupt = ContainsAny(text, FeaturesPhrases[402]),
         },
         label = "Preview Cast Bar",
         summary = "Opens the Cast Bar page and selects the requested preview.",
@@ -3460,7 +3034,7 @@ local CASTBAR_GLOBAL_BOOLEAN_DETAILS = {
 }
 
 local function ParseCastbarGlobalDetail(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[403]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     for i = 1, #CASTBAR_GLOBAL_BOOLEAN_DETAILS do
@@ -3479,35 +3053,20 @@ local function ParseCastbarGlobalDetail(text)
 end
 
 local function ParseCastbarDirectionClarification(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "zauberleisten" }) then return nil end
-    if not ContainsAny(text, { "target", "target castbar", "target cast bar", "ziel", "ziel castbar", "ziel zauberleiste" }) then return nil end
-    if not ContainsAny(text, {
-        "other direction", "opposite direction", "opposite fill direction", "fill in the other direction",
-        "fill the other direction", "other way", "opposite way", "reverse direction", "fill opposite", "opposite fill",
-        "filling opposite", "fills opposite", "normal direction", "normal fill", "same direction", "same fill",
-        "not opposite", "no opposite", "stop opposite", "stop filling opposite",
-        "andere richtung", "entgegengesetzte richtung", "umgekehrte richtung", "andere fuellrichtung",
-        "normal richtung", "normale richtung", "gleiche richtung", "gleiche fuellrichtung",
-    }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[404]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[405]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[406]) then return nil end
 
     local opposite = Registry and Registry:GetSetting("general.castbarOpositeDirectionTarget")
     if not opposite then return nil end
     local value = DetectBoolean(text)
-    if value == nil and ContainsAny(text, {
-        "use opposite", "use opposite direction", "use opposite fill direction",
-        "use target opposite", "use target opposite direction", "fill opposite", "opposite fill",
-        "entgegengesetzte richtung", "umgekehrte richtung", "andere fuellrichtung",
-    }) then
+    if value == nil and ContainsAny(text, FeaturesPhrases[407]) then
         value = true
     end
-    if value == nil and ContainsAny(text, {
-        "normal direction", "normal fill", "same direction", "same fill",
-        "not opposite", "no opposite", "stop opposite", "stop filling opposite",
-        "normal richtung", "normale richtung", "gleiche richtung", "gleiche fuellrichtung",
-    }) then
+    if value == nil and ContainsAny(text, FeaturesPhrases[408]) then
         value = false
     end
-    if value == nil and ContainsAny(text, { "stop", "clear", "remove", "aus", "deaktiviere", "beende" }) and ContainsAny(text, { "opposite", "other way", "reverse", "entgegengesetzt", "umgekehrt" }) then
+    if value == nil and ContainsAny(text, FeaturesPhrases[409]) and ContainsAny(text, FeaturesPhrases[410]) then
         value = false
     end
     if value ~= nil then
@@ -3550,18 +3109,7 @@ local function ParseCastbarDirectionClarification(text)
     }
 end
 local function ParseGuidedSetup(text)
-    if not ContainsAny(text, {
-        "help me build", "guided setup", "setup", "setup guide", "start guide", "start tour",
-        "tour guide", "guide me", "show me around", "walk me through", "getting started",
-        "start with msuf", "how do i start with msuf", "first time msuf", "new to msuf",
-        "never used msuf", "never used this addon", "new user", "beginner guide",
-        "beginner setup", "onboarding", "build a clean", "clean layout", "rogue layout",
-        "layout bauen", "setup hilfe", "fuehre mich", "fuehr mich", "fuehrung",
-        "einsteiger", "anfanger", "neu in msuf", "noch nie msuf", "zeig mir msuf",
-        "hilf mir einrichten", "hilf mir beim einrichten", "einrichtungshilfe",
-        "schritt fuer schritt", "fuehre mich durch msuf", "msuf einrichten",
-        "assistant einrichtung", "assistent einrichtung",
-    }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[411]) then return nil end
     local action = Registry and Registry:GetAction("guided_setup")
     return action and {
         kind = "action",
@@ -3574,19 +3122,7 @@ end
 
 local function ParseGuidedSetupFollowup(text, ctx)
     local active = ctx and type(ctx.guidedSetup) == "table"
-    local explicit = ContainsAny(text, {
-        "cancel setup", "stop setup", "abort setup", "setup cancel",
-        "finish setup", "done setup", "setup done", "complete setup", "setup complete",
-        "skip setup", "skip setup step", "setup skip",
-        "next setup", "next setup step", "setup next", "continue setup",
-        "back setup", "back setup step", "setup back", "previous setup", "previous setup step", "setup previous",
-        "show setup", "show setup step", "repeat setup", "current setup step", "setup status",
-        "setup weiter", "weiter setup", "naechster setup schritt", "naechster schritt",
-        "setup zurueck", "zurueck setup", "vorheriger setup schritt", "vorheriger schritt",
-        "setup abbrechen", "einrichtung abbrechen", "setup fertig", "einrichtung fertig",
-        "setup ueberspringen", "schritt ueberspringen", "setup anzeigen", "zeige setup",
-        "setup wiederholen", "schritt wiederholen", "setup status",
-    })
+    local explicit = ContainsAny(text, FeaturesPhrases[412])
     if not active and not explicit then return nil end
     local exact
     if active then
@@ -3615,30 +3151,25 @@ local function ParseGuidedSetupFollowup(text, ctx)
         end
     end
     local command
-    if ContainsAny(text, { "cancel setup", "stop setup", "abort setup", "setup cancel", "setup abbrechen", "einrichtung abbrechen" }) then
+    if ContainsAny(text, FeaturesPhrases[413]) then
         command = "cancel"
-    elseif ContainsAny(text, { "finish setup", "done setup", "setup done", "complete setup", "setup complete", "setup fertig", "einrichtung fertig" }) then
+    elseif ContainsAny(text, FeaturesPhrases[414]) then
         command = "finish"
-    elseif ContainsAny(text, { "skip setup", "skip setup step", "setup skip", "setup ueberspringen", "schritt ueberspringen" }) then
+    elseif ContainsAny(text, FeaturesPhrases[415]) then
         command = "skip"
-    elseif ContainsAny(text, { "next setup", "next setup step", "setup next", "continue setup", "setup weiter", "weiter setup", "naechster setup schritt", "naechster schritt" }) then
+    elseif ContainsAny(text, FeaturesPhrases[416]) then
         command = "next"
-    elseif ContainsAny(text, { "back setup", "back setup step", "setup back", "previous setup", "previous setup step", "setup previous", "setup zurueck", "zurueck setup", "vorheriger setup schritt", "vorheriger schritt" }) then
+    elseif ContainsAny(text, FeaturesPhrases[417]) then
         command = "back"
-    elseif ContainsAny(text, { "show setup", "show setup step", "repeat setup", "current setup step", "setup status", "setup anzeigen", "zeige setup", "setup wiederholen", "schritt wiederholen" }) then
+    elseif ContainsAny(text, FeaturesPhrases[418]) then
         command = "show"
-    elseif active and ContainsAny(text, {
-        "why this", "tell me more", "more details",
-        "what is it for", "why this step", "what does this step do",
-    }) then
+    elseif active and ContainsAny(text, FeaturesPhrases[419]) then
         command = "explain"
-    elseif active and ContainsAny(text, { "show examples", "show me examples", "example commands" }) then
+    elseif active and ContainsAny(text, FeaturesPhrases[420]) then
         command = "examples"
-    elseif active and ContainsAny(text, {
-        "open it", "open this", "open that", "show me where", "take me there", "go there",
-    }) then
+    elseif active and ContainsAny(text, FeaturesPhrases[421]) then
         command = "open"
-    elseif active and ContainsAny(text, { "do it", "do that", "apply it", "use it", "run it" }) then
+    elseif active and ContainsAny(text, FeaturesPhrases[422]) then
         command = "apply"
     elseif exact then
         command = exact
@@ -3655,10 +3186,7 @@ local function ParseGuidedSetupFollowup(text, ctx)
 end
 
 function P.ParseProfileBackupImportQuestion(text)
-    if not ContainsAny(text, {
-        "backup before import", "backup before importing", "backup before profile import", "backup before importing profile",
-        "make backup before import", "make a backup before import", "make backup before importing", "make a backup before importing",
-    }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[423]) then return nil end
     return {
         kind = "answer",
         status = "info",
@@ -3671,7 +3199,7 @@ function P.ParseProfileBackupImportQuestion(text)
 end
 
 function P.ParseCustomAnchorLookupQuestion(text)
-    if not ContainsAny(text, { "custom anchor", "custom anchor picker", "anchor picker", "anchor settings" }) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[424]) then return nil end
     return {
         kind = "answer",
         status = "info",
@@ -3681,12 +3209,8 @@ function P.ParseCustomAnchorLookupQuestion(text)
 end
 
 function P.ParseGroupScaleLookupQuestion(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, {
-        "scale", "scaling", "frame scale", "raid scale", "party scale", "mythic raid scale",
-        "players", "raider", "raiders", "people", "members", "player count", "raid size",
-        "full raid", "when full", "large raid", "small raid", "five man", "5 man", "5m",
-    }) then return nil end
+    if ContainsAny(text, FeaturesPhrases[425]) then return nil end
+    if not ContainsAny(text, FeaturesPhrases[426]) then return nil end
     if type(P.GroupScaleBreakpointAttrForText) ~= "function" then return nil end
     local attr, playerCount = P.GroupScaleBreakpointAttrForText(text)
     if not attr then return nil end

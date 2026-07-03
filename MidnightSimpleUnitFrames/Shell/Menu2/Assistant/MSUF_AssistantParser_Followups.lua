@@ -13,12 +13,16 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Data = A.ParserData or {}
+A.ParserData = Data
+local FollowupData = Data.FOLLOWUPS_PARSER or {}
 
 -- Follow-up parser for multi-step assistant flows.
 -- These handlers interpret short replies like "yes", "party only", or a copied profile name
 -- in the context of the pending assistant state. They should be conservative because the
 -- original command may have been parsed in a previous frame or after a yield.
 local Normalize = P.Normalize
+local HasPhrase = P.HasPhrase
 local ContainsAny = P.ContainsAny
 local DetectUnits = P.DetectUnits
 local DetectGroups = P.DetectGroups
@@ -57,11 +61,7 @@ local function ContextGroups(ctx)
 end
 
 local function ShouldUseLastUnitContext(text)
-    return ContainsAny(text, {
-        "it", "that", "this", "das", "same", "again", "wieder", "back", "more", "mehr",
-        "frame", "unitframe", "name", "text", "health", "hp", "power", "width", "height",
-        "size", "alpha", "opacity", "position", "offset", "anchor",
-    })
+    return ContainsAny(text, FollowupData.LAST_UNIT_CONTEXT_TERMS)
 end
 
 local function FollowupValueDisplay(setting, value)
@@ -116,30 +116,17 @@ local function IsTroubleshootingWhyQuestion(text)
     text = Normalize(text)
     if text == "" then return false end
     if text:match("^why%s+are%s+") or text:match("^why%s+is%s+") then
-        if ContainsAny(text, {
-            "why is that", "why is this", "why are those", "why are these",
-            "why is it", "why are they",
-        }) then
+        if ContainsAny(text, FollowupData.TROUBLESHOOTING_WHY_REFERENCE_TERMS) then
             return false
         end
-        return ContainsAny(text, {
-            "hidden", "missing", "not showing", "not visible", "invisible",
-            "disabled", "gone", "broken", "doesnt work", "does not work",
-            "frame", "frames", "cast bar", "castbar", "buff", "buffs",
-            "debuff", "debuffs", "aura", "auras", "text", "icon", "icons",
-        })
+        return ContainsAny(text, FollowupData.TROUBLESHOOTING_STATE_TERMS)
     end
 
     if text:match("^why%s+cant%s+") or text:match("^why%s+cannot%s+")
         or text:match("^why%s+can%s+not%s+") or text:match("^why%s+doesnt%s+")
         or text:match("^why%s+does%s+not%s+") or text:match("^why%s+dont%s+")
         or text:match("^why%s+do%s+not%s+") then
-        return ContainsAny(text, {
-            "edit mode", "exit", "close", "cancel", "leave", "start", "open",
-            "cast bar", "castbar", "frame", "frames", "aura", "auras",
-            "buff", "buffs", "debuff", "debuffs", "profile", "import", "export",
-            "anchor picker", "custom anchor", "copy", "paste",
-        })
+        return ContainsAny(text, FollowupData.TROUBLESHOOTING_ACTION_TERMS)
     end
 
     return false
@@ -148,15 +135,7 @@ end
 local function IsPageExplanationQuestion(text)
     text = Normalize(text)
     if text == "" then return false end
-    if ContainsAny(text, {
-        "explain this page", "explain current page", "explain the page",
-        "explain page", "what is this page", "what can i do on this page",
-        "what can i do on current page", "what can i change on this page",
-        "what can i change on current page", "what can be changed on this page",
-        "how can i configure this page", "show me commands for this page",
-        "commands for this page", "current page help", "this page help",
-        "help on this page", "help for this page", "page help",
-    }) then
+    if ContainsAny(text, FollowupData.PAGE_EXPLANATION_TERMS) then
         return true
     end
     return false
@@ -173,12 +152,12 @@ local function HasExplicitValueSubject(text)
     local norm = Normalize(text)
     if not HasNormalizedPhrase(norm, "current value") and not HasNormalizedPhrase(norm, "value now") then return false end
     if norm:find(" of ", 1, true)
-        and not ContainsAny(norm, { "of it", "of that", "of this", "of the last setting", "of last setting", "of the last option", "of last option" })
+        and not ContainsAny(norm, FollowupData.VALUE_SUBJECT_OF_GUARD_TERMS)
     then
         return true
     end
     if norm:find(" for ", 1, true)
-        and not ContainsAny(norm, { "for it", "for that", "for this", "for the last setting", "for last setting", "for the last option", "for last option" })
+        and not ContainsAny(norm, FollowupData.VALUE_SUBJECT_FOR_GUARD_TERMS)
     then
         return true
     end
@@ -188,30 +167,8 @@ end
 function A._ParseFollowupAnswer(text, ctx)
     if IsTroubleshootingWhyQuestion(text) or IsPageExplanationQuestion(text) then return nil end
     if HasExplicitValueSubject(text) then return nil end
-    local asksWhatChanged = ContainsAny(text, {
-        "what did you change", "what changed", "what was changed", "what did you do",
-        "what did you just change", "what exactly did you change", "what did you set",
-        "last change", "last assistant change", "previous change", "what is it now",
-        "what is it set to", "current value", "value now", "show last change",
-        "show me last change", "show me the last change", "what now", "what happened",
-        "what did that do", "what did this do", "what does that mean",
-        "what does this mean", "explain that", "explain this",
-        "explain the last change", "explain last change", "what is the result",
-        "what was the result",
-        "what did you copy", "what did you just copy", "what was copied", "last copy",
-        "show last copy", "show me last copy",
-    })
-    local asksWhy = ContainsAny(text, {
-        "why did you change", "why did you do that", "why did you do this",
-        "why did you set", "why did you pick", "why that change",
-        "why this change", "why did that happen", "why did this happen",
-        "why", "why that", "why this", "why did you", "why did you choose",
-        "why did you choose that", "why did you choose this",
-        "why did you choose that option", "why did you choose this option",
-        "why that option", "why this option", "why did you pick that option",
-        "why did you pick this option", "why did you use that",
-        "why did you use this", "explain why",
-    })
+    local asksWhatChanged = ContainsAny(text, FollowupData.ASK_WHAT_CHANGED_TERMS)
+    local asksWhy = ContainsAny(text, FollowupData.ASK_WHY_TERMS)
     if not asksWhatChanged and not asksWhy then return nil end
     if not ctx then return nil end
 
@@ -392,15 +349,177 @@ function A._BuildColorTokenFollowup(text, ctx)
     }
 end
 
+local CONTINUATION_TOKEN_STOPWORDS = {
+    a = true, an = true, ["and"] = true, also = true, bit = true, by = true,
+    change = true, down = true, even = true, farther = true, further = true,
+    going = true, keep = true, left = true, little = true, lower = true,
+    more = true, much = true, next = true, now = true, nudge = true, ok = true,
+    push = true, raise = true, right = true, shift = true, slightly = true,
+    the = true, ["then"] = true, tiny = true, to = true, up = true, way = true,
+    move = true, moving = true, moved = true,
+}
+
+local function ContinuationHasMarker(text)
+    text = tostring(text or "")
+    if text:match("^now%s+") or text:match("^then%s+") or text:match("^also%s+") or text:match("^next%s+") then return true end
+    return ContainsAny(text, FollowupData.CONTINUATION_MARKER_TERMS)
+end
+
+local function ContinuationHasMovementVerb(text)
+    if A.HasNudgeMovementVerb and A.HasNudgeMovementVerb(text) then return true end
+    return HasPhrase(text, "move")
+        or HasPhrase(text, "nudge")
+        or HasPhrase(text, "shift")
+        or HasPhrase(text, "push")
+        or HasPhrase(text, "raise")
+        or HasPhrase(text, "lower")
+end
+
+local function ContinuationDirection(text)
+    local direction = A.ExtractNudgeDirection and A.ExtractNudgeDirection(text) or nil
+    if direction then return direction end
+    if HasPhrase(text, "left") or HasPhrase(text, "leftwards") or HasPhrase(text, "to the left") then return "left" end
+    if HasPhrase(text, "right") or HasPhrase(text, "rightwards") or HasPhrase(text, "to the right") then return "right" end
+    if HasPhrase(text, "up") or HasPhrase(text, "upwards") or HasPhrase(text, "higher") then return "up" end
+    if HasPhrase(text, "down") or HasPhrase(text, "downwards") or HasPhrase(text, "lower") then return "down" end
+    return nil
+end
+
+local function ContinuationNormalizeToken(token)
+    token = tostring(token or ""):lower()
+    if #token > 3 and token:sub(-1) == "s" then token = token:sub(1, -2) end
+    return token
+end
+
+local function ContinuationTokenSet(text)
+    local set = {}
+    text = Normalize(text)
+    for token in tostring(text or ""):gmatch("%w+") do
+        token = ContinuationNormalizeToken(token)
+        if token ~= "" then set[token] = true end
+    end
+    return set
+end
+
+local function ContinuationSubjectTokens(text)
+    local out, seen = {}, {}
+    text = Normalize(text)
+    for token in tostring(text or ""):gmatch("%w+") do
+        token = ContinuationNormalizeToken(token)
+        if token ~= "" and not CONTINUATION_TOKEN_STOPWORDS[token] and not token:match("^%d+$") and not seen[token] then
+            seen[token] = true
+            out[#out + 1] = token
+        end
+    end
+    return out
+end
+
+local function ContinuationSubjectMatches(text, setting)
+    local subjectTokens = ContinuationSubjectTokens(text)
+    if #subjectTokens == 0 then return false, subjectTokens end
+    local labelTokens = ContinuationTokenSet(tostring(setting and setting.label or "") .. " " .. tostring(setting and setting.category or ""))
+    for i = 1, #subjectTokens do
+        if not labelTokens[subjectTokens[i]] then return false, subjectTokens end
+    end
+    return true, subjectTokens
+end
+
+local function ContinuationAmount(setting, text)
+    if A.RuntimePrivate and type(A.RuntimePrivate.ContextEscalationAmount) == "function" then
+        return A.RuntimePrivate.ContextEscalationAmount(setting, text)
+    end
+    local amount = tonumber(setting and (setting.moveStep or setting.moveAmount)) or 10
+    if A.HasSmallNudgeIntent and A.HasSmallNudgeIntent(text) then
+        amount = amount / 2
+        if amount < 2 then amount = 2 end
+    end
+    return amount
+end
+
+local function ContinuationAxisSuffix(direction)
+    if direction == "left" or direction == "right" then return "X" end
+    if direction == "up" or direction == "down" then return "Y" end
+    return nil
+end
+
+local function ContinuationOffsetCandidate(setting, axisSuffix, subjectTokens)
+    if not (setting and setting.type == "number") then return false end
+    local attr = tostring(setting.attribute or "")
+    local offsetSuffix = "Offset" .. axisSuffix
+    if not (attr:sub(-#offsetSuffix) == offsetSuffix or attr:sub(-#axisSuffix) == axisSuffix) then return false end
+    local labelTokens = ContinuationTokenSet(tostring(setting.label or "") .. " " .. tostring(setting.category or ""))
+    for i = 1, #(subjectTokens or {}) do
+        if not labelTokens[subjectTokens[i]] then return false end
+    end
+    return true
+end
+
+local function ContinuationFindAxisSetting(lastSetting, direction, subjectTokens)
+    local axisSuffix = ContinuationAxisSuffix(direction)
+    if not axisSuffix then return nil end
+
+    local axisSetting = A.ResolveContextAxisSetting and A.ResolveContextAxisSetting(lastSetting, direction) or nil
+    if axisSetting and axisSetting.type == "number" and axisSetting.unit == lastSetting.unit and axisSetting.category == lastSetting.category then
+        return axisSetting
+    end
+
+    if not (Registry and type(Registry.FindSettings) == "function") then return nil end
+    local candidates = Registry:FindSettings({ unit = lastSetting.unit })
+    local match
+    for i = 1, #(candidates or {}) do
+        local candidate = candidates[i]
+        if candidate and candidate.category == lastSetting.category and ContinuationOffsetCandidate(candidate, axisSuffix, subjectTokens) then
+            if match and match.key ~= candidate.key then return nil end
+            match = candidate
+        end
+    end
+    return match
+end
+
+local function BuildContinuationFollowup(text, ctx)
+    if A.ContextEngineEnabled == false then return nil end
+    if not ctx then return nil end
+    if not ContinuationHasMarker(text) then return nil end
+    if not ContinuationHasMovementVerb(text) then return nil end
+    local direction = ContinuationDirection(text)
+    if not direction then return nil end
+
+    local currentTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or 0
+    local subjectTurn = tonumber(ctx.lastSubjectTurn) or -1000
+    if currentTurn - subjectTurn > 3 then return nil end
+
+    local lastSetting = Registry and type(Registry.GetSetting) == "function" and Registry:GetSetting(ctx.lastSetting) or nil
+    if not lastSetting then return nil end
+    local subjectMatches, subjectTokens = ContinuationSubjectMatches(text, lastSetting)
+    if not subjectMatches then return nil end
+
+    local axisSetting = ContinuationFindAxisSetting(lastSetting, direction, subjectTokens)
+    if not axisSetting then return nil end
+    local delta = ContinuationAmount(axisSetting, text)
+    if direction == "left" or direction == "down" then delta = -math.abs(delta) else delta = math.abs(delta) end
+    if delta == 0 then return nil end
+
+    return {
+        kind = "changes",
+        changes = {
+            {
+                setting = axisSetting,
+                relativeDelta = delta,
+                direction = direction,
+            },
+        },
+        label = "Continue " .. tostring(lastSetting.label or "Assistant setting"),
+        summary = "Continues the previous MSUF subject by adjusting its placement.",
+        sourceText = text,
+    }
+end
+
 local function BuildFollowup(text, ctx)
     if not ctx then return nil end
     if IsPageExplanationQuestion(text) then return nil end
     local copyActionFollowup = P.BuildCopyActionFollowup and P.BuildCopyActionFollowup(text, ctx)
     if copyActionFollowup then return copyActionFollowup end
-    if ContainsAny(text, {
-        "what did you copy", "what was copied", "what did you just copy",
-        "last copy", "previous copy", "copy history", "show copy",
-    }) and ctx.lastAction ~= "copy_unit" and ctx.lastAction ~= "copy_group" then
+    if ContainsAny(text, FollowupData.PREVIOUS_COPY_QUERY_TERMS) and ctx.lastAction ~= "copy_unit" and ctx.lastAction ~= "copy_group" then
         return {
             kind = "answer",
             status = "info",
@@ -409,75 +528,33 @@ local function BuildFollowup(text, ctx)
         }
     end
     if type(ctx.lastChangeBundle) ~= "table" then return nil end
-    local positiveTerms = {
-        "bigger", "larger", "higher", "thicker", "wider", "taller", "increase", "raise", "up", "grow", "stronger",
-        "brighter", "lighter", "more opaque", "more visible",
-        "groesser", "hoeher", "dicker", "breiter", "heller", "hoch",
-    }
-    local negativeTerms = {
-        "smaller", "lower", "thinner", "narrower", "shorter", "less", "decrease", "reduce", "down", "shrink", "weaker",
-        "darker", "dimmer", "more transparent", "less opaque", "fainter",
-        "kleiner", "tiefer", "duenner", "weniger", "dunkler", "runter",
-    }
-    local neutralTerms = {
-        "more", "mehr", "weiter", "further", "farther", "again", "do it again", "same again", "once more", "one more",
-        "another", "repeat", "keep going", "continue", "nochmal", "noch mal",
-    }
-    local oppositeTerms = {
-        "opposite", "opposite way", "other way", "reverse", "reverse it", "undo direction", "andersrum", "umgekehrt",
-    }
-    local reverseCorrectionTerms = {
-        "too much", "too far", "not that much", "went too far", "go back a bit", "back a bit", "a bit back",
-        "zu viel", "zu weit", "etwas zurueck",
-    }
-    local tooPositiveTerms = {
-        "too high", "too big", "too large", "too thick", "too wide", "too tall", "too bright", "too visible", "too opaque",
-        "zu hoch", "zu gross", "zu dick", "zu breit", "zu hell",
-    }
-    local tooNegativeTerms = {
-        "too low", "too small", "too thin", "too narrow", "too short", "too dark", "too transparent", "not visible enough",
-        "zu niedrig", "zu klein", "zu duenn", "zu schmal", "zu dunkel",
-    }
-    local notEnoughTerms = {
-        "not enough", "needs more", "need more", "more still", "still more", "not far enough",
-        "not big enough", "not high enough", "not wide enough", "not visible enough",
-        "nicht genug", "mehr noch",
-    }
-    local replayTerms = {
-        "too", "also", "as well", "same", "same for", "same on", "same to",
-        "do the same", "do that", "do it", "apply that", "apply it", "copy that", "copy it",
-        "repeat that", "repeat it", "repeat that for", "repeat it for",
-        "apply that to", "apply it to", "do that for", "do it for",
-        "make same change", "make the same change", "make that same change",
-        "auch", "auch fuer", "auch fur", "genauso", "genauso fuer", "genauso fur",
-        "das auch", "mach das", "mach das gleiche", "das gleiche fuer", "das gleiche fur",
-    }
-    local rightIntent = ContainsAny(text, { "right", "rechts" })
-    local leftIntent = ContainsAny(text, { "left", "links" })
-    local upIntent = ContainsAny(text, { "up", "higher", "hoch", "oben", "hoeher" })
-    local downIntent = ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" })
+    local positiveTerms = FollowupData.POSITIVE_TERMS
+    local negativeTerms = FollowupData.NEGATIVE_TERMS
+    local neutralTerms = FollowupData.NEUTRAL_TERMS
+    local oppositeTerms = FollowupData.OPPOSITE_TERMS
+    local reverseCorrectionTerms = FollowupData.REVERSE_CORRECTION_TERMS
+    local tooPositiveTerms = FollowupData.TOO_POSITIVE_TERMS
+    local tooNegativeTerms = FollowupData.TOO_NEGATIVE_TERMS
+    local notEnoughTerms = FollowupData.NOT_ENOUGH_TERMS
+    local replayTerms = FollowupData.REPLAY_TERMS
+    local rightIntent = ContainsAny(text, FollowupData.RIGHT_TERMS)
+    local leftIntent = ContainsAny(text, FollowupData.LEFT_TERMS)
+    local upIntent = ContainsAny(text, FollowupData.UP_TERMS)
+    local downIntent = ContainsAny(text, FollowupData.DOWN_TERMS)
     local followDirection = rightIntent and "right" or (leftIntent and "left" or (upIntent and "up" or (downIntent and "down" or nil)))
-    local forcePositive = ContainsAny(text, { "more opaque", "less transparent", "more visible", "brighter", "lighter", "heller" })
-    local forceNegative = ContainsAny(text, { "more transparent", "less opaque", "darker", "dimmer", "fainter", "dunkler" })
+    local forcePositive = ContainsAny(text, FollowupData.FORCE_POSITIVE_TERMS)
+    local forceNegative = ContainsAny(text, FollowupData.FORCE_NEGATIVE_TERMS)
     local positiveIntent = forcePositive or (ContainsAny(text, positiveTerms) and not forceNegative)
     local negativeIntent = forceNegative or (ContainsAny(text, negativeTerms) and not forcePositive)
     local neutralIntent = ContainsAny(text, neutralTerms)
-    local neutralIncreaseIntent = ContainsAny(text, { "more", "mehr", "weiter", "further", "farther", "once more", "one more", "another", "keep going", "continue" })
+    local neutralIncreaseIntent = ContainsAny(text, FollowupData.NEUTRAL_INCREASE_TERMS)
     local oppositeIntent = ContainsAny(text, oppositeTerms)
     local reverseCorrectionIntent = ContainsAny(text, reverseCorrectionTerms)
     local tooPositiveIntent = ContainsAny(text, tooPositiveTerms)
     local tooNegativeIntent = ContainsAny(text, tooNegativeTerms)
     local notEnoughIntent = ContainsAny(text, notEnoughTerms)
     local targetReplayIntent = ContainsAny(text, replayTerms)
-    local explicitAuraBulkScope = ContainsAny(text, {
-        "all aura", "all auras", "all aura icon", "all aura icons",
-        "all unit aura", "all unit auras", "all unit aura icon", "all unit aura icons",
-        "all group aura", "all group auras", "all group aura icon", "all group aura icons",
-        "all buff", "all buffs", "all buff icon", "all buff icons",
-        "all debuff", "all debuffs", "all debuff icon", "all debuff icons",
-        "every aura", "every aura icon", "every aura icons",
-        "every buff", "every buff icon", "every debuff", "every debuff icon",
-    })
+    local explicitAuraBulkScope = ContainsAny(text, FollowupData.EXPLICIT_AURA_BULK_SCOPE_TERMS)
     local pureNumberIntent = tostring(text or ""):match("^[-+]?%d+%.?%d*$") ~= nil
     local bareExactValueIntent = tostring(text or ""):match("^to%s+[-+]?%d+%.?%d*$") ~= nil
         or tostring(text or ""):match("^move%s+to%s+[-+]?%d+%.?%d*$") ~= nil
@@ -485,67 +562,25 @@ local function BuildFollowup(text, ctx)
         or tostring(text or ""):match("^change%s+to%s+[-+]?%d+%.?%d*$") ~= nil
         or tostring(text or ""):match("^auf%s+[-+]?%d+%.?%d*$") ~= nil
         or tostring(text or ""):match("^zu%s+[-+]?%d+%.?%d*$") ~= nil
-    local exactValueReference = ContainsAny(text, {
-        "it", "that", "this",
-        "last setting", "last value", "actually", "instead", "rather",
-        "no", "nope", "wait", "oops",
-        "set it", "set them", "set those", "set these",
-        "make it", "make them", "make those", "make these",
-        "change it", "change them", "change those", "change these",
-        "move it to", "move them to", "move those to", "move these to",
-        "them to", "those to", "these to",
-        "use",
-    })
-    local pluralExactValueReference = ContainsAny(text, {
-        "them", "those", "these", "both", "all", "all of them",
-        "each", "every", "settings", "options", "values",
-    })
+    local exactValueReference = ContainsAny(text, FollowupData.EXACT_VALUE_REFERENCE_TERMS)
+    local pluralExactValueReference = ContainsAny(text, FollowupData.PLURAL_EXACT_VALUE_REFERENCE_TERMS)
     local exactValueIntent = pureNumberIntent
         or bareExactValueIntent
-        or (not explicitAuraBulkScope and ContainsAny(text, { "min", "minimum", "max", "maximum" }))
+        or (not explicitAuraBulkScope and ContainsAny(text, FollowupData.MIN_MAX_TERMS))
         or (not explicitAuraBulkScope and exactValueReference and FirstNumber(text) ~= nil)
-    local commandIntent = ContainsAny(text, {
-        "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift",
-        "create", "select", "use", "reset", "copy", "open", "import", "export", "rename", "delete", "remove", "switch", "assign",
-        "setze", "stelle", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken", "einblenden", "ausblenden", "verschiebe", "verschieben",
-    })
-    local auraLaneObjectIntent = ContainsAny(text, {
-        "them", "those", "these", "their",
-        "the icon", "the icons", "icons", "aura icon", "aura icons",
-        "buff icon", "buff icons", "debuff icon", "debuff icons",
-        "buffs", "debuffs", "auras",
-    }) and ContainsAny(text, {
-        "move", "nudge", "shift", "offset", "position", "left", "right", "up", "down",
-        "x offset", "y offset", "per row", "icons per row", "spacing", "gap",
-        "layer", "z", "z layer", "frame level", "cap", "limit", "max", "maximum", "count",
-        "size", "bigger", "larger", "smaller", "shrink", "growth", "grow", "anchor",
-    })
-    local genericObjectIntent = ContainsAny(text, {
-        "it", "its", "that", "this", "them", "those", "these", "their",
-        "the frame", "the frames", "the bar", "the bars", "the text", "the icon", "the icons",
-        "same object", "same option area",
-    }) and ContainsAny(text, {
-        "move", "nudge", "shift", "offset", "position", "left", "right", "up", "down",
-        "x offset", "y offset", "width", "height", "wider", "narrower", "taller", "shorter",
-        "size", "bigger", "larger", "smaller", "shrink",
-        "layer", "z", "z layer", "frame level", "anchor", "growth", "grow",
-        "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off",
-    })
-    local explicitFollowupReference = ContainsAny(text, { "it", "that", "this", "them", "those", "these", "same", "do it", "do that", "again", "more", "less", "opposite", "other way" })
+    local commandIntent = ContainsAny(text, FollowupData.COMMAND_INTENT_TERMS)
+    local auraLaneObjectIntent = ContainsAny(text, FollowupData.AURA_LANE_OBJECT_REFERENCE_TERMS) and ContainsAny(text, FollowupData.AURA_LANE_OBJECT_ACTION_TERMS)
+    local genericObjectIntent = ContainsAny(text, FollowupData.GENERIC_OBJECT_REFERENCE_TERMS) and ContainsAny(text, FollowupData.GENERIC_OBJECT_ACTION_TERMS)
+    local explicitFollowupReference = ContainsAny(text, FollowupData.EXPLICIT_FOLLOWUP_REFERENCE_TERMS)
     local wordCount = 0
     for _ in tostring(text or ""):gmatch("%S+") do wordCount = wordCount + 1 end
-    local bareDirectionalFollowup = ContainsAny(text, {
-        "left", "right", "up", "down",
-        "move left", "move right", "move up", "move down",
-        "nudge left", "nudge right", "nudge up", "nudge down",
-        "shift left", "shift right", "shift up", "shift down",
-    }) and wordCount <= 3 and not ContainsAny(text, { "anchor", "attach", "point", "bottom left", "bottom right", "top left", "top right" })
+    local bareDirectionalFollowup = ContainsAny(text, FollowupData.BARE_DIRECTIONAL_FOLLOWUP_TERMS) and wordCount <= 3 and not ContainsAny(text, FollowupData.BARE_DIRECTIONAL_GUARD_TERMS)
     local hasIntent = positiveIntent or negativeIntent or neutralIntent or oppositeIntent or reverseCorrectionIntent
         or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or exactValueIntent
         or leftIntent or rightIntent or targetReplayIntent
         or auraLaneObjectIntent
         or genericObjectIntent
-        or ContainsAny(text, { "hide it", "clear it", "remove it", "empty it", "turn it off", "disable it", "hide that", "clear that", "remove that" })
+        or ContainsAny(text, FollowupData.HIDE_REFERENCE_TERMS)
     if not hasIntent then return nil end
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
@@ -564,8 +599,8 @@ local function BuildFollowup(text, ctx)
 
     local function FollowupExactValue(setting)
         if not (setting and setting.type == "number") then return nil end
-        if ContainsAny(text, { "maximum", "max" }) and setting.max ~= nil then return setting.max end
-        if ContainsAny(text, { "minimum", "min" }) and setting.min ~= nil then return setting.min end
+        if ContainsAny(text, FollowupData.EXACT_MAX_TERMS) and setting.max ~= nil then return setting.max end
+        if ContainsAny(text, FollowupData.EXACT_MIN_TERMS) and setting.min ~= nil then return setting.min end
         local value = A._ExplicitNumberValue(text)
         if value == nil then value = FirstNumber(text) end
         if value == nil then return nil end
@@ -578,13 +613,13 @@ local function BuildFollowup(text, ctx)
         local step = (setting and tonumber(setting.step)) or 1
         if amount == nil and prevDelta ~= nil and prevDelta ~= 0 then amount = math.abs(prevDelta) end
         if amount == nil or amount == 0 then amount = step end
-        if explicitAmount == nil and ContainsAny(text, { "a bit", "bit", "a little", "little", "slightly", "tiny", "small step", "etwas" }) then
+        if explicitAmount == nil and ContainsAny(text, FollowupData.SMALL_AMOUNT_TERMS) then
             amount = amount / 2
             if amount < step then amount = step end
-        elseif explicitAmount == nil and ContainsAny(text, { "half", "half as much" }) then
+        elseif explicitAmount == nil and ContainsAny(text, FollowupData.HALF_AMOUNT_TERMS) then
             amount = amount / 2
             if amount < step then amount = step end
-        elseif explicitAmount == nil and not reverseCorrectionIntent and ContainsAny(text, { "a lot", "much", "way more", "way less", "far more", "far less", "big step", "large step", "twice", "double" }) then
+        elseif explicitAmount == nil and not reverseCorrectionIntent and ContainsAny(text, FollowupData.LARGE_AMOUNT_TERMS) then
             amount = amount * 2
         end
         if setting and setting.percent == true and amount > 1 then amount = amount / 100 end
@@ -599,27 +634,23 @@ local function BuildFollowup(text, ctx)
     end
 
     local function HasGenericObjectFollowupReference(textValue)
-        return ContainsAny(textValue, {
-            "it", "its", "that", "this", "them", "those", "these", "their",
-            "the frame", "the frames", "the bar", "the bars", "the text", "the icon", "the icons",
-            "same", "same object", "same option area",
-        })
+        return ContainsAny(textValue, FollowupData.GENERIC_REFERENCE_TERMS)
     end
 
     local function GenericFollowupTargetAttr(textValue, direction)
-        if ContainsAny(textValue, { "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off" }) then return "enabled" end
-        if ContainsAny(textValue, { "growth direction", "grow direction", "growth", "grow", "grows" }) then return "growth" end
-        if ContainsAny(textValue, { "anchor", "anchor point", "position anchor", "bottom left", "bottom right", "top left", "top right", "bottomleft", "bottomright", "topleft", "topright" }) then return "anchor" end
-        if direction and ContainsAny(textValue, { "move", "nudge", "shift", "offset", "position", "left", "right", "up", "down", "links", "rechts", "hoch", "runter", "oben", "unten" }) then
+        if ContainsAny(textValue, FollowupData.GENERIC_ENABLE_TERMS) then return "enabled" end
+        if ContainsAny(textValue, FollowupData.GROWTH_TERMS) then return "growth" end
+        if ContainsAny(textValue, FollowupData.ANCHOR_TERMS) then return "anchor" end
+        if direction and ContainsAny(textValue, FollowupData.MOVEMENT_TERMS) then
             if direction == "left" or direction == "right" then return "offsetX" end
             if direction == "up" or direction == "down" then return "offsetY" end
         end
-        if ContainsAny(textValue, { "x offset", "offset x", "horizontal offset" }) then return "offsetX" end
-        if ContainsAny(textValue, { "y offset", "offset y", "vertical offset" }) then return "offsetY" end
-        if ContainsAny(textValue, { "width", "wider", "narrower", "wide", "breite", "breiter", "schmaler" }) then return "width" end
-        if ContainsAny(textValue, { "height", "taller", "shorter", "tall", "hoehe", "hoeher" }) then return "height" end
-        if ContainsAny(textValue, { "layer", "z", "z layer", "z level", "z-level", "z order", "z-order", "z index", "z-index", "draw layer", "frame level", "strata" }) then return "layer" end
-        if ContainsAny(textValue, { "icon size", "text size", "font size", "size", "bigger", "larger", "smaller", "shrink", "groesse", "grosse", "groesser", "kleiner" }) then return "size" end
+        if ContainsAny(textValue, FollowupData.X_OFFSET_TERMS) then return "offsetX" end
+        if ContainsAny(textValue, FollowupData.Y_OFFSET_TERMS) then return "offsetY" end
+        if ContainsAny(textValue, FollowupData.WIDTH_TERMS) then return "width" end
+        if ContainsAny(textValue, FollowupData.HEIGHT_TERMS) then return "height" end
+        if ContainsAny(textValue, FollowupData.LAYER_TERMS) then return "layer" end
+        if ContainsAny(textValue, FollowupData.GENERIC_SIZE_TERMS) then return "size" end
         return nil
     end
 
@@ -842,14 +873,14 @@ local function BuildFollowup(text, ctx)
 
     local function TextAreaTargetPrefixes(textValue)
         local prefixes = {}
-        if ContainsAny(textValue, { "power text", "mana text", "power number", "mana number", "power value", "mana value" }) then
+        if ContainsAny(textValue, FollowupData.POWER_TEXT_TERMS) then
             prefixes[#prefixes + 1] = "power"
             prefixes[#prefixes + 1] = "powerText"
-        elseif ContainsAny(textValue, { "hp text", "health text", "health number", "hp number", "health value", "hp value" }) then
+        elseif ContainsAny(textValue, FollowupData.HP_TEXT_TERMS) then
             prefixes[#prefixes + 1] = "hp"
             prefixes[#prefixes + 1] = "healthText"
             prefixes[#prefixes + 1] = "text"
-        elseif ContainsAny(textValue, { "name text", "name" }) then
+        elseif ContainsAny(textValue, FollowupData.NAME_TEXT_TERMS) then
             prefixes[#prefixes + 1] = "name"
             prefixes[#prefixes + 1] = "nameText"
         end
@@ -936,9 +967,9 @@ local function BuildFollowup(text, ctx)
 
     local textSlotFollowupShouldHandle = #units == 0 and #groups == 0 and BundleHasTextSlotPrevious()
         and (
-            ContainsAny(text, { "hide it", "clear it", "remove it", "empty it", "turn it off", "disable it", "hide that", "clear that", "remove that" })
-            or (followDirection and ContainsAny(text, { "move", "nudge", "shift", "left", "right", "up", "down" }))
-            or ContainsAny(text, { "make it bigger", "make it larger", "bigger", "larger", "increase it", "make it smaller", "smaller", "decrease it", "shrink it" })
+            ContainsAny(text, FollowupData.HIDE_REFERENCE_TERMS)
+            or (followDirection and ContainsAny(text, FollowupData.TEXT_SLOT_MOVE_TERMS))
+            or ContainsAny(text, FollowupData.TEXT_SLOT_RESIZE_TERMS)
         )
 
     local genericObjectFollowupReference = HasGenericObjectFollowupReference(text) or bareDirectionalFollowup
@@ -1001,33 +1032,23 @@ local function BuildFollowup(text, ctx)
     end
 
     local function HasAuraObjectFollowupReference(textValue)
-        return ContainsAny(textValue, {
-            "it", "that", "this", "them", "those", "these", "their",
-            "the icon", "the icons", "icons", "aura icon", "aura icons",
-            "buff icon", "buff icons", "debuff icon", "debuff icons",
-            "buffs", "debuffs", "auras", "same",
-        })
+        return ContainsAny(textValue, FollowupData.AURA_REFERENCE_TERMS)
     end
 
     local function AuraLaneFollowupTargetAttr(textValue, direction)
-        if ContainsAny(textValue, { "growth direction", "grow direction", "growth", "grow", "grows" }) then return "growth" end
-        if ContainsAny(textValue, { "anchor", "anchor point", "position anchor", "bottom left", "bottom right", "top left", "top right", "bottomleft", "bottomright", "topleft", "topright" }) then return "anchor" end
-        if direction and ContainsAny(textValue, { "move", "nudge", "shift", "offset", "position", "left", "right", "up", "down", "links", "rechts", "hoch", "runter", "oben", "unten" }) then
+        if ContainsAny(textValue, FollowupData.GROWTH_TERMS) then return "growth" end
+        if ContainsAny(textValue, FollowupData.ANCHOR_TERMS) then return "anchor" end
+        if direction and ContainsAny(textValue, FollowupData.MOVEMENT_TERMS) then
             if direction == "left" or direction == "right" then return "offsetX" end
             if direction == "up" or direction == "down" then return "offsetY" end
         end
-        if ContainsAny(textValue, { "x offset", "offset x", "horizontal offset" }) then return "offsetX" end
-        if ContainsAny(textValue, { "y offset", "offset y", "vertical offset" }) then return "offsetY" end
-        if ContainsAny(textValue, { "per row", "icons per row", "wrap count", "row count" }) then return "perRow" end
-        if ContainsAny(textValue, { "spacing", "gap", "icon gap", "space them", "space out" }) then return "spacing" end
-        if ContainsAny(textValue, { "layer", "z", "z layer", "z level", "z-level", "z order", "z-order", "z index", "z-index", "draw layer", "frame level", "strata" }) then return "layer" end
-        if ContainsAny(textValue, {
-            "max", "maximum", "max icons", "maximum icons", "max count", "maximum count",
-            "icon count", "aura count", "buff count", "debuff count", "count",
-            "cap", "caps", "capped", "aura cap", "buff cap", "debuff cap",
-            "limit", "limits", "limited", "icon limit", "aura limit", "buff limit", "debuff limit",
-        }) then return "max" end
-        if ContainsAny(textValue, { "icon size", "icons size", "size", "bigger", "larger", "smaller", "shrink", "groesse", "grosse", "groesser", "kleiner" }) then return "size" end
+        if ContainsAny(textValue, FollowupData.X_OFFSET_TERMS) then return "offsetX" end
+        if ContainsAny(textValue, FollowupData.Y_OFFSET_TERMS) then return "offsetY" end
+        if ContainsAny(textValue, FollowupData.AURA_PER_ROW_TERMS) then return "perRow" end
+        if ContainsAny(textValue, FollowupData.AURA_SPACING_TERMS) then return "spacing" end
+        if ContainsAny(textValue, FollowupData.LAYER_TERMS) then return "layer" end
+        if ContainsAny(textValue, FollowupData.AURA_MAX_TERMS) then return "max" end
+        if ContainsAny(textValue, FollowupData.AURA_SIZE_TERMS) then return "size" end
         return nil
     end
 
@@ -1041,8 +1062,8 @@ local function BuildFollowup(text, ctx)
     end
 
     local function RequestedAuraMirrorLane(textValue)
-        local wantsBuff = ContainsAny(textValue, { "buff", "buffs" })
-        local wantsDebuff = ContainsAny(textValue, { "debuff", "debuffs" })
+        local wantsBuff = ContainsAny(textValue, FollowupData.BUFF_TERMS)
+        local wantsDebuff = ContainsAny(textValue, FollowupData.DEBUFF_TERMS)
         if wantsBuff == wantsDebuff then return nil end
         return wantsBuff and "buff" or "debuff"
     end
@@ -1320,9 +1341,9 @@ local function BuildFollowup(text, ctx)
     end
 
     if #units == 0 and #groups == 0 then
-        local hideTextSlot = ContainsAny(text, { "hide it", "clear it", "remove it", "empty it", "turn it off", "disable it", "hide that", "clear that", "remove that" })
-        local moveTextSlot = followDirection and ContainsAny(text, { "move", "nudge", "shift", "left", "right", "up", "down" })
-        local resizeTextSlot = ContainsAny(text, { "make it bigger", "make it larger", "bigger", "larger", "increase it", "make it smaller", "smaller", "decrease it", "shrink it" })
+        local hideTextSlot = ContainsAny(text, FollowupData.HIDE_REFERENCE_TERMS)
+        local moveTextSlot = followDirection and ContainsAny(text, FollowupData.TEXT_SLOT_MOVE_TERMS)
+        local resizeTextSlot = ContainsAny(text, FollowupData.TEXT_SLOT_RESIZE_TERMS)
         local textSlotFollowupReference = explicitFollowupReference or bareDirectionalFollowup or hideTextSlot
         if textSlotFollowupReference and (hideTextSlot or moveTextSlot or resizeTextSlot) then
             local textSlotChanges = {}
@@ -1593,11 +1614,7 @@ local function BuildBooleanCorrection(text, ctx)
     if not (ctx and type(ctx.lastSetting) == "string") then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
-    if not ContainsAny(text, {
-        "again", "wieder", "doch", "actually", "ne",
-        "it", "that", "this", "back", "back on", "back off",
-        "turn it", "turn that", "same setting", "last setting",
-    }) then return nil end
+    if not ContainsAny(text, FollowupData.BOOLEAN_CORRECTION_TERMS) then return nil end
     local setting = Registry:GetSetting(ctx.lastSetting)
     if not setting or setting.type ~= "boolean" then return nil end
     return {
@@ -1617,30 +1634,19 @@ P.NON_AURA_DEBUFF_CONTROL_TERMS = P.NON_AURA_DEBUFF_CONTROL_TERMS or {
 }
 
 local function ParseSetting(text, ctx)
-    if ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+    if ContainsAny(text, FollowupData.AURA_KIND_TERMS)
         and not ContainsAny(text, P.NON_AURA_DEBUFF_CONTROL_TERMS) then
         return nil
     end
     local frameType = DetectFrameType(text, ctx)
     local direction = DetectDirection(text, ctx)
-    local movementIntent = direction and ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "x", "y" }) and not ContainsAny(text, { "anchor" })
+    local movementIntent = direction and ContainsAny(text, FollowupData.PARSE_MOVEMENT_TERMS) and not ContainsAny(text, FollowupData.PARSE_ANCHOR_TERMS)
     local attr = movementIntent and ((direction == "left" or direction == "right") and "offsetX" or "offsetY") or DetectAttribute(text, frameType)
     if not attr then return nil end
-    if attr == "enabled" and ContainsAny(text, {
-        "in group", "when solo", "while solo", "show player", "hide player", "player in group",
-        "show while solo", "while in group", "group when solo",
-        "out of combat", "outside combat", "in combat", "while mounted", "when mounted", "mounted",
-        "in vehicle", "while in vehicle", "when in vehicle", "resting", "stealthed", "load condition",
-        "dispel overlay", "unitframe dispel", "debuff overlay",
-    }) then
+    if attr == "enabled" and ContainsAny(text, FollowupData.ENABLED_GUARD_TERMS) then
         return nil
     end
-    if (attr == "width" or attr == "height") and ContainsAny(text, {
-        "width mode", "height mode", "width source", "height source",
-        "power bar height", "mana bar height", "energy bar height",
-        "portrait height", "portrait width", "castbar height", "castbar width",
-        "icon height", "icon width", "text height", "text width",
-    }) then
+    if (attr == "width" or attr == "height") and ContainsAny(text, FollowupData.DIMENSION_GUARD_TERMS) then
         return nil
     end
     local useLastUnit = ShouldUseLastUnitContext(text)
@@ -1718,7 +1724,7 @@ local function ParseSetting(text, ctx)
         }
     end
     if #units == 0 and #candidates > 1 then
-        if ContainsAny(text, { "all", "all of", "every", "each", "alle", "alles", "jede", "jeder", "jedes" }) then
+        if ContainsAny(text, FollowupData.ALL_SCOPE_TERMS) then
             return {
                 kind = "changes",
                 changes = BuildChanges(candidates, value, relativeDelta, direction),
@@ -1747,5 +1753,6 @@ P.IsGroupContextUnit = IsGroupContextUnit
 P.ContextGroups = ContextGroups
 P.ShouldUseLastUnitContext = ShouldUseLastUnitContext
 P.BuildFollowup = BuildFollowup
+P.BuildContinuationFollowup = BuildContinuationFollowup
 P.BuildBooleanCorrection = BuildBooleanCorrection
 P.ParseSetting = ParseSetting

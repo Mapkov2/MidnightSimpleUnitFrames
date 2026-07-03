@@ -13,6 +13,7 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Data = A.ParserData or {}
 
 -- Follow-up parser for "do the same/copy that" replies.
 -- It clones only plain action args from the previous context, then builds a fresh action
@@ -64,19 +65,8 @@ local function CopyActionTargetsForFollowup(text, actionKey, source)
     return targets
 end
 
-local COPY_ACTION_FOLLOWUP_TERMS = {
-    "copy that", "copy it", "copy the same", "copy same",
-    "do that", "do it", "do the same", "same for", "same to",
-    "apply that", "apply it", "apply the same", "also to", "also for",
-    "repeat that", "repeat it",
-    "das auch", "mach das", "mach das gleiche", "gleiches fuer", "gleiches fur",
-    "auch fuer", "auch fur", "kopiere das", "uebernehme das",
-}
-
-local COPY_ACTION_EXPLICIT_FOLLOWUP_TERMS = {
-    "copy that", "copy it", "copy the same", "copy same",
-    "kopiere das", "uebernehme das",
-}
+local COPY_ACTION_FOLLOWUP_TERMS = Data.COPY_ACTION_FOLLOWUP_TERMS or {}
+local COPY_ACTION_EXPLICIT_FOLLOWUP_TERMS = Data.COPY_ACTION_EXPLICIT_FOLLOWUP_TERMS or {}
 
 function P.BuildCopyActionFollowup(text, ctx)
     if not ContainsAny(text, COPY_ACTION_FOLLOWUP_TERMS) then return nil end

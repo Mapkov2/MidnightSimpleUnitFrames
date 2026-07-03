@@ -20,6 +20,7 @@ M.Assistant = A
 
 local P = A.Parser or {}
 A.Parser = P
+P.RootPhrases = (((A.ParserData or {}).ROOT_PARSER or {}).PHRASES or {})
 local Trim = P.Trim
 local Normalize = P.Normalize
 local ContainsAny = P.ContainsAny
@@ -80,8 +81,8 @@ local ParseUnsupportedDetailShortcut = P.ParseUnsupportedDetailShortcut
 local ParsePortraitDetailShortcut = P.ParsePortraitDetailShortcut
 
 local function ParseDispelOverlayOpacityShortcut(normalized)
-    if not ContainsAny(normalized, { "dispel overlay opacity", "dispel overlay alpha", "unitframe dispel overlay opacity", "unit frame dispel overlay opacity" }) then return nil end
-    if ContainsAny(normalized, { "increase", "decrease", "raise", "lower", "more ", "less ", "relative", "by " }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[1]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[2]) then return nil end
     local value = FirstNumber(normalized)
     if value == nil then return nil end
     if value > 1 then value = value / 100 end
@@ -114,23 +115,17 @@ local function ParseDispelOverlayOpacityShortcut(normalized)
 end
 
 local function CastbarWidthModeValue(normalized)
-    if ContainsAny(normalized, { "manual", "manual width", "custom", "fixed" }) then return "manual" end
-    if ContainsAny(normalized, { "unitframe", "unit frame", "follow unit frame", "auto unit frame", "own width" }) then return "unitframe" end
-    if ContainsAny(normalized, { "essential", "essential cooldown", "essential cooldowns", "cooldown", "cooldowns", "cdm" }) then return "essential" end
-    if ContainsAny(normalized, { "utility", "utility cooldown", "utility cooldowns" }) then return "utility" end
+    if ContainsAny(normalized, P.RootPhrases[3]) then return "manual" end
+    if ContainsAny(normalized, P.RootPhrases[4]) then return "unitframe" end
+    if ContainsAny(normalized, P.RootPhrases[5]) then return "essential" end
+    if ContainsAny(normalized, P.RootPhrases[6]) then return "utility" end
     return nil
 end
 
 local function ParseCastbarWidthModeShortcut(normalized)
-    if not ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if not ContainsAny(normalized, {
-        "width mode", "width source", "width behavior", "match width", "auto width",
-        "breite modus", "breite quelle",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "spell name", "spell text", "text width", "manual width", "truncate", "aura", "buff", "debuff",
-        "focus kick", "kick icon", "interrupt icon",
-    }) and not ContainsAny(normalized, { "width mode", "width source", "width behavior" }) then
+    if not ContainsAny(normalized, P.RootPhrases[7]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[8]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[9]) and not ContainsAny(normalized, P.RootPhrases[10]) then
         return nil
     end
 
@@ -138,7 +133,7 @@ local function ParseCastbarWidthModeShortcut(normalized)
     if value == nil then return nil end
 
     local units = DetectUnits(normalized)
-    if #units == 0 and ContainsAny(normalized, { "all castbars", "all cast bars", "every castbar", "every cast bar", "all unit castbars", "all unit cast bars" }) then
+    if #units == 0 and ContainsAny(normalized, P.RootPhrases[11]) then
         units = { "player", "target", "focus", "boss" }
     end
     if #units == 0 then return nil end
@@ -170,24 +165,21 @@ local function ParseCastbarWidthModeShortcut(normalized)
 end
 
 local function ParseGroupAuraLaneOffsetShortcut(normalized)
-    if not ContainsAny(normalized, { "buff", "buffs", "debuff", "debuffs" }) then return nil end
-    if ContainsAny(normalized, {
-        "cooldown", "timer", "stack", "stack count", "text", "font", "filter", "blacklist",
-        "anchor", "growth", "grow", "size", "spacing", "per row", "max", "count",
-    }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[12]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[13]) then return nil end
 
     local lane
-    if ContainsAny(normalized, { "buff", "buffs" }) then lane = "buff" end
-    if ContainsAny(normalized, { "debuff", "debuffs" }) then
+    if ContainsAny(normalized, P.RootPhrases[14]) then lane = "buff" end
+    if ContainsAny(normalized, P.RootPhrases[15]) then
         if lane ~= nil then return nil end
         lane = "debuff"
     end
     if not lane then return nil end
 
     local axis
-    if ContainsAny(normalized, { "x offset", "offset x", "horizontal offset", " x ", " x", "x " }) then
+    if ContainsAny(normalized, P.RootPhrases[16]) then
         axis = "x"
-    elseif ContainsAny(normalized, { "y offset", "offset y", "vertical offset", " y ", " y", "y " }) then
+    elseif ContainsAny(normalized, P.RootPhrases[17]) then
         axis = "y"
     end
     if not axis then return nil end
@@ -196,10 +188,7 @@ local function ParseGroupAuraLaneOffsetShortcut(normalized)
     if value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, {
-        "all group", "all group aura", "all group auras", "all group buffs", "all group debuffs",
-        "every group", "every group aura", "every group buff", "every group debuff",
-    }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[18]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -225,33 +214,30 @@ local function ParseGroupAuraLaneOffsetShortcut(normalized)
 end
 
 local function ParseGroupAuraLaneTextOffsetShortcut(normalized)
-    if not ContainsAny(normalized, { "buff", "buffs", "debuff", "debuffs" }) then return nil end
-    if not ContainsAny(normalized, { "cooldown", "timer", "stack", "stack count" }) then return nil end
-    if ContainsAny(normalized, {
-        "font", "size", "anchor", "filter", "blacklist", "growth", "grow", "text size",
-        "cooldown size", "timer size", "stack size",
-    }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[19]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[20]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[21]) then return nil end
 
     local lane
-    if ContainsAny(normalized, { "buff", "buffs" }) then lane = "buff" end
-    if ContainsAny(normalized, { "debuff", "debuffs" }) then
+    if ContainsAny(normalized, P.RootPhrases[22]) then lane = "buff" end
+    if ContainsAny(normalized, P.RootPhrases[23]) then
         if lane ~= nil then return nil end
         lane = "debuff"
     end
     if not lane then return nil end
 
     local prefix
-    if ContainsAny(normalized, { "cooldown", "timer" }) then
+    if ContainsAny(normalized, P.RootPhrases[24]) then
         prefix = "cooldown"
-    elseif ContainsAny(normalized, { "stack", "stack count" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[25]) then
         prefix = "stack"
     end
     if not prefix then return nil end
 
     local axis
-    if ContainsAny(normalized, { "x offset", "offset x", "horizontal offset", " x ", " x", "x " }) then
+    if ContainsAny(normalized, P.RootPhrases[26]) then
         axis = "X"
-    elseif ContainsAny(normalized, { "y offset", "offset y", "vertical offset", " y ", " y", "y " }) then
+    elseif ContainsAny(normalized, P.RootPhrases[27]) then
         axis = "Y"
     end
     if not axis then return nil end
@@ -260,10 +246,7 @@ local function ParseGroupAuraLaneTextOffsetShortcut(normalized)
     if value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, {
-        "all group", "all group aura", "all group auras", "all group buffs", "all group debuffs",
-        "every group", "every group aura", "every group buff", "every group debuff",
-    }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[28]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -290,23 +273,23 @@ local function ParseGroupAuraLaneTextOffsetShortcut(normalized)
 end
 
 local function ParseGroupAuraLaneTextSizeShortcut(normalized)
-    if not ContainsAny(normalized, { "buff", "buffs", "debuff", "debuffs" }) then return nil end
-    if not ContainsAny(normalized, { "cooldown", "timer", "stack", "stack count" }) then return nil end
-    if not ContainsAny(normalized, { "font", "font size", "text size", "size" }) then return nil end
-    if ContainsAny(normalized, { "anchor", " x", "x ", "x offset", " y", "y ", "y offset", "offset", "filter", "blacklist" }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[29]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[30]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[31]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[32]) then return nil end
 
     local lane
-    if ContainsAny(normalized, { "buff", "buffs" }) then lane = "buff" end
-    if ContainsAny(normalized, { "debuff", "debuffs" }) then
+    if ContainsAny(normalized, P.RootPhrases[33]) then lane = "buff" end
+    if ContainsAny(normalized, P.RootPhrases[34]) then
         if lane ~= nil then return nil end
         lane = "debuff"
     end
     if not lane then return nil end
 
     local attr
-    if ContainsAny(normalized, { "cooldown", "timer" }) then
+    if ContainsAny(normalized, P.RootPhrases[35]) then
         attr = "cooldownSize"
-    elseif ContainsAny(normalized, { "stack", "stack count" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[36]) then
         attr = "stackSize"
     end
     if not attr then return nil end
@@ -315,10 +298,7 @@ local function ParseGroupAuraLaneTextSizeShortcut(normalized)
     if value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, {
-        "all group", "all group aura", "all group auras", "all group buffs", "all group debuffs",
-        "every group", "every group aura", "every group buff", "every group debuff",
-    }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[37]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -344,40 +324,34 @@ local function ParseGroupAuraLaneTextSizeShortcut(normalized)
 end
 
 local function ParseGroupAuraLaneBooleanShortcut(normalized)
-    if not ContainsAny(normalized, { "buff", "buffs", "debuff", "debuffs" }) then return nil end
-    if ContainsAny(normalized, {
-        "font", "size", "anchor", "direction", "reverse", " x", "x ", "x offset", " y", "y ", "y offset",
-        "offset", "filter", "blacklist", "darken", "darkens", "loss", "lost",
-    }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[38]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[39]) then return nil end
 
     local attr
-    if ContainsAny(normalized, { "cooldown text", "timer text" }) then
+    if ContainsAny(normalized, P.RootPhrases[40]) then
         attr = "showCooldown"
-    elseif ContainsAny(normalized, { "stack count", "stacks", "stack text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[41]) then
         attr = "showStacks"
-    elseif ContainsAny(normalized, { "cooldown swipe", "timer swipe" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[42]) then
         attr = "showCooldownSwipe"
     end
     if not attr then return nil end
 
     local lane
-    if ContainsAny(normalized, { "buff", "buffs" }) then lane = "buff" end
-    if ContainsAny(normalized, { "debuff", "debuffs" }) then
+    if ContainsAny(normalized, P.RootPhrases[43]) then lane = "buff" end
+    if ContainsAny(normalized, P.RootPhrases[44]) then
         if lane ~= nil then return nil end
         lane = "debuff"
     end
     if not lane then return nil end
 
     local value = DetectBoolean(normalized)
-    if value == nil and ContainsAny(normalized, { "show", "enable", "enabled", "turn on", "on" }) then value = true end
-    if value == nil and ContainsAny(normalized, { "hide", "disable", "disabled", "turn off", "off" }) then value = false end
+    if value == nil and ContainsAny(normalized, P.RootPhrases[45]) then value = true end
+    if value == nil and ContainsAny(normalized, P.RootPhrases[46]) then value = false end
     if value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, {
-        "all group", "all group aura", "all group auras", "all group buffs", "all group debuffs",
-        "every group", "every group aura", "every group buff", "every group debuff",
-    }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[47]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -403,18 +377,18 @@ local function ParseGroupAuraLaneBooleanShortcut(normalized)
 end
 
 local function ParseGroupAuraCooldownDarkenShortcut(normalized)
-    if not ContainsAny(normalized, { "cooldown", "swipe", "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(normalized, { "darken", "darkens", "darkened", "dim", "dims", "dunkelt" }) then return nil end
-    if not ContainsAny(normalized, { "loss", "lost", "missing", "expire", "expired", "verlust" }) then return nil end
-    if ContainsAny(normalized, { "color", "colour", "size", "font", "text", "anchor", "x offset", "y offset" }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[48]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[49]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[50]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[51]) then return nil end
 
     local value = DetectBoolean(normalized)
-    if value == nil and ContainsAny(normalized, { "turn on", "enable", "enabled", "on", "darken", "darkens", "dim", "dims" }) then value = true end
-    if value == nil and ContainsAny(normalized, { "turn off", "disable", "disabled", "off", "dont", "do not" }) then value = false end
+    if value == nil and ContainsAny(normalized, P.RootPhrases[52]) then value = true end
+    if value == nil and ContainsAny(normalized, P.RootPhrases[53]) then value = false end
     if value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group", "all groups", "all group frames", "every group", "every group frame" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[54]) then
         groups = { "party", "raid" }
     end
     if #groups == 0 then return nil end
@@ -454,17 +428,9 @@ local function ParseGroupAuraCooldownDarkenShortcut(normalized)
 end
 
 local function ParseExplicitUnitBarOpacityShortcut(normalized)
-    if not ContainsAny(normalized, { "alpha", "opacity", "transparency" }) then return nil end
-    if ContainsAny(normalized, {
-        "increase", "decrease", "raise", "lower", "more ", "less ", "more transparent", "less transparent",
-        "more opaque", "less opaque", "relative", "by ",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "text opacity", "text alpha", "font opacity", "font alpha", "aura", "auras", "buff", "debuff",
-        "castbar", "cast bar", "absorb", "heal absorb", "range fade", "dispel", "overlay",
-        "outline", "border",
-        "portrait", "edit mode", "editmode",
-    }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[55]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[56]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[57]) then return nil end
 
     local units = DetectUnits(normalized)
     if #units == 0 then return nil end
@@ -472,14 +438,8 @@ local function ParseExplicitUnitBarOpacityShortcut(normalized)
     if value == nil then return nil end
     if value > 1 then value = value / 100 end
 
-    local powerOpacity = ContainsAny(normalized, {
-        "power bar", "powerbar", "power opacity", "power alpha",
-        "mana bar", "mana opacity", "mana alpha",
-        "resource bar", "resource opacity", "resource alpha",
-    })
-    local backgroundOpacity = ContainsAny(normalized, {
-        "background", "backdrop", "track", "hp track", "health track", "bg", "bar background",
-    })
+    local powerOpacity = ContainsAny(normalized, P.RootPhrases[58])
+    local backgroundOpacity = ContainsAny(normalized, P.RootPhrases[59])
     local attr = powerOpacity and backgroundOpacity and "powerBarBgAlpha"
         or powerOpacity and "powerBarAlpha"
         or backgroundOpacity and "hpBgAlpha"
@@ -508,78 +468,45 @@ local function ParseExplicitUnitBarOpacityShortcut(normalized)
 end
 
 local function ParseGroupAvailabilityFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "gruppenframe", "gruppenframes",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[60]) then
         return nil
     end
-    if not ContainsAny(normalized, {
-        "show player", "player in group", "show player in group", "show player when solo",
-        "show solo", "show while solo", "show group while solo", "hide while solo",
-        "client scene", "hide during client scene", "hide in client scene",
-        "housing", "hide in housing", "hide during housing",
-        "offline members", "offline in combat", "hide offline",
-        "click casting", "clique",
-        "group frames enabled", "frames enabled", "party frames", "raid frames",
-        "mythic raid frames", "turn on group frames", "turn off group frames",
-        "enable group frames", "disable group frames",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[61]) then
         return nil
     end
-    if ContainsAny(normalized, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-        "spell indicator", "spell indicators", "corner indicator", "corner indicators",
-        "power bar", "power bars", "mana bar", "mana bars", "resource bar", "resource bars",
-        "health bar", "hp bar", "health text", "hp text", "power text", "mana text",
-        "castbar", "cast bar", "raid marker", "status icon", "status icons",
-        "role icon", "ready check", "summon", "resurrection", "phase", "pvp",
-        "texture", "gradient", "color", "colors", "colour", "colours",
-        "opacity", "alpha", "font", "text size", "font size", "anchor", "offset",
-        "delay", "after", "tint", "dead background", "background",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[62]) then
         return nil
     end
 
     local attr
     local hideSemantic = false
-    if ContainsAny(normalized, { "offline in combat", "hide offline in combat" }) then
+    if ContainsAny(normalized, P.RootPhrases[63]) then
         attr = "hideOfflineInCombat"
         hideSemantic = true
-    elseif ContainsAny(normalized, { "offline members", "offline member", "offline players", "hide offline members", "hide offline" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[64]) then
         attr = "hideOfflineEnabled"
         hideSemantic = true
-    elseif ContainsAny(normalized, { "client scene", "hide during client scene", "hide in client scene" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[65]) then
         attr = "hideInClientScene"
         hideSemantic = true
-    elseif ContainsAny(normalized, { "housing", "hide in housing", "hide during housing" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[66]) then
         attr = "hideInHousing"
         hideSemantic = true
-    elseif ContainsAny(normalized, {
-        "show player", "player in group", "show player in group",
-        "show player when solo", "show player in group when solo",
-    }) then
+    elseif ContainsAny(normalized, P.RootPhrases[67]) then
         attr = "showPlayer"
-    elseif ContainsAny(normalized, {
-        "show solo", "show while solo", "show group while solo", "show group frame while solo",
-        "show group frames while solo", "hide while solo", "hide solo", "hide group frame while solo",
-        "show party frame while solo", "show raid frame while solo", "show mythic raid frame while solo",
-    }) then
+    elseif ContainsAny(normalized, P.RootPhrases[68]) then
         attr = "showSolo"
-    elseif ContainsAny(normalized, { "click casting", "clique" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[69]) then
         attr = "clickCastEnabled"
-    elseif ContainsAny(normalized, {
-        "group frames enabled", "frames enabled", "party frames", "raid frames", "mythic raid frames",
-        "turn on group frames", "turn off group frames", "enable group frames", "disable group frames",
-    }) then
+    elseif ContainsAny(normalized, P.RootPhrases[70]) then
         attr = "enabled"
     end
     if not attr then return nil end
 
     local fromToValue
-    if ContainsAny(normalized, { "from off to on", "off to on", "from disabled to enabled", "disabled to enabled", "from hidden to shown", "hidden to shown" }) then
+    if ContainsAny(normalized, P.RootPhrases[71]) then
         fromToValue = true
-    elseif ContainsAny(normalized, { "from on to off", "on to off", "from enabled to disabled", "enabled to disabled", "from shown to hidden", "shown to hidden" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[72]) then
         fromToValue = false
     end
 
@@ -587,16 +514,16 @@ local function ParseGroupAvailabilityFastShortcut(normalized)
     if fromToValue ~= nil then
         value = fromToValue
     elseif hideSemantic then
-        if ContainsAny(normalized, { "turn off", "disable", "disabled", "off", "false", "no", "dont hide", "do not hide", "never hide", "always show", "show", "display", "visible" }) then
+        if ContainsAny(normalized, P.RootPhrases[73]) then
             value = false
-        elseif ContainsAny(normalized, { "turn on", "enable", "enabled", "on", "true", "yes", "hide", "hidden", "not show", "dont show", "do not show", "never show" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[74]) then
             value = true
         end
         if value == nil then value = true end
     else
-        if ContainsAny(normalized, { "turn off", "disable", "disabled", "off", "false", "no", "hide", "hidden", "not show", "dont show", "do not show", "never show" }) then
+        if ContainsAny(normalized, P.RootPhrases[75]) then
             value = false
-        elseif ContainsAny(normalized, { "turn on", "enable", "enabled", "on", "true", "yes", "show", "display", "visible" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[76]) then
             value = true
         end
         if value == nil and DetectBoolean then value = DetectBoolean(normalized) end
@@ -604,7 +531,7 @@ local function ParseGroupAvailabilityFastShortcut(normalized)
     if value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "all party and raid", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[77]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -633,13 +560,13 @@ local function GroupBlizzardFallbackValue(normalized)
     local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(normalized) or nil
     local function valueIn(text)
         if not text or text == "" then return nil end
-        if ContainsAny(text, { "auto", "automatic", "default", "standard", "normal", "blizzard default", "blizzard standard" }) then
+        if ContainsAny(text, P.RootPhrases[78]) then
             return "AUTO"
         end
-        if ContainsAny(text, { "show", "visible", "force", "force blizzard", "show blizzard", "anzeigen", "einblenden", "sichtbar", "erzwingen" }) then
+        if ContainsAny(text, P.RootPhrases[79]) then
             return "SHOW"
         end
-        if ContainsAny(text, { "none", "hide all", "hide blizzard", "no blizzard", "off", "aus", "ausblenden", "verstecken", "keiner", "keine", "nichts" }) then
+        if ContainsAny(text, P.RootPhrases[80]) then
             return "NONE"
         end
         return nil
@@ -647,48 +574,27 @@ local function GroupBlizzardFallbackValue(normalized)
 
     local value = valueIn(target)
     if value then return value end
-    if ContainsAny(normalized, {
-        "show blizzard group frames", "show blizzard party frames", "show blizzard raid frames",
-        "force blizzard group frames", "force blizzard party frames", "force blizzard raid frames",
-        "blizzard frames when disabled show", "default frames when disabled show",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[81]) then
         return "SHOW"
     end
-    if ContainsAny(normalized, {
-        "hide blizzard group frames", "hide blizzard party frames", "hide blizzard raid frames",
-        "no blizzard group frames", "no blizzard party frames", "no blizzard raid frames",
-        "hide default group frames", "hide default party frames", "hide default raid frames",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[82]) then
         return "NONE"
     end
     return valueIn(normalized)
 end
 
 local function ParseGroupBlizzardFallbackFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "blizzard fallback", "fallback mode", "fallback modus", "disabled group frame behavior",
-        "disabled group frame blizzard behavior", "when group frames are disabled",
-        "if this switch is off", "blizzard group frames when disabled",
-        "blizzard party frames when disabled", "blizzard raid frames when disabled",
-        "blizzard mythic raid frames when disabled", "blizzard mythicraid frames when disabled",
-        "default group frames when disabled", "standard group frames when disabled",
-        "default party frames when disabled", "default raid frames when disabled",
-        "standard party frames when disabled", "standard raid frames when disabled",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[83]) then
         return nil
     end
-    if ContainsAny(normalized, {
-        "aura", "auras", "buff", "debuff", "spell indicator", "spell indicators",
-        "power", "health", "hp", "text", "font", "color", "colour", "opacity", "alpha",
-        "anchor", "offset", "scale", "scaling",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[84]) then
         return nil
     end
 
     local value = GroupBlizzardFallbackValue(normalized)
     if not value then return nil end
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[85]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -714,19 +620,16 @@ local function ParseGroupBlizzardFallbackFastShortcut(normalized)
 end
 
 local function ParseGroupHideOfflineDelayFastShortcut(normalized)
-    if not ContainsAny(normalized, { "offline", "hide offline" }) then return nil end
-    if not ContainsAny(normalized, { "delay", "after", "seconds", "sec", "verzoegerung", "verzogerung" }) then return nil end
-    if ContainsAny(normalized, {
-        "tint", "dead background", "background", "color", "colour", "opacity", "alpha",
-        "name", "text", "font", "aura", "buff", "debuff", "spell indicator", "spell indicators",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[86]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[87]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[88]) then
         return nil
     end
     local value = FirstNumber(normalized)
     if value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[89]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -752,32 +655,26 @@ local function ParseGroupHideOfflineDelayFastShortcut(normalized)
 end
 
 local function ParseGroupReverseFillFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "reverse fill", "reverse health fill", "fill backwards", "backwards fill",
-        "right to left fill", "fill right to left", "normal fill", "left to right fill",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[90]) then
         return nil
     end
-    if ContainsAny(normalized, {
-        "text", "hp text", "health text", "power text", "mana text", "aura", "buff", "debuff",
-        "castbar", "cast bar", "spell indicator", "spell indicators", "color", "colour",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[91]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[92]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
 
     local value
     local boolValue = DetectBoolean(normalized)
-    if ContainsAny(normalized, { "normal fill", "left to right fill", "fill left to right" }) then
+    if ContainsAny(normalized, P.RootPhrases[93]) then
         value = false
     elseif boolValue ~= nil then
         value = boolValue
-    elseif ContainsAny(normalized, { "reverse", "backwards", "right to left", "fill right to left" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[94]) then
         value = true
     end
     if value == nil then return nil end
@@ -803,18 +700,10 @@ local function ParseGroupReverseFillFastShortcut(normalized)
 end
 
 local function ParseUnitReverseFillFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "reverse fill", "reverse fill direction", "reverse health fill", "reverse bar fill",
-        "fill backwards", "backwards fill", "right to left fill", "fill right to left",
-        "normal fill", "left to right fill", "fill left to right",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[95]) then
         return nil
     end
-    if ContainsAny(normalized, {
-        "party", "raid", "mythicraid", "mythic raid", "group frame", "group frames",
-        "text", "hp text", "health text", "power text", "mana text", "aura", "buff", "debuff",
-        "castbar", "cast bar", "spell indicator", "spell indicators", "color", "colour",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[96]) then
         return nil
     end
 
@@ -823,11 +712,11 @@ local function ParseUnitReverseFillFastShortcut(normalized)
 
     local value
     local boolValue = DetectBoolean(normalized)
-    if ContainsAny(normalized, { "normal fill", "left to right fill", "fill left to right" }) then
+    if ContainsAny(normalized, P.RootPhrases[97]) then
         value = false
     elseif boolValue ~= nil then
         value = boolValue
-    elseif ContainsAny(normalized, { "reverse", "backwards", "right to left", "fill right to left" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[98]) then
         value = true
     end
     if value == nil then return nil end
@@ -853,28 +742,22 @@ local function ParseUnitReverseFillFastShortcut(normalized)
 end
 
 local function ParseUnitSimpleBooleanFastShortcut(normalized)
-    if ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[99]) then
         return nil
     end
-    if ContainsAny(normalized, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
-        "color", "colour", "texture", "textures", "gradient", "gradients", "anchor",
-        "offset", " x", "x ", " y", "y ", "size", "layer", "style", "font",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[100]) then
         return nil
     end
 
     local attr
     local label
-    if ContainsAny(normalized, { "power smooth fill", "power bar smooth fill", "smooth power fill", "smooth power bar", "smooth mana bar", "smooth resource bar" }) then
+    if ContainsAny(normalized, P.RootPhrases[101]) then
         attr = "powerSmoothFill"
         label = "Power Bar Smooth Fill"
-    elseif ContainsAny(normalized, { "smooth fill", "smooth health fill", "smooth frame fill" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[102]) then
         attr = "smoothFill"
         label = "Smooth Health Fill"
-    elseif ContainsAny(normalized, { "name", "names", "name text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[103]) then
         attr = "showName"
         label = "Name"
     else
@@ -908,35 +791,20 @@ local function ParseUnitSimpleBooleanFastShortcut(normalized)
 end
 
 local function ParseUnitStatusDetailFastShortcut(normalized)
-    if ContainsAny(normalized, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
-        "color", "colour", "texture", "textures", "gradient", "gradients",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[104]) then
         return nil
     end
-    if not ContainsAny(normalized, {
-        "level", "level indicator", "level text", "pvp flag", "pvp indicator", "pvp icon",
-        "raid marker", "raid marker icon", "raid group", "raid group name", "raid group style",
-        "raid group name style", "group number style", "combat indicator", "rested indicator",
-        "combat icon", "rested icon", "resting indicator", "resting icon", "rested symbol", "resting symbol",
-        "incoming rez", "incoming rez icon", "incoming resurrection", "incoming resurrection icon",
-        "resurrection icon", "rez icon", "dead text", "dead indicator", "ghost indicator", "status text",
-        "elite icon", "elite indicator", "rare icon", "rare indicator",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[105]) then
         return nil
     end
 
-    local wantsAnchor = ContainsAny(normalized, { "anchor", "position" })
-    local wantsX = ContainsAny(normalized, { "x offset", "offset x", "horizontal offset", "horizontal position" })
-    local wantsY = ContainsAny(normalized, { "y offset", "offset y", "vertical offset", "vertical position" })
-    local wantsSize = ContainsAny(normalized, { "size", "icon size", "text size", "font size" })
-    local wantsLayer = ContainsAny(normalized, {
-        "layer", "frame level", "framelevel", "draw layer", "draw order",
-        "layer up", "layer down", "bring forward", "send back",
-        "front", "behind", "backward", "backwards", "above", "below",
-    })
-    local wantsStyle = ContainsAny(normalized, { "raid group style", "raid group name style", "group number style" })
-    local wantsVisibility = ContainsAny(normalized, { "show", "hide", "enable", "disable", "turn on", "turn off", "on", "off" })
+    local wantsAnchor = ContainsAny(normalized, P.RootPhrases[106])
+    local wantsX = ContainsAny(normalized, P.RootPhrases[107])
+    local wantsY = ContainsAny(normalized, P.RootPhrases[108])
+    local wantsSize = ContainsAny(normalized, P.RootPhrases[109])
+    local wantsLayer = ContainsAny(normalized, P.RootPhrases[110])
+    local wantsStyle = ContainsAny(normalized, P.RootPhrases[111])
+    local wantsVisibility = ContainsAny(normalized, P.RootPhrases[112])
     if not (wantsAnchor or wantsX or wantsY or wantsSize or wantsLayer or wantsStyle or wantsVisibility) then return nil end
 
     local units = DetectUnits(normalized)
@@ -973,17 +841,9 @@ local function ParseUnitStatusDetailFastShortcut(normalized)
                 local relativeDelta
                 if wantsLayer then
                     local amount = FirstNumber(normalized) or 1
-                    if ContainsAny(normalized, {
-                        "layer down", "down layer", "move layer down", "drop layer",
-                        "behind", "backward", "backwards", "send back", "to back", "lower layer", "lower draw",
-                        "below", "back", "down", "hinter", "nach hinten", "runter",
-                    }) then
+                    if ContainsAny(normalized, P.RootPhrases[113]) then
                         relativeDelta = -amount
-                    elseif ContainsAny(normalized, {
-                        "layer up", "up layer", "move layer up", "raise layer",
-                        "forward", "front", "to front", "bring forward", "higher layer", "higher draw",
-                        "above", "up", "nach vorne", "hoch",
-                    }) then
+                    elseif ContainsAny(normalized, P.RootPhrases[114]) then
                         relativeDelta = amount
                     end
                 end
@@ -1014,33 +874,25 @@ local function ParseUnitStatusDetailFastShortcut(normalized)
 end
 
 local function ParseGroupSimpleBooleanFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "all group frames", "all groups", "every group frame", "every group",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[115]) then
         return nil
     end
-    if ContainsAny(normalized, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
-        "color", "colour", "texture", "textures", "gradient", "gradients", "anchor",
-        "offset", " x", "x ", " y", "y ", "size", "layer", "style", "font",
-        "raid marker", "role icon", "ready check", "summon", "resurrection",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[116]) then
         return nil
     end
 
     local attr
     local label
-    if ContainsAny(normalized, { "power smooth fill", "power bar smooth fill", "smooth power fill", "smooth power bar", "smooth mana bar", "smooth resource bar" }) then
+    if ContainsAny(normalized, P.RootPhrases[117]) then
         attr = "powerSmoothFill"
         label = "Power Smooth Fill"
-    elseif ContainsAny(normalized, { "smooth fill", "smooth health fill", "smooth frame fill" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[118]) then
         attr = "smoothFill"
         label = "Smooth Health Fill"
-    elseif ContainsAny(normalized, { "corner indicators", "corner indicator", "corner dots", "corner dot" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[119]) then
         attr = "ciEnabled"
         label = "Corner Indicators"
-    elseif ContainsAny(normalized, { "group number", "raid group number" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[120]) then
         attr = "showGroupNumber"
         label = "Group Number"
     else
@@ -1074,10 +926,10 @@ local function ParseGroupSimpleBooleanFastShortcut(normalized)
 end
 
 local function GroupCornerCustomFilterValue(text)
-    if ContainsAny(text, { "helpful player", "helpful|player", "buff by me", "my buff", "own buff", "player helpful" }) then return "HELPFUL|PLAYER" end
-    if ContainsAny(text, { "harmful player", "harmful|player", "debuff by me", "my debuff", "own debuff", "player harmful" }) then return "HARMFUL|PLAYER" end
-    if ContainsAny(text, { "helpful", "any buff", "buffs", "buff" }) then return "HELPFUL" end
-    if ContainsAny(text, { "harmful", "any debuff", "debuffs", "debuff" }) then return "HARMFUL" end
+    if ContainsAny(text, P.RootPhrases[121]) then return "HELPFUL|PLAYER" end
+    if ContainsAny(text, P.RootPhrases[122]) then return "HARMFUL|PLAYER" end
+    if ContainsAny(text, P.RootPhrases[123]) then return "HELPFUL" end
+    if ContainsAny(text, P.RootPhrases[124]) then return "HARMFUL" end
     return nil
 end
 
@@ -1093,9 +945,9 @@ local function GroupCornerCustomValueAfterTo(raw, normalized)
 end
 
 local function ParseGroupCornerCustomFastShortcut(normalized, raw)
-    if not ContainsAny(normalized, { "corner", "dot", "indicator" }) then return nil end
-    if not ContainsAny(normalized, { "custom filter", "custom aura filter", "custom mode", "custom when", "custom spells", "custom spell ids", "spell ids" }) then return nil end
-    if ContainsAny(normalized, { "custom color", "spell color", "color", "colour", "reset", "clear" }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[125]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[126]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[127]) then return nil end
 
     local groups = DetectGroups(normalized)
     if #groups ~= 1 then return nil end
@@ -1106,17 +958,17 @@ local function ParseGroupCornerCustomFastShortcut(normalized, raw)
 
     local attr
     local value
-    if ContainsAny(normalized, { "custom filter", "custom aura filter" }) then
+    if ContainsAny(normalized, P.RootPhrases[128]) then
         attr = "filter"
         value = GroupCornerCustomFilterValue(tostring(raw or ""):lower() .. " " .. normalized)
-    elseif ContainsAny(normalized, { "custom mode", "custom when" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[129]) then
         attr = "mode"
-        if ContainsAny(normalized, { "missing", "absent", "not present" }) then
+        if ContainsAny(normalized, P.RootPhrases[130]) then
             value = "missing"
-        elseif ContainsAny(normalized, { "present", "active", "shown", "showing" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[131]) then
             value = "present"
         end
-    elseif ContainsAny(normalized, { "custom spells", "custom spell ids", "spell ids" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[132]) then
         attr = "spells"
         value = GroupCornerCustomValueAfterTo(raw, normalized)
     end
@@ -1133,23 +985,20 @@ local function ParseGroupCornerCustomFastShortcut(normalized, raw)
 end
 
 local function ParseGroupTextureFastShortcut(normalized, raw)
-    if not ContainsAny(normalized, { "texture", "textures" }) then return nil end
-    if ContainsAny(normalized, {
-        "absorb", "heal absorb", "castbar", "cast bar", "class resource", "class power",
-        "detached power", "portrait", "aura", "buff", "debuff", "cooldown",
-    }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[133]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[134]) then return nil end
 
     local groups = DetectGroups(normalized)
     if #groups ~= 1 then return nil end
 
     local key
-    if ContainsAny(normalized, { "bar background texture", "bar bg texture", "health background texture" }) then
+    if ContainsAny(normalized, P.RootPhrases[135]) then
         key = "barScope.gf_" .. tostring(groups[1]) .. ".barBackgroundTexture"
-    elseif ContainsAny(normalized, { "background texture", "bg texture" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[136]) then
         key = "gf_" .. tostring(groups[1]) .. ".barBgTexture"
-    elseif ContainsAny(normalized, { "foreground texture" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[137]) then
         key = "gf_" .. tostring(groups[1]) .. ".barTexture"
-    elseif ContainsAny(normalized, { "bar texture", "health bar texture" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[138]) then
         key = "barScope.gf_" .. tostring(groups[1]) .. ".barTexture"
     else
         return nil
@@ -1171,10 +1020,10 @@ local function GroupNameClipSideValue(normalized)
     local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(normalized) or nil
     local function valueIn(text)
         if not text or text == "" then return nil end
-        if ContainsAny(text, { "left", "keep end", "endletters", "end letters", "from left", "truncate start", "remove start" }) then
+        if ContainsAny(text, P.RootPhrases[139]) then
             return "LEFT"
         end
-        if ContainsAny(text, { "right", "keep start", "startletters", "start letters", "from right", "truncate end", "remove end" }) then
+        if ContainsAny(text, P.RootPhrases[140]) then
             return "RIGHT"
         end
         return nil
@@ -1183,18 +1032,9 @@ local function GroupNameClipSideValue(normalized)
 end
 
 local function ParseGroupNameTextFastShortcut(normalized)
-    if not ContainsAny(normalized, { "name", "names", "group name", "group names", "namen", "ellipsis", "without dots", "truncate without dots" }) then return nil end
-    local hideNameDeadOffline = ContainsAny(normalized, {
-        "hide name on dead", "hide name when dead", "hide name on offline", "hide name when offline",
-        "hide name on dead offline", "hide name on dead or offline", "hide name when dead or offline",
-        "dead offline", "dead or offline",
-    })
-    if ContainsAny(normalized, {
-        "health", "hp", "power", "mana", "castbar", "cast bar", "aura", "buff", "debuff",
-        "spell indicator", "spell indicators", "raid marker", "status icon", "role icon",
-        "anchor", "offset", " x", "x ", " y", "y ", "layer", "font size", "name size",
-        "color", "colour",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[141]) then return nil end
+    local hideNameDeadOffline = ContainsAny(normalized, P.RootPhrases[142])
+    if ContainsAny(normalized, P.RootPhrases[143]) then
         return nil
     end
 
@@ -1202,35 +1042,29 @@ local function ParseGroupNameTextFastShortcut(normalized)
     local value
     if hideNameDeadOffline then
         attr = "hideNameOnDeadOffline"
-        if ContainsAny(normalized, {
-            "turn off", "disable", "disabled", "off", "false", "show name", "show names",
-            "dont hide", "do not hide", "never hide",
-        }) then
+        if ContainsAny(normalized, P.RootPhrases[144]) then
             value = false
-        elseif ContainsAny(normalized, {
-            "turn on", "enable", "enabled", "on", "true", "hide name", "hide names",
-            "hide name on dead", "hide name on offline", "dead offline", "dead or offline",
-        }) then
+        elseif ContainsAny(normalized, P.RootPhrases[145]) then
             value = true
         end
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "name max chars", "name max characters", "max chars", "max characters", "name length", "name laenge", "name länge" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[146]) then
         attr = "nameMaxChars"
         value = FirstNumber(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, { "shorten group names", "shorten names", "name shortening" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[147]) then
         attr = "nameShortenEnabled"
         value = DetectBoolean(normalized)
-        if value == nil then value = not ContainsAny(normalized, { "turn off", "disable", "disabled", "off", "false", "no", "dont", "do not" }) end
-    elseif ContainsAny(normalized, { "name truncation style", "truncation style", "name clip side" }) then
+        if value == nil then value = not ContainsAny(normalized, P.RootPhrases[148]) end
+    elseif ContainsAny(normalized, P.RootPhrases[149]) then
         attr = "nameClipSide"
         value = GroupNameClipSideValue(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, { "name no ellipsis", "no ellipsis", "truncate without dots", "without dots", "without ellipsis" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[150]) then
         attr = "nameNoEllipsis"
-        if ContainsAny(normalized, { "turn off", "disable", "disabled", "off", "false", "show dots", "use dots", "ellipsis on" }) then
+        if ContainsAny(normalized, P.RootPhrases[151]) then
             value = false
-        elseif ContainsAny(normalized, { "turn on", "enable", "enabled", "on", "true", "hide dots", "remove dots", "without dots", "without ellipsis", "no ellipsis" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[152]) then
             value = true
         end
         if value == nil then value = DetectBoolean(normalized) end
@@ -1238,7 +1072,7 @@ local function ParseGroupNameTextFastShortcut(normalized)
     if not attr then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[153]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -1264,18 +1098,13 @@ local function ParseGroupNameTextFastShortcut(normalized)
 end
 
 local function ParseGroupPowerBarEnabledFastShortcut(normalized)
-    if not ContainsAny(normalized, { "power bar", "power bars", "mana bar", "mana bars", "resource bar", "resource bars", "secondary bar", "secondary bars" }) then return nil end
-    if ContainsAny(normalized, {
-        "text", "font", "delimiter", "separator", " x", "x ", " y", "y ", "offset",
-        "height", "smooth", "smooth fill", "tank", "healer", "dps", "damager",
-        "role", "color", "colour", "gradient", "texture", "opacity", "alpha",
-        "detached", "class power", "class resource", "player hp",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[154]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[155]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[156]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -1304,28 +1133,24 @@ local function ParseGroupPowerBarEnabledFastShortcut(normalized)
 end
 
 local function ParseGroupRolePowerFastShortcut(normalized)
-    if not ContainsAny(normalized, { "power", "power bar", "power bars", "mana", "resource" }) then return nil end
-    if not ContainsAny(normalized, { "tank", "healer", "dps", "damager", "damage dealer" }) then return nil end
-    if ContainsAny(normalized, {
-        "text", "font", "delimiter", "separator", "offset", "height", "smooth",
-        "color", "colour", "gradient", "texture", "opacity", "alpha",
-        "detached", "class power", "class resource",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[157]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[158]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[159]) then
         return nil
     end
 
     local attr
-    if ContainsAny(normalized, { "tank", "tanks" }) then
+    if ContainsAny(normalized, P.RootPhrases[160]) then
         attr = "powerShowTank"
-    elseif ContainsAny(normalized, { "healer", "healers", "heal" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[161]) then
         attr = "powerShowHealer"
-    elseif ContainsAny(normalized, { "dps", "damager", "damagers", "damage dealer", "damage dealers" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[162]) then
         attr = "powerShowDamager"
     end
     if not attr then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[163]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -1354,34 +1179,25 @@ local function ParseGroupRolePowerFastShortcut(normalized)
 end
 
 local function ParseGroupLayoutNumberFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "spacing", "frame spacing", "space between frames", "gap between frames",
-        "units per column", "members per column", "players per column", "frames per column",
-        "max columns", "columns", "number of columns", "power height", "power bar height",
-        "frame width", "frame height",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[164]) then
         return nil
     end
-    if ContainsAny(normalized, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "private aura", "private auras",
-        "text", "font", "name", "health text", "hp text", "power text", "mana text",
-        "spell indicator", "spell indicators", "color", "colour", "opacity", "alpha",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[165]) then
         return nil
     end
 
     local attr
-    if ContainsAny(normalized, { "units per column", "members per column", "players per column", "frames per column" }) then
+    if ContainsAny(normalized, P.RootPhrases[166]) then
         attr = "unitsPerColumn"
-    elseif ContainsAny(normalized, { "max columns", "number of columns", "columns" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[167]) then
         attr = "maxColumns"
-    elseif ContainsAny(normalized, { "power height", "power bar height" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[168]) then
         attr = "powerHeight"
-    elseif ContainsAny(normalized, { "spacing", "frame spacing", "space between frames", "gap between frames" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[169]) then
         attr = "spacing"
-    elseif ContainsAny(normalized, { "frame width" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[170]) then
         attr = "width"
-    elseif ContainsAny(normalized, { "frame height" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[171]) then
         attr = "height"
     end
     if not attr then return nil end
@@ -1390,7 +1206,7 @@ local function ParseGroupLayoutNumberFastShortcut(normalized)
     if value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[172]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -1419,10 +1235,10 @@ local function GroupGrowthValue(normalized)
     local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(normalized) or nil
     local function valueIn(text)
         if not text or text == "" then return nil end
-        if ContainsAny(text, { "down", "down first", "grow down", "vertical", "vertically", "runter", "unten" }) then return "DOWN" end
-        if ContainsAny(text, { "up", "up first", "grow up", "upwards", "hoch", "oben" }) then return "UP" end
-        if ContainsAny(text, { "right", "right first", "grow right", "to the right", "horizontal", "horizontally", "rechts" }) then return "RIGHT" end
-        if ContainsAny(text, { "left", "left first", "grow left", "to the left", "links" }) then return "LEFT" end
+        if ContainsAny(text, P.RootPhrases[173]) then return "DOWN" end
+        if ContainsAny(text, P.RootPhrases[174]) then return "UP" end
+        if ContainsAny(text, P.RootPhrases[175]) then return "RIGHT" end
+        if ContainsAny(text, P.RootPhrases[176]) then return "LEFT" end
         return nil
     end
     return valueIn(target) or valueIn(normalized)
@@ -1432,11 +1248,11 @@ local function GroupSortModeValue(normalized)
     local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(normalized) or nil
     local function valueIn(text)
         if not text or text == "" then return nil end
-        if ContainsAny(text, { "group role", "group and role", "group plus role", "group_role", "grouprole" }) then return "GROUP_ROLE" end
-        if ContainsAny(text, { "index", "default", "simple", "off", "disabled" }) then return "INDEX" end
-        if ContainsAny(text, { "role", "roles", "by role" }) then return "ROLE" end
-        if ContainsAny(text, { "raid group", "by group", "group" }) then return "GROUP" end
-        if ContainsAny(text, { "name", "alphabetical", "alpha" }) then return "NAME" end
+        if ContainsAny(text, P.RootPhrases[177]) then return "GROUP_ROLE" end
+        if ContainsAny(text, P.RootPhrases[178]) then return "INDEX" end
+        if ContainsAny(text, P.RootPhrases[179]) then return "ROLE" end
+        if ContainsAny(text, P.RootPhrases[180]) then return "GROUP" end
+        if ContainsAny(text, P.RootPhrases[181]) then return "NAME" end
         return nil
     end
     return valueIn(target) or valueIn(normalized)
@@ -1469,45 +1285,39 @@ local function GroupRoleOrderValue(normalized)
 end
 
 local function ParseGroupOrderingFastShortcut(normalized)
-    if ContainsAny(normalized, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "private aura", "private auras" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[182]) then return nil end
 
     local attr
     local value
-    if ContainsAny(normalized, { "role priority order", "role order", "role sorting order" }) then
+    if ContainsAny(normalized, P.RootPhrases[183]) then
         attr = "roleOrder"
         value = GroupRoleOrderValue(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, { "growth", "growth direction", "grow", "grow direction", "frames grow", "frames to grow" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[184]) then
         attr = "growth"
         value = GroupGrowthValue(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, { "sort mode", "sort order", "sortierung", "sortiermodus" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[185]) then
         attr = "sortMode"
         value = GroupSortModeValue(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, { "sort by role", "role sorting", "sort roles" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[186]) then
         attr = "sortByRole"
         value = DetectBoolean(normalized)
-        if value == nil then value = not ContainsAny(normalized, { "turn off", "disable", "disabled", "off", "false", "no", "dont", "do not" }) end
-    elseif ContainsAny(normalized, {
-        "player first in role", "player first", "me first", "myself first",
-        "put me first", "keep me first", "me at top", "me at the top",
-    }) then
+        if value == nil then value = not ContainsAny(normalized, P.RootPhrases[187]) end
+    elseif ContainsAny(normalized, P.RootPhrases[188]) then
         attr = "playerFirstInRole"
         value = DetectBoolean(normalized)
-        if value == nil then value = not ContainsAny(normalized, { "turn off", "disable", "disabled", "off", "false", "no", "dont", "do not" }) end
-    elseif ContainsAny(normalized, {
-        "preserve raid groups", "keep raid groups", "keep raid groups together",
-        "keep groups together", "preserve groups", "preserve group order",
-    }) then
+        if value == nil then value = not ContainsAny(normalized, P.RootPhrases[189]) end
+    elseif ContainsAny(normalized, P.RootPhrases[190]) then
         attr = "preserveRaidGroups"
         value = DetectBoolean(normalized)
-        if value == nil then value = not ContainsAny(normalized, { "turn off", "disable", "disabled", "off", "false", "no", "dont", "do not" }) end
+        if value == nil then value = not ContainsAny(normalized, P.RootPhrases[191]) end
     end
     if not attr then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[192]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -1536,10 +1346,10 @@ local function GroupScaleModeValue(normalized)
     local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(normalized) or nil
     local function valueIn(text)
         if not text or text == "" then return nil end
-        if ContainsAny(text, { "auto", "automatic", "breakpoint", "breakpoints" }) then return "auto" end
-        if ContainsAny(text, { "manual", "custom" }) then return "manual" end
-        if ContainsAny(text, { "off", "none", "disable", "disabled", "false", "no scaling" }) then return "off" end
-        if ContainsAny(text, { "on", "enable", "enabled" }) then return "manual" end
+        if ContainsAny(text, P.RootPhrases[193]) then return "auto" end
+        if ContainsAny(text, P.RootPhrases[194]) then return "manual" end
+        if ContainsAny(text, P.RootPhrases[195]) then return "off" end
+        if ContainsAny(text, P.RootPhrases[196]) then return "manual" end
         return nil
     end
     return valueIn(target) or valueIn(normalized)
@@ -1553,45 +1363,41 @@ local function NumberAfterLastConnector(normalized)
 end
 
 local function ParseGroupScalingFastShortcut(normalized)
-    if not ContainsAny(normalized, { "scale", "scaling", "skalierung", "skalierungsmodus" }) then return nil end
-    if ContainsAny(normalized, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "private aura", "private auras",
-        "font", "text", "ui scale", "global ui scale", "wow ui scale", "edit mode", "editmode",
-        "class power", "class resource",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[197]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[198]) then
         return nil
     end
 
     local attr
     local value
-    if ContainsAny(normalized, { "scale mode", "scaling mode", "frame scale mode", "frame scaling mode", "group scale mode", "group scaling mode" }) then
+    if ContainsAny(normalized, P.RootPhrases[199]) then
         attr = "frameScaleMode"
         value = GroupScaleModeValue(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, { "frame scaling", "group frame scaling", "scaling" }) and FirstNumber(normalized) == nil then
+    elseif ContainsAny(normalized, P.RootPhrases[200]) and FirstNumber(normalized) == nil then
         attr = "frameScaleEnabled"
         value = DetectBoolean(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, { "scale over 25", "26 plus player scale", "large raid scale", "scale when over 25", "scale for more than 25", "26 players" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[201]) then
         attr = "scaleOver25"
         value = NumberAfterLastConnector(normalized)
-    elseif ContainsAny(normalized, { "scale at 25", "21-25 player scale", "scale when 25", "scale for 25", "25 players" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[202]) then
         attr = "scaleAt25"
         value = NumberAfterLastConnector(normalized)
-    elseif ContainsAny(normalized, { "scale at 20", "11-20 player scale", "scale when 20", "scale for 20", "20 players" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[203]) then
         attr = "scaleAt20"
         value = NumberAfterLastConnector(normalized)
-    elseif ContainsAny(normalized, { "scale at 10", "1-10 player scale", "small group scale", "scale when 10", "scale for 10", "10 players" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[204]) then
         attr = "scaleAt10"
         value = NumberAfterLastConnector(normalized)
-    elseif ContainsAny(normalized, { "manual scale", "frame scale", "scale percent", "frame scale percent" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[205]) then
         attr = "frameScaleManual"
         value = NumberAfterLastConnector(normalized)
     end
     if not attr or value == nil then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group", "party and raid" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[206]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -1617,20 +1423,13 @@ local function ParseGroupScalingFastShortcut(normalized)
 end
 
 local function ParseGlobalUiScaleFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "global ui scale", "wow ui scale", "global scale", "ui scale",
-        "scale the ui", "scale ui", "ui skalierung",
-        "ui scale override", "global scale override",
-    }) then return nil end
-    if ContainsAny(normalized, { "preset", "1080p", "1440p", "4k", "apply" }) then return nil end
-    if ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "edit mode", "editmode", "menu scale", "msuf frame scale", "unit frame scale", "frame scale",
-    }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[207]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[208]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[209]) then return nil end
 
     local key
     local value
-    if ContainsAny(normalized, { "override", "ui scale override", "global scale override", "wow ui scale override" }) then
+    if ContainsAny(normalized, P.RootPhrases[210]) then
         key = "general.globalUiScaleEnabled"
         value = DetectBoolean(normalized)
         if value == nil then return nil end
@@ -1652,24 +1451,15 @@ local function ParseGlobalUiScaleFastShortcut(normalized)
 end
 
 local function ParseDashboardScaleFastShortcut(normalized)
-    if ContainsAny(normalized, { "preset", "panel", "section", "tools", "open", "close", "toggle" }) then return nil end
-    if not ContainsAny(normalized, {
-        "scale", "bigger", "larger", "smaller", "increase", "decrease", "raise", "lower",
-        "grow", "shrink", "set", "make",
-    }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[211]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[212]) then return nil end
 
     local key
     local label
-    if ContainsAny(normalized, {
-        "msuf menu", "menu scale", "dashboard scale", "options menu", "config menu",
-        "configuration menu", "assistant menu",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[213]) then
         key = "general.slashMenuScale"
         label = "MSUF Menu Scale"
-    elseif ContainsAny(normalized, {
-        "msuf frame scale", "msuf frames", "all msuf frames", "msuf ui scale",
-        "unit frame scale", "unitframes scale", "frames globally", "all frames globally",
-    }) then
+    elseif ContainsAny(normalized, P.RootPhrases[214]) then
         key = "general.msufUiScale"
         label = "MSUF Frame Scale"
     else
@@ -1694,10 +1484,8 @@ local function ParseDashboardScaleFastShortcut(normalized)
 end
 
 local function ParseGlobalFontColorFastShortcut(normalized, raw)
-    if not ContainsAny(normalized, {
-        "custom font color", "global custom font color",
-    }) then return nil end
-    if ContainsAny(normalized, { "reset", "palette", "zuruecksetzen" }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[215]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[216]) then return nil end
     local setting = A.Registry and A.Registry:GetSetting("general.customFontColor")
     if not setting then return nil end
     local extract = P.ExtractColor
@@ -1731,11 +1519,11 @@ local CLASS_COLOR_FAST_TOKENS = {
 }
 
 local function ParseClassColorFastShortcut(normalized, raw)
-    local hasClassColorPhrase = ContainsAny(normalized, { "class color", "class colors", "class colours", "class colour", "class bar color", "class bar colour" })
-    local hasMutationVerb = ContainsAny(normalized, { "set", "change", "make", "use", "apply", "mach", "mache", "aender", "ander", "setzen" })
+    local hasClassColorPhrase = ContainsAny(normalized, P.RootPhrases[217])
+    local hasMutationVerb = ContainsAny(normalized, P.RootPhrases[218])
     local token
     for i = 1, #CLASS_COLOR_FAST_TOKENS do
-        if ContainsAny(normalized, { CLASS_COLOR_FAST_TOKENS[i][1] }) then
+        if HasPhrase(normalized, CLASS_COLOR_FAST_TOKENS[i][1]) then
             token = CLASS_COLOR_FAST_TOKENS[i][2]
             break
         end
@@ -1757,8 +1545,8 @@ local function ParseClassColorFastShortcut(normalized, raw)
 end
 
 local function ParseGlobalBarBackgroundFastShortcut(normalized, raw)
-    if ContainsAny(normalized, { "power background matches hp", "power bar background matches hp", "power background follows hp" }) then
-        if ContainsAny(normalized, { "color", "colour", "tint", "texture", "opacity", "alpha" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[220]) then
+        if ContainsAny(normalized, P.RootPhrases[221]) then return nil end
         local setting = A.Registry and A.Registry:GetSetting("general.powerBarBgMatchBarColor")
         if not setting then return nil end
         local value = DetectBoolean(normalized)
@@ -1771,27 +1559,22 @@ local function ParseGlobalBarBackgroundFastShortcut(normalized, raw)
         }
     end
 
-    if ContainsAny(normalized, {
-        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "castbar", "cast bar", "class power", "class resource", "power bar", "mana bar",
-        "power background", "mana background", "resource background",
-    }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[222]) then return nil end
 
     local key
     local value
-    if ContainsAny(normalized, { "bar background tint", "bar tint", "class bar background color", "bar background color" }) then
+    if ContainsAny(normalized, P.RootPhrases[223]) then
         key = "general.classBarBgColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
         local r, g, b, label = extract(raw or normalized, normalized)
         if not r then return nil end
         value = { r = r, g = g, b = b, label = label }
-    elseif ContainsAny(normalized, { "background follows hp color", "bar background follows hp", "background matches hp" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[224]) then
         key = "general.barBgMatchHPColor"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "health background follows class color", "bar background class color", "background follows class color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[225]) then
         key = "general.barBgClassColor"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
@@ -1810,8 +1593,8 @@ local function ParseGlobalBarBackgroundFastShortcut(normalized, raw)
 end
 
 local function ParseDarkModeCustomColorFastShortcut(normalized)
-    if not ContainsAny(normalized, { "custom color in dark mode", "dark mode custom background color", "dark mode custom color" }) then return nil end
-    if ContainsAny(normalized, { "bar color", "bar brightness", "brightness", "set color to", "to red", "to yellow", "to green", "to blue", "to white", "to black" }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[226]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[227]) then return nil end
     local value = DetectBoolean(normalized)
     if value == nil then return nil end
     local setting = A.Registry and A.Registry:GetSetting("general.darkBgCustomColor")
@@ -1832,58 +1615,58 @@ local GLOBAL_BAR_COLOR_SCOPE_BLOCKERS = {
 
 local function ParseGlobalUnitFrameColorFastShortcut(normalized, raw)
     if ContainsAny(normalized, GLOBAL_BAR_COLOR_SCOPE_BLOCKERS) then return nil end
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[228]) then return nil end
 
     local key
     local value
-    if ContainsAny(normalized, { "unified bar color", "unified color", "all frames color" }) then
+    if ContainsAny(normalized, P.RootPhrases[229]) then
         key = "general.unifiedBarColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
         local r, g, b, label = extract(raw or normalized, normalized)
         if not r then return nil end
         value = { r = r, g = g, b = b, label = label }
-    elseif ContainsAny(normalized, { "dark mode bar color", "dark bar color", "dark mode brightness", "dark bar brightness" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[230]) then
         key = "general.darkBarGray"
         value = FirstNumber(normalized)
         if value == nil then return nil end
         if value > 1 then value = value / 100 end
-    elseif ContainsAny(normalized, { "power bar background color", "power background color", "mana bar background color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[231]) then
         key = "general.powerBarBgColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
         local r, g, b, label = extract(raw or normalized, normalized)
         if not r then return nil end
         value = { r = r, g = g, b = b, label = label }
-    elseif ContainsAny(normalized, { "heal absorb bar color", "heal absorb color", "heal-absorb color", "global heal absorb bar color", "bar heal absorb color", "heal absorb overlay color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[232]) then
         key = "general.healAbsorbBarColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
         local r, g, b, label = extract(raw or normalized, normalized)
         if not r then return nil end
         value = { r = r, g = g, b = b, label = label }
-    elseif ContainsAny(normalized, { "absorb bar color", "absorb color", "absorb overlay color", "global absorb bar color", "bar absorb color", "bar absorb overlay color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[233]) then
         key = "general.absorbBarColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
         local r, g, b, label = extract(raw or normalized, normalized)
         if not r then return nil end
         value = { r = r, g = g, b = b, label = label }
-    elseif ContainsAny(normalized, { "aggro border color", "threat border color", "aggro outline color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[234]) then
         key = "general.aggroBorderColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
         local r, g, b, label = extract(raw or normalized, normalized)
         if not r then return nil end
         value = { r = r, g = g, b = b, label = label }
-    elseif ContainsAny(normalized, { "purge border color", "purgeable border color", "purge outline color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[235]) then
         key = "general.purgeBorderColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
         local r, g, b, label = extract(raw or normalized, normalized)
         if not r then return nil end
         value = { r = r, g = g, b = b, label = label }
-    elseif ContainsAny(normalized, { "bar outline color", "frame outline color", "bar border color", "bars border color", "border outline color", "outline border color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[236]) then
         key = "general.barOutlineColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
@@ -1905,10 +1688,10 @@ local function ParseGlobalUnitFrameColorFastShortcut(normalized, raw)
 end
 
 local function FollowupGradientDirection(normalized)
-    if ContainsAny(normalized, { "from right", "to right", "right side", "rightward", "right", "rechts" }) then return "RIGHT" end
-    if ContainsAny(normalized, { "from left", "to left", "left side", "leftward", "left", "links" }) then return "LEFT" end
-    if ContainsAny(normalized, { "from top", "to top", "from up", "to up", "top", "up", "oben" }) then return "UP" end
-    if ContainsAny(normalized, { "from bottom", "to bottom", "from down", "to down", "bottom", "down", "unten" }) then return "DOWN" end
+    if ContainsAny(normalized, P.RootPhrases[237]) then return "RIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[238]) then return "LEFT" end
+    if ContainsAny(normalized, P.RootPhrases[239]) then return "UP" end
+    if ContainsAny(normalized, P.RootPhrases[240]) then return "DOWN" end
     return nil
 end
 
@@ -1936,14 +1719,9 @@ local function LastBarGradientIntent(ctx)
 end
 
 local function ParseLastBarGradientGroupFollowup(normalized, ctx)
-    if not ContainsAny(normalized, { "also", "same", "too", "as well", "auch", "ebenfalls" }) then return nil end
-    if not ContainsAny(normalized, {
-        "group frame", "group frames", "all groups", "all group frames", "party", "raid", "mythic raid", "mythicraid",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "filter", "filters",
-        "name", "text", "font", "castbar", "cast bar", "profile", "import", "copy",
-    }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[241]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[242]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[243]) then return nil end
 
     local healthValue, powerValue, direction = LastBarGradientIntent(ctx)
     if healthValue == nil and powerValue == nil and direction == nil then
@@ -1967,9 +1745,9 @@ local function ParseLastBarGradientGroupFollowup(normalized, ctx)
     local function addScope(scope)
         if scope and not scopes[scope] then scopes[scope] = true end
     end
-    if ContainsAny(normalized, { "party" }) then addScope("gf_party") end
-    if ContainsAny(normalized, { "raid", "mythic raid", "mythicraid" }) then addScope("gf_raid") end
-    if ContainsAny(normalized, { "group frame", "group frames", "all groups", "all group frames" }) then
+    if ContainsAny(normalized, P.RootPhrases[244]) then addScope("gf_party") end
+    if ContainsAny(normalized, P.RootPhrases[245]) then addScope("gf_raid") end
+    if ContainsAny(normalized, P.RootPhrases[246]) then
         addScope("gf_party")
         addScope("gf_raid")
     end
@@ -2006,25 +1784,16 @@ local function ParseLastBarGradientGroupFollowup(normalized, ctx)
 end
 
 local function ParseHealthColorGradientFastShortcut(normalized, raw)
-    if ContainsAny(normalized, {
-        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "power", "mana", "resource", "class resource", "class power", "castbar", "cast bar",
-    }) then return nil end
-    if not ContainsAny(normalized, {
-        "health color gradient", "color health by gradient", "unitframe health gradient",
-        "health gradient low", "health gradient mid", "health gradient middle", "health gradient high",
-        "low health gradient color", "mid health gradient color", "middle health gradient color", "high health gradient color",
-        "low hp gradient color", "mid hp gradient color", "high hp gradient color",
-    }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[247]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[248]) then return nil end
 
     local key
     local value
-    if ContainsAny(normalized, { "health gradient low", "low health gradient color", "low hp gradient color", "low health color", "low hp color" }) then
+    if ContainsAny(normalized, P.RootPhrases[249]) then
         key = "general.healthGradientLow"
-    elseif ContainsAny(normalized, { "health gradient mid", "health gradient middle", "mid health gradient color", "middle health gradient color", "mid health color", "yellow health gradient color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[250]) then
         key = "general.healthGradientMid"
-    elseif ContainsAny(normalized, { "health gradient high", "high health gradient color", "full health gradient color", "high health color", "full hp color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[251]) then
         key = "general.healthGradientHigh"
     else
         key = "general.enableHealthGradient"
@@ -2051,15 +1820,15 @@ local function ParseHealthColorGradientFastShortcut(normalized, raw)
 end
 
 local function ParseNPCReactionColorFastShortcut(normalized, raw)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[252]) then return nil end
     local suffix
-    if ContainsAny(normalized, { "friendly npc color", "friendly reaction color" }) then
+    if ContainsAny(normalized, P.RootPhrases[253]) then
         suffix = "friendly"
-    elseif ContainsAny(normalized, { "neutral npc color", "neutral reaction color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[254]) then
         suffix = "neutral"
-    elseif ContainsAny(normalized, { "enemy npc color", "hostile npc color", "enemy reaction color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[255]) then
         suffix = "enemy"
-    elseif ContainsAny(normalized, { "dead npc color", "dead unit color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[256]) then
         suffix = "dead"
     else
         return nil
@@ -2080,9 +1849,9 @@ local function ParseNPCReactionColorFastShortcut(normalized, raw)
 end
 
 local function ParsePetFrameColorFastShortcut(normalized, raw)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
-    if not ContainsAny(normalized, { "pet frame color", "pet color", "pet bar color" }) then return nil end
-    if ContainsAny(normalized, { "pet health", "pet hp", "pet power", "pet mana", "pet name", "pet text", "pet castbar", "pet cast bar" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[257]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[258]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[259]) then return nil end
 
     local extract = P.ExtractColor
     if type(extract) ~= "function" then return nil end
@@ -2099,11 +1868,7 @@ local function ParsePetFrameColorFastShortcut(normalized, raw)
 end
 
 local function ParsePowerColorTokenFastShortcut(normalized, raw)
-    if ContainsAny(normalized, {
-        "power text", "powertext", "mana text", "resource text", "font color", "text color",
-        "class power", "class resource", "combo point", "combo points", "holy power", "soul shard", "soul shards",
-        "chi", "arcane charge", "arcane charges", "runes",
-    }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[260]) then return nil end
 
     local specs = {
         { "MANA", { "mana power color", "mana color", "color of mana" } },
@@ -2127,7 +1892,7 @@ local function ParsePowerColorTokenFastShortcut(normalized, raw)
     end
     if not token then return nil end
 
-    if ContainsAny(normalized, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then
+    if ContainsAny(normalized, P.RootPhrases[261]) then
         local action = A.Registry and A.Registry:GetAction("reset_power_color_token")
         return action and {
             kind = "action",
@@ -2153,26 +1918,21 @@ local function ParsePowerColorTokenFastShortcut(normalized, raw)
 end
 
 local function ParseDispelColorFastShortcut(normalized, raw)
-    if ContainsAny(normalized, {
-        "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target",
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "reset", "restore", "default", "defaults", "mode",
-        "aura", "auras", "buff", "buffs",
-    }) then return nil end
-    if not ContainsAny(normalized, { "dispel color", "dispel border color", "debuff color" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[262]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[263]) then return nil end
 
     local key
-    if ContainsAny(normalized, { "magic dispel color", "magic debuff color" }) then
+    if ContainsAny(normalized, P.RootPhrases[264]) then
         key = "general.dispelTypeMagic"
-    elseif ContainsAny(normalized, { "curse dispel color", "curse debuff color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[265]) then
         key = "general.dispelTypeCurse"
-    elseif ContainsAny(normalized, { "disease dispel color", "disease debuff color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[266]) then
         key = "general.dispelTypeDisease"
-    elseif ContainsAny(normalized, { "poison dispel color", "poison debuff color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[267]) then
         key = "general.dispelTypePoison"
-    elseif ContainsAny(normalized, { "bleed dispel color", "bleed debuff color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[268]) then
         key = "general.dispelTypeBleed"
-    elseif ContainsAny(normalized, { "dispel color", "dispel border color", "all dispel color", "single dispel color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[269]) then
         key = "general.hlDispelColor"
     else
         return nil
@@ -2259,13 +2019,13 @@ local function ParseCastbarColorFastShortcut(normalized, raw)
 end
 
 local function ParseCastbarOverrideModeFastShortcut(normalized)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore" }) then return nil end
-    if not ContainsAny(normalized, { "player castbar override mode", "player cast bar override mode", "player castbar color mode", "player cast bar color mode" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[270]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[271]) then return nil end
 
     local value
-    if ContainsAny(normalized, { "class", "class color", "class colour", "classcolor", "classcolour" }) then
+    if ContainsAny(normalized, P.RootPhrases[272]) then
         value = "CLASS"
-    elseif ContainsAny(normalized, { "custom", "manual", "color", "colour" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[273]) then
         value = "CUSTOM"
     end
     if value == nil then return nil end
@@ -2281,13 +2041,13 @@ local function ParseCastbarOverrideModeFastShortcut(normalized)
 end
 
 A._ParseMouseoverHighlightFastShortcut = A._ParseMouseoverHighlightFastShortcut or function(normalized, raw)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore", "default", "defaults" }) then return nil end
-    if ContainsAny(normalized, { "rounded", "round", "thickness", "size", "offset", "target", "focus", "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames", "corner" }) then return nil end
-    if not ContainsAny(normalized, { "mouseover highlight", "hover highlight", "unitframe mouseover highlight", "unit frame mouseover highlight", "unitframe highlight color", "unit frame highlight color" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[274]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[275]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[276]) then return nil end
 
     local key
     local value
-    if ContainsAny(normalized, { "color", "colour", "farbe", "tint" }) then
+    if ContainsAny(normalized, P.RootPhrases[277]) then
         key = "general.highlightColor"
         local extract = P.ExtractColor
         if type(extract) ~= "function" then return nil end
@@ -2322,8 +2082,8 @@ P.GlobalHighlightColorFastSpecs = P.GlobalHighlightColorFastSpecs or {
 }
 
 A._ParseGlobalHighlightColorFastShortcut = A._ParseGlobalHighlightColorFastShortcut or function(normalized, raw)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore", "default", "defaults" }) then return nil end
-    if not ContainsAny(normalized, { "highlight color", "highlight colour", "combat timer color", "combat timer text color", "combat enter color", "combat enter text color", "combat leave color", "combat leave text color", "crosshair in range color", "crosshair out of range color", "crosshair out-of-range color", "aura own buff color", "aura own debuff color" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[278]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[279]) then return nil end
 
     local specs = P.GlobalHighlightColorFastSpecs
     local matched
@@ -2388,27 +2148,23 @@ P._EnsureExactColorSettingIndex = P._EnsureExactColorSettingIndex or function(se
 end
 
 A._ParseExactColorSettingFastShortcut = A._ParseExactColorSettingFastShortcut or function(normalized, raw)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore", "default", "defaults" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[280]) then return nil end
     local extract = P.ExtractColor
     if type(extract) ~= "function" then return nil end
     local r, g, b, label
-    if not ContainsAny(normalized, { "color", "colors", "colour", "colours", "farbe", "farben" }) then
+    if not ContainsAny(normalized, P.RootPhrases[281]) then
         r, g, b, label = extract(raw or normalized, normalized)
         if not r then return nil end
     end
 
-    if ContainsAny(normalized, { "global font color", "main font color", "default font color", "globale schriftfarbe" })
-        and not ContainsAny(normalized, { "custom font color", "global custom font color", "custom global font color" })
+    if ContainsAny(normalized, P.RootPhrases[282])
+        and not ContainsAny(normalized, P.RootPhrases[283])
     then
         local fontAction = ParseFontColorAction and ParseFontColorAction(normalized, raw)
         if fontAction then return fontAction end
     end
 
-    if not ContainsAny(normalized, {
-        "class power", "class resource", "power class resource", "resource class power",
-        "combo point", "combo points", "holy power", "soul shard", "soul shards",
-        "chi", "arcane charge", "arcane charges", "rune", "runes",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[284]) then
         local powerParsed = A._ParsePowerColorTokenFastShortcut and A._ParsePowerColorTokenFastShortcut(normalized, raw)
         if powerParsed then return powerParsed end
     end
@@ -2478,11 +2234,9 @@ A._ParseExactColorSettingFastShortcut = A._ParseExactColorSettingFastShortcut or
 end
 
 local function ParseScopedBarOutlineColorFastShortcut(normalized, raw)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore" }) then return nil end
-    if ContainsAny(normalized, { "group border", "group frame border", "full group border", "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(normalized, {
-        "bar outline color", "frame outline color", "bar border color", "bars border color", "border outline color", "outline border color",
-    }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[285]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[286]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[287]) then return nil end
 
     local units = DetectUnits(normalized)
     local groups = DetectGroups(normalized)
@@ -2511,20 +2265,20 @@ local function ParseScopedBarOutlineColorFastShortcut(normalized, raw)
 end
 
 local function ParseNPCTypeColorFastShortcut(normalized)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
-    if ContainsAny(normalized, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
-    if not ContainsAny(normalized, { "npc type color", "npc type colors", "npc type coloring", "npc role color", "npc role colors" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[288]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[289]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[290]) then return nil end
 
     local colorKey
-    if ContainsAny(normalized, { "boss npc type color", "npc boss color", "boss type color" }) then
+    if ContainsAny(normalized, P.RootPhrases[291]) then
         colorKey = "npcBoss"
-    elseif ContainsAny(normalized, { "miniboss npc type color", "lieutenant npc color", "npc miniboss color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[292]) then
         colorKey = "npcMiniboss"
-    elseif ContainsAny(normalized, { "caster npc type color", "npc caster color", "caster type color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[293]) then
         colorKey = "npcCaster"
-    elseif ContainsAny(normalized, { "melee npc type color", "npc melee color", "melee type color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[294]) then
         colorKey = "npcMelee"
-    elseif ContainsAny(normalized, { "regular npc type color", "npc regular color", "regular type color" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[295]) then
         colorKey = "npcRegular"
     end
     if colorKey then
@@ -2546,17 +2300,17 @@ local function ParseNPCTypeColorFastShortcut(normalized)
     end
 
     local key
-    if ContainsAny(normalized, { "targettarget", "target target", "target of target", "tot" }) then
+    if ContainsAny(normalized, P.RootPhrases[296]) then
         key = "general.npcTypeToT"
-    elseif ContainsAny(normalized, { "target" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[297]) then
         key = "general.npcTypeTarget"
-    elseif ContainsAny(normalized, { "focus" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[298]) then
         key = "general.npcTypeFocus"
-    elseif ContainsAny(normalized, { "boss" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[299]) then
         key = "general.npcTypeBoss"
-    elseif ContainsAny(normalized, { "hp bar", "health bar", "health", "hp" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[300]) then
         key = "general.npcTypeColorBar"
-    elseif ContainsAny(normalized, { "name text", "names", "name" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[301]) then
         key = "general.npcTypeColorText"
     else
         key = "general.npcColorMode"
@@ -2575,17 +2329,9 @@ local function ParseNPCTypeColorFastShortcut(normalized)
 end
 
 local function ParseClassResourceHPBarFastShortcut(normalized)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active" }) then return nil end
-    if not ContainsAny(normalized, {
-        "class resource hp bar", "class resources hp bar", "class resource health bar", "class resources health bar",
-        "class resources player hp bar", "class resource player hp bar", "second player hp bar", "duplicate hp bar",
-        "duplicate health bar", "show player hp twice",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "width", "height", "size", "anchor", "position", "offset", "left", "right", "up", "down",
-        "shape", "style", "mode", "color", "colour", "texture", "opacity", "alpha", "smooth", "outline",
-        "text", "font", "gap", "layer", "frame level",
-    }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[302]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[303]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[304]) then return nil end
 
     local value = DetectBoolean(normalized)
     if value == nil then value = true end
@@ -2600,20 +2346,20 @@ local function ParseClassResourceHPBarFastShortcut(normalized)
 end
 
 local function ParseGlobalColorModeBooleanFastShortcut(normalized)
-    if ContainsAny(normalized, { "what", "which", "where", "why", "help", "explain", "how", "current", "active", "reset", "restore" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[305]) then return nil end
     local key
     local value
-    if ContainsAny(normalized, { "dispel color mode", "dispel colors mode", "debuff type color mode" }) then
+    if ContainsAny(normalized, P.RootPhrases[306]) then
         key = "general.hlDispelColorMode"
-        if ContainsAny(normalized, { "single", "one" }) then
+        if ContainsAny(normalized, P.RootPhrases[307]) then
             value = "SINGLE"
-        elseif ContainsAny(normalized, { "type", "types", "per type", "debuff type" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[308]) then
             value = "TYPE"
         else
             return nil
         end
-    elseif ContainsAny(normalized, { "player castbar color override", "player cast bar color override" }) then
-        if ContainsAny(normalized, { "mode", "class", "custom" }) then return nil end
+    elseif ContainsAny(normalized, P.RootPhrases[309]) then
+        if ContainsAny(normalized, P.RootPhrases[310]) then return nil end
         key = "general.playerCastbarOverrideEnabled"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
@@ -2632,18 +2378,18 @@ local function ParseGlobalColorModeBooleanFastShortcut(normalized)
 end
 
 local function ParseRaidMarkerNumberFastShortcut(normalized)
-    if not ContainsAny(normalized, { "raid marker", "raidmarker", "target marker" }) then return nil end
-    if ContainsAny(normalized, { "reset", "preview", "status icon", "symbol", "skull", "star", "circle", "square", "moon", "triangle", "diamond", "cross" }) then return nil end
-    if not ContainsAny(normalized, { "set", "change", "make" }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[311]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[312]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[313]) then return nil end
 
     local attr
-    if ContainsAny(normalized, { "x offset", "marker x", "raid marker x", "target marker x" }) then
+    if ContainsAny(normalized, P.RootPhrases[314]) then
         attr = "x"
-    elseif ContainsAny(normalized, { "y offset", "marker y", "raid marker y", "target marker y" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[315]) then
         attr = "y"
-    elseif ContainsAny(normalized, { "size" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[316]) then
         attr = "size"
-    elseif ContainsAny(normalized, { "layer", "frame level", "z layer" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[317]) then
         attr = "layer"
     else
         return nil
@@ -2683,34 +2429,44 @@ end
 
 local function ParseExactTextSlotOffsetFastShortcut(normalized)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(normalized) then return nil end
-    if ContainsAny(normalized, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if ContainsAny(normalized, { "move", "nudge", "shift" }) then return nil end
-    if not ContainsAny(normalized, { "set", "change", "make" }) then return nil end
-    if not ContainsAny(normalized, { "slot x", "slot y", "slot x offset", "slot y offset" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[318]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[319]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[320]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[321]) then return nil end
 
     local tab
-    if ContainsAny(normalized, { "hp", "health" }) then
+    if ContainsAny(normalized, P.RootPhrases[322]) then
         tab = "hp"
-    elseif ContainsAny(normalized, { "power", "mana" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[323]) then
         tab = "power"
     else
         return nil
     end
 
     local slot
-    if ContainsAny(normalized, { "left slot", "slot left", tab .. " left slot", "left " .. tab .. " slot" }) then
+    if ContainsAny(normalized, P.RootPhrases[324])
+        or HasPhrase(normalized, tab .. " left slot")
+        or HasPhrase(normalized, "left " .. tab .. " slot")
+    then
         slot = "Left"
-    elseif ContainsAny(normalized, { "center slot", "centre slot", "middle slot", "slot center", "slot centre", "slot middle", tab .. " center slot", tab .. " centre slot", tab .. " middle slot" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[325])
+        or HasPhrase(normalized, tab .. " center slot")
+        or HasPhrase(normalized, tab .. " centre slot")
+        or HasPhrase(normalized, tab .. " middle slot")
+    then
         slot = "Center"
-    elseif ContainsAny(normalized, { "right slot", "slot right", tab .. " right slot", "right " .. tab .. " slot" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[326])
+        or HasPhrase(normalized, tab .. " right slot")
+        or HasPhrase(normalized, "right " .. tab .. " slot")
+    then
         slot = "Right"
     else
         return nil
     end
 
     local axis
-    if ContainsAny(normalized, { "slot x", "slot x offset", " x offset" }) then axis = "X" end
-    if ContainsAny(normalized, { "slot y", "slot y offset", " y offset" }) then
+    if ContainsAny(normalized, P.RootPhrases[327]) then axis = "X" end
+    if ContainsAny(normalized, P.RootPhrases[328]) then
         if axis then return nil end
         axis = "Y"
     end
@@ -2771,16 +2527,12 @@ local function SpellIndicatorSpecValue(normalized)
 end
 
 local function ParseGroupSpellIndicatorsEnabledFastShortcut(normalized)
-    if not ContainsAny(normalized, { "spell indicator", "spell indicators" }) then return nil end
-    if ContainsAny(normalized, {
-        "specific", "multi spec", "multi-spec",
-        "slot", "order", "move", "reset", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-        "beacon", "earth shield", "lifebloom", "rejuvenation", "renew", "spell id", "spellid",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[329]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[330]) then
         return nil
     end
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[331]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -2788,11 +2540,11 @@ local function ParseGroupSpellIndicatorsEnabledFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, { "layer", "draw layer" }) then
+    if ContainsAny(normalized, P.RootPhrases[332]) then
         attr = "spellIndicators.layer"
         label = "Spell Indicator Layer"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "spec", "specialization", "specialisation" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[333]) then
         attr = "spellIndicators.spec"
         label = "Spell Indicator Spec"
         value = SpellIndicatorSpecValue(normalized)
@@ -2827,23 +2579,12 @@ end
 local function ParseGroupFrameColorFastShortcut(normalized, raw)
     if not P.ParseGroupFrameColorShortcut then return nil end
     if P.HasGroupFrameColorIntent and not P.HasGroupFrameColorIntent(normalized) then return nil end
-    if ContainsAny(normalized, {
-        "text color", "text colour", "font color", "font colour",
-        "health text", "hp text", "power text", "mana text", "resource text",
-        "power color", "power colour", "power bar color", "power bar colour",
-        "powerbar color", "powerbar colour", "mana color", "mana colour",
-        "mana bar color", "mana bar colour", "resource color", "resource colour",
-        "resource bar color", "resource bar colour", "class power", "class resource",
-        "castbar", "cast bar", "status icon", "status icons", "status indicator",
-        "raid marker", "role icon", "ready check", "summon", "resurrection",
-        "targeted spell", "targeted spells", "texture", "textures",
-        "gradient", "gradients", "health gradient", "bar gradient",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[334]) then
         return nil
     end
-    if ContainsAny(normalized, { "aura", "auras", "buff", "buffs" }) then return nil end
-    if ContainsAny(normalized, { "debuff", "debuffs" })
-        and not ContainsAny(normalized, { "debuff stripe", "debuff stripes" })
+    if ContainsAny(normalized, P.RootPhrases[335]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[336])
+        and not ContainsAny(normalized, P.RootPhrases[337])
     then
         return nil
     end
@@ -2853,37 +2594,26 @@ local function ParseGroupFrameColorFastShortcut(normalized, raw)
 end
 
 local function ParseGroupDeadBackgroundFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "dead background", "dead member background", "dead offline background", "dead bg",
-        "tint offline members", "also tint offline members", "dead background offline members", "dead offline tint",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[338]) then
         return nil
     end
-    if ContainsAny(normalized, { "color", "colors", "colour", "colours", "farbe", "farben" }) then return nil end
-    if ContainsAny(normalized, {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-        "text", "font", "spell indicator", "status icon", "raid marker", "role icon",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[339]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[340]) then
         return nil
     end
 
     local attr
     local label
     local value
-    if ContainsAny(normalized, {
-        "tint offline members", "also tint offline members", "dead background offline members", "dead offline tint",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[341]) then
         attr = "deadBgOffline"
         label = "Tint Offline Members"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, {
-        "dead background opacity", "dead background alpha", "dead member background opacity",
-        "dead offline background opacity", "dead bg opacity", "dead bg alpha",
-    }) then
+    elseif ContainsAny(normalized, P.RootPhrases[342]) then
         attr = "deadBgA"
         label = "Dead Background Opacity"
-        if ContainsAny(normalized, { "increase", "decrease", "raise", "lower", "more ", "less ", "relative", "by " }) then return nil end
+        if ContainsAny(normalized, P.RootPhrases[343]) then return nil end
         value = FirstNumber(normalized)
         if value == nil then return nil end
         if value > 1 then value = value / 100 end
@@ -2895,7 +2625,7 @@ local function ParseGroupDeadBackgroundFastShortcut(normalized)
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[344]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -2923,25 +2653,25 @@ local function ParseGroupDeadBackgroundFastShortcut(normalized)
 end
 
 local function GroupFrameAnchorTargetValue(normalized)
-    if ContainsAny(normalized, { "free", "none", "clear", "uiparent", "ui parent" }) then return "FREE" end
-    if ContainsAny(normalized, { "targettarget", "target of target", "tot" }) then return "targettarget" end
-    if ContainsAny(normalized, { "focustarget", "focus target" }) then return "focustarget" end
-    if ContainsAny(normalized, { "player" }) then return "player" end
-    if ContainsAny(normalized, { "target" }) then return "target" end
-    if ContainsAny(normalized, { "focus" }) then return "focus" end
+    if ContainsAny(normalized, P.RootPhrases[345]) then return "FREE" end
+    if ContainsAny(normalized, P.RootPhrases[346]) then return "targettarget" end
+    if ContainsAny(normalized, P.RootPhrases[347]) then return "focustarget" end
+    if ContainsAny(normalized, P.RootPhrases[348]) then return "player" end
+    if ContainsAny(normalized, P.RootPhrases[349]) then return "target" end
+    if ContainsAny(normalized, P.RootPhrases[350]) then return "focus" end
     return nil
 end
 
 local function GroupFrameAnchorPointValue(normalized)
-    if ContainsAny(normalized, { "top left", "topleft" }) then return "TOPLEFT" end
-    if ContainsAny(normalized, { "top right", "topright" }) then return "TOPRIGHT" end
-    if ContainsAny(normalized, { "bottom left", "bottomleft" }) then return "BOTTOMLEFT" end
-    if ContainsAny(normalized, { "bottom right", "bottomright" }) then return "BOTTOMRIGHT" end
-    if ContainsAny(normalized, { "top" }) then return "TOP" end
-    if ContainsAny(normalized, { "bottom" }) then return "BOTTOM" end
-    if ContainsAny(normalized, { "left" }) then return "LEFT" end
-    if ContainsAny(normalized, { "right" }) then return "RIGHT" end
-    if ContainsAny(normalized, { "center", "centre", "middle" }) then return "CENTER" end
+    if ContainsAny(normalized, P.RootPhrases[351]) then return "TOPLEFT" end
+    if ContainsAny(normalized, P.RootPhrases[352]) then return "TOPRIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[353]) then return "BOTTOMLEFT" end
+    if ContainsAny(normalized, P.RootPhrases[354]) then return "BOTTOMRIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[355]) then return "TOP" end
+    if ContainsAny(normalized, P.RootPhrases[356]) then return "BOTTOM" end
+    if ContainsAny(normalized, P.RootPhrases[357]) then return "LEFT" end
+    if ContainsAny(normalized, P.RootPhrases[358]) then return "RIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[359]) then return "CENTER" end
     return nil
 end
 
@@ -2968,17 +2698,17 @@ local function TargetedSpellPartyScope(normalized)
 end
 
 local function TargetedSpellModeValue(normalized)
-    if ContainsAny(normalized, { "whenhealing", "when healing", "healing only", "healer", "healing", "smart" }) then return "whenHealing" end
-    if ContainsAny(normalized, { "always", "all the time" }) then return "always" end
+    if ContainsAny(normalized, P.RootPhrases[360]) then return "whenHealing" end
+    if ContainsAny(normalized, P.RootPhrases[361]) then return "always" end
     return nil
 end
 
 local function TargetedSpellGrowValue(normalized)
-    if ContainsAny(normalized, { "center", "centre", "middle", "centered" }) then return "CENTER" end
-    if ContainsAny(normalized, { "right" }) then return "RIGHT" end
-    if ContainsAny(normalized, { "left" }) then return "LEFT" end
-    if ContainsAny(normalized, { "up", "above" }) then return "UP" end
-    if ContainsAny(normalized, { "down", "below" }) then return "DOWN" end
+    if ContainsAny(normalized, P.RootPhrases[362]) then return "CENTER" end
+    if ContainsAny(normalized, P.RootPhrases[363]) then return "RIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[364]) then return "LEFT" end
+    if ContainsAny(normalized, P.RootPhrases[365]) then return "UP" end
+    if ContainsAny(normalized, P.RootPhrases[366]) then return "DOWN" end
     return nil
 end
 
@@ -2998,19 +2728,19 @@ local function ParsePartyTargetedSpellFastShortcut(normalized, raw)
     local label
     local value
     local valueLabel
-    if ContainsAny(normalized, { "color by time", "colour by time", "timer color by time", "timer colour by time" }) then
+    if ContainsAny(normalized, P.RootPhrases[367]) then
         attr = "targetedSpellsTextColorByTime"
         label = "Targeted Spell Cooldown Color by Time"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then
-        if ContainsAny(normalized, { "safe color", "safe timer color", "safe colour", "safe timer colour" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[368]) then
+        if ContainsAny(normalized, P.RootPhrases[369]) then
             attr = "targetedSpellsTextSafeColor"
             label = "Targeted Spell Safe Color"
-        elseif ContainsAny(normalized, { "warning color", "warning timer color", "warning colour", "warning timer colour" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[370]) then
             attr = "targetedSpellsTextWarningColor"
             label = "Targeted Spell Warning Color"
-        elseif ContainsAny(normalized, { "urgent color", "urgent timer color", "urgent colour", "urgent timer colour" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[371]) then
             attr = "targetedSpellsTextUrgentColor"
             label = "Targeted Spell Urgent Color"
         else
@@ -3028,60 +2758,60 @@ local function ParsePartyTargetedSpellFastShortcut(normalized, raw)
         if not colorValue then return nil end
         value = colorValue
         valueLabel = colorLabel
-    elseif ContainsAny(normalized, { "cooldown text size", "timer text size" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[372]) then
         attr = "targetedSpellsTextSize"
         label = "Targeted Spell Cooldown Text Size"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "cooldown text", "timer text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[373]) then
         attr = "targetedSpellsTextEnabled"
         label = "Targeted Spell Cooldown Text"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "cooldown decimals", "timer decimals", "decimal threshold", "decimals below" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[374]) then
         attr = "targetedSpellsTextDecimalBelow"
         label = "Targeted Spell Cooldown Decimal Threshold"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "safe seconds", "safe timer threshold" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[375]) then
         attr = "targetedSpellsTextSafeSeconds"
         label = "Targeted Spell Safe Seconds"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "warning seconds", "warning timer threshold" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[376]) then
         attr = "targetedSpellsTextWarningSeconds"
         label = "Targeted Spell Warning Seconds"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "urgent seconds", "urgent timer threshold" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[377]) then
         attr = "targetedSpellsTextUrgentSeconds"
         label = "Targeted Spell Urgent Seconds"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "icon size", "targeted spell size", "targeted spells size" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[378]) then
         attr = "targetedSpellsIconSize"
         label = "Targeted Spell Icon Size"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "max icons", "maximum icons", "icon count" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[379]) then
         attr = "targetedSpellsMaxIcons"
         label = "Targeted Spell Max Icons"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "layer", "draw layer" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[380]) then
         attr = "targetedSpellsLayer"
         label = "Targeted Spell Layer"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "anchor", "position" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[381]) then
         attr = "targetedSpellsAnchor"
         label = "Targeted Spell Anchor"
         value = GroupFrameAnchorPointValue(normalized)
-    elseif ContainsAny(normalized, { "growth", "grow" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[382]) then
         attr = "targetedSpellsGrow"
         label = "Targeted Spell Growth"
         value = TargetedSpellGrowValue(normalized)
-    elseif ContainsAny(normalized, { "x offset", "offset x", "targeted spell x", "targeted spells x" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[383]) then
         attr = "targetedSpellsX"
         label = "Targeted Spell X Offset"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "y offset", "offset y", "targeted spell y", "targeted spells y" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[384]) then
         attr = "targetedSpellsY"
         label = "Targeted Spell Y Offset"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "mode" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[385]) then
         attr = "targetedSpellsMode"
         label = "Targeted Spell Mode"
         value = TargetedSpellModeValue(normalized)
@@ -3105,26 +2835,15 @@ end
 A._ParsePartyTargetedSpellFastShortcut = ParsePartyTargetedSpellFastShortcut
 
 local function ParseGroupFrameAnchorFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "anchor to", "attach to", "anchored to", "anchor target", "anchor frame",
-        "anchor point", "anchor position",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[386]) then
         return nil
     end
-    if ContainsAny(normalized, {
-        "custom anchor", "custom anchor frame", "anchor frame name", "clear custom anchor",
-        "remove custom anchor", "reset custom anchor", "picker",
-        "portrait", "castbar", "cast bar", "name text", "hp text", "health text", "power text",
-        "text", "icon", "indicator", "raid marker", "status", "level", "level indicator",
-        "raid group name", "group number", "leader", "assist", "elite", "rare",
-        "combat indicator", "rested", "resting", "incoming rez", "incoming resurrection",
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[387]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[388]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3132,7 +2851,7 @@ local function ParseGroupFrameAnchorFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, { "anchor point", "anchor position" }) then
+    if ContainsAny(normalized, P.RootPhrases[389]) then
         attr = "anchorPoint"
         label = "Anchor Point"
         value = GroupFrameAnchorPointValue(normalized)
@@ -3165,41 +2884,32 @@ local function ParseGroupFrameAnchorFastShortcut(normalized)
 end
 
 local function GroupBarColorModeValue(normalized)
-    if ContainsAny(normalized, { "global", "global color", "global colors", "inherit", "inherit color", "default", "default color" }) then return "GLOBAL" end
-    if ContainsAny(normalized, { "dark", "dark mode", "darkmode" }) then return "dark" end
-    if ContainsAny(normalized, { "unified", "unified color", "unifiedcolor" }) then return "unified" end
-    if ContainsAny(normalized, { "gradient", "health gradient", "healthgradient" }) then return "GRADIENT" end
-    if ContainsAny(normalized, { "custom", "manual" }) then return "CUSTOM" end
-    if ContainsAny(normalized, { "class", "class color", "class colors", "classcolor", "class colored", "colored by class", "coloured by class" }) then return "CLASS" end
+    if ContainsAny(normalized, P.RootPhrases[390]) then return "GLOBAL" end
+    if ContainsAny(normalized, P.RootPhrases[391]) then return "dark" end
+    if ContainsAny(normalized, P.RootPhrases[392]) then return "unified" end
+    if ContainsAny(normalized, P.RootPhrases[393]) then return "GRADIENT" end
+    if ContainsAny(normalized, P.RootPhrases[394]) then return "CUSTOM" end
+    if ContainsAny(normalized, P.RootPhrases[395]) then return "CLASS" end
     return nil
 end
 
 local function ParseGroupBarColorModeFastShortcut(normalized)
-    if ContainsAny(normalized, {
-        "text", "font", "name", "power text", "health text", "hp text", "mana text",
-        "class power", "class resource", "resource text", "castbar", "cast bar",
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[396]) then
         return nil
     end
-    if not ContainsAny(normalized, {
-        "bar color mode", "health bar color mode", "group bar style",
-        "use class colors", "class colored bars", "colored by class", "coloured by class",
-        "use global colors", "use default colors", "health color mode", "health mode",
-        "class color", "class colors", "global color", "global colors",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[397]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[398]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
 
     local attr
     local label
-    if ContainsAny(normalized, { "health color mode", "health mode" }) then
+    if ContainsAny(normalized, P.RootPhrases[399]) then
         attr = "healthColorMode"
         label = "Health Color Mode"
     else
@@ -3234,12 +2944,12 @@ end
 local function GroupTextDelimiterValue(normalized)
     local target = P.TargetAfterLastConnector and P.TargetAfterLastConnector(normalized) or nil
     local text = target or normalized
-    if ContainsAny(text, { "double space", "doublespace" }) then return "  " end
-    if ContainsAny(text, { "space", "single" }) then return " " end
-    if ContainsAny(text, { "slash", "forward slash", "forwardslash" }) then return " / " end
-    if ContainsAny(text, { "hyphen", "dash", "minus" }) then return " - " end
-    if ContainsAny(text, { "colon" }) then return " : " end
-    if ContainsAny(text, { "pipe", "vertical bar", "verticalbar" }) then return " | " end
+    if ContainsAny(text, P.RootPhrases[400]) then return "  " end
+    if ContainsAny(text, P.RootPhrases[401]) then return " " end
+    if ContainsAny(text, P.RootPhrases[402]) then return " / " end
+    if ContainsAny(text, P.RootPhrases[403]) then return " - " end
+    if ContainsAny(text, P.RootPhrases[404]) then return " : " end
+    if ContainsAny(text, P.RootPhrases[405]) then return " | " end
     if text:find("/", 1, true) then return " / " end
     if text:find("-", 1, true) then return " - " end
     if text:find(":", 1, true) then return " : " end
@@ -3249,32 +2959,15 @@ local function GroupTextDelimiterValue(normalized)
 end
 
 A._ParseGroupTextDirectFastShortcut = function(normalized)
-    if ContainsAny(normalized, {
-        "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-        "class power", "class resource", "class resources", "name color", "color", "colour",
-        "anchor", "offset", " x", "x ", " y", "y ", "layer", "delimiter",
-        "reverse", "reversed", "reverse order", "decimal", "decimals",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[406]) then
         return nil
     end
-    if not ContainsAny(normalized, {
-        "hp font size", "health font size", "hp text size", "health text size",
-        "power font size", "mana font size", "power text size", "mana text size",
-        "hp left text", "left hp text", "health left text", "left health text",
-        "hp center text", "hp centre text", "center hp text", "centre hp text",
-        "health center text", "health centre text", "center health text", "centre health text",
-        "hp right text", "right hp text", "health right text", "right health text",
-        "power left text", "left power text", "mana left text", "left mana text",
-        "power center text", "power centre text", "center power text", "centre power text",
-        "mana center text", "mana centre text", "center mana text", "centre mana text",
-        "power right text", "right power text", "mana right text", "right mana text",
-        "power text", "mana text", "resource text", "hp text", "health text",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[407]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[408]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3282,37 +2975,37 @@ A._ParseGroupTextDirectFastShortcut = function(normalized)
     local attr
     local label
     local numeric = false
-    if ContainsAny(normalized, { "hp font size", "health font size", "hp text size", "health text size" }) then
+    if ContainsAny(normalized, P.RootPhrases[409]) then
         attr = "hpFontSize"
         label = "HP Font Size"
         numeric = true
-    elseif ContainsAny(normalized, { "power font size", "mana font size", "power text size", "mana text size" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[410]) then
         attr = "powerFontSize"
         label = "Power Font Size"
         numeric = true
-    elseif ContainsAny(normalized, { "power left text", "left power text", "mana left text", "left mana text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[411]) then
         attr = "powerTextLeft"
         label = "Left Power Text"
-    elseif ContainsAny(normalized, { "power center text", "power centre text", "center power text", "centre power text", "mana center text", "mana centre text", "center mana text", "centre mana text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[412]) then
         attr = "powerTextCenter"
         label = "Center Power Text"
-    elseif ContainsAny(normalized, { "power right text", "right power text", "mana right text", "right mana text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[413]) then
         attr = "powerTextRight"
         label = "Right Power Text"
-    elseif ContainsAny(normalized, { "hp left text", "left hp text", "health left text", "left health text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[414]) then
         attr = "textLeft"
         label = "Left HP Text"
-    elseif ContainsAny(normalized, { "hp center text", "hp centre text", "center hp text", "centre hp text", "health center text", "health centre text", "center health text", "centre health text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[415]) then
         attr = "textCenter"
         label = "Center HP Text"
-    elseif ContainsAny(normalized, { "hp right text", "right hp text", "health right text", "right health text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[416]) then
         attr = "textRight"
         label = "Right HP Text"
-    elseif ContainsAny(normalized, { "power text", "mana text", "resource text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[417]) then
         attr = "showPowerText"
         label = "Power Text"
         numeric = false
-    elseif ContainsAny(normalized, { "hp text", "health text" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[418]) then
         attr = "showHPText"
         label = "HP Text"
         numeric = false
@@ -3350,27 +3043,15 @@ A._ParseGroupTextDirectFastShortcut = function(normalized)
 end
 
 local function ParseGroupTextFormatFastShortcut(normalized)
-    if ContainsAny(normalized, {
-        "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-        "class power", "class resource", "class resources", "name text", "name color",
-        "font", "color", "colour", "slot", "left text", "right text", "center text", "centre text",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[419]) then
         return nil
     end
-    if not ContainsAny(normalized, {
-        "hp text delimiter", "health text delimiter", "health delimiter",
-        "power text delimiter", "mana text delimiter", "power delimiter", "mana delimiter",
-        "hp text x", "hp text y", "health text x", "health text y",
-        "power text x", "power text y", "mana text x", "mana text y",
-        "hp text layer", "health text layer", "power text layer", "mana text layer",
-        "reverse hp text", "hp text reverse", "reverse health text", "health text reverse",
-        "health text decimals", "hp text decimals", "decimal percent",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[420]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[421]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3378,47 +3059,44 @@ local function ParseGroupTextFormatFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, { "power text delimiter", "mana text delimiter", "power delimiter", "mana delimiter" }) then
+    if ContainsAny(normalized, P.RootPhrases[422]) then
         attr = "powerTextDelimiter"
         label = "Power Text Delimiter"
         value = GroupTextDelimiterValue(normalized)
-    elseif ContainsAny(normalized, { "hp text delimiter", "health text delimiter", "health delimiter" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[423]) then
         attr = "textDelimiter"
         label = "HP Text Delimiter"
         value = GroupTextDelimiterValue(normalized)
-    elseif ContainsAny(normalized, { "power text x", "power text x offset", "mana text x", "mana text x offset" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[424]) then
         attr = "powerOffsetX"
         label = "Power Text X Offset"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "power text y", "power text y offset", "mana text y", "mana text y offset" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[425]) then
         attr = "powerOffsetY"
         label = "Power Text Y Offset"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "power text layer", "mana text layer" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[426]) then
         attr = "powerTextLayer"
         label = "Power Text Layer"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "hp text x", "hp text x offset", "health text x", "health text x offset" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[427]) then
         attr = "hpOffsetX"
         label = "HP Text X Offset"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "hp text y", "hp text y offset", "health text y", "health text y offset" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[428]) then
         attr = "hpOffsetY"
         label = "HP Text Y Offset"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "hp text layer", "health text layer" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[429]) then
         attr = "textLayer"
         label = "HP Text Layer"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, {
-        "reverse hp text", "hp text reverse", "reverse health text", "health text reverse",
-        "reverse hp text order", "hp text reverse order", "reverse health text order", "health text reverse order",
-    }) then
+    elseif ContainsAny(normalized, P.RootPhrases[430]) then
         attr = "hpTextReverse"
         label = "Reverse HP Text"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "health text decimals", "hp text decimals", "health decimals", "hp decimals", "decimal percent" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[431]) then
         attr = "healthTextDecimals"
         label = "Health Text Decimals"
         value = DetectBoolean(normalized)
@@ -3447,33 +3125,30 @@ local function ParseGroupTextFormatFastShortcut(normalized)
 end
 
 local function GroupDispelOverlayTriggerValue(normalized)
-    if ContainsAny(normalized, { "by me", "byme", "dispellable by me", "dispellable" }) then return "BY_ME" end
-    if ContainsAny(normalized, { "dispel type", "dispeltype", "type" }) then return "DISPEL_TYPE" end
-    if ContainsAny(normalized, { "any debuff", "all debuffs", "any", "debuff" }) then return "ANY_DEBUFF" end
-    if ContainsAny(normalized, { "border", "dispel border", "inherit", "same" }) then return "BORDER" end
+    if ContainsAny(normalized, P.RootPhrases[432]) then return "BY_ME" end
+    if ContainsAny(normalized, P.RootPhrases[433]) then return "DISPEL_TYPE" end
+    if ContainsAny(normalized, P.RootPhrases[434]) then return "ANY_DEBUFF" end
+    if ContainsAny(normalized, P.RootPhrases[435]) then return "BORDER" end
     return nil
 end
 
 local function GroupDispelOverlayStyleValue(normalized)
-    if ContainsAny(normalized, { "full frame", "full" }) then return "FULL" end
-    if ContainsAny(normalized, { "bottom" }) then return "BOTTOM" end
-    if ContainsAny(normalized, { "top" }) then return "TOP" end
-    if ContainsAny(normalized, { "left" }) then return "LEFT" end
-    if ContainsAny(normalized, { "right" }) then return "RIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[436]) then return "FULL" end
+    if ContainsAny(normalized, P.RootPhrases[437]) then return "BOTTOM" end
+    if ContainsAny(normalized, P.RootPhrases[438]) then return "TOP" end
+    if ContainsAny(normalized, P.RootPhrases[439]) then return "LEFT" end
+    if ContainsAny(normalized, P.RootPhrases[440]) then return "RIGHT" end
     return nil
 end
 
 local function ParseGroupDispelOverlayFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "dispel overlay", "debuff overlay", "dispellable overlay", "dispellable debuff overlay",
-        "dispel health overlay", "dispellable health overlay",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[441]) then
         return nil
     end
-    if ContainsAny(normalized, { "opacity", "alpha", "color", "colors", "colour", "colours", "aura filter", "aura filters", "debuff stripe" }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[442]) then return nil end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[443]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3481,16 +3156,16 @@ local function ParseGroupDispelOverlayFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, { "current health only", "current health", "on current health", "on health only", "on health" }) then
+    if ContainsAny(normalized, P.RootPhrases[444]) then
         attr = "dispelOverlayOnHealth"
         label = "Dispel Overlay on Current Health"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "detects", "trigger" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[445]) then
         attr = "dispelOverlayTrigger"
         label = "Dispel Overlay Detects"
         value = GroupDispelOverlayTriggerValue(normalized)
-    elseif ContainsAny(normalized, { "style" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[446]) then
         attr = "dispelOverlayStyle"
         label = "Dispel Overlay Style"
         value = GroupDispelOverlayStyleValue(normalized)
@@ -3523,26 +3198,20 @@ local function ParseGroupDispelOverlayFastShortcut(normalized)
 end
 
 local function GroupRangeFadeLayerValue(normalized)
-    if ContainsAny(normalized, { "health only", "hp only", "current health", "health" }) then return "health" end
-    if ContainsAny(normalized, { "whole frame", "entire frame", "full frame", "frame" }) then return "frame" end
+    if ContainsAny(normalized, P.RootPhrases[447]) then return "health" end
+    if ContainsAny(normalized, P.RootPhrases[448]) then return "frame" end
     return nil
 end
 
 local function ParseGroupRangeFadeFastShortcut(normalized)
-    if ContainsAny(normalized, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar" }) then return nil end
-    if ContainsAny(normalized, { "keep text visible", "keep names visible", "text visible", "names visible" }) then return nil end
-    if not ContainsAny(normalized, {
-        "range fade", "range fading", "out of range", "outside range",
-        "offline alpha", "offline opacity", "offline member opacity", "offline transparency",
-        "fade offline members", "offline member fade",
-        "health fade", "healthy fade", "healer health fade", "fade healthy members",
-        "dim healthy members", "dim healthy frames", "fade full health", "dim full health",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[449]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[450]) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[451]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[452]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3550,31 +3219,18 @@ local function ParseGroupRangeFadeFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, {
-        "offline alpha", "offline opacity", "offline member opacity", "offline transparency",
-        "fade offline members", "offline member fade",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[453]) then
         attr = "offlineAlpha"
         label = "Offline Opacity"
         value = FirstNumber(normalized)
         if value == nil then return nil end
         if value > 1 then value = value / 100 end
-    elseif ContainsAny(normalized, {
-        "health fade", "healthy fade", "healer health fade", "fade healthy members",
-        "dim healthy members", "dim healthy frames", "fade full health", "dim full health",
-    }) then
-        if ContainsAny(normalized, {
-            "health fade threshold", "health fade percent", "fade above health",
-            "fade above health percent", "dim above health", "dim above health percent",
-            "healthy frame threshold",
-        }) then
+    elseif ContainsAny(normalized, P.RootPhrases[454]) then
+        if ContainsAny(normalized, P.RootPhrases[455]) then
             attr = "healthFadeThreshold"
             label = "Health Fade Threshold"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, {
-            "health fade opacity", "health fade alpha", "healthy frame opacity",
-            "healthy member opacity", "dimmed health opacity", "dimmed healthy opacity",
-        }) then
+        elseif ContainsAny(normalized, P.RootPhrases[456]) then
             attr = "healthFadeAlpha"
             label = "Health Fade Opacity"
             value = FirstNumber(normalized)
@@ -3585,11 +3241,11 @@ local function ParseGroupRangeFadeFastShortcut(normalized)
             value = DetectBoolean(normalized)
             if value == nil then value = true end
         end
-    elseif ContainsAny(normalized, { "affects", "layer", "mode", "health only", "hp only", "whole frame", "entire frame", "full frame" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[457]) then
         attr = "rangeFadeLayerMode"
         label = "Range Fade Affects"
         value = GroupRangeFadeLayerValue(normalized)
-    elseif ContainsAny(normalized, { "alpha", "opacity", "transparency", "transparent" }) or FirstNumber(normalized) ~= nil then
+    elseif ContainsAny(normalized, P.RootPhrases[458]) or FirstNumber(normalized) ~= nil then
         attr = "rangeFadeAlpha"
         label = "Range Fade Alpha"
         value = FirstNumber(normalized)
@@ -3624,27 +3280,23 @@ local function ParseGroupRangeFadeFastShortcut(normalized)
 end
 
 local function GroupCornerAnchorValue(normalized)
-    if ContainsAny(normalized, { "top left", "topleft" }) then return "TOPLEFT" end
-    if ContainsAny(normalized, { "top right", "topright" }) then return "TOPRIGHT" end
-    if ContainsAny(normalized, { "bottom left", "bottomleft" }) then return "BOTTOMLEFT" end
-    if ContainsAny(normalized, { "bottom right", "bottomright" }) then return "BOTTOMRIGHT" end
-    if ContainsAny(normalized, { "top" }) then return "TOPLEFT" end
-    if ContainsAny(normalized, { "bottom" }) then return "BOTTOMRIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[459]) then return "TOPLEFT" end
+    if ContainsAny(normalized, P.RootPhrases[460]) then return "TOPRIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[461]) then return "BOTTOMLEFT" end
+    if ContainsAny(normalized, P.RootPhrases[462]) then return "BOTTOMRIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[463]) then return "TOPLEFT" end
+    if ContainsAny(normalized, P.RootPhrases[464]) then return "BOTTOMRIGHT" end
     return nil
 end
 
 local function ParseGroupNumberFastShortcut(normalized)
-    if not ContainsAny(normalized, { "group number", "group index", "group number label" }) then return nil end
-    if ContainsAny(normalized, {
-        "style", "raid group style", "raid group name style",
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-        "status icon", "spell indicator", "raid marker", "role icon",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[465]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[466]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[467]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3652,19 +3304,19 @@ local function ParseGroupNumberFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, { "anchor", "position" }) then
+    if ContainsAny(normalized, P.RootPhrases[468]) then
         attr = "groupNumberAnchor"
         label = "Group Number Anchor"
         value = GroupCornerAnchorValue(normalized)
-    elseif ContainsAny(normalized, { "x offset", "offset x", "group number x", "group index x", " x", "x " }) then
+    elseif ContainsAny(normalized, P.RootPhrases[469]) then
         attr = "groupNumberX"
         label = "Group Number X Offset"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "y offset", "offset y", "group number y", "group index y", " y", "y " }) then
+    elseif ContainsAny(normalized, P.RootPhrases[470]) then
         attr = "groupNumberY"
         label = "Group Number Y Offset"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "size", "font size", "group number size", "group index size" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[471]) then
         attr = "groupNumberSize"
         label = "Group Number Size"
         value = FirstNumber(normalized)
@@ -3697,34 +3349,23 @@ local function ParseGroupNumberFastShortcut(normalized)
 end
 
 local function GroupAggroModeValue(normalized)
-    if ContainsAny(normalized, { "non tank", "non tanks", "not tank", "not tanks", "non-tank", "non-tanks", "nontank" }) then return "NON_TANK" end
-    if ContainsAny(normalized, { "healer", "healers" }) then return "HEALER" end
-    if ContainsAny(normalized, { "tank", "tanks" }) then return "TANK" end
-    if ContainsAny(normalized, { "all", "everyone", "all roles" }) then return "ALL" end
+    if ContainsAny(normalized, P.RootPhrases[472]) then return "NON_TANK" end
+    if ContainsAny(normalized, P.RootPhrases[473]) then return "HEALER" end
+    if ContainsAny(normalized, P.RootPhrases[474]) then return "TANK" end
+    if ContainsAny(normalized, P.RootPhrases[475]) then return "ALL" end
     return nil
 end
 
 local function ParseGroupHighlightFastShortcut(normalized)
-    if ContainsAny(normalized, {
-        "color", "colors", "colour", "colours", "priority", "custom highlight priority",
-        "bar outline", "outline color", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[476]) then
         return nil
     end
-    if not ContainsAny(normalized, {
-        "hover highlight", "mouseover highlight", "hover border",
-        "fallback aggro border", "fallback threat border", "group fallback aggro border", "group fallback threat border",
-        "fallback aggro shows for", "fallback aggro role filter", "fallback threat role filter",
-        "fallback aggro non tanks", "fallback aggro not tanks", "fallback threat non tanks",
-        "fallback dispel border", "fallback dispellable border", "group fallback dispel border", "group fallback dispellable border",
-        "target highlight", "target border", "selected target border",
-        "focus highlight", "focus border", "focus glow",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[477]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[478]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3732,38 +3373,38 @@ local function ParseGroupHighlightFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, { "hover highlight thickness", "mouseover highlight thickness", "hover border thickness" }) then
+    if ContainsAny(normalized, P.RootPhrases[479]) then
         attr = "hlHoverSize"
         label = "Hover Highlight Thickness"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "fallback aggro shows for", "fallback aggro role filter", "fallback threat role filter", "fallback aggro non tanks", "fallback aggro not tanks", "fallback threat non tanks" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[480]) then
         attr = "aggroMode"
         label = "Aggro Shows For"
         value = GroupAggroModeValue(normalized)
-    elseif ContainsAny(normalized, { "fallback aggro border", "fallback threat border", "group fallback aggro border", "group fallback threat border" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[481]) then
         attr = "aggroEnabled"
         label = "Aggro Border"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "fallback dispel border", "fallback dispellable border", "group fallback dispel border", "group fallback dispellable border" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[482]) then
         attr = "dispelEnabled"
         label = "Dispel Border"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "target highlight", "target border", "selected target border" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[483]) then
         attr = "targetIndicator"
         label = "Target Highlight"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "focus highlight thickness", "focus border thickness", "focus glow thickness" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[484]) then
         attr = "hlFocusSize"
         label = "Focus Highlight Thickness"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "focus highlight offset", "focus border offset", "focus glow offset" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[485]) then
         attr = "hlFocusOffset"
         label = "Focus Highlight Offset"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "focus highlight", "focus border", "focus glow" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[486]) then
         attr = "hlFocusEnabled"
         label = "Focus Highlight"
         value = DetectBoolean(normalized)
@@ -3792,22 +3433,15 @@ local function ParseGroupHighlightFastShortcut(normalized)
 end
 
 local function ParseFullGroupBorderFastShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "group border", "full group border", "whole group border", "outer group border", "group block border",
-        "border around group", "border around frames",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[487]) then
         return nil
     end
-    if ContainsAny(normalized, {
-        "color", "colors", "colour", "colours", "bar outline", "frame outline",
-        "highlight border", "fallback aggro", "fallback threat", "fallback dispel",
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[488]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[489]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3815,16 +3449,16 @@ local function ParseFullGroupBorderFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, { "padding", "border padding", "padding around", "padding around frames", "padding around group", "frame padding" }) then
+    if ContainsAny(normalized, P.RootPhrases[490]) then
         attr = "groupBorderPadding"
         label = "Group Border Padding"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "opacity", "alpha", "transparency" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[491]) then
         attr = "groupBorderA"
         label = "Group Border Opacity"
         value = FirstNumber(normalized)
         if value and value > 1 then value = value / 100 end
-    elseif ContainsAny(normalized, { "thickness", "size", "border size", "border thickness", "thicker", "thinner", "bigger", "smaller" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[492]) then
         attr = "groupBorderSize"
         label = "Group Border Thickness"
         value = FirstNumber(normalized)
@@ -3857,30 +3491,22 @@ local function ParseFullGroupBorderFastShortcut(normalized)
 end
 
 local function GroupStatusIconStyleValue(normalized)
-    if ContainsAny(normalized, { "midnight", "msuf" }) then return "MIDNIGHT" end
-    if ContainsAny(normalized, { "classic", "old" }) then return "CLASSIC" end
-    if ContainsAny(normalized, { "blizzard", "default" }) then return "BLIZZARD" end
+    if ContainsAny(normalized, P.RootPhrases[493]) then return "MIDNIGHT" end
+    if ContainsAny(normalized, P.RootPhrases[494]) then return "CLASSIC" end
+    if ContainsAny(normalized, P.RootPhrases[495]) then return "BLIZZARD" end
     return nil
 end
 
 local function ParseGroupStatusIconStyleFastShortcut(normalized)
-    if ContainsAny(normalized, {
-        "icon pack", "role icon", "leader icon", "assist icon", "ready check",
-        "raid marker", "pvp", "summon", "phase", "resurrection", "incoming",
-        "anchor", "offset", " x", "x ", " y", "y ", "size", "layer",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[496]) then
         return nil
     end
-    if not ContainsAny(normalized, {
-        "status icon style", "status icons style", "group icon style",
-        "midnight status icons", "midnight icon style", "use midnight icons",
-        "status icons midnight style", "status icon midnight style", "midnight status icon style",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[497]) then
         return nil
     end
 
     local groups = DetectGroups(normalized)
-    if #groups == 0 and ContainsAny(normalized, { "all group frames", "all groups", "every group frame", "every group" }) then
+    if #groups == 0 and ContainsAny(normalized, P.RootPhrases[498]) then
         groups = { "party", "raid", "mythicraid" }
     end
     if #groups == 0 then return nil end
@@ -3888,8 +3514,8 @@ local function ParseGroupStatusIconStyleFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, { "use midnight icons", "midnight status icons" })
-        and not ContainsAny(normalized, { "classic", "blizzard", "default", "old" })
+    if ContainsAny(normalized, P.RootPhrases[499])
+        and not ContainsAny(normalized, P.RootPhrases[500])
     then
         attr = "useMidnightIcons"
         label = "Use Midnight Status Icons"
@@ -3897,7 +3523,7 @@ local function ParseGroupStatusIconStyleFastShortcut(normalized)
         if value == nil then value = true end
     else
         attr = "iconStyle"
-        label = "Status Icon Style"
+        label = "Default Role Icon Style"
         value = GroupStatusIconStyleValue(normalized)
     end
     if value == nil then return nil end
@@ -3974,13 +3600,8 @@ local function LooksLikeAlphaExcludeTextPortraitCommand(text)
 end
 
 local function ParseCastbarInterruptVisibilityShortcut(text)
-    if not ContainsAny(text, { "show interrupt", "castbar interrupt", "cast bar interrupt", "show castbar interrupt", "show cast bar interrupt" }) then return nil end
-    if ContainsAny(text, {
-        "ready", "tracker", "focus kick", "focus interrupt", "indicator", "preview", "test",
-        "color", "colors", "colour", "colours", "interruptible", "uninterruptible",
-        "non interruptible", "noninterruptible", "kickable", "unkickable", "feedback",
-        "shake", "strength", "size", "width", "height", "anchor", "offset",
-    }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[501]) then return nil end
+    if ContainsAny(text, P.RootPhrases[502]) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     local units = DetectUnits(text)
@@ -4113,8 +3734,8 @@ if not P.InitUnsupportedAuraCommand then
                         text = "Exact aura blacklist edits are legacy read-only while the native 12.1 backend is active, so I will not edit them as if they could affect live aura display. I can change live Aura Filter options instead, such as player-only, raid, dispellable, crowd-control, exclusive filters, icon size, count, spacing, growth, cooldown text, stack text, and duration bars.",
                     }
                 end
-                if ContainsAny(text, { "target of target", "targettarget", "target target", "targets target", "focus target", "focustarget" })
-                    and ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+                if ContainsAny(text, P.RootPhrases[503])
+                    and ContainsAny(text, P.RootPhrases[504])
                 then
                     return {
                         kind = "unsupported",
@@ -4195,7 +3816,7 @@ local GLOBAL_STATUS_TEXT_STATES = {
 }
 
 local function ParseGlobalStatusTextStateShortcut(text)
-    if ContainsAny(text, { "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames" }) then return nil end
+    if ContainsAny(text, P.RootPhrases[505]) then return nil end
     local value = DetectBoolean and DetectBoolean(text) or nil
     if value == nil then return nil end
     for i = 1, #GLOBAL_STATUS_TEXT_STATES do
@@ -4215,18 +3836,14 @@ local function ParseGlobalStatusTextStateShortcut(text)
 end
 
 A._ParseGlobalStatusIconsStyleFastShortcut = function(text)
-    if not ContainsAny(text, {
-        "status icon midnight style", "status icons midnight style",
-        "midnight status icon style", "midnight status icons",
-        "use midnight status icons",
-    }) then
+    if not ContainsAny(text, P.RootPhrases[506]) then
         return nil
     end
-    if ContainsAny(text, { "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames", "icon pack", "anchor", "offset", "size", "layer" }) then return nil end
+    if ContainsAny(text, P.RootPhrases[507]) then return nil end
     local setting = A.Registry and A.Registry:GetSetting("general.statusIconsUseMidnightStyle")
     if not setting then return nil end
     local value = DetectBoolean and DetectBoolean(text) or nil
-    if value == nil then value = not ContainsAny(text, { "classic", "blizzard", "default", "old" }) end
+    if value == nil then value = not ContainsAny(text, P.RootPhrases[508]) end
     return {
         kind = "changes",
         changes = { { setting = setting, value = value } },
@@ -4236,12 +3853,8 @@ A._ParseGlobalStatusIconsStyleFastShortcut = function(text)
 end
 
 A._ParseUnitAnchorPointFastShortcut = function(text)
-    if not ContainsAny(text, { "anchor point", "anchor position", "frame anchor point" }) then return nil end
-    if ContainsAny(text, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "aura", "auras", "buff", "debuff", "castbar", "cast bar", "text", "icon",
-        "indicator", "raid marker", "status", "level", "custom anchor", "anchor to",
-    }) then
+    if not ContainsAny(text, P.RootPhrases[509]) then return nil end
+    if ContainsAny(text, P.RootPhrases[510]) then
         return nil
     end
     local units = DetectUnits and DetectUnits(text) or {}
@@ -4268,8 +3881,8 @@ A._ParseUnitAnchorPointFastShortcut = function(text)
 end
 
 A._ParseBossTargetHighlightFastShortcut = function(text)
-    if not ContainsAny(text, { "boss target highlight", "boss target border", "boss target outline" }) then return nil end
-    if ContainsAny(text, { "color", "colour", "test", "preview", "group", "party", "raid", "mythic raid" }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[511]) then return nil end
+    if ContainsAny(text, P.RootPhrases[512]) then return nil end
     local setting = A.Registry and A.Registry:GetSetting("general.bossTargetHighlightEnabled")
     if not setting then return nil end
     local value = DetectBoolean and DetectBoolean(text) or nil
@@ -4283,16 +3896,16 @@ A._ParseBossTargetHighlightFastShortcut = function(text)
 end
 
 A._ParseHumanIndicatorMoveFastShortcut = function(text)
-    if not ContainsAny(text, { "move", "nudge", "shift", "position", "verschiebe" }) then return nil end
-    if ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[513]) then return nil end
+    if ContainsAny(text, P.RootPhrases[514]) then return nil end
     local direction
-    if ContainsAny(text, { "right", "to right", "to the right", "rechts" }) then
+    if ContainsAny(text, P.RootPhrases[515]) then
         direction = "right"
-    elseif ContainsAny(text, { "left", "to left", "to the left", "links" }) then
+    elseif ContainsAny(text, P.RootPhrases[516]) then
         direction = "left"
-    elseif ContainsAny(text, { "up", "above", "to top", "to the top", "oben", "hoch" }) then
+    elseif ContainsAny(text, P.RootPhrases[517]) then
         direction = "up"
-    elseif ContainsAny(text, { "down", "below", "to bottom", "to the bottom", "unten", "runter" }) then
+    elseif ContainsAny(text, P.RootPhrases[518]) then
         direction = "down"
     end
     if not direction then return nil end
@@ -4304,7 +3917,7 @@ A._ParseHumanIndicatorMoveFastShortcut = function(text)
     local unitSpecs = {
         { terms = { "raid group name", "raid group indicator", "raid group", "group number in name", "group number indicator", "subgroup indicator" }, x = "raidGroupNameOffsetX", y = "raidGroupNameOffsetY", label = "Raid Group Name" },
         { terms = { "raid marker", "raid marker icon", "raid marker indicator", "target marker", "target marker icon", "target marker indicator" }, x = "raidMarkerOffsetX", y = "raidMarkerOffsetY", label = "Raid Marker" },
-        { terms = { "leader icon", "leader indicator", "assist icon", "assist indicator", "leader assist icon", "leader assist indicator" }, x = "leaderIconOffsetX", y = "leaderIconOffsetY", label = "Leader / Assist" },
+        { terms = { "leader icon", "leader indicator", "assist icon", "assist indicator", "leader assist icon", "leader assist indicator" }, x = "leaderIconOffsetX", y = "leaderIconOffsetY", label = "Leader/Assist Icon" },
         { terms = { "level", "level indicator", "level text" }, x = "levelIndicatorOffsetX", y = "levelIndicatorOffsetY", label = "Level Indicator" },
         { terms = { "elite icon", "rare icon", "elite indicator", "rare indicator", "elite rare icon" }, x = "eliteIconOffsetX", y = "eliteIconOffsetY", label = "Elite / Rare Icon" },
         { terms = { "dead text", "status text", "offline text", "dead indicator", "offline indicator" }, x = "statusTextOffsetX", y = "statusTextOffsetY", label = "Dead Text" },
@@ -4341,7 +3954,7 @@ A._ParseHumanIndicatorMoveFastShortcut = function(text)
     local changes = {}
     local label
     if #units > 0 and unitSpec
-        and (#groups == 0 or ContainsAny(text, { "raid group", "raid group name", "raid group indicator", "subgroup indicator", "group number in name" }))
+        and (#groups == 0 or ContainsAny(text, P.RootPhrases[519]))
     then
         local spec = unitSpec
         if not spec then return nil end
@@ -4384,22 +3997,17 @@ A._ParseHumanIndicatorMoveFastShortcut = function(text)
 end
 
 local function ParseClassResourceFillFastShortcut(text)
-    if not ContainsAny(text, { "class resource", "class resources", "class power", "class powers" }) then return nil end
-    if ContainsAny(text, {
-        "move", "nudge", "shift", "position", "offset", "left", "right", "up", "down",
-        "hoch", "runter", "links", "rechts", "layer", "frame level", "strata",
-    }) and not ContainsAny(text, {
-        "text", "number", "numbers", "detached power", "player hp", "player health", "second hp", "duplicate hp",
-    }) then
+    if not ContainsAny(text, P.RootPhrases[520]) then return nil end
+    if ContainsAny(text, P.RootPhrases[521]) and not ContainsAny(text, P.RootPhrases[522]) then
         local direction = DetectDirection and DetectDirection(text, {}) or nil
         local key
         local fallback = 10
-        if ContainsAny(text, { "layer", "frame level", "strata" }) then
+        if ContainsAny(text, P.RootPhrases[523]) then
             key = "bars.classPowerFrameLevelOffset"
             fallback = 1
-        elseif direction == "left" or direction == "right" or ContainsAny(text, { "x offset", "offset x", "x position", "horizontal" }) then
+        elseif direction == "left" or direction == "right" or ContainsAny(text, P.RootPhrases[524]) then
             key = "bars.classPowerOffsetX"
-        elseif direction == "up" or direction == "down" or ContainsAny(text, { "y offset", "offset y", "y position", "vertical" }) then
+        elseif direction == "up" or direction == "down" or ContainsAny(text, P.RootPhrases[525]) then
             key = "bars.classPowerOffsetY"
         end
         local setting = key and A.Registry and A.Registry:GetSetting(key) or nil
@@ -4417,25 +4025,21 @@ local function ParseClassResourceFillFastShortcut(text)
             end
         end
     end
-    if ContainsAny(text, {
-        "color", "colour", "background", "texture", "text", "number", "numbers",
-        "width", "height", "size", "gap", "spacing", "anchor", "offset", "move",
-        "preview", "resource type", "resource token", "detached power", "player hp",
-    }) then
+    if ContainsAny(text, P.RootPhrases[526]) then
         return nil
     end
-    if not ContainsAny(text, { "fill", "direction", "reverse", "reversed", "backwards", "backward", "right to left", "left to right", "normal", "forward" }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[527]) then return nil end
 
     local value
     local boolValue = DetectBoolean and DetectBoolean(text) or nil
-    if ContainsAny(text, { "left to right", "normal direction", "normal fill", "fill normal", "forward fill", "fill forward" }) then
+    if ContainsAny(text, P.RootPhrases[528]) then
         value = false
-    elseif ContainsAny(text, { "right to left", "fill backwards", "fill backward", "reverse fill", "reverse direction", "fill reverse", "fill reversed" }) then
+    elseif ContainsAny(text, P.RootPhrases[529]) then
         value = true
-    elseif ContainsAny(text, { "reverse", "reversed", "fill" }) then
+    elseif ContainsAny(text, P.RootPhrases[530]) then
         value = boolValue
-        if value == nil and ContainsAny(text, { "turn on", "enable", "enabled", "on", "true" }) then value = true end
-        if value == nil and ContainsAny(text, { "turn off", "disable", "disabled", "off", "false" }) then value = false end
+        if value == nil and ContainsAny(text, P.RootPhrases[531]) then value = true end
+        if value == nil and ContainsAny(text, P.RootPhrases[532]) then value = false end
     end
     if value == nil then return nil end
 
@@ -4449,9 +4053,9 @@ local function ParseClassResourceFillFastShortcut(text)
 end
 
 local function ParseAuraBlacklistPresetFastShortcut(text)
-    if not ContainsAny(text, { "aura blacklist preset", "blacklist preset" }) then return nil end
-    if ContainsAny(text, { "what", "which", "where", "why", "how", "explain", "current", "active" }) then return nil end
-    if not ContainsAny(text, { "set", "change", "make", "select", "choose", "use", "to" }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[533]) then return nil end
+    if ContainsAny(text, P.RootPhrases[534]) then return nil end
+    if not ContainsAny(text, P.RootPhrases[535]) then return nil end
     local setting = A.Registry and A.Registry:GetSetting("menu.auraBlacklistPreset")
     if not setting then return nil end
     local value = P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text) or nil
@@ -4465,8 +4069,8 @@ local function ParseAuraBlacklistPresetFastShortcut(text)
 end
 
 local function ParseDispelBorderTriggerFastShortcut(text)
-    if not ContainsAny(text, { "dispel border detects", "dispel border trigger", "dispel border detection", "dispel detects" }) then return nil end
-    if ContainsAny(text, { "color", "colour", "opacity", "alpha", "size", "texture", "aura", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[536]) then return nil end
+    if ContainsAny(text, P.RootPhrases[537]) then return nil end
     if #(DetectUnits and DetectUnits(text) or {}) > 0 or #(DetectGroups and DetectGroups(text) or {}) > 0 then return nil end
     local setting = A.Registry and A.Registry:GetSetting("general.dispelBorderTrigger")
     if not setting then return nil end
@@ -4481,8 +4085,8 @@ local function ParseDispelBorderTriggerFastShortcut(text)
 end
 
 local function ParseUnitPortraitShapeFastShortcut(text)
-    if not ContainsAny(text, { "portrait shape", "portrait frame shape" }) then return nil end
-    if ContainsAny(text, { "color", "colour", "size", "width", "height", "anchor", "offset", "move", "texture" }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[538]) then return nil end
+    if ContainsAny(text, P.RootPhrases[539]) then return nil end
     local units = DetectUnits and DetectUnits(text) or {}
     if #units == 0 then return nil end
     local changes = {}
@@ -4507,13 +4111,13 @@ local function ParseUnitPortraitShapeFastShortcut(text)
 end
 
 local function ParseClassPowerTextOffsetShortcut(text)
-    if not ContainsAny(text, { "class power", "class powers", "class resource", "class resources", "combo point", "combo points" }) then return nil end
-    if ContainsAny(text, { "player hp", "player health", "second hp", "duplicate hp" }) then return nil end
-    if not ContainsAny(text, { "text", "number", "numbers" }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[540]) then return nil end
+    if ContainsAny(text, P.RootPhrases[541]) then return nil end
+    if not ContainsAny(text, P.RootPhrases[542]) then return nil end
     local axis
-    if ContainsAny(text, { "x offset", "offset x", "text x", "number x", "numbers x" }) or HasPhrase and HasPhrase(text, "x") then
+    if ContainsAny(text, P.RootPhrases[543]) or HasPhrase and HasPhrase(text, "x") then
         axis = "X"
-    elseif ContainsAny(text, { "y offset", "offset y", "text y", "number y", "numbers y" }) or HasPhrase and HasPhrase(text, "y") then
+    elseif ContainsAny(text, P.RootPhrases[544]) or HasPhrase and HasPhrase(text, "y") then
         axis = "Y"
     end
     if not axis then return nil end
@@ -4547,8 +4151,8 @@ local UNIT_ROOT_FRAME_DETAIL_BLOCKERS = {
 }
 
 local function UnitRootVisibilityValue(text)
-    if ContainsAny(text, { "hide", "hidden", "disable", "disabled", "turn off", "off", "not show", "dont show", "do not show" }) then return false end
-    if ContainsAny(text, { "show", "enable", "enabled", "turn on", "on" }) then return true end
+    if ContainsAny(text, P.RootPhrases[545]) then return false end
+    if ContainsAny(text, P.RootPhrases[546]) then return true end
     return DetectBoolean and DetectBoolean(text) or nil
 end
 
@@ -4560,7 +4164,7 @@ local function UnitRootLabel(unit)
 end
 
 local function ParseUnitRootVisibilityShortcut(text)
-    if not ContainsAny(text, { "frame", "frames", "unit frame", "unit frames", "unitframe", "unitframes" }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[547]) then return nil end
     if ContainsAny(text, UNIT_ROOT_FRAME_DETAIL_BLOCKERS) then return nil end
     local value = UnitRootVisibilityValue(text)
     if value == nil then return nil end
@@ -4585,21 +4189,21 @@ local function ParseUnitRootVisibilityShortcut(text)
 end
 
 local function ParseGroupDebuffStripeShortcut(text, raw)
-    if not ContainsAny(text, { "debuff stripe", "debuff stripes", "stripe edge", "stripe opacity", "stripe alpha", "stripe height" }) then return nil end
-    if ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben" }) then return nil end
+    if not ContainsAny(text, P.RootPhrases[548]) then return nil end
+    if ContainsAny(text, P.RootPhrases[549]) then return nil end
 
     local groups = DetectGroups and DetectGroups(text) or {}
     if #groups == 0 then return nil end
 
     local attr
     local title = "Group Debuff Stripe"
-    if ContainsAny(text, { "edge", "position", "top", "bottom", "upper", "lower" }) then
+    if ContainsAny(text, P.RootPhrases[550]) then
         attr = "debuffStripeEdge"
         title = "Debuff Stripe Edge"
-    elseif ContainsAny(text, { "opacity", "alpha", "transparency", "transparent" }) then
+    elseif ContainsAny(text, P.RootPhrases[551]) then
         attr = "debuffStripeAlpha"
         title = "Debuff Stripe Opacity"
-    elseif ContainsAny(text, { "height", "size", "thickness", "tall" }) then
+    elseif ContainsAny(text, P.RootPhrases[552]) then
         attr = "debuffStripeHeight"
         title = "Debuff Stripe Height"
     else
@@ -4650,6 +4254,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     local result = ParseGuidedSetupFollowup(normalized, ctx); if result then return result end
     result = A._ParseFollowupAnswer(normalized, ctx); if result then return result end
     result = BuildFollowup(normalized, ctx); if result then return result end
+    result = P.BuildContinuationFollowup and P.BuildContinuationFollowup(normalized, ctx); if result then return result end
     result = BuildBooleanCorrection(normalized, ctx); if result then return result end
     result = P.ParseBroadHumanAnchorTargetAnswer and P.ParseBroadHumanAnchorTargetAnswer(normalized, raw); if result then return result end
     result = ParseWorkflowLifecycle(normalized); if result then return result end
@@ -4825,16 +4430,10 @@ end
 A._ParseBarGradientPriorityShortcut = ParseBarGradientPriorityShortcut
 
 local function ParseGlobalBarModePriorityShortcut(normalized)
-    if ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
-        "text", "font", "name", "power text", "health text", "hp text", "mana text",
-        "class power", "class resource", "class resources", "castbar", "cast bar",
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[553]) then
         return nil
     end
-    if not ContainsAny(normalized, { "bar mode", "bar color mode", "health bar mode", "bars mode", "global bar mode" }) then
+    if not ContainsAny(normalized, P.RootPhrases[554]) then
         return nil
     end
     local setting = A.Registry and A.Registry:GetSetting("general.barMode")
@@ -4850,24 +4449,13 @@ end
 A._ParseGlobalBarModePriorityShortcut = ParseGlobalBarModePriorityShortcut
 
 local function ParseGlobalBarTexturePriorityShortcut(normalized, raw)
-    if not ContainsAny(normalized, {
-        "bar texture", "bars texture", "health bar texture", "power bar texture",
-        "foreground bar texture", "foreground texture", "bar background texture",
-        "global bar texture", "global bars texture", "global bar background texture",
-        "background bar texture", "bar bg texture", "background texture",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
-        "castbar", "cast bar", "class power", "class resource", "class resources",
-        "detached power", "second hp", "player hp", "absorb", "heal absorb",
-        "gradient", "color", "colour", "opacity", "alpha", "outline", "border",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[555]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[556]) then
         return nil
     end
 
     local key
-    if ContainsAny(normalized, { "bar background texture", "global bar background texture", "background bar texture", "bar bg texture", "background texture" }) then
+    if ContainsAny(normalized, P.RootPhrases[557]) then
         key = "general.barBackgroundTexture"
     else
         key = "general.barTexture"
@@ -4890,14 +4478,8 @@ end
 A._ParseGlobalBarTexturePriorityShortcut = ParseGlobalBarTexturePriorityShortcut
 
 local function ParseGlobalGradientStrengthPriorityShortcut(normalized)
-    if not ContainsAny(normalized, { "gradient strength", "bar gradient strength", "health gradient strength", "power gradient strength" }) then return nil end
-    if ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
-        "castbar", "cast bar", "class power", "class resource", "class resources",
-        "detached power", "second hp", "player hp", "absorb", "heal absorb",
-        "texture", "color", "colour", "opacity", "alpha", "outline", "border",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[558]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[559]) then
         return nil
     end
     local setting = A.Registry and A.Registry:GetSetting("general.gradientStrength")
@@ -4917,29 +4499,19 @@ end
 A._ParseGlobalGradientStrengthPriorityShortcut = ParseGlobalGradientStrengthPriorityShortcut
 
 local function ParseGlobalRoundedBarsPriorityShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "rounded frame texture", "rounded frames", "round corners", "rounded corners", "rounded texture",
-        "rounded unit frames", "rounded unitframes", "unit frame corners", "unitframe corners",
-        "rounded group frames", "rounded party frames", "rounded raid frames", "group frame corners",
-        "rounded power bars", "rounded powerbar", "power bar corners", "powerbar corners",
-        "rounded mouseover", "rounded hover", "rounded hover border", "mouseover rounded", "rounded mouseover highlights",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "portrait", "aura", "auras", "buff", "debuff", "icon", "icons",
-        "castbar", "cast bar", "class power", "class resource", "class resources",
-        "combo point", "combo points", "shape",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[560]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[561]) then
         return nil
     end
 
     local key
-    if ContainsAny(normalized, { "rounded mouseover", "rounded hover", "rounded hover border", "mouseover rounded", "rounded mouseover highlights" }) then
+    if ContainsAny(normalized, P.RootPhrases[562]) then
         key = "bars.roundedMouseover"
-    elseif ContainsAny(normalized, { "rounded power bars", "rounded powerbar", "power bar corners", "powerbar corners" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[563]) then
         key = "bars.roundedPowerBars"
-    elseif ContainsAny(normalized, { "rounded group frames", "rounded party frames", "rounded raid frames", "group frame corners" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[564]) then
         key = "bars.roundedGroupFrames"
-    elseif ContainsAny(normalized, { "rounded unit frames", "rounded unitframes", "unit frame corners", "unitframe corners" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[565]) then
         key = "bars.roundedUnitFrames"
     else
         key = "bars.roundedFramesEnabled"
@@ -4959,28 +4531,22 @@ end
 A._ParseGlobalRoundedBarsPriorityShortcut = ParseGlobalRoundedBarsPriorityShortcut
 
 local function ParseGlobalUnitDispelOverlayPriorityShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "unitframe dispel overlay", "unit frame dispel overlay", "dispel overlay", "health bar dispel overlay",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
-        "aura", "auras", "buff", "debuff", "corner", "stripe", "filter",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[566]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[567]) then
         return nil
     end
 
     local key
     local value
-    if ContainsAny(normalized, { "detects", "trigger", "detection" }) then
+    if ContainsAny(normalized, P.RootPhrases[568]) then
         key = "general.unitDispelOverlayTrigger"
-    elseif ContainsAny(normalized, { "style" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[569]) then
         key = "general.unitDispelOverlayStyle"
-    elseif ContainsAny(normalized, { "current health only", "current health", "on health only", "on current health", "on current health only" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[570]) then
         key = "general.unitDispelOverlayOnHealth"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "opacity", "alpha" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[571]) then
         key = "general.unitDispelOverlayAlpha"
         value = FirstNumber(normalized)
         if value == nil then return nil end
@@ -5010,13 +4576,8 @@ end
 A._ParseGlobalUnitDispelOverlayPriorityShortcut = ParseGlobalUnitDispelOverlayPriorityShortcut
 
 local function ParseScopedUnitDispelOverlayPriorityShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "unitframe dispel overlay", "unit frame dispel overlay", "dispel overlay", "health bar dispel overlay",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "aura", "auras", "buff", "debuff", "corner", "stripe", "filter",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[572]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[573]) then
         return nil
     end
 
@@ -5025,15 +4586,15 @@ local function ParseScopedUnitDispelOverlayPriorityShortcut(normalized)
 
     local suffix
     local value
-    if ContainsAny(normalized, { "detects", "trigger", "detection" }) then
+    if ContainsAny(normalized, P.RootPhrases[574]) then
         suffix = "unitDispelOverlayTrigger"
-    elseif ContainsAny(normalized, { "style" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[575]) then
         suffix = "unitDispelOverlayStyle"
-    elseif ContainsAny(normalized, { "current health only", "current health", "on health only", "on current health", "on current health only" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[576]) then
         suffix = "unitDispelOverlayOnHealth"
         value = DetectBoolean(normalized)
         if value == nil then value = true end
-    elseif ContainsAny(normalized, { "opacity", "alpha" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[577]) then
         suffix = "unitDispelOverlayAlpha"
         value = FirstNumber(normalized)
         if value == nil then return nil end
@@ -5075,20 +4636,12 @@ end
 A._ParseScopedUnitDispelOverlayPriorityShortcut = ParseScopedUnitDispelOverlayPriorityShortcut
 
 local function ParseGlobalPowerBarDetailPriorityShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "smooth power bar", "smooth power", "smooth mana bar", "power bar smoothing",
-        "realtime power text", "real time power text", "instant power text", "accurate power text",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
-        "class power", "class resource", "class resources", "detached power",
-        "color", "colour", "font", "size", "offset", "anchor", "position",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[578]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[579]) then
         return nil
     end
 
-    local key = ContainsAny(normalized, { "realtime power text", "real time power text", "instant power text", "accurate power text" })
+    local key = ContainsAny(normalized, P.RootPhrases[580])
         and "bars.realtimePowerText"
         or "bars.smoothPowerBar"
     local setting = A.Registry and A.Registry:GetSetting(key)
@@ -5105,13 +4658,9 @@ end
 A._ParseGlobalPowerBarDetailPriorityShortcut = ParseGlobalPowerBarDetailPriorityShortcut
 
 local function ParseScopedBarOverridePriorityShortcut(normalized)
-    if not ContainsAny(normalized, { "bars override", "bar override", "custom bars", "custom bar settings", "bar custom settings" }) then return nil end
-    if ContainsAny(normalized, { "reset", "clear", "remove" }) then return nil end
-    if ContainsAny(normalized, {
-        "texture", "gradient", "strength", "direction", "color", "colour", "opacity", "alpha",
-        "outline", "border", "dispel", "aggro", "purge", "absorb", "heal absorb",
-        "power text", "health text", "hp text", "font", "size", "height", "width",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[581]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[582]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[583]) then
         return nil
     end
 
@@ -5146,12 +4695,8 @@ end
 A._ParseScopedBarOverridePriorityShortcut = ParseScopedBarOverridePriorityShortcut
 
 local function ParseScopedGradientStrengthPriorityShortcut(normalized)
-    if not ContainsAny(normalized, { "gradient strength", "bar gradient strength", "health gradient strength", "power gradient strength" }) then return nil end
-    if ContainsAny(normalized, {
-        "castbar", "cast bar", "class power", "class resource", "class resources",
-        "detached power", "second hp", "player hp", "absorb", "heal absorb",
-        "texture", "color", "colour", "opacity", "alpha", "outline", "border",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[584]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[585]) then
         return nil
     end
 
@@ -5190,29 +4735,22 @@ end
 A._ParseScopedGradientStrengthPriorityShortcut = ParseScopedGradientStrengthPriorityShortcut
 
 local function ParseGlobalFontPriorityShortcut(normalized, raw)
-    if ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-        "player", "target", "focus", "pet", "boss", "targettarget", "focustarget",
-        "combat", "timer", "crosshair", "totem",
-        "name text", "hp text", "health text", "power text", "mana text",
-        "class power", "class resource", "class resources", "castbar", "cast bar",
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[586]) then
         return nil
     end
 
     local key
     local label
     local value
-    if ContainsAny(normalized, { "font size", "text size", "schrift groesse", "schriftgroesse", "globale schriftgroesse" }) then
+    if ContainsAny(normalized, P.RootPhrases[587]) then
         key = "general.fontSize"
         label = "Global Font Size"
         value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, { "font color", "font colour", "schriftfarbe", "textfarbe" }) then
-        if ContainsAny(normalized, { "custom", "global font color", "global font colour" }) then return nil end
+    elseif ContainsAny(normalized, P.RootPhrases[588]) then
+        if ContainsAny(normalized, P.RootPhrases[589]) then return nil end
         key = "general.fontColor"
         label = "Global Font Palette Color"
-    elseif ContainsAny(normalized, { "font family", "global font", "shared font", "sharedmedia font" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[590]) then
         key = "general.fontKey"
         label = "Global Font"
     else
@@ -5263,20 +4801,8 @@ end
 A._ParseGlobalFontPriorityShortcut = ParseGlobalFontPriorityShortcut
 
 local function ParseFontScopePriorityShortcut(normalized)
-    if not ContainsAny(normalized, {
-        "font override", "font size", "font outline", "font rendering",
-        "text opacity", "text baseline", "text shadow", "shadow strength",
-        "shorten names", "truncate names", "name shortening", "name truncation",
-        "truncation style", "clip side", "max name length", "name max length",
-        "max chars", "no ellipsis", "without ellipsis", "without dots",
-    }) then return nil end
-    if ContainsAny(normalized, {
-        "name text", "name font", "hp text", "hp font", "health text", "health font",
-        "power text", "power font", "mana text", "mana font",
-        "left text", "right text", "center text", "centre text", "text slot",
-        "castbar", "cast bar", "aura", "buff", "debuff",
-        "reset", "clear", "remove",
-    }) then
+    if not ContainsAny(normalized, P.RootPhrases[591]) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[592]) then
         return nil
     end
 
@@ -5285,54 +4811,50 @@ local function ParseFontScopePriorityShortcut(normalized)
     for i = 1, #units do scopes[#scopes + 1] = tostring(units[i]) end
     local groups = DetectGroups and DetectGroups(normalized) or {}
     for i = 1, #groups do scopes[#scopes + 1] = "gf_" .. tostring(groups[i]) end
-    if #scopes == 0 and ContainsAny(normalized, { "shared", "global", "all frames", "all unitframes", "all unit frames" }) then
+    if #scopes == 0 and ContainsAny(normalized, P.RootPhrases[593]) then
         scopes[#scopes + 1] = "shared"
     end
-    if #scopes == 0 and ContainsAny(normalized, { "font outline", "font rendering", "text opacity", "text baseline", "text shadow", "shadow strength" }) then
+    if #scopes == 0 and ContainsAny(normalized, P.RootPhrases[594]) then
         scopes[#scopes + 1] = "shared"
     end
-    if #scopes == 0 and ContainsAny(normalized, {
-        "shorten names", "truncate names", "name shortening", "name truncation",
-        "truncation style", "clip side", "max name length", "name max length",
-        "max chars", "no ellipsis", "without ellipsis", "without dots",
-    }) then
+    if #scopes == 0 and ContainsAny(normalized, P.RootPhrases[595]) then
         scopes[#scopes + 1] = "shared"
     end
     if #scopes == 0 then return nil end
 
     local suffix
     local value
-    if ContainsAny(normalized, { "font override" }) then
+    if ContainsAny(normalized, P.RootPhrases[596]) then
         suffix = "override"
-    elseif ContainsAny(normalized, { "font size" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[597]) then
         suffix = "fontSize"
         value = FirstNumber(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, { "font outline" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[598]) then
         suffix = "outline"
-    elseif ContainsAny(normalized, { "font rendering" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[599]) then
         suffix = "fontMonochrome"
-    elseif ContainsAny(normalized, { "text opacity" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[600]) then
         suffix = "fontTextAlpha"
-    elseif ContainsAny(normalized, { "text baseline" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[601]) then
         suffix = "fontBaselineOffset"
-    elseif ContainsAny(normalized, { "text shadow" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[602]) then
         suffix = "textBackdrop"
-    elseif ContainsAny(normalized, { "shadow strength" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[603]) then
         suffix = "fontShadowStrength"
-    elseif ContainsAny(normalized, { "shorten names", "truncate names", "name shortening" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[604]) then
         suffix = "shortenNames"
-    elseif ContainsAny(normalized, { "truncation style", "name truncation", "clip side", "name clip side", "truncate side", "shorten name side" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[605]) then
         suffix = "shortenNameClipSide"
-    elseif ContainsAny(normalized, { "max name length", "name max length", "max chars", "max characters", "name max characters", "short name length" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[606]) then
         suffix = "shortenNameMaxChars"
         value = FirstNumber(normalized)
         if value == nil then return nil end
-    elseif ContainsAny(normalized, { "no ellipsis", "without ellipsis", "without dots", "truncate without dots", "truncate without ellipsis" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[607]) then
         suffix = "shortenNameNoEllipsis"
-        if ContainsAny(normalized, { "turn off", "disable", "disabled", "off", "false", "show ellipsis", "show dots", "use dots", "ellipsis on" }) then
+        if ContainsAny(normalized, P.RootPhrases[608]) then
             value = false
-        elseif ContainsAny(normalized, { "turn on", "enable", "enabled", "on", "true", "hide ellipsis", "hide dots", "remove dots", "without ellipsis", "without dots", "no ellipsis" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[609]) then
             value = true
         end
     else
@@ -5511,36 +5033,24 @@ A._ParseUnitRootVisibilityShortcut = ParseUnitRootVisibilityShortcut
 
 local function ParseHumanSafetyGuidanceShortcut(normalized)
     if FirstNumber(normalized) ~= nil then return nil end
-    if ContainsAny(normalized, {
-        "gradient", "color", "colour", "alpha", "opacity", "scale", "width", "height",
-        "x offset", "y offset", "anchor", "position", "font size", "text size",
-    }) then return nil end
+    if ContainsAny(normalized, P.RootPhrases[610]) then return nil end
 
-    local broadIntent = ContainsAny(normalized, {
-        "prettier", "make prettier", "look better", "make it better", "make them better",
-        "less cluttered", "declutter", "cluttered", "too noisy", "too busy",
-        "clean this up", "clean that up", "clean it up", "cleaner",
-        "easier to read", "more readable", "readable", "hard to read",
-    })
+    local broadIntent = ContainsAny(normalized, P.RootPhrases[611])
     if not broadIntent then return nil end
-    if not ContainsAny(normalized, {
-        "msuf", "ui", "frame", "frames", "unitframe", "unitframes", "unit frame", "unit frames",
-        "bar", "bars", "party", "raid", "mythic", "target", "player", "focus", "boss",
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "text",
-    }) then return nil end
+    if not ContainsAny(normalized, P.RootPhrases[612]) then return nil end
 
     local area = "that area"
     local examples = "open player; open bars; set target health bar height to 24; set target buff icon count to 8"
-    if ContainsAny(normalized, { "raid", "mythic" }) then
+    if ContainsAny(normalized, P.RootPhrases[613]) then
         area = "raid frames"
         examples = "open raid frames; set raid debuff filter to RAID_IN_COMBAT; set raid name max chars to 12; set raid frame scale to 90"
-    elseif ContainsAny(normalized, { "party" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[614]) then
         area = "party frames"
         examples = "open party frames; set party buff count to 4; set party frame spacing to 8; turn on party range fade"
-    elseif ContainsAny(normalized, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[615]) then
         area = "auras"
         examples = "open aura filters; set target buff icon count to 8; set target debuff filter to RAID; set party buff icon size to 24"
-    elseif ContainsAny(normalized, { "bar", "bars" }) then
+    elseif ContainsAny(normalized, P.RootPhrases[616]) then
         area = "bars"
         examples = "open bars; turn on gradient from right for all unitframes; set gradient strength to 0.45; set bar texture to Minimalist"
     end
@@ -5648,6 +5158,12 @@ function A.Parse(text, ctxOverride)
         humanSafetyParsed.raw = raw
         humanSafetyParsed.normalized = normalized
         return humanSafetyParsed
+    end
+    local continuationPriorityParsed = P.BuildContinuationFollowup and P.BuildContinuationFollowup(normalized, ctx)
+    if continuationPriorityParsed then
+        continuationPriorityParsed.raw = raw
+        continuationPriorityParsed.normalized = normalized
+        return continuationPriorityParsed
     end
     local humanIndicatorMovePriorityParsed = A._ParseHumanIndicatorMoveFastShortcut and A._ParseHumanIndicatorMoveFastShortcut(normalized)
     if humanIndicatorMovePriorityParsed then
@@ -6170,7 +5686,7 @@ function A.Parse(text, ctxOverride)
         dispelOverlayOpacityParsed.normalized = normalized
         return dispelOverlayOpacityParsed
     end
-    if ContainsAny(normalized, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then
+    if ContainsAny(normalized, P.RootPhrases[617]) then
         local opacityUnits = DetectUnits(normalized)
         local opacityGroups = DetectGroups(normalized)
         local scopedOpacityParsed
@@ -6199,9 +5715,9 @@ function A.Parse(text, ctxOverride)
         return editModeControlParsed
     end
     local customAnchorActionParsed
-    if ContainsAny(normalized, { "custom anchor picker", "anchor frame picker", "clear custom anchor", "remove custom anchor", "reset custom anchor" })
-        or (ContainsAny(normalized, { "custom anchor", "custom anchor frame" })
-            and ContainsAny(normalized, { "clear", "remove", "reset", "restore", "default", "defaults", "zuruecksetzen" }))
+    if ContainsAny(normalized, P.RootPhrases[618])
+        or (ContainsAny(normalized, P.RootPhrases[619])
+            and ContainsAny(normalized, P.RootPhrases[620]))
     then
         customAnchorActionParsed = ParseCustomAnchorWorkflow(normalized) or ParseCustomAnchorClear(normalized)
         if customAnchorActionParsed then
@@ -6210,31 +5726,25 @@ function A.Parse(text, ctxOverride)
             return customAnchorActionParsed
         end
     end
-    if ContainsAny(normalized, {
-        "target of target inline text", "target target inline text", "target inline text",
-        "target of target inline name", "target of target name inline", "tot inline text",
-        "tot inline name", "target inline color", "target of target inline color", "tot inline color",
-        "target inline separator", "target of target inline separator", "tot inline separator",
-        "target inline custom separator", "target of target inline custom separator", "tot inline custom separator",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[621]) then
         local setting
         local value
-        if ContainsAny(normalized, { "inline color", "inline colour" }) then
+        if ContainsAny(normalized, P.RootPhrases[622]) then
             setting = A.Registry and A.Registry:GetSetting("targettarget.totInlineColorMode")
             value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
-        elseif ContainsAny(normalized, { "custom separator", "custom seperator", "custom delimiter" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[623]) then
             setting = A.Registry and A.Registry:GetSetting("targettarget.totInlineCustomSeparator")
             value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw, { " to ", " as ", " value ", " separator " }) or nil
             value = value or tostring(raw or ""):match("[Tt][Oo]%s+(.+)$")
-        elseif ContainsAny(normalized, { "separator", "seperator", "delimiter" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[624]) then
             setting = A.Registry and A.Registry:GetSetting("targettarget.totInlineSeparator")
             value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
             value = value or (P.RawAfterLastConnector and P.RawAfterLastConnector(raw, { " to ", " as ", " value " }) or nil)
         else
             setting = A.Registry and A.Registry:GetSetting("targettarget.showToTInTargetName")
             value = DetectBoolean(normalized)
-            if value == nil and ContainsAny(normalized, { "show", "display", "enable", "turn on", "on" }) then value = true end
-            if value == nil and ContainsAny(normalized, { "hide", "disable", "turn off", "off" }) then value = false end
+            if value == nil and ContainsAny(normalized, P.RootPhrases[625]) then value = true end
+            if value == nil and ContainsAny(normalized, P.RootPhrases[626]) then value = false end
         end
         if setting and value ~= nil then
             return {
@@ -6247,13 +5757,13 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "boss", "boss frame", "boss frames", "bossframe", "bossframes" })
-        and ContainsAny(normalized, { "spacing", "frame spacing", "gap between frames", "distance between frames", "frame layout", "layout" })
-        and not ContainsAny(normalized, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" })
+    if ContainsAny(normalized, P.RootPhrases[627])
+        and ContainsAny(normalized, P.RootPhrases[628])
+        and not ContainsAny(normalized, P.RootPhrases[629])
     then
         local setting
         local value
-        if ContainsAny(normalized, { "frame layout", "layout" }) then
+        if ContainsAny(normalized, P.RootPhrases[630]) then
             setting = A.Registry and A.Registry:GetSetting("boss.bossLayoutMode")
             value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
         else
@@ -6271,9 +5781,9 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, { "move", "nudge", "shift" })
-        and ContainsAny(normalized, { "left", "right", "up", "down", "links", "rechts", "oben", "unten" })
+    if ContainsAny(normalized, P.RootPhrases[631])
+        and ContainsAny(normalized, P.RootPhrases[632])
+        and ContainsAny(normalized, P.RootPhrases[633])
     then
         local castbarUnits = DetectUnits(normalized)
         local castbarOffsetKeys = {
@@ -6324,8 +5834,8 @@ function A.Parse(text, ctxOverride)
             return earlyCastbarMoveParsed
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, { "provider", "backend", "source", "renderer", "owner", "quelle", "besitzer" })
+    if ContainsAny(normalized, P.RootPhrases[634])
+        and ContainsAny(normalized, P.RootPhrases[635])
     then
         local setting = A.Registry and A.Registry:GetSetting("general.castbarPlayerBackend")
         local value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
@@ -6340,29 +5850,29 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, { "focus kick", "focus interrupt tracker", "fokus kick", "fokus interrupt tracker" })
-        and not ContainsAny(normalized, { "ready", "interrupt ready", "kick ready", "color", "colour" })
+    if ContainsAny(normalized, P.RootPhrases[636])
+        and ContainsAny(normalized, P.RootPhrases[637])
+        and not ContainsAny(normalized, P.RootPhrases[638])
     then
         local key
         local value
-        if ContainsAny(normalized, { "preview", "on-screen preview", "onscreen preview", "vorschau" }) then
+        if ContainsAny(normalized, P.RootPhrases[639]) then
             key = "runtime.focusKickPreview"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "width", "breite" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[640]) then
             key = "general.focusKickIconWidth"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "height", "hoehe" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[641]) then
             key = "general.focusKickIconHeight"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "text size", "font size", "schriftgroesse" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[642]) then
             key = "general.focusKickTextSize"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "x offset", "offset x", " x", "x ", "x versatz" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[643]) then
             key = "general.focusKickIconOffsetX"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "y offset", "offset y", " y", "y ", "y versatz" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[644]) then
             key = "general.focusKickIconOffsetY"
             value = FirstNumber(normalized)
         else
@@ -6382,33 +5892,33 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "interrupt ready", "kick ready", "interrupt bereit" })
-        and not ContainsAny(normalized, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" })
+    if ContainsAny(normalized, P.RootPhrases[645])
+        and not ContainsAny(normalized, P.RootPhrases[646])
     then
         local key
         local value
-        if ContainsAny(normalized, { "auto size", "autosize", "automatic size", "auto-size" }) then
+        if ContainsAny(normalized, P.RootPhrases[647]) then
             key = "general.kickReadyAutoSize"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "style", "border", "box", "fill", "outline", "square", "unavailable fill" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[648]) then
             key = "general.kickReadyStyle"
-        elseif ContainsAny(normalized, { "anchor", "anchor point", "anchor position", "position dropdown" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[649]) then
             key = "general.kickReadyAnchor"
-        elseif ContainsAny(normalized, { "x offset", "offset x", " x", "x " }) then
+        elseif ContainsAny(normalized, P.RootPhrases[650]) then
             key = "general.kickReadyOffsetX"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "y offset", "offset y", " y", "y " }) then
+        elseif ContainsAny(normalized, P.RootPhrases[651]) then
             key = "general.kickReadyOffsetY"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "size", "scale", "groesse", "grosse" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[652]) then
             key = "general.kickReadySize"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "target", "target castbar", "target cast bar", "ziel" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[653]) then
             key = "general.kickReadyShowTarget"
-        elseif ContainsAny(normalized, { "focus", "focus castbar", "focus cast bar", "fokus" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[654]) then
             key = "general.kickReadyShowFocus"
-        elseif ContainsAny(normalized, { "boss", "boss castbar", "boss castbars", "boss cast bar", "boss cast bars" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[655]) then
             key = "general.kickReadyShowBoss"
         end
         local setting = key and A.Registry and A.Registry:GetSetting(key)
@@ -6431,95 +5941,83 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, {
-            "interrupt shake", "shake on interrupt", "shake strength",
-            "unified fill direction", "same fill direction", "same castbar direction",
-            "target opposite fill direction", "opposite target direction", "target castbar opposite direction",
-            "fill direction", "channel ticks", "channel tick lines",
-            "castbar texture", "cast bar texture", "foreground texture", "background texture",
-            "outline thickness", "border thickness", "castbar glow", "cast bar glow",
-            "castbar latency", "latency indicator", "castbar spark", "spark overflow",
-            "empowered stage colors", "empower color stages", "empowered stage blink",
-            "empower stage blink", "stage blink time", "empowered blink time",
-            "spell name shortening", "shorten spell names", "max spell name length",
-            "spell name max length", "reserved spell name space", "spell name reserved space",
-        })
-        and not ContainsAny(normalized, { "interrupt ready", "kick ready", "focus kick", "tracker" })
-        and not (ContainsAny(normalized, { "color", "colors", "colour", "colours" })
-            and ContainsAny(normalized, { "interrupt", "kick", "interruptible", "uninterruptible", "non interruptible", "noninterruptible" }))
+    if ContainsAny(normalized, P.RootPhrases[656])
+        and ContainsAny(normalized, P.RootPhrases[657])
+        and not ContainsAny(normalized, P.RootPhrases[658])
+        and not (ContainsAny(normalized, P.RootPhrases[659])
+            and ContainsAny(normalized, P.RootPhrases[660]))
     then
         local key
         local value
-        if ContainsAny(normalized, { "shake strength" }) then
+        if ContainsAny(normalized, P.RootPhrases[661]) then
             key = "general.castbarShakeStrength"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "interrupt shake", "shake on interrupt" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[662]) then
             key = "general.castbarInterruptShake"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "unified fill direction", "same fill direction", "same castbar direction" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[663]) then
             key = "general.castbarUnifiedDirection"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "target opposite fill direction", "opposite target direction", "target castbar opposite direction" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[664]) then
             key = "general.castbarOpositeDirectionTarget"
             value = DetectBoolean(normalized)
             if value == nil then
-                value = not ContainsAny(normalized, { "normal", "same", "not opposite", "disable", "off" })
+                value = not ContainsAny(normalized, P.RootPhrases[665])
             end
-        elseif ContainsAny(normalized, { "fill direction" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[666]) then
             key = "general.castbarFillDirection"
             local setting = A.Registry and A.Registry:GetSetting(key)
             value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
-        elseif ContainsAny(normalized, { "channel ticks", "channel tick lines" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[667]) then
             key = "general.castbarShowChannelTicks"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "background texture" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[668]) then
             key = "general.castbarBackgroundTexture"
             value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw, { " to ", " as ", " = " }) or nil
-        elseif ContainsAny(normalized, { "castbar texture", "cast bar texture", "foreground texture" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[669]) then
             key = "general.castbarTexture"
             value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw, { " to ", " as ", " = " }) or nil
-        elseif ContainsAny(normalized, { "outline thickness", "border thickness" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[670]) then
             key = "general.castbarOutlineThickness"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "castbar glow", "cast bar glow", "glow effect" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[671]) then
             key = "general.castbarShowGlow"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "castbar latency", "latency indicator" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[672]) then
             key = "general.castbarShowLatency"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "spark overflow" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[673]) then
             key = "general.castbarSparkOverflow"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "castbar spark", "cast bar spark" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[674]) then
             key = "general.castbarShowSpark"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "stage blink time", "empowered blink time" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[675]) then
             key = "general.empowerStageBlinkTime"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "empowered stage colors", "empower color stages" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[676]) then
             key = "general.empowerColorStages"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "empowered stage blink", "empower stage blink" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[677]) then
             key = "general.empowerStageBlink"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "spell name shortening", "shorten spell names" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[678]) then
             key = "general.castbarSpellNameShortening"
             value = DetectBoolean(normalized)
             if value == nil then value = true end
-        elseif ContainsAny(normalized, { "max spell name length", "spell name max length" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[679]) then
             key = "general.castbarSpellNameMaxLen"
             value = FirstNumber(normalized)
-        elseif ContainsAny(normalized, { "reserved spell name space", "spell name reserved space" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[680]) then
             key = "general.castbarSpellNameReservedSpace"
             value = FirstNumber(normalized)
         end
@@ -6535,25 +6033,21 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, {
-            "icon size", "spell icon size", "icon x", "icon y", "icon offset", "symbol groesse",
-            "spell name font size", "spell text font size", "spell text size", "castbar text font size",
-            "time font size", "timer font size", "time text size", "castbar time font size",
-        })
+    if ContainsAny(normalized, P.RootPhrases[681])
+        and ContainsAny(normalized, P.RootPhrases[682])
         and not DetectUnits(normalized)[1]
-        and not ContainsAny(normalized, { "aura", "buff", "debuff", "focus kick", "kick icon", "interrupt icon" })
+        and not ContainsAny(normalized, P.RootPhrases[683])
     then
         local key
-        if ContainsAny(normalized, { "spell name font size", "spell text font size", "spell text size", "castbar text font size" }) then
+        if ContainsAny(normalized, P.RootPhrases[684]) then
             key = "general.castbarSpellNameFontSize"
-        elseif ContainsAny(normalized, { "time font size", "timer font size", "time text size", "castbar time font size" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[685]) then
             key = "general.castbarTimeFontSize"
-        elseif ContainsAny(normalized, { "icon size", "spell icon size", "symbol groesse" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[686]) then
             key = "general.castbarIconSize"
-        elseif ContainsAny(normalized, { "icon x", "icon x offset", "x offset" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[687]) then
             key = "general.castbarIconOffsetX"
-        elseif ContainsAny(normalized, { "icon y", "icon y offset", "y offset" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[688]) then
             key = "general.castbarIconOffsetY"
         end
         local setting = key and A.Registry and A.Registry:GetSetting(key)
@@ -6569,26 +6063,22 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, {
-            "icon size", "spell icon size", "icon position", "spell icon position",
-            "icon x", "icon y", "icon offset", "icon spacing", "spell icon spacing",
-            "icon border", "icon border style", "symbol groesse",
-        })
-        and not ContainsAny(normalized, { "aura", "buff", "debuff", "focus kick", "kick icon", "interrupt icon" })
+    if ContainsAny(normalized, P.RootPhrases[689])
+        and ContainsAny(normalized, P.RootPhrases[690])
+        and not ContainsAny(normalized, P.RootPhrases[691])
     then
         local attr
-        if ContainsAny(normalized, { "icon border", "icon border style" }) then
+        if ContainsAny(normalized, P.RootPhrases[692]) then
             attr = "border"
-        elseif ContainsAny(normalized, { "icon spacing", "spell icon spacing" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[693]) then
             attr = "spacing"
-        elseif ContainsAny(normalized, { "icon position", "spell icon position" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[694]) then
             attr = "position"
-        elseif ContainsAny(normalized, { "icon x", "icon x offset" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[695]) then
             attr = "x"
-        elseif ContainsAny(normalized, { "icon y", "icon y offset" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[696]) then
             attr = "y"
-        elseif ContainsAny(normalized, { "icon size", "spell icon size", "symbol groesse" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[697]) then
             attr = "size"
         end
 
@@ -6656,47 +6146,34 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, {
-            "spell name position", "spell text position", "text position",
-            "text x", "text y", "spell name x", "spell name y", "spell text x", "spell text y",
-            "spell name alignment", "spell text alignment", "text alignment",
-            "spell name font size", "spell text font size", "spell text size",
-            "spell name manual width", "spell text manual width", "text manual width",
-            "spell name max width", "spell text max width", "text max width",
-            "spell name width behavior", "spell text width behavior", "text width behavior",
-            "spell name truncate", "spell text truncate", "text truncate",
-            "time format", "timer format", "cast time format",
-            "time position", "timer position", "time text position",
-            "time x", "time y", "timer x", "timer y", "time text x", "time text y",
-            "time font size", "timer font size", "time text size",
-        })
-        and not ContainsAny(normalized, { "aura", "buff", "debuff", "focus kick", "kick icon", "interrupt icon" })
+    if ContainsAny(normalized, P.RootPhrases[698])
+        and ContainsAny(normalized, P.RootPhrases[699])
+        and not ContainsAny(normalized, P.RootPhrases[700])
     then
         local attr
-        if ContainsAny(normalized, { "time format", "timer format", "cast time format" }) then
+        if ContainsAny(normalized, P.RootPhrases[701]) then
             attr = "timeFormat"
-        elseif ContainsAny(normalized, { "time position", "timer position", "time text position" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[702]) then
             attr = "timePosition"
-        elseif ContainsAny(normalized, { "time x", "timer x", "time text x" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[703]) then
             attr = "timeX"
-        elseif ContainsAny(normalized, { "time y", "timer y", "time text y" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[704]) then
             attr = "timeY"
-        elseif ContainsAny(normalized, { "time font size", "timer font size", "time text size" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[705]) then
             attr = "timeFontSize"
-        elseif ContainsAny(normalized, { "spell name width behavior", "spell text width behavior", "text width behavior", "spell name truncate", "spell text truncate", "text truncate" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[706]) then
             attr = "spellTruncate"
-        elseif ContainsAny(normalized, { "spell name manual width", "spell text manual width", "text manual width", "spell name max width", "spell text max width", "text max width" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[707]) then
             attr = "spellMaxWidth"
-        elseif ContainsAny(normalized, { "spell name font size", "spell text font size", "spell text size" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[708]) then
             attr = "spellFontSize"
-        elseif ContainsAny(normalized, { "spell name alignment", "spell text alignment", "text alignment" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[709]) then
             attr = "spellAlign"
-        elseif ContainsAny(normalized, { "spell name position", "spell text position", "text position" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[710]) then
             attr = "spellPosition"
-        elseif ContainsAny(normalized, { "text x", "spell name x", "spell text x" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[711]) then
             attr = "textX"
-        elseif ContainsAny(normalized, { "text y", "spell name y", "spell text y" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[712]) then
             attr = "textY"
         end
 
@@ -6788,20 +6265,16 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, { "time", "cast time", "icon", "spell icon", "text", "spell text", "spell name" })
-        and not ContainsAny(normalized, {
-            "width", "height", "size", "position", "anchor", "align", "alignment", "format",
-            "x offset", "y offset", " icon x", " icon y", " text x", " text y",
-            "manual width", "truncate", "border", "spacing",
-        })
+    if ContainsAny(normalized, P.RootPhrases[713])
+        and ContainsAny(normalized, P.RootPhrases[714])
+        and not ContainsAny(normalized, P.RootPhrases[715])
     then
         local attr
-        if ContainsAny(normalized, { "time", "cast time" }) then
+        if ContainsAny(normalized, P.RootPhrases[716]) then
             attr = "time"
-        elseif ContainsAny(normalized, { "icon", "spell icon" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[717]) then
             attr = "icon"
-        elseif ContainsAny(normalized, { "text", "spell text", "spell name" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[718]) then
             attr = "text"
         end
         local value = DetectBoolean(normalized)
@@ -6832,17 +6305,14 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, { "width", "height", "wide", "tall", "breite", "hoehe" })
-        and not ContainsAny(normalized, {
-            "text", "time", "icon", "aura", "buff", "debuff", "spell name",
-            "manual width", "focus kick", "kick icon", "interrupt icon",
-        })
+    if ContainsAny(normalized, P.RootPhrases[719])
+        and ContainsAny(normalized, P.RootPhrases[720])
+        and not ContainsAny(normalized, P.RootPhrases[721])
     then
         local axis
-        if ContainsAny(normalized, { "width", "wide", "breite" }) then
+        if ContainsAny(normalized, P.RootPhrases[722]) then
             axis = "w"
-        elseif ContainsAny(normalized, { "height", "tall", "hoehe" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[723]) then
             axis = "h"
         end
         local value = FirstNumber(normalized)
@@ -6873,17 +6343,14 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, { " x", "x ", "x offset", " y", "y ", "y offset", "links", "rechts", "oben", "unten" })
-        and not ContainsAny(normalized, {
-            "text", "time", "icon", "aura", "buff", "debuff", "spell name",
-            "manual width", "focus kick", "kick icon", "interrupt icon",
-        })
+    if ContainsAny(normalized, P.RootPhrases[724])
+        and ContainsAny(normalized, P.RootPhrases[725])
+        and not ContainsAny(normalized, P.RootPhrases[726])
     then
         local axis
-        if ContainsAny(normalized, { "x offset", "offset x", " x", "x ", "links", "rechts" }) then
+        if ContainsAny(normalized, P.RootPhrases[727]) then
             axis = "x"
-        elseif ContainsAny(normalized, { "y offset", "offset y", " y", "y ", "oben", "unten" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[728]) then
             axis = "y"
         end
         local value = FirstNumber(normalized)
@@ -6914,12 +6381,8 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and not ContainsAny(normalized, {
-            "text", "time", "icon", "width", "height", "size", "x", "y", "offset",
-            "move", "nudge", "shift", "position", "anchor", "color", "colour", "backend",
-            "provider", "interrupt", "spell", "test", "preview", "fill", "direction",
-        })
+    if ContainsAny(normalized, P.RootPhrases[729])
+        and not ContainsAny(normalized, P.RootPhrases[730])
     then
         local value = DetectBoolean(normalized)
         if value ~= nil then
@@ -6949,78 +6412,65 @@ function A.Parse(text, ctxOverride)
             end
         end
     end
-    if ContainsAny(normalized, {
-        "confirm wago backup", "clear wago backup", "reset wago backup", "unconfirm wago backup",
-        "profile backup confirmed", "backup confirmed",
-        "open dashboard panel", "show dashboard panel", "close dashboard panel", "hide dashboard panel",
-        "toggle dashboard panel", "dashboard panels",
-        "navigation section", "nav section", "sidebar section", "navigation group", "nav group",
-        "reset search intro", "show search intro", "hide search intro", "mark search intro seen",
-        "open recovery tools", "show recovery tools", "display recovery", "dashboard recovery",
-        "open scaling tools", "show scaling tools", "dashboard scaling", "open changelog",
-        "show changelog", "release notes", "latest changes", "build notes",
-        "enter edit mode", "exit edit mode", "leave edit mode", "cancel edit mode", "toggle edit mode",
-        "edit mode status", "am i in edit mode", "is edit mode on", "why can't i exit edit mode",
-        "why cant i exit edit mode", "why can not i exit edit mode",
-    }) and not ContainsAny(normalized, { " help", "help ", "how do i", "how can i", "what is", "what are", "explain", "describe" }) then
+    if ContainsAny(normalized, P.RootPhrases[731]) and not ContainsAny(normalized, P.RootPhrases[732]) then
         local actionKey
         local args = {}
         local label
         local summary
         local confirmRequired = false
-        if ContainsAny(normalized, { "confirm wago backup", "clear wago backup", "reset wago backup", "unconfirm wago backup", "profile backup confirmed", "backup confirmed" }) then
-            local clear = ContainsAny(normalized, { "clear", "reset", "unconfirm", "not confirmed" })
+        if ContainsAny(normalized, P.RootPhrases[733]) then
+            local clear = ContainsAny(normalized, P.RootPhrases[734])
             actionKey = "confirm_wago_backup"
             args.confirmed = not clear
             label = clear and "Clear Wago backup confirmation" or "Confirm Wago backup"
             summary = "Marks the Wago backup checklist for the active profile."
-        elseif ContainsAny(normalized, { "open recovery tools", "show recovery tools", "display recovery", "dashboard recovery" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[735]) then
             actionKey = "open_recovery_tools"
             label = "Open recovery tools"
             summary = "Opens the Dashboard recovery area."
-        elseif ContainsAny(normalized, { "open dashboard panel", "show dashboard panel", "close dashboard panel", "hide dashboard panel", "toggle dashboard panel", "dashboard panels" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[736]) then
             actionKey = "set_dashboard_panel"
-            if ContainsAny(normalized, { "close", "hide", "collapse" }) then
+            if ContainsAny(normalized, P.RootPhrases[737]) then
                 args.open = false
-            elseif ContainsAny(normalized, { "toggle" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[738]) then
                 args.open = nil
             else
                 args.open = true
             end
             label = "Set Dashboard panel"
             summary = "Asks which Dashboard panel to open, such as recovery tools, scaling tools, or changelog."
-        elseif ContainsAny(normalized, { "reset search intro", "show search intro", "hide search intro", "mark search intro seen", "search intro" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[739]) then
             actionKey = "set_nav_search_intro"
-            if ContainsAny(normalized, { "hide", "close", "dismiss", "mark seen", "mark as seen", "mark search intro seen", "dont show" }) then
+            if ContainsAny(normalized, P.RootPhrases[740]) then
                 args.command = "seen"
-            elseif ContainsAny(normalized, { "reset", "show again", "next time" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[741]) then
                 args.command = "reset"
             else
                 args.command = "show"
             end
             label = "Set search intro"
             summary = "Shows or hides the menu search intro."
-        elseif ContainsAny(normalized, { "navigation section", "nav section", "sidebar section", "navigation group", "nav group" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[742]) then
             actionKey = "set_nav_section"
-            if ContainsAny(normalized, { "group frames", "groupframes", "raid frames", "party frames", "group frame", "groups" }) then
+            if ContainsAny(normalized, P.RootPhrases[743]) then
                 args.section = "groupframes"
                 label = "Group Frames"
-            elseif ContainsAny(normalized, { "unit frames", "unitframes", "unit frame", "frames", "frame list" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[744]) then
                 args.section = "unitframes"
                 label = "Frames"
-            elseif ContainsAny(normalized, { "appearance", "global style", "globalstyle", "style section", "look section" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[745]) then
                 args.section = "globalstyle"
                 label = "Appearance"
-            elseif ContainsAny(normalized, { "advanced", "modules", "module section", "advanced menu" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[746]) then
                 args.section = "modules"
                 label = "Advanced"
-            elseif ContainsAny(normalized, { "auras", "aura section", "buffs section", "debuffs section" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[747]) then
                 args.section = "auras"
                 label = "Auras"
             end
-            if ContainsAny(normalized, { "close", "hide", "collapse" }) then
+            if ContainsAny(normalized, P.RootPhrases[748]) then
                 args.open = false
-            elseif ContainsAny(normalized, { "toggle" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[749]) then
                 args.open = nil
             else
                 args.open = true
@@ -7031,38 +6481,32 @@ function A.Parse(text, ctxOverride)
                 label = "Set navigation section"
             end
             summary = "Expands or collapses a menu section."
-        elseif ContainsAny(normalized, { "open scaling tools", "show scaling tools", "dashboard scaling" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[750]) then
             actionKey = "open_dashboard_panel"
             args.panel = "scaling"
             label = "Open scaling tools"
             summary = "Opens the Dashboard scaling area."
-        elseif ContainsAny(normalized, { "open changelog", "show changelog", "release notes", "latest changes", "build notes" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[751]) then
             actionKey = "open_dashboard_panel"
             args.panel = "changelog"
             label = "Open changelog"
             summary = "Opens the Dashboard changelog."
-        elseif ContainsAny(normalized, { "edit mode", "editmode", "msuf edit mode", "bearbeitungsmodus", "editmodus" }) then
-            if ContainsAny(normalized, {
-                "am i in edit mode", "is edit mode on", "is edit mode active", "edit mode status",
-                "why can't i exit edit mode", "why cant i exit edit mode", "why can not i exit edit mode",
-            }) then
+        elseif ContainsAny(normalized, P.RootPhrases[752]) then
+            if ContainsAny(normalized, P.RootPhrases[753]) then
                 actionKey = "assistant.diagnostic.editMode.status"
-                if ContainsAny(normalized, { "why can't", "why cant", "why can not" }) then args.reason = "why_exit" end
+                if ContainsAny(normalized, P.RootPhrases[754]) then args.reason = "why_exit" end
                 label = "Show MSUF Edit Mode status"
-            elseif ContainsAny(normalized, { "cancel edit mode", "discard edit mode", "cancel msuf edit mode" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[755]) then
                 actionKey = "assistant.action.editMode.cancel"
                 confirmRequired = true
                 label = "Cancel MSUF Edit Mode"
-            elseif ContainsAny(normalized, { "toggle edit mode", "toggle msuf edit mode" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[756]) then
                 actionKey = "assistant.action.editMode.toggle"
                 label = "Toggle MSUF Edit Mode"
-            elseif ContainsAny(normalized, {
-                "stop edit mode", "exit edit mode", "exit msuf edit mode", "leave edit mode", "leave msuf edit mode",
-                "close edit mode", "disable edit mode", "turn off edit mode", "edit mode off",
-            }) then
+            elseif ContainsAny(normalized, P.RootPhrases[757]) then
                 actionKey = "assistant.action.editMode.exit"
                 label = "Exit MSUF Edit Mode"
-            elseif ContainsAny(normalized, { "enter edit mode", "start edit mode", "open edit mode", "turn on edit mode", "edit mode on" }) then
+            elseif ContainsAny(normalized, P.RootPhrases[758]) then
                 actionKey = "assistant.action.editMode.enter"
                 label = "Enter MSUF Edit Mode"
             end
@@ -7082,11 +6526,7 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, {
-        "copy category", "copy categories", "copy scope", "copy scopes",
-        "select unit copy", "select group copy", "set unit copy", "set group copy",
-        "select all group copy categories", "select all unit copy categories",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[759]) then
         local earlyMenuSelectorParsed = (ParseGroupCopyScopeState and ParseGroupCopyScopeState(normalized))
             or (ParseUnitCopyScopeState and ParseUnitCopyScopeState(normalized))
             or (ParseMenuSelectorState and ParseMenuSelectorState(normalized))
@@ -7096,12 +6536,9 @@ function A.Parse(text, ctxOverride)
             return earlyMenuSelectorParsed
         end
     end
-    if ContainsAny(normalized, { "copy " })
-        and ContainsAny(normalized, { " to ", " into ", "onto " })
-        and not ContainsAny(normalized, {
-            "profile", "profiles", "profil", "wago", "support link", "discord", "github",
-            "patreon", "paypal", "kofi", "ko-fi",
-        })
+    if ContainsAny(normalized, P.RootPhrases[760])
+        and ContainsAny(normalized, P.RootPhrases[761])
+        and not ContainsAny(normalized, P.RootPhrases[762])
     then
         local earlyCopyParsed = CopyRequest(normalized)
         if earlyCopyParsed then
@@ -7110,12 +6547,7 @@ function A.Parse(text, ctxOverride)
             return earlyCopyParsed
         end
     end
-    if ContainsAny(normalized, {
-        "close msuf menu", "hide msuf menu", "minimize msuf menu", "minimise msuf menu",
-        "maximize msuf menu", "maximise msuf menu", "restore msuf menu",
-        "close menu", "hide menu", "minimize menu", "minimise menu", "maximize menu",
-        "maximise menu", "restore menu",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[763]) then
         local earlyMenuWindowParsed = ParseMenuWindowAction and ParseMenuWindowAction(normalized)
         if earlyMenuWindowParsed then
             earlyMenuWindowParsed.raw = raw
@@ -7123,13 +6555,7 @@ function A.Parse(text, ctxOverride)
             return earlyMenuWindowParsed
         end
     end
-    if ContainsAny(normalized, {
-        "open ", "go to ", "show settings", "show me ", "find ", "search ", "where ",
-        " frame page", " settings page", " option page", " options page", " config page",
-    }) and not ContainsAny(normalized, {
-        "profile import", "import profile", "open profile import", "profile export",
-        "export profile", "profile string", "import string", "export string",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[764]) and not ContainsAny(normalized, P.RootPhrases[765]) then
         local earlyOpenParsed = ParseOpen and ParseOpen(normalized, raw)
         if earlyOpenParsed then
             earlyOpenParsed.raw = raw
@@ -7137,11 +6563,7 @@ function A.Parse(text, ctxOverride)
             return earlyOpenParsed
         end
     end
-    if normalized == "help" or normalized == "hilfe" or ContainsAny(normalized, {
-        "assistant help", "command help", "commands help", "help commands",
-        "print help", "show help", "what can you do", "what settings can you change",
-        "command examples",
-    }) then
+    if normalized == "help" or normalized == "hilfe" or ContainsAny(normalized, P.RootPhrases[766]) then
         local action = A.Registry and A.Registry:GetAction("assistant_help")
         if action then
             return {
@@ -7155,7 +6577,7 @@ function A.Parse(text, ctxOverride)
             }
         end
     end
-    if ContainsAny(normalized, { "help for", "help with", "player frame help", "target frame help", "group frame help", "edit mode help" }) then
+    if ContainsAny(normalized, P.RootPhrases[767]) then
         local earlyScopedHelpParsed = ParseScopedHelp and ParseScopedHelp(normalized)
         if earlyScopedHelpParsed then
             earlyScopedHelpParsed.raw = raw
@@ -7163,12 +6585,7 @@ function A.Parse(text, ctxOverride)
             return earlyScopedHelpParsed
         end
     end
-    if ContainsAny(normalized, {
-        "support link", "support links", "discord support", "discord link", "copy discord",
-        "copy support", "show support links", "donate links", "development links",
-        "github link", "repo link", "repository link", "patreon link", "paypal link",
-        "ko fi", "kofi", "ko-fi",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[768]) then
         local earlySupportParsed = ParseSupportWorkflow and ParseSupportWorkflow(normalized)
         if earlySupportParsed then
             earlySupportParsed.raw = raw
@@ -7176,11 +6593,7 @@ function A.Parse(text, ctxOverride)
             return earlySupportParsed
         end
     end
-    if ContainsAny(normalized, {
-        "guided setup", "setup guide", "start guide", "start tour", "guide me",
-        "guided setup next", "setup next", "next setup", "continue setup",
-        "cancel setup", "finish setup", "skip setup", "setup status",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[769]) then
         local earlyGuidedSetupParsed = (ParseGuidedSetupFollowup and ParseGuidedSetupFollowup(normalized, ctx))
             or (ParseGuidedSetup and ParseGuidedSetup(normalized))
         if earlyGuidedSetupParsed then
@@ -7189,33 +6602,27 @@ function A.Parse(text, ctxOverride)
             return earlyGuidedSetupParsed
         end
     end
-    if ContainsAny(normalized, {
-        "assistant status", "msuf status", "status report", "diagnostic report",
-        "run checks", "run diagnostics", "health check", "assistant support text",
-        "no match telemetry", "nomatch telemetry", "no match worklist", "nomatch worklist",
-        "clear no match telemetry", "clear nomatch telemetry", "assistant misses",
-        "diagnose ", "diagnostics", "debug report", "performance report",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[770]) then
         local actionKey
         local args = {}
         local label
         local summary
         local confirmRequired = false
-        if ContainsAny(normalized, { "clear no match telemetry", "clear nomatch telemetry", "clear assistant no match", "reset no match telemetry" }) then
+        if ContainsAny(normalized, P.RootPhrases[771]) then
             actionKey = "assistant_nomatch_clear"
             label = "Clear Assistant learning phrases"
             summary = "Clears stored Assistant learning/no-match phrases."
             confirmRequired = true
-        elseif ContainsAny(normalized, { "no match worklist", "nomatch worklist", "action no match worklist", "show action no match worklist" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[772]) then
             actionKey = "assistant_nomatch_worklist"
-            if ContainsAny(normalized, { "action no match", "action nomatch", "action review" }) then args.owner = "action-parser" end
+            if ContainsAny(normalized, P.RootPhrases[773]) then args.owner = "action-parser" end
             label = "Show Assistant learning list"
             summary = "Shows phrases that still need better Assistant answers."
-        elseif ContainsAny(normalized, { "no match telemetry", "nomatch telemetry", "show no match", "show nomatch", "assistant misses" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[774]) then
             actionKey = "assistant_nomatch_telemetry"
             label = "Show Assistant phrases to improve"
             summary = "Shows stored phrases that still need better Assistant answers."
-        elseif ContainsAny(normalized, { "assistant status", "msuf status", "status report", "diagnostic report", "assistant support text", "debug report", "performance report" }) then
+        elseif ContainsAny(normalized, P.RootPhrases[775]) then
             actionKey = "assistant_status"
             label = "Show MSUF status"
             summary = "Shows read-only MSUF and Assistant details."
@@ -7235,10 +6642,7 @@ function A.Parse(text, ctxOverride)
             return earlyDiagnosticParsed
         end
     end
-    if ContainsAny(normalized, {
-        "blacklist", "unblacklist", "hidden aura", "aura spell", "spell blacklist",
-        "aura preset", "category blacklist", "blacklist category",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[776]) then
         local auraActionParsed = P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw)
         if auraActionParsed then
             auraActionParsed.raw = raw
@@ -7247,22 +6651,22 @@ function A.Parse(text, ctxOverride)
         end
     end
     local actionFirstParsed
-    if ContainsAny(normalized, { "crosshair", "fadenkreuz", "totem frame", "totemframe", "blizzard totem", "statue frame", "totem rahmen" }) then
+    if ContainsAny(normalized, P.RootPhrases[777]) then
         actionFirstParsed = ParseGameplayAction(normalized, raw)
     end
     actionFirstParsed = actionFirstParsed or ParsePresetWorkflow(normalized) or ParseGlobalBarsAction(normalized)
-    if not actionFirstParsed and ContainsAny(normalized, { "global font color", "main font color", "default font color", "globale schriftfarbe" }) then
+    if not actionFirstParsed and ContainsAny(normalized, P.RootPhrases[778]) then
         actionFirstParsed = ParseFontColorAction(normalized, raw)
     end
     if not actionFirstParsed
-        and ContainsAny(normalized, { "reset", "restore", "zuruecksetzen", "zurucksetzen" })
-        and ContainsAny(normalized, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" })
+        and ContainsAny(normalized, P.RootPhrases[779])
+        and ContainsAny(normalized, P.RootPhrases[780])
     then
         actionFirstParsed = ParseColorAction(normalized)
     end
     actionFirstParsed = actionFirstParsed
         or ParseScopedOverrideReset(normalized)
-        or (not ContainsAny(normalized, { "focus kick", "focus interrupt", "kick preview", "interrupt preview" }) and ParseCastbarPreviewAction(normalized))
+        or (not ContainsAny(normalized, P.RootPhrases[781]) and ParseCastbarPreviewAction(normalized))
         or ParseGroupSpellIndicatorAction(normalized, raw)
         or ParseGroupCornerIndicatorReset(normalized)
         or ParseGroupStatusPreview(normalized)
@@ -7272,32 +6676,22 @@ function A.Parse(text, ctxOverride)
         or (P.ParsePowerBarGradientRegistryShortcut and P.ParsePowerBarGradientRegistryShortcut(normalized))
         or (P.ParseDetachedPowerBarMoveShortcut and P.ParseDetachedPowerBarMoveShortcut(normalized))
     if not actionFirstParsed
-        and ContainsAny(normalized, { "reset", "restore", "zuruecksetzen", "zurucksetzen" })
-        and not ContainsAny(normalized, { "set", "change", "make", "to default", "as default", "auf default", "zu default" })
+        and ContainsAny(normalized, P.RootPhrases[782])
+        and not ContainsAny(normalized, P.RootPhrases[783])
     then
         actionFirstParsed = ParseGroupStatusIconReset(normalized)
             or ParseUnitStatusIndicatorReset(normalized, ctx)
     end
     if not actionFirstParsed
-        and ContainsAny(normalized, { "reset", "restore", "zuruecksetzen", "zurucksetzen", "default", "defaults", "werksreset", "werkseinstellungen", "vollreset" })
-        and ContainsAny(normalized, {
-            "position", "positions", "pos", "placement", "x", "y", "offscreen", "off screen",
-            "all positions", "frame positions", "reset positions", "reset movers", "broken layout",
-            "factory reset", "full reset", "fullreset", "reset all settings", "reset all profiles",
-            "profile", "profil", "werksreset", "werkseinstellungen", "vollreset",
-        })
+        and ContainsAny(normalized, P.RootPhrases[784])
+        and ContainsAny(normalized, P.RootPhrases[785])
     then
         actionFirstParsed = ParseReset(normalized)
     end
     if not actionFirstParsed
-        and ContainsAny(normalized, { "reset", "restore", "zuruecksetzen", "zurucksetzen", "default", "defaults" })
-        and ContainsAny(normalized, { "options", "settings", "page", "option page", "setting page" })
-        and not ContainsAny(normalized, {
-            "name", "hp", "health", "power", "mana", "text", "font", "color", "colour",
-            "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar",
-            "portrait", "range fade", "raid marker", "status", "indicator", "icon", "border",
-            "opacity", "alpha", "width", "height", "position", "offset", "x", "y",
-        })
+        and ContainsAny(normalized, P.RootPhrases[786])
+        and ContainsAny(normalized, P.RootPhrases[787])
+        and not ContainsAny(normalized, P.RootPhrases[788])
     then
         actionFirstParsed = ParseReset(normalized)
     end
@@ -7455,39 +6849,15 @@ function A.Parse(text, ctxOverride)
         earlyUnitAnchorParsed.normalized = normalized
         return earlyUnitAnchorParsed
     end
-    if ContainsAny(normalized, { "color", "colors", "colour", "colours", "tint", "farbe", "farben" }) then
+    if ContainsAny(normalized, P.RootPhrases[789]) then
         local directColorParsed
-        if ContainsAny(normalized, {
-            "power text", "powertext", "mana text", "resource text", "power value", "mana value", "resource value",
-            "color of power text", "colour of power text", "color of powertext", "colour of powertext",
-            "name text color", "name text colour", "name color", "name colour",
-            "color of name text", "colour of name text", "color name by class", "name text by class",
-            "health text color", "health text colour", "hp text color", "hp text colour",
-            "color of health text", "colour of health text", "color text by health", "text color by health",
-        }) then
+        if ContainsAny(normalized, P.RootPhrases[790]) then
             directColorParsed = ParseScopedFontTextColorShortcut(normalized)
         end
-        if ContainsAny(normalized, {
-            "class resource color", "class resource colors", "class power color", "class power colors",
-            "combo point", "combo points", "holy power", "soul shard", "soul shards", "arcane charge",
-            "arcane charges", "maelstrom power", "resource color",
-        }) then
+        if ContainsAny(normalized, P.RootPhrases[791]) then
             directColorParsed = A._ParseClassPowerColorShortcut and A._ParseClassPowerColorShortcut(normalized, raw)
         end
-        if not directColorParsed and ContainsAny(normalized, {
-            "color of mana", "colour of mana", "mana color", "mana colour", "mana power color", "mana power colour",
-            "color of rage", "colour of rage", "rage color", "rage colour", "rage power color", "rage power colour",
-            "color of energy", "colour of energy", "color energy", "energy color", "energy colour", "energy power color", "energy power colour",
-            "color of runic power", "colour of runic power", "runic power color", "runic power colour",
-            "color of insanity", "colour of insanity", "insanity color", "insanity colour", "insanity power color", "insanity power colour",
-            "color of fury", "colour of fury", "fury color", "fury colour", "fury power color", "fury power colour",
-            "color of pain", "colour of pain", "pain color", "pain colour", "pain power color", "pain power colour",
-            "color of essence", "colour of essence", "essence color", "essence colour", "essence power color", "essence power colour",
-            "color of astral power", "colour of astral power", "astral power color", "astral power colour",
-            "color of lunar power", "colour of lunar power", "lunar power color", "lunar power colour",
-            "color of maelstrom", "colour of maelstrom", "maelstrom color", "maelstrom colour", "maelstrom power color", "maelstrom power colour",
-            "color of focus power", "colour of focus power", "focus power color", "focus power colour", "hunter focus color", "hunter focus colour",
-        }) then
+        if not directColorParsed and ContainsAny(normalized, P.RootPhrases[792]) then
             directColorParsed = A._ParsePowerColorShortcut and A._ParsePowerColorShortcut(normalized, raw)
         end
         if directColorParsed then
@@ -7496,11 +6866,8 @@ function A.Parse(text, ctxOverride)
             return directColorParsed
         end
     end
-    if ContainsAny(normalized, { "detached power", "detached power bar", "detached mana", "detached mana bar" })
-        and ContainsAny(normalized, {
-            "width", "wide", "height", "tall", "frame level", "framelevel", "layer",
-            "text on bar", "text on detached",
-        })
+    if ContainsAny(normalized, P.RootPhrases[793])
+        and ContainsAny(normalized, P.RootPhrases[794])
     then
         local detachedPowerDetail = P.ParseDetachedPowerBarRegistryShortcut
             and P.ParseDetachedPowerBarRegistryShortcut(normalized, raw)
@@ -7510,10 +6877,7 @@ function A.Parse(text, ctxOverride)
             return detachedPowerDetail
         end
     end
-    if ContainsAny(normalized, {
-        "group border thickness", "group border size", "full group border",
-        "border around group", "border around frames", "group border padding",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[795]) then
         local groupNumberParsed = P.ParseGroupNumberRegistryShortcut and P.ParseGroupNumberRegistryShortcut(normalized)
         if groupNumberParsed then
             groupNumberParsed.raw = raw
@@ -7521,14 +6885,7 @@ function A.Parse(text, ctxOverride)
             return groupNumberParsed
         end
     end
-    if ContainsAny(normalized, {
-        "castbar", "cast bar", "cast color", "cast colour", "zauberleiste",
-        "interrupt color", "interrupt colour", "interrupt feedback", "interrupted cast",
-        "interruptible", "kickable", "unkickable", "non interruptible", "noninterruptible",
-    }) and ContainsAny(normalized, {
-        "color", "colors", "colour", "colours", "green", "red", "blue", "yellow", "white", "black",
-        "interrupt", "kick", "ready", "available", "cooldown",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[796]) and ContainsAny(normalized, P.RootPhrases[797]) then
         local castbarColorParsed = P.ParseCastbarColorShortcut and P.ParseCastbarColorShortcut(normalized, raw)
         if castbarColorParsed then
             castbarColorParsed.raw = raw
@@ -7536,9 +6893,9 @@ function A.Parse(text, ctxOverride)
             return castbarColorParsed
         end
     end
-    if ContainsAny(normalized, { "castbar", "cast bar", "zauberleiste" })
-        and ContainsAny(normalized, { "move", "nudge", "shift" })
-        and ContainsAny(normalized, { "left", "right", "up", "down", "links", "rechts", "oben", "unten" })
+    if ContainsAny(normalized, P.RootPhrases[798])
+        and ContainsAny(normalized, P.RootPhrases[799])
+        and ContainsAny(normalized, P.RootPhrases[800])
     then
         local castbarMoveParsed = P.ParseGenericOffsetMove and P.ParseGenericOffsetMove(normalized)
         if castbarMoveParsed then
@@ -7547,13 +6904,7 @@ function A.Parse(text, ctxOverride)
             return castbarMoveParsed
         end
     end
-    if ContainsAny(normalized, {
-        "dead text", "status text", "ghost text", "afk text", "dnd text", "offline text",
-        "disconnected text", "connection text", "status icon midnight", "status icons midnight",
-        "midnight status icon", "midnight status icons", "classic status icon", "classic status icons",
-    }) and not ContainsAny(normalized, {
-        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[801]) and not ContainsAny(normalized, P.RootPhrases[802]) then
         local statusTextParsed = A._ParseGlobalStatusTextStateShortcut and A._ParseGlobalStatusTextStateShortcut(normalized)
             or (P.ParseUnitStatusIconStyle and P.ParseUnitStatusIconStyle(normalized))
             or (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
@@ -7563,8 +6914,8 @@ function A.Parse(text, ctxOverride)
             return statusTextParsed
         end
     end
-    if ContainsAny(normalized, { "class power", "class powers", "class resource", "class resources", "combo point", "combo points" })
-        and ContainsAny(normalized, { "text x", "text y", "number x", "number y", "numbers x", "numbers y", "x offset", "y offset" })
+    if ContainsAny(normalized, P.RootPhrases[803])
+        and ContainsAny(normalized, P.RootPhrases[804])
     then
         local classPowerTextOffsetParsed = A._ParseClassPowerTextOffsetShortcut and A._ParseClassPowerTextOffsetShortcut(normalized)
         if classPowerTextOffsetParsed then
@@ -7573,13 +6924,7 @@ function A.Parse(text, ctxOverride)
             return classPowerTextOffsetParsed
         end
     end
-    if ContainsAny(normalized, {
-        "party frame", "party frames", "raid frame", "raid frames",
-        "mythic raid frame", "mythic raid frames", "mythicraid frame", "mythicraid frames",
-        "group frame", "group frames",
-    }) and ContainsAny(normalized, {
-        "move", "nudge", "shift", "offset", "position", "pos", "x", "y",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[805]) and ContainsAny(normalized, P.RootPhrases[806]) then
         local groupRootMoveParsed = P.ParseGroupFrameRootMove and P.ParseGroupFrameRootMove(normalized)
         if groupRootMoveParsed then
             groupRootMoveParsed.raw = raw
@@ -7593,17 +6938,10 @@ function A.Parse(text, ctxOverride)
         groupDebuffStripeParsed.normalized = normalized
         return groupDebuffStripeParsed
     end
-    if ContainsAny(normalized, {
-        "party frames", "party frame", "raid frames", "raid frame",
-        "mythic raid frames", "mythic raid frame", "mythicraid frames", "mythicraid frame",
-        "group frames", "group frame", "preserve raid groups", "keep raid groups",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[807]) then
         local groupFrameParsed = P.ParseGroupPreserveRaidGroupsShortcut
             and P.ParseGroupPreserveRaidGroupsShortcut(normalized)
-        if not groupFrameParsed and ContainsAny(normalized, {
-            "show", "hide", "enable", "disable", "enabled", "disabled", "turn on", "turn off",
-            "from off to on", "from on to off", "off to on", "on to off",
-        }) then
+        if not groupFrameParsed and ContainsAny(normalized, P.RootPhrases[808]) then
             groupFrameParsed = P.ParseGroupAvailabilityIntent and P.ParseGroupAvailabilityIntent(normalized)
         end
         if groupFrameParsed then
@@ -7612,11 +6950,7 @@ function A.Parse(text, ctxOverride)
             return groupFrameParsed
         end
     end
-    if ContainsAny(normalized, {
-        "player frame", "target frame", "focus frame", "pet frame", "boss frame",
-        "targettarget frame", "target target frame", "target of target frame",
-        "focustarget frame", "focus target frame", "unit frame", "unit frames",
-    }) then
+    if ContainsAny(normalized, P.RootPhrases[809]) then
         local unitRootParsed = A._ParseUnitRootVisibilityShortcut and A._ParseUnitRootVisibilityShortcut(normalized)
         if unitRootParsed then
             unitRootParsed.raw = raw
@@ -7650,24 +6984,11 @@ function A.Parse(text, ctxOverride)
         historyAction.normalized = normalized
         return historyAction
     end
-    local hasEditModeContext = ContainsAny(normalized, {
-        "edit mode", "editmode", "msuf edit mode", "bearbeitungsmodus", "frame edit mode",
-    })
-    if not hasEditModeContext and ContainsAny(normalized, {
-        "undo", "undo that", "undo this", "undo last", "undo last change",
-        "revert", "revert that", "revert this", "revert last", "revert last change",
-        "rollback", "roll back", "roll back that", "roll back last change",
-        "take it back", "take that back", "back out that change", "restore previous value",
-        "put it back", "put that back", "make it like before",
-        "rueckgaengig", "rueckgaengig machen", "mach das rueckgaengig", "das rueckgaengig machen",
-        "zuruecknehmen", "nimm das zurueck", "mach das zurueck", "wieder zurueck",
-    }) then
+    local hasEditModeContext = ContainsAny(normalized, P.RootPhrases[810])
+    if not hasEditModeContext and ContainsAny(normalized, P.RootPhrases[811]) then
         return { kind = "undo" }
     end
-    if not hasEditModeContext and ContainsAny(normalized, {
-        "redo", "redo last", "redo that", "redo this", "reapply", "reapply that",
-        "apply it again", "do it again", "repeat undo", "wiederholen", "erneut anwenden",
-    }) then
+    if not hasEditModeContext and ContainsAny(normalized, P.RootPhrases[812]) then
         return { kind = "redo" }
     end
     local guidedSetupFollowup = ParseGuidedSetupFollowup(normalized, ctx)

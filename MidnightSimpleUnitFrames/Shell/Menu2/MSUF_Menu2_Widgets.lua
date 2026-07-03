@@ -627,6 +627,44 @@ function W.PageBuilder(ctx)
             }
         end
     end
+    --- Auto-height: derives a section's height from its content cursor instead of a
+    --- hand-declared constant. Call after the section content is built. Works for
+    --- plain b:Section frames and collapsible bodies. Only acts when the content
+    --- actually advanced the cursor (W.Toggle/W.Slider/W.NextRow flow); sections
+    --- placed purely with explicit y offsets keep their declared height.
+    function b:FinishSection(section, bottomPad)
+        if not section then return nil end
+        local cursor = tonumber(section._msuf2CursorY)
+        if not cursor or cursor >= -38 then return nil end
+        local height = math.max(48, -cursor + (tonumber(bottomPad) or 14))
+        local entry = section._msuf2CollapsibleEntry
+        if entry then
+            entry.contentHeight = height
+            if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
+            if entry.outer and entry.outer.SetHeight then
+                entry.outer:SetHeight(entry.headerHeight + (entry.open and height or 0))
+            end
+            local owner = entry.builder or self
+            if owner.RelayoutCollapsibles then owner:RelayoutCollapsibles() end
+            return height
+        end
+        local old = (section.GetHeight and section:GetHeight()) or 0
+        if section.SetHeight then section:SetHeight(height) end
+        if self._collapsibleStartY then
+            for i = #self.layoutEntries, 1, -1 do
+                local layoutEntry = self.layoutEntries[i]
+                if layoutEntry.kind == "section" and layoutEntry.frame == section then
+                    layoutEntry.height = height
+                    break
+                end
+            end
+            self:RelayoutCollapsibles()
+        else
+            self.y = self.y - (height - old)
+            if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
+        end
+        return height
+    end
     --- Declarative card layout. Renders one ControlCard whose controls auto-flow
     --- top-to-bottom using the SAME widget constructors and binders that hand-written
     --- pages use, so output is pixel-identical to a manually placed card. The point is
@@ -1007,6 +1045,11 @@ local function NextRow(section, height)
     section._msuf2CursorY = y - (height or 28)
     return section._msuf2ContentX or 14, y
 end
+--- Public cursor advance for pages that mix flowed rows with manually placed
+--- blocks (e.g. a row of side-by-side ControlCards): reserve the block's height
+--- once instead of hand-summing offsets, then let b:FinishSection derive the
+--- section height from the cursor.
+W.NextRow = NextRow
 local function PlayWidgetMotion(region, motion, opts)
     if T.PlayMotion then
         T.PlayMotion(region, motion, opts)

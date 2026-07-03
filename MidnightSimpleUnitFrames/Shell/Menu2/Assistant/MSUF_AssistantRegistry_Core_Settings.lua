@@ -69,6 +69,9 @@ local function RegisterGeneralBoolean(dbKey, attr, label, defaultValue, aliases,
                 M.RefreshAdvancedNavVisibility()
             elseif dbKey == "showNavigationIcons" and M and type(M.RefreshNavIconVisibility) == "function" then
                 M.RefreshNavIconVisibility()
+            elseif dbKey == "showGameMenuButton" then
+                local fn = _G.MSUF_SetGameMenuButtonEnabled
+                if type(fn) == "function" then fn(GeneralDB().showGameMenuButton ~= false) end
             end
         end,
         combatSafe = opts.combatSafe == true,

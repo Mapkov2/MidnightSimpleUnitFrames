@@ -17,6 +17,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+local Data = A.ParserData or {}
+A.ParserData = Data
+local GeometryData = Data.GEOMETRY_PARSER or {}
+local GeometryPhrases = GeometryData.PHRASES or {}
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -112,13 +116,10 @@ end
 function P.ParseUnitSizeMatchShortcut(text)
     -- "Make player as big as target" depends on current live setting values. Read them here
     -- to build an explicit width/height plan, then let the router apply the change normally.
-    if not ContainsAny(text, {
-        "as big as", "same size as", "the same size as", "same width and height as",
-        "so gross wie", "gleich gross wie", "gleiche groesse wie", "dieselbe groesse wie",
-    }) then
+    if not ContainsAny(text, GeometryPhrases[1]) then
         return nil
     end
-    if DetectGroups(text)[1] or ContainsAny(text, { "castbar", "cast bar", "class power", "class resource", "aura", "auras" }) then
+    if DetectGroups(text)[1] or ContainsAny(text, GeometryPhrases[2]) then
         return nil
     end
 
@@ -187,7 +188,7 @@ function P.ParseUnitSizeMatchShortcut(text)
 end
 
 local function ParseUnsupportedDetailShortcut(text)
-    if ContainsAny(text, { "combat timer alpha", "combat timer opacity", "combat timer transparency" }) then
+    if ContainsAny(text, GeometryPhrases[3]) then
         return {
             kind = "unknown",
             text = "Combat Timer supports enable, size, position, anchor, lock, and colors in MSUF, but not opacity.",
@@ -231,10 +232,7 @@ local function BuildUnitDetailChoices(attr, value, relativeDelta, direction)
 end
 
 local function HasAllUnitDetailScopeIntent(text)
-    return ContainsAny(text, {
-        "all", "all of", "for all", "every", "each",
-        "alle", "alles", "fuer alle", "jede", "jeder", "jedes", "jeweils",
-    })
+    return ContainsAny(text, GeometryPhrases[4])
 end
 
 local function AllUnitDetailUnits()
@@ -244,89 +242,86 @@ local function AllUnitDetailUnits()
 end
 
 local function ParsePortraitDetailShortcut(text)
-    if not ContainsAny(text, { "portrait", "portraits" }) then return nil end
-    if ContainsAny(text, { "color", "colour", "farbe", "reset" }) then return nil end
-    if ContainsAny(text, {
-        "keep text portrait visible", "keep text and portrait visible", "keep text visible", "keep portrait visible",
-        "exclude text from opacity", "exclude portrait from opacity", "text portrait opacity", "text and portrait opacity",
-    }) then return nil end
-    if ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset" }) and DetectDirection(text, {}) then return nil end
+    if not ContainsAny(text, GeometryPhrases[5]) then return nil end
+    if ContainsAny(text, GeometryPhrases[6]) then return nil end
+    if ContainsAny(text, GeometryPhrases[7]) then return nil end
+    if ContainsAny(text, GeometryPhrases[8]) and DetectDirection(text, {}) then return nil end
 
     local attr
     local value
     local relativeDelta
     local direction
 
-    if ContainsAny(text, { "x offset", "offset x", "portrait x", "horizontal offset" }) or HasPhrase(text, "x") then
+    if ContainsAny(text, GeometryPhrases[9]) or HasPhrase(text, "x") then
         attr = "portraitOffsetX"
         value = FirstNumber(text)
-    elseif ContainsAny(text, { "y offset", "offset y", "portrait y", "vertical offset" }) or HasPhrase(text, "y") then
+    elseif ContainsAny(text, GeometryPhrases[10]) or HasPhrase(text, "y") then
         attr = "portraitOffsetY"
         value = FirstNumber(text)
-    elseif ContainsAny(text, { "class portrait style", "portrait class style" }) then
+    elseif ContainsAny(text, GeometryPhrases[11]) then
         attr = "portraitClassStyle"
         value = RawAfterLastConnector and RawAfterLastConnector(text) or nil
-        if value == nil and ContainsAny(text, { "default" }) then value = "default" end
-    elseif ContainsAny(text, { "render", "type", "2d", "2d portrait", "class portrait", "to class" }) and not ContainsAny(text, { "class portrait style", "portrait class style", "border" }) then
+        if value == nil and ContainsAny(text, GeometryPhrases[12]) then value = "default" end
+    elseif ContainsAny(text, GeometryPhrases[13]) and not ContainsAny(text, GeometryPhrases[14]) then
         attr = "portraitRender"
-        if ContainsAny(text, { "2d", "2d portrait", "normal portrait", "normal render" }) then
+        if ContainsAny(text, GeometryPhrases[15]) then
             value = "2D"
-        elseif ContainsAny(text, { "class portrait", "class render", "class icon", "class icons", "to class" }) then
+        elseif ContainsAny(text, GeometryPhrases[16]) then
             value = "CLASS"
         end
-    elseif ContainsAny(text, { "shape", "square", "circle", "rounded", "round", "diamond" }) then
+    elseif ContainsAny(text, GeometryPhrases[17]) then
         attr = "portraitShape"
-        if ContainsAny(text, { "square" }) then
+        if ContainsAny(text, GeometryPhrases[18]) then
             value = "SQUARE"
-        elseif ContainsAny(text, { "rounded" }) then
+        elseif ContainsAny(text, GeometryPhrases[19]) then
             value = "ROUNDED"
-        elseif ContainsAny(text, { "circle", "round" }) then
+        elseif ContainsAny(text, GeometryPhrases[20]) then
             value = "CIRCLE"
-        elseif ContainsAny(text, { "diamond" }) then
+        elseif ContainsAny(text, GeometryPhrases[21]) then
             value = "DIAMOND"
         end
-    elseif ContainsAny(text, { "fill border", "border gap", "frame gap", "fill portrait border", "fill border into frame gap" }) then
+    elseif ContainsAny(text, GeometryPhrases[22]) then
         attr = "portraitFillBorder"
         value = DetectBoolean(text)
-        if value == nil and ContainsAny(text, { "fill", "into gap", "frame gap" }) then value = true end
-    elseif ContainsAny(text, { "portrait background", "portrait bg" }) then
+        if value == nil and ContainsAny(text, GeometryPhrases[23]) then value = true end
+    elseif ContainsAny(text, GeometryPhrases[24]) then
         attr = "portraitBgEnabled"
         value = DetectBoolean(text)
-    elseif ContainsAny(text, { "border thickness", "border size", "border thicker", "border thinner", "thicker", "thinner", "dicker", "duenner" }) then
+    elseif ContainsAny(text, GeometryPhrases[25]) then
         attr = "portraitBorderThickness"
         relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
         if relativeDelta == nil then value = FirstNumber(text) end
-    elseif ContainsAny(text, { "zoom", "portrait zoom", "2d portrait zoom", "reinzoomen", "rauszoomen", "crop" }) then
+    elseif ContainsAny(text, GeometryPhrases[26]) then
         attr = "portraitZoom"
         relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 10)
         if relativeDelta == nil then
             value = FirstNumber(text)
             if type(value) == "number" and value > 1 and value <= 2 then value = value * 100 end
         end
-    elseif ContainsAny(text, { "size", "size override", "bigger", "smaller", "larger", "groesser", "kleiner" }) then
+    elseif ContainsAny(text, GeometryPhrases[27]) then
         attr = "portraitSizeOverride"
         relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 4)
         if relativeDelta == nil then value = FirstNumber(text) end
-    elseif ContainsAny(text, { "border" }) then
+    elseif ContainsAny(text, GeometryPhrases[28]) then
         attr = "portraitBorderStyle"
-        if ContainsAny(text, { "off", "disable", "disabled", "hide", "none", "no border", "aus", "deaktivieren" }) then
+        if ContainsAny(text, GeometryPhrases[29]) then
             value = "NONE"
-        elseif ContainsAny(text, { "on", "enable", "enabled", "show", "solid", "an", "aktivieren" }) then
+        elseif ContainsAny(text, GeometryPhrases[30]) then
             value = "SOLID"
-        elseif ContainsAny(text, { "class color", "class" }) then
+        elseif ContainsAny(text, GeometryPhrases[31]) then
             value = "CLASS_COLOR"
-        elseif ContainsAny(text, { "reaction" }) then
+        elseif ContainsAny(text, GeometryPhrases[32]) then
             value = "REACTION"
-        elseif ContainsAny(text, { "custom" }) then
+        elseif ContainsAny(text, GeometryPhrases[33]) then
             value = "CUSTOM"
         end
     else
         attr = "portraitMode"
-        if ContainsAny(text, { "off", "disable", "disabled", "hide", "aus", "deaktivieren" }) then
+        if ContainsAny(text, GeometryPhrases[34]) then
             value = "OFF"
-        elseif ContainsAny(text, { "right" }) then
+        elseif ContainsAny(text, GeometryPhrases[35]) then
             value = "RIGHT"
-        elseif ContainsAny(text, { "on", "enable", "enabled", "show", "left", "an", "aktivieren" }) then
+        elseif ContainsAny(text, GeometryPhrases[36]) then
             value = "LEFT"
         end
     end
@@ -449,7 +444,7 @@ function OM.RootDetailBlocked(setting, text)
         "ready check", "group number", "raid marker", "kick", "interrupt", "status", "indicator",
         "leben", "gesundheit", "lebenspunkte", "lebensanzeige", "energie", "ressource", "ressourcen",
     }) do
-        if ContainsAny(text, { term }) and not HasPhrase(label, term) then return true end
+        if ContainsAny(text, GeometryPhrases[37]) and not HasPhrase(label, term) then return true end
     end
     return false
 end
@@ -585,8 +580,8 @@ function OM.UnitRootFrameMoveScopes(text)
     local units = DetectUnits(text)
     if #units > 0 then return units end
     if HasAllUnitDetailScopeIntent(text)
-        and ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames", "frame", "frames" })
-        and not ContainsAny(text, { "group", "group frame", "group frames", "party", "raid", "mythic raid", "mythicraid" })
+        and ContainsAny(text, GeometryPhrases[38])
+        and not ContainsAny(text, GeometryPhrases[39])
     then
         return AllUnitDetailUnits()
     end
@@ -615,7 +610,7 @@ end
 
 function OM.ParseUnitFrameRootMove(text)
     if ContainsAny(text, OM.unitRootFrameDetailTerms) then return nil end
-    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "pos", "x", "y" }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[40]) then return nil end
 
     local units = OM.UnitRootFrameMoveScopes(text)
     if #units == 0 then return nil end
@@ -846,9 +841,9 @@ local function ParseGenericOffsetMove(text)
 end
 
 local function ParseUnitDetailMove(text)
-    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if ContainsAny(text, { "detached power", "detached power bar", "detached mana", "detached mana bar" }) then return nil end
-    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[41]) then return nil end
+    if ContainsAny(text, GeometryPhrases[42]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[43]) then return nil end
     local direction = DetectDirection(text, {})
     if not direction then return nil end
     local units = DetectUnits(text)
@@ -905,30 +900,20 @@ function P.UnitPowerBarIsDetached(unit)
 end
 
 function P.ParseDetachedPowerBarMoveShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[44]) then return nil end
     if ContainsAny(text, CLASS_POWER_TERMS) then return nil end
     if #DetectGroups(text) > 0 then return nil end
-    if ContainsAny(text, {
-        "power text", "mana text", "power value", "mana value", "power number", "mana number",
-        "power label", "mana label", "energie text", "resource text", "resource label",
-    }) then
+    if ContainsAny(text, GeometryPhrases[45]) then
         return nil
     end
-    if not ContainsAny(text, {
-        "powerbar", "power bar", "mana bar", "manabar", "power balken", "mana balken",
-    }) then
+    if not ContainsAny(text, GeometryPhrases[46]) then
         return nil
     end
 
     local direction = DetectDirection(text, {})
     local axis = OM.AxisForDirection(direction) or A._DetailOffsetAxis(text)
     if not direction and not axis then
-        if ContainsAny(text, {
-            "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
-            "near", "near to", "next to", "put near", "put next to", "place near", "place next to",
-            "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
-            "under", "below", "above", "over",
-        }) and (P.CooldownManagerAnchorValueForText(text) ~= nil or ContainsAny(text, { "cooldown manager", "cooldownmanager", "cdm" })) then
+        if ContainsAny(text, GeometryPhrases[47]) and (P.CooldownManagerAnchorValueForText(text) ~= nil or ContainsAny(text, GeometryPhrases[48])) then
             return {
                 kind = "answer",
                 status = "info",
@@ -946,7 +931,7 @@ function P.ParseDetachedPowerBarMoveShortcut(text)
     end
     if #units == 0 then return nil end
 
-    local explicitDetached = ContainsAny(text, { "detached", "undocked", "separate", "separated", "abgekoppelt" })
+    local explicitDetached = ContainsAny(text, GeometryPhrases[49])
     local attr = axis == "y" and "detachedPowerBarOffsetY" or "detachedPowerBarOffsetX"
     local relativeDelta
     local value
@@ -994,18 +979,12 @@ function P.ParseDetachedPowerBarMoveShortcut(text)
 end
 
 function P.PairwiseFrameSpacingMode(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[50]) then return nil end
     if ContainsAny(text, CLASS_POWER_TERMS) then return nil end
-    if ContainsAny(text, {
-        "closer together", "closer to each other", "closer", "nearer together", "nearer to each other",
-        "bring closer", "bring together", "naeher zusammen", "zusammen naeher",
-    }) then
+    if ContainsAny(text, GeometryPhrases[51]) then
         return "closer"
     end
-    if ContainsAny(text, {
-        "farther apart", "further apart", "move apart", "spread apart", "more space", "more spacing",
-        "more distance", "space between", "away from each other", "weiter auseinander", "mehr abstand",
-    }) then
+    if ContainsAny(text, GeometryPhrases[52]) then
         return "apart"
     end
     return nil
@@ -1024,8 +1003,8 @@ function P.PairwiseFrameSpacingTargets(text)
 end
 
 function P.PairwiseFrameSpacingAxis(text, firstSettingX, firstSettingY, secondSettingX, secondSettingY)
-    if ContainsAny(text, { "horizontal", "horizontally", "x axis", "x-axis", "left right", "left/right" }) then return "x" end
-    if ContainsAny(text, { "vertical", "vertically", "y axis", "y-axis", "up down", "up/down" }) then return "y" end
+    if ContainsAny(text, GeometryPhrases[53]) then return "x" end
+    if ContainsAny(text, GeometryPhrases[54]) then return "y" end
     local x1 = tonumber(OM.ReadValue(firstSettingX)) or 0
     local x2 = tonumber(OM.ReadValue(secondSettingX)) or 0
     local y1 = tonumber(OM.ReadValue(firstSettingY)) or 0
@@ -1109,24 +1088,14 @@ function P.ParsePairwiseFrameSpacingShortcut(text)
 end
 
 function P.ParseBossFrameSpacingShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[55]) then return nil end
     if ContainsAny(text, CLASS_POWER_TERMS) then return nil end
-    if not ContainsAny(text, { "boss", "boss frame", "boss frames", "bossframe", "bossframes" }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[56]) then return nil end
 
     local mode
-    if ContainsAny(text, {
-        "closer together", "closer to each other", "nearer together", "bring together",
-        "less space", "less spacing", "reduce spacing", "decrease spacing", "tighten spacing",
-        "smaller spacing", "smaller gap", "less gap", "compact spacing",
-        "tighter", "tighter spacing", "more compact", "too far apart",
-    }) then
+    if ContainsAny(text, GeometryPhrases[57]) then
         mode = "closer"
-    elseif ContainsAny(text, {
-        "farther apart", "further apart", "spread apart", "spread out", "space out",
-        "more space", "more spacing", "more distance", "increase spacing", "add spacing",
-        "add space between", "bigger spacing", "larger spacing", "bigger gap", "larger gap",
-        "looser", "looser spacing", "too close",
-    }) or (ContainsAny(text, { "spread", "space" }) and ContainsAny(text, { "apart", "out" })) then
+    elseif ContainsAny(text, GeometryPhrases[58]) or (ContainsAny(text, GeometryPhrases[59]) and ContainsAny(text, GeometryPhrases[60])) then
         mode = "apart"
     else
         return nil
@@ -1151,29 +1120,16 @@ function P.ParseBossFrameSpacingShortcut(text)
 end
 
 function P.ParseGroupFrameSpacingShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[61]) then return nil end
     if ContainsAny(text, CLASS_POWER_TERMS) then return nil end
-    if ContainsAny(text, {
-        "portrait", "name", "hp text", "health text", "power text", "mana text", "status icon",
-        "indicator", "border padding", "group border", "power bar", "health bar",
-    }) then
+    if ContainsAny(text, GeometryPhrases[62]) then
         return nil
     end
 
     local mode
-    if ContainsAny(text, {
-        "closer together", "closer to each other", "nearer together", "bring together",
-        "less space", "less spacing", "reduce spacing", "decrease spacing", "tighten spacing",
-        "smaller spacing", "smaller gap", "less gap", "compact spacing",
-        "tighter", "tighter spacing", "more compact", "closer vertically", "closer horizontally",
-    }) then
+    if ContainsAny(text, GeometryPhrases[63]) then
         mode = "closer"
-    elseif ContainsAny(text, {
-        "farther apart", "further apart", "spread apart", "spread out", "space out",
-        "more space", "more spacing", "more distance", "increase spacing", "add spacing",
-        "add space between", "bigger spacing", "larger spacing", "bigger gap", "larger gap",
-        "looser", "looser spacing", "farther vertically", "farther horizontally",
-    }) or (ContainsAny(text, { "spread", "space" }) and ContainsAny(text, { "apart", "out" })) then
+    elseif ContainsAny(text, GeometryPhrases[64]) or (ContainsAny(text, GeometryPhrases[65]) and ContainsAny(text, GeometryPhrases[66])) then
         mode = "apart"
     else
         return nil
@@ -1202,22 +1158,13 @@ function P.ParseGroupFrameSpacingShortcut(text)
 end
 
 function P.CooldownManagerAnchorValueForText(text)
-    if ContainsAny(text, {
-        "utility cooldown", "utility cooldowns", "utility cooldown manager", "utility cooldownmanager",
-        "utility cooldown viewer", "ucv",
-    }) then
+    if ContainsAny(text, GeometryPhrases[67]) then
         return "UtilityCooldownViewer"
     end
-    if ContainsAny(text, {
-        "tracked buff", "tracked buffs", "tracked buffs viewer", "buff icon cooldown viewer",
-        "buff cooldown viewer", "buff tracker",
-    }) then
+    if ContainsAny(text, GeometryPhrases[68]) then
         return "BuffIconCooldownViewer"
     end
-    if ContainsAny(text, {
-        "essential cooldown", "essential cooldowns", "essential cooldown manager", "essential cooldownmanager",
-        "essential cooldown viewer", "cooldown manager", "cooldownmanager", "cooldowns manager", "cdm",
-    }) then
+    if ContainsAny(text, GeometryPhrases[69]) then
         return "EssentialCooldownViewer"
     end
     return nil
@@ -1261,8 +1208,8 @@ end
 function P.ParseBroadHumanAnchorTargetAnswer(text, raw)
     local externalFrameName = HumanAnchorFrameNameForText(text, raw)
     if externalFrameName == nil then return nil end
-    if ContainsAny(text, { "open", "where", "where is", "where are", "how", "help", "settings", "setting", "page" })
-        and ContainsAny(text, { "anchor", "anchors", "custom anchor", "anchor settings", "anchor page" })
+    if ContainsAny(text, GeometryPhrases[70])
+        and ContainsAny(text, GeometryPhrases[71])
     then
         local target = externalFrameName == "EssentialCooldownViewer" and "Cooldown Manager" or tostring(externalFrameName)
         return {
@@ -1275,53 +1222,32 @@ function P.ParseBroadHumanAnchorTargetAnswer(text, raw)
             summary = "Shows how custom anchor frame names work.",
         }
     end
-    local attachIntent = ContainsAny(text, {
-        "close to", "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
-        "near", "near to", "next to", "put near", "put next to", "place near", "place next to",
-        "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
-    }) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
+    local attachIntent = ContainsAny(text, GeometryPhrases[72]) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
         or (HasPhrase(text, "attach") and HasPhrase(text, "to"))
         or (HasPhrase(text, "dock") and HasPhrase(text, "to"))
         or (HasPhrase(text, "snap") and HasPhrase(text, "to"))
     if not attachIntent then return nil end
     if #DetectUnits(text) > 0 or #DetectGroups(text) > 0 then return nil end
-    if ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames", "group frame", "group frames", "party frames", "raid frames" }) then return nil end
-    if not ContainsAny(text, { "frame", "frames", "all frames", "everything", "all msuf", "all ui" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[73]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[74]) then return nil end
     return BroadHumanAnchorAnswer(externalFrameName)
 end
 
 function P.ParseHumanAnchorTarget(text, raw)
-    if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
-    if ContainsAny(text, {
-        "portrait", "castbar", "cast bar", "name text", "hp text", "health text", "power text",
-        "powerbar", "power bar", "mana bar", "manabar", "power balken", "mana balken",
-        "text", "icon", "indicator", "raid marker", "status", "level", "level indicator",
-        "raid group name", "group number", "leader", "assist", "elite", "rare",
-        "combat indicator", "rested", "resting", "incoming rez", "incoming resurrection",
-        "ready check", "ready icon", "role icon", "leader icon", "assist icon", "summon icon",
-        "resurrect icon", "resurrection icon", "rez icon", "pvp icon", "phase icon",
-        "dead text", "ghost text", "afk text", "dnd text",
-    }) then
+    if ContainsAny(text, GeometryPhrases[75]) then return nil end
+    if ContainsAny(text, GeometryPhrases[76]) then
         return nil
     end
     local externalFrameName = HumanAnchorFrameNameForText(text, raw)
-    local attachIntent = ContainsAny(text, {
-        "close to", "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
-        "near", "near to", "next to", "put near", "put next to", "place near", "place next to",
-        "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
-    }) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
+    local attachIntent = ContainsAny(text, GeometryPhrases[77]) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
         or (HasPhrase(text, "attach") and HasPhrase(text, "to"))
         or (HasPhrase(text, "dock") and HasPhrase(text, "to"))
         or (HasPhrase(text, "snap") and HasPhrase(text, "to"))
         or (externalFrameName ~= nil and HasPhrase(text, "use") and HasPhrase(text, "anchor"))
         or (externalFrameName ~= nil
-            and ContainsAny(text, { "put", "place", "move", "anchor", "attach" })
-            and ContainsAny(text, { "under", "below", "above", "over" }))
-    local detachIntent = ContainsAny(text, {
-        "away from", "farther from", "further from", "move away", "move away from",
-        "detach from", "undock from", "disconnect from", "detach", "undock", "free anchor",
-        "free from anchor", "clear anchor",
-    })
+            and ContainsAny(text, GeometryPhrases[78])
+            and ContainsAny(text, GeometryPhrases[79]))
+    local detachIntent = ContainsAny(text, GeometryPhrases[80])
     if not attachIntent and not detachIntent then return nil end
 
     local units = DetectUnits(text)
@@ -1330,9 +1256,9 @@ function P.ParseHumanAnchorTarget(text, raw)
     if explicitAnchorSubject and explicitAnchorValue and not detachIntent then
         units = { explicitAnchorSubject }
     end
-    local unitframeScope = ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames" })
+    local unitframeScope = ContainsAny(text, GeometryPhrases[81])
     if #units == 0 and #groups == 0 and not unitframeScope and externalFrameName ~= nil
-        and ContainsAny(text, { "frame", "frames", "all frames", "everything", "all msuf", "all ui" })
+        and ContainsAny(text, GeometryPhrases[82])
     then
         return BroadHumanAnchorAnswer(externalFrameName)
     end
@@ -1481,12 +1407,7 @@ function P.GroupScaleWordValueForText(text)
 end
 
 function P.GroupScaleBreakpointAttrForText(text)
-    if ContainsAny(text, {
-        "over 25", "above 25", "more than 25", "over twenty five", "above twenty five",
-        "25 plus", "25+", "25 or more", "26 plus", "26+", "26 or more", "large raid", "full raid",
-        "raid is full", "full group", "full party", "full size raid", "max raid", "maximum raid",
-        "when full", "at full", "is full", "full roster",
-    }) then
+    if ContainsAny(text, GeometryPhrases[83]) then
         return "scaleOver25", 26
     end
     local norm = Normalize(text):gsub("%-", " ")
@@ -1600,12 +1521,9 @@ function P.GroupScaleBreakpointAttrForText(text)
         number = P.GroupScaleWordPlayerCountForText(text)
     end
     if number == nil then
-        if ContainsAny(text, {
-            "1-10", "1 to 10", "one to ten", "small group", "small raid", "small party",
-            "dungeon group", "dungeon party", "five man", "five-man", "5 man", "5-man", "5m",
-        }) then return "scaleAt10", 10 end
-        if ContainsAny(text, { "11-20", "11 to 20", "eleven to twenty" }) then return "scaleAt20", 20 end
-        if ContainsAny(text, { "21-25", "21 to 25", "twenty one to twenty five" }) then return "scaleAt25", 25 end
+        if ContainsAny(text, GeometryPhrases[84]) then return "scaleAt10", 10 end
+        if ContainsAny(text, GeometryPhrases[85]) then return "scaleAt20", 20 end
+        if ContainsAny(text, GeometryPhrases[86]) then return "scaleAt25", 25 end
         return nil
     end
     if number <= 10 then return "scaleAt10", number end
@@ -1625,10 +1543,7 @@ function P.GroupScaleValueForText(text, playerCount)
         or norm:match("(%d+%.?%d*)%s*%%?%s+scaling")
     value = tonumber(value)
     if value ~= nil then return value end
-    if ContainsAny(text, {
-        "normal size", "normal scale", "normal scaling", "default scale", "default scaling",
-        "full size", "regular size", "regular scale", "back to 100", "back to normal",
-    }) then
+    if ContainsAny(text, GeometryPhrases[87]) then
         return 100
     end
     value = P.GroupScaleWordValueForText(text)
@@ -1646,15 +1561,9 @@ end
 
 function P.GroupScaleRelativeDeltaForText(text)
     local direction
-    if ContainsAny(text, {
-        "decrease", "lower", "reduce", "smaller", "shrink", "scale down",
-        "less scale", "less scaling", "kleiner", "senke", "reduziere", "weniger",
-    }) then
+    if ContainsAny(text, GeometryPhrases[88]) then
         direction = -1
-    elseif ContainsAny(text, {
-        "increase", "raise", "higher", "bigger", "larger", "grow", "scale up",
-        "more scale", "more scaling", "groesser", "erhoehe", "mehr",
-    }) then
+    elseif ContainsAny(text, GeometryPhrases[89]) then
         direction = 1
     end
     if not direction then return nil end
@@ -1663,9 +1572,9 @@ function P.GroupScaleRelativeDeltaForText(text)
     local amount = tonumber(norm:match("by%s+([-+]?%d+%.?%d*)"))
         or tonumber(norm:match("um%s+([-+]?%d+%.?%d*)"))
     if not amount then
-        if ContainsAny(text, { "a little", "a bit", "slightly", "small amount", "klein wenig" }) then
+        if ContainsAny(text, GeometryPhrases[90]) then
             amount = 2
-        elseif ContainsAny(text, { "a lot", "much", "massive", "huge", "large amount", "stark" }) then
+        elseif ContainsAny(text, GeometryPhrases[91]) then
             amount = 10
         else
             amount = 5
@@ -1697,19 +1606,8 @@ local function GroupScaleMissingValueAnswer(groups, attr, playerCount)
 end
 
 function P.ParseGroupScaleBreakpointShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, {
-        "scale", "scaling", "frame scale", "raid scale", "party scale", "mythic raid scale",
-        "players", "raider", "raiders", "people", "persons", "members",
-        "raid member", "raid members", "player count", "raid size",
-        "when we are", "when we have", "when our group is", "when our raid is",
-        "if we are", "if we have", "if our group is", "if our raid is",
-        "with us at", "with the group at", "with the raid at",
-        "full raid", "large raid", "big raid", "max raid", "maximum raid",
-        "raid is full", "full group", "full size raid", "when full", "at full", "full roster",
-        "small raid", "small group", "small party", "dungeon group", "dungeon party",
-        "five man", "5 man", "5m",
-    }) then
+    if ContainsAny(text, GeometryPhrases[92]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[93]) then
         return nil
     end
     local attr, playerCount = P.GroupScaleBreakpointAttrForText(text)
@@ -1750,24 +1648,24 @@ function P.ParseGroupScaleBreakpointShortcut(text)
 end
 
 function P.GroupGrowthDirectionForText(text)
-    if ContainsAny(text, { "right then down", "right and down", "right first", "grow right", "to the right", "horizontal", "horizontally", "rechts" }) then
+    if ContainsAny(text, GeometryPhrases[94]) then
         return "RIGHT"
     end
-    if ContainsAny(text, { "left then down", "left and down", "left first", "grow left", "to the left", "links" }) then
+    if ContainsAny(text, GeometryPhrases[95]) then
         return "LEFT"
     end
-    if ContainsAny(text, { "down then right", "down and right", "down first", "grow down", "downwards", "vertical", "vertically", "runter", "unten" }) then
+    if ContainsAny(text, GeometryPhrases[96]) then
         return "DOWN"
     end
-    if ContainsAny(text, { "up then right", "up and right", "up first", "grow up", "upwards", "hoch", "oben" }) then
+    if ContainsAny(text, GeometryPhrases[97]) then
         return "UP"
     end
     return nil
 end
 
 function P.ParseGroupGrowthDirectionShortcut(text)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if not ContainsAny(text, { "grow", "growth", "growth direction", "fill direction", "layout direction" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[98]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[99]) then return nil end
     local groups = DetectGroups(text)
     if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
     if #groups == 0 then return nil end
@@ -1791,7 +1689,7 @@ end
 function P.GroupPowerBarSizeDelta(text, direction)
     local amount = FirstNumber(text)
     if not amount then
-        if ContainsAny(text, { "a lot", "much", "massive", "huge", "large amount", "stark" }) then
+        if ContainsAny(text, GeometryPhrases[100]) then
             amount = 3
         else
             amount = 1
@@ -1803,12 +1701,8 @@ function P.GroupPowerBarSizeDelta(text, direction)
 end
 
 function P.ParseGroupPowerBarSizeShortcut(text)
-    if not ContainsAny(text, { "power bar", "mana bar", "power balken", "mana balken" }) then return nil end
-    if ContainsAny(text, {
-        "power text", "mana text", "power value", "mana value", "power number", "mana number",
-        "power label", "mana label", "border", "outline", "aura", "auras", "buff", "debuff",
-        "class power", "class resource", "castbar", "cast bar",
-    }) then
+    if not ContainsAny(text, GeometryPhrases[101]) then return nil end
+    if ContainsAny(text, GeometryPhrases[102]) then
         return nil
     end
     local groups = DetectGroups(text)
@@ -1817,21 +1711,15 @@ function P.ParseGroupPowerBarSizeShortcut(text)
 
     local direction
     local widthIntent
-    if ContainsAny(text, { "wider", "wide", "increase width", "more width", "breiter" }) then
+    if ContainsAny(text, GeometryPhrases[103]) then
         widthIntent = true
         direction = "increase"
-    elseif ContainsAny(text, { "narrower", "decrease width", "less width", "schmaler" }) then
+    elseif ContainsAny(text, GeometryPhrases[104]) then
         widthIntent = true
         direction = "decrease"
-    elseif ContainsAny(text, {
-        "taller", "higher", "thicker", "increase height", "more height", "bigger", "larger",
-        "increase size", "make bigger", "make larger", "hoeher", "dicker",
-    }) then
+    elseif ContainsAny(text, GeometryPhrases[105]) then
         direction = "increase"
-    elseif ContainsAny(text, {
-        "shorter", "lower", "thinner", "decrease height", "less height", "smaller", "shrink",
-        "reduce size", "make smaller", "niedriger", "duenner",
-    }) then
+    elseif ContainsAny(text, GeometryPhrases[106]) then
         direction = "decrease"
     end
 
@@ -1846,7 +1734,7 @@ function P.ParseGroupPowerBarSizeShortcut(text)
     end
 
     local value
-    if ContainsAny(text, { "height", "hoehe" }) then
+    if ContainsAny(text, GeometryPhrases[107]) then
         value = P.PowerBarSizeExactValue and P.PowerBarSizeExactValue(text, "height") or nil
     end
     if not direction and value == nil then return nil end
@@ -1884,7 +1772,7 @@ P.GROUP_ROOT_FRAME_DETAIL_TERMS = {
 
 function P.ParseGroupFrameRootMove(text)
     if ContainsAny(text, P.GROUP_ROOT_FRAME_DETAIL_TERMS) then return nil end
-    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "pos", "x", "y" }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[108]) then return nil end
     local groups = GroupScopesOrCurrentPage(text)
     if #groups == 0 then return nil end
 
@@ -1965,8 +1853,8 @@ P.FRAME_RESIZE_EXACT_DIMENSION_TERMS = {
 function P.FrameResizeDirection(text)
     if ContainsAny(text, P.FRAME_RESIZE_INCREASE_TERMS) then return "increase" end
     if ContainsAny(text, P.FRAME_RESIZE_DECREASE_TERMS) then return "decrease" end
-    if ContainsAny(text, { "increase", "raise" }) and ContainsAny(text, { "size", "frame size", "unitframe size", "unit frame size" }) then return "increase" end
-    if ContainsAny(text, { "decrease", "reduce", "lower" }) and ContainsAny(text, { "size", "frame size", "unitframe size", "unit frame size" }) then return "decrease" end
+    if ContainsAny(text, GeometryPhrases[109]) and ContainsAny(text, GeometryPhrases[110]) then return "increase" end
+    if ContainsAny(text, GeometryPhrases[111]) and ContainsAny(text, GeometryPhrases[112]) then return "decrease" end
     return nil
 end
 
@@ -1978,8 +1866,8 @@ end
 function P.FrameResizeDelta(text, axis, direction)
     local amount = FirstNumber(text)
     if not amount then
-        local subtle = ContainsAny(text, { "a bit", "bit", "little", "slightly", "small amount" })
-        local large = ContainsAny(text, { "a lot", "lot", "much", "massive", "huge", "big amount" })
+        local subtle = ContainsAny(text, GeometryPhrases[113])
+        local large = ContainsAny(text, GeometryPhrases[114])
         if axis == "width" then
             amount = large and 50 or (subtle and 10 or 25)
         else
@@ -2033,21 +1921,17 @@ end
 
 function P.ParseFrameSizeExactShortcut(text)
     if ContainsAny(text, P.FRAME_RESIZE_DETAIL_BLOCKERS) then return nil end
-    if ContainsAny(text, { "detached", "detached power", "detached power bar", "detached mana", "detached mana bar" }) then return nil end
-    if ContainsAny(text, { "power", "mana", "role power", "healer power", "tank power" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[115]) then return nil end
+    if ContainsAny(text, GeometryPhrases[116]) then return nil end
     local dimension
-    if ContainsAny(text, { "width", "frame width", "unit frame width", "unitframe width", "breite", "frame breite" }) then
+    if ContainsAny(text, GeometryPhrases[117]) then
         dimension = "width"
-    elseif ContainsAny(text, { "height", "frame height", "unit frame height", "unitframe height", "hoehe", "frame hoehe" }) then
+    elseif ContainsAny(text, GeometryPhrases[118]) then
         dimension = "height"
     else
         return nil
     end
-    if ContainsAny(text, {
-        "wider", "narrower", "taller", "shorter", "bigger", "larger", "smaller",
-        "increase", "decrease", "reduce", "raise", "lower", "grow", "shrink", "by",
-        "breiter", "schmaler", "hoeher", "duenner", "groesser", "kleiner",
-    }) then return nil end
+    if ContainsAny(text, GeometryPhrases[119]) then return nil end
 
     local value = A._NumberValueForText and A._NumberValueForText(nil, text) or FirstNumber(text)
     if value == nil then return nil end
@@ -2193,10 +2077,7 @@ function P.ParseFrameResizeShortcut(text)
 
     local widthDelta = P.FrameResizeDelta(text, "width", direction)
     local heightDelta = P.FrameResizeDelta(text, "height", direction)
-    local forceBoth = ContainsAny(text, {
-        "both", "width and height", "height and width", "whole frame", "entire frame",
-        "overall", "all around", "in both directions",
-    })
+    local forceBoth = ContainsAny(text, GeometryPhrases[120])
     if forceBoth then
         local changes = P.BuildFrameResizeChanges(kind, targets, "both", widthDelta, heightDelta)
         if #changes == 0 then return nil end
@@ -2282,8 +2163,8 @@ function P.PowerBarSizeExactValue(text, dimension)
     if number == nil then return nil end
     if HasPhrase(text, "by") then return nil end
     if HasPhrase(text, "to") or tostring(text or ""):find("=", 1, true) then return number end
-    if dimension == "height" and ContainsAny(text, { "height", "power height", "mana height", "hoehe" }) then return number end
-    if dimension == "width" and ContainsAny(text, { "width", "power width", "mana width", "breite" }) then return number end
+    if dimension == "height" and ContainsAny(text, GeometryPhrases[121]) then return number end
+    if dimension == "width" and ContainsAny(text, GeometryPhrases[122]) then return number end
     return nil
 end
 
@@ -2291,8 +2172,8 @@ function P.PowerBarSizeDelta(text, dimension, direction, detached)
     if dimension == "height" and not detached then
         local amount = FirstNumber(text)
         if not amount then
-            local subtle = ContainsAny(text, { "a bit", "bit", "little", "slightly", "small amount" })
-            local large = ContainsAny(text, { "a lot", "lot", "much", "massive", "huge", "big amount" })
+            local subtle = ContainsAny(text, GeometryPhrases[123])
+            local large = ContainsAny(text, GeometryPhrases[124])
             amount = large and 5 or (subtle and 1 or 1)
         end
         amount = tonumber(amount) or 0
@@ -2305,7 +2186,7 @@ end
 function P.PowerBarSizeUnits(text)
     local units = DetectUnits(text)
     if #units > 0 then return units end
-    if ContainsAny(text, { "all", "all unitframes", "all unit frames", "every", "each", "alle" }) then
+    if ContainsAny(text, GeometryPhrases[125]) then
         local allUnits = {}
         for i = 1, #ALL_UNITFRAMES do allUnits[#allUnits + 1] = ALL_UNITFRAMES[i] end
         return allUnits
@@ -2323,23 +2204,23 @@ function P.ParsePowerBarSizeShortcut(text)
 
     local direction, dimension = P.PowerBarSizeDirection(text)
     if not direction then
-        if ContainsAny(text, { "height", "power height", "mana height", "hoehe" }) then
+        if ContainsAny(text, GeometryPhrases[126]) then
             dimension = "height"
-        elseif ContainsAny(text, { "width", "power width", "mana width", "breite" }) then
+        elseif ContainsAny(text, GeometryPhrases[127]) then
             dimension = "width"
         else
             return nil
         end
-        if ContainsAny(text, { "increase", "raise", "more", "grow", "hoeher", "groesser" }) then
+        if ContainsAny(text, GeometryPhrases[128]) then
             direction = "increase"
-        elseif ContainsAny(text, { "decrease", "reduce", "lower", "less", "shrink", "niedriger", "kleiner" }) then
+        elseif ContainsAny(text, GeometryPhrases[129]) then
             direction = "decrease"
         end
     end
     if not direction and P.PowerBarSizeExactValue(text, dimension) == nil then return nil end
 
     local explicitUnits = DetectUnits(text)
-    local allUnitPowerBars = ContainsAny(text, { "all", "all unitframes", "all unit frames", "every", "each", "alle" })
+    local allUnitPowerBars = ContainsAny(text, GeometryPhrases[130])
     if #explicitUnits == 0 and not allUnitPowerBars and not CurrentPageUnit() then return nil end
 
     local units = P.PowerBarSizeUnits(text)
@@ -2352,7 +2233,7 @@ function P.ParsePowerBarSizeShortcut(text)
         }
     end
 
-    local explicitDetached = ContainsAny(text, { "detached", "undocked", "separate", "separated", "abgekoppelt" })
+    local explicitDetached = ContainsAny(text, GeometryPhrases[131])
     local changes = {}
     local skippedAttachedWidth = {}
 
@@ -2453,40 +2334,25 @@ function P.ParseTextVisibilityShortcut(text)
         return nil
     end
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, {
-        "show me", "tell me", "what is", "whats", "which", "where", "why",
-        "explain", "help", "option", "options", "setting", "settings", "page", "tab",
-    }) then return nil end
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
-    if ContainsAny(text, {
-        "reverse hp text", "hp text reverse", "reverse health text", "health text reverse",
-        "hide name on dead", "hide name when dead", "hide name on offline", "hide name when offline", "dead or offline",
-    }) then return nil end
+    if ContainsAny(text, GeometryPhrases[132]) then return nil end
+    if ContainsAny(text, GeometryPhrases[133]) then return nil end
+    if ContainsAny(text, GeometryPhrases[134]) then return nil end
+    if ContainsAny(text, GeometryPhrases[135]) then return nil end
     if ContainsAny(text, P.TEXT_VISIBILITY_VALUE_TERMS) then return nil end
     if not ContainsAny(text, P.TEXT_VISIBILITY_VERBS) then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
     local spec
-    if ContainsAny(text, {
-        "power text", "mana text", "energy text", "resource text", "energie text", "ressource text",
-        "power number", "power numbers", "mana number", "mana numbers", "energy number", "energy numbers",
-    }) then
+    if ContainsAny(text, GeometryPhrases[136]) then
         spec = { unitAttr = "showPower", groupAttr = "showPowerText", label = "Power Text" }
-    elseif ContainsAny(text, {
-        "hp text", "health text", "life text", "leben text", "gesundheit text",
-        "hp number", "hp numbers", "health number", "health numbers", "life number", "life numbers",
-    }) then
+    elseif ContainsAny(text, GeometryPhrases[137]) then
         spec = { unitAttr = "showHP", groupAttr = "showHPText", label = "HP Text" }
-    elseif ContainsAny(text, { "name text", "unit name", "unit names", "names", "name" }) then
+    elseif ContainsAny(text, GeometryPhrases[138]) then
         spec = { unitAttr = "showName", groupAttr = "showName", label = "Name Text" }
     end
     if not spec then return nil end
 
-    local allScope = ContainsAny(text, {
-        "all", "all of", "for all", "every", "each",
-        "alle", "alles", "fuer alle", "jede", "jeder", "jedes", "jeweils",
-    })
+    local allScope = ContainsAny(text, GeometryPhrases[139])
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
     local units = {}
@@ -2558,14 +2424,9 @@ function P.ParseTextVisibilityShortcut(text)
 end
 
 function A._ParseGroupAnchorTargetShortcut(text)
-    if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
-    if ContainsAny(text, {
-        "portrait", "castbar", "cast bar", "name text", "hp text", "health text", "power text",
-        "text", "icon", "indicator", "raid marker", "status", "level", "level indicator",
-        "raid group name", "group number", "leader", "assist", "elite", "rare",
-        "combat indicator", "rested", "resting", "incoming rez", "incoming resurrection",
-    }) then return nil end
-    if not (ContainsAny(text, { "anchor to", "attach to", "anchored to", "anchor target", "anchor frame" })
+    if ContainsAny(text, GeometryPhrases[140]) then return nil end
+    if ContainsAny(text, GeometryPhrases[141]) then return nil end
+    if not (ContainsAny(text, GeometryPhrases[142])
         or (HasPhrase(text, "anchor") and HasPhrase(text, "to")))
     then
         return nil
@@ -2573,7 +2434,7 @@ function A._ParseGroupAnchorTargetShortcut(text)
 
     local groups = GroupScopesOrCurrentPage(text)
     local units = DetectUnits(text)
-    local unitframeScope = ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames" })
+    local unitframeScope = ContainsAny(text, GeometryPhrases[143])
     local unitPage = CurrentPageUnit()
     if #groups == 0 and (#units > 0 or unitframeScope or unitPage) then
         local valueSetting = Registry and Registry:GetSetting(((units and units[1]) or unitPage or "player") .. ".anchorToUnitframe")
@@ -2628,8 +2489,8 @@ function A._ParseGroupAnchorTargetShortcut(text)
 end
 
 local function ParseGroupDetailMove(text)
-    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "portrait" }) then return nil end
-    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[144]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[145]) then return nil end
     local direction = DetectDirection(text, {})
     if not direction then return nil end
     local groups = GroupScopesOrCurrentPage(text)
@@ -2660,8 +2521,8 @@ local function ParseGroupDetailMove(text)
 end
 
 function A._DetailOffsetAxis(text)
-    if ContainsAny(text, { "x offset", "x position", "x pos", "horizontal", "left right" }) or HasPhrase(text, "x") then return "x" end
-    if ContainsAny(text, { "y offset", "y position", "y pos", "vertical", "up down" }) or HasPhrase(text, "y") then return "y" end
+    if ContainsAny(text, GeometryPhrases[146]) or HasPhrase(text, "x") then return "x" end
+    if ContainsAny(text, GeometryPhrases[147]) or HasPhrase(text, "y") then return "y" end
     return nil
 end
 
@@ -2673,8 +2534,8 @@ function A._DetailSpecForText(text, specs)
 end
 
 function A._ParseTextDetailExactOffset(text)
-    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "portrait" }) then return nil end
-    if not ContainsAny(text, { "offset", "position", "pos", "x", "y" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[148]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[149]) then return nil end
     local axis = A._DetailOffsetAxis(text)
     if not axis then return nil end
     local value = FirstNumber(text)
@@ -2741,17 +2602,12 @@ local function OutlineScopeSettingForText(text)
 end
 
 local function ParseBorderThicknessShortcut(text)
-    if not ContainsAny(text, { "border", "outline" }) then return nil end
-    if ContainsAny(text, { "portrait", "castbar", "cast bar", "class power", "class resource", "class resources", "power bar", "mana bar", "power border", "mana border", "detached power", "group border", "group frame border" }) then return nil end
-    if ContainsAny(text, { "color", "colour", "farbe", "opacity", "alpha", "transparent", "transparency", "reset" }) then return nil end
-    if ContainsAny(text, { "aggro", "threat", "dispel", "dispellable", "purge", "purgeable", "boss target", "highlight" }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[150]) then return nil end
+    if ContainsAny(text, GeometryPhrases[151]) then return nil end
+    if ContainsAny(text, GeometryPhrases[152]) then return nil end
+    if ContainsAny(text, GeometryPhrases[153]) then return nil end
 
-    local explicitDetail = ContainsAny(text, {
-        "frame outline", "frame border", "bar outline", "bar border", "border outline", "outline border",
-        "outline thickness", "border thickness", "outline size", "border size", "outline width", "border width",
-        "outline thicker", "outline thinner", "border thicker", "border thinner",
-        "thicker", "thinner", "bigger", "larger", "smaller", "dicker", "duenner",
-    })
+    local explicitDetail = ContainsAny(text, GeometryPhrases[154])
     local toggleIntent = DetectBoolean(text) ~= nil
     local numberIntent = FirstNumber(text) ~= nil
     if not (explicitDetail or toggleIntent or numberIntent) then return nil end
@@ -2762,7 +2618,7 @@ local function ParseBorderThicknessShortcut(text)
     local value
     local relativeDelta
     local bool = DetectBoolean(text)
-    if bool ~= nil and not numberIntent and not ContainsAny(text, { "thicker", "thinner", "bigger", "larger", "smaller", "increase", "decrease", "dicker", "duenner" }) then
+    if bool ~= nil and not numberIntent and not ContainsAny(text, GeometryPhrases[155]) then
         value = bool and 1 or 0
     else
         relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
@@ -2816,7 +2672,7 @@ local function BarOutlineHighlightScopes(text)
         AddBarOutlineHighlightScope(scopes, seen, units[i])
     end
 
-    if #scopes == 0 and not ContainsAny(text, { "global", "shared", "all scopes" }) then
+    if #scopes == 0 and not ContainsAny(text, GeometryPhrases[156]) then
         local pageUnit = CurrentPageUnit()
         if pageUnit then AddBarOutlineHighlightScope(scopes, seen, pageUnit) end
     end
@@ -2832,36 +2688,16 @@ local function BarOutlineHighlightGlobalKey(attr)
 end
 
 local function BarOutlineHighlightSpec(text)
-    if ContainsAny(text, {
-        "custom highlight priority", "highlight priority", "border priority", "highlight border priority",
-        "highlight prio", "border prio", "custom highlight prio", "highlight prioritaet", "border prioritaet",
-    }) then
+    if ContainsAny(text, GeometryPhrases[157]) then
         return "hlPrioEnabled", "Custom Highlight Priority"
     end
-    if ContainsAny(text, {
-        "highlight border thickness", "highlight border size", "highlight border width",
-        "aggro border size", "aggro border thickness", "aggro border width",
-        "dispel border size", "dispel border thickness", "dispel border width",
-    }) then
+    if ContainsAny(text, GeometryPhrases[158]) then
         return "highlightBorderThickness", "Highlight Border Thickness"
     end
-    if ContainsAny(text, {
-        "bar outline opacity", "bar outline alpha", "frame outline opacity", "frame outline alpha",
-        "bar border opacity", "bar border alpha", "frame border opacity", "frame border alpha",
-        "outline opacity", "outline alpha", "border opacity", "border alpha",
-    }) then
+    if ContainsAny(text, GeometryPhrases[159]) then
         return "barOutlineColorA", "Bar Outline Opacity"
     end
-    if ContainsAny(text, {
-        "bar outline thickness", "bar outline size", "bar outline width", "bar outline",
-        "frame outline thickness", "frame outline size", "frame outline width", "frame outline",
-        "bar border thickness", "bar border size", "bar border width",
-        "frame border thickness", "frame border size", "frame border width",
-        "outline thickness", "outline size", "outline width",
-        "border thickness", "border size", "border width",
-        "outline thicker", "outline thinner", "border thicker", "border thinner",
-        "outline bigger", "outline smaller", "border bigger", "border smaller",
-    }) then
+    if ContainsAny(text, GeometryPhrases[160]) then
         return "barOutlineThickness", "Bar Outline Thickness"
     end
     return nil, nil
@@ -2891,7 +2727,7 @@ end
 
 local function ParseBarOutlineHighlightShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if not ContainsAny(text, { "outline", "border", "highlight", "prio", "priority" }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[161]) then return nil end
     if ContainsAny(text, BAR_OUTLINE_HIGHLIGHT_BLOCK_TERMS) then return nil end
 
     local attr, label = BarOutlineHighlightSpec(text)
@@ -2936,7 +2772,7 @@ local function BarOverlayScopes(text, groupOnly)
             AddBarOutlineHighlightScope(scopes, seen, units[i])
         end
     end
-    if #scopes == 0 and not groupOnly and not ContainsAny(text, { "global", "shared", "all scopes" }) then
+    if #scopes == 0 and not groupOnly and not ContainsAny(text, GeometryPhrases[162]) then
         local pageUnit = CurrentPageUnit()
         if pageUnit then AddBarOutlineHighlightScope(scopes, seen, pageUnit) end
     end
@@ -2957,31 +2793,31 @@ local function AbsorbBarGlobalKey(attr)
 end
 
 local function AbsorbBarSpec(text)
-    if ContainsAny(text, { "heal prediction anchor", "heal prediction anchoring", "incoming heal anchor" }) then
+    if ContainsAny(text, GeometryPhrases[163]) then
         return "healPredAnchorMode", "Heal Prediction Anchor", "enum", true
     end
-    if ContainsAny(text, { "heal prediction", "heal prediction overlay", "incoming heal prediction" }) then
+    if ContainsAny(text, GeometryPhrases[164]) then
         return "showSelfHealPrediction", "Heal Prediction Overlay", "boolean", true
     end
-    if ContainsAny(text, { "heal absorb texture", "heal-absorb texture", "heal absorb bar texture" }) then
+    if ContainsAny(text, GeometryPhrases[165]) then
         return "healAbsorbBarTexture", "Heal Absorb Bar Texture", "string", false
     end
-    if ContainsAny(text, { "heal absorb opacity", "heal-absorb opacity", "heal absorb bar opacity", "heal absorb alpha" }) then
+    if ContainsAny(text, GeometryPhrases[166]) then
         return "healAbsorbBarOpacity", "Heal Absorb Bar Opacity", "number", false
     end
-    if ContainsAny(text, { "absorb display mode", "absorb mode", "absorb bars" }) then
+    if ContainsAny(text, GeometryPhrases[167]) then
         return "absorbTextMode", "Absorb Display Mode", "enum", false
     end
-    if ContainsAny(text, { "absorb bar anchor", "absorb anchor", "absorb anchoring" }) then
+    if ContainsAny(text, GeometryPhrases[168]) then
         return "absorbAnchorMode", "Absorb Bar Anchor", "enum", false
     end
-    if ContainsAny(text, { "over absorb overlay", "over-absorb overlay", "over absorb glow", "overshield overlay", "full hp absorb overlay", "full health absorb overlay" }) then
+    if ContainsAny(text, GeometryPhrases[169]) then
         return "overAbsorbOverlay", "Over-Absorb Overlay", "boolean", false
     end
-    if ContainsAny(text, { "absorb bar texture", "absorb texture" }) then
+    if ContainsAny(text, GeometryPhrases[170]) then
         return "absorbBarTexture", "Absorb Bar Texture", "string", false
     end
-    if ContainsAny(text, { "absorb bar opacity", "absorb opacity", "absorb alpha" }) then
+    if ContainsAny(text, GeometryPhrases[171]) then
         return "absorbBarOpacity", "Absorb Bar Opacity", "number", false
     end
     return nil, nil, nil, nil
@@ -3021,12 +2857,8 @@ end
 
 local function ParseAbsorbBarShortcut(text, raw)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if not ContainsAny(text, { "absorb", "heal prediction", "incoming heal" }) then return nil end
-    if ContainsAny(text, {
-        "color", "colors", "colour", "colours", "farbe", "farben", "tint",
-        "test", "preview", "show preview", "hide preview",
-        "aura", "auras", "buff", "debuff", "castbar", "cast bar", "power bar", "class resource", "class power",
-    }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[172]) then return nil end
+    if ContainsAny(text, GeometryPhrases[173]) then return nil end
 
     local attr, label, attrType, groupOnly = AbsorbBarSpec(text)
     if not attr then return nil end
@@ -3059,25 +2891,22 @@ local function ParseAbsorbBarShortcut(text, raw)
 end
 
 local function BarBorderEnumSpec(text)
-    if ContainsAny(text, { "boss target border", "boss target outline" }) then
+    if ContainsAny(text, GeometryPhrases[174]) then
         return "bossTargetOutlineMode", "Boss Target Border"
     end
-    if ContainsAny(text, {
-        "aggro shows for", "aggro role filter", "aggro non tanks", "aggro not tank",
-        "threat shows for", "threat role filter", "threat non tanks",
-    }) then
+    if ContainsAny(text, GeometryPhrases[175]) then
         return "aggroMode", "Aggro Shows For"
     end
-    if ContainsAny(text, { "dispel border detects", "dispel border trigger", "dispel detection" }) then
+    if ContainsAny(text, GeometryPhrases[176]) then
         return "dispelBorderTrigger", "Dispel Border Detects"
     end
-    if ContainsAny(text, { "aggro border", "threat border", "aggro outline", "threat outline" }) then
+    if ContainsAny(text, GeometryPhrases[177]) then
         return "aggroOutlineMode", "Aggro Border"
     end
-    if ContainsAny(text, { "dispel border", "dispellable border", "dispel outline" }) then
+    if ContainsAny(text, GeometryPhrases[178]) then
         return "dispelOutlineMode", "Dispel Border"
     end
-    if ContainsAny(text, { "purge border", "purge outline", "purgeable border" }) then
+    if ContainsAny(text, GeometryPhrases[179]) then
         return "purgeOutlineMode", "Purge Border"
     end
     return nil, nil
@@ -3095,15 +2924,8 @@ end
 
 local function ParseBarBorderEnumShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if not ContainsAny(text, { "aggro", "threat", "dispel", "dispellable", "purge", "purgeable", "boss target" }) then return nil end
-    if ContainsAny(text, {
-        "fallback", "fallback aggro", "fallback threat",
-        "aura", "auras", "buff", "debuff", "native group aura",
-        "overlay", "unitframe dispel overlay", "unit frame dispel overlay", "debuff overlay",
-        "color", "colors", "colour", "colours", "opacity", "alpha",
-        "thickness", "size", "width",
-        "test", "preview", "castbar", "cast bar", "class resource", "class power",
-    }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[180]) then return nil end
+    if ContainsAny(text, GeometryPhrases[181]) then return nil end
 
     local attr, label = BarBorderEnumSpec(text)
     if not attr then return nil end
@@ -3137,8 +2959,8 @@ local function ParseBarBorderEnumShortcut(text)
 end
 
 local function ParseUnitDetailOffsetShortcut(text)
-    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if not ContainsAny(text, { "offset" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[182]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[183]) then return nil end
     if DetectDirection(text, {}) then return nil end
     local value = FirstNumber(text)
     if value == nil then return nil end
@@ -3217,22 +3039,19 @@ local function CastbarRootUnitsOrCurrentPage(text)
 end
 
 local function CastbarSizeDirection(text)
-    if ContainsAny(text, { "wider", "wider bar", "make wider", "increase width", "raise width", "larger width", "more width", "breiter" }) then return "increase", "width" end
-    if ContainsAny(text, { "narrower", "make narrower", "decrease width", "reduce width", "smaller width", "less width", "schmaler" }) then return "decrease", "width" end
-    if ContainsAny(text, { "taller", "higher", "make taller", "increase height", "raise height", "larger height", "more height", "hoeher" }) then return "increase", "height" end
-    if ContainsAny(text, { "shorter", "lower", "make shorter", "decrease height", "reduce height", "smaller height", "less height", "niedriger" }) then return "decrease", "height" end
-    if ContainsAny(text, { "bigger", "larger", "increase size", "make bigger", "make larger" }) then return "increase", "both" end
-    if ContainsAny(text, { "smaller", "decrease size", "reduce size", "make smaller", "shrink" }) then return "decrease", "both" end
+    if ContainsAny(text, GeometryPhrases[184]) then return "increase", "width" end
+    if ContainsAny(text, GeometryPhrases[185]) then return "decrease", "width" end
+    if ContainsAny(text, GeometryPhrases[186]) then return "increase", "height" end
+    if ContainsAny(text, GeometryPhrases[187]) then return "decrease", "height" end
+    if ContainsAny(text, GeometryPhrases[188]) then return "increase", "both" end
+    if ContainsAny(text, GeometryPhrases[189]) then return "decrease", "both" end
     return nil, nil
 end
 
 function P.ParseCastbarSizeShortcut(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if ContainsAny(text, {
-        "icon", "spell name", "spell text", "castbar text", "castbar name", "timer", "time text",
-        "border", "outline", "spark", "latency", "focus kick", "interrupt ready",
-    }) then
+    if not ContainsAny(text, GeometryPhrases[190]) then return nil end
+    if ContainsAny(text, GeometryPhrases[191]) then return nil end
+    if ContainsAny(text, GeometryPhrases[192]) then
         return nil
     end
     local direction, dimension = CastbarSizeDirection(text)
@@ -3267,15 +3086,15 @@ function P.ParseCastbarSizeShortcut(text)
 end
 
 function P.ParseCastbarPlacementShortcut(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if ContainsAny(text, { "icon", "spell name", "spell text", "timer", "time text", "interrupt ready", "focus kick" }) then return nil end
-    if not ContainsAny(text, { "move", "put", "place", "position" }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[193]) then return nil end
+    if ContainsAny(text, GeometryPhrases[194]) then return nil end
+    if ContainsAny(text, GeometryPhrases[195]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[196]) then return nil end
 
     local direction
-    if ContainsAny(text, { "under", "below", "beneath", "underneath" }) then
+    if ContainsAny(text, GeometryPhrases[197]) then
         direction = "down"
-    elseif ContainsAny(text, { "above", "over", "on top of" }) then
+    elseif ContainsAny(text, GeometryPhrases[198]) then
         direction = "up"
     else
         return nil
@@ -3304,22 +3123,22 @@ function P.ParseCastbarPlacementShortcut(text)
 end
 
 function P.ParseCastbarTextSizeShortcut(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if ContainsAny(text, { "move", "nudge", "shift", "offset", "position" }) then return nil end
-    if not ContainsAny(text, { "font size", "text size", "size", "bigger", "larger", "smaller", "increase", "decrease", "raise", "reduce" }) then
+    if not ContainsAny(text, GeometryPhrases[199]) then return nil end
+    if ContainsAny(text, GeometryPhrases[200]) then return nil end
+    if ContainsAny(text, GeometryPhrases[201]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[202]) then
         return nil
     end
-    if not ContainsAny(text, { "spell name", "spell text", "castbar text", "castbar name", "timer", "time text", "cast time" }) then
+    if not ContainsAny(text, GeometryPhrases[203]) then
         return nil
     end
 
     local field
     local label
-    if ContainsAny(text, { "timer", "time text", "cast time" }) then
+    if ContainsAny(text, GeometryPhrases[204]) then
         field = "TimeFontSize"
         label = "Cast Bar time text size"
-    elseif ContainsAny(text, { "spell name", "spell text", "castbar text", "castbar name", "text" }) then
+    elseif ContainsAny(text, GeometryPhrases[205]) then
         field = "SpellNameFontSize"
         label = "Cast Bar spell text size"
     else
@@ -3327,9 +3146,9 @@ function P.ParseCastbarTextSizeShortcut(text)
     end
 
     local relativeDelta
-    if ContainsAny(text, { "bigger", "larger", "increase", "raise", "more", "groesser" }) then
+    if ContainsAny(text, GeometryPhrases[206]) then
         relativeDelta = FirstNumber(text) or 1
-    elseif ContainsAny(text, { "smaller", "decrease", "reduce", "lower", "less", "kleiner" }) then
+    elseif ContainsAny(text, GeometryPhrases[207]) then
         relativeDelta = -(FirstNumber(text) or 1)
     end
     local value
@@ -3359,16 +3178,16 @@ function P.ParseCastbarTextSizeShortcut(text)
 end
 
 local function ParseCastbarTextMoveShortcut(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
-    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset" }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[208]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[209]) then return nil end
     local direction = DetectDirection(text, {})
     if not direction then return nil end
     local field
     local label
-    if ContainsAny(text, { "time text", "castbar time", "cast time", "timer", "time" }) then
+    if ContainsAny(text, GeometryPhrases[210]) then
         field = (direction == "left" or direction == "right") and "TimeOffsetX" or "TimeOffsetY"
         label = "Move cast bar time text"
-    elseif ContainsAny(text, { "spell name", "spell text", "castbar text", "castbar name", "text" }) then
+    elseif ContainsAny(text, GeometryPhrases[211]) then
         field = (direction == "left" or direction == "right") and "TextOffsetX" or "TextOffsetY"
         label = "Move cast bar spell text"
     else
@@ -3396,21 +3215,18 @@ local function ParseCastbarTextMoveShortcut(text)
 end
 
 local function ParseUnitOpacityShortcut(text)
-    if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
-    if ContainsAny(text, { "edit mode", "editmode", "editor mode" }) then return nil end
-    if ContainsAny(text, { "class power", "class resource", "class resources", "resource bar", "alt mana", "alternative mana", "secondary mana", "dual resource mana" }) then return nil end
-    if ContainsAny(text, { "player hp bar opacity", "player health bar opacity" })
-        and not ContainsAny(text, {
-            "second", "duplicate", "class resource", "class power", "background", "backdrop", "bg",
-            "text", "font", "outline", "border", "color", "colour", "texture",
-        })
+    if not ContainsAny(text, GeometryPhrases[212]) then return nil end
+    if ContainsAny(text, GeometryPhrases[213]) then return nil end
+    if ContainsAny(text, GeometryPhrases[214]) then return nil end
+    if ContainsAny(text, GeometryPhrases[215])
+        and not ContainsAny(text, GeometryPhrases[216])
     then
         local relativeDelta
-        if ContainsAny(text, { "more transparent", "more transparency", "more see through", "transparenter" }) then
+        if ContainsAny(text, GeometryPhrases[217]) then
             local amount = FirstNumber(text) or 0.05
             if amount > 1 then amount = amount / 100 end
             relativeDelta = -amount
-        elseif ContainsAny(text, { "less transparent", "less transparency", "more opaque", "opaquer" }) then
+        elseif ContainsAny(text, GeometryPhrases[218]) then
             local amount = FirstNumber(text) or 0.05
             if amount > 1 then amount = amount / 100 end
             relativeDelta = amount
@@ -3432,26 +3248,17 @@ local function ParseUnitOpacityShortcut(text)
             summary = "Sets the Player unit-frame HP bar opacity.",
         }
     end
-    if ContainsAny(text, {
-        "second hp", "duplicate hp", "second health", "duplicate health", "player hp bar",
-        "bar outline", "outline opacity", "outline alpha", "border opacity", "border alpha",
-        "highlight border", "group border", "dead background", "dead bg", "health fade",
-    }) then return nil end
+    if ContainsAny(text, GeometryPhrases[219]) then return nil end
     if DetectGroups(text)[1] then return nil end
-    local powerOpacity = ContainsAny(text, { "power bar", "powerbar", "power opacity", "power alpha", "mana bar", "mana opacity", "mana alpha", "resource bar", "resource opacity", "resource alpha" })
-    local backgroundOpacity = ContainsAny(text, { "background", "backdrop", "track", "hp track", "health track", "bg", "bar background" })
-    if ContainsAny(text, {
-        "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target",
-        "preserve hp",
-        "text opacity", "text alpha", "font opacity", "font alpha", "absorb", "heal absorb",
-        "dispel overlay", "debuff overlay", "unitframe dispel overlay", "unit frame dispel overlay",
-    }) then return nil end
+    local powerOpacity = ContainsAny(text, GeometryPhrases[220])
+    local backgroundOpacity = ContainsAny(text, GeometryPhrases[221])
+    if ContainsAny(text, GeometryPhrases[222]) then return nil end
     local relativeDelta
-    if ContainsAny(text, { "more transparent", "more transparency", "more see through", "transparenter" }) then
+    if ContainsAny(text, GeometryPhrases[223]) then
         local amount = FirstNumber(text) or 0.05
         if amount > 1 then amount = amount / 100 end
         relativeDelta = -amount
-    elseif ContainsAny(text, { "less transparent", "less transparency", "more opaque", "opaquer" }) then
+    elseif ContainsAny(text, GeometryPhrases[224]) then
         local amount = FirstNumber(text) or 0.05
         if amount > 1 then amount = amount / 100 end
         relativeDelta = amount
@@ -3503,21 +3310,12 @@ local function ParseUnitOpacityShortcut(text)
 end
 
 function A._ParseGroupOpacityShortcut(text)
-    if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
-    if ContainsAny(text, { "edit mode", "editmode", "editor mode" }) then return nil end
-    if ContainsAny(text, {
-        "bar outline", "outline opacity", "outline alpha", "border opacity", "border alpha",
-        "highlight border", "group border", "dead background", "dead bg", "dead member",
-        "dead offline", "offline opacity", "health fade",
-    }) then return nil end
-    local backgroundOpacity = ContainsAny(text, { "background", "backdrop", "track", "hp track", "health track", "bg", "bar background" })
-    if ContainsAny(text, { "range fade", "dispel overlay", "debuff overlay" }) then return nil end
-    if ContainsAny(text, {
-        "debuff stripe opacity", "debuff stripe alpha", "offline opacity", "offline alpha", "offline member opacity",
-        "corner indicator opacity", "corner indicator alpha", "corner dot opacity", "corner dot alpha",
-        "text opacity", "text alpha", "absorb bar opacity", "absorb bar alpha", "heal absorb opacity", "heal absorb alpha",
-        "heal absorb bar opacity", "heal absorb bar alpha",
-    }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[225]) then return nil end
+    if ContainsAny(text, GeometryPhrases[226]) then return nil end
+    if ContainsAny(text, GeometryPhrases[227]) then return nil end
+    local backgroundOpacity = ContainsAny(text, GeometryPhrases[228])
+    if ContainsAny(text, GeometryPhrases[229]) then return nil end
+    if ContainsAny(text, GeometryPhrases[230]) then return nil end
 
     local groups = DetectGroups(text)
     if #groups == 0 then
@@ -3529,11 +3327,11 @@ function A._ParseGroupOpacityShortcut(text)
     if #groups == 0 then return nil end
 
     local relativeDelta
-    if ContainsAny(text, { "more transparent", "more transparency", "more see through", "transparenter" }) then
+    if ContainsAny(text, GeometryPhrases[231]) then
         local amount = FirstNumber(text) or 0.05
         if amount > 1 then amount = amount / 100 end
         relativeDelta = -amount
-    elseif ContainsAny(text, { "less transparent", "less transparency", "more opaque", "opaquer" }) then
+    elseif ContainsAny(text, GeometryPhrases[232]) then
         local amount = FirstNumber(text) or 0.05
         if amount > 1 then amount = amount / 100 end
         relativeDelta = amount
@@ -3565,12 +3363,9 @@ end
 
 function P.ParseUnitRangeFadeShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if ContainsAny(text, { "keep text visible", "keep names visible", "text visible", "names visible" }) then return nil end
-    if not ContainsAny(text, {
-        "range fade", "range fading", "out of range", "outside range",
-        "when out of range", "while out of range",
-    }) then
+    if ContainsAny(text, GeometryPhrases[233]) then return nil end
+    if ContainsAny(text, GeometryPhrases[234]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[235]) then
         return nil
     end
 
@@ -3582,24 +3377,17 @@ function P.ParseUnitRangeFadeShortcut(text)
     if #units == 0 then return nil end
 
     local number = FirstNumber(text)
-    local alphaIntent = ContainsAny(text, {
-        "alpha", "opacity", "transparency", "transparent", "out of range alpha",
-        "out of range opacity", "range fade alpha", "range fade opacity",
-        "more visible", "less visible", "more faded", "less faded",
-    }) or number ~= nil
-    local layerIntent = ContainsAny(text, {
-        "affects", "layer", "mode", "health only", "current health only", "hp only",
-        "frame only", "whole frame", "to frame", "to health",
-    })
+    local alphaIntent = ContainsAny(text, GeometryPhrases[236]) or number ~= nil
+    local layerIntent = ContainsAny(text, GeometryPhrases[237])
 
     local value
     local relativeDelta
     if alphaIntent then
-        if ContainsAny(text, { "more transparent", "more transparency", "less visible", "fade more", "more faded", "stronger fade" }) then
+        if ContainsAny(text, GeometryPhrases[238]) then
             local amount = number or 0.05
             if amount > 1 then amount = amount / 100 end
             relativeDelta = -amount
-        elseif ContainsAny(text, { "less transparent", "less transparency", "more visible", "more opaque", "fade less", "less faded", "weaker fade" }) then
+        elseif ContainsAny(text, GeometryPhrases[239]) then
             local amount = number or 0.05
             if amount > 1 then amount = amount / 100 end
             relativeDelta = amount
@@ -3615,11 +3403,7 @@ function P.ParseUnitRangeFadeShortcut(text)
 
     local bool = DetectBoolean(text)
     local enableIntent = not alphaIntent and not layerIntent and (bool ~= nil
-        or ContainsAny(text, {
-            "transparent when out of range", "transparent out of range",
-            "fade when out of range", "fade out of range", "fade outside range",
-            "range fade", "range fading",
-        }))
+        or ContainsAny(text, GeometryPhrases[240]))
 
     local changes = {}
     for i = 1, #units do
@@ -3646,9 +3430,9 @@ function P.ParseUnitRangeFadeShortcut(text)
         if layerIntent then
             local setting = Registry and Registry:GetSetting(unit .. ".rangeFadeLayerMode")
             local enumValue = setting and EnumValueForText and EnumValueForText(setting, text) or nil
-            if enumValue == nil and ContainsAny(text, { "health only", "current health only", "hp only", "to health" }) then
+            if enumValue == nil and ContainsAny(text, GeometryPhrases[241]) then
                 enumValue = "health"
-            elseif enumValue == nil and ContainsAny(text, { "frame only", "whole frame", "to frame" }) then
+            elseif enumValue == nil and ContainsAny(text, GeometryPhrases[242]) then
                 enumValue = "frame"
             end
             if setting and enumValue ~= nil then
@@ -3671,14 +3455,10 @@ end
 
 function P.ParseUnitHealthColorSchemeShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if not ContainsAny(text, {
-        "health color scheme", "health color mode",
-        "health bar color scheme", "health bar color mode",
-        "unitframe color scheme", "unit frame color scheme",
-    }) then
+    if not ContainsAny(text, GeometryPhrases[243]) then
         return nil
     end
-    if ContainsAny(text, { "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames" }) then return nil end
+    if ContainsAny(text, GeometryPhrases[244]) then return nil end
 
     local units = DetectUnits(text)
     if #units == 0 then
@@ -3710,17 +3490,9 @@ end
 
 function P.ParseUnitAnchorTargetShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if not ContainsAny(text, { "anchor to", "anchor target", "anchor frame" }) then return nil end
-    if ContainsAny(text, {
-        "anchor point", "frame anchor point", "anchor position", "custom anchor",
-        "custom anchor frame", "anchor frame name", "clear custom anchor",
-        "remove custom anchor", "reset custom anchor", "picker",
-    }) then return nil end
-    if ContainsAny(text, {
-        "class power", "class resource", "detached power", "detached mana", "castbar", "cast bar",
-        "name text", "health text", "hp text", "power text", "mana text", "status", "indicator", "icon",
-        "aura", "auras", "buff", "debuff", "group frame", "group frames", "party", "raid", "mythic raid",
-    }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[245]) then return nil end
+    if ContainsAny(text, GeometryPhrases[246]) then return nil end
+    if ContainsAny(text, GeometryPhrases[247]) then return nil end
 
     local units = DetectUnits(text)
     if #units == 0 then
@@ -3752,14 +3524,8 @@ end
 
 function P.ParseUnitAnchorPointShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if not ContainsAny(text, { "anchor point", "frame anchor point", "anchor position" }) then return nil end
-    if ContainsAny(text, {
-        "custom anchor", "custom anchor frame", "anchor frame name", "anchor to", "anchor target",
-        "class power", "class resource", "detached power", "detached mana", "castbar", "cast bar",
-        "name text", "health text", "hp text", "power text", "mana text", "status", "indicator", "icon",
-        "level", "pvp", "pvp flag", "aura", "auras", "buff", "debuff", "group frame", "group frames",
-        "party", "raid", "mythic raid",
-    }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[248]) then return nil end
+    if ContainsAny(text, GeometryPhrases[249]) then return nil end
 
     local units = DetectUnits(text)
     if #units == 0 then
@@ -3791,18 +3557,10 @@ end
 
 function P.ParseUnitPowerBarBorderThicknessShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if not ContainsAny(text, {
-        "power bar border thickness", "power bar border size",
-        "power border thickness", "power border size",
-        "mana bar border thickness", "mana bar border size",
-    }) then
+    if not ContainsAny(text, GeometryPhrases[250]) then
         return nil
     end
-    if ContainsAny(text, {
-        "detached", "detached power", "detached power bar", "class power", "class resource",
-        "aura", "auras", "buff", "debuff", "text", "font", "castbar", "cast bar",
-        "health bar", "hp bar", "portrait", "group frame", "group frames", "party", "raid", "mythic raid",
-    }) then return nil end
+    if ContainsAny(text, GeometryPhrases[251]) then return nil end
 
     local units = DetectUnits(text)
     if #units == 0 then
@@ -3841,33 +3599,27 @@ end
 
 function P.ParseUnitPowerBarBooleanShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if not ContainsAny(text, { "power bar", "mana bar", "powerbar", "mana bar", "power balken", "mana balken" }) then return nil end
-    if ContainsAny(text, {
-        "class power", "class resource", "class resources", "power text", "mana text", "resource text",
-        "text on", "sync", "anchor", "width", "height", "x offset", "y offset", "offset x", "offset y",
-        "frame level", "layer", "shape", "orb", "border thickness", "border size", "smooth",
-        "aura", "auras", "buff", "debuff", "castbar", "cast bar", "group frame", "group frames",
-        "party", "raid", "mythic raid",
-    }) then return nil end
+    if not ContainsAny(text, GeometryPhrases[252]) then return nil end
+    if ContainsAny(text, GeometryPhrases[253]) then return nil end
 
     local attr = "showPowerBar"
     local label = "Power Bar"
     local value
-    if ContainsAny(text, { "border", "outline", "rand" }) then
+    if ContainsAny(text, GeometryPhrases[254]) then
         attr = "powerBarBorderEnabled"
         label = "Power Bar Border"
         value = DetectBoolean(text)
-    elseif ContainsAny(text, { "embed", "embedded", "into health", "into hp", "inside health", "inside hp", "within health", "within hp" }) then
+    elseif ContainsAny(text, GeometryPhrases[255]) then
         attr = "embedPowerBarIntoHealth"
         label = "Embed Power Bar"
         value = DetectBoolean(text)
         if value == nil then value = true end
-    elseif ContainsAny(text, { "detach", "detached", "undock", "undocked", "separate", "separated", "abkoppeln" }) then
-        if ContainsAny(text, { "left", "right", "up", "down", "links", "rechts", "oben", "unten", "x", "y", "position", "pos", "move", "nudge", "shift" }) then return nil end
+    elseif ContainsAny(text, GeometryPhrases[256]) then
+        if ContainsAny(text, GeometryPhrases[257]) then return nil end
         attr = "powerBarDetached"
         label = "Detach Power Bar"
         value = true
-    elseif ContainsAny(text, { "attach", "attached", "reattach", "dock", "docked", "back to frame", "into frame", "ankoppeln" }) then
+    elseif ContainsAny(text, GeometryPhrases[258]) then
         attr = "powerBarDetached"
         label = "Attach Power Bar"
         value = false
@@ -3905,18 +3657,10 @@ end
 
 function P.ParsePlayerPowerBarShapeShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if not ContainsAny(text, {
-        "player power shape", "player power bar shape",
-        "detached power shape", "detached power bar shape",
-        "class resources player power shape", "class resources player power bar shape",
-        "class resource player power shape", "class power player power shape",
-    }) then
+    if not ContainsAny(text, GeometryPhrases[259]) then
         return nil
     end
-    if ContainsAny(text, {
-        "texture", "foreground", "background", "outline", "border", "color", "colour",
-        "text", "font", "width", "height", "x", "y", "offset", "layer",
-    }) then return nil end
+    if ContainsAny(text, GeometryPhrases[260]) then return nil end
 
     local setting = Registry and Registry:GetSetting("player.detachedPowerBarShape")
     local value = setting and EnumValueForText and EnumValueForText(setting, text) or nil
@@ -3931,16 +3675,8 @@ end
 
 function P.ParsePlayerPowerOrbSizeShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, {
-        "health", "hp", "player hp", "second hp", "duplicate hp", "health orb",
-        "hp orb", "player health", "class resource health", "class resources hp",
-    }) then return nil end
-    if not ContainsAny(text, {
-        "mana orb size", "power orb size", "detached power orb size", "detached power bar orb size",
-        "player power orb size", "player power bar orb size", "mana ball size", "power ball size",
-        "class resources player power orb size", "class resources player power bar orb size",
-        "class resource player power orb size", "class power player power orb size",
-    }) then
+    if ContainsAny(text, GeometryPhrases[261]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[262]) then
         return nil
     end
 
@@ -3962,13 +3698,10 @@ end
 
 function A._ParseGroupRangeFadeShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
-    if ContainsAny(text, { "affects", "layer", "mode", "health only", "current health only" }) then return nil end
-    if ContainsAny(text, { "keep text visible", "keep names visible", "text visible", "names visible" }) then return nil end
-    if not ContainsAny(text, {
-        "range fade", "range fading", "out of range", "outside range",
-        "when out of range", "while out of range",
-    }) then
+    if ContainsAny(text, GeometryPhrases[263]) then return nil end
+    if ContainsAny(text, GeometryPhrases[264]) then return nil end
+    if ContainsAny(text, GeometryPhrases[265]) then return nil end
+    if not ContainsAny(text, GeometryPhrases[266]) then
         return nil
     end
 
@@ -3979,17 +3712,13 @@ function A._ParseGroupRangeFadeShortcut(text)
     local value
     local relativeDelta
     local number = FirstNumber(text)
-    local alphaIntent = ContainsAny(text, {
-        "alpha", "opacity", "transparency", "transparent", "out of range alpha",
-        "out of range opacity", "range fade alpha", "range fade opacity",
-        "more visible", "less visible", "more faded", "less faded",
-    }) or number ~= nil
+    local alphaIntent = ContainsAny(text, GeometryPhrases[267]) or number ~= nil
     if alphaIntent then
-        if ContainsAny(text, { "more transparent", "more transparency", "less visible", "fade more", "more faded", "stronger fade" }) then
+        if ContainsAny(text, GeometryPhrases[268]) then
             local amount = number or 0.05
             if amount > 1 then amount = amount / 100 end
             relativeDelta = -amount
-        elseif ContainsAny(text, { "less transparent", "less transparency", "more visible", "more opaque", "fade less", "less faded", "weaker fade" }) then
+        elseif ContainsAny(text, GeometryPhrases[269]) then
             local amount = number or 0.05
             if amount > 1 then amount = amount / 100 end
             relativeDelta = amount
@@ -4003,11 +3732,7 @@ function A._ParseGroupRangeFadeShortcut(text)
 
     local bool = DetectBoolean(text)
     local enableIntent = not alphaIntent and (bool ~= nil
-        or ContainsAny(text, {
-            "transparent when out of range", "transparent out of range",
-            "fade when out of range", "fade out of range", "fade outside range",
-            "range fade", "range fading",
-        }))
+        or ContainsAny(text, GeometryPhrases[270]))
 
     local changes = {}
     for i = 1, #groups do
@@ -4033,11 +3758,11 @@ end
 
 local function GroupColorModeScopes(text)
     local scopes = {}
-    local explicitGroupGeneric = ContainsAny(text, { "group frames", "group frame", "gruppenframes", "groups" })
+    local explicitGroupGeneric = ContainsAny(text, GeometryPhrases[271])
     local explicitNamed = false
-    if ContainsAny(text, { "party", "party frame", "party frames", "partyframe" }) then AddUnique(scopes, "party"); explicitNamed = true end
-    if ContainsAny(text, { "mythic raid", "mythicraid", "mythic raid frame", "mythic raid frames", "mythicraidframe" }) then AddUnique(scopes, "mythicraid"); explicitNamed = true end
-    if ContainsAny(text, { "raid", "raid frame", "raid frames", "raidframe" }) and not ContainsAny(text, { "mythic raid", "mythicraid", "mythicraidframe" }) then
+    if ContainsAny(text, GeometryPhrases[272]) then AddUnique(scopes, "party"); explicitNamed = true end
+    if ContainsAny(text, GeometryPhrases[273]) then AddUnique(scopes, "mythicraid"); explicitNamed = true end
+    if ContainsAny(text, GeometryPhrases[274]) and not ContainsAny(text, GeometryPhrases[275]) then
         AddUnique(scopes, "raid")
         explicitNamed = true
     end
@@ -4053,39 +3778,22 @@ end
 
 local function GroupBarColorModeForText(text)
     local bool = DetectBoolean(text)
-    if ContainsAny(text, {
-        "class color", "class colors", "class colored", "class mode", "use class color",
-        "use class colors", "use class colour", "use class colours", "colored by class",
-        "coloured by class", "by class", "class colored bars", "class color bars",
-    }) then
+    if ContainsAny(text, GeometryPhrases[276]) then
         return bool == false and "GLOBAL" or "CLASS"
     end
-    if ContainsAny(text, { "gradient", "health gradient" }) then return bool == false and "GLOBAL" or "GRADIENT" end
-    if ContainsAny(text, { "custom", "manual" }) then return bool == false and "GLOBAL" or "CUSTOM" end
-    if ContainsAny(text, { "dark mode", "dark bars", "dark" }) then return bool == false and "GLOBAL" or "dark" end
-    if ContainsAny(text, { "unified", "unified color", "unified bars" }) then return bool == false and "GLOBAL" or "unified" end
-    if ContainsAny(text, {
-        "global", "global style", "global color", "global colors", "global colour", "global colours",
-        "inherit", "inherit color", "inherit colors", "default", "default color", "default colors",
-    }) then return "GLOBAL" end
+    if ContainsAny(text, GeometryPhrases[277]) then return bool == false and "GLOBAL" or "GRADIENT" end
+    if ContainsAny(text, GeometryPhrases[278]) then return bool == false and "GLOBAL" or "CUSTOM" end
+    if ContainsAny(text, GeometryPhrases[279]) then return bool == false and "GLOBAL" or "dark" end
+    if ContainsAny(text, GeometryPhrases[280]) then return bool == false and "GLOBAL" or "unified" end
+    if ContainsAny(text, GeometryPhrases[281]) then return "GLOBAL" end
     return nil
 end
 
 local function ParseGroupFrameColorMode(text)
-    if not ContainsAny(text, {
-        "group frames", "group frame", "gruppenframes", "party", "party frame", "party frames", "partyframe",
-        "raid", "raid frame", "raid frames", "raidframe", "mythic raid", "mythicraid",
-    }) then
+    if not ContainsAny(text, GeometryPhrases[282]) then
         return nil
     end
-    if not ContainsAny(text, {
-        "bar color mode", "health bar color mode", "class color mode", "health color mode",
-        "group bar style", "bar mode", "class colored health", "class color health",
-        "use class color", "use class colors", "use class colour", "use class colours",
-        "class colored", "class colors", "colored by class", "coloured by class",
-        "use global color", "use global colors", "use default color", "use default colors",
-        "global colors", "default colors", "inherit colors",
-    }) then
+    if not ContainsAny(text, GeometryPhrases[283]) then
         return nil
     end
     local value = GroupBarColorModeForText(text)

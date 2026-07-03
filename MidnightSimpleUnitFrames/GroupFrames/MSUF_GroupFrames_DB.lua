@@ -52,7 +52,8 @@ end
 --   Status icon packs (this file):  MSUF_RegisterStatusIconPack /
 --       MSUF_RefreshStatusIconPacks are a PUBLIC extension point for other
 --       addons (no internal callers by design -- keep them). Plus
---       MSUF_GetStatusIconPackValues / MSUF_Get{Role,Leader,Assist}StatusIconTexture.
+--       MSUF_GetStatusIconPackValues / MSUF_GetStatusIconTexture /
+--       MSUF_Get{Role,Leader,Assist}StatusIconTexture.
 --   Spell indicators (DB_SpellIndicators): MSUF_GF_Seed{,Current}SpellIndicator*.
 --   EditMode popups (EM2): MSUF_EM2_*GFPopup*, MSUF_GF_EM2_*.
 --   Blizzard frames (Blizzard): MSUF_GF_DisableBlizzard.
@@ -273,6 +274,7 @@ local PARTY_DEFAULTS = {
     useMidnightIcons  = false,
     roleIcon          = true,
     roleIconStyle     = "DEFAULT",
+    roleIconCustomIcon = "",
     roleIconShowTank   = true,
     roleIconShowHealer = true,
     roleIconShowDPS    = true,
@@ -281,43 +283,57 @@ local PARTY_DEFAULTS = {
     roleIconX         = 0,
     roleIconY         = 0,
     raidMarker        = true,
+    raidMarkerStyle   = "DEFAULT",
+    raidMarkerCustomIcon = "",
     raidMarkerSize    = 14,
     raidMarkerAnchor  = "CENTER",
     raidMarkerX       = 0,
     raidMarkerY       = 0,
     leaderIcon        = true,
     leaderIconStyle   = "DEFAULT",
+    leaderIconCustomIcon = "",
     leaderIconSize    = 12,
     leaderIconAnchor  = "TOPRIGHT",
     leaderIconX       = 0,
     leaderIconY       = 0,
     assistIcon        = true,
     assistIconStyle   = "DEFAULT",
+    assistIconCustomIcon = "",
     assistIconSize    = 12,
     assistIconAnchor  = "TOPRIGHT",
     assistIconX       = 14,
     assistIconY       = 0,
     readyCheckIcon    = true,
+    readyCheckIconStyle = "DEFAULT",
+    readyCheckIconCustomIcon = "",
     readyCheckSize    = 16,
     readyCheckAnchor  = "CENTER",
     readyCheckX       = 0,
     readyCheckY       = 0,
     summonIcon        = true,
+    summonIconStyle   = "DEFAULT",
+    summonIconCustomIcon = "",
     summonIconSize    = 16,
     summonAnchor      = "CENTER",
     summonX           = 0,
     summonY           = 0,
     resurrectIcon     = true,
+    resurrectIconStyle = "DEFAULT",
+    resurrectIconCustomIcon = "",
     resurrectIconSize = 16,
     resurrectAnchor   = "CENTER",
     resurrectX        = 0,
     resurrectY        = 0,
     pvpIcon           = true,
+    pvpIconStyle      = "DEFAULT",
+    pvpIconCustomIcon = "",
     pvpIconSize       = 14,
     pvpIconAnchor     = "TOPLEFT",
     pvpIconX          = 14,
     pvpIconY          = 0,
     phaseIcon         = true,
+    phaseIconStyle    = "DEFAULT",
+    phaseIconCustomIcon = "",
     phaseIconSize     = 14,
     phaseAnchor       = "TOPLEFT",
     phaseX            = 0,
@@ -2178,10 +2194,30 @@ local BLIZZARD_ROLE_COORDS = {
 }
 local BLIZZARD_LEADER_TEX = "Interface\\GroupFrame\\UI-Group-LeaderIcon"
 local BLIZZARD_ASSIST_TEX = "Interface\\GroupFrame\\UI-Group-AssistantIcon"
+local BLIZZARD_RAID_MARKER_TEX = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
+local BLIZZARD_READY_TEXTURES = {
+    ready = "Interface\\RaidFrame\\ReadyCheck-Ready",
+    notready = "Interface\\RaidFrame\\ReadyCheck-NotReady",
+    waiting = "Interface\\RaidFrame\\ReadyCheck-Waiting",
+}
+local BLIZZARD_SUMMON_TEXTURES = {
+    pending = "Interface\\RaidFrame\\Raid-Icon-SummonPending",
+    accepted = "Interface\\RaidFrame\\Raid-Icon-SummonAccepted",
+    declined = "Interface\\RaidFrame\\Raid-Icon-SummonDeclined",
+}
+local BLIZZARD_REZ_TEXTURE = "Interface\\RaidFrame\\Raid-Icon-Rez"
+local BLIZZARD_PHASE_TEXTURE = "Interface\\TargetingFrame\\UI-PhasingIcon"
+local BLIZZARD_STATE_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
+local BLIZZARD_PVP_TEXTURES = {
+    Alliance = "Interface\\TargetingFrame\\UI-PVP-Alliance",
+    Horde = "Interface\\TargetingFrame\\UI-PVP-Horde",
+    FFA = "Interface\\TargetingFrame\\UI-PVP-Alliance",
+}
 
 local CUSTOM_STYLES = {
     CLASSIC       = "Classic",
     MIDNIGHT      = "Midnight",
+    UXPRO         = "UXPro",
     GLOSSY_ORBS   = "GlossyOrbs",
     NEON_OUTLINE  = "NeonOutline",
     RING_SYMBOLS  = "RingSymbols",
@@ -2198,13 +2234,70 @@ local CUSTOM_STYLES_NO_MIDNIGHT_SUFFIX = {
     MIDNIGHT = true,
 }
 
+local STANDALONE_STATUS_ICON_FOLDERS = {
+    { label = "Custom Glyphs", folder = "CustomGlyphs" },
+    { label = "Custom Badges", folder = "CustomBadges" },
+}
+
 local ROLE_MAP = { TANK = "tank", HEALER = "healer", DAMAGER = "dps" }
+local RAID_MARKER_FILES = {
+    [1] = "raid_star",
+    [2] = "raid_circle",
+    [3] = "raid_diamond",
+    [4] = "raid_triangle",
+    [5] = "raid_moon",
+    [6] = "raid_square",
+    [7] = "raid_cross",
+    [8] = "raid_skull",
+}
+local READY_FILES = {
+    ready = "ready_ready",
+    notready = "ready_notready",
+    waiting = "ready_waiting",
+}
+local SUMMON_FILES = {
+    [1] = "summon_pending",
+    [2] = "summon_accepted",
+    [3] = "summon_declined",
+    pending = "summon_pending",
+    accepted = "summon_accepted",
+    declined = "summon_declined",
+}
+local PVP_FILES = {
+    Alliance = "pvp_alliance",
+    Horde = "pvp_horde",
+    FFA = "pvp_ffa",
+    alliance = "pvp_alliance",
+    horde = "pvp_horde",
+    ffa = "pvp_ffa",
+}
+local SIMPLE_STATUS_ICON_FILES = {
+    incomingRes = "resurrect",
+    resurrect = "resurrect",
+    pvp = "pvp_alliance",
+    phase = "phase",
+    combat = "combat",
+    resting = "resting",
+    elite = "elite_elite",
+    rare = "elite_rare",
+    boss = "elite_boss",
+}
 local ADDON_ICON_STYLE_PREFIX = "ADDON:"
 local REGISTERED_ICON_STYLE_PREFIX = "REGISTERED:"
-local STATUS_ICON_FILES = { "tank", "healer", "dps", "leader", "assist" }
+local LSM_ICON_STYLE_PREFIX = "LSM:"
+local ROLE_ICON_FILES = { "tank", "healer", "dps", "leader", "assist" }
+local NON_ROLE_ICON_FILES = {
+    "raid_star", "raid_circle", "raid_diamond", "raid_triangle",
+    "raid_moon", "raid_square", "raid_cross", "raid_skull",
+    "ready_ready", "ready_notready", "ready_waiting",
+    "summon_pending", "summon_accepted", "summon_declined",
+    "resurrect", "pvp_alliance", "pvp_horde", "pvp_ffa", "phase",
+    "combat", "resting", "elite_elite", "elite_rare", "elite_boss",
+}
 local _externalIconPacks
 local _externalIconPackOrder
 local _registeredIconPacks = {}
+local _statusIconAssetItemsCache = {}
 local _textureProbeHost
 local _textureProbe
 local _textureProbeReliable
@@ -2225,7 +2318,8 @@ local function TextureProbeRaw(path)
     end
     if not (_textureProbe and _textureProbe.SetTexture) then return false end
     _textureProbe:SetTexture(nil)
-    if _textureProbe:SetTexture(path) == false then
+    local applied = _textureProbe:SetTexture(path)
+    if applied == false then
         _textureProbe:SetTexture(nil)
         return false
     end
@@ -2256,25 +2350,96 @@ end
 local function IconFolderLooksComplete(folder)
     folder = NormalizeIconFolderPath(folder)
     if not folder then return false end
-    for _, file in ipairs(STATUS_ICON_FILES) do
-        if not TexturePathExists(folder .. "\\" .. file) then return false end
+    local roleComplete = true
+    for _, file in ipairs(ROLE_ICON_FILES) do
+        if not TexturePathExists(folder .. "\\" .. file) then
+            roleComplete = false
+            break
+        end
     end
-    return true
+    if roleComplete then return true end
+    local statusComplete = true
+    for _, file in ipairs(NON_ROLE_ICON_FILES) do
+        if not TexturePathExists(folder .. "\\" .. file) then
+            statusComplete = false
+            break
+        end
+    end
+    return statusComplete
 end
 
-local function AddExternalIconPack(key, label, folder, noMidnightSuffix, hasMidnightSuffix)
+local function AddExternalIconPack(key, label, folder, noMidnightSuffix, hasMidnightSuffix, files)
     folder = NormalizeIconFolderPath(folder)
-    if type(key) ~= "string" or key == "" or not folder then return end
+    local hasFiles = type(files) == "table" and next(files) ~= nil
+    if type(key) ~= "string" or key == "" or (not folder and not hasFiles) then return end
     if _externalIconPacks[key] then return end
     local pack = {
         key = key,
         label = (type(label) == "string" and label ~= "" and label) or key,
         folder = folder,
+        files = files,
         noMidnightSuffix = noMidnightSuffix == true,
         hasMidnightSuffix = hasMidnightSuffix == true,
     }
     _externalIconPacks[key] = pack
     _externalIconPackOrder[#_externalIconPackOrder + 1] = pack
+end
+
+local function NormalizeStatusIconFileKey(file)
+    if type(file) ~= "string" or file == "" then return nil end
+    file = file:gsub("\\", "/"):match("([^/]+)$") or file
+    file = file:gsub("%.[%a%d]+$", "")
+    file = file:gsub("%s+", "_"):gsub("[^%w_%-]", "_"):lower()
+    return file ~= "" and file or nil
+end
+
+local function LSM()
+    local lsm = (MSUF and MSUF.LSM) or _G.MSUF_LSM
+    if not lsm and type(_G.LibStub) == "function" then
+        lsm = _G.LibStub("LibSharedMedia-3.0", true)
+    end
+    return lsm
+end
+
+local function ParseLSMStatusIconName(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    local a, b = name:match("^MSUF%s+Status%s+Icon%s+Pack:%s*(.-)%s*:%s*([%w_%-%.%s]+)%s*$")
+    if a and b then return a, NormalizeStatusIconFileKey(b) end
+    a, b = name:match("^MSUF%s+StatusIcon:%s*(.-)%s*:%s*([%w_%-%.%s]+)%s*$")
+    if a and b then return a, NormalizeStatusIconFileKey(b) end
+    a, b = name:match("^MSUF:StatusIcon:(.-):([%w_%-%.%s]+)%s*$")
+    if a and b then return a, NormalizeStatusIconFileKey(b) end
+    return nil
+end
+
+local function AddSharedMediaIconPacks()
+    local lsm = LSM()
+    if not (lsm and type(lsm.HashTable) == "function") then return end
+    local packs, labels = {}, {}
+    for _, mediaType in ipairs({ "msuf_statusicon", "background", "statusbar" }) do
+        local hash = lsm:HashTable(mediaType)
+        if type(hash) == "table" then
+            for name, path in pairs(hash) do
+                local label, file = ParseLSMStatusIconName(name)
+                if label and file and type(path) == "string" and path ~= "" then
+                    local key = label:gsub("%s+", "_"):gsub("[^%w_%-]", "_")
+                    if key ~= "" then
+                        packs[key] = packs[key] or {}
+                        packs[key][file] = path
+                        labels[key] = label
+                    end
+                end
+            end
+        end
+    end
+    local keys = {}
+    for key in pairs(packs) do keys[#keys + 1] = key end
+    table.sort(keys)
+    for i = 1, #keys do
+        local key = keys[i]
+        local files = packs[key]
+        AddExternalIconPack(LSM_ICON_STYLE_PREFIX .. key, labels[key], nil, false, true, files)
+    end
 end
 
 local function GetAddonInfoName(index)
@@ -2321,10 +2486,13 @@ function GF.RefreshExternalStatusIconPacks(force)
     if _externalIconPacks and not force then return _externalIconPacks end
     _externalIconPacks = {}
     _externalIconPackOrder = {}
+    _statusIconAssetItemsCache = {}
 
     for key, pack in pairs(_registeredIconPacks) do
         AddExternalIconPack(key, pack.label, pack.folder, pack.noMidnightSuffix, pack.hasMidnightSuffix)
     end
+
+    AddSharedMediaIconPacks()
 
     local count = GetAddonCount()
     for i = 1, count do
@@ -2373,6 +2541,7 @@ function GF.RegisterStatusIconPack(key, label, folder, opts)
     }
     _externalIconPacks = nil
     _externalIconPackOrder = nil
+    _statusIconAssetItemsCache = {}
     return key
 end
 
@@ -2383,13 +2552,20 @@ ExportPublic("MSUF_RegisterStatusIconPack", function(key, label, folder, opts)
 end)
 ExportPublic("MSUF_RefreshStatusIconPacks", function()
     _texturePathExistsCache = {}
+    _statusIconAssetItemsCache = {}
     return GF.RefreshExternalStatusIconPacks(true)
 end)
 
 local INDICATOR_STYLE_KEYS = {
-    roleIcon   = "roleIconStyle",
-    leaderIcon = "leaderIconStyle",
-    assistIcon = "assistIconStyle",
+    roleIcon       = "roleIconStyle",
+    leaderIcon     = "leaderIconStyle",
+    assistIcon     = "assistIconStyle",
+    raidMarker     = "raidMarkerStyle",
+    readyCheckIcon = "readyCheckIconStyle",
+    summonIcon     = "summonIconStyle",
+    resurrectIcon  = "resurrectIconStyle",
+    pvpIcon        = "pvpIconStyle",
+    phaseIcon      = "phaseIconStyle",
 }
 
 local function NormalizeIconStyle(style, fallback)
@@ -2420,41 +2596,200 @@ local function CustomIconPath(style, file, useMidnight)
     return MEDIA_PREFIX .. folder .. "\\" .. file
 end
 
-function GF.GetStatusIconTexture(style, iconType, role, useMidnight)
-    style = NormalizeIconStyle(style, "BLIZZARD")
-    local folder = CUSTOM_STYLES[style]
-    if folder then
-        local file
-        if iconType == "role" then
-            file = ROLE_MAP[role] or "dps"
-        elseif iconType == "assist" then
-            file = "assist"
-        else
-            file = "leader"
+local function StatusIconFile(iconType, variant)
+    iconType = tostring(iconType or "")
+    if iconType == "role" then return ROLE_MAP[variant] or "dps" end
+    if iconType == "leader" then return "leader" end
+    if iconType == "assist" then return "assist" end
+    if iconType == "raidMarker" or iconType == "raidmarker" then
+        return RAID_MARKER_FILES[tonumber(variant) or variant] or "raid_skull"
+    end
+    if iconType == "readyCheck" or iconType == "readycheck" then
+        return READY_FILES[tostring(variant or "")] or "ready_waiting"
+    end
+    if iconType == "summon" then
+        return SUMMON_FILES[tonumber(variant) or variant] or "summon_pending"
+    end
+    if iconType == "pvp" then
+        return PVP_FILES[variant] or PVP_FILES[tostring(variant or ""):lower()] or "pvp_alliance"
+    end
+    if iconType == "elite" then
+        variant = tostring(variant or ""):upper()
+        if variant == "BOSS" or variant == "WORLDBOSS" then return "elite_boss" end
+        if variant == "RARE" or variant == "RAREELITE" then return "elite_rare" end
+        return "elite_elite"
+    end
+    return SIMPLE_STATUS_ICON_FILES[iconType]
+end
+
+local function RaidMarkerTexCoord(index)
+    index = tonumber(index) or 8
+    if index < 1 or index > 8 then index = 8 end
+    local col = (index - 1) % 4
+    local row = math_floor((index - 1) / 4)
+    local size = 0.25
+    return col * size, (col + 1) * size, row * size, (row + 1) * size
+end
+
+local function BuiltinStatusIconTexture(iconType, variant)
+    iconType = tostring(iconType or "")
+    if iconType == "leader" then return BLIZZARD_LEADER_TEX, 0, 1, 0, 1 end
+    if iconType == "assist" then return BLIZZARD_ASSIST_TEX, 0, 1, 0, 1 end
+    if iconType == "role" then
+        local c = BLIZZARD_ROLE_COORDS[variant] or BLIZZARD_ROLE_COORDS.DAMAGER
+        return BLIZZARD_ROLE_TEX, c[1], c[2], c[3], c[4]
+    end
+    if iconType == "raidMarker" or iconType == "raidmarker" then
+        local l, r, t, b = RaidMarkerTexCoord(variant)
+        return BLIZZARD_RAID_MARKER_TEX, l, r, t, b
+    end
+    if iconType == "readyCheck" or iconType == "readycheck" then
+        return BLIZZARD_READY_TEXTURES[tostring(variant or "")] or BLIZZARD_READY_TEXTURES.waiting, 0, 1, 0, 1
+    end
+    if iconType == "summon" then
+        local key = SUMMON_FILES[tonumber(variant) or variant]
+        if key == "summon_accepted" then return BLIZZARD_SUMMON_TEXTURES.accepted, 0, 1, 0, 1 end
+        if key == "summon_declined" then return BLIZZARD_SUMMON_TEXTURES.declined, 0, 1, 0, 1 end
+        return BLIZZARD_SUMMON_TEXTURES.pending, 0, 1, 0, 1
+    end
+    if iconType == "incomingRes" or iconType == "resurrect" then return BLIZZARD_REZ_TEXTURE, 0, 1, 0, 1 end
+    if iconType == "phase" then return BLIZZARD_PHASE_TEXTURE, 0, 1, 0, 1 end
+    if iconType == "pvp" then
+        return BLIZZARD_PVP_TEXTURES[variant] or BLIZZARD_PVP_TEXTURES[tostring(variant or "")] or BLIZZARD_PVP_TEXTURES.Alliance, 0, 1, 0, 1
+    end
+    if iconType == "combat" then return BLIZZARD_STATE_TEXTURE, 0.5, 1, 0, 0.5 end
+    if iconType == "resting" then return BLIZZARD_STATE_TEXTURE, 0, 0.5, 0, 0.5 end
+    if iconType == "elite" then return "Interface\\TargetingFrame\\UI-TargetingFrame-Skull", 0, 1, 0, 1 end
+    return nil
+end
+
+local function ExternalIconPath(pack, file, useMidnight)
+    if not (pack and file) then return nil end
+    if type(pack.files) == "table" then
+        if useMidnight == true and pack.files[file .. "_midnight"] then
+            return pack.files[file .. "_midnight"]
         end
+        return pack.files[file]
+    end
+    if type(pack.folder) ~= "string" or pack.folder == "" then return nil end
+    local path = pack.folder .. "\\" .. file
+    if useMidnight == true and not pack.noMidnightSuffix then
+        local midnightPath = pack.folder .. "\\" .. file .. "_midnight"
+        if pack.hasMidnightSuffix or TexturePathExists(midnightPath) then path = midnightPath end
+    end
+    if TexturePathExists(path) then return path end
+    return nil
+end
+
+local function StatusIconAssetCacheKey(iconType, variant, includeDefault, includeStyleSets)
+    return tostring(iconType or "") .. "\031" .. tostring(variant or "") .. "\031" .. (includeDefault and "1" or "0") .. "\031" .. (includeStyleSets and "1" or "0")
+end
+
+local function AddStatusIconAssetItem(out, used, value, text)
+    if type(value) ~= "string" or value == "" or used[value] then return end
+    used[value] = true
+    out[#out + 1] = {
+        value = value,
+        text = text or value,
+        texture = value,
+        texturePreview = value,
+        previewKind = "icon",
+    }
+end
+
+local function AddSharedMediaIconAssetItems(out, used)
+    local lsm = LSM()
+    if not (lsm and type(lsm.HashTable) == "function") then return end
+    for _, mediaType in ipairs({ "msuf_statusicon", "background", "statusbar" }) do
+        local hash = lsm:HashTable(mediaType)
+        if type(hash) == "table" then
+            local names = {}
+            for name in pairs(hash) do names[#names + 1] = name end
+            table.sort(names, function(a, b) return tostring(a):lower() < tostring(b):lower() end)
+            for i = 1, #names do
+                local name = names[i]
+                local path = hash[name]
+                local packLabel, file = ParseLSMStatusIconName(name)
+                local isIconMedia = mediaType == "msuf_statusicon" or (packLabel ~= nil and file ~= nil)
+                if isIconMedia and type(path) == "string" and path ~= "" then
+                    AddStatusIconAssetItem(out, used, path, "SharedMedia: " .. tostring(name))
+                end
+            end
+        end
+    end
+end
+
+function GF.GetStatusIconAssetItems(iconType, variant, includeDefault, includeStyleSets)
+    includeStyleSets = includeStyleSets == true
+    local cacheKey = StatusIconAssetCacheKey(iconType, variant, includeDefault == true, includeStyleSets)
+    if _statusIconAssetItemsCache[cacheKey] then return _statusIconAssetItemsCache[cacheKey] end
+    local out, used = {}, {}
+    if includeDefault == true then
+        out[#out + 1] = { value = "", text = "Use default icon" }
+        used[""] = true
+    end
+    local file = StatusIconFile(iconType, variant)
+    if file then
+        if includeStyleSets then
+            for i = 1, #GF.ICON_STYLE_ITEMS do
+                local item = GF.ICON_STYLE_ITEMS[i]
+                local style = item.value or item.key
+                local label = item.text or item.label or style
+                local path = CustomIconPath(style, file, false)
+                if path then AddStatusIconAssetItem(out, used, path, tostring(label) .. ": " .. file) end
+                if path and not CUSTOM_STYLES_NO_MIDNIGHT_SUFFIX[style] then
+                    local midnightPath = CustomIconPath(style, file, true)
+                    AddStatusIconAssetItem(out, used, midnightPath, tostring(label) .. " Midnight: " .. file)
+                end
+            end
+        end
+        for i = 1, #STANDALONE_STATUS_ICON_FOLDERS do
+            local item = STANDALONE_STATUS_ICON_FOLDERS[i]
+            AddStatusIconAssetItem(out, used, MEDIA_PREFIX .. item.folder .. "\\" .. file, item.label .. ": " .. file)
+        end
+        if includeStyleSets then
+            GF.RefreshExternalStatusIconPacks()
+            for i = 1, #(_externalIconPackOrder or {}) do
+                local pack = _externalIconPackOrder[i]
+                local path = ExternalIconPath(pack, file, false)
+                if path then AddStatusIconAssetItem(out, used, path, tostring(pack.label or pack.key) .. ": " .. file) end
+                local midnightPath = ExternalIconPath(pack, file, true)
+                if midnightPath and midnightPath ~= path then
+                    AddStatusIconAssetItem(out, used, midnightPath, tostring(pack.label or pack.key) .. " Midnight: " .. file)
+                end
+            end
+        end
+    end
+    AddSharedMediaIconAssetItems(out, used)
+    _statusIconAssetItemsCache[cacheKey] = out
+    return out
+end
+
+function GF.GetStatusIconTexture(style, iconType, variant, useMidnight)
+    style = NormalizeIconStyle(style, "BLIZZARD")
+    local file = StatusIconFile(iconType, variant)
+    local folder = CUSTOM_STYLES[style]
+    if folder and file then
         return CustomIconPath(style, file, useMidnight == true), 0, 1, 0, 1
     end
     local external = ExternalIconPackByKey(style)
-    if external then
-        local file
-        if iconType == "role" then
-            file = ROLE_MAP[role] or "dps"
-        elseif iconType == "assist" then
-            file = "assist"
-        else
-            file = "leader"
-        end
-        local path = external.folder .. "\\" .. file
-        if useMidnight == true and not external.noMidnightSuffix then
-            local midnightPath = external.folder .. "\\" .. file .. "_midnight"
-            if external.hasMidnightSuffix or TexturePathExists(midnightPath) then path = midnightPath end
-        end
-        return path, 0, 1, 0, 1
+    if external and file then
+        local path = ExternalIconPath(external, file, useMidnight == true)
+        if path then return path, 0, 1, 0, 1 end
     end
-    if iconType == "leader" then return BLIZZARD_LEADER_TEX, 0, 1, 0, 1 end
-    if iconType == "assist" then return BLIZZARD_ASSIST_TEX, 0, 1, 0, 1 end
-    local c = BLIZZARD_ROLE_COORDS[role] or BLIZZARD_ROLE_COORDS.DAMAGER
-    return BLIZZARD_ROLE_TEX, c[1], c[2], c[3], c[4]
+    return BuiltinStatusIconTexture(iconType, variant)
+end
+
+function GF.StatusIconPackSupports(style, iconType, variant, useMidnight)
+    if type(style) ~= "string" or style == "" or style == "DEFAULT" then return true end
+    style = NormalizeIconStyle(style, "BLIZZARD")
+    if style == "BLIZZARD" then return BuiltinStatusIconTexture(iconType, variant) ~= nil end
+    local file = StatusIconFile(iconType, variant)
+    if not file then return false end
+    if CUSTOM_STYLES[style] then return true end
+    local external = ExternalIconPackByKey(style)
+    if external then return ExternalIconPath(external, file, useMidnight == true) ~= nil end
+    return false
 end
 
 function GF.GetIndicatorIconStyle(kind, indicatorKey)
@@ -2484,6 +2819,7 @@ GF.ICON_STYLE_ITEMS = {
     { key = "BLIZZARD",      label = "Blizzard (Default)" },
     { key = "CLASSIC",       label = "Classic"            },
     { key = "MIDNIGHT",      label = "Midnight"           },
+    { key = "UXPRO",         label = "UX Pro"             },
     { key = "GLOSSY_ORBS",   label = "Glossy Orbs"        },
     { key = "DARK_EMBOSS",   label = "Dark Emboss"        },
     { key = "GLASS_PANELS",  label = "Glass Panels"       },
@@ -2497,26 +2833,51 @@ GF.ICON_STYLE_ITEMS = {
 
 function GF.GetIconStyleItems(includeDefault)
     local out = {}
+    local seenValues, seenLabels = {}, {}
+    local function LabelKey(label)
+        if type(label) ~= "string" then return nil end
+        label = label:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " "):lower()
+        return label ~= "" and label or nil
+    end
+    local function AddStyleItem(value, text)
+        value = type(value) == "string" and value or nil
+        text = type(text) == "string" and text or value
+        if not value or value == "" then return end
+        local lk = LabelKey(text)
+        if seenValues[value] or (lk and seenLabels[lk]) then return end
+        seenValues[value] = true
+        if lk then seenLabels[lk] = true end
+        out[#out + 1] = { value = value, text = text }
+    end
     if includeDefault then
-        out[#out + 1] = { value = "DEFAULT", text = "Follow global style" }
+        AddStyleItem("DEFAULT", "Follow global style")
     end
     for i = 1, #GF.ICON_STYLE_ITEMS do
         local item = GF.ICON_STYLE_ITEMS[i]
-        out[#out + 1] = {
-            value = item.value or item.key,
-            text = item.text or item.label or item.value or item.key,
-        }
+        AddStyleItem(item.value or item.key, item.text or item.label or item.value or item.key)
     end
     GF.RefreshExternalStatusIconPacks()
     for i = 1, #(_externalIconPackOrder or {}) do
         local pack = _externalIconPackOrder[i]
-        out[#out + 1] = { value = pack.key, text = pack.label }
+        AddStyleItem(pack.key, pack.label)
     end
     return out
 end
 
 ExportPublic("MSUF_GetStatusIconPackValues", function(includeDefault)
     return GF.GetIconStyleItems(includeDefault == true)
+end)
+
+ExportPublic("MSUF_GetStatusIconTexture", function(style, iconType, variant, useMidnight)
+    return GF.GetStatusIconTexture(style, iconType, variant, useMidnight == true)
+end)
+
+ExportPublic("MSUF_StatusIconPackSupports", function(style, iconType, variant, useMidnight)
+    return GF.StatusIconPackSupports(style, iconType, variant, useMidnight == true)
+end)
+
+ExportPublic("MSUF_GetStatusIconAssetValues", function(iconType, variant, includeDefault, includeStyleSets)
+    return GF.GetStatusIconAssetItems(iconType, variant, includeDefault == true, includeStyleSets == true)
 end)
 
 ExportPublic("MSUF_GetRoleStatusIconTexture", function(style, role, useMidnight)
