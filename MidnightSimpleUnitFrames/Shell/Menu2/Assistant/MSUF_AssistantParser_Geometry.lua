@@ -2344,7 +2344,7 @@ function P.ParseTextVisibilityShortcut(text)
     if value == nil then return nil end
     local spec
     if ContainsAny(text, GeometryPhrases[136]) then
-        spec = { unitAttr = "showPower", groupAttr = "showPowerText", label = "Power Text" }
+        spec = { unitAttr = "showPowerText", groupAttr = "showPowerText", label = "Power Text" }
     elseif ContainsAny(text, GeometryPhrases[137]) then
         spec = { unitAttr = "showHP", groupAttr = "showHPText", label = "HP Text" }
     elseif ContainsAny(text, GeometryPhrases[138]) then

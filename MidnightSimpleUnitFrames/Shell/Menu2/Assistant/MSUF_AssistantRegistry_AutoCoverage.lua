@@ -35,8 +35,19 @@ local UNIT_SCOPES = {
 local GROUP_SCOPES = { gf_party = "party", gf_raid = "raid", gf_mythicraid = "mythicraid" }
 local FLAT_SCOPES = { general = true, bars = true, gameplay = true }
 
+-- "Channel" keeps these distinct from color VALUE words ("set X color to red")
+-- that the color parser owns.
+local CHANNEL_WORDS = { R = "Red Channel", G = "Green Channel", B = "Blue Channel", A = "Alpha Channel" }
+
 local function LabelFromKey(key)
-    local label = key:gsub("(%l)(%u)", "%1 %2"):gsub("(%a)(%d)", "%1 %2"):gsub("_", " ")
+    local label = key:gsub("(%l)(%u)", "%1 %2")
+        -- Acronym boundary: "alphaBGOutOfCombat" -> "alpha BG Out Of Combat",
+        -- not "alpha BGOut Of Combat".
+        :gsub("(%u)(%u%l)", "%1 %2")
+        :gsub("(%a)(%d)", "%1 %2"):gsub("_", " ")
+    -- Trailing color channel letters make aliases ambiguous once text
+    -- normalization drops single-character tokens; spell them out.
+    label = label:gsub(" ([RGBA])$", function(c) return " " .. CHANNEL_WORDS[c] end)
     return (label:gsub("^%l", string.upper))
 end
 
@@ -92,13 +103,72 @@ local function ManifestDefaults()
     return manifest
 end
 
+-- Word-level synonyms so generated settings answer to human phrasing, not just
+-- the camelCase-derived label ("hp bg alpha" -> "health background opacity").
+-- Keys are single lowercase label words; each maps to alternative words.
+-- English only. Kept small on purpose: every synonym multiplies alias variants.
+local WORD_SYNONYMS = {
+    alpha = { "opacity", "transparency" },
+    bg = { "background" },
+    background = { "bg" },
+    tex = { "texture" },
+    hp = { "health", "health bar" },
+    pos = { "position" },
+    dist = { "distance" },
+    sep = { "separator" },
+    icon = { "symbol" },
+    color = { "colour" },
+}
+local MAX_GENERATED_ALIASES = 12
+
+local function AddAliasVariants(aliases, seen, base)
+    local function add(text)
+        if #aliases >= MAX_GENERATED_ALIASES then return end
+        if text ~= "" and not seen[text] then
+            seen[text] = true
+            aliases[#aliases + 1] = text
+        end
+    end
+    add(base)
+    -- One-word substitutions: replace each synonym-bearing word once so variant
+    -- count stays linear, not combinatorial.
+    for word in base:gmatch("%S+") do
+        local subs = WORD_SYNONYMS[word]
+        if subs then
+            for i = 1, #subs do
+                add((base:gsub("%f[%w]" .. word .. "%f[%W]", subs[i], 1)))
+            end
+        end
+    end
+end
+
+-- Legacy mirror keys ("portraitBgColorR" alongside "portraitBackgroundColorR")
+-- collapse into one generated setting; set() keeps every mirror in sync since
+-- we cannot know statically which spelling the runtime reads.
+local function WriteMirrors(spec, tbl, v)
+    local mirrors = spec and spec.mirrorKeys
+    if mirrors and tbl then
+        for i = 1, #mirrors do tbl[mirrors[i]] = v end
+    end
+end
+
 local function BuildSpec(scope, key, value, fromManifest)
     local valueType = type(value)
     local label = LabelFromKey(key)
     local scopeLabel = ScopeLabel(scope)
     local fullLabel = scopeLabel .. " " .. label
     local aliasBase = label:lower()
-    local aliases = { aliasBase, fullLabel:lower() }
+    local aliases, seen = {}, {}
+    if FLAT_SCOPES[scope] then
+        -- Flat scopes have no unit word in the sentence to disambiguate them;
+        -- lead with the scope-prefixed phrase so "gameplay font size" and
+        -- "general font size" stay distinct for prompt generation.
+        AddAliasVariants(aliases, seen, fullLabel:lower())
+        AddAliasVariants(aliases, seen, aliasBase)
+    else
+        AddAliasVariants(aliases, seen, aliasBase)
+        AddAliasVariants(aliases, seen, fullLabel:lower())
+    end
     local unit = UNIT_SCOPES[scope] and scope or GROUP_SCOPES[scope] or nil
     local spec = {
         key = scope .. "." .. key,
@@ -126,7 +196,10 @@ local function BuildSpec(scope, key, value, fromManifest)
         end
         spec.set = function(v)
             local tbl = ScopeTable(scope, true)
-            if tbl then tbl[key] = v and true or false end
+            if tbl then
+                tbl[key] = v and true or false
+                WriteMirrors(spec, tbl, v and true or false)
+            end
         end
     elseif valueType == "number" then
         spec.type = "number"
@@ -147,7 +220,10 @@ local function BuildSpec(scope, key, value, fromManifest)
             if spec.min and v < spec.min then v = spec.min end
             if spec.max and v > spec.max then v = spec.max end
             local tbl = ScopeTable(scope, true)
-            if tbl then tbl[key] = v end
+            if tbl then
+                tbl[key] = v
+                WriteMirrors(spec, tbl, v)
+            end
         end
     else
         spec.type = "string"
@@ -159,7 +235,10 @@ local function BuildSpec(scope, key, value, fromManifest)
         end
         spec.set = function(v)
             local tbl = ScopeTable(scope, true)
-            if tbl then tbl[key] = tostring(v) end
+            if tbl then
+                tbl[key] = tostring(v)
+                WriteMirrors(spec, tbl, tostring(v))
+            end
         end
     end
     return spec
@@ -262,11 +341,16 @@ function Auto.Fill()
     if not (Audit and type(Audit.BuildCoveredSets) == "function") then return 0 end
     local covered = Audit.BuildCoveredSets()
     local added = 0
+    local IsCoveredKey = Audit.IsCoveredKey or function(set, k) return set[k] end
+    local NormalizeKey = Audit.NormalizeCoverageKey or function(k) return k end
+    -- normKey -> generated spec, per scope: legacy mirror spellings of the
+    -- same field collapse into one setting instead of colliding as aliases.
+    local generatedByNorm = {}
     local function RegisterGenerated(scope, key, value, coveredSet, fromManifest)
         local valueType = type(value)
         if type(key) == "string"
             and key:sub(1, 1) ~= "_"
-            and not coveredSet[key]
+            and not IsCoveredKey(coveredSet, key)
             and not Audit.IsIgnored(scope, key)
             and (valueType == "boolean" or valueType == "number" or valueType == "string")
         then
@@ -276,9 +360,23 @@ function Auto.Fill()
                 coveredSet[key] = existing
                 return
             end
+            local normMap = generatedByNorm[scope]
+            if not normMap then
+                normMap = {}
+                generatedByNorm[scope] = normMap
+            end
+            local norm = NormalizeKey(key)
+            local twin = normMap[norm]
+            if twin then
+                twin.mirrorKeys = twin.mirrorKeys or {}
+                twin.mirrorKeys[#twin.mirrorKeys + 1] = key
+                coveredSet[key] = twin
+                return
+            end
             local registered = Registry:RegisterSetting(BuildSpec(scope, key, value, fromManifest))
             if registered then
                 coveredSet[key] = registered
+                normMap[norm] = registered
                 added = added + 1
             end
         end

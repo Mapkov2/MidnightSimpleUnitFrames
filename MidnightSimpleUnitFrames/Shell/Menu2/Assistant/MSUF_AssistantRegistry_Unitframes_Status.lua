@@ -64,28 +64,6 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
                 description = spec.description or ("Status icon visibility for " .. spec.label .. "."),
             }))
 
-            if spec.iconStyle and IsRoleStatusSpec(spec) then
-                aliases = {}
-                for a = 1, #(spec.aliases or {}) do
-                    local base = tostring(spec.aliases[a] or "")
-                    local indicatorAlias = base:match(" indicator style$") and base or (base .. " indicator style")
-                    local roleStyleAlias = base:match(" role icon style$") and base or (base .. " role icon style")
-                    local designAlias = base:match(" icon design$") and base or (base .. " icon design")
-                    local packAlias = base:match(" icon pack$") and base or (base .. " icon pack")
-                    aliases[#aliases + 1] = indicatorAlias
-                    aliases[#aliases + 1] = roleStyleAlias
-                    aliases[#aliases + 1] = designAlias
-                    aliases[#aliases + 1] = packAlias
-                    AddAliasesForUnit(aliases, unit, indicatorAlias)
-                    AddAliasesForUnit(aliases, unit, roleStyleAlias)
-                    AddAliasesForUnit(aliases, unit, designAlias)
-                    AddAliasesForUnit(aliases, unit, packAlias)
-                end
-                RegisterUnitString(unit, spec.iconStyle, spec.iconStyle, StatusIconStyleLabel(spec), spec.defaultIconStyle or "BLIZZARD", aliases, StatusIconOpts(spec, {
-                    description = "Role icon style for this status indicator. Default options include " .. table.concat(STATUS_ICON_PACK_FALLBACK_VALUES, ", ") .. ".",
-                }))
-            end
-
             if spec.symbol then
                 aliases = {}
                 for a = 1, #(spec.aliases or {}) do

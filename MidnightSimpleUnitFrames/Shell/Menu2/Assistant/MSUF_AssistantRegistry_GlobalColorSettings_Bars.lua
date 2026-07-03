@@ -1,4 +1,4 @@
--- Bar, outline, and dispel global color assistant settings.
+-- Bar and outline global color assistant settings.
 -- Loaded before MSUF_AssistantRegistry_GlobalColorSettings.lua; the main registry passes shared color helpers in.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -28,7 +28,6 @@ function A.GlobalRegistry.RegisterBarColorSettings(ctx)
     local ColorSame = ctx.ColorSame
     local Clamp01 = ctx.Clamp01
     local RegisterGeneralBoolean = ctx.RegisterGeneralBoolean
-    local RegisterGeneralEnum = ctx.RegisterGeneralEnum
     local ApplyColors = ctx.ApplyColors
     local ApplyBarOutline = ctx.ApplyBarOutline
     local GLOBAL_SCOPE_ORDER = ctx.GLOBAL_SCOPE_ORDER or {}
@@ -37,14 +36,13 @@ function A.GlobalRegistry.RegisterBarColorSettings(ctx)
     local GlobalScopeRead = ctx.GlobalScopeRead
     local GlobalScopeWrite = ctx.GlobalScopeWrite
     local GlobalScopeAliases = ctx.GlobalScopeAliases
-    local COLOR_DISPEL_TYPE_ROWS = ctx.COLOR_DISPEL_TYPE_ROWS or {}
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return end
     if type(ColorSetting) ~= "function" or type(ApiRGB) ~= "function" or type(ApiSetRGB) ~= "function" then return end
     if type(GeneralDB) ~= "function" or type(GeneralRGB) ~= "function" or type(SetGeneralRGB) ~= "function" then return end
     if type(GeneralRGBAlias) ~= "function" or type(SetGeneralRGBAlias) ~= "function" then return end
     if type(ColorComponents) ~= "function" or type(ColorSame) ~= "function" or type(Clamp01) ~= "function" then return end
-    if type(RegisterGeneralBoolean) ~= "function" or type(RegisterGeneralEnum) ~= "function" then return end
+    if type(RegisterGeneralBoolean) ~= "function" then return end
     if type(NormalizeGlobalScope) ~= "function" or type(GlobalScopeLabel) ~= "function" then return end
     if type(GlobalScopeRead) ~= "function" or type(GlobalScopeWrite) ~= "function" or type(GlobalScopeAliases) ~= "function" then return end
 
@@ -131,28 +129,4 @@ function A.GlobalRegistry.RegisterBarColorSettings(ctx)
         "power background matches hp", "power bar background matches hp", "power background follows hp",
     }, { category = "Colors / Bar Colors", frameType = "colors", apply = ApplyColors, reason = "MSUF_ASSISTANT_POWER_BG_MATCH_HP" })
 
-    RegisterGeneralEnum("hlDispelColorMode", "dispelColorMode", "Dispel Color Mode", "SINGLE", { "SINGLE", "TYPE" }, {
-        "dispel color mode", "dispel colors mode", "debuff type color mode",
-    }, {
-        category = "Colors / Dispel",
-        frameType = "colors",
-        apply = ApplyColors,
-        reason = "MSUF_ASSISTANT_DISPEL_COLOR_MODE",
-        valueAliases = { single = "SINGLE", one = "SINGLE", type = "TYPE", types = "TYPE", pertype = "TYPE", debufftype = "TYPE" },
-    })
-    ColorSetting("general.hlDispelColor", "Dispel Color", {
-        "dispel color", "dispel border color", "all dispel color", "single dispel color",
-    }, function()
-        return GeneralRGBAlias("hlDispelColor", "dispelBorderColor", 0.25, 0.75, 1)
-    end, function(r, g, b)
-        SetGeneralRGBAlias("hlDispelColor", "dispelBorderColor", r, g, b)
-    end, { category = "Colors / Dispel", attribute = "dispelColor", defaultR = 0.25, defaultG = 0.75, defaultB = 1, apply = ApplyColors })
-
-    for _, row in ipairs(COLOR_DISPEL_TYPE_ROWS) do
-        ColorSetting("general.dispelType" .. row.key, row.label, row.aliases, function()
-            return GeneralRGB("dispelType" .. row.key, row.dr, row.dg, row.db)
-        end, function(r, g, b)
-            SetGeneralRGB("dispelType" .. row.key, r, g, b)
-        end, { category = "Colors / Dispel", attribute = "dispelTypeColor", defaultR = row.dr, defaultG = row.dg, defaultB = row.db, apply = ApplyColors })
-    end
 end

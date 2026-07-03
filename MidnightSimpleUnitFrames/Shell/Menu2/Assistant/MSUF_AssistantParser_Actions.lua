@@ -903,25 +903,6 @@ local function ParseGroupStatusIconDetail(text)
         end
     end
 
-    if ContainsAny(text, ActionsPhrases[73]) and iconSpec.style then
-        local iconValue = iconSpec and iconSpec.value
-        local roleStyle = iconValue == "roleIcon" or iconValue == "leaderIcon" or iconValue == "assistIcon"
-        if not roleStyle then return nil end
-        local value = AliasValueForText(text, GROUP_STATUS_ICON_PACK_ALIASES, STATUS_ICON_PACK_VALUES)
-        if value ~= nil then
-            local changes = BuildGroupStatusChanges(scopes, iconSpec.style, value)
-            if #changes > 0 then
-                return {
-                    kind = "changes",
-                    changes = changes,
-                    label = "Group Role Icon Style",
-                    bulkSafe = #changes > 1,
-                    summary = "Changes the selected group role icon style.",
-                }
-            end
-        end
-    end
-
     if anchorIntent and iconSpec.anchor
         and not (ContainsAny(text, ActionsPhrases[74]) and DetectDirection(text)
             and not ContainsAny(text, ActionsPhrases[75]))
@@ -1329,22 +1310,6 @@ local function ParseUnitStatusIndicatorDetail(text)
                 changes = { { setting = setting, value = visible } },
                 label = UnitDisplayLabel(unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Visibility",
                 summary = "Changes the visibility toggle for one unit-frame status indicator.",
-            }
-        end
-    end
-
-    if ContainsAny(text, ActionsPhrases[90]) and spec.iconStyle then
-        local specValue = spec and spec.value
-        local roleStyle = specValue == "leader" or specValue == "assist"
-        if not roleStyle then return nil end
-        local value = AliasValueForText(text, UNIT_STATUS_ICON_PACK_ALIASES, STATUS_ICON_PACK_VALUES)
-        local setting = value and Registry and Registry:GetSetting(unit .. "." .. spec.iconStyle) or nil
-        if setting then
-            return {
-                kind = "changes",
-                changes = { { setting = setting, value = value } },
-                label = UnitDisplayLabel(unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Role Icon Style",
-                summary = "Changes the role icon style for one unit-frame status indicator.",
             }
         end
     end

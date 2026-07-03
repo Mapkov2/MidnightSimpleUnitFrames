@@ -59,7 +59,6 @@ Registry:RegisterAction({
         return ResetGlobalScopeOverride("hlOverride", args and args.scope, ApplyBars, "MSUF_ASSISTANT_RESET_SCOPED_BARS")
     end,
 })
-
 Registry:RegisterAction({
     key = "reset_all_scoped_global_bars_overrides",
     label = "Reset All Section Bars Overrides",
@@ -137,21 +136,5 @@ Registry:RegisterAction({
             ExportPublic("MSUF_" .. kind .. "BorderTestMode", enabled and true or false)
         end
         return true, (enabled and "Enabled" or "Disabled") .. " " .. tostring(BORDER_TEST_LABELS[kind] or kind) .. " border test."
-    end,
-})
-
-Registry:RegisterAction({
-    key = "set_dispel_border_test_type",
-    label = "Set Dispel Border Test Type",
-    type = "globalBars",
-    combatSafe = true,
-    run = function(args)
-        local value = tostring(args and args.value or "Magic")
-        local allowed = { Magic = true, Curse = true, Disease = true, Poison = true, Bleed = true }
-        if not allowed[value] then value = "Magic" end
-        ExportPublic("MSUF_DispelBorderTestType", value)
-        local gp = M and M.GlobalPage
-        if gp and type(gp.RefreshBorderTestModes) == "function" then gp.RefreshBorderTestModes() end
-        return true, "Done. Dispel border test type set to " .. value .. "."
     end,
 })

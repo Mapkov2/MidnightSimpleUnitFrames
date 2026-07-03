@@ -752,20 +752,6 @@ Data.REGISTRY_PARSER = {
         [359] = { "interrupt", "interruptible", "kick", "kickable", "unterbrechen" },
         [360] = { "ready", "tracker", "focus kick", "indicator" },
         [361] = { "castbar", "cast bar", "zauberleiste" },
-        [362] = { "color", "colors", "colour", "colours" },
-        [363] = {
-        "debuff type color", "debuff type colors", "debuff type colour", "debuff type colours",
-        "magic debuff color", "magic debuff colour", "magic dispel color", "magic dispel colour",
-        "curse debuff color", "curse debuff colour", "curse dispel color", "curse dispel colour",
-        "disease debuff color", "disease debuff colour", "disease dispel color", "disease dispel colour",
-        "poison debuff color", "poison debuff colour", "poison dispel color", "poison dispel colour",
-        "bleed debuff color", "bleed debuff colour", "bleed dispel color", "bleed dispel colour",
-    },
-        [364] = {
-        "dispel color", "dispel colour", "dispel border color", "dispel border colour",
-        "single dispel color", "single dispel colour", "all dispel color", "all dispel colour",
-    },
-        [365] = { "debuff type", "magic", "curse", "disease", "poison", "bleed" },
         [366] = { "aura", "auras", "buff", "debuff" },
         [367] = {
         "castbar", "cast bar", "cast color", "cast colour", "zauberleiste",

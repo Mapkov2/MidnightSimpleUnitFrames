@@ -80,6 +80,22 @@ Data.ABSORB_ANCHOR_ALIASES = {
     max = "reverse",
 }
 Data.DISPEL_TRIGGER_VALUES = { "BY_ME", "DISPEL_TYPE", "ANY_DEBUFF" }
+Data.DISPEL_COLOR_MODE_VALUES = { "TYPE", "SINGLE" }
+Data.DISPEL_COLOR_MODE_ALIASES = {
+    type = "TYPE",
+    pertype = "TYPE",
+    ["per type"] = "TYPE",
+    ["per debuff type"] = "TYPE",
+    dispeltype = "TYPE",
+    ["dispel type"] = "TYPE",
+    debufftype = "TYPE",
+    ["debuff type"] = "TYPE",
+    single = "SINGLE",
+    unified = "SINGLE",
+    ["unified color"] = "SINGLE",
+    same = "SINGLE",
+    one = "SINGLE",
+}
 Data.DISPEL_TRIGGER_ALIASES = {
     byme = "BY_ME",
     ["by me"] = "BY_ME",

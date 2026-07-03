@@ -1272,7 +1272,7 @@ function R.TrySignalProblemShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.SIGNAL_DISPEL_TERMS) then
         return R.SignalProblemReply(
             "Dispel visibility help",
-            "For dispels, start with Aura Filters and Group Status & Indicators. MSUF can show dispellable debuffs, debuff type colors, dispel borders, debuff stripes, and group-frame aura visibility.",
+            "For dispels, start with Aura Filters and Group Status & Indicators. MSUF can show dispellable debuffs, dispel borders, debuff stripes, group-frame health overlays, and group-frame aura visibility.",
             "show only dispellable debuffs; open aura filters; test dispel border; set raid range fade to 40.",
             "Open Aura Filters | Open Group Status & Indicators | Open Group Auras"
         )
@@ -3944,7 +3944,7 @@ function R.TextPowerSettingFollowupResults(unit, unitLabel, textKind, settingLab
     elseif textKind == "health" then
         key = unit .. ".showHP"
     elseif textKind == "power" then
-        key = unit .. ".showPower"
+        key = unit .. ".showPowerText"
     elseif textKind == "status" then
         key = unit .. ".statusTextEnabled"
     end

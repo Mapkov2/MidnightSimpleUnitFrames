@@ -117,7 +117,6 @@ function A.GlobalRegistry.RegisterAssistantColorSettings(ctx)
             GlobalScopeRead = GlobalScopeRead,
             GlobalScopeWrite = GlobalScopeWrite,
             GlobalScopeAliases = GlobalScopeAliases,
-            COLOR_DISPEL_TYPE_ROWS = ColorData.COLOR_DISPEL_TYPE_ROWS or {},
         })
     end
 
