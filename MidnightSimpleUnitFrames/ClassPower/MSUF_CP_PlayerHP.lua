@@ -262,6 +262,21 @@ builders.PLAYER_HP = function(E)
         return pct
     end
 
+    local function GlobalHidePercentSymbol()
+        local g = _G.MSUF_DB and _G.MSUF_DB.general
+        return g and g.hidePercentSymbol == true
+    end
+
+    local function ReadHidePercentSymbol(conf, key)
+        if conf and conf[key] ~= nil then return conf[key] == true end
+        return GlobalHidePercentSymbol()
+    end
+
+    local function PercentText(pct, hidePercentSymbol)
+        if pct == nil then return "" end
+        return string_format("%d%s", pct, hidePercentSymbol and "" or "%")
+    end
+
     --- Some clients can return protected/secret health values. When raw values
     --- are unavailable, use Blizzard's percent helper if it exposes a safe
     --- scalar and let text fall back to percent-only output.
@@ -314,12 +329,12 @@ builders.PLAYER_HP = function(E)
         bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = r, g, b, 1
     end
 
-    local function ModeText(mode, hp, maxHP, delimiter)
+    local function ModeText(mode, hp, maxHP, delimiter, hidePercentSymbol)
         mode = tostring(mode or "NONE"):upper()
         if mode == "NONE" then return "" end
         local current = ShortValue(hp)
         local maxText = ShortValue(maxHP)
-        local pctText = string_format("%d%%", Percent(hp, maxHP))
+        local pctText = PercentText(Percent(hp, maxHP), hidePercentSymbol == true)
         delimiter = Delimiter(delimiter)
         if mode == "CURRENT" then return current end
         if mode == "MAX" then return maxText end
@@ -919,6 +934,7 @@ builders.PLAYER_HP = function(E)
         if (hpSecret or maxSecret) and UsePlayerText(b) and CopyPlayerTextBestEffort() then return end
 
         local left, center, right, delimiter, reverse
+        local hideLeft, hideCenter, hideRight
         if UsePlayerText(b) then
             local player = PlayerConfig()
             player = player or {}
@@ -927,43 +943,53 @@ builders.PLAYER_HP = function(E)
             right = tostring(player.textRight or player.hpTextMode or "CURPERCENT"):upper()
             delimiter = player.hpTextSeparator or ""
             reverse = player.hpTextReverse == true
+            hideLeft = ReadHidePercentSymbol(player, "hpTextLeftHidePercentSymbol")
+            hideCenter = ReadHidePercentSymbol(player, "hpTextCenterHidePercentSymbol")
+            hideRight = ReadHidePercentSymbol(player, "hpTextRightHidePercentSymbol")
         else
             left = tostring(b.playerHPBarTextLeft or "NONE"):upper()
             center = tostring(b.playerHPBarTextCenter or "NONE"):upper()
             right = tostring(b.playerHPBarTextRight or "CURPERCENT"):upper()
             delimiter = b.playerHPBarTextSeparator or ""
             reverse = b.playerHPBarTextReverse == true
+            hideLeft = ReadHidePercentSymbol(b, "playerHPBarTextLeftHidePercentSymbol")
+            hideCenter = ReadHidePercentSymbol(b, "playerHPBarTextCenterHidePercentSymbol")
+            hideRight = ReadHidePercentSymbol(b, "playerHPBarTextRightHidePercentSymbol")
         end
         if reverse then
             left, right = HP_TEXT_REVERSE[right] or right, HP_TEXT_REVERSE[left] or left
             center = HP_TEXT_REVERSE[center] or center
+            hideLeft, hideRight = hideRight, hideLeft
         end
         if PHP._compactText == true then
             local compactMode = center ~= "NONE" and center or right
-            if compactMode == "NONE" then compactMode = left end
+            local compactHide = center ~= "NONE" and hideCenter or hideRight
+            if compactMode == "NONE" then
+                compactMode = left
+                compactHide = hideLeft
+            end
             SetText(PHP.left, "")
             SetText(PHP.right, "")
             if compactMode == "NONE" then
                 SetText(PHP.center, "")
             elseif hpSecret or maxSecret then
                 local pct = UnitPercent()
-                SetText(PHP.center, pct and string_format("%d%%", pct) or "")
+                SetText(PHP.center, PercentText(pct, compactHide))
             else
-                SetText(PHP.center, ModeText(compactMode, hp, maxHP, delimiter))
+                SetText(PHP.center, ModeText(compactMode, hp, maxHP, delimiter, compactHide))
             end
             return
         end
         if hpSecret or maxSecret then
             local pct = UnitPercent()
-            local pctText = pct and string_format("%d%%", pct) or ""
-            SetText(PHP.left, (left:find("PERCENT", 1, true) or left == "PERCENT") and pctText or "")
-            SetText(PHP.center, (center:find("PERCENT", 1, true) or center == "PERCENT") and pctText or "")
-            SetText(PHP.right, (right:find("PERCENT", 1, true) or right == "PERCENT") and pctText or "")
+            SetText(PHP.left, left:find("PERCENT", 1, true) and PercentText(pct, hideLeft) or "")
+            SetText(PHP.center, center:find("PERCENT", 1, true) and PercentText(pct, hideCenter) or "")
+            SetText(PHP.right, right:find("PERCENT", 1, true) and PercentText(pct, hideRight) or "")
             return
         end
-        SetText(PHP.left, ModeText(left, hp, maxHP, delimiter))
-        SetText(PHP.center, ModeText(center, hp, maxHP, delimiter))
-        SetText(PHP.right, ModeText(right, hp, maxHP, delimiter))
+        SetText(PHP.left, ModeText(left, hp, maxHP, delimiter, hideLeft))
+        SetText(PHP.center, ModeText(center, hp, maxHP, delimiter, hideCenter))
+        SetText(PHP.right, ModeText(right, hp, maxHP, delimiter, hideRight))
     end
 
     --- Health event entry. Keep this small and cache-aware because ClassPower

@@ -748,13 +748,18 @@ local function ResolveHealthTextModes(text)
   local healthLeft = text.healthLeft
   local healthCenter = text.healthCenter
   local healthRight = text.healthRight
+  local fallbackHide = text.hidePercentSymbol == true
+  local hideLeft = text.healthLeftHidePercentSymbol ~= nil and text.healthLeftHidePercentSymbol == true or fallbackHide
+  local hideCenter = text.healthCenterHidePercentSymbol ~= nil and text.healthCenterHidePercentSymbol == true or fallbackHide
+  local hideRight = text.healthRightHidePercentSymbol ~= nil and text.healthRightHidePercentSymbol == true or fallbackHide
   if text.healthReverse == true then
     healthLeft, healthRight = healthRight, healthLeft
+    hideLeft, hideRight = hideRight, hideLeft
     healthLeft = REVERSE_HEALTH_MODE[healthLeft] or healthLeft
     healthCenter = REVERSE_HEALTH_MODE[healthCenter] or healthCenter
     healthRight = REVERSE_HEALTH_MODE[healthRight] or healthRight
   end
-  return healthLeft, healthCenter, healthRight
+  return healthLeft, healthCenter, healthRight, hideLeft, hideCenter, hideRight
 end
 
 local function BuildSecretPattern(mode, vf, pf)
@@ -832,7 +837,7 @@ end
 local HEALTH_SLOT_FIELDS = { "hpTextLeft", "hpTextCenter", "hpTextRight" }
 local POWER_SLOT_FIELDS = { "powerTextLeft", "powerTextCenter", "powerTextRight" }
 
-local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, mode3, delimiter, short, hidePercentSymbol, percentDecimals)
+local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, mode3, delimiter, short, hidePercentSymbol1, hidePercentSymbol2, hidePercentSymbol3, percentDecimals)
   local nextIndex = 1
   local needsPercent, needsMissing, needsCurrent, needsMax = false, false, false, false
   if show then
@@ -840,6 +845,7 @@ local function CompileThreeTextSlots(slots, frame, show, fields, mode1, mode2, m
       local fs = frame[fields[i]]
       if fs and fs:IsShown() then
         local mode = i == 1 and mode1 or (i == 2 and mode2 or mode3)
+        local hidePercentSymbol = i == 1 and hidePercentSymbol1 or (i == 2 and hidePercentSymbol2 or hidePercentSymbol3)
         local slotNeeds, slotMissing, slotCurrent, slotMax
         nextIndex, slotNeeds, slotMissing, slotCurrent, slotMax = AddTextSlot(slots, nextIndex, fs, mode, delimiter, short, hidePercentSymbol, percentDecimals)
         needsPercent = needsPercent or slotNeeds
@@ -904,14 +910,15 @@ local function CompileTextRuntime(frame, spec, text)
   rt.healthSlots = rt.healthSlots or {}
   rt.powerSlots = rt.powerSlots or {}
   local showHealth = spec and spec.showHealthText ~= false
-  local healthLeft, healthCenter, healthRight = ResolveHealthTextModes(text)
+  local healthLeft, healthCenter, healthRight, healthHideLeft, healthHideCenter, healthHideRight = ResolveHealthTextModes(text)
   rt.healthPercentDecimals = NormalizePercentDecimals(text.healthPercentDecimals)
 
   local needsPercent, needsMissing, needsCurrent, needsMax
   rt.healthSlotCount, needsPercent, needsMissing, needsCurrent, needsMax = CompileThreeTextSlots(
     rt.healthSlots, frame, showHealth, HEALTH_SLOT_FIELDS,
     healthLeft, healthCenter, healthRight,
-    text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol, rt.healthPercentDecimals)
+    text.healthDelimiter, text.shortNumbers,
+    healthHideLeft, healthHideCenter, healthHideRight, rt.healthPercentDecimals)
   rt.healthNeedsPercent = needsPercent
   rt.healthNeedsMissing = needsMissing
   rt.healthNeedsCurrent = needsCurrent
@@ -950,7 +957,10 @@ local function CompileTextRuntime(frame, spec, text)
   rt.powerSlotCount, needsPercent, powerUnused, needsCurrent, needsMax = CompileThreeTextSlots(
     rt.powerSlots, frame, showPower, POWER_SLOT_FIELDS,
     text.powerLeft, text.powerCenter, text.powerRight,
-    text.powerDelimiter, text.shortNumbers, text.hidePercentSymbol)
+    text.powerDelimiter, text.shortNumbers,
+    text.powerLeftHidePercentSymbol ~= nil and text.powerLeftHidePercentSymbol == true or text.hidePercentSymbol == true,
+    text.powerCenterHidePercentSymbol ~= nil and text.powerCenterHidePercentSymbol == true or text.hidePercentSymbol == true,
+    text.powerRightHidePercentSymbol ~= nil and text.powerRightHidePercentSymbol == true or text.hidePercentSymbol == true)
   rt.powerNeedsPercent = needsPercent
   rt.powerNeedsCurrent = needsCurrent
   rt.powerNeedsMax = needsMax

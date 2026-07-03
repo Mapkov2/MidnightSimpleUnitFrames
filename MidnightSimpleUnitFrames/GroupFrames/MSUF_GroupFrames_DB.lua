@@ -1830,7 +1830,7 @@ end
 --- concatenated with ".." and passed to FontString:SetText (C-side).
 --- Percent comes from UnitHealthPercent / UnitPowerPercent (non-secret).
 ---
---- Signature: FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit)
+--- Signature: FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol)
 --- The optional "unit" parameter enables the secret-safe path.
 --- Preview mode (fake numeric values) omits unit - non-secret path runs.
 ---
@@ -1881,6 +1881,10 @@ local _cachedUseShort
 local function _GF_GetHidePct()
     if _cachedHidePct == nil then _cachedHidePct = _GF_GetGlobalTextOpt("hidePercentSymbol", false) and true or false end
     return _cachedHidePct
+end
+local function _GF_ResolveHidePct(hidePercentSymbol)
+    if hidePercentSymbol ~= nil then return hidePercentSymbol == true end
+    return _GF_GetHidePct()
 end
 local function _GF_GetUseShort()
     if _cachedUseShort == nil then _cachedUseShort = _GF_GetGlobalTextOpt("useShortNumbers", true) and true or false end
@@ -2033,19 +2037,19 @@ local function _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, missingVal)
 end
 
 ---
---- FormatHealthText(mode, hp, hpMax, delimiter, reverse [, unit])
+--- FormatHealthText(mode, hp, hpMax, delimiter, reverse [, unit [, hidePercentSymbol]])
 --- mode : "PERCENT", "CURMAX", "DEFICIT", etc. or "NONE"
 --- hp, hpMax : raw UnitHealth / UnitHealthMax (possibly secret)
 --- delimiter : " / " etc.
 --- reverse : swap mode before formatting
 --- unit : unitId for secret-safe percent (optional, nil in preview)
 ---
-function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit)
+function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol)
     if not mode or mode == "NONE" then return "" end
     if reverse then mode = REVERSE_HP_MAP[mode] or mode end
 
     local delim = _GF_NormalizeTextDelimiter(delimiter, " / ")
-    local hidePct = _GF_GetHidePct()
+    local hidePct = _GF_ResolveHidePct(hidePercentSymbol)
     local pctSuffix = hidePct and "" or "%"
 
     --- Abbreviate cur/max (secret-safe: C-side abbreviators)
@@ -2136,14 +2140,14 @@ function GF.HasActiveTextSlot(kind)
 end
 
 ---
---- FormatPowerText(mode, pw, pwMax, delimiter [, unit])
+--- FormatPowerText(mode, pw, pwMax, delimiter [, unit [, hidePercentSymbol]])
 --- Same modes as health text. Secret-safe via C-side abbreviators.
 ---
-function GF.FormatPowerText(mode, pw, pwMax, delimiter, unit)
+function GF.FormatPowerText(mode, pw, pwMax, delimiter, unit, hidePercentSymbol)
     if not mode or mode == "NONE" then return "" end
 
     local delim = _GF_NormalizeTextDelimiter(delimiter, " / ")
-    local hidePct = _GF_GetHidePct()
+    local hidePct = _GF_ResolveHidePct(hidePercentSymbol)
     local pctSuffix = hidePct and "" or "%"
 
     --- Abbreviate cur/max (secret-safe)
