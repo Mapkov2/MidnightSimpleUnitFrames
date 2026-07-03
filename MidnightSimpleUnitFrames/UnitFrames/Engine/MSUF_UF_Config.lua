@@ -446,6 +446,13 @@ local function NormalizePowerTextMode(mode, fallback)
   return mode == nil and fallback or POWER_TEXT_MODE_ALIASES[mode] or mode
 end
 
+local function ResolveTextSlotHidePercentSymbol(conf, general, key)
+  if conf and conf[key] ~= nil then
+    return conf[key] == true
+  end
+  return general and general.hidePercentSymbol == true
+end
+
 local function ResolveNameShortening(db, general, conf, unit, text)
   local shorten = db and db.shortenNames == true
   local maxChars = Number(general and general.shortenNameMaxChars, 6)
@@ -1431,6 +1438,9 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.healthLeft = NormalizeHealthTextMode(conf.textLeft, "NONE")
   text.healthCenter = NormalizeHealthTextMode(conf.textCenter, "NONE")
   text.healthRight = NormalizeHealthTextMode(conf.textRight or conf.hpTextMode or general.hpTextMode, "CURPERCENT")
+  text.healthLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextLeftHidePercentSymbol")
+  text.healthCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextCenterHidePercentSymbol")
+  text.healthRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol")
   if conf.hpTextReverse ~= nil then
     text.healthReverse = conf.hpTextReverse == true
   else
@@ -1448,6 +1458,9 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.powerLeft = NormalizePowerTextMode(conf.powerTextLeft, "NONE")
   text.powerCenter = NormalizePowerTextMode(conf.powerTextCenter, "NONE")
   text.powerRight = NormalizePowerTextMode(conf.powerTextRight or conf.powerTextMode or general.powerTextMode, "CURPERCENT")
+  text.powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol")
+  text.powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol")
+  text.powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol")
   text.powerDelimiter = conf.powerTextSeparator or general.powerTextSeparator or text.healthDelimiter
   text.powerX = Number(conf.powerOffsetX or conf.powerTextOffsetX or general.powerOffsetX or general.powerTextOffsetX, -4)
   text.powerY = Number(conf.powerOffsetY or conf.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY, 4) + fontBaselineOffset

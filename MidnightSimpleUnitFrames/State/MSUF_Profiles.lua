@@ -3696,6 +3696,8 @@ local function MSUF_ProfileIO_ResetUUFText(dst)
     dst.showPowerText = false
     dst.textLeft, dst.textCenter, dst.textRight = "NONE", "NONE", "NONE"
     dst.powerTextLeft, dst.powerTextCenter, dst.powerTextRight = "NONE", "NONE", "NONE"
+    dst.hpTextLeftHidePercentSymbol, dst.hpTextCenterHidePercentSymbol, dst.hpTextRightHidePercentSymbol = nil, nil, nil
+    dst.powerTextLeftHidePercentSymbol, dst.powerTextCenterHidePercentSymbol, dst.powerTextRightHidePercentSymbol = nil, nil, nil
     dst.hpOffsetX, dst.hpOffsetY = 0, 0
     dst.powerOffsetX, dst.powerOffsetY = 0, 0
     dst.nameOffsetX, dst.nameOffsetY = 0, 0

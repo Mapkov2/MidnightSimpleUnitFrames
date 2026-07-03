@@ -373,6 +373,13 @@ local function IsPowerTextEnabled(kind, conf)
   return conf.showPowerText == true or conf.showPower == true
 end
 
+local function ResolveTextSlotHidePercentSymbol(conf, general, key)
+  if conf and conf[key] ~= nil then
+    return conf[key] == true
+  end
+  return general and general.hidePercentSymbol == true
+end
+
 local function GetRole(unit)
   if GF.GetUnitGroupRole then
     return GF.GetUnitGroupRole(unit)
@@ -1089,6 +1096,9 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       healthLeft = healthLeft,
       healthCenter = healthCenter,
       healthRight = healthRight,
+      healthLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextLeftHidePercentSymbol"),
+      healthCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextCenterHidePercentSymbol"),
+      healthRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol"),
       healthDelimiter = conf.textDelimiter or " / ",
       healthPercentDecimals = (conf.healthTextDecimals == true or conf.hpTextDecimals == true) and 1 or 0,
       healthReverse = conf.hpTextReverse == true,
@@ -1104,6 +1114,9 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       powerLeft = conf.powerTextLeft or "NONE",
       powerCenter = conf.powerTextCenter or "NONE",
       powerRight = conf.powerTextRight or "NONE",
+      powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol"),
+      powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol"),
+      powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol"),
       powerDelimiter = conf.powerTextDelimiter or " / ",
       powerLayer = Layer(conf.powerTextLayer, 2),
       powerLeftX = powerX + Num(conf.powerTextLeftOffsetX, 0),
