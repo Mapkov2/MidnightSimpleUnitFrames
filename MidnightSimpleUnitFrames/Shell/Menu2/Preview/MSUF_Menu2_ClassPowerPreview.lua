@@ -1091,6 +1091,73 @@ local function ApplyMeterText(frame, size, x, y, leftText, centerText, rightText
     if (rightText or "") ~= "" then frame.right:Show() else frame.right:Hide() end
 end
 
+local function ResolveFontBaselineOffset(conf)
+    local general = General()
+    local value = general and general.fontBaselineOffset
+    if conf and conf.fontOverride == true and conf.fontBaselineOffset ~= nil then
+        value = conf.fontBaselineOffset
+    end
+    value = tonumber(value) or 0
+    if value < -4 then return -4 end
+    if value > 4 then return 4 end
+    return value
+end
+
+local function Number(value, fallback)
+    local n = tonumber(value)
+    if n == nil then return fallback end
+    return n
+end
+
+local function SideTextOffset(conf, general, side, axis)
+    local key = "powerText" .. side .. "Offset" .. axis
+    local legacyKey = "power" .. side .. "Offset" .. axis
+    return Number(conf[key] or conf[legacyKey] or general[key] or general[legacyKey], 0)
+end
+
+local function ResolvePlayerPowerTextLayout(player)
+    local general = General()
+    local baseX = Number(player.powerOffsetX or player.powerTextOffsetX or general.powerOffsetX or general.powerTextOffsetX, -4)
+    local baseY = Number(player.powerOffsetY or player.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY, 4)
+        + ResolveFontBaselineOffset(player)
+    return {
+        leftX = baseX + SideTextOffset(player, general, "Left", "X"),
+        leftY = baseY + SideTextOffset(player, general, "Left", "Y"),
+        centerX = baseX + SideTextOffset(player, general, "Center", "X"),
+        centerY = baseY + SideTextOffset(player, general, "Center", "Y"),
+        rightX = baseX + SideTextOffset(player, general, "Right", "X"),
+        rightY = baseY + SideTextOffset(player, general, "Right", "Y"),
+    }
+end
+
+local function ApplyPowerMeterText(frame, player, size, leftText, centerText, rightText)
+    ApplyFont(frame.left, size)
+    ApplyFont(frame.center, size)
+    ApplyFont(frame.right, size)
+    frame.left:SetText(leftText or "")
+    frame.center:SetText(centerText or "")
+    frame.right:SetText(rightText or "")
+    frame.left:SetTextColor(1, 1, 1, 1)
+    frame.center:SetTextColor(1, 1, 1, 1)
+    frame.right:SetTextColor(1, 1, 1, 1)
+    local layout = ResolvePlayerPowerTextLayout(player or {})
+    local h = frame:GetHeight() or 8
+    local textH = max(14, h + 8)
+    local width = frame:GetWidth() or 100
+    frame.left:ClearAllPoints()
+    frame.left:SetPoint("LEFT", frame, "LEFT", 4 + layout.leftX, layout.leftY)
+    frame.left:SetSize(max(20, width * 0.34), textH)
+    frame.center:ClearAllPoints()
+    frame.center:SetPoint("CENTER", frame, "CENTER", layout.centerX, layout.centerY)
+    frame.center:SetSize(max(20, width), textH)
+    frame.right:ClearAllPoints()
+    frame.right:SetPoint("RIGHT", frame, "RIGHT", -4 + layout.rightX, layout.rightY)
+    frame.right:SetSize(max(20, width * 0.34), textH)
+    if (leftText or "") ~= "" then frame.left:Show() else frame.left:Hide() end
+    if (centerText or "") ~= "" then frame.center:Show() else frame.center:Hide() end
+    if (rightText or "") ~= "" then frame.right:Show() else frame.right:Hide() end
+end
+
 --- Detached power preview follows the same anchoring relationship as runtime:
 --- it can attach to ClassPower, but no live player power events are involved.
 local function RenderDetachedPower(preview, bars, player, classFrame)
@@ -1135,11 +1202,11 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
     frame:Show()
     if player.showPower ~= false and player.detachedPowerBarTextOnBar == true then
         local leftMode = tostring(player.powerTextLeft or "NONE"):upper()
-        local centerMode = tostring(player.powerTextCenter or player.powerTextMode or "CURPERCENT"):upper()
-        local rightMode = tostring(player.powerTextRight or "NONE"):upper()
+        local centerMode = tostring(player.powerTextCenter or "NONE"):upper()
+        local rightMode = tostring(player.powerTextRight or player.powerTextMode or "CURPERCENT"):upper()
         local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
         local current = floor((fraction * 100) + 0.5)
-        ApplyMeterText(frame, Clamp(player.powerFontSize, 14, 6, 48), tonumber(player.powerOffsetX) or -4, tonumber(player.powerOffsetY) or 4,
+        ApplyPowerMeterText(frame, player, Clamp(player.powerFontSize, 14, 6, 48),
             ModeText(leftMode, current, 100, delimiter),
             ModeText(centerMode, current, 100, delimiter),
             ModeText(rightMode, current, 100, delimiter))
@@ -1322,8 +1389,8 @@ local function UpdateDetachedPowerAnimation(preview, frame, bars, player)
     UpdateMeterFill(frame, fraction)
     if player.showPower ~= false and player.detachedPowerBarTextOnBar == true then
         local leftMode = tostring(player.powerTextLeft or "NONE"):upper()
-        local centerMode = tostring(player.powerTextCenter or player.powerTextMode or "CURPERCENT"):upper()
-        local rightMode = tostring(player.powerTextRight or "NONE"):upper()
+        local centerMode = tostring(player.powerTextCenter or "NONE"):upper()
+        local rightMode = tostring(player.powerTextRight or player.powerTextMode or "CURPERCENT"):upper()
         local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
         local current = floor((fraction * 100) + 0.5)
         if frame.left then frame.left:SetText(ModeText(leftMode, current, 100, delimiter)) end
