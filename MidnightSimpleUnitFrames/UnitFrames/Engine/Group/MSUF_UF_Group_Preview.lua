@@ -23,8 +23,10 @@ local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetNumGroupMembers = GetNumGroupMembers
 local UnitName = UnitName
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
+local C_Timer = _G.C_Timer
 local floor, max, min = math.floor, math.max, math.min
 local type, tonumber, tostring = type, tonumber, tostring
+local NormalizeKind
 
 GF._previewFrames = GF._previewFrames or {}
 GF._previewActive = GF._previewActive or {}
@@ -32,6 +34,21 @@ GF._previewShownCounts = GF._previewShownCounts or {}
 GF._previewAnchorFrame = GF._previewAnchorFrame or {}
 GF._previewContainer = GF._previewContainer or {}
 GF._previewLayoutFrame = GF._previewLayoutFrame or {}
+GF._previewBuildSerial = GF._previewBuildSerial or {}
+
+local PREVIEW_BUILD_SLICE_COUNT = 2
+local PREVIEW_BUILD_SLICE_THRESHOLD = 8
+
+local function BumpPreviewBuildSerial(kind)
+  kind = NormalizeKind(kind) or kind
+  if not kind then return 0 end
+  GF._previewBuildSerial[kind] = (GF._previewBuildSerial[kind] or 0) + 1
+  return GF._previewBuildSerial[kind]
+end
+
+local function CurrentPreviewBuildSerial(kind)
+  return GF._previewBuildSerial[kind] or 0
+end
 
 local PREVIEW_CLASSES = {
   "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST",
@@ -50,7 +67,7 @@ local function InCombat()
   return InCombatLockdown and InCombatLockdown()
 end
 
-local function NormalizeKind(kind)
+function NormalizeKind(kind)
   if kind == "gf_party" then return "party" end
   if kind == "gf_raid" then return "raid" end
   if kind == "gf_mythicraid" then return "mythicraid" end
@@ -133,7 +150,13 @@ end
 function GF.SetPreviewAnchor(kind, parent)
   kind = NormalizeKind(kind)
   if not kind then return false end
+  if GF._previewAnchorFrame[kind] == parent then return true end
   GF._previewAnchorFrame[kind] = parent
+  BumpPreviewBuildSerial(kind)
+  local container = GF._previewContainer and GF._previewContainer[kind]
+  local layout = GF._previewLayoutFrame and GF._previewLayoutFrame[kind]
+  if container then container._msufGFPreviewPositionKey = nil end
+  if layout then layout._msufGFPreviewPositionKey = nil end
   return true
 end
 
@@ -169,21 +192,34 @@ local function PositionContainer(kind, count)
   local parent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
   local container, layout = EnsureContainer(kind, parent or UIParent)
 
-  container:ClearAllPoints()
-  container:SetSize(max(posW or w or 1, 1), max(posH or h or 1, 1))
+  local containerW, containerH = max(posW or w or 1, 1), max(posH or h or 1, 1)
+  local point, relative, x, y
   if parent then
-    container:SetPoint("CENTER", parent, "CENTER", 0, 0)
+    point, relative, x, y = "CENTER", parent, 0, 0
   else
     local cx, cy = tonumber(conf.offsetX), tonumber(conf.offsetY)
     if cx == nil or cy == nil then cx, cy = DefaultCenter(kind) end
-    local point = AnchorPoint(conf)
-    container:SetPoint(point, ResolveAnchorFrame(conf), point, floor(cx + 0.5), floor(cy + 0.5))
+    point, relative, x, y = AnchorPoint(conf), ResolveAnchorFrame(conf), floor(cx + 0.5), floor(cy + 0.5)
+  end
+  local containerKey = tostring(point) .. "\030" .. tostring(relative) .. "\030" .. tostring(x) .. "\030" .. tostring(y)
+    .. "\030" .. tostring(containerW) .. "\030" .. tostring(containerH)
+  if container._msufGFPreviewPositionKey ~= containerKey then
+    container._msufGFPreviewPositionKey = containerKey
+    container:ClearAllPoints()
+    container:SetSize(containerW, containerH)
+    container:SetPoint(point, relative, point, x, y)
   end
 
-  layout:ClearAllPoints()
-  layout:SetSize(max(posW or w or 1, 1), max(posH or h or 1, 1))
-  local point = AnchorPoint(conf)
-  layout:SetPoint(point, container, point, -(dx or 0), -(dy or 0))
+  local layoutW, layoutH = containerW, containerH
+  local layoutPoint = AnchorPoint(conf)
+  local layoutKey = tostring(layoutPoint) .. "\030" .. tostring(dx or 0) .. "\030" .. tostring(dy or 0)
+    .. "\030" .. tostring(layoutW) .. "\030" .. tostring(layoutH) .. "\030" .. tostring(container)
+  if layout._msufGFPreviewPositionKey ~= layoutKey then
+    layout._msufGFPreviewPositionKey = layoutKey
+    layout:ClearAllPoints()
+    layout:SetSize(layoutW, layoutH)
+    layout:SetPoint(layoutPoint, container, layoutPoint, -(dx or 0), -(dy or 0))
+  end
   layout.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ("gf_" .. kind)
   layout._msufIsGroupFrame = true
   layout._msufGFKind = kind
@@ -347,6 +383,7 @@ end
 --- regions. Keep this data fake/local; live group frames own real roster state.
 local function ApplyPreviewData(frame, index, kind)
   if not frame then return false end
+  if not frame.MSUFSpec then return false end
   kind = NormalizeKind(kind) or "party"
   local class = PREVIEW_CLASSES[((index - 1) % #PREVIEW_CLASSES) + 1]
   local role = PREVIEW_ROLES[((index - 1) % #PREVIEW_ROLES) + 1]
@@ -469,13 +506,51 @@ local function SetPreservedPreviewPoint(frame, layout, index, w, h, spacing, gro
 end
 
 local function PositionPreviewFrame(frame, layout, index, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
-  frame:ClearAllPoints()
   local conf = GF.GetConf and GF.GetConf(kind) or nil
+  local posKey = tostring(layout) .. "\030" .. tostring(index) .. "\030" .. tostring(kind)
+    .. "\030" .. tostring(w) .. "\030" .. tostring(h) .. "\030" .. tostring(spacing)
+    .. "\030" .. tostring(growth) .. "\030" .. tostring(upc) .. "\030" .. tostring(primary)
+    .. "\030" .. tostring(blockW) .. "\030" .. tostring(blockH)
+    .. "\030" .. tostring(conf and conf.preserveRaidGroups == true)
+  if frame._msufGFPreviewPositionKey == posKey then return end
+  frame._msufGFPreviewPositionKey = posKey
+  frame:ClearAllPoints()
   if IsRaidLikeKind(kind) and conf and conf.preserveRaidGroups == true then
     SetPreservedPreviewPoint(frame, layout, index, w, h, spacing, growth, primary, blockW, blockH)
   else
     PlacePreviewFrame(frame, layout, index, w, h, spacing, growth, upc)
   end
+end
+
+local function PreviewApplyRevision(kind)
+  if GF.GetCompiledSpecRevision then return GF.GetCompiledSpecRevision(kind) end
+  return tostring(GF._compiledSpecRevision or "") .. ":" .. tostring(GF._compiledSpecSerial or "")
+end
+
+local function PreviewApplyKey(frame, kind, w, h)
+  local unit = (frame.GetAttribute and frame:GetAttribute("unit")) or frame.unit or "player"
+  return tostring(kind) .. "\030" .. tostring(unit) .. "\030" .. PreviewApplyRevision(kind)
+    .. "\030" .. tostring(w) .. "\030" .. tostring(h)
+end
+
+local function ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h)
+  if not frame then return false end
+  local key = PreviewApplyKey(frame, kind, w, h)
+  if frame._msufGFPreviewApplyKey == key and frame.MSUFSpec then return true end
+  if not GF.ApplyButton then return false end
+  local ok = GF.ApplyButton(frame, kind, reason)
+  if ok then frame._msufGFPreviewApplyKey = PreviewApplyKey(frame, kind, w, h) end
+  return ok
+end
+
+local function SetPreviewFrameSize(frame, w, h)
+  if frame._msufGFPreviewWidth == w and frame._msufGFPreviewHeight == h
+    and (not frame.GetWidth or frame:GetWidth() == w)
+    and (not frame.GetHeight or frame:GetHeight() == h) then
+    return
+  end
+  frame._msufGFPreviewWidth, frame._msufGFPreviewHeight = w, h
+  frame:SetSize(w, h)
 end
 
 local function EnsurePreviewFrame(kind, index, parent)
@@ -505,29 +580,66 @@ local function EnsurePreviewFrame(kind, index, parent)
   return frame
 end
 
-function GF.ShowPreview(kind, count)
+local function PreparePreviewFrame(kind, index, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+  local frame = EnsurePreviewFrame(kind, index, layout)
+  SetPreviewFrameSize(frame, w, h)
+  frame.unit = "player"
+  frame.unitKey = "player"
+  if frame.SetAttribute then frame:SetAttribute("unit", "player") end
+  PositionPreviewFrame(frame, layout, index, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
+  if not frame.MSUFSpec and frame.Hide then frame:Hide() end
+  return frame
+end
+
+local function ApplyPreviewFrame(kind, index, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+  local frame = PreparePreviewFrame(kind, index, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+  ApplyPreviewSpecIfNeeded(frame, kind, reason, w, h)
+  ApplyPreviewData(frame, index, kind)
+  return true
+end
+
+local function QueuePreviewBuild(kind, serial, visibleCount, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+  if not (C_Timer and C_Timer.After) then
+    for i = 1, visibleCount do
+      ApplyPreviewFrame(kind, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+    end
+    return true
+  end
+  local index = 1
+  local function Step()
+    if CurrentPreviewBuildSerial(kind) ~= serial then return end
+    if not (GF._previewActive and GF._previewActive[kind]) then return end
+    local limit = min(visibleCount, index + PREVIEW_BUILD_SLICE_COUNT - 1)
+    for i = index, limit do
+      ApplyPreviewFrame(kind, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+    end
+    index = limit + 1
+    if index <= visibleCount then
+      C_Timer.After(0, Step)
+    end
+  end
+  C_Timer.After(0, Step)
+  return true
+end
+
+function GF.ShowPreview(kind, count, opts)
   if InCombat() then return false end
   if type(PreviewsAllowed) == "function" and not PreviewsAllowed() then return false end
   kind = NormalizeKind(kind) or "party"
   count = floor((tonumber(count) or DefaultPreviewCount(kind)) + 0.5)
   if count < 1 then count = DefaultPreviewCount(kind) end
   local visibleCount = VisiblePreviewCount(kind, count)
+  opts = type(opts) == "table" and opts or nil
 
   GF._previewActive[kind] = true
   GF._previewShownCounts[kind] = count
+  local serial = BumpPreviewBuildSerial(kind)
 
   local container, layout, w, h, spacing, growth, upc, primary, blockW, blockH = PositionContainer(kind, count)
   local frames = GF._previewFrames[kind] or {}
   GF._previewFrames[kind] = frames
   for i = 1, visibleCount do
-    local frame = EnsurePreviewFrame(kind, i, layout)
-    frame:SetSize(w, h)
-    frame.unit = "player"
-    frame.unitKey = "player"
-    if frame.SetAttribute then frame:SetAttribute("unit", "player") end
-    if GF.ApplyButton then GF.ApplyButton(frame, kind, "MSUF_GF_PREVIEW") end
-    PositionPreviewFrame(frame, layout, i, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
-    ApplyPreviewData(frame, i, kind)
+    PreparePreviewFrame(kind, i, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
   end
   for i = visibleCount + 1, #frames do
     local frame = frames[i]
@@ -537,11 +649,24 @@ function GF.ShowPreview(kind, count)
     end
   end
   container:Show()
+  local reason = opts and opts.reason or "MSUF_GF_PREVIEW"
+  if opts and opts.immediate == true or visibleCount <= PREVIEW_BUILD_SLICE_THRESHOLD then
+    for i = 1, visibleCount do
+      ApplyPreviewFrame(kind, i, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+    end
+  else
+    QueuePreviewBuild(kind, serial, visibleCount, reason, layout, w, h, spacing, growth, upc, primary, blockW, blockH)
+  end
   return true
 end
 
 function GF.HidePreview(kind)
   kind = NormalizeKind(kind) or "party"
+  local container = GF._previewContainer[kind]
+  if GF._previewActive[kind] ~= true and (not (container and container.IsShown and container:IsShown())) then
+    return true
+  end
+  BumpPreviewBuildSerial(kind)
   GF._previewActive[kind] = nil
   GF._previewShownCounts[kind] = nil
   local frames = GF._previewFrames[kind]
@@ -553,7 +678,6 @@ function GF.HidePreview(kind)
       end
     end
   end
-  local container = GF._previewContainer[kind]
   if container then container:Hide() end
   return true
 end
@@ -572,26 +696,7 @@ function GF.RefreshPreviewLayout(kind)
   kind = NormalizeKind(kind) or "party"
   if not (GF._previewActive and GF._previewActive[kind]) then return false end
   local count = GF._previewShownCounts[kind] or DefaultPreviewCount(kind)
-  local visibleCount = VisiblePreviewCount(kind, count)
-  local _, layout, w, h, spacing, growth, upc, primary, blockW, blockH = PositionContainer(kind, count)
-  local frames = GF._previewFrames[kind] or {}
-  GF._previewFrames[kind] = frames
-  for i = 1, visibleCount do
-    local frame = EnsurePreviewFrame(kind, i, layout)
-    if frame:GetParent() ~= layout then frame:SetParent(layout) end
-    frame:SetSize(w, h)
-    if GF.ApplyButton then GF.ApplyButton(frame, kind, "MSUF_GF_PREVIEW_REFRESH") end
-    PositionPreviewFrame(frame, layout, i, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
-    ApplyPreviewData(frame, i, kind)
-  end
-  for i = visibleCount + 1, #frames do
-    local frame = frames[i]
-    if frame then
-      ClearPreviewData(frame)
-      frame:Hide()
-    end
-  end
-  return true
+  return GF.ShowPreview(kind, count, { reason = "MSUF_GF_PREVIEW_REFRESH" })
 end
 
 GF.RefreshPreviewBox = GF.RefreshPreviewLayout

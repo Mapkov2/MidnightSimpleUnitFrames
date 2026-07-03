@@ -117,7 +117,8 @@ local WORD_SYNONYMS = {
     dist = { "distance" },
     sep = { "separator" },
     icon = { "symbol" },
-    color = { "colour" },
+    -- no "colour": text normalization canonicalizes it to "color" anyway, so
+    -- the variant would only duplicate index entries.
 }
 local MAX_GENERATED_ALIASES = 12
 

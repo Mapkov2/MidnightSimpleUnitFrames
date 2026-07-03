@@ -279,9 +279,14 @@ local function ApplyStyledFont(fs)
     local nextFlags = orig.flags or flags or ""
     local menuFont = ResolveMenuFontPath(nextSize, nextFlags)
     local nextFont = menuFont or orig.font or font
+    local fontKey = tostring(nextFont or "") .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "")
+    if fs._msuf2AppliedFontKey == fontKey then return true end
     local ok, applied = pcall(fs.SetFont, fs, nextFont, nextSize, nextFlags)
     if (not ok or applied == false) and nextFont ~= orig.font and orig.font then
         ok, applied = pcall(fs.SetFont, fs, orig.font, nextSize, nextFlags)
+        if ok and applied ~= false then
+            fontKey = tostring(orig.font or "") .. "\030" .. tostring(nextSize or "") .. "\030" .. tostring(nextFlags or "")
+        end
     end
     if ok and applied ~= false and fs._msuf2DropdownDefaultFont then
         local appliedFont, appliedSize, appliedFlags = fs:GetFont()
@@ -289,14 +294,30 @@ local function ApplyStyledFont(fs)
             fs._msuf2DropdownDefaultFont = { appliedFont, appliedSize, appliedFlags or "" }
         end
     end
+    if ok and applied ~= false then fs._msuf2AppliedFontKey = fontKey end
     return ok and applied ~= false
 end
 function T.StyleFontString(fs, color, bump)
     if not fs then return fs end
     local c = color or T.colors.text
-    if fs.SetTextColor and c then fs:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
-    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0.70) end
-    if fs.SetShadowOffset then fs:SetShadowOffset(1, -1) end
+    local cr, cg, cb, ca = c[1], c[2], c[3], c[4] or 1
+    if fs.SetTextColor
+        and (fs._msuf2TextColorR ~= cr
+            or fs._msuf2TextColorG ~= cg
+            or fs._msuf2TextColorB ~= cb
+            or fs._msuf2TextColorA ~= ca)
+    then
+        fs._msuf2TextColorR, fs._msuf2TextColorG, fs._msuf2TextColorB, fs._msuf2TextColorA = cr, cg, cb, ca
+        fs:SetTextColor(cr, cg, cb, ca)
+    end
+    if fs.SetShadowColor and fs._msuf2ShadowColorKey ~= "0:0:0:0.7" then
+        fs._msuf2ShadowColorKey = "0:0:0:0.7"
+        fs:SetShadowColor(0, 0, 0, 0.70)
+    end
+    if fs.SetShadowOffset and fs._msuf2ShadowOffsetKey ~= "1:-1" then
+        fs._msuf2ShadowOffsetKey = "1:-1"
+        fs:SetShadowOffset(1, -1)
+    end
     if fs.GetFont and fs.SetFont then
         fs._msuf2FontBump = tonumber(bump) or T.fontBump or 0
         ApplyStyledFont(fs)
@@ -847,19 +868,27 @@ local function CollapseHintLearned()
     return (tonumber(state and state.total) or 0) >= (tonumber(T.collapseHintClickHideThreshold) or 8)
 end
 function T.ApplyCollapseVisual(chevron, hint, open)
+    open = open and true or false
     if chevron then
-        if chevron.SetRotation then chevron:SetRotation(open and (math.pi * 0.5) or 0) end
-        if chevron.SetVertexColor then
-            if open then
-                chevron:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.86)
-            else
-                chevron:SetVertexColor(T.colors.accent2[1], T.colors.accent2[2], T.colors.accent2[3], 0.74)
-            end
+        local c = open and T.colors.accent or T.colors.accent2
+        local a = open and 0.86 or 0.74
+        local chevronKey = tostring(open) .. "\030" .. tostring(c[1]) .. "\030" .. tostring(c[2]) .. "\030" .. tostring(c[3]) .. "\030" .. tostring(a)
+        if chevron._msuf2CollapseVisualKey ~= chevronKey then
+            chevron._msuf2CollapseVisualKey = chevronKey
+            if chevron.SetRotation then chevron:SetRotation(open and (math.pi * 0.5) or 0) end
+            if chevron.SetVertexColor then chevron:SetVertexColor(c[1], c[2], c[3], a) end
         end
     end
     if hint and hint.SetText then
-        hint:SetText((open or hint._msuf2SuppressCollapseHint or CollapseHintLearned()) and "" or Tr("click to expand"))
-        if hint.SetTextColor then hint:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.74) end
+        local learned = CollapseHintLearned()
+        local text = (open or hint._msuf2SuppressCollapseHint or learned) and "" or Tr("click to expand")
+        local c = T.colors.dim
+        local hintKey = text .. "\030" .. tostring(c[1]) .. "\030" .. tostring(c[2]) .. "\030" .. tostring(c[3]) .. "\030" .. "0.74"
+        if hint._msuf2CollapseVisualKey ~= hintKey then
+            hint._msuf2CollapseVisualKey = hintKey
+            hint:SetText(text)
+            if hint.SetTextColor then hint:SetTextColor(c[1], c[2], c[3], 0.74) end
+        end
     end
 end
 local function CreateAtmosphereTexture(parent, layer, subLevel, texture, color, inset, texCoord)
@@ -1687,11 +1716,15 @@ function T.StyleScrollFrame(scroll, anchor)
     local function SetRawScroll(offset)
         local maxScroll = CurrentMaxScroll()
         offset = ClampScrollValue(offset, maxScroll)
-        if rawSetVerticalScroll then rawSetVerticalScroll(scroll, offset) end
+        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        if rawSetVerticalScroll and math.abs(offset - current) > 0.01 then rawSetVerticalScroll(scroll, offset) end
         if bar then
-            bar._msuf2Refreshing = true
-            bar:SetValue(offset)
-            bar._msuf2Refreshing = nil
+            if bar._msuf2LastScrollValue ~= offset then
+                bar._msuf2LastScrollValue = offset
+                bar._msuf2Refreshing = true
+                bar:SetValue(offset)
+                bar._msuf2Refreshing = nil
+            end
         end
         return offset
     end
@@ -1756,22 +1789,34 @@ function T.StyleScrollFrame(scroll, anchor)
         if maxScroll <= 1 or frameH <= 0 then
             StopSmoothScroll()
             if rawSetVerticalScroll and (scroll:GetVerticalScroll() or 0) ~= 0 then rawSetVerticalScroll(scroll, 0) end
-            bar._msuf2Refreshing = true
-            bar:SetValue(0)
-            bar._msuf2Refreshing = nil
-            bar:Hide()
+            if bar._msuf2LastScrollValue ~= 0 then
+                bar._msuf2LastScrollValue = 0
+                bar._msuf2Refreshing = true
+                bar:SetValue(0)
+                bar._msuf2Refreshing = nil
+            end
+            if bar.Hide and bar:IsShown() then bar:Hide() end
             return
         end
-        bar:Show()
-        bar:SetMinMaxValues(0, maxScroll)
+        if bar.Show and not bar:IsShown() then bar:Show() end
+        if bar._msuf2LastMaxScroll ~= maxScroll then
+            bar._msuf2LastMaxScroll = maxScroll
+            bar:SetMinMaxValues(0, maxScroll)
+        end
         local visibleRatio = frameH / math.max(childH, 1)
         local thumbH = math.floor(math.max(34, math.min(frameH, frameH * visibleRatio)) + 0.5)
-        if thumb and thumb.SetHeight then thumb:SetHeight(thumbH) end
+        if thumb and thumb.SetHeight and thumb._msuf2LastHeight ~= thumbH then
+            thumb._msuf2LastHeight = thumbH
+            thumb:SetHeight(thumbH)
+        end
         local offset = ClampScrollValue(scroll:GetVerticalScroll() or 0, maxScroll)
         if offset ~= (scroll:GetVerticalScroll() or 0) and rawSetVerticalScroll then rawSetVerticalScroll(scroll, offset) end
-        bar._msuf2Refreshing = true
-        bar:SetValue(offset)
-        bar._msuf2Refreshing = nil
+        if bar._msuf2LastScrollValue ~= offset then
+            bar._msuf2LastScrollValue = offset
+            bar._msuf2Refreshing = true
+            bar:SetValue(offset)
+            bar._msuf2Refreshing = nil
+        end
         Paint(bar._msuf2Hover)
     end
     scroll._msuf2RefreshScrollBar = Refresh
@@ -1784,7 +1829,9 @@ function T.StyleScrollFrame(scroll, anchor)
             local frameH = (self.GetHeight and self:GetHeight()) or 0
             maxScroll = math.max(0, childH - frameH)
         end
-        rawSetVerticalScroll(self, ClampScrollValue(offset, maxScroll))
+        local clamped = ClampScrollValue(offset, maxScroll)
+        local current = (self.GetVerticalScroll and self:GetVerticalScroll()) or 0
+        if math.abs(clamped - current) > 0.01 then rawSetVerticalScroll(self, clamped) end
         if self._msuf2RefreshScrollBar then self:_msuf2RefreshScrollBar() end
     end
     local function ScrollBy(delta)
@@ -1815,7 +1862,9 @@ function T.StyleScrollFrame(scroll, anchor)
         if self._msuf2Refreshing then return end
         StopSmoothScroll()
         local maxScroll = scroll._msuf2MaxScroll or 0
-        if rawSetVerticalScroll then rawSetVerticalScroll(scroll, ClampScrollValue(value, maxScroll)) end
+        local clamped = ClampScrollValue(value, maxScroll)
+        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        if rawSetVerticalScroll and math.abs(clamped - current) > 0.01 then rawSetVerticalScroll(scroll, clamped) end
         Refresh()
     end)
     scroll:HookScript("OnScrollRangeChanged", Refresh)

@@ -322,7 +322,19 @@ function W.PageBuilder(ctx)
         collapsibles = {},
         layoutEntries = {},
     }
+    if type(ctx) == "table" then
+        ctx._msuf2PageBuilders = ctx._msuf2PageBuilders or {}
+        ctx._msuf2PageBuilders[#ctx._msuf2PageBuilders + 1] = b
+    end
+    function b:RequestRelayoutCollapsibles()
+        if ctx and ctx._msuf2Building then
+            self._msuf2RelayoutPending = true
+            return
+        end
+        return self:RelayoutCollapsibles()
+    end
     function b:RelayoutCollapsibles()
+        self._msuf2RelayoutPending = nil
         if not self._collapsibleStartY then return end
         local y = self._collapsibleStartY
         local entries = (#self.layoutEntries > 0) and self.layoutEntries or self.collapsibles
@@ -331,18 +343,32 @@ function W.PageBuilder(ctx)
             if entry.kind == "section" then
                 local section = entry.frame
                 if section then
-                    section:ClearAllPoints()
-                    section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
-                    y = y - ((section.GetHeight and section:GetHeight()) or entry.height or 120) - (entry.gap or 12)
+                    local h = (section.GetHeight and section:GetHeight()) or entry.height or 120
+                    local key = tostring(self.parent) .. "\030" .. tostring(self.x) .. "\030" .. tostring(y) .. "\030" .. tostring(h)
+                    if section._msuf2RelayoutKey ~= key then
+                        section._msuf2RelayoutKey = key
+                        section:ClearAllPoints()
+                        section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
+                    end
+                    y = y - h - (entry.gap or 12)
                 end
             elseif entry.kind == "spacer" then
                 y = y - (entry.height or 10)
             else
                 local open = entry.open and true or false
-                entry.outer:ClearAllPoints()
-                entry.outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
-                entry.outer:SetHeight(entry.headerHeight + (open and entry.contentHeight or 0))
-                entry.body:SetShown(open)
+                local outerH = entry.headerHeight + (open and entry.contentHeight or 0)
+                local key = tostring(self.parent) .. "\030" .. tostring(self.x) .. "\030" .. tostring(y)
+                    .. "\030" .. tostring(outerH) .. "\030" .. tostring(open)
+                if entry._msuf2RelayoutKey ~= key then
+                    entry._msuf2RelayoutKey = key
+                    entry.outer:ClearAllPoints()
+                    entry.outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
+                    entry.outer:SetHeight(outerH)
+                end
+                if entry.body._msuf2ShownState ~= open then
+                    entry.body._msuf2ShownState = open
+                    entry.body:SetShown(open)
+                end
                 if entry.body.SetAlpha and not entry._msuf2MotionActive then entry.body:SetAlpha(1) end
                 T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
                 if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
@@ -577,7 +603,7 @@ function W.PageBuilder(ctx)
         RefreshHeaderLayout()
         RefreshHeaderTone(false)
         self.layoutEntries[#self.layoutEntries + 1] = entry
-        self:RelayoutCollapsibles()
+        self:RequestRelayoutCollapsibles()
         local focusReq = MenuFocusRequestMatches(ctx.key, sectionId)
         if focusReq then
             ExportPublic("MSUF_EM2_MenuFocusSection", body)
@@ -645,7 +671,11 @@ function W.PageBuilder(ctx)
                 entry.outer:SetHeight(entry.headerHeight + (entry.open and height or 0))
             end
             local owner = entry.builder or self
-            if owner.RelayoutCollapsibles then owner:RelayoutCollapsibles() end
+            if owner.RequestRelayoutCollapsibles then
+                owner:RequestRelayoutCollapsibles()
+            elseif owner.RelayoutCollapsibles then
+                owner:RelayoutCollapsibles()
+            end
             return height
         end
         local old = (section.GetHeight and section:GetHeight()) or 0
@@ -658,7 +688,7 @@ function W.PageBuilder(ctx)
                     break
                 end
             end
-            self:RelayoutCollapsibles()
+            self:RequestRelayoutCollapsibles()
         else
             self.y = self.y - (height - old)
             if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
@@ -1378,6 +1408,8 @@ local function CreateToggle(section, label, x, y, labelWidth)
         end
     end
     local function RefreshToggleFeedback(self, hover, down)
+        hover = hover and true or false
+        down = down and true or false
         local enabled = not (self.IsEnabled and not self:IsEnabled())
         local checked = (self.GetChecked and self:GetChecked()) and true or false
         local active = T.colors.checkActive or { 0.055, 0.145, 0.350, 1.00 }
@@ -1391,6 +1423,13 @@ local function CreateToggle(section, label, x, y, labelWidth)
             and (checked and (down and 0.96 or hover and 0.88 or 0.76) or (down and 0.78 or hover and 0.64 or 0.50))
             or 0.30
         local alpha = enabled and 1 or 0.45
+        local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
+        local visualKey = tostring(enabled) .. "\030" .. tostring(checked) .. "\030" .. tostring(hover) .. "\030" .. tostring(down)
+            .. "\030" .. tostring(bg[1]) .. "\030" .. tostring(bg[2]) .. "\030" .. tostring(bg[3]) .. "\030" .. tostring(bg[4])
+            .. "\030" .. tostring(br[1]) .. "\030" .. tostring(br[2]) .. "\030" .. tostring(br[3]) .. "\030" .. tostring(br[4])
+            .. "\030" .. tostring(tx and tx[1]) .. "\030" .. tostring(tx and tx[2]) .. "\030" .. tostring(tx and tx[3]) .. "\030" .. tostring(tx and tx[4])
+        if self._msuf2ToggleVisualKey == visualKey then return end
+        self._msuf2ToggleVisualKey = visualKey
         if self._msuf2ToggleFill then
             local bgAlpha = checked and 0.96 or (down and 0.86 or hover and 0.78 or 0.70)
             self._msuf2ToggleFill:SetVertexColor(min(bg[1] * bgMul, 1), min(bg[2] * bgMul, 1), min(bg[3] * bgMul, 1), bgAlpha * alpha)
@@ -1401,8 +1440,10 @@ local function CreateToggle(section, label, x, y, labelWidth)
         SyncCheckedTexture(self, checked, enabled)
         SetToggleHoverVisual(self, hover and enabled, down and enabled)
         if self._msuf2Label and self._msuf2Label.SetTextColor then
-            local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
-            self._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
+            local r, g, b, a = tx[1], tx[2], tx[3], tx[4] or 1
+            self._msuf2Label._msuf2TextColorR, self._msuf2Label._msuf2TextColorG = r, g
+            self._msuf2Label._msuf2TextColorB, self._msuf2Label._msuf2TextColorA = b, a
+            self._msuf2Label:SetTextColor(r, g, b, a)
         end
     end
     btn._msuf2RefreshToggleFeedback = RefreshToggleFeedback
@@ -1724,17 +1765,37 @@ function W.SetControlShown(control, shown)
 end
 local function SetEnabledState(frame, enabled)
     if not frame then return end
+    local mouseEnabled = enabled and not frame._msuf2UseProxyMouse
+    if frame._msuf2EnabledStateApplied == enabled
+        and frame._msuf2MouseEnabledStateApplied == mouseEnabled
+        and (not frame.IsEnabled or ((frame:IsEnabled() and true or false) == enabled))
+    then
+        return
+    end
+    frame._msuf2EnabledStateApplied = enabled
+    frame._msuf2MouseEnabledStateApplied = mouseEnabled
     if frame.Enable and frame.Disable then
         if enabled then frame:Enable() else frame:Disable() end
     elseif frame.SetEnabled then
         frame:SetEnabled(enabled)
     end
-    if frame.EnableMouse then frame:EnableMouse(enabled and not frame._msuf2UseProxyMouse) end
+    if frame.EnableMouse then frame:EnableMouse(mouseEnabled) end
 end
 local function SetTextEnabledColor(fontString, enabled)
     if not (fontString and fontString.SetTextColor) then return end
     local c = enabled and T.colors.text or T.colors.dim
-    fontString:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+    local r, g, b, a = c[1], c[2], c[3], c[4] or 1
+    if fontString._msuf2EnabledColorState == enabled
+        and fontString._msuf2TextColorR == r
+        and fontString._msuf2TextColorG == g
+        and fontString._msuf2TextColorB == b
+        and fontString._msuf2TextColorA == a
+    then
+        return
+    end
+    fontString._msuf2EnabledColorState = enabled
+    fontString._msuf2TextColorR, fontString._msuf2TextColorG, fontString._msuf2TextColorB, fontString._msuf2TextColorA = r, g, b, a
+    fontString:SetTextColor(r, g, b, a)
 end
 local function HasDisableGate(control)
     local gates = control and control._msuf2DisableGates
@@ -1746,39 +1807,51 @@ local function HasDisableGate(control)
 end
 local function ApplyEnabledVisuals(control, enabled)
     SetEnabledState(control, enabled)
-    if control.SetAlpha then control:SetAlpha(enabled and 1 or 0.45) end
+    if control.SetAlpha and control._msuf2EnabledAlphaState ~= enabled then
+        control._msuf2EnabledAlphaState = enabled
+        control:SetAlpha(enabled and 1 or 0.45)
+    end
     SetTextEnabledColor(control._msuf2Title, enabled)
     SetTextEnabledColor(control._msuf2Label, enabled)
     if control._msuf2RefreshSwitchVisual then control:_msuf2RefreshSwitchVisual() end
     if control._msuf2RefreshToggleFeedback then control:_msuf2RefreshToggleFeedback() end
-    if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse then control._msuf2LabelHit:EnableMouse(enabled) end
+    if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse and control._msuf2LabelHit._msuf2MouseEnabledStateApplied ~= enabled then
+        control._msuf2LabelHit._msuf2MouseEnabledStateApplied = enabled
+        control._msuf2LabelHit:EnableMouse(enabled)
+    end
     local edit = control.editBox or control.__MSUF_valueBox
     if edit then
         SetEnabledState(edit, enabled)
-        if edit.SetAlpha then edit:SetAlpha(enabled and 1 or 0.45) end
+        if edit.SetAlpha and edit._msuf2EnabledAlphaState ~= enabled then
+            edit._msuf2EnabledAlphaState = enabled
+            edit:SetAlpha(enabled and 1 or 0.45)
+        end
     end
     if control._msuf2StepButtons then
         for i = 1, #control._msuf2StepButtons do
             local btn = control._msuf2StepButtons[i]
             SetEnabledState(btn, enabled)
-            if btn.SetAlpha then btn:SetAlpha(enabled and 1 or 0.45) end
+            if btn.SetAlpha and btn._msuf2EnabledAlphaState ~= enabled then
+                btn._msuf2EnabledAlphaState = enabled
+                btn:SetAlpha(enabled and 1 or 0.45)
+            end
         end
     end
     if control.buttons then
         for i = 1, #control.buttons do
             local btn = control.buttons[i]
             SetEnabledState(btn, enabled)
-            if btn.SetAlpha then btn:SetAlpha(enabled and 1 or 0.45) end
+            if btn.SetAlpha and btn._msuf2EnabledAlphaState ~= enabled then
+                btn._msuf2EnabledAlphaState = enabled
+                btn:SetAlpha(enabled and 1 or 0.45)
+            end
         end
     end
 end
 local function ApplyControlEnabled(control)
     if not control then return end
     local enabled = (control._msuf2DesiredEnabled ~= false) and not HasDisableGate(control)
-    if control._msuf2AppliedEnabled == enabled then
-        if control._msuf2ControlKind == "slider" and control._msuf2UpdateFill then control:_msuf2UpdateFill() end
-        return
-    end
+    if control._msuf2AppliedEnabled == enabled then return end
     control._msuf2AppliedEnabled = enabled
     if control._msuf2ControlKind == "slider" then
         HideSliderTemplateParts(control)

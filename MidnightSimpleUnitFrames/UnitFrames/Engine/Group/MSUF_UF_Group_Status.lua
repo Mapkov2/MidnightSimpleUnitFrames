@@ -570,6 +570,9 @@ local function RunStatusPollFrame(frame)
   if not (frame and (not live or live[frame] == true)) then
     return
   end
+  if frame.IsShown and not frame:IsShown() then
+    return
+  end
   local active = frame._msufActiveElements
   if not (active and active.GroupStatusRuntime == true) then
     return

@@ -16,13 +16,20 @@ if type(C) ~= "table" then return end
 local Registry = C.Registry
 if type(Registry) ~= "table" then return end
 
+local AddSettingToFindIndex
+
 function Registry:RegisterSetting(spec)
     if type(spec) ~= "table" or type(spec.key) ~= "string" or spec.key == "" then return nil end
     if self.settingsByKey[spec.key] then return self.settingsByKey[spec.key] end
     spec.aliases = type(spec.aliases) == "table" and spec.aliases or {}
     self.settings[#self.settings + 1] = spec
     self.settingsByKey[spec.key] = spec
-    self._findSettingsIndex = nil
+    if type(self._findSettingsIndex) == "table"
+        and tonumber(self._findSettingsIndexCount) == (#self.settings - 1)
+        and type(AddSettingToFindIndex) == "function" then
+        AddSettingToFindIndex(self._findSettingsIndex, spec)
+        self._findSettingsIndexCount = #self.settings
+    end
     if A.Knowledge and type(A.Knowledge.MarkDirty) == "function" then A.Knowledge.MarkDirty() end
     return spec
 end
@@ -43,7 +50,25 @@ local function AddFindIndex(index, bucket, key, setting)
     byKey[key][#byKey[key] + 1] = setting
 end
 
+AddSettingToFindIndex = function(index, setting)
+    if type(index) ~= "table" or type(setting) ~= "table" then return end
+    AddFindIndex(index, "byUnit", setting.unit, setting)
+    AddFindIndex(index, "byFrameType", setting.frameType, setting)
+    AddFindIndex(index, "byAttribute", setting.attribute, setting)
+    AddFindIndex(index, "byType", setting.type, setting)
+end
+
 function Registry:BuildFindSettingsIndex()
+    local existing = self._findSettingsIndex
+    local indexedCount = tonumber(self._findSettingsIndexCount) or 0
+    local settingsCount = #self.settings
+    if type(existing) == "table" and indexedCount > 0 and indexedCount <= settingsCount then
+        for i = indexedCount + 1, settingsCount do
+            AddSettingToFindIndex(existing, self.settings[i])
+        end
+        self._findSettingsIndexCount = settingsCount
+        return existing
+    end
     local index = {
         byUnit = {},
         byFrameType = {},
@@ -51,11 +76,7 @@ function Registry:BuildFindSettingsIndex()
         byType = {},
     }
     for i = 1, #self.settings do
-        local setting = self.settings[i]
-        AddFindIndex(index, "byUnit", setting.unit, setting)
-        AddFindIndex(index, "byFrameType", setting.frameType, setting)
-        AddFindIndex(index, "byAttribute", setting.attribute, setting)
-        AddFindIndex(index, "byType", setting.type, setting)
+        AddSettingToFindIndex(index, self.settings[i])
     end
     self._findSettingsIndex = index
     self._findSettingsIndexCount = #self.settings

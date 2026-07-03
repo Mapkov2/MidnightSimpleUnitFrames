@@ -1326,8 +1326,26 @@ function A.StartJob(label, steps, callback, opts)
         callback = callback,
         budgetMs = tonumber(opts.budgetMs),
         maxStepsPerFrame = tonumber(opts.maxStepsPerFrame),
+        lowPriority = opts.lowPriority == true,
     }
-    A._assistantJobs[#A._assistantJobs + 1] = job
+    -- The pump is strict FIFO on jobs[1]. Background work (index warmup) can
+    -- take minutes at its tiny frame budget, and a user command queued behind
+    -- it would starve exactly that long. Normal jobs therefore enqueue ahead
+    -- of any low-priority job; low-priority work resumes afterwards (its
+    -- coroutine state lives in the step closure, so reordering is safe).
+    local jobs = A._assistantJobs
+    if job.lowPriority then
+        jobs[#jobs + 1] = job
+    else
+        local insertAt = #jobs + 1
+        for i = 1, #jobs do
+            if jobs[i].lowPriority then
+                insertAt = i
+                break
+            end
+        end
+        table.insert(jobs, insertAt, job)
+    end
     if opts.runInCombat == true or not InCombat() then
         ScheduleJobPump()
     else
@@ -7085,6 +7103,7 @@ function A.WarmupPerformanceIndexes(reason)
     end, {
         budgetMs = warmupBudget,
         maxStepsPerFrame = 1,
+        lowPriority = true,
     })
     return true, reason
 end

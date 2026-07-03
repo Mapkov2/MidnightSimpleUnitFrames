@@ -940,6 +940,16 @@ local compiledSpecSettingsGenByKind = GF._compiledSpecSettingsGenByKind or {}
 GF._compiledSpecSettingsGenByKind = compiledSpecSettingsGenByKind
 local compiledSpecSettingsGenAll = GF._compiledSpecSettingsGenAll or 1
 GF._compiledSpecSettingsGenAll = compiledSpecSettingsGenAll
+GF._compiledSpecRevision = GF._compiledSpecRevision or 1
+local compiledSpecRevisionByKind = GF._compiledSpecRevisionByKind or {}
+GF._compiledSpecRevisionByKind = compiledSpecRevisionByKind
+
+local function BumpCompiledSpecRevision(kind)
+  GF._compiledSpecRevision = (GF._compiledSpecRevision or 1) + 1
+  if kind then
+    compiledSpecRevisionByKind[kind] = (compiledSpecRevisionByKind[kind] or 1) + 1
+  end
+end
 
 local function CompileSpecUncached(kind, frame, unit, conf)
   kind = kind or "party"
@@ -1165,6 +1175,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
 end
 
 function GF.InvalidateCompiledSpecs(kind)
+  BumpCompiledSpecRevision(kind)
   if kind then
     compiledSpecSettingsGenByKind[kind] = (compiledSpecSettingsGenByKind[kind] or 1) + 1
   else
@@ -1176,6 +1187,14 @@ function GF.InvalidateCompiledSpecs(kind)
   else
     wipe(compiledSpecCache)
   end
+end
+
+function GF.GetCompiledSpecRevision(kind)
+  kind = kind or "party"
+  return tostring(GF._compiledSpecRevision or 1)
+    .. ":" .. tostring(compiledSpecRevisionByKind[kind] or 1)
+    .. ":" .. tostring(GF._compiledSpecSerial or 1)
+    .. ":" .. tostring(compiledSpecSerialByKind[kind] or 1)
 end
 
 function GF.DropCompiledSpecs(kind)

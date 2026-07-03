@@ -380,16 +380,21 @@ function M.TextSlotOffsetKeys(kind, slot)
     if not prefix then return "nameOffsetX", "nameOffsetY" end
     return prefix .. "OffsetX", prefix .. "OffsetY"
 end
-function M.DeepCopy(value, seen)
+local function DeepCopyValue(value, seen)
     if type(value) ~= "table" then return value end
     seen = seen or {}
     if seen[value] then return seen[value] end
     local out = {}
     seen[value] = out
     for k, v in pairs(value) do
-        out[M.DeepCopy(k, seen)] = M.DeepCopy(v, seen)
+        local outKey = type(k) == "table" and DeepCopyValue(k, seen) or k
+        out[outKey] = type(v) == "table" and DeepCopyValue(v, seen) or v
     end
     return out
+end
+
+function M.DeepCopy(value, seen)
+    return DeepCopyValue(value, seen)
 end
 local function PickValues(source, names, fallbacks, defaultEmpty)
     local values, count = {}, 0
