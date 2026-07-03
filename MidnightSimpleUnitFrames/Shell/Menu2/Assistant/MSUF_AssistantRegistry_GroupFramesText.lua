@@ -18,6 +18,8 @@ function A.GroupFramesRegistry.RegisterTextSettings(ctx, scope)
     if scope == "" then return end
 
     local AddAliasesForUnit = ctx.AddAliasesForUnit
+    local GeneralDB = ctx.GeneralDB
+    local GroupDB = ctx.GroupDB
     local RegisterGroupBoolean = ctx.RegisterGroupBoolean
     local RegisterGroupNumber = ctx.RegisterGroupNumber
     local RegisterGroupEnum = ctx.RegisterGroupEnum
@@ -71,6 +73,50 @@ function A.GroupFramesRegistry.RegisterTextSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "right hp text")
     RegisterGroupTextMode(scope, "healthTextRight", "textRight", "Right HP Text", "NONE", aliases)
 
+    local function PercentSignVisible(scopeKey, dbKey)
+        local conf = type(GroupDB) == "function" and GroupDB(scopeKey) or nil
+        local value = type(conf) == "table" and conf[dbKey] or nil
+        if value ~= nil then return value ~= true end
+        local g = type(GeneralDB) == "function" and GeneralDB() or nil
+        return not (type(g) == "table" and g.hidePercentSymbol == true)
+    end
+    local function SetPercentSignVisible(scopeKey, dbKey, visible)
+        local conf = type(GroupDB) == "function" and GroupDB(scopeKey) or nil
+        if type(conf) == "table" then
+            conf[dbKey] = not (visible and true or false)
+        end
+    end
+    local function RegisterHidePercent(attr, dbKey, label, ...)
+        aliases = {}
+        for i = 1, select("#", ...) do
+            AddAliasesForUnit(aliases, scope, select(i, ...))
+        end
+        AddAliasesForUnit(aliases, scope, "hide percent sign")
+        AddAliasesForUnit(aliases, scope, "hide percent symbol")
+        AddAliasesForUnit(aliases, scope, "hide % sign")
+        RegisterGroupBoolean(scope, attr, dbKey, label, false, "visual", aliases, { matchLabel = false })
+    end
+    local function RegisterPercentSign(attr, dbKey, label, ...)
+        aliases = {}
+        for i = 1, select("#", ...) do
+            AddAliasesForUnit(aliases, scope, select(i, ...))
+        end
+        AddAliasesForUnit(aliases, scope, "percent sign")
+        AddAliasesForUnit(aliases, scope, "percent symbol")
+        AddAliasesForUnit(aliases, scope, "% sign")
+        RegisterGroupBoolean(scope, attr, dbKey, label, true, "visual", aliases, {
+            keySuffix = attr,
+            get = function(scopeKey) return PercentSignVisible(scopeKey, dbKey) end,
+            set = function(scopeKey, value) SetPercentSignVisible(scopeKey, dbKey, value) end,
+        })
+    end
+    RegisterHidePercent("healthTextLeftHidePercentSymbol", "hpTextLeftHidePercentSymbol", "Left HP Hide % Sign", "hp left hide percent sign", "left hp hide percent sign", "health left hide percent sign", "left health hide percent sign", "hide hp left percent sign", "hide health left percent sign", "hide left hp percent sign")
+    RegisterPercentSign("healthTextLeftPercentSymbol", "hpTextLeftHidePercentSymbol", "Left HP % Sign", "hp left percent sign", "health left percent sign", "left hp percent sign", "hp left % sign", "left hp % sign")
+    RegisterHidePercent("healthTextCenterHidePercentSymbol", "hpTextCenterHidePercentSymbol", "Center HP Hide % Sign", "hp center hide percent sign", "center hp hide percent sign", "hp middle hide percent sign", "health center hide percent sign", "center health hide percent sign", "hide hp center percent sign", "hide health center percent sign", "hide center hp percent sign", "hide hp middle percent sign")
+    RegisterPercentSign("healthTextCenterPercentSymbol", "hpTextCenterHidePercentSymbol", "Center HP % Sign", "hp center percent sign", "health center percent sign", "center hp percent sign", "hp middle percent sign", "middle hp percent sign", "hp center % sign")
+    RegisterHidePercent("healthTextRightHidePercentSymbol", "hpTextRightHidePercentSymbol", "Right HP Hide % Sign", "hp right hide percent sign", "right hp hide percent sign", "health right hide percent sign", "right health hide percent sign", "hide hp right percent sign", "hide health right percent sign", "hide right hp percent sign")
+    RegisterPercentSign("healthTextRightPercentSymbol", "hpTextRightHidePercentSymbol", "Right HP % Sign", "hp right percent sign", "health right percent sign", "right hp percent sign", "hp right % sign", "right hp % sign")
+
     aliases = {}
     AddAliasesForUnit(aliases, scope, "hp text delimiter")
     AddAliasesForUnit(aliases, scope, "health text delimiter")
@@ -121,6 +167,13 @@ function A.GroupFramesRegistry.RegisterTextSettings(ctx, scope)
     AddAliasesForUnit(aliases, scope, "power right text")
     AddAliasesForUnit(aliases, scope, "right power text")
     RegisterGroupTextMode(scope, "powerTextRight", "powerTextRight", "Right Power Text", "NONE", aliases)
+
+    RegisterHidePercent("powerTextLeftHidePercentSymbol", "powerTextLeftHidePercentSymbol", "Left Power Hide % Sign", "power left hide percent sign", "left power hide percent sign", "hide power left percent sign", "hide left power percent sign")
+    RegisterPercentSign("powerTextLeftPercentSymbol", "powerTextLeftHidePercentSymbol", "Left Power % Sign", "power left percent sign", "left power percent sign", "power left % sign", "left power % sign")
+    RegisterHidePercent("powerTextCenterHidePercentSymbol", "powerTextCenterHidePercentSymbol", "Center Power Hide % Sign", "power center hide percent sign", "center power hide percent sign", "power middle hide percent sign", "hide power center percent sign", "hide center power percent sign", "hide power middle percent sign")
+    RegisterPercentSign("powerTextCenterPercentSymbol", "powerTextCenterHidePercentSymbol", "Center Power % Sign", "power center percent sign", "center power percent sign", "power middle percent sign", "middle power percent sign", "power center % sign")
+    RegisterHidePercent("powerTextRightHidePercentSymbol", "powerTextRightHidePercentSymbol", "Right Power Hide % Sign", "power right hide percent sign", "right power hide percent sign", "hide power right percent sign", "hide right power percent sign")
+    RegisterPercentSign("powerTextRightPercentSymbol", "powerTextRightHidePercentSymbol", "Right Power % Sign", "power right percent sign", "right power percent sign", "power right % sign", "right power % sign")
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "power text delimiter")

@@ -29,6 +29,9 @@ function A.ClassPowerRegistry.RegisterPlayerHPTextSettings(ctx)
     local RegisterBarsNumber = ctx.RegisterBarsNumber
     local RegisterBarsEnum = ctx.RegisterBarsEnum
     local ApplyClassPower = ctx.ApplyClassPower
+    local RegistryCore = A.RegistryCore or {}
+    local BarsDB = ctx.BarsDB or RegistryCore.BarsDB
+    local GeneralDB = ctx.GeneralDB or RegistryCore.GeneralDB
 
     if type(RegisterBarsBoolean) ~= "function" or type(RegisterBarsString) ~= "function" then return end
     if type(RegisterBarsNumber) ~= "function" or type(RegisterBarsEnum) ~= "function" then return end
@@ -65,6 +68,54 @@ function A.ClassPowerRegistry.RegisterPlayerHPTextSettings(ctx)
     }, PlayerHPOpts(ApplyClassPower, "MSUF_ASSISTANT_CLASSPOWER_PLAYER_HP_TEXT_RIGHT", {
         valueAliases = PLAYER_HP_TEXT_MODE_ALIASES,
     }))
+    local function PercentSignVisible(dbKey)
+        local bars = type(BarsDB) == "function" and BarsDB() or nil
+        local value = type(bars) == "table" and bars[dbKey] or nil
+        if value ~= nil then return value ~= true end
+        local g = type(GeneralDB) == "function" and GeneralDB() or nil
+        return not (type(g) == "table" and g.hidePercentSymbol == true)
+    end
+    local function SetPercentSignVisible(dbKey, visible)
+        local bars = type(BarsDB) == "function" and BarsDB() or nil
+        if type(bars) == "table" then
+            bars[dbKey] = not (visible and true or false)
+        end
+    end
+    local function RegisterPercentSign(attr, dbKey, label, aliases, reason)
+        RegisterBarsBoolean(dbKey, attr, label, true, aliases, PlayerHPOpts(ApplyClassPower, reason, {
+            keySuffix = attr,
+            get = function() return PercentSignVisible(dbKey) end,
+            set = function(value) SetPercentSignVisible(dbKey, value) end,
+        }))
+    end
+    RegisterBarsBoolean("playerHPBarTextLeftHidePercentSymbol", "leftTextHidePercentSymbol", "Class Resources Player HP Hide Left % Sign", false, {
+        "player hp left hide percent sign", "second hp left hide percent sign", "duplicate hp left hide percent sign",
+        "hide player hp left percent sign", "hide second hp left percent sign", "hide duplicate hp left percent sign",
+        "second hp hide percent sign",
+    }, PlayerHPOpts(ApplyClassPower, "MSUF_ASSISTANT_CLASSPOWER_PLAYER_HP_HIDE_LEFT_PERCENT", { matchLabel = false }))
+    RegisterPercentSign("playerHPBarTextLeftPercentSymbol", "playerHPBarTextLeftHidePercentSymbol", "Class Resources Player HP Left % Sign", {
+        "player hp left percent sign", "second hp left percent sign", "duplicate hp left percent sign",
+        "player hp left % sign", "second hp left % sign", "class resources player hp left percent sign",
+    }, "MSUF_ASSISTANT_CLASSPOWER_PLAYER_HP_LEFT_PERCENT_SIGN")
+    RegisterBarsBoolean("playerHPBarTextCenterHidePercentSymbol", "centerTextHidePercentSymbol", "Class Resources Player HP Hide Center % Sign", false, {
+        "player hp center hide percent sign", "player hp middle hide percent sign", "second hp center hide percent sign",
+        "duplicate hp center hide percent sign", "second hp middle hide percent sign",
+        "hide player hp center percent sign", "hide player hp middle percent sign", "hide second hp center percent sign",
+        "hide duplicate hp center percent sign",
+    }, PlayerHPOpts(ApplyClassPower, "MSUF_ASSISTANT_CLASSPOWER_PLAYER_HP_HIDE_CENTER_PERCENT", { matchLabel = false }))
+    RegisterPercentSign("playerHPBarTextCenterPercentSymbol", "playerHPBarTextCenterHidePercentSymbol", "Class Resources Player HP Center % Sign", {
+        "player hp center percent sign", "player hp middle percent sign", "second hp center percent sign",
+        "duplicate hp center percent sign", "second hp middle percent sign", "player hp center % sign",
+        "class resources player hp center percent sign",
+    }, "MSUF_ASSISTANT_CLASSPOWER_PLAYER_HP_CENTER_PERCENT_SIGN")
+    RegisterBarsBoolean("playerHPBarTextRightHidePercentSymbol", "rightTextHidePercentSymbol", "Class Resources Player HP Hide Right % Sign", false, {
+        "player hp right hide percent sign", "second hp right hide percent sign", "duplicate hp right hide percent sign",
+        "hide player hp right percent sign", "hide second hp right percent sign", "hide duplicate hp right percent sign",
+    }, PlayerHPOpts(ApplyClassPower, "MSUF_ASSISTANT_CLASSPOWER_PLAYER_HP_HIDE_RIGHT_PERCENT", { matchLabel = false }))
+    RegisterPercentSign("playerHPBarTextRightPercentSymbol", "playerHPBarTextRightHidePercentSymbol", "Class Resources Player HP Right % Sign", {
+        "player hp right percent sign", "second hp right percent sign", "duplicate hp right percent sign",
+        "player hp right % sign", "second hp right % sign", "class resources player hp right percent sign",
+    }, "MSUF_ASSISTANT_CLASSPOWER_PLAYER_HP_RIGHT_PERCENT_SIGN")
     RegisterBarsString("playerHPBarTextSeparator", "textDelimiter", "Class Resources Player HP Text Delimiter", "", {
         "second hp text delimiter", "second hp text separator",
         "duplicate hp text delimiter", "duplicate hp text separator",
