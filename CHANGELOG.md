@@ -1,5 +1,78 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta3 - 2026-07-03
+
+### Highlights
+- Added selectable status icon packs for unit and group frames.
+- Added per-indicator custom icon overrides and live icon previews.
+- Added the first Assistant context-engine pass for smarter follow-up commands.
+- Restored Wago-compatible profile exports with embedded full MSUF6 data.
+- Added an MSUF button to the Blizzard Escape/Game Menu.
+
+### Status Icons And Indicators
+- Added bundled icon styles: Classic, Midnight, UX Pro, Glossy Orbs, Dark Emboss, Glass Panels, Neon Outline, Ring Symbols, Dots, Shapes, Diamonds, and Squares.
+- Added external icon-pack support through public registration, addon metadata, and SharedMedia.
+- Added style/custom-icon support for role, leader, assist, raid marker, ready check, summon, resurrection, PvP, phase, combat/resting, and elite indicators.
+- Added Midnight-style switching and icon-pack filtering by supported indicator type.
+- Added icon preview strips and custom icon asset dropdowns.
+- Updated live unit-frame and group-frame status rendering to use the new icon resolver.
+
+### Menu And Preview Improvements
+- Added a Game Menu MSUF entry with addon icon.
+- Added the `showGameMenuButton` default.
+- Added smoother Menu2 scrolling for pages and dropdowns.
+- Replaced the preview gear glyph with a drawn settings icon.
+- Added Menu2 auto-height helpers.
+- Added `/msufmenucheck` for read-only menu consistency checks.
+
+### Assistant And Search
+- Split large parser phrase tables into `_Data.lua` modules.
+- Added generated fallback coverage for scalar DB settings.
+- Added `/msufcoverage` reports, stubs, manifest export, smoke tracking, and gate checks.
+- Added no-op escalation for relative nudges like "more to the right".
+- Added continuation follow-ups for partially repeated subjects like "now move target leader up".
+- Added context scoring for recent unit/category/text-area matches.
+- De-prioritized generated fallbacks during ambiguous matches.
+- Prioritized long exact aliases before broad fast paths.
+- Improved generated labels and aliases.
+- Improved coverage/audit detection for three-segment scoped keys.
+- Improved AutoCoverage labels for acronym boundaries.
+- Added small synonym expansion for generated Assistant aliases.
+- Added minimum-token exact-alias parsing.
+- Added an early priority pass for long exact aliases.
+
+### Profiles And Imports
+- Added MSUF3-prefixed compact export support for Wago.
+- Added normalized Wago compatibility payloads.
+- Embedded full `msuf6` snapshots in exported strings.
+- Prefer embedded full MSUF6 data on import when available.
+- Normalized aura and group-frame payloads for Wago compatibility.
+
+### Class Resources And Power Text
+- Added left/center/right slot controls for detached Player Power text.
+- Added per-slot value modes, delimiter, size, global offsets, per-slot offsets, and text layer.
+- Cleared stale `hpPowerTextOverride` state when detached power text changes.
+- Bumped the Class Resources page version.
+
+### Auras, Castbars, And Runtime Fixes
+- Added localized minute suffixes for aura duration text.
+- Fixed sub-second decimal aura timer display.
+- Reduced redundant boss castbar and castbar visual updates.
+- Reduced redundant Interrupt Ready visual updates.
+- Improved explicit non-interruptible Interrupt Ready colors.
+- Added Player health lifecycle events for dead/alive/ghost updates.
+- Improved target/focus portrait refresh handling.
+
+### What To Test First
+- Status icon packs and Midnight variants.
+- Custom icon overrides and live previews.
+- External icon packs via SharedMedia and addon metadata.
+- Assistant follow-ups, exact option names, `/msufcoverage`, and `/msufcoverage gate`.
+- Wago export/import and full MSUF import from the same string.
+- Detached Player Power text slots and offsets.
+- Aura duration text around sub-second and minute-long timers.
+- Castbar updates, Interrupt Ready visuals, portraits, and Player dead/ghost health refresh.
+
 ## 6.0-Beta2 - 2026-07-03
 
 ### Highlights
