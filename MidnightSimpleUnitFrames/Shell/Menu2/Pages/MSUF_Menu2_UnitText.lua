@@ -166,6 +166,12 @@ local function BuildText(ctx, builder, unit)
         if value == nil or value == "" then value = ReadText(unitKey, legacyKey, fallback) end
         return value or fallback
     end
+    local function ReadSlotHidePercentSymbol(slotKey)
+        local conf = GetConf(unit)
+        if conf and conf[slotKey] ~= nil then return conf[slotKey] == true end
+        local g = GetGeneral()
+        return g and g.hidePercentSymbol == true
+    end
     local function EffectiveTextSize(unitKey, generalKey)
         local conf = GetConf(unit)
         local value = tonumber(conf and conf[unitKey])
@@ -188,6 +194,41 @@ local function BuildText(ctx, builder, unit)
             if item and item.value == value then return item.text or item.label or tostring(value) end
         end
         return tostring(value)
+    end
+    local function TextModeHasPercent(mode)
+        return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
+    end
+    local function TextModeExample(mode, delimiter, isPower, decimalPercent, hidePercentSymbol)
+        mode = tostring(mode or "NONE"):upper()
+        if mode == "NONE" then return nil end
+        local cur = isPower and "100" or "630.0k"
+        local maxText = isPower and "100" or "1.0m"
+        local pct = isPower and "100" or (decimalPercent and "63.4" or "63")
+        if hidePercentSymbol ~= true then pct = pct .. "%" end
+        if mode == "PERCENT" then return pct end
+        if mode == "CURRENT" then return cur end
+        if mode == "MAX" then return maxText end
+        if mode == "DEFICIT" then return "-370.0k" end
+        if mode == "CURMAX" then return cur .. delimiter .. maxText end
+        if mode == "MAXCUR" then return maxText .. delimiter .. cur end
+        if mode == "CURPERCENT" then return cur .. delimiter .. pct end
+        if mode == "PERCENTCUR" then return pct .. delimiter .. cur end
+        if mode == "CURMAXPERCENT" then return cur .. delimiter .. maxText .. delimiter .. pct end
+        if mode == "PERCENTMAXCUR" then return pct .. delimiter .. maxText .. delimiter .. cur end
+        if mode == "MAXPERCENT" then return maxText .. delimiter .. pct end
+        if mode == "PERCENTMAX" then return pct .. delimiter .. maxText end
+        if mode == "PERCENTCURMAX" then return pct .. delimiter .. cur .. delimiter .. maxText end
+        return cur
+    end
+    local function ReversePreviewHealthMode(mode)
+        local rev = {
+            CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT",
+            CURMAX = "MAXCUR", MAXCUR = "CURMAX",
+            CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
+            MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
+            PERCENTCURMAX = "CURMAXPERCENT",
+        }
+        return rev[mode] or mode
     end
     local BadgeValue, BadgeNumber = UnitSectionShared.TextBadgeValue, UnitSectionShared.TextBadgeNumber
     local UpdateTextHeaderBadges
@@ -321,8 +362,9 @@ local function BuildText(ctx, builder, unit)
     local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
-        local content = TextCard(tab, "What text appears", "Slots are explained before advanced position controls.", leftX, -4, cardW, 286)
-        PreviewText(content, cfg.preview, 16, -54, cardW - 32)
+        local content = TextCard(tab, "What text appears", "Slots are explained before advanced position controls.", leftX, -4, cardW, 346)
+        local _, previewValue = PreviewText(content, cfg.preview, 16, -54, cardW - 32)
+        controls.preview = previewValue
         controls.show = W.SwitchAt(content, cfg.showLabel, cardW - 62, -24, 0, "HIDDEN")
         M.BindBoolWidget(ctx, controls.show,
             function()
@@ -347,20 +389,72 @@ local function BuildText(ctx, builder, unit)
                     RefreshTextHeader()
                 end)
         end
-        SlotControl("left", "Left slot", 16, -150, halfDropdownW)
-        SlotControl("center", "Center slot", 28 + halfDropdownW, -150, halfDropdownW)
         SlotControl("right", "Right slot", 16, -96, cardW - 32)
+        SlotControl("left", "Left slot", 16, -178, halfDropdownW)
+        SlotControl("center", "Center slot", 28 + halfDropdownW, -178, halfDropdownW)
+        local function SlotHidePercentControl(slot, label, x, y, width)
+            local spec = cfg.slots[slot]
+            if not (spec and spec.hidePercentKey) then return end
+            local control = SwitchOrToggle(content, label, x, y, width)
+            controls[slot .. "HidePercent"] = control
+            M.BindBoolWidget(ctx, control,
+                function() return ReadSlotHidePercentSymbol(spec.hidePercentKey) end,
+                function(v)
+                    SetText(unit, spec.hidePercentKey, v and true or false, spec.hidePercentReason)
+                    SetCurrentSlot(kind, slot)
+                    FocusPreviewText(kind, slot, true)
+                    RefreshTextHeader()
+                end)
+        end
+        SlotHidePercentControl("right", "Hide right % sign", 16, -146, cardW - 32)
+        SlotHidePercentControl("left", "Hide left % sign", 16, -230, halfDropdownW)
+        SlotHidePercentControl("center", "Hide center % sign", 28 + halfDropdownW, -230, halfDropdownW)
+        function controls.RefreshPercentToggles(enabled)
+            for slot, spec in pairs(cfg.slots or {}) do
+                local control = controls[slot .. "HidePercent"]
+                if control then
+                    SetControlEnabled(control, enabled == true and TextModeHasPercent(ReadSlot(unit, spec.key, cfg.legacyKey, spec.default)))
+                end
+            end
+        end
+        function controls.RefreshPreview()
+            if not (controls.preview and controls.preview.SetText) then return end
+            local leftSpec, centerSpec, rightSpec = cfg.slots.left, cfg.slots.center, cfg.slots.right
+            local leftMode = ReadSlot(unit, leftSpec.key, cfg.legacyKey, leftSpec.default)
+            local centerMode = ReadSlot(unit, centerSpec.key, cfg.legacyKey, centerSpec.default)
+            local rightMode = ReadSlot(unit, rightSpec.key, cfg.legacyKey, rightSpec.default)
+            local hideLeft = leftSpec.hidePercentKey and ReadSlotHidePercentSymbol(leftSpec.hidePercentKey)
+            local hideCenter = centerSpec.hidePercentKey and ReadSlotHidePercentSymbol(centerSpec.hidePercentKey)
+            local hideRight = rightSpec.hidePercentKey and ReadSlotHidePercentSymbol(rightSpec.hidePercentKey)
+            if cfg.reverseKey and ReadText(unit, cfg.reverseKey, false) == true then
+                leftMode, rightMode = ReversePreviewHealthMode(rightMode), ReversePreviewHealthMode(leftMode)
+                centerMode = ReversePreviewHealthMode(centerMode)
+                hideLeft, hideRight = hideRight, hideLeft
+            end
+            local delimiter = cfg.separatorGet and cfg.separatorGet() or ""
+            local parts = {}
+            local values = {
+                { leftMode, hideLeft },
+                { centerMode, hideCenter },
+                { rightMode, hideRight },
+            }
+            for i = 1, #values do
+                local text = TextModeExample(values[i][1], delimiter, cfg.isPower == true, cfg.decimalsKey and ReadText(unit, cfg.decimalsKey, false) == true, values[i][2])
+                if text then parts[#parts + 1] = text end
+            end
+            controls.preview:SetText(#parts > 0 and table.concat(parts, "  ") or "(none)")
+        end
         controls.separator = W.Dropdown(content, "Delimiter", SEPARATORS, 160)
-        PlaceDropdown(content, controls.separator, 16, -206, halfDropdownW)
+        PlaceDropdown(content, controls.separator, 16, -266, halfDropdownW)
         M.BindDropdownWidget(ctx, controls.separator, cfg.separatorGet, function(v) SetText(unit, cfg.separatorKey, v or "", cfg.separatorReason) end)
         if cfg.reverseKey then
-            controls.reverse = SwitchOrToggle(content, "Reverse order", 28 + halfDropdownW, -228, halfDropdownW)
+            controls.reverse = SwitchOrToggle(content, "Reverse order", 28 + halfDropdownW, -288, halfDropdownW)
             M.BindBoolWidget(ctx, controls.reverse,
                 function() return ReadText(unit, cfg.reverseKey, false) == true end,
                 function(v) SetText(unit, cfg.reverseKey, v and true or false, cfg.reverseReason) end)
         end
         if cfg.decimalsKey then
-            controls.decimals = SwitchOrToggle(content, "Decimal percent", 28 + halfDropdownW, -256, halfDropdownW)
+            controls.decimals = SwitchOrToggle(content, "Decimal percent", 28 + halfDropdownW, -316, halfDropdownW)
             M.BindBoolWidget(ctx, controls.decimals,
                 function() return ReadText(unit, cfg.decimalsKey, false) == true end,
                 function(v) SetText(unit, cfg.decimalsKey, v and true or false, cfg.decimalsReason) end)
@@ -405,7 +499,7 @@ local function BuildText(ctx, builder, unit)
             end)
         BindPositionSlider("slotX", "Slot X", -284, function() return SlotOffsetKeys(kind) end, 0, cfg.slotXReason, function() return CurrentSlot(kind) end)
         BindPositionSlider("slotY", "Slot Y", -342, function() local _, yKey = SlotOffsetKeys(kind); return yKey end, 0, cfg.slotYReason, function() return CurrentSlot(kind) end)
-        local appearance = TextCard(tab, "Appearance", nil, leftX, -310, cardW, 144)
+        local appearance = TextCard(tab, "Appearance", nil, leftX, -374, cardW, 144)
         controls.size = W.Slider(appearance, "Size", 6, 48, 1, 260)
         PlaceSlider(appearance, controls.size, 16, -58, cardW - 72)
         M.BindNumberWidget(ctx, controls.size,
@@ -423,9 +517,9 @@ local function BuildText(ctx, builder, unit)
         modes = HP_MODES,
         legacyKey = "hpTextMode",
         slots = {
-            left = { key = "textLeft", default = "NONE", reason = "MSUF2_HP_LEFT" },
-            center = { key = "textCenter", default = "NONE", reason = "MSUF2_HP_CENTER" },
-            right = { key = "textRight", default = "CURPERCENT", reason = "MSUF2_HP_RIGHT" },
+            left = { key = "textLeft", default = "NONE", reason = "MSUF2_HP_LEFT", hidePercentKey = "hpTextLeftHidePercentSymbol", hidePercentReason = "MSUF2_HP_LEFT_HIDE_PERCENT_SYMBOL" },
+            center = { key = "textCenter", default = "NONE", reason = "MSUF2_HP_CENTER", hidePercentKey = "hpTextCenterHidePercentSymbol", hidePercentReason = "MSUF2_HP_CENTER_HIDE_PERCENT_SYMBOL" },
+            right = { key = "textRight", default = "CURPERCENT", reason = "MSUF2_HP_RIGHT", hidePercentKey = "hpTextRightHidePercentSymbol", hidePercentReason = "MSUF2_HP_RIGHT_HIDE_PERCENT_SYMBOL" },
         },
         separatorKey = "hpTextSeparator",
         separatorGet = function() return ReadText(unit, "hpTextSeparator", "") end,
@@ -451,6 +545,7 @@ local function BuildText(ctx, builder, unit)
     })
     local powerControls = BuildValueTextTab("power", powerTab, {
         preview = "100 Energy",
+        isPower = true,
         showLabel = "Show Power Text",
         showKey = "showPowerText",
         showDefault = PowerTextDefault,
@@ -458,9 +553,9 @@ local function BuildText(ctx, builder, unit)
         modes = POWER_MODES,
         legacyKey = "powerTextMode",
         slots = {
-            left = { key = "powerTextLeft", default = "NONE", reason = "MSUF2_POWER_TEXT_LEFT" },
-            center = { key = "powerTextCenter", default = "NONE", reason = "MSUF2_POWER_TEXT_CENTER" },
-            right = { key = "powerTextRight", default = "CURPERCENT", reason = "MSUF2_POWER_TEXT_RIGHT" },
+            left = { key = "powerTextLeft", default = "NONE", reason = "MSUF2_POWER_TEXT_LEFT", hidePercentKey = "powerTextLeftHidePercentSymbol", hidePercentReason = "MSUF2_POWER_TEXT_LEFT_HIDE_PERCENT_SYMBOL" },
+            center = { key = "powerTextCenter", default = "NONE", reason = "MSUF2_POWER_TEXT_CENTER", hidePercentKey = "powerTextCenterHidePercentSymbol", hidePercentReason = "MSUF2_POWER_TEXT_CENTER_HIDE_PERCENT_SYMBOL" },
+            right = { key = "powerTextRight", default = "CURPERCENT", reason = "MSUF2_POWER_TEXT_RIGHT", hidePercentKey = "powerTextRightHidePercentSymbol", hidePercentReason = "MSUF2_POWER_TEXT_RIGHT_HIDE_PERCENT_SYMBOL" },
         },
         separatorKey = "powerTextSeparator",
         separatorGet = function() return ReadText(unit, "powerTextSeparator", ReadText(unit, "hpTextSeparator", "")) end,
@@ -522,14 +617,18 @@ local function BuildText(ctx, builder, unit)
         local powerOn = PowerTextShown()
         local powerManaged = IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)
         if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
+        if hpControls.RefreshPreview then hpControls.RefreshPreview() end
+        if powerControls.RefreshPreview then powerControls.RefreshPreview() end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         SetControlEnabled(showNameText, true)
         SetControlsEnabled(nameTextControls, nameOn)
         SetControlEnabled(hpControls.show, true)
         SetControlsEnabled(hpTextControls, hpOn)
+        if hpControls.RefreshPercentToggles then hpControls.RefreshPercentToggles(hpOn) end
         SetControlsEnabled(hpSlotControls, hpOn and not MoveTogether("hp"))
         SetControlEnabled(powerControls.show, true)
         SetControlsEnabled(powerTextControls, powerOn)
+        if powerControls.RefreshPercentToggles then powerControls.RefreshPercentToggles(powerOn) end
         SetControlsEnabled(powerSlotControls, powerOn and not MoveTogether("power"))
         if powerManaged then
             if powerManagedNotice then

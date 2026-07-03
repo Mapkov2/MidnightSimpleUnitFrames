@@ -362,11 +362,16 @@ function Shared.ValueTextControlSets(kind, controls, layer, hookControls, curren
     local function CurrentSlotFocus() return currentSlot and currentSlot(kind) end
     local hookSpecs = {
         { controls.show }, { controls.left, "left" }, { controls.center, "center" }, { controls.right, "right" },
+        { controls.leftHidePercent, "left" }, { controls.centerHidePercent, "center" }, { controls.rightHidePercent, "right" },
         { delimiter }, { controls.x }, { controls.y }, { controls.moveTogether },
         { controls.slot, CurrentSlotFocus }, { controls.slotX, CurrentSlotFocus }, { controls.slotY, CurrentSlotFocus },
         { controls.size }, { layer },
     }
-    local textControls = { controls.left, controls.center, controls.right, delimiter, controls.size, controls.x, controls.y, controls.moveTogether, layer }
+    local textControls = {
+        controls.left, controls.center, controls.right,
+        controls.leftHidePercent, controls.centerHidePercent, controls.rightHidePercent,
+        delimiter, controls.size, controls.x, controls.y, controls.moveTogether, layer,
+    }
     if controls.reverse then
         hookSpecs[#hookSpecs + 1] = { controls.reverse }
         textControls[#textControls + 1] = controls.reverse

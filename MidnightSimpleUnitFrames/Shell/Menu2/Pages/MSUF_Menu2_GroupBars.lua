@@ -331,10 +331,11 @@ local function BuildGFBars(ctx)
     local hpSliderW = min(310, max(230, textRightW))
     local textDropW = min(310, max(220, textCardW))
     local textHalfDropW = floor((textCardW - 44) / 2)
-    local function TextModeExampleStr(mode, delim, isPower, decimalHP)
+    local function TextModeExampleStr(mode, delim, isPower, decimalHP, hidePercentSymbol)
         local cur     = isPower and "100"  or "12,450"
         local max_    = isPower and "100"  or "15,000"
-        local pct     = isPower and "100%" or (decimalHP and "83.0%" or "83%")
+        local pct     = isPower and "100" or (decimalHP and "83.0" or "83")
+        if hidePercentSymbol ~= true then pct = pct .. "%" end
         local deficit = isPower and "0"    or "-2,550"
         if mode == "PERCENT"        then return pct
         elseif mode == "CURRENT"    then return cur
@@ -352,6 +353,9 @@ local function BuildGFBars(ctx)
         end
         return nil
     end
+    local function TextModeHasPercent(mode)
+        return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
+    end
     local function ReverseHpPreviewMode(mode)
         local gf = MSUF and MSUF.GF
         if gf and gf.ReverseHealthTextMode then return gf.ReverseHealthTextMode(mode) end
@@ -364,15 +368,26 @@ local function BuildGFBars(ctx)
         }
         return rev[mode] or mode
     end
-    local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP)
-        if reverse and not isPower then leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode) end
+    local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, hideLeft, hideCenter, hideRight)
+        if reverse and not isPower then
+            leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode)
+            hideLeft, hideRight = hideRight, hideLeft
+        end
         local slots = { leftMode, centerMode, rightMode }
+        local hideSlots = { hideLeft, hideCenter, hideRight }
         local parts = {}
-        for _, mode in ipairs(slots) do
-            local ex = TextModeExampleStr(mode, delim, isPower, decimalHP)
+        for i, mode in ipairs(slots) do
+            local ex = TextModeExampleStr(mode, delim, isPower, decimalHP, hideSlots[i])
             if ex then parts[#parts + 1] = ex end
         end
         return #parts > 0 and table.concat(parts, "  ") or "(none)"
+    end
+    local function SlotHidePercentSymbol(scope, key)
+        local conf = Conf(scope)
+        if conf and conf[key] ~= nil then return conf[key] == true end
+        local db = M.EnsureDB and M.EnsureDB()
+        local g = db and db.general
+        return g and g.hidePercentSymbol == true
     end
     local hint = W.Text(text, "Font style is shared in Global Style > Fonts. Position can be adjusted here or dragged in Edit Mode.", 14, -38, textW - 210, { 0.60, 0.75, 1.00, 1 })
     if hint.SetWordWrap then hint:SetWordWrap(true) end
@@ -560,7 +575,7 @@ local function BuildGFBars(ctx)
     local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
-        local content = TextCard(tab, "What text appears", "Slots are explained before advanced position controls.", textLeftX, -4, textCardW, 286)
+        local content = TextCard(tab, "What text appears", "Slots are explained before advanced position controls.", textLeftX, -4, textCardW, 346)
         controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
         if cfg.showGet then
             controls.show = W.SwitchAt(content, cfg.showLabel, textCardW - 62, -24, 0, "HIDDEN")
@@ -573,11 +588,36 @@ local function BuildGFBars(ctx)
             controls[slot] = ScopeDropdown(ctx, content, label, TEXT_MODES, width, spec.key, spec.default, "visual", x, y, width)
         end
         SlotControl("right", "Right slot", 16, -96, textCardW - 32)
-        SlotControl("left", "Left slot", 16, -150, textHalfDropW)
-        SlotControl("center", "Center slot", 28 + textHalfDropW, -150, textHalfDropW)
-        controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, -206, textHalfDropW)
-        if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, -228, textHalfDropW), cfg.reverseKey, false, "visual") end
-        if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, -256, textHalfDropW), cfg.decimalsKey, false, "visual") end
+        SlotControl("left", "Left slot", 16, -178, textHalfDropW)
+        SlotControl("center", "Center slot", 28 + textHalfDropW, -178, textHalfDropW)
+        local function SlotHidePercentControl(slot, label, x, y, width)
+            local spec = cfg.slots[slot]
+            if not (spec and spec.hidePercentKey) then return end
+            local control = W.ToggleAt(content, label, x, y, width)
+            controls[slot .. "HidePercent"] = control
+            M.BindBoolWidget(ctx, control,
+                function() return SlotHidePercentSymbol(CurrentScope(), spec.hidePercentKey) end,
+                function(value)
+                    Set(CurrentScope(), spec.hidePercentKey, value and true or false, "visual")
+                    SetCurrentSlot(kind, slot)
+                    FocusGFPreviewText(kind, slot, true)
+                    RequestGroupBarsRefresh(ctx, "gf-bars-text-hide-percent-symbol")
+                end)
+        end
+        SlotHidePercentControl("right", "Hide right % sign", 16, -146, textCardW - 32)
+        SlotHidePercentControl("left", "Hide left % sign", 16, -230, textHalfDropW)
+        SlotHidePercentControl("center", "Hide center % sign", 28 + textHalfDropW, -230, textHalfDropW)
+        function controls.RefreshPercentToggles(enabled)
+            for slot, spec in pairs(cfg.slots or {}) do
+                local control = controls[slot .. "HidePercent"]
+                if control then
+                    SetOptionEnabled(control, enabled == true and TextModeHasPercent(Val(CurrentScope(), spec.key, spec.default)))
+                end
+            end
+        end
+        controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, -266, textHalfDropW)
+        if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, -288, textHalfDropW), cfg.reverseKey, false, "visual") end
+        if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, -316, textHalfDropW), cfg.decimalsKey, false, "visual") end
         local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 410)
         controls.x = ScopeSlider(ctx, position, "X Offset", -100, 100, 1, hpSliderW, cfg.xKey, 0, "font", 16, -64, textRightW - 58)
         controls.y = ScopeSlider(ctx, position, "Y Offset", -100, 100, 1, hpSliderW, cfg.yKey, 0, "font", 16, -122, textRightW - 58)
@@ -617,7 +657,7 @@ local function BuildGFBars(ctx)
         end
         SlotAxis("X")
         SlotAxis("Y")
-        local appearance = TextCard(tab, "Appearance", nil, textLeftX, -310, textCardW, 144)
+        local appearance = TextCard(tab, "Appearance", nil, textLeftX, -374, textCardW, 144)
         controls.size = ScopeSlider(ctx, appearance, "Size", 6, 48, 1, textSliderW, cfg.sizeKey, cfg.sizeDefault, "font", 16, -58, textCardW - 72)
         return controls
     end
@@ -626,9 +666,9 @@ local function BuildGFBars(ctx)
         showKey = "showHPText",
         showDefault = true,
         slots = {
-            left = { key = "textLeft", default = "NONE" },
-            center = { key = "textCenter", default = "PERCENT" },
-            right = { key = "textRight", default = "NONE" },
+            left = { key = "textLeft", default = "NONE", hidePercentKey = "hpTextLeftHidePercentSymbol" },
+            center = { key = "textCenter", default = "PERCENT", hidePercentKey = "hpTextCenterHidePercentSymbol" },
+            right = { key = "textRight", default = "NONE", hidePercentKey = "hpTextRightHidePercentSymbol" },
         },
         delimiterKey = "textDelimiter",
         reverseKey = "hpTextReverse",
@@ -647,9 +687,9 @@ local function BuildGFBars(ctx)
             if refreshTextControls then refreshTextControls() end
         end,
         slots = {
-            left = { key = "powerTextLeft", default = "NONE" },
-            center = { key = "powerTextCenter", default = "PERCENT" },
-            right = { key = "powerTextRight", default = "NONE" },
+            left = { key = "powerTextLeft", default = "NONE", hidePercentKey = "powerTextLeftHidePercentSymbol" },
+            center = { key = "powerTextCenter", default = "PERCENT", hidePercentKey = "powerTextCenterHidePercentSymbol" },
+            right = { key = "powerTextRight", default = "NONE", hidePercentKey = "powerTextRightHidePercentSymbol" },
         },
         delimiterKey = "powerTextDelimiter",
         positionSubtitle = "Move all power text together or adjust a selected slot.",
@@ -679,8 +719,10 @@ local function BuildGFBars(ctx)
         scopeLabel:SetText(M.Format(M.Tr("Editing %s"), ScopeDisplayName()))
         SetOptionsEnabled(nameTextControls, nameOn)
         SetOptionsEnabled(hpTextControls, hpOn)
+        if hpControls.RefreshPercentToggles then hpControls.RefreshPercentToggles(hpOn) end
         SetOptionsEnabled(hpSlotControls, hpOn and not MoveTogether("hp"))
         SetOptionsEnabled(powerTextControls, powerOn)
+        if powerControls.RefreshPercentToggles then powerControls.RefreshPercentToggles(powerOn) end
         SetOptionsEnabled(powerSlotControls, powerOn and not MoveTogether("power"))
         SetOptionEnabled(showName, true)
         SetOptionEnabled(hpControls.show, true)
@@ -690,13 +732,19 @@ local function BuildGFBars(ctx)
             local delim = Val(kind, "textDelimiter", " / ")
             hpControls.preview:SetText(BuildTextPreviewStr(
                 Val(kind, "textLeft", "NONE"), Val(kind, "textCenter", "PERCENT"), Val(kind, "textRight", "NONE"),
-                delim, Bool(kind, "hpTextReverse", false), false, Bool(kind, "healthTextDecimals", false)))
+                delim, Bool(kind, "hpTextReverse", false), false, Bool(kind, "healthTextDecimals", false),
+                SlotHidePercentSymbol(kind, "hpTextLeftHidePercentSymbol"),
+                SlotHidePercentSymbol(kind, "hpTextCenterHidePercentSymbol"),
+                SlotHidePercentSymbol(kind, "hpTextRightHidePercentSymbol")))
         end
         if powerControls.preview then
             local delim = Val(kind, "powerTextDelimiter", " / ")
             powerControls.preview:SetText(BuildTextPreviewStr(
                 Val(kind, "powerTextLeft", "NONE"), Val(kind, "powerTextCenter", "PERCENT"), Val(kind, "powerTextRight", "NONE"),
-                delim, false, true))
+                delim, false, true, false,
+                SlotHidePercentSymbol(kind, "powerTextLeftHidePercentSymbol"),
+                SlotHidePercentSymbol(kind, "powerTextCenterHidePercentSymbol"),
+                SlotHidePercentSymbol(kind, "powerTextRightHidePercentSymbol")))
         end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         FocusActiveGFPreviewText()

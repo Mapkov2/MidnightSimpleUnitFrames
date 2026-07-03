@@ -596,6 +596,32 @@ local function BuildClassPower(ctx)
     local phpManualControls, phpOrbControls, phpTextureControls, altManaControls = {}, {}, {}, {}
     local RefreshClassPowerControls = M.RefreshProxy()
     local AddControls, AddNamedControls = M.AppendValues, M.AppendNamedValues
+    local function TextModeHasPercent(mode)
+        return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
+    end
+    local function GlobalHidePercentSymbol()
+        local db = M.EnsureDB and M.EnsureDB()
+        local g = db and db.general
+        return g and g.hidePercentSymbol == true
+    end
+    local function HidePercentValue(source, key)
+        if source and source[key] ~= nil then return source[key] == true end
+        return GlobalHidePercentSymbol()
+    end
+    local function SourceToggle(parent, label, source, key, apply)
+        local control = W.Toggle(parent, label)
+        M.BindBoolWidget(ctx, control,
+            function() return HidePercentValue(source(), key) end,
+            function(value) SetValue(source(), key, value and true or false, apply) end)
+        return control
+    end
+    local function PlayerTextToggle(parent, label, key, apply)
+        local control = W.Toggle(parent, label)
+        M.BindBoolWidget(ctx, control,
+            function() return HidePercentValue(Player(), key) end,
+            function(value) SetPlayerTextValue(key, value and true or false, apply) end)
+        return control
+    end
     local function PlaceColumn(parent, x, y, step, width, titleJustify, ...)
         for i = 1, select("#", ...) do
             MoveWidget(select(i, ...), parent, x, y - ((i - 1) * step), width, titleJustify)
@@ -846,7 +872,7 @@ local function BuildClassPower(ctx)
     AddTooltip(dpbFields.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(dpbFields.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
     AddTooltip(dpbFields.shape, "Player Power Shape", "FOLLOW_CLASS resolves from Class Resource shape: Bar -> Bar, Circle -> Round, Diamond/Hex -> Crystal. Orb is a single bottom-to-top filled mana/power sphere.")
-    W.ControlCard(dpbText, "Power Text", "Text shown on the detached Player power bar managed here.", 14, -38, dpbCardW, dpbTwoColumn and 498 or 790)
+    W.ControlCard(dpbText, "Power Text", "Text shown on the detached Player power bar managed here.", 14, -38, dpbCardW, dpbTwoColumn and 560 or 790)
     local dpbTextFields = BuildBoundControls(dpbText, Player, ApplyDetachedPowerText, {
         { "onBar", "detachedTextOnBar", "Power text on bar", "detachedPowerBarTextOnBar", false },
         { "preset", "detachedTextPreset", "Power text", DETACHED_POWER_TEXT_PRESET_VALUES, 300 },
@@ -859,6 +885,9 @@ local function BuildClassPower(ctx)
         { "y", "slider", "Text Y", -300, 300, 1, 300, "powerOffsetY", 4 },
         { "layer", "slider", "Power text layer", 0, 30, 1, 300, "powerTextLayer", 2 },
     })
+    local dpbTextHideRight = PlayerTextToggle(dpbText, "Hide right % sign", "powerTextRightHidePercentSymbol", ApplyDetachedPowerText)
+    local dpbTextHideLeft = PlayerTextToggle(dpbText, "Hide left % sign", "powerTextLeftHidePercentSymbol", ApplyDetachedPowerText)
+    local dpbTextHideCenter = PlayerTextToggle(dpbText, "Hide center % sign", "powerTextCenterHidePercentSymbol", ApplyDetachedPowerText)
     M.classPowerDetachedPowerTextSlot = M.classPowerDetachedPowerTextSlot or "center"
     local function CurrentDetachedPowerTextSlot()
         local slot = M.classPowerDetachedPowerTextSlot
@@ -911,13 +940,20 @@ local function BuildClassPower(ctx)
     PlaceColumn(dpbLayout, 32, -154, 54, dpbControlW, "LEFT", dpbFields.anchor, dpbFields.sync, dpbModeField.mode, dpbFields.shape, dpbFields.orbSize, dpbFields.height)
     PlaceColumn(dpbLayout, dpbRightX, dpbSecondColY, 54, dpbControlW, "LEFT", dpbFields.x, dpbFields.y, dpbFields.layer)
     PlaceColumn(dpbTextures, 32, -104, 54, dpbControlW, "LEFT", dpbTextureFields.fg, dpbTextureFields.bg, dpbTextureFields.outline)
-    PlaceColumn(dpbText, 32, -104, 54, dpbControlW, "LEFT", dpbTextFields.onBar, dpbTextFields.preset, dpbTextFields.right, dpbTextFields.left, dpbTextFields.center, dpbTextFields.sep)
+    PlaceColumn(dpbText, 32, -104, 54, dpbControlW, "LEFT", dpbTextFields.onBar, dpbTextFields.preset, dpbTextFields.right)
+    MoveWidget(dpbTextHideRight, dpbText, 32, -264, dpbControlW, "LEFT")
+    MoveWidget(dpbTextFields.left, dpbText, 32, -298, dpbControlW, "LEFT")
+    MoveWidget(dpbTextHideLeft, dpbText, 32, -350, dpbControlW, "LEFT")
+    MoveWidget(dpbTextFields.center, dpbText, 32, -384, dpbControlW, "LEFT")
+    MoveWidget(dpbTextHideCenter, dpbText, 32, -436, dpbControlW, "LEFT")
+    MoveWidget(dpbTextFields.sep, dpbText, 32, -470, dpbControlW, "LEFT")
     PlaceColumn(dpbText, dpbRightX, dpbTextSecondColY, 54, dpbControlW, "LEFT", dpbTextFields.size, dpbTextFields.x, dpbTextFields.y, dpbTextFields.layer, dpbTextSlot, dpbTextSlotX, dpbTextSlotY)
     AddControls(dpbControls, dpbModeField.mode)
     AddNamedControls(dpbControls, dpbTextureFields, "fg bg outline")
     AddNamedControls(dpbPlayerControls, dpbFields, "anchor sync x y height layer")
     AddNamedControls(dpbPlayerControls, dpbTextFields, "onBar preset")
     AddNamedControls(dpbTextControls, dpbTextFields, "right left center sep size x y layer")
+    AddControls(dpbTextControls, dpbTextHideRight, dpbTextHideLeft, dpbTextHideCenter)
     AddControls(dpbSlotTextControls, dpbTextSlot, dpbTextSlotX, dpbTextSlotY)
     AddNamedControls(dpbPlayerControls, dpbFields, "shape orbSize")
     local phpCompact = layoutWidth < 680
@@ -979,7 +1015,7 @@ local function BuildClassPower(ctx)
     AddTooltip(phpTextureFields.color, "HP Color", "Global follows the normal MSUF health color mode. Class Color forces your class color. Dark Mode forces the configured dark bar color. HP Gradient colors only this second HP bar by current health.")
     AddTooltip(phpTextureFields.bg, "Background Texture", "Visible behind the filled HP amount. At 100% HP the fill covers the background; Outline 0 does not disable this texture.")
     AddTooltip(phpTextureFields.outline, "HP Outline", "Controls only the second HP bar outline. Bar uses four outside border edges; shapes use their fixed edge texture. 0 disables only the outline.")
-    W.ControlCard(phpText, "HP Text", "Same value modes as Player unitframe health text.", 14, -38, phpCardW, phpTwoColumn and 440 or 690)
+    W.ControlCard(phpText, "HP Text", "Same value modes as Player unitframe health text.", 14, -38, phpCardW, phpTwoColumn and 520 or 690)
     local ApplyPlayerHPTextAndRefresh = WithClassPowerRefresh(ApplyPlayerHPText)
     local phpTextEnable = SwitchAt(ctx, phpText, "Show HP text", 32, -104, phpControlW, Bars, "playerHPBarTextEnabled", true, ApplyPlayerHPTextAndRefresh)
     local phpTextShared = SwitchAt(ctx, phpText, "Use Player HP text", 32, -136, phpControlW, Bars, "playerHPBarUsePlayerText", true, ApplyPlayerHPTextAndRefresh)
@@ -993,11 +1029,21 @@ local function BuildClassPower(ctx)
         { "x", "slider", "Text X", -300, 300, 1, 300, "playerHPBarTextOffsetX", 0 },
         { "y", "slider", "Text Y", -300, 300, 1, 300, "playerHPBarTextOffsetY", 0 },
     })
-    PlaceColumn(phpText, 32, -188, 54, phpControlW, "LEFT", phpTextFields.right, phpTextFields.left, phpTextFields.center, phpTextFields.sep)
+    local phpTextHideRight = SourceToggle(phpText, "Hide right % sign", Bars, "playerHPBarTextRightHidePercentSymbol", ApplyPlayerHPText)
+    local phpTextHideLeft = SourceToggle(phpText, "Hide left % sign", Bars, "playerHPBarTextLeftHidePercentSymbol", ApplyPlayerHPText)
+    local phpTextHideCenter = SourceToggle(phpText, "Hide center % sign", Bars, "playerHPBarTextCenterHidePercentSymbol", ApplyPlayerHPText)
+    MoveWidget(phpTextFields.right, phpText, 32, -188, phpControlW, "LEFT")
+    MoveWidget(phpTextHideRight, phpText, 32, -240, phpControlW, "LEFT")
+    MoveWidget(phpTextFields.left, phpText, 32, -274, phpControlW, "LEFT")
+    MoveWidget(phpTextHideLeft, phpText, 32, -326, phpControlW, "LEFT")
+    MoveWidget(phpTextFields.center, phpText, 32, -360, phpControlW, "LEFT")
+    MoveWidget(phpTextHideCenter, phpText, 32, -412, phpControlW, "LEFT")
+    MoveWidget(phpTextFields.sep, phpText, 32, -446, phpControlW, "LEFT")
     PlaceColumn(phpText, phpRightX, phpTextSecondColY, 54, phpControlW, "LEFT", phpTextFields.reverse, phpTextFields.size, phpTextFields.x, phpTextFields.y)
     AddControls(phpControls, phpTextEnable)
     AddControls(phpTextControls, phpTextShared)
     AddNamedControls(phpCustomTextControls, phpTextFields, "right left center sep reverse size")
+    AddControls(phpCustomTextControls, phpTextHideRight, phpTextHideLeft, phpTextHideCenter)
     AddNamedControls(phpTextPositionControls, phpTextFields, "x y")
     AddTooltip(phpTextEnable, "HP Text", "Controls only this second HP bar. The normal Player unitframe HP text remains separate.")
     AddTooltip(phpTextShared, "Use Player HP Text", "Uses Player HP text settings and copies already-rendered Player HP text when it is current. Local Text X/Y still belong to this bar.")
@@ -1043,6 +1089,9 @@ local function BuildClassPower(ctx)
         SetControlEnabled(dpbTextFields.onBar, playerDetached)
         SetControlEnabled(dpbTextFields.size, playerDetached and playerTextOn)
         SetControlsEnabled(dpbTextControls, playerDetached and playerTextOn)
+        SetControlEnabled(dpbTextHideRight, playerDetached and playerTextOn and TextModeHasPercent((db.player and (db.player.powerTextRight or db.player.powerTextMode)) or "CURPERCENT"))
+        SetControlEnabled(dpbTextHideLeft, playerDetached and playerTextOn and TextModeHasPercent(db.player and db.player.powerTextLeft or "NONE"))
+        SetControlEnabled(dpbTextHideCenter, playerDetached and playerTextOn and TextModeHasPercent(db.player and db.player.powerTextCenter or "NONE"))
         SetControlsEnabled(dpbSlotTextControls, playerDetached and playerTextOn)
         local phpOn = BoolValue(bars, "playerHPBarEnabled", false)
         local phpShapeValue = ResolvePlayerHPShape(bars, db)
@@ -1058,6 +1107,9 @@ local function BuildClassPower(ctx)
         local phpSharedText = BoolValue(bars, "playerHPBarUsePlayerText", true)
         SetControlsEnabled(phpTextControls, phpTextOn)
         SetControlsEnabled(phpCustomTextControls, phpTextOn and not phpSharedText)
+        SetControlEnabled(phpTextHideRight, phpTextOn and not phpSharedText and TextModeHasPercent(bars.playerHPBarTextRight or "CURPERCENT"))
+        SetControlEnabled(phpTextHideLeft, phpTextOn and not phpSharedText and TextModeHasPercent(bars.playerHPBarTextLeft or "NONE"))
+        SetControlEnabled(phpTextHideCenter, phpTextOn and not phpSharedText and TextModeHasPercent(bars.playerHPBarTextCenter or "NONE"))
         SetControlsEnabled(phpTextPositionControls, phpTextOn)
         SetControlEnabled(phpUse, true)
         local altOn = BoolValue(bars, "showAltMana", false)
