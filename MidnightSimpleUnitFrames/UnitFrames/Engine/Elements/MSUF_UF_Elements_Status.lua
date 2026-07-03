@@ -1342,18 +1342,56 @@ local function StatusTextChanged(frame, status, event, unitState, seedHP)
   return true
 end
 
+local function RefreshHealthAfterGoneStatus(frame, oldValue)
+  if oldValue ~= "DEAD" and oldValue ~= "GHOST" and oldValue ~= "OFFLINE" then
+    return
+  end
+  if frame._msufStatusTextHealthRefresh == true then
+    return
+  end
+  local active = frame._msufActiveElements
+  if not (active and active.Health == true) then
+    return
+  end
+  local health = UF.elements and UF.elements.Health
+  local update = health and health.Update
+  local unit = frame.unit
+  if not (type(update) == "function" and type(unit) == "string" and unit ~= "" and issecretvalue(unit) ~= true) then
+    return
+  end
+  local refreshed = false
+  local hadDeadBg = frame._msufGFDeadBgState == true
+  local gone = frame._msufUpdateGroupVisualsGoneState
+  if type(gone) == "function" then
+    gone(frame, "MSUF_STATUS_TEXT_CLEAR", unit)
+    refreshed = hadDeadBg and frame._msufGFDeadBgState ~= true
+  end
+  if refreshed == true then
+    return
+  end
+  frame._msufStatusTextHealthRefresh = true
+  update(frame, "MSUF_STATUS_TEXT_CLEAR", unit)
+  frame._msufStatusTextHealthRefresh = nil
+end
+
+local function StatusTextIsGone(value)
+  return value == "DEAD" or value == "GHOST" or value == "OFFLINE"
+end
+
 local function ClearStatusText(frame, fs)
   if frame._msufStatusTextValue == nil
     and frame._msufStatusTextLayout == nil
     and fs and fs._msufStatusShown == false then
     return
   end
+  local oldValue = frame._msufStatusTextValue
   frame._msufStatusTextValue = nil
   frame._msufStatusTextLayout = nil
   if fs then
     SetText(fs, "")
     SetShown(fs, false)
   end
+  RefreshHealthAfterGoneStatus(frame, oldValue)
 end
 
 local function UpdateStatusText(frame, status, event, seedHP)
@@ -1411,11 +1449,15 @@ local function UpdateStatusText(frame, status, event, seedHP)
       and fs._msufStatusShown == true then
       return
     end
+    local oldValue = frame._msufStatusTextValue
     frame._msufStatusTextValue = text
     frame._msufStatusTextLayout = layout
     LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
     SetText(fs, text)
     SetShown(fs, true)
+    if StatusTextIsGone(oldValue) and not StatusTextIsGone(text) then
+      RefreshHealthAfterGoneStatus(frame, oldValue)
+    end
   else
     ClearStatusText(frame, fs)
   end
