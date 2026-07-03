@@ -477,6 +477,31 @@ function Render.Install(box, ctx, deps)
         else
             hpLeftMode, hpCenterMode, hpRightMode = runtimeText.healthLeft or conf.textLeft or "NONE", runtimeText.healthCenter or conf.textCenter or "NONE", runtimeText.healthRight or conf.textRight or "NONE"
         end
+        local function GlobalHidePercentSymbol()
+            local db = M.EnsureDB and M.EnsureDB()
+            local g = db and db.general
+            return g and g.hidePercentSymbol == true
+        end
+        local function SlotHidePercentSymbol(runtimeKey, dbKey)
+            local value = runtimeText and runtimeText[runtimeKey]
+            if value ~= nil then return value == true end
+            if conf and conf[dbKey] ~= nil then return conf[dbKey] == true end
+            return GlobalHidePercentSymbol()
+        end
+        local hpLeftHidePercent = SlotHidePercentSymbol("healthLeftHidePercentSymbol", "hpTextLeftHidePercentSymbol")
+        local hpCenterHidePercent = SlotHidePercentSymbol("healthCenterHidePercentSymbol", "hpTextCenterHidePercentSymbol")
+        local hpRightHidePercent = SlotHidePercentSymbol("healthRightHidePercentSymbol", "hpTextRightHidePercentSymbol")
+        if runtimeSpec and runtimeText.healthReverse == true then
+            hpLeftMode, hpRightMode = hpRightMode, hpLeftMode
+            if gf and gf.ReverseHealthTextMode then
+                hpLeftMode = gf.ReverseHealthTextMode(hpLeftMode)
+                hpCenterMode = gf.ReverseHealthTextMode(hpCenterMode)
+                hpRightMode = gf.ReverseHealthTextMode(hpRightMode)
+            end
+            hpLeftHidePercent, hpRightHidePercent = hpRightHidePercent, hpLeftHidePercent
+        elseif (not runtimeSpec) and conf and conf.hpTextReverse == true then
+            hpLeftHidePercent, hpRightHidePercent = hpRightHidePercent, hpLeftHidePercent
+        end
         local fakeMax = 1000000
         local fakeHP = max(1, floor(fakeMax * hpPct + 0.5))
         local hpTextR, hpTextG, hpTextB = fr or 1, fg or 1, fb or 1
@@ -489,22 +514,22 @@ function Render.Install(box, ctx, deps)
             end
         end
         local hpDelimiter = runtimeText.healthDelimiter or conf.textDelimiter or " - "
-        local function PreviewHealthText(mode)
-            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false) end
-            return mode == "PERCENT" and "72%" or "720k"
+        local function PreviewHealthText(mode, hidePercentSymbol)
+            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false, nil, hidePercentSymbol) end
+            return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
         end
         PaintPreviewText(mock._hpLeftFS, hpSize, hpLeftMode, "LEFT", "LEFT",
             pad4 + ConfigToOffset(runtimeText.healthLeftX or ((conf.hpOffsetX or 0) + (conf.hpTextLeftOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthLeftY or ((conf.hpOffsetY or 0) + (conf.hpTextLeftOffsetY or 0) + baselineOffset), previewScale),
-            "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpLeftMode))
+            "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpLeftMode, hpLeftHidePercent))
         PaintPreviewText(mock._hpCenterFS, hpSize, hpCenterMode, "CENTER", "CENTER",
             ConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0) + baselineOffset), previewScale),
-            "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpCenterMode))
+            "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpCenterMode, hpCenterHidePercent))
         PaintPreviewText(mock._hpRightFS, hpSize, hpRightMode, "RIGHT", "RIGHT",
             -pad4 + ConfigToOffset(runtimeText.healthRightX or ((conf.hpOffsetX or 0) + (conf.hpTextRightOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthRightY or ((conf.hpOffsetY or 0) + (conf.hpTextRightOffsetY or 0) + baselineOffset), previewScale),
-            "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpRightMode))
+            "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpRightMode, hpRightHidePercent))
         local pwrSize = max(6, ScaleValue((runtimeSpec and runtimeSpec.powerFontSize) or conf.powerFontSize or 9, previewScale, 6))
         local showPowerText = showText
         if runtimeSpec then
@@ -515,25 +540,28 @@ function Render.Install(box, ctx, deps)
         local fakePowMax = 100
         local fakePow = max(0, floor(fakePowMax * powerPct + 0.5))
         local powerDelimiter = runtimeText.powerDelimiter or conf.powerTextDelimiter or conf.textDelimiter or " - "
-        local function PreviewPowerText(mode)
-            if gf and gf.FormatPowerText then return gf.FormatPowerText(mode, fakePow, fakePowMax, powerDelimiter) end
-            return mode == "PERCENT" and "70%" or "70"
+        local function PreviewPowerText(mode, hidePercentSymbol)
+            if gf and gf.FormatPowerText then return gf.FormatPowerText(mode, fakePow, fakePowMax, powerDelimiter, nil, hidePercentSymbol) end
+            return mode == "PERCENT" and (hidePercentSymbol and "70" or "70%") or "70"
         end
         local powerLeftMode = runtimeText.powerLeft or conf.powerTextLeft or "NONE"
         local powerCenterMode = runtimeText.powerCenter or conf.powerTextCenter or "NONE"
         local powerRightMode = runtimeText.powerRight or conf.powerTextRight or "NONE"
+        local powerLeftHidePercent = SlotHidePercentSymbol("powerLeftHidePercentSymbol", "powerTextLeftHidePercentSymbol")
+        local powerCenterHidePercent = SlotHidePercentSymbol("powerCenterHidePercentSymbol", "powerTextCenterHidePercentSymbol")
+        local powerRightHidePercent = SlotHidePercentSymbol("powerRightHidePercentSymbol", "powerTextRightHidePercentSymbol")
         PaintPreviewText(mock._powerLeftFS, pwrSize, powerLeftMode, "BOTTOMLEFT", "BOTTOMLEFT",
             pad4 + ConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale),
             ConfigToOffset(1 + (runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0) + baselineOffset)), previewScale),
-            "LEFT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerLeftMode))
+            "LEFT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerLeftMode, powerLeftHidePercent))
         PaintPreviewText(mock._powerCenterFS, pwrSize, powerCenterMode, "BOTTOM", "BOTTOM",
             ConfigToOffset(runtimeText.powerCenterX or ((conf.powerOffsetX or 0) + (conf.powerTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(1 + (runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0) + baselineOffset)), previewScale),
-            "CENTER", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerCenterMode))
+            "CENTER", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerCenterMode, powerCenterHidePercent))
         PaintPreviewText(mock._powerRightFS, pwrSize, powerRightMode, "BOTTOMRIGHT", "BOTTOMRIGHT",
             -pad4 + ConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale),
             ConfigToOffset(1 + (runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset)), previewScale),
-            "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerRightMode))
+            "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerRightMode, powerRightHidePercent))
         self._bounds:ClearAllPoints()
         local boundsEdge = max(1, outlineEdge)
         self._bounds:SetPoint("TOPLEFT", mock, "TOPLEFT", -boundsEdge, boundsEdge)

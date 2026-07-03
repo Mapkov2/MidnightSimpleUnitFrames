@@ -322,7 +322,7 @@ local function ShortValue(value)
     end
     return tostring(floor(value + 0.5))
 end
-local function ModeText(mode, current, maxValue, delimiter)
+local function ModeText(mode, current, maxValue, delimiter, hidePercentSymbol)
     mode = tostring(mode or "NONE"):upper()
     if mode == "NONE" then return "" end
     current = tonumber(current) or 0
@@ -331,7 +331,8 @@ local function ModeText(mode, current, maxValue, delimiter)
     delimiter = DELIMITERS[delimiter] or delimiter or " "
     local pct = floor((current / maxValue) * 100 + 0.5)
     if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
-    local curText, maxText, pctText = ShortValue(current), ShortValue(maxValue), tostring(pct) .. "%"
+    local curText, maxText, pctText = ShortValue(current), ShortValue(maxValue), tostring(pct)
+    if hidePercentSymbol ~= true then pctText = pctText .. "%" end
     if mode == "CURRENT" then return curText end
     if mode == "MAX" then return maxText end
     if mode == "DEFICIT" then
@@ -349,6 +350,15 @@ local function ModeText(mode, current, maxValue, delimiter)
     if mode == "PERCENTCURMAX" then return pctText .. delimiter .. curText .. delimiter .. maxText end
     if mode == "PERCENTMAXCUR" then return pctText .. delimiter .. maxText .. delimiter .. curText end
     return curText
+end
+local function GlobalHidePercentSymbol()
+    local db = M.EnsureDB and M.EnsureDB()
+    local g = db and db.general
+    return g and g.hidePercentSymbol == true
+end
+local function HidePercentValue(source, key)
+    if source and source[key] ~= nil then return source[key] == true end
+    return GlobalHidePercentSymbol()
 end
 local function ApplyFont(region, size)
     if not (region and region.SetFont) then return end
@@ -1173,10 +1183,13 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
         local rightMode = tostring(player.powerTextRight or player.powerTextMode or "CURPERCENT"):upper()
         local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
         local current = floor((fraction * 100) + 0.5)
+        local hideLeft = HidePercentValue(player, "powerTextLeftHidePercentSymbol")
+        local hideCenter = HidePercentValue(player, "powerTextCenterHidePercentSymbol")
+        local hideRight = HidePercentValue(player, "powerTextRightHidePercentSymbol")
         ApplyMeterText(frame, Clamp(player.powerFontSize, 14, 6, 48), nil, nil,
-            ModeText(leftMode, current, 100, delimiter),
-            ModeText(centerMode, current, 100, delimiter),
-            ModeText(rightMode, current, 100, delimiter),
+            ModeText(leftMode, current, 100, delimiter, hideLeft),
+            ModeText(centerMode, current, 100, delimiter, hideCenter),
+            ModeText(rightMode, current, 100, delimiter, hideRight),
             ResolvePlayerPowerTextLayout(player))
         PlaceTextHandle(preview.handlePowerText, PreviewParent(preview), { frame.left, frame.center, frame.right })
     else
@@ -1219,25 +1232,32 @@ local function PlaceHP(frame, preview, bars, classFrame, powerFrame)
     end
 end
 local function HPTextConfig(bars, player)
-    local left, center, right, delimiter, reverse
+    local left, center, right, delimiter, reverse, hideLeft, hideCenter, hideRight
     if bars.playerHPBarUsePlayerText ~= false then
         left = tostring(player.textLeft or "NONE"):upper()
         center = tostring(player.textCenter or "NONE"):upper()
         right = tostring(player.textRight or player.hpTextMode or "CURPERCENT"):upper()
         delimiter = player.hpTextSeparator or ""
         reverse = player.hpTextReverse == true
+        hideLeft = HidePercentValue(player, "hpTextLeftHidePercentSymbol")
+        hideCenter = HidePercentValue(player, "hpTextCenterHidePercentSymbol")
+        hideRight = HidePercentValue(player, "hpTextRightHidePercentSymbol")
     else
         left = tostring(bars.playerHPBarTextLeft or "NONE"):upper()
         center = tostring(bars.playerHPBarTextCenter or "NONE"):upper()
         right = tostring(bars.playerHPBarTextRight or "CURPERCENT"):upper()
         delimiter = bars.playerHPBarTextSeparator or ""
         reverse = bars.playerHPBarTextReverse == true
+        hideLeft = HidePercentValue(bars, "playerHPBarTextLeftHidePercentSymbol")
+        hideCenter = HidePercentValue(bars, "playerHPBarTextCenterHidePercentSymbol")
+        hideRight = HidePercentValue(bars, "playerHPBarTextRightHidePercentSymbol")
     end
     if reverse then
         left, right = HP_TEXT_REVERSE[right] or right, HP_TEXT_REVERSE[left] or left
         center = HP_TEXT_REVERSE[center] or center
+        hideLeft, hideRight = hideRight, hideLeft
     end
-    return left, center, right, delimiter
+    return left, center, right, delimiter, hideLeft, hideCenter, hideRight
 end
 
 --- Optional ClassPower-owned player HP preview. It mirrors runtime layout/text
@@ -1279,13 +1299,13 @@ local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spe
     })
     frame:Show()
     if bars.playerHPBarTextEnabled ~= false then
-        local leftMode, centerMode, rightMode, delimiter = HPTextConfig(bars, player)
+        local leftMode, centerMode, rightMode, delimiter, hideLeft, hideCenter, hideRight = HPTextConfig(bars, player)
         local maxValue = 1000000
         local current = floor((maxValue * fraction) + 0.5)
         ApplyMeterText(frame, Clamp(bars.playerHPBarUsePlayerText ~= false and player.hpFontSize or bars.playerHPBarTextSize, 14, 6, 48), tonumber(bars.playerHPBarTextOffsetX) or 0, tonumber(bars.playerHPBarTextOffsetY) or 0,
-            ModeText(leftMode, current, maxValue, delimiter),
-            ModeText(centerMode, current, maxValue, delimiter),
-            ModeText(rightMode, current, maxValue, delimiter))
+            ModeText(leftMode, current, maxValue, delimiter, hideLeft),
+            ModeText(centerMode, current, maxValue, delimiter, hideCenter),
+            ModeText(rightMode, current, maxValue, delimiter, hideRight))
         PlaceTextHandle(preview.handleHPText, PreviewParent(preview), { frame.left, frame.center, frame.right })
     else
         frame.left:Hide()
@@ -1361,9 +1381,9 @@ local function UpdateDetachedPowerAnimation(preview, frame, bars, player)
         local rightMode = tostring(player.powerTextRight or player.powerTextMode or "CURPERCENT"):upper()
         local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
         local current = floor((fraction * 100) + 0.5)
-        if frame.left then frame.left:SetText(ModeText(leftMode, current, 100, delimiter)) end
-        if frame.center then frame.center:SetText(ModeText(centerMode, current, 100, delimiter)) end
-        if frame.right then frame.right:SetText(ModeText(rightMode, current, 100, delimiter)) end
+        if frame.left then frame.left:SetText(ModeText(leftMode, current, 100, delimiter, HidePercentValue(player, "powerTextLeftHidePercentSymbol"))) end
+        if frame.center then frame.center:SetText(ModeText(centerMode, current, 100, delimiter, HidePercentValue(player, "powerTextCenterHidePercentSymbol"))) end
+        if frame.right then frame.right:SetText(ModeText(rightMode, current, 100, delimiter, HidePercentValue(player, "powerTextRightHidePercentSymbol"))) end
     end
     return true
 end
@@ -1373,12 +1393,12 @@ local function UpdatePlayerHPAnimation(preview, frame, bars, player)
     local fraction = AnimatedMeterFraction(preview, 0.74, 0.34, 0.18, 1.00)
     UpdateMeterFill(frame, fraction)
     if bars.playerHPBarTextEnabled ~= false then
-        local leftMode, centerMode, rightMode, delimiter = HPTextConfig(bars, player)
+        local leftMode, centerMode, rightMode, delimiter, hideLeft, hideCenter, hideRight = HPTextConfig(bars, player)
         local maxValue = 1000000
         local current = floor((maxValue * fraction) + 0.5)
-        if frame.left then frame.left:SetText(ModeText(leftMode, current, maxValue, delimiter)) end
-        if frame.center then frame.center:SetText(ModeText(centerMode, current, maxValue, delimiter)) end
-        if frame.right then frame.right:SetText(ModeText(rightMode, current, maxValue, delimiter)) end
+        if frame.left then frame.left:SetText(ModeText(leftMode, current, maxValue, delimiter, hideLeft)) end
+        if frame.center then frame.center:SetText(ModeText(centerMode, current, maxValue, delimiter, hideCenter)) end
+        if frame.right then frame.right:SetText(ModeText(rightMode, current, maxValue, delimiter, hideRight)) end
     end
     return true
 end
@@ -1646,6 +1666,7 @@ local function CreateAnimateButton(preview)
     end
     btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     btn.fs:SetPoint("CENTER")
+    if T and T.StyleFontString then T.StyleFontString(btn.fs, T.colors and T.colors.text or { 1, 1, 1, 1 }, 0) end
     if Helpers.StylePreviewPillButton then Helpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
     btn:SetScript("OnClick", function(self)
         SetAnimationEnabled(self._preview, not AnimationEnabled(self._preview))

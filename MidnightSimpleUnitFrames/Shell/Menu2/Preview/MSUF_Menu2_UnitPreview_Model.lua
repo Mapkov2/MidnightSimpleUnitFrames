@@ -762,12 +762,13 @@ local function JoinSep(sep)
     if sep == "" then return " " end
     return " " .. sep .. " "
 end
-local function FormatMode(mode, cur, maxVal, pct, sep, isPower)
+local function FormatMode(mode, cur, maxVal, pct, sep, isPower, hidePercentSymbol)
     if isPower then mode = NormalizePowerMode(mode) else mode = NormalizeHpMode(mode) end
     if mode == "NONE" then return "" end
     local c = NumText(cur)
     local m = NumText(maxVal)
-    local p = tostring(pct) .. "%"
+    local p = tostring(pct)
+    if hidePercentSymbol ~= true then p = p .. "%" end
     local s = JoinSep(sep)
     if mode == "PERCENT" then return p end
     if mode == "CURRENT" then return c end

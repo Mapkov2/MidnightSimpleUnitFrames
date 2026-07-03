@@ -1123,21 +1123,30 @@ function Preview.Refresh(box, reason)
     else
         hpLeftMode, hpCenterMode, hpRightMode = "NONE", "NONE", R.NormalizeHpMode(R.TextScopeGet(key, "hpTextMode", "CURPERCENT"))
     end
+    local function TextSlotHidePercentSymbol(field)
+        local value = R.TextScopeGet(key, field, nil)
+        if value ~= nil then return value == true end
+        return R.TextScopeGet(key, "hidePercentSymbol", false) == true
+    end
+    local hpLeftHidePercent = TextSlotHidePercentSymbol("hpTextLeftHidePercentSymbol")
+    local hpCenterHidePercent = TextSlotHidePercentSymbol("hpTextCenterHidePercentSymbol")
+    local hpRightHidePercent = TextSlotHidePercentSymbol("hpTextRightHidePercentSymbol")
     if R.TextScopeGet(key, "hpTextReverse", false) == true then
         local rev = { CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT", MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT", PERCENTCURMAX = "CURMAXPERCENT" }
         hpLeftMode, hpRightMode = hpRightMode, hpLeftMode
         hpLeftMode = rev[hpLeftMode] or hpLeftMode
         hpCenterMode = rev[hpCenterMode] or hpCenterMode
         hpRightMode = rev[hpRightMode] or hpRightMode
+        hpLeftHidePercent, hpRightHidePercent = hpRightHidePercent, hpLeftHidePercent
     end
     local hpPercentDecimals = R.TextScopeGet(key, "healthTextDecimals", false) == true
         or R.TextScopeGet(key, "hpTextDecimals", false) == true
     local hpPctValue = hpPercentDecimals and format("%.1f", floor(data.hp * 1000 + 0.5) / 10)
         or floor(data.hp * 100 + 0.5)
     local hpSepRaw = R.TextScopeGet(key, "hpTextSeparator", "")
-    mock.hpTextLeft:SetText(R.FormatMode(hpLeftMode, hpCur, hpMax, hpPctValue, hpSepRaw, false))
-    mock.hpTextCenter:SetText(R.FormatMode(hpCenterMode, hpCur, hpMax, hpPctValue, hpSepRaw, false))
-    mock.hpText:SetText(R.FormatMode(hpRightMode, hpCur, hpMax, hpPctValue, hpSepRaw, false))
+    mock.hpTextLeft:SetText(R.FormatMode(hpLeftMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpLeftHidePercent))
+    mock.hpTextCenter:SetText(R.FormatMode(hpCenterMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpCenterHidePercent))
+    mock.hpText:SetText(R.FormatMode(hpRightMode, hpCur, hpMax, hpPctValue, hpSepRaw, false, hpRightHidePercent))
     mock.hpTextPct:SetText("")
     local powerSlots = R.TextScopeHasSlots(key, "powerTextLeft", "powerTextCenter", "powerTextRight")
     local powerLeftMode, powerCenterMode, powerRightMode
@@ -1150,9 +1159,9 @@ function Preview.Refresh(box, reason)
     end
     local powerPctValue = floor(powerFrac * 100 + 0.5)
     local powerSepRaw = R.TextScopeGet(key, "powerTextSeparator", R.TextScopeGet(key, "hpTextSeparator", ""))
-    mock.powerTextLeft:SetText(R.FormatMode(powerLeftMode, pCur, pMax, powerPctValue, powerSepRaw, true))
-    mock.powerTextCenter:SetText(R.FormatMode(powerCenterMode, pCur, pMax, powerPctValue, powerSepRaw, true))
-    mock.powerText:SetText(R.FormatMode(powerRightMode, pCur, pMax, powerPctValue, powerSepRaw, true))
+    mock.powerTextLeft:SetText(R.FormatMode(powerLeftMode, pCur, pMax, powerPctValue, powerSepRaw, true, TextSlotHidePercentSymbol("powerTextLeftHidePercentSymbol")))
+    mock.powerTextCenter:SetText(R.FormatMode(powerCenterMode, pCur, pMax, powerPctValue, powerSepRaw, true, TextSlotHidePercentSymbol("powerTextCenterHidePercentSymbol")))
+    mock.powerText:SetText(R.FormatMode(powerRightMode, pCur, pMax, powerPctValue, powerSepRaw, true, TextSlotHidePercentSymbol("powerTextRightHidePercentSymbol")))
     mock.powerTextPct:SetText("")
     local showNamePreview = conf.showName ~= false
     if runtimeSpec then showNamePreview = runtimeSpec.showName ~= false end
