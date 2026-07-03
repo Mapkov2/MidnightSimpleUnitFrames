@@ -79,10 +79,12 @@ local function SetWindowControlIcon(btn, kind)
             local shadow = btn:CreateFontString(nil, "ARTWORK", "GameFontHighlightLarge")
             shadow:SetText("\226\128\147")
             shadow:SetPoint("CENTER", btn, "CENTER", 1, -3)
+            if T.StyleFontString then T.StyleFontString(shadow, { 0.015, 0.020, 0.045, 0.72 }, 0) end
             btn._msuf2ControlTextShadow = shadow
             local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
             text:SetText("\226\128\147")
             text:SetPoint("CENTER", btn, "CENTER", 0, -2)
+            if T.StyleFontString then T.StyleFontString(text, T.colors and T.colors.accent or { 0.62, 0.74, 0.98, 1 }, 0) end
             btn._msuf2ControlText = text
         end
         btn._msuf2ControlTextShadow:Show()

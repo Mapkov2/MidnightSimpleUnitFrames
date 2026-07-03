@@ -2027,6 +2027,7 @@ function W.AttachPinnedPreview(body, box, opts)
         placeholder:SetPoint("CENTER", body, "CENTER", 0, 0)
         placeholder:SetText(Tr("\226\134\145 Preview pinned at top"))
         placeholder:SetTextColor(0.38, 0.44, 0.58, 0.55)
+        if T.StyleFontString then T.StyleFontString(placeholder, { 0.38, 0.44, 0.58, 0.55 }, 0) end
         placeholder:Hide()
     end
     local function PinEnabled()

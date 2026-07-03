@@ -614,6 +614,7 @@ local function BuildDashboardUX(ctx)
             if descBox.SetFont then descBox:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 11, "") end
             if descBox.SetTextInsets then descBox:SetTextInsets(8, 8, 0, 0) end
             M.CallIf(T.SkinEditBox, descBox)
+            if T.StyleFontString then T.StyleFontString(descBox, T.colors.text, 0) end
             descBox:SetText(selectedDescription or "")
             local placeholder = descBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
             placeholder:SetPoint("LEFT", descBox, "LEFT", 10, 0)
@@ -621,6 +622,7 @@ local function BuildDashboardUX(ctx)
             placeholder:SetJustifyH("LEFT")
             placeholder:SetText(M.Tr("Optional note: what went wrong?"))
             if placeholder.SetTextColor then placeholder:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.82) end
+            if T.StyleFontString then T.StyleFontString(placeholder, { T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.82 }, 0) end
             placeholder:SetShown((selectedDescription or "") == "")
             descBox:SetScript("OnTextChanged", function(self)
                 local text = self:GetText() or ""
@@ -684,6 +686,7 @@ local function BuildDashboardUX(ctx)
         if reportBox.SetFont then reportBox:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 10, "") end
         if reportBox.SetTextInsets then reportBox:SetTextInsets(8, 8, 8, 8) end
         M.CallIf(T.SkinEditBox, reportBox)
+        if T.StyleFontString then T.StyleFontString(reportBox, T.colors.text, 0) end
         reportBox:SetText(reportText)
         reportBox:SetCursorPosition(0)
         local lines = 1

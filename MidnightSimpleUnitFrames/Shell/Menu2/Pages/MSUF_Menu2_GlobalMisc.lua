@@ -11,7 +11,7 @@ local T = M.Theme
 local GP = M.GlobalPage or {}
 local max = math.max
 local min = math.min
-local Call, G, ReadG, SetG, ReadGBool, SetGBool = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool]])
+local Call, G, ReadG, SetG, ReadGBool, SetGBool, MenuFontValues, MenuFontKeyGet, MenuFontKeySet = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool MenuFontValues MenuFontKeyGet MenuFontKeySet]])
 local VT = M.ValueTextList
 local TOOLTIP_MODES = VT("ALWAYS", "Always", "OOC", "Out of Combat", "MODIFIER", "Modifier Key", "NEVER", "Never")
 local TOOLTIP_MODIFIERS = VT("ALT", "Alt", "CTRL", "Ctrl", "SHIFT", "Shift")
@@ -119,8 +119,9 @@ local function BuildMisc(ctx)
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
     local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 340, true)
+    local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
     BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil, nil, nil, MENU_WRITE_OPTS)
-    local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, (menuBehavior._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
+    local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, menuBehaviorW - 70, T.colors.muted)
     if menuSnapHelp.SetWordWrap then menuSnapHelp:SetWordWrap(true) end
     BindMiscToggle(menuBehavior, "Hide Advanced menu section", "hideAdvancedMenu", true, "MSUF2_ADVANCED_MENU_VISIBILITY", 14, -118, 280, MENU_WRITE_OPTS,
         function() M.CallIf(M.RefreshAdvancedNavVisibility) end)
@@ -133,6 +134,32 @@ local function BuildMisc(ctx)
             end
         end)
     BindMiscToggle(menuBehavior, "Reduce menu motion", "reduceMotion", false, "MSUF2_REDUCE_MOTION", 14, -208, 280, MENU_WRITE_OPTS)
+    local menuFontRightX = max(350, floor(menuBehaviorW * 0.52))
+    local menuFontW = max(250, min(340, menuBehaviorW - menuFontRightX - 30))
+    local menuFontPreview
+    BindMiscDropdown(menuBehavior, "MSUF menu font", function()
+        return (type(MenuFontValues) == "function" and MenuFontValues()) or {
+            { value = "", text = "Blizzard default" },
+        }
+    end, menuFontW, menuFontRightX, -118,
+        function()
+            return (type(MenuFontKeyGet) == "function" and MenuFontKeyGet()) or ReadG("menuFontKey", "")
+        end,
+        function(value)
+            if type(MenuFontKeySet) == "function" then
+                MenuFontKeySet(value)
+            else
+                SetG("menuFontKey", value or "", "MSUF2_MENU_FONT", MENU_WRITE_OPTS)
+            end
+            M.CallIf(T.ClearMenuFontCache)
+            M.CallIf(T.RefreshMenuFonts)
+            if menuFontPreview and menuFontPreview.SetText then
+                menuFontPreview:SetText("AaBbCc 12345 - MSUF Menu")
+            end
+        end)
+    menuFontPreview = W.Text(menuBehavior, "AaBbCc 12345 - MSUF Menu", menuFontRightX, -178, menuBehaviorW - menuFontRightX - 30, T.colors.text)
+    if menuFontPreview.SetHeight then menuFontPreview:SetHeight(24) end
+    if menuFontPreview.SetJustifyV then menuFontPreview:SetJustifyV("MIDDLE") end
     local navHoverScale = W.Slider(menuBehavior, "Navigation hover size", 100, 150, 1, 260)
     if navHoverScale.SetValueFormatter then navHoverScale:SetValueFormatter(function(value) return M.Format("%d%%", floor((tonumber(value) or 100) + 0.5)) end) end
     M.BindNumberWidget(ctx, navHoverScale,
@@ -144,7 +171,7 @@ local function BuildMisc(ctx)
         105,
         { min = 100, max = 150, step = 1, format = "%d%%" })
     W.MoveWidget(navHoverScale, menuBehavior, 14, -244, 300, "LEFT")
-    local navHoverHelp = W.Text(menuBehavior, "100% keeps every navigation row the same size. Higher values magnify the row under the cursor.", 30, -292, (menuBehavior._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
+    local navHoverHelp = W.Text(menuBehavior, "100% keeps every navigation row the same size. Higher values magnify the row under the cursor.", 30, -292, menuBehaviorW - 70, T.colors.muted)
     if navHoverHelp.SetWordWrap then navHoverHelp:SetWordWrap(true) end
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
     BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
@@ -199,4 +226,4 @@ local function BuildMisc(ctx)
         end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 10 })
+M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 11 })
