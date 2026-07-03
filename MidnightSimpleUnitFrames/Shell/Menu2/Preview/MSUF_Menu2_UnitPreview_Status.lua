@@ -150,24 +150,12 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
         if tex then
             local isAssist = spec.id == "assist"
             local path = isAssist and "Interface\\GroupFrame\\UI-Group-AssistantIcon" or "Interface\\GroupFrame\\UI-Group-LeaderIcon"
-            local styleKey = isAssist and "assistIconStyle" or "leaderIconStyle"
             local customKey = isAssist and "assistIconCustomIcon" or "leaderIconCustomIcon"
             local customIcon = (runtimeCfg and runtimeCfg.customIcon) or (conf and conf[customKey]) or (g and g[customKey])
             if type(customIcon) == "string" and customIcon ~= "" then
                 tex:SetTexture(customIcon)
                 if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
                 return
-            end
-            local style = (runtimeCfg and runtimeCfg.style) or (conf and conf[styleKey]) or (g and g[styleKey]) or (isAssist and ((conf and conf.leaderIconStyle) or (g and g.leaderIconStyle))) or "BLIZZARD"
-            if type(style) == "string" and style ~= "" and style ~= "DEFAULT" and style ~= "BLIZZARD" then
-                local resolver = isAssist and _G.MSUF_GetAssistStatusIconTexture or _G.MSUF_GetLeaderStatusIconTexture
-                if type(resolver) == "function" then
-                    local customPath, l, r, t, b = resolver(style, false)
-                    if type(customPath) == "string" and customPath ~= "" then
-                        path = customPath
-                        if tex.SetTexCoord then tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1) end
-                    end
-                end
             end
             tex:SetTexture(path)
         end

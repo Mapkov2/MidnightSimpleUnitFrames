@@ -296,7 +296,7 @@ local function BuildStatus(ctx, builder, unit)
         return "Role icon style"
     end
     local function SpecificIconLabel(spec)
-        return "Custom icon override"
+        return "Custom icon"
     end
     local function SetDropdownTitle(control, label)
         if control and control._msuf2Title and control._msuf2Title.SetText then
@@ -336,7 +336,7 @@ local function BuildStatus(ctx, builder, unit)
         local out, used = {}, {}
         for i = 1, #entries do
             local entry = entries[i]
-            local values = valuesFn(entry[1], entry[2], i == 1)
+                local values = valuesFn(entry[1], entry[2], i == 1, true)
             for j = 1, #(values or {}) do
                 local item = values[j]
                 local value = item and item.value
@@ -359,8 +359,7 @@ local function BuildStatus(ctx, builder, unit)
         local customPath = spec and spec.customIcon and ReadStatusString(unit, spec.customIcon, "") or ""
         if type(customPath) == "string" and customPath ~= "" then return customPath, 0, 1, 0, 1 end
         local resolver = _G.MSUF_GetStatusIconTexture
-        local style = (IsRoleStatusSpec(spec) and spec and spec.iconStyle) and ReadStatusString(unit, spec.iconStyle, spec.defaultIconStyle or "BLIZZARD") or "BLIZZARD"
-        if IsRoleStatusSpec(spec) and (type(style) ~= "string" or style == "" or style == "DEFAULT") then style = spec and spec.defaultIconStyle or "BLIZZARD" end
+        local style = "BLIZZARD"
         if type(resolver) == "function" then
             local path, l, r, t, b = resolver(style, entry[1], entry[2], ReadGeneralBool("statusIconsUseMidnightStyle", false))
             if type(path) == "string" and path ~= "" then return path, l, r, t, b end
@@ -383,7 +382,7 @@ local function BuildStatus(ctx, builder, unit)
         "iconStyle", function(spec) return spec and spec.defaultIconStyle or "BLIZZARD" end, "MSUF2_STATUS_ICON_PACK", "Visual style for this indicator", {
         "indicator style", "icon style", "icon design", "icon pack", "leader indicator style", "leader icon design", "leader icon pack", "assist indicator style", "assist icon design", "assist icon pack", "role indicator style", "role icon design", "role icon pack", "status indicator style", "status icon design", "status icon pack",
     }, IconPackValuesForCurrentStatus, function() if RefreshStatusSectionState then RefreshStatusSectionState() end end)
-    local customIcon = BindStatusSpecDropdown(selectedCard, "Custom icon override", IconAssetValuesForCurrentStatus, 260, 16, -106, selectedControlW,
+    local customIcon = BindStatusSpecDropdown(selectedCard, "Custom icon", IconAssetValuesForCurrentStatus, 260, 16, -106, selectedControlW,
         "customIcon", "", "MSUF2_STATUS_CUSTOM_ICON", "Specific icon override", {
         "specific icon", "custom icon", "single icon", "icon asset", "sharedmedia icon", "override icon",
     }, IconAssetValuesForCurrentStatus, function() if RefreshStatusSectionState then RefreshStatusSectionState() end end)
@@ -607,7 +606,7 @@ local function BuildStatus(ctx, builder, unit)
             iconPreviewLabel:SetText(IsRoleStatusSpec(spec) and "Role icon preview" or "Icon preview")
         end
         local hasSymbol = spec and spec.symbol
-        local hasIconPack = spec and spec.iconStyle and IsRoleStatusSpec(spec)
+        local hasIconPack = false
         local hasCustomIcon = spec and spec.customIcon
         local isStatusText = spec and spec.value == "statusText"
         local showStateStyle = (hasSymbol or hasIconPack) and true or false

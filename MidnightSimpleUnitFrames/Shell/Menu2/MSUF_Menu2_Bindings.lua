@@ -28,6 +28,14 @@ local refreshQueued = false
 local MENU_REFRESH_DELAY = 0.04
 local C_Timer = _G.C_Timer
 local UNIT_KEYS = KS("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
+local TEXT_SLOT_SIDES = { "Left", "Center", "Right" }
+local TEXT_SLOT_SIDE_SET = { Left = true, Center = true, Right = true }
+local DIRECT_TEXT_GROUP_ORDER = { "name", "hp", "power" }
+local DIRECT_TEXT_GROUPS = {
+    name = { single = true, basePrefix = "name", baseAliasPrefix = "nameText", directPrefix = "directName", defaultX = 4, defaultY = -4 },
+    hp = { basePrefix = "hp", baseAliasPrefix = "hpText", directPrefix = "directHealth", slotPrefix = "hpText", legacySlotPrefix = "hp", defaultX = -4, defaultY = -4 },
+    power = { basePrefix = "power", baseAliasPrefix = "powerText", directPrefix = "directPower", slotPrefix = "powerText", legacySlotPrefix = "power", defaultX = -4, defaultY = 4 },
+}
 
 local function BindingProfileStart()
     if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart then return M.ProfileStart() end
@@ -66,6 +74,99 @@ function M.GetGeneralDB()
     local db = M.EnsureDB()
     db.general = db.general or {}
     return db.general, db
+end
+local function NumberOr(value, fallback)
+    local n = tonumber(value)
+    if n ~= nil then return n end
+    return fallback or 0
+end
+local function TextDefault(spec, axis)
+    return axis == "X" and (spec.defaultX or 0) or (spec.defaultY or 0)
+end
+local function TextBaseOffset(conf, spec, axis, overrideValue)
+    if overrideValue ~= nil then return NumberOr(overrideValue, TextDefault(spec, axis)) end
+    local value = conf and conf[spec.basePrefix .. "Offset" .. axis]
+    if value == nil and spec.baseAliasPrefix then value = conf and conf[spec.baseAliasPrefix .. "Offset" .. axis] end
+    return NumberOr(value, TextDefault(spec, axis))
+end
+local function TextSlotOffset(conf, spec, side, axis, overrideValue)
+    if overrideValue ~= nil then return NumberOr(overrideValue, 0) end
+    return NumberOr((conf and conf[spec.slotPrefix .. side .. "Offset" .. axis]) or (conf and conf[spec.legacySlotPrefix .. side .. "Offset" .. axis]), 0)
+end
+local function HasModernTextAxis(conf, spec, axis)
+    if not conf then return false end
+    if conf[spec.basePrefix .. "Offset" .. axis] ~= nil or (spec.baseAliasPrefix and conf[spec.baseAliasPrefix .. "Offset" .. axis] ~= nil) then return true end
+    if not spec.single then
+        for i = 1, #TEXT_SLOT_SIDES do
+            local side = TEXT_SLOT_SIDES[i]
+            if conf[spec.slotPrefix .. side .. "Offset" .. axis] ~= nil or conf[spec.legacySlotPrefix .. side .. "Offset" .. axis] ~= nil then return true end
+        end
+    end
+    return false
+end
+local function DirectTextChangedKey(spec, changedKey)
+    if changedKey == nil or changedKey == "directTextLayout" then return nil end
+    local key = tostring(changedKey)
+    local axis = key:match("^" .. spec.basePrefix .. "Offset([XY])$")
+    if not axis and spec.baseAliasPrefix then axis = key:match("^" .. spec.baseAliasPrefix .. "Offset([XY])$") end
+    if axis then return "base", axis end
+    if not spec.single then
+        local side
+        side, axis = key:match("^" .. spec.slotPrefix .. "([A-Za-z]+)Offset([XY])$")
+        if not side then side, axis = key:match("^" .. spec.legacySlotPrefix .. "([A-Za-z]+)Offset([XY])$") end
+        if side and axis and TEXT_SLOT_SIDE_SET[side] then return "slot", axis, side end
+    end
+end
+local function SyncDirectTextGroupOffsets(conf, group, changedKey, changedValue)
+    if type(conf) ~= "table" or conf.directTextLayout ~= true then return false end
+    local spec = DIRECT_TEXT_GROUPS[group]
+    if not spec then return false end
+    local kind, axis, changedSide = DirectTextChangedKey(spec, changedKey)
+    if changedKey ~= nil and changedKey ~= "directTextLayout" and not kind then return false end
+    local changed = false
+    local function SetDirect(suffix, axis, value)
+        local key = spec.directPrefix .. suffix .. "Offset" .. axis
+        value = math.floor((tonumber(value) or 0) + 0.5)
+        if conf[key] ~= value then
+            conf[key] = value
+            changed = true
+        end
+    end
+    local function SyncAxis(axis, baseOverride)
+        if baseOverride == nil and not HasModernTextAxis(conf, spec, axis) then return end
+        local base = TextBaseOffset(conf, spec, axis, baseOverride)
+        if spec.single then
+            SetDirect("", axis, base)
+            return
+        end
+        for i = 1, #TEXT_SLOT_SIDES do
+            local side = TEXT_SLOT_SIDES[i]
+            SetDirect(side, axis, base + TextSlotOffset(conf, spec, side, axis))
+        end
+    end
+    if changedKey == nil or changedKey == "directTextLayout" then
+        SyncAxis("X")
+        SyncAxis("Y")
+        return changed
+    end
+    if kind == "base" then
+        SyncAxis(axis, changedValue)
+        return changed
+    end
+    if kind == "slot" and changedSide then
+        SetDirect(changedSide, axis, TextBaseOffset(conf, spec, axis) + TextSlotOffset(conf, spec, changedSide, axis, changedValue))
+    end
+    return changed
+end
+function M.SyncDirectTextOffsets(conf, changedKey, changedValue)
+    local changed = false
+    for i = 1, #DIRECT_TEXT_GROUP_ORDER do
+        if SyncDirectTextGroupOffsets(conf, DIRECT_TEXT_GROUP_ORDER[i], changedKey, changedValue) then changed = true end
+    end
+    return changed
+end
+function M.SyncDirectPowerTextOffsets(conf, changedKey, changedValue)
+    return SyncDirectTextGroupOffsets(conf, "power", changedKey, changedValue)
 end
 local IsConfigCombatLocked = M.IsConfigCombatLocked
 function M.IsConfigCombatLocked()
@@ -441,8 +542,10 @@ function M.SetUnitValue(unit, key, value, reason, opts)
         end)
     end
     local conf = M.GetUnitDB(unit)
-    if conf[key] == value then return false end
-    conf[key] = value
+    local sameValue = conf[key] == value
+    if not sameValue then conf[key] = value end
+    local directTextChanged = M.SyncDirectTextOffsets(conf, key)
+    if sameValue and not directTextChanged then return false end
     M.RequestUnitApply(unit, reason or ("MSUF2_" .. tostring(key)), opts)
     return true
 end
@@ -521,16 +624,16 @@ end
 local BARS_GENERAL_KEYS = KSW [[
     barTexture barBackgroundTexture enableGradient enablePowerGradient gradientStrength gradientDirection
     gradientDirRight gradientDirLeft gradientDirUp gradientDirDown showSelfHealPrediction healPredAnchorMode
-    overAbsorbOverlay absorbBarTexture healAbsorbBarTexture dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
+    overAbsorbOverlay absorbBarTexture healAbsorbBarTexture dispelBorderTrigger dispelColorMode unitDispelOverlayEnabled unitDispelOverlayStyle
     unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger bossTargetOutlineMode
-    bossTargetHighlightEnabled highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
+    bossTargetHighlightEnabled hlPrioEnabled hlPrioOrder highlightPrioEnabled highlightPrioOrder roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedMouseover barOutlineColorR barOutlineColorG
     barOutlineColorB barOutlineColorA
 ]]
 local BARS_SCOPE_KEYS = KSW [[
     hlOverride hpPowerTextOverride barTexture barBackgroundTexture barBgTexture absorbTextMode absorbAnchorMode healPredEnabled healPredAnchorMode
     overAbsorbOverlay absorbBarOpacity healAbsorbBarOpacity barOutlineThickness highlightBorderThickness hlAggroSize
-    aggroOutlineMode dispelOutlineMode dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
+    aggroOutlineMode dispelOutlineMode dispelBorderTrigger dispelColorMode unitDispelOverlayEnabled unitDispelOverlayStyle
     unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill

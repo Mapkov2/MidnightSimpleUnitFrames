@@ -415,6 +415,10 @@ local function WriteHandleOffsets(handle, x, y, reason)
     local store = HandleStore(box, fields)
     store[xKey] = RoundOffset(x)
     store[yKey] = RoundOffset(y)
+    if fields.text and type(M2.SyncDirectTextOffsets) == "function" then
+        M2.SyncDirectTextOffsets(store, xKey)
+        M2.SyncDirectTextOffsets(store, yKey)
+    end
     CommitHandleMove(handle, reason)
     if not handle._msuf2PreviewHistoryTx then CheckpointMenuHistory(handle, reason == "UNIT_PREVIEW_NUDGE" and "Nudge" or "Move") end
     return true

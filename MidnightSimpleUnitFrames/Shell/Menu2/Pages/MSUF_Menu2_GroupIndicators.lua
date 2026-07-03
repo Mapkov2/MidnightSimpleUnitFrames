@@ -253,7 +253,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         return "Role icon style"
     end
     local function SpecificIconLabel(spec)
-        return "Custom icon override"
+        return "Custom icon"
     end
     local function SetDropdownTitle(control, label)
         if control and control._msuf2Title and control._msuf2Title.SetText then
@@ -293,7 +293,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         local out, used = {}, {}
         for i = 1, #entries do
             local entry = entries[i]
-            local values = valuesFn(entry[1], entry[2], i == 1)
+                local values = valuesFn(entry[1], entry[2], i == 1, true)
             for j = 1, #(values or {}) do
                 local item = values[j]
                 local value = item and item.value
@@ -350,7 +350,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
             M.CallIf(RefreshGFPreview)
             if RefreshStatusIconState then RefreshStatusIconState() end
         end)
-    local customIcon = BindStatusDropdown(selectedCard, "Custom icon override", IconAssetValuesForCurrentStatus, siconLeftW, "customIcon", "", "visual", 16, -158, siconLeftW - 32,
+    local customIcon = BindStatusDropdown(selectedCard, "Custom icon", IconAssetValuesForCurrentStatus, siconLeftW, "customIcon", "", "visual", 16, -158, siconLeftW - 32,
         function()
             M.CallIf(RefreshGFPreview)
             if RefreshStatusIconState then RefreshStatusIconState() end
@@ -436,10 +436,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         iconPreviewLabel:SetShown(shown and true or false)
         iconPreviewStrip:SetShown(shown and true or false)
         if not shown then return end
-        local style = IsRoleStatusIconSpec(spec) and Val(CurrentScope(), spec.iconStyle, "DEFAULT") or "BLIZZARD"
-        if IsRoleStatusIconSpec(spec) and (type(style) ~= "string" or style == "" or style == "DEFAULT") then
-            style = Val(CurrentScope(), "iconStyle", "BLIZZARD")
-        end
+        local style = IsRoleStatusIconSpec(spec) and Val(CurrentScope(), "iconStyle", "BLIZZARD") or "BLIZZARD"
         if type(style) ~= "string" or style == "" or style == "DEFAULT" then style = "BLIZZARD" end
         local customPath = spec and spec.customIcon and Val(CurrentScope(), spec.customIcon, "") or ""
         local useMidnight = Bool(CurrentScope(), "useMidnightIcons", false)
@@ -510,7 +507,7 @@ local function BuildStatusIconsSection(ctx, b, RefreshPage)
         SetOptionsEnabled(statusPlacementControls, enabled)
         SetOptionsEnabled(statusActionControls, spec ~= nil)
         SetManyEnabled(true, advanced.previewAll, previewAll, midnightStyle, statusEnabled)
-        local hasIconPack = spec and spec.iconStyle and IsRoleStatusIconSpec(spec)
+        local hasIconPack = false
         local hasCustomIcon = spec and spec.customIcon
         if W.SetControlShown then
             W.SetControlShown(iconPack, hasIconPack and true or false)

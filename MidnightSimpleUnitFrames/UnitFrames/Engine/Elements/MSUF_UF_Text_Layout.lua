@@ -834,7 +834,14 @@ function Text.Apply(frame, spec)
     frame._msufInlineAnchorDynamic = nil
     HideDots(frame._msufInlineDotsFS)
   end
-  if directText then
+  if directText and detachedPowerText then
+    LayoutDirectText(frame.hpTextLeft, text, "directHealthLeft", "LEFT", "LEFT", 4, 0, "LEFT")
+    LayoutDirectText(frame.hpTextCenter, text, "directHealthCenter", "CENTER", "CENTER", 0, 0, "CENTER")
+    LayoutDirectText(frame.hpTextRight, text, "directHealthRight", "RIGHT", "RIGHT", -4, 0, "RIGHT")
+    LayoutText(frame.powerTextLeft, "LEFT", "LEFT", 4 + (text.powerLeftX or 0), text.powerLeftY or 0, "LEFT", frame.targetPowerBar)
+    LayoutText(frame.powerTextCenter, "CENTER", "CENTER", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER", frame.targetPowerBar)
+    LayoutText(frame.powerTextRight, "RIGHT", "RIGHT", -4 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT", frame.targetPowerBar)
+  elseif directText then
     LayoutDirectText(frame.hpTextLeft, text, "directHealthLeft", "LEFT", "LEFT", 4, 0, "LEFT")
     LayoutDirectText(frame.hpTextCenter, text, "directHealthCenter", "CENTER", "CENTER", 0, 0, "CENTER")
     LayoutDirectText(frame.hpTextRight, text, "directHealthRight", "RIGHT", "RIGHT", -4, 0, "RIGHT")

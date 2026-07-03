@@ -462,16 +462,15 @@ local function PriorityColor(key)
         r = ReadG("hlPurgeColorR", ReadG("purgeBorderColorR", r))
         g = ReadG("hlPurgeColorG", ReadG("purgeBorderColorG", g))
         b = ReadG("hlPurgeColorB", ReadG("purgeBorderColorB", b))
-    elseif key == "dispel" then
-        r = ReadG("hlDispelColorR", ReadG("dispelBorderColorR", r))
-        g = ReadG("hlDispelColorG", ReadG("dispelBorderColorG", g))
-        b = ReadG("hlDispelColorB", ReadG("dispelBorderColorB", b))
     end
     return tonumber(r) or fallback[1], tonumber(g) or fallback[2], tonumber(b) or fallback[3]
 end
 local function SetPriorityOrder(order)
     BarScopeSet("hlPrioOrder", order, "MSUF2_HIGHLIGHT_PRIORITY_ORDER")
-    if CurrentBarsScope() == "shared" then G().highlightPrioOrder = order end
+    if CurrentBarsScope() == "shared" then
+        G().hlPrioOrder = order
+        G().highlightPrioOrder = order
+    end
 end
 local function RefreshBorderTestModes()
     if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then return end

@@ -220,7 +220,10 @@ local function ApplyDetachedPowerBar()
 end
 local function ApplyDetachedPowerText()
     local db = M.EnsureDB()
-    if db and db.player then db.player.hpPowerTextOverride = nil end
+    if db and db.player then
+        db.player.hpPowerTextOverride = nil
+        if type(M.SyncDirectPowerTextOffsets) == "function" then M.SyncDirectPowerTextOffsets(db.player) end
+    end
     ApplyClassPowerPage("MSUF2_DETACHED_POWER_TEXT", APPLY_DETACHED_POWER_TEXT,
         "MSUF_DetachedPowerBar_RefreshTextures", "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_ClassPower_PlayerHP_Refresh")
 end
@@ -256,9 +259,18 @@ local function SetPlayerTextValue(key, value, apply)
     if type(M.RunWithHistory) == "function" then return M.RunWithHistory(tostring(key), "classpower:detachedPowerText:" .. tostring(key), Write) end
     return Write()
 end
+local function PlayerPowerTextShown(player)
+    player = player or Player()
+    if player.showPowerText ~= nil then return player.showPowerText ~= false end
+    return player.showPower ~= false
+end
+local function SetPlayerPowerTextShown(player, shown)
+    player = player or Player()
+    player.showPowerText = shown and true or false
+end
 local function NormalizeDetachedPowerTextPreset(player)
     player = player or Player()
-    if player.showPower == false then return "OFF" end
+    if not PlayerPowerTextShown(player) then return "OFF" end
     local left = tostring(player.powerTextLeft or "NONE"):upper()
     local center = tostring(player.powerTextCenter or player.powerTextMode or "CURPERCENT"):upper()
     local right = tostring(player.powerTextRight or "NONE"):upper()
@@ -270,11 +282,11 @@ local function SetDetachedPowerTextPreset(value)
     if value == "CUSTOM" then return end
     local player = Player()
     if value == "OFF" then
-        player.showPower = false
+        SetPlayerPowerTextShown(player, false)
         return
     end
     if not DETACHED_POWER_TEXT_PRESETS[value] then value = "CURPERCENT" end
-    player.showPower = true
+    SetPlayerPowerTextShown(player, true)
     player.detachedPowerBarTextOnBar = true
     player.powerTextLeft = "NONE"
     player.powerTextCenter = value
@@ -598,6 +610,34 @@ local function BuildClassPower(ctx)
             M.BindDropdownWidget(ctx, control, function() return source()[key] or default end, function(v) source()[key] = (v ~= default) and v or nil; apply() end)
             return control
         end,
+        detachedTextOnBar = function(_, parent, source, defaultApply, spec)
+            local control = W.Toggle(parent, spec[3])
+            local key, default, apply = spec[4], spec[5], spec[6] or defaultApply
+            M.BindBoolWidget(ctx, control,
+                function()
+                    local player = source()
+                    return PlayerPowerTextShown(player) and BoolValue(player, key, default)
+                end,
+                function(v)
+                    local function Write()
+                        local player = source()
+                        local changed = false
+                        if player[key] ~= (v and true or false) then
+                            player[key] = v and true or false
+                            changed = true
+                        end
+                        if v and player.showPowerText ~= true then
+                            SetPlayerPowerTextShown(player, true)
+                            changed = true
+                        end
+                        if changed and type(apply) == "function" then apply() end
+                        return changed
+                    end
+                    if type(M.RunWithHistory) == "function" then return M.RunWithHistory(tostring(key), "classpower:detachedPowerText:" .. tostring(key), Write) end
+                    return Write()
+                end)
+            return control
+        end,
         playerShape = function(_, parent, _, defaultApply, spec)
             local control = W.Dropdown(parent, spec[3], spec[4], spec[5])
             local apply = spec[6] or defaultApply
@@ -770,7 +810,7 @@ local function BuildClassPower(ctx)
         width = min(520, dpbInnerW), frames = dpbTabFrames, defaultTab = "layout",
         x = 32, y = -44,
     })
-    W.ControlCard(dpbLayout, "Detached Player Power", "When anchored or synced here, Player power settings are managed by Class Resources.", 14, -38, dpbCardW, dpbTwoColumn and 482 or 760)
+    W.ControlCard(dpbLayout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources.", 14, -38, dpbCardW, dpbTwoColumn and 482 or 760)
     local dpbUse = W.SwitchAt(dpbLayout, "Detached player power", 32, -104, dpbControlW)
     M.BindBoolWidget(ctx, dpbUse,
         function() return Player().powerBarDetached == true end,
@@ -802,13 +842,13 @@ local function BuildClassPower(ctx)
         { "height", "slider", "Power height", 2, 80, 1, 300, "detachedPowerBarHeight", 6 },
         { "layer", "slider", "Power layer", 0, 20, 1, 300, "detachedPowerBarFrameLevelOffset", 6 },
     })
-    AddTooltip(dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. When Sync width or Anchor is enabled, Player power settings are managed here.")
+    AddTooltip(dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width.")
     AddTooltip(dpbFields.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
-    AddTooltip(dpbFields.sync, "Sync Width", "Uses the Class Resource width for detached Player power. Player power controls are disabled while this connection is active.")
+    AddTooltip(dpbFields.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
     AddTooltip(dpbFields.shape, "Player Power Shape", "FOLLOW_CLASS resolves from Class Resource shape: Bar -> Bar, Circle -> Round, Diamond/Hex -> Crystal. Orb is a single bottom-to-top filled mana/power sphere.")
     W.ControlCard(dpbText, "Power Text", "Text shown on the detached Player power bar managed here.", 14, -38, dpbCardW, dpbTwoColumn and 498 or 790)
     local dpbTextFields = BuildBoundControls(dpbText, Player, ApplyDetachedPowerText, {
-        { "onBar", "toggle", "Power text on bar", "detachedPowerBarTextOnBar", false },
+        { "onBar", "detachedTextOnBar", "Power text on bar", "detachedPowerBarTextOnBar", false },
         { "preset", "detachedTextPreset", "Power text", DETACHED_POWER_TEXT_PRESET_VALUES, 300 },
         { "right", "dropdown", "Right slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextRight", "CURPERCENT" },
         { "left", "dropdown", "Left slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextLeft", "NONE" },
@@ -999,8 +1039,8 @@ local function BuildClassPower(ctx)
         local playerShape = NormalizeDetachedPowerShape(db.player and db.player.detachedPowerBarShape)
         SetControlEnabled(dpbFields.orbSize, playerDetached and playerShape == "ORB")
         SetControlEnabled(dpbFields.height, playerDetached and playerShape ~= "ORB")
-        local playerTextOn = db.player and db.player.showPower ~= false
-        SetControlEnabled(dpbTextFields.onBar, playerDetached and playerTextOn)
+        local playerTextOn = db.player and PlayerPowerTextShown(db.player)
+        SetControlEnabled(dpbTextFields.onBar, playerDetached)
         SetControlEnabled(dpbTextFields.size, playerDetached and playerTextOn)
         SetControlsEnabled(dpbTextControls, playerDetached and playerTextOn)
         SetControlsEnabled(dpbSlotTextControls, playerDetached and playerTextOn)

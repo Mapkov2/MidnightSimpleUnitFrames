@@ -200,6 +200,7 @@ local function BuildPower(ctx, builder, unit)
     local detachedWidth
     local detachedHeight
     local orbSize
+    local detachedTextToggle
     local function AddPowerControl(control) M.AppendValues(powerControls, control); W.AttachUnitEditFocus(control, unit, "powerbar"); return control end
     local function AddDetachedControl(control) M.AppendValues(detachedControls, control); return AddPowerControl(control) end
     local function ResolveDefault(value)
@@ -305,9 +306,19 @@ local function BuildPower(ctx, builder, unit)
             RefreshPowerEnabled()
             RefreshClassPowerDetachedState()
         end)
-    BuildPowerControls(detachedCard, AddDetachedControl, {
-        { "toggle", "Text on detached bar", 16, -62, detachedLeftW, "detachedPowerBarTextOnBar", false, "MSUF2_POWER_DETACHED_TEXT", nil, nil, POWER_TEXT_OPTS },
+    local detachedTextFields = BuildPowerControls(detachedCard, AddDetachedControl, {
+        { "toggle", "Text on detached bar", 16, -62, detachedLeftW, "detachedPowerBarTextOnBar", false, "MSUF2_POWER_DETACHED_TEXT", nil,
+        function()
+            return ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", true))
+                and ReadBool(unit, "detachedPowerBarTextOnBar", false)
+        end,
+        function(v)
+            if v and not ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", true)) then
+                SetBool(unit, "showPowerText", true, "MSUF2_SHOW_POWER_TEXT", POWER_TEXT_OPTS)
+            end
+        end, POWER_TEXT_OPTS },
     })
+    detachedTextToggle = detachedTextFields and detachedTextFields.detachedPowerBarTextOnBar
     local sliderTop = -116
     if isPlayer then
         sliderTop = -148
@@ -367,6 +378,7 @@ local function BuildPower(ctx, builder, unit)
             if ClassManaged() then
                 setEnabled(powerControls, false)
                 setEnabled(detachedControls, false)
+                if detachedTextToggle then setEnabled(detachedTextToggle, DetachedOn()) end
                 setEnabled(show, false)
                 setEnabled(borderSize, false)
             end

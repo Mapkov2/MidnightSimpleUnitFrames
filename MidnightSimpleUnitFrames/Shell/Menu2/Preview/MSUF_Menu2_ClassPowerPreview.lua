@@ -412,13 +412,14 @@ local function HideBarOutline(frame)
 end
 local function CallApply(handle, reason)
     local kind = handle and handle._applyKind
-    local moveOnly = reason == "CLASSPOWER_PREVIEW_MOVE"
+    local moveOnly = reason == "CLASSPOWER_PREVIEW_MOVE" and kind ~= "powerText"
     if not moveOnly then
         if kind == "class" or kind == "classText" then
             if type(_G.MSUF_ClassPower_Refresh) == "function" then _G.MSUF_ClassPower_Refresh() end
             if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
             if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
         elseif kind == "power" or kind == "powerText" then
+            if kind == "powerText" and type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then _G.MSUF_ForceTextLayoutForUnitKey("player") end
             if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
             if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
         elseif kind == "hp" or kind == "hpText" then
@@ -449,6 +450,10 @@ local function WriteHandle(handle, x, y, skipApply)
     if not (store and handle and handle._xKey and handle._yKey) then return end
     store[handle._xKey] = Round(x)
     store[handle._yKey] = Round(y)
+    if handle._applyKind == "powerText" and type(M.SyncDirectTextOffsets) == "function" then
+        M.SyncDirectTextOffsets(store, handle._xKey)
+        M.SyncDirectTextOffsets(store, handle._yKey)
+    end
     RequestClassPowerPreviewRefresh(handle._preview, "CLASSPOWER_PREVIEW_DRAG")
     if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_MOVE") end
 end
@@ -1114,6 +1119,12 @@ local function ResolvePlayerPowerTextLayout(player)
     }
 end
 
+local function PlayerPowerTextShown(player)
+    player = player or {}
+    if player.showPowerText ~= nil then return player.showPowerText ~= false end
+    return player.showPower ~= false
+end
+
 --- Detached power preview follows the same anchoring relationship as runtime:
 --- it can attach to ClassPower, but no live player power events are involved.
 local function RenderDetachedPower(preview, bars, player, classFrame)
@@ -1156,7 +1167,7 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
         outline = outline,
     })
     frame:Show()
-    if player.showPower ~= false and player.detachedPowerBarTextOnBar == true then
+    if PlayerPowerTextShown(player) and player.detachedPowerBarTextOnBar == true then
         local leftMode = tostring(player.powerTextLeft or "NONE"):upper()
         local centerMode = tostring(player.powerTextCenter or "NONE"):upper()
         local rightMode = tostring(player.powerTextRight or player.powerTextMode or "CURPERCENT"):upper()
@@ -1344,7 +1355,7 @@ local function UpdateDetachedPowerAnimation(preview, frame, bars, player)
     if frame.IsShown and not frame:IsShown() then return true end
     local fraction = AnimatedMeterFraction(preview, 0.72, 0.46, 0.08, 0.96)
     UpdateMeterFill(frame, fraction)
-    if player.showPower ~= false and player.detachedPowerBarTextOnBar == true then
+    if PlayerPowerTextShown(player) and player.detachedPowerBarTextOnBar == true then
         local leftMode = tostring(player.powerTextLeft or "NONE"):upper()
         local centerMode = tostring(player.powerTextCenter or "NONE"):upper()
         local rightMode = tostring(player.powerTextRight or player.powerTextMode or "CURPERCENT"):upper()
@@ -1781,7 +1792,7 @@ function Preview.Create(ctx, builder)
             class = classFrame ~= nil,
             classText = classFrame ~= nil and bars.classPowerShowText == true,
             power = powerFrame ~= nil,
-            powerText = powerFrame ~= nil and player.showPower ~= false and player.detachedPowerBarTextOnBar == true,
+            powerText = powerFrame ~= nil and PlayerPowerTextShown(player) and player.detachedPowerBarTextOnBar == true,
             hp = hpFrame ~= nil,
             hpText = hpFrame ~= nil and bars.playerHPBarTextEnabled ~= false,
             bounds = true,

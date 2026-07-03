@@ -200,8 +200,14 @@ local function BuildText(ctx, builder, unit)
             CurrentTextTab(),
             ReadBool(unit, "showName", true),
             ReadBool(unit, "showHP", true),
-            ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget")
+            ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget"))
         )
+    end
+    local function PowerTextDefault()
+        return ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget")
+    end
+    local function PowerTextShown()
+        return ReadBool(unit, "showPowerText", PowerTextDefault())
     end
     local TEXT_SUMMARY_SLOTS = {
         hp = {
@@ -446,8 +452,8 @@ local function BuildText(ctx, builder, unit)
     local powerControls = BuildValueTextTab("power", powerTab, {
         preview = "100 Energy",
         showLabel = "Show Power Text",
-        showKey = "showPower",
-        showDefault = function() return unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget" end,
+        showKey = "showPowerText",
+        showDefault = PowerTextDefault,
         showReason = "MSUF2_SHOW_POWER_TEXT",
         modes = POWER_MODES,
         legacyKey = "powerTextMode",
@@ -513,7 +519,7 @@ local function BuildText(ctx, builder, unit)
         M.CallIf(RefreshTextTabs)
         local nameOn = ReadBool(unit, "showName", true)
         local hpOn = ReadBool(unit, "showHP", true)
-        local powerOn = ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget")
+        local powerOn = PowerTextShown()
         local powerManaged = IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)
         if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
@@ -526,11 +532,8 @@ local function BuildText(ctx, builder, unit)
         SetControlsEnabled(powerTextControls, powerOn)
         SetControlsEnabled(powerSlotControls, powerOn and not MoveTogether("power"))
         if powerManaged then
-            SetControlEnabled(powerControls.show, false)
-            SetControlsEnabled(powerTextControls, false)
-            SetControlsEnabled(powerSlotControls, false)
             if powerManagedNotice then
-                powerManagedNotice:SetMessage("Player power text is managed in Class Resources because the detached power bar is connected there.", "warning")
+                powerManagedNotice:SetMessage("Player power bar is connected to Class Resources. These Power Text settings still edit the active Player power text.", "warning")
                 powerManagedNotice:Show()
             end
         elseif powerManagedNotice then
