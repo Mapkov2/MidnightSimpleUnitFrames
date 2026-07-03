@@ -6,6 +6,7 @@ on:
     tags:
       - "[0-9]*"
       - "v[0-9]*"
+      - "MSUF_[0-9]*"
   release:
     types:
       - published
@@ -125,9 +126,28 @@ jobs:
             )
           }
 
+          function Test-BetaReleaseSignal([AllowNull()][string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return $false }
+            $v = $value.Trim()
+            return (
+              ($v -match '(?i)beta') -or
+              ($v -match '(?i)\d+(?:\.\d+)*B\d+(?:$|[^A-Za-z0-9])') -or
+              ($v -match '(?i)(^|[^A-Za-z0-9])B\d+(?:$|[^A-Za-z0-9])')
+            )
+          }
+
           function Test-PrereleaseSignal([AllowNull()][string]$value) {
             if ([string]::IsNullOrWhiteSpace($value)) { return $false }
-            return ((Test-AlphaReleaseSignal $value) -or ($value.Trim() -match '(?i)(beta|rc|pre|preview)'))
+            return ((Test-AlphaReleaseSignal $value) -or (Test-BetaReleaseSignal $value) -or ($value.Trim() -match '(?i)(rc|pre|preview)'))
+          }
+
+          function Normalize-ReleaseInput([AllowNull()][string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return "" }
+            $v = $value.Trim()
+            $v = $v -replace '^refs/tags/', ''
+            $v = $v -replace '(?i)^MSUF[\s._-]*', ''
+            $v = $v -replace '^v(?=\d)', ''
+            return $v
           }
 
           function Get-FileFirstLine([string]$path) {
@@ -147,10 +167,8 @@ jobs:
 
           function Convert-AlphaTagToReleaseName([AllowNull()][string]$value) {
             if ([string]::IsNullOrWhiteSpace($value)) { return "" }
-            $v = $value.Trim()
-            $v = $v -replace '^refs/tags/', ''
-            $v = $v -replace '^v(?=\d)', ''
-            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*alpha[\s._-]*(?<number>\d+(?:\.\d+)*))\s*$') {
+            $v = Normalize-ReleaseInput $value
+            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?:alpha|a)[\s._-]*(?<number>\d+(?:\.\d+)*))\s*$') {
               $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
               $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
               return "MSUF_${base}A$number"
@@ -172,9 +190,8 @@ jobs:
             if (-not [string]::IsNullOrWhiteSpace($alphaReleaseName)) {
               $releaseName = $alphaReleaseName
             } else {
-              $displayVersion = $tag -replace '^refs/tags/', ''
-              $displayVersion = $displayVersion -replace '^v(?=\d)', ''
-              if ($displayVersion -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+              $displayVersion = Normalize-ReleaseInput $tag
+              if ($displayVersion -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre|a|b)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
                 $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
                 if ([string]::IsNullOrWhiteSpace($Matches["channel"])) {
                   $displayVersion = $base
@@ -183,7 +200,10 @@ jobs:
                   if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
                     $number = " " + ((($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join ".")
                   }
-                  $channel = (Get-Culture).TextInfo.ToTitleCase($Matches["channel"].ToLowerInvariant()) -replace '\bRc\b', 'RC'
+                  $channelKey = $Matches["channel"].ToLowerInvariant()
+                  if ($channelKey -eq "a") { $channelKey = "alpha" }
+                  if ($channelKey -eq "b") { $channelKey = "beta" }
+                  $channel = (Get-Culture).TextInfo.ToTitleCase($channelKey) -replace '\bRc\b', 'RC'
                   $displayVersion = ($base + " " + $channel + $number).Trim()
                 }
               } else {
@@ -269,9 +289,28 @@ jobs:
       - name: Build AddOns zip
         shell: pwsh
         run: |
-          $releaseVersion = $env:RELEASE_VERSION
-          $releaseVersion = $releaseVersion -replace '^refs/tags/', ''
-          $releaseVersion = $releaseVersion -replace '^v(?=\d)', ''
+          function Normalize-ReleaseVersion([AllowNull()][string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return "" }
+            $v = $value.Trim()
+            $v = $v -replace '^refs/tags/', ''
+            $v = $v -replace '(?i)^MSUF[\s._-]*', ''
+            $v = $v -replace '^v(?=\d)', ''
+            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|preview|rc|pre|a|b)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+              $channel = $Matches["channel"].ToLowerInvariant()
+              if ($channel -eq "a") { $channel = "alpha" }
+              if ($channel -eq "b") { $channel = "beta" }
+              $number = ""
+              if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+                $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              }
+              return ($base + "-" + $channel + $number)
+            }
+            return $v
+          }
+
+          $releaseVersion = Normalize-ReleaseVersion $env:RELEASE_VERSION
           if ([string]::IsNullOrWhiteSpace($releaseVersion)) {
             throw "Release version cannot be empty."
           }
@@ -335,15 +374,19 @@ jobs:
             if ([string]::IsNullOrWhiteSpace($value)) { return "" }
             $v = $value.Trim()
             $v = $v -replace '^refs/tags/', ''
+            $v = $v -replace '(?i)^MSUF[\s._-]*', ''
             $v = $v -replace '^v(?=\d)', ''
-            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre|a|b)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
               $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
               if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+              $channel = $Matches["channel"].ToLowerInvariant()
+              if ($channel -eq "a") { $channel = "alpha" }
+              if ($channel -eq "b") { $channel = "beta" }
               $number = ""
               if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
                 $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
               }
-              return ($base + $Matches["channel"].ToLowerInvariant() + $number)
+              return ($base + $channel + $number)
             }
             return (($v.ToLowerInvariant()) -replace '[^a-z0-9]+', '')
           }
@@ -352,25 +395,33 @@ jobs:
             if ([string]::IsNullOrWhiteSpace($value)) { return "" }
             $v = $value.Trim()
             $v = $v -replace '^refs/tags/', ''
+            $v = $v -replace '(?i)^MSUF[\s._-]*', ''
             $v = $v -replace '^v(?=\d)', ''
-            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+)\.\d+(?:\.\d+)*)\s*$') {
+            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre|a|b)[\s._-]*(?<number>\d+)\.\d+(?:\.\d+)*)\s*$') {
               $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
-              return Normalize-Key ($base + " " + $Matches["channel"] + " " + $Matches["number"])
+              $channel = $Matches["channel"].ToLowerInvariant()
+              if ($channel -eq "a") { $channel = "alpha" }
+              if ($channel -eq "b") { $channel = "beta" }
+              return Normalize-Key ($base + " " + $channel + " " + $Matches["number"])
             }
             return ""
           }
 
           function Convert-TagToDisplay([string]$tag) {
             $display = $tag -replace '^refs/tags/', ''
+            $display = $display -replace '(?i)^MSUF[\s._-]*', ''
             $display = $display -replace '^v(?=\d)', ''
-            if ($display -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+            if ($display -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre|a|b)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
               $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
               if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
               $number = ""
               if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
                 $number = " " + ((($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join ".")
               }
-              $channel = (Get-Culture).TextInfo.ToTitleCase($Matches["channel"].ToLowerInvariant()) -replace '\bRc\b', 'RC'
+              $channelKey = $Matches["channel"].ToLowerInvariant()
+              if ($channelKey -eq "a") { $channelKey = "alpha" }
+              if ($channelKey -eq "b") { $channelKey = "beta" }
+              $channel = (Get-Culture).TextInfo.ToTitleCase($channelKey) -replace '\bRc\b', 'RC'
               return ($base + " " + $channel + $number).Trim()
             }
             $display = $display -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
@@ -551,6 +602,22 @@ jobs:
           }
           if ($alphaSignals -and $env:WAGO_STABILITY -ne "alpha") {
             throw "Alpha signal '$($alphaSignals[0])' must upload to Wago as alpha. Got '$env:WAGO_STABILITY'."
+          }
+
+          $prereleaseSignals = @($env:RELEASE_VERSION, $env:RELEASE_NAME, $versionFileValue, $tocVersion) | Where-Object {
+            if ([string]::IsNullOrWhiteSpace($_)) {
+              $false
+            } else {
+              $v = $_.Trim()
+              (
+                ($v -match '(?i)(alpha|beta|rc|pre|preview)') -or
+                ($v -match '(?i)\d+(?:\.\d+)*[AB]\d+(?:$|[^A-Za-z0-9])') -or
+                ($v -match '(?i)(^|[^A-Za-z0-9])[AB]\d+(?:$|[^A-Za-z0-9])')
+              )
+            }
+          }
+          if ($prereleaseSignals -and $env:WAGO_STABILITY -eq "stable") {
+            throw "Prerelease signal '$($prereleaseSignals[0])' must not upload to Wago as stable."
           }
 
           $interfaceField = Get-TocField -Content $tocContent -Name "Interface"
