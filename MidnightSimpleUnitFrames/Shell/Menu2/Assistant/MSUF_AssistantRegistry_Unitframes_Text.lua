@@ -32,6 +32,8 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
     local RegisterUnitEnum = ctx.RegisterUnitEnum
     local RegisterUnitTextNumber = ctx.RegisterUnitTextNumber
     local TextValue = ctx.TextValue
+    local UnitDB = ctx.UnitDB
+    local GeneralDB = ctx.GeneralDB
 
     if type(MakeAliases) ~= "function" or type(RegisterUnitBooleanSetting) ~= "function" then return end
     if type(RegisterUnitEnum) ~= "function" or type(RegisterUnitTextNumber) ~= "function" then return end
@@ -90,6 +92,41 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
             valueAliases = HP_MODE_ALIASES,
             get = function(unitKey) return TextValue(unitKey, "textRight", TextValue(unitKey, "hpTextMode", "CURPERCENT")) end,
         })
+    local function PercentSignVisible(unitKey, dbKey)
+        local conf = type(UnitDB) == "function" and UnitDB(unitKey) or nil
+        local value = type(conf) == "table" and conf[dbKey] or nil
+        if value ~= nil then return value ~= true end
+        local g = type(GeneralDB) == "function" and GeneralDB() or nil
+        return not (type(g) == "table" and g.hidePercentSymbol == true)
+    end
+    local function SetPercentSignVisible(unitKey, dbKey, visible)
+        local conf = type(UnitDB) == "function" and UnitDB(unitKey) or nil
+        if type(conf) == "table" then
+            conf[dbKey] = not (visible and true or false)
+        end
+    end
+    local function RegisterHidePercent(attr, dbKey, label, ...)
+        local aliases = MakeAliases(unit, ...)
+        AppendAliases(aliases, "hide percent sign", "hide percent symbol", "hide % sign", "hide percentage sign")
+        RegisterUnitBooleanSetting(unit, attr, dbKey, label, false, aliases, { category = "Text", text = true, matchLabel = false })
+    end
+    local function RegisterPercentSign(attr, dbKey, label, ...)
+        local aliases = MakeAliases(unit, ...)
+        AppendAliases(aliases, "percent sign", "percent symbol", "% sign", "percentage sign")
+        RegisterUnitBooleanSetting(unit, attr, dbKey, label, true, aliases, {
+            category = "Text",
+            text = true,
+            keySuffix = attr,
+            get = function(unitKey) return PercentSignVisible(unitKey, dbKey) end,
+            set = function(unitKey, value) SetPercentSignVisible(unitKey, dbKey, value) end,
+        })
+    end
+    RegisterHidePercent("hpTextLeftHidePercentSymbol", "hpTextLeftHidePercentSymbol", "HP Left Hide % Sign", "hp left hide percent sign", "left hp hide percent sign", "health left hide percent sign", "left health hide percent sign", "hide hp left percent sign", "hide health left percent sign", "hide left hp percent sign")
+    RegisterPercentSign("hpTextLeftPercentSymbol", "hpTextLeftHidePercentSymbol", "HP Left % Sign", "hp left percent sign", "health left percent sign", "left hp percent sign", "hp left % sign", "left hp % sign")
+    RegisterHidePercent("hpTextCenterHidePercentSymbol", "hpTextCenterHidePercentSymbol", "HP Center Hide % Sign", "hp center hide percent sign", "center hp hide percent sign", "hp middle hide percent sign", "health center hide percent sign", "center health hide percent sign", "hide hp center percent sign", "hide health center percent sign", "hide center hp percent sign", "hide hp middle percent sign")
+    RegisterPercentSign("hpTextCenterPercentSymbol", "hpTextCenterHidePercentSymbol", "HP Center % Sign", "hp center percent sign", "health center percent sign", "center hp percent sign", "hp middle percent sign", "middle hp percent sign", "hp center % sign")
+    RegisterHidePercent("hpTextRightHidePercentSymbol", "hpTextRightHidePercentSymbol", "HP Right Hide % Sign", "hp right hide percent sign", "right hp hide percent sign", "health right hide percent sign", "right health hide percent sign", "hide hp right percent sign", "hide health right percent sign", "hide right hp percent sign")
+    RegisterPercentSign("hpTextRightPercentSymbol", "hpTextRightHidePercentSymbol", "HP Right % Sign", "hp right percent sign", "health right percent sign", "right hp percent sign", "hp right % sign", "right hp % sign")
     RegisterUnitEnum(unit, "hpTextSeparator", "hpTextSeparator", "HP Text Delimiter", "", SEPARATOR_VALUES,
         MakeAliases(unit, "hp text delimiter", "hp text separator", "health text delimiter"),
         { category = "Text", text = true, valueAliases = SEPARATOR_ALIASES, get = function(unitKey) return TextValue(unitKey, "hpTextSeparator", "") end })
@@ -136,6 +173,12 @@ function A.UnitframesRegistry.RegisterTextSettings(ctx, unit)
             valueAliases = POWER_MODE_ALIASES,
             get = function(unitKey) return TextValue(unitKey, "powerTextRight", TextValue(unitKey, "powerTextMode", "CURPERCENT")) end,
         })
+    RegisterHidePercent("powerTextLeftHidePercentSymbol", "powerTextLeftHidePercentSymbol", "Power Left Hide % Sign", "power left hide percent sign", "left power hide percent sign", "mana left hide percent sign", "left mana hide percent sign", "hide power left percent sign", "hide mana left percent sign", "hide left power percent sign")
+    RegisterPercentSign("powerTextLeftPercentSymbol", "powerTextLeftHidePercentSymbol", "Power Left % Sign", "power left percent sign", "mana left percent sign", "left power percent sign", "power left % sign", "left power % sign")
+    RegisterHidePercent("powerTextCenterHidePercentSymbol", "powerTextCenterHidePercentSymbol", "Power Center Hide % Sign", "power center hide percent sign", "center power hide percent sign", "power middle hide percent sign", "mana center hide percent sign", "center mana hide percent sign", "hide power center percent sign", "hide mana center percent sign", "hide center power percent sign", "hide power middle percent sign")
+    RegisterPercentSign("powerTextCenterPercentSymbol", "powerTextCenterHidePercentSymbol", "Power Center % Sign", "power center percent sign", "mana center percent sign", "center power percent sign", "power middle percent sign", "middle power percent sign", "power center % sign")
+    RegisterHidePercent("powerTextRightHidePercentSymbol", "powerTextRightHidePercentSymbol", "Power Right Hide % Sign", "power right hide percent sign", "right power hide percent sign", "mana right hide percent sign", "right mana hide percent sign", "hide power right percent sign", "hide mana right percent sign", "hide right power percent sign")
+    RegisterPercentSign("powerTextRightPercentSymbol", "powerTextRightHidePercentSymbol", "Power Right % Sign", "power right percent sign", "mana right percent sign", "right power percent sign", "power right % sign", "right power % sign")
     RegisterUnitEnum(unit, "powerTextSeparator", "powerTextSeparator", "Power Text Delimiter", "", SEPARATOR_VALUES,
         MakeAliases(unit, "power text delimiter", "power text separator", "mana text delimiter"),
         {

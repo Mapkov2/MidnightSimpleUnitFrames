@@ -80,6 +80,8 @@ function A.UnitframesRegistry.BuildCoreSettingsContext(ctx)
     }
 
     local unitTextSettings = {
+        UnitDB = UnitDB,
+        GeneralDB = GeneralDB,
         MakeAliases = MakeAliases,
         RegisterUnitBooleanSetting = RegisterUnitBooleanSetting,
         RegisterUnitEnum = RegisterUnitEnum,

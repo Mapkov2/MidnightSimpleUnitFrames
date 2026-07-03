@@ -40,6 +40,7 @@ function A.UnitframesRegistry.BuildSettingBaseUnitContext(ctx)
             type = "boolean",
             aliases = aliases,
             exactAliases = opts.exactAliases,
+            matchLabel = opts.matchLabel,
             get = function()
                 if opts.get then return opts.get(unit) end
                 local value = UnitDB(unit)[dbKey]

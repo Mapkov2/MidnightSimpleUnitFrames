@@ -33,7 +33,7 @@ end
 local function RegisterBarsBoolean(dbKey, attr, label, defaultValue, aliases, opts)
     opts = opts or {}
     Registry:RegisterSetting({
-        key = "bars." .. dbKey,
+        key = "bars." .. (opts.keySuffix or dbKey),
         label = label,
         category = opts.category or "Global / Class Resources",
         unit = opts.unit or "global",
@@ -45,11 +45,16 @@ local function RegisterBarsBoolean(dbKey, attr, label, defaultValue, aliases, op
         valueAliases = opts.valueAliases,
         companionChanges = opts.companionChanges,
         get = function()
+            if opts.get then return opts.get() end
             local value = BarsDB()[dbKey]
             if value == nil then return defaultValue and true or false end
             return value and true or false
         end,
         set = function(value)
+            if opts.set then
+                opts.set(value and true or false)
+                return
+            end
             BarsDB()[dbKey] = value and true or false
         end,
         apply = function() ApplyRegistrySetting(opts, dbKey, ApplyClassPower) end,

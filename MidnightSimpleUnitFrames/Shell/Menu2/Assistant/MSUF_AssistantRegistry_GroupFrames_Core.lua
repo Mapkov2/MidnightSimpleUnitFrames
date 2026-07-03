@@ -83,6 +83,7 @@ function A.GroupFramesRegistry.BuildCoreContext(ctx)
         Registry = Registry,
         UNIT_LABELS = UNIT_LABELS,
         AddAliasesForUnit = AddAliasesForUnit,
+        GeneralDB = GeneralDB,
         GroupDB = GroupDB,
         ClampNumber = ClampNumber,
         ApplyGroup = ApplyGroup,

@@ -27,7 +27,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
     local function RegisterGroupBoolean(scope, attr, dbKey, label, defaultValue, mode, aliases, opts)
         opts = opts or {}
         Registry:RegisterSetting({
-            key = "gf_" .. scope .. "." .. dbKey,
+            key = "gf_" .. scope .. "." .. (opts.keySuffix or dbKey),
             label = UNIT_LABELS[scope] .. " " .. label,
             category = UNIT_LABELS[scope] .. " / Group Frames",
             unit = scope,
@@ -36,6 +36,7 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             type = "boolean",
             aliases = aliases,
             exactAliases = opts.exactAliases,
+            matchLabel = opts.matchLabel,
             booleanAliases = opts.booleanAliases,
             valueAliases = opts.valueAliases,
             intentGuard = opts.intentGuard,
