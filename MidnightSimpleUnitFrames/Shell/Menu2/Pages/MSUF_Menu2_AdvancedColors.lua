@@ -124,7 +124,6 @@ local COLOR_CLASS_TOKENS = WL [[WARRIOR PALADIN HUNTER ROGUE PRIEST DEATHKNIGHT 
 local COLOR_CLASS_LABELS = KeyLabelMap [[WARRIOR=Warrior|PALADIN=Paladin|HUNTER=Hunter|ROGUE=Rogue|PRIEST=Priest|DEATHKNIGHT=Death Knight|SHAMAN=Shaman|MAGE=Mage|WARLOCK=Warlock|MONK=Monk|DRUID=Druid|DEMONHUNTER=Demon Hunter|EVOKER=Evoker]]
 local COLOR_NPC_ROWS = ColorRows "friendly|Friendly NPC Color|0|1|0;neutral|Neutral NPC Color|1|1|0;enemy|Enemy NPC Color|0.85|0.10|0.10;dead|Dead NPC Color|0.40|0.40|0.40"
 local COLOR_NPC_TYPE_ROWS = ColorRows "npcBoss|Boss|0.74|0.11|0;npcMiniboss|Miniboss / Lieutenant|0.56|0|0.74;npcCaster|Caster|0|0.45|0.74;npcMelee|Melee|0.99|0.99|0.99;npcRegular|Regular|0.70|0.56|0.33"
-local COLOR_DISPEL_TYPES = ColorRows "Magic|Magic|0.20|0.60|1.00;Curse|Curse|0.60|0.00|1.00;Disease|Disease|0.60|0.40|0.00;Poison|Poison|0.00|0.60|0.00;Bleed|Bleed|0.80|0.10|0.10"
 local COLOR_POWER_TOKENS = ValueTextPairs [[MANA=Mana|RAGE=Rage|ENERGY=Energy|FOCUS=Focus|RUNIC_POWER=Runic Power|INSANITY=Insanity|FURY=Fury|PAIN=Pain|ESSENCE=Essence|LUNAR_POWER=Astral Power|MAELSTROM=Maelstrom]]
 local COLOR_CP_TOKENS = ValueTextPairs [[COMBO_POINTS=Combo Points|HOLY_POWER=Holy Power|SOUL_SHARDS=Soul Shards|CHI=Chi|ARCANE_CHARGES=Arcane Charges|RUNES=Runes|ESSENCE=Essence|CHARGED=Empowered / Charged|SOUL_FRAGMENTS=Soul Fragments|SOUL_FRAGMENTS_META=Soul Fragments (Void Meta)|MAELSTROM=Maelstrom Weapon|MAELSTROM_ABOVE_5=Maelstrom Weapon 5+|ASTRAL_POWER=Astral Power|AP_PREDICTION=Astral Prediction|ECLIPSE_SOLAR=Eclipse Solar|ECLIPSE_LUNAR=Eclipse Lunar|ECLIPSE_CA=Celestial Alignment|STAGGER_GREEN=Stagger Light|STAGGER_YELLOW=Stagger Moderate|STAGGER_RED=Stagger Heavy|SOUL_FRAGMENTS_VENG=Soul Fragments (Vengeance)|INSANITY=Insanity|MAELSTROM_POWER=Maelstrom Power|WHIRLWIND=Whirlwind|TIP_OF_THE_SPEAR=Tip of the Spear|ICICLES=Icicles|EBON_MIGHT=Ebon Might|RESOURCE_TEXT=Resource Text]]
 local COLOR_CP_SLOT_TOKENS = WL [[COMBO_POINTS_1 COMBO_POINTS_2 COMBO_POINTS_3 COMBO_POINTS_4 COMBO_POINTS_5 COMBO_POINTS_6 COMBO_POINTS_7]]
@@ -137,7 +136,6 @@ local COLOR_DATA = {
     CLASS_LABELS = COLOR_CLASS_LABELS,
     NPC_ROWS = COLOR_NPC_ROWS,
     NPC_TYPE_ROWS = COLOR_NPC_TYPE_ROWS,
-    DISPEL_TYPES = COLOR_DISPEL_TYPES,
     POWER_TOKENS = COLOR_POWER_TOKENS,
     CP_TOKENS = COLOR_CP_TOKENS,
     CP_SLOT_TOKENS = COLOR_CP_SLOT_TOKENS,
@@ -872,38 +870,6 @@ local function BuildColors(ctx)
     end)
     M.BindGateGroup(ctx, nil, {
         { controls = powerBg, on = function() return not (powerBgMatch:GetChecked() and true or false) end },
-    })
-    local dispel = b:CollapsibleSection("colors_dispel", "Dispel", 310, false)
-    LabelAt(dispel, "Dispel color shared by Highlight Border and Unit/Group Frame Dispel Overlay.", 12, -8, 620, "GameFontHighlightSmall", T.colors.muted)
-    ValueDropdownAt(ctx, dispel, "Color mode", 12, -42, ValueTextPairs "SINGLE=Single color|TYPE=Per debuff type", 220,
-        function() return G().hlDispelColorMode or "SINGLE" end,
-        function(v)
-            G().hlDispelColorMode = v or "SINGLE"
-            ApplyColors()
-            CallGlobal("MSUF_PrioRows_Reinit")
-        end)
-    local singleDispel = ColorValueAt(ctx, dispel, "Dispel Color (all types)", 12, -102,
-        function() return GeneralRGBAlias("hlDispelColor", "dispelBorderColor", 0.25, 0.75, 1.00) end,
-        function(r, g, c) SetGeneralRGBAlias("hlDispelColor", "dispelBorderColor", r, g, c) end)
-    local typeControls = {}
-    for i = 1, #COLOR_DATA.DISPEL_TYPES do
-        local def = COLOR_DATA.DISPEL_TYPES[i]
-        local col = (i - 1) % 2
-        local row = floor((i - 1) / 2)
-        typeControls[#typeControls + 1] = CH.GeneralColorAt(ctx, dispel, def.label, 12 + col * 330, -146 - row * 36,
-            "dispelType" .. def.key, def.dr, def.dg, def.db)
-    end
-    CH.ButtonAt(dispel, "Reset Dispel Colors", 12, -274, 180, function()
-        local g = G()
-        ClearRGBs(g, "dispelBorderColor", "hlDispelColor")
-        g.hlDispelColorMode = nil
-        for i = 1, #COLOR_DATA.DISPEL_TYPES do ClearRGB(g, "dispelType" .. COLOR_DATA.DISPEL_TYPES[i].key) end
-        ApplyColors()
-        CallGlobal("MSUF_PrioRows_Reinit")
-    end)
-    M.BindGateGroup(ctx, function() return (G().hlDispelColorMode or "SINGLE") end, {
-        { controls = singleDispel, on = function(mode) return mode ~= "TYPE" end },
-        { controls = typeControls, on = function(mode) return mode == "TYPE" end },
     })
     local castbar = b:CollapsibleSection("colors_castbar", "Castbar Colors", 544, false)
     local castW = castbar._msuf2Width or ctx.width or 720

@@ -125,7 +125,7 @@ local function DeepCopy(src)
 end
 local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower]]
 local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitShape portraitSizeOverride portraitOffsetX portraitOffsetY portraitZoom portraitBorderStyle portraitBorderThickness portraitBgEnabled portraitFillBorder]]
-local COPY_TEXT_FIELDS = WL [[showName showHP showPower nameTextAnchor nameOffsetX nameOffsetY nameFontSize showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameStyle hpOffsetX hpOffsetY hpFontSize hpTextMode textLeft textCenter textRight hpTextReverse hpTextSeparator healthTextDecimals powerOffsetX powerOffsetY powerFontSize powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextSeparator nameTextLayer hpTextLayer powerTextLayer]]
+local COPY_TEXT_FIELDS = WL [[showName showHP showPower showPowerText nameTextAnchor nameOffsetX nameOffsetY nameFontSize showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameStyle hpOffsetX hpOffsetY hpFontSize hpTextMode textLeft textCenter textRight hpTextReverse hpTextSeparator healthTextDecimals powerOffsetX powerOffsetY powerFontSize powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextSeparator nameTextLayer hpTextLayer powerTextLayer]]
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname level eliteicon", nil, "show iconStyle customIcon x y anchor size layer symbol")
 local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "statusText statusCombat statusResting statusIncomingRes statusPvp", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha", "show iconStyle customIcon x y anchor size layer symbol")
 local COPY_FRAME_BASIC_FIELDS = WL [[enabled showName showHP showPower reverseFillBars smoothFill healthColorMode]]
@@ -580,7 +580,7 @@ local function IsPlayerPowerManagedByClassResources(unit)
     if unit ~= "player" then return false end
     local conf = GetConf("player")
     if not (conf and conf.powerBarDetached == true) then return false end
-    return conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false
+    return conf.detachedPowerBarAnchorToClassPower == true
 end
 local function SetString(unit, key, value, reason, opts)
     M.SetUnitValue(unit, key, tostring(value or ""), reason, opts)
