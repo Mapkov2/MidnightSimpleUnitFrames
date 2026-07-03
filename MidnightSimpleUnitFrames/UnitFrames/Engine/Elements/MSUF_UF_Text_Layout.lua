@@ -20,6 +20,7 @@ local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local DrawSubLayer = Text.DrawSubLayer
 local ClampFrameLayer = Text.ClampFrameLayer
 local GetLayerBaseLevel = Text.GetLayerBaseLevel
+local Layers = UF and UF.Layers or {}
 local SetFrameLevelCached = Text.SetFrameLevelCached
 local SetShownCached = Text.SetShownCached
 local SetFont = Text.SetFont
@@ -250,7 +251,7 @@ local function EnsureClipFrame(frame, key, layer)
   end
   frame[key] = clip
   if frame.GetFrameLevel and clip.SetFrameLevel then
-    local level = GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, 5)
+    local level = (Layers.TextLevel and Layers.TextLevel(frame, layer, 5)) or (GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, 5))
     SetFrameLevelCached(clip, level)
   end
   return clip
@@ -635,7 +636,7 @@ local function EnsureTextOverlay(frame, field, layer, fallback)
     frame[field] = overlay
   end
   if frame.GetFrameLevel and overlay.SetFrameLevel then
-    local level = GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, fallback)
+    local level = (Layers.TextLevel and Layers.TextLevel(frame, layer, fallback)) or (GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, fallback))
     if overlay._msufFrameLevel ~= level then
       overlay:SetFrameLevel(level)
       overlay._msufFrameLevel = level
@@ -801,7 +802,7 @@ function Text.Apply(frame, spec)
     local detachedTextLayer = max(tonumber(text.powerLayer) or 2, (tonumber(power.detachedLevel) or 6) + 1)
     local overlay = EnsureTextOverlay(frame, "MSUFPowerTextLayer", detachedTextLayer, 2)
     local baseLevel = frame.GetFrameLevel and (frame:GetFrameLevel() or 0) or GetLayerBaseLevel(frame)
-    SetFrameLevelCached(overlay, baseLevel + 10 + detachedTextLayer)
+    SetFrameLevelCached(overlay, (Layers.TextLevel and Layers.TextLevel(baseLevel, detachedTextLayer, 2)) or (baseLevel + 10 + detachedTextLayer))
   end
 
   RestoreNameParent(frame)

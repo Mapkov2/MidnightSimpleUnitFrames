@@ -13,6 +13,7 @@ MSUF.GF = GF
 
 local TS = GF.TargetedSpells or {}
 GF.TargetedSpells = TS
+local Layers = MSUF.UF and MSUF.UF.Layers or {}
 
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
@@ -525,7 +526,7 @@ local function ApplyIconFrame(icon, frame)
   if holder.SetFrameStrata and frame.GetFrameStrata then
     holder:SetFrameStrata(frame:GetFrameStrata())
   end
-  local holderLevel = BaseFrameLevel(frame) + 40 + settings.layer
+  local holderLevel = BaseFrameLevel(frame) + (Layers.TARGETED_SPELLS_BASE_OFFSET or 40) + settings.layer
   if holder.SetFrameLevel and holder._msufTSLevel ~= holderLevel then
     holder:SetFrameLevel(holderLevel)
     holder._msufTSLevel = holderLevel

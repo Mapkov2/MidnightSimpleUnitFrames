@@ -21,6 +21,7 @@ local Clamp01 = PreviewModel.Clamp01
 local PreviewResolveHealPredAnchorMode = PreviewModel.PreviewResolveHealPredAnchorMode
 local PreviewResolveAbsorbAnchorMode = PreviewModel.PreviewResolveAbsorbAnchorMode
 local PreviewHelpers = (MSUF.MSUF2 and MSUF.MSUF2.PreviewHelpers) or {}
+local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local Core = MSUF.UFPreviewCore or {}
 MSUF.UFPreviewCore = Core
 function Core.MenuTheme()
@@ -138,7 +139,7 @@ local function EnsureFrameBorderOverlay(mock)
         overlay._edges = {}
         mock._msufPreviewFrameBorder = overlay
     end
-    if overlay.SetFrameLevel and mock.GetFrameLevel then overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + 40) end
+    if overlay.SetFrameLevel and mock.GetFrameLevel then overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + (Layers.PREVIEW_FRAME_BORDER_OFFSET or 40)) end
     return overlay
 end
 local function SetFrameBorderShown(mock, shown)

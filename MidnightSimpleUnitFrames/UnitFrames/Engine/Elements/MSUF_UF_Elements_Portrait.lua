@@ -4,6 +4,7 @@ MSUF = MSUF or _G.MSUF_NS or {}
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
+local Layers = UF and UF.Layers or {}
 
 -- Unitframe portrait element.
 -- Handles 2D/class portraits, shape masks, dynamic border colors, and queued portrait busts.
@@ -450,13 +451,15 @@ local function LayoutPortrait(frame, p)
   if frame.Health and frame.Health.GetFrameLevel then
     baseLevel = frame.Health:GetFrameLevel() or baseLevel
   end
-  if holder._msufLevel ~= baseLevel + 6 then
-    holder:SetFrameLevel(baseLevel + 6)
-    holder._msufLevel = baseLevel + 6
+  local portraitLevel = baseLevel + (Layers.PORTRAIT_OFFSET or 6)
+  if holder._msufLevel ~= portraitLevel then
+    holder:SetFrameLevel(portraitLevel)
+    holder._msufLevel = portraitLevel
   end
-  if holder.border and holder.border._msufLevel ~= baseLevel + 7 then
-    holder.border:SetFrameLevel(baseLevel + 7)
-    holder.border._msufLevel = baseLevel + 7
+  local borderLevel = baseLevel + (Layers.PORTRAIT_BORDER_OFFSET or 7)
+  if holder.border and holder.border._msufLevel ~= borderLevel then
+    holder.border:SetFrameLevel(borderLevel)
+    holder.border._msufLevel = borderLevel
   end
 
   if holder._msufSize ~= size then

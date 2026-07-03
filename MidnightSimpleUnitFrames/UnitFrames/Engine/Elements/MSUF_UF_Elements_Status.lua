@@ -4,6 +4,7 @@ MSUF = MSUF or _G.MSUF_NS or {}
 
 local UF = MSUF.UF
 if not UF then return end
+local Layers = UF.Layers or {}
 
 -- Unitframe status indicator element.
 -- Owns level/classification/PvP/ready-check/role/raid-marker style icons for normal unit
@@ -196,7 +197,7 @@ local function EnsureLayerFrame(frame, layer)
     layers[layer] = holder
   end
   if holder.SetFrameLevel then
-    local level = GetLayerBaseLevel(frame) + 10 + layer
+    local level = (Layers.StatusLevel and Layers.StatusLevel(frame, layer, 7)) or (GetLayerBaseLevel(frame) + 10 + layer)
     if holder._msufStatusFrameLevel ~= level then
       holder:SetFrameLevel(level)
       holder._msufStatusFrameLevel = level

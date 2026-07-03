@@ -24,6 +24,9 @@
 - Replaced the preview gear glyph with a drawn settings icon.
 - Added Menu2 auto-height helpers.
 - Added `/msufmenucheck` for read-only menu consistency checks.
+- Unified live and preview layer constants for unit-frame and group-frame text, status, portrait, power, targeted-spell, and preview-overlay stacking.
+- Added on-demand live-vs-preview layer diagnostics for unit and group previews without combat-time event, timer, or update overhead.
+- Aligned unit and group preview mock text layering with runtime text-layer specs for closer 1:1 visual previews.
 
 ### Assistant And Search
 - Split large parser phrase tables into `_Data.lua` modules.
@@ -67,6 +70,7 @@
 - Status icon packs and Midnight variants.
 - Custom icon overrides and live previews.
 - External icon packs via SharedMedia and addon metadata.
+- Unit-frame and group-frame preview layering compared with the matching live frames.
 - Assistant follow-ups, exact option names, `/msufcoverage`, and `/msufcoverage gate`.
 - Wago export/import and full MSUF import from the same string.
 - Detached Player Power text slots and offsets.
