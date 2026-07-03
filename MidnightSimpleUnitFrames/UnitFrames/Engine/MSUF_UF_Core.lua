@@ -275,6 +275,15 @@ local function NormalizeDispelOverlayStyle(value)
 end
 UF.NormalizeDispelOverlayStyle = NormalizeDispelOverlayStyle
 
+local function NormalizeDispelColorMode(value)
+  value = tostring(value or "TYPE"):upper()
+  if value == "SINGLE" or value == "UNIFIED" or value == "ONE" then
+    return "SINGLE"
+  end
+  return "TYPE"
+end
+UF.NormalizeDispelColorMode = NormalizeDispelColorMode
+
 local function NormalizeRangeFadeLayerMode(value)
   if value == "health" or value == "hp" or value == "hpbar" or value == "HP" or value == 2 then
     return "health"
@@ -439,14 +448,6 @@ local function ResolveBarGradient(conf, general, enabledKey)
 end
 UF.ResolveBarGradient = ResolveBarGradient
 
-local DISPEL_TYPE_COLORS = {
-  { "Magic", 0.20, 0.60, 1.00 },
-  { "Curse", 0.60, 0.00, 1.00 },
-  { "Disease", 0.60, 0.40, 0.00 },
-  { "Poison", 0.00, 0.60, 0.00 },
-  { "Bleed", 0.80, 0.10, 0.10 },
-}
-
 local function NumberWithFallback(value, fallback)
   value = tonumber(value)
   if value == nil then
@@ -455,17 +456,6 @@ local function NumberWithFallback(value, fallback)
   return value
 end
 UF.NumberWithFallback = NumberWithFallback
-
-function UF.FillDispelTypeColors(dst, general, numberFn)
-  numberFn = numberFn or NumberWithFallback
-  for i = 1, #DISPEL_TYPE_COLORS do
-    local color = DISPEL_TYPE_COLORS[i]
-    local key = "type" .. color[1]
-    dst[key .. "R"] = numberFn(general and general["dispelType" .. color[1] .. "R"], color[2])
-    dst[key .. "G"] = numberFn(general and general["dispelType" .. color[1] .. "G"], color[3])
-    dst[key .. "B"] = numberFn(general and general["dispelType" .. color[1] .. "B"], color[4])
-  end
-end
 
 function UF.FillPredictionColors(dst, general, conf, scopedValue, numberFn)
   scopedValue = scopedValue or ConfigScopedValue

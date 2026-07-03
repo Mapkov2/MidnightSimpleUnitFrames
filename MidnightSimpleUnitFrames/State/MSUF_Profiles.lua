@@ -4144,18 +4144,6 @@ local function MSUF_ProfileIO_CopyUUFGeneral(src, outProfile)
         if next(classPowerOverrides) then
             g.classPowerColorOverrides = classPowerOverrides
         end
-        if type(colours.Dispel) == "table" then
-            for dispelType, color in pairs(colours.Dispel) do
-                local r, gc, b = MSUF_ProfileIO_Color(color, nil, nil, nil, nil)
-                if r and gc and b then
-                    local key = tostring(dispelType)
-                    key = key:sub(1, 1):upper() .. key:sub(2):lower()
-                    g["dispelType" .. key .. "R"] = r
-                    g["dispelType" .. key .. "G"] = gc
-                    g["dispelType" .. key .. "B"] = b
-                end
-            end
-        end
     end
 end
 

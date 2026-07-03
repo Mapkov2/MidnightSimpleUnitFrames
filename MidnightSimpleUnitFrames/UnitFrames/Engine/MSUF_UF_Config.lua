@@ -48,8 +48,27 @@ local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope
 local ScopedValue = UF.ConfigScopedValue
 local CompileBorderPriority = UF.CompileBorderPriority
 local ResolveBarGradient = UF.ResolveBarGradient
-local FillDispelTypeColors = UF.FillDispelTypeColors
 local FillPredictionColors = UF.FillPredictionColors
+
+local DISPEL_TYPE_COLORS = {
+  { "Magic", 0.20, 0.60, 1.00 },
+  { "Curse", 0.60, 0.00, 1.00 },
+  { "Disease", 0.60, 0.40, 0.00 },
+  { "Poison", 0.00, 0.60, 0.00 },
+  { "Bleed", 0.80, 0.10, 0.10 },
+}
+
+local function FallbackFillDispelTypeColors(dst, general, numberFn)
+  for i = 1, #DISPEL_TYPE_COLORS do
+    local color = DISPEL_TYPE_COLORS[i]
+    local key = "type" .. color[1]
+    dst[key .. "R"] = numberFn(general and general["dispelType" .. color[1] .. "R"], color[2])
+    dst[key .. "G"] = numberFn(general and general["dispelType" .. color[1] .. "G"], color[3])
+    dst[key .. "B"] = numberFn(general and general["dispelType" .. color[1] .. "B"], color[4])
+  end
+end
+
+local FillDispelTypeColors = UF.FillDispelTypeColors or FallbackFillDispelTypeColors
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local DEFAULT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"

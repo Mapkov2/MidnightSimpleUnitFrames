@@ -131,14 +131,6 @@ local function _PushVisualUpdates_Flush()
     _ProfiledCall("UF.RefreshSettingsCache", _G.MSUF_UFCore_RefreshSettingsCache, "COLOR_CHANGE")
     _ProfiledCall("BarBackgroundVisuals", _RefreshAllBarBackgroundVisuals)
 
-    --- Rebuild the shared dispel color curve from the DB (per-type Magic /
-    --- Curse / Disease / Poison / Bleed swatches from the Colors panel).
-    --- Consumed by GF overlay, UF border highlight, and corner indicators -
-    --- all of which pass curve output straight to C-side texture sinks.
-    if MSUF and MSUF.GF and type(MSUF.GF.RebuildDispelColorCurve) == "function" then
-        _ProfiledCall("GF.RebuildDispelColorCurve", MSUF.GF.RebuildDispelColorCurve)
-    end
-
     _RefreshUnitFrameColors()
     _ProfiledCall("CastbarVisuals", _G.MSUF_UpdateCastbarVisuals)
     if MSUF.MSUF_ApplyGameplayVisuals then
