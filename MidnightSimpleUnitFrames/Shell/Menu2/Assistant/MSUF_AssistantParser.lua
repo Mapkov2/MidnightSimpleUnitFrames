@@ -4386,6 +4386,38 @@ end
 local function ParseClassResourceFillFastShortcut(text)
     if not ContainsAny(text, { "class resource", "class resources", "class power", "class powers" }) then return nil end
     if ContainsAny(text, {
+        "move", "nudge", "shift", "position", "offset", "left", "right", "up", "down",
+        "hoch", "runter", "links", "rechts", "layer", "frame level", "strata",
+    }) and not ContainsAny(text, {
+        "text", "number", "numbers", "detached power", "player hp", "player health", "second hp", "duplicate hp",
+    }) then
+        local direction = DetectDirection and DetectDirection(text, {}) or nil
+        local key
+        local fallback = 10
+        if ContainsAny(text, { "layer", "frame level", "strata" }) then
+            key = "bars.classPowerFrameLevelOffset"
+            fallback = 1
+        elseif direction == "left" or direction == "right" or ContainsAny(text, { "x offset", "offset x", "x position", "horizontal" }) then
+            key = "bars.classPowerOffsetX"
+        elseif direction == "up" or direction == "down" or ContainsAny(text, { "y offset", "offset y", "y position", "vertical" }) then
+            key = "bars.classPowerOffsetY"
+        end
+        local setting = key and A.Registry and A.Registry:GetSetting(key) or nil
+        if setting then
+            local relativeDelta = P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text, fallback) or nil
+            local value
+            if relativeDelta == nil then value = FirstNumber and FirstNumber(text) or nil end
+            if value ~= nil or relativeDelta ~= nil then
+                return {
+                    kind = "changes",
+                    changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+                    label = setting.label or "Class Resource Position",
+                    summary = "Moves or layers the Class Resource frame.",
+                }
+            end
+        end
+    end
+    if ContainsAny(text, {
         "color", "colour", "background", "texture", "text", "number", "numbers",
         "width", "height", "size", "gap", "spacing", "anchor", "offset", "move",
         "preview", "resource type", "resource token", "detached power", "player hp",

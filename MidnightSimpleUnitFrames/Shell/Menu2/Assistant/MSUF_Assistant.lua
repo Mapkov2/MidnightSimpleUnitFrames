@@ -6271,6 +6271,42 @@ function AP.TryImmediateMutationResult(text, opts)
     if not plan and A._ParseBarGradientPriorityShortcut and normalized:find("gradient", 1, true) then
         plan = A._ParseBarGradientPriorityShortcut(normalized)
     end
+    if not plan and parser.ParseRegistryExactAliasShortcut then
+        local firstWord = normalized:match("^(%S+)")
+        local deterministicRegistryMutation =
+            firstWord == "set" or firstWord == "change" or firstWord == "make"
+            or firstWord == "turn" or firstWord == "enable" or firstWord == "disable"
+            or firstWord == "show" or firstWord == "hide"
+            or firstWord == "move" or firstWord == "nudge" or firstWord == "shift"
+            or firstWord == "increase" or firstWord == "decrease" or firstWord == "raise" or firstWord == "lower"
+            or firstWord == "setze" or firstWord == "stelle" or firstWord == "verschiebe" or firstWord == "verschieben"
+            or firstWord == "aktivieren" or firstWord == "deaktivieren"
+            or firstWord == "anzeigen" or firstWord == "verstecken" or firstWord == "einblenden" or firstWord == "ausblenden"
+        if deterministicRegistryMutation then
+            local exactPlan = parser.ParseRegistryExactAliasShortcut(normalized, text)
+            if exactPlan and exactPlan.kind == "changes" and exactPlan.confirmRequired ~= true then
+                plan = exactPlan
+            end
+        end
+    end
+    if not plan and type(A.ParseSimpleChange) == "function" then
+        local firstWord = normalized:match("^(%S+)")
+        local simpleMovementMutation =
+            firstWord == "move" or firstWord == "nudge" or firstWord == "shift"
+            or firstWord == "increase" or firstWord == "decrease" or firstWord == "raise" or firstWord == "lower"
+            or firstWord == "verschiebe" or firstWord == "verschieben"
+            or normalized:find(" offset", 1, true) or normalized:find("layer", 1, true)
+            or normalized:find("left", 1, true) or normalized:find("right", 1, true)
+            or normalized:find("up", 1, true) or normalized:find("down", 1, true)
+            or normalized:find("links", 1, true) or normalized:find("rechts", 1, true)
+            or normalized:find("hoch", 1, true) or normalized:find("runter", 1, true)
+        if simpleMovementMutation then
+            local simplePlan = A.ParseSimpleChange(text, ctx)
+            if simplePlan and simplePlan.kind == "changes" and simplePlan.confirmRequired ~= true then
+                plan = simplePlan
+            end
+        end
+    end
     if not plan or plan.confirmRequired == true or plan.kind == "action" or plan.kind == "ambiguous" then return nil end
 
     local startedMs = PerfNowMs()
