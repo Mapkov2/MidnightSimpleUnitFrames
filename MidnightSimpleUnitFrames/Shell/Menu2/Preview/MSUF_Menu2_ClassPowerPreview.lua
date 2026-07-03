@@ -1065,7 +1065,7 @@ local function DetachedPowerWidth(preview, bars, player, classFrame)
     if widthMode and widthMode ~= "manual" and classFrame and classFrame.GetWidth then return max(20, floor(classFrame:GetWidth() + 0.5)), shape end
     return Clamp(player.detachedPowerBarWidth, preview.playerW, 20, 800), shape
 end
-local function ApplyMeterText(frame, size, x, y, leftText, centerText, rightText)
+local function ApplyMeterText(frame, size, x, y, leftText, centerText, rightText, layout)
     ApplyFont(frame.left, size)
     ApplyFont(frame.center, size)
     ApplyFont(frame.right, size)
@@ -1075,87 +1075,43 @@ local function ApplyMeterText(frame, size, x, y, leftText, centerText, rightText
     frame.left:SetTextColor(1, 1, 1, 1)
     frame.center:SetTextColor(1, 1, 1, 1)
     frame.right:SetTextColor(1, 1, 1, 1)
+    x, y = x or 0, y or 0
+    local lx, ly = layout and layout.leftX or x, layout and layout.leftY or y
+    local cx, cy = layout and layout.centerX or x, layout and layout.centerY or y
+    local rx, ry = layout and layout.rightX or x, layout and layout.rightY or y
     local h = frame:GetHeight() or 8
     local textH = max(14, h + 8)
     frame.left:ClearAllPoints()
-    frame.left:SetPoint("LEFT", frame, "LEFT", 4 + (x or 0), y or 0)
+    frame.left:SetPoint("LEFT", frame, "LEFT", 4 + lx, ly)
     frame.left:SetSize(max(20, (frame:GetWidth() or 100) * 0.34), textH)
     frame.center:ClearAllPoints()
-    frame.center:SetPoint("CENTER", frame, "CENTER", x or 0, y or 0)
+    frame.center:SetPoint("CENTER", frame, "CENTER", cx, cy)
     frame.center:SetSize(max(20, frame:GetWidth() or 100), textH)
     frame.right:ClearAllPoints()
-    frame.right:SetPoint("RIGHT", frame, "RIGHT", -4 + (x or 0), y or 0)
+    frame.right:SetPoint("RIGHT", frame, "RIGHT", -4 + rx, ry)
     frame.right:SetSize(max(20, (frame:GetWidth() or 100) * 0.34), textH)
     if (leftText or "") ~= "" then frame.left:Show() else frame.left:Hide() end
     if (centerText or "") ~= "" then frame.center:Show() else frame.center:Hide() end
     if (rightText or "") ~= "" then frame.right:Show() else frame.right:Hide() end
 end
 
-local function ResolveFontBaselineOffset(conf)
-    local general = General()
-    local value = general and general.fontBaselineOffset
-    if conf and conf.fontOverride == true and conf.fontBaselineOffset ~= nil then
-        value = conf.fontBaselineOffset
-    end
-    value = tonumber(value) or 0
-    if value < -4 then return -4 end
-    if value > 4 then return 4 end
-    return value
-end
-
-local function Number(value, fallback)
-    local n = tonumber(value)
-    if n == nil then return fallback end
-    return n
-end
-
-local function SideTextOffset(conf, general, side, axis)
-    local key = "powerText" .. side .. "Offset" .. axis
-    local legacyKey = "power" .. side .. "Offset" .. axis
-    return Number(conf[key] or conf[legacyKey] or general[key] or general[legacyKey], 0)
-end
-
 local function ResolvePlayerPowerTextLayout(player)
+    player = player or {}
     local general = General()
-    local baseX = Number(player.powerOffsetX or player.powerTextOffsetX or general.powerOffsetX or general.powerTextOffsetX, -4)
-    local baseY = Number(player.powerOffsetY or player.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY, 4)
-        + ResolveFontBaselineOffset(player)
+    local baseX = tonumber(player.powerOffsetX or player.powerTextOffsetX or general.powerOffsetX or general.powerTextOffsetX) or -4
+    local baseY = tonumber(player.powerOffsetY or player.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY) or 4
+    local baseline = tonumber((player.fontOverride == true and player.fontBaselineOffset) or general.fontBaselineOffset) or 0
+    if baseline < -4 then baseline = -4 elseif baseline > 4 then baseline = 4 end
+    local function Side(side, axis)
+        local key, legacy = "powerText" .. side .. "Offset" .. axis, "power" .. side .. "Offset" .. axis
+        return tonumber(player[key] or player[legacy] or general[key] or general[legacy]) or 0
+    end
+    baseY = baseY + baseline
     return {
-        leftX = baseX + SideTextOffset(player, general, "Left", "X"),
-        leftY = baseY + SideTextOffset(player, general, "Left", "Y"),
-        centerX = baseX + SideTextOffset(player, general, "Center", "X"),
-        centerY = baseY + SideTextOffset(player, general, "Center", "Y"),
-        rightX = baseX + SideTextOffset(player, general, "Right", "X"),
-        rightY = baseY + SideTextOffset(player, general, "Right", "Y"),
+        leftX = baseX + Side("Left", "X"), leftY = baseY + Side("Left", "Y"),
+        centerX = baseX + Side("Center", "X"), centerY = baseY + Side("Center", "Y"),
+        rightX = baseX + Side("Right", "X"), rightY = baseY + Side("Right", "Y"),
     }
-end
-
-local function ApplyPowerMeterText(frame, player, size, leftText, centerText, rightText)
-    ApplyFont(frame.left, size)
-    ApplyFont(frame.center, size)
-    ApplyFont(frame.right, size)
-    frame.left:SetText(leftText or "")
-    frame.center:SetText(centerText or "")
-    frame.right:SetText(rightText or "")
-    frame.left:SetTextColor(1, 1, 1, 1)
-    frame.center:SetTextColor(1, 1, 1, 1)
-    frame.right:SetTextColor(1, 1, 1, 1)
-    local layout = ResolvePlayerPowerTextLayout(player or {})
-    local h = frame:GetHeight() or 8
-    local textH = max(14, h + 8)
-    local width = frame:GetWidth() or 100
-    frame.left:ClearAllPoints()
-    frame.left:SetPoint("LEFT", frame, "LEFT", 4 + layout.leftX, layout.leftY)
-    frame.left:SetSize(max(20, width * 0.34), textH)
-    frame.center:ClearAllPoints()
-    frame.center:SetPoint("CENTER", frame, "CENTER", layout.centerX, layout.centerY)
-    frame.center:SetSize(max(20, width), textH)
-    frame.right:ClearAllPoints()
-    frame.right:SetPoint("RIGHT", frame, "RIGHT", -4 + layout.rightX, layout.rightY)
-    frame.right:SetSize(max(20, width * 0.34), textH)
-    if (leftText or "") ~= "" then frame.left:Show() else frame.left:Hide() end
-    if (centerText or "") ~= "" then frame.center:Show() else frame.center:Hide() end
-    if (rightText or "") ~= "" then frame.right:Show() else frame.right:Hide() end
 end
 
 --- Detached power preview follows the same anchoring relationship as runtime:
@@ -1206,10 +1162,11 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
         local rightMode = tostring(player.powerTextRight or player.powerTextMode or "CURPERCENT"):upper()
         local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
         local current = floor((fraction * 100) + 0.5)
-        ApplyPowerMeterText(frame, player, Clamp(player.powerFontSize, 14, 6, 48),
+        ApplyMeterText(frame, Clamp(player.powerFontSize, 14, 6, 48), nil, nil,
             ModeText(leftMode, current, 100, delimiter),
             ModeText(centerMode, current, 100, delimiter),
-            ModeText(rightMode, current, 100, delimiter))
+            ModeText(rightMode, current, 100, delimiter),
+            ResolvePlayerPowerTextLayout(player))
         PlaceTextHandle(preview.handlePowerText, PreviewParent(preview), { frame.left, frame.center, frame.right })
     else
         frame.left:Hide()
