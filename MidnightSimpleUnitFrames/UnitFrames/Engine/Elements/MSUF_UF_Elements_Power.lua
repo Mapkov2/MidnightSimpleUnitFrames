@@ -14,6 +14,7 @@ if not C then return end
 
 local UF = C.UF
 local Clamp01 = UF.Clamp01
+local Layers = UF.Layers or {}
 local CreateFrame = C.CreateFrame
 local UnitPower = C.UnitPower
 local UnitPowerMax = C.UnitPowerMax
@@ -545,7 +546,7 @@ function Power.Apply(frame, spec)
   end
   local detachedX = tonumber(power.detachedX) or 0
   local detachedY = tonumber(power.detachedY) or -4
-  local detachedLevel = tonumber(power.detachedLevel) or 6
+  local detachedLevel = tonumber(power.detachedLevel) or (Layers.POWER_DETACHED_DEFAULT or 6)
   local frameLevel = frame.GetFrameLevel and (frame:GetFrameLevel() or 1) or 1
   local targetLevel = frameLevel + detachedLevel
   local layoutChanged = bar._msufPowerLayout ~= layout
@@ -579,7 +580,7 @@ function Power.Apply(frame, spec)
       bar:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -1)
       bar:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -1)
       bar:SetHeight(h)
-      SetFrameLevelCached(bar, frameLevel + 1)
+      SetFrameLevelCached(bar, frameLevel + (Layers.POWER_INLINE_OFFSET or 1))
     end
   else
     frame._msufPowerBarDetached = nil
@@ -587,7 +588,7 @@ function Power.Apply(frame, spec)
       bar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
       bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
       bar:SetHeight(h)
-      SetFrameLevelCached(bar, frameLevel + 1)
+      SetFrameLevelCached(bar, frameLevel + (Layers.POWER_INLINE_OFFSET or 1))
     end
   end
   if layoutChanged then

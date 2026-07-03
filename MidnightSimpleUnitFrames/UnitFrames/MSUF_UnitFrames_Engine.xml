@@ -2,9 +2,11 @@
   <Script file="Engine\MSUF_UF_Secrets.lua"/>
   <Script file="Engine\MSUF_UF_Apply.lua"/>
   <Script file="Engine\MSUF_UF_Metadata.lua"/>
+  <Script file="Engine\MSUF_UF_Layers.lua"/>
   <Script file="Engine\MSUF_UF_Core.lua"/>
   <Script file="Engine\MSUF_UF_Dispatch.lua"/>
   <Script file="Engine\MSUF_UF_Runtime.lua"/>
   <Script file="Engine\MSUF_UF_Config.lua"/>
+  <Script file="Engine\MSUF_UF_PreviewDiagnostics.lua"/>
   <Script file="Engine\MSUF_UF_PreviewAnimation.lua"/>
 </Ui>

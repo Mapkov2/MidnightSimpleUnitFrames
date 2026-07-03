@@ -9,6 +9,7 @@ MSUF.MSUF2 = M
 local Render = M.GroupPreviewRender or {}
 M.GroupPreviewRender = Render
 local F = M.Fallbacks or {}
+local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local function DefaultCompiledAuraLane(_, _, fallback) return fallback or {} end
 local function DefaultInt(value, fallback, minValue, maxValue)
     local n = math.floor((tonumber(value) or tonumber(fallback) or 0) + 0.0001)
@@ -368,7 +369,7 @@ function Render.Install(box, ctx, deps)
         else
             H.LayoutOutline(mock, outlineEdge)
         end
-        local textBaseLevel = (mock.GetFrameLevel and mock:GetFrameLevel()) or 1
+        local textBaseLevel = ((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + (Layers.TEXT_BASE_OFFSET or 10)
         if mock._nameTextLayer then
             if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
             mock._nameTextLayer:ClearAllPoints()
@@ -537,7 +538,7 @@ function Render.Install(box, ctx, deps)
         local boundsEdge = max(1, outlineEdge)
         self._bounds:SetPoint("TOPLEFT", mock, "TOPLEFT", -boundsEdge, boundsEdge)
         self._bounds:SetSize(mockW + boundsEdge * 2, mockH + boundsEdge * 2)
-        if self._bounds.SetFrameLevel and mock.GetFrameLevel then self._bounds:SetFrameLevel((mock:GetFrameLevel() or 1) + 48) end
+        if self._bounds.SetFrameLevel and mock.GetFrameLevel then self._bounds:SetFrameLevel((mock:GetFrameLevel() or 1) + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
         self._bounds:SetShown(LayerOn("bounds"))
         local function LayoutHandle(handle, anchor, x, y, defaultAnchor)
             anchor = anchor or defaultAnchor or "CENTER"
@@ -1201,7 +1202,7 @@ function Render.Install(box, ctx, deps)
         local spellLayer = conf.spellIndicators and conf.spellIndicators.layer
         if runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.layer ~= nil then spellLayer = runtimeSpec.spellIndicators.layer end
         spellHandle:SetFrameLevel(baseLevel + ClampLayer(spellLayer, 9))
-        if targetedHandle then targetedHandle:SetFrameLevel(baseLevel + 40 + ClampLayer(conf.targetedSpellsLayer, 10)) end
+        if targetedHandle then targetedHandle:SetFrameLevel(baseLevel + (Layers.TARGETED_SPELLS_BASE_OFFSET or 40) + ClampLayer(conf.targetedSpellsLayer, 10)) end
         textHandles.name:SetFrameLevel(baseLevel + (tonumber(runtimeText.nameLayer) or tonumber(conf.nameTextLayer) or 6))
         textHandles.hpGroup:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))
         textHandles.hpLeft:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))

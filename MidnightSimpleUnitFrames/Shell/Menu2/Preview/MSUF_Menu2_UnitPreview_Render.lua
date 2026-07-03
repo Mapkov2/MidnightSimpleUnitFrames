@@ -11,6 +11,7 @@ local Pick, PickFallbackTable = MenuState.Pick, MenuState.PickFallbackTable
 local F = MenuState.Fallbacks or {}
 local PreviewHelpers = MenuState.PreviewHelpers or {}
 local CPPreview = MenuState.ClassPowerPreview or {}
+local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local function CastbarPreviewDetailPrefix(unitKey)
     if unitKey == "player" then return "castbarPlayer" end
     if unitKey == "target" then return "castbarTarget" end
@@ -428,6 +429,7 @@ function Preview.Refresh(box, reason)
     local runtimeSpec = R.RuntimeSpecForPreviewKey(key)
     local runtimePower = runtimeSpec and runtimeSpec.power
     local runtimeStatus = runtimeSpec and runtimeSpec.status
+    local runtimeText = runtimeSpec and runtimeSpec.text
     local runtimeClassPower = runtimeSpec and runtimeSpec.classPower
     box.key = key
     local skipControlRefresh = (reason == "OPTIONS_APPLY_DB" or reason == "UNIT_MENU_ENTER" or reason == "UNIT_MENU_REENTER")
@@ -656,15 +658,15 @@ function Preview.Refresh(box, reason)
     local baseLevel = (canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + 2
     if mock.SetFrameLevel then mock:SetFrameLevel(baseLevel + 4) end
     if mock.classPower and mock.classPower.SetFrameLevel then mock.classPower:SetFrameLevel(baseLevel + 4 + ClampPreviewLayer(bars.classPowerFrameLevelOffset, 5)) end
-    if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(baseLevel + 4 + ClampPreviewLayer(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, 6)) end
-    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(baseLevel + 7) end
+    if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(baseLevel + 4 + ClampPreviewLayer(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6)) end
+    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(baseLevel + (Layers.PORTRAIT_BORDER_OFFSET or 7)) end
     if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel(baseLevel + 6) end
-    if mock.textFrame and mock.textFrame.SetFrameLevel then mock.textFrame:SetFrameLevel(baseLevel + 10) end
-    local textBase = baseLevel + 12
-    if mock.nameLayer and mock.nameLayer.SetFrameLevel then mock.nameLayer:SetFrameLevel(textBase + ClampPreviewLayer(conf.nameTextLayer, 5)) end
-    if mock.hpLayer and mock.hpLayer.SetFrameLevel then mock.hpLayer:SetFrameLevel(textBase + ClampPreviewLayer(conf.hpTextLayer, 5)) end
-    if mock.powerLayer and mock.powerLayer.SetFrameLevel then mock.powerLayer:SetFrameLevel(textBase + ClampPreviewLayer(conf.powerTextLayer, 2)) end
-    if mock.bounds and mock.bounds.SetFrameLevel then mock.bounds:SetFrameLevel(baseLevel + 48) end
+    if mock.textFrame and mock.textFrame.SetFrameLevel then mock.textFrame:SetFrameLevel(baseLevel + (Layers.TEXT_BASE_OFFSET or 10)) end
+    local textBase = baseLevel + (Layers.TEXT_BASE_OFFSET or 10)
+    if mock.nameLayer and mock.nameLayer.SetFrameLevel then mock.nameLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.nameLayer or conf.nameTextLayer or g.nameTextLayer, 5)) end
+    if mock.hpLayer and mock.hpLayer.SetFrameLevel then mock.hpLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.healthLayer or conf.hpTextLayer or conf.textLayer or g.hpTextLayer or g.textLayer, 5)) end
+    if mock.powerLayer and mock.powerLayer.SetFrameLevel then mock.powerLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.powerLayer or conf.powerTextLayer or g.powerTextLayer, 2)) end
+    if mock.bounds and mock.bounds.SetFrameLevel then mock.bounds:SetFrameLevel(baseLevel + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
     SetTex(mock.hp, (runtimeSpec and runtimeSpec.health and runtimeSpec.health.texture) or (runtimeSpec and runtimeSpec.texture) or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8)
     SetTex(mock.power, (runtimePower and runtimePower.texture) or (runtimeSpec and runtimeSpec.texture) or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8)
     SetTex(mock.hpBG, (runtimeSpec and runtimeSpec.health and runtimeSpec.health.backgroundTexture) or (runtimeSpec and runtimeSpec.backgroundTexture) or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()) or TEX_W8)
