@@ -1175,6 +1175,31 @@ end
 
 local candidateIndexTokenCache = {}
 local candidateIndexTokenCacheCount = 0
+local candidateIndexTokenCacheOrder = {}
+local candidateIndexTokenCacheOrderHead = 1
+local candidateIndexTokenCacheOrderTail = 0
+local CANDIDATE_INDEX_TOKEN_CACHE_LIMIT = 24576
+
+local function CacheCandidateIndexTokens(raw, tokens)
+    if #raw > 180 then return tokens end
+    if candidateIndexTokenCache[raw] == nil then
+        candidateIndexTokenCacheCount = candidateIndexTokenCacheCount + 1
+        candidateIndexTokenCacheOrderTail = candidateIndexTokenCacheOrderTail + 1
+        candidateIndexTokenCacheOrder[candidateIndexTokenCacheOrderTail] = raw
+        while candidateIndexTokenCacheCount > CANDIDATE_INDEX_TOKEN_CACHE_LIMIT do
+            local old = candidateIndexTokenCacheOrder[candidateIndexTokenCacheOrderHead]
+            candidateIndexTokenCacheOrder[candidateIndexTokenCacheOrderHead] = nil
+            candidateIndexTokenCacheOrderHead = candidateIndexTokenCacheOrderHead + 1
+            if old ~= nil and candidateIndexTokenCache[old] ~= nil then
+                candidateIndexTokenCache[old] = nil
+                candidateIndexTokenCacheCount = candidateIndexTokenCacheCount - 1
+            end
+        end
+    end
+    candidateIndexTokenCache[raw] = tokens
+    return tokens
+end
+
 local function CandidateIndexTokens(text)
     local raw = tostring(text or "")
     if raw == "" then return nil end
@@ -1195,15 +1220,7 @@ local function CandidateIndexTokens(text)
         local folded = P.PluralFoldWord and P.PluralFoldWord(word) or word
         if folded ~= word then add(folded) end
     end
-    if #raw <= 180 then
-        if candidateIndexTokenCacheCount > 4096 then
-            candidateIndexTokenCache = {}
-            candidateIndexTokenCacheCount = 0
-        end
-        candidateIndexTokenCache[raw] = tokens
-        candidateIndexTokenCacheCount = candidateIndexTokenCacheCount + 1
-    end
-    return tokens
+    return CacheCandidateIndexTokens(raw, tokens)
 end
 
 P._AddCandidateIndexTokens = function(tokenSet, text)

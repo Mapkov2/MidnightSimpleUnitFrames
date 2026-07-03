@@ -544,6 +544,22 @@ local function EnsureEditModeUIHook()
     end)
     editModeUIHooked = true
 end
+local function SetFrameHeightIfChanged(frame, height)
+    if not (frame and frame.SetHeight) then return end
+    height = tonumber(height) or CONTENT_H
+    if frame._msuf2LastMenuHeight == height then return end
+    frame._msuf2LastMenuHeight = height
+    frame:SetHeight(height)
+end
+local function ApplyContextContentHeight(entry, wrapper, height)
+    if type(entry) ~= "table" then return end
+    height = math.max(CONTENT_H, tonumber(height) or CONTENT_H)
+    entry.height = height
+    SetFrameHeightIfChanged(wrapper, height)
+    if not entry.hiddenBuild and M.scrollChild then
+        SetFrameHeightIfChanged(M.scrollChild, height)
+    end
+end
 local function CreateContext(key, wrapper, entry)
     local ctx = {
         key = key,
@@ -555,9 +571,12 @@ local function CreateContext(key, wrapper, entry)
     }
     function ctx:SetContentHeight(height)
         height = math.max(CONTENT_H, tonumber(height) or CONTENT_H)
-        entry.height = height
-        if wrapper.SetHeight then wrapper:SetHeight(height) end
-        if not entry.hiddenBuild and M.scrollChild and M.scrollChild.SetHeight then M.scrollChild:SetHeight(height) end
+        if ctx._msuf2DeferContentHeight then
+            entry.height = height
+            entry._msuf2PendingContentHeight = height
+            return
+        end
+        ApplyContextContentHeight(entry, wrapper, height)
     end
     function ctx:AddRefresher(fn)
         M.AddRefresher(ctx, fn)
@@ -620,14 +639,29 @@ local function BuildPageEntry(key, hidden)
     if spec and type(spec.build) == "function" then
         entry._msuf2Building = true
         ctx._msuf2Building = true
+        ctx._msuf2DeferContentHeight = true
         local result = spec.build(ctx)
+        ctx._msuf2DeferContentHeight = nil
         ctx._msuf2Building = nil
         entry._msuf2Building = nil
-        if tonumber(result) then
-            ctx:SetContentHeight(result)
+        local builders = ctx._msuf2PageBuilders
+        if type(builders) == "table" then
+            for i = 1, #builders do
+                local builder = builders[i]
+                if builder and builder._msuf2RelayoutPending and builder.RelayoutCollapsibles then
+                    builder._msuf2RelayoutPending = nil
+                    builder:RelayoutCollapsibles()
+                end
+            end
         end
+        ctx:SetContentHeight(tonumber(result) or entry._msuf2PendingContentHeight or entry.height or CONTENT_H)
+        entry._msuf2PendingContentHeight = nil
     else
+        ctx._msuf2DeferContentHeight = true
         BuildPlaceholderPage(ctx, key)
+        ctx._msuf2DeferContentHeight = nil
+        ctx:SetContentHeight(entry._msuf2PendingContentHeight or entry.height or CONTENT_H)
+        entry._msuf2PendingContentHeight = nil
     end
     if profiling then M.ProfileStop("pageBuild", tostring(key) .. (hidden and ":hidden" or ""), buildStarted) end
     M._msuf2SearchBuildKey = prevBuildKey
@@ -761,7 +795,7 @@ function M.SelectPage(key)
     if not suppressPageHistory then RecordPageNavigation(previousKey, key) end
     if key ~= "search" then M.SetMenuStateValue("lastPage", key) end
     if M.frame then M.frame._msufCurrentKey = key end
-    if M.scrollChild then M.scrollChild:SetHeight(entry.height or CONTENT_H) end
+    if M.scrollChild then SetFrameHeightIfChanged(M.scrollChild, entry.height or CONTENT_H) end
     if M.scrollFrame then
         if M.scrollFrame.SetVerticalScroll then
             M.scrollFrame:SetVerticalScroll(0)

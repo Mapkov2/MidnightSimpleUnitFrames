@@ -2386,10 +2386,35 @@ function A3.RequestUnit(unit)
     return RequestUnitNow(unit)
 end
 
-function A3.RefreshAll()
+local function DoRefreshAll()
     A3.BumpRuntimeConfig()
     A3._runtimeConfigCache = nil
     RequestUnitNow("*")
+    return true
+end
+
+local function FlushCoalescedRefreshAll()
+    local pending = A3._refreshAllPending == true
+    A3._refreshAllPending = nil
+    A3._refreshAllCoalescing = nil
+    if pending then
+        return DoRefreshAll()
+    end
+    return true
+end
+
+function A3.RefreshAll()
+    if A3._refreshAllCoalescing == true then
+        A3._refreshAllPending = true
+        return true
+    end
+    A3._refreshAllCoalescing = true
+    DoRefreshAll()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, FlushCoalescedRefreshAll)
+    else
+        A3._refreshAllCoalescing = nil
+    end
     return true
 end
 

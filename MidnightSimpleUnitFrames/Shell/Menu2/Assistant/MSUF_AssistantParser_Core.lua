@@ -33,6 +33,10 @@ local Normalize
 
 local normalizeCache = {}
 local normalizeCacheCount = 0
+local normalizeCacheOrder = {}
+local normalizeCacheOrderHead = 1
+local normalizeCacheOrderTail = 0
+local NORMALIZE_CACHE_LIMIT = 16384
 
 local NORMALIZE_WORD_REPLACEMENTS = {
     wat = "what",
@@ -554,11 +558,20 @@ end
 -- bounded and only cache short strings so pasted imports or bug reports cannot grow it forever.
 local function CacheNormalize(raw, value)
     if #raw <= 180 then
-        if normalizeCacheCount > 4096 then
-            normalizeCache = {}
-            normalizeCacheCount = 0
+        if normalizeCache[raw] == nil then
+            normalizeCacheCount = normalizeCacheCount + 1
+            normalizeCacheOrderTail = normalizeCacheOrderTail + 1
+            normalizeCacheOrder[normalizeCacheOrderTail] = raw
+            while normalizeCacheCount > NORMALIZE_CACHE_LIMIT do
+                local old = normalizeCacheOrder[normalizeCacheOrderHead]
+                normalizeCacheOrder[normalizeCacheOrderHead] = nil
+                normalizeCacheOrderHead = normalizeCacheOrderHead + 1
+                if old ~= nil and normalizeCache[old] ~= nil then
+                    normalizeCache[old] = nil
+                    normalizeCacheCount = normalizeCacheCount - 1
+                end
+            end
         end
-        if normalizeCache[raw] == nil then normalizeCacheCount = normalizeCacheCount + 1 end
         normalizeCache[raw] = value
     end
     return value

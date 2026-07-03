@@ -274,6 +274,10 @@ local function FullPhraseMatch(index, tokens, minTokens)
         setting = ReduceEquivalentHits(hits)
         if not setting then return nil end
     end
+    -- Short phrases on hand-written settings stay with their dedicated flows
+    -- ("global font color" is a workflow); generated settings may claim them
+    -- because nothing else answers for those keys.
+    if not setting.generated and count < 4 then return nil end
     return setting, subject, boolFromVerb
 end
 

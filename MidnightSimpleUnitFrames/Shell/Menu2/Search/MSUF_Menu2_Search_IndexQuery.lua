@@ -834,6 +834,12 @@ function M.RegisterSearchWidget(widget, meta)
 
     local label = DisplaySearchText(meta.label or meta.title or meta.text or widget._msuf2SearchText or widget._msuf2SearchTitle)
     if not IsSearchableDisplayText(label) then return end
+    local kind = meta.kind or widget._msuf2ControlKind or "control"
+    local anchor = meta.anchor or widget._msuf2Title or widget._msuf2Label or widget
+    local rawValues = meta.values or widget.values
+    local command = meta.command or widget._msuf2CommandAction
+    local keywords = meta.keywords
+    local help = meta.help or meta.description
 
     local id = widget._msuf2SearchRegistryId
     if not id or widget._msuf2SearchRegistryPage ~= pageKey or not SEARCH_STATE.registry[id] then
@@ -845,17 +851,34 @@ function M.RegisterSearchWidget(widget, meta)
         SEARCH_STATE.registryByPage[pageKey][#SEARCH_STATE.registryByPage[pageKey] + 1] = id
     end
 
+    local previous = SEARCH_STATE.registry[id]
+    if previous
+        and previous.widget == widget
+        and previous.pageKey == pageKey
+        and previous.label == label
+        and previous.kind == kind
+        and previous.anchor == anchor
+        and previous.command == command
+        and previous.keywords == keywords
+        and previous.help == help
+        and previous._rawValues == rawValues
+        and type(rawValues) ~= "function"
+    then
+        return
+    end
+
     local entry = {
         id = id,
         widget = widget,
         pageKey = pageKey,
         label = label,
-        kind = meta.kind or widget._msuf2ControlKind or "control",
-        anchor = meta.anchor or widget._msuf2Title or widget._msuf2Label or widget,
-        values = CopyStaticSearchValues(meta.values or widget.values),
-        command = meta.command or widget._msuf2CommandAction,
-        keywords = meta.keywords,
-        help = meta.help or meta.description,
+        kind = kind,
+        anchor = anchor,
+        values = CopyStaticSearchValues(rawValues),
+        command = command,
+        keywords = keywords,
+        help = help,
+        _rawValues = rawValues,
     }
     SEARCH_STATE.registry[id] = entry
     SEARCH_STATE.registryRecords[id] = nil

@@ -1646,7 +1646,7 @@ local CoreRefreshAll = A3.RefreshAll
 function A3.RefreshAll(...)
     local ret
     if type(CoreRefreshAll) == "function" then ret = CoreRefreshAll(...) end
-    RefreshEditModeAuras()
+    RequestEditModeAurasRefresh(0)
     return ret
 end
 

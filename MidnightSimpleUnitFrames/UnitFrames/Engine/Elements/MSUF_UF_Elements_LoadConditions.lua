@@ -68,6 +68,7 @@ local bossPreviewAppliedActive
 local BOSS_PREVIEW_LIGHT_REASONS = {
   MSUF_BOSS_PREVIEW = true,
   MSUF_BOSS_PREVIEW_SYNC = true,
+  MSUF_BOSS_PREVIEW_OFF = true,
   MSUF2_BOSS_PAGE_CORE = true,
   MSUF2_BOSS_PAGE_FALLBACK = true,
 }
@@ -445,6 +446,10 @@ end
 
 local function RefreshBossAuras()
   local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.RequestUnit) == "function" then
+    A3.RequestUnit("boss")
+    return
+  end
   if A3 and type(A3.RefreshUnit) == "function" then
     for i = 1, 5 do
       A3.RefreshUnit("boss" .. i)
