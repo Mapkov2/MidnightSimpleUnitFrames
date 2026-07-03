@@ -77,6 +77,9 @@ local PLAYER_HP_SHAPE_VALUES = VTP "BAR=Bar|FOLLOW_POWER=Follow Player Power|ROU
 local PLAYER_HP_COLOR_VALUES = VTP "GLOBAL=Global|CLASS=Class Color|DARK=Dark Mode|GRADIENT=HP Gradient"
 local PLAYER_HP_TEXT_VALUES = VTP "PERCENT=Percent|CURRENT=Current|MAX=Max|DEFICIT=Deficit|CURMAX=Current / Max|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|MAXPERCENT=Max / Percent|PERCENTCUR=Percent / Current|PERCENTMAX=Percent / Max|PERCENTCURMAX=Percent / Current / Max|NONE=None"
 local PLAYER_HP_SEPARATORS = VT("", "space", "-", "-", "/", "/", "\\", "\\", "|", "|", "<", "<", ">", ">", "~", "~", ":", ":")
+local DETACHED_POWER_SLOT_VALUES = VTP "CURRENT=Current|MAX=Max|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|NONE=None"
+local DETACHED_POWER_SEPARATORS = VT("", "space", "-", "-", "/", "/", "\\", "\\", "|", "|", "<", "<", ">", ">", "~", "~", ":", ":")
+local TEXT_SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
 local DETACHED_POWER_TEXT_PRESETS = M.KeySetFromWords "CURRENT CURMAX PERCENT CURPERCENT CURMAXPERCENT"
 local function ApplyShapePreset(key)
     local preset = SHAPE_PRESETS[key]
@@ -216,6 +219,8 @@ local function ApplyDetachedPowerBar()
         "MSUF_DetachedPowerBar_RefreshTextures", "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_ClassPower_PlayerHP_Refresh")
 end
 local function ApplyDetachedPowerText()
+    local db = M.EnsureDB()
+    if db and db.player then db.player.hpPowerTextOverride = nil end
     ApplyClassPowerPage("MSUF2_DETACHED_POWER_TEXT", APPLY_DETACHED_POWER_TEXT,
         "MSUF_DetachedPowerBar_RefreshTextures", "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_ClassPower_PlayerHP_Refresh")
 end
@@ -236,6 +241,20 @@ local function Player()
     local db = M.EnsureDB()
     db.player = db.player or {}
     return db.player
+end
+local function SetPlayerTextValue(key, value, apply)
+    local player = Player()
+    if player[key] == value then return end
+    local function Write()
+        local target = Player()
+        if target[key] == value then return false end
+        target[key] = value
+        target.hpPowerTextOverride = nil
+        if type(apply) == "function" then apply() end
+        return true
+    end
+    if type(M.RunWithHistory) == "function" then return M.RunWithHistory(tostring(key), "classpower:detachedPowerText:" .. tostring(key), Write) end
+    return Write()
 end
 local function NormalizeDetachedPowerTextPreset(player)
     player = player or Player()
@@ -560,6 +579,7 @@ local function BuildClassPower(ctx)
     b:Header("Class Resource Bar", "Combo Points, Runes, Holy Power, Chi and similar class-specific resources.", 64)
     local display = b:CollapsibleSection("classpower_display", "Class Resource Layout", compactLayout and 820 or 540, true)
     local cpControls, textControls, dpbControls, dpbPlayerControls = {}, {}, {}, {}
+    local dpbTextControls, dpbSlotTextControls = {}, {}
     local phpControls, phpTextControls, phpCustomTextControls, phpTextPositionControls = {}, {}, {}, {}
     local phpManualControls, phpOrbControls, phpTextureControls, altManaControls = {}, {}, {}, {}
     local RefreshClassPowerControls = M.RefreshProxy()
@@ -741,7 +761,7 @@ local function BuildClassPower(ctx)
     local dpbTwoColumn = (not dpbCompact) and dpbCardW >= 620
     local dpbRightX = dpbTwoColumn and (32 + dpbControlW + 28) or 32
     local dpbSecondColY = dpbTwoColumn and -154 or -520
-    local dpbTextSecondColY = dpbTwoColumn and -154 or -300
+    local dpbTextSecondColY = dpbTwoColumn and -154 or -446
     local dpbTabFrames = {}
     local dpbLayout, dpbTextures, dpbText = M.UnitSectionsShared.MakeTabFrames(dpb, -88, dpbWidth, dpbTabFrames, "layout", "textures", "text")
     W.SegmentTabs(ctx, dpb, {
@@ -786,13 +806,61 @@ local function BuildClassPower(ctx)
     AddTooltip(dpbFields.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(dpbFields.sync, "Sync Width", "Uses the Class Resource width for detached Player power. Player power controls are disabled while this connection is active.")
     AddTooltip(dpbFields.shape, "Player Power Shape", "FOLLOW_CLASS resolves from Class Resource shape: Bar -> Bar, Circle -> Round, Diamond/Hex -> Crystal. Orb is a single bottom-to-top filled mana/power sphere.")
-    W.ControlCard(dpbText, "Power Text", "Text shown on the detached Player power bar managed here.", 14, -38, dpbCardW, dpbTwoColumn and 260 or 410)
+    W.ControlCard(dpbText, "Power Text", "Text shown on the detached Player power bar managed here.", 14, -38, dpbCardW, dpbTwoColumn and 498 or 790)
     local dpbTextFields = BuildBoundControls(dpbText, Player, ApplyDetachedPowerText, {
         { "onBar", "toggle", "Power text on bar", "detachedPowerBarTextOnBar", false },
-        { "size", "slider", "Power text size", 6, 48, 1, 300, "powerFontSize", 14 },
         { "preset", "detachedTextPreset", "Power text", DETACHED_POWER_TEXT_PRESET_VALUES, 300 },
+        { "right", "dropdown", "Right slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextRight", "CURPERCENT" },
+        { "left", "dropdown", "Left slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextLeft", "NONE" },
+        { "center", "dropdown", "Center slot", DETACHED_POWER_SLOT_VALUES, 300, "powerTextCenter", "NONE" },
+        { "sep", "dropdown", "Delimiter", DETACHED_POWER_SEPARATORS, 180, "powerTextSeparator", "" },
+        { "size", "slider", "Power text size", 6, 48, 1, 300, "powerFontSize", 14 },
+        { "x", "slider", "Text X", -300, 300, 1, 300, "powerOffsetX", -4 },
+        { "y", "slider", "Text Y", -300, 300, 1, 300, "powerOffsetY", 4 },
+        { "layer", "slider", "Power text layer", 0, 30, 1, 300, "powerTextLayer", 2 },
     })
+    M.classPowerDetachedPowerTextSlot = M.classPowerDetachedPowerTextSlot or "center"
+    local function CurrentDetachedPowerTextSlot()
+        local slot = M.classPowerDetachedPowerTextSlot
+        if slot ~= "left" and slot ~= "center" and slot ~= "right" then slot = "center" end
+        return slot
+    end
+    local function CurrentDetachedPowerTextSlotOffsetKeys()
+        if type(M.TextSlotOffsetKeys) == "function" then return M.TextSlotOffsetKeys("power", CurrentDetachedPowerTextSlot()) end
+        return "powerTextCenterOffsetX", "powerTextCenterOffsetY"
+    end
+    local dpbTextSlot = W.Segment(dpbText, "Slot", TEXT_SLOT_VALUES, dpbControlW)
+    M.BindSegment(ctx, dpbTextSlot,
+        CurrentDetachedPowerTextSlot,
+        function(value)
+            M.classPowerDetachedPowerTextSlot = value or "center"
+            if M.RequestRefresh then M.RequestRefresh(ctx, "classpower-detached-power-text-slot") elseif M.Refresh then M.Refresh(ctx) end
+        end)
+    local dpbTextSlotX = W.Slider(dpbText, "Slot X", -300, 300, 1, 300)
+    M.BindNumberWidget(ctx, dpbTextSlotX,
+        function()
+            local key = CurrentDetachedPowerTextSlotOffsetKeys()
+            return tonumber(Player()[key]) or 0
+        end,
+        function(value)
+            local key = CurrentDetachedPowerTextSlotOffsetKeys()
+            SetPlayerTextValue(key, value, ApplyDetachedPowerText)
+        end,
+        0, { step = 1, roundStep = true })
+    local dpbTextSlotY = W.Slider(dpbText, "Slot Y", -300, 300, 1, 300)
+    M.BindNumberWidget(ctx, dpbTextSlotY,
+        function()
+            local _, key = CurrentDetachedPowerTextSlotOffsetKeys()
+            return tonumber(Player()[key]) or 0
+        end,
+        function(value)
+            local _, key = CurrentDetachedPowerTextSlotOffsetKeys()
+            SetPlayerTextValue(key, value, ApplyDetachedPowerText)
+        end,
+        0, { step = 1, roundStep = true })
     AddTooltip(dpbTextFields.preset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.")
+    AddTooltip(dpbTextFields.onBar, "Power Text On Bar", "Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout.")
+    AddTooltip(dpbTextFields.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
     W.ControlCard(dpbTextures, "Power Textures", "Bar uses SharedMedia textures. Shapes use fixed alpha assets.", 14, -38, dpbCardW, 260)
     local dpbTextureFields = BuildBoundControls(dpbTextures, Bars, ApplyDetachedPowerBar, {
         { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "detachedPowerBarTexture", "" },
@@ -803,12 +871,14 @@ local function BuildClassPower(ctx)
     PlaceColumn(dpbLayout, 32, -154, 54, dpbControlW, "LEFT", dpbFields.anchor, dpbFields.sync, dpbModeField.mode, dpbFields.shape, dpbFields.orbSize, dpbFields.height)
     PlaceColumn(dpbLayout, dpbRightX, dpbSecondColY, 54, dpbControlW, "LEFT", dpbFields.x, dpbFields.y, dpbFields.layer)
     PlaceColumn(dpbTextures, 32, -104, 54, dpbControlW, "LEFT", dpbTextureFields.fg, dpbTextureFields.bg, dpbTextureFields.outline)
-    PlaceColumn(dpbText, 32, -104, 54, dpbControlW, "LEFT", dpbTextFields.onBar, dpbTextFields.preset)
-    PlaceColumn(dpbText, dpbRightX, dpbTextSecondColY, 54, dpbControlW, "LEFT", dpbTextFields.size)
+    PlaceColumn(dpbText, 32, -104, 54, dpbControlW, "LEFT", dpbTextFields.onBar, dpbTextFields.preset, dpbTextFields.right, dpbTextFields.left, dpbTextFields.center, dpbTextFields.sep)
+    PlaceColumn(dpbText, dpbRightX, dpbTextSecondColY, 54, dpbControlW, "LEFT", dpbTextFields.size, dpbTextFields.x, dpbTextFields.y, dpbTextFields.layer, dpbTextSlot, dpbTextSlotX, dpbTextSlotY)
     AddControls(dpbControls, dpbModeField.mode)
     AddNamedControls(dpbControls, dpbTextureFields, "fg bg outline")
     AddNamedControls(dpbPlayerControls, dpbFields, "anchor sync x y height layer")
-    AddNamedControls(dpbPlayerControls, dpbTextFields, "onBar size preset")
+    AddNamedControls(dpbPlayerControls, dpbTextFields, "onBar preset")
+    AddNamedControls(dpbTextControls, dpbTextFields, "right left center sep size x y layer")
+    AddControls(dpbSlotTextControls, dpbTextSlot, dpbTextSlotX, dpbTextSlotY)
     AddNamedControls(dpbPlayerControls, dpbFields, "shape orbSize")
     local phpCompact = layoutWidth < 680
     local php = b:CollapsibleSection("classpower_player_hp", "Second Player HP Bar", phpCompact and 980 or 700, false)
@@ -932,6 +1002,8 @@ local function BuildClassPower(ctx)
         local playerTextOn = db.player and db.player.showPower ~= false
         SetControlEnabled(dpbTextFields.onBar, playerDetached and playerTextOn)
         SetControlEnabled(dpbTextFields.size, playerDetached and playerTextOn)
+        SetControlsEnabled(dpbTextControls, playerDetached and playerTextOn)
+        SetControlsEnabled(dpbSlotTextControls, playerDetached and playerTextOn)
         local phpOn = BoolValue(bars, "playerHPBarEnabled", false)
         local phpShapeValue = ResolvePlayerHPShape(bars, db)
         local phpRawShape = NormalizePlayerHPShape(bars.playerHPBarShape)
@@ -958,4 +1030,4 @@ local function BuildClassPower(ctx)
     MaybeOfferQuickSetup()
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 14 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 15 })
