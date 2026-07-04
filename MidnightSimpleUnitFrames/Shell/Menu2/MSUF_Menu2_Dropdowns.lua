@@ -69,14 +69,17 @@ local function PaintDropdownScrollbar(hover)
     local edge = bar._msuf2TrackEdge
     local thumb = bar._msuf2Thumb
     local soft = T.colors.borderSoft or T.colors.border or { 0.12, 0.14, 0.26 }
-    local thumbBase = bar._msuf2ThumbBase or { 0.240, 0.300, 0.430 }
-    local thumbHover = bar._msuf2ThumbHover or { 0.320, 0.420, 0.560 }
+    local thumbBase = bar._msuf2ThumbBase or T.colors.coreRim or { 0.043, 0.096, 0.150 }
+    local thumbHover = bar._msuf2ThumbHover or T.colors.coreRaised or { 0.026, 0.070, 0.110 }
     if track then
         local a = (hover and 0.98 or 0.82) * alpha
         if T.ApplyTextureGradient then
-            T.ApplyTextureGradient(track, "VERTICAL", { 0.042, 0.052, 0.095, a }, { 0.010, 0.014, 0.030, a }, true)
+            local top = T.colors.coreSurface or { 0.014, 0.038, 0.072 }
+            local bottom = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+            T.ApplyTextureGradient(track, "VERTICAL", { top[1], top[2], top[3], a }, { bottom[1], bottom[2], bottom[3], a }, true)
         elseif track.SetColorTexture then
-            track:SetColorTexture(0.025, 0.030, 0.060, a)
+            local c = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+            track:SetColorTexture(c[1], c[2], c[3], a)
         end
     end
     if edge and edge.SetColorTexture then edge:SetColorTexture(soft[1], soft[2], soft[3], (hover and 0.62 or 0.38) * alpha) end
@@ -351,7 +354,7 @@ local function EnsureDropdownFrame()
     if T.ApplyMaterial then
         T.ApplyMaterial(dropdownFrame, "popup")
     else
-        T.ApplyBackdrop(dropdownFrame, T.colors.glassPopup or { 0.010, 0.010, 0.018, 0.985 }, { 0.140, 0.220, 0.600, 0.88 })
+        T.ApplyBackdrop(dropdownFrame, T.colors.glassPopup or { 0.006, 0.016, 0.032, 0.985 }, T.colors.borderSoft or { 0.026, 0.070, 0.110, 0.88 })
         if T.ApplyGlass then T.ApplyGlass(dropdownFrame, "popup") end
     end
     dropdownFrame:Hide()
@@ -385,8 +388,8 @@ local function EnsureDropdownFrame()
     thumb:SetSize(5, 34)
     dropdownSlider:SetThumbTexture(thumb)
     dropdownSlider._msuf2Thumb = thumb
-    dropdownSlider._msuf2ThumbBase = { 0.240, 0.300, 0.430 }
-    dropdownSlider._msuf2ThumbHover = { 0.320, 0.420, 0.560 }
+    dropdownSlider._msuf2ThumbBase = T.colors.coreRim or { 0.043, 0.096, 0.150 }
+    dropdownSlider._msuf2ThumbHover = T.colors.coreRaised or { 0.026, 0.070, 0.110 }
     dropdownSlider:SetScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
         StopDropdownSmoothScroll()

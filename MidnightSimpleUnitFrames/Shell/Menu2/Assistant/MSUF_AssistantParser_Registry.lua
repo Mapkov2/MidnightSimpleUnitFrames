@@ -1173,38 +1173,40 @@ local function SettingPartialSuggestionScore(setting, text)
     return best
 end
 
-local candidateIndexTokenCache = {}
-local candidateIndexTokenCacheCount = 0
-local candidateIndexTokenCacheOrder = {}
-local candidateIndexTokenCacheOrderHead = 1
-local candidateIndexTokenCacheOrderTail = 0
+-- Generational cache: two tables, no per-key deletes. Delete-based eviction
+-- keeps a hash table at capacity under constant insert+delete, which drives
+-- Lua into rehash storms (hundreds of microseconds per insert, measured on
+-- the normalize cache with the same structure).
+local candidateIndexTokenCacheHot = {}
+local candidateIndexTokenCacheCold = {}
+local candidateIndexTokenCacheHotCount = 0
 local CANDIDATE_INDEX_TOKEN_CACHE_LIMIT = 8192
 
 local function CacheCandidateIndexTokens(raw, tokens)
     if #raw > 180 then return tokens end
-    if candidateIndexTokenCache[raw] == nil then
-        candidateIndexTokenCacheCount = candidateIndexTokenCacheCount + 1
-        candidateIndexTokenCacheOrderTail = candidateIndexTokenCacheOrderTail + 1
-        candidateIndexTokenCacheOrder[candidateIndexTokenCacheOrderTail] = raw
-        while candidateIndexTokenCacheCount > CANDIDATE_INDEX_TOKEN_CACHE_LIMIT do
-            local old = candidateIndexTokenCacheOrder[candidateIndexTokenCacheOrderHead]
-            candidateIndexTokenCacheOrder[candidateIndexTokenCacheOrderHead] = nil
-            candidateIndexTokenCacheOrderHead = candidateIndexTokenCacheOrderHead + 1
-            if old ~= nil and candidateIndexTokenCache[old] ~= nil then
-                candidateIndexTokenCache[old] = nil
-                candidateIndexTokenCacheCount = candidateIndexTokenCacheCount - 1
-            end
+    if candidateIndexTokenCacheHot[raw] == nil then
+        candidateIndexTokenCacheHotCount = candidateIndexTokenCacheHotCount + 1
+        if candidateIndexTokenCacheHotCount > CANDIDATE_INDEX_TOKEN_CACHE_LIMIT then
+            candidateIndexTokenCacheCold = candidateIndexTokenCacheHot
+            candidateIndexTokenCacheHot = {}
+            candidateIndexTokenCacheHotCount = 1
         end
     end
-    candidateIndexTokenCache[raw] = tokens
+    candidateIndexTokenCacheHot[raw] = tokens
     return tokens
 end
 
 local function CandidateIndexTokens(text)
     local raw = tostring(text or "")
     if raw == "" then return nil end
-    local cached = candidateIndexTokenCache[raw]
+    local cached = candidateIndexTokenCacheHot[raw]
     if cached ~= nil then return cached end
+    cached = candidateIndexTokenCacheCold[raw]
+    if cached ~= nil then
+        -- Promote so the entry survives the next generation swap.
+        candidateIndexTokenCacheHot[raw] = cached
+        return cached
+    end
     local tokens = {}
     local seen = {}
     local function add(word)

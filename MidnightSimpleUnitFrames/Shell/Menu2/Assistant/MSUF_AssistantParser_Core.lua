@@ -31,11 +31,15 @@ end
 
 local Normalize
 
-local normalizeCache = {}
-local normalizeCacheCount = 0
-local normalizeCacheOrder = {}
-local normalizeCacheOrderHead = 1
-local normalizeCacheOrderTail = 0
+-- Generational cache: two tables, no per-key deletes. Delete-based eviction
+-- (FIFO/ring) keeps a hash table at capacity under constant insert+delete,
+-- which drives Lua into rehash storms (~200us per insert, measured — it made
+-- index builds 25x slower). Instead, inserts go into the hot table; when it
+-- fills, the hot generation becomes the cold one and a fresh table starts.
+-- Lookups check hot then cold, so the effective window is 1-2 generations.
+local normalizeCacheHot = {}
+local normalizeCacheCold = {}
+local normalizeCacheHotCount = 0
 local NORMALIZE_CACHE_LIMIT = 8192
 
 local NORMALIZE_WORD_REPLACEMENTS = {
@@ -558,49 +562,61 @@ end
 -- bounded and only cache short strings so pasted imports or bug reports cannot grow it forever.
 local function CacheNormalize(raw, value)
     if #raw <= 180 then
-        if normalizeCache[raw] == nil then
-            normalizeCacheCount = normalizeCacheCount + 1
-            normalizeCacheOrderTail = normalizeCacheOrderTail + 1
-            normalizeCacheOrder[normalizeCacheOrderTail] = raw
-            while normalizeCacheCount > NORMALIZE_CACHE_LIMIT do
-                local old = normalizeCacheOrder[normalizeCacheOrderHead]
-                normalizeCacheOrder[normalizeCacheOrderHead] = nil
-                normalizeCacheOrderHead = normalizeCacheOrderHead + 1
-                if old ~= nil and normalizeCache[old] ~= nil then
-                    normalizeCache[old] = nil
-                    normalizeCacheCount = normalizeCacheCount - 1
-                end
+        if normalizeCacheHot[raw] == nil then
+            normalizeCacheHotCount = normalizeCacheHotCount + 1
+            if normalizeCacheHotCount > NORMALIZE_CACHE_LIMIT then
+                normalizeCacheCold = normalizeCacheHot
+                normalizeCacheHot = {}
+                normalizeCacheHotCount = 1
             end
         end
-        normalizeCache[raw] = value
+        normalizeCacheHot[raw] = value
     end
     return value
 end
 
+-- Phrase folding below only ever fires when one of these plain substrings is
+-- present; a handful of allocation-free find() probes lets the common case
+-- (registry aliases, most user input) skip 18 gsub passes.
+local NORMALIZE_FOLD_NEEDLES = {
+    "turn", "target", "focus", "cast", "power", "mana",
+    "unit", "gruppen", "status", "incoming",
+}
+
 Normalize = function(text)
     local raw = tostring(text or "")
-    local cached = normalizeCache[raw]
+    local cached = normalizeCacheHot[raw]
     if cached ~= nil then return cached end
+    cached = normalizeCacheCold[raw]
+    if cached ~= nil then
+        -- Promote so the entry survives the next generation swap.
+        normalizeCacheHot[raw] = cached
+        return cached
+    end
     -- The assistant accepts English/German phrasing plus common typos. These replacements
     -- intentionally happen before phrase folding so the downstream parser can stay literal.
     text = raw:lower()
-    text = text:gsub("\195\131\194\164", "ae")
-    text = text:gsub("\195\131\194\182", "oe")
-    text = text:gsub("\195\131\194\188", "ue")
-    text = text:gsub("\195\131\194\159", "ss")
-    text = text:gsub("\195\164", "ae")
-    text = text:gsub("\195\182", "oe")
-    text = text:gsub("\195\188", "ue")
-    text = text:gsub("\195\159", "ss")
-    text = text:gsub("\228", "ae")
-    text = text:gsub("\246", "oe")
-    text = text:gsub("\252", "ue")
-    text = text:gsub("\196", "ae")
-    text = text:gsub("\214", "oe")
-    text = text:gsub("\220", "ue")
-    text = text:gsub("\223", "ss")
-    text = text:gsub("[\"'`]", "")
-    text = text:gsub("[,;:!?%(%)]", " ")
+    -- Charset folding only touches bytes >= 128 plus the listed quote and
+    -- punctuation characters; pure ASCII-word strings skip all 17 passes.
+    if text:find("[\128-\255\"'`,;:!?%(%)]") then
+        text = text:gsub("\195\131\194\164", "ae")
+        text = text:gsub("\195\131\194\182", "oe")
+        text = text:gsub("\195\131\194\188", "ue")
+        text = text:gsub("\195\131\194\159", "ss")
+        text = text:gsub("\195\164", "ae")
+        text = text:gsub("\195\182", "oe")
+        text = text:gsub("\195\188", "ue")
+        text = text:gsub("\195\159", "ss")
+        text = text:gsub("\228", "ae")
+        text = text:gsub("\246", "oe")
+        text = text:gsub("\252", "ue")
+        text = text:gsub("\196", "ae")
+        text = text:gsub("\214", "oe")
+        text = text:gsub("\220", "ue")
+        text = text:gsub("\223", "ss")
+        text = text:gsub("[\"'`]", "")
+        text = text:gsub("[,;:!?%(%)]", " ")
+    end
     text = text:gsub("%s+", " ")
     text = Trim(text)
     if text ~= "" then
@@ -613,24 +629,33 @@ Normalize = function(text)
         end
         if changed then text = table.concat(out, " ") end
     end
-    text = text:gsub("%f[%w]turn%s+of%f[%W]", "turn off")
-    text = text:gsub("target%s+of%s+target", "targettarget")
-    text = text:gsub("target%s+target", "targettarget")
-    text = text:gsub("focus%s+target", "focustarget")
-    text = text:gsub("cast%s+bar", "castbar")
-    text = text:gsub("castbars", "castbar")
-    text = text:gsub("cast%s+text", "castbar text")
-    text = text:gsub("powerbars", "power bars")
-    text = text:gsub("power%s+bars", "power bar")
-    text = text:gsub("powerbar", "power bar")
-    text = text:gsub("manabars", "mana bars")
-    text = text:gsub("mana%s+bars", "mana bar")
-    text = text:gsub("manabar", "mana bar")
-    text = text:gsub("unit%s+frames", "unitframes")
-    text = text:gsub("gruppen%s+frames", "gruppenframes")
-    text = text:gsub("status%s+icons", "status icon")
-    text = text:gsub("incoming%s+res%s+", "incoming rez ")
-    text = text:gsub("incoming%s+res$", "incoming rez")
+    local needsFold = false
+    for i = 1, #NORMALIZE_FOLD_NEEDLES do
+        if text:find(NORMALIZE_FOLD_NEEDLES[i], 1, true) then
+            needsFold = true
+            break
+        end
+    end
+    if needsFold then
+        text = text:gsub("%f[%w]turn%s+of%f[%W]", "turn off")
+        text = text:gsub("target%s+of%s+target", "targettarget")
+        text = text:gsub("target%s+target", "targettarget")
+        text = text:gsub("focus%s+target", "focustarget")
+        text = text:gsub("cast%s+bar", "castbar")
+        text = text:gsub("castbars", "castbar")
+        text = text:gsub("cast%s+text", "castbar text")
+        text = text:gsub("powerbars", "power bars")
+        text = text:gsub("power%s+bars", "power bar")
+        text = text:gsub("powerbar", "power bar")
+        text = text:gsub("manabars", "mana bars")
+        text = text:gsub("mana%s+bars", "mana bar")
+        text = text:gsub("manabar", "mana bar")
+        text = text:gsub("unit%s+frames", "unitframes")
+        text = text:gsub("gruppen%s+frames", "gruppenframes")
+        text = text:gsub("status%s+icons", "status icon")
+        text = text:gsub("incoming%s+res%s+", "incoming rez ")
+        text = text:gsub("incoming%s+res$", "incoming rez")
+    end
     return CacheNormalize(raw, Trim(text))
 end
 A.Normalize = Normalize

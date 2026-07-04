@@ -182,7 +182,14 @@ local function BuildDashboardUX(ctx)
     local mainW = sideBySide and (layoutW - sideW - gap) or layoutW
     local sideX = sideBySide and (x0 + mainW + gap) or x0
     local function Card(parent, title, x, y, w, h, bg, border)
-        local card = T.Panel(parent or root, nil, bg or T.colors.panel2, border or T.colors.cardBorder or T.colors.borderSoft)
+        bg = bg or T.colors.panel2
+        border = border or T.colors.cardBorder or T.colors.borderSoft
+        local card = T.Panel(parent or root, nil, bg, border)
+        if T.ApplyMaterial then
+            T.ApplyMaterial(card, { bg = bg, border = border, glass = "card", gradient = "card" })
+        elseif T.ApplySurface then
+            T.ApplySurface(card, "card")
+        end
         card:SetPoint("TOPLEFT", parent or root, "TOPLEFT", x, y)
         card:SetSize(w, h)
         if title and title ~= "" then
@@ -226,19 +233,26 @@ local function BuildDashboardUX(ctx)
     local function ApplyDashboardHeroGradient(card, w, h)
         if not (card and card.CreateTexture) or card._msuf2DashboardHeroGradient then return end
         card._msuf2DashboardHeroGradient = true
+        local c = T.colors
         local wash = card:CreateTexture(nil, "BACKGROUND", nil, 1)
         wash:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         wash:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -2, 2)
-        SetDashboardGradient(wash, "HORIZONTAL", { 0.020, 0.026, 0.064, 0.00 }, { 0.030, 0.210, 0.285, 0.16 })
+        SetDashboardGradient(wash, "HORIZONTAL",
+            { c.coreShadow[1], c.coreShadow[2], c.coreShadow[3], 0.00 },
+            { c.coreRaised[1], c.coreRaised[2], c.coreRaised[3], 0.12 })
         local top = card:CreateTexture(nil, "BACKGROUND", nil, 2)
         top:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         top:SetPoint("TOPRIGHT", card, "TOPRIGHT", -2, -2)
         top:SetHeight(max(54, min(96, floor((h or 190) * 0.42))))
-        SetDashboardGradient(top, "VERTICAL", { 0.080, 0.320, 0.430, 0.08 }, { 0.020, 0.030, 0.070, 0.00 })
+        SetDashboardGradient(top, "VERTICAL",
+            { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.055 },
+            { c.coreShadow[1], c.coreShadow[2], c.coreShadow[3], 0.00 })
         local focus = card:CreateTexture(nil, "BACKGROUND", nil, 3)
         focus:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         focus:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -2, 2)
-        SetDashboardGradient(focus, "HORIZONTAL", { 0.080, 0.420, 0.560, 0.00 }, { 0.080, 0.420, 0.560, 0.05 })
+        SetDashboardGradient(focus, "HORIZONTAL",
+            { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.00 },
+            { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.035 })
     end
     local function Button(parent, text, x, y, w, h, onClick, skin)
         local btn = T.Button(parent, M.Tr(text or ""), w, h or 24)
@@ -255,7 +269,7 @@ local function BuildDashboardUX(ctx)
         return fs
     end
     local function Pill(parent, text, x, y, w, color)
-        local pill = T.Panel(parent, nil, { 0.055, 0.070, 0.135, 0.92 }, { 0.160, 0.220, 0.430, 0.70 })
+        local pill = T.Panel(parent, nil, T.colors.pillBaseSolid, T.colors.pillEdge)
         pill:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
         pill:SetSize(w or 82, 20)
         local label = T.Font(pill, "GameFontDisableSmall", M.Tr(text or ""), color or T.colors.muted)
@@ -277,7 +291,7 @@ local function BuildDashboardUX(ctx)
         local hover = card:CreateTexture(nil, "BORDER", nil, 4)
         hover:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         hover:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -2, 2)
-        hover:SetColorTexture(0.240, 0.780, 0.940, 0.055)
+        hover:SetColorTexture(T.colors.coreBlue[1], T.colors.coreBlue[2], T.colors.coreBlue[3], 0.045)
         hover:Hide()
         card._msuf2DashboardActionHover = hover
         if showArrow then
@@ -324,6 +338,7 @@ local function BuildDashboardUX(ctx)
         RefreshDashboardEditModeButtonSafe()
         RefreshDashboardFrameStatus()
     end
+    M.ToggleDashboardEditMode = ToggleEditMode
     local function StartNewAssistantTask()
         local A = MSUF and MSUF.Assistant
         if not A then return end
@@ -346,6 +361,7 @@ local function BuildDashboardUX(ctx)
             A.RefreshUI()
         end
     end
+    M.StartNewAssistantTask = StartNewAssistantTask
     local function CopyWagoLink()
         if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end
     end
@@ -491,10 +507,10 @@ local function BuildDashboardUX(ctx)
     local compactHeader = layoutW < 640
     local tinyHeader = layoutW < 430
     local headerH = tinyHeader and 128 or (compactHeader and 104 or 86)
-    local header = Card(root, "Dashboard", x0, y0, layoutW, headerH, { 0.030, 0.036, 0.058, 0.94 }, { 0.100, 0.140, 0.220, 0.82 })
+    local header = Card(root, "Dashboard", x0, y0, layoutW, headerH, T.colors.panel2, T.colors.cardBorder)
     local editW = 150
     local taskW = 96
-    local headerTextW = compactHeader and (layoutW - 32) or max(180, layoutW - editW - taskW - 76)
+    local headerTextW = compactHeader and (layoutW - 32) or (layoutW - 32)
     W.Text(header, "Ask MSUF, review setup, and open recovery tools when needed.", 16, -42, headerTextW, T.colors.muted)
     if tinyHeader then
         local available = max(160, layoutW - 32)
@@ -502,7 +518,7 @@ local function BuildDashboardUX(ctx)
         local smallEditW = min(editW, available - smallTaskW - 10)
         Button(header, "New Task", 16, -82, smallTaskW, 26, StartNewAssistantTask)
         M.dashboardEditModeButton = Button(header, "MSUF Edit Mode", 16 + smallTaskW + 10, -82, smallEditW, 26, ToggleEditMode, "primary")
-    else
+    elseif compactHeader then
         local actionY = compactHeader and -66 or -26
         local actionX = layoutW - editW - 16
         M.dashboardEditModeButton = Button(header, "MSUF Edit Mode", actionX, actionY, editW, 28, ToggleEditMode, "primary")
@@ -512,8 +528,9 @@ local function BuildDashboardUX(ctx)
     local mainTop = y0 - headerH - 16
     local tinyHero = mainW < 390
     local heroH = tinyHero and 398 or (mainW < 560 and 382 or 360)
-    local hero = Card(root, "", x0, mainTop, mainW, heroH, { 0.024, 0.050, 0.090, 0.90 }, { 0.085, 0.230, 0.340, 0.70 })
+    local hero = Card(root, "", x0, mainTop, mainW, heroH, T.colors.glassHost, T.colors.cardBorder)
     ApplyDashboardHeroGradient(hero, mainW, heroH)
+    M.CallIf(T.ApplyNeonEdge, hero, "ambient", { variant = "host" })
     if MSUF and MSUF.Assistant and type(MSUF.Assistant.BuildDashboardCard) == "function" then
         MSUF.Assistant.BuildDashboardCard(hero, mainW, heroH)
     else
@@ -528,9 +545,10 @@ local function BuildDashboardUX(ctx)
     local checklistTop = sideTop
     local checklistH = 236
     local checklist = Card(root, "Setup checklist", sideX, checklistTop, sideW, checklistH)
+    M.CallIf(T.ApplyNeonEdge, checklist, "status", { variant = "card" })
     W.Text(checklist, "Useful for first-run orientation.", 16, -38, sideW - 32, T.colors.muted)
     local function Row(i, title, body, state, color, onClick, iconText)
-        local row = Card(checklist, "", 16, -60 - ((i - 1) * 42), sideW - 32, 36, { 0.080, 0.095, 0.170, 0.72 }, T.colors.borderSoft)
+        local row = Card(checklist, "", 16, -60 - ((i - 1) * 42), sideW - 32, 36, T.colors.panel2, T.colors.borderSoft)
         Pill(row, iconText or (i < 3 and "OK" or "!"), 10, -14, 28, color or T.colors.ok)
         local label = T.Font(row, "GameFontNormal", M.Tr(title), T.colors.text)
         label:SetPoint("TOPLEFT", row, "TOPLEFT", 48, -6)
@@ -553,9 +571,18 @@ local function BuildDashboardUX(ctx)
             or (missing and 158 or 124)
         local accent = hasReport and (T.colors.danger or T.colors.accent2)
             or (missing and T.colors.accent2 or T.colors.ok)
-        local bg = hasReport and { 0.032, 0.038, 0.058, 0.92 }
-            or (missing and { 0.060, 0.050, 0.035, 0.86 } or { 0.030, 0.040, 0.078, 0.86 })
-        local card = Card(root, "", x, top, width, height, bg, hasReport and T.colors.borderSoft or (accent or T.colors.borderSoft))
+        local bg = hasReport and T.colors.glassPopup
+            or (missing and { 0.050, 0.042, 0.030, 0.68 } or T.colors.panel2)
+        local card = Card(root, "", x, top, width, height, bg, hasReport and { 0.430, 0.260, 0.300, 0.44 } or (accent or T.colors.borderSoft))
+        if hasReport then
+            M.CallIf(T.ApplyNeonEdge, card, autoReport and "error" or "warning", { variant = "popup" })
+            if autoReport and M._dashboardBugFlashStatus ~= tostring(status) then
+                M._dashboardBugFlashStatus = tostring(status)
+                M.CallIf(T.PlayNeonFlash, card, "error", { alpha = 0.24, duration = 0.85 })
+            end
+        else
+            M.CallIf(T.ApplyNeonEdge, card, missing and "warning" or "success", { variant = "card" })
+        end
         local title = T.Font(card, "GameFontNormal", M.Tr("Bug report"), T.colors.text)
         title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
         local statusText = hasReport and (status == "dummy" and "test" or (autoReport and "error" or "manual"))
@@ -741,7 +768,7 @@ local function BuildDashboardUX(ctx)
     local recoveryWrap = recoveryW < 620
     local recoveryNarrow = recoveryW < 520
     local recoveryH = recoveryOpen and (recoveryNarrow and 184 or (recoveryWrap and 154 or 122)) or 42
-    local recovery = Card(root, "", x0, recoveryTop, recoveryW, recoveryH, { 0.030, 0.040, 0.078, 0.86 }, T.colors.borderSoft)
+    local recovery = Card(root, "", x0, recoveryTop, recoveryW, recoveryH, T.colors.panel2, T.colors.borderSoft)
     local g = M.GetGeneralDB and M.GetGeneralDB() or {}
     DashboardDisclosure(recovery, "Display & recovery", recoveryOpen, "dashboardRecoveryOpen", recoveryW, function(head)
         if recoveryW >= 520 then Pill(head, "Factory reset hidden", recoveryW - 124, -11, 110, T.colors.accent2) end
@@ -775,7 +802,7 @@ local function BuildDashboardUX(ctx)
     local scalingOpen = M.dashboardScalingOpen == true
     local scalingColumns = (recoveryW >= 960) and 3 or ((recoveryW >= 680) and 2 or 1)
     local scalingH = scalingOpen and ((scalingColumns == 3) and 250 or ((scalingColumns == 2) and 382 or 548)) or 42
-    local scaling = Card(root, "", x0, scalingTop, recoveryW, scalingH, { 0.030, 0.040, 0.078, 0.86 }, T.colors.borderSoft)
+    local scaling = Card(root, "", x0, scalingTop, recoveryW, scalingH, T.colors.panel2, T.colors.borderSoft)
     DashboardDisclosure(scaling, "Scaling", scalingOpen, "dashboardScalingOpen", recoveryW, function(scaleHead)
         if recoveryW < 520 then return end
         local _, ui = GlobalState()
@@ -965,7 +992,7 @@ local function BuildDashboardUX(ctx)
     local changelogTop = scalingTop - scalingH - 10
     local changelogOpen = M.dashboardChangelogOpen == true
     local changelogH = changelogOpen and 360 or 42
-    local changelog = Card(root, "", x0, changelogTop, recoveryW, changelogH, { 0.030, 0.040, 0.078, 0.86 }, T.colors.borderSoft)
+    local changelog = Card(root, "", x0, changelogTop, recoveryW, changelogH, T.colors.panel2, T.colors.borderSoft)
     BuildDashboardChangelog(changelog, recoveryW, {
         title = "Changelog",
         sectionHeader = true,
@@ -980,7 +1007,7 @@ local function BuildDashboardUX(ctx)
     local supportTop = changelogTop - changelogH - 10
     local supportCompact = recoveryW < 560
     local supportH = supportCompact and 116 or 78
-    local support = Card(root, "", x0, supportTop, recoveryW, supportH, { 0.030, 0.040, 0.078, 0.86 }, T.colors.borderSoft)
+    local support = Card(root, "", x0, supportTop, recoveryW, supportH, T.colors.panel2, T.colors.borderSoft)
     local supportTitle = T.Font(support, "GameFontNormal", M.Tr("How to support MSUF"), T.colors.text)
     supportTitle:SetPoint("TOPLEFT", support, "TOPLEFT", 16, -16)
     local supportTextW = max(160, recoveryW - (supportCompact and 32 or 230))

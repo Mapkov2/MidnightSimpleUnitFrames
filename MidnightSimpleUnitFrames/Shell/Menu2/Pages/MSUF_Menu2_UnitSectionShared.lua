@@ -46,7 +46,10 @@ function Shared.SetSectionHeaderStatus(sec, opts)
     local entry = sec and sec._msuf2CollapsibleEntry
     if not entry then return end
     M.CallIf(T.ApplyCollapseVisual, entry.arrow, entry.hint, entry.open)
-    if entry.headerBg and entry.headerBg.SetColorTexture then entry.headerBg:SetColorTexture(0.040, 0.050, 0.088, entry.open and 0.40 or 0.34) end
+    if entry.headerBg and entry.headerBg.SetColorTexture then
+        local c = (T.colors and T.colors.coreSurface) or { 0.014, 0.038, 0.072 }
+        entry.headerBg:SetColorTexture(c[1], c[2], c[3], entry.open and 0.40 or 0.34)
+    end
     if entry.label and entry.label.SetTextColor and T and T.colors and T.colors.text then
         local c = T.colors.text
         entry.label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
@@ -54,7 +57,7 @@ function Shared.SetSectionHeaderStatus(sec, opts)
     opts = opts or {}
     if opts.bg and entry.headerBg and entry.headerBg.SetColorTexture then
         local bg = opts.bg
-        entry.headerBg:SetColorTexture(bg[1] or 0.060, bg[2] or 0.070, bg[3] or 0.130, bg[4] or 0.48)
+        entry.headerBg:SetColorTexture(bg[1] or 0.035, bg[2] or 0.075, bg[3] or 0.157, bg[4] or 0.48)
     end
     if opts.labelColor and entry.label and entry.label.SetTextColor then
         local c = opts.labelColor
@@ -85,17 +88,20 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     notice[gateKey] = true
     local bg = notice:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
-    bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
+    local coreShadow = (T.colors and T.colors.coreShadow) or { 0.006, 0.016, 0.032 }
+    local coreSurface = (T.colors and T.colors.coreSurface) or { 0.014, 0.038, 0.072 }
+    local coreBlue = (T.colors and T.colors.coreBlue) or { 0.095, 0.360, 0.560 }
+    bg:SetColorTexture(coreShadow[1], coreShadow[2], coreShadow[3], 0.30)
     local top = notice:CreateTexture(nil, "BORDER")
     top:SetPoint("TOPLEFT", notice, "TOPLEFT", 0, 0)
     top:SetPoint("TOPRIGHT", notice, "TOPRIGHT", 0, 0)
     top:SetHeight(1)
-    top:SetColorTexture(0.16, 0.34, 0.66, 0.55)
+    top:SetColorTexture(coreBlue[1], coreBlue[2], coreBlue[3], 0.42)
     local bottom = notice:CreateTexture(nil, "BORDER")
     bottom:SetPoint("BOTTOMLEFT", notice, "BOTTOMLEFT", 0, 0)
     bottom:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", 0, 0)
     bottom:SetHeight(1)
-    bottom:SetColorTexture(0.10, 0.20, 0.38, 0.48)
+    bottom:SetColorTexture(coreSurface[1], coreSurface[2], coreSurface[3], 0.48)
     local text = T.Font(notice, "GameFontDisableSmall", "", T.colors.dim)
     text:SetPoint("LEFT", notice, "LEFT", 10, 0)
     text:SetJustifyH("LEFT")
@@ -115,9 +121,9 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
             bottom:SetColorTexture(WARNING_NOTICE_BOTTOM[1], WARNING_NOTICE_BOTTOM[2], WARNING_NOTICE_BOTTOM[3], WARNING_NOTICE_BOTTOM[4])
             if text.SetTextColor then text:SetTextColor(WARNING_HINT[1], WARNING_HINT[2], WARNING_HINT[3], WARNING_HINT[4]) end
         else
-            bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
-            top:SetColorTexture(0.16, 0.34, 0.66, 0.55)
-            bottom:SetColorTexture(0.10, 0.20, 0.38, 0.48)
+            bg:SetColorTexture(coreShadow[1], coreShadow[2], coreShadow[3], 0.30)
+            top:SetColorTexture(coreBlue[1], coreBlue[2], coreBlue[3], 0.42)
+            bottom:SetColorTexture(coreSurface[1], coreSurface[2], coreSurface[3], 0.48)
             if text.SetTextColor and T.colors and T.colors.dim then text:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1) end
         end
     end
@@ -129,9 +135,14 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     return notice, text, button
 end
 local COPY_POPUP_TARGET_STYLE = {
-    bg = { 0.020, 0.048, 0.105, 0.96 }, border = { 0.070, 0.160, 0.330, 0.72 }, textColor = { 0.76, 0.86, 0.98, 1 },
-    hoverBg = { 0.050, 0.110, 0.240, 0.98 }, hoverBorder = { 0.135, 0.300, 0.600, 0.86 },
-    activeBg = { 0.050, 0.110, 0.240, 0.98 }, activeBorder = { 0.135, 0.300, 0.600, 0.86 }, activeTextColor = { 0.88, 0.94, 1.00, 1 },
+    bg = T.colors and { T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], 0.96 } or { 0.006, 0.016, 0.032, 0.96 },
+    border = T.colors and { T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.72 } or { 0.026, 0.070, 0.110, 0.72 },
+    textColor = { 0.76, 0.86, 0.98, 1 },
+    hoverBg = T.colors and { T.colors.coreSurface[1], T.colors.coreSurface[2], T.colors.coreSurface[3], 0.98 } or { 0.014, 0.038, 0.072, 0.98 },
+    hoverBorder = T.colors and { T.colors.coreBlue[1], T.colors.coreBlue[2], T.colors.coreBlue[3], 0.60 } or { 0.095, 0.360, 0.560, 0.60 },
+    activeBg = T.colors and { T.colors.coreSurface[1], T.colors.coreSurface[2], T.colors.coreSurface[3], 0.98 } or { 0.014, 0.038, 0.072, 0.98 },
+    activeBorder = T.colors and { T.colors.coreBlue[1], T.colors.coreBlue[2], T.colors.coreBlue[3], 0.60 } or { 0.095, 0.360, 0.560, 0.60 },
+    activeTextColor = { 0.88, 0.94, 1.00, 1 },
     stripe = false,
 }
 local function CopyPopupButton(parent, text, width, role)
@@ -467,7 +478,7 @@ function Shared.MakeDragSortRows(parent, defs, opts)
         local row = self._msuf2DragRow
         if not DragAllowed(row) then return end
         if self.SetBackdropBorderColor then
-            local c = opts.hoverBorder or { 0.380, 0.550, 0.900, 0.95 }
+            local c = opts.hoverBorder or (T.colors and T.colors.coreBlue) or { 0.095, 0.360, 0.560, 0.95 }
             self:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
         end
         if opts.tooltip and _G.GameTooltip then opts.tooltip(self, row, _G.GameTooltip) end

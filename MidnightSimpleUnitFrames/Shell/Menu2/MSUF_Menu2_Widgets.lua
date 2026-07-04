@@ -23,6 +23,13 @@ local min = math.min
 local sliderSerial = 0
 local Tr = M.TranslateText or function(text) return text end
 local EM2Util = (_G.MSUF_EM2 and _G.MSUF_EM2.Util) or {}
+local function ThemeColor(name, fallback)
+    local c = T and T.colors and T.colors[name]
+    return c or fallback
+end
+local function WithAlpha(color, alpha)
+    return { color[1], color[2], color[3], alpha }
+end
 local function SetSearchText(object, text)
     if object and text ~= nil then object._msuf2SearchText = text end
     return object
@@ -183,7 +190,7 @@ local function FlashCollapsibleHeader(entry)
     if not entry._msuf2FocusFlash then
         local flash = header:CreateTexture(nil, "OVERLAY")
         flash:SetAllPoints()
-        local c = T.colors.accent or { 0.18, 0.72, 0.90, 1 }
+        local c = T.colors.accent or ThemeColor("coreBlue", { 0.060, 0.250, 0.390, 1.00 })
         flash:SetColorTexture(c[1], c[2], c[3], 0.18)
         flash:SetAlpha(0)
         flash:Hide()
@@ -415,6 +422,7 @@ function W.PageBuilder(ctx)
         local headerH = 28
         if not self._collapsibleStartY then self._collapsibleStartY = self.y end
         local outer = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
+        outer._msuf2NoPanelNeon = true
         T.ApplySurface(outer, "card")
         SetSearchTitle(outer, title)
         RegisterSearchObject(outer, title, "section")
@@ -427,7 +435,9 @@ function W.PageBuilder(ctx)
         header:SetHeight(headerH)
         local headerBg = header:CreateTexture(nil, "BACKGROUND")
         headerBg:SetAllPoints()
-        headerBg:SetColorTexture(0.040, 0.050, 0.088, 0.34)
+        local headerSurface = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
+        local headerRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
+        headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], 0.34)
         local headerHover = header:CreateTexture(nil, "HIGHLIGHT")
         headerHover:SetAllPoints()
         headerHover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.045)
@@ -539,11 +549,11 @@ function W.PageBuilder(ctx)
         local function RefreshHeaderTone(hover)
             if not headerBg.SetColorTexture then return end
             if entry.open then
-                headerBg:SetColorTexture(0.048, 0.060, 0.105, hover and 0.48 or 0.40)
+                headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], hover and 0.48 or 0.40)
             elseif hover then
-                headerBg:SetColorTexture(0.050, 0.064, 0.110, 0.42)
+                headerBg:SetColorTexture(headerRaised[1], headerRaised[2], headerRaised[3], 0.42)
             else
-                headerBg:SetColorTexture(0.040, 0.050, 0.088, 0.34)
+                headerBg:SetColorTexture(headerSurface[1], headerSurface[2], headerSurface[3], 0.34)
             end
         end
         entry._msuf2RefreshHeaderTone = RefreshHeaderTone
@@ -845,7 +855,11 @@ local function TopButtonStyle(bg, border, textColor, hoverBg, hoverBorder)
         activeBg = bg, activeBorder = border, activeTextColor = textColor,
     }
 end
-local TOP_ACTION_BUTTON_STYLE = TopButtonStyle({ 0.018, 0.028, 0.058, 0.95 }, { 0.082, 0.125, 0.245, 0.66 }, { 0.82, 0.90, 1.00, 1 }, { 0.026, 0.040, 0.078, 0.97 }, { 0.125, 0.220, 0.430, 0.80 })
+local TOP_CORE_SHADOW = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
+local TOP_CORE_SURFACE = ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
+local TOP_CORE_RIM = ThemeColor("coreRim", { 0.043, 0.096, 0.150, 1.00 })
+local TOP_CORE_BLUE = ThemeColor("coreBlue", { 0.060, 0.250, 0.390, 1.00 })
+local TOP_ACTION_BUTTON_STYLE = TopButtonStyle(WithAlpha(TOP_CORE_SHADOW, 0.82), WithAlpha(TOP_CORE_RIM, 0.46), { 0.82, 0.90, 1.00, 0.96 }, WithAlpha(TOP_CORE_SURFACE, 0.86), WithAlpha(TOP_CORE_BLUE, 0.42))
 local TOP_DANGER_BUTTON_STYLE = TopButtonStyle({ 0.070, 0.026, 0.034, 0.94 }, { 0.340, 0.090, 0.110, 0.82 }, { 1.00, 0.82, 0.82, 1 }, { 0.090, 0.035, 0.045, 0.96 }, { 0.420, 0.120, 0.140, 0.90 })
 local TOP_SUCCESS_BUTTON_STYLE = TopButtonStyle({ 0.018, 0.145, 0.090, 0.94 }, { 0.055, 0.440, 0.270, 0.82 }, { 0.780, 1.000, 0.875, 1 }, { 0.026, 0.185, 0.115, 0.96 }, { 0.075, 0.560, 0.345, 0.90 })
 local TOP_ROLE_STYLES = { primary = TOP_ACTION_BUTTON_STYLE, destructive = TOP_DANGER_BUTTON_STYLE, danger = TOP_DANGER_BUTTON_STYLE, reset = TOP_DANGER_BUTTON_STYLE, delete = TOP_DANGER_BUTTON_STYLE, success = TOP_SUCCESS_BUTTON_STYLE, confirm = TOP_SUCCESS_BUTTON_STYLE }
@@ -853,10 +867,10 @@ local function ApplyTopActionButtonVisual(btn, hover)
     local bg = btn._msuf2TopActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
     local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
     local tx = btn._msuf2TopActive and btn._msuf2TopActiveText or btn._msuf2TopText
-    local mul = hover and 1.06 or 1
+    local mul = hover and 1.03 or 1
     if btn._msuf2Fill then
         local fill = { min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 1 }
-        if T.SetFillGradient then T.SetFillGradient(btn._msuf2Fill, fill, 0.12, -0.18) else btn._msuf2Fill:SetVertexColor(fill[1], fill[2], fill[3], fill[4]) end
+        if T.SetFillGradient then T.SetFillGradient(btn._msuf2Fill, fill, 0.07, -0.26) else btn._msuf2Fill:SetVertexColor(fill[1], fill[2], fill[3], fill[4]) end
     end
     if btn._msuf2Edge then btn._msuf2Edge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 1) end
     if btn._msuf2Label then btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1) end
@@ -882,7 +896,7 @@ local function StyleTopButton(btn, style)
     end
     if s.stripe == true and not btn._msuf2TopStripe then
         local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
-        local c = s.stripeColor or { 0.22, 0.78, 0.94, 1 }
+        local c = s.stripeColor or ThemeColor("coreBlue", { 0.060, 0.250, 0.390, 1.00 })
         stripe:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
         stripe:SetWidth(s.stripeWidth or 3)
         stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -5)
@@ -980,18 +994,18 @@ local COLLAPSIBLE_BADGE_STYLES = {
         text = { 0.640, 1.000, 0.820, 1 },
     },
     info = {
-        bg = { 0.060, 0.090, 0.210, 0.92 },
-        border = { 0.160, 0.260, 0.560, 0.78 },
+        bg = WithAlpha(ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 }), 0.92),
+        border = WithAlpha(ThemeColor("coreRim", { 0.043, 0.096, 0.150, 1.00 }), 0.78),
         text = { 0.760, 0.840, 1.000, 1 },
     },
     accent = {
-        bg = { 0.018, 0.170, 0.280, 0.94 },
-        border = { 0.100, 0.530, 0.780, 0.86 },
+        bg = WithAlpha(ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 }), 0.94),
+        border = WithAlpha(ThemeColor("coreBlue", { 0.060, 0.250, 0.390, 1.00 }), 0.72),
         text = { 0.680, 0.920, 1.000, 1 },
     },
     muted = {
-        bg = { 0.045, 0.055, 0.090, 0.90 },
-        border = { 0.110, 0.140, 0.230, 0.72 },
+        bg = WithAlpha(ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 }), 0.90),
+        border = WithAlpha(ThemeColor("coreRim", { 0.043, 0.096, 0.150, 1.00 }), 0.72),
         text = { 0.680, 0.730, 0.860, 1 },
     },
 }
@@ -1145,6 +1159,7 @@ local function UpdateToggleProxyBounds(button)
         rowHover:ClearAllPoints()
         rowHover:SetPoint("LEFT", button, "LEFT", -4, 0)
         rowHover:SetSize(hitWidth, 28)
+        if rowHover.SetTexCoord then rowHover:SetTexCoord(0, 1, 0, 1) end
     end
     local labelHit = button._msuf2LabelHit
     if labelHit then
@@ -1255,12 +1270,17 @@ local TOGGLE_LABEL_HOOKS = {
         RefreshToggleControl(btn)
     end,
 }
-local SWITCH_BG_ON = { 0.020, 0.090, 0.135, 0.96 }
-local SWITCH_BG_OFF = { 0.014, 0.022, 0.048, 0.96 }
-local SWITCH_EDGE_ON = { 0.160, 0.560, 0.760, 0.86 }
-local SWITCH_EDGE_OFF = { 0.095, 0.145, 0.255, 0.82 }
-local SWITCH_KNOB_ON = { 0.380, 0.760, 0.900, 1.00 }
-local SWITCH_KNOB_OFF = { 0.680, 0.760, 0.940, 1.00 }
+local CORE_SHADOW = (T and T.colors and T.colors.coreShadow) or { 0.006, 0.016, 0.032, 1.00 }
+local CORE_SURFACE = (T and T.colors and T.colors.coreSurface) or { 0.014, 0.038, 0.072, 1.00 }
+local CORE_RAISED = (T and T.colors and T.colors.coreRaised) or { 0.026, 0.070, 0.110, 1.00 }
+local CORE_RIM = (T and T.colors and T.colors.coreRim) or { 0.043, 0.096, 0.150, 1.00 }
+local CORE_BLUE = (T and T.colors and T.colors.coreBlue) or { 0.060, 0.250, 0.390, 1.00 }
+local SWITCH_BG_ON = { 0.055, 0.305, 0.475, 0.98 }
+local SWITCH_BG_OFF = { 0.018, 0.075, 0.120, 0.92 }
+local SWITCH_EDGE_ON = { 0.150, 0.560, 0.800, 0.98 }
+local SWITCH_EDGE_OFF = { 0.070, 0.260, 0.390, 0.84 }
+local SWITCH_KNOB_ON = { 0.145, 0.500, 0.740, 1.00 }
+local SWITCH_KNOB_OFF = { 0.050, 0.170, 0.250, 1.00 }
 local function PlaySwitchFeedback(button)
     if not (button and button._msuf2SwitchFlash) then return end
     local checked = button.GetChecked and button:GetChecked()
@@ -1279,7 +1299,7 @@ local function RefreshSwitchVisual(button, hover)
     local bg = checked and SWITCH_BG_ON or SWITCH_BG_OFF
     local br = checked and SWITCH_EDGE_ON or SWITCH_EDGE_OFF
     local kb = checked and SWITCH_KNOB_ON or SWITCH_KNOB_OFF
-    local mul = enabled and (pressed and 1.14 or hover and 1.08 or 1) or 1
+    local mul = enabled and (checked and (pressed and 1.22 or hover and 1.17 or 1.10) or (pressed and 1.16 or hover and 1.10 or 1.04)) or 1
     local alpha = enabled and 1 or 0.45
     if button._msuf2SwitchFill then button._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] * alpha) end
     if button._msuf2SwitchEdge then button._msuf2SwitchEdge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] * alpha) end
@@ -1379,8 +1399,9 @@ local function CreateToggle(section, label, x, y, labelWidth)
     hoverFill:SetAlpha(0)
     hoverFill:Show()
     local rowHover = section:CreateTexture(nil, "BORDER", nil, 1)
-    rowHover:SetTexture("Interface\\Buttons\\WHITE8X8")
-    rowHover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
+    rowHover:SetTexture((T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
+    if rowHover.SetTexCoord then rowHover:SetTexCoord(0, 1, 0, 1) end
+    rowHover:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
     rowHover:SetAlpha(0)
     rowHover:Show()
     btn._msuf2ToggleRowHover = rowHover
@@ -1402,7 +1423,9 @@ local function CreateToggle(section, label, x, y, labelWidth)
             if tex.Show then tex:Show() end
         end
         if rowTex then
-            rowTex:SetColorTexture(c[1], c[2], c[3], 1)
+            if rowTex.SetTexture then rowTex:SetTexture((T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8") end
+            if rowTex.SetTexCoord then rowTex:SetTexCoord(0, 1, 0, 1) end
+            if rowTex.SetVertexColor then rowTex:SetVertexColor(c[1], c[2], c[3], 1) end
             rowTex:SetAlpha(rowTarget)
             if rowTex.Show then rowTex:Show() end
         end
@@ -1412,15 +1435,15 @@ local function CreateToggle(section, label, x, y, labelWidth)
         down = down and true or false
         local enabled = not (self.IsEnabled and not self:IsEnabled())
         local checked = (self.GetChecked and self:GetChecked()) and true or false
-        local active = T.colors.checkActive or { 0.055, 0.145, 0.350, 1.00 }
-        local inactive = T.colors.checkInactive or { 0.018, 0.030, 0.068, 1.00 }
+        local active = T.colors.checkActive or ThemeColor("coreSurface", { 0.014, 0.038, 0.072, 1.00 })
+        local inactive = T.colors.checkInactive or ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
         local bg = checked and active or inactive
         local br = checked
             and (T.colors.checkActiveEdge or { min(active[1] + 0.20, 1), min(active[2] + 0.31, 1), min(active[3] + 0.48, 1), 0.90 })
-            or (T.colors.checkInactiveEdge or { 0.135, 0.210, 0.400, 1.00 })
+            or (T.colors.checkInactiveEdge or ThemeColor("coreRim", { 0.043, 0.096, 0.150, 1.00 }))
         local bgMul = enabled and (down and 1.14 or hover and 1.08 or 1) or 1
         local borderAlpha = enabled
-            and (checked and (down and 0.96 or hover and 0.88 or 0.76) or (down and 0.78 or hover and 0.64 or 0.50))
+            and (checked and (down and 1.00 or hover and 0.96 or 0.88) or (down and 0.90 or hover and 0.80 or 0.68))
             or 0.30
         local alpha = enabled and 1 or 0.45
         local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
@@ -1431,7 +1454,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
         if self._msuf2ToggleVisualKey == visualKey then return end
         self._msuf2ToggleVisualKey = visualKey
         if self._msuf2ToggleFill then
-            local bgAlpha = checked and 0.96 or (down and 0.86 or hover and 0.78 or 0.70)
+            local bgAlpha = checked and 0.98 or (down and 0.92 or hover and 0.86 or 0.80)
             self._msuf2ToggleFill:SetVertexColor(min(bg[1] * bgMul, 1), min(bg[2] * bgMul, 1), min(bg[3] * bgMul, 1), bgAlpha * alpha)
         end
         if self._msuf2ToggleEdge then self._msuf2ToggleEdge:SetVertexColor(br[1], br[2], br[3], borderAlpha * alpha) end
@@ -1482,7 +1505,8 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
     if not parent then return nil end
     width = width or 360
     height = height or 120
-    local cardBg = { 0.018, 0.026, 0.052, 0.86 }
+    local cardBase = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
+    local cardBg = { cardBase[1], cardBase[2], cardBase[3], 0.86 }
     local cardBorder = T.colors.cardBorder or T.colors.borderSoft
     local card = T.Panel(parent, nil, cardBg, cardBorder)
     T.ApplySurface(card, { bg = cardBg, border = cardBorder, glass = "card" })
@@ -1519,7 +1543,8 @@ function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
     height = max(24, floor((tonumber(height) or 120) + 0.5))
     x = floor((tonumber(x) or 0) + 0.5)
     y = floor((tonumber(y) or 0) + 0.5)
-    local cardBg = bg or { 0.018, 0.026, 0.052, 0.86 }
+    local cardBase = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
+    local cardBg = bg or { cardBase[1], cardBase[2], cardBase[3], 0.86 }
     local cardBorder = border or T.colors.cardBorder or T.colors.borderSoft
     local card = T.Panel(parent, nil, cardBg, cardBorder)
     T.ApplySurface(card, { bg = cardBg, border = cardBorder, glass = "card" })
@@ -2099,8 +2124,9 @@ function W.AttachPinnedPreview(body, box, opts)
     if placeholder then
         placeholder:SetPoint("CENTER", body, "CENTER", 0, 0)
         placeholder:SetText(Tr("\226\134\145 Preview pinned at top"))
-        placeholder:SetTextColor(0.38, 0.44, 0.58, 0.55)
-        if T.StyleFontString then T.StyleFontString(placeholder, { 0.38, 0.44, 0.58, 0.55 }, 0) end
+        local placeholderColor = ThemeColor("dim", { 0.043, 0.096, 0.150, 0.86 })
+        placeholder:SetTextColor(placeholderColor[1], placeholderColor[2], placeholderColor[3], 0.55)
+        if T.StyleFontString then T.StyleFontString(placeholder, { placeholderColor[1], placeholderColor[2], placeholderColor[3], 0.55 }, 0) end
         placeholder:Hide()
     end
     local function PinEnabled()
