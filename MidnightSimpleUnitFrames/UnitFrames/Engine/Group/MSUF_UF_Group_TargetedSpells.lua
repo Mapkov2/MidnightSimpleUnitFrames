@@ -42,7 +42,6 @@ local max = math.max
 local pairs = pairs
 local pcall = pcall
 local string_format = string.format
-local tremove = table.remove
 local type = type
 local wipe = wipe or function(t)
   for k in pairs(t) do
@@ -53,21 +52,21 @@ end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local PARTY_UNITS = { "player", "party1", "party2", "party3", "party4" }
-local PICKUP_DELAY = 0.10
-local VERIFY_DELAY = 0.15
-local RETARGET_DELAY = 0.05
+local CAST_SAMPLE_DELAY = 0.11
+local CAST_CONFIRM_GAP = 0.16
+local TARGET_SWAP_DELAY = 0.06
 local FALLBACK_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 
 local HOT_EVENTS = {
   "NAME_PLATE_UNIT_ADDED",
-  "NAME_PLATE_UNIT_REMOVED",
-  "UNIT_TARGET",
   "UNIT_SPELLCAST_START",
   "UNIT_SPELLCAST_CHANNEL_START",
-  "UNIT_SPELLCAST_STOP",
-  "UNIT_SPELLCAST_CHANNEL_STOP",
+  "UNIT_TARGET",
   "UNIT_SPELLCAST_INTERRUPTED",
   "UNIT_SPELLCAST_FAILED",
+  "UNIT_SPELLCAST_STOP",
+  "UNIT_SPELLCAST_CHANNEL_STOP",
+  "NAME_PLATE_UNIT_REMOVED",
 }
 
 local CONTROL_EVENTS = {
@@ -127,12 +126,19 @@ local activeTextIcons = setmetatable({}, { __mode = "k" })
 local activeTextCount = 0
 local textTicker
 
-local rosterByClass = {}
-local rosterRole = {}
-local rosterRace = {}
-local rosterSex = {}
-local matchBuf = {}
+local partyUnitsByClass = {}
+local partyRoleByUnit = {}
+local partyRaceByUnit = {}
+local partySexByUnit = {}
+local candidateUnits = {}
+local candidateCount = 0
 local clearBuf = {}
+local sampleUnits = {}
+local sampleGenerations = {}
+local sampleDue = {}
+local sampleHead = 1
+local sampleTail = 0
+local sampleTimerAt
 local lastRosterSync = 0
 
 local function IsSecret(value)
@@ -317,6 +323,39 @@ local function Schedule(delay, fn)
   else
     fn()
   end
+end
+
+local RunSampleQueue
+
+local function ArmSampleQueue(when)
+  if sampleTimerAt and sampleTimerAt <= when then return end
+  sampleTimerAt = when
+  local delay = when - ((GetTime and GetTime()) or 0)
+  if C_Timer and C_Timer.After then
+    C_Timer.After(delay > 0 and delay or 0, RunSampleQueue)
+  else
+    RunSampleQueue()
+  end
+end
+
+local function PushCasterSample(caster, generation, delay)
+  local due = ((GetTime and GetTime()) or 0) + delay
+  sampleTail = sampleTail + 1
+  sampleUnits[sampleTail] = caster
+  sampleGenerations[sampleTail] = generation
+  sampleDue[sampleTail] = due
+  ArmSampleQueue(due)
+end
+
+local function ResetSampleQueue()
+  for i = sampleHead, sampleTail do
+    sampleUnits[i] = nil
+    sampleGenerations[i] = nil
+    sampleDue[i] = nil
+  end
+  sampleHead = 1
+  sampleTail = 0
+  sampleTimerAt = nil
 end
 
 local function AnchorHost(frame)
@@ -693,34 +732,35 @@ local function ApplyCooldown(cooldown, durationObj, startMS, endMS)
   cooldown:Hide()
 end
 
-local function HideCasterIcon(caster)
-  local rec = caster and activeByCaster[caster]
-  if not rec then return end
+local function ReleaseCasterIndicator(caster)
+  local icon = caster and activeByCaster[caster]
+  if not icon then return end
   activeByCaster[caster] = nil
-  local icon = rec.icon
-  if icon then
-    icon._msufTSCaster = nil
-    ReleaseTextIcon(icon)
-    SetShown(icon, false)
-    ApplyCooldown(icon.cooldown)
-  end
-  LayoutFrame(rec.frame)
+  local frame = icon._msufTSFrame
+  icon._msufTSCaster = nil
+  icon._msufTSFrame = nil
+  icon._msufTSUnit = nil
+  ReleaseTextIcon(icon)
+  SetShown(icon, false)
+  ApplyCooldown(icon.cooldown)
+  LayoutFrame(frame)
 end
 
-local function ClearCaster(caster)
+local function DropCasterState(caster)
   if not caster then return end
   casterGeneration[caster] = (casterGeneration[caster] or 0) + 1
   trackedCasters[caster] = nil
-  HideCasterIcon(caster)
+  ReleaseCasterIndicator(caster)
 end
 
-local function ClearAll()
+local function DropAllCasterState()
+  ResetSampleQueue()
   wipe(clearBuf)
   for caster in pairs(activeByCaster) do
     clearBuf[#clearBuf + 1] = caster
   end
   for i = 1, #clearBuf do
-    ClearCaster(clearBuf[i])
+    DropCasterState(clearBuf[i])
     clearBuf[i] = nil
   end
   for caster in pairs(trackedCasters) do
@@ -747,6 +787,30 @@ local function RefreshVisibleIcons()
   end
 end
 
+local frameSearchGUID
+local frameSearchMatched
+
+local function MatchPartyFrameByGUID(candidate, frameUnit, kind)
+  if frameSearchMatched or kind ~= "party" or not candidate then return end
+  if candidate.IsShown and not candidate:IsShown() then return end
+  frameUnit = IsUnitToken(frameUnit) and frameUnit or candidate.unit
+  if not IsUnitToken(frameUnit) then return end
+  local frameGUID = UnitGUID(frameUnit)
+  if IsSecret(frameGUID) ~= true and frameGUID == frameSearchGUID then
+    frameSearchMatched = candidate
+    return true
+  end
+end
+
+local firstPartyFrameMatched
+
+local function MatchFirstPartyFrame(candidate, _, kind)
+  if firstPartyFrameMatched or kind ~= "party" or not candidate then return end
+  if candidate.IsShown and not candidate:IsShown() then return end
+  firstPartyFrameMatched = candidate
+  return true
+end
+
 local function FrameForPartyUnit(unit)
   if not IsUnitToken(unit) then return nil end
   local frame = GF.FrameForUnit and GF.FrameForUnit(unit)
@@ -758,139 +822,148 @@ local function FrameForPartyUnit(unit)
   local targetGUID = UnitGUID(unit)
   if IsSecret(targetGUID) == true or targetGUID == nil then return nil end
 
-  local matched
-  GF.ForEachFrame(function(candidate, frameUnit, kind)
-    if matched or kind ~= "party" or not candidate then return end
-    if candidate.IsShown and not candidate:IsShown() then return end
-    frameUnit = IsUnitToken(frameUnit) and frameUnit or candidate.unit
-    if not IsUnitToken(frameUnit) then return end
-    local frameGUID = UnitGUID(frameUnit)
-    if IsSecret(frameGUID) ~= true and frameGUID == targetGUID then
-      matched = candidate
-      return true
-    end
-  end, true)
-  return matched
+  frameSearchGUID = targetGUID
+  frameSearchMatched = nil
+  GF.ForEachFrame(MatchPartyFrameByGUID, true)
+  frameSearchGUID = nil
+  return frameSearchMatched
 end
 
 local function FirstPartyFrame()
   if not GF.ForEachFrame then return nil end
-  local matched
-  GF.ForEachFrame(function(candidate, _, kind)
-    if matched or kind ~= "party" or not candidate then return end
-    if candidate.IsShown and not candidate:IsShown() then return end
-    matched = candidate
-    return true
-  end, true)
-  return matched
+  firstPartyFrameMatched = nil
+  GF.ForEachFrame(MatchFirstPartyFrame, true)
+  return firstPartyFrameMatched
 end
 
-local function ShowFor(caster, unit, cast)
+local function DisplayIndicator(caster, unit, texture, durationObj, startMS, endMS)
   local frame = FrameForPartyUnit(unit)
   if not frame then
-    HideCasterIcon(caster)
+    ReleaseCasterIndicator(caster)
     return
   end
 
-  local rec = activeByCaster[caster]
-  if rec and rec.unit == unit and rec.frame == frame then
-    if rec.icon and rec.icon.tex then
-      rec.icon.tex:SetTexture(cast.texture or FALLBACK_ICON)
-      ApplyCooldown(rec.icon.cooldown, cast.durationObj, cast.startMS, cast.endMS)
-      SetIconTiming(rec.icon, cast.durationObj, cast.startMS, cast.endMS)
+  local activeIcon = activeByCaster[caster]
+  if activeIcon and activeIcon._msufTSUnit == unit and activeIcon._msufTSFrame == frame then
+    if activeIcon.tex then
+      activeIcon.tex:SetTexture(texture or FALLBACK_ICON)
+      ApplyCooldown(activeIcon.cooldown, durationObj, startMS, endMS)
+      SetIconTiming(activeIcon, durationObj, startMS, endMS)
     end
     return
   end
 
-  if rec then
-    HideCasterIcon(caster)
+  if activeIcon then
+    ReleaseCasterIndicator(caster)
   end
 
   local icon = AcquireIcon(frame)
   if not icon then return end
   icon._msufTSCaster = caster
-  icon.tex:SetTexture(cast.texture or FALLBACK_ICON)
+  icon._msufTSFrame = frame
+  icon._msufTSUnit = unit
+  icon.tex:SetTexture(texture or FALLBACK_ICON)
   ApplyIconFrame(icon, frame)
-  ApplyCooldown(icon.cooldown, cast.durationObj, cast.startMS, cast.endMS)
-  SetIconTiming(icon, cast.durationObj, cast.startMS, cast.endMS)
+  ApplyCooldown(icon.cooldown, durationObj, startMS, endMS)
+  SetIconTiming(icon, durationObj, startMS, endMS)
   SetShown(icon, true)
-  activeByCaster[caster] = { icon = icon, frame = frame, unit = unit }
+  activeByCaster[caster] = icon
   LayoutFrame(frame)
 end
 
-local function RebuildRoster()
-  for _, list in pairs(rosterByClass) do
-    wipe(list)
+local function ResetPartyIdentityIndex()
+  for _, classBucket in pairs(partyUnitsByClass) do
+    wipe(classBucket)
   end
-  wipe(rosterRole)
-  wipe(rosterRace)
-  wipe(rosterSex)
+  wipe(partyRoleByUnit)
+  wipe(partyRaceByUnit)
+  wipe(partySexByUnit)
+end
 
-  for i = 1, #PARTY_UNITS do
-    local unit = PARTY_UNITS[i]
-    local exists = UnitExists and UnitExists(unit)
-    if exists == true and IsSecret(exists) ~= true then
-      local _, classToken = UnitClass(unit)
-      if IsSecret(classToken) ~= true and type(classToken) == "string" then
-        local list = rosterByClass[classToken]
-        if not list then
-          list = {}
-          rosterByClass[classToken] = list
-        end
-        list[#list + 1] = unit
-      end
+local function IndexPartyIdentity(unit)
+  local exists = UnitExists and UnitExists(unit)
+  if exists ~= true or IsSecret(exists) == true then return end
 
-      local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
-      if IsSecret(role) ~= true and type(role) == "string" and role ~= "NONE" then
-        rosterRole[unit] = role
-      end
+  local _, classToken = UnitClass(unit)
+  if IsSecret(classToken) ~= true and type(classToken) == "string" then
+    local classBucket = partyUnitsByClass[classToken]
+    if not classBucket then
+      classBucket = {}
+      partyUnitsByClass[classToken] = classBucket
+    end
+    classBucket[#classBucket + 1] = unit
+  end
 
-      if UnitRace then
-        local _, raceToken = UnitRace(unit)
-        if IsSecret(raceToken) ~= true and type(raceToken) == "string" then
-          rosterRace[unit] = raceToken
-        end
-      end
+  local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
+  if IsSecret(role) ~= true and type(role) == "string" and role ~= "NONE" then
+    partyRoleByUnit[unit] = role
+  end
 
-      if UnitSex then
-        local sex = UnitSex(unit)
-        if IsSecret(sex) ~= true and type(sex) == "number" then
-          rosterSex[unit] = sex
-        end
-      end
+  if UnitRace then
+    local _, raceToken = UnitRace(unit)
+    if IsSecret(raceToken) ~= true and type(raceToken) == "string" then
+      partyRaceByUnit[unit] = raceToken
     end
   end
 
+  if UnitSex then
+    local sex = UnitSex(unit)
+    if IsSecret(sex) ~= true and type(sex) == "number" then
+      partySexByUnit[unit] = sex
+    end
+  end
+end
+
+local function RefreshPartyIdentityIndex()
+  ResetPartyIdentityIndex()
+  for i = 1, #PARTY_UNITS do
+    IndexPartyIdentity(PARTY_UNITS[i])
+  end
   lastRosterSync = GetTime and GetTime() or 0
 end
 
-local function CopyClassCandidates(classToken)
-  wipe(matchBuf)
-  local list = rosterByClass[classToken]
-  if not list or #list == 0 then return false end
-  for i = 1, #list do
-    matchBuf[i] = list[i]
+local function LoadClassCandidateUnits(classToken)
+  local list = partyUnitsByClass[classToken]
+  local count = list and #list or 0
+  for i = count + 1, candidateCount do
+    candidateUnits[i] = nil
+  end
+  candidateCount = count
+  if count == 0 then return false end
+  for i = 1, count do
+    candidateUnits[i] = list[i]
   end
   return true
 end
 
-local function NarrowCandidates(targetValue, rosterMap)
-  if targetValue == nil or #matchBuf <= 1 then return end
-  local exact = 0
-  for i = 1, #matchBuf do
-    if rosterMap[matchBuf[i]] == targetValue then
-      exact = exact + 1
+local function KeepCandidateUnitsWith(value, valuesByUnit)
+  local candidates = candidateUnits
+  local count = candidateCount
+  if value == nil or count <= 1 then return end
+
+  local matches = 0
+  for i = 1, count do
+    if valuesByUnit[candidates[i]] == value then
+      matches = matches + 1
     end
   end
-  if exact == 0 then return end
-  for i = #matchBuf, 1, -1 do
-    if rosterMap[matchBuf[i]] ~= targetValue then
-      tremove(matchBuf, i)
+  if matches == 0 then return end
+
+  local writeIndex = 1
+  for readIndex = 1, count do
+    local unit = candidates[readIndex]
+    if valuesByUnit[unit] == value then
+      candidates[writeIndex] = unit
+      writeIndex = writeIndex + 1
     end
   end
+  for i = writeIndex, count do
+    candidates[i] = nil
+  end
+  candidateCount = writeIndex - 1
 end
 
-local function SafeTargetRace(unit)
+local function ReadPlainRaceToken(unit)
   if not UnitRace then return nil end
   local ok, _, raceToken = pcall(UnitRace, unit)
   if ok and IsSecret(raceToken) ~= true and type(raceToken) == "string" then
@@ -899,7 +972,7 @@ local function SafeTargetRace(unit)
   return nil
 end
 
-local function SafeTargetSex(unit)
+local function ReadPlainSex(unit)
   if not UnitSex then return nil end
   local ok, sex = pcall(UnitSex, unit)
   if ok and IsSecret(sex) ~= true and type(sex) == "number" then
@@ -908,115 +981,157 @@ local function SafeTargetSex(unit)
   return nil
 end
 
-local function ClassifyTarget(caster)
+local function ReadPlainAssignedRole(unit)
+  local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)
+  if IsSecret(role) == true or role == "NONE" or type(role) ~= "string" then
+    return nil
+  end
+  return role
+end
+
+local function ResolvePartyMemberFromCaster(caster)
   local target = caster .. "target"
   local _, classToken = UnitClass(target)
   if IsSecret(classToken) == true or type(classToken) ~= "string" then return nil end
 
-  if not CopyClassCandidates(classToken) then
+  if not LoadClassCandidateUnits(classToken) then
     local now = GetTime and GetTime() or 0
     if now - lastRosterSync > 1 then
-      RebuildRoster()
-      CopyClassCandidates(classToken)
+      RefreshPartyIdentityIndex()
+      LoadClassCandidateUnits(classToken)
     end
   end
-  if #matchBuf == 0 then return nil end
+  if candidateCount == 0 then return nil end
 
-  local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(target)
-  if IsSecret(role) == true or role == "NONE" or type(role) ~= "string" then
-    role = nil
+  if candidateCount > 1 then
+    KeepCandidateUnitsWith(ReadPlainAssignedRole(target), partyRoleByUnit)
   end
-  NarrowCandidates(role, rosterRole)
+  if candidateCount > 1 then
+    KeepCandidateUnitsWith(ReadPlainRaceToken(target), partyRaceByUnit)
+  end
+  if candidateCount > 1 then
+    KeepCandidateUnitsWith(ReadPlainSex(target), partySexByUnit)
+  end
 
-  NarrowCandidates(SafeTargetRace(target), rosterRace)
-  NarrowCandidates(SafeTargetSex(target), rosterSex)
-
-  if #matchBuf == 1 then
-    return matchBuf[1]
+  if candidateCount == 1 then
+    return candidateUnits[1]
   end
   return nil
 end
 
-local function TargetNameAllowed(caster)
+local function CastTargetGateOpen(caster)
   if not UnitShouldDisplaySpellTargetName then return true end
   local shown = UnitShouldDisplaySpellTargetName(caster)
   return IsSecret(shown) == true or shown ~= false
 end
 
-local function ReadCast(caster)
+local function ReadNameplateCast(caster)
   local name, _, texture, startMS, endMS = UnitCastingInfo(caster)
   if name ~= nil then
-    return {
-      name = name,
-      texture = texture,
-      startMS = startMS,
-      endMS = endMS,
-      durationObj = UnitCastingDuration and UnitCastingDuration(caster) or nil,
-    }
+    return true, texture, UnitCastingDuration and UnitCastingDuration(caster) or nil, startMS, endMS
   end
 
   name, _, texture, startMS, endMS = UnitChannelInfo(caster)
   if name ~= nil then
-    return {
-      name = name,
-      texture = texture,
-      startMS = startMS,
-      endMS = endMS,
-      durationObj = UnitChannelDuration and UnitChannelDuration(caster) or nil,
-    }
+    return true, texture, UnitChannelDuration and UnitChannelDuration(caster) or nil, startMS, endMS
   end
-  return nil
+  return false
 end
 
-local function Resolve(caster, generation)
+local function ResolveCasterSample(caster, generation)
+  if active ~= true then return end
   if casterGeneration[caster] ~= generation then return end
-  local cast = ReadCast(caster)
-  if not cast then
-    ClearCaster(caster)
+  local hasCast, texture, durationObj, startMS, endMS = ReadNameplateCast(caster)
+  if not hasCast then
+    DropCasterState(caster)
     return
   end
-  if not TargetNameAllowed(caster) then
-    HideCasterIcon(caster)
+  if not CastTargetGateOpen(caster) then
+    ReleaseCasterIndicator(caster)
     return
   end
 
-  local unit = ClassifyTarget(caster)
+  local unit = ResolvePartyMemberFromCaster(caster)
   if not unit then
-    HideCasterIcon(caster)
+    ReleaseCasterIndicator(caster)
     return
   end
-  ShowFor(caster, unit, cast)
+  DisplayIndicator(caster, unit, texture, durationObj, startMS, endMS)
 end
 
-local function ScheduleResolve(caster, firstDelay)
+RunSampleQueue = function()
+  sampleTimerAt = nil
+  local now = (GetTime and GetTime()) or 0
+  local out = sampleHead
+  local last = sampleTail
+  local nextDue
+
+  for i = sampleHead, last do
+    local caster = sampleUnits[i]
+    local due = sampleDue[i]
+    local generation = sampleGenerations[i]
+    if caster and due then
+      if now >= due then
+        sampleUnits[i] = nil
+        sampleGenerations[i] = nil
+        sampleDue[i] = nil
+        ResolveCasterSample(caster, generation)
+      else
+        if out ~= i then
+          sampleUnits[out] = caster
+          sampleGenerations[out] = generation
+          sampleDue[out] = due
+          sampleUnits[i] = nil
+          sampleGenerations[i] = nil
+          sampleDue[i] = nil
+        end
+        out = out + 1
+        if not nextDue or due < nextDue then
+          nextDue = due
+        end
+      end
+    end
+  end
+
+  sampleHead = 1
+  sampleTail = out - 1
+  if sampleTail <= 0 then
+    sampleTail = 0
+  end
+  if nextDue then
+    ArmSampleQueue(nextDue)
+  end
+end
+
+local function QueueCasterSamples(caster, firstDelay)
   local generation = casterGeneration[caster] or 0
-  Schedule(firstDelay, function() Resolve(caster, generation) end)
-  Schedule(firstDelay + VERIFY_DELAY, function() Resolve(caster, generation) end)
+  PushCasterSample(caster, generation, firstDelay)
+  PushCasterSample(caster, generation, firstDelay + CAST_CONFIRM_GAP)
 end
 
-local function OnCastStart(caster)
-  ClearCaster(caster)
+local function StartCasterWatch(caster)
+  DropCasterState(caster)
   if not IsUnitToken(caster) then return end
 
   local hostile = UnitCanAttack and UnitCanAttack("player", caster)
   if IsSecret(hostile) ~= true and hostile ~= true then return end
-  if not TargetNameAllowed(caster) then return end
+  if not CastTargetGateOpen(caster) then return end
 
   trackedCasters[caster] = true
   casterGeneration[caster] = casterGeneration[caster] or 0
-  ScheduleResolve(caster, PICKUP_DELAY)
+  QueueCasterSamples(caster, CAST_SAMPLE_DELAY)
 end
 
-local function OnRetarget(caster)
+local function RefreshCasterWatch(caster)
   if not trackedCasters[caster] then return end
   casterGeneration[caster] = (casterGeneration[caster] or 0) + 1
-  ScheduleResolve(caster, RETARGET_DELAY)
+  QueueCasterSamples(caster, TARGET_SWAP_DELAY)
 end
 
-local function AdoptIfCasting(unit)
+local function ImportActiveNameplateCast(unit)
   if not IsUnitToken(unit) then return end
-  if ReadCast(unit) then
-    OnCastStart(unit)
+  if ReadNameplateCast(unit) then
+    StartCasterWatch(unit)
   end
 end
 
@@ -1029,7 +1144,7 @@ local function SeedNameplates()
     local token = plates[i] and plates[i].namePlateUnitToken
     if IsUnitToken(token) then
       nameplateUnits[token] = true
-      AdoptIfCasting(token)
+      ImportActiveNameplateCast(token)
     end
   end
 end
@@ -1037,7 +1152,7 @@ end
 local function StartRuntime()
   if active then return end
   active = true
-  RebuildRoster()
+  RefreshPartyIdentityIndex()
   SetHotEvents(true)
   SeedNameplates()
 end
@@ -1046,7 +1161,7 @@ local function StopRuntime()
   if not active then return end
   active = false
   SetHotEvents(false)
-  ClearAll()
+  DropAllCasterState()
   wipe(nameplateUnits)
 end
 
@@ -1056,8 +1171,8 @@ function TS.RefreshConfig(reseed)
   if ShouldRun() then
     if active then
       if reseed == true then
-        RebuildRoster()
-        ClearAll()
+        RefreshPartyIdentityIndex()
+        DropAllCasterState()
         SeedNameplates()
       else
         RefreshVisibleIcons()
@@ -1075,7 +1190,7 @@ function TS.IsActive()
 end
 
 function TS.Clear()
-  ClearAll()
+  DropAllCasterState()
 end
 
 function TS.DebugSnapshot()
@@ -1125,10 +1240,12 @@ function TS.ShowTest(unit, seconds)
   local frame = FrameForPartyUnit(unit) or FirstPartyFrame()
   if not frame then return false, "no party frame" end
   local caster = "__MSUF_TS_TEST"
-  ClearCaster(caster)
+  DropCasterState(caster)
   local icon = AcquireIcon(frame)
   if not icon then return false, "no free icon" end
   icon._msufTSCaster = caster
+  icon._msufTSFrame = frame
+  icon._msufTSUnit = frame.unit or unit
   icon.tex:SetTexture(FALLBACK_ICON)
   ApplyIconFrame(icon, frame)
   local now = GetTime and GetTime() or 0
@@ -1136,13 +1253,13 @@ function TS.ShowTest(unit, seconds)
   ApplyCooldown(icon.cooldown, nil, now * 1000, (now + duration) * 1000)
   SetIconTiming(icon, nil, now * 1000, (now + duration) * 1000)
   SetShown(icon, true)
-  activeByCaster[caster] = { icon = icon, frame = frame, unit = frame.unit or unit }
+  activeByCaster[caster] = icon
   LayoutFrame(frame)
   return true, frame.unit or unit
 end
 
 function TS.HideTest()
-  ClearCaster("__MSUF_TS_TEST")
+  DropCasterState("__MSUF_TS_TEST")
 end
 
 local function InstallHooks()
@@ -1198,22 +1315,26 @@ eventFrame:SetScript("OnEvent", function(_, event, unit)
 
   if event == "NAME_PLATE_UNIT_ADDED" then
     nameplateUnits[unit] = true
-    AdoptIfCasting(unit)
+    ImportActiveNameplateCast(unit)
   elseif event == "NAME_PLATE_UNIT_REMOVED" then
     nameplateUnits[unit] = nil
-    ClearCaster(unit)
+    DropCasterState(unit)
   elseif event == "UNIT_TARGET" then
     if nameplateUnits[unit] then
-      OnRetarget(unit)
+      RefreshCasterWatch(unit)
     end
   elseif nameplateUnits[unit] then
     if event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" then
-      OnCastStart(unit)
+      StartCasterWatch(unit)
     else
-      ClearCaster(unit)
+      DropCasterState(unit)
     end
   end
 end)
 
+local function InitialRefresh()
+  TS.RefreshConfig(true)
+end
+
 InstallHooks()
-Schedule(0, function() TS.RefreshConfig(true) end)
+Schedule(0, InitialRefresh)
