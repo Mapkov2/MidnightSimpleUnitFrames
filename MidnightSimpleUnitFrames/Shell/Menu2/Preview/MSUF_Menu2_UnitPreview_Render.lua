@@ -103,6 +103,18 @@ local function CopyPreviewAnimationData(box, data, hpFrac, powerFrac)
     copy.power = powerFrac
     return copy
 end
+local function UnitPreviewAnimationState(box, index, key)
+    if not (box and box._animationEnabled == true) then return nil end
+    local previewAnimation = MSUF and MSUF.PreviewAnimation
+    local buildState = previewAnimation and previewAnimation.BuildFrameState or _G.MSUF_BuildPreviewAnimationFrameState
+    if type(buildState) ~= "function" then return nil end
+    local scratch = box._previewAnimationState
+    if not scratch then
+        scratch = {}
+        box._previewAnimationState = scratch
+    end
+    return buildState(box, index, key, scratch, box._animationElapsed)
+end
 local function ShortenCastbarPreviewSpellName(key, text)
     local shorten = _G.MSUF_ShortenCastbarSpellName
     if type(shorten) ~= "function" then return text end
@@ -434,6 +446,9 @@ function Preview.Refresh(box, reason)
     box.key = key
     local skipControlRefresh = (reason == "OPTIONS_APPLY_DB" or reason == "UNIT_MENU_ENTER" or reason == "UNIT_MENU_REENTER")
         or reason == "UNIT_PREVIEW_DRAG"
+        or reason == "UNIT_PREVIEW_ANIMATE"
+        or reason == "UNIT_PREVIEW_ANIMATE_TOGGLE"
+        or reason == "UNIT_PREVIEW_COMBAT_ANIMATE"
         or reason == "UNIT_PREVIEW_ZOOM"
         or reason == "UNIT_PREVIEW_ZOOM_STEP"
         or reason == "UNIT_PREVIEW_ZOOM_FIT"
@@ -513,20 +528,15 @@ function Preview.Refresh(box, reason)
     local powerFrac = tonumber(data.power) or 1
     if not detachedPower and key ~= "player" then powerFrac = 1 end
     if powerFrac < 0 then powerFrac = 0 elseif powerFrac > 1 then powerFrac = 1 end
-    local animState
-    local previewAnimation = MSUF and MSUF.PreviewAnimation
-    if previewAnimation and previewAnimation.IsEnabled and previewAnimation.IsEnabled() and previewAnimation.FrameState then
-        animState = previewAnimation.FrameState(box, 1, key, box._previewAnimationState or {})
-        box._previewAnimationState = animState
-        local animHp = animState and tonumber(animState.hpPct)
-        local animPower = animState and tonumber(animState.powerPct)
-        if animHp then
-            if animHp < 0 then animHp = 0 elseif animHp > 1 then animHp = 1 end
-            if animPower == nil then animPower = powerFrac end
-            if animPower < 0 then animPower = 0 elseif animPower > 1 then animPower = 1 end
-            powerFrac = animPower
-            data = CopyPreviewAnimationData(box, data, animHp, powerFrac)
-        end
+    local animState = UnitPreviewAnimationState(box, 1, key)
+    local animHp = animState and tonumber(animState.hpPct)
+    local animPower = animState and tonumber(animState.powerPct)
+    if animHp then
+        if animHp < 0 then animHp = 0 elseif animHp > 1 then animHp = 1 end
+        if animPower == nil then animPower = powerFrac end
+        if animPower < 0 then animPower = 0 elseif animPower > 1 then animPower = 1 end
+        powerFrac = animPower
+        data = CopyPreviewAnimationData(box, data, animHp, powerFrac)
     end
     local cpH = classPowerOn and (tonumber(bars.classPowerHeight) or 4) or 0
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
@@ -1440,6 +1450,11 @@ function Preview.Refresh(box, reason)
                 icon:SetFrameLevel(textBase + ClampPreviewLayer(rawLayer, spec.defaultLayer or 7))
             end
             R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg)
+            if spec.id == "statusCombat" and icon.SetAlpha then
+                icon:SetAlpha(animState and (0.55 + ((tonumber(animState.pulse) or 0) * 0.45)) or 1)
+            elseif icon.SetAlpha then
+                icon:SetAlpha(1)
+            end
             if spec.id == "level" then
                 local anchor, x, y = StatusAnchorOffsets(spec, statusCfg)
                 if icon.txt then

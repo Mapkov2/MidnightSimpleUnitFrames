@@ -771,6 +771,7 @@ local PreviewBaseEdgeColor = PreviewCore.BaseEdgeColor
 local STATUS_PREVIEW = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.StatusPreview) or {}
 local PREVIEW_LAYERS = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.PreviewLayers) or {}
 local ZOOM_MIN = tonumber(PreviewZoomPan.MIN) or 0.35
+local UNIT_PREVIEW_ANIMATION_INTERVAL = 1 / 20
 if PreviewZoomPan.Configure then PreviewZoomPan.Configure({ Preview = Preview, T = M2.Theme, TR = TR, TEX_W8 = TEX_W8, UpdateHandleHint = UpdateHandleHint }) end
 local function ZoomOrOne(v) return tonumber(v) or 1 end
 local ClampPreviewZoom = PreviewZoomPan.Clamp or ZoomOrOne
@@ -779,14 +780,19 @@ local SetPreviewZoom = PreviewZoomPan.SetZoom or F.Noop
 local StepPreviewZoom = PreviewZoomPan.Step or F.Noop
 StartPreviewPan = PreviewZoomPan.Start or StartPreviewPan
 StopPreviewPan = PreviewZoomPan.Stop or StopPreviewPan
-local function PreviewAnimationActive()
-    local fn = _G.MSUF_IsPreviewAnimationEnabled
-    return type(fn) == "function" and fn() == true
+local SetPreviewAnimationEnabled
+local function PreviewAnimationInCombat()
+    local fn = PreviewCore.InCombat
+    if type(fn) == "function" then return fn() == true end
+    return InCombatLockdown and InCombatLockdown() or false
+end
+local function PreviewAnimationActive(box)
+    return box and box._animationEnabled == true
 end
 local function RefreshPreviewAnimationButton(box)
     local btn = box and box.animateCombatButton
     if not btn then return end
-    local active = PreviewAnimationActive()
+    local active = PreviewAnimationActive(box)
     if btn.fs then
         btn.fs:SetText(active and TR("Stop") or TR("Combat"))
         btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
@@ -802,16 +808,70 @@ local function RefreshPreviewAnimationButton(box)
         end
     end
 end
-local function TogglePreviewAnimation(box)
-    local fn = _G.MSUF_TogglePreviewAnimation
-    if type(fn) ~= "function" then return end
-    local ok, reason = fn("unit_menu")
-    RefreshPreviewAnimationButton(box)
-    if ok == false and reason == "combat" and box and box.hint then
-        box.hint:SetText(TR("Preview animation pauses during combat."))
+local function StopPreviewAnimationDriver(box)
+    if not (box and box.SetScript) then return end
+    box:SetScript("OnUpdate", nil)
+    if box.UnregisterEvent then box:UnregisterEvent("PLAYER_REGEN_DISABLED") end
+end
+local function RefreshPreviewAnimationFrame(box)
+    local refresh = Preview and Preview.Refresh
+    if type(refresh) == "function" then
+        refresh(box, "UNIT_PREVIEW_ANIMATE")
+    else
+        RequestPreviewLayoutRefresh(box, "UNIT_PREVIEW_ANIMATE")
+    end
+end
+local function PreviewAnimationOnUpdate(box, elapsed)
+    if not (box and box._animationEnabled == true and box.IsShown and box:IsShown()) then
+        StopPreviewAnimationDriver(box)
         return
     end
-    RequestPreviewLayoutRefresh(box, "UNIT_PREVIEW_COMBAT_ANIMATE")
+    if PreviewAnimationInCombat() then
+        StopPreviewAnimationDriver(box)
+        if box.hint then box.hint:SetText(TR("Preview animation pauses during combat.")) end
+        return
+    end
+    elapsed = tonumber(elapsed) or 0
+    box._animationElapsed = (tonumber(box._animationElapsed) or 0) + elapsed
+    box._animationAccum = (tonumber(box._animationAccum) or 0) + elapsed
+    if box._animationAccum < UNIT_PREVIEW_ANIMATION_INTERVAL then return end
+    box._animationAccum = 0
+    RefreshPreviewAnimationFrame(box)
+end
+local function StartPreviewAnimationDriver(box)
+    if not (box and box._animationEnabled == true) then return end
+    if PreviewAnimationInCombat() then
+        StopPreviewAnimationDriver(box)
+        return
+    end
+    if box.RegisterEvent then box:RegisterEvent("PLAYER_REGEN_DISABLED") end
+    box:SetScript("OnUpdate", PreviewAnimationOnUpdate)
+end
+SetPreviewAnimationEnabled = function(box, enabled, reason)
+    if not box then return end
+    enabled = enabled == true
+    if enabled and PreviewAnimationInCombat() then
+        if box.hint then box.hint:SetText(TR("Preview animation pauses during combat.")) end
+        RefreshPreviewAnimationButton(box)
+        return
+    end
+    if enabled and box._animationEnabled ~= true then
+        box._animationElapsed = 0
+        box._animationAccum = 0
+    end
+    box._animationEnabled = enabled
+    if enabled then
+        StartPreviewAnimationDriver(box)
+    else
+        StopPreviewAnimationDriver(box)
+        box._previewAnimationState = nil
+        box._previewAnimationData = nil
+    end
+    RefreshPreviewAnimationButton(box)
+    RequestPreviewLayoutRefresh(box, reason or "UNIT_PREVIEW_ANIMATE_TOGGLE")
+end
+local function TogglePreviewAnimation(box)
+    SetPreviewAnimationEnabled(box, not PreviewAnimationActive(box), "UNIT_PREVIEW_COMBAT_ANIMATE")
 end
 local function CreatePreviewAnimationButton(box)
     if not (box and box.canvas) or box.animateCombatButton then return end
@@ -832,7 +892,7 @@ local function CreatePreviewAnimationButton(box)
     if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
     btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
     if M2.AddTooltip then
-        M2.AddTooltip(btn, "Combat Preview", "Animates health, power, absorbs, cast progress, and combat indicators for visible previews only. Stops automatically in combat.", { hook = true })
+        M2.AddTooltip(btn, "Combat Preview", "Animates health, power, absorbs, cast progress, and combat indicators in this preview only. Pauses during combat.", { hook = true })
     end
     box.animateCombatButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
@@ -855,8 +915,58 @@ local function ApplyPreviewCanvasGradient(canvas, T)
         bg:SetColorTexture(0.018, 0.019, 0.022, 0.98)
     end
 end
+local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
+    if not box then return end
+    local T = MenuTheme()
+    local colors = (T and T.colors) or {}
+    local shade = box._msuf2PinnedHeaderShade
+    if not shade and box.CreateTexture then
+        shade = box:CreateTexture(nil, "BORDER", nil, -1)
+        shade:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
+        shade:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1)
+        shade:SetHeight(29)
+        shade:SetTexture(TEX_W8)
+        box._msuf2PinnedHeaderShade = shade
+    end
+    local line = box._msuf2PinnedHeaderLine
+    if not line and box.CreateTexture then
+        line = box:CreateTexture(nil, "BORDER", nil, 0)
+        line:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -29)
+        line:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -29)
+        line:SetHeight(1)
+        line:SetTexture(TEX_W8)
+        box._msuf2PinnedHeaderLine = line
+    end
+    local canvasBottom = pinned and 12 or 28
+    if box.canvas then
+        box.canvas:ClearAllPoints()
+        box.canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+        box.canvas:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -((sideW or 72) + 18), canvasBottom)
+    end
+    if box.sidebar and box.canvas then
+        box.sidebar:ClearAllPoints()
+        box.sidebar:SetPoint("TOPLEFT", box.canvas, "TOPRIGHT", 8, 0)
+        box.sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, canvasBottom)
+    end
+    if box.footer then box.footer:SetShown(not pinned) end
+    if shade then
+        local bg = colors.coreShadow or { 0.006, 0.016, 0.032, 1 }
+        shade:SetColorTexture(bg[1], bg[2], bg[3], pinned and 0.92 or 0)
+        shade:SetShown(pinned)
+    end
+    if line then
+        local border = colors.borderSoft or colors.border or { 0.070, 0.260, 0.390, 1 }
+        line:SetColorTexture(border[1], border[2], border[3], pinned and 0.52 or 0)
+        line:SetShown(pinned)
+    end
+    if pinned and box.hint and not box._selectedHandle then
+        box.hint:SetText(TR("drag/select handles - right-click actions - Ctrl+wheel zoom"))
+    elseif not pinned then
+        UpdateHandleHint(box, box._selectedHandle)
+    end
+end
 local function BuildPreview(parent, panel, width, height)
-    local sideW = 72
+    local sideW = 104
     local T = MenuTheme()
     local colors = (T and T.colors) or {}
     local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -868,6 +978,9 @@ local function BuildPreview(parent, panel, width, height)
     )
     box._msufStaticH = height or 228
     box._msufPanel = panel
+    box.ApplyPinnedPreviewPresentation = function(self, pinned, opts)
+        ApplyUnitPinnedPresentation(self, pinned, opts, sideW)
+    end
     local title = box:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     title:SetText(TR("Unit Frame Preview"))
@@ -918,27 +1031,38 @@ local function BuildPreview(parent, panel, width, height)
     if T and T.StyleFontString then T.StyleFontString(footer, muted, 0) end
     box.footer = footer
     local sidebar = CreateFrame("Frame", nil, box, "BackdropTemplate")
-    sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 6, 0)
+    sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 8, 0)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 28)
     ApplyPreviewBackdrop(
         sidebar,
-        colors.panel or { 0.025, 0.028, 0.04, 0.82 },
-        colors.borderSoft or { 0.10, 0.13, 0.18, 0.65 },
+        colors.coreInk or colors.panel or { 0.010, 0.024, 0.046, 0.86 },
+        colors.borderSoft or { 0.070, 0.260, 0.390, 0.58 },
         { backdrop = { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 } }
     )
     box.sidebar = sidebar
     local sHdr = sidebar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     sHdr:SetPoint("TOP", sidebar, "TOP", 0, -5)
     sHdr:SetText(TR("LAYERS"))
-    sHdr:SetTextColor(0.45, 0.50, 0.62, 0.8)
-    if T and T.StyleFontString then T.StyleFontString(sHdr, { 0.45, 0.50, 0.62, 0.8 }, 0) end
+    local layerHeaderColor = colors.muted or { 0.62, 0.70, 0.82, 0.90 }
+    sHdr:SetTextColor(layerHeaderColor[1], layerHeaderColor[2], layerHeaderColor[3], 0.94)
+    if T and T.StyleFontString then T.StyleFontString(sHdr, { layerHeaderColor[1], layerHeaderColor[2], layerHeaderColor[3], 0.94 }, 0) end
     box.layerVisibility = {}
     box.layerButtons = {}
     local function UnitLayerAvailable(owner, key)
         return not (owner and owner.layerAvailable and owner.layerAvailable[key] == false)
     end
+    local activeLayerText = colors.pillTextActive or colors.text or { 0.92, 0.96, 1.00, 1.00 }
+    local mutedLayerText = colors.muted or { 0.62, 0.70, 0.82, 0.90 }
+    local disabledLayerText = colors.dim or { 0.36, 0.46, 0.60, 0.82 }
     local unitLayerButtonOpts = {
         Tr = TR,
+        height = 18,
+        rowHeight = 18,
+        topOffset = 23,
+        showOffText = false,
+        textOn = { activeLayerText[1], activeLayerText[2], activeLayerText[3], 1.00 },
+        textOff = { mutedLayerText[1], mutedLayerText[2], mutedLayerText[3], 0.72 },
+        textDisabled = { disabledLayerText[1], disabledLayerText[2], disabledLayerText[3], 0.64 },
         IsAvailable = UnitLayerAvailable,
         IsOn = function(owner, key) return UnitLayerAvailable(owner, key) and owner.layerVisibility[key] ~= false end,
         OnClick = function(self, owner)
@@ -954,19 +1078,20 @@ local function BuildPreview(parent, panel, width, height)
         end,
         OnEnter = function(self, owner, available, on, tr)
             if not available then
-                self.bg:SetColorTexture(0.045, 0.045, 0.055, 0.62)
-                self.fs:SetTextColor(0.42, 0.42, 0.48, 0.75)
+                self.bg:SetColorTexture(0.014, 0.038, 0.072, 0.62)
+                self.fs:SetTextColor(disabledLayerText[1], disabledLayerText[2], disabledLayerText[3], 0.78)
                 owner.hint:SetText(TR("This layer is off in settings and cannot be shown in preview."))
                 return
             end
-            if GameTooltip and self.tooltip then
+            local label = tr(self.fs and self.fs:GetText() or self.key)
+            if owner.hint then owner.hint:SetText(label .. " - " .. TR(on and "click to hide this preview layer" or "click to show this preview layer")) end
+            if GameTooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText(tr(self.fs and self.fs:GetText() or self.key), 1, 1, 1)
-                GameTooltip:AddLine(tr(self.tooltip), 0.82, 0.82, 0.82, true)
+                GameTooltip:SetText(label, 1, 1, 1)
+                if self.tooltip then GameTooltip:AddLine(tr(self.tooltip), 0.82, 0.82, 0.82, true) end
+                GameTooltip:AddLine(TR(on and "Click to hide this preview layer." or "Click to show this preview layer."), 0.55, 0.68, 0.86, true)
                 if self.key == "guides" then GameTooltip:AddLine(tr(on and "Turn off to inspect the frame without mover outlines. The selected element can still be nudged with arrow keys." or "Guides are hidden. Turn this back on to see drag handles and selected borders."), 0.55, 0.68, 0.86, true) end
                 GameTooltip:Show()
-            elseif GameTooltip then
-                GameTooltip:Hide()
             end
         end,
         OnLeave = function(_, owner) UpdateHandleHint(owner, owner._selectedHandle) end,
@@ -1205,23 +1330,16 @@ local function BuildPreview(parent, panel, width, height)
     box:SetScript("OnKeyDown", PreviewArrowKeyDown)
     box:SetScript("OnShow", function(self)
         Preview.active = self
-        if type(_G.MSUF_RegisterPreviewAnimationMenuBox) == "function" then _G.MSUF_RegisterPreviewAnimationMenuBox(self) end
-        if type(_G.MSUF_RegisterPreviewAnimationRefreshOwner) == "function" then _G.MSUF_RegisterPreviewAnimationRefreshOwner(self, RefreshPreviewAnimationButton) end
-        if self.RegisterEvent then
-            self:RegisterEvent("PLAYER_REGEN_ENABLED")
-            self:RegisterEvent("PLAYER_REGEN_DISABLED")
-        end
+        if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
         RefreshPreviewAnimationButton(self)
         Preview.RequestRefresh("SHOW")
     end)
     box:SetScript("OnHide", function(self)
-        if type(_G.MSUF_UnregisterPreviewAnimationMenuBox) == "function" then _G.MSUF_UnregisterPreviewAnimationMenuBox(self) end
-        if type(_G.MSUF_UnregisterPreviewAnimationRefreshOwner) == "function" then _G.MSUF_UnregisterPreviewAnimationRefreshOwner(self) end
+        StopPreviewAnimationDriver(self)
         self._refreshSerial = (tonumber(self._refreshSerial) or 0) + 1
         self._refreshQueued = nil
         self._refreshReason = nil
         if self.UnregisterEvent then
-            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
             self:UnregisterEvent("PLAYER_REGEN_DISABLED")
         end
         self._selectedHandle = nil
@@ -1240,9 +1358,8 @@ local function BuildPreview(parent, panel, width, height)
         end
     end)
     box:SetScript("OnEvent", function(self, event)
-        if event == "PLAYER_REGEN_ENABLED" then
-            Preview.RequestRefresh("COMBAT_ALPHA")
-        elseif event == "PLAYER_REGEN_DISABLED" then
+        if event == "PLAYER_REGEN_DISABLED" then
+            StopPreviewAnimationDriver(self)
             self._refreshReason = nil
             self._refreshQueued = nil
             self._selectedHandle = nil

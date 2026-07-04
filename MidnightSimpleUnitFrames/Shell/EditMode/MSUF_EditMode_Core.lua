@@ -506,6 +506,7 @@ local function HardHideEditModePreviews()
     PublishCompat("MSUF_UnitPreviewActive", false)
     PublishCompat("MSUF_PreviewTestMode", false)
     PublishCompat("MSUF_BossTestMode", false)
+    PublishCompat("MSUF2_BossUnitframePreviewActive", nil)
 
     local hideCastbars = _G.MSUF_HideAllCastbarPreviews
     if type(hideCastbars) == "function" then

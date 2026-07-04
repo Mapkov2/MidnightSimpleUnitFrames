@@ -326,6 +326,17 @@ function Text.UpdateName(frame, event, unit)
     return
   end
   unit = frameUnit
+  local previewName = frame._msufPreviewNameText
+  if type(previewName) == "string" and previewName ~= "" then
+    frame._msufNameStatusUnit = nil
+    frame._msufNameStatusHidden = nil
+    frame.nameText._msufShown = nil
+    SetShownCached(frame.nameText, true)
+    SetTextCached(frame.nameText, previewName)
+    frame._msufNameTextUnit = unit
+    Text.UpdateNameColor(frame, event, unit)
+    return
+  end
   if rt and rt.showName == false then
     frame._msufNameStatusUnit = nil
     frame._msufNameStatusHidden = nil
