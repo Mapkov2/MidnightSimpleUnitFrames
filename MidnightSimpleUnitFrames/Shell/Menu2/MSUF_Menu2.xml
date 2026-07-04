@@ -246,6 +246,7 @@
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalColorSettings_ResetContext.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalColorSettings.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalActions.lua"/>
+    <Script file="Assistant\MSUF_AssistantRegistry_RecoverFrames.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalColorResetActions.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_GlobalColorResetActions_Extras.lua"/>
     <Script file="Assistant\MSUF_AssistantRegistry_Dashboard_Panels.lua"/>
