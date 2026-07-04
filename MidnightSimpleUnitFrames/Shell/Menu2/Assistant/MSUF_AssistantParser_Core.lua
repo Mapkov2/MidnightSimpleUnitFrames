@@ -36,7 +36,7 @@ local normalizeCacheCount = 0
 local normalizeCacheOrder = {}
 local normalizeCacheOrderHead = 1
 local normalizeCacheOrderTail = 0
-local NORMALIZE_CACHE_LIMIT = 16384
+local NORMALIZE_CACHE_LIMIT = 8192
 
 local NORMALIZE_WORD_REPLACEMENTS = {
     wat = "what",

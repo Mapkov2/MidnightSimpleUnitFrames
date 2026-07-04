@@ -1231,6 +1231,7 @@ local function BuildWindow()
     local assistantWarmupSerial = 0
     local assistantWarmupTimer
     local ASSISTANT_WARMUP_IDLE_DELAY = 2.5
+    local ASSISTANT_AUTO_WARMUP_ENABLED = false
     local function AssistantAPI()
         return (MSUF and MSUF.Assistant) or M.Assistant
     end
@@ -1261,6 +1262,10 @@ local function BuildWindow()
         end
     end
     local function QueueAssistantPerformanceWarmup(reason, delay)
+        if ASSISTANT_AUTO_WARMUP_ENABLED ~= true and _G.MSUF_ASSISTANT_ALLOW_WARMUP ~= true then
+            CancelAssistantPerformanceWarmup(reason or "menu-activity")
+            return false
+        end
         local assistant = AssistantAPI()
         if assistant and assistant._performanceWarmupCompleted == true then
             CancelAssistantWarmupTimer()
