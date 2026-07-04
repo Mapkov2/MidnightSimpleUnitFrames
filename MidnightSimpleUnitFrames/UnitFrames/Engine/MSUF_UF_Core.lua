@@ -1400,6 +1400,16 @@ local function ElementEvents(element, kind, frame, spec)
   return kind == "unitless" and element.unitlessEvents or element.events
 end
 
+local function SyncRuntimeDriverIfNeeded()
+  if UF._msufApplyingSpec == true then
+    return
+  end
+  local sync = UF.SyncRuntimeDriver
+  if type(sync) == "function" then
+    sync()
+  end
+end
+
 --- Diff each element's declared event set against the frame. Keep new element
 --- event declarations as stable tables when possible; stable refs let this
 --- function skip rebuild work during repeated ApplySpec calls.
@@ -1482,6 +1492,7 @@ local function FrameEnableElement(frame, name)
   if rebuildRuntimeStatus then
     rebuildRuntimeStatus(frame)
   end
+  SyncRuntimeDriverIfNeeded()
   return true
 end
 
@@ -1503,6 +1514,7 @@ local function FrameDisableElement(frame, name)
   if rebuildRuntimeStatus then
     rebuildRuntimeStatus(frame)
   end
+  SyncRuntimeDriverIfNeeded()
   return true
 end
 
@@ -1624,6 +1636,8 @@ function UF.DetachFrame(frame)
   end
   -- Detaching unwinds every element/event pair; batch the central-driver
   -- refresh so each touched event re-registers once per detach.
+  local wasApplyingSpec = UF._msufApplyingSpec
+  UF._msufApplyingSpec = true
   UF.BeginEventRegistrationBatch()
   if frame._msufActiveElements then
     while true do
@@ -1675,6 +1689,13 @@ function UF.DetachFrame(frame)
     end
   end
   UF.EndEventRegistrationBatch()
+  UF._msufApplyingSpec = wasApplyingSpec
+  if wasApplyingSpec ~= true then
+    local sync = UF.SyncRuntimeDriver
+    if type(sync) == "function" then
+      sync()
+    end
+  end
   return true
 end
 
@@ -1766,6 +1787,8 @@ function UF.ApplySpec(frame, spec, reason, mask)
   -- Elements share events (health/prediction/text all ride UNIT_HEALTH); batch
   -- the central-driver refresh so each touched event re-registers once per
   -- apply instead of once per element.
+  local wasApplyingSpec = UF._msufApplyingSpec
+  UF._msufApplyingSpec = true
   UF.BeginEventRegistrationBatch()
   UF.AttachFrame(frame, {
     scope = frame._msufCoreScope,
@@ -1781,6 +1804,13 @@ function UF.ApplySpec(frame, spec, reason, mask)
     end
   end
   UF.EndEventRegistrationBatch()
+  UF._msufApplyingSpec = wasApplyingSpec
+  if wasApplyingSpec ~= true then
+    local sync = UF.SyncRuntimeDriver
+    if type(sync) == "function" then
+      sync()
+    end
+  end
   if reason then
     UF.FrameRuntimeUpdate(frame, reason)
   end

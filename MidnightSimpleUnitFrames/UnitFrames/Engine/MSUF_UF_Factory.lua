@@ -298,6 +298,10 @@ local function ApplyFrame(frame, spec)
   if ApplySize(frame, spec) == false or ApplyPosition(frame, spec) == false then
     return false
   end
+  if UF.InstallPingCompatibility then
+    UF.InstallPingCompatibility(frame)
+  end
+  UF.RefreshNativePingIcon(frame)
   UF.ApplySpec(frame, spec, nil, true)
 
   -- LoadConditions.Apply (run inside ApplySpec above) owns visibility: it
@@ -1020,6 +1024,13 @@ local function ApplyOne(unit)
     local frame = UF.frames[unit]
     if frame then
       frame:Hide()
+      if UF.DetachFrame then
+        UF.DetachFrame(frame)
+      end
+      if UF.DisablePingCompatibility then
+        UF.DisablePingCompatibility(frame)
+      end
+      frame._msufDisabledByConfig = true
     end
     return true
   end
