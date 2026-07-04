@@ -142,6 +142,38 @@ local function RefreshCachedPowerType(frame, unit)
   return changed
 end
 
+local function SeedCachedPowerType(frame, unit, powerType, powerToken)
+  if not frame then
+    return false
+  end
+  if issecretvalue(powerType) == true or issecretvalue(powerToken) == true then
+    return false
+  end
+  if powerType == nil and powerToken == nil then
+    return false
+  end
+  local cacheUnit = unit
+  local sameUnit = cacheUnit ~= nil and frame._msufTextPowerTypeUnit == cacheUnit
+  local changed = frame._msufTextPowerTypeKnown ~= true
+    or not sameUnit
+    or powerType ~= frame._msufTextPowerType
+    or powerToken ~= frame._msufTextPowerToken
+  frame._msufTextPowerType = powerType
+  frame._msufTextPowerToken = powerToken
+  frame._msufTextPowerTypeKnown = true
+  frame._msufTextPowerTypeUnit = cacheUnit
+  return changed
+end
+
+local function SeedCachedPowerMax(frame, unit, powerMax)
+  if not frame or powerMax == nil or issecretvalue(powerMax) == true then
+    return false
+  end
+  frame._msufTextPowerMax = powerMax
+  frame._msufTextPowerMaxUnit = unit
+  return true
+end
+
 local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powerTick)
   local powerType
   if frame._msufTextPowerNeedsType == true then
@@ -583,7 +615,7 @@ local function MarkHealthDirtyRuntime(frame, event, unit, hp, hpMax)
   end
 end
 
-local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
+local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   unit = unit or frame.unit
   local rt = frame._msufTextRuntime
   if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
@@ -596,6 +628,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
       or event == "MSUF_UNIT_IDENTITY_SOFT"
       or event == "MSUF_UNIT_IDENTITY_SOFT_FAST"
       or event == "MSUF_GF_UNIT_IDENTITY")
+  local seededPowerType
   if identityChanged then
     frame._msufTextPowerType = nil
     frame._msufTextPowerToken = nil
@@ -603,10 +636,14 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     frame._msufTextPowerTypeUnit = nil
     frame._msufTextPowerMax = nil
     frame._msufTextPowerMaxUnit = nil
-    if rt.powerColorByType == true then
+    seededPowerType = SeedCachedPowerType(frame, unit, powerType, powerToken)
+    if rt.powerColorByType == true and seededPowerType ~= true then
       RefreshCachedPowerType(frame, unit)
     end
+  else
+    seededPowerType = SeedCachedPowerType(frame, unit, powerType, powerToken)
   end
+  SeedCachedPowerMax(frame, unit, powerMax)
   if rt.powerColorByType == true
     and animate
     and rt.powerRefreshTypeOnTick == true
@@ -781,7 +818,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
   UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt)
 end
 
-local function MarkPowerDirtyRuntime(frame, event, unit, power, powerMax)
+local function MarkPowerDirtyRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   unit = unit or frame.unit
   local rt = frame._msufTextRuntime
   if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
@@ -791,14 +828,16 @@ local function MarkPowerDirtyRuntime(frame, event, unit, power, powerMax)
   if not powerTick
     or not GetTime
     or not QueuePowerTextFlush then
-    return UpdatePowerRuntime(frame, event, unit, power, powerMax)
+    return UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   end
 
   local throttle = rt.powerThrottle or 0
   if throttle <= 0 then
-    return UpdatePowerRuntime(frame, event, unit, power, powerMax)
+    return UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   end
 
+  SeedCachedPowerType(frame, unit, powerType, powerToken)
+  SeedCachedPowerMax(frame, unit, powerMax)
   rt.pendingPower, rt.pendingPowerMax = power, powerMax
   rt.powerTextPending = true
   if rt.powerTimerActive == true then
@@ -1089,23 +1128,23 @@ function PowerText.GetEvents(frame, spec)
   return spec and spec.power and spec.power.frequent == true and POWER_EVENTS_FREQUENT or POWER_EVENTS
 end
 
-function PowerText.Update(frame, event, unit, power, powerMax)
+function PowerText.Update(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   local rt = frame and frame._msufTextRuntime
   if rt and rt.powerThrottle and rt.powerThrottle > 0 then
     local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
     if powerTick then
       local fn = rt.powerDirty or rt.powerHot
       if fn then
-        return fn(frame, event, unit or frame.unit, power, powerMax)
+        return fn(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)
       end
-      return Text.MarkPowerDirty(frame, event, unit or frame.unit, power, powerMax)
+      return Text.MarkPowerDirty(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)
     end
   end
   local fn = rt and rt.powerHot
   if fn then
-    return fn(frame, event, unit or frame.unit, power, powerMax)
+    return fn(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   end
-  return Text.UpdatePower(frame, event, unit or frame.unit, power, powerMax)
+  return Text.UpdatePower(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)
 end
 
 function PowerText.Disable(frame)

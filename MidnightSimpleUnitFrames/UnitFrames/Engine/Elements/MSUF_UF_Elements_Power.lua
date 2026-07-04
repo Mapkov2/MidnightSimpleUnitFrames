@@ -683,7 +683,7 @@ function Power.UpdateValuePlain(frame, event, unit)
   if bar._msufStatusR == nil or powerMetaChanged then
     ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, powerType, powerToken, true))
   end
-  return power, maxPower
+  return power, maxPower, powerType, powerToken, powerMetaChanged
 end
 
 function Power.UpdateValue(frame, event, unit)
@@ -725,7 +725,7 @@ function Power.UpdateValue(frame, event, unit)
   if bar._msufStatusR == nil or powerMetaChanged then
     ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, powerType, powerToken, true))
   end
-  return power, maxPower
+  return power, maxPower, powerType, powerToken, powerMetaChanged
 end
 
 function Power.Update(frame, event, unit)
@@ -752,7 +752,7 @@ function Power.Update(frame, event, unit)
     or (not animate and (event == "UNIT_DISPLAYPOWER" or event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_POWER_LAYOUT")) then
     ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, powerType, powerToken, true))
   end
-  return power, maxPower
+  return power, maxPower, powerType, powerToken, powerMetaChanged
 end
 
 UF.RegisterElement("Power", Power)
