@@ -1923,6 +1923,7 @@ end
 
 local function UnregisterNativeContainer(container)
     if not container then return true end
+    if type(container.SetEnabled) == "function" then container:SetEnabled(false) end
     container._msufA3NativeRegistered = nil
     container._msufA3NativeRegistrationPending = nil
     return true
@@ -2256,7 +2257,7 @@ function A3.RenderFrame(frame, reason)
     if DEFERRED_IDENTITY_REASONS[reason] == true then
         -- Coalesce target/focus swaps off the tick; the container's own
         -- UNIT_AURA full-update repopulates content. See FlushIdentityQueue.
-        return A3.QueueIdentityAuraRebuild(frame)
+        if A3.QueueIdentityAuraRebuild(frame) then return true end
     end
     if IDENTITY_AURA_REFRESH_REASONS[reason] == true then
         -- Group identity stays synchronous so roster builds settle in one pass,
@@ -2279,6 +2280,10 @@ A3.RenderCachedFrame = A3.RenderFrame
 
 function A3.QueueIdentityAuraRebuild(frame)
     if not frame then return false end
+    local root = frame.Auras
+    if not (root and root._msufA3NativeRoot == true and root._msufA3Applied == true) then
+        return false
+    end
     _identityQueue = _identityQueue or {}
     _identityQueue[frame] = true
     if not _identityFlushScheduled then
