@@ -201,10 +201,10 @@ local function RunPowerHot(frame, owners, event, unit)
   unit = unit or frame.unit
   local updateFn = frame._msufUpdatePower
   if not updateFn then return end
-  local power, maxPower = updateFn(frame, event, unit)
+  local power, maxPower, powerType, powerToken, powerMetaChanged = updateFn(frame, event, unit)
   local textFn = frame._msufUpdatePowerText
   if textFn then
-    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower)
+    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, nil, powerType, powerToken, powerMetaChanged)
   end
 end
 
@@ -407,24 +407,24 @@ local function HealthTextNeedsUpdate(frame, healthTick, hp, maxHP)
   return HealthTextNeedsTickUpdate(frame, hp, maxHP)
 end
 
-RunCompiledPowerText = function(frame, fn, event, unit, power, powerMax, dirtyFn)
+RunCompiledPowerText = function(frame, fn, event, unit, power, powerMax, dirtyFn, powerType, powerToken, powerMetaChanged)
   if not fn then return end
   local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   if PowerTextNeedsUpdate(frame, powerTick, power, powerMax) then
     if dirtyFn and powerTick then
-      return dirtyFn(frame, event, unit, power, powerMax)
+      return dirtyFn(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
     end
-    fn(frame, event, unit, power, powerMax)
+    fn(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   end
 end
 
-RunCompiledPowerTextTick = function(frame, fn, event, unit, power, powerMax, dirtyFn)
+RunCompiledPowerTextTick = function(frame, fn, event, unit, power, powerMax, dirtyFn, powerType, powerToken, powerMetaChanged)
   if not fn then return end
   if PowerTextNeedsTickUpdate(frame, power, powerMax) then
     if dirtyFn then
-      return dirtyFn(frame, event, unit, power, powerMax)
+      return dirtyFn(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
     end
-    fn(frame, event, unit, power, powerMax)
+    fn(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   end
 end
 
@@ -651,16 +651,16 @@ end
 
 local function RunHotPowerTextOnly(frame, state, event, unit, sameUnit)
   if sameUnit then
-    local power, maxPower = state.power(frame, event, unit)
-    RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    local power, maxPower, powerType, powerToken, powerMetaChanged = state.power(frame, event, unit)
+    RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
   end
   return true
 end
 
 local function RunHotPowerTextTickOnly(frame, state, event, unit, sameUnit)
   if sameUnit then
-    local power, maxPower = state.power(frame, event, unit)
-    RunCompiledPowerTextTick(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    local power, maxPower, powerType, powerToken, powerMetaChanged = state.power(frame, event, unit)
+    RunCompiledPowerTextTick(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
   end
   return true
 end
@@ -861,9 +861,9 @@ local function RunHotKindPower(frame, state, event, unit, sameUnit, a, b, c)
   end
   local fn = state.power
   if fn then
-    local power, maxPower = fn(frame, event, unit)
+    local power, maxPower, powerType, powerToken, powerMetaChanged = fn(frame, event, unit)
     local textFn = state.powerText
-    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, state.powerTextDirty)
+    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
   else
     fn = state.powerText
     RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
@@ -902,9 +902,9 @@ local function RunHotKindConnection(frame, state, event, unit, sameUnit, a, b, c
   end
   fn = state.power
   if fn then
-    local power, maxPower = fn(frame, event, unit)
+    local power, maxPower, powerType, powerToken, powerMetaChanged = fn(frame, event, unit)
     local textFn = state.powerText
-    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, state.powerTextDirty)
+    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
   else
     fn = state.powerText
     RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
@@ -959,8 +959,8 @@ end
 local function RunConnectionPower(frame, state, event, unit)
   local fn = state.power
   if fn then
-    local power, maxPower = fn(frame, event, unit)
-    RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    local power, maxPower, powerType, powerToken, powerMetaChanged = fn(frame, event, unit)
+    RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
   else
     RunCompiledPowerText(frame, state.powerText, event, unit, nil, nil, state.powerTextDirty)
   end
