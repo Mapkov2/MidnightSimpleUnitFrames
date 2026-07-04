@@ -87,8 +87,10 @@ function Render.Install(box, ctx, deps)
         local label = H.PreviewScopeLabel(kind)
         local conf = H.Conf(kind)
         local gf = MSUF and MSUF.GF
-        local animState = _G.MSUF_GetPreviewAnimationFrameState
-            and _G.MSUF_GetPreviewAnimationFrameState(self, 1, kind, self._msufGFMenuPreviewAnimState or {})
+        local previewAnimation = MSUF and MSUF.PreviewAnimation
+        local buildFrameState = previewAnimation and previewAnimation.BuildFrameState or _G.MSUF_BuildPreviewAnimationFrameState
+        local animState = self._animationEnabled == true and type(buildFrameState) == "function"
+            and buildFrameState(self, 1, kind, self._msufGFMenuPreviewAnimState or {}, self._animationElapsed)
         if animState then self._msufGFMenuPreviewAnimState = animState end
         local hpPct = animState and max(0.02, min(0.98, tonumber(animState.hpPct) or 0.72)) or 0.72
         local powerPct = animState and max(0, min(1, tonumber(animState.powerPct) or 0.70)) or 0.70
@@ -655,14 +657,15 @@ function Render.Install(box, ctx, deps)
             border:Show()
         end
         local function PreviewAuraState(groupKey, index, handle, cfg)
-            local fn = _G.MSUF_GetPreviewAnimationAuraState
-            if type(fn) ~= "function" or not handle then return nil end
+            if not (self._animationEnabled == true and handle) then return nil end
+            local buildAuraState = previewAnimation and previewAnimation.BuildAuraState or _G.MSUF_BuildPreviewAnimationAuraState
+            if type(buildAuraState) ~= "function" then return nil end
             handle._previewAuraStates = handle._previewAuraStates or {}
             local scratch = handle._previewAuraStates[index] or {}
             handle._previewAuraStates[index] = scratch
-            return fn(groupKey, index, scratch, {
+            return buildAuraState(groupKey, index, scratch, {
                 decimalSeconds = cfg and cfg.cooldownDecimalSeconds == true,
-            })
+            }, self._animationElapsed)
         end
         local function LayoutAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
             if not (swipe and icon) then return end

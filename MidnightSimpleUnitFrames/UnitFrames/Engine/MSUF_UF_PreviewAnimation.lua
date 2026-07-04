@@ -20,10 +20,18 @@ local floor, min, max = math.floor, math.min, math.max
 local format = string.format
 local type, tonumber, tostring = type, tonumber, tostring
 
-local UPDATE_INTERVAL = 0.10
+local UPDATE_INTERVAL = 1 / 20
 local NO_TARGET_GRACE = 0.35
 local PREVIEW_UNITS = { "target", "focus", "targettarget", "focustarget", "pet" }
 local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
+local PREVIEW_NAME_LABELS = {
+  player = "Player Name Position",
+  target = "Target Name Position",
+  focus = "Focus Name Position",
+  targettarget = "Target of Target Name Position",
+  focustarget = "Focus Target Name Position",
+  pet = "Pet Name Position",
+}
 local CASTBAR_PREVIEWS = {
   { name = "MSUF_PlayerCastbarPreview", unit = "player", label = "Test Cast" },
   { name = "MSUF_TargetCastbarPreview", unit = "target", label = "Test Cast" },
@@ -32,8 +40,11 @@ local CASTBAR_PREVIEWS = {
 
 local driver
 local noTargetElapsed = 0
+local editModeStopListenerRegistered
+local RegisterEditModeStopListener
 local percentValue = 0
 local frameStateScratch = {}
+local unitFrameRestoreFrames = setmetatable({}, { __mode = "k" })
 
 PA.menuBoxes = PA.menuBoxes or setmetatable({}, { __mode = "k" })
 PA.groupBoxes = PA.groupBoxes or setmetatable({}, { __mode = "k" })
@@ -114,11 +125,10 @@ function PA.Elapsed()
   return tonumber(PA.elapsed) or 0
 end
 
-function PA.FrameState(frame, index, kind, scratch)
-  if PA.enabled ~= true then return nil end
+function PA.BuildFrameState(frame, index, kind, scratch, elapsed)
   scratch = scratch or frameStateScratch
   local i = tonumber(index) or tonumber(frame and frame._msufGFPreviewIndex) or 1
-  local elapsed = PA.Elapsed()
+  elapsed = tonumber(elapsed) or 0
   local offset = (i * 0.073) + ((tostring(kind or frame and frame.unit or ""):byte(1) or 0) * 0.001)
   local hpWave = Triangle(elapsed, 0.145, offset)
   local powerWave = Triangle(elapsed, 0.21, offset + 0.31)
@@ -138,8 +148,12 @@ function PA.FrameState(frame, index, kind, scratch)
   return scratch
 end
 
-function PA.AuraState(kind, index, scratch, options)
+function PA.FrameState(frame, index, kind, scratch)
   if PA.enabled ~= true then return nil end
+  return PA.BuildFrameState(frame, index, kind, scratch, PA.Elapsed())
+end
+
+function PA.BuildAuraState(kind, index, scratch, options, elapsed)
   kind = AuraKind(kind)
   scratch = scratch or {}
   options = options or {}
@@ -147,7 +161,7 @@ function PA.AuraState(kind, index, scratch, options)
   local i = tonumber(index) or 1
   local durations = AURA_DURATIONS[kind] or AURA_DURATIONS.buff
   local duration = durations[((i - 1) % #durations) + 1] or 30
-  local elapsed = PA.Elapsed()
+  elapsed = tonumber(elapsed) or 0
   local offsetFrac = ((i * 0.173) + (AURA_KIND_OFFSETS[kind] or 0)) % 1
   local auraElapsed = (elapsed + duration * offsetFrac) % duration
   local remaining = max(0.1, duration - auraElapsed)
@@ -172,6 +186,11 @@ function PA.AuraState(kind, index, scratch, options)
   scratch.text = FormatAuraTime(remaining, duration, options.decimalSeconds == true)
   scratch.stacks = stacks
   return scratch
+end
+
+function PA.AuraState(kind, index, scratch, options)
+  if PA.enabled ~= true then return nil end
+  return PA.BuildAuraState(kind, index, scratch, options, PA.Elapsed())
 end
 
 local function NotifyRefreshOwners()
@@ -239,12 +258,44 @@ local function BossPreviewActive()
   return _G.MSUF_BossTestMode == true or _G.MSUF2_BossUnitframePreviewActive == true
 end
 
+local function EditModeAnimationTargetActive()
+  if not EditModePreviewActive() then return false end
+  return PA.source == "edit_mode"
+    or _G.MSUF_UnitPreviewActive == true
+    or _G.MSUF_PreviewTestMode == true
+end
+
 local function HasVisibleTarget()
+  if PA.source == "edit_mode" then return EditModeAnimationTargetActive() end
   if HasVisibleMenuBox() then return true end
   if HasVisibleGroupBox() then return true end
   if GroupPreviewActive() then return true end
   if BossPreviewActive() then return true end
-  return EditModePreviewActive() and _G.MSUF_UnitPreviewActive == true
+  return EditModeAnimationTargetActive()
+end
+
+local function PrepareEditModePreviewForAnimation()
+  if not EditModePreviewActive() then return end
+  if RegisterEditModeStopListener then RegisterEditModeStopListener() end
+  if _G.MSUF_UnitPreviewActive ~= true then
+    ExportPublic("MSUF_UnitPreviewActive", true)
+  end
+
+  if type(_G.MSUF_SyncAllUnitPreviewsAsync) == "function" then
+    _G.MSUF_SyncAllUnitPreviewsAsync()
+  elseif type(_G.MSUF_SyncAllUnitPreviews) == "function" then
+    _G.MSUF_SyncAllUnitPreviews()
+  end
+
+  if type(_G.MSUF_GF_EM2_IsPreviewShown) == "function"
+    and _G.MSUF_GF_EM2_IsPreviewShown() == true
+    and type(_G.MSUF_GF_EM2_ShowPreview) == "function" then
+    _G.MSUF_GF_EM2_ShowPreview()
+  end
+
+  if type(_G.MSUF_EM2_ReforcePreviewFrames) == "function" then
+    _G.MSUF_EM2_ReforcePreviewFrames()
+  end
 end
 
 local function SetBar(bar, value, maxValue)
@@ -267,6 +318,202 @@ local function SetRegionShown(region, shown, alpha)
     region:Show()
   elseif region.Hide then
     region:Hide()
+  end
+end
+
+local function StoreRegionState(region)
+  if not region then return nil end
+  local state = { region = region }
+  if region.GetAlpha then state.alpha = region:GetAlpha() end
+  if region.IsShown then state.shown = region:IsShown() end
+  return state
+end
+
+local function RestoreRegionState(state)
+  local region = state and state.region
+  if not region then return end
+  if region.SetAlpha and state.alpha ~= nil then region:SetAlpha(state.alpha) end
+  if state.shown ~= nil then SetRegionShown(region, state.shown == true) end
+end
+
+local function StoreStatusBarState(bar)
+  if not bar then return nil end
+  local state = { bar = bar }
+  if bar.GetMinMaxValues then state.minValue, state.maxValue = bar:GetMinMaxValues() end
+  if bar.GetValue then state.value = bar:GetValue() end
+  if bar.IsShown then state.shown = bar:IsShown() end
+  if bar.GetAlpha then state.alpha = bar:GetAlpha() end
+  local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+  if tex and tex.GetAlpha then state.fillAlpha = tex:GetAlpha() end
+  return state
+end
+
+local function RuntimeStatusBarValues(frame, bar, role)
+  if not bar then return nil, nil end
+  local unit = frame and frame.unit
+  local value, maxValue
+  if role == "health" and unit then
+    if bar._msufHealthValueUnit == unit then value = bar._msufHealthValue end
+    if bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit then maxValue = bar._msufHealthMax end
+  elseif role == "power" and unit then
+    if bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then maxValue = bar._msufPowerMax end
+  end
+  if value == nil then
+    if bar._msufDirectValuePlain == true then
+      value = bar._msufDirectValue
+    elseif bar._msufValuePlain == true then
+      value = bar._msufValue
+    end
+  end
+  if maxValue == nil then
+    if bar._msufDirectMaxValuePlain == true then
+      maxValue = bar._msufDirectMaxValue
+    elseif bar._msufMaxValuePlain == true then
+      maxValue = bar._msufMaxValue
+    end
+  end
+  return value, maxValue
+end
+
+local function RestoreStatusBarState(state, frame, role)
+  local bar = state and state.bar
+  if not bar then return end
+  local value, maxValue = RuntimeStatusBarValues(frame, bar, role)
+  value = value ~= nil and value or state.value
+  maxValue = maxValue ~= nil and maxValue or state.maxValue
+  if bar.SetMinMaxValues and state.minValue ~= nil and maxValue ~= nil then
+    bar:SetMinMaxValues(state.minValue, maxValue)
+  end
+  if bar.SetValue and value ~= nil then bar:SetValue(value) end
+  if bar.SetAlpha and state.alpha ~= nil then bar:SetAlpha(state.alpha) end
+  local tex = bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+  if tex and tex.SetAlpha and state.fillAlpha ~= nil then tex:SetAlpha(state.fillAlpha) end
+  if state.shown ~= nil then SetRegionShown(bar, state.shown == true) end
+end
+
+local function StoreFontStringState(fontString)
+  if not (fontString and fontString.SetText) then return nil end
+  local state = { region = fontString }
+  if fontString.GetText then state.text = fontString:GetText() end
+  if fontString.GetAlpha then state.alpha = fontString:GetAlpha() end
+  if fontString.IsShown then state.shown = fontString:IsShown() end
+  return state
+end
+
+local function RestoreFontStringState(state)
+  local fontString = state and state.region
+  if not (fontString and fontString.SetText) then return end
+  fontString:SetText(state.text or "")
+  if fontString.SetAlpha and state.alpha ~= nil then fontString:SetAlpha(state.alpha) end
+  if state.shown ~= nil then SetRegionShown(fontString, state.shown == true) end
+end
+
+local function StoreTextSlotStates(slots, count)
+  if type(slots) ~= "table" then return nil end
+  local states
+  count = tonumber(count) or #slots
+  for i = 1, count do
+    local state = StoreFontStringState(slots[i])
+    if state then
+      states = states or {}
+      states[#states + 1] = state
+    end
+  end
+  return states
+end
+
+local function RestoreTextSlotStates(states)
+  if type(states) ~= "table" then return end
+  for i = 1, #states do RestoreFontStringState(states[i]) end
+end
+
+local UNIT_TEXT_RUNTIME_FIELDS = {
+  "healthMissing",
+  "healthTextPending",
+  "healthTimerActive",
+  "pendingHP",
+  "pendingHPMax",
+  "nextHealthTextTime",
+  "powerTextPending",
+  "powerTimerActive",
+  "pendingPower",
+  "pendingPowerMax",
+  "nextPowerTextTime",
+}
+
+local function StoreTextRuntimeState(frame, restore)
+  local rt = frame and frame._msufTextRuntime
+  if not rt then return end
+  local values = {}
+  for i = 1, #UNIT_TEXT_RUNTIME_FIELDS do
+    local key = UNIT_TEXT_RUNTIME_FIELDS[i]
+    values[key] = rt[key]
+  end
+  restore.textRuntime = { runtime = rt, values = values }
+  restore.healthTextSlots = StoreTextSlotStates(rt.healthSlots, rt.healthSlotCount)
+  restore.powerTextSlots = StoreTextSlotStates(rt.powerSlots, rt.powerSlotCount)
+end
+
+local function RestoreTextRuntimeState(restore)
+  local textRuntime = restore and restore.textRuntime
+  local rt = textRuntime and textRuntime.runtime
+  if rt then
+    local values = textRuntime.values or {}
+    for i = 1, #UNIT_TEXT_RUNTIME_FIELDS do
+      local key = UNIT_TEXT_RUNTIME_FIELDS[i]
+      rt[key] = values[key]
+    end
+  end
+  RestoreTextSlotStates(restore and restore.healthTextSlots)
+  RestoreTextSlotStates(restore and restore.powerTextSlots)
+end
+
+local function ClearEditModePreviewFlags()
+  ExportPublic("MSUF_UnitPreviewActive", false)
+  ExportPublic("MSUF_PreviewTestMode", false)
+  ExportPublic("MSUF_BossTestMode", false)
+  ExportPublic("MSUF2_BossUnitframePreviewActive", nil)
+end
+
+local function RuntimeStopReason(frame)
+  return frame and frame._msufGFKind and "MSUF_GF_UNIT_IDENTITY" or "MSUF_UNIT_IDENTITY_FAST"
+end
+
+local function RefreshUnitFrameRuntimeAfterPreview(frame)
+  if not frame then return end
+  local unit = frame.unit
+  local reason = RuntimeStopReason(frame)
+
+  frame._msufPreviewNameText = nil
+
+  local hp, hpMax, calc
+  local updateHealth = frame._msufUpdateHealth
+  if type(updateHealth) == "function" then
+    hp, hpMax, calc = updateHealth(frame, reason, unit)
+  end
+  local updateHealthText = frame._msufUpdateHealthText
+  if type(updateHealthText) == "function" then
+    updateHealthText(frame, reason, unit, hp, hpMax)
+  end
+
+  local power, powerMax, powerType, powerToken, powerMetaChanged
+  local updatePower = frame._msufUpdatePower
+  if type(updatePower) == "function" then
+    power, powerMax, powerType, powerToken, powerMetaChanged = updatePower(frame, reason, unit)
+  end
+  local updatePowerText = frame._msufUpdatePowerText
+  if type(updatePowerText) == "function" then
+    updatePowerText(frame, reason, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
+  end
+
+  local updateName = frame._msufUpdateNameText
+  if type(updateName) == "function" then
+    updateName(frame, reason, unit)
+  end
+
+  local updatePrediction = frame._msufUpdatePrediction
+  if type(updatePrediction) == "function" then
+    updatePrediction(frame, reason, unit, hp, hpMax, calc)
   end
 end
 
@@ -346,13 +593,85 @@ local function ApplyText(frame, hp, hpMax, power, powerMax, hpPct, powerPct)
   text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PercentValue, rt.powerNeedsPercent, rt)
 end
 
-local function SetTextIfChanged(fontString, text)
-  if not fontString then return end
-  if type(_G.MSUF_SetTextIfChanged) == "function" then
-    _G.MSUF_SetTextIfChanged(fontString, text or "")
-  elseif fontString.SetText then
-    fontString:SetText(text or "")
+local function ApplyPreviewName(frame, kind)
+  local text = MSUF and MSUF.UFText
+  local label = PREVIEW_NAME_LABELS[kind or frame and frame.unit]
+  if not (frame and label and text and type(text.UpdateName) == "function") then
+    if frame then frame._msufPreviewNameText = nil end
+    return false
   end
+  frame._msufPreviewNameText = label
+  text.UpdateName(frame, "MSUF_PREVIEW_NAME", frame.unit)
+  return true
+end
+
+local function SetTextIfChanged(fontString, text)
+  if fontString and fontString.SetText then fontString:SetText(text or "") end
+end
+
+local function StoreUnitFrameRestore(frame)
+  if not frame then return nil end
+  local restore = frame._msufPreviewAnimUnitRestore
+  if restore then return restore end
+
+  restore = {
+    source = PA.source,
+    unit = frame.unit,
+    healthBar = StoreStatusBarState(frame.hpBar or frame.Health or frame.health),
+    powerBar = StoreStatusBarState(frame.targetPowerBar or frame.powerBar or frame.Power or frame.power),
+    incomingHealBar = StoreStatusBarState(frame.incomingHealBar),
+    absorbBar = StoreStatusBarState(frame.absorbBar),
+    healAbsorbBar = StoreStatusBarState(frame.healAbsorbBar),
+    nameText = StoreFontStringState(frame.nameText),
+    nameTextUnit = frame._msufNameTextUnit,
+    nameStatusUnit = frame._msufNameStatusUnit,
+    nameStatusHidden = frame._msufNameStatusHidden,
+    previewNameText = frame._msufPreviewNameText,
+    combatIcon = StoreRegionState(frame.combatStateIndicatorIcon),
+    incomingResIcon = StoreRegionState(frame.incomingResIndicatorIcon or frame.resurrectIcon),
+    readyCheckIcon = StoreRegionState(frame.readyCheckIcon),
+  }
+  StoreTextRuntimeState(frame, restore)
+  frame._msufPreviewAnimUnitRestore = restore
+  unitFrameRestoreFrames[frame] = true
+  return restore
+end
+
+local function RestoreUnitFrame(frame, refreshRuntime)
+  local restore = frame and frame._msufPreviewAnimUnitRestore
+  if not restore then return false end
+
+  RestoreStatusBarState(restore.healthBar, frame, "health")
+  RestoreStatusBarState(restore.powerBar, frame, "power")
+  RestoreStatusBarState(restore.incomingHealBar, frame)
+  RestoreStatusBarState(restore.absorbBar, frame)
+  RestoreStatusBarState(restore.healAbsorbBar, frame)
+  frame._msufPreviewNameText = restore.previewNameText
+  frame._msufNameTextUnit = restore.nameTextUnit
+  frame._msufNameStatusUnit = restore.nameStatusUnit
+  frame._msufNameStatusHidden = restore.nameStatusHidden
+  RestoreFontStringState(restore.nameText)
+  RestoreTextRuntimeState(restore)
+  RestoreRegionState(restore.combatIcon)
+  RestoreRegionState(restore.incomingResIcon)
+  RestoreRegionState(restore.readyCheckIcon)
+
+  frame._msufPreviewNameText = nil
+  if refreshRuntime == true then
+    RefreshUnitFrameRuntimeAfterPreview(frame)
+  end
+  frame._msufPreviewAnimState = nil
+  frame._msufPreviewAnimUnitRestore = nil
+  unitFrameRestoreFrames[frame] = nil
+  return true
+end
+
+local function RestoreUnitAnimationFrames(refreshRuntime)
+  local any = false
+  for frame in pairs(unitFrameRestoreFrames) do
+    any = RestoreUnitFrame(frame, refreshRuntime) or any
+  end
+  return any
 end
 
 local function CastbarTimeEnabled(unit)
@@ -383,6 +702,12 @@ local function StoreCastbarRestore(frame)
   if restore then return restore end
   restore = {}
   frame._msufPreviewAnimCastRestore = restore
+  restore.source = PA.source
+  restore.testMode = frame.MSUF_testMode
+  restore.testActive = frame._msufTestActive
+  restore.testStart = frame.MSUF_testStart
+  restore.testDur = frame.MSUF_testDur
+  if frame.GetScript then restore.onUpdate = frame:GetScript("OnUpdate") end
 
   local bar = frame.statusBar
   if bar then
@@ -404,6 +729,15 @@ local function StoreCastbarRestore(frame)
   end
   if frame.spark and frame.spark.IsShown then restore.sparkShown = frame.spark:IsShown() end
   return restore
+end
+
+local function OwnCastbarPreviewFrame(frame, restore)
+  if not (frame and restore and restore.source == "edit_mode") then return end
+  frame.MSUF_testMode = nil
+  frame._msufTestActive = nil
+  frame.MSUF_testStart = nil
+  frame.MSUF_testDur = nil
+  if frame.SetScript then frame:SetScript("OnUpdate", nil) end
 end
 
 local function RestoreCastbarFrame(frame)
@@ -431,17 +765,33 @@ local function RestoreCastbarFrame(frame)
     if restore.latencyShown ~= nil then SetRegionShown(frame.latencyBar, restore.latencyShown == true) end
   end
   if frame.spark and restore.sparkShown ~= nil then SetRegionShown(frame.spark, restore.sparkShown == true) end
+  if restore.source == "edit_mode" then
+    frame.MSUF_testMode = nil
+    frame._msufTestActive = nil
+    frame.MSUF_testStart = nil
+    frame.MSUF_testDur = nil
+    if frame.SetScript then frame:SetScript("OnUpdate", nil) end
+  else
+    frame.MSUF_testMode = restore.testMode
+    frame._msufTestActive = restore.testActive
+    frame.MSUF_testStart = restore.testStart
+    frame.MSUF_testDur = restore.testDur
+    if frame.SetScript and restore.onUpdate then frame:SetScript("OnUpdate", restore.onUpdate) end
+  end
   if type(_G.MSUF_ResetCastbarGlowFade) == "function" then _G.MSUF_ResetCastbarGlowFade(frame) end
+  frame._msufPreviewAnimCastState = nil
   frame._msufPreviewAnimCastRestore = nil
 end
 
 local function ApplyCastbarPreviewFrame(frame, index, kind, label)
   if PA.enabled ~= true or InCombat() or not IsVisible(frame) or not frame.statusBar then return false end
-  if frame.MSUF_testMode == true or frame._msufTestActive == true then return false end
+  local ownsEditModeTest = PA.source == "edit_mode"
+  if not ownsEditModeTest and (frame.MSUF_testMode == true or frame._msufTestActive == true) then return false end
 
   local state = PA.FrameState(frame, index, kind, frame._msufPreviewAnimCastState or {})
   frame._msufPreviewAnimCastState = state
-  StoreCastbarRestore(frame)
+  local restore = StoreCastbarRestore(frame)
+  OwnCastbarPreviewFrame(frame, restore)
 
   local duration = tonumber(state.castDuration) or 2.8
   if duration <= 0 then duration = 2.8 end
@@ -477,6 +827,7 @@ function PA.ApplyUnitFrame(frame, index, kind)
   if PA.enabled ~= true or InCombat() or not IsVisible(frame) then return false end
   local state = PA.FrameState(frame, index, kind, frame._msufPreviewAnimState or {})
   frame._msufPreviewAnimState = state
+  StoreUnitFrameRestore(frame)
 
   local hpMax = 1000000
   local hp = floor(hpMax * (state.hpPct or 0.7) + 0.5)
@@ -486,6 +837,7 @@ function PA.ApplyUnitFrame(frame, index, kind)
   SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax)
   SetBar(frame.targetPowerBar or frame.powerBar or frame.Power or frame.power, power, powerMax)
   ApplyPrediction(frame, hpMax, state)
+  ApplyPreviewName(frame, kind)
   ApplyText(frame, hp, hpMax, power, powerMax, state.hpPct, state.powerPct)
   ApplyStatus(frame, state)
   return true
@@ -551,7 +903,7 @@ local function RestoreCastbarPreviewFrames()
 end
 
 local function RefreshStaticCastbarPreviews()
-  if EditModePreviewActive() and _G.MSUF_UnitPreviewActive == true and type(_G.MSUF_UpdatePlayerCastbarPreview) == "function" then
+  if EditModeAnimationTargetActive() and type(_G.MSUF_UpdatePlayerCastbarPreview) == "function" then
     _G.MSUF_UpdatePlayerCastbarPreview()
     return
   end
@@ -597,6 +949,35 @@ local function RefreshGroupPreviews()
   return false
 end
 
+local function RefreshGroupRuntimeFrames()
+  if not (PA.source == "edit_mode" and EditModePreviewActive()) then return false end
+  if type(_G.MSUF_GF_EM2_IsPreviewShown) == "function" and _G.MSUF_GF_EM2_IsPreviewShown() ~= true then return false end
+  local gf = MSUF and MSUF.GF
+  local each = gf and gf.ForEachFrame
+  if type(each) ~= "function" then return false end
+  local any = false
+  local index = 0
+  each(function(frame)
+    if frame and frame._msufGFIsPreviewFrame ~= true and IsVisible(frame) then
+      index = index + 1
+      any = PA.ApplyUnitFrame(frame, index, frame._msufGFKind or "group") or any
+    end
+  end, false)
+  return any
+end
+
+local function RefreshStaticGroupRuntimeFrames()
+  local refresh = _G.MSUF_GF_RefreshVisuals
+  if type(refresh) == "function" then
+    refresh(nil, MSUF and MSUF.GF and MSUF.GF.DIRTY_VISUAL)
+    return
+  end
+  local gf = MSUF and MSUF.GF
+  if gf and type(gf.RefreshVisuals) == "function" then
+    gf.RefreshVisuals(nil, gf.DIRTY_VISUAL)
+  end
+end
+
 local function RefreshEditAuraPreviews()
   if not EditModePreviewActive() then return false end
   local a3 = MSUF and MSUF.MSUF_Auras3
@@ -608,7 +989,59 @@ local function RefreshEditAuraPreviews()
   return false
 end
 
+local function RefreshEditModeTargets()
+  if not EditModeAnimationTargetActive() then return false end
+  local any = false
+  any = RefreshGroupPreviews() or any
+  any = RefreshGroupRuntimeFrames() or any
+  any = RefreshUnitPreviewFrames() or any
+  any = RefreshBossPreviewFrames() or any
+  any = RefreshEditAuraPreviews() or any
+  any = RefreshCastbarPreviewFrames() or any
+  return any
+end
+
+local function RefreshPreviewTargets()
+  local any = false
+  any = RefreshMenuBoxes() or any
+  any = RefreshGroupBoxes() or any
+  any = RefreshGroupPreviews() or any
+  any = RefreshBossPreviewFrames() or any
+  any = RefreshCastbarPreviewFrames() or any
+  return any
+end
+
 local StopDriver
+
+local function RefreshAfterDriverStop(stoppedSource)
+  RefreshStaticCastbarPreviews()
+  RefreshMenuBoxes()
+  RefreshGroupBoxes()
+  RefreshGroupPreviews()
+  if stoppedSource == "edit_mode" then
+    RefreshStaticGroupRuntimeFrames()
+  end
+  RefreshEditAuraPreviews()
+  if _G.MSUF_EM2_ReforcePreviewFrames then
+    _G.MSUF_EM2_ReforcePreviewFrames()
+  end
+  if BossPreviewActive() and _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
+    _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
+  end
+end
+
+RegisterEditModeStopListener = function()
+  if editModeStopListenerRegistered then return end
+  local register = _G.MSUF_RegisterAnyEditModeListener
+  if type(register) ~= "function" then return end
+  editModeStopListenerRegistered = true
+  register(function(active)
+    if active == true then return end
+    if PA.enabled == true and PA.source == "edit_mode" then
+      StopDriver(true)
+    end
+  end)
+end
 
 local function AnimationOnUpdate(_, elapsed)
   if PA.enabled ~= true then
@@ -616,7 +1049,7 @@ local function AnimationOnUpdate(_, elapsed)
     return
   end
   if InCombat() then
-    StopDriver(true)
+    StopDriver(true, true)
     return
   end
   elapsed = tonumber(elapsed) or 0
@@ -634,14 +1067,7 @@ local function AnimationOnUpdate(_, elapsed)
   end
   noTargetElapsed = 0
 
-  local any = false
-  any = RefreshMenuBoxes() or any
-  any = RefreshGroupBoxes() or any
-  any = RefreshGroupPreviews() or any
-  any = RefreshUnitPreviewFrames() or any
-  any = RefreshBossPreviewFrames() or any
-  any = RefreshEditAuraPreviews() or any
-  any = RefreshCastbarPreviewFrames() or any
+  local any = PA.source == "edit_mode" and RefreshEditModeTargets() or RefreshPreviewTargets()
   if not any then
     noTargetElapsed = noTargetElapsed + UPDATE_INTERVAL
     if noTargetElapsed >= NO_TARGET_GRACE then StopDriver(true) end
@@ -654,7 +1080,7 @@ local function EnsureDriver()
   driver:Hide()
   driver:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_REGEN_DISABLED" then
-      StopDriver(true)
+      StopDriver(true, true)
     end
   end)
   return driver
@@ -666,35 +1092,36 @@ local function StartDriver()
   noTargetElapsed = 0
   PA._accum = 0
   f:RegisterEvent("PLAYER_REGEN_DISABLED")
-  if f.SetOnUpdateMode then f:SetOnUpdateMode("RunWhenVisible") end
   f:SetScript("OnUpdate", AnimationOnUpdate)
   f:Show()
   NotifyRefreshOwners()
-  return true
+  AnimationOnUpdate(f, UPDATE_INTERVAL)
+  return PA.enabled == true
 end
 
-StopDriver = function(clearEnabled)
+StopDriver = function(clearEnabled, forceCombatStop)
+  local stoppedSource = PA.source
+  local stoppedInCombat = forceCombatStop == true or InCombat()
+  local combatEditModeStop = stoppedSource == "edit_mode" and stoppedInCombat == true
   if driver then
     driver:SetScript("OnUpdate", nil)
     driver:UnregisterEvent("PLAYER_REGEN_DISABLED")
-    if driver.SetOnUpdateMode then driver:SetOnUpdateMode("Disabled") end
     driver:Hide()
   end
   PA._accum = 0
   noTargetElapsed = 0
-  if clearEnabled ~= false then PA.enabled = false end
+  if clearEnabled ~= false then
+    PA.enabled = false
+    PA.source = nil
+  end
+  if combatEditModeStop then
+    ClearEditModePreviewFlags()
+  end
   RestoreCastbarPreviewFrames()
-  if clearEnabled ~= false and not InCombat() then
-    RefreshStaticCastbarPreviews()
-    RefreshMenuBoxes()
-    RefreshGroupBoxes()
-    RefreshGroupPreviews()
-    RefreshEditAuraPreviews()
-    if _G.MSUF_EM2_ReforcePreviewFrames then
-      _G.MSUF_EM2_ReforcePreviewFrames()
-    end
-    if BossPreviewActive() and _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
-      _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
+  RestoreUnitAnimationFrames(combatEditModeStop)
+  if clearEnabled ~= false then
+    if not stoppedInCombat then
+      RefreshAfterDriverStop(stoppedSource)
     end
   end
   NotifyRefreshOwners()
@@ -703,13 +1130,19 @@ end
 function PA.SetEnabled(enabled, source)
   enabled = enabled == true
   if enabled and InCombat() then
-    StopDriver(true)
+    StopDriver(true, true)
     return false, "combat"
+  end
+  if enabled and PA.enabled == true and source and PA.source ~= source then
+    StopDriver(false)
   end
   PA.enabled = enabled
   PA.source = enabled and source or nil
   if enabled then
     PA.elapsed = 0
+    if source == "edit_mode" then
+      PrepareEditModePreviewForAnimation()
+    end
     if not StartDriver() then
       PA.enabled = false
       NotifyRefreshOwners()
@@ -722,6 +1155,9 @@ function PA.SetEnabled(enabled, source)
 end
 
 function PA.Toggle(source)
+  if PA.enabled == true and source and PA.source ~= source then
+    return PA.SetEnabled(true, source)
+  end
   return PA.SetEnabled(PA.enabled ~= true, source)
 end
 
@@ -735,5 +1171,7 @@ ExportPublic("MSUF_RegisterPreviewAnimationGroupBox", function(box) return PA.Re
 ExportPublic("MSUF_UnregisterPreviewAnimationGroupBox", function(box) return PA.UnregisterGroupBox(box) end)
 ExportPublic("MSUF_RegisterPreviewAnimationRefreshOwner", function(owner, fn) return PA.RegisterRefreshOwner(owner, fn) end)
 ExportPublic("MSUF_UnregisterPreviewAnimationRefreshOwner", function(owner) return PA.UnregisterRefreshOwner(owner) end)
+ExportPublic("MSUF_BuildPreviewAnimationFrameState", function(frame, index, kind, scratch, elapsed) return PA.BuildFrameState(frame, index, kind, scratch, elapsed) end)
+ExportPublic("MSUF_BuildPreviewAnimationAuraState", function(kind, index, scratch, options, elapsed) return PA.BuildAuraState(kind, index, scratch, options, elapsed) end)
 ExportPublic("MSUF_GetPreviewAnimationFrameState", function(frame, index, kind, scratch) return PA.FrameState(frame, index, kind, scratch) end)
 ExportPublic("MSUF_GetPreviewAnimationAuraState", function(kind, index, scratch, options) return PA.AuraState(kind, index, scratch, options) end)

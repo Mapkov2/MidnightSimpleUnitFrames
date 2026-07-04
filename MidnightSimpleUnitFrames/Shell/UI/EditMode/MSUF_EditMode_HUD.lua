@@ -27,6 +27,7 @@ local SharedUI = U.SharedUI
 local hudFrame, row2Frame
 local previewBtn, previewAnimBtn, auraBtn, snapToggle, resetBtn, settingsBtn, cdmBtn, anchorBtn
 local previewAddonSlot
+local previewAnimRefreshRegistered
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
 local selectionFS, hintFS
@@ -104,6 +105,16 @@ local function SetActive(btn, on)
         btn._label:SetTextColor(TH.offR, TH.offG, TH.offB, 0.85)
         if btn._dot then btn._dot:Hide() end
     end
+end
+
+local function RegisterPreviewAnimationRefreshOwner()
+    if previewAnimRefreshRegistered or not previewAnimBtn then return end
+    local register = _G.MSUF_RegisterPreviewAnimationRefreshOwner
+    if type(register) ~= "function" then return end
+    register(previewAnimBtn, function(btn, active)
+        SetActive(btn, active == true)
+    end)
+    previewAnimRefreshRegistered = true
 end
 
 local function SetTip(widget, text)
@@ -1059,17 +1070,14 @@ local function EnsureHUD()
         local ok, reason = toggle("edit_mode")
         local active = type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true
         SetActive(previewAnimBtn, active)
+        if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
         if ok == false and reason == "combat" then
             HUD.SetStatus(HelpText("Preview animation pauses during combat."), "warn")
         else
             HUD.SetStatus(HelpText(active and "Preview animation on" or "Preview animation off"), "info")
         end
     end, "Animate visible preview dummy frames.\nStops automatically in combat\nor when previews are hidden.")
-    if type(_G.MSUF_RegisterPreviewAnimationRefreshOwner) == "function" then
-        _G.MSUF_RegisterPreviewAnimationRefreshOwner(previewAnimBtn, function(btn, active)
-            SetActive(btn, active == true)
-        end)
-    end
+    RegisterPreviewAnimationRefreshOwner()
 
     auraBtn = AddRowButton(previewItems, previewCluster, "Auras", 52, CLUSTER_BTN_H, 11, function()
         local db = _G.MSUF_DB; if not db then return end
@@ -1274,6 +1282,7 @@ function HUD.RefreshControls(force)
             canOpen and 0.92 or 0.55
         )
     end
+    RegisterPreviewAnimationRefreshOwner()
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
     if previewAnimBtn then
         local active = type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true

@@ -111,14 +111,7 @@ local function ShouldForcePreview(frame)
   return false
 end
 
-local function BuildVisibility(frame, spec)
-  if not (frame and spec) or spec.enabled == false then
-    return "hide"
-  end
-  if ShouldForcePreview(frame) then
-    return "show"
-  end
-
+local function BuildRuntimeVisibility(frame, spec)
   local load = spec.load
   if load and load.hideInInstance == true and InInstance() then
     return "hide"
@@ -159,6 +152,20 @@ local function BuildVisibility(frame, spec)
     rules[i] = nil
   end
   return table.concat(rules, "; ")
+end
+
+local function BuildVisibility(frame, spec)
+  if not (frame and spec) or spec.enabled == false then
+    return "hide"
+  end
+
+  local visibility = BuildRuntimeVisibility(frame, spec)
+  if ShouldForcePreview(frame) then
+    -- Preview must not stay force-shown when combat starts. The secure driver
+    -- falls back to normal runtime visibility in combat without Lua work.
+    return "[nocombat] show; " .. visibility
+  end
+  return visibility
 end
 
 local RegisterUnitWatch = _G.RegisterUnitWatch

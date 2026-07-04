@@ -67,6 +67,10 @@ local function InCombat()
   return InCombatLockdown and InCombatLockdown()
 end
 
+local function PreviewAnimationActive()
+  return type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true
+end
+
 function NormalizeKind(kind)
   if kind == "gf_party" then return "party" end
   if kind == "gf_raid" then return "raid" end
@@ -376,6 +380,7 @@ local function ApplyPreviewStatus(frame, kind, index, role)
   else
     SetShown(frame.raidGroupNameText, false)
   end
+  SetShown(frame.combatStateIndicatorIcon, false)
   SetShown(frame.statusIndicatorText, false)
 end
 
@@ -405,7 +410,7 @@ local function ApplyPreviewData(frame, index, kind)
   end
 
   local hpPct = min(0.95, 0.34 + (((index * 13) % 55) * 0.01))
-  local animState = _G.MSUF_GetPreviewAnimationFrameState
+  local animState = PreviewAnimationActive() and _G.MSUF_GetPreviewAnimationFrameState
     and _G.MSUF_GetPreviewAnimationFrameState(frame, index, kind, frame._msufGFPreviewAnimState or {})
   if animState then
     frame._msufGFPreviewAnimState = animState
@@ -428,9 +433,6 @@ local function ApplyPreviewData(frame, index, kind)
   ApplyPreviewText(frame, hp, hpMax, power, powerMax)
   ApplyPreviewStatus(frame, kind, index, role)
   if animState and frame.combatStateIndicatorIcon then
-    if frame.combatStateIndicatorIcon.SetAtlas then
-      frame.combatStateIndicatorIcon:SetAtlas("UI-HUD-UnitFrame-Player-PortraitCombatIcon")
-    end
     if frame.combatStateIndicatorIcon.SetAlpha then frame.combatStateIndicatorIcon:SetAlpha(0.55 + ((animState.pulse or 0) * 0.45)) end
     frame.combatStateIndicatorIcon:Show()
   end

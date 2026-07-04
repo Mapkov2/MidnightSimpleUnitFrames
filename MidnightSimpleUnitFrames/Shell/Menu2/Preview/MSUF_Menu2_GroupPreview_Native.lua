@@ -21,6 +21,7 @@ local max = math.max
 local min = math.min
 local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 local GROUP_PREVIEW_REFRESH_DELAY = 0.05
+local GROUP_PREVIEW_ANIMATION_INTERVAL = 1 / 20
 local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
 local LAYER_TEXT_OFF = { 0.30, 0.30, 0.36, 0.55 }
@@ -139,14 +140,16 @@ local function OpenGFSection(sectionKey)
         M.SelectPage(pageKey)
     end
 end
-local function PreviewAnimationActive()
-    local fn = _G.MSUF_IsPreviewAnimationEnabled
-    return type(fn) == "function" and fn() == true
+local function PreviewAnimationInCombat()
+    return (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true
+end
+local function PreviewAnimationActive(box)
+    return box and box._animationEnabled == true
 end
 local function RefreshPreviewAnimationButton(box)
     local btn = box and box._previewAnimationButton
     if not btn then return end
-    local active = PreviewAnimationActive()
+    local active = PreviewAnimationActive(box)
     local text = active and "Stop" or "Combat"
     if btn.fs then
         btn.fs:SetText(text)
@@ -159,21 +162,69 @@ local function RefreshPreviewAnimationButton(box)
         btn:SetActive(active)
     end
 end
-local function TogglePreviewAnimation(box)
-    local toggle = _G.MSUF_TogglePreviewAnimation
-    if type(toggle) ~= "function" then return end
-    if box and type(_G.MSUF_RegisterPreviewAnimationGroupBox) == "function" then _G.MSUF_RegisterPreviewAnimationGroupBox(box) end
-    local ok, reason = toggle("group_menu")
-    RefreshPreviewAnimationButton(box)
-    if ok == false and reason == "combat" and box and box._hint then
-        box._hint:SetText((M.Tr and M.Tr("Preview animation pauses during combat.")) or "Preview animation pauses during combat.")
+local function StopPreviewAnimationDriver(box)
+    if not (box and box.SetScript) then return end
+    box:SetScript("OnUpdate", nil)
+    if box.UnregisterEvent then box:UnregisterEvent("PLAYER_REGEN_DISABLED") end
+end
+local function RefreshPreviewAnimationFrame(box)
+    if box and type(box.Refresh) == "function" then
+        box:Refresh("GROUP_PREVIEW_ANIMATE")
+    elseif box and type(box.RequestRefresh) == "function" then
+        box:RequestRefresh("GROUP_PREVIEW_ANIMATE")
+    end
+end
+local function PreviewAnimationOnUpdate(box, elapsed)
+    if not (box and box._animationEnabled == true and box.IsShown and box:IsShown()) then
+        StopPreviewAnimationDriver(box)
         return
     end
-    if box and box.RequestRefresh then
-        box:RequestRefresh("GROUP_PREVIEW_COMBAT_ANIMATE_TOGGLE")
-    elseif box and box.Refresh then
-        box:Refresh("GROUP_PREVIEW_COMBAT_ANIMATE_TOGGLE")
+    if PreviewAnimationInCombat() then
+        StopPreviewAnimationDriver(box)
+        if box._hint then box._hint:SetText((M.Tr and M.Tr("Preview animation pauses during combat.")) or "Preview animation pauses during combat.") end
+        return
     end
+    elapsed = tonumber(elapsed) or 0
+    box._animationElapsed = (tonumber(box._animationElapsed) or 0) + elapsed
+    box._animationAccum = (tonumber(box._animationAccum) or 0) + elapsed
+    if box._animationAccum < GROUP_PREVIEW_ANIMATION_INTERVAL then return end
+    box._animationAccum = 0
+    RefreshPreviewAnimationFrame(box)
+end
+local function StartPreviewAnimationDriver(box)
+    if not (box and box._animationEnabled == true) then return end
+    if PreviewAnimationInCombat() then
+        StopPreviewAnimationDriver(box)
+        return
+    end
+    if box.RegisterEvent then box:RegisterEvent("PLAYER_REGEN_DISABLED") end
+    box:SetScript("OnUpdate", PreviewAnimationOnUpdate)
+end
+local function SetPreviewAnimationEnabled(box, enabled, reason)
+    if not box then return end
+    enabled = enabled == true
+    if enabled and PreviewAnimationInCombat() then
+        if box._hint then box._hint:SetText((M.Tr and M.Tr("Preview animation pauses during combat.")) or "Preview animation pauses during combat.") end
+        RefreshPreviewAnimationButton(box)
+        return
+    end
+    if enabled and box._animationEnabled ~= true then
+        box._animationElapsed = 0
+        box._animationAccum = 0
+    end
+    box._animationEnabled = enabled
+    if enabled then
+        StartPreviewAnimationDriver(box)
+    else
+        StopPreviewAnimationDriver(box)
+        box._msufGFMenuPreviewAnimState = nil
+        box._msufGFMenuPreviewAuraStates = nil
+    end
+    RefreshPreviewAnimationButton(box)
+    RefreshPreviewAnimationFrame(box)
+end
+local function TogglePreviewAnimation(box)
+    SetPreviewAnimationEnabled(box, not PreviewAnimationActive(box), "GROUP_PREVIEW_COMBAT_ANIMATE_TOGGLE")
 end
 local function CreatePreviewAnimationButton(box)
     if not box or box._previewAnimationButton then return end
@@ -200,7 +251,7 @@ local function CreatePreviewAnimationButton(box)
     if btn.SetFrameLevel and parent.GetFrameLevel then btn:SetFrameLevel((parent:GetFrameLevel() or 0) + 85) end
     btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
     if M.AddTooltip then
-        M.AddTooltip(btn, "Combat Preview", "Animates health, power, prediction bars, text values, and combat-state indicators for visible group previews only. Stops automatically in combat.", { hook = true })
+        M.AddTooltip(btn, "Combat Preview", "Animates health, power, prediction bars, text values, aura timers, and combat-state indicators in this preview only. Pauses during combat.", { hook = true })
     end
     box._previewAnimationButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
@@ -1142,15 +1193,18 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
     end
     box:HookScript("OnShow", function(self)
-        if type(_G.MSUF_RegisterPreviewAnimationGroupBox) == "function" then _G.MSUF_RegisterPreviewAnimationGroupBox(self) end
-        if type(_G.MSUF_RegisterPreviewAnimationRefreshOwner) == "function" then _G.MSUF_RegisterPreviewAnimationRefreshOwner(self, RefreshPreviewAnimationButton) end
+        if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
         RefreshPreviewAnimationButton(self)
         self:RequestRefresh("GROUP_PREVIEW_SHOW")
     end)
     box:HookScript("OnHide", function(self)
-        if type(_G.MSUF_UnregisterPreviewAnimationGroupBox) == "function" then _G.MSUF_UnregisterPreviewAnimationGroupBox(self) end
-        if type(_G.MSUF_UnregisterPreviewAnimationRefreshOwner) == "function" then _G.MSUF_UnregisterPreviewAnimationRefreshOwner(self) end
+        StopPreviewAnimationDriver(self)
         self:ReleaseRuntimePreview()
+    end)
+    box:SetScript("OnEvent", function(self, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            StopPreviewAnimationDriver(self)
+        end
     end)
     box:HookScript("OnSizeChanged", function(self, width, height)
         if not self:IsShown() then return end
