@@ -54,6 +54,20 @@ local function RegisterSearchObject(object, label, kind, opts)
     end
     return object
 end
+local function QueuePinnedPreviewGeometryRefresh(scroll)
+    scroll = scroll or M.scrollFrame
+    local list = M._pinnedPreviews
+    if not scroll or type(list) ~= "table" or #list == 0 then return end
+    scroll._msuf2PinnedPreviewLastOffset = nil
+    scroll._msuf2PinnedPreviewLastHeight = nil
+    scroll._msuf2PinnedPreviewLastChildHeight = nil
+    if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(scroll) end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(scroll) end
+        end)
+    end
+end
 local function ResolveFocusValue(value)
     if type(value) == "function" then return value() end
     return value
@@ -385,6 +399,7 @@ function W.PageBuilder(ctx)
         end
         self.y = y
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(y) + 42) end
+        QueuePinnedPreviewGeometryRefresh(M.scrollFrame)
     end
     function b:Section(title, height)
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
@@ -1300,7 +1315,7 @@ local function RefreshSwitchVisual(button, hover)
     local br = checked and SWITCH_EDGE_ON or SWITCH_EDGE_OFF
     local kb = checked and SWITCH_KNOB_ON or SWITCH_KNOB_OFF
     local mul = enabled and (checked and (pressed and 1.22 or hover and 1.17 or 1.10) or (pressed and 1.16 or hover and 1.10 or 1.04)) or 1
-    local alpha = enabled and 1 or 0.45
+    local alpha = enabled and 1 or 0.58
     if button._msuf2SwitchFill then button._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] * alpha) end
     if button._msuf2SwitchEdge then button._msuf2SwitchEdge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] * alpha) end
     local knob = button._msuf2SwitchKnob
@@ -1445,7 +1460,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
         local borderAlpha = enabled
             and (checked and (down and 1.00 or hover and 0.96 or 0.88) or (down and 0.90 or hover and 0.80 or 0.68))
             or 0.30
-        local alpha = enabled and 1 or 0.45
+        local alpha = enabled and 1 or 0.58
         local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
         local visualKey = tostring(enabled) .. "\030" .. tostring(checked) .. "\030" .. tostring(hover) .. "\030" .. tostring(down)
             .. "\030" .. tostring(bg[1]) .. "\030" .. tostring(bg[2]) .. "\030" .. tostring(bg[3]) .. "\030" .. tostring(bg[4])
@@ -1834,7 +1849,7 @@ local function ApplyEnabledVisuals(control, enabled)
     SetEnabledState(control, enabled)
     if control.SetAlpha and control._msuf2EnabledAlphaState ~= enabled then
         control._msuf2EnabledAlphaState = enabled
-        control:SetAlpha(enabled and 1 or 0.45)
+        control:SetAlpha(enabled and 1 or 0.60)
     end
     SetTextEnabledColor(control._msuf2Title, enabled)
     SetTextEnabledColor(control._msuf2Label, enabled)
@@ -1849,7 +1864,7 @@ local function ApplyEnabledVisuals(control, enabled)
         SetEnabledState(edit, enabled)
         if edit.SetAlpha and edit._msuf2EnabledAlphaState ~= enabled then
             edit._msuf2EnabledAlphaState = enabled
-            edit:SetAlpha(enabled and 1 or 0.45)
+            edit:SetAlpha(enabled and 1 or 0.60)
         end
     end
     if control._msuf2StepButtons then
@@ -1858,7 +1873,7 @@ local function ApplyEnabledVisuals(control, enabled)
             SetEnabledState(btn, enabled)
             if btn.SetAlpha and btn._msuf2EnabledAlphaState ~= enabled then
                 btn._msuf2EnabledAlphaState = enabled
-                btn:SetAlpha(enabled and 1 or 0.45)
+                btn:SetAlpha(enabled and 1 or 0.60)
             end
         end
     end
@@ -1868,7 +1883,7 @@ local function ApplyEnabledVisuals(control, enabled)
             SetEnabledState(btn, enabled)
             if btn.SetAlpha and btn._msuf2EnabledAlphaState ~= enabled then
                 btn._msuf2EnabledAlphaState = enabled
-                btn:SetAlpha(enabled and 1 or 0.45)
+                btn:SetAlpha(enabled and 1 or 0.60)
             end
         end
     end
@@ -2008,18 +2023,34 @@ local function InstallPinnedPreviewUpdater(scroll)
         if type(list) ~= "table" or #list == 0 then
             self._msuf2PinnedPreviewLastOffset = nil
             self._msuf2PinnedPreviewLastHeight = nil
+            self._msuf2PinnedPreviewLastChildHeight = nil
             return
         end
         local offset = (self.GetVerticalScroll and self:GetVerticalScroll()) or 0
         local h = (self.GetHeight and self:GetHeight()) or 0
-        if offset == self._msuf2PinnedPreviewLastOffset and h == self._msuf2PinnedPreviewLastHeight then return end
+        local child = M.scrollChild
+        local childH = (child and child.GetHeight and child:GetHeight()) or 0
+        if offset == self._msuf2PinnedPreviewLastOffset
+            and h == self._msuf2PinnedPreviewLastHeight
+            and childH == self._msuf2PinnedPreviewLastChildHeight
+        then
+            return
+        end
         self._msuf2PinnedPreviewLastOffset = offset
         self._msuf2PinnedPreviewLastHeight = h
+        self._msuf2PinnedPreviewLastChildHeight = childH
         if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(self) end
     end
     scroll:HookScript("OnVerticalScroll", RefreshIfPinned)
     scroll:HookScript("OnShow", RefreshIfPinned)
     scroll:HookScript("OnSizeChanged", RefreshIfPinned)
+    local child = M.scrollChild
+    if child and child.HookScript and not child._msuf2PinnedPreviewChildUpdater then
+        child._msuf2PinnedPreviewChildUpdater = true
+        child:HookScript("OnSizeChanged", function()
+            QueuePinnedPreviewGeometryRefresh(scroll)
+        end)
+    end
 end
 function M.RefreshPinnedPreviews(scroll)
     local list = M._pinnedPreviews
@@ -2094,12 +2125,54 @@ function W.AttachPinnedPreview(body, box, opts)
     local stateKey = tostring(opts.stateKey or box._msuf2PinStateKey or "preview")
     local pageKey = opts.pageKey or box._msufGFNativePreviewPageKey
     local pageWrapper = opts.wrapper or box._msufGFNativePreviewWrapper
-    local originalParent = box:GetParent()
-    local point, relTo, relPoint, xOfs, yOfs = box:GetPoint(1)
     local scrollParent = scroll:GetParent()
+    local originalParent = opts.restoreParent or body or box:GetParent()
+    local point, relTo, relPoint, xOfs, yOfs = box:GetPoint(1)
+    if type(opts.restorePoint) == "table" then
+        point = opts.restorePoint[1] or point
+        relTo = opts.restorePoint[2] or originalParent
+        relPoint = opts.restorePoint[3] or relPoint
+        xOfs = opts.restorePoint[4] or xOfs
+        yOfs = opts.restorePoint[5] or yOfs
+    end
+    if relTo == scroll or relTo == scrollParent then relTo = originalParent end
+    local originalAnchor = relTo or originalParent or body
     local originalFrameLevel = (box.GetFrameLevel and box:GetFrameLevel()) or 1
+    local originalWidth = tonumber(opts.restoreWidth) or (box.GetWidth and box:GetWidth())
+    local originalHeight = tonumber(opts.restoreHeight) or (box.GetHeight and box:GetHeight())
+    local pinnedHeight = tonumber(opts.pinnedHeight)
     local pinned = false
+    local restoring = false
     local record
+    local function EnsureRestoreSlot()
+        if not originalParent then return nil end
+        local slot = box._msuf2PinnedPreviewRestoreSlot
+        if not slot then
+            slot = CreateFrame("Frame", nil, originalParent)
+            if slot.EnableMouse then slot:EnableMouse(false) end
+            box._msuf2PinnedPreviewRestoreSlot = slot
+        elseif slot.SetParent then
+            slot:SetParent(originalParent)
+        end
+        if slot.SetFrameLevel then slot:SetFrameLevel(max(0, originalFrameLevel - 1)) end
+        slot:ClearAllPoints()
+        slot:SetPoint(point or "TOPLEFT", relTo or originalParent, relPoint or "TOPLEFT", xOfs or 0, yOfs or 0)
+        slot:SetSize(max(1, originalWidth or (box.GetWidth and box:GetWidth()) or 1), max(1, originalHeight or (box.GetHeight and box:GetHeight()) or 1))
+        if slot.SetAlpha then slot:SetAlpha(0) end
+        slot:Show()
+        return slot
+    end
+    local function AnchorBoxToRestoreSlot()
+        local slot = EnsureRestoreSlot()
+        if not slot then return false end
+        box:SetParent(originalParent)
+        box:ClearAllPoints()
+        box:SetPoint("TOPLEFT", slot, "TOPLEFT", 0, 0)
+        box:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", 0, 0)
+        if box.SetFrameLevel then box:SetFrameLevel(originalFrameLevel) end
+        return true
+    end
+    EnsureRestoreSlot()
     local pinBtn = box._msuf2PinButton
     if not pinBtn then
         pinBtn = T.Button(box, Tr("Pinned"), opts.buttonWidth or 86, 22)
@@ -2144,17 +2217,64 @@ function W.AttachPinnedPreview(body, box, opts)
             if pinBtn.SetActive then pinBtn:SetActive(enabled) end
         end
     end
-    local function Restore()
+    local function EnsurePinnedScrim()
+        if record and record.scrim then return record.scrim end
+        local scrim = CreateFrame("Frame", nil, scrollParent or scroll, "BackdropTemplate")
+        scrim:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        scrim:Hide()
+        if record then record.scrim = scrim end
+        return scrim
+    end
+    local function LayoutPinnedScrim(level)
+        if not (record and record.scrim) then return end
+        local scrim = record.scrim
+        local bg = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1 })
+        local border = ThemeColor("borderSoft", { 0.070, 0.260, 0.390, 1 })
+        if scrim.SetFrameLevel then scrim:SetFrameLevel(max(0, (tonumber(level) or originalFrameLevel) - 1)) end
+        scrim:ClearAllPoints()
+        scrim:SetPoint("TOPLEFT", box, "TOPLEFT", -2, 2)
+        scrim:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 2, -2)
+        if scrim.SetBackdropColor then scrim:SetBackdropColor(bg[1], bg[2], bg[3], opts.scrimAlpha or 0.94) end
+        if scrim.SetBackdropBorderColor then scrim:SetBackdropBorderColor(border[1], border[2], border[3], opts.scrimBorderAlpha or 0.58) end
+        scrim:Show()
+    end
+    local function ApplyPinnedPresentation(active, level)
+        if active then
+            EnsurePinnedScrim()
+            if pinnedHeight and box.SetHeight then box:SetHeight(pinnedHeight) end
+            if type(box.ApplyPinnedPreviewPresentation) == "function" then box:ApplyPinnedPreviewPresentation(true, opts) end
+            LayoutPinnedScrim(level)
+        else
+            if record and record.scrim then record.scrim:Hide() end
+            if originalWidth and originalHeight and box.SetSize then box:SetSize(originalWidth, originalHeight) end
+            if type(box.ApplyPinnedPreviewPresentation) == "function" then box:ApplyPinnedPreviewPresentation(false, opts) end
+        end
+    end
+    local function ClearActivePinnedRecord()
+        local active = scroll and scroll._msuf2PinnedPreviewActiveRecord
+        if active and (active == record or active.box == box) then
+            if active.scrim and active.scrim.Hide then active.scrim:Hide() end
+            scroll._msuf2PinnedPreviewActiveRecord = nil
+        end
+    end
+    local function Restore(force)
         if box._msuf2PinnedPreviewRecord and box._msuf2PinnedPreviewRecord ~= record then return end
-        if not pinned then return end
+        if not force and not pinned and box._msuf2PinnedFloating ~= true then return end
+        restoring = true
         pinned = false
         box._msuf2PinnedFloating = nil
         if placeholder then placeholder:Hide() end
-        if scroll._msuf2PinnedPreviewActiveRecord == record then scroll._msuf2PinnedPreviewActiveRecord = nil end
-        box:SetParent(originalParent)
-        box:ClearAllPoints()
-        box:SetPoint(point or "TOPLEFT", relTo or body, relPoint or "TOPLEFT", xOfs or 0, yOfs or 0)
-        if box.SetFrameLevel then box:SetFrameLevel(originalFrameLevel) end
+        ClearActivePinnedRecord()
+        if record and record.scrim then record.scrim:Hide() end
+        ApplyPinnedPresentation(false)
+        if not AnchorBoxToRestoreSlot() then
+            box:SetParent(originalParent)
+            box:ClearAllPoints()
+            box:SetPoint(point or "TOPLEFT", relTo or body, relPoint or "TOPLEFT", xOfs or 0, yOfs or 0)
+            if box.SetFrameLevel then box:SetFrameLevel(originalFrameLevel) end
+        end
+        if box.RequestRefresh then box:RequestRefresh("PINNED_PREVIEW_RESTORE") end
+        restoring = false
     end
     local function BodyVisible()
         --- IsVisible checks the full ancestor chain; IsShown only checks the frame itself
@@ -2165,18 +2285,27 @@ function W.AttachPinnedPreview(body, box, opts)
         return (not body.IsVisible or body:IsVisible())
             and (not scroll.IsShown or scroll:IsShown())
     end
+    local function OriginalSlotTop()
+        local slot = EnsureRestoreSlot()
+        if slot and slot.GetTop then return slot:GetTop() end
+        local anchor = originalAnchor or body
+        local anchorTop = anchor and anchor.GetTop and anchor:GetTop()
+        if not anchorTop then return nil end
+        return anchorTop + (tonumber(yOfs) or 0)
+    end
     local function ShouldPin()
         if not PinEnabled() or not BodyVisible() then return false end
         local offset = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
         local activateAt = opts.activateAfter or 64
         if offset <= (pinned and math.floor(activateAt * 0.45) or activateAt) then return false end
         local scrollTop = scroll.GetTop and scroll:GetTop()
-        local bodyTop = body.GetTop and body:GetTop()
-        if not (scrollTop and bodyTop) then return false end
-        if bodyTop <= (scrollTop + (opts.threshold or 6)) then return false end
+        local slotTop = OriginalSlotTop()
+        if not (scrollTop and slotTop) then return false end
+        if slotTop <= (scrollTop + (opts.threshold or 6)) then return false end
         return true
     end
     local function ApplyPinnedState()
+        if restoring then return end
         if box._msuf2PinnedPreviewRecord and box._msuf2PinnedPreviewRecord ~= record then return end
         if not BodyVisible() then
             Restore()
@@ -2200,8 +2329,11 @@ function W.AttachPinnedPreview(body, box, opts)
                 box:SetPoint("TOPLEFT", scroll, "TOPLEFT", opts.left or 14, opts.top or -8)
                 box:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", -(opts.right or 14), opts.top or -8)
                 if box.SetFrameLevel then box:SetFrameLevel(level) end
+                ApplyPinnedPresentation(true, level)
+                if box.RequestRefresh then box:RequestRefresh("PINNED_PREVIEW_LAYOUT") end
                 if placeholder then placeholder:Show() end
             end
+            if pinned then LayoutPinnedScrim(((scrollParent and scrollParent.GetFrameLevel and scrollParent:GetFrameLevel()) or 1) + (opts.frameLevelOffset or 80)) end
         else
             Restore()
         end
@@ -2210,8 +2342,7 @@ function W.AttachPinnedPreview(body, box, opts)
     pinBtn:SetScript("OnClick", function()
         M.previewPinState[stateKey] = not PinEnabled()
         if not PinEnabled() then
-            pinned = true  --- force Restore() to run fully even if state drifted
-            Restore()
+            Restore(true)
         end
         ApplyPinnedState()
     end)

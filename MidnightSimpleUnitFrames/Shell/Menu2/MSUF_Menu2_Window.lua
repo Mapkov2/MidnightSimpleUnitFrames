@@ -221,6 +221,9 @@ local SNAP_EDGE_PX = 24
 local SNAP_FRAME_EDGE_PX = 4
 local SNAP_SCREEN_MARGIN = 14
 local MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H = 286, 32
+local WINDOW_MAXIMIZE_ANIM_SECONDS = 0.38
+local WINDOW_MINIMIZE_ANIM_SECONDS = 0.34
+local WINDOW_RESTORE_ANIM_SECONDS = 0.36
 local function IsSlashMenuSnapEnabled()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return true end
@@ -232,6 +235,15 @@ local function WindowVisualScale(frame)
     local uiScale = parent:GetEffectiveScale() or 1
     if uiScale == 0 then uiScale = 1 end
     return (frame:GetEffectiveScale() or uiScale) / uiScale
+end
+local function FrameRectToUIParent(frame)
+    local parent = _G.UIParent
+    if not (frame and parent and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then return nil end
+    local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+    if not (l and r and t and b) then return nil end
+    local scale = WindowVisualScale(frame)
+    if scale <= 0 then scale = 1 end
+    return l * scale, r * scale, t * scale, b * scale
 end
 local function CursorPositionInUIParent()
     local parent = _G.UIParent
@@ -249,6 +261,115 @@ local function CaptureWindowLayout(frame)
         w = frame:GetWidth() or WINDOW_W,
         h = frame:GetHeight() or WINDOW_H,
     }
+end
+local function CaptureFrameLayout(frame, fallbackW, fallbackH)
+    if not (frame and frame.GetLeft and frame.GetTop and frame.GetWidth and frame.GetHeight) then return nil end
+    return {
+        x = frame:GetLeft() or SNAP_SCREEN_MARGIN,
+        yTop = frame:GetTop() or (((_G.UIParent and _G.UIParent.GetHeight and _G.UIParent:GetHeight()) or DEFAULT_WINDOW_H) - SNAP_SCREEN_MARGIN),
+        w = frame:GetWidth() or fallbackW or WINDOW_W,
+        h = frame:GetHeight() or fallbackH or WINDOW_H,
+    }
+end
+local function ApplyRawFrameLayout(frame, layout)
+    if not (frame and layout and _G.UIParent) then return false end
+    frame:ClearAllPoints()
+    frame:SetSize(max(1, layout.w or WINDOW_W), max(1, layout.h or WINDOW_H))
+    frame:SetPoint("TOPLEFT", _G.UIParent, "BOTTOMLEFT", layout.x or SNAP_SCREEN_MARGIN, layout.yTop or DEFAULT_WINDOW_H)
+    return true
+end
+local function WindowMotionReduced()
+    return T and T.ReducedMotionEnabled and T.ReducedMotionEnabled()
+end
+local function EaseWindowMorph(progress)
+    progress = tonumber(progress) or 0
+    if progress <= 0 then return 0 end
+    if progress >= 1 then return 1 end
+    return progress * progress * progress * (progress * (progress * 6 - 15) + 10)
+end
+local function LerpNumber(fromValue, toValue, progress)
+    return (fromValue or 0) + (((toValue or 0) - (fromValue or 0)) * progress)
+end
+local function StopWindowLayoutAnimation(frame)
+    local state = frame and frame._msuf2WindowLayoutAnim
+    if not state then return end
+    frame._msuf2WindowLayoutAnim = nil
+    if state.driver and state.driver.SetScript then state.driver:SetScript("OnUpdate", nil) end
+    if state.driver and state.driver.Hide then state.driver:Hide() end
+end
+local function AnimateWindowLayout(frame, target, opts)
+    if not (frame and target) then return false end
+    opts = opts or {}
+    StopWindowLayoutAnimation(frame)
+    local start = opts.start or CaptureFrameLayout(frame)
+    if not start then return false end
+    if opts.applyStart then ApplyRawFrameLayout(frame, start) end
+    local duration = tonumber(opts.duration) or WINDOW_RESTORE_ANIM_SECONDS
+    if WindowMotionReduced() or duration <= 0.001 then
+        ApplyRawFrameLayout(frame, target)
+        if opts.toAlpha and frame.SetAlpha then frame:SetAlpha(opts.toAlpha) end
+        if type(opts.onFinished) == "function" then opts.onFinished(frame) end
+        return true
+    end
+    local driver = frame._msuf2WindowLayoutDriver
+    if not driver then
+        driver = CreateFrame("Frame", nil, _G.UIParent or frame)
+        frame._msuf2WindowLayoutDriver = driver
+    end
+    local state = {
+        elapsed = 0,
+        duration = duration,
+        start = start,
+        target = target,
+        fromAlpha = opts.fromAlpha,
+        toAlpha = opts.toAlpha,
+        onFinished = opts.onFinished,
+        driver = driver,
+    }
+    frame._msuf2WindowLayoutAnim = state
+    if state.fromAlpha and frame.SetAlpha then frame:SetAlpha(state.fromAlpha) end
+    if frame.Show then frame:Show() end
+    driver:SetScript("OnUpdate", function(self, elapsed)
+        if frame._msuf2WindowLayoutAnim ~= state then
+            self:SetScript("OnUpdate", nil)
+            self:Hide()
+            return
+        end
+        state.elapsed = state.elapsed + (elapsed or 0)
+        local p = state.elapsed / state.duration
+        if p >= 1 then p = 1 end
+        local eased = EaseWindowMorph(p)
+        ApplyRawFrameLayout(frame, {
+            x = LerpNumber(start.x, target.x, eased),
+            yTop = LerpNumber(start.yTop, target.yTop, eased),
+            w = LerpNumber(start.w, target.w, eased),
+            h = LerpNumber(start.h, target.h, eased),
+        })
+        if state.fromAlpha and state.toAlpha and frame.SetAlpha then
+            frame:SetAlpha(LerpNumber(state.fromAlpha, state.toAlpha, eased))
+        end
+        if p >= 1 then
+            frame._msuf2WindowLayoutAnim = nil
+            self:SetScript("OnUpdate", nil)
+            self:Hide()
+            ApplyRawFrameLayout(frame, target)
+            if state.toAlpha and frame.SetAlpha then frame:SetAlpha(state.toAlpha) end
+            if type(state.onFinished) == "function" then state.onFinished(frame) end
+        end
+    end)
+    driver:Show()
+    return true
+end
+local function MinimizedBarTargetLayout(frame, bar)
+    local layout = CaptureFrameLayout(bar, MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H)
+    if not layout then
+        layout = { x = 18, yTop = 18 + MINIMIZED_WINDOW_H, w = MINIMIZED_WINDOW_W, h = MINIMIZED_WINDOW_H }
+    end
+    local scale = WindowVisualScale(frame)
+    if scale <= 0 then scale = 1 end
+    layout.w = max(1, (layout.w or MINIMIZED_WINDOW_W) / scale)
+    layout.h = max(1, (layout.h or MINIMIZED_WINDOW_H) / scale)
+    return layout
 end
 local function ApplyWindowLayout(frame, layout, rebuild)
     if not (frame and layout and _G.UIParent) then return false end
@@ -271,12 +392,22 @@ local function RestoreSlashMenuWindow(frame)
     local layout = frame._msuf2RestoreLayout
     frame._msuf2WindowState = "normal"
     frame._msuf2RestoreLayout = nil
-    local restored = layout and ApplyWindowLayout(frame, layout, true)
+    local restored = false
+    if layout then
+        M.CallIf(RefreshWindowControls, frame)
+        restored = AnimateWindowLayout(frame, layout, {
+            duration = WINDOW_RESTORE_ANIM_SECONDS,
+            onFinished = function()
+                ApplyWindowLayout(frame, layout, true)
+                M.CallIf(RefreshWindowControls, frame)
+            end,
+        })
+    end
     if not restored then
         ClampWindowSize(frame)
         if RebuildActivePageForResize then RebuildActivePageForResize(frame) end
+        M.CallIf(RefreshWindowControls, frame)
     end
-    M.CallIf(RefreshWindowControls, frame)
     return true
 end
 local function MaximizeSlashMenuWindow(frame)
@@ -298,23 +429,55 @@ local function MaximizeSlashMenuWindow(frame)
     local visualW = localW * scale
     local x = max(SNAP_SCREEN_MARGIN, floor((screenW - visualW) * 0.5 + 0.5))
     local yTop = screenH - SNAP_SCREEN_MARGIN
-    ApplyWindowLayout(frame, { x = x, yTop = yTop, w = localW, h = localH }, true)
+    local target = { x = x, yTop = yTop, w = localW, h = localH }
     M.CallIf(RefreshWindowControls, frame)
+    AnimateWindowLayout(frame, target, {
+        duration = WINDOW_MAXIMIZE_ANIM_SECONDS,
+        onFinished = function()
+            ApplyWindowLayout(frame, target, true)
+            M.CallIf(RefreshWindowControls, frame)
+        end,
+    })
     return true
 end
 local function RestoreMinimizedSlashMenu(frame)
     if not frame then frame = M.frame end
     if not frame then return false end
+    local start = M.minimizedBar and MinimizedBarTargetLayout(frame, M.minimizedBar) or nil
+    local target = frame._msuf2PreMinimizeLayout or CaptureWindowLayout(frame)
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     frame._msuf2Minimized = nil
     ApplyMenuFramePriority(frame)
-    frame:Show()
+    if start and target then
+        ApplyRawFrameLayout(frame, start)
+        if frame.SetAlpha then frame:SetAlpha(0.08) end
+        frame:Show()
+        AnimateWindowLayout(frame, target, {
+            start = start,
+            applyStart = true,
+            fromAlpha = 0.08,
+            toAlpha = 1,
+            duration = WINDOW_RESTORE_ANIM_SECONDS,
+            onFinished = function()
+                frame._msuf2PreMinimizeLayout = nil
+                if frame.SetAlpha then frame:SetAlpha(1) end
+                ApplyWindowLayout(frame, target, true)
+                M.CallIf(M.UpdateMenuCombatListener)
+                M.CallIf(RefreshWindowControls, frame)
+            end,
+        })
+    else
+        frame:Show()
+        if frame.SetAlpha then frame:SetAlpha(1) end
+        frame._msuf2PreMinimizeLayout = nil
+    end
     M.CallIf(M.UpdateMenuCombatListener)
     M.CallIf(RefreshWindowControls, frame)
     return true
 end
 local function HideSlashMenuAndMinibar(frame)
     frame = frame or M.frame
+    StopWindowLayoutAnimation(frame)
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     if frame and frame.Hide then frame:Hide() end
     M.CallIf(M.UpdateMenuCombatListener)
@@ -322,11 +485,32 @@ end
 local function MinimizeSlashMenuWindow(frame)
     if not frame then return false end
     if not M.minimizedBar then return false end
+    local start = CaptureWindowLayout(frame)
     frame._msuf2Minimized = true
+    frame._msuf2PreMinimizeLayout = start
     if M.minimizedBar.title and frame.title and frame.title.GetText then M.minimizedBar.title:SetText(frame.title:GetText() or "MSUF Menu") end
     ApplyMenuFramePriority(M.minimizedBar)
+    if M.minimizedBar.SetAlpha then M.minimizedBar:SetAlpha(0) end
     M.minimizedBar:Show()
-    frame:Hide()
+    local target = MinimizedBarTargetLayout(frame, M.minimizedBar)
+    if start and target then
+        AnimateWindowLayout(frame, target, {
+            start = start,
+            fromAlpha = 1,
+            toAlpha = 0.08,
+            duration = WINDOW_MINIMIZE_ANIM_SECONDS,
+            onFinished = function()
+                if frame.SetAlpha then frame:SetAlpha(1) end
+                frame:Hide()
+                ApplyRawFrameLayout(frame, start)
+                if M.minimizedBar and M.minimizedBar.SetAlpha then M.minimizedBar:SetAlpha(1) end
+                M.CallIf(M.UpdateMenuCombatListener)
+            end,
+        })
+    else
+        if M.minimizedBar.SetAlpha then M.minimizedBar:SetAlpha(1) end
+        frame:Hide()
+    end
     M.CallIf(M.UpdateMenuCombatListener)
     return true
 end
@@ -943,8 +1127,10 @@ local function BuildWindow()
         if scale <= 0 then scale = 1 end
         local proxy = EnsureResizeProxy()
         ApplyMenuResizeProxyPriority(proxy, f)
+        local left = layout.uiLeft or layout.x or SNAP_SCREEN_MARGIN
+        local top = layout.uiTop or layout.yTop or DEFAULT_WINDOW_H
         proxy:ClearAllPoints()
-        proxy:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", layout.x or SNAP_SCREEN_MARGIN, layout.yTop or DEFAULT_WINDOW_H)
+        proxy:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
         proxy:SetSize(layout.visualW or ((layout.w or WINDOW_W) * scale), layout.visualH or ((layout.h or WINDOW_H) * scale))
         if proxy.sizeLabel then proxy.sizeLabel:SetText(string.format("%d x %d", layout.w or WINDOW_W, layout.h or WINDOW_H)) end
         proxy:Show()
@@ -1015,7 +1201,7 @@ local function BuildWindow()
         local h = ClampNumber(state.startH + ((state.cursorY - cursorY) / scale), MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
         if state.w == w and state.h == h then return end
         state.w, state.h = w, h
-        ShowWindowLayoutProxy({ x = state.layout.x, yTop = state.layout.yTop, w = w, h = h, scale = scale })
+        ShowWindowLayoutProxy({ x = state.layout.x, yTop = state.layout.yTop, uiLeft = state.uiLeft, uiTop = state.uiTop, w = w, h = h, scale = scale })
     end
     local function BeginResizeProxy(button)
         if button ~= "LeftButton" then return false end
@@ -1035,6 +1221,9 @@ local function BuildWindow()
             layout = layout,
             scale = WindowVisualScale(f),
         }
+        local uiLeft, _, uiTop = FrameRectToUIParent(f)
+        f._msuf2ResizeState.uiLeft = uiLeft or layout.x
+        f._msuf2ResizeState.uiTop = uiTop or layout.yTop
         local proxy = EnsureResizeProxy()
         proxy:SetScript("OnUpdate", UpdateResizeProxy)
         proxy:Show()

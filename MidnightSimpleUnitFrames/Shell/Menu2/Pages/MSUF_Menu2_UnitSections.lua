@@ -277,6 +277,11 @@ local function BuildPreview(ctx, builder, unit)
                 left = 14,
                 right = 14,
                 top = -8,
+                pinnedHeight = 232,
+                restoreParent = sec,
+                restorePoint = { "TOPLEFT", sec, "TOPLEFT", 14, -70 },
+                restoreWidth = ctx.width - 28,
+                restoreHeight = 292,
                 pageKey = ctx and ctx.key,
                 wrapper = ctx and ctx.wrapper,
             })
