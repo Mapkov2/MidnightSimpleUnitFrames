@@ -137,12 +137,12 @@ local BuildNav = M.BuildNavRail
 local CreateWindowControlButton = M.CreateWindowControlButton
 local RefreshWindowControls = M.RefreshWindowControls
 local ALIASES = M.ALIASES or {}
-local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 900, 700
+local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 1180, 720
 local MIN_WINDOW_W, MIN_WINDOW_H = 620, 430
 local MAX_WINDOW_W, MAX_WINDOW_H = 1600, 1100
 local WINDOW_W, WINDOW_H = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
-local NAV_W = 174
-local CONTENT_W = WINDOW_W - NAV_W - 24
+local NAV_W = 158
+local CONTENT_W = WINDOW_W - NAV_W - 34
 local CONTENT_H = WINDOW_H - 74
 local MENU_BASE_SCALE = 1.08
 local function ClampNumber(value, minValue, maxValue, fallback)
@@ -184,7 +184,7 @@ local function SetWindowMetrics(width, height)
     local maxW, maxH = WindowMaxBounds()
     WINDOW_W = ClampNumber(width, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W)
     WINDOW_H = ClampNumber(height, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
-    CONTENT_W = math.max(420, WINDOW_W - NAV_W - 24)
+    CONTENT_W = math.max(420, WINDOW_W - NAV_W - 34)
     CONTENT_H = math.max(320, WINDOW_H - 74)
 end
 function M.GetContentMetrics()
@@ -460,17 +460,9 @@ local function UpdateNav(key)
     local localeKey = CurrentMenuLocaleKey()
     local labelsDirty = M._msuf2NavLocaleKey ~= localeKey
     M._msuf2NavLocaleKey = localeKey
-    local previousKey = M._msuf2NavActiveKey
-    if labelsDirty then
-        for pageKey, btn in pairs(M.navButtons) do
-            if btn._msuf2RawLabel and btn.SetText then btn:SetText(M.Tr(btn._msuf2RawLabel)) end
-            if btn.SetActive then btn:SetActive(pageKey == key) end
-        end
-    elseif previousKey ~= key then
-        local previous = previousKey and M.navButtons[previousKey]
-        if previous and previous.SetActive then previous:SetActive(false) end
-        local current = key and M.navButtons[key]
-        if current and current.SetActive then current:SetActive(true) end
+    for pageKey, btn in pairs(M.navButtons) do
+        if labelsDirty and btn._msuf2RawLabel and btn.SetText then btn:SetText(M.Tr(btn._msuf2RawLabel)) end
+        if btn.SetActive then btn:SetActive(pageKey == key) end
     end
     M._msuf2NavActiveKey = key
     if labelsDirty and M.navHeaders then
@@ -511,19 +503,23 @@ end
 IsEditModeActive = M.IsMSUFEditModeActive
 local IsEditModeCombatLocked = M.IsEditModeCombatLocked
 local function RefreshDashboardEditModeButton()
-    local btn = M.dashboardEditModeButton
-    if not btn then return end
     local active = IsEditModeActive()
     local combatLocked = IsEditModeCombatLocked() and true or false
-    if active then
-        btn:SetText(L_EDIT_MODE_ON)
-    elseif combatLocked then
-        btn:SetText(L_EDIT_MODE_OFF_COMBAT)
-    else
-        btn:SetText(L_EDIT_MODE_OFF)
+    local buttons = { M.dashboardEditModeButton, M.dashboardToolbarEditModeButton }
+    for i = 1, #buttons do
+        local btn = buttons[i]
+        if btn then
+            if active then
+                btn:SetText(L_EDIT_MODE_ON)
+            elseif combatLocked then
+                btn:SetText(L_EDIT_MODE_OFF_COMBAT)
+            else
+                btn:SetText(L_EDIT_MODE_OFF)
+            end
+            if btn.SetEnabled then btn:SetEnabled(active or not combatLocked) end
+            if btn.SetActive then btn:SetActive(active) end
+        end
     end
-    if btn.SetEnabled then btn:SetEnabled(active or not combatLocked) end
-    if btn.SetActive then btn:SetActive(active) end
 end
 local editModeUIHooked = false
 local function EnsureEditModeUIHook()
@@ -836,7 +832,7 @@ local function CreateMinimizedBar(frame)
     restore:SetPoint("RIGHT", bar, "RIGHT", -31, 0)
     restore:SetScript("OnClick", function() RestoreMinimizedSlashMenu(frame) end)
     bar.restoreButton = restore
-    local close = T.CloseButton(bar)
+    local close = CreateWindowControlButton(bar, "close", "Close", "Close the minimized MSUF menu.")
     close:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
     close:SetScript("OnClick", function()
         bar:Hide()
@@ -855,7 +851,7 @@ local function BuildWindow()
     T.ApplySurface(f, "shell")
     ExportPublic("MSUF_StandaloneOptionsWindow", f)
     f:SetSize(WINDOW_W, WINDOW_H)
-    f:SetPoint("CENTER", UIParent, "CENTER", -60, 10)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     ApplyMenuFramePriority(f)
     f:EnableMouse(true)
     f:SetMovable(true)
@@ -892,14 +888,14 @@ local function BuildWindow()
     title:SetPoint("TOPLEFT", 12, -6)
     title:SetPoint("TOPRIGHT", f, "TOPRIGHT", -112, -6)
     title:SetJustifyH("LEFT")
-    title:SetAlpha(0.50)
+    title:SetAlpha(0.82)
     f.title = title
     local subtitle = T.Font(f, "GameFontDisableSmall", "", T.colors.muted)
     subtitle:SetPoint("TOPRIGHT", f, "TOPRIGHT", -112, -14)
     subtitle:SetJustifyH("RIGHT")
     subtitle:Hide()
     f.subtitle = subtitle
-    local close = T.CloseButton(f)
+    local close = CreateWindowControlButton(f, "close", "Close", "Close the MSUF menu window.")
     close:SetPoint("TOPRIGHT", -4, -4)
     close:SetScript("OnClick", function() HideSlashMenuAndMinibar(f) end)
     f.closeButton = close
@@ -1090,8 +1086,8 @@ local function BuildWindow()
     CreateMinimizedBar(f)
     RefreshWindowControls(f)
     local content = CreateFrame("Frame", nil, f)
-    content:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -30)
-    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 8)
+    content:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -38)
+    content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -14, 14)
     f.content = content
     local nav = T.Panel(content, nil, T.colors.glassRail or T.colors.panelNav or T.colors.panel, T.colors.borderSoft)
     T.ApplySurface(nav, "rail")
@@ -1105,7 +1101,7 @@ local function BuildWindow()
     BuildNav(nav)
     local host = T.Panel(content, nil, T.colors.glassHost or T.colors.panel, T.colors.borderSoft)
     T.ApplySurface(host, "host")
-    host:SetPoint("TOPLEFT", nav, "TOPRIGHT", 8, 0)
+    host:SetPoint("TOPLEFT", nav, "TOPRIGHT", 4, 0)
     host:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", 0, 0)
     f.host = host
     f._msufMirrorHost = host
@@ -1114,7 +1110,7 @@ local function BuildWindow()
     T.ApplySurface(status, "status")
     status:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     status:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-    status:SetHeight(22)
+    status:SetHeight(46)
     local statusTopLine = status:CreateTexture(nil, "ARTWORK", nil, 6)
     statusTopLine:SetTexture("Interface\\Buttons\\WHITE8X8")
     statusTopLine:SetHeight(1)
@@ -1128,12 +1124,12 @@ local function BuildWindow()
         if alpha then fs:SetAlpha(alpha) end
         return fs
     end
-    local sbProfile = StatusText("LEFT", status, "LEFT", 10, 0)
+    local sbProfile = StatusText("LEFT", status, "LEFT", 24, 11)
     local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 14, 0)
     local sbCombat = StatusText("LEFT", sbEdit, "RIGHT", 14, 0)
-    local sbVersion = StatusText("RIGHT", status, "RIGHT", -10, 0, "RIGHT", 0.50)
-    local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -18, 0, "RIGHT", 0)
-    sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 0)
+    local sbVersion = StatusText("RIGHT", status, "RIGHT", -18, 11, "RIGHT", 0.50)
+    local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -18, 11, "RIGHT", 0)
+    sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 11)
     status.profileText = sbProfile
     status.editText = sbEdit
     status.combatText = sbCombat
@@ -1141,6 +1137,34 @@ local function BuildWindow()
     status.feedbackText = sbFeedback
     status.text = sbProfile
     f.status = status
+    local function RunToolbarNewTask()
+        if type(M.StartNewAssistantTask) == "function" then return M.StartNewAssistantTask() end
+        if type(M.SelectPage) == "function" then M.SelectPage("home") end
+    end
+    local function RunToolbarEditMode()
+        if type(M.ToggleDashboardEditMode) == "function" then return M.ToggleDashboardEditMode() end
+        if IsEditModeCombatLocked and IsEditModeCombatLocked() then
+            M.CallIf(M.BlockCombatAction)
+            RefreshDashboardEditModeButton()
+            return
+        end
+        local active = IsEditModeActive and IsEditModeActive()
+        if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then _G.MSUF_SetMSUFEditModeDirect(not active) end
+        RefreshDashboardEditModeButton()
+        if f.RefreshStatus then f:RefreshStatus() end
+    end
+    local toolbarEdit = T.Button(status, L_EDIT_MODE_OFF, 150, 24)
+    toolbarEdit:SetPoint("RIGHT", status, "RIGHT", -26, -10)
+    T.CenterButtonLabel(toolbarEdit)
+    if T.SkinPrimaryButton then T.SkinPrimaryButton(toolbarEdit) end
+    toolbarEdit:SetScript("OnClick", RunToolbarEditMode)
+    M.dashboardToolbarEditModeButton = toolbarEdit
+    local toolbarTask = T.Button(status, "New Task", 104, 24)
+    toolbarTask:SetPoint("RIGHT", toolbarEdit, "LEFT", -12, 0)
+    T.CenterButtonLabel(toolbarTask)
+    toolbarTask:SetScript("OnClick", RunToolbarNewTask)
+    status.newTaskButton = toolbarTask
+    status.editModeButton = toolbarEdit
     function M.ShowStatusFeedback(text, kind, seconds)
         if not (f and f.status and f.status.feedbackText and text and text ~= "") then return end
         local feedback = f.status.feedbackText

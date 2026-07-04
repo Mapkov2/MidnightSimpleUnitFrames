@@ -14,9 +14,16 @@ local SearchBridge = M.SearchBridge or {}
 local floor = math.floor
 local max = math.max
 local abs = math.abs
-local NAV_W = 174
+local NAV_W = 158
 local NAV_BUTTON_H = 20
 local NAV_BUTTON_STEP = 23
+local NAV_ITEM_X = 8
+local NAV_ITEM_RIGHT_PAD = 8
+local NAV_ITEM_INDENT = 12
+local NAV_SCROLL_GUTTER = 7
+local NAV_PILL_REFERENCE_LABEL = "Status & Indicators"
+local NAV_PILL_MIN_W = 112
+local NAV_PILL_MAX_W = 124
 local UpdateSearchPlaceholder = SearchBridge.UpdateSearchPlaceholder
 local ScheduleSearchInputQuery = SearchBridge.ScheduleSearchInputQuery
 local RunSearchInputQuery = SearchBridge.RunSearchInputQuery
@@ -49,6 +56,28 @@ local function ShortLabel(text, limit)
     limit = tonumber(limit) or 22
     if #text <= limit then return text end
     return text:sub(1, max(1, limit - 3)) .. "..."
+end
+local function NavItemWidth(indent)
+    return NAV_W - NAV_ITEM_X - NAV_ITEM_RIGHT_PAD - (tonumber(indent) or 0)
+end
+local function NavPillVisualWidth(parent)
+    if M._navPillVisualWidth then return M._navPillVisualWidth end
+    local width = 124
+    if parent and parent.CreateFontString then
+        local probe = parent._msuf2NavPillWidthProbe
+        if not probe then
+            probe = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            probe:Hide()
+            parent._msuf2NavPillWidthProbe = probe
+        end
+        probe:SetText(M.Tr(NAV_PILL_REFERENCE_LABEL))
+        local textWidth = probe.GetStringWidth and probe:GetStringWidth()
+        if textWidth and textWidth > 0 then width = floor(textWidth + 22 + 0.5) end
+    end
+    width = max(NAV_PILL_MIN_W, width)
+    if width > NAV_PILL_MAX_W then width = NAV_PILL_MAX_W end
+    M._navPillVisualWidth = width
+    return width
 end
 local function NormalizeNavToken(text)
     text = tostring(text or ""):lower()
@@ -146,11 +175,12 @@ local function SubmitAssistantQuery(query)
     return true
 end
 local function CreateNavButton(parent, key, label, indent)
-    local btn = T.Button(parent, M.Tr(label), NAV_W - 38 - (indent or 0), NAV_BUTTON_H)
+    local btn = T.Button(parent, M.Tr(label), NavItemWidth(indent), NAV_BUTTON_H)
     btn:SetScript("OnClick", function() M.SelectPage(key) end)
     btn._msuf2SkipHistoryCheckpoint = true
     btn._msuf2NavItem = true
     btn._msuf2NavIndent = indent or 0
+    btn._msuf2NavPillVisualWidth = NavPillVisualWidth(parent)
     btn._msuf2RawLabel = label
     M.CallIf(T.AttachNavIcon, btn, key, (indent or 0) > 0, NavIconsEnabled())
     M.navButtons[key] = btn
@@ -259,7 +289,7 @@ local function HistoryTooltipText(kind)
 end
 local function CreateHistoryControls(parent)
     local row = CreateFrame("Frame", nil, parent)
-    local rowW = NAV_W - 38
+    local rowW = NavItemWidth(0)
     row:SetSize(rowW, 26)
     local buttonGap = 6
     local buttonW = floor((rowW - buttonGap) * 0.5)
@@ -354,15 +384,42 @@ local function BuildNavRail(parent)
     M.navHeaders = {}
     M.navGroupForKey = {}
     M.navHeaderState = M.navHeaderState or {}
-    local brandIcon = parent:CreateTexture(nil, "ARTWORK")
-    brandIcon:SetSize(22, 22)
-    brandIcon:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -9)
+    local brandIconFrame = CreateFrame("Frame", nil, parent)
+    brandIconFrame:SetSize(24, 24)
+    brandIconFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 11, -8)
+    brandIconFrame:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 1) + 1)
+    if T.CreateSuperellipseLayers then
+        local fill, edge = T.CreateSuperellipseLayers(brandIconFrame, "_msuf2BrandIconWell", 0, "BACKGROUND", "BORDER")
+        if fill and T.SetFillGradient then
+            T.SetFillGradient(fill, T.colors.coreShadow or T.colors.panelNav, 0.08, -0.24, 0.86)
+        elseif fill and fill.SetVertexColor then
+            local bg = T.colors.coreShadow or T.colors.panelNav or { 0.006, 0.016, 0.032, 0.96 }
+            fill:SetVertexColor(bg[1], bg[2], bg[3], 0.86)
+        end
+        if edge and edge.SetVertexColor then
+            local rim = T.colors.coreGlow or T.colors.accent or { 0.090, 0.360, 0.540, 1 }
+            edge:SetVertexColor(rim[1], rim[2], rim[3], 0.14)
+        end
+    end
+    local brandIcon = brandIconFrame:CreateTexture(nil, "ARTWORK", nil, 1)
+    brandIcon:SetSize(20, 20)
+    brandIcon:SetPoint("CENTER", brandIconFrame, "CENTER", 0, 0)
     brandIcon:SetTexture((T.media and T.media.logo) or "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\MSUF_MinimapIcon.tga")
-    brandIcon:SetVertexColor(1, 1, 1, 0.96)
+    if brandIcon.SetTexCoord then brandIcon:SetTexCoord(0.075, 0.925, 0.075, 0.925) end
+    if brandIcon.SetBlendMode then brandIcon:SetBlendMode("BLEND") end
+    brandIcon:SetVertexColor(0.58, 0.74, 0.88, 0.82)
+    if brandIconFrame.CreateMaskTexture and brandIcon.AddMaskTexture and T.media and T.media.superellipse then
+        local mask = brandIconFrame:CreateMaskTexture(nil, "ARTWORK")
+        mask:SetTexture(T.media.superellipse, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetAllPoints(brandIcon)
+        brandIcon:AddMaskTexture(mask)
+        brandIconFrame._msuf2BrandIconMask = mask
+    end
     local brand = T.Font(parent, "GameFontHighlightSmall", "MSUF", T.colors.title or T.colors.text)
-    brand:SetPoint("LEFT", brandIcon, "RIGHT", 8, 0)
+    brand:SetPoint("LEFT", brandIconFrame, "RIGHT", 8, 0)
     brand:SetPoint("RIGHT", parent, "RIGHT", -12, 0)
     brand:SetJustifyH("LEFT")
+    parent._msuf2BrandIconFrame = brandIconFrame
     parent._msuf2BrandIcon = brandIcon
     parent._msuf2BrandTitle = brand
     local search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
@@ -379,7 +436,8 @@ local function BuildNavRail(parent)
         local fill, edge = T.CreateSuperellipseLayers(search, "_msuf2SearchEdit", 2, "BACKGROUND", "BORDER")
         search._msuf2RoundedEditFill = fill
         search._msuf2RoundedEditEdge = edge
-        search._msuf2RoundedEditColor = { 0.020, 0.024, 0.046, 0.96 }
+        local c = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+        search._msuf2RoundedEditColor = { c[1], c[2], c[3], 0.96 }
         if search._msuf2PaintEditBox then search:_msuf2PaintEditBox(false) end
     end
     local placeholder = search.Instructions
@@ -409,7 +467,7 @@ local function BuildNavRail(parent)
     local function EnsureSearchIntro()
         local intro = parent._msuf2SearchIntro
         if intro then return intro end
-        local introBg = T.colors.glassPopup or { 0.030, 0.042, 0.085, 0.980 }
+        local introBg = T.colors.glassPopup or { 0.006, 0.016, 0.032, 0.980 }
         intro = T.Panel(parent, nil, introBg, T.colors.accent)
         T.ApplySurface(intro, { bg = introBg, border = T.colors.accent, glass = "popup" })
         intro:SetPoint("TOPLEFT", search, "BOTTOMLEFT", -2, -6)
@@ -424,7 +482,7 @@ local function BuildNavRail(parent)
         title:SetJustifyH("LEFT")
         local body = T.Font(intro, "GameFontDisableSmall", "Try: \"where do I move raid frames\" or \"make text bigger\".", T.colors.muted)
         body:SetPoint("TOPLEFT", intro, "TOPLEFT", 10, -32)
-        body:SetWidth(NAV_W - 36)
+        body:SetWidth(NAV_W - 30)
         body:SetWordWrap(true)
         body:SetJustifyH("LEFT")
         local foot = T.Font(intro, "GameFontDisableSmall", "Press Enter to ask the Assistant.", T.colors.dim)
@@ -530,9 +588,9 @@ local function BuildNavRail(parent)
     end)
     local listScroll = CreateFrame("ScrollFrame", nil, parent)
     listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -66)
-    listScroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -14, 6)
+    listScroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -NAV_SCROLL_GUTTER, 6)
     local list = CreateFrame("Frame", nil, listScroll)
-    list:SetSize(NAV_W - 18, 1)
+    list:SetSize(NAV_W - NAV_SCROLL_GUTTER, 1)
     listScroll:SetScrollChild(list)
     parent._msuf2NavListScroll = listScroll
     parent._msuf2NavList = list
@@ -543,7 +601,7 @@ local function BuildNavRail(parent)
         if item.header then
             local id = item.id or item.header
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
-            local btn = T.Button(list, string.upper(M.Tr(item.header)), NAV_W - 38, NAV_BUTTON_H)
+            local btn = T.Button(list, string.upper(M.Tr(item.header)), NavItemWidth(0), NAV_BUTTON_H)
             btn._msuf2NavHeader = true
             btn._msuf2NavHeaderId = id
             btn._msuf2RawLabel = item.header
@@ -565,7 +623,7 @@ local function BuildNavRail(parent)
             M.navHeaders[id] = btn
             created[#created + 1] = { kind = "header", id = id, button = btn }
         elseif item.key then
-            local indent = item.group and 12 or 0
+            local indent = item.group and NAV_ITEM_INDENT or 0
             local btn = CreateNavButton(list, item.key, item.label, indent)
             AttachNavHoverGrow(btn)
             if item.group then M.navGroupForKey[item.key] = item.group end
@@ -588,21 +646,21 @@ local function BuildNavRail(parent)
                 if btn.SetScale then btn:SetScale(1) end
                 if btn.SetWidth and btn._msuf2NavBaseWidth then btn:SetWidth(btn._msuf2NavBaseWidth) end
                 btn:ClearAllPoints()
-                btn:SetPoint("TOPLEFT", list, "TOPLEFT", 12, y)
+                btn:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y)
                 ApplyNavHeaderVisual(btn, M.navHeaderState[item.id])
                 y = y - NAV_BUTTON_STEP
             elseif item.kind == "history" then
                 local frame = item.frame
                 frame:Show()
                 frame:ClearAllPoints()
-                frame:SetPoint("TOPLEFT", list, "TOPLEFT", 12, y - 2)
+                frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y - 2)
                 y = y - 32
             elseif not item.group or M.navHeaderState[item.group] then
                 btn:Show()
                 if btn.SetScale then btn:SetScale(1) end
                 if btn.SetWidth and btn._msuf2NavBaseWidth then btn:SetWidth(btn._msuf2NavBaseWidth) end
                 btn:ClearAllPoints()
-                btn:SetPoint("TOPLEFT", list, "TOPLEFT", 12 + (btn._msuf2NavIndent or 0), y)
+                btn:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + (btn._msuf2NavIndent or 0), y)
                 y = y - NAV_BUTTON_STEP
             else
                 if btn then btn:Hide() end
@@ -610,7 +668,7 @@ local function BuildNavRail(parent)
             end
         end
         local contentH = max(abs(y) + 8, (listScroll.GetHeight and listScroll:GetHeight()) or 1)
-        list:SetSize(NAV_W - 18, contentH)
+        list:SetSize(NAV_W - NAV_SCROLL_GUTTER, contentH)
         if listScroll._msuf2RefreshScrollBar then listScroll:_msuf2RefreshScrollBar() end
         M.CallIf(M.RefreshHistoryControls)
     end

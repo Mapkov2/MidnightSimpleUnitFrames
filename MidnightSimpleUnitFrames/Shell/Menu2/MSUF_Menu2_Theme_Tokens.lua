@@ -26,6 +26,15 @@ T.media = T.media or {
     bgCharcoal = ADDON_PATH .. "Media\\Bars\\Charcoal.tga",
     logo = ADDON_PATH .. "Media\\MSUF_MinimapIcon.tga",
     navIcons = ADDON_PATH .. "Media\\msuf_nav_icons",
+    navPillIdle = ADDON_PATH .. "Media\\Menu2\\msuf2_nav_idle.png",
+    navPillHover = ADDON_PATH .. "Media\\Menu2\\msuf2_nav_hover.png",
+    navPillActive = ADDON_PATH .. "Media\\Menu2\\msuf2_nav_active.png",
+    panelShell = ADDON_PATH .. "Media\\Menu2\\msuf2_panel_shell.png",
+    panelRail = ADDON_PATH .. "Media\\Menu2\\msuf2_panel_rail.png",
+    panelHost = ADDON_PATH .. "Media\\Menu2\\msuf2_panel_host.png",
+    panelStatus = ADDON_PATH .. "Media\\Menu2\\msuf2_panel_status.png",
+    panelCard = ADDON_PATH .. "Media\\Menu2\\msuf2_panel_card.png",
+    panelPopup = ADDON_PATH .. "Media\\Menu2\\msuf2_panel_popup.png",
     historyUndo = ADDON_PATH .. "Media\\msuf_history_undo_red.png",
     historyRedo = ADDON_PATH .. "Media\\msuf_history_redo_green.png",
 }
@@ -48,55 +57,67 @@ local function ColorRows(rows)
     end
     return out
 end
+-- Dark Apple-glass palette derived from Media/MSUF_MinimapIcon.tga.
+-- Keep blue UI values on these RGB triplets; use alpha/gradients for variation.
 T.colors = ColorRows [[
-bg=0.040,0.046,0.064,0.985
-panel=0.040,0.048,0.070,0.300
-panelNav=0.038,0.048,0.076,0.390
-panel2=0.038,0.046,0.072,0.955
-header=0.044,0.052,0.080,0.280
-border=0.105,0.130,0.220,0.660
-borderSoft=0.105,0.130,0.220,0.300
-cardBorder=0.105,0.130,0.220,0.320
+coreShadow=0.006,0.016,0.032,1.00
+coreInk=0.010,0.024,0.046,1.00
+coreSurface=0.014,0.038,0.072,1.00
+coreRaised=0.026,0.070,0.110,1.00
+coreRim=0.043,0.096,0.150,1.00
+coreBlue=0.060,0.250,0.390,1.00
+coreGlow=0.090,0.360,0.540,1.00
+coreHot=0.105,0.430,0.640,1.00
+bg=0.006,0.016,0.032,0.820
+panel=0.010,0.024,0.046,0.620
+panelNav=0.010,0.024,0.046,0.660
+panel2=0.014,0.038,0.072,0.660
+header=0.014,0.038,0.072,0.560
+border=0.043,0.096,0.150,0.500
+borderSoft=0.043,0.096,0.150,0.360
+cardBorder=0.043,0.096,0.150,0.430
 text=0.880,0.910,1.000,1.00
 title=0.890,0.940,1.000,1.00
-muted=0.690,0.735,0.840,0.90
-dim=0.500,0.580,0.720,0.86
-accent=0.180,0.720,0.900,1.00
-checkActive=0.055,0.145,0.350,1.00
-checkActiveEdge=0.255,0.455,0.835,0.90
+muted=0.520,0.610,0.720,0.86
+dim=0.043,0.096,0.150,0.84
+accent=0.090,0.360,0.540,1.00
+checkActive=0.045,0.250,0.390,1.00
+checkActiveEdge=0.105,0.430,0.640,0.92
+checkInactive=0.018,0.075,0.120,1.00
+checkInactiveEdge=0.070,0.260,0.390,0.82
 accent2=0.965,0.760,0.150,1.00
 danger=0.880,0.280,0.280,1.00
 ok=0.240,0.820,0.460,1.00
-pillBase=0.050,0.062,0.105,0.88
-pillBaseSolid=0.052,0.066,0.112,0.92
-pillHover=0.068,0.084,0.140,0.95
-pillActive=0.120,0.185,0.430,0.95
-pillEdge=0.130,0.165,0.290,0.38
-pillEdgeButton=0.130,0.165,0.290,0.52
-pillEdgeHover=0.150,0.280,0.540,0.66
-pillEdgeActive=0.210,0.420,0.860,0.76
+pillBase=0.010,0.024,0.046,0.84
+pillBaseSolid=0.014,0.038,0.072,0.90
+pillHover=0.024,0.072,0.112,0.90
+pillActive=0.030,0.112,0.176,0.96
+pillEdge=0.043,0.096,0.150,0.42
+pillEdgeButton=0.043,0.096,0.150,0.50
+pillEdgeHover=0.090,0.360,0.540,0.42
+pillEdgeActive=0.090,0.360,0.540,0.64
 pillText=0.820,0.890,1.000,0.94
 pillTextActive=0.920,0.960,1.000,1.00
-navPillBase=0.064,0.088,0.170,0.92
-navPillBaseSolid=0.072,0.098,0.188,0.94
-navPillHover=0.094,0.128,0.252,0.96
-navPillActive=0.235,0.375,0.920,0.99
-navPillEdge=0.135,0.180,0.350,0.42
-navPillEdgeHover=0.220,0.350,0.760,0.62
-navPillEdgeActive=0.380,0.560,0.960,0.80
+navPillBase=0.008,0.020,0.038,0.74
+navPillBaseSolid=0.010,0.030,0.055,0.82
+navPillHover=0.024,0.072,0.112,0.88
+navPillActive=0.030,0.112,0.176,0.96
+navPillEdge=0.043,0.096,0.150,0.38
+navPillEdgeHover=0.090,0.360,0.540,0.44
+navPillEdgeActive=0.090,0.360,0.540,0.68
 navText=0.840,0.900,1.000,0.96
 navTextActive=0.970,0.990,1.000,1.00
-navHeaderText=0.680,0.780,1.000,0.96
-navHeaderHover=0.780,0.860,1.000,1.00
+navHeaderText=0.520,0.610,0.720,0.82
+navHeaderHover=0.090,0.360,0.540,0.92
 navArrowOpen=1.000,0.760,0.250,1.00
 navArrowClosed=1.000,0.560,0.060,1.00
-glassShell=0.026,0.032,0.052,0.955
-glassRail=0.028,0.036,0.064,0.760
-glassHost=0.030,0.038,0.066,0.680
-glassStatus=0.032,0.040,0.070,0.560
-glassPopup=0.008,0.012,0.022,0.950
-guide=0.180,0.720,0.900,0.82
-focus=0.115,0.220,0.460,0.62
+glassShell=0.006,0.016,0.032,0.660
+glassRail=0.010,0.024,0.046,0.620
+glassHost=0.010,0.024,0.046,0.520
+glassStatus=0.014,0.038,0.072,0.500
+glassPopup=0.006,0.016,0.032,0.700
+guide=0.090,0.360,0.540,0.46
+focus=0.026,0.070,0.110,0.64
 warning=0.920,0.680,0.250,1.00
 ]]
 T.fontBump = T.fontBump or 1
@@ -164,22 +185,22 @@ modules 4 2
 profiles 5 2
 ]]
 T.navIconColors = NavIconColors [[
-home=0.30,0.60,1.00
-uf_player uf_target uf_targettarget uf_focustarget uf_focus uf_boss uf_pet=0.40,0.78,0.98
+home=0.090,0.360,0.540
+uf_player uf_target uf_targettarget uf_focustarget uf_focus uf_boss uf_pet=0.090,0.360,0.540
 opt_bars opt_fonts auras3 auras3_buffs auras3_debuffs auras3_styling auras3_filters opt_castbar opt_misc opt_colors=0.88,0.74,0.36
 classpower=0.35,0.82,0.50
 gameplay=0.72,0.50,0.92
-groupframes gf_layout gf_bars gf_auras gf_indicators=0.45,0.75,0.88
-modules=0.40,0.80,0.75
+groupframes gf_layout gf_bars gf_auras gf_indicators=0.520,0.610,0.720
+modules=0.090,0.360,0.540
 profiles=0.90,0.62,0.30
 ]]
 T.glassVariants = T.glassVariants or GlassVariants [[
-shell tint=0.020,0.026,0.048,0.18 wash=0.070,0.105,0.190,0.070 depth=0.010,0.014,0.034,0.14 grain=0.060,0.070,0.115,0.046 top=0.220,0.620,0.900,0.18 bottom=0.000,0.000,0.000,0.24
-rail tint=0.016,0.024,0.048,0.16 wash=0.058,0.088,0.180,0.065 grain=0.050,0.060,0.108,0.044 top=0.210,0.560,0.860,0.14 bottom=0.000,0.000,0.000,0.20
-host tint=0.016,0.024,0.052,0.135 wash=0.058,0.094,0.190,0.058 depth=0.012,0.014,0.040,0.105 grain=0.052,0.058,0.108,0.036 top=0.210,0.610,0.900,0.12 bottom=0.000,0.000,0.000,0.21
-status tint=0.020,0.030,0.060,0.20 wash=0.080,0.120,0.230,0.080 top=0.300,0.800,1.000,0.24 bottom=0.000,0.000,0.000,0.20
-popup tint=0.008,0.012,0.024,0.20 wash=0.050,0.090,0.180,0.084 grain=0.060,0.070,0.115,0.048 top=0.230,0.680,0.920,0.20 bottom=0.000,0.000,0.000,0.24
-card tint=0.012,0.018,0.034,0.105 wash=0.038,0.066,0.132,0.036 top=0.200,0.560,0.820,0.08 bottom=0.000,0.000,0.000,0.14
+shell tint=0.006,0.016,0.032,0.170 wash=0.014,0.038,0.072,0.026 depth=0.000,0.000,0.000,0.220 grain=0.014,0.038,0.072,0.014 top=0.090,0.360,0.540,0.046 bottom=0.000,0.000,0.000,0.300 glow=0.090,0.360,0.540,0.014 side=0.043,0.096,0.150,0.044
+rail tint=0.010,0.024,0.046,0.165 wash=0.014,0.038,0.072,0.024 depth=0.000,0.000,0.000,0.200 grain=0.014,0.038,0.072,0.014 top=0.090,0.360,0.540,0.040 bottom=0.000,0.000,0.000,0.275 glow=0.090,0.360,0.540,0.012 side=0.043,0.096,0.150,0.040
+host tint=0.010,0.024,0.046,0.150 wash=0.014,0.038,0.072,0.020 depth=0.000,0.000,0.000,0.180 grain=0.014,0.038,0.072,0.012 top=0.090,0.360,0.540,0.034 bottom=0.000,0.000,0.000,0.255 glow=0.090,0.360,0.540,0.010 side=0.043,0.096,0.150,0.036
+status tint=0.014,0.038,0.072,0.145 wash=0.026,0.070,0.110,0.020 depth=0.000,0.000,0.000,0.170 top=0.090,0.360,0.540,0.036 bottom=0.000,0.000,0.000,0.260 glow=0.090,0.360,0.540,0.012 side=0.043,0.096,0.150,0.038
+popup tint=0.006,0.016,0.032,0.200 wash=0.014,0.038,0.072,0.024 depth=0.000,0.000,0.000,0.220 grain=0.014,0.038,0.072,0.014 top=0.090,0.360,0.540,0.038 bottom=0.000,0.000,0.000,0.310 glow=0.090,0.360,0.540,0.012 side=0.043,0.096,0.150,0.040
+card tint=0.010,0.024,0.046,0.145 wash=0.014,0.038,0.072,0.018 depth=0.000,0.000,0.000,0.175 grain=0.014,0.038,0.072,0.010 top=0.090,0.360,0.540,0.030 bottom=0.000,0.000,0.000,0.245 glow=0.090,0.360,0.540,0.008 side=0.043,0.096,0.150,0.032
 ]]
 local function DefaultToken(tbl, key, value)
     if tbl[key] == nil then tbl[key] = value end
@@ -191,16 +212,16 @@ local function DefaultNumberRows(tbl, rows)
     end
 end
 T.gradients = T.gradients or {}
-DefaultToken(T.gradients, "shell", { orientation = "VERTICAL", from = { 0.070, 0.096, 0.170, 0.40 }, to = { 0.008, 0.012, 0.026, 0.58 }, inset = 3 })
-DefaultToken(T.gradients, "rail", { orientation = "VERTICAL", from = { 0.060, 0.088, 0.170, 0.32 }, to = { 0.010, 0.014, 0.030, 0.46 }, inset = 3 })
-DefaultToken(T.gradients, "host", { orientation = "VERTICAL", from = { 0.052, 0.080, 0.160, 0.28 }, to = { 0.008, 0.012, 0.028, 0.40 }, inset = 3 })
-DefaultToken(T.gradients, "status", { orientation = "VERTICAL", from = { 0.070, 0.110, 0.220, 0.34 }, to = { 0.010, 0.014, 0.030, 0.42 }, inset = 2 })
-DefaultToken(T.gradients, "card", { orientation = "VERTICAL", from = { 0.060, 0.080, 0.142, 0.22 }, to = { 0.006, 0.010, 0.024, 0.34 }, inset = 2 })
-DefaultToken(T.gradients, "popup", { orientation = "VERTICAL", from = { 0.055, 0.088, 0.175, 0.38 }, to = { 0.004, 0.006, 0.014, 0.54 }, inset = 2 })
-DefaultToken(T.gradients, "guide", { orientation = "VERTICAL", from = { 0.090, 0.220, 0.310, 0.24 }, to = { 0.006, 0.020, 0.035, 0.32 }, inset = 2 })
+DefaultToken(T.gradients, "shell", { orientation = "VERTICAL", from = { 0.014, 0.038, 0.072, 0.30 }, to = { 0.006, 0.016, 0.032, 0.70 }, inset = 3 })
+DefaultToken(T.gradients, "rail", { orientation = "VERTICAL", from = { 0.014, 0.038, 0.072, 0.28 }, to = { 0.010, 0.024, 0.046, 0.62 }, inset = 3 })
+DefaultToken(T.gradients, "host", { orientation = "VERTICAL", from = { 0.014, 0.038, 0.072, 0.24 }, to = { 0.010, 0.024, 0.046, 0.58 }, inset = 3 })
+DefaultToken(T.gradients, "status", { orientation = "VERTICAL", from = { 0.014, 0.038, 0.072, 0.26 }, to = { 0.010, 0.024, 0.046, 0.58 }, inset = 2 })
+DefaultToken(T.gradients, "card", { orientation = "VERTICAL", from = { 0.014, 0.038, 0.072, 0.24 }, to = { 0.010, 0.024, 0.046, 0.56 }, inset = 2 })
+DefaultToken(T.gradients, "popup", { orientation = "VERTICAL", from = { 0.014, 0.038, 0.072, 0.28 }, to = { 0.006, 0.016, 0.032, 0.66 }, inset = 2 })
+DefaultToken(T.gradients, "guide", { orientation = "VERTICAL", from = { 0.090, 0.360, 0.540, 0.055 }, to = { 0.010, 0.024, 0.046, 0.40 }, inset = 2 })
 DefaultToken(T.gradients, "warning", { orientation = "VERTICAL", from = { 0.260, 0.180, 0.080, 0.26 }, to = { 0.044, 0.028, 0.012, 0.36 }, inset = 2 })
 DefaultToken(T.gradients, "button", { orientation = "VERTICAL", amountTop = 0.16, amountBottom = -0.20 })
-DefaultToken(T.gradients, "sliderFill", { orientation = "HORIZONTAL", from = { 0.235, 0.820, 1.000, 0.96 }, to = { 0.115, 0.560, 0.760, 0.86 } })
+DefaultToken(T.gradients, "sliderFill", { orientation = "HORIZONTAL", from = { 0.090, 0.360, 0.540, 0.62 }, to = { 0.018, 0.055, 0.088, 0.78 } })
 T.motion = T.motion or {}
 DefaultNumberRows(T.motion, [[
 fast 0.075
@@ -252,7 +273,7 @@ DefaultToken(T.materials, "rail", { bg = T.colors.glassRail, border = T.colors.b
 DefaultToken(T.materials, "host", { bg = T.colors.glassHost, border = T.colors.borderSoft, glass = "host", gradient = "host" })
 DefaultToken(T.materials, "status", { bg = T.colors.glassStatus, border = T.colors.borderSoft, glass = "status", gradient = "status" })
 DefaultToken(T.materials, "card", { bg = T.colors.panel2, border = T.colors.cardBorder or T.colors.borderSoft, glass = "card", gradient = "card" })
-DefaultToken(T.materials, "popup", { bg = T.colors.glassPopup, border = { 0.140, 0.220, 0.600, 0.88 }, glass = "popup", gradient = "popup" })
+DefaultToken(T.materials, "popup", { bg = T.colors.glassPopup, border = T.colors.borderSoft, glass = "popup", gradient = "popup" })
 DefaultToken(T.materials, "focus", { veil = "dropdown" })
 DefaultToken(T.materials, "guide", { bg = { 0.018, 0.052, 0.082, 0.28 }, border = T.colors.guide, glass = "card", gradient = "guide" })
 DefaultToken(T.materials, "warning", { bg = { 0.105, 0.082, 0.052, 0.34 }, border = { 0.480, 0.360, 0.200, 0.62 }, glass = "card", gradient = "warning" })

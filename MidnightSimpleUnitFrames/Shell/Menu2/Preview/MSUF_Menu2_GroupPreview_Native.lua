@@ -246,7 +246,8 @@ local function MakePreviewSectionButton(parent, label, color, sectionKey, onOpen
     btn._sectionKey = sectionKey
     btn._bg = btn:CreateTexture(nil, "BACKGROUND")
     btn._bg:SetAllPoints()
-    btn._bg:SetColorTexture(0.020, 0.024, 0.046, 0.85)
+    local idleBg = T.colors and T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+    btn._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], 0.85)
     btn._stripe = btn:CreateTexture(nil, "ARTWORK")
     btn._stripe:SetPoint("LEFT", btn, "LEFT", 0, 0)
     btn._stripe:SetSize(2, 12)
@@ -283,7 +284,7 @@ local function MakePreviewSectionButton(parent, label, color, sectionKey, onOpen
             self._stripe:SetColorTexture(0.16, 0.16, 0.20, 0.45)
             SetFSColor(self._label, LAYER_TEXT_OFF)
         else
-            self._bg:SetColorTexture(0.020, 0.024, 0.046, 0.85)
+            self._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], 0.85)
             SetFSColor(self._label, LAYER_TEXT_ON)
             self._stripe:SetAlpha(1)
         end

@@ -293,8 +293,14 @@ function H.StylePreviewPillButton(btn, T, opts)
         if btn.SetBackdropColor then btn:SetBackdropColor(0, 0, 0, 0) end
         if btn.SetBackdropBorderColor then btn:SetBackdropBorderColor(0, 0, 0, 0) end
     end
-    local bgIdle, bgHover, bgActive, bgDown = { 0.018, 0.026, 0.050, 0.92 }, { 0.032, 0.058, 0.098, 0.98 }, { 0.018, 0.150, 0.230, 0.98 }, { 0.014, 0.115, 0.178, 1.00 }
-    local brIdle, brHover, brActive = { 0.085, 0.128, 0.238, 0.72 }, { 0.145, 0.265, 0.470, 0.92 }, { 0.120, 0.600, 0.780, 0.98 }
+    local tc = T and T.colors
+    local shadow = tc and tc.coreShadow or { 0.006, 0.016, 0.032 }
+    local surface = tc and tc.coreSurface or { 0.014, 0.038, 0.072 }
+    local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
+    local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
+    local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
+    local bgIdle, bgHover, bgActive, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2], raised[3], 0.98 }, { raised[1], raised[2], raised[3], 1.00 }
+    local brIdle, brHover, brActive = { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
     local bgScratch = { 0, 0, 0, 1 }
     function btn:MSUF2RefreshPreviewPill(active, hover, down)
         active = active == true
@@ -803,8 +809,14 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         if btn[fontField] then btn[fontField]:SetPoint("CENTER") end
         btn:SetScript("OnClick", onClick)
-        local bgIdle, bgHover, bgDown = { 0.018, 0.026, 0.050, 0.92 }, { 0.032, 0.058, 0.098, 0.98 }, { 0.018, 0.150, 0.230, 0.98 }
-        local brIdle, brHover, brDown = { 0.085, 0.128, 0.238, 0.72 }, { 0.145, 0.265, 0.470, 0.92 }, { 0.120, 0.600, 0.780, 0.98 }
+        local tc = T and T.colors
+        local shadow = tc and tc.coreShadow or { 0.006, 0.016, 0.032 }
+        local surface = tc and tc.coreSurface or { 0.014, 0.038, 0.072 }
+        local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
+        local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
+        local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
+        local bgIdle, bgHover, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2], raised[3], 0.98 }
+        local brIdle, brHover, brDown = { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
         local bgScratch = { 0, 0, 0, 1 }
         local function ApplyButtonVisual(self, hover, down)
             if useSuperellipse then
@@ -827,8 +839,10 @@ function H.InstallZoomPan(ZoomPan, opts)
                 end
                 return
             end
-            if self.SetBackdropColor then self:SetBackdropColor(hover and 0.05 or 0.025, hover and 0.07 or 0.030, hover and 0.11 or 0.045, hover and 0.98 or 0.88) end
-            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(hover and 0.28 or 0.12, hover and 0.42 or 0.16, hover and 0.68 or 0.24, hover and 1 or 0.92) end
+            local bg = hover and bgHover or bgIdle
+            local br = hover and brHover or brIdle
+            if self.SetBackdropColor then self:SetBackdropColor(bg[1], bg[2], bg[3], hover and 0.98 or 0.88) end
+            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(br[1], br[2], br[3], hover and 1 or 0.92) end
         end
         btn:SetScript("OnMouseDown", function(self)
             self._msuf2PreviewZoomDown = true

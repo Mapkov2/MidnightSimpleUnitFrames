@@ -41,7 +41,10 @@ end
 local function AddIndexAlias(index, setting, alias, minTokens)
     alias = Normalize(alias)
     if alias == "" then return end
-    local tokens = Tokens(alias)
+    -- alias is already normalized; split directly instead of Tokens(), which
+    -- would run the full Normalize pass a second time per alias.
+    local tokens = {}
+    for token in alias:gmatch("%S+") do tokens[#tokens + 1] = token end
     local count = #tokens
     minTokens = tonumber(minTokens) or 1
     if count < minTokens then return end

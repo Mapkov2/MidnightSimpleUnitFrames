@@ -209,7 +209,8 @@ local function StyleInput(input)
         local fill, edge = T.CreateSuperellipseLayers(input, "_msuf2AssistantInput", 2, "BACKGROUND", "BORDER")
         input._msuf2RoundedEditFill = fill
         input._msuf2RoundedEditEdge = edge
-        input._msuf2RoundedEditColor = { 0.010, 0.014, 0.028, 0.98 }
+        local c = T.colors and T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+        input._msuf2RoundedEditColor = { c[1], c[2], c[3], 0.98 }
         if input._msuf2PaintEditBox then input:_msuf2PaintEditBox(false) end
     end
 end
@@ -732,7 +733,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     if panel.help.SetWordWrap then panel.help:SetWordWrap(true) end
 
     local boxH = max(76, min(conversationH, 250) - 82)
-    panel.boxFrame = T.Panel and T.Panel(panel, nil, { 0.020, 0.024, 0.046, 0.96 }, T.colors and T.colors.borderSoft or { 0.16, 0.20, 0.30, 0.80 }) or CreateFrame("Frame", nil, panel)
+    panel.boxFrame = T.Panel and T.Panel(panel, nil, T.colors and T.colors.glassPopup or { 0.006, 0.016, 0.032, 0.96 }, T.colors and T.colors.borderSoft or { 0.026, 0.070, 0.110, 0.80 }) or CreateFrame("Frame", nil, panel)
     panel.boxFrame:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -50)
     panel.boxFrame:SetSize(cardW - 44, boxH)
     panel.boxScroll = CreateFrame("ScrollFrame", nil, panel.boxFrame)

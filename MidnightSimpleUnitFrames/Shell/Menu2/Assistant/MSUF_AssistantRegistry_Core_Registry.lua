@@ -18,10 +18,37 @@ if type(Registry) ~= "table" then return end
 
 local AddSettingToFindIndex
 
+-- Alias permutation helpers can emit thousands of near-identical phrases per
+-- setting (aura lane generators peak above 4000). Every alias costs index
+-- build time AND per-query fuzzy scoring, so exact duplicates are dropped and
+-- the list is capped. Generators emit canonical phrases first, so keeping the
+-- head preserves the useful match surface; anything dropped still matches
+-- through the label and the kept aliases via fuzzy scoring.
+local MAX_SETTING_ALIASES = 200
+
+local function DedupeAndCapAliases(aliases)
+    if type(aliases) ~= "table" then return {} end
+    local seen, out = {}, {}
+    for i = 1, #aliases do
+        local alias = aliases[i]
+        if type(alias) == "string" and alias ~= "" and not seen[alias] then
+            seen[alias] = true
+            out[#out + 1] = alias
+            if #out >= MAX_SETTING_ALIASES then break end
+        end
+    end
+    return out
+end
+
 function Registry:RegisterSetting(spec)
     if type(spec) ~= "table" or type(spec.key) ~= "string" or spec.key == "" then return nil end
     if self.settingsByKey[spec.key] then return self.settingsByKey[spec.key] end
-    spec.aliases = type(spec.aliases) == "table" and spec.aliases or {}
+    spec.aliases = DedupeAndCapAliases(spec.aliases)
+    -- Some domains route their permutation output through exactAliases (aura
+    -- lane registrars pass lists of 1200+); cap those the same way.
+    if type(spec.exactAliases) == "table" and #spec.exactAliases > 0 then
+        spec.exactAliases = DedupeAndCapAliases(spec.exactAliases)
+    end
     self.settings[#self.settings + 1] = spec
     self.settingsByKey[spec.key] = spec
     if type(self._findSettingsIndex) == "table"

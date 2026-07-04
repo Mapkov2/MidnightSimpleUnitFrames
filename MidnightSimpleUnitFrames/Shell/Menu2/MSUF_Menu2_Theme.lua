@@ -765,6 +765,18 @@ local function PlaceGlassLine(tex, frame, point, height)
     end
     tex:SetHeight(height or 1)
 end
+local function PlaceGlassSideLine(tex, frame, point, width)
+    if not tex then return end
+    tex:ClearAllPoints()
+    if point == "RIGHT" then
+        tex:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -3, -4)
+        tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, 4)
+    else
+        tex:SetPoint("TOPLEFT", frame, "TOPLEFT", 3, -4)
+        tex:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 3, 4)
+    end
+    tex:SetWidth(width or 1)
+end
 local function PaintGlassLayer(frame, key, subLevel, color, texture, inset, blend, texCoord)
     local tex = GlassTexture(frame, key, "BORDER", subLevel)
     if color then
@@ -779,10 +791,334 @@ local function PaintGlassLayer(frame, key, subLevel, color, texture, inset, blen
     end
     return tex
 end
+local function HideFrameTexture(frame, key)
+    local tex = frame and frame[key]
+    if tex and tex.Hide then tex:Hide() end
+end
+local GLASS_LAYER_KEYS = {
+    "_msuf2GlassTint",
+    "_msuf2GlassWash",
+    "_msuf2GlassDepth",
+    "_msuf2GlassGrain",
+    "_msuf2GlassOuterGlow",
+    "_msuf2GlassTopLine",
+    "_msuf2GlassTopGlow",
+    "_msuf2GlassBottomLine",
+    "_msuf2GlassLeftLine",
+    "_msuf2GlassRightLine",
+}
+local function HideLegacyGlassLayers(frame)
+    for i = 1, #GLASS_LAYER_KEYS do HideFrameTexture(frame, GLASS_LAYER_KEYS[i]) end
+end
+local PANEL_ASSET_KEY = {
+    shell = "panelShell",
+    rail = "panelRail",
+    host = "panelHost",
+    status = "panelStatus",
+    card = "panelCard",
+    popup = "panelPopup",
+}
+local PANEL_SLICES = {
+    { "TL", 0.000, 0.125, 0.000, 0.125 },
+    { "T",  0.125, 0.875, 0.000, 0.125 },
+    { "TR", 0.875, 1.000, 0.000, 0.125 },
+    { "L",  0.000, 0.125, 0.125, 0.875 },
+    { "C",  0.125, 0.875, 0.125, 0.875 },
+    { "R",  0.875, 1.000, 0.125, 0.875 },
+    { "BL", 0.000, 0.125, 0.875, 1.000 },
+    { "B",  0.125, 0.875, 0.875, 1.000 },
+    { "BR", 0.875, 1.000, 0.875, 1.000 },
+}
+local function EnsurePanelAsset(frame)
+    if not (frame and frame.CreateTexture) then return nil end
+    if frame._msuf2PanelAsset then return frame._msuf2PanelAsset end
+    local art = {}
+    for i = 1, #PANEL_SLICES do
+        local spec = PANEL_SLICES[i]
+        local tex = frame:CreateTexture(nil, "BACKGROUND", nil, 7)
+        tex:SetTexCoord(spec[2], spec[3], spec[4], spec[5])
+        if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
+        tex:Hide()
+        art[spec[1]] = tex
+    end
+    local function Layout()
+        local w = (frame.GetWidth and frame:GetWidth()) or 120
+        local h = (frame.GetHeight and frame:GetHeight()) or 80
+        local c = math.max(6, math.min(16, math.floor(math.min(w, h) * 0.34 + 0.5)))
+        local os = 2
+        art.TL:ClearAllPoints(); art.T:ClearAllPoints(); art.TR:ClearAllPoints()
+        art.L:ClearAllPoints(); art.C:ClearAllPoints(); art.R:ClearAllPoints()
+        art.BL:ClearAllPoints(); art.B:ClearAllPoints(); art.BR:ClearAllPoints()
+        art.TL:SetPoint("TOPLEFT", frame, "TOPLEFT", -os, os); art.TL:SetSize(c, c)
+        art.TR:SetPoint("TOPRIGHT", frame, "TOPRIGHT", os, os); art.TR:SetSize(c, c)
+        art.BL:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -os, -os); art.BL:SetSize(c, c)
+        art.BR:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", os, -os); art.BR:SetSize(c, c)
+        art.T:SetPoint("TOPLEFT", art.TL, "TOPRIGHT", 0, 0); art.T:SetPoint("BOTTOMRIGHT", art.TR, "BOTTOMLEFT", 0, 0)
+        art.B:SetPoint("TOPLEFT", art.BL, "TOPRIGHT", 0, 0); art.B:SetPoint("BOTTOMRIGHT", art.BR, "BOTTOMLEFT", 0, 0)
+        art.L:SetPoint("TOPLEFT", art.TL, "BOTTOMLEFT", 0, 0); art.L:SetPoint("BOTTOMRIGHT", art.BL, "TOPRIGHT", 0, 0)
+        art.R:SetPoint("TOPLEFT", art.TR, "BOTTOMLEFT", 0, 0); art.R:SetPoint("BOTTOMRIGHT", art.BR, "TOPRIGHT", 0, 0)
+        art.C:SetPoint("TOPLEFT", art.TL, "BOTTOMRIGHT", 0, 0); art.C:SetPoint("BOTTOMRIGHT", art.BR, "TOPLEFT", 0, 0)
+    end
+    art.Layout = Layout
+    Layout()
+    if frame.HookScript and not frame._msuf2PanelAssetLayoutHooked then
+        frame._msuf2PanelAssetLayoutHooked = true
+        frame:HookScript("OnSizeChanged", Layout)
+    end
+    frame._msuf2PanelAsset = art
+    return art
+end
+local function ApplyPanelAsset(frame, variant)
+    local mediaKey = PANEL_ASSET_KEY[variant or "card"]
+    local path = mediaKey and T.media and T.media[mediaKey]
+    if not path then return false end
+    local art = EnsurePanelAsset(frame)
+    if not art then return false end
+    if art.path ~= path then
+        art.path = path
+        for i = 1, #PANEL_SLICES do
+            local tex = art[PANEL_SLICES[i][1]]
+            if tex then tex:SetTexture(path) end
+        end
+    end
+    if art.Layout then art.Layout() end
+    for i = 1, #PANEL_SLICES do
+        local tex = art[PANEL_SLICES[i][1]]
+        if tex then tex:Show() end
+    end
+    if frame.SetBackdropColor then frame:SetBackdropColor(0, 0, 0, 0.001) end
+    if frame.SetBackdropBorderColor then frame:SetBackdropBorderColor(0, 0, 0, 0.001) end
+    frame._msuf2PanelAssetApplied = true
+    return true
+end
+local function HidePanelAsset(frame)
+    local art = frame and frame._msuf2PanelAsset
+    if not art then return end
+    for i = 1, #PANEL_SLICES do
+        local tex = art[PANEL_SLICES[i][1]]
+        if tex and tex.Hide then tex:Hide() end
+    end
+    frame._msuf2PanelAssetApplied = nil
+end
+local function EnsurePanelAssetDepth(frame)
+    if not (frame and frame.CreateTexture) then return nil end
+    if frame._msuf2PanelAssetDepth then return frame._msuf2PanelAssetDepth end
+    local top = frame:CreateTexture(nil, "BORDER", nil, -8)
+    top:SetPoint("TOPLEFT", frame, "TOPLEFT", 7, -5)
+    top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -7, -5)
+    if top.SetBlendMode then top:SetBlendMode("ADD") end
+    local bottom = frame:CreateTexture(nil, "BORDER", nil, -8)
+    bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 6, 5)
+    bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -6, 5)
+    local grain = frame:CreateTexture(nil, "BORDER", nil, -7)
+    grain:SetPoint("TOPLEFT", frame, "TOPLEFT", 5, -5)
+    grain:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -5, 5)
+    if grain.SetBlendMode then grain:SetBlendMode("BLEND") end
+    local leftGlint = frame:CreateTexture(nil, "ARTWORK", nil, 1)
+    leftGlint:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -4)
+    leftGlint:SetHeight(2)
+    leftGlint:SetTexture((T.media and T.media.gradH) or WHITE8)
+    if leftGlint.SetTexCoord then leftGlint:SetTexCoord(0, 1, 0, 1) end
+    if leftGlint.SetBlendMode then leftGlint:SetBlendMode("ADD") end
+    local rightGlint = frame:CreateTexture(nil, "ARTWORK", nil, 1)
+    rightGlint:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -4)
+    rightGlint:SetHeight(2)
+    rightGlint:SetTexture((T.media and T.media.gradHRev) or WHITE8)
+    if rightGlint.SetTexCoord then rightGlint:SetTexCoord(0, 1, 0, 1) end
+    if rightGlint.SetBlendMode then rightGlint:SetBlendMode("ADD") end
+    local cornerGlow = frame:CreateTexture(nil, "ARTWORK", nil, 0)
+    cornerGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -4)
+    cornerGlow:SetSize(76, 18)
+    cornerGlow:SetTexture(T.media.bgSmooth or WHITE8)
+    if cornerGlow.SetBlendMode then cornerGlow:SetBlendMode("ADD") end
+    frame._msuf2PanelAssetDepth = { top = top, bottom = bottom, grain = grain, leftGlint = leftGlint, rightGlint = rightGlint, cornerGlow = cornerGlow }
+    return frame._msuf2PanelAssetDepth
+end
+local function StopPanelNeonPulse(depth)
+    if not depth then return end
+    if depth._neonPulse and depth._neonPulse.Stop then depth._neonPulse:Stop() end
+    if depth.leftGlint and depth.leftGlint.SetAlpha then depth.leftGlint:SetAlpha(1) end
+    if depth.rightGlint and depth.rightGlint.SetAlpha then depth.rightGlint:SetAlpha(1) end
+    if depth.cornerGlow and depth.cornerGlow.SetAlpha then depth.cornerGlow:SetAlpha(1) end
+end
+local function StartPanelNeonPulse(depth, strong)
+    if not (depth and depth.leftGlint and depth.leftGlint.CreateAnimationGroup) then return end
+    if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then
+        StopPanelNeonPulse(depth)
+        return
+    end
+    if not depth._neonPulse then
+        local group = depth.leftGlint:CreateAnimationGroup()
+        if group.SetLooping then group:SetLooping("REPEAT") end
+        local fadeIn = group:CreateAnimation("Alpha")
+        if fadeIn.SetFromAlpha then fadeIn:SetFromAlpha(strong and 0.64 or 0.58) end
+        if fadeIn.SetToAlpha then fadeIn:SetToAlpha(strong and 0.92 or 0.78) end
+        if fadeIn.SetDuration then fadeIn:SetDuration(strong and 5.40 or 6.40) end
+        if fadeIn.SetSmoothing then fadeIn:SetSmoothing("IN_OUT") end
+        if fadeIn.SetOrder then fadeIn:SetOrder(1) end
+        local fadeOut = group:CreateAnimation("Alpha")
+        if fadeOut.SetFromAlpha then fadeOut:SetFromAlpha(strong and 0.92 or 0.78) end
+        if fadeOut.SetToAlpha then fadeOut:SetToAlpha(strong and 0.62 or 0.54) end
+        if fadeOut.SetDuration then fadeOut:SetDuration(strong and 7.20 or 8.40) end
+        if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN_OUT") end
+        if fadeOut.SetOrder then fadeOut:SetOrder(2) end
+        depth._neonPulse = group
+    end
+    if depth._neonPulse and depth._neonPulse.Play and (not depth._neonPulse.IsPlaying or not depth._neonPulse:IsPlaying()) then depth._neonPulse:Play() end
+end
+local function ApplyPanelAssetDepth(frame, variant)
+    local depth = EnsurePanelAssetDepth(frame)
+    if not depth then return end
+    local strong = variant == "shell" or variant == "rail" or variant == "popup"
+    local topH = strong and 36 or 28
+    local bottomH = strong and 58 or 42
+    local glow = frame._msuf2NeonColor or T.colors.coreGlow or T.colors.coreBlue or T.colors.accent
+    local shadow = T.colors.coreShadow or { 0.006, 0.016, 0.032, 1 }
+    if depth.top then
+        depth.top:SetHeight(topH)
+        ApplyTextureGradient(depth.top, "VERTICAL",
+            { glow[1], glow[2], glow[3], strong and 0.016 or 0.011 },
+            { glow[1], glow[2], glow[3], 0.000 },
+            false)
+        depth.top:Show()
+    end
+    if depth.bottom then
+        depth.bottom:SetHeight(bottomH)
+        ApplyTextureGradient(depth.bottom, "VERTICAL",
+            { shadow[1], shadow[2], shadow[3], 0.000 },
+            { shadow[1], shadow[2], shadow[3], strong and 0.130 or 0.095 },
+            false)
+        depth.bottom:Show()
+    end
+    if depth.grain then
+        if T.media and T.media.bgCharcoal then depth.grain:SetTexture(T.media.bgCharcoal) end
+        depth.grain:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.007 or 0.005)
+        depth.grain:Show()
+    end
+    if frame._msuf2NoPanelNeon or not frame._msuf2NeonEdge then
+        StopPanelNeonPulse(depth)
+        if depth.leftGlint and depth.leftGlint.Hide then depth.leftGlint:Hide() end
+        if depth.rightGlint and depth.rightGlint.Hide then depth.rightGlint:Hide() end
+        if depth.cornerGlow and depth.cornerGlow.Hide then depth.cornerGlow:Hide() end
+        return
+    end
+    local w = (frame.GetWidth and frame:GetWidth()) or 180
+    local glintW = math.max(36, math.min(strong and 118 or 86, math.floor(w * (strong and 0.115 or 0.095) + 0.5)))
+    if depth.leftGlint then
+        depth.leftGlint:SetWidth(glintW)
+        depth.leftGlint:SetTexture((T.media and T.media.gradH) or WHITE8)
+        depth.leftGlint._msuf2TextureMode = nil
+        depth.leftGlint:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.105 or 0.064)
+        depth.leftGlint:Show()
+    end
+    if depth.rightGlint then
+        depth.rightGlint:SetWidth(math.floor(glintW * 0.70 + 0.5))
+        depth.rightGlint:SetTexture((T.media and T.media.gradHRev) or WHITE8)
+        depth.rightGlint._msuf2TextureMode = nil
+        depth.rightGlint:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.076 or 0.046)
+        depth.rightGlint:Show()
+    end
+    if depth.cornerGlow then
+        depth.cornerGlow:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.026 or 0.014)
+        depth.cornerGlow:Show()
+    end
+    StartPanelNeonPulse(depth, strong)
+end
+local function HidePanelAssetDepth(frame)
+    local depth = frame and frame._msuf2PanelAssetDepth
+    if not depth then return end
+    StopPanelNeonPulse(depth)
+    if depth.top and depth.top.Hide then depth.top:Hide() end
+    if depth.bottom and depth.bottom.Hide then depth.bottom:Hide() end
+    if depth.grain and depth.grain.Hide then depth.grain:Hide() end
+    if depth.leftGlint and depth.leftGlint.Hide then depth.leftGlint:Hide() end
+    if depth.rightGlint and depth.rightGlint.Hide then depth.rightGlint:Hide() end
+    if depth.cornerGlow and depth.cornerGlow.Hide then depth.cornerGlow:Hide() end
+end
+local function NeonColor(kind, opts)
+    opts = opts or {}
+    if opts.color then return opts.color end
+    if kind == "error" or kind == "danger" then return T.colors.danger or { 0.880, 0.280, 0.280, 1 } end
+    if kind == "success" then return T.colors.ok or { 0.240, 0.820, 0.460, 1 } end
+    if kind == "warning" then return T.colors.accent2 or { 0.965, 0.760, 0.150, 1 } end
+    return T.colors.coreGlow or T.colors.accent or { 0.090, 0.360, 0.540, 1 }
+end
+function T.ClearNeonEdge(frame)
+    if not frame then return frame end
+    frame._msuf2NeonEdge = nil
+    frame._msuf2NeonColor = nil
+    ApplyPanelAssetDepth(frame, frame._msuf2GlassVariant or "card")
+    return frame
+end
+function T.ApplyNeonEdge(frame, kind, opts)
+    if not (frame and frame.CreateTexture) then return frame end
+    opts = opts or {}
+    frame._msuf2NoPanelNeon = nil
+    frame._msuf2NeonEdge = true
+    frame._msuf2NeonColor = NeonColor(kind, opts)
+    frame._msuf2NeonKind = kind or "ambient"
+    ApplyPanelAssetDepth(frame, opts.variant or frame._msuf2GlassVariant or "card")
+    return frame
+end
+function T.PlayNeonFlash(frame, kind, opts)
+    if not (frame and frame.CreateTexture) then return frame end
+    opts = opts or {}
+    local color = NeonColor(kind, opts)
+    local flash = frame._msuf2NeonFlash
+    if not flash then
+        flash = frame:CreateTexture(nil, "OVERLAY", nil, 6)
+        flash:SetTexture((T.media and T.media.superellipse) or WHITE8)
+        flash:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+        flash:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+        if flash.SetBlendMode then flash:SetBlendMode("ADD") end
+        frame._msuf2NeonFlash = flash
+    end
+    flash:SetVertexColor(color[1], color[2], color[3], opts.alpha or 0.26)
+    flash:SetAlpha(opts.alpha or 0.26)
+    flash:Show()
+    if flash._msuf2FlashGroup and flash._msuf2FlashGroup.Stop then flash._msuf2FlashGroup:Stop() end
+    if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then
+        flash:SetAlpha(0)
+        flash:Hide()
+        return frame
+    end
+    if flash.CreateAnimationGroup then
+        local group = flash:CreateAnimationGroup()
+        local fade = group:CreateAnimation("Alpha")
+        if fade.SetFromAlpha then fade:SetFromAlpha(opts.alpha or 0.26) end
+        if fade.SetToAlpha then fade:SetToAlpha(0) end
+        if fade.SetDuration then fade:SetDuration(opts.duration or 0.70) end
+        if fade.SetSmoothing then fade:SetSmoothing("OUT") end
+        if group.SetScript then
+            group:SetScript("OnFinished", function()
+                if flash.SetAlpha then flash:SetAlpha(0) end
+                if flash.Hide then flash:Hide() end
+            end)
+        end
+        flash._msuf2FlashGroup = group
+        group:Play()
+    else
+        flash:SetAlpha(0)
+        flash:Hide()
+    end
+    return frame
+end
 function T.ApplyGlass(frame, variant)
     if not (frame and frame.CreateTexture) then return frame end
     if T.ApplyGradient and T.gradients and T.gradients[variant or "card"] then T.ApplyGradient(frame, variant or "card", { key = "_msuf2MaterialGradient" }) end
     local spec = GLASS_VARIANTS[variant or "card"] or GLASS_VARIANTS.card
+    local panelAssetApplied = ApplyPanelAsset(frame, variant or "card")
+    if panelAssetApplied then
+        frame._msuf2GlassVariant = variant
+        frame._msuf2GlassApplied = true
+        HideLegacyGlassLayers(frame)
+        ApplyPanelAssetDepth(frame, variant or "card")
+        return frame
+    end
+    if frame._msuf2PanelAssetApplied then
+        HidePanelAsset(frame)
+        HidePanelAssetDepth(frame)
+    end
     if frame._msuf2GlassVariant == variant and frame._msuf2GlassApplied then return frame end
     frame._msuf2GlassVariant = variant
     frame._msuf2GlassApplied = true
@@ -793,14 +1129,87 @@ function T.ApplyGlass(frame, variant)
     PaintGlassLayer(frame, "_msuf2GlassWash", 1, spec.wash, T.media.bgSmooth, 3, "ADD")
     PaintGlassLayer(frame, "_msuf2GlassDepth", 2, spec.depth, T.media.bgSmooth, 3, "BLEND", { 0, 0, 1, 0, 0, 1, 1, 1 })
     PaintGlassLayer(frame, "_msuf2GlassGrain", 3, spec.grain, T.media.bgCharcoal, 2)
+    PaintGlassLayer(frame, "_msuf2GlassOuterGlow", -1, spec.glow, T.media.bgSmooth, -3, "ADD")
     local top = GlassTexture(frame, "_msuf2GlassTopLine", "ARTWORK", 0)
     PlaceGlassLine(top, frame, "TOP", 1)
     ColorTexture(top, spec.top)
     if top and top.Show then top:Show() end
+    local topGlow = GlassTexture(frame, "_msuf2GlassTopGlow", "ARTWORK", 1)
+    PlaceGlassLine(topGlow, frame, "TOP", 3)
+    ColorTexture(topGlow, spec.glow)
+    if topGlow and topGlow.SetBlendMode then topGlow:SetBlendMode("ADD") end
+    if topGlow and topGlow.Show then topGlow:Show() end
     local bottom = GlassTexture(frame, "_msuf2GlassBottomLine", "ARTWORK", 0)
     PlaceGlassLine(bottom, frame, "BOTTOM", 1)
     ColorTexture(bottom, spec.bottom)
     if bottom and bottom.Show then bottom:Show() end
+    local left = GlassTexture(frame, "_msuf2GlassLeftLine", "ARTWORK", 0)
+    PlaceGlassSideLine(left, frame, "LEFT", 1)
+    ColorTexture(left, spec.side or spec.top)
+    if left and left.Show then left:Show() end
+    local right = GlassTexture(frame, "_msuf2GlassRightLine", "ARTWORK", 0)
+    PlaceGlassSideLine(right, frame, "RIGHT", 1)
+    ColorTexture(right, spec.side or spec.top)
+    if right and right.Show then right:Show() end
+    return frame
+end
+function T.ApplyPlasticDepth(frame, variant)
+    if not (frame and frame.CreateTexture) then return frame end
+    if frame._msuf2PanelAssetApplied then
+        HideFrameTexture(frame, "_msuf2PlasticTop")
+        HideFrameTexture(frame, "_msuf2PlasticBottom")
+        HideFrameTexture(frame, "_msuf2PlasticLip")
+        return frame
+    end
+    variant = variant or "card"
+    local strong = variant == "card" or variant == "guide" or variant == "warning"
+    local topH = strong and 18 or 14
+    local bottomH = strong and 22 or 16
+    local top = frame._msuf2PlasticTop
+    if not top then
+        top = frame:CreateTexture(nil, "ARTWORK", nil, -2)
+        frame._msuf2PlasticTop = top
+        SmoothTexture(top)
+    end
+    top:ClearAllPoints()
+    top:SetPoint("TOPLEFT", frame, "TOPLEFT", 5, -5)
+    top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -5, -5)
+    top:SetHeight(topH)
+    local highlight = T.colors.coreBlue or T.colors.accent
+    ApplyTextureGradient(top, "VERTICAL",
+        { highlight[1], highlight[2], highlight[3], strong and 0.048 or 0.030 },
+        { highlight[1], highlight[2], highlight[3], 0.000 },
+        false)
+    if top.SetBlendMode then top:SetBlendMode("ADD") end
+    top:Show()
+    local bottom = frame._msuf2PlasticBottom
+    if not bottom then
+        bottom = frame:CreateTexture(nil, "BORDER", nil, 5)
+        frame._msuf2PlasticBottom = bottom
+        SmoothTexture(bottom)
+    end
+    bottom:ClearAllPoints()
+    bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 4, 4)
+    bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
+    bottom:SetHeight(bottomH)
+    ApplyTextureGradient(bottom, "VERTICAL",
+        { 0.000, 0.000, 0.000, 0.000 },
+        { 0.000, 0.000, 0.000, strong and 0.260 or 0.180 },
+        false)
+    bottom:Show()
+    local lip = frame._msuf2PlasticLip
+    if not lip then
+        lip = frame:CreateTexture(nil, "ARTWORK", nil, 4)
+        frame._msuf2PlasticLip = lip
+        lip:SetTexture(WHITE8)
+    end
+    lip:ClearAllPoints()
+    lip:SetPoint("TOPLEFT", frame, "TOPLEFT", 7, -6)
+    lip:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -7, -6)
+    lip:SetHeight(1)
+    local lipColor = T.colors.coreBlue or T.colors.accent
+    lip:SetColorTexture(lipColor[1], lipColor[2], lipColor[3], strong and 0.095 or 0.060)
+    lip:Show()
     return frame
 end
 local function ResolveGradientSpec(token)
@@ -855,6 +1264,7 @@ function T.ApplyMaterial(frame, material)
         frame._msuf2MaterialGradient:Hide()
     end
     if spec.glass and T.ApplyGlass then T.ApplyGlass(frame, spec.glass) end
+    if spec.plastic ~= false and T.ApplyPlasticDepth then T.ApplyPlasticDepth(frame, spec.glass or material) end
     if spec.veil and T.ApplyFocusVeil then T.ApplyFocusVeil(frame, spec.veil) end
     return frame
 end
@@ -1242,6 +1652,53 @@ function T.Panel(parent, name, bg, border)
     if T.ApplyGradient then T.ApplyGradient(f, DynamicGradientFromColor(bg or T.colors.panel), { key = "_msuf2MaterialGradient" }) end
     return f
 end
+function T.ApplyBottomRoundCap(frame, opts)
+    if not (frame and frame.CreateTexture and T.CreateSuperellipseLayers) then return frame end
+    opts = opts or {}
+    local cap = frame._msuf2BottomRoundCap
+    if opts.shown == false then
+        if cap and cap.Hide then cap:Hide() end
+        return frame
+    end
+    if not cap then
+        cap = CreateFrame("Frame", nil, frame)
+        cap:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, -1)
+        cap:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -1)
+        cap:SetHeight(opts.height or 18)
+        if cap.EnableMouse then cap:EnableMouse(false) end
+        frame._msuf2BottomRoundCap = cap
+        local leftCover = cap:CreateTexture(nil, "BORDER", nil, 4)
+        leftCover:SetPoint("BOTTOMLEFT", cap, "BOTTOMLEFT", 0, 0)
+        leftCover:SetSize(18, 18)
+        cap._msuf2LeftCover = leftCover
+        local rightCover = cap:CreateTexture(nil, "BORDER", nil, 4)
+        rightCover:SetPoint("BOTTOMRIGHT", cap, "BOTTOMRIGHT", 0, 0)
+        rightCover:SetSize(18, 18)
+        cap._msuf2RightCover = rightCover
+        local fill, edge = T.CreateSuperellipseLayers(cap, "_msuf2BottomRound", 1, "ARTWORK", "OVERLAY")
+        cap._msuf2Fill = fill
+        cap._msuf2Edge = edge
+    elseif opts.height and cap.SetHeight then
+        cap:SetHeight(opts.height)
+    end
+    if cap.Show then cap:Show() end
+    if cap.SetFrameLevel and frame.GetFrameLevel then cap:SetFrameLevel((frame:GetFrameLevel() or 0) + 6) end
+    local shadow = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+    local cover = opts.cover or { shadow[1], shadow[2], shadow[3], 0.82 }
+    if cap._msuf2LeftCover then cap._msuf2LeftCover:SetColorTexture(cover[1], cover[2], cover[3], cover[4] or 1) end
+    if cap._msuf2RightCover then cap._msuf2RightCover:SetColorTexture(cover[1], cover[2], cover[3], cover[4] or 1) end
+    local fillColor = opts.fill or T.colors.panel2 or { 0.014, 0.038, 0.072, 0.78 }
+    local edgeColor = opts.border or T.colors.cardBorder or T.colors.borderSoft or { 0.320, 0.460, 0.590, 0.40 }
+    if cap._msuf2Fill then
+        if T.SetFillGradient then
+            T.SetFillGradient(cap._msuf2Fill, fillColor, 0.08, -0.18)
+        else
+            cap._msuf2Fill:SetVertexColor(fillColor[1], fillColor[2], fillColor[3], fillColor[4] or 1)
+        end
+    end
+    if cap._msuf2Edge then cap._msuf2Edge:SetVertexColor(edgeColor[1], edgeColor[2], edgeColor[3], edgeColor[4] or 1) end
+    return frame
+end
 local EDIT_BOX_EDGE_SPECS = { { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 }, { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 }, { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 } }
 local EDIT_BOX_NATIVE_SUFFIXES = WL "Left Right Middle Mid"
 function T.SkinEditBox(editBox)
@@ -1265,7 +1722,9 @@ function T.SkinEditBox(editBox)
             end
         end
     end
-    T.ApplyBackdrop(editBox, { 0.020, 0.024, 0.046, 0.96 }, T.colors.borderSoft)
+    local shadow = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+    local rim = T.colors.coreRim or { 0.043, 0.096, 0.150 }
+    T.ApplyBackdrop(editBox, { shadow[1], shadow[2], shadow[3], 0.720 }, { rim[1], rim[2], rim[3], 0.38 })
     if editBox.CreateTexture then
         local bg = editBox:CreateTexture(nil, "BACKGROUND", nil, -6)
         bg:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
@@ -1288,7 +1747,8 @@ function T.SkinEditBox(editBox)
         local roundedFill = self._msuf2RoundedEditFill
         local roundedEdge = self._msuf2RoundedEditEdge
         if roundedFill and roundedEdge then
-            local bg = self._msuf2RoundedEditColor or { 0.018, 0.024, 0.050, 0.98 }
+            local c = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+            local bg = self._msuf2RoundedEditColor or { c[1], c[2], c[3], 0.98 }
             SetFillGradient(roundedFill, { bg[1] or 0.018, bg[2] or 0.024, bg[3] or 0.050, (bg[4] or 0.98) * alpha }, 0.10, -0.16)
             local c = focused and T.colors.accent or T.colors.borderSoft
             local a = focused and 0.95 or 0.78
@@ -1305,7 +1765,8 @@ function T.SkinEditBox(editBox)
             return
         end
         if self._msuf2EditBg then
-            local bg = { 0.018, 0.024, 0.050, 0.98 * alpha }
+            local c = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+            local bg = { c[1], c[2], c[3], 0.98 * alpha }
             ApplyTextureGradient(self._msuf2EditBg, "VERTICAL", ShadeColor(bg, 0.10, 1), ShadeColor(bg, -0.16, 1), false)
         end
         local c = focused and T.colors.accent or T.colors.borderSoft
@@ -1358,11 +1819,305 @@ local function PaintButtonParts(fill, edge, label, bg, br, tx, top, bottom, text
     edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
     SetLabelColor(label, tx, textAlpha)
 end
+local function EnsureButtonDepthArt(btn)
+    if not (btn and btn.CreateTexture) then return nil end
+    if btn._msuf2ButtonDepthArt then return btn._msuf2ButtonDepthArt end
+    local top = btn:CreateTexture(nil, "ARTWORK", nil, 2)
+    top:SetPoint("TOPLEFT", btn, "TOPLEFT", 6, -2)
+    top:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -6, -2)
+    top:SetHeight(5)
+    top:SetTexture(WHITE8)
+    if top.SetBlendMode then top:SetBlendMode("ADD") end
+    local bottom = btn:CreateTexture(nil, "BORDER", nil, 7)
+    bottom:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 5, 2)
+    bottom:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -5, 2)
+    bottom:SetHeight(6)
+    bottom:SetTexture(WHITE8)
+    local lip = btn:CreateTexture(nil, "ARTWORK", nil, 3)
+    lip:SetPoint("TOPLEFT", btn, "TOPLEFT", 8, -3)
+    lip:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -8, -3)
+    lip:SetHeight(1)
+    lip:SetTexture(WHITE8)
+    if lip.SetBlendMode then lip:SetBlendMode("ADD") end
+    btn._msuf2ButtonDepthArt = { top = top, bottom = bottom, lip = lip }
+    return btn._msuf2ButtonDepthArt
+end
+local function SetButtonDepthArt(btn, base, edgeColor, active, hover)
+    local art = EnsureButtonDepthArt(btn)
+    if not art then return end
+    local alpha = active and 1.00 or hover and 0.82 or 0.58
+    local top = art.top
+    local bottom = art.bottom
+    local lip = art.lip
+    local glow = T.colors.coreGlow or T.colors.accent
+    top:SetVertexColor(glow[1], glow[2], glow[3], 0.055 * alpha)
+    top:Show()
+    local shadow = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
+    bottom:SetVertexColor(shadow[1], shadow[2], shadow[3], 0.150 * alpha)
+    bottom:Show()
+    local ec = edgeColor or T.colors.accent
+    lip:SetVertexColor(ec[1], ec[2], ec[3], (active and 0.22 or hover and 0.16 or 0.10))
+    lip:Show()
+end
+local function HideButtonDepthArt(btn)
+    local art = btn and btn._msuf2ButtonDepthArt
+    if not art then return end
+    if art.top and art.top.Hide then art.top:Hide() end
+    if art.bottom and art.bottom.Hide then art.bottom:Hide() end
+    if art.lip and art.lip.Hide then art.lip:Hide() end
+end
 local function PaintStoredNavIcon(btn, alpha)
     if btn._msuf2NavIcon and btn._msuf2NavIconColor then
         local ic = btn._msuf2NavIconColor
         btn._msuf2NavIcon:SetVertexColor(ic[1], ic[2], ic[3], alpha)
     end
+end
+local NAV_PILL_TEX = {
+    idle = "navPillIdle",
+    hover = "navPillHover",
+    active = "navPillActive",
+}
+local function LayoutNavPillTexture(btn, tex)
+    if not (btn and tex) then return end
+    local h = (btn.GetHeight and btn:GetHeight()) or 20
+    local buttonW = (btn.GetWidth and btn:GetWidth()) or 120
+    local w = tonumber(btn._msuf2NavPillVisualWidth)
+    if not w or w <= 0 then w = buttonW end
+    if buttonW and buttonW > 0 and w > buttonW then w = buttonW end
+    tex:ClearAllPoints()
+    tex:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
+    tex:SetSize(w, h)
+end
+local function LayoutNavPillArt(btn, art)
+    if not art then return end
+    LayoutNavPillTexture(btn, art.texture)
+    LayoutNavPillTexture(btn, art.hoverWash)
+    LayoutNavPillTexture(btn, art.glow)
+    LayoutNavPillTexture(btn, art.sheen)
+end
+local function EnsureNavPillArt(btn)
+    if not (btn and btn.CreateTexture) then return nil end
+    if btn._msuf2NavPillArt then return btn._msuf2NavPillArt end
+    local tex = btn:CreateTexture(nil, "BORDER", nil, 7)
+    if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+    if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
+    tex:Hide()
+    local glow = btn:CreateTexture(nil, "ARTWORK", nil, 1)
+    if glow.SetTexCoord then glow:SetTexCoord(0, 1, 0, 1) end
+    if glow.SetBlendMode then glow:SetBlendMode("ADD") end
+    glow:Hide()
+    local hoverWash = btn:CreateTexture(nil, "ARTWORK", nil, 0)
+    if hoverWash.SetTexCoord then hoverWash:SetTexCoord(0, 1, 0, 1) end
+    if hoverWash.SetBlendMode then hoverWash:SetBlendMode("ADD") end
+    hoverWash:Hide()
+    local sheen = btn:CreateTexture(nil, "ARTWORK", nil, 2)
+    if sheen.SetTexCoord then sheen:SetTexCoord(0, 1, 0, 1) end
+    if sheen.SetBlendMode then sheen:SetBlendMode("ADD") end
+    sheen:Hide()
+    local art = { texture = tex, hoverWash = hoverWash, glow = glow, sheen = sheen }
+    LayoutNavPillArt(btn, art)
+    btn._msuf2NavPillArt = art
+    return art
+end
+local StopNavPillGlowPulse
+local function HideNavPillArt(btn)
+    local art = btn and btn._msuf2NavPillArt
+    if not art then return end
+    StopNavPillGlowPulse(art)
+    if art.texture then art.texture:Hide() end
+    if art.hoverWash then art.hoverWash:Hide() end
+    if art.glow then art.glow:Hide() end
+    if art.sheen then art.sheen:Hide() end
+    if art.L then art.L:Hide() end
+    if art.M then art.M:Hide() end
+    if art.R then art.R:Hide() end
+end
+StopNavPillGlowPulse = function(art)
+    if not art then return end
+    local group = art._pulse
+    if group and group.Stop then group:Stop() end
+    if art.glow and art.glow.SetAlpha then art.glow:SetAlpha(1) end
+    if art.sheen and art.sheen.SetAlpha then art.sheen:SetAlpha(1) end
+end
+local function StartNavPillGlowPulse(art)
+    if not (art and art.glow and art.glow.CreateAnimationGroup) then return end
+    if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then
+        StopNavPillGlowPulse(art)
+        return
+    end
+    if not art._pulse then
+        local group = art.glow:CreateAnimationGroup()
+        if group.SetLooping then group:SetLooping("REPEAT") end
+        local fadeIn = group:CreateAnimation("Alpha")
+        if fadeIn.SetFromAlpha then fadeIn:SetFromAlpha(0.78) end
+        if fadeIn.SetToAlpha then fadeIn:SetToAlpha(1.00) end
+        if fadeIn.SetDuration then fadeIn:SetDuration(1.45) end
+        if fadeIn.SetSmoothing then fadeIn:SetSmoothing("IN_OUT") end
+        if fadeIn.SetOrder then fadeIn:SetOrder(1) end
+        local fadeOut = group:CreateAnimation("Alpha")
+        if fadeOut.SetFromAlpha then fadeOut:SetFromAlpha(1.00) end
+        if fadeOut.SetToAlpha then fadeOut:SetToAlpha(0.80) end
+        if fadeOut.SetDuration then fadeOut:SetDuration(1.85) end
+        if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN_OUT") end
+        if fadeOut.SetOrder then fadeOut:SetOrder(2) end
+        art._pulse = group
+    end
+    if art._pulse and art._pulse.Play and (not art._pulse.IsPlaying or not art._pulse:IsPlaying()) then art._pulse:Play() end
+end
+local function PaintNavPillGlowArt(art, path, state)
+    if not art then return end
+    local active = state == "active"
+    local hover = state == "hover"
+    if not (active or hover) then
+        StopNavPillGlowPulse(art)
+        if art.hoverWash then art.hoverWash:Hide() end
+        if art.glow then art.glow:Hide() end
+        if art.sheen then art.sheen:Hide() end
+        return
+    end
+    local c = T.colors or {}
+    local blue = c.coreBlue or c.accent or { 0.060, 0.250, 0.390, 1 }
+    if art.hoverWash then
+        if hover then
+            if art.hoverWashPath ~= path then
+                art.hoverWashPath = path
+                art.hoverWash:SetTexture(path)
+                art.hoverWash._msuf2TextureMode = nil
+                if art.hoverWash.SetTexCoord then art.hoverWash:SetTexCoord(0, 1, 0, 1) end
+            end
+            ApplyTextureGradient(art.hoverWash, "VERTICAL",
+                { blue[1], blue[2], blue[3], 0.165 },
+                { blue[1], blue[2], blue[3], 0.045 },
+                true)
+            art.hoverWash:Show()
+        else
+            art.hoverWash:Hide()
+        end
+    end
+    if art.glow then
+        if art.glowPath ~= path then
+            art.glowPath = path
+            art.glow:SetTexture(path)
+            art.glow._msuf2TextureMode = nil
+            if art.glow.SetTexCoord then art.glow:SetTexCoord(0, 1, 0, 1) end
+        end
+        ApplyTextureGradient(art.glow, "VERTICAL",
+            { blue[1], blue[2], blue[3], active and 0.120 or 0.055 },
+            { blue[1], blue[2], blue[3], active and 0.024 or 0.010 },
+            true)
+        art.glow:Show()
+    end
+    if art.sheen then
+        if art.sheenPath ~= path then
+            art.sheenPath = path
+            art.sheen:SetTexture(path)
+            art.sheen._msuf2TextureMode = nil
+            if art.sheen.SetTexCoord then art.sheen:SetTexCoord(0, 1, 0, 1) end
+        end
+        ApplyTextureGradient(art.sheen, "HORIZONTAL",
+            { blue[1], blue[2], blue[3], 0.000 },
+            { blue[1], blue[2], blue[3], active and 0.090 or 0.040 },
+            true)
+        art.sheen:Show()
+    end
+    if active then
+        StartNavPillGlowPulse(art)
+    else
+        StopNavPillGlowPulse(art)
+    end
+end
+local function SetNavPillArt(btn, state, baseColor, topAmount, bottomAmount, alphaMul)
+    local media = T.media or {}
+    local path = media[NAV_PILL_TEX[state or "idle"] or ""]
+    if not path then return false end
+    local art = EnsureNavPillArt(btn)
+    if not art then return false end
+    LayoutNavPillArt(btn, art)
+    if art.path ~= path then
+        art.path = path
+        if art.texture then
+            art.texture:SetTexture(path)
+            art.texture._msuf2TextureMode = nil
+            if art.texture.SetTexCoord then art.texture:SetTexCoord(0, 1, 0, 1) end
+        end
+    end
+    if art.texture then
+        local base = baseColor or T.colors.navPillBase or T.colors.pillBase
+        local top = art._topColor or {}
+        local bottom = art._bottomColor or {}
+        art._topColor = top
+        art._bottomColor = bottom
+        ShadeColorInto(top, base, topAmount or 0.22, alphaMul)
+        ShadeColorInto(bottom, base, bottomAmount or -0.18, alphaMul)
+        ApplyTextureGradient(art.texture, "VERTICAL", top, bottom, true)
+        art.texture:Show()
+        PaintNavPillGlowArt(art, path, state)
+    end
+    return true
+end
+local function SetSuperellipsePartsShown(parts, shown)
+    if not parts then return end
+    local list = parts._parts
+    if not list then return end
+    for i = 1, #list do
+        if shown then
+            list[i]:Show()
+        else
+            list[i]:Hide()
+        end
+    end
+end
+local function SetSuperellipsePartsBlend(parts, blend)
+    if not parts then return end
+    local list = parts._parts
+    if not list then return end
+    for i = 1, #list do
+        if list[i].SetBlendMode then list[i]:SetBlendMode(blend or "BLEND") end
+    end
+end
+local function EnsureNavActiveFX(btn)
+    if not (btn and btn.CreateTexture and T.CreateSuperellipseLayers) then return nil end
+    if btn._msuf2NavActiveFX then return btn._msuf2NavActiveFX end
+    local glowFill, glowEdge = T.CreateSuperellipseLayers(btn, "_msuf2NavActiveGlow", 0, "ARTWORK", "OVERLAY")
+    local sheenFill, sheenEdge = T.CreateSuperellipseLayers(btn, "_msuf2NavActiveSheen", 4, "ARTWORK", "ARTWORK")
+    SetSuperellipsePartsBlend(glowFill, "ADD")
+    SetSuperellipsePartsBlend(sheenFill, "ADD")
+    local fx = {
+        glowFill = glowFill,
+        glowEdge = glowEdge,
+        sheenFill = sheenFill,
+        sheenEdge = sheenEdge,
+    }
+    SetSuperellipsePartsShown(glowFill, false)
+    SetSuperellipsePartsShown(glowEdge, false)
+    SetSuperellipsePartsShown(sheenFill, false)
+    SetSuperellipsePartsShown(sheenEdge, false)
+    btn._msuf2NavActiveFX = fx
+    return fx
+end
+local function SetNavActiveFX(btn, active, hover)
+    if not active then
+        local fx = btn and btn._msuf2NavActiveFX
+        if not fx then return end
+        SetSuperellipsePartsShown(fx.glowFill, false)
+        SetSuperellipsePartsShown(fx.glowEdge, false)
+        SetSuperellipsePartsShown(fx.sheenFill, false)
+        SetSuperellipsePartsShown(fx.sheenEdge, false)
+        return
+    end
+    local fx = btn and (btn._msuf2NavActiveFX or EnsureNavActiveFX(btn))
+    if not fx then return end
+    local c = T.colors
+    local blue = c.coreBlue or c.accent
+    local glow = c.coreGlow or c.accent
+    local hot = c.coreHot or glow
+    if fx.glowFill then T.SetFillGradient(fx.glowFill, { blue[1], blue[2], blue[3], hover and 0.30 or 0.23 }, 0.34, -0.18) end
+    if fx.glowEdge then fx.glowEdge:SetVertexColor(glow[1], glow[2], glow[3], hover and 0.76 or 0.56) end
+    if fx.sheenFill then T.SetFillGradient(fx.sheenFill, { hot[1], hot[2], hot[3], hover and 0.18 or 0.115 }, 0.42, -0.55) end
+    SetSuperellipsePartsShown(fx.glowFill, true)
+    SetSuperellipsePartsShown(fx.glowEdge, true)
+    SetSuperellipsePartsShown(fx.sheenFill, true)
+    SetSuperellipsePartsShown(fx.sheenEdge, false)
 end
 local function ButtonVisual(btn, active, hover)
     local c = T.colors
@@ -1370,85 +2125,129 @@ local function ButtonVisual(btn, active, hover)
     local edge = btn._msuf2Edge
     local enabled = not (btn.IsEnabled and not btn:IsEnabled())
     if not enabled then
-        SetFillGradient(fill, { 0.075, 0.080, 0.105, 0.55 }, 0.08, -0.14)
-        edge:SetVertexColor(0.180, 0.210, 0.300, 0.45)
+        HideNavPillArt(btn)
+        SetNavActiveFX(btn, false)
+        SetFillGradient(fill, { c.coreShadow[1], c.coreShadow[2], c.coreShadow[3], 0.55 }, 0.08, -0.14)
+        edge:SetVertexColor(c.coreRim[1], c.coreRim[2], c.coreRim[3], 0.45)
+        SetButtonDepthArt(btn, nil, { c.coreRim[1], c.coreRim[2], c.coreRim[3], 0.45 }, false, false)
         btn._msuf2Label:SetTextColor(0.50, 0.52, 0.58, 0.95)
         return
     end
     if btn._msuf2NavHeader then
-        fill:SetVertexColor(0, 0, 0, 0)
-        edge:SetVertexColor(0, 0, 0, 0)
+        HideNavPillArt(btn)
+        SetNavActiveFX(btn, false)
+        HideButtonDepthArt(btn)
+        SetSuperellipsePartsShown(fill, false)
+        SetSuperellipsePartsShown(edge, false)
         local tx = hover and (c.navHeaderHover or c.navHeaderText) or c.navHeaderText
         SetLabelColor(btn._msuf2Label, tx)
         return
     end
     if btn._msuf2Danger then
+        HideNavPillArt(btn)
+        SetNavActiveFX(btn, false)
         if active or hover then
             SetFillGradient(fill, { 0.180, 0.040, 0.065, 0.97 }, 0.18, -0.18)
             edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.95)
+            SetButtonDepthArt(btn, nil, c.danger, active, hover)
         else
             SetFillGradient(fill, { 0.140, 0.030, 0.050, 0.94 }, 0.14, -0.20)
             edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.82)
+            SetButtonDepthArt(btn, nil, c.danger, false, false)
         end
         btn._msuf2Label:SetTextColor(c.text[1], c.text[2], c.text[3], 1)
         return
     end
     if btn._msuf2Primary then
+        HideNavPillArt(btn)
+        SetNavActiveFX(btn, false)
         if active or hover then
-            SetFillGradient(fill, { 0.200, 0.640, 0.820, 0.99 }, 0.18, -0.16)
-            edge:SetVertexColor(0.260, 0.830, 1.000, 0.90)
+            SetFillGradient(fill, { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.64 }, 0.08, -0.28)
+            edge:SetVertexColor(c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.46)
+            SetButtonDepthArt(btn, nil, { c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.46 }, active, hover)
         else
-            SetFillGradient(fill, { 0.160, 0.560, 0.720, 0.97 }, 0.15, -0.18)
-            edge:SetVertexColor(0.220, 0.720, 0.940, 0.85)
+            SetFillGradient(fill, { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.56 }, 0.07, -0.30)
+            edge:SetVertexColor(c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.38)
+            SetButtonDepthArt(btn, nil, { c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.38 }, false, false)
         end
         btn._msuf2Label:SetTextColor(1, 1, 1, 1)
         return
     end
     if btn._msuf2Success then
+        HideNavPillArt(btn)
+        SetNavActiveFX(btn, false)
         if active or hover then
             SetFillGradient(fill, { 0.060, 0.380, 0.180, 0.98 }, 0.18, -0.18)
             edge:SetVertexColor(0.220, 0.860, 0.420, 0.90)
+            SetButtonDepthArt(btn, nil, { 0.220, 0.860, 0.420, 0.90 }, active, hover)
         else
             SetFillGradient(fill, { 0.040, 0.280, 0.130, 0.95 }, 0.14, -0.20)
             edge:SetVertexColor(0.140, 0.660, 0.310, 0.82)
+            SetButtonDepthArt(btn, nil, { 0.140, 0.660, 0.310, 0.82 }, false, false)
         end
         btn._msuf2Label:SetTextColor(0.92, 1.00, 0.94, 1)
         return
     end
     if btn._msuf2NavItem then
+        HideButtonDepthArt(btn)
+        SetSuperellipsePartsShown(fill, false)
+        SetSuperellipsePartsShown(edge, false)
         if active then
+            local bg = hover and { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.72 } or c.navPillActive
+            local br = hover and { c.coreGlow[1], c.coreGlow[2], c.coreGlow[3], 0.55 } or c.navPillEdgeActive
             if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
-            local bg, br, tx = c.navPillActive, c.navPillEdgeActive, c.navTextActive
-            PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.16, -0.15)
-            if btn._msuf2NavIcon then btn._msuf2NavIcon:SetVertexColor(0.96, 0.99, 1.00, 1.00) end
+            if SetNavPillArt(btn, "active", bg, hover and 0.20 or 0.17, -0.20) then
+                SetNavActiveFX(btn, false)
+                SetLabelColor(btn._msuf2Label, c.navTextActive)
+            else
+                SetSuperellipsePartsShown(fill, true)
+                SetSuperellipsePartsShown(edge, true)
+                PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, c.navTextActive, 0.24, -0.18)
+                SetNavActiveFX(btn, true, hover)
+            end
+            if btn._msuf2NavIcon then btn._msuf2NavIcon:SetVertexColor(0.82, 0.92, 1.00, 0.96) end
         elseif hover then
-            if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
             local bg, br, tx = c.navPillHover, c.navPillEdgeHover, c.navText
-            PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.14, -0.18, 1)
+            SetNavActiveFX(btn, false)
+            if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
+            if SetNavPillArt(btn, "hover", bg, 0.14, -0.22) then
+                SetLabelColor(btn._msuf2Label, c.navHeaderHover or tx, 1)
+            else
+                SetSuperellipsePartsShown(fill, true)
+                SetSuperellipsePartsShown(edge, true)
+                PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.14, -0.18, 1)
+            end
             PaintStoredNavIcon(btn, 0.88)
         else
+            local tx = c.navText
+            SetNavActiveFX(btn, false)
             if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
-            local bg, br, tx = btn._msuf2SolidPill and c.navPillBaseSolid or c.navPillBase, c.navPillEdge, c.navText
-            PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.12, -0.20)
+            HideNavPillArt(btn)
+            SetLabelColor(btn._msuf2Label, tx)
             PaintStoredNavIcon(btn, 0.64)
         end
         return
     end
+    HideNavPillArt(btn)
+    SetNavActiveFX(btn, false)
     if active then
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
         local bg, br, tx = c.pillActive, c.pillEdgeActive, c.pillTextActive
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.16, -0.15)
+        SetButtonDepthArt(btn, bg, br, true, hover)
         PaintStoredNavIcon(btn, 1.00)
     elseif hover then
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br = c.pillHover, c.pillEdgeHover
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, c.text, 0.14, -0.18, 1)
+        SetButtonDepthArt(btn, bg, br, false, true)
         PaintStoredNavIcon(btn, 0.85)
     else
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br, tx = c.pillBase, c.pillEdge, c.pillText
         if btn._msuf2SolidPill then bg = c.pillBaseSolid end
         PaintButtonParts(fill, edge, btn._msuf2Label, bg, br, tx, 0.12, -0.20, 0.95)
+        SetButtonDepthArt(btn, bg, br, false, false)
         PaintStoredNavIcon(btn, 0.50)
     end
     if (not active) and btn._msuf2Override and edge then
@@ -1585,7 +2384,7 @@ local function CloseButtonVisual(btn, hover, down)
         elseif hover then
             SetFillGradient(fill, { 0.230, 0.045, 0.065, 0.96 * alpha }, 0.14, -0.18)
         else
-            SetFillGradient(fill, { 0.075, 0.080, 0.125, 0.92 * alpha }, 0.10, -0.20)
+            SetFillGradient(fill, { T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], 0.92 * alpha }, 0.10, -0.20)
         end
     end
     if edge and edge.SetVertexColor then
@@ -1673,7 +2472,10 @@ function T.StyleScrollFrame(scroll, anchor)
     track:SetPoint("TOP", bar, "TOP", 0, 0)
     track:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
     track:SetWidth(2)
-    ApplyTextureGradient(track, "VERTICAL", { 0.042, 0.052, 0.095, 0.82 }, { 0.010, 0.014, 0.030, 0.82 }, true)
+    ApplyTextureGradient(track, "VERTICAL",
+        { T.colors.coreSurface[1], T.colors.coreSurface[2], T.colors.coreSurface[3], 0.82 },
+        { T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], 0.82 },
+        true)
     bar._msuf2Track = track
     local trackEdge = PixelBarTexture(bar:CreateTexture(nil, "BORDER"))
     trackEdge:SetPoint("TOPLEFT", track, "TOPRIGHT", 1, 0)
@@ -1681,8 +2483,8 @@ function T.StyleScrollFrame(scroll, anchor)
     trackEdge:SetWidth(1)
     trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.38)
     bar._msuf2TrackEdge = trackEdge
-    local thumbBase = { 0.240, 0.300, 0.430 }
-    local thumbHover = { 0.320, 0.420, 0.560 }
+    local thumbBase = T.colors.coreRim
+    local thumbHover = T.colors.coreRaised
     local thumb = PixelBarTexture(bar:CreateTexture(nil, "OVERLAY"))
     thumb:SetSize(5, 42)
     ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 }, { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
@@ -1693,7 +2495,10 @@ function T.StyleScrollFrame(scroll, anchor)
         local alpha = shown and 1 or 0
         if track then
             local a = (hover and 0.98 or 0.82) * alpha
-            ApplyTextureGradient(track, "VERTICAL", { 0.042, 0.052, 0.095, a }, { 0.010, 0.014, 0.030, a }, true)
+            ApplyTextureGradient(track, "VERTICAL",
+                { T.colors.coreSurface[1], T.colors.coreSurface[2], T.colors.coreSurface[3], a },
+                { T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], a },
+                true)
         end
         if trackEdge then trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], (hover and 0.62 or 0.38) * alpha) end
         if thumb and thumb.SetColorTexture then

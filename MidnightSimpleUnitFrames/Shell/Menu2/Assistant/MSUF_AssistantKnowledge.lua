@@ -607,6 +607,37 @@ function K.EnsureIndex()
     return K.index
 end
 
+-- Building the knowledge index walks every registry setting through Normalize
+-- (many seconds of CPU). Inside a job coroutine that work yields in slices;
+-- on the main thread it would freeze the client until the script-ran-too-long
+-- watchdog kills it. Query paths therefore only build when it is safe to do
+-- so, and otherwise queue a low-priority background build and report "cold".
+local function CanBuildIndexNow()
+    if type(K.index) == "table" and K.index.version == INDEX_VERSION then return true end
+    if type(coroutine) == "table" and type(coroutine.running) == "function" then
+        local co, isMain = coroutine.running()
+        if co and not isMain then return true end
+    end
+    return false
+end
+
+local function QueueBackgroundIndexBuild()
+    if K._indexBuildQueued then return end
+    if type(A.StartJob) ~= "function" or type(A.CoroutineStep) ~= "function" then return end
+    K._indexBuildQueued = true
+    A.StartJob("assistant.knowledge.index", {
+        A.CoroutineStep(function() K.EnsureIndex() end),
+    }, function()
+        K._indexBuildQueued = nil
+    end, { lowPriority = true })
+end
+
+function K.EnsureIndexIfSafe()
+    if CanBuildIndexNow() then return K.EnsureIndex() end
+    QueueBackgroundIndexBuild()
+    return nil
+end
+
 local LOCATION_TERMS = {
     "where", "where is", "where are", "find", "search", "open", "go to", "show me", "wo", "wo ist", "finde", "suche", "oeffne",
 }
@@ -877,7 +908,8 @@ end
 
 function K.Search(query, limit, opts)
     opts = opts or {}
-    local index = K.EnsureIndex()
+    local index = K.EnsureIndexIfSafe()
+    if not index then return nil end
     local pageKey = opts.ignoreCurrentPage and "home" or CurrentPageKey()
     local intent = QueryIntent(query)
     local cleanedQuery = SearchQueryText(query)
@@ -1151,7 +1183,8 @@ local function RememberKnowledgeHelpContext(result)
 end
 
 local function CountRegisteredForPage(page)
-    local index = K.EnsureIndex()
+    local index = K.EnsureIndexIfSafe()
+    if not index then return 0, 0 end
     local settings, actions = 0, 0
     for i = 1, #(index.items or {}) do
         if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -1278,6 +1311,9 @@ end
 
 local function CapabilityHelp(german)
     local counts = K.Summary()
+    -- Cold knowledge index on the main thread: decline so the deferred job
+    -- path (which can build the index in yielding slices) answers instead.
+    if not counts then return nil end
     local settingCount = tostring(counts.setting or 0)
     local actionCount = tostring((counts.action or 0) + (counts.diagnostic or 0))
     local lines = {
@@ -2294,7 +2330,8 @@ function K.NoMatch(query)
 end
 
 function K.Summary()
-    local index = K.EnsureIndex()
+    local index = K.EnsureIndexIfSafe()
+    if not index then return nil end
     if type(K.summaryCache) == "table" and K.summaryCacheIndex == index then return K.summaryCache end
     local counts = {}
     for i = 1, #(index.items or {}) do
