@@ -813,6 +813,16 @@ local function StopPreviewAnimationDriver(box)
     box:SetScript("OnUpdate", nil)
     if box.UnregisterEvent then box:UnregisterEvent("PLAYER_REGEN_DISABLED") end
 end
+local function KillPreviewAnimationForCombat(box)
+    if not box then return end
+    StopPreviewAnimationDriver(box)
+    box._animationEnabled = nil
+    box._animationElapsed = 0
+    box._animationAccum = 0
+    box._previewAnimationState = nil
+    box._previewAnimationData = nil
+    RefreshPreviewAnimationButton(box)
+end
 local function RefreshPreviewAnimationFrame(box)
     local refresh = Preview and Preview.Refresh
     if type(refresh) == "function" then
@@ -827,7 +837,7 @@ local function PreviewAnimationOnUpdate(box, elapsed)
         return
     end
     if PreviewAnimationInCombat() then
-        StopPreviewAnimationDriver(box)
+        KillPreviewAnimationForCombat(box)
         if box.hint then box.hint:SetText(TR("Preview animation pauses during combat.")) end
         return
     end
@@ -851,6 +861,7 @@ SetPreviewAnimationEnabled = function(box, enabled, reason)
     if not box then return end
     enabled = enabled == true
     if enabled and PreviewAnimationInCombat() then
+        KillPreviewAnimationForCombat(box)
         if box.hint then box.hint:SetText(TR("Preview animation pauses during combat.")) end
         RefreshPreviewAnimationButton(box)
         return
@@ -1359,7 +1370,7 @@ local function BuildPreview(parent, panel, width, height)
     end)
     box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
-            StopPreviewAnimationDriver(self)
+            KillPreviewAnimationForCombat(self)
             self._refreshReason = nil
             self._refreshQueued = nil
             self._selectedHandle = nil

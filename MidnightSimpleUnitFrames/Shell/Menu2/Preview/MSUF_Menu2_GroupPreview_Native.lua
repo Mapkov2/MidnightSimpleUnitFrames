@@ -167,6 +167,16 @@ local function StopPreviewAnimationDriver(box)
     box:SetScript("OnUpdate", nil)
     if box.UnregisterEvent then box:UnregisterEvent("PLAYER_REGEN_DISABLED") end
 end
+local function KillPreviewAnimationForCombat(box)
+    if not box then return end
+    StopPreviewAnimationDriver(box)
+    box._animationEnabled = nil
+    box._animationElapsed = 0
+    box._animationAccum = 0
+    box._msufGFMenuPreviewAnimState = nil
+    box._msufGFMenuPreviewAuraStates = nil
+    RefreshPreviewAnimationButton(box)
+end
 local function RefreshPreviewAnimationFrame(box)
     if box and type(box.Refresh) == "function" then
         box:Refresh("GROUP_PREVIEW_ANIMATE")
@@ -180,7 +190,7 @@ local function PreviewAnimationOnUpdate(box, elapsed)
         return
     end
     if PreviewAnimationInCombat() then
-        StopPreviewAnimationDriver(box)
+        KillPreviewAnimationForCombat(box)
         if box._hint then box._hint:SetText((M.Tr and M.Tr("Preview animation pauses during combat.")) or "Preview animation pauses during combat.") end
         return
     end
@@ -204,6 +214,7 @@ local function SetPreviewAnimationEnabled(box, enabled, reason)
     if not box then return end
     enabled = enabled == true
     if enabled and PreviewAnimationInCombat() then
+        KillPreviewAnimationForCombat(box)
         if box._hint then box._hint:SetText((M.Tr and M.Tr("Preview animation pauses during combat.")) or "Preview animation pauses during combat.") end
         RefreshPreviewAnimationButton(box)
         return
@@ -1203,7 +1214,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end)
     box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
-            StopPreviewAnimationDriver(self)
+            KillPreviewAnimationForCombat(self)
         end
     end)
     box:HookScript("OnSizeChanged", function(self, width, height)
