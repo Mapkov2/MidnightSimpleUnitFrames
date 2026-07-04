@@ -16,7 +16,6 @@ local Metadata = UF.Metadata or {}
 local type = type
 local tostring = tostring
 local tonumber = tonumber
-local select = select
 local next = next
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
@@ -508,15 +507,6 @@ local function ApplyCachedUnitFrameScreenPosition(frame, key, unit)
   return true
 end
 
-local function ForceUnits(reason, ...)
-  for i = 1, select("#", ...) do
-    local unit = select(i, ...)
-    if unit then
-      UF.UpdateRuntime(unit, reason or "MSUF_FORCE_UPDATE")
-    end
-  end
-end
-
 local pendingTargetVisual = false
 local pendingTargetAuras = false
 local pendingFocusVisual = false
@@ -534,6 +524,7 @@ local dependentUnitTickerBudget = 0
 local dependentUnitPollTick = 0
 local DependentIdentityGuidChanged
 local DependentUnitTimerCallback
+local SyncRuntimeDriver
 local DEPENDENT_UNIT_TICK_SECONDS = 0.5
 local DEPENDENT_UNIT_TICK_BUDGET = 3
 local DEPENDENT_UNIT_TICK_REASON = "MSUF_UNIT_IDENTITY_SOFT_FAST"
@@ -690,6 +681,57 @@ local function RuntimeFrame(unit)
   return nil
 end
 
+local IDENTITY_DRIVER_ELEMENTS = {
+  LoadConditions = true,
+  Health = true,
+  Power = true,
+  Text = true,
+  NameText = true,
+  HealthText = true,
+  PowerText = true,
+  InlineToT = true,
+  Portrait = true,
+  StatusIndicators = true,
+  RaidMarkerIndicator = true,
+  LeaderIndicator = true,
+  LevelIndicator = true,
+  RaidGroupIndicator = true,
+  EliteIndicator = true,
+  StatusTextIndicator = true,
+  CombatIndicator = true,
+  RestingIndicator = true,
+  IncomingResIndicator = true,
+  PVPIndicator = true,
+  Prediction = true,
+  Alpha = true,
+  Borders = true,
+  Auras = true,
+  GroupStatusRuntime = true,
+  GroupVisuals = true,
+  GroupCornerIndicators = true,
+}
+
+local function FrameNeedsIdentityDriver(frame)
+  local active = frame and frame._msufActiveElements
+  if not active then
+    return false
+  end
+  for name in pairs(active) do
+    if IDENTITY_DRIVER_ELEMENTS[name] == true then
+      return true
+    end
+  end
+  return false
+end
+
+local function IdentityRuntimeFrame(unit)
+  local frame = RuntimeFrame(unit)
+  if frame and FrameNeedsIdentityDriver(frame) then
+    return frame
+  end
+  return nil
+end
+
 local function RunRuntimeFrame(frame, reason)
   local update = UF.FrameRuntimeUpdate
   if update then
@@ -782,27 +824,105 @@ local function PlainUnitValue(fn, unit)
   return value, false
 end
 
+local DEP_POLL_HEALTH = 1
+local DEP_POLL_POWER = 2
+local DEP_POLL_NAME = 4
+local DEP_POLL_STATUS = 8
+local DEP_POLL_COMBAT = 16
+local DEP_POLL_ALL = DEP_POLL_HEALTH + DEP_POLL_POWER + DEP_POLL_NAME + DEP_POLL_STATUS + DEP_POLL_COMBAT
+
+-- ToT/FoT do not receive normal unit events. Poll only the state buckets that
+-- active elements can consume instead of sampling every unit API every tick.
+local function DependentPollMask(frame)
+  local active = frame and frame._msufActiveElements
+  if not active then
+    return DEP_POLL_ALL
+  end
+
+  local needHealth = active.Health or active.HealthText or active.Prediction or active.StatusTextIndicator
+  local needPower = active.Power or active.PowerText
+  local needName = active.NameText or active.InlineToT
+  local needStatus = active.Health or active.NameText or active.StatusTextIndicator
+    or active.PVPIndicator or active.GroupStatusRuntime
+  local needCombat = active.CombatIndicator or active.Alpha or active.Borders
+  if active.Auras or active.Portrait or active.RaidMarkerIndicator or active.LeaderIndicator
+    or active.LevelIndicator or active.RaidGroupIndicator or active.EliteIndicator
+    or active.IncomingResIndicator or active.RestingIndicator or active.LoadConditions then
+    needStatus = true
+  end
+
+  local mask = 0
+  if needHealth then mask = mask + DEP_POLL_HEALTH end
+  if needPower then mask = mask + DEP_POLL_POWER end
+  if needName then mask = mask + DEP_POLL_NAME end
+  if needStatus then mask = mask + DEP_POLL_STATUS end
+  if needCombat then mask = mask + DEP_POLL_COMBAT end
+  if mask == 0 then
+    return DEP_POLL_STATUS
+  end
+  return mask
+end
+
+local function ClearDependentPollCache(frame)
+  if not frame then return end
+  frame._msufDependentPollGUID = nil
+  frame._msufDependentPollHP = nil
+  frame._msufDependentPollMaxHP = nil
+  frame._msufDependentPollPower = nil
+  frame._msufDependentPollMaxPower = nil
+  frame._msufDependentPollPowerType = nil
+  frame._msufDependentPollName = nil
+  frame._msufDependentPollConnected = nil
+  frame._msufDependentPollDead = nil
+  frame._msufDependentPollCombat = nil
+end
+
 local function DependentUnitPollStateChanged(frame, unit)
   local guid = frame._msufIdentityGUID
   if guid == false then
     return true
   end
 
-  local hp, hpSecret = PlainUnitValue(UnitHealth, unit)
-  local maxHP, maxSecret = PlainUnitValue(UnitHealthMax, unit)
-  local power, powerSecret = PlainUnitValue(UnitPower, unit)
-  local maxPower, maxPowerSecret = PlainUnitValue(UnitPowerMax, unit)
-  local powerType, powerTypeSecret = PlainUnitValue(UnitPowerType, unit)
-  local name, nameSecret = PlainUnitValue(UnitName, unit)
-  local connected, connectedSecret = PlainUnitValue(UnitIsConnected, unit)
-  local dead, deadSecret = PlainUnitValue(UnitIsDeadOrGhost, unit)
-  local combat, combatSecret = PlainUnitValue(UnitAffectingCombat, unit)
+  local mask = DependentPollMask(frame)
+  local maskChanged = frame._msufDependentPollMask ~= mask
+  if maskChanged then
+    frame._msufDependentPollMask = mask
+    ClearDependentPollCache(frame)
+  end
+
+  local hp, hpSecret, maxHP, maxSecret
+  local power, powerSecret, maxPower, maxPowerSecret, powerType, powerTypeSecret
+  local name, nameSecret
+  local connected, connectedSecret, dead, deadSecret
+  local combat, combatSecret
+
+  if mask % (DEP_POLL_HEALTH * 2) >= DEP_POLL_HEALTH then
+    hp, hpSecret = PlainUnitValue(UnitHealth, unit)
+    maxHP, maxSecret = PlainUnitValue(UnitHealthMax, unit)
+  end
+  if mask % (DEP_POLL_POWER * 2) >= DEP_POLL_POWER then
+    power, powerSecret = PlainUnitValue(UnitPower, unit)
+    maxPower, maxPowerSecret = PlainUnitValue(UnitPowerMax, unit)
+    powerType, powerTypeSecret = PlainUnitValue(UnitPowerType, unit)
+  end
+  if mask % (DEP_POLL_NAME * 2) >= DEP_POLL_NAME then
+    name, nameSecret = PlainUnitValue(UnitName, unit)
+  end
+  if mask % (DEP_POLL_STATUS * 2) >= DEP_POLL_STATUS then
+    connected, connectedSecret = PlainUnitValue(UnitIsConnected, unit)
+    dead, deadSecret = PlainUnitValue(UnitIsDeadOrGhost, unit)
+  end
+  if mask % (DEP_POLL_COMBAT * 2) >= DEP_POLL_COMBAT then
+    combat, combatSecret = PlainUnitValue(UnitAffectingCombat, unit)
+  end
+
   if hpSecret or maxSecret or powerSecret or maxPowerSecret or powerTypeSecret
     or nameSecret or connectedSecret or deadSecret or combatSecret then
     return true
   end
 
-  local changed = frame._msufDependentPollGUID ~= guid
+  local changed = maskChanged
+    or frame._msufDependentPollGUID ~= guid
     or frame._msufDependentPollHP ~= hp
     or frame._msufDependentPollMaxHP ~= maxHP
     or frame._msufDependentPollPower ~= power
@@ -827,7 +947,7 @@ local function DependentUnitPollStateChanged(frame, unit)
 end
 
 local function DependentUnitPollFrame(unit)
-  local frame = RuntimeFrame(unit)
+  local frame = IdentityRuntimeFrame(unit)
   if not frame then
     return nil
   end
@@ -931,6 +1051,103 @@ local function EnsureDependentUnitTicker()
   dependentUnitPollTick = 0
   ScheduleDependentUnitTicker()
 end
+
+local RUNTIME_DRIVER_PEW = 1
+local RUNTIME_DRIVER_TARGET = 2
+local RUNTIME_DRIVER_FOCUS = 4
+local RUNTIME_DRIVER_PET = 8
+local RUNTIME_DRIVER_BOSS = 16
+local RUNTIME_DRIVER_UNIT_TARGET_TARGET = 32
+local RUNTIME_DRIVER_UNIT_TARGET_FOCUS = 64
+local runtimeDriverMask
+
+-- Blizzard's unit frames register optional events only while an owning frame
+-- exists and an active element can consume that identity refresh. RangeFade and
+-- group range have their own drivers, so they do not keep this global frame awake.
+local function AnyIdentityRuntimeFrame()
+  for i = 1, #UF.unitOrder do
+    if IdentityRuntimeFrame(UF.unitOrder[i]) then
+      return true
+    end
+  end
+  return false
+end
+
+local function AnyBossIdentityFrame()
+  return IdentityRuntimeFrame("boss1") or IdentityRuntimeFrame("boss2") or IdentityRuntimeFrame("boss3")
+    or IdentityRuntimeFrame("boss4") or IdentityRuntimeFrame("boss5")
+end
+
+local function RuntimeDriverMask()
+  local mask = 0
+  if AnyIdentityRuntimeFrame() then
+    mask = mask + RUNTIME_DRIVER_PEW
+  end
+  if IdentityRuntimeFrame("target") or IdentityRuntimeFrame("targettarget") then
+    mask = mask + RUNTIME_DRIVER_TARGET
+  end
+  if IdentityRuntimeFrame("focus") or IdentityRuntimeFrame("focustarget") then
+    mask = mask + RUNTIME_DRIVER_FOCUS
+  end
+  if IdentityRuntimeFrame("pet") then
+    mask = mask + RUNTIME_DRIVER_PET
+  end
+  if AnyBossIdentityFrame() then
+    mask = mask + RUNTIME_DRIVER_BOSS
+  end
+  if IdentityRuntimeFrame("targettarget") then
+    mask = mask + RUNTIME_DRIVER_UNIT_TARGET_TARGET
+  end
+  if IdentityRuntimeFrame("focustarget") then
+    mask = mask + RUNTIME_DRIVER_UNIT_TARGET_FOCUS
+  end
+  return mask
+end
+
+SyncRuntimeDriver = function()
+  local driver = UF.driver
+  if not driver then
+    return false
+  end
+  local mask = RuntimeDriverMask()
+  if runtimeDriverMask == mask then
+    return true
+  end
+
+  driver:UnregisterAllEvents()
+  if mask % (RUNTIME_DRIVER_PEW * 2) >= RUNTIME_DRIVER_PEW then
+    driver:RegisterEvent("PLAYER_ENTERING_WORLD")
+  end
+  if mask % (RUNTIME_DRIVER_TARGET * 2) >= RUNTIME_DRIVER_TARGET then
+    driver:RegisterEvent("PLAYER_TARGET_CHANGED")
+  end
+  if mask % (RUNTIME_DRIVER_FOCUS * 2) >= RUNTIME_DRIVER_FOCUS then
+    driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
+  end
+  if mask % (RUNTIME_DRIVER_PET * 2) >= RUNTIME_DRIVER_PET then
+    driver:RegisterEvent("UNIT_PET")
+  end
+  if mask % (RUNTIME_DRIVER_BOSS * 2) >= RUNTIME_DRIVER_BOSS then
+    driver:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+  end
+
+  local wantTargetTarget = mask % (RUNTIME_DRIVER_UNIT_TARGET_TARGET * 2) >= RUNTIME_DRIVER_UNIT_TARGET_TARGET
+  local wantFocusTarget = mask % (RUNTIME_DRIVER_UNIT_TARGET_FOCUS * 2) >= RUNTIME_DRIVER_UNIT_TARGET_FOCUS
+  if wantTargetTarget and wantFocusTarget then
+    driver:RegisterUnitEvent("UNIT_TARGET", "target", "focus")
+  elseif wantTargetTarget then
+    driver:RegisterUnitEvent("UNIT_TARGET", "target")
+  elseif wantFocusTarget then
+    driver:RegisterUnitEvent("UNIT_TARGET", "focus")
+  end
+
+  runtimeDriverMask = mask
+  if mask == 0 then
+    StopDependentUnitTicker()
+  end
+  return true
+end
+UF.SyncRuntimeDriver = SyncRuntimeDriver
 
 local function ConfigTouchesDependentUnits(unit)
   if unit == nil or unit == "*" then
@@ -1093,7 +1310,7 @@ end
 
 local function DriverOnEvent(self, event, unit)
   if event == "PLAYER_TARGET_CHANGED" then
-    local frame = RuntimeFrame("target")
+    local frame = IdentityRuntimeFrame("target")
     if frame then
       RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_FAST")
       RunIdentityAurasCoalesced(frame, "target")
@@ -1101,7 +1318,7 @@ local function DriverOnEvent(self, event, unit)
     ScheduleTargetIdentityDeferred(true, frame)
     EnsureDependentUnitTicker()
   elseif event == "PLAYER_FOCUS_CHANGED" then
-    local frame = RuntimeFrame("focus")
+    local frame = IdentityRuntimeFrame("focus")
     if frame then
       RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_FAST")
       RunIdentityAurasCoalesced(frame, "focus")
@@ -1114,13 +1331,23 @@ local function DriverOnEvent(self, event, unit)
     EnsureDependentUnitTicker()
   elseif event == "UNIT_PET" then
     if unit == "player" then
-      local frame = RuntimeFrame("pet")
+      local frame = IdentityRuntimeFrame("pet")
       if frame then
         RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY")
       end
     end
   elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-    ForceUnits("MSUF_UNIT_IDENTITY", "boss1", "boss2", "boss3", "boss4", "boss5")
+    local frame
+    frame = IdentityRuntimeFrame("boss1")
+    if frame then RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY") end
+    frame = IdentityRuntimeFrame("boss2")
+    if frame then RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY") end
+    frame = IdentityRuntimeFrame("boss3")
+    if frame then RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY") end
+    frame = IdentityRuntimeFrame("boss4")
+    if frame then RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY") end
+    frame = IdentityRuntimeFrame("boss5")
+    if frame then RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY") end
   else
     UF.ForEachFrame(RuntimeUpdateExistingFrame, "MSUF_FORCE_UPDATE")
     EnsureDependentUnitTicker()
@@ -1129,14 +1356,9 @@ end
 
 if not UF.driver then
   UF.driver = CreateFrame("Frame")
-  UF.driver:SetScript("OnEvent", DriverOnEvent)
-  UF.driver:RegisterEvent("PLAYER_ENTERING_WORLD")
-  UF.driver:RegisterEvent("PLAYER_TARGET_CHANGED")
-  UF.driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
-  UF.driver:RegisterEvent("UNIT_PET")
-  UF.driver:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-  UF.driver:RegisterUnitEvent("UNIT_TARGET", "target", "focus")
 end
+UF.driver:SetScript("OnEvent", DriverOnEvent)
+SyncRuntimeDriver()
 
 local REFRESH_ELEMENT_GROUPS = Metadata.refreshElementGroups or EMPTY_METADATA_SET
 
