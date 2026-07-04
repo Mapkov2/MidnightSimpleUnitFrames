@@ -1507,7 +1507,7 @@ function T.StyleSlider(slider)
     local enabled = not (slider.IsEnabled and not slider:IsEnabled())
     local hovered = slider._msuf2SliderHovered and true or false
     local active = enabled and slider._msuf2SliderActive and true or false
-    local alpha = enabled and 1 or 0.45
+    local alpha = enabled and 1 or 0.58
     local accent = T.colors.accent
     local edge = T.colors.border or T.colors.borderSoft
     local thumbMedia = T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8"
@@ -1534,21 +1534,27 @@ function T.StyleSlider(slider)
     slider._msuf2SliderVisualEdgeR, slider._msuf2SliderVisualEdgeG, slider._msuf2SliderVisualEdgeB = edge[1], edge[2], edge[3]
     slider._msuf2SliderVisualThumbMedia = thumbMedia
     if slider._msufTrack then
-        local trackBase = { active and 0.045 or 0.035, active and 0.058 or 0.043, active and 0.098 or 0.078, 0.98 * alpha }
+        local surface = T.colors.coreSurface or { 0.014, 0.038, 0.072, 1 }
+        local trackBase = {
+            surface[1] * (active and 1.45 or hovered and 1.30 or 1.18),
+            surface[2] * (active and 1.42 or hovered and 1.28 or 1.16),
+            surface[3] * (active and 1.36 or hovered and 1.22 or 1.12),
+            0.98 * alpha,
+        }
         SetSliderTextureColor(slider._msufTrack, trackBase[1], trackBase[2], trackBase[3], trackBase[4])
         ApplyTextureGradient(slider._msufTrack, "VERTICAL", ShadeColor(trackBase, 0.10, 1), ShadeColor(trackBase, -0.18, 1), false)
         if slider._msufTrack.Show then slider._msufTrack:Show() end
     end
     if slider._msufTrackTop then
-        SetSliderTextureColor(slider._msufTrackTop, edge[1], edge[2], edge[3], (active and 1.00 or hovered and 0.88 or 0.58) * alpha)
+        SetSliderTextureColor(slider._msufTrackTop, edge[1], edge[2], edge[3], (active and 1.00 or hovered and 0.94 or 0.74) * alpha)
         slider._msufTrackTop:Show()
     end
     if slider._msufTrackBottom then
-        SetSliderTextureColor(slider._msufTrackBottom, edge[1], edge[2], edge[3], (active and 0.54 or 0.34) * alpha)
+        SetSliderTextureColor(slider._msufTrackBottom, edge[1], edge[2], edge[3], (active and 0.62 or hovered and 0.46 or 0.40) * alpha)
         slider._msufTrackBottom:Show()
     end
     if slider._msufFill then
-        local fillAlpha = (active and 1.00 or hovered and 0.92 or 0.76) * alpha
+        local fillAlpha = (active and 1.00 or hovered and 0.96 or 0.86) * alpha
         SetSliderTextureColor(slider._msufFill, accent[1], accent[2], accent[3], fillAlpha)
         ApplyTextureGradient(slider._msufFill, "HORIZONTAL",
             { math.min(accent[1] * 1.24, 1), math.min(accent[2] * 1.14, 1), math.min(accent[3] * 1.10, 1), fillAlpha },
@@ -1557,7 +1563,7 @@ function T.StyleSlider(slider)
         if slider._msufFill.Show then slider._msufFill:Show() end
     end
     if slider._msufFillGlow then
-        SetSliderTextureColor(slider._msufFillGlow, accent[1], accent[2], accent[3], (active and 0.28 or hovered and 0.16 or 0.08) * alpha)
+        SetSliderTextureColor(slider._msufFillGlow, accent[1], accent[2], accent[3], (active and 0.30 or hovered and 0.20 or 0.12) * alpha)
         slider._msufFillGlow:Show()
     end
     local nativeThumb = slider.GetThumbTexture and slider:GetThumbTexture()
@@ -1723,8 +1729,8 @@ function T.SkinEditBox(editBox)
         end
     end
     local shadow = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
-    local rim = T.colors.coreRim or { 0.043, 0.096, 0.150 }
-    T.ApplyBackdrop(editBox, { shadow[1], shadow[2], shadow[3], 0.720 }, { rim[1], rim[2], rim[3], 0.38 })
+    local rim = T.colors.borderSoft or T.colors.coreRim or { 0.070, 0.260, 0.390 }
+    T.ApplyBackdrop(editBox, { shadow[1], shadow[2], shadow[3], 0.760 }, { rim[1], rim[2], rim[3], 0.56 })
     if editBox.CreateTexture then
         local bg = editBox:CreateTexture(nil, "BACKGROUND", nil, -6)
         bg:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
@@ -1743,7 +1749,7 @@ function T.SkinEditBox(editBox)
     end
     local function PaintEditBox(self, focused)
         local enabled = not (self.IsEnabled and not self:IsEnabled())
-        local alpha = enabled and 1 or 0.45
+        local alpha = enabled and 1 or 0.60
         local roundedFill = self._msuf2RoundedEditFill
         local roundedEdge = self._msuf2RoundedEditEdge
         if roundedFill and roundedEdge then
@@ -1751,7 +1757,7 @@ function T.SkinEditBox(editBox)
             local bg = self._msuf2RoundedEditColor or { c[1], c[2], c[3], 0.98 }
             SetFillGradient(roundedFill, { bg[1] or 0.018, bg[2] or 0.024, bg[3] or 0.050, (bg[4] or 0.98) * alpha }, 0.10, -0.16)
             local c = focused and T.colors.accent or T.colors.borderSoft
-            local a = focused and 0.95 or 0.78
+            local a = focused and 0.98 or 0.88
             roundedEdge:SetVertexColor(c[1], c[2], c[3], a * alpha)
             if self.SetBackdropColor then self:SetBackdropColor(0, 0, 0, 0) end
             if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0, 0, 0, 0) end
@@ -1770,7 +1776,7 @@ function T.SkinEditBox(editBox)
             ApplyTextureGradient(self._msuf2EditBg, "VERTICAL", ShadeColor(bg, 0.10, 1), ShadeColor(bg, -0.16, 1), false)
         end
         local c = focused and T.colors.accent or T.colors.borderSoft
-        local a = focused and 0.95 or 0.78
+        local a = focused and 0.98 or 0.88
         local edges = self._msuf2EditEdges
         if edges then
             for i = 1, #edges do

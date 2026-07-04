@@ -73,7 +73,25 @@ local function BuildIndicatorsSection(ctx, b)
     local highlightCard = W.ControlCard(indicators, "Target Highlight", nil, leftX, -38, innerW, 92)
     local targetToggle = BindScopeToggle(ctx, W.SwitchAt(highlightCard, "Target Highlight", innerW - 62, -24, 0, "HIDDEN"), "targetIndicator", true, "visual")
     targetToggle._msuf2GroupFrameGateAlwaysEnabled = true
-    local hlHint = W.Text(highlightCard, "Shows a border around the current target in group frames. Aggro and dispel borders are controlled from |cff38c7f0Global Style > Bars|r > |cff38c7f0Highlight Borders|r.", 16, -42, innerW - 32, T.colors.muted)
+    local function OpenBarsHighlight()
+        _G.MSUF_EM2_MenuFocusRequest = {
+            pageKey = "opt_bars",
+            sectionId = "bars_highlight",
+            explicit = true,
+            consumed = false,
+        }
+        if M.SelectPage and M.SelectPage("opt_bars") == false then
+            _G.MSUF_EM2_MenuFocusRequest = nil
+        end
+    end
+    local openBars = T.Button(highlightCard, "Open Bars", 112, 22)
+    openBars:SetPoint("TOPRIGHT", highlightCard, "TOPRIGHT", -16, -56)
+    T.CenterButtonLabel(openBars)
+    if M.AddTooltip then
+        M.AddTooltip(openBars, "Open Bars", "Global Style > Bars > Highlight Borders", { hook = true })
+    end
+    openBars:SetScript("OnClick", OpenBarsHighlight)
+    local hlHint = W.Text(highlightCard, "Shows a border around the current target in group frames. Aggro and dispel borders are controlled in Bars.", 16, -42, innerW - 164, T.colors.muted)
     if hlHint.SetWordWrap then hlHint:SetWordWrap(true) end
     local groupNumberCard = W.ControlCard(indicators, "Group Number", "Small group index label on each frame.", leftX, -148, leftW, 246)
     local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(groupNumberCard, "Group Number", leftW - 62, -24, 0, "HIDDEN"), "showGroupNumber", false, "visual")

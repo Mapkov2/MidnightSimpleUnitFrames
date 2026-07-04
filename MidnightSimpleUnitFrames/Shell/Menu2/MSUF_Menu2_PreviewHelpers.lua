@@ -1138,25 +1138,28 @@ function H.RefreshLayerButton(btn, owner, opts)
     local available = LayerButtonAvailableFor(owner, btn.key, opts)
     local on = LayerButtonOnFor(owner, btn.key, opts)
     local c = btn.color or LAYER_BUTTON_FALLBACK_COLOR
+    local textOn = opts.textOn or { 0.82, 0.88, 1.00, 0.98 }
+    local textOff = opts.textOff or { 0.54, 0.61, 0.72, 0.78 }
+    local textDisabled = opts.textDisabled or { 0.42, 0.48, 0.58, 0.62 }
     if btn.off then
         btn.off:SetText(opts.offText or "OFF")
-        btn.off:SetShown((not available) or not on)
+        btn.off:SetShown((opts.showOffText == true) and ((not available) or not on))
     end
     if not available then
-        btn.bg:SetColorTexture(0.020, 0.020, 0.028, 0.48)
-        btn.bar:SetColorTexture(0.18, 0.18, 0.22, 0.35)
-        btn.fs:SetTextColor(0.30, 0.30, 0.36, 0.55)
-        btn.off:SetTextColor(0.36, 0.36, 0.42, 0.65)
+        btn.bg:SetColorTexture(0.010, 0.018, 0.030, 0.32)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.30)
+        btn.fs:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], textDisabled[4] or 0.62)
+        if btn.off then btn.off:SetTextColor(textDisabled[1], textDisabled[2], textDisabled[3], 0.72) end
     elseif on then
-        btn.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.58)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.88)
-        btn.fs:SetTextColor(0.76, 0.80, 0.90, 0.95)
-        btn.off:SetTextColor(0.36, 0.36, 0.42, 0.65)
+        btn.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.54)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.94)
+        btn.fs:SetTextColor(textOn[1], textOn[2], textOn[3], textOn[4] or 0.98)
+        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.0) end
     else
-        btn.bg:SetColorTexture(0.035, 0.035, 0.045, 0.35)
-        btn.bar:SetColorTexture(0.18, 0.18, 0.22, 0.32)
-        btn.fs:SetTextColor(0.30, 0.30, 0.36, 0.55)
-        btn.off:SetTextColor(0.40, 0.42, 0.50, 0.78)
+        btn.bg:SetColorTexture(0.010, 0.018, 0.030, 0.26)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.42)
+        btn.fs:SetTextColor(textOff[1], textOff[2], textOff[3], textOff[4] or 0.78)
+        if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.78) end
     end
 end
 function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
@@ -1172,11 +1175,11 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn.bg = btn:CreateTexture(nil, "BACKGROUND")
     btn.bg:SetAllPoints()
     btn.bar = btn:CreateTexture(nil, "ARTWORK")
-    btn.bar:SetSize(2, 14)
-    btn.bar:SetPoint("LEFT", btn, "LEFT", 2, 0)
+    btn.bar:SetSize(3, h - 5)
+    btn.bar:SetPoint("LEFT", btn, "LEFT", 3, 0)
     btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    btn.fs:SetPoint("LEFT", btn.bar, "RIGHT", 5, 0)
-    btn.fs:SetPoint("RIGHT", btn, "RIGHT", -18, 0)
+    btn.fs:SetPoint("LEFT", btn.bar, "RIGHT", 6, 0)
+    btn.fs:SetPoint("RIGHT", btn, "RIGHT", opts.showOffText == true and -22 or -7, 0)
     btn.fs:SetJustifyH("LEFT")
     btn.fs:SetText(tr(def.label))
     if T and T.StyleFontString then T.StyleFontString(btn.fs, { 0.78, 0.84, 0.96, 1 }, 0) end
@@ -1200,7 +1203,8 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
         local available = LayerButtonAvailableFor(owner, self.key, opts)
         local on = LayerButtonOnFor(owner, self.key, opts)
         local c = self.color or LAYER_BUTTON_FALLBACK_COLOR
-        self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.08, (available and on) and c[2] * 0.18 or 0.08, (available and on) and c[3] * 0.18 or 0.10, (available and on) and 0.78 or 0.55)
+        self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.026, (available and on) and c[2] * 0.18 or 0.070, (available and on) and c[3] * 0.18 or 0.110, (available and on) and 0.74 or 0.58)
+        self.bar:SetColorTexture(c[1], c[2], c[3], available and 1.0 or 0.48)
         self.fs:SetTextColor(0.90, 0.92, 1, 1)
         if opts.OnEnter then
             opts.OnEnter(self, owner, available, on, tr)
