@@ -1026,21 +1026,91 @@ local function PointOffsetFromCenter(point, width, height)
     return x, y
 end
 
+local VALID_UNIT_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
+
+local function UnitFramePoint(conf)
+    local point = conf and conf.point or "CENTER"
+    if not VALID_UNIT_POINTS[point] then point = "CENTER" end
+    return point
+end
+
+local function UnitFrameRelativePoint(conf, point)
+    local relativePoint = conf and conf.relativePoint or point or "CENTER"
+    if not VALID_UNIT_POINTS[relativePoint] then relativePoint = point or "CENTER" end
+    return relativePoint
+end
+
+local function ResolveAnchorPointForDrag(anchor, relativePoint, bar, point, conf)
+    local ax, ay = PointXY(anchor, relativePoint)
+    if ax and ay then return ax, ay end
+
+    if bar then
+        local bx, by = PointXY(bar, point)
+        if bx and by then
+            local as = (anchor and anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or 1
+            local fs = (bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
+            if as == 0 then as = 1 end
+            if fs == 0 then fs = 1 end
+            return ((bx * fs) - ((tonumber(conf and conf.offsetX) or 0) * as)) / as,
+                   ((by * fs) - ((tonumber(conf and conf.offsetY) or 0) * as)) / as
+        end
+    end
+
+    return PointXY(UIParent, relativePoint or "CENTER")
+end
+
+local EDIT_COOLDOWN_ANCHORS = {
+    EssentialCooldownViewer = true,
+    UtilityCooldownViewer = true,
+    BuffIconCooldownViewer = true,
+}
+
+local function ResolveNamedEditAnchor(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    if EDIT_COOLDOWN_ANCHORS[name] then
+        local cooldownFrame = type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(name) or nil
+        return cooldownFrame or _G[name]
+    end
+    local uf = _G.MSUF_UnitFrames or _G.UnitFrames
+    if uf and uf[name] then return uf[name] end
+    return _G[name] or _G["MSUF_" .. name]
+end
+
+local function UnitCooldownAnchorName(conf)
+    local cn = conf and conf.anchorFrameName
+    if EDIT_COOLDOWN_ANCHORS[cn] then return cn end
+    if type(cn) == "string" and cn ~= "" then return nil end
+
+    local atv = conf and conf.anchorToUnitframe
+    if EDIT_COOLDOWN_ANCHORS[atv] then return atv end
+    if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "global" and atv ~= "FREE" then return nil end
+
+    local db = _G.MSUF_DB
+    local general = db and db.general
+    if general and general.anchorToCooldown == true then return "EssentialCooldownViewer" end
+    local globalAnchor = general and general.anchorName
+    if EDIT_COOLDOWN_ANCHORS[globalAnchor] then return globalAnchor end
+    return nil
+end
+
 local function ResolveAnchor(key, conf)
     local anchorFn = _G.MSUF_GetAnchorFrame
     local anchor = (type(anchorFn) == "function" and anchorFn()) or UIParent
     if not conf then return anchor end
     local cn = conf.anchorFrameName
     if type(cn) == "string" and cn ~= "" then
-        local ecvFn = _G.MSUF_GetEffectiveCooldownFrame
-        local cf = (type(ecvFn) == "function" and cn == "EssentialCooldownViewer") and ecvFn(cn) or _G[cn]
+        local cf = ResolveNamedEditAnchor(cn)
         if cf and cf ~= UIParent and cf ~= WorldFrame then return cf end
     end
     local atv = conf.anchorToUnitframe
     if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
-        local uf = _G.MSUF_UnitFrames or _G.UnitFrames
-        local rel = uf and uf[atv] or _G["MSUF_" .. atv]
+        local rel = ResolveNamedEditAnchor(atv)
         if rel and rel ~= UIParent and rel ~= WorldFrame then return rel end
+    end
+    local cooldownAnchorName = UnitCooldownAnchorName(conf)
+    if cooldownAnchorName then
+        local cooldownAnchor = ResolveNamedEditAnchor(cooldownAnchorName)
+        if cooldownAnchor and cooldownAnchor ~= UIParent and cooldownAnchor ~= WorldFrame then return cooldownAnchor end
     end
     return anchor
 end
@@ -1368,10 +1438,12 @@ local function OnUpdate(self, elapsed)
                 end
             else
                 local anchor = d.anchor
-                local ax, ay = d.anchorCX, d.anchorCY
+                local point = d.point or "CENTER"
+                local relativePoint = d.relativePoint or point
+                local ax, ay = d.anchorPX, d.anchorPY
                 if not (ax and ay) then
-                    ax, ay = anchor:GetCenter()
-                    d.anchorCX, d.anchorCY = ax, ay
+                    ax, ay = ResolveAnchorPointForDrag(anchor, relativePoint, bar, point, conf)
+                    d.anchorPX, d.anchorPY = ax, ay
                 end
                 if ax and ay then
                     local as = d.anchorScale or anchor:GetEffectiveScale() or 1
@@ -1383,10 +1455,13 @@ local function OnUpdate(self, elapsed)
 
                     local barScreenCX = desiredBarCX * sc  --- sc = UIParent:GetEffectiveScale()
                     local barScreenCY = desiredBarCY * sc
-                    local ancScreenCX = ax * as
-                    local ancScreenCY = ay * as
-                    local offX = (barScreenCX - ancScreenCX) / as
-                    local offY = (barScreenCY - ancScreenCY) / as
+                    local pointDX, pointDY = PointOffsetFromCenter(point, d.barW, d.barH)
+                    local framePointScreenX = barScreenCX + pointDX * fs
+                    local framePointScreenY = barScreenCY + pointDY * fs
+                    local anchorPointScreenX = ax * as
+                    local anchorPointScreenY = ay * as
+                    local offX = (framePointScreenX - anchorPointScreenX) / as
+                    local offY = (framePointScreenY - anchorPointScreenY) / as
 
                     if d.bossAdjX then offX = offX - d.bossAdjX end
                     if d.bossAdjY then offY = offY - d.bossAdjY end
@@ -1418,12 +1493,13 @@ local function OnUpdate(self, elapsed)
                             bar:SetPoint(point, ecv, relPoint, baseX + conf.offsetX, conf.offsetY + extraY)
                         end
                     else
-                        --- Normal path: CENTER-to-CENTER (same as PositionUnitFrame line 2429)
+                        --- Normal path mirrors Factory.ApplyPosition so anchored frames drag
+                        --- against the same point/relativePoint that popup edits apply.
                         if conf.offsetX ~= nextX or conf.offsetY ~= nextY then
                             conf.offsetX = nextX
                             conf.offsetY = nextY
                             bar:ClearAllPoints()
-                            bar:SetPoint("CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
+                            bar:SetPoint(point, anchor, relativePoint, conf.offsetX, conf.offsetY)
                         end
                     end
                     bar._msufDragActive = true
@@ -1505,10 +1581,9 @@ function Ticker.BeginDrag(mover, key, cfg)
     --- Native StartMoving regressed live profiles because the overlay/db sync
     --- cost more than the manual drag path. Keep one predictable path.
     local uiScale = UIParent:GetEffectiveScale() or 1
-    local anchorCX, anchorCY
-    if anchor and anchor.GetCenter then
-        anchorCX, anchorCY = anchor:GetCenter()
-    end
+    local point = UnitFramePoint(conf)
+    local relativePoint = UnitFrameRelativePoint(conf, point)
+    local anchorPX, anchorPY = ResolveAnchorPointForDrag(anchor, relativePoint, bar, point, conf)
     local anchorScale = (anchor and anchor.GetEffectiveScale and anchor:GetEffectiveScale()) or 1
     local frameScale = (bar and bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
     local barW = (bar and bar.GetWidth and bar:GetWidth()) or (mR - mL)
@@ -1526,12 +1601,9 @@ function Ticker.BeginDrag(mover, key, cfg)
     local usesECV = false
     local ecvFrame
     if (not isCastbar) and ecvRule and conf then
-        local db = _G.MSUF_DB
-        local general = db and db.general
-        local ecvFn = _G.MSUF_GetEffectiveCooldownFrame
-        local ecv = (type(ecvFn) == "function" and ecvFn("EssentialCooldownViewer"))
-            or _G["EssentialCooldownViewer"]
-        if general and general.anchorToCooldown and ecv and anchor == ecv then
+        local cooldownAnchorName = UnitCooldownAnchorName(conf)
+        local ecv = cooldownAnchorName and (ResolveNamedEditAnchor(cooldownAnchorName) or anchor) or nil
+        if ecv and anchor == ecv then
             usesECV = true
             ecvFrame = ecv
             ecvAnchorX, ecvAnchorY = PointXY(ecv, ecvRule[2])
@@ -1592,8 +1664,10 @@ function Ticker.BeginDrag(mover, key, cfg)
         castbarReanchorFunc = castbarReanchorFunc,
         snapEnabled  = snapEnabled,
         uiScale      = uiScale,
-        anchorCX     = anchorCX,
-        anchorCY     = anchorCY,
+        point        = point,
+        relativePoint = relativePoint,
+        anchorPX     = anchorPX,
+        anchorPY     = anchorPY,
         anchorScale  = anchorScale,
         frameScale   = frameScale,
         barW         = barW,

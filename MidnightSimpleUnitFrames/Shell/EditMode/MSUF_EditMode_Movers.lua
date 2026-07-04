@@ -139,6 +139,22 @@ local function EnsurePendingDragFrame()
     return pendingDragFrame
 end
 
+local UNIT_NAME_POSITION_LABELS = {
+    player = "Player Name Position",
+    target = "Target Name Position",
+    focus = "Focus Name Position",
+    targettarget = "Target of Target Name Position",
+    focustarget = "Focus Target Name Position",
+    pet = "Pet Name Position",
+}
+
+local function MoverLabelText(key, cfg)
+    if cfg and cfg.popupType == "unit" and key ~= "boss" then
+        return Tr(UNIT_NAME_POSITION_LABELS[key] or ((cfg.label or key) .. " Name Position"))
+    end
+    return Tr(cfg and cfg.label or key)
+end
+
 local function QueuePendingDrag(mover, button)
     if button ~= "LeftButton" or not mover then return end
     if IsConfigCombatLocked and IsConfigCombatLocked() then return end
@@ -194,7 +210,7 @@ local function CreateMover(key, cfg)
 
     local label = mover:CreateFontString(nil, "OVERLAY")
     label:SetFont(FONT, 10, "OUTLINE"); label:SetPoint("CENTER")
-    label:SetTextColor(th.textR, th.textG, th.textB, 0.85); label:SetText(Tr(cfg.label or key))
+    label:SetTextColor(th.textR, th.textG, th.textB, 0.85); label:SetText(MoverLabelText(key, cfg))
     mover._label = label
 
     local coordFS = mover:CreateFontString(nil, "OVERLAY")
@@ -223,10 +239,16 @@ local function CreateMover(key, cfg)
         end
     end)
 
-    --- Hide label when preview is active (preview frame already shows unit name)
+    --- Unit movers keep the name-position label visible while preview frames are
+    --- active so hidden/offset name text can still be inspected.
     function mover:UpdateLabelVisibility()
+        if self._label then self._label:SetText(MoverLabelText(key, cfg)) end
         if _G.MSUF_PreviewTestMode and not (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) and not self._dragging then
-            self._label:Hide()
+            if cfg.popupType == "unit" and key ~= "boss" then
+                self._label:Show()
+            else
+                self._label:Hide()
+            end
             self._bg:SetColorTexture(0, 0, 0, 0)
             self._brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.25)
         else
