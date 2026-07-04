@@ -42,7 +42,7 @@ local PERF_TRACE_LIMIT = 80
 local JOB_BUDGET_MS = 2
 local JOB_MAX_STEPS = 4
 A.JOB_YIELD = A.JOB_YIELD or {}
-if A.allowPerformanceWarmup == nil then A.allowPerformanceWarmup = true end
+if A.allowPerformanceWarmup == nil then A.allowPerformanceWarmup = false end
 if A.jobBudgetMs == nil then A.jobBudgetMs = JOB_BUDGET_MS end
 if A.jobMaxStepsPerFrame == nil then A.jobMaxStepsPerFrame = JOB_MAX_STEPS end
 if A.ContextEngineEnabled == nil then A.ContextEngineEnabled = true end

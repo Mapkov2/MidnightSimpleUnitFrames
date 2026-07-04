@@ -1178,7 +1178,7 @@ local candidateIndexTokenCacheCount = 0
 local candidateIndexTokenCacheOrder = {}
 local candidateIndexTokenCacheOrderHead = 1
 local candidateIndexTokenCacheOrderTail = 0
-local CANDIDATE_INDEX_TOKEN_CACHE_LIMIT = 24576
+local CANDIDATE_INDEX_TOKEN_CACHE_LIMIT = 8192
 
 local function CacheCandidateIndexTokens(raw, tokens)
     if #raw > 180 then return tokens end
