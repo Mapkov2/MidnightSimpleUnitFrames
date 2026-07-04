@@ -4212,6 +4212,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     result = BuildFollowup(normalized, ctx); if result then return result end
     result = P.BuildContinuationFollowup and P.BuildContinuationFollowup(normalized, ctx); if result then return result end
     result = BuildBooleanCorrection(normalized, ctx); if result then return result end
+    result = P.ParseFrameRecovery and P.ParseFrameRecovery(normalized); if result then return result end
     result = P.ParseBroadHumanAnchorTargetAnswer and P.ParseBroadHumanAnchorTargetAnswer(normalized, raw); if result then return result end
     result = ParseWorkflowLifecycle(normalized); if result then return result end
     result = P.ParseProfileRepairShortcut and P.ParseProfileRepairShortcut(normalized); if result then return result end

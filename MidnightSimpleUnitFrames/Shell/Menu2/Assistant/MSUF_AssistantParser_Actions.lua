@@ -2450,6 +2450,89 @@ function P.ParseExactActionKeyShortcut(text, raw)
     }
 end
 
+-- Frame-recovery intent. "I don't see my frames" and its many variants are a
+-- problem report, not a concept question, so this must run before the generic
+-- unit-frame help so the user gets an actionable rescue (offer to run the
+-- "/msuf reset" position/visibility reset) instead of a description.
+--
+-- Two signal groups keep it precise: a symptom ("can't see", "gone",
+-- "off-screen", "everything moved") combined with a frame/UI subject; plus a
+-- few standalone SOS phrases that are unambiguous on their own. A confirm is
+-- always required because the reset moves every frame.
+local FRAME_RECOVERY_SYMPTOM_TERMS = {
+    "dont see", "don't see", "do not see", "cant see", "can't see", "cannot see",
+    "not see", "not showing", "not shown", "not visible", "no longer see",
+    "cant find", "can't find", "cannot find", "not find", "where are my", "where is my",
+    "disappeared", "disappear", "vanished", "vanish", "gone", "missing", "lost",
+    "off screen", "offscreen", "off-screen", "out of screen", "outside the screen",
+    "moved away", "moved off", "everything moved", "all messed up", "messed up",
+    "broken layout", "layout broken", "cant reach", "can't reach",
+    "nicht mehr", "nicht sichtbar", "verschwunden", "weg", "verloren",
+    "finde nicht", "sehe nicht", "sehe keine", "sehe keinen", "sehe kein",
+    "ausserhalb", "vom bildschirm", "verschoben", "kaputt",
+}
+local FRAME_RECOVERY_SUBJECT_TERMS = {
+    "frame", "frames", "unitframe", "unitframes", "unit frame", "unit frames",
+    "player frame", "target frame", "focus frame", "pet frame", "boss frame",
+    "group frame", "group frames", "party frame", "raid frame",
+    "health bar", "health bars", "hp bar", "power bar",
+    "my ui", "the ui", "msuf", "everything", "anything", "all my frames",
+    "the bars", "my bars", "gesundheitsleiste", "leiste", "leisten", "rahmen",
+    "alles", "meine frames", "die frames", "oberflaeche",
+}
+-- Standalone recovery phrases: unambiguous rescue requests. Exact
+-- "reset [all] frame positions" phrases are intentionally excluded because the
+-- dedicated reset_all_unit_positions action already owns those explicit
+-- commands; this parser is for the symptom/rescue framing.
+local FRAME_RECOVERY_STANDALONE_TERMS = {
+    "reset my frames", "reset all frames", "reset frames to screen", "reset to screen",
+    "bring my frames back", "bring back my frames", "bring frames back",
+    "get my frames back", "restore my frames", "recover my frames", "recover frames",
+    "frames back to center", "frames to the middle", "frames to middle",
+    "center my frames", "recenter frames",
+    "i lost my frames", "i cant see my frames", "i can't see my frames",
+    "help i cant see", "help i can't see", "nothing is showing", "nothing shows",
+    "frames verschwunden", "frames weg", "rahmen weg",
+    "frames zuruecksetzen", "frames zurucksetzen", "rahmen zuruecksetzen",
+    "frames zentrieren", "frames zur mitte",
+}
+-- Guard: these clearly ask about a single setting or a "how do I" concept and
+-- should stay on their normal paths, not trigger a full reset offer.
+local FRAME_RECOVERY_BLOCK_TERMS = {
+    "how do i", "how can i", "how to", "wie kann ich", "wie mache ich",
+    "what is", "what are", "explain", "was ist", "was sind",
+    "size", "width", "height", "color", "colour", "font", "opacity", "texture",
+}
+
+local function ParseFrameRecovery(text)
+    text = Normalize(text)
+    if text == "" then return nil end
+    local action = Registry and Registry:GetAction("recover_frames")
+    if not action then return nil end
+
+    local standalone = ContainsAny(text, FRAME_RECOVERY_STANDALONE_TERMS)
+    if not standalone then
+        if ContainsAny(text, FRAME_RECOVERY_BLOCK_TERMS) then return nil end
+        if not ContainsAny(text, FRAME_RECOVERY_SYMPTOM_TERMS) then return nil end
+        if not ContainsAny(text, FRAME_RECOVERY_SUBJECT_TERMS) then return nil end
+    end
+
+    return {
+        kind = "action",
+        action = action,
+        args = {},
+        confirmRequired = true,
+        label = "Reset frame positions & visibility",
+        summary = "Offers to reset all MSUF frame positions and visibility to the on-screen defaults.",
+        confirmText = "It looks like your MSUF frames may be off-screen or hidden. I can reset every unit-frame and group-frame position and visibility back to the on-screen defaults (near the middle of the screen). Do you want me to do that?",
+    }
+end
+
+P.ParseFrameRecovery = ParseFrameRecovery
+P.FRAME_RECOVERY_SYMPTOM_TERMS = FRAME_RECOVERY_SYMPTOM_TERMS
+P.FRAME_RECOVERY_SUBJECT_TERMS = FRAME_RECOVERY_SUBJECT_TERMS
+P.FRAME_RECOVERY_STANDALONE_TERMS = FRAME_RECOVERY_STANDALONE_TERMS
+
 P.CopyTextParts = CopyTextParts
 P.RemoveUnit = RemoveUnit
 P.CopyTargetsForText = CopyTargetsForText
