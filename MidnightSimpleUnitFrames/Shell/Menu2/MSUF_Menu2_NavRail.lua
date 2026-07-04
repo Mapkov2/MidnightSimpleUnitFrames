@@ -452,8 +452,8 @@ local function BuildNavRail(parent)
     if placeholder.SetJustifyV then placeholder:SetJustifyV("MIDDLE") end
     if placeholder.SetWordWrap then placeholder:SetWordWrap(false) end
     if placeholder.SetNonSpaceWrap then placeholder:SetNonSpaceWrap(false) end
-    if placeholder.SetAlpha then placeholder:SetAlpha(0.72) end
-    T.StyleFontString(placeholder, T.colors.dim, 0)
+    T.StyleFontString(placeholder, T.colors.searchPlaceholder or T.colors.muted, 0)
+    if placeholder.SetAlpha then placeholder:SetAlpha(0.94) end
     search._msuf2SearchPlaceholder = placeholder
     UpdateSearchPlaceholder(search)
     parent.searchBox = search

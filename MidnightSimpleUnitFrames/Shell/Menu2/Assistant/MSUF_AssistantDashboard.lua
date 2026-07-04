@@ -811,7 +811,8 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     placeholder:SetPoint("RIGHT", input, "RIGHT", -10, 0)
     placeholder:SetJustifyH("LEFT")
     if placeholder.SetWordWrap then placeholder:SetWordWrap(false) end
-    if T.StyleFontString then T.StyleFontString(placeholder, T.colors and T.colors.dim or { 0.45, 0.50, 0.60, 1 }, 0) end
+    if T.StyleFontString then T.StyleFontString(placeholder, T.colors and (T.colors.searchPlaceholder or T.colors.muted) or { 0.52, 0.61, 0.72, 0.96 }, 0) end
+    if placeholder.SetAlpha then placeholder:SetAlpha(0.94) end
     SetAssistantText(placeholder, "what can you do")
     input._msufAssistantPlaceholder = placeholder
 

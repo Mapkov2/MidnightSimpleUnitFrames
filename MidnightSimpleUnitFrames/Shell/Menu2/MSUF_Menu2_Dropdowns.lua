@@ -738,7 +738,7 @@ local function OpenDropdown(owner, valuesTable)
         row._msuf2Value = value
         row._msuf2Item = item
         row._msuf2DropdownDisabled = disabled
-        if row.SetAlpha then row:SetAlpha(isHeader and 1 or (disabled and 0.45 or 1)) end
+        if row.SetAlpha then row:SetAlpha(isHeader and 1 or (disabled and 0.62 or 1)) end
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", dropdownChild, "TOPLEFT", 0, -((i - 1) * DROPDOWN_ROW_H))
         row:SetWidth(rowWidth)
