@@ -800,6 +800,16 @@ local function UpdateLeaderPair(frame, status)
   local leaderTex = frame and (frame.leaderIcon or frame.LeaderIndicator)
   local assistTex = frame and frame.assistIcon
   local exists = UnitExistsSafe(unit)
+  -- Unit-type early-out: only a PLAYER can be group leader/assistant, so a
+  -- non-player target (any mob) can never show these. Skip the two group-query
+  -- API calls entirely and just ensure the icons are hidden. This is the oUF-
+  -- style guard that makes rapid target-swaps over mobs cheap.
+  if exists and UnitIsPlayer and not BoolTrue(UnitIsPlayer(unit)) then
+    if leaderTex and leaderTex._msufStatusShown ~= false then SetShown(leaderTex, false); leaderTex._msufStatusShown = false end
+    if assistTex and assistTex._msufStatusShown ~= false then SetShown(assistTex, false); assistTex._msufStatusShown = false end
+    frame._msufLeaderPairState = 0
+    return
+  end
   local leaderRaw = exists and UnitIsGroupLeader and UnitIsGroupLeader(unit)
   local leader = BoolTrue(leaderRaw)
   local assistRaw = exists and (not leader) and UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
@@ -1134,6 +1144,12 @@ local function UpdateRaidGroup(frame, status)
     SetShown(fs, false)
     return
   end
+  -- Only a PLAYER can be in the raid roster; a mob target never shows a raid
+  -- group number. Skip UnitInRaid/GetRaidRosterInfo for non-players.
+  if UnitIsPlayer and not BoolTrue(UnitIsPlayer(unit)) then
+    SetShown(fs, false)
+    return
+  end
   local index = UnitInRaid(unit)
   index = SafeNumber(index)
   local subgroup
@@ -1199,6 +1215,12 @@ local function UpdateElite(frame, status)
   local cfg = status and status.elite
   local tex = frame.eliteIcon
   if not (cfg and cfg.enabled and tex) then
+    SetShown(tex, false)
+    return
+  end
+  -- Opposite gate: only NPCs are elite/rare/boss classifications, so a PLAYER
+  -- target can never show this. Skip the classification query for players.
+  if status.testMode ~= true and UnitIsPlayer and BoolTrue(UnitIsPlayer(frame.unit)) then
     SetShown(tex, false)
     return
   end
@@ -1516,6 +1538,12 @@ local function UpdateIncomingRes(frame, status)
     return
   end
   if frame._msufGFSummonActive then
+    SetShown(tex, false)
+    return
+  end
+  -- Only players get resurrected; a mob target never has incoming res. Skip the
+  -- API query for non-players.
+  if status.testMode ~= true and UnitIsPlayer and not BoolTrue(UnitIsPlayer(unit)) then
     SetShown(tex, false)
     return
   end

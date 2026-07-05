@@ -1139,6 +1139,73 @@ EnsureEventDriver = function()
   return eventDriver
 end
 
+--- Lean OnEvent for the per-unit tracker frames. A per-unit tracker already
+--- knows its unit (RegisterUnitEvent filtered on the C side), so the generic
+--- EventDriverOnEvent fan-out -- iterating unitless sets, derived-unit maps and
+--- the unit->frames table, plus DirectMappedGroupFrame -- is wasted work. This
+--- is the ~7ms/UNIT_HEALTH the profiler showed: the tracker delivered the event,
+--- then the generic router re-derived which frame it belonged to.
+---
+--- Fast path (the overwhelmingly common case): the event has NO unitless owners
+--- and NO derived-unit owners, so the only possible target is the frame(s)
+--- registered for this exact unit. Dispatch straight into that frame's
+--- precompiled _msufFastEventHandlers via `dispatch`, with the same
+--- FrameUnitMatches safety the generic path uses. Any complication (unitless or
+--- derived owners present, or the event is not a hot kind) falls back to the
+--- unchanged EventDriverOnEvent -- correctness first, speed only where provably
+--- safe. Covers single frames (UF.frames[unit]) and group frames
+--- (eventUnitFrames[event][unit]) identically.
+local function UnitDriverOnEvent(self, event, unit, ...)
+  -- Non-unit event on a unit tracker should not happen (trackers only register
+  -- unit-filtered events), but stay correct if it does.
+  if not UNIT_EVENT_HAS_UNIT[event] then
+    return EventDriverOnEvent(self, event, unit, ...)
+  end
+  if not unit or issecretvalue(unit) == true then
+    return
+  end
+  -- Bail to the generic router if anything makes the fan-out non-trivial.
+  if (UnitEventAllowsUnitless(event) and eventUnitlessFrames[event])
+    or eventDerivedFrames[event] then
+    return EventDriverOnEvent(self, event, unit, ...)
+  end
+  local frames = eventFrames[event]
+  if not frames then
+    return
+  end
+  local dispatch = HOT_EVENT_KIND[event] and (UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent)
+  if not dispatch then
+    -- Not a compiled hot event: let the generic path handle element lists.
+    return EventDriverOnEvent(self, event, unit, ...)
+  end
+  -- Distinct profile name ("leanEvent:") so /msufprof shows whether this fast
+  -- path actually ran vs the generic "coreEvent:" fallback.
+  local profGF, profName, profToken
+  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+    profName = "leanEvent:" .. tostring(event)
+    profGF, profToken = MSUF, MSUF.ProfBegin(profName)
+  end
+
+  local eventUnits = eventUnitFrames[event]
+  local unitFrames = eventUnits and eventUnits[unit]
+  if unitFrames then
+    for frame in pairs(unitFrames) do
+      if not FrameUnitMatches(frame, unit) then
+        RemoveEventUnitFrame(frame, event, frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] or unit)
+      else
+        dispatch(frame, event, unit, ...)
+      end
+    end
+  else
+    local frame = UF.frames[unit]
+    if frame and frames[frame]
+      and not (frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event]) then
+      dispatch(frame, event, unit, ...)
+    end
+  end
+  if profToken and profGF and profGF.ProfEnd then profGF.ProfEnd(profName, profToken) end
+end
+
 local function EnsureUnitEventDriver(unit)
   if not IsUnitToken(unit) then
     return nil
@@ -1146,9 +1213,10 @@ local function EnsureUnitEventDriver(unit)
   local driver = unitEventDrivers[unit]
   if not driver then
     -- One tracker per unit keeps RegisterUnitEvent filters exact and avoids
-    -- API-side unit-list limits while preserving the central dispatch path.
+    -- API-side unit-list limits. The lean UnitDriverOnEvent skips the generic
+    -- fan-out since the tracker's unit is already known.
     driver = CreateFrame("Frame")
-    driver:SetScript("OnEvent", EventDriverOnEvent)
+    driver:SetScript("OnEvent", UnitDriverOnEvent)
     unitEventDrivers[unit] = driver
   end
   return driver

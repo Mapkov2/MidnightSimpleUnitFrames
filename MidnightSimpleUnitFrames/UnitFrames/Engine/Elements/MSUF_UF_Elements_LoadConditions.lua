@@ -275,6 +275,20 @@ function LoadConditions.Apply(frame, spec)
 end
 
 function LoadConditions.Update(frame)
+  -- Identity refreshes (target/focus swap) call this on every unit change, but a
+  -- unit swap NEVER changes the visibility expression: BuildRuntimeVisibility
+  -- depends only on the spec (load rules + the frame's fixed unit token like
+  -- "target"), not on which GUID is currently targeted. The secure state driver
+  -- was already registered at Apply and re-evaluates itself natively in the
+  -- engine on the conditions that matter (combat/resting/instance/exists). So
+  -- re-running RegisterVisibility here just rebuilds an identical string and
+  -- throws it away -- pure per-swap waste (this was a large chunk of the
+  -- target-swap cost). Skip once the driver/watch is installed; a real config
+  -- change goes through LoadConditions.Apply / UF.RefreshVisibilityDrivers,
+  -- which call RegisterVisibility directly and are not gated by this.
+  if frame and (frame._msufVisibilityExpr ~= nil or frame._msufUnitWatched == true) then
+    return
+  end
   RegisterVisibility(frame, frame and frame.MSUFSpec)
 end
 

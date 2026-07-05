@@ -561,13 +561,17 @@ local function RunDependentUnitImmediate(unit)
     and not frame:IsShown() then
     return false
   end
+  -- ToT/FoT ("Rattenschwanz"): the GUID-change case is the real per-swap cost
+  -- (the dependent unit points at a new GUID each time the parent's target
+  -- changes). Route it through the lean identity loop like the parent frames.
+  -- The rare poll-tick case stays on the generic fast path.
   if not UnitExistsPlain(unit) then
-    RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_SOFT")
+    UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY_SOFT")
     return true
   end
   local guidChanged = DependentIdentityGuidChanged(frame, unit)
   if guidChanged ~= false then
-    RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_SOFT")
+    UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY_SOFT")
     return true
   end
   if DependentUnitPollStateChanged(frame, unit) then
@@ -782,20 +786,27 @@ end
 
 local function DriverOnEvent(self, event, unit)
   if event == "PLAYER_TARGET_CHANGED" then
+    -- LEAN identity path: a swap is a tight loop over the frame's prebaked
+    -- element fns (oUF's UpdateAllElements model), bypassing the FrameRuntimeUpdate
+    -- wrapper + FAST/AURAS/VISUAL runner + per-element RunElementUpdate owner-mode
+    -- dispatch that made a swap ~16x an oUF swap. Auras + native ping refresh are
+    -- kept inside RunLeanIdentity. Falls back to the generic path pre-apply. When
+    -- no identity frame is active, the old visual-only refresh resolves the frame
+    -- itself (looser condition), preserving the no-identity-driver path.
     local frame = IdentityRuntimeFrame("target")
     if frame then
-      RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_FAST")
-      RunImmediateIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
+      UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY")
+    else
+      RefreshTargetIdentityVisual(true, nil)
     end
-    RefreshTargetIdentityVisual(true, frame)
     RunDependentUnitsForParent("target")
   elseif event == "PLAYER_FOCUS_CHANGED" then
     local frame = IdentityRuntimeFrame("focus")
     if frame then
-      RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_FAST")
-      RunImmediateIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
+      UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY")
+    else
+      RefreshFocusIdentityVisual(true, nil)
     end
-    RefreshFocusIdentityVisual(true, frame)
     RunDependentUnitsForParent("focus")
   elseif event == "UNIT_TARGET" then
     RunDependentUnitsForParent(unit)
