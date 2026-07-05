@@ -800,6 +800,24 @@ local function ApplyGroupBorder(anchor, conf)
   end
 end
 
+function GF.ApplyGroupBorder(kind)
+  local function ApplyForKey(key)
+    local anchor = GF.anchors and GF.anchors[key]
+    if not anchor then return end
+    local anchorKind = anchor._msufGFKind or (key == "party" and "party" or "raid")
+    local conf = GF.GetConf and GF.GetConf(anchorKind) or {}
+    ApplyGroupBorder(anchor, conf)
+  end
+  if kind == "party" then
+    ApplyForKey("party")
+  elseif kind == "raid" or kind == "mythicraid" then
+    ApplyForKey("raid")
+  else
+    ApplyForKey("party")
+    ApplyForKey("raid")
+  end
+end
+
 local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount)
   local buttonTemplate = ButtonTemplate()
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing)

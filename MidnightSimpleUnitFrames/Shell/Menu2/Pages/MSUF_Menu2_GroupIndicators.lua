@@ -153,9 +153,9 @@ local function BuildIndicatorsSection(ctx, b)
         SetOptionsEnabled(groupBorderControls, groupBorderEnabled)
         SetOptionEnabled(groupBorderToggle, true)
         SetSectionBadgesAndStatus(indicators, {
-            OnOffBadge(targetEnabled and hoverEnabled, "Target on", "Target off"),
+            OnOffBadge(targetEnabled, "Target on", "Target off"),
             { text = hoverEnabled and "Hover on" or "Hover off", kind = hoverEnabled and "info" or "muted" },
-            OnOffBadge(focusEnabled and hoverEnabled, "Focus on", "Focus off"),
+            OnOffBadge(focusEnabled, "Focus on", "Focus off"),
             { text = groupNumberEnabled and "Group #" or (groupBorderEnabled and "Group border" or "Clean"), kind = (groupNumberEnabled or groupBorderEnabled) and "accent" or "muted" },
         })
     end

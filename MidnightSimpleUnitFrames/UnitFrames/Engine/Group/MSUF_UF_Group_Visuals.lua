@@ -250,6 +250,9 @@ local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, sh
     return
   end
   local show = showOverride
+  if type(show) ~= "boolean" then
+    show = nil
+  end
   if show == nil then
     show = enabled and frame.unit and SameUnit(frame.unit, unit) or false
   else
