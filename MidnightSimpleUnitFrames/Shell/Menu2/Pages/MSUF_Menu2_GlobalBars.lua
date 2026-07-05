@@ -22,6 +22,9 @@ local BARS_PAGE_WORK_DELAY = 0.04
 local DISPEL_BORDER_121_PTR_DISABLED = false
 local PURGE_BORDER_121_PTR_DISABLED = true
 local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel uses native 12.1 AuraContainer detection. Purge border stays disabled until Blizzard exposes a safe purge/stealable filter."
+local UNITFRAME_DISPEL_AURA_WARNING = "No UnitFrame auras: Dispel Border/Overlay need Player/Target/Focus/Boss auras."
+local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
+local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss" }
 local ROUNDED_PREVIEW_WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local ROUNDED_PREVIEW_MASK = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_4x.tga"
@@ -45,6 +48,15 @@ local function BarsProfileStop(key, started, extraCount)
     if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then
         M.ProfileStop("barsPage", key, started, extraCount)
     end
+end
+local function AnyUnitFrameAuraEnabled()
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local model = a3 and a3.MenuModel
+    if not (model and type(model.UnitEnabled) == "function") then return true end
+    for i = 1, #UNITFRAME_DISPEL_AURA_UNITS do
+        if model.UnitEnabled(UNITFRAME_DISPEL_AURA_UNITS[i]) then return true end
+    end
+    return false
 end
 local function BuildBars(ctx)
     local b = W.PageBuilder(ctx)
@@ -1055,6 +1067,8 @@ local function BuildBars(ctx)
     if dispelPurgePtrHint.SetWordWrap then dispelPurgePtrHint:SetWordWrap(true) end
     local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -486, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
+    local unitAuraDispelHint = W.Text(modesFrame, UNITFRAME_DISPEL_AURA_WARNING, hlLeftX, -516, hlLeftW, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+    if unitAuraDispelHint.SetWordWrap then unitAuraDispelHint:SetWordWrap(true) end
     local function ScopeBorderModeOn(key, defaultValue) return tonumber(BarScopeGet(key, defaultValue)) == 1 end
     local function BossTargetBorderOn()
         local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
@@ -1115,6 +1129,7 @@ local function BuildBars(ctx)
         SetControlEnabled(purgeTest, scopedActive and purgeOn and not PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
         if dispelPurgePtrHint and dispelPurgePtrHint.SetShown then dispelPurgePtrHint:SetShown(PURGE_BORDER_121_PTR_DISABLED) end
+        if unitAuraDispelHint and unitAuraDispelHint.SetShown then unitAuraDispelHint:SetShown((not CurrentBarsScopeIsGroupFrame()) and not AnyUnitFrameAuraEnabled()) end
         local hintColor = sharedActive and T.colors.dim or T.colors.muted
         bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
     end)
@@ -1183,6 +1198,8 @@ local function BuildBars(ctx)
     local ufOverlayGroupHintY = overlayWide and -284 or -384
     local ufOverlayGroupHint = W.Text(ufOverlayCard, "Group frame scopes use Group Frames > Health & Bars > Dispel Overlay.", 16, ufOverlayGroupHintY, ufOverlayCardW - 32, T.colors.muted)
     if ufOverlayGroupHint.SetWordWrap then ufOverlayGroupHint:SetWordWrap(true) end
+    local ufOverlayUnitAuraHint = W.Text(ufOverlayCard, UNITFRAME_DISPEL_AURA_WARNING, 16, ufOverlayGroupHintY, ufOverlayCardW - 32, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+    if ufOverlayUnitAuraHint.SetWordWrap then ufOverlayUnitAuraHint:SetWordWrap(true) end
     M.TrackRefresh(ctx, SyncUFOverlayControls(function()
         local groupScope = CurrentBarsScopeIsGroupFrame()
         local activeScope = (not groupScope) and ScopedBarsControlsActive()
@@ -1190,6 +1207,7 @@ local function BuildBars(ctx)
         SetControlEnabled(ufOverlayToggle, activeScope)
         SetControlsEnabled(ufOverlayControls, overlayOn)
         ufOverlayGroupHint:SetShown(groupScope)
+        ufOverlayUnitAuraHint:SetShown((not groupScope) and not AnyUnitFrameAuraEnabled())
     end))
     local RefreshPriorityRows
     local prio = W.SwitchAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)

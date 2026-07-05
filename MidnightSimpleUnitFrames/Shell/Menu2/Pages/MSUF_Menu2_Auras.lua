@@ -526,6 +526,19 @@ end
 local function UnitLaneShown(unit, kind)
     return Model.UnitEnabled(unit) and Model.GroupShown(unit, kind)
 end
+local UNIT_AURA_DISPEL_WARNING_UNITS = { "player", "target", "focus", "boss" }
+local UNIT_AURA_DISPEL_WARNING = "No UnitFrame auras: Dispel Border/Overlay need Player/Target/Focus/Boss auras."
+local function AnyUnitFrameAuraEnabled()
+    for i = 1, #UNIT_AURA_DISPEL_WARNING_UNITS do
+        if Model.UnitEnabled(UNIT_AURA_DISPEL_WARNING_UNITS[i]) then return true end
+    end
+    return false
+end
+local function ShowNoUnitAuraDispelWarning()
+    if type(M.ShowStatusFeedback) == "function" then
+        M.ShowStatusFeedback(UNIT_AURA_DISPEL_WARNING, "warning", 3.0)
+    end
+end
 local function SetUnitLaneShown(ctx, unit, kind, shown, reason)
     if shown then
         Model.SetUnitEnabled(unit, true)
@@ -536,6 +549,7 @@ local function SetUnitLaneShown(ctx, unit, kind, shown, reason)
         if not Model.GroupShown(unit, OtherLane(kind)) then Model.SetUnitEnabled(unit, false) end
     end
     ApplyUnit(ctx, unit, reason or "AURAS3_VISIBILITY", true)
+    if not shown and not AnyUnitFrameAuraEnabled() then ShowNoUnitAuraDispelWarning() end
 end
 local function GF()
     if type(GP.GF) == "function" then return GP.GF() end
@@ -1924,6 +1938,11 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local filters = ActionButton(top, "Filters", 82)
     filters:SetPoint("LEFT", style, "RIGHT", 8, 0)
     filters:SetScript("OnClick", function() SelectPage("auras3_filters", unit) end)
+    local dispelWarningNotice
+    if M.UnitSectionsShared and type(M.UnitSectionsShared.CreateSectionNotice) == "function" then
+        dispelWarningNotice = M.UnitSectionsShared.CreateSectionNotice(top, -84)
+        dispelWarningNotice:SetMessage(UNIT_AURA_DISPEL_WARNING, "warning")
+    end
     local tabFrames = {}
     local buffFrame, debuffFrame = M.UnitSectionsShared.MakeTabFrames(sec, -170, sectionW, tabFrames, "buff", "debuff")
     BuildUnitAuraPlacementCard(ctx, buffFrame, unit, "buff", 18, -6, laneCardW)
@@ -1936,6 +1955,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         W.SetControlEnabled(laneButtons.buff, true)
         W.SetControlEnabled(laneButtons.debuff, true)
         RefreshTabs()
+        if dispelWarningNotice then dispelWarningNotice:SetShown(not AnyUnitFrameAuraEnabled()) end
         if W.SetCollapsibleBadges then
             W.SetCollapsibleBadges(sec, {
                 { text = UnitLaneShown(unit, "buff") and "Buffs on" or "Buffs off", kind = UnitLaneShown(unit, "buff") and "ok" or "muted", onlyWhenOpen = true },

@@ -1872,7 +1872,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, { "help", "what", "what is", "what does", "how", "where", "explain", "debuff" })
     then
         return {
-            text = "Dispel help\nA dispel removes certain debuffs from friendly units or buffs from enemies, depending on your class and spell. In MSUF, dispel-related visibility lives in aura filters, dispel borders, group status and indicators, and group health overlays.\nExamples: show only dispellable debuffs; open aura filters; test dispel border; open group status and indicators.\nYou can ask: Open Aura Filters | Open Group Status & Indicators | Open Group Auras",
+            text = "Dispel help\nMSUF has separate dispel features. Party/Raid/Mythic Raid use Group Frames > Health & Text > Dispel Overlay. Player/Target/Focus/Boss use Bars > UnitFrame Dispel Overlay and the global/scoped Dispel Border. Aura Filters decide which dispellable debuffs are shown as icons. UnitFrame Dispel Border/Overlay need at least one UnitFrame aura container enabled.\nExamples: turn on party dispel overlay; set raid dispel overlay to max; set target dispel overlay opacity to 80; set dispel border detects to dispellable by me; show only dispellable raid debuffs.\nYou can ask: Open Group Health & Text | Open Bars | Open Aura Filters",
             status = "applied",
             summary = "Assistant dispel help",
         }
