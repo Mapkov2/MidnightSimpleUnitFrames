@@ -1211,6 +1211,43 @@ local function RunHotKindCooldown(frame, state, event, unit, sameUnit, a, b, c)
   return true
 end
 
+local function RunHotGroupConnectionState(frame, state, event, unit, sameUnit)
+  if sameUnit then
+    if state.healthText then
+      RunCompiledHealthText(frame, state, event, unit)
+    end
+    local fn = state.prediction
+    if fn then fn(frame, event, unit) end
+    fn = state.groupVisuals
+    if fn then fn(frame, event, unit) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit) end
+    fn = state.range
+    if fn then fn(frame, event, unit) end
+    fn = state.groupRange
+    if fn then fn(frame, event, unit) end
+  end
+  return true
+end
+
+local function RunHotGroupFlagsState(frame, state, event, unit, sameUnit, a, b, c)
+  if sameUnit then
+    local fn = state.groupVisuals
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+  end
+  return true
+end
+
+local function RunHotGroupStatusOnly(frame, state, event, unit, sameUnit, a, b, c)
+  if sameUnit then
+    local fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+  end
+  return true
+end
+
 local function SelectHotHealthValueRunner(state, event)
   if state.inline or state.inlineUnitless or state.predictionUnitless
     or state.name or state.statusText or state.combat or state.pvp or state.groupStatus then
@@ -1309,6 +1346,49 @@ local function SelectHotConnectionRunner(state)
     return nil
   end
   return RunHotConnectionPrimary
+end
+
+local function SelectHotGroupRunner(frame, event, state)
+  if not IsGroupFrame(frame) then
+    return nil
+  end
+  if state.inline or state.inlineUnitless or state.predictionUnitless then
+    return nil
+  end
+  if event == "UNIT_CONNECTION" then
+    if state.health or state.power or state.powerText
+      or state.name or state.portrait or state.statusText then
+      return nil
+    end
+    if state.healthText or state.prediction or state.groupVisuals
+      or state.groupStatus or state.range or state.groupRange then
+      return RunHotGroupConnectionState
+    end
+  elseif event == "UNIT_FLAGS" then
+    if state.health or state.name or state.statusText or state.combat then
+      return nil
+    end
+    if state.groupVisuals or state.groupStatus then
+      return RunHotGroupFlagsState
+    end
+  elseif event == "UNIT_FACTION" then
+    if state.health or state.name or state.pvp then
+      return nil
+    end
+    if state.groupStatus then
+      return RunHotGroupStatusOnly
+    end
+  elseif event == "INCOMING_RESURRECT_CHANGED"
+    or event == "UNIT_PHASE"
+    or event == "UNIT_OTHER_PARTY_CHANGED" then
+    if state.level or state.elite or state.health or state.name or state.incomingRes then
+      return nil
+    end
+    if state.groupStatus then
+      return RunHotGroupStatusOnly
+    end
+  end
+  return nil
 end
 
 local function SelectHotHealthFlagsRunner(state)
@@ -1480,6 +1560,7 @@ RebuildHotEventState = function(frame, event, owners)
   elseif kind == 3 then
     state.runner = SelectHotConnectionRunner(state) or state.runner
   end
+  state.runner = SelectHotGroupRunner(frame, event, state) or state.runner
   state.unitScoped = not (frame._msufEventUnitless and frame._msufEventUnitless[event])
   state.frameUnitFiltered = state.unitScoped == true
     and frame._msufFrameUnitEvents
