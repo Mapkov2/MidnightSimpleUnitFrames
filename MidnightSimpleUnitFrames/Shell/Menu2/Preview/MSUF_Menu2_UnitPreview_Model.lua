@@ -124,7 +124,21 @@ local function CanonKey(key)
     if UNIT_SET[key] then return key end
     return "player"
 end
+local function ProfileSystemNeedsInit()
+    local active = _G.MSUF_ActiveProfile
+    local gdb = _G.MSUF_GlobalDB
+    local profiles = type(gdb) == "table" and gdb.profiles or nil
+    local activeTable = type(active) == "string" and type(profiles) == "table" and profiles[active] or nil
+    return type(active) ~= "string"
+        or active == ""
+        or type(_G.MSUF_DB) ~= "table"
+        or type(activeTable) ~= "table"
+        or _G.MSUF_DB ~= activeTable
+end
 local function EnsureDB()
+    if ProfileSystemNeedsInit() and type(_G.MSUF_InitProfiles) == "function" then
+        _G.MSUF_InitProfiles()
+    end
     local ensureDB = _G.MSUF_EnsureDB
     if type(ensureDB) == "function" then
         ensureDB()

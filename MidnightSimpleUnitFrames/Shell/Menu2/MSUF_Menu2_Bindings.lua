@@ -55,7 +55,21 @@ local function EnsureHistoryStacks()
     M.historyRedo = M.historyRedo or {}
     return M.historyUndo, M.historyRedo
 end
+local function ProfileSystemNeedsInit()
+    local active = _G.MSUF_ActiveProfile
+    local gdb = _G.MSUF_GlobalDB
+    local profiles = type(gdb) == "table" and gdb.profiles or nil
+    local activeTable = type(active) == "string" and type(profiles) == "table" and profiles[active] or nil
+    return type(active) ~= "string"
+        or active == ""
+        or type(_G.MSUF_DB) ~= "table"
+        or type(activeTable) ~= "table"
+        or _G.MSUF_DB ~= activeTable
+end
 function M.EnsureDB()
+    if ProfileSystemNeedsInit() and type(_G.MSUF_InitProfiles) == "function" then
+        SafeInvoke(_G.MSUF_InitProfiles)
+    end
     local ensure = _G.MSUF_EnsureDB
     if type(ensure) == "function" then SafeInvoke(ensure) end
     ExportPublic("MSUF_DB", _G.MSUF_DB or {})
