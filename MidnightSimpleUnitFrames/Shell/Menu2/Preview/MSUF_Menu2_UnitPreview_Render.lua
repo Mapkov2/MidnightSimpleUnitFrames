@@ -159,6 +159,44 @@ end
 local function SetLeftSpan(region, parent, x, y) region:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0); region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", x or 0, y or 0) end
 local function SetRightSpan(region, parent, x, y) region:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x or 0, y or 0); region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", x or 0, y or 0) end
 local function SetBottomSpan(region, parent, leftX, rightX, y) region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", leftX or 0, y or 0); region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", rightX or 0, y or 0) end
+local function PointCoord(point, w, h)
+    point = tostring(point or "CENTER"):upper()
+    local x = (point:find("RIGHT", 1, true) and w) or (point:find("LEFT", 1, true) and 0) or (w * 0.5)
+    local y = (point:find("TOP", 1, true) and h) or (point:find("BOTTOM", 1, true) and 0) or (h * 0.5)
+    return x, y
+end
+local function ExpandRect(minX, maxX, minY, maxY, left, bottom, right, top)
+    if not (left and bottom and right and top) then return minX, maxX, minY, maxY end
+    return math.min(minX, left), math.max(maxX, right), math.min(minY, bottom), math.max(maxY, top)
+end
+local function ExpandAnchoredRect(minX, maxX, minY, maxY, point, relPoint, x, y, rw, rh, targetW, targetH)
+    rw, rh = tonumber(rw) or 1, tonumber(rh) or 1
+    local tx, ty = PointCoord(relPoint or point, tonumber(targetW) or 0, tonumber(targetH) or 0)
+    local px, py = PointCoord(point, rw, rh)
+    local left = tx + (tonumber(x) or 0) - px
+    local bottom = ty + (tonumber(y) or 0) - py
+    return ExpandRect(minX, maxX, minY, maxY, left, bottom, left + rw, bottom + rh)
+end
+local function ExpandRuntimeAnchorRect(minX, maxX, minY, maxY, anchor, x, y, rw, rh, targetW, targetH)
+    anchor = tostring(anchor or "CENTER"):upper()
+    local point, relPoint = anchor, anchor
+    if anchor == "NAMERIGHT" then
+        point, relPoint = "LEFT", "RIGHT"
+    elseif anchor == "NAMELEFT" then
+        point, relPoint = "RIGHT", "LEFT"
+    end
+    return ExpandAnchoredRect(minX, maxX, minY, maxY, point, relPoint, x, y, rw, rh, targetW, targetH)
+end
+local function ApproxTextWidth(text, size, fallbackChars)
+    local chars = type(text) == "string" and #text or tonumber(fallbackChars) or 8
+    local width = (tonumber(size) or 12) * 0.58 * math.max(chars, 1)
+    if width < 18 then width = 18 elseif width > 520 then width = 520 end
+    return width
+end
+local function PreviewLayerWanted(box, layerKey)
+    local visibility = box and box.layerVisibility
+    return not (visibility and visibility[layerKey] == false)
+end
 local function NumberOrOne(value) return tonumber(value) or 1 end
 local function CastbarNumFallback(_, _, fallback) return tonumber(fallback) or 0 end
 local function CastbarTimeFallback(value) return tostring(value or "") end
@@ -498,7 +536,7 @@ function Preview.Refresh(box, reason)
     if castOffsetX == nil then castOffsetX = tonumber(castDefX) or 0 end
     if castOffsetY == nil then castOffsetY = tonumber(castDefY) or 0 end
     local castDetached = castEnabled and CastbarDetached(key, g)
-    local castPreviewVisible = castEnabled
+    local castPreviewVisible = castEnabled and PreviewLayerWanted(box, "castbar")
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars or {}
     local classPowerPreviewSpec
     if key == "player" then
@@ -563,10 +601,106 @@ function Preview.Refresh(box, reason)
     local detachedPowerManagedByClassPreview = detachedPower and key == "player" and box._runtimeDetachedPowerAnchorClass == true
     local detachedPowerInUnitPreview = detachedPower and not detachedPowerManagedByClassPreview
     local wideW = w
-    if classPowerOn then wideW = max(wideW, box._runtimeClassPowerW or w) end
-    if detachedPowerInUnitPreview then wideW = max(wideW, box._runtimeDetachedPowerW) end
+    if classPowerOn and PreviewLayerWanted(box, "classPower") then wideW = max(wideW, box._runtimeClassPowerW or w) end
+    if detachedPowerInUnitPreview and PreviewLayerWanted(box, "power") then wideW = max(wideW, box._runtimeDetachedPowerW) end
     local minX, maxX, minY, maxY = 0, w, 0, h
-    if hasPortrait then
+    do
+        local rawBaseTextSize = tonumber(g.fontSize) or 14
+        local rawNameSize = tonumber(conf.nameFontSize) or tonumber(g.nameFontSize) or rawBaseTextSize
+        local rawHPSize = tonumber(conf.hpFontSize) or tonumber(g.hpFontSize) or rawBaseTextSize
+        local rawPowerSize = tonumber(conf.powerFontSize) or tonumber(g.powerFontSize) or rawBaseTextSize
+        local rawBaseline = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
+        if rawBaseline < -4 then rawBaseline = -4 elseif rawBaseline > 4 then rawBaseline = 4 end
+        if PreviewLayerWanted(box, "nameText") and conf.showName ~= false and (not runtimeSpec or runtimeSpec.showName ~= false) then
+            local npt, nrel, nx = R.ResolveNameAnchor(conf.nameTextAnchor or "LEFT", tonumber(conf.nameOffsetX) or 4)
+            local label = R.ShortenPreviewName(data.name, key, conf)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, npt, nrel, nx, (tonumber(conf.nameOffsetY) or -4) + rawBaseline, ApproxTextWidth(label, rawNameSize, 14), rawNameSize + 6, w, h)
+        end
+        local function NumField(primary, alias, generalPrimary, generalAlias, fallback)
+            local v = conf[primary]
+            if v == nil and alias then v = conf[alias] end
+            if v == nil and generalPrimary then v = g[generalPrimary] end
+            if v == nil and generalAlias then v = g[generalAlias] end
+            return tonumber(v) or fallback or 0
+        end
+        local function TextOffsets(prefix, fallbackY)
+            local baseX = NumField(prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
+            local baseY = NumField(prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + rawBaseline
+            local function Slot(side, axis)
+                return NumField(prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, 0)
+            end
+            return {
+                leftX = baseX + Slot("Left", "X"),
+                leftY = baseY + Slot("Left", "Y"),
+                centerX = baseX + Slot("Center", "X"),
+                centerY = baseY + Slot("Center", "Y"),
+                rightX = baseX + Slot("Right", "X"),
+                rightY = baseY + Slot("Right", "Y"),
+            }
+        end
+        local hpTextVisible = PreviewLayerWanted(box, "hpText") and conf.showHP ~= false and (not runtimeSpec or runtimeSpec.showHealthText ~= false)
+        if hpTextVisible then
+            local o = TextOffsets("hp", -4)
+            local th, tw = rawHPSize + 6, ApproxTextWidth("410K - 41%", rawHPSize, 10)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "LEFT", "LEFT", 4 + o.leftX, o.leftY, tw, th, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "CENTER", "CENTER", o.centerX, o.centerY, tw, th, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "RIGHT", "RIGHT", -4 + o.rightX, o.rightY, tw, th, w, h)
+        end
+        local powerTextVisible = PreviewLayerWanted(box, "powerText") and ((key ~= "focustarget" and conf.showPower ~= false) or conf.showPower == true) and (not runtimeSpec or runtimeSpec.showPowerText ~= false)
+        if powerTextVisible then
+            local o = TextOffsets("power", 4)
+            local th, tw = rawPowerSize + 6, ApproxTextWidth("240K", rawPowerSize, 6)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMLEFT", "BOTTOMLEFT", 4 + o.leftX, 1 + o.leftY, tw, th, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOM", "BOTTOM", o.centerX, 1 + o.centerY, tw, th, w, h)
+            minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + o.rightX, 1 + o.rightY, tw, th, w, h)
+        end
+        if PreviewLayerWanted(box, "status") then
+            for i = 1, #(D.STATUS_PREVIEW or {}) do
+                local spec = D.STATUS_PREVIEW[i]
+                local statusCfg = runtimeStatus and runtimeStatus[R.STATUS_RUNTIME_KEYS[spec.id]]
+                local show
+                if statusCfg then
+                    show = statusCfg.enabled == true
+                    if not show and spec.id == "statusPvp" and statusCfg.contextDisabled == true then show = true end
+                else
+                    local showVal = conf[spec.show]
+                    if showVal == nil then showVal = g[spec.show] end
+                    show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
+                end
+                if spec.allowed and not spec.allowed(key) then show = false end
+                if spec.id == "elite" and not data.elite then show = false end
+                if spec.id == "statusText" and R.PreviewStatus.StatusTextPreviewText then show = show and R.PreviewStatus.StatusTextPreviewText(statusCfg or g) ~= nil end
+                if Preview.GetStatusPreviewMode() ~= "all" then
+                    local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
+                    if selected == "" then selected = "raidmarker" end
+                    show = show and (spec.id == selected)
+                end
+                if show then
+                    local rawSize = tonumber(statusCfg and statusCfg.size) or tonumber(conf[spec.size]) or tonumber(g[spec.size])
+                    if rawSize == nil then
+                        if spec.id == "level" then
+                            rawSize = rawNameSize
+                        elseif spec.id == "statusText" then
+                            rawSize = rawNameSize + 2
+                        else
+                            rawSize = spec.defaultSize
+                        end
+                    end
+                    local rw, rh = rawSize, rawSize
+                    if spec.id == "level" then
+                        rw, rh = ApproxTextWidth(tostring(data.level or "80"), rawSize, 2), rawSize + 4
+                    elseif spec.id == "statusText" then
+                        rw, rh = ApproxTextWidth(R.PreviewStatus.StatusTextPreviewText(statusCfg or g) or "DEAD", rawSize, 4), rawSize + 4
+                    end
+                    local anchor = (statusCfg and statusCfg.anchor) or R.ResolveStatusPreviewAnchor(spec, conf, g)
+                    local sx = tonumber(statusCfg and statusCfg.x) or tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0
+                    local sy = tonumber(statusCfg and statusCfg.y) or tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0
+                    minX, maxX, minY, maxY = ExpandRuntimeAnchorRect(minX, maxX, minY, maxY, anchor, sx, sy, rw, rh, w, h)
+                end
+            end
+        end
+    end
+    if hasPortrait and PreviewLayerWanted(box, "portrait") then
         local poX = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.x) or tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0
         local poY = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.y) or tonumber(PortraitStyleGet(key, "portraitOffsetY", 0)) or 0
         local left, right
@@ -579,14 +713,14 @@ function Preview.Refresh(box, reason)
         minX, maxX = min(minX, left), max(maxX, right)
         minY, maxY = min(minY, poY - pSize * 0.5 + h * 0.5 - (box._runtimePortraitBorderFill and 0 or box._runtimePortraitBorderThickness)), max(maxY, poY + pSize * 0.5 + h * 0.5 + (box._runtimePortraitBorderFill and 0 or box._runtimePortraitBorderThickness))
     end
-    if classPowerOn then
+    if classPowerOn and PreviewLayerWanted(box, "classPower") then
         local cpW = box._runtimeClassPowerW or PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount)
         local cx = 2 + (tonumber(bars.classPowerOffsetX) or 0)
         local cy = h + 4 + (tonumber(bars.classPowerOffsetY) or 0)
         minX, maxX = min(minX, cx), max(maxX, cx + cpW)
         minY, maxY = min(minY, cy), max(maxY, cy + cpH)
     end
-    if detachedPowerInUnitPreview then
+    if detachedPowerInUnitPreview and PreviewLayerWanted(box, "power") then
         local dW = box._runtimeDetachedPowerW
         local dx = box._runtimeDetachedPowerX
         local dy = box._runtimeDetachedPowerY
@@ -601,7 +735,7 @@ function Preview.Refresh(box, reason)
         minX, maxX = min(minX, dLeft), max(maxX, dLeft + dW)
         minY, maxY = min(minY, dBottom), max(maxY, dBottom + detachedH)
     end
-    if castEnabled then
+    if castEnabled and PreviewLayerWanted(box, "castbar") then
         local cLeft, cBottom
         if castDetached then
             cLeft = (w - castW) * 0.5 + castOffsetX
@@ -613,32 +747,31 @@ function Preview.Refresh(box, reason)
             cLeft = castOffsetX
             cBottom = h + castOffsetY + ((key == "boss") and 2 or 0)
         end
-        local tooFar
-        if castDetached then
-            tooFar = (abs(castOffsetX) > 260 or abs(castOffsetY) > 180)
-        else
-            local limitX = max(w * 1.25, 180)
-            local limitY = max(h * 3.0, 120)
-            tooFar = (cLeft > w + limitX)
-                or ((cLeft + castW) < -limitX)
-                or (cBottom > h + limitY)
-                or ((cBottom + castBarH) < -limitY)
-        end
-        castPreviewVisible = not tooFar
         if castPreviewVisible then
             wideW = max(wideW, castW)
-            minX, maxX = min(minX, cLeft), max(maxX, cLeft + castW)
-            minY, maxY = min(minY, cBottom), max(maxY, cBottom + castBarH)
+            local detailPadX = max(
+                abs(R.ReadCastbarNum(g, key, "IconOffsetX", "bossCastIconOffsetX", 0) or 0) + abs(R.ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH) or castBarH),
+                abs(R.ReadCastbarNum(g, key, "TextOffsetX", "bossCastTextOffsetX", 0) or 0) + 80,
+                abs(R.ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", 0) or 0) + 46
+            )
+            local detailPadY = max(
+                abs(R.ReadCastbarNum(g, key, "IconOffsetY", "bossCastIconOffsetY", 0) or 0) + abs(R.ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH) or castBarH),
+                abs(R.ReadCastbarNum(g, key, "TextOffsetY", "bossCastTextOffsetY", 0) or 0) + 24,
+                abs(R.ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", 0) or 0) + 24
+            )
+            minX, maxX = min(minX, cLeft - detailPadX), max(maxX, cLeft + castW + detailPadX)
+            minY, maxY = min(minY, cBottom - detailPadY), max(maxY, cBottom + castBarH + detailPadY)
         end
     end
     local auraPreviewState = Auras and Auras.BuildState and Auras.BuildState(key, w, h, runtimeSpec)
-    local centerX = ((minX + maxX) * 0.5) - (w * 0.5)
-    local centerY = ((minY + maxY) * 0.5) - (h * 0.5)
-    if auraPreviewState and Auras.ExpandFootprint then minX, maxX, minY, maxY = Auras.ExpandFootprint(auraPreviewState, minX, maxX, minY, maxY) end
-    if classPowerOn or detachedPowerInUnitPreview or castPreviewVisible or auraPreviewState then
+    local auraFootprintState = PreviewLayerWanted(box, "auras") and auraPreviewState or nil
+    if auraFootprintState and Auras.ExpandFootprint then minX, maxX, minY, maxY = Auras.ExpandFootprint(auraFootprintState, minX, maxX, minY, maxY) end
+    if (classPowerOn and PreviewLayerWanted(box, "classPower")) or (detachedPowerInUnitPreview and PreviewLayerWanted(box, "power")) or castPreviewVisible or auraFootprintState then
         minX, maxX = minX - 18, maxX + 18
         minY, maxY = minY - 18, maxY + 18
     end
+    local centerX = ((minX + maxX) * 0.5) - (w * 0.5)
+    local centerY = ((minY + maxY) * 0.5) - (h * 0.5)
     local runtimeScale = R.RuntimeVisualScaleForPreviewKey(key)
     local autoScale = min(1.0, (cw - 60) / max(max(wideW, maxX - minX) * runtimeScale, 1), (ch - 42) / max(max(h, maxY - minY) * runtimeScale, 1))
     if autoScale < R.ZOOM_MIN then autoScale = R.ZOOM_MIN end

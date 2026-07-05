@@ -146,6 +146,7 @@ end
 local function CreateWindowControlButton(parent, kind, tooltipTitle, tooltipText)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(24, 24)
+    if btn.RegisterForClicks then btn:RegisterForClicks("AnyUp") end
     local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Control", 2, "BACKGROUND", "BORDER")
     btn._msuf2ControlFill = fill
     btn._msuf2ControlEdge = edge
@@ -193,6 +194,11 @@ end
 local function RefreshWindowControls(frame)
     frame = frame or M.frame
     if not frame then return end
+    local baseLevel = (frame.GetFrameLevel and frame:GetFrameLevel()) or 0
+    local controlLevel = baseLevel + 140
+    if frame.closeButton and frame.closeButton.SetFrameLevel then frame.closeButton:SetFrameLevel(controlLevel) end
+    if frame.maximizeButton and frame.maximizeButton.SetFrameLevel then frame.maximizeButton:SetFrameLevel(controlLevel) end
+    if frame.minimizeButton and frame.minimizeButton.SetFrameLevel then frame.minimizeButton:SetFrameLevel(controlLevel) end
     if frame.maximizeButton and frame.maximizeButton.SetWindowControlIcon then frame.maximizeButton:SetWindowControlIcon(frame._msuf2WindowState == "maximized" and "restore" or "maximize") end
 end
 M.CreateWindowControlButton = CreateWindowControlButton

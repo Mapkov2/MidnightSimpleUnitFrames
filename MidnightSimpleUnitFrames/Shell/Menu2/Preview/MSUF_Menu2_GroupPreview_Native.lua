@@ -304,51 +304,75 @@ local function PreviewScopeLabel(kind)
 end
 local function MakePreviewSectionButton(parent, label, color, sectionKey, onOpen)
     local btn = CreateFrame("Button", nil, parent)
-    btn:SetSize(68, 16)
+    btn:SetSize(parent and parent._msufGFLayerButtonWidth or 94, 18)
     btn._sectionKey = sectionKey
+    btn._layerColor = color or { 0.42, 0.72, 1.00 }
     btn._bg = btn:CreateTexture(nil, "BACKGROUND")
     btn._bg:SetAllPoints()
     local idleBg = T.colors and T.colors.coreShadow or { 0.006, 0.016, 0.032 }
-    btn._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], 0.85)
+    local surface = T.colors and T.colors.coreSurface or { 0.014, 0.038, 0.072 }
+    local raised = T.colors and T.colors.coreRaised or { 0.026, 0.070, 0.110 }
+    local blue = T.colors and T.colors.coreBlue or { 0.095, 0.360, 0.560 }
+    btn._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], 0.48)
     btn._stripe = btn:CreateTexture(nil, "ARTWORK")
-    btn._stripe:SetPoint("LEFT", btn, "LEFT", 0, 0)
-    btn._stripe:SetSize(2, 12)
-    btn._stripe:SetColorTexture(color[1], color[2], color[3], 1)
+    btn._stripe:SetPoint("LEFT", btn, "LEFT", 3, 0)
+    btn._stripe:SetSize(3, 13)
+    btn._stripe:SetColorTexture(btn._layerColor[1], btn._layerColor[2], btn._layerColor[3], 1)
     btn._label = LayerFont(btn, label, LAYER_TEXT_ON)
-    btn._label:SetPoint("LEFT", btn, "LEFT", 6, 0)
-    btn._label:SetPoint("RIGHT", btn, "RIGHT", -18, 0)
+    btn._label:SetPoint("LEFT", btn._stripe, "RIGHT", 6, 0)
+    btn._label:SetPoint("RIGHT", btn, "RIGHT", -7, 0)
     btn._label:SetJustifyH("LEFT")
     btn._off = LayerFont(btn, "OFF", LAYER_TEXT_OFF)
     btn._off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
     btn._off:SetJustifyH("RIGHT")
     btn._off:Hide()
     btn:SetScript("OnClick", function() end)
+    function btn:SetPreviewHover(hover)
+        self._layerHover = hover == true
+        if self._msuf2LastLayerState then
+            self:SetPreviewActive(
+                self._msuf2LastLayerState.active,
+                self._msuf2LastLayerState.visible,
+                self._msuf2LastLayerState.solo,
+                self._msuf2LastLayerState.available
+            )
+        end
+    end
     function btn:SetPreviewActive(active, visible, solo, available)
         visible = visible ~= false
         available = available ~= false
-        self._off:SetShown(not available)
+        self._msuf2LastLayerState = self._msuf2LastLayerState or {}
+        self._msuf2LastLayerState.active = active == true
+        self._msuf2LastLayerState.visible = visible
+        self._msuf2LastLayerState.solo = solo == true
+        self._msuf2LastLayerState.available = available
+        self._off:Hide()
+        local c = self._layerColor or color or { 0.42, 0.72, 1.00 }
+        local hover = self._layerHover == true
         if not available then
-            self._bg:SetColorTexture(0.018, 0.018, 0.024, 0.52)
-            self._stripe:SetColorTexture(0.18, 0.18, 0.22, 0.42)
+            self._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], hover and 0.42 or 0.30)
+            self._stripe:SetColorTexture(c[1], c[2], c[3], hover and 0.42 or 0.24)
             SetFSColor(self._label, LAYER_TEXT_OFF)
-            SetFSColor(self._off, LAYER_TEXT_OFF)
         elseif solo then
-            self._bg:SetColorTexture(0.20, 0.14, 0.02, 0.75)
+            self._bg:SetColorTexture(0.20, 0.14, 0.02, hover and 0.82 or 0.68)
             self._stripe:SetColorTexture(1.00, 0.82, 0.18, 1)
             SetFSColor(self._label, LAYER_TEXT_HIGHLIGHT)
         elseif active and visible then
-            local bg = T.colors.pillActive
-            self._bg:SetColorTexture(bg[1], bg[2], bg[3], bg[4] or 1)
+            self._bg:SetColorTexture(blue[1], blue[2], blue[3], hover and 0.72 or 0.60)
+            self._stripe:SetColorTexture(c[1], c[2], c[3], 1.00)
             SetFSColor(self._label, LAYER_TEXT_HIGHLIGHT)
-            self._stripe:SetAlpha(1)
         elseif not visible then
-            self._bg:SetColorTexture(0.02, 0.02, 0.03, 0.45)
-            self._stripe:SetColorTexture(0.16, 0.16, 0.20, 0.45)
+            self._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], hover and 0.42 or 0.28)
+            self._stripe:SetColorTexture(c[1], c[2], c[3], hover and 0.42 or 0.26)
             SetFSColor(self._label, LAYER_TEXT_OFF)
+        elseif hover then
+            self._bg:SetColorTexture(surface[1], surface[2], surface[3], 0.64)
+            self._stripe:SetColorTexture(c[1], c[2], c[3], 0.92)
+            SetFSColor(self._label, LAYER_TEXT_HIGHLIGHT)
         else
-            self._bg:SetColorTexture(idleBg[1], idleBg[2], idleBg[3], 0.85)
+            self._bg:SetColorTexture(raised[1] * 0.32, raised[2] * 0.32, raised[3] * 0.32, 0.34)
+            self._stripe:SetColorTexture(c[1], c[2], c[3], 0.66)
             SetFSColor(self._label, LAYER_TEXT_ON)
-            self._stripe:SetAlpha(1)
         end
     end
     return btn
@@ -971,6 +995,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local R = ShallowCopy(NativeDeps) or {}
     local H, T, M = R.Helpers, R.T, R.M
     local width = (ctx.width or 720) - 28
+    local layerW = 104
+    local stageW = max(320, width - layerW - 20)
     local box = T.Panel(parent, nil, T.colors.panel2, T.colors.border)
     box:SetSize(width, 300)
     if parent and parent.GetFrameLevel and box.SetFrameLevel then box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2) end
@@ -983,7 +1009,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     box._hint = hint
     local stage = CreateFrame("Frame", nil, box, T.Template())
     stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -34)
-    stage:SetSize(width - 98, 218)
+    stage:SetSize(stageW, 218)
     ApplyGroupPreviewFlatBackdrop(stage, R.WHITE8X8, { 0, 0, 0, 1 }, T.colors.borderSoft)
     if stage.SetClipsChildren then stage:SetClipsChildren(true) end
     stage:EnableMouse(true)
@@ -1019,11 +1045,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local layers = CreateFrame("Frame", nil, box, T.Template())
     ApplyGroupPreviewFlatBackdrop(layers, R.WHITE8X8, { 0.006, 0.010, 0.024, 0.96 }, T.colors.borderSoft)
     layers:SetPoint("TOPLEFT", stage, "TOPRIGHT", 8, 0)
-    layers:SetSize(78, 218)
+    layers:SetSize(layerW, 218)
+    layers._msufGFLayerButtonWidth = layerW - 10
     box._layers = layers
     ApplyGroupPreviewBodyTint(box, stage, R.WHITE8X8, T)
-    local layersTitle = R.LayerFont(layers, "LAYERS", R.LayerHeaderColor)
-    layersTitle:SetPoint("TOPLEFT", layers, "TOPLEFT", 10, -10)
+    local layersTitle = R.LayerFont(layers, "LAYERS", (T.colors and T.colors.muted) or R.LayerHeaderColor)
+    layersTitle:SetPoint("TOP", layers, "TOP", 0, -5)
     M.gfPreviewLayerVisible = M.gfPreviewLayerVisible or {
         guides = true,
         bounds = true,
@@ -1051,11 +1078,24 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local def = layerDefs[i]
         local btn = R.MakePreviewSectionButton(layers, def[1], def[2], def[3], onOpen)
         btn._layerKey = def[4]
-        btn:SetPoint("TOPLEFT", layers, "TOPLEFT", 8, -26 - ((i - 1) * 16))
+        btn:SetPoint("TOP", layers, "TOP", 0, -23 - ((i - 1) * 18))
         btn:SetScript("OnEnter", function(self)
-            if self._layerAvailable == false and box._hint then box._hint:SetText(string.format((M.Tr and M.Tr("%s is off in settings and cannot be shown in preview.")) or "%s is off in settings and cannot be shown in preview.", self._label and self._label:GetText() or ((M.Tr and M.Tr("Layer")) or "Layer"))) end
+            if self.SetPreviewHover then self:SetPreviewHover(true) end
+            if box._hint then
+                local label = self._label and self._label:GetText() or ((M.Tr and M.Tr("Layer")) or "Layer")
+                if self._layerAvailable == false then
+                    box._hint:SetText(string.format((M.Tr and M.Tr("%s is off in settings and cannot be shown in preview.")) or "%s is off in settings and cannot be shown in preview.", label))
+                else
+                    local key = self._layerKey
+                    local visible = not (key and M.gfPreviewLayerVisible and M.gfPreviewLayerVisible[key] == false)
+                    local solo = key and M.gfPreviewSoloLayer == key
+                    local action = solo and "Shift-click clears solo layer" or (visible and "click to hide - Shift-click to solo" or "click to show")
+                    box._hint:SetText(label .. " - " .. ((M.Tr and M.Tr(action)) or action))
+                end
+            end
         end)
-        btn:SetScript("OnLeave", function()
+        btn:SetScript("OnLeave", function(self)
+            if self.SetPreviewHover then self:SetPreviewHover(false) end
             R.UpdateHint(box, box._selectedHandle)
         end)
         M.AddTooltip(btn, "Layer disabled", "Turn this feature on in settings to make the preview layer available.", {
