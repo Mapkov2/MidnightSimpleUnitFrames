@@ -8,10 +8,89 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta3",
-    previousVersion = "6.0-Beta2",
-    rangeLabel = "6.0-Beta2 -> 6.0-Beta3",
+    currentVersion = "6.0-Beta4",
+    previousVersion = "6.0-Beta3",
+    rangeLabel = "6.0-Beta3 -> 6.0-Beta4",
     entries = {
+        {
+            version = "6.0-Beta4",
+            date = "2026-07-05",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        "Refreshed the Menu2 visual shell with stronger contrast, updated panel textures, clearer navigation states, and improved window controls.",
+                        "Added MSUF menu font selection.",
+                        "Added per-slot percent-symbol controls for unit-frame, group-frame, and Class Resource text.",
+                        "Improved unit and group previews so visible layers, pinned previews, zoom, and snap behavior are more reliable.",
+                        "Improved fresh-install and profile-reset handling so the bundled factory profile is applied more consistently.",
+                    },
+                },
+                {
+                    title = "Menu And Preview",
+                    bullets = {
+                        "Updated Menu2 panel, rail, popup, status, and navigation textures.",
+                        "Improved Menu2 window snapping, minimize/restore handling, close cleanup, and combat-entry cleanup.",
+                        "Improved pinned preview stability when switching pages or closing the menu.",
+                        "Improved unit preview fitting for text, status icons, portrait, power, castbar, auras, and class-resource layers.",
+                        "Improved group preview layer controls, hover hints, disabled-layer visuals, and restore placement.",
+                        "Reset preview zoom and pan when non-guide layers are toggled so changed layers stay visible.",
+                        "Reduced menu and Assistant warmup work during normal menu use.",
+                    },
+                },
+                {
+                    title = "Unit Frames And Text",
+                    bullets = {
+                        "Added per-slot percent-symbol visibility for health and power text.",
+                        "Added menu and Assistant support for the new percent-symbol text controls.",
+                        "Improved NPC type coloring for health bars, name text, and inline target-of-target names.",
+                        "Updated NPC type colors when unit classification changes.",
+                        "Improved safe handling for protected/secret unit values in color and text logic.",
+                        "Reduced redundant unit-frame identity, power text, and aura identity refresh work.",
+                    },
+                },
+                {
+                    title = "Group Frames And Edit Mode",
+                    bullets = {
+                        "Improved Party Targeted Spell Indicator performance.",
+                        "Improved group-frame preview and Edit Mode placement for large party, raid, and mythic raid layouts.",
+                        "Kept group-frame preview anchors clamped to screen bounds without forcing large layouts into bad positions.",
+                        "Fixed mover and popup geometry issues in Edit Mode.",
+                        "Stopped motion previews and menu preview interactions more cleanly when combat starts.",
+                    },
+                },
+                {
+                    title = "Assistant And Recovery",
+                    bullets = {
+                        "Added a frame recovery workflow for restoring hidden or misplaced frames.",
+                        "Improved Assistant handling for percent-symbol visibility requests.",
+                        "Improved Assistant setting search, exact aliases, follow-up parsing, and dashboard/changelog answers.",
+                        "Improved Assistant-facing labels and setting registry coverage for text and group-frame options.",
+                    },
+                },
+                {
+                    title = "Profiles And Defaults",
+                    bullets = {
+                        "Improved fresh-install detection when early startup modules already created small bootstrap database buckets.",
+                        "Preserved exported factory-profile values while filling only missing structural defaults.",
+                        "Initialized the active profile before Menu2, gameplay settings, and previews read MSUF_DB.",
+                        "Refreshed preview runtime specs after profile swaps or resets so previews do not use stale profile data.",
+                    },
+                },
+                {
+                    title = "What To Test First",
+                    bullets = {
+                        "Menu2 window controls, snapping, minimize/restore, and close behavior.",
+                        "Menu font selection and the refreshed Menu2 styling.",
+                        "Unit-frame, group-frame, and Class Resource percent-symbol toggles.",
+                        "NPC type colors on target, focus, boss, and target-of-target text.",
+                        "Group-frame preview placement with large party, raid, and mythic raid layouts.",
+                        "Frame recovery workflow from the Assistant.",
+                        "Fresh install, profile reset, and profile swap behavior.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta3",
             date = "2026-07-03",
@@ -327,30 +406,6 @@ local data = {
                         "Test Class Resources on several classes/specs, especially shape presets, detached Player Power, the optional Player HP bar, and preview switching.",
                         "Test castbars for normal casts, channels, empower casts, Boss casts, Focus Kick, Interrupt Ready, and Blizzard/MSUF player castbar ownership.",
                         "Test profile strings, missing font/texture fallback, NSRT nicknames, external anchors, Edit Mode, and /reload after combat.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-alpha8",
-            date = "2026-06-30",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added draggable Auras3 edit handles so aura lanes can be moved more directly in Edit Mode.",
-                        "Improved Menu2 and combat hot-path performance before the Beta cut.",
-                        "Expanded Assistant coverage for group-frame and bar controls.",
-                        "Prepared the MSUF_6.0A8 package as the last alpha before Beta1.",
-                    },
-                },
-                {
-                    title = "Auras, Menu, And Performance",
-                    bullets = {
-                        "Improved aura movement, aura edit-mode state, target/focus aura refresh, and range fade related refresh behavior.",
-                        "Reduced menu preview rebuild work and tightened several Menu2 window/page refresh paths.",
-                        "Improved combat performance across runtime update paths that were too noisy during alpha testing.",
-                        "Updated group bar/page controls and related Assistant routing so more group-frame settings can be found and changed naturally.",
                     },
                 },
             },
