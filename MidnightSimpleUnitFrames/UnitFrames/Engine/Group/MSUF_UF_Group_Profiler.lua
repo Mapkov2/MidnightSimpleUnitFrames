@@ -145,6 +145,12 @@ function GF.ProfileDump()
       .. " addonMetric=" .. tostring(AddOnMetricEnabled())
       .. " detail=" .. tostring(GF._profDetail == true)
       .. " mapWatch=" .. tostring(GF._profMapWatch == true))
+    -- Fast-path status in the FIRST line so it never scrolls off: is the
+    -- EUI-style direct route active, and how many events took it?
+    print(string.format("|cff7fd5ffMSUF Prof|r FASTPATH proven=%s fixedDispatches=%d rev=%d",
+      tostring(GF._unitFrameMapProven == true),
+      GF._fixedGroupDispatches or 0,
+      GF._unitFrameMapRevision or 0))
   end
   local rows = {}
   for i = 1, #order do
@@ -206,6 +212,15 @@ end
 function GF.CheckUnitFrameInvariant(frame, event, unit)
   if GF._profMapWatch ~= true then return true end
   if not (frame and unit and type(unit) == "string" and unit ~= "") then return true end
+  -- Only GROUP frames live in GF.unitFrames. Single frames (player/target/
+  -- focus/boss) run their own OnEvent and are NOT in the group map, so
+  -- validating them here is a false mismatch -- e.g. the player single frame
+  -- reports mappedSame=false because GF.unitFrames["player"] is the group
+  -- player button, a different frame. Those false negatives were pinning
+  -- _unitFrameMapProven to false forever and disabling the fast path. Skip them.
+  if frame._msufIsGroupFrame ~= true then
+    return true
+  end
   GF._profMapChecks = (GF._profMapChecks or 0) + 1
   if GF.ValidateUnitFrameMap and GF.ValidateUnitFrameMap(frame, unit) == true then
     GF._unitFrameMapCleanChecks = (GF._unitFrameMapCleanChecks or 0) + 1
@@ -330,6 +345,32 @@ local function HandleSlash(msg)
   elseif msg == "detail off" then
     GF._profDetail = nil
     if print then print("|cff7fd5ffMSUF Prof|r detail buckets OFF") end
+  elseif msg == "skipident on" then
+    GF._skipIdentity = true
+    if print then print("|cffff5555MSUF Prof|r skipIdentity ON (target/focus visual refresh DISABLED -- A/B test only, frames go stale on swap)") end
+  elseif msg == "skipident off" then
+    GF._skipIdentity = nil
+    if print then print("|cff7fd5ffMSUF Prof|r skipIdentity OFF (normal)") end
+  elseif msg == "skipvisual on" then
+    GF._skipVisual = true
+    if print then print("|cffff5555MSUF Prof|r skipVisual ON (VISUAL element list disabled on swap -- A/B test only)") end
+  elseif msg == "skipvisual off" then
+    GF._skipVisual = nil
+    if print then print("|cff7fd5ffMSUF Prof|r skipVisual OFF (normal)") end
+  elseif msg == "skipfast on" then
+    GF._skipFast = true
+    if print then print("|cffff5555MSUF Prof|r skipFast ON (FAST bars/text+auras disabled on swap -- A/B test only)") end
+  elseif msg == "skipfast off" then
+    GF._skipFast = nil
+    if print then print("|cff7fd5ffMSUF Prof|r skipFast OFF (normal)") end
+  elseif msg:match("^identdump") then
+    local u = msg:match("^identdump%s+(%S+)") or "target"
+    local UF = MSUF.UF
+    if UF and UF.DumpIdentityList then
+      UF.DumpIdentityList(u)
+    elseif print then
+      print("|cff7fd5ffMSUF Prof|r identdump unavailable")
+    end
   elseif msg == "dump" or msg == "status" or msg == "" then
     GF.ProfileDump()
   elseif msg == "map on" then
@@ -357,7 +398,7 @@ local function HandleSlash(msg)
     if print then print("|cff7fd5ffMSUF Prof|r map reset") end
   else
     if print then
-      print("|cff7fd5ffMSUF Prof|r /msufprof on|off|reset|dump|threshold <ms>|spikes combat|spikes all|addon on|addon off|detail on|detail off|map on|map off|map reset")
+      print("|cff7fd5ffMSUF Prof|r /msufprof on|off|reset|dump|threshold <ms>|spikes combat|spikes all|addon on|addon off|detail on|detail off|skipident on|skipident off|map on|map off|map reset")
     end
   end
 end

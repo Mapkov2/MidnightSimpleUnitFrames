@@ -2120,6 +2120,20 @@ local RUNTIME_IDENTITY_MISSING_EXIT = {
   MSUF_GF_UNIT_IDENTITY = true,
   MSUF_GF_UNIT_STRUCTURE = true,
 }
+-- Identity reasons safe to skip for the /msufprof skipident A/B measurement:
+-- the target/focus-swap visual refreshes. Excludes the GF structural reasons.
+local IDENTITY_SKIPPABLE = {
+  MSUF_UNIT_IDENTITY = true,
+  MSUF_UNIT_IDENTITY_DEFERRED = true,
+  MSUF_UNIT_IDENTITY_FAST = true,
+  MSUF_UNIT_IDENTITY_VISUAL = true,
+  MSUF_UNIT_IDENTITY_AURAS = true,
+  MSUF_UNIT_IDENTITY_SOFT = true,
+  MSUF_UNIT_IDENTITY_SOFT_DEFERRED = true,
+  MSUF_UNIT_IDENTITY_SOFT_FAST = true,
+  MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
+  MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
+}
 local RUNTIME_MISSING_AURA_CLEAR = {
   MSUF_UNIT_IDENTITY = true,
   MSUF_UNIT_IDENTITY_DEFERRED = true,
@@ -2204,6 +2218,76 @@ local function RebuildRuntimeList(frame, keys, listKey, countKey)
   end
 end
 
+-- Flat identity update list for the LEAN target/focus/ToT swap path. One array
+-- of the frame's actual _msufUpdate<Element> functions, in the same order the
+-- generic FAST->VISUAL runners would call them, so a swap is just a tight loop
+-- (oUF's __elements model) with NO FrameRuntimeUpdate wrapper, reason masks, or
+-- per-element RunElementUpdate owner-mode dispatch -- that machinery was the bulk
+-- of the swap cost vs oUF. LoadConditions is intentionally OMITTED (visibility
+-- is unit-independent and already registered at apply; see LoadConditions.Update
+-- guard). Auras are handled by the caller (deferred-notify semantics preserved).
+-- FAST bars/text first (health before its text so text can reuse values), then
+-- the VISUAL indicator functions.
+local IDENTITY_LEAN_KEYS = {
+  "_msufUpdateHealth",
+  "_msufUpdateHealthText",
+  "_msufUpdatePower",
+  "_msufUpdatePowerText",
+  "_msufUpdateNameText",
+  "_msufUpdateInlineToT",
+  "_msufUpdatePortrait",
+  "_msufUpdateRaidMarkerIndicator",
+  "_msufUpdateLeaderIndicator",
+  "_msufUpdateLevelIndicator",
+  "_msufUpdateRaidGroupIndicator",
+  "_msufUpdateEliteIndicator",
+  "_msufUpdateStatusTextIndicator",
+  "_msufUpdateCombatIndicator",
+  "_msufUpdateRestingIndicator",
+  "_msufUpdateIncomingResIndicator",
+  "_msufUpdatePVPIndicator",
+  "_msufUpdateGroupStatusRuntime",
+  "_msufUpdatePrediction",
+  "_msufUpdateAlpha",
+  "_msufUpdateBorders",
+}
+
+-- The first N entries of IDENTITY_LEAN_KEYS are the FAST bars/text (health,
+-- healthText, power, powerText, name); the remainder are VISUAL. Auras run at
+-- the FAST/VISUAL boundary. Keep in sync with IDENTITY_LEAN_KEYS above.
+local IDENTITY_LEAN_FAST_KEYS = 5
+
+--- Bake the flat identity fn list AND record how many baked entries are FAST
+--- (health/power/text) vs VISUAL, since the baked list only holds functions that
+--- actually exist on the frame -- the boundary index shifts per frame.
+local function RebuildIdentityList(frame)
+  local list = frame._msufIdentityFns or {}
+  frame._msufIdentityFns = list
+  local labels = frame._msufIdentityLabels or {}
+  frame._msufIdentityLabels = labels
+  local n, fastN = 0, 0
+  for i = 1, #IDENTITY_LEAN_KEYS do
+    local fn = frame[IDENTITY_LEAN_KEYS[i]]
+    if fn then
+      n = n + 1
+      list[n] = fn
+      labels[n] = IDENTITY_LEAN_KEYS[i]:gsub("^_msufUpdate", "")
+      if i <= IDENTITY_LEAN_FAST_KEYS then
+        fastN = n
+      end
+    end
+  end
+  for i = n + 1, frame._msufIdentityCount or 0 do
+    list[i] = nil
+    labels[i] = nil
+  end
+  frame._msufIdentityCount = n > 0 and n or nil
+  frame._msufIdentityFastCount = fastN
+  if n <= 0 then
+    frame._msufIdentityFns = nil
+  end
+end
+
 --- Precompute the update lists used by runtime identity refreshes. Identity
 --- refreshes are narrower than ForceUpdate and deliberately split fast
 --- bars/text from aura and visual passes.
@@ -2211,6 +2295,7 @@ function UF.RebuildRuntimeStatusState(frame)
   if not frame then return end
   RebuildRuntimeList(frame, RUNTIME_VISUAL_UPDATE_KEYS, "_msufRuntimeVisualFns", "_msufRuntimeVisualCount")
   RebuildRuntimeList(frame, RUNTIME_SOFT_VISUAL_UPDATE_KEYS, "_msufRuntimeSoftVisualFns", "_msufRuntimeSoftVisualCount")
+  RebuildIdentityList(frame)
 end
 
 local function RuntimeCanSkipMissingUnit(frame, reason)
@@ -2227,6 +2312,103 @@ local function RuntimeCanSkipMissingUnit(frame, reason)
   return UnitMissing(frame.unit)
 end
 
+--- LEAN identity refresh for target/focus/ToT swaps (extensible to all single
+--- frames). Replaces the FrameRuntimeUpdate wrapper + FAST/AURAS/VISUAL runner
+--- stack with oUF's model: gate on unit-exists, then a tight loop over the
+--- prebaked _msufIdentityFns. Keeps the two things that path really needed --
+--- the native ping-icon refresh and the deferred aura pass -- but drops the
+--- reason-mask lookup, per-element RunElementUpdate owner-mode dispatch, and the
+--- profiling string-build that made a swap ~16x an oUF swap. Falls back to the
+--- generic FrameRuntimeUpdate when no baked list exists (frame not fully applied
+--- yet) so behaviour degrades safely. `event` is the identity reason string the
+--- element update fns expect (MSUF_UNIT_IDENTITY).
+function UF.RunLeanIdentity(frame, event)
+  if not frame then return end
+  local count = frame._msufIdentityCount
+  if not count then
+    -- Not baked yet (pre-apply) -- use the full generic path so nothing is missed.
+    return UF.FrameRuntimeUpdate and UF.FrameRuntimeUpdate(frame, event or "MSUF_UNIT_IDENTITY")
+  end
+  local spec = frame.MSUFSpec
+  local active = frame._msufActiveElements
+  if (spec and spec.enabled == false) or not active then
+    return
+  end
+  local gfDbg = MSUF and MSUF.GF
+  if gfDbg and gfDbg._skipIdentity == true then
+    return
+  end
+  event = event or "MSUF_UNIT_IDENTITY"
+  -- Aura pass reason must match the identity variant (soft vs full) so the aura
+  -- element branches the same way the generic runners did.
+  local auraReason = event == "MSUF_UNIT_IDENTITY_SOFT"
+    and "MSUF_UNIT_IDENTITY_SOFT_AURAS" or "MSUF_UNIT_IDENTITY_AURAS"
+  local unit = frame.unit
+  -- Native ping icon (MSUF-only, cheap, GUID-deduped). InstallPingCompatibility
+  -- is skipped here: the secure binding is unit-token fixed ("target") and set at
+  -- apply, so a GUID swap never changes it -- only the icon needs the GUID refresh.
+  if UF.RefreshNativePingIcon then UF.RefreshNativePingIcon(frame) end
+  -- Missing-unit exit: nothing to draw for a vanished target.
+  if RuntimeCanSkipMissingUnit(frame, event) then
+    if frame._msufUpdateAuras then
+      local aurasFn = frame._msufUpdateAuras
+      aurasFn(frame, auraReason, unit)
+    end
+    return
+  end
+  local fns = frame._msufIdentityFns
+  local fastCount = frame._msufIdentityFastCount or 0
+  local skipFast = gfDbg and gfDbg._skipFast == true
+  local skipVisual = gfDbg and gfDbg._skipVisual == true
+  -- No FAST elements: run auras before the visual loop (the i==fastCount boundary
+  -- below never triggers when fastCount is 0 since the loop starts at 1).
+  if fastCount == 0 and not skipFast and frame._msufUpdateAuras then
+    frame._msufA3DeferAuraVisualNotify = true
+    frame._msufUpdateAuras(frame, auraReason, unit)
+    frame._msufA3DeferAuraVisualNotify = nil
+  end
+  -- FAST bars/text are the first fastCount baked entries; the rest are VISUAL.
+  -- Auras run at the boundary to match the generic order (FAST -> auras -> VISUAL).
+  for i = 1, count do
+    local isFast = i <= fastCount
+    if not (isFast and skipFast) and not ((not isFast) and skipVisual) then
+      fns[i](frame, event, unit, nil, nil, nil)
+    end
+    if i == fastCount and not skipFast and frame._msufUpdateAuras then
+      frame._msufA3DeferAuraVisualNotify = true
+      frame._msufUpdateAuras(frame, auraReason, unit)
+      frame._msufA3DeferAuraVisualNotify = nil
+    end
+  end
+  -- If FAST was skipped (skipFast) fastCount may be >0 but the boundary aura pass
+  -- above is gated on not-skipFast; nothing else to do.
+end
+
+-- Diagnostic: print the actual baked identity element list for a unit's frame,
+-- so it's visible exactly which element update fns run on a swap (and whether a
+-- supposedly-disabled feature is still in there). /msufprof identdump <unit>.
+function UF.DumpIdentityList(unit)
+  unit = unit or "target"
+  local frame = UF.frames and UF.frames[unit]
+  local p = _G.print
+  if not frame then
+    if p then p("|cff7fd5ffMSUF ident|r no frame for '" .. tostring(unit) .. "'") end
+    return
+  end
+  local count = frame._msufIdentityCount or 0
+  local fastCount = frame._msufIdentityFastCount or 0
+  local labels = frame._msufIdentityLabels
+  if p then
+    p(string.format("|cff7fd5ffMSUF ident|r unit=%s  count=%d (FAST=%d, VISUAL=%d)",
+      tostring(unit), count, fastCount, count - fastCount))
+    for i = 1, count do
+      local tag = i <= fastCount and "FAST  " or "VISUAL"
+      p(string.format("  %d %s %s", i, tag, labels and labels[i] or "?"))
+    end
+    if count == 0 then p("  (no baked identity list -- generic fallback path)") end
+  end
+end
+
 local function RuntimeRunIdentityFast(frame, reason)
   local unit = frame.unit
   local updateFn = frame._msufUpdateLoadConditions
@@ -2239,6 +2421,10 @@ end
 local function RuntimeRunIdentityVisual(frame, reason)
   local count = frame._msufRuntimeVisualCount
   if not count then return end
+  -- A/B measurement hook (/msufprof skipvisual): isolates the VISUAL element list
+  -- so !!AddonProfiler can attribute cost to VISUAL vs FAST. Diagnostic only.
+  local gfDbg = MSUF and MSUF.GF
+  if gfDbg and gfDbg._skipVisual == true then return end
   local list = frame._msufRuntimeVisualFns
   local unit = frame.unit
   for i = 1, count do
@@ -2262,11 +2448,19 @@ local function RuntimeRunIdentityAuras(frame, reason)
 end
 
 local function RuntimeRunIdentityFull(frame, reason)
-  RuntimeRunIdentityFast(frame, reason)
-  if frame._msufUpdateAuras then
-    frame._msufA3DeferAuraVisualNotify = true
-    RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
-    frame._msufA3DeferAuraVisualNotify = nil
+  -- A/B triangulation: skipfast disables ONLY the FAST bars/text (+ its auras),
+  -- letting VISUAL run. Complements skipvisual. If skipfast rescues perf but
+  -- skipvisual does not, the cost is FAST/auras; if neither does but skipident
+  -- (whole wrapper) does, the cost is the FrameRuntimeUpdate wrapper itself.
+  local gfDbg = MSUF and MSUF.GF
+  local skipFast = gfDbg and gfDbg._skipFast == true
+  if not skipFast then
+    RuntimeRunIdentityFast(frame, reason)
+    if frame._msufUpdateAuras then
+      frame._msufA3DeferAuraVisualNotify = true
+      RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
+      frame._msufA3DeferAuraVisualNotify = nil
+    end
   end
   RuntimeRunIdentityVisual(frame, "MSUF_UNIT_IDENTITY_VISUAL")
 end
@@ -2349,12 +2543,26 @@ FrameRuntimeUpdate = function(frame, reason)
   if (spec and spec.enabled == false) or not active or next(active) == nil then
     return
   end
+  -- A/B measurement hook (/msufprof skipident): when set, skip identity refreshes
+  -- entirely so C_AddOnProfiler / !!AddonProfiler can measure the TRUE cost of
+  -- this path (external metric, free of ProfBegin/End probe overhead). Diagnostic
+  -- only; leaves frames stale on swap while enabled. Auto-off in combat is not
+  -- needed since it only drops a visual refresh.
+  local gfDbg = MSUF and MSUF.GF
+  if gfDbg and gfDbg._skipIdentity == true and IDENTITY_SKIPPABLE[reason] then
+    return
+  end
   reason = reason or "MSUF_FORCE_UPDATE"
   local profGF, profName, profToken = StartGFProfileDynamic("uf:Runtime:", reason)
   local unit = frame.unit
   if RUNTIME_PING_REFRESH[reason] then
+    -- One profile bucket for the whole ping block (MSUF-only subsystem oUF lacks);
+    -- single ProfBegin/End so no per-call overhead distortion.
+    local gf = MSUF and MSUF.GF
+    local pt = gf and gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("tgt:PingBlock")
     if UF.InstallPingCompatibility then UF.InstallPingCompatibility(frame) end
     UF.RefreshNativePingIcon(frame)
+    if pt and gf.ProfEnd then gf.ProfEnd("tgt:PingBlock", pt) end
   end
   if RuntimeCanSkipMissingUnit(frame, reason) then
     if RUNTIME_MISSING_AURA_CLEAR[reason] == true then
@@ -2365,7 +2573,12 @@ FrameRuntimeUpdate = function(frame, reason)
   end
   local runner = RUNTIME_REASON_RUNNERS[reason]
   if runner then
+    -- One bucket for the whole runner (the element updates) so we can compare
+    -- element cost vs the ping block above. Single ProfBegin/End, no distortion.
+    local gf = MSUF and MSUF.GF
+    local rt = gf and gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("tgt:Runner")
     local result = runner(frame, reason)
+    if rt and gf.ProfEnd then gf.ProfEnd("tgt:Runner", rt) end
     EndGFProfile(profGF, profName, profToken)
     return result
   end
