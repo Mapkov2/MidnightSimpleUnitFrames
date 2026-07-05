@@ -80,12 +80,25 @@ local ParseGuidedSetupFollowup = P.ParseGuidedSetupFollowup
 local ParseUnsupportedDetailShortcut = P.ParseUnsupportedDetailShortcut
 local ParsePortraitDetailShortcut = P.ParsePortraitDetailShortcut
 
+function A._DispelOverlayAlphaValue(normalized)
+    local value = FirstNumber(normalized)
+    if value ~= nil then
+        if value > 1 then value = value / 100 end
+        if value > 1 then value = 1 end
+        if value < 0.05 then value = 0.05 end
+        return value
+    end
+    if ContainsAny(normalized, { "max", "maximum", "full opacity", "full alpha", "strongest", "highest" }) then return 1 end
+    if ContainsAny(normalized, { "min", "minimum", "lowest", "weakest" }) then return 0.05 end
+    if ContainsAny(normalized, { "half", "50 percent", "50%" }) then return 0.5 end
+    return nil
+end
+
 local function ParseDispelOverlayOpacityShortcut(normalized)
     if not ContainsAny(normalized, P.RootPhrases[1]) then return nil end
     if ContainsAny(normalized, P.RootPhrases[2]) then return nil end
-    local value = FirstNumber(normalized)
+    local value = A._DispelOverlayAlphaValue(normalized)
     if value == nil then return nil end
-    if value > 1 then value = value / 100 end
 
     local changes = {}
     local units = DetectUnits(normalized)
@@ -3097,6 +3110,16 @@ local function GroupDispelOverlayStyleValue(normalized)
     return nil
 end
 
+function A._HasDispelOverlayAlphaIntent(normalized)
+    return ContainsAny(normalized, { "opacity", "alpha", "max", "maximum", "min", "minimum", "half", "50 percent", "50%" })
+        and not ContainsAny(normalized, { "style", "detects", "trigger", "detection", "current health", "on health" })
+end
+
+function A._HasDispelOverlayImplicitTriggerIntent(normalized)
+    return ContainsAny(normalized, { "by me", "byme", "dispellable by me", "any debuff", "all debuffs", "dispel type", "dispeltype" })
+        and not ContainsAny(normalized, { "turn on", "enable", "enabled", "on", "turn off", "disable", "disabled", "off" })
+end
+
 local function ParseGroupDispelOverlayFastShortcut(normalized)
     if not ContainsAny(normalized, P.RootPhrases[441]) then
         return nil
@@ -3112,7 +3135,11 @@ local function ParseGroupDispelOverlayFastShortcut(normalized)
     local attr
     local label
     local value
-    if ContainsAny(normalized, P.RootPhrases[444]) then
+    if A._HasDispelOverlayAlphaIntent(normalized) then
+        attr = "dispelOverlayAlpha"
+        label = "Dispel Overlay Opacity"
+        value = A._DispelOverlayAlphaValue(normalized)
+    elseif ContainsAny(normalized, P.RootPhrases[444]) then
         attr = "dispelOverlayOnHealth"
         label = "Dispel Overlay on Current Health"
         value = DetectBoolean(normalized)
@@ -3125,6 +3152,14 @@ local function ParseGroupDispelOverlayFastShortcut(normalized)
         attr = "dispelOverlayStyle"
         label = "Dispel Overlay Style"
         value = GroupDispelOverlayStyleValue(normalized)
+    elseif GroupDispelOverlayStyleValue(normalized) and DetectBoolean(normalized) == nil then
+        attr = "dispelOverlayStyle"
+        label = "Dispel Overlay Style"
+        value = GroupDispelOverlayStyleValue(normalized)
+    elseif A._HasDispelOverlayImplicitTriggerIntent(normalized) then
+        attr = "dispelOverlayTrigger"
+        label = "Dispel Overlay Detects"
+        value = GroupDispelOverlayTriggerValue(normalized)
     else
         attr = "dispelOverlayEnabled"
         label = "Dispel Overlay"
@@ -3505,6 +3540,7 @@ local function ParseGroupStatusIconStyleFastShortcut(normalized)
 end
 local ParseUnitDetailMove = P.ParseUnitDetailMove
 local ParseGroupDetailMove = P.ParseGroupDetailMove
+local ParseAmbiguousGroupOutlineBorderShortcut = P.ParseAmbiguousGroupOutlineBorderShortcut
 local ParseBorderThicknessShortcut = P.ParseBorderThicknessShortcut
 local ParseBarOutlineHighlightShortcut = P.ParseBarOutlineHighlightShortcut
 local ParseAbsorbBarShortcut = P.ParseAbsorbBarShortcut
@@ -4322,6 +4358,7 @@ function A._ParsePipelineGeometry(normalized, raw)
     if LooksLikeBarBorderEnumCommand(normalized) then
         result = ParseBarBorderEnumShortcut and ParseBarBorderEnumShortcut(normalized); if result then return result end
     end
+    result = ParseAmbiguousGroupOutlineBorderShortcut and ParseAmbiguousGroupOutlineBorderShortcut(normalized); if result then return result end
     if LooksLikeBarOutlineHighlightCommand(normalized) then
         result = ParseBarOutlineHighlightShortcut and ParseBarOutlineHighlightShortcut(normalized); if result then return result end
     end
@@ -4495,9 +4532,14 @@ local function ParseGlobalUnitDispelOverlayPriorityShortcut(normalized)
 
     local key
     local value
-    if ContainsAny(normalized, P.RootPhrases[568]) then
+    if A._HasDispelOverlayAlphaIntent(normalized) then
+        key = "general.unitDispelOverlayAlpha"
+        value = A._DispelOverlayAlphaValue(normalized)
+    elseif ContainsAny(normalized, P.RootPhrases[568]) or A._HasDispelOverlayImplicitTriggerIntent(normalized) then
         key = "general.unitDispelOverlayTrigger"
     elseif ContainsAny(normalized, P.RootPhrases[569]) then
+        key = "general.unitDispelOverlayStyle"
+    elseif GroupDispelOverlayStyleValue(normalized) and DetectBoolean(normalized) == nil then
         key = "general.unitDispelOverlayStyle"
     elseif ContainsAny(normalized, P.RootPhrases[570]) then
         key = "general.unitDispelOverlayOnHealth"
@@ -4505,7 +4547,7 @@ local function ParseGlobalUnitDispelOverlayPriorityShortcut(normalized)
         if value == nil then value = true end
     elseif ContainsAny(normalized, P.RootPhrases[571]) then
         key = "general.unitDispelOverlayAlpha"
-        value = FirstNumber(normalized)
+        value = A._DispelOverlayAlphaValue(normalized)
         if value == nil then return nil end
     else
         key = "general.unitDispelOverlayEnabled"
@@ -4543,9 +4585,14 @@ local function ParseScopedUnitDispelOverlayPriorityShortcut(normalized)
 
     local suffix
     local value
-    if ContainsAny(normalized, P.RootPhrases[574]) then
+    if A._HasDispelOverlayAlphaIntent(normalized) then
+        suffix = "unitDispelOverlayAlpha"
+        value = A._DispelOverlayAlphaValue(normalized)
+    elseif ContainsAny(normalized, P.RootPhrases[574]) or A._HasDispelOverlayImplicitTriggerIntent(normalized) then
         suffix = "unitDispelOverlayTrigger"
     elseif ContainsAny(normalized, P.RootPhrases[575]) then
+        suffix = "unitDispelOverlayStyle"
+    elseif GroupDispelOverlayStyleValue(normalized) and DetectBoolean(normalized) == nil then
         suffix = "unitDispelOverlayStyle"
     elseif ContainsAny(normalized, P.RootPhrases[576]) then
         suffix = "unitDispelOverlayOnHealth"
@@ -4553,7 +4600,7 @@ local function ParseScopedUnitDispelOverlayPriorityShortcut(normalized)
         if value == nil then value = true end
     elseif ContainsAny(normalized, P.RootPhrases[577]) then
         suffix = "unitDispelOverlayAlpha"
-        value = FirstNumber(normalized)
+        value = A._DispelOverlayAlphaValue(normalized)
         if value == nil then return nil end
     else
         suffix = "unitDispelOverlayEnabled"
@@ -5031,6 +5078,7 @@ function A.ParseSimpleChange(text, ctxOverride)
         or (P.ParseAmbiguousFontTextColorShortcut and P.ParseAmbiguousFontTextColorShortcut(normalized))
         or (P.ParseAmbiguousColorShortcut and P.ParseAmbiguousColorShortcut(normalized, raw))
         or (P.ParseScopedFontTextColorShortcut and P.ParseScopedFontTextColorShortcut(normalized, raw))
+        or (A._ParseGroupDispelOverlayFastShortcut and A._ParseGroupDispelOverlayFastShortcut(normalized))
         or (A._ParseGlobalBarModePriorityShortcut and A._ParseGlobalBarModePriorityShortcut(normalized))
         or (A._ParseGlobalBarTexturePriorityShortcut and A._ParseGlobalBarTexturePriorityShortcut(normalized, raw))
         or (A._ParseGlobalGradientStrengthPriorityShortcut and A._ParseGlobalGradientStrengthPriorityShortcut(normalized))
@@ -5062,6 +5110,7 @@ function A.ParseSimpleChange(text, ctxOverride)
         or ParsePortraitDetailShortcut(normalized)
         or (LooksLikeAbsorbBarCommand(normalized) and ParseAbsorbBarShortcut and ParseAbsorbBarShortcut(normalized, raw))
         or (LooksLikeBarBorderEnumCommand(normalized) and ParseBarBorderEnumShortcut and ParseBarBorderEnumShortcut(normalized))
+        or (ParseAmbiguousGroupOutlineBorderShortcut and ParseAmbiguousGroupOutlineBorderShortcut(normalized))
         or (LooksLikeBarOutlineHighlightCommand(normalized) and ParseBarOutlineHighlightShortcut and ParseBarOutlineHighlightShortcut(normalized))
         or (P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized))
         or (P.ParseUnitPowerBarBorderThicknessShortcut and P.ParseUnitPowerBarBorderThicknessShortcut(normalized))
@@ -5343,6 +5392,12 @@ function A.Parse(text, ctxOverride)
         globalRoundedBarsPriorityParsed.raw = raw
         globalRoundedBarsPriorityParsed.normalized = normalized
         return globalRoundedBarsPriorityParsed
+    end
+    local groupDispelOverlayPriorityParsed = A._ParseGroupDispelOverlayFastShortcut and A._ParseGroupDispelOverlayFastShortcut(normalized)
+    if groupDispelOverlayPriorityParsed then
+        groupDispelOverlayPriorityParsed.raw = raw
+        groupDispelOverlayPriorityParsed.normalized = normalized
+        return groupDispelOverlayPriorityParsed
     end
     local globalUnitDispelOverlayPriorityParsed = A._ParseGlobalUnitDispelOverlayPriorityShortcut and A._ParseGlobalUnitDispelOverlayPriorityShortcut(normalized)
     if globalUnitDispelOverlayPriorityParsed then
@@ -6788,6 +6843,12 @@ function A.Parse(text, ctxOverride)
             earlyBarBorderEnumParsed.normalized = normalized
             return earlyBarBorderEnumParsed
         end
+    end
+    local earlyAmbiguousGroupOutlineParsed = ParseAmbiguousGroupOutlineBorderShortcut and ParseAmbiguousGroupOutlineBorderShortcut(normalized)
+    if earlyAmbiguousGroupOutlineParsed then
+        earlyAmbiguousGroupOutlineParsed.raw = raw
+        earlyAmbiguousGroupOutlineParsed.normalized = normalized
+        return earlyAmbiguousGroupOutlineParsed
     end
     if LooksLikeBarOutlineHighlightCommand(normalized) then
         local earlyBarOutlineHighlightParsed = ParseBarOutlineHighlightShortcut and ParseBarOutlineHighlightShortcut(normalized)

@@ -2601,8 +2601,44 @@ local function OutlineScopeSettingForText(text)
     return Registry and Registry:GetSetting("bars.barOutlineThickness"), "shared"
 end
 
+local AMBIGUOUS_GROUP_OUTLINE_SCOPE_TERMS = {
+    "group", "group frame", "group frames",
+    "party", "party frame", "party frames",
+    "raid", "raid frame", "raid frames",
+    "mythic raid", "mythicraid", "mythic raid frame", "mythic raid frames",
+}
+local AMBIGUOUS_GROUP_OUTLINE_DETAIL_TERMS = {
+    "outline", "frame border", "outline border", "border outline",
+}
+local EXPLICIT_GROUP_BAR_OUTLINE_TERMS = {
+    "bar outline", "bar outlines", "bar border", "bar borders",
+    "health bar outline", "healthbar outline", "hp bar outline", "member bar outline",
+}
+local EXPLICIT_FULL_GROUP_BORDER_TERMS = {
+    "full group border", "whole group border", "outer group border", "group block border",
+    "border around group", "border around frames", "entire group border",
+}
+local function IsAmbiguousGroupOutlineBorderIntent(text)
+    if ContainsAny(text, EXPLICIT_GROUP_BAR_OUTLINE_TERMS) then return false end
+    if ContainsAny(text, EXPLICIT_FULL_GROUP_BORDER_TERMS) then return false end
+    if not ContainsAny(text, AMBIGUOUS_GROUP_OUTLINE_SCOPE_TERMS) then return false end
+    return ContainsAny(text, AMBIGUOUS_GROUP_OUTLINE_DETAIL_TERMS)
+end
+
+local function ParseAmbiguousGroupOutlineBorderShortcut(text)
+    if not IsAmbiguousGroupOutlineBorderIntent(text) then return nil end
+    return {
+        kind = "answer",
+        status = "ambiguous",
+        text = "Which group outline/border do you mean: the bar outline on each Party/Raid member, or the full Group Border around the whole group frame? I did not change anything. Say 'turn off raid bar outline' or 'turn off raid group border'.",
+        summary = "Clarifies ambiguous group outline or border request instead of changing the wrong option.",
+    }
+end
+
 local function ParseBorderThicknessShortcut(text)
     if not ContainsAny(text, GeometryPhrases[150]) then return nil end
+    local ambiguous = ParseAmbiguousGroupOutlineBorderShortcut(text)
+    if ambiguous then return ambiguous end
     if ContainsAny(text, GeometryPhrases[151]) then return nil end
     if ContainsAny(text, GeometryPhrases[152]) then return nil end
     if ContainsAny(text, GeometryPhrases[153]) then return nil end
@@ -2640,6 +2676,8 @@ local BAR_OUTLINE_HIGHLIGHT_BLOCK_TERMS = {
     "power bar", "powerbar", "mana bar", "mana border", "power border",
     "detached power", "detached mana",
     "group border", "full group border", "whole group border", "outer group border", "group block border",
+    "group outline", "group frame outline", "group outline border", "group border outline",
+    "party outline", "party frame outline", "raid outline", "raid frame outline",
     "boss target", "dead background", "dead bg",
     "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay", "debuff overlay",
     "heal absorb", "absorb bar", "heal prediction",
@@ -2728,6 +2766,8 @@ end
 local function ParseBarOutlineHighlightShortcut(text)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
     if not ContainsAny(text, GeometryPhrases[161]) then return nil end
+    local ambiguous = ParseAmbiguousGroupOutlineBorderShortcut(text)
+    if ambiguous then return ambiguous end
     if ContainsAny(text, BAR_OUTLINE_HIGHLIGHT_BLOCK_TERMS) then return nil end
 
     local attr, label = BarOutlineHighlightSpec(text)
@@ -3830,6 +3870,7 @@ P.ParseUnitDetailMove = ParseUnitDetailMove
 P.GroupScopesOrCurrentPage = GroupScopesOrCurrentPage
 P.ParseGroupDetailMove = ParseGroupDetailMove
 P.OutlineScopeSettingForText = OutlineScopeSettingForText
+P.ParseAmbiguousGroupOutlineBorderShortcut = ParseAmbiguousGroupOutlineBorderShortcut
 P.ParseBorderThicknessShortcut = ParseBorderThicknessShortcut
 P.ParseBarOutlineHighlightShortcut = ParseBarOutlineHighlightShortcut
 P.ParseAbsorbBarShortcut = ParseAbsorbBarShortcut

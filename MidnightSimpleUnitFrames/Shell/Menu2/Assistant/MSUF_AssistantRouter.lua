@@ -8906,14 +8906,6 @@ function R.MutationFallbackVariants(text)    local norm = R.Normalize(text)
     local variants = {}
     if norm == "" then return variants end
 
-    if R.ContainsAny(norm, { "frame outline", "frame border", "unitframe outline", "unitframe border" }) then
-        R.AddUnique(variants, norm:gsub("frame%s+outline", "bar outline"))
-        R.AddUnique(variants, norm:gsub("frame%s+border", "bar border"))
-        R.AddUnique(variants, norm:gsub("unitframe%s+outline", "bar outline"))
-        R.AddUnique(variants, norm:gsub("unitframe%s+border", "bar border"))
-        R.AddUnique(variants, "global bar " .. norm)
-    end
-
     if R.ContainsAny(norm, { "open", "oeffne" }) then
         R.AddUnique(variants, norm:gsub("^oeffne%s+", "open "))
     end
