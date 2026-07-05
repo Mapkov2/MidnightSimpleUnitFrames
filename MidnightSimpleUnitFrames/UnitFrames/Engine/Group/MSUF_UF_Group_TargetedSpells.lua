@@ -104,6 +104,8 @@ local GROWS = { CENTER = true, RIGHT = true, LEFT = true, UP = true, DOWN = true
 
 local settings = {
   enabled = false,
+  configEnabled = false,
+  partyFramesEnabled = false,
   mode = "whenHealing",
   size = 24,
   maxIcons = 3,
@@ -206,6 +208,11 @@ local function Conf()
   return db and db.gf_party
 end
 
+local function PartyFramesEnabled()
+  local conf = Conf()
+  return conf and conf.enabled == true
+end
+
 local function ReadValue(key, fallback)
   local conf = Conf()
   local value = conf and conf[key]
@@ -241,7 +248,9 @@ local function NormalizeKey(value, allowed, fallback)
 end
 
 local function ReadSettings()
-  settings.enabled = ReadValue("targetedSpellsEnabled", false) == true
+  settings.configEnabled = ReadValue("targetedSpellsEnabled", false) == true
+  settings.partyFramesEnabled = PartyFramesEnabled()
+  settings.enabled = settings.configEnabled == true and settings.partyFramesEnabled == true
   settings.mode = ReadValue("targetedSpellsMode", "whenHealing")
   settings.size = ClampInt(ReadValue("targetedSpellsIconSize", 24), 24, 8, 64)
   settings.maxIcons = ClampInt(ReadValue("targetedSpellsMaxIcons", 3), 3, 1, 5)
@@ -271,6 +280,8 @@ local function ReadSettings()
 end
 
 local function HasInstancedPartyRoster()
+  local conf = Conf()
+  if not (conf and conf.enabled == true) then return false end
   if IsInRaid and IsInRaid() then return false end
   if IsInGroup and IsInGroup() then return true end
 
@@ -284,7 +295,6 @@ local function HasInstancedPartyRoster()
     end
   end
 
-  local conf = Conf()
   if not (conf and conf.showSolo == true and conf.showPlayer ~= false) then return false end
   local playerExists = UnitExists and UnitExists("player")
   return IsSecret(playerExists) == true or playerExists == true
@@ -1255,6 +1265,8 @@ function TS.DebugSnapshot()
   end
   return {
     enabled = settings.enabled,
+    configEnabled = settings.configEnabled,
+    partyFramesEnabled = settings.partyFramesEnabled,
     mode = settings.mode,
     textEnabled = settings.textEnabled,
     textTickerActive = textTicker ~= nil,
@@ -1310,7 +1322,10 @@ local function InstallHooks()
   if type(originalRefreshVisuals) == "function" then
     GF.RefreshVisuals = function(...)
       local result = originalRefreshVisuals(...)
-      TS.RefreshConfig(false)
+      local kind = select(1, ...)
+      if kind == nil or kind == "party" then
+        TS.RefreshConfig(false)
+      end
       return result
     end
     if MSUF.ExportPublic then

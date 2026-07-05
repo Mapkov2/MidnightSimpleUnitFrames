@@ -67,6 +67,20 @@ local INIT_EVENTS = {
   "BARBER_SHOP_OPEN", "BARBER_SHOP_CLOSE",
 }
 
+local function ConfEnabled(kind)
+  local conf = GF.GetConf and GF.GetConf(kind)
+  return conf and conf.enabled == true
+end
+
+local function AnyGroupFrameEnabled()
+  if type(GF.AnyMSUFGroupFrameEnabled) == "function" then
+    return GF.AnyMSUFGroupFrameEnabled() == true
+  end
+  return ConfEnabled("party") or ConfEnabled("raid") or ConfEnabled("mythicraid")
+end
+
+GF.AnyGroupRuntimeEnabled = AnyGroupFrameEnabled
+
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
 end
@@ -299,8 +313,11 @@ function GF.RefreshGroupNames(unit)
   return GF.ForEachFrame(RefreshGroupNameFrame, true, runtime, unit, matchGuid) == true
 end
 
+local CurrentGroupRuntimeActive
+
 local function RegisterNameEvents()
-  if eventFrame and not nameEventsRegistered and not InCombat() then
+  if eventFrame and not nameEventsRegistered and not InCombat()
+    and CurrentGroupRuntimeActive and CurrentGroupRuntimeActive() == true then
     eventFrame:RegisterEvent("UNIT_NAME_UPDATE")
     nameEventsRegistered = true
   end
@@ -314,7 +331,7 @@ local function UnregisterNameEvents()
 end
 
 local function RegisterRosterEvents()
-  if eventFrame and not rosterEventsRegistered and not InCombat() then
+  if eventFrame and not rosterEventsRegistered and not InCombat() and AnyGroupFrameEnabled() then
     for i = 1, #ROSTER_EVENTS do
       eventFrame:RegisterEvent(ROSTER_EVENTS[i])
     end
@@ -331,6 +348,21 @@ local function UnregisterRosterEvents()
   end
 end
 
+local function RefreshRuntimeEventRegistration()
+  if InCombat() or not AnyGroupFrameEnabled() then
+    UnregisterNameEvents()
+    UnregisterRosterEvents()
+    return false
+  end
+  if CurrentGroupRuntimeActive and CurrentGroupRuntimeActive() == true then
+    RegisterNameEvents()
+  else
+    UnregisterNameEvents()
+  end
+  RegisterRosterEvents()
+  return true
+end
+
 local function LiveRaidKind()
   return GF.GetLiveRaidKind and GF.GetLiveRaidKind() or "raid"
 end
@@ -344,6 +376,14 @@ local function ShouldShowParty()
     return true
   end
   return conf.showSolo == true and conf.showPlayer ~= false
+end
+
+CurrentGroupRuntimeActive = function()
+  if IsInRaid and IsInRaid() then
+    local conf = GF.GetConf and GF.GetConf(LiveRaidKind()) or {}
+    return conf.enabled == true
+  end
+  return ShouldShowParty()
 end
 
 local function RosterMode()
@@ -395,11 +435,12 @@ local function CurrentRosterSignature(includeRoles)
   local n = 1
   local raidConf = GF.GetConf and GF.GetConf(LiveRaidKind()) or {}
   local wantRaid = (IsInRaid and IsInRaid()) and raidConf.enabled == true
+  local wantParty = ShouldShowParty()
   n = n + 1
-  parts[n] = ShouldShowParty() and "party:on" or "party:off"
+  parts[n] = wantParty and "party:on" or "party:off"
   n = n + 1
   parts[n] = wantRaid and "raid:on" or "raid:off"
-  if mode == "raid" then
+  if mode == "raid" and wantRaid then
     local count = GetNumGroupMembers and (GetNumGroupMembers() or 0) or 0
     n = n + 1
     parts[n] = tostring(count)
@@ -415,7 +456,7 @@ local function CurrentRosterSignature(includeRoles)
       n = n + 1
       parts[n] = tostring(subgroup or "")
     end
-  elseif mode == "party" then
+  elseif mode == "party" and wantParty then
     local count = GetNumSubgroupMembers and (GetNumSubgroupMembers() or 0) or 0
     n = n + 1
     parts[n] = tostring(count)
@@ -445,18 +486,19 @@ local function CurrentRosterLayoutSignature()
   local raidKind = LiveRaidKind()
   local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
   local wantRaid = (IsInRaid and IsInRaid()) and raidConf.enabled == true
+  local wantParty = ShouldShowParty()
   local n = 1
   parts[n] = mode
   n = n + 1
-  parts[n] = ShouldShowParty() and "party:on" or "party:off"
+  parts[n] = wantParty and "party:on" or "party:off"
   n = n + 1
   parts[n] = wantRaid and "raid:on" or "raid:off"
   n = n + 1
   parts[n] = raidKind
-  if mode == "raid" then
+  if mode == "raid" and wantRaid then
     n = n + 1
     parts[n] = tostring(GetNumGroupMembers and (GetNumGroupMembers() or 0) or 0)
-  elseif mode == "party" then
+  elseif mode == "party" and wantParty then
     n = n + 1
     parts[n] = tostring(GetNumSubgroupMembers and (GetNumSubgroupMembers() or 0) or 0)
   end
@@ -545,6 +587,7 @@ end
 
 local RefreshRosterStateBindings
 local RefreshStructuralMask
+local ResetRefreshSlice
 
 local function ScanRaidHeaderChildren()
   local header = GF.headers and GF.headers.raid
@@ -556,7 +599,7 @@ local function ScanRaidHeaderChildren()
 end
 
 local function ScheduleRosterSettle()
-  if RosterMode() ~= "raid" then
+  if RosterMode() ~= "raid" or not CurrentGroupRuntimeActive() then
     return
   end
   rosterSettleToken = rosterSettleToken + 1
@@ -741,6 +784,40 @@ local function HideOrRetireHeader(key)
   end
 end
 
+local function ClearGroupRuntimeQueues()
+  rosterRebuildQueued = false
+  zoneRefreshQueued = false
+  rosterSettleToken = rosterSettleToken + 1
+  if groupRuntimeDeferFrame then
+    groupRuntimeDeferFrame:SetScript("OnUpdate", nil)
+  end
+  groupRuntimeDeferActive = nil
+  for i = 1, groupRuntimeDeferCount do
+    local key = groupRuntimeDeferKeys[i]
+    groupRuntimeDeferKeys[i] = nil
+    if key ~= nil then
+      groupRuntimeDeferQueue[key] = nil
+    end
+  end
+  groupRuntimeDeferCount = 0
+  if ResetRefreshSlice then
+    ResetRefreshSlice()
+  end
+end
+
+local function RetireDisabledGroupRuntime(reason)
+  HideOrRetireHeader("party")
+  HideOrRetireHeader("raid")
+  ClearGroupRuntimeQueues()
+  DropSpecs()
+  GF._forceScanHeaders = nil
+  GF._forceRecreateHeaders = nil
+  RefreshRuntimeEventRegistration()
+  if GF.ApplyBlizzardGroupFrameOwnership then
+    GF.ApplyBlizzardGroupFrameOwnership(reason or "disabled")
+  end
+end
+
 local function PreviewSuppressesHeader(key)
   if _G.MSUF_UnitEditModeActive == true then
     return false
@@ -769,6 +846,14 @@ function GF.UpdateGroupVisibility()
     return false
   end
   if GF.EnsureDB then GF.EnsureDB() end
+  if not AnyGroupFrameEnabled() then
+    RetireDisabledGroupRuntime("visibility-disabled")
+    return true
+  end
+  if not CurrentGroupRuntimeActive() then
+    RetireDisabledGroupRuntime("visibility-inactive")
+    return true
+  end
 
   local wantParty = ShouldShowParty() and not PreviewSuppressesHeader("party")
   local raidKind = LiveRaidKind()
@@ -802,6 +887,7 @@ function GF.UpdateGroupVisibility()
   if GF.ApplyBlizzardGroupFrameOwnership then
     GF.ApplyBlizzardGroupFrameOwnership("visibility")
   end
+  RefreshRuntimeEventRegistration()
   return true
 end
 
@@ -820,6 +906,16 @@ function GF.RefreshHeaderLayout(reason)
     return false
   end
   if GF.EnsureDB then GF.EnsureDB() end
+  if not AnyGroupFrameEnabled() then
+    RetireDisabledGroupRuntime(reason or "layout-disabled")
+    if GF.ProfEnd then GF.ProfEnd("layout", profToken) end
+    return true
+  end
+  if not CurrentGroupRuntimeActive() then
+    RetireDisabledGroupRuntime(reason or "layout-inactive")
+    if GF.ProfEnd then GF.ProfEnd("layout", profToken) end
+    return true
+  end
 
   local wantParty = ShouldShowParty() and not PreviewSuppressesHeader("party")
   local raidKind = LiveRaidKind()
@@ -850,6 +946,7 @@ function GF.RefreshHeaderLayout(reason)
   GF._forceScanHeaders = nil
   GF._forceRecreateHeaders = nil
   RefreshRosterSignature()
+  RefreshRuntimeEventRegistration()
   if GF.ProfEnd then GF.ProfEnd("layout", profToken) end
   return true
 end
@@ -863,6 +960,16 @@ function GF.RefreshUnitBindings(kind)
     GF.DeferGroupRuntime("roster", kind, GF.DIRTY_UNIT_BINDING)
     if GF.ProfEnd then GF.ProfEnd("unitBinding", profToken) end
     return false
+  end
+  if not AnyGroupFrameEnabled() then
+    RetireDisabledGroupRuntime("unit-binding-disabled")
+    if GF.ProfEnd then GF.ProfEnd("unitBinding", profToken) end
+    return true
+  end
+  if not CurrentGroupRuntimeActive() then
+    RetireDisabledGroupRuntime("unit-binding-inactive")
+    if GF.ProfEnd then GF.ProfEnd("unitBinding", profToken) end
+    return true
   end
   if GF._forceRecreateHeaders == true or RosterLayoutChanged() then
     local result = GF.RefreshHeaderLayout("unitBinding")
@@ -901,13 +1008,23 @@ function GF.RebuildAll(preInvalidated, auras3ConfigBumped)
     if GF.ProfEnd then GF.ProfEnd("rebuildAll", profToken) end
     return false
   end
+  if GF.EnsureDB then GF.EnsureDB() end
+  if not AnyGroupFrameEnabled() then
+    RetireDisabledGroupRuntime("rebuild-disabled")
+    if GF.ProfEnd then GF.ProfEnd("rebuildAll", profToken) end
+    return true
+  end
+  if not CurrentGroupRuntimeActive() then
+    RetireDisabledGroupRuntime("rebuild-inactive")
+    if GF.ProfEnd then GF.ProfEnd("rebuildAll", profToken) end
+    return true
+  end
   if preInvalidated ~= true then
     InvalidateSpecs()
   end
   if auras3ConfigBumped ~= true then
     BumpAuras3ConfigForGroup(GF.DIRTY_ALL)
   end
-  if GF.EnsureDB then GF.EnsureDB() end
 
   local wantParty = ShouldShowParty() and not PreviewSuppressesHeader("party")
   local raidKind = LiveRaidKind()
@@ -937,6 +1054,7 @@ function GF.RebuildAll(preInvalidated, auras3ConfigBumped)
   GF._forceScanHeaders = nil
   GF._forceRecreateHeaders = nil
   RefreshRosterSignature()
+  RefreshRuntimeEventRegistration()
   if GF.ProfEnd then GF.ProfEnd("rebuildAll", profToken) end
   return true
 end
@@ -956,7 +1074,7 @@ local refreshSliceIndex = 0
 local refreshSliceKind, refreshSliceMask
 local refreshSliceActive = false
 
-local function ResetRefreshSlice()
+ResetRefreshSlice = function()
   for i = refreshSliceIndex + 1, refreshSliceCount do
     refreshSliceFrames[i] = nil
     refreshSliceKinds[i] = nil
@@ -1024,11 +1142,22 @@ function GF.RefreshVisuals(kind, mask, preInvalidated, auras3ConfigBumped)
     GF.DeferGroupRuntime("refresh", kind, mask)
     return false
   end
+  if not AnyGroupFrameEnabled() then
+    RetireDisabledGroupRuntime("refresh-disabled")
+    return true
+  end
+  if not CurrentGroupRuntimeActive() then
+    RetireDisabledGroupRuntime("refresh-inactive")
+    return true
+  end
   if preInvalidated ~= true then
     InvalidateSpecs(kind)
   end
   if auras3ConfigBumped ~= true then
     BumpAuras3ConfigForGroup(mask)
+  end
+  if GF.ApplyGroupBorder then
+    GF.ApplyGroupBorder(kind)
   end
   if not GF.ForEachFrame then
     return true
@@ -1059,6 +1188,14 @@ function GF.RefreshAll(preInvalidated)
     GF.DeferGroupRuntime("refresh", nil, GF.DIRTY_ALL)
     return false
   end
+  if not AnyGroupFrameEnabled() then
+    RetireDisabledGroupRuntime("refresh-all-disabled")
+    return true
+  end
+  if not CurrentGroupRuntimeActive() then
+    RetireDisabledGroupRuntime("refresh-all-inactive")
+    return true
+  end
   if preInvalidated ~= true then
     InvalidateSpecs()
   end
@@ -1073,6 +1210,14 @@ RefreshStructuralMask = function(mask)
     GF.DeferGroupRuntime("layout")
     GF.DeferGroupRuntime("refresh", nil, mask)
     return false
+  end
+  if not AnyGroupFrameEnabled() then
+    RetireDisabledGroupRuntime("structural-disabled")
+    return true
+  end
+  if not CurrentGroupRuntimeActive() then
+    RetireDisabledGroupRuntime("structural-inactive")
+    return true
   end
   local dirty = mask or GF.DIRTY_ALL
   InvalidateSpecs()
@@ -1247,13 +1392,38 @@ local function FlushPendingGroupRuntime(rosterLayoutChanged, rosterBindingChange
   return true
 end
 
+local function HasPendingGroupRuntime()
+  return GF._pendingGroupRuntime ~= nil
+    or GF._pendingGroupRebuild == true
+    or GF._pendingGroupDropSpecs == true
+    or GF._pendingGroupLayout == true
+    or GF._pendingGroupUnitBinding == true
+    or GF._pendingGroupVisibility == true
+    or GF._pendingGroupRefresh == true
+end
+
 --- Central event router for group runtime. Keep event-specific decisions here so
 --- Headers/Adapter/Visuals stay callable from explicit refresh paths too.
 local function OnEvent(self, event, ...)
   if event == "PLAYER_REGEN_ENABLED" then
     ExportPublic("MSUF_InCombat", false)
-    RegisterNameEvents()
-    RegisterRosterEvents()
+    local active = RefreshRuntimeEventRegistration()
+    if not active then
+      if HasPendingGroupRuntime() then
+        FlushPendingGroupRuntime(false, false, false)
+        RefreshRuntimeEventRegistration()
+      end
+      return
+    end
+    if not CurrentGroupRuntimeActive() then
+      if HasPendingGroupRuntime() then
+        FlushPendingGroupRuntime(false, false, false)
+      else
+        RetireDisabledGroupRuntime("regen-inactive")
+      end
+      RefreshRuntimeEventRegistration()
+      return
+    end
     local rosterLayoutChanged = GF._forceRecreateHeaders == true or RosterLayoutChanged()
     local rosterBindingChanged = RosterStructureChanged()
     local rosterStateChanged = RosterSignatureChanged()
@@ -1277,21 +1447,37 @@ local function OnEvent(self, event, ...)
     UnregisterRosterEvents()
   elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
     ExportPublic("MSUF_InCombat", InCombat())
+    local active
     if _G.MSUF_InCombat then
       UnregisterNameEvents()
       UnregisterRosterEvents()
     else
-      RegisterNameEvents()
-      RegisterRosterEvents()
+      active = RefreshRuntimeEventRegistration()
+    end
+    lastDifficultyToken = CurrentDifficultyToken()
+    if not active then
+      RetireDisabledGroupRuntime(event == "PLAYER_LOGIN" and "login-disabled" or "entering-world-disabled")
+      return
+    end
+    if not CurrentGroupRuntimeActive() then
+      RetireDisabledGroupRuntime(event == "PLAYER_LOGIN" and "login-inactive" or "entering-world-inactive")
+      return
     end
     MarkRosterMode()
-    lastDifficultyToken = CurrentDifficultyToken()
     if event == "PLAYER_ENTERING_WORLD" then
       GF._forceRecreateHeaders = true
     end
     DropSpecs()
     GF.RebuildAll(true)
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
+    if not AnyGroupFrameEnabled() then
+      RefreshRuntimeEventRegistration()
+      return
+    end
+    if not CurrentGroupRuntimeActive() then
+      RetireDisabledGroupRuntime("roster-inactive")
+      return
+    end
     if InCombat() then
       if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
       GF._forceScanHeaders = true
@@ -1306,6 +1492,7 @@ local function OnEvent(self, event, ...)
       ScheduleRosterSettle()
     end
   elseif event == "PLAYER_DIFFICULTY_CHANGED" then
+    if not AnyGroupFrameEnabled() or not CurrentGroupRuntimeActive() then return end
     local token = CurrentDifficultyToken()
     if token ~= lastDifficultyToken then
       lastDifficultyToken = token
@@ -1313,20 +1500,32 @@ local function OnEvent(self, event, ...)
       ScheduleZoneRefresh()
     end
   elseif event == "ZONE_CHANGED_NEW_AREA" then
+    if not AnyGroupFrameEnabled() or not CurrentGroupRuntimeActive() then return end
     lastDifficultyToken = CurrentDifficultyToken()
     GF._forceRecreateHeaders = true
     ApplySceneAlphas()
     ScheduleZoneRefresh()
   elseif event == "ZONE_CHANGED" or event == "ZONE_CHANGED_INDOORS" then
+    if not AnyGroupFrameEnabled() or not CurrentGroupRuntimeActive() then return end
     ApplySceneAlphas()
   elseif event == "BARBER_SHOP_OPEN" then
+    if not AnyGroupFrameEnabled() or not CurrentGroupRuntimeActive() then return end
     GF._clientSceneActive = true
     ApplySceneAlphas()
   elseif event == "BARBER_SHOP_CLOSE" then
+    if not AnyGroupFrameEnabled() or not CurrentGroupRuntimeActive() then return end
     GF._clientSceneActive = nil
     ApplySceneAlphas()
     GF.UpdateGroupVisibility()
   elseif event == "UNIT_NAME_UPDATE" then
+    if not AnyGroupFrameEnabled() then
+      RefreshRuntimeEventRegistration()
+      return
+    end
+    if not CurrentGroupRuntimeActive() then
+      RefreshRuntimeEventRegistration()
+      return
+    end
     GF.RefreshGroupNames(select(1, ...))
   end
 end
@@ -1336,8 +1535,7 @@ eventFrame:SetScript("OnEvent", OnEvent)
 for i = 1, #INIT_EVENTS do
   eventFrame:RegisterEvent(INIT_EVENTS[i])
 end
-RegisterNameEvents()
-RegisterRosterEvents()
+RefreshRuntimeEventRegistration()
 
 local GF_PUBLIC_ALIASES = {
   { "MSUF_GF_RebuildAll", "RebuildAll" },

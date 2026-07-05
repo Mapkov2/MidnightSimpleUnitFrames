@@ -44,6 +44,7 @@ local lastOwnershipSig
 local partyReconcileScheduled
 local partyReconcileHideSolo
 local rosterEventRegistered = false
+local BlizzardRosterEventWanted
 
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
@@ -86,7 +87,8 @@ local function EnsureEventFrame()
 end
 
 local function RegisterRosterEvent()
-  if not rosterEventRegistered and not InCombat() then
+  if not rosterEventRegistered and not InCombat()
+    and (type(BlizzardRosterEventWanted) ~= "function" or BlizzardRosterEventWanted() == true) then
     EnsureEventFrame():RegisterEvent("GROUP_ROSTER_UPDATE")
     rosterEventRegistered = true
   end
@@ -97,6 +99,15 @@ local function UnregisterRosterEvent()
     eventFrame:UnregisterEvent("GROUP_ROSTER_UPDATE")
     rosterEventRegistered = false
   end
+end
+
+local function RefreshRosterEventRegistration()
+  if InCombat() or (type(BlizzardRosterEventWanted) == "function" and BlizzardRosterEventWanted() ~= true) then
+    UnregisterRosterEvent()
+    return false
+  end
+  RegisterRosterEvent()
+  return rosterEventRegistered == true
 end
 
 local function DeferHide(frame)
@@ -576,6 +587,19 @@ local function ApplyDisabledRaidFallback(mode, msufOwnsGroupFrames)
   end
 end
 
+BlizzardRosterEventWanted = function()
+  if not ShouldManageBlizzardGroups() then
+    return false
+  end
+  if MSUFOwnsLiveGroupFrames() then
+    return true
+  end
+  local party = GF.GetConf and GF.GetConf("party") or {}
+  local raid = GF.GetConf and GF.GetConf(LiveRaidKind()) or {}
+  return NormalizeBlizzardFallbackMode(party.blizzardFallbackMode) == "NONE"
+    or NormalizeBlizzardFallbackMode(raid.blizzardFallbackMode) == "NONE"
+end
+
 function GF.HideBlizzardPartyFrames()
   HidePartyFrames(true)
 end
@@ -613,6 +637,7 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
     lastOwnershipSig = sig
     GF.RestoreBlizzardGroupFrames(false)
     lastOwnershipSig = sig
+    RefreshRosterEventRegistration()
     return true
   end
 
@@ -659,6 +684,7 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
     HidePartyFrames(true)
   end
 
+  RefreshRosterEventRegistration()
   return true
 end
 
@@ -692,7 +718,7 @@ end
 
 local function OnEvent(self, event, arg1)
   if event == "PLAYER_REGEN_ENABLED" then
-    RegisterRosterEvent()
+    RefreshRosterEventRegistration()
     FlushPending()
     if GF._pendingBlizzardGroupOwnership then
       local reason = GF._pendingBlizzardGroupOwnership
@@ -722,7 +748,7 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-RegisterRosterEvent()
+RefreshRosterEventRegistration()
 
 ExportPublic("MSUF_GF_DisableBlizzard", function()
   return GF.ApplyBlizzardGroupFrameOwnership("legacy-global")
