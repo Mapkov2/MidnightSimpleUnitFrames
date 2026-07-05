@@ -1026,6 +1026,19 @@ local function PointOffsetFromCenter(point, width, height)
     return x, y
 end
 
+local function ClampCenterAxis(center, halfSize, screenSize)
+    center = tonumber(center) or 0
+    halfSize = max(0, tonumber(halfSize) or 0)
+    screenSize = max(0, tonumber(screenSize) or 0)
+    if screenSize <= 0 then return center end
+    local minCenter = halfSize
+    local maxCenter = screenSize - halfSize
+    if minCenter > maxCenter then
+        minCenter, maxCenter = maxCenter, minCenter
+    end
+    return max(minCenter, min(maxCenter, center))
+end
+
 local VALID_UNIT_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
 
 local function UnitFramePoint(conf)
@@ -1396,8 +1409,8 @@ local function OnUpdate(self, elapsed)
             snapCX, snapCY = EM2.Snap.Apply(rawCX, rawCY, d.halfW, d.halfH, d.key)
         end
 
-        snapCX = max(d.halfW, min(d.screenW - d.halfW, snapCX))
-        snapCY = max(d.halfH, min(d.screenH - d.halfH, snapCY))
+        snapCX = ClampCenterAxis(snapCX, d.halfW, d.screenW)
+        snapCY = ClampCenterAxis(snapCY, d.halfH, d.screenH)
 
         local moverX = snapCX - d.halfW
         local moverY = snapCY + d.halfH - d.screenH
