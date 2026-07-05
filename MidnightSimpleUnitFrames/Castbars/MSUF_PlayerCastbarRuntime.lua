@@ -14,6 +14,25 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
+local function ProfBegin(name)
+    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+        return MSUF.ProfBegin(name)
+    end
+end
+
+local function ProfEnd(name, token)
+    if token and MSUF and MSUF.ProfEnd then
+        MSUF.ProfEnd(name, token)
+    end
+end
+
+local function ProfEventBegin(prefix, event)
+    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+        local name = prefix .. tostring(event)
+        return name, MSUF.ProfBegin(name)
+    end
+end
+
 local C_Timer = _G.C_Timer
 local type = type
 local tonumber = tonumber
@@ -527,6 +546,7 @@ local function ApplyActiveCast(
     frame.MSUF_durationObj = durationObj
     frame.MSUF_timerDriven = timerDriven and true or nil
 
+    frame:Show()
     _G.MSUF_EnsureCastbarManager()
     if _G.MSUF_RegisterCastbar then _G.MSUF_RegisterCastbar(frame) end
     if _G.MSUF_UpdateCastbarFrame then
@@ -534,7 +554,6 @@ local function ApplyActiveCast(
         _G.MSUF_UpdateCastbarFrame(frame, 0, now)
     end
 
-    frame:Show()
     if isChannel then
         UpdateChannelHasteMarkers(frame, true)
     end
@@ -829,7 +848,7 @@ local function HandleActiveEmpowerEvent(frame, event)
     return false
 end
 
-local function PlayerCastbarOnEvent(frame, event, ...)
+local function PlayerCastbarOnEventImpl(frame, event, ...)
     if not _G.MSUF_IsCastbarEnabledForUnit("player") then
         DisablePlayerCastbar(frame)
         return
@@ -900,6 +919,13 @@ local function PlayerCastbarOnEvent(frame, event, ...)
         frame.isNotInterruptible = true
         UpdateColorForInterruptible(frame)
     end
+end
+
+local function PlayerCastbarOnEvent(frame, event, ...)
+    local profName, profToken = ProfEventBegin("castbar:playerEvent:", event)
+    local result = PlayerCastbarOnEventImpl(frame, event, ...)
+    ProfEnd(profName, profToken)
+    return result
 end
 
 ExportPublic("MSUF_PlayerCastbar_UpdateLatencyZone", UpdateLatencyZone)

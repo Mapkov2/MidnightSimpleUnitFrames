@@ -25,8 +25,8 @@ function A.RegistryCoreBuilders.BuildGroupApplyHelper(ctx)
         elseif MSUFRef and MSUFRef.GF then
             if mode == "auras" and type(MSUFRef.GF.RefreshVisuals) == "function" then
                 MSUFRef.GF.RefreshVisuals(scope, MSUFRef.GF.DIRTY_AURAS)
-            elseif mode == "rebuild" and type(MSUFRef.GF.RebuildAll) == "function" then
-                MSUFRef.GF.RebuildAll()
+            elseif mode == "rebuild" and type(MSUFRef.GF.RefreshAll) == "function" then
+                MSUFRef.GF.RefreshAll()
             elseif type(MSUFRef.GF.RefreshVisuals) == "function" then
                 MSUFRef.GF.RefreshVisuals()
             end

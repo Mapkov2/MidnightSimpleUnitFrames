@@ -13,6 +13,18 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
+local function ProfBegin(name)
+    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+        return MSUF.ProfBegin(name)
+    end
+end
+
+local function ProfEnd(name, token)
+    if token and MSUF and MSUF.ProfEnd then
+        MSUF.ProfEnd(name, token)
+    end
+end
+
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -950,24 +962,29 @@ local function InvalidateUnitRuntimeConfig(unit)
     return unit
 end
 
+local function EmptyUnitFrameConfig(unit)
+    return {
+        unit = unit,
+        enabled = false,
+        lanes = {},
+        sensors = {},
+        group = false,
+        _msufA3ConfigGen = A3._runtimeConfigGen or 1,
+        _msufA3VisualGen = A3._nativeVisualGen or 0,
+    }
+end
+
 local function BuildUnitFrameConfig(unit, frameSpec)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
-    local auras, shared = EnsureDB()
+    local auras = EnsureDB()
     local iconsEnabled = UnitAuraIconsEnabled(auras, unit)
+    if not iconsEnabled then
+        return EmptyUnitFrameConfig(unit)
+    end
+
     local dispelBorder = CompileDispelSensor(unit, frameSpec, false, "border")
     local dispelOverlay = CompileDispelSensor(unit, frameSpec, false, "overlay")
-    if not iconsEnabled then
-        return {
-            unit = unit,
-            enabled = (dispelBorder and dispelBorder.enabled == true) or (dispelOverlay and dispelOverlay.enabled == true),
-            lanes = {},
-            sensors = { dispelBorder = dispelBorder, dispelOverlay = dispelOverlay },
-            group = false,
-            _msufA3ConfigGen = A3._runtimeConfigGen or 1,
-            _msufA3VisualGen = A3._nativeVisualGen or 0,
-        }
-    end
     local layout, sharedLayout, filtersRoot = EffectiveUnitTables(auras, unit)
     local buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff")
     local debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff")
@@ -1032,8 +1049,7 @@ local function ResolveGroupFrameConfig(frame, unit)
         cfg.lanes.debuff = debuff
         cfg.lanes.external = external
         cfg.enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true) or (external and external.enabled == true)
-    end
-    if type(unit) == "string" and unit ~= "" then
+
         local dispelBorder = CompileDispelSensor(unit, spec, true, "border")
         local dispelOverlay = CompileDispelSensor(unit, spec, true, "overlay")
         local dispelCorner = CompileDispelSensor(unit, spec, true, "corner")
@@ -1363,9 +1379,10 @@ local function RootAppliedConfigIsCurrent(root, frame, cfg, reason)
     return true
 end
 
-local function FrameAppliedConfigIsCurrent(frame, reason)
+local function FrameAppliedConfigIsCurrent(frame, reason, cfg)
     if not frame then return false end
-    return RootAppliedConfigIsCurrent(frame.Auras, frame, nil, reason)
+    if cfg == nil then cfg = FrameAuraConfig(frame, frame.unit) end
+    return RootAppliedConfigIsCurrent(frame.Auras, frame, cfg, reason)
 end
 
 LaneTrackingSignature = function(lane)
@@ -2130,10 +2147,15 @@ local _identityQueue
 local _identityFlushScheduled = false
 
 local function FlushIdentityQueue()
+    local profName = "auras3:FlushIdentityQueue"
+    local profToken = ProfBegin(profName)
     _identityFlushScheduled = false
     local queue = _identityQueue
     _identityQueue = nil
-    if not queue then return end
+    if not queue then
+        ProfEnd(profName, profToken)
+        return
+    end
     for frame in pairs(queue) do
         local root = frame and frame.Auras
         -- Only touch frames that still own applied native auras; a frame disabled
@@ -2146,6 +2168,7 @@ local function FlushIdentityQueue()
             RefreshAppliedNativeAuras(frame, true)
         end
     end
+    ProfEnd(profName, profToken)
 end
 
 local function HideState(frame)
@@ -2254,24 +2277,45 @@ end
 
 function A3.RenderFrame(frame, reason)
     if not frame then return false end
+    local cfg
+    local cfgReady = false
+
     if DEFERRED_IDENTITY_REASONS[reason] == true then
         -- Coalesce target/focus swaps off the tick; the container's own
         -- UNIT_AURA full-update repopulates content. See FlushIdentityQueue.
-        if A3.QueueIdentityAuraRebuild(frame) then return true end
+        cfg = FrameAuraConfig(frame, frame.unit)
+        cfgReady = true
+        if not (cfg and cfg.enabled == true) then
+            HideState(frame)
+            return false
+        end
+        if RootAppliedConfigIsCurrent(frame.Auras, frame, cfg, nil)
+            and A3.QueueIdentityAuraRebuild(frame) then
+            return true
+        end
     end
     if IDENTITY_AURA_REFRESH_REASONS[reason] == true then
         -- Group identity stays synchronous so roster builds settle in one pass,
         -- but never forces a filter rebuild: keep geometry/registration current
         -- (no ClearAuraFilters/AddAuraFilter) and let the container's UNIT_AURA
         -- own aura content.
-        if RefreshAppliedNativeAuras(frame, false) then return true end
+        if not cfgReady then cfg = FrameAuraConfig(frame, frame.unit) end
+        cfgReady = true
+        if not (cfg and cfg.enabled == true) then
+            HideState(frame)
+            return false
+        end
+        if RootAppliedConfigIsCurrent(frame.Auras, frame, cfg, nil)
+            and RefreshAppliedNativeAuras(frame, false) then
+            return true
+        end
         if InCombat() then return false end
     end
-    if FrameAppliedConfigIsCurrent(frame, reason) then
+    if not cfgReady then cfg = FrameAuraConfig(frame, frame.unit) end
+    if FrameAppliedConfigIsCurrent(frame, reason, cfg) then
         RefreshAppliedNativeAuras(frame, false)
         return true
     end
-    local cfg = FrameAuraConfig(frame, frame.unit)
     return ApplyConfig(frame, cfg, reason)
 end
 
@@ -2399,12 +2443,17 @@ local function DoRefreshAll()
 end
 
 local function FlushCoalescedRefreshAll()
+    local profName = "auras3:FlushRefreshAll"
+    local profToken = ProfBegin(profName)
     local pending = A3._refreshAllPending == true
     A3._refreshAllPending = nil
     A3._refreshAllCoalescing = nil
     if pending then
-        return DoRefreshAll()
+        local result = DoRefreshAll()
+        ProfEnd(profName, profToken)
+        return result
     end
+    ProfEnd(profName, profToken)
     return true
 end
 
@@ -2491,7 +2540,12 @@ end
 
 function AurasElement.Update(frame, event)
     if event ~= nil and not ReasonRequiresAuraApply(event) then
-        return FrameAppliedConfigIsCurrent(frame, event)
+        local cfg = FrameAuraConfig(frame, frame and frame.unit)
+        if not (cfg and cfg.enabled == true) then
+            HideState(frame)
+            return false
+        end
+        return FrameAppliedConfigIsCurrent(frame, event, cfg)
     end
     return A3.RenderFrame(frame, event)
 end

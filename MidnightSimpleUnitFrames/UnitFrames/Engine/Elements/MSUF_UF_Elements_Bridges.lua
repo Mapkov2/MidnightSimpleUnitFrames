@@ -38,7 +38,14 @@ local function Queue(fn, tokenName)
     UF[tokenName] = nil
     fn()
   end
-  _G.C_Timer.After(0, flush)
+  local scheduleOnce = _G.MSUF_ScheduleOnce
+  if type(scheduleOnce) == "function" then
+    scheduleOnce(tokenName, flush)
+  elseif _G.C_Timer and _G.C_Timer.After then
+    _G.C_Timer.After(0, flush)
+  else
+    flush()
+  end
 end
 
 local function QueueCastbarRefresh()

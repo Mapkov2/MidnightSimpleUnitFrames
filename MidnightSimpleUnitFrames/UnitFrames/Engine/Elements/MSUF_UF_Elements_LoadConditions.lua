@@ -368,12 +368,8 @@ local function ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
     return
   end
   rt.healthMissing = nil
-  rt.healthTextPending = nil
-  rt.nextHealthTextTime = nil
   text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, BossPreviewPercent, rt.healthNeedsPercent, rt)
 
-  rt.powerTextPending = nil
-  rt.nextPowerTextTime = nil
   text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, BossPreviewPowerPercent, rt.powerNeedsPercent, rt)
 end
 

@@ -29,6 +29,8 @@ local ApplyHealthStatusColor = C.ApplyHealthStatusColor
 local ApplyBackgrounds = C.ApplyBackgrounds
 local ApplyBarGradient = C.ApplyBarGradient
 local RefreshUnitState = C.RefreshUnitState
+local UnitHealthPercent = C.UnitHealthPercent
+local SCALE_100 = C.SCALE_100
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local floor = C.floor or math.floor
 local GetTime = C.GetTime or _G.GetTime
@@ -56,6 +58,27 @@ local HEALTH_EVENTS_NO_FACTION = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HE
 local HEALTH_EVENTS_PLAYER = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_FLAGS" }
 local HEALTH_PLAYER_LIFECYCLE_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 local GROUP_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED" }
+
+local function HealthCanUseStaticHotpath(frame, spec)
+  if frame and frame._msufIsGroupFrame == true then
+    return false
+  end
+  if spec and spec.scope == "group" then
+    return false
+  end
+  local health = spec and spec.health
+  if health and health.mode == "gradient" then
+    return false
+  end
+  if health and health.backgroundMatchHealth == true then
+    return false
+  end
+  local power = spec and spec.power
+  if power and power.backgroundMatchHealth == true then
+    return false
+  end
+  return true
+end
 
 local function StoreHealthValue(bar, unit, hp, hpSecret)
   if not bar then return end
@@ -204,8 +227,24 @@ function Health.Apply(frame, spec)
   if ApplyBarGradient then
     ApplyBarGradient(frame, frame.hpBar, spec and spec.health and spec.health.barGradient, "hpGradients")
   end
-  frame._msufUpdateHealthValue = frame.unit == "player" and Health.UpdateValuePlain or Health.UpdateValue
-  frame._msufUpdateHealthMaxValue = frame.unit == "player" and Health.UpdateMaxValuePlain or Health.UpdateMaxValue
+  local groupStaticHot = frame._msufIsGroupFrame == true
+    and frame._msufHealthColorByHealth ~= true
+    and frame._msufHealthBgDynamic ~= true
+    and frame._msufPowerBgDynamic ~= true
+  -- Remembered so the text runtime (registered after Health) can promote this
+  -- frame to the percent-only updater once it knows the resolved health text
+  -- mode. See Health.SelectGroupHealthUpdater / Runtime.BuildGroupHot.
+  frame._msufGroupStaticHot = groupStaticHot or nil
+  if groupStaticHot then
+    frame._msufUpdateHealthValue = Health.UpdateValueGroupStatic
+    frame._msufUpdateHealthMaxValue = Health.UpdateMaxValueStatic
+  elseif HealthCanUseStaticHotpath(frame, spec) then
+    frame._msufUpdateHealthValue = frame.unit == "player" and Health.UpdateValueStaticPlain or Health.UpdateValueStatic
+    frame._msufUpdateHealthMaxValue = frame.unit == "player" and Health.UpdateMaxValueStaticPlain or Health.UpdateMaxValueStatic
+  else
+    frame._msufUpdateHealthValue = frame.unit == "player" and Health.UpdateValuePlain or Health.UpdateValue
+    frame._msufUpdateHealthMaxValue = frame.unit == "player" and Health.UpdateMaxValuePlain or Health.UpdateMaxValue
+  end
   frame._msufUpdateHealthConnection = Health.UpdateConnectionState
   frame._msufUpdateHealthIdentityColor = Health.UpdateIdentityColor
 end
@@ -301,6 +340,207 @@ function Health.UpdateValuePlain(frame, event, unit)
   end
   RefreshGroupDeadStateFromHealth(frame, event, unit, hp, false)
   return hp, maxHP
+end
+
+function Health.UpdateValueStaticPlain(frame, event, unit)
+  unit = unit or frame.unit
+  if issecretvalue(unit) == true or unit ~= "player" then
+    return Health.UpdateValueStatic(frame, event, unit)
+  end
+  local bar = frame.hpBar
+  if not bar then
+    return
+  end
+
+  local hp = UnitHealth(unit)
+  if issecretvalue(hp) == true then
+    return Health.UpdateValueStatic(frame, event, unit)
+  end
+  if hp == nil then hp = 0 end
+  StoreHealthValue(bar, unit, hp, false)
+
+  local maxHP
+  if bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit then
+    maxHP = bar._msufHealthMax
+  else
+    maxHP = UnitHealthMax(unit)
+    if issecretvalue(maxHP) == true then
+      return Health.UpdateValueStatic(frame, event, unit)
+    end
+    if maxHP == nil then maxHP = 1 end
+    StoreHealthMax(bar, unit, maxHP, false)
+  end
+
+  if bar._msufMinMaxInit ~= true then
+    SetBarMinMaxPlain(bar, maxHP)
+    bar._msufMinMaxInit = true
+  end
+  SetBarValuePlain(bar, hp, true)
+
+  local zeroHealth = hp == 0
+  if bar._msufStatusR == nil or bar._msufStaticZeroHealth ~= zeroHealth then
+    bar._msufStaticZeroHealth = zeroHealth
+    ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, nil, event or "UNIT_HEALTH")
+  end
+  return hp, maxHP
+end
+
+function Health.UpdateValueStatic(frame, event, unit)
+  unit = unit or frame.unit
+  local bar = frame.hpBar
+  if not bar then
+    return
+  end
+
+  local hp = UnitHealth(unit)
+  local hpSecret = issecretvalue(hp) == true
+  if not hpSecret and hp == nil then hp = 0 end
+  local cacheUnit = unit
+  StoreHealthValue(bar, cacheUnit, hp, hpSecret)
+
+  local maxHP, maxSecret
+  if bar._msufHealthMaxReady == true and cacheUnit ~= nil and bar._msufHealthMaxUnit == cacheUnit then
+    maxHP = bar._msufHealthMax
+    maxSecret = bar._msufHealthMaxSecret == true
+  else
+    maxHP = UnitHealthMax(unit)
+    maxSecret = issecretvalue(maxHP) == true
+    if not maxSecret and maxHP == nil then maxHP = 1 end
+    StoreHealthMax(bar, cacheUnit, maxHP, maxSecret)
+  end
+
+  if bar._msufMinMaxInit ~= true then
+    SetBarMinMaxKnown(bar, maxHP, maxSecret)
+    bar._msufMinMaxInit = true
+  end
+  SetBarValueKnown(bar, hp, hpSecret, true)
+
+  local zeroHealth = not hpSecret and hp == 0
+  if bar._msufStatusR == nil or bar._msufStaticZeroHealth ~= zeroHealth then
+    bar._msufStaticZeroHealth = zeroHealth
+    ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, nil, event or "UNIT_HEALTH")
+  end
+  return hp, maxHP
+end
+
+function Health.UpdateValueGroupStatic(frame, event, unit)
+  unit = unit or frame.unit
+  local bar = frame.hpBar
+  if not bar then
+    return
+  end
+
+  local hp = UnitHealth(unit)
+  local hpSecret = issecretvalue(hp) == true
+  if not hpSecret and hp == nil then hp = 0 end
+  local cacheUnit = unit
+  StoreHealthValue(bar, cacheUnit, hp, hpSecret)
+
+  local maxHP, maxSecret
+  if bar._msufHealthMaxReady == true and cacheUnit ~= nil and bar._msufHealthMaxUnit == cacheUnit then
+    maxHP = bar._msufHealthMax
+    maxSecret = bar._msufHealthMaxSecret == true
+  else
+    maxHP = UnitHealthMax(unit)
+    maxSecret = issecretvalue(maxHP) == true
+    if not maxSecret and maxHP == nil then maxHP = 1 end
+    StoreHealthMax(bar, cacheUnit, maxHP, maxSecret)
+  end
+
+  if bar._msufMinMaxInit ~= true then
+    SetBarMinMaxKnown(bar, maxHP, maxSecret)
+    bar._msufMinMaxInit = true
+  end
+  SetBarValueKnown(bar, hp, hpSecret, true)
+
+  local zeroHealth = not hpSecret and hp == 0
+  if bar._msufStatusR == nil or bar._msufStaticZeroHealth ~= zeroHealth then
+    bar._msufStaticZeroHealth = zeroHealth
+    ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, nil, event or "UNIT_HEALTH")
+  end
+  RefreshGroupDeadStateFromHealth(frame, event, unit, hp, hpSecret)
+  return hp, maxHP
+end
+
+--- EUI-parity percent path for group frames that never need an absolute HP
+--- number (no "number" text mode, no gradient-by-health color). One
+--- `UnitHealthPercent` C-call handles value + secret + scale-to-100; there is no
+--- `UnitHealthMax`, no MaxHP cache, and no second `issecretvalue`. MinMax is
+--- pinned to (0,100) once, so only the fill value moves per event. Returns the
+--- percent as the first value so the compiled text writer reuses it instead of
+--- calling `UnitHealthPercent` a second time (dispatch key mode 4). The second
+--- return is nil: this path is gated on "no max needed", so no caller reads it.
+function Health.UpdateValueGroupPercent(frame, event, unit)
+  unit = unit or frame.unit
+  local bar = frame.hpBar
+  if not bar then
+    return
+  end
+
+  local pct = UnitHealthPercent(unit, true, SCALE_100)
+  local pctSecret = issecretvalue(pct) == true
+  if not pctSecret and pct == nil then pct = 0 end
+
+  -- Always (re-)assert the 0-100 scale: UNIT_MAXHEALTH runs UpdateMaxValueStatic
+  -- (which pins MinMax to the absolute max), so a shared _msufMinMaxInit guard
+  -- would leave the bar on absolute min/max while we feed it a percent.
+  -- SetBarMinMaxKnown dedups internally (no-op when already 0-100).
+  SetBarMinMaxKnown(bar, 100, false)
+  bar._msufMinMaxInit = true
+  SetBarValueKnown(bar, pct, pctSecret, true)
+
+  local zeroHealth = not pctSecret and pct == 0
+  if bar._msufStatusR == nil or bar._msufStaticZeroHealth ~= zeroHealth then
+    bar._msufStaticZeroHealth = zeroHealth
+    ApplyHealthStatusColor(bar, frame, unit, nil, nil, nil, event or "UNIT_HEALTH")
+  end
+  RefreshGroupDeadStateFromHealth(frame, event, unit, pct, pctSecret)
+  return pct, nil
+end
+
+--- Called by the text runtime once the health-text mode is resolved (it is
+--- registered after Health, so Health.Apply cannot see the text runtime for the
+--- current spec). Promotes a group-static-hot frame to the EUI percent path when
+--- NO consumer needs an absolute HP number: dispatch key mode 0 (no text) or 4
+--- (percent-only text, no max). Modes 1/2/3/5 need current and/or max, so they
+--- stay on the absolute static path. Requires the ScaleTo100 curve constant;
+--- without it (older client) the percent API is unavailable and we keep static.
+--- Idempotent and reversible: a later config change that adds a number slot
+--- re-runs this and restores the static updater.
+function Health.SelectGroupHealthUpdater(frame)
+  if frame._msufGroupStaticHot ~= true then
+    return
+  end
+  -- Prediction and group health-visuals consume RAW hp/hpMax (heal/absorb bars,
+  -- over-absorb glow). The percent path produces neither, so it is only eligible
+  -- when both are inactive; otherwise those consumers would get a percent where
+  -- absolute health is required. Cheap active-flag reads; the elements applied
+  -- before the text runtime that calls this.
+  local active = frame._msufActiveElements
+  if active and (active.Prediction == true or active.GroupVisuals == true) then
+    if frame._msufUpdateHealthValue == Health.UpdateValueGroupPercent then
+      frame._msufUpdateHealthValue = Health.UpdateValueGroupStatic
+      local bar = frame.hpBar
+      if bar then bar._msufMinMaxInit = nil end
+    end
+    return
+  end
+  local rt = frame._msufTextRuntime
+  local mode = rt and rt.healthDispatchKeyMode or 0
+  local percentOnly = SCALE_100 ~= nil and UnitHealthPercent ~= nil
+    and (mode == 0 or mode == 4)
+  if percentOnly then
+    if frame._msufUpdateHealthValue ~= Health.UpdateValueGroupPercent then
+      frame._msufUpdateHealthValue = Health.UpdateValueGroupPercent
+      -- Pinned to (0,100); force the next update to re-init min/max.
+      local bar = frame.hpBar
+      if bar then bar._msufMinMaxInit = nil end
+    end
+  elseif frame._msufUpdateHealthValue == Health.UpdateValueGroupPercent then
+    frame._msufUpdateHealthValue = Health.UpdateValueGroupStatic
+    local bar = frame.hpBar
+    if bar then bar._msufMinMaxInit = nil end
+  end
 end
 
 function Health.UpdateValue(frame, event, unit)
@@ -415,6 +655,72 @@ function Health.UpdateMaxValuePlain(frame, event, unit)
   end
   if updateColor and not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
     ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
+  end
+  return hp, maxHP
+end
+
+function Health.UpdateMaxValueStaticPlain(frame, event, unit)
+  unit = unit or frame.unit
+  if issecretvalue(unit) == true or unit ~= "player" then
+    return Health.UpdateMaxValueStatic(frame, event, unit)
+  end
+  local bar = frame.hpBar
+  if not bar then
+    return
+  end
+
+  local hp = UnitHealth(unit)
+  if issecretvalue(hp) == true then
+    return Health.UpdateMaxValueStatic(frame, event, unit)
+  end
+  if hp == nil then hp = 0 end
+  local maxHP = UnitHealthMax(unit)
+  if issecretvalue(maxHP) == true then
+    return Health.UpdateMaxValueStatic(frame, event, unit)
+  end
+  if maxHP == nil then maxHP = 1 end
+  StoreHealthValue(bar, unit, hp, false)
+  StoreHealthMax(bar, unit, maxHP, false)
+
+  SetBarMinMaxPlain(bar, maxHP)
+  bar._msufMinMaxInit = true
+  SetBarValuePlain(bar, hp, false)
+  SnapBarInterpolation(bar)
+
+  local zeroHealth = hp == 0
+  if bar._msufStatusR == nil or bar._msufStaticZeroHealth ~= zeroHealth then
+    bar._msufStaticZeroHealth = zeroHealth
+    ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, nil, event or "UNIT_MAXHEALTH")
+  end
+  return hp, maxHP
+end
+
+function Health.UpdateMaxValueStatic(frame, event, unit)
+  unit = unit or frame.unit
+  local bar = frame.hpBar
+  if not bar then
+    return
+  end
+
+  local hp = UnitHealth(unit)
+  local hpSecret = issecretvalue(hp) == true
+  if not hpSecret and hp == nil then hp = 0 end
+  local maxHP = UnitHealthMax(unit)
+  local maxSecret = issecretvalue(maxHP) == true
+  if not maxSecret and maxHP == nil then maxHP = 1 end
+  local cacheUnit = unit
+  StoreHealthValue(bar, cacheUnit, hp, hpSecret)
+  StoreHealthMax(bar, cacheUnit, maxHP, maxSecret)
+
+  SetBarMinMaxKnown(bar, maxHP, maxSecret)
+  bar._msufMinMaxInit = true
+  SetBarValueKnown(bar, hp, hpSecret, false)
+  SnapBarInterpolation(bar)
+
+  local zeroHealth = not hpSecret and hp == 0
+  if bar._msufStatusR == nil or bar._msufStaticZeroHealth ~= zeroHealth then
+    bar._msufStaticZeroHealth = zeroHealth
+    ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, nil, event or "UNIT_MAXHEALTH")
   end
   return hp, maxHP
 end

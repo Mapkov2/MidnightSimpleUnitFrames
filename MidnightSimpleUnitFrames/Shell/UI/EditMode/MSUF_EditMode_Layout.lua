@@ -1761,12 +1761,12 @@ function Ticker.EndDrag()
         elseif d.isGroupFrame then
             if not IsConfigCombatLocked() then
                 local profileStarted = EditPerfStart()
-                if type(_G.MSUF_GF_RebuildAll) == "function" then
-                    _G.MSUF_GF_RebuildAll()
-                elseif MSUF and MSUF.GF and type(MSUF.GF.RefreshGeometry) == "function" then
+                if MSUF and MSUF.GF and type(MSUF.GF.RefreshGeometry) == "function" then
                     MSUF.GF.RefreshGeometry()
                 elseif type(_G.MSUF_GF_RefreshAll) == "function" then
                     _G.MSUF_GF_RefreshAll()
+                elseif type(_G.MSUF_GF_Refresh) == "function" then
+                    _G.MSUF_GF_Refresh()
                 end
                 EditPerfStop("Group.DragEndGeometry", profileStarted)
             end

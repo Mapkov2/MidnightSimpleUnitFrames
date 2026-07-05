@@ -750,8 +750,9 @@ ApplyCastbarEffectiveSizeUnit = function(unit, g)
     end
 
     if unit == "target" or unit == "focus" then
-        local frame = (unit == "target" and (_G.MSUF_TargetCastbar or _G.TargetCastBar))
-            or (_G.MSUF_FocusCastbar or _G.FocusCastBar)
+        local frame = (unit == "target"
+            and (_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)))
+            or (_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar))
         local preview = (unit == "target" and _G.MSUF_TargetCastbarPreview) or _G.MSUF_FocusCastbarPreview
         local target = frame or preview
         if not target then return false end
@@ -817,8 +818,9 @@ end
 local function ReanchorTargetOrFocusCastbar(unit)
     EnsureDB()
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
-    local frame = (unit == "target" and (_G.MSUF_TargetCastbar or _G.TargetCastBar))
-        or (_G.MSUF_FocusCastbar or _G.FocusCastBar)
+    local frame = (unit == "target"
+        and (_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)))
+        or (_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar))
     local preview = (unit == "target" and _G.MSUF_TargetCastbarPreview) or _G.MSUF_FocusCastbarPreview
     if not frame then return end
 

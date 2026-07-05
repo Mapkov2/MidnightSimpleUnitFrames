@@ -338,30 +338,12 @@ UF.RegisterElement("Alpha", Alpha)
 
 do
   local pending
-  local driver
 
   local function Flush()
     pending = nil
-    if driver then
-      driver:SetScript("OnUpdate", nil)
-    end
     if _G.MSUF_RefreshAllUnitAlphas then
       return _G.MSUF_RefreshAllUnitAlphas()
     end
-  end
-
-  local function FlushOnUpdate()
-    return Flush()
-  end
-
-  local function QueueOnUpdate()
-    local create = _G.CreateFrame
-    if not create then
-      return false
-    end
-    driver = driver or create("Frame")
-    driver:SetScript("OnUpdate", FlushOnUpdate)
-    return true
   end
 
   function Alpha.RequestRefresh()
@@ -369,10 +351,9 @@ do
       return true
     end
     pending = true
-    if _G.MSUF_ScheduleOnce then
-      _G.MSUF_ScheduleOnce("UF_ALPHA_FLUSH", Flush)
-    elseif QueueOnUpdate() then
-      return true
+    local scheduleOnce = _G.MSUF_ScheduleOnce
+    if type(scheduleOnce) == "function" then
+      scheduleOnce("UF_ALPHA_FLUSH", Flush)
     else
       Flush()
     end

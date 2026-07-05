@@ -429,16 +429,6 @@ end
 
 local UNIT_TEXT_RUNTIME_FIELDS = {
   "healthMissing",
-  "healthTextPending",
-  "healthTimerActive",
-  "pendingHP",
-  "pendingHPMax",
-  "nextHealthTextTime",
-  "powerTextPending",
-  "powerTimerActive",
-  "pendingPower",
-  "pendingPowerMax",
-  "nextPowerTextTime",
 }
 
 local function StoreTextRuntimeState(frame, restore)
@@ -576,19 +566,9 @@ local function ApplyText(frame, hp, hpMax, power, powerMax, hpPct, powerPct)
   if not (text and rt and text.UpdateTextSlots) then return end
 
   rt.healthMissing = max(0, (hpMax or 0) - (hp or 0))
-  rt.healthTextPending = nil
-  rt.healthTimerActive = nil
-  rt.pendingHP = nil
-  rt.pendingHPMax = nil
-  rt.nextHealthTextTime = nil
   percentValue = floor((hpPct or 0) * 100 + 0.5)
   text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, PercentValue, rt.healthNeedsPercent, rt)
 
-  rt.powerTextPending = nil
-  rt.powerTimerActive = nil
-  rt.pendingPower = nil
-  rt.pendingPowerMax = nil
-  rt.nextPowerTextTime = nil
   percentValue = floor((powerPct or 0) * 100 + 0.5)
   text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PercentValue, rt.powerNeedsPercent, rt)
 end

@@ -5,9 +5,23 @@
 --- historic globals and the shared runtime manager used by player, target, focus,
 --- and boss castbars.
 
-local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic) or function(name, value)
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = (MSUF.ExportPublic) or function(name, value)
     _G[name] = value
     return value
+end
+
+local function ProfBegin(name)
+    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+        return MSUF.ProfBegin(name)
+    end
+end
+
+local function ProfEnd(name, token)
+    if token and MSUF and MSUF.ProfEnd then
+        MSUF.ProfEnd(name, token)
+    end
 end
 
 local PlayerCastbarCast = _G.MSUF_PlayerCastbar_Cast
@@ -611,16 +625,20 @@ local function StopLowFrequencyTicker()
 end
 
 local function LowFrequencyTicker()
+    local profName = "castbar:lowTicker"
+    local profToken = ProfBegin(profName)
     if activeCount <= 0 then
         StopLowFrequencyTicker()
         CastbarManager:SetScript("OnUpdate", nil)
         CastbarManager:Hide()
+        ProfEnd(profName, profToken)
         return
     end
 
     if highFrequencyCount > 0 then
         StopLowFrequencyTicker()
         if RefreshManagerOnUpdate then RefreshManagerOnUpdate() end
+        ProfEnd(profName, profToken)
         return
     end
 
@@ -634,13 +652,17 @@ local function LowFrequencyTicker()
 
     managerTime = managerTime + elapsed
     UpdateBucket(CastbarManager.low, elapsed)
+    ProfEnd(profName, profToken)
 end
 
 local function ManagerOnUpdate(manager, elapsed)
+    local profName = "castbar:onUpdate"
+    local profToken = ProfBegin(profName)
     if activeCount <= 0 then
         StopLowFrequencyTicker()
         manager._msufLowTickAccum = 0
         manager:Hide()
+        ProfEnd(profName, profToken)
         return
     end
 
@@ -663,6 +685,7 @@ local function ManagerOnUpdate(manager, elapsed)
     else
         manager._msufLowTickAccum = 0
     end
+    ProfEnd(profName, profToken)
 end
 
 RefreshManagerOnUpdate = function()
@@ -703,6 +726,12 @@ CastbarManager:SetScript("OnHide", function(manager)
 end)
 
 local function FrameHasRuntimeWork(frame)
+    if frame.IsShown and not frame:IsShown()
+        and frame.MSUF_preview ~= true
+        and frame._msufPreview ~= true
+        and frame._msufCastbarPreview ~= true then
+        return false
+    end
     return frame.MSUF_castActive == true
         or frame.isEmpower == true
         or frame.MSUF_timerDriven == true

@@ -15,6 +15,25 @@ do
         return value
     end
 
+    local function ProfBegin(name)
+        if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+            return MSUF.ProfBegin(name)
+        end
+    end
+
+    local function ProfEnd(name, token)
+        if token and MSUF and MSUF.ProfEnd then
+            MSUF.ProfEnd(name, token)
+        end
+    end
+
+    local function ProfEventBegin(prefix, event)
+        if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+            local name = prefix .. tostring(event)
+            return name, MSUF.ProfBegin(name)
+        end
+    end
+
     local balanceBuilders = _G.MSUF_CP_FEATURE_BUILDERS
     if type(balanceBuilders) ~= "table" then
         balanceBuilders = {}
@@ -332,26 +351,37 @@ local function _refreshActiveState()
 end
 
 local function _runDeferredAuraRefresh()
+    local profName = "classpower:balance:deferredAura"
+    local profToken = ProfBegin(profName)
     _auraDeferred = false
-    if not _active then return end
+    if not _active then
+        ProfEnd(profName, profToken)
+        return
+    end
     _refreshEclipses()
     _applyEclipseColor()
     if _castSpell then
         _predAmt = _computeAP(_castSpell)
         _updateOverlay()
     end
+    ProfEnd(profName, profToken)
 end
 
 local function _deferAuraRefresh()
     if _auraDeferred then return end
     _auraDeferred = true
-    C_Timer.After(0, _runDeferredAuraRefresh)
+    local scheduleOnce = _G.MSUF_ScheduleOnce
+    if type(scheduleOnce) == "function" then
+        scheduleOnce("MSUF_BALANCE_AURA_REFRESH", _runDeferredAuraRefresh)
+    else
+        C_Timer.After(0, _runDeferredAuraRefresh)
+    end
 end
 
-f:SetScript("OnEvent", function(_, event, arg1, _, arg3)
-    if event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "UPDATE_SHAPESHIFT_FORM" or event == "PLAYER_ENTERING_WORLD" then
-        _refreshActiveState()
-        return
+    local function BalanceOnEvent(_, event, arg1, _, arg3)
+        if event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "UPDATE_SHAPESHIFT_FORM" or event == "PLAYER_ENTERING_WORLD" then
+            _refreshActiveState()
+            return
     end
     if not _active then return end
     if event == "UNIT_SPELLCAST_START" and arg1 == "player" then
@@ -373,7 +403,14 @@ f:SetScript("OnEvent", function(_, event, arg1, _, arg3)
         if _castSpell then _updateOverlay() end
         if _eclColor then _applyEclipseColor() end
     end
-end)
+    end
+
+    f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
+        local profName, profToken = ProfEventBegin("classpower:balance:event:", event)
+        local result = BalanceOnEvent(self, event, arg1, arg2, arg3)
+        ProfEnd(profName, profToken)
+        return result
+    end)
 
 _refreshActiveState()
 

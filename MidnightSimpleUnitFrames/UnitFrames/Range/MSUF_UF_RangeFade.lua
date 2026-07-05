@@ -638,6 +638,10 @@ local PollNow
 
 local pollSettlePending = false -- run one final eval after movement stops
 
+local function RangePollCombatBlocked()
+  return InCombatLockdown and InCombatLockdown()
+end
+
 local function MarkPollSetDirty()
   pollSetDirty = true
 end
@@ -650,7 +654,7 @@ local function UnitMoving(unit)
 end
 
 local function RangeCanChange()
-  if InCombatLockdown and InCombatLockdown() then return true end
+  if RangePollCombatBlocked() then return false end
   if not GetUnitSpeed then return true end
   if UnitMoving("player") then return true end
   for i = 1, pollCount do
@@ -660,11 +664,17 @@ local function RangeCanChange()
 end
 
 local function PollInterval()
-  return (InCombatLockdown and InCombatLockdown()) and 0.75 or 0.85
+  return 2.00
 end
 
 local function PollTimerCallback()
   if not pollQueued then return end
+  if RangePollCombatBlocked() then
+    pollQueued = false
+    pollNextAt = nil
+    pollSettlePending = false
+    return
+  end
   local now = GetTime and GetTime() or 0
   if pollNextAt and now < pollNextAt then
     C_Timer.After(pollNextAt - now, PollTimerCallback)
@@ -677,6 +687,7 @@ end
 
 local function SchedulePoll(delay)
   if pollQueued or pollCount <= 0 then return end
+  if RangePollCombatBlocked() then return end
   pollQueued = true
   delay = delay or PollInterval()
   pollNextAt = (GetTime and GetTime() or 0) + delay
@@ -686,6 +697,15 @@ end
 local function RebuildPollSet()
   pollSetDirty = false
   pollCount = 0
+  if RangePollCombatBlocked() then
+    for i = 1, #pollUnits do
+      pollUnits[i] = nil
+    end
+    pollQueued = false
+    pollNextAt = nil
+    pollSettlePending = false
+    return
+  end
   for unit in pairs(activeUnits) do
     if UnitNeedsPoll(unit) then
       pollCount = pollCount + 1
@@ -703,54 +723,7 @@ local function RebuildPollSet()
   SchedulePoll()
 end
 
-local pendingTargetTargetRange = false
-local pendingFocusTargetRange = false
-local pendingTargetRange = false
-local pendingFocusRange = false
-local pendingRangeFlush = false
-local pendingPollSetRebuild = false
 local driver
-local RangeFlushOnUpdate
-
-local function RunPendingRangeFlush()
-  pendingRangeFlush = false
-  local rebuildPollSet = pendingPollSetRebuild or pollSetDirty
-  local runTarget = pendingTargetRange
-  local runFocus = pendingFocusRange
-  local runTargetTarget = pendingTargetTargetRange
-  local runFocusTarget = pendingFocusTargetRange
-  pendingTargetRange = false
-  pendingFocusRange = false
-  pendingTargetTargetRange = false
-  pendingFocusTargetRange = false
-  pendingPollSetRebuild = false
-  if runTarget then EvaluateTargetUnits(false) end
-  if runFocus then EvaluateFocusUnits(false) end
-  if runTargetTarget then EvaluateIfActive("targettarget", false) end
-  if runFocusTarget then EvaluateIfActive("focustarget", false) end
-  if rebuildPollSet or pollSetDirty then
-    RebuildPollSet()
-  else
-    SchedulePoll()
-  end
-end
-
-RangeFlushOnUpdate = function(self)
-  if self then
-    self:SetScript("OnUpdate", nil)
-  end
-  RunPendingRangeFlush()
-end
-
-local function QueueRangeFlush()
-  if pendingRangeFlush then return true end
-  if driver and driver.SetScript then
-    pendingRangeFlush = true
-    driver:SetScript("OnUpdate", RangeFlushOnUpdate)
-    return true
-  end
-  return false
-end
 
 local function RangeUnitScheduled(unit)
   if not activeUnits[unit] then
@@ -764,84 +737,46 @@ local function ScheduleTargetRange()
   if not RangeUnitScheduled("target") then
     return false
   end
-  if pendingTargetRange then
-    return true
-  end
-  if QueueRangeFlush() then
-    pendingTargetRange = true
-    return true
-  end
   EvaluateTargetUnits(false)
-  return false
+  return true
 end
 
 local function ScheduleFocusRange()
   if not RangeUnitScheduled("focus") then
     return false
   end
-  pendingPollSetRebuild = true
-  if pendingFocusRange then
-    return true
-  end
-  if QueueRangeFlush() then
-    pendingFocusRange = true
-    return true
-  end
   EvaluateFocusUnits(false)
   RebuildPollSet()
-  pendingPollSetRebuild = false
-  return false
+  return true
 end
 
 local function ScheduleTargetTargetRange()
   if not RangeUnitScheduled("targettarget") then
     return false
   end
-  pendingPollSetRebuild = true
-  if pendingTargetTargetRange then
-    return true
-  end
-  if QueueRangeFlush() then
-    pendingTargetTargetRange = true
-    return true
-  end
   EvaluateIfActive("targettarget", false)
   RebuildPollSet()
-  pendingPollSetRebuild = false
-  return false
+  return true
 end
 
 local function ScheduleFocusTargetRange()
   if not RangeUnitScheduled("focustarget") then
     return false
   end
-  pendingPollSetRebuild = true
-  if pendingFocusTargetRange then
-    return true
-  end
-  if QueueRangeFlush() then
-    pendingFocusTargetRange = true
-    return true
-  end
   EvaluateIfActive("focustarget", false)
   RebuildPollSet()
-  pendingPollSetRebuild = false
-  return false
+  return true
 end
 
 local function RangeFrameOnShow(self)
   MarkPollSetDirty()
   EvaluateIfActive(self._msufRangeUnit or self.unit, true)
-  if not QueueRangeFlush() then
-    RebuildPollSet()
-  end
+  RebuildPollSet()
 end
 
 local function RangeFrameOnHide()
   MarkPollSetDirty()
-  if not QueueRangeFlush() then
-    RebuildPollSet()
-  end
+  RebuildPollSet()
 end
 
 local function HookFrameVisibility(frame)
@@ -854,8 +789,15 @@ local function HookFrameVisibility(frame)
 end
 
 PollNow = function()
+  if RangePollCombatBlocked() then
+    pollQueued = false
+    pollNextAt = nil
+    pollSettlePending = false
+    return
+  end
+  local settlePending = pollSettlePending
   local moving = RangeCanChange()
-  if moving or pollSettlePending then
+  if moving or settlePending then
     for i = 1, pollCount do
       EvaluateUnit(pollUnits[i])
     end
@@ -863,8 +805,11 @@ PollNow = function()
   pollSettlePending = moving
   if pollSetDirty then
     RebuildPollSet()
-  else
+  elseif moving then
     SchedulePoll()
+  else
+    pollQueued = false
+    pollNextAt = nil
   end
 end
 
@@ -930,9 +875,6 @@ local function DriverOnEvent(_, event, unit, a, b, c)
     else
       EvaluateUnit(unit, true)
     end
-  end
-  if pendingRangeFlush then
-    return
   end
   RebuildPollSet()
 end
@@ -1058,15 +1000,6 @@ local function SyncRuntime()
   pollCount = 0
   pollQueued = false
   pollNextAt = nil
-  pendingRangeFlush = false
-  pendingTargetRange = false
-  pendingFocusRange = false
-  pendingTargetTargetRange = false
-  pendingFocusTargetRange = false
-  pendingPollSetRebuild = false
-  if driver and driver.SetScript then
-    driver:SetScript("OnUpdate", nil)
-  end
   UnregisterDriver()
 end
 

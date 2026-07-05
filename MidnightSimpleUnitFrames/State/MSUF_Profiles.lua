@@ -2977,10 +2977,10 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload, isUUFIm
     elseif gf and type(gf.MarkAllDirty) == "function" then
         gf.MarkAllDirty(gf.DIRTY_AURAS or gf.DIRTY_ALL or 0x3F)
     end
-    if type(_G.MSUF_GF_RebuildAll) == "function" then
-        _G.MSUF_GF_RebuildAll()
-    elseif type(_G.MSUF_GF_Refresh) == "function" then
+    if type(_G.MSUF_GF_Refresh) == "function" then
         _G.MSUF_GF_Refresh()
+    elseif type(_G.MSUF_GF_RefreshAll) == "function" then
+        _G.MSUF_GF_RefreshAll()
     elseif type(_G.MSUF_GF_RefreshVisuals) == "function" then
         _G.MSUF_GF_RefreshVisuals()
     end

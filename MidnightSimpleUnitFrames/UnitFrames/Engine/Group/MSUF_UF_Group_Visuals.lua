@@ -1031,7 +1031,7 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
     cfg = spec and spec.group
   end
   if not cfg then return end
-  if event == "MSUF_GF_UNIT_IDENTITY" then
+  if event == "MSUF_GF_UNIT_IDENTITY" or event == "MSUF_GF_UNIT_STRUCTURE" then
     local guid = RefreshIndicatorUnitGUID(frame)
     local fn = cfg.runtimeOnTarget
     if fn then fn(frame, cfg, guid ~= nil and guid == targetIndicatorCurrentGUID) end
@@ -1140,8 +1140,12 @@ function GroupVisuals.Apply(frame)
     frame._msufGFVisualRuntimeHealth = healthFn
     frame._msufGFVisualRuntimeGone = goneFn
     frame._msufGFVisualHealthBackgroundTexture = frame.MSUFSpec and frame.MSUFSpec.health and frame.MSUFSpec.health.backgroundTexture or false
-    frame._msufUpdateGroupVisualsHealthValue = healthFn and GroupVisuals.UpdateHealthValue or nil
-    frame._msufUpdateGroupVisualsGoneState = goneFn and GroupVisuals.UpdateGoneState or nil
+    frame._msufUpdateGroupVisualsHealthValue = healthFn and function(owner, event, unit, seedHP, seedMaxHP)
+      healthFn(owner, cfg, seedHP, seedMaxHP, event)
+    end or nil
+    frame._msufUpdateGroupVisualsGoneState = goneFn and function(owner, event, unit, seedHP)
+      goneFn(owner, cfg, seedHP, event)
+    end or nil
   end
   SetIndicatorRegistration(frame, cfg and cfg.targetIndicator == true, cfg and cfg.focusIndicator == true)
   PrepareVisuals(frame, cfg)
