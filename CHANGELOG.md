@@ -1,5 +1,25 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta5 - 2026-07-05
+
+### Performance Highlights
+- Added lean Target, Focus, and target-of-target identity refreshes that use prebaked element update lists instead of the full runtime wrapper path.
+- Added lean per-unit event dispatch for hot unit events so filtered unit trackers can call compiled frame handlers directly.
+- Added direct group-frame health dispatch to reduce overhead on frequent health updates.
+- Retired inactive group-frame runtime work when party, raid, or mythic raid frames are disabled or not active for the current roster state.
+
+### Runtime Optimizations
+- Reduced target/focus swap cost by skipping redundant visibility rebuilds and avoiding unnecessary player-only or NPC-only status API checks.
+- Reduced group-frame background event work by unregistering name, roster, and Blizzard fallback listeners when group runtime is inactive.
+- Tightened targeted-spell refreshes so party-only state is not recalculated for unrelated group-frame updates.
+- Added profiling diagnostics for identity refreshes and fast-path dispatch verification.
+
+### What To Test First
+- Rapid target and focus swapping, including target-of-target and focus-target frames.
+- Frequent group health changes in party and raid layouts.
+- Enabling, disabling, and switching Party/Raid/Mythic Raid frames, including solo and inactive roster states.
+- `/msufprof` fast-path, detail, and identity diagnostic output.
+
 ## 6.0-Beta4 - 2026-07-05
 
 ### Highlights
