@@ -1083,6 +1083,10 @@ local function BuildPreview(parent, panel, width, height)
             end
             owner.layerVisibility[self.key] = owner.layerVisibility[self.key] == false
             if self.key == "guides" then SetPreviewGuidesEnabled(owner.layerVisibility[self.key] ~= false) end
+            if self.key ~= "guides" then
+                owner._manualZoom = nil
+                owner._zoomPanX, owner._zoomPanY = 0, 0
+            end
             for j = 1, #owner.layerButtons do owner.layerButtons[j]:refresh() end
             RequestPreviewLayoutRefresh(owner, "UNIT_PREVIEW_LAYER")
             RefreshHandleSelectionVisuals(owner)

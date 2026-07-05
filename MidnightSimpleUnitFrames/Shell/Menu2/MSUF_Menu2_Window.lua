@@ -224,6 +224,7 @@ local MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H = 286, 32
 local WINDOW_MAXIMIZE_ANIM_SECONDS = 0.38
 local WINDOW_MINIMIZE_ANIM_SECONDS = 0.34
 local WINDOW_RESTORE_ANIM_SECONDS = 0.36
+local WINDOW_SNAP_ANIM_SECONDS = 0.36
 local function IsSlashMenuSnapEnabled()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return true end
@@ -293,10 +294,12 @@ end
 local function StopWindowLayoutAnimation(frame)
     local state = frame and frame._msuf2WindowLayoutAnim
     if not state then return end
+    state.cancelled = true
     frame._msuf2WindowLayoutAnim = nil
     if state.driver and state.driver.SetScript then state.driver:SetScript("OnUpdate", nil) end
     if state.driver and state.driver.Hide then state.driver:Hide() end
 end
+M.StopWindowLayoutAnimation = StopWindowLayoutAnimation
 local function AnimateWindowLayout(frame, target, opts)
     if not (frame and target) then return false end
     opts = opts or {}
@@ -330,7 +333,7 @@ local function AnimateWindowLayout(frame, target, opts)
     if state.fromAlpha and frame.SetAlpha then frame:SetAlpha(state.fromAlpha) end
     if frame.Show then frame:Show() end
     driver:SetScript("OnUpdate", function(self, elapsed)
-        if frame._msuf2WindowLayoutAnim ~= state then
+        if state.cancelled or frame._msuf2Closing or frame._msuf2WindowLayoutAnim ~= state or (frame.IsShown and not frame:IsShown()) then
             self:SetScript("OnUpdate", nil)
             self:Hide()
             return
@@ -352,6 +355,7 @@ local function AnimateWindowLayout(frame, target, opts)
             frame._msuf2WindowLayoutAnim = nil
             self:SetScript("OnUpdate", nil)
             self:Hide()
+            if state.cancelled or frame._msuf2Closing or (frame.IsShown and not frame:IsShown()) then return end
             ApplyRawFrameLayout(frame, target)
             if state.toAlpha and frame.SetAlpha then frame:SetAlpha(state.toAlpha) end
             if type(state.onFinished) == "function" then state.onFinished(frame) end
@@ -477,7 +481,15 @@ local function RestoreMinimizedSlashMenu(frame)
 end
 local function HideSlashMenuAndMinibar(frame)
     frame = frame or M.frame
+    if frame then
+        frame._msuf2Closing = true
+        frame._msuf2WindowState = "normal"
+        frame._msuf2RestoreLayout = nil
+        frame._msuf2PreMinimizeLayout = nil
+        frame._msuf2Minimized = nil
+    end
     StopWindowLayoutAnimation(frame)
+    if frame and frame._msuf2CancelWindowInteractions then frame:_msuf2CancelWindowInteractions() end
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     if frame and frame.Hide then frame:Hide() end
     M.CallIf(M.UpdateMenuCombatListener)
@@ -581,9 +593,21 @@ local function ApplySlashMenuSnap(frame)
     local layout = frame and frame._msuf2LastSnapLayout or nil
     if not layout then layout = GetSlashMenuSnapLayout(frame) end
     if not layout then return false end
+    local start = CaptureWindowLayout(frame)
     if frame._msuf2WindowState == "maximized" then
         frame._msuf2WindowState = "normal"
         frame._msuf2RestoreLayout = nil
+    end
+    M.CallIf(RefreshWindowControls, frame)
+    if start and AnimateWindowLayout(frame, layout, {
+        start = start,
+        duration = WINDOW_SNAP_ANIM_SECONDS,
+        onFinished = function()
+            ApplyWindowLayout(frame, layout, true)
+            M.CallIf(RefreshWindowControls, frame)
+        end,
+    }) then
+        return true
     end
     ApplyWindowLayout(frame, layout, true)
     M.CallIf(RefreshWindowControls, frame)
@@ -1079,15 +1103,15 @@ local function BuildWindow()
     subtitle:SetJustifyH("RIGHT")
     subtitle:Hide()
     f.subtitle = subtitle
-    local close = CreateWindowControlButton(f, "close", "Close", "Close the MSUF menu window.")
+    local close = M.CreateWindowControlButton(f, "close", "Close", "Close the MSUF menu window.")
     close:SetPoint("TOPRIGHT", -4, -4)
-    close:SetScript("OnClick", function() HideSlashMenuAndMinibar(f) end)
+    close:SetScript("OnClick", function() M.HideSlashMenuAndMinibar(f) end)
     f.closeButton = close
-    local maximize = CreateWindowControlButton(f, "maximize", "Maximize", "Maximize or restore the MSUF menu window.")
+    local maximize = M.CreateWindowControlButton(f, "maximize", "Maximize", "Maximize or restore the MSUF menu window.")
     maximize:SetPoint("TOPRIGHT", close, "TOPLEFT", -2, 0)
     maximize:SetScript("OnClick", function() MaximizeSlashMenuWindow(f) end)
     f.maximizeButton = maximize
-    local minimize = CreateWindowControlButton(f, "minimize", "Minimize", "Collapse the MSUF menu to a small taskbar-style bar.")
+    local minimize = M.CreateWindowControlButton(f, "minimize", "Minimize", "Collapse the MSUF menu to a small taskbar-style bar.")
     minimize:SetPoint("TOPRIGHT", maximize, "TOPLEFT", -2, 0)
     minimize:SetScript("OnClick", function() MinimizeSlashMenuWindow(f) end)
     f.minimizeButton = minimize
@@ -1163,7 +1187,7 @@ local function BuildWindow()
         if f._msuf2WindowState == "maximized" then
             f._msuf2WindowState = "normal"
             f._msuf2RestoreLayout = nil
-            M.CallIf(RefreshWindowControls, f)
+            M.CallIf(M.RefreshWindowControls, f)
         end
         f._msuf2DraggingWindow = true
         f._msuf2SnapPreviewKey = nil
@@ -1212,7 +1236,7 @@ local function BuildWindow()
         f._msuf2ResizeMetricsDirty = nil
         f._msuf2WindowState = "normal"
         f._msuf2RestoreLayout = nil
-        M.CallIf(RefreshWindowControls, f)
+        M.CallIf(M.RefreshWindowControls, f)
         f._msuf2ResizeState = {
             cursorX = cursorX,
             cursorY = cursorY,
@@ -1255,6 +1279,15 @@ local function BuildWindow()
         f._msuf2LiveResizing = nil
         f._msuf2FinishingResize = nil
     end
+    function f:_msuf2CancelWindowInteractions()
+        self._msuf2DraggingWindow = nil
+        self._msuf2LastSnapLayout = nil
+        self._msuf2SnapPreviewKey = nil
+        if self.SetScript then self:SetScript("OnUpdate", nil) end
+        HideWindowLayoutProxy()
+        if self.StopMovingOrSizing then self:StopMovingOrSizing() end
+        if FinishResizeProxy then FinishResizeProxy(false) end
+    end
     local grip = CreateFrame("Button", nil, f)
     grip:SetSize(18, 18)
     grip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 3)
@@ -1273,7 +1306,7 @@ local function BuildWindow()
     end)
     f.resizeGrip = grip
     CreateMinimizedBar(f)
-    RefreshWindowControls(f)
+    M.CallIf(M.RefreshWindowControls, f)
     local content = CreateFrame("Frame", nil, f)
     content:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -38)
     content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -14, 14)
@@ -1522,7 +1555,7 @@ local function BuildWindow()
             CancelAssistantPerformanceWarmup("combat")
             CancelSearchBackgroundIndex()
             M.CallIf(M.BlockCombatAction)
-            HideSlashMenuAndMinibar(f)
+            M.HideSlashMenuAndMinibar(f)
             return
         elseif event == "PLAYER_REGEN_ENABLED" and M.activeKey == "search" then
             RefreshSearchResultsPage()
@@ -1537,8 +1570,11 @@ local function BuildWindow()
             self:Hide()
             return
         end
+        self._msuf2Closing = nil
+        if self.SetAlpha then self:SetAlpha(1) end
         ShowPreviewWarning("menu")
         ApplyMenuFramePriority(self)
+        M.CallIf(M.RefreshWindowControls, self)
         self._msuf2Minimized = nil
         if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
         M.CallIf(M.StartHistorySession)
@@ -1553,8 +1589,19 @@ local function BuildWindow()
     end)
     f:SetScript("OnHide", function()
         assistantWarmupSerial = assistantWarmupSerial + 1
-        if f._msuf2FinishWindowDrag then f:_msuf2FinishWindowDrag(false) end
-        if FinishResizeProxy then FinishResizeProxy(false) end
+        if M.StopWindowLayoutAnimation then M.StopWindowLayoutAnimation(f) end
+        if f._msuf2CancelWindowInteractions then
+            f:_msuf2CancelWindowInteractions()
+        else
+            if f._msuf2FinishWindowDrag then f:_msuf2FinishWindowDrag(false) end
+            if FinishResizeProxy then FinishResizeProxy(false) end
+        end
+        if f._msuf2Closing then
+            f._msuf2WindowState = "normal"
+            f._msuf2RestoreLayout = nil
+            f._msuf2PreMinimizeLayout = nil
+            f._msuf2Minimized = nil
+        end
         CancelAssistantPerformanceWarmup("menu-hide")
         CancelSearchBackgroundIndex()
         SetStatusEventsRegistered(false)
@@ -1568,6 +1615,7 @@ local function BuildWindow()
         SyncBossPagePreviewForKey(nil)
         RequestGroupPagePreviewForKey(nil)
         M.CallIf(M.UpdateMenuCombatListener)
+        f._msuf2Closing = nil
     end)
     local scroll = CreateFrame("ScrollFrame", nil, host)
     scroll:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, 0)

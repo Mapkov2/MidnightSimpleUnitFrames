@@ -137,7 +137,22 @@ local function AddGFPreview(ctx, builder)
         box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, boxY)
         RegisterNativePreview(box, ctx)
         box:Show()
-        if W.AttachPinnedPreview then W.AttachPinnedPreview(body, box, { stateKey = "groupFramePreview", title = box._title, hint = box._hint, left = 14, right = 14, top = -8, pageKey = ctx and ctx.key, wrapper = ctx and ctx.wrapper }) end
+        if W.AttachPinnedPreview then
+            W.AttachPinnedPreview(body, box, {
+                stateKey = "groupFramePreview",
+                title = box._title,
+                hint = box._hint,
+                left = 14,
+                right = 14,
+                top = -8,
+                pageKey = ctx and ctx.key,
+                wrapper = ctx and ctx.wrapper,
+                restoreParent = body,
+                restorePoint = { "TOPLEFT", body, "TOPLEFT", 14, boxY },
+                restoreWidth = box.GetWidth and box:GetWidth(),
+                restoreHeight = box.GetHeight and box:GetHeight(),
+            })
+        end
         return box
     end
     local function RefreshThisPreview()
