@@ -696,6 +696,7 @@ local SIG_TEXT_KEYS = {
   "anchorToBars", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
   "nameShortenMaskPx",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY",
+  "nameClassColor", "nameNpcColor", "nameNpcClassColor", "npcColorMode", "npcTypeColorText", "npcTypeTarget", "npcTypeFocus", "npcTypeBoss", "npcTypeToT",
   "healthLayer", "healthLeft", "healthCenter", "healthRight", "healthLeftHidePercentSymbol", "healthCenterHidePercentSymbol", "healthRightHidePercentSymbol", "healthReverse", "healthDelimiter", "healthPercentDecimals", "healthColorByHealth", "healthThrottle", "healthLeftX", "healthLeftY", "healthCenterX", "healthCenterY", "healthRightX", "healthRightY",
   "directHealthLeftPoint", "directHealthLeftRelativePoint", "directHealthLeftX", "directHealthLeftY", "directHealthCenterPoint", "directHealthCenterRelativePoint", "directHealthCenterX", "directHealthCenterY", "directHealthRightPoint", "directHealthRightRelativePoint", "directHealthRightX", "directHealthRightY",
   "powerLayer", "powerLeft", "powerCenter", "powerRight", "powerLeftHidePercentSymbol", "powerCenterHidePercentSymbol", "powerRightHidePercentSymbol", "powerDelimiter", "powerColorByType", "powerThrottle", "powerLeftX", "powerLeftY", "powerCenterX", "powerCenterY", "powerRightX", "powerRightY",

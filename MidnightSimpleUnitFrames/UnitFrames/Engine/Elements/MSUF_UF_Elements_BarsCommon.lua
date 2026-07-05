@@ -29,8 +29,17 @@ local UnitIsPlayer = UnitIsPlayer
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitIsConnected = UnitIsConnected
 local UnitReaction = UnitReaction
+local UnitSelectionType = UnitSelectionType
 local UnitSelectionColor = UnitSelectionColor
-local GetUnitClassification = GetUnitClassification
+local UnitClassification = UnitClassification or GetUnitClassification
+local UnitIsBossMob = UnitIsBossMob
+local UnitIsLieutenant = UnitIsLieutenant
+local UnitEffectiveLevel = UnitEffectiveLevel
+local UnitHasPowerType = UnitHasPowerType
+local UnitPowerType = UnitPowerType
+local IsInInstance = IsInInstance
+local GetMaxLevelForExpansionLevel = GetMaxLevelForExpansionLevel
+local GetMaximumExpansionLevel = GetMaximumExpansionLevel
 local PowerBarColor = PowerBarColor
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
 local type = type
@@ -41,7 +50,8 @@ local abs, floor, max = math.abs, math.floor, math.max
 local Clamp01 = UF.Clamp01
 local GetTime = _G.GetTime
 local C_Timer = _G.C_Timer
-local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
+local Enum = _G.Enum
+local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
 local SMOOTH_INTERP = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
 local C_CurveUtil = _G.C_CurveUtil
 local CreateColor = _G.CreateColor
@@ -50,6 +60,11 @@ local IsSecret = Secrets.IsSecret or function(_) return false end
 local IsNil = Secrets.IsNil or function(value) return value == nil end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local SafeNumber = Secrets.SafeNumber or tonumber
+local POWER_TYPE_MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
+
+local npcTypeReferenceLevel
+local npcTypeReferenceInstanceType
+local npcTypeLieutenantLevel
 
 -- Shared bar/text primitives for unitframe elements.
 -- Health, power, text, color, and smoothing helpers live here so element files can share the
@@ -498,7 +513,13 @@ local function ExternalFrameWidth(frameName, relativeTo)
 end
 
 local function ClassColor(unit)
+  if issecretvalue(unit) == true then
+    return 0.12, 0.62, 0.95
+  end
   local _, class = UnitClass(unit)
+  if issecretvalue(class) == true then
+    class = nil
+  end
   local fast = _G.MSUF_UFCore_GetClassBarColorFast
   if type(fast) == "function" and class then
     local r, g, b = fast(class)
@@ -513,11 +534,115 @@ local function ClassColor(unit)
   return 0.12, 0.62, 0.95
 end
 
+local function PlainTrue(value)
+  return issecretvalue(value) ~= true and (value == true or value == 1)
+end
+
+local function UnitIsNeutralForNPCType(unit)
+  if UnitSelectionType then
+    local selection = SafeNumber(UnitSelectionType(unit))
+    if selection ~= nil then
+      return selection == 2
+    end
+  end
+  if UnitReaction then
+    return SafeNumber(UnitReaction(unit, "player")) == 4
+  end
+  return false
+end
+
+local function UnitHasMana(unit)
+  if UnitHasPowerType then
+    return PlainTrue(UnitHasPowerType(unit, POWER_TYPE_MANA))
+  end
+  if UnitPowerType then
+    local powerType = UnitPowerType(unit)
+    return issecretvalue(powerType) ~= true and powerType == POWER_TYPE_MANA
+  end
+  return false
+end
+
+local function NPCTypeReferenceLevel()
+  local instanceType
+  if IsInInstance then
+    local inInstance
+    inInstance, instanceType = IsInInstance()
+    if not PlainTrue(inInstance) or issecretvalue(instanceType) == true then
+      instanceType = nil
+    end
+  end
+
+  local referenceLevel
+  if instanceType == "party" and GetMaxLevelForExpansionLevel and GetMaximumExpansionLevel then
+    referenceLevel = SafeNumber(GetMaxLevelForExpansionLevel(GetMaximumExpansionLevel()))
+  end
+  if not referenceLevel and UnitEffectiveLevel then
+    referenceLevel = SafeNumber(UnitEffectiveLevel("player"))
+  end
+  if referenceLevel ~= npcTypeReferenceLevel or instanceType ~= npcTypeReferenceInstanceType then
+    npcTypeReferenceLevel = referenceLevel
+    npcTypeReferenceInstanceType = instanceType
+    npcTypeLieutenantLevel = nil
+  end
+  return referenceLevel
+end
+
+local function NPCEliteKind(unit)
+  if UnitIsBossMob and PlainTrue(UnitIsBossMob(unit)) then
+    return "npcBoss"
+  end
+  local level = UnitEffectiveLevel and SafeNumber(UnitEffectiveLevel(unit)) or nil
+  if level == -1 then
+    return "npcBoss"
+  end
+
+  local referenceLevel = NPCTypeReferenceLevel()
+  if UnitIsLieutenant and PlainTrue(UnitIsLieutenant(unit)) then
+    npcTypeLieutenantLevel = level
+    return "npcMiniboss"
+  end
+  if level and referenceLevel then
+    if level == referenceLevel + 1 then
+      npcTypeLieutenantLevel = level
+      return "npcMiniboss"
+    elseif level == referenceLevel + 2 or (npcTypeLieutenantLevel and level == npcTypeLieutenantLevel + 1) then
+      return "npcBoss"
+    end
+  end
+  return UnitHasMana(unit) and "npcCaster" or "npcMelee"
+end
+
+local function UnitNPCClassificationKind(unit)
+  if issecretvalue(unit) == true or not UnitClassification then
+    return nil
+  end
+  local classification = UnitClassification(unit)
+  if issecretvalue(classification) == true then
+    return nil
+  elseif classification == "worldboss" then
+    return "npcBoss"
+  elseif classification == "elite" then
+    return NPCEliteKind(unit)
+  elseif classification == "normal" or classification == "trivial" or classification == "minus" then
+    return "npcRegular"
+  end
+  return nil
+end
+
 local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
+  if issecretvalue(unit) == true then
+    return nil
+  end
   local health = spec and spec.health or {}
   local text = spec and spec.text or {}
-  local typeColorEnabled = forText and text.npcTypeColorText or health.npcTypeColorBar
-  local colorMode = (forText and text.npcColorMode) or health.npcColorMode
+  local typeColorEnabled, colorMode
+  if forText then
+    typeColorEnabled = text.npcTypeColorText
+    colorMode = text.npcColorMode or health.npcColorMode
+  else
+    typeColorEnabled = health.npcTypeColorBar
+    colorMode = health.npcColorMode
+  end
   if colorMode == "type" and typeColorEnabled ~= false then
     local key = keyOverride or spec and spec.key or frame.configKey
     local allowed = true
@@ -530,30 +655,21 @@ local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
     elseif key == "targettarget" or key == "focustarget" then
       if forText then allowed = text.npcTypeToT ~= false else allowed = health.npcTypeToT ~= false end
     end
-    if allowed and GetUnitClassification then
-      local classification = GetUnitClassification(unit)
-      if classification == "worldboss" or classification == "rareelite" then
-        return "npcBoss"
-      elseif classification == "elite" then
-        return "npcMiniboss"
-      elseif classification == "rare" then
-        return "npcCaster"
-      elseif classification == "minus" then
-        return "npcMelee"
-      elseif classification == "normal" then
-        return "npcRegular"
+    if allowed and not UnitIsNeutralForNPCType(unit) then
+      local kind = UnitNPCClassificationKind(unit)
+      if kind then
+        return kind
       end
     end
   end
 
-  local dead = UnitIsDeadOrGhost(unit)
-  if dead then
+  local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)
+  if issecretvalue(dead) ~= true and dead then
     return "dead"
   end
 
   if UnitReaction then
-    local reaction = UnitReaction(unit, "player")
-    reaction = tonumber(reaction)
+    local reaction = SafeNumber(UnitReaction(unit, "player"))
     if reaction and reaction >= 5 then
       return "friendly"
     elseif reaction and reaction == 4 then
@@ -780,9 +896,9 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
   local kind = state and state.npcKindKnown and state.npcKind or UnitNPCKind(frame, unit, spec)
   if kind then
     return NPCColor(kind)
-  elseif UnitSelectionColor then
+  elseif UnitSelectionColor and issecretvalue(unit) ~= true then
     local r, g, b = UnitSelectionColor(unit)
-    if r ~= nil then
+    if issecretvalue(r) ~= true and issecretvalue(g) ~= true and issecretvalue(b) ~= true and r ~= nil then
       return r, g, b
     end
   end
@@ -899,7 +1015,6 @@ MSUF.UFBarTextCommon = {
   UnitIsConnected = UnitIsConnected,
   UnitReaction = UnitReaction,
   UnitSelectionColor = UnitSelectionColor,
-  GetUnitClassification = GetUnitClassification,
   PowerBarColor = PowerBarColor,
   RAID_CLASS_COLORS = RAID_CLASS_COLORS,
   type = type,

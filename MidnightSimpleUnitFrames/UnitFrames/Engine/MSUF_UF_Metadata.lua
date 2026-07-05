@@ -98,7 +98,7 @@ Metadata.hotStateSpecs = {
   [8] = BuildHotSpecs("Portrait:portrait"),
   [9] = BuildHotSpecs("Prediction:prediction:predictionMode"),
   [10] = BuildHotSpecs(
-    "LevelIndicator:level EliteIndicator:elite NameText:name InlineToT:inline:inlineMode " ..
+    "LevelIndicator:level EliteIndicator:elite Health:health NameText:name InlineToT:inline:inlineMode " ..
     "IncomingResIndicator:incomingRes GroupStatusRuntime:groupStatus"),
   [11] = BuildHotSpecs("Alpha:alpha CombatIndicator:combat LoadConditions:load Auras:auras"),
   [12] = BuildHotSpecs("RaidMarkerIndicator:raidMarker GroupStatusRuntime:groupStatus"),

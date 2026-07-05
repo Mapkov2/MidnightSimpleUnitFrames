@@ -1106,6 +1106,10 @@ local function RunHotKindClassification(frame, state, event, unit, sameUnit, a, 
     fn = state.elite
     if fn then fn(frame, event, unit, a, b, c) end
   elseif event == "UNIT_CLASSIFICATION_CHANGED" then
+    if sameUnit then
+      fn = state.health
+      if fn then fn(frame, event, unit, a, b, c) end
+    end
     fn = state.name
     if fn then fn(frame, event, unit) end
     fn = state.inline
@@ -1436,6 +1440,8 @@ RebuildHotEventState = function(frame, event, owners)
     state.health = frame._msufUpdateHealthMaxValue or state.health
   elseif state.health and event == "UNIT_CONNECTION" then
     state.health = frame._msufUpdateHealthConnection or state.health
+  elseif state.health and event == "UNIT_CLASSIFICATION_CHANGED" then
+    state.health = frame._msufUpdateHealthIdentityColor or state.health
   end
   if state.power and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") then
     state.power = frame._msufUpdatePowerValue or state.power
