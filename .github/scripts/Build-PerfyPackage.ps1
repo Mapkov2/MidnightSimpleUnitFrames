@@ -172,6 +172,29 @@ function Repair-PerfyForCurrentLuaLs {
   }
 }
 
+function Patch-PerfyInstrumentorForWowLimits {
+  param([Parameter(Mandatory = $true)][string]$PerfyRoot)
+
+  $instrumentPath = Join-Path $PerfyRoot "Instrumentation/Instrument.lua"
+  if (-not (Test-Path -LiteralPath $instrumentPath)) {
+    throw "Perfy Instrument.lua not found: $instrumentPath"
+  }
+
+  $content = Get-Content -LiteralPath $instrumentPath -Raw
+  $localCacheInjection = 'injections[#injections + 1] = {pos = 0, text = perfyTag .. " local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough = Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough;" .. perfyEnterFile}'
+  $globalSafeInjection = 'injections[#injections + 1] = {pos = 0, text = perfyTag .. perfyEnterFile}'
+
+  if ($content.Contains($localCacheInjection)) {
+    $content = $content.Replace($localCacheInjection, $globalSafeInjection)
+    [System.IO.File]::WriteAllText($instrumentPath, $content, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Patched Perfy Instrument.lua to avoid injected local Perfy upvalues for WoW Lua limits."
+  } elseif ($content.Contains($globalSafeInjection)) {
+    Write-Host "Perfy Instrument.lua already uses WoW-safe global Perfy calls."
+  } else {
+    throw "Could not patch Perfy Instrument.lua. Expected local cache injection was not found."
+  }
+}
+
 function Set-PerfyInterfaceVersion {
   param(
     [Parameter(Mandatory = $true)][string]$PerfyAddonDir,
@@ -434,6 +457,7 @@ New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 
 $perfyRoot = Get-PerfyRoot -DepsDir $depsDir -PerfyRef $PerfyRef -PerfyZip $PerfyZip -PerfySource $PerfySource
 Repair-PerfyForCurrentLuaLs $perfyRoot
+Patch-PerfyInstrumentorForWowLimits $perfyRoot
 $perfyMain = Join-Path $perfyRoot "Instrumentation/Main.lua"
 $perfyAddonSource = Join-Path $perfyRoot "AddOn"
 
@@ -475,6 +499,12 @@ $notInstrumented = @($allLuaFiles | Where-Object { -not (Test-PerfyInstrumentedF
 if ($InstrumentAllLua -and $notInstrumented.Count -gt 0) {
   $sample = ($notInstrumented | Select-Object -First 20 | ForEach-Object { $_.FullName }) -join [Environment]::NewLine
   throw "Perfy did not instrument $($notInstrumented.Count) Lua files. First files:`n$sample"
+}
+
+$localPerfyCacheHits = @(Select-String -LiteralPath $allLuaFiles.FullName -SimpleMatch "local Perfy_GetTime, Perfy_Trace, Perfy_Trace_Passthrough" -ErrorAction SilentlyContinue)
+if ($localPerfyCacheHits.Count -gt 0) {
+  $sample = ($localPerfyCacheHits | Select-Object -First 20 | ForEach-Object { "$($_.Path):$($_.LineNumber)" }) -join [Environment]::NewLine
+  throw "Perfy injected local trace caches into $($localPerfyCacheHits.Count) locations. This can exceed WoW Lua's 60-upvalue limit. First hits:`n$sample"
 }
 
 $version = Get-FirstNonEmptyLine (Join-RepoPath "VERSION")
@@ -522,6 +552,8 @@ $summaryPath = Join-Path $outputRoot "$AddonName-Perfy-$safeVersion.txt"
   "InstrumentAllLua: $InstrumentAllLua",
   "InstrumentedLuaFiles: $($allLuaFiles.Count)",
   "PerfyTraceReferences: $traceCallCount",
+  "LocalPerfyCacheHits: $($localPerfyCacheHits.Count)",
+  "WoWSafeGlobalPerfyCalls: true",
   "Zip: $zipPath"
 ) | Set-Content -LiteralPath $summaryPath -Encoding utf8
 
