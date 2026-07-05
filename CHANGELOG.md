@@ -1,5 +1,59 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta4 - 2026-07-05
+
+### Highlights
+- Refreshed the Menu2 visual shell with stronger contrast, updated panel textures, clearer navigation states, and improved window controls.
+- Added MSUF menu font selection.
+- Added per-slot percent-symbol controls for unit-frame, group-frame, and Class Resource text.
+- Improved unit and group previews so visible layers, pinned previews, zoom, and snap behavior are more reliable.
+- Improved fresh-install and profile-reset handling so the bundled factory profile is applied more consistently.
+
+### Menu And Preview
+- Updated Menu2 panel, rail, popup, status, and navigation textures.
+- Improved Menu2 window snapping, minimize/restore handling, close cleanup, and combat-entry cleanup.
+- Improved pinned preview stability when switching pages or closing the menu.
+- Improved unit preview fitting for text, status icons, portrait, power, castbar, auras, and class-resource layers.
+- Improved group preview layer controls, hover hints, disabled-layer visuals, and restore placement.
+- Reset preview zoom and pan when non-guide layers are toggled so changed layers stay visible.
+- Reduced menu and Assistant warmup work during normal menu use.
+
+### Unit Frames And Text
+- Added per-slot percent-symbol visibility for health and power text.
+- Added menu and Assistant support for the new percent-symbol text controls.
+- Improved NPC type coloring for health bars, name text, and inline target-of-target names.
+- Updated NPC type colors when unit classification changes.
+- Improved safe handling for protected/secret unit values in color and text logic.
+- Reduced redundant unit-frame identity, power text, and aura identity refresh work.
+
+### Group Frames And Edit Mode
+- Improved Party Targeted Spell Indicator performance.
+- Improved group-frame preview and Edit Mode placement for large party, raid, and mythic raid layouts.
+- Kept group-frame preview anchors clamped to screen bounds without forcing large layouts into bad positions.
+- Fixed mover and popup geometry issues in Edit Mode.
+- Stopped motion previews and menu preview interactions more cleanly when combat starts.
+
+### Assistant And Recovery
+- Added a frame recovery workflow for restoring hidden or misplaced frames.
+- Improved Assistant handling for percent-symbol visibility requests.
+- Improved Assistant setting search, exact aliases, follow-up parsing, and dashboard/changelog answers.
+- Improved Assistant-facing labels and setting registry coverage for text and group-frame options.
+
+### Profiles And Defaults
+- Improved fresh-install detection when early startup modules already created small bootstrap database buckets.
+- Preserved exported factory-profile values while filling only missing structural defaults.
+- Initialized the active profile before Menu2, gameplay settings, and previews read `MSUF_DB`.
+- Refreshed preview runtime specs after profile swaps or resets so previews do not use stale profile data.
+
+### What To Test First
+- Menu2 window controls, snapping, minimize/restore, and close behavior.
+- Menu font selection and the refreshed Menu2 styling.
+- Unit-frame, group-frame, and Class Resource percent-symbol toggles.
+- NPC type colors on target, focus, boss, and target-of-target text.
+- Group-frame preview placement with large party, raid, and mythic raid layouts.
+- Frame recovery workflow from the Assistant.
+- Fresh install, profile reset, and profile swap behavior.
+
 ## 6.0-Beta3 - 2026-07-03
 
 ### Highlights
