@@ -23,6 +23,7 @@ local SetShownCached = Text.SetShownCached
 local SetTextCached = Text.SetTextCached
 local SetNameTextColor = Text.SetNameTextColor
 local NameTextColor = Text.NameTextColor
+local NPCTypeTextColorEnabled = Text.NPCTypeTextColorEnabled
 local SetInlineTextColor = Text.SetInlineTextColor
 local InlineTextColor = Text.InlineTextColor
 local SetPowerTextColor = Text.SetPowerTextColor
@@ -896,8 +897,13 @@ local INLINE_NAME_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE" }
 local INLINE_COLOR_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" }
 
 local function NameNeedsNPCColorEvents(text)
-  return text
-    and type(text.nameColor) ~= "table"
+  if not text then
+    return false
+  end
+  if NPCTypeTextColorEnabled and NPCTypeTextColorEnabled(text) then
+    return true
+  end
+  return type(text.nameColor) ~= "table"
     and (text.nameNpcColor == true or text.nameNpcClassColor == true)
 end
 

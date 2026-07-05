@@ -29,7 +29,6 @@ local UnitIsDeadOrGhost = C.UnitIsDeadOrGhost
 local UnitIsConnected = C.UnitIsConnected
 local UnitReaction = C.UnitReaction
 local UnitSelectionColor = C.UnitSelectionColor
-local GetUnitClassification = C.GetUnitClassification
 local PowerBarColor = C.PowerBarColor
 local RAID_CLASS_COLORS = C.RAID_CLASS_COLORS
 local type = C.type
@@ -336,6 +335,21 @@ local function SetNameTextColor(frame, r, g, b, a)
   frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = r, g, b, a
 end
 
+local function PlainUnitIsPlayer(unit)
+  if issecretvalue(unit) == true or not UnitIsPlayer then
+    return nil
+  end
+  local isPlayer = UnitIsPlayer(unit)
+  if issecretvalue(isPlayer) == true then
+    return nil
+  end
+  return isPlayer == true or isPlayer == 1
+end
+
+local function TextWantsNPCTypeColor(text)
+  return text and text.npcColorMode == "type" and text.npcTypeColorText ~= false
+end
+
 local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, npcClassNames)
   local spec = frame and frame.MSUFSpec
   local fallback = spec and spec.textColor
@@ -343,7 +357,10 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
   if not classNames and not npcNames and not npcClassNames then
     return fr, fg, fb, fa
   end
-  local isPlayer = UnitIsPlayer(unit)
+  local isPlayer = PlainUnitIsPlayer(unit)
+  if isPlayer == nil then
+    return fr, fg, fb, fa
+  end
   if isPlayer then
     if classNames then
       local r, g, b = ClassColor(unit)
@@ -352,7 +369,7 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride, 
   else
     if npcClassNames then
       local _, class = UnitClass(unit)
-      if class then
+      if issecretvalue(class) ~= true and class then
         local r, g, b = ClassColor(unit)
         return r, g, b, fa
       end
@@ -369,10 +386,11 @@ local function NameTextColor(frame, unit)
   local spec = frame and frame.MSUFSpec
   local text = spec and spec.text or {}
   local override = text.nameColor
-  if type(override) == "table" then
+  local npcTypeColor = TextWantsNPCTypeColor(text)
+  if type(override) == "table" and not npcTypeColor then
     return override.r or 1, override.g or 1, override.b or 1, override.a or 1
   end
-  return NameTextColorFor(frame, unit, text.nameClassColor == true, text.nameNpcColor == true, nil, text.nameNpcClassColor == true)
+  return NameTextColorFor(frame, unit, text.nameClassColor == true, text.nameNpcColor == true or npcTypeColor, nil, text.nameNpcClassColor == true)
 end
 
 local function SetInlineTextColor(frame, r, g, b, a)
@@ -405,7 +423,10 @@ local function InlineTextColor(frame, unit, inline)
     return NameTextColorFor(frame, unit, inline.totNameClassColor == true, inline.totNameNpcColor == true, "targettarget", inline.totNameNpcClassColor == true)
   end
 
-  local isPlayer = UnitIsPlayer(unit)
+  local isPlayer = PlainUnitIsPlayer(unit)
+  if isPlayer == nil then
+    return fr, fg, fb, fa
+  end
   if mode == "NPC" then
     if not isPlayer then
       local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, "targettarget"))
@@ -421,7 +442,7 @@ local function InlineTextColor(frame, unit, inline)
   else
     if inline and inline.targetNameNpcClassColor == true then
       local _, class = UnitClass(unit)
-      if class then
+      if issecretvalue(class) ~= true and class then
         local r, g, b = ClassColor(unit)
         return r, g, b, fa
       end
@@ -462,7 +483,6 @@ Text.UnitIsDeadOrGhost = UnitIsDeadOrGhost
 Text.UnitIsConnected = UnitIsConnected
 Text.UnitReaction = UnitReaction
 Text.UnitSelectionColor = UnitSelectionColor
-Text.GetUnitClassification = GetUnitClassification
 Text.PowerBarColor = PowerBarColor
 Text.RAID_CLASS_COLORS = RAID_CLASS_COLORS
 Text.type = type
@@ -510,5 +530,6 @@ Text.UpdateHealthTextColor = UpdateHealthTextColor
 Text.SetNameTextColor = SetNameTextColor
 Text.NameTextColorFor = NameTextColorFor
 Text.NameTextColor = NameTextColor
+Text.NPCTypeTextColorEnabled = TextWantsNPCTypeColor
 Text.SetInlineTextColor = SetInlineTextColor
 Text.InlineTextColor = InlineTextColor

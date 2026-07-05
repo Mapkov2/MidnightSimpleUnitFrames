@@ -47,8 +47,10 @@ if not SetBarValueKnown then
 end
 
 local GRADIENT_SECRET_THROTTLE = 0.1
+local HEALTH_EVENTS_CLASS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_FACTION" }
+local HEALTH_EVENTS_CLASS_NPC_TYPE = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_FACTION", "UNIT_CLASSIFICATION_CHANGED" }
 local Health = {
-  events = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_FACTION" },
+  events = HEALTH_EVENTS_CLASS,
 }
 local HEALTH_EVENTS_NO_FACTION = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_CONNECTION", "UNIT_FLAGS" }
 local HEALTH_EVENTS_PLAYER = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_FLAGS" }
@@ -205,6 +207,7 @@ function Health.Apply(frame, spec)
   frame._msufUpdateHealthValue = frame.unit == "player" and Health.UpdateValuePlain or Health.UpdateValue
   frame._msufUpdateHealthMaxValue = frame.unit == "player" and Health.UpdateMaxValuePlain or Health.UpdateMaxValue
   frame._msufUpdateHealthConnection = Health.UpdateConnectionState
+  frame._msufUpdateHealthIdentityColor = Health.UpdateIdentityColor
 end
 
 function Health.GetEvents(frame, spec)
@@ -218,6 +221,9 @@ function Health.GetEvents(frame, spec)
   end
   if (health and health.mode) ~= "class" then
     return HEALTH_EVENTS_NO_FACTION
+  end
+  if health and health.npcColorMode == "type" and health.npcTypeColorBar ~= false then
+    return HEALTH_EVENTS_CLASS_NPC_TYPE
   end
   return Health.events
 end
@@ -500,6 +506,27 @@ function Health.UpdateConnectionState(frame, event, unit)
     if not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
       ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
     end
+  end
+  return hp, maxHP
+end
+
+function Health.UpdateIdentityColor(frame, event, unit)
+  unit = unit or frame.unit
+  local bar = frame.hpBar
+  if not bar then
+    return
+  end
+  local cacheUnit = unit
+  local hpUnit = bar._msufHealthValueUnit
+  local maxUnit = bar._msufHealthMaxUnit
+  local hp = cacheUnit ~= nil and hpUnit == cacheUnit and bar._msufHealthValue or nil
+  local maxHP = cacheUnit ~= nil and maxUnit == cacheUnit and bar._msufHealthMax or nil
+  local rawHealthColor = ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, nil, event or "UNIT_CLASSIFICATION_CHANGED")
+  if rawHealthColor ~= true then
+    bar._msufGradientPct = nil
+  end
+  if not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
+    ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
   end
   return hp, maxHP
 end

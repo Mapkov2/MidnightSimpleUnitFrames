@@ -192,6 +192,10 @@ local function ApplyNpcTypeFlags(dst, general, colorKey)
   dst.npcTypeToT = general.npcTypeToT ~= false
 end
 
+local function NPCTypeTextColorEnabled(text)
+  return text and text.npcColorMode == "type" and text.npcTypeColorText ~= false
+end
+
 local function CopyPowerColorOverrides(dst, src, onlyMissing)
   if type(src) ~= "table" then
     return
@@ -222,6 +226,17 @@ local function CopyDirectTextLayout(text, conf)
     text[key .. "X"] = Number(conf[key .. "OffsetX"], 0)
     text[key .. "Y"] = Number(conf[key .. "OffsetY"], 0)
     text[key .. "Color"] = CopyConfigColor(conf[key .. "Color"])
+  end
+end
+
+local function ClearDirectTextLayout(text)
+  for i = 1, #DIRECT_TEXT_LAYOUTS do
+    local key = "direct" .. DIRECT_TEXT_LAYOUTS[i]
+    text[key .. "Point"] = nil
+    text[key .. "RelativePoint"] = nil
+    text[key .. "X"] = nil
+    text[key .. "Y"] = nil
+    text[key .. "Color"] = nil
   end
 end
 
@@ -604,10 +619,12 @@ local function ResolveToTInline(db, general, unit, targetText)
   inline.unit = "targettarget"
   inline.separator = ResolveToTInlineSeparator(tot)
   inline.colorMode = ResolveToTInlineColorMode(tot.totInlineColorMode)
+  local targetNpcTypeColor = NPCTypeTextColorEnabled(targetText)
   inline.targetNameClassColor = targetText.nameClassColor == true
-  inline.targetNameNpcColor = targetText.nameNpcColor == true
+  inline.targetNameNpcColor = targetText.nameNpcColor == true or targetNpcTypeColor
   inline.targetNameNpcClassColor = targetText.nameNpcClassColor == true
   inline.totNameClassColor, inline.totNameNpcColor, inline.totNameNpcClassColor = ResolveNameColorFlags(general, tot)
+  inline.totNameNpcColor = inline.totNameNpcColor == true or targetNpcTypeColor
 end
 
 local function NormalizePortraitMode(conf)
@@ -1483,11 +1500,15 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.directLayout = conf.directTextLayout == true
   if text.directLayout == true then
     CopyDirectTextLayout(text, conf)
-    if text.nameClassColor ~= true and text.nameNpcColor ~= true and text.nameNpcClassColor ~= true then
+    local npcTypeNameColor = NPCTypeTextColorEnabled(text)
+    if text.nameClassColor ~= true and text.nameNpcColor ~= true and text.nameNpcClassColor ~= true and not npcTypeNameColor then
       text.nameColor = text.directNameColor
     else
       text.nameColor = nil
     end
+  else
+    text.nameColor = nil
+    ClearDirectTextLayout(text)
   end
   text.shortNumbers = general.useShortNumbers ~= false
   text.hidePercentSymbol = general.hidePercentSymbol == true
