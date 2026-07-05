@@ -121,13 +121,6 @@ local GATED_PREDICTION_EVENTS = {
   UNIT_HEALTH = true,
 }
 
-local DEFERRED_PREDICTION_EVENT_BITS = {
-  UNIT_HEAL_PREDICTION = 1,
-  UNIT_ABSORB_AMOUNT_CHANGED = 2,
-  UNIT_HEAL_ABSORB_AMOUNT_CHANGED = 4,
-}
-
-local PREDICTION_FLUSH_EVENT = "MSUF_PREDICTION_FLUSH"
 local calcUnsupported
 local BAR_VALUE_CACHE_FIELDS = { "_msufMaxReady", "_msufMaxPlain", "_msufValuePlain" }
 local PREDICTION_DISABLE_FIELDS = {
@@ -151,12 +144,8 @@ local PREDICTION_DISABLE_FIELDS = {
   "_msufPredictionOverAbsorbOverlay",
   "_msufPredictionClampHealToMissing",
   "_msufPredictionClampAbsorbToMissing",
-  "_msufPredictionQueuedUnit",
-  "_msufPredictionFlushing",
   "_msufUpdatePredictionHealthValue",
   "_msufUpdatePredictionConnectionState",
-  "_msufQueuePredictionUpdate",
-  "_msufQueuePredictionBit",
 }
 
 local function SetTextureCached(bar, texture)
@@ -857,90 +846,6 @@ local PREDICTION_BAR_DEFS = {
   { "healAbsorb", "healAbsorbBar", 3 },
 }
 
-local predictionQueue
-
-local function QueuedPredictionEvent(bits)
-  if bits == 1 then
-    return "UNIT_HEAL_PREDICTION"
-  elseif bits == 2 then
-    return "UNIT_ABSORB_AMOUNT_CHANGED"
-  elseif bits == 4 then
-    return "UNIT_HEAL_ABSORB_AMOUNT_CHANGED"
-  end
-  return PREDICTION_FLUSH_EVENT
-end
-
-local function ProcessQueuedPrediction(frame, bits)
-  if not frame then
-    return false
-  end
-  local unit = frame._msufPredictionQueuedUnit or frame.unit
-  frame._msufPredictionQueuedUnit = nil
-  if frame._msufPredictionDisabled == true or frame._msufDisabledByConfig == true then
-    return false
-  end
-  frame._msufPredictionFlushing = true
-  Prediction.Update(frame, QueuedPredictionEvent(bits), unit)
-  frame._msufPredictionFlushing = nil
-  return true
-end
-
-local function EnsurePredictionQueue()
-  if predictionQueue ~= nil then
-    return predictionQueue or nil
-  end
-  if not (UF and UF.CreateDirtyQueue) then
-    predictionQueue = false
-    return nil
-  end
-  predictionQueue = UF.CreateDirtyQueue("Prediction", {
-    scheduleKey = "UF_PREDICTION_FLUSH",
-    process = ProcessQueuedPrediction,
-    maxPerFlush = 24,
-  }) or false
-  return predictionQueue or nil
-end
-
-local function ClearQueuedPrediction(frame)
-  if not frame then
-    return
-  end
-  frame._msufPredictionQueuedUnit = nil
-  if predictionQueue and predictionQueue.Retire then
-    predictionQueue:Retire(frame)
-  end
-end
-
-local function PredictionMaskHasBit(mask, bit)
-  return type(mask) == "number" and type(bit) == "number" and (mask % (bit * 2)) >= bit
-end
-
-local function QueuePredictionBit(frame, bit, unit)
-  if not frame or frame._msufPredictionFlushing == true or issecretvalue(unit) == true then
-    return false
-  end
-  local mask = frame._msufPredictionMask or 0
-  if not PredictionMaskHasBit(mask, bit) then
-    return false
-  end
-  local cfg = frame._msufPredictionRuntimeCfg
-  if not (cfg and cfg.enabled == true)
-    or cfg.test == true
-    or mask == 0 then
-    return false
-  end
-  local queue = EnsurePredictionQueue()
-  if not queue then
-    return false
-  end
-  frame._msufPredictionQueuedUnit = unit or frame.unit
-  return queue:Mark(frame, bit)
-end
-
-local function QueuePredictionUpdate(frame, event, unit)
-  return QueuePredictionBit(frame, DEFERRED_PREDICTION_EVENT_BITS[event], unit)
-end
-
 local function ClearBarValueCache(bar)
   if not bar then return end
   for i = 1, #BAR_VALUE_CACHE_FIELDS do
@@ -1060,16 +965,13 @@ function Prediction.Apply(frame, spec)
   local cfg = spec and spec.prediction or {}
   Prediction.Create(frame, spec)
   frame._msufPredictionDisabled = nil
-  ClearQueuedPrediction(frame)
   ClearPredictionCache(frame)
   frame._msufPredictionConnectionUnit = nil
   frame._msufPredictionConnectionOnline = nil
   CompilePredictionRuntime(frame, cfg, spec)
   frame._msufUpdatePredictionHealthValue = Prediction.UpdateHealthValue
   frame._msufUpdatePredictionConnectionState = Prediction.UpdateConnectionState
-  frame._msufQueuePredictionUpdate = QueuePredictionUpdate
-  frame._msufQueuePredictionBit = QueuePredictionBit
-  if frame._msufPredictionMask ~= 0 and cfg.test ~= true then
+  if frame._msufPredictionMask ~= 0 and cfg.test ~= true and frame._msufPredictionAbsorbOnly ~= true then
     local calc = EnsureCalc(frame)
     if calc then
       if calc.ResetPredictedValues then
@@ -1104,7 +1006,6 @@ function Prediction.Disable(frame)
   if not frame or frame._msufPredictionDisabled == true then
     return
   end
-  ClearQueuedPrediction(frame)
   for i = 1, #PREDICTION_BAR_DEFS do
     HideBar(frame[PREDICTION_BAR_DEFS[i][2]])
   end
@@ -1149,14 +1050,12 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
     if issecretvalue(maxHP) ~= true and maxHP == nil then maxHP = cachedMax end
   end
 
-  local calc
   if refreshAbsorb then
-    calc = UpdateCalc(frame, unit, cfg)
-    if not calc and frame._msufPredictionClampAbsorbToMissing == true then
+    if frame._msufPredictionClampAbsorbToMissing == true then
       if issecretvalue(hp) ~= true and hp == nil and UnitHealth then hp = UnitHealth(unit) end
       if issecretvalue(maxHP) ~= true and maxHP == nil then maxHP = ReadHealthMax(frame, unit) end
     end
-    frame._msufPredictionAbsorb = ReadDamageAbsorbs(calc, unit, hp, maxHP, absorbMode)
+    frame._msufPredictionAbsorb = ReadDamageAbsorbs(nil, unit, hp, maxHP, absorbMode)
     frame._msufPredictionCacheReady = true
     frame._msufPredictionCacheUnit = issecretvalue(unit) ~= true and unit or nil
     frame._msufPredictionCacheCfg = cfg
@@ -1333,14 +1232,6 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   end
   frame._msufPredictionDisabled = nil
 
-  if cfg.test ~= true
-    and seedHP == nil
-    and seedMaxHP == nil
-    and seedCalc == nil
-    and QueuePredictionUpdate(frame, event, unit) then
-    return
-  end
-
   local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, 3)
   local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
 
@@ -1467,10 +1358,6 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
       maxHP = ReadHealthMax(frame, unit)
     end
     ShowValue(frame.healAbsorbBar, maxHP, frame._msufPredictionHealAbsorb, forceMax)
-  end
-
-  if frame._msufPredictionFlushing ~= true and plan == frame._msufPredictionFullPlan then
-    ClearQueuedPrediction(frame)
   end
 end
 

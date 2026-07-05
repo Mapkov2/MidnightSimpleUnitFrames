@@ -28,8 +28,27 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
+local function ProfBegin(name)
+    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+        return MSUF.ProfBegin(name)
+    end
+end
+
+local function ProfEnd(name, token)
+    if token and MSUF and MSUF.ProfEnd then
+        MSUF.ProfEnd(name, token)
+    end
+end
+
+local function ProfEventBegin(prefix, event)
+    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+        local name = prefix .. tostring(event)
+        return name, MSUF.ProfBegin(name)
+    end
+end
+
 --- Perf locals (eliminate global lookups in hot paths)
-local type, tonumber, pairs = type, tonumber, pairs
+local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor = math.floor
 local math_min = math.min
 local string_format = string.format
@@ -2078,6 +2097,8 @@ end
 
 local _cpAuraDeferred = false
 local function CP_RunDeferredAuraUpdate()
+    local profName = "classpower:deferredAura"
+    local profToken = ProfBegin(profName)
     _cpAuraDeferred = false
     local profile = CP.modeProfile or CP_GetModeEventProfile(CP.renderMode, CP.powerType, CP.isAuraPower)
     if CP._liteBindingsActive == false or (CP.visible and profile and profile.aura == true) then
@@ -2086,29 +2107,43 @@ local function CP_RunDeferredAuraUpdate()
     if CP._cdmWidthEventsActive then
         CP.CDMWidthSyncLayouts(false)
     end
+    ProfEnd(profName, profToken)
 end
 
 local function CP_DeferAuraUpdate()
     if _cpAuraDeferred then return end
     _cpAuraDeferred = true
-    C_Timer.After(0, CP_RunDeferredAuraUpdate)
+    local scheduleOnce = _G.MSUF_ScheduleOnce
+    if type(scheduleOnce) == "function" then
+        scheduleOnce("MSUF_CP_AURA_UPDATE", CP_RunDeferredAuraUpdate)
+    else
+        C_Timer.After(0, CP_RunDeferredAuraUpdate)
+    end
 end
 
 local _cpCDMWidthDeferred = false
 local function CP_RunDeferredCDMWidthSync()
+    local profName = "classpower:deferredCDMWidth"
+    local profToken = ProfBegin(profName)
     _cpCDMWidthDeferred = false
     if CP._cdmWidthEventsActive then
         CP.CDMWidthSyncLayouts(false)
     end
+    ProfEnd(profName, profToken)
 end
 
 local function CP_DeferCDMWidthSync()
     if _cpCDMWidthDeferred then return end
     _cpCDMWidthDeferred = true
-    C_Timer.After(0, CP_RunDeferredCDMWidthSync)
+    local scheduleOnce = _G.MSUF_ScheduleOnce
+    if type(scheduleOnce) == "function" then
+        scheduleOnce("MSUF_CP_CDM_WIDTH_SYNC", CP_RunDeferredCDMWidthSync)
+    else
+        C_Timer.After(0, CP_RunDeferredCDMWidthSync)
+    end
 end
 
-eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
+local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
     if event == "UNIT_POWER_UPDATE" then
         if arg1 == "player" then
             OnPowerUpdate(arg2)
@@ -2305,6 +2340,13 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
         EnsureDefaults()
         return
     end
+end
+
+eventFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
+    local profName, profToken = ProfEventBegin("classpower:event:", event)
+    local result = ClassPowerOnEvent(self, event, arg1, arg2, arg3)
+    ProfEnd(profName, profToken)
+    return result
 end)
 
 --- Register startup events permanently. Structural/runtime events are bound

@@ -51,7 +51,8 @@ end
 --- Suppression uses alpha rather than destroying/hiding the focus castbar so the
 --- cast-state plumbing and range-alpha refresh can still coexist safely.
 local function SetFocusCastbarSuppressed(suppressed)
-    local focusCastbar = G.FocusCastBar or G.MSUF_FocusCastBar or G["MSUF_FocusCastBar"]
+    local focusCastbar = G.MSUF_FocusCastBar or G.MSUF_FocusCastbar
+        or ((G.FocusCastBar and G.FocusCastBar._msufCastbarDriver == true) and G.FocusCastBar)
     if focusCastbar and focusCastbar.SetAlpha then
         focusCastbar._msufFocusKickSuppressed = suppressed and true or nil
         if suppressed then

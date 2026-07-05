@@ -42,6 +42,7 @@ local UPDATE_KEYS = UF._updateKeys or {}
 local FrameIsElementEnabled = UF.FrameIsElementEnabled
 local RebuildHotEventState
 local DispatchFrameEvent
+local RunCompiledFrameEvent
 local FrameRuntimeUpdate
 local RunCompiledPowerText
 local RunCompiledPowerTextTick
@@ -204,17 +205,12 @@ local function RunPowerHot(frame, owners, event, unit)
   local power, maxPower, powerType, powerToken, powerMetaChanged = updateFn(frame, event, unit)
   local textFn = frame._msufUpdatePowerText
   if textFn then
-    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, nil, powerType, powerToken, powerMetaChanged)
+    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, powerType, powerToken, powerMetaChanged)
   end
 end
 
 local HOT_EVENT_KIND = Metadata.hotEventKind or {}
 local HOT_STATE_SPECS = Metadata.hotStateSpecs or {}
-local PREDICTION_QUEUE_BITS = {
-  UNIT_HEAL_PREDICTION = 1,
-  UNIT_ABSORB_AMOUNT_CHANGED = 2,
-  UNIT_HEAL_ABSORB_AMOUNT_CHANGED = 4,
-}
 
 local function PredictionMaskFromSpec(frame)
   local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.prediction
@@ -250,6 +246,52 @@ end
 local function IsGroupFrame(frame)
   local spec = frame and frame.MSUFSpec
   return frame and (frame._msufIsGroupFrame == true or frame._msufCoreScope == "group" or (spec and spec.scope == "group"))
+end
+
+local function StrictGroupFrame(frame)
+  local spec = frame and frame.MSUFSpec
+  return frame and frame._msufIsGroupFrame == true and spec and spec.scope == "group"
+end
+
+local function GroupHotViolation(frame, event)
+  local debug = MSUF and MSUF.Debug
+  if debug and debug.groupHot == true then
+    local handler = _G.geterrorhandler and _G.geterrorhandler()
+    local message = "MSUF GF hot path rejected non-group frame for " .. tostring(event)
+    if type(handler) == "function" then handler(message) else error(message, 2) end
+  end
+  if frame then
+    frame._msufGFHot = nil
+    frame._msufGFHotSerial = nil
+  end
+end
+
+local function BlockOldGroupHotDispatch(frame, event)
+  local gf = MSUF and MSUF.GF
+  if gf then
+    gf._oldGroupHotDispatchBlocked = (gf._oldGroupHotDispatchBlocked or 0) + 1
+  end
+  local debug = MSUF and MSUF.Debug
+  if debug and debug.groupHot == true then
+    local handler = _G.geterrorhandler and _G.geterrorhandler()
+    local message = "MSUF GF blocked old dispatcher for " .. tostring(event)
+    if type(handler) == "function" then handler(message) else error(message, 2) end
+  end
+  return true
+end
+
+local function StartGFProfileDynamic(prefix, value)
+  if not (MSUF and MSUF._profEnabled == true and MSUF.ProfBegin) then
+    return nil, nil, nil
+  end
+  local name = prefix .. tostring(value)
+  return MSUF, name, MSUF.ProfBegin(name)
+end
+
+local function EndGFProfile(prof, name, token)
+  if token and prof and prof.ProfEnd then
+    prof.ProfEnd(name, token)
+  end
 end
 
 --- Text can be as expensive as the bar update it follows. These helpers cache
@@ -407,23 +449,17 @@ local function HealthTextNeedsUpdate(frame, healthTick, hp, maxHP)
   return HealthTextNeedsTickUpdate(frame, hp, maxHP)
 end
 
-RunCompiledPowerText = function(frame, fn, event, unit, power, powerMax, dirtyFn, powerType, powerToken, powerMetaChanged)
+RunCompiledPowerText = function(frame, fn, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   if not fn then return end
   local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
   if PowerTextNeedsUpdate(frame, powerTick, power, powerMax) then
-    if dirtyFn and powerTick then
-      return dirtyFn(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-    end
     fn(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   end
 end
 
-RunCompiledPowerTextTick = function(frame, fn, event, unit, power, powerMax, dirtyFn, powerType, powerToken, powerMetaChanged)
+RunCompiledPowerTextTick = function(frame, fn, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   if not fn then return end
   if PowerTextNeedsTickUpdate(frame, power, powerMax) then
-    if dirtyFn then
-      return dirtyFn(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-    end
     fn(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   end
 end
@@ -496,12 +532,6 @@ local function RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
   if not HealthTextNeedsUpdate(frame, healthTick, hp, maxHP) then
     return
   end
-  if healthTick then
-    local dirtyFn = state.healthTextDirty
-    if dirtyFn then
-      return dirtyFn(frame, event, unit, hp, maxHP)
-    end
-  end
   return textFn(frame, event, unit, hp, maxHP)
 end
 
@@ -510,10 +540,6 @@ local function RunCompiledHealthTextTick(frame, state, event, unit, hp, maxHP)
   if not textFn then return end
   if not HealthTextNeedsTickUpdate(frame, hp, maxHP) then
     return
-  end
-  local dirtyFn = state.healthTextDirty
-  if dirtyFn then
-    return dirtyFn(frame, event, unit, hp, maxHP)
   end
   return textFn(frame, event, unit, hp, maxHP)
 end
@@ -652,7 +678,7 @@ end
 local function RunHotPowerTextOnly(frame, state, event, unit, sameUnit)
   if sameUnit then
     local power, maxPower, powerType, powerToken, powerMetaChanged = state.power(frame, event, unit)
-    RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
+    RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, powerType, powerToken, powerMetaChanged)
   end
   return true
 end
@@ -660,21 +686,21 @@ end
 local function RunHotPowerTextTickOnly(frame, state, event, unit, sameUnit)
   if sameUnit then
     local power, maxPower, powerType, powerToken, powerMetaChanged = state.power(frame, event, unit)
-    RunCompiledPowerTextTick(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
+    RunCompiledPowerTextTick(frame, state.powerText, event, unit, power, maxPower, powerType, powerToken, powerMetaChanged)
   end
   return true
 end
 
 local function RunHotPowerTextStandalone(frame, state, event, unit, sameUnit)
   if sameUnit then
-    RunCompiledPowerText(frame, state.powerText, event, unit, nil, nil, state.powerTextDirty)
+    RunCompiledPowerText(frame, state.powerText, event, unit)
   end
   return true
 end
 
 local function RunHotPowerTextTickStandalone(frame, state, event, unit, sameUnit)
   if sameUnit then
-    RunCompiledPowerTextTick(frame, state.powerText, event, unit, nil, nil, state.powerTextDirty)
+    RunCompiledPowerTextTick(frame, state.powerText, event, unit)
   end
   return true
 end
@@ -863,10 +889,10 @@ local function RunHotKindPower(frame, state, event, unit, sameUnit, a, b, c)
   if fn then
     local power, maxPower, powerType, powerToken, powerMetaChanged = fn(frame, event, unit)
     local textFn = state.powerText
-    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
+    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, powerType, powerToken, powerMetaChanged)
   else
     fn = state.powerText
-    RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
+    RunCompiledPowerText(frame, fn, event, unit)
   end
   return true
 end
@@ -904,10 +930,10 @@ local function RunHotKindConnection(frame, state, event, unit, sameUnit, a, b, c
   if fn then
     local power, maxPower, powerType, powerToken, powerMetaChanged = fn(frame, event, unit)
     local textFn = state.powerText
-    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
+    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, powerType, powerToken, powerMetaChanged)
   else
     fn = state.powerText
-    RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
+    RunCompiledPowerText(frame, fn, event, unit)
   end
   fn = state.name
   if fn then fn(frame, event, unit) end
@@ -960,9 +986,9 @@ local function RunConnectionPower(frame, state, event, unit)
   local fn = state.power
   if fn then
     local power, maxPower, powerType, powerToken, powerMetaChanged = fn(frame, event, unit)
-    RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty, powerType, powerToken, powerMetaChanged)
+    RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, powerType, powerToken, powerMetaChanged)
   else
-    RunCompiledPowerText(frame, state.powerText, event, unit, nil, nil, state.powerTextDirty)
+    RunCompiledPowerText(frame, state.powerText, event, unit)
   end
 end
 
@@ -1046,25 +1072,9 @@ end
 local function RunHotKindPrediction(frame, state, event, unit, sameUnit, a, b, c)
   if not sameUnit then
     if state.predictionUnitless then
-      local queue = state.predictionQueueBit
-      if queue and queue(frame, state.predictionBit, unit) then
-        return true
-      end
-      queue = state.predictionQueue or frame._msufQueuePredictionUpdate
-      if queue and queue(frame, event, unit) then
-        return true
-      end
       local fn = state.prediction
       if fn then fn(frame, event, unit, a, b, c) end
     end
-    return true
-  end
-  local queue = state.predictionQueueBit
-  if queue and queue(frame, state.predictionBit, unit) then
-    return true
-  end
-  queue = state.predictionQueue or frame._msufQueuePredictionUpdate
-  if queue and queue(frame, event, unit) then
     return true
   end
   local fn = state.prediction
@@ -1349,7 +1359,7 @@ local function SelectHotConnectionRunner(state)
 end
 
 local function SelectHotGroupRunner(frame, event, state)
-  if not IsGroupFrame(frame) then
+  if not StrictGroupFrame(frame) then
     return nil
   end
   if state.inline or state.inlineUnitless or state.predictionUnitless then
@@ -1389,6 +1399,35 @@ local function SelectHotGroupRunner(frame, event, state)
     end
   end
   return nil
+end
+
+local function CanUseGroupHotHealth(frame, event, state)
+  if event ~= "UNIT_HEALTH" or not StrictGroupFrame(frame) then return false end
+  if not (state and state.health) then return false end
+  if state.inline or state.inlineUnitless or state.predictionUnitless
+    or state.name or state.statusText or state.combat or state.pvp or state.groupStatus then
+    return false
+  end
+  if state.healthText then
+    local rt = frame and frame._msufTextRuntime
+    if not (rt and rt.healthSlotCount == 1 and rt.healthColorByHealth ~= true) then
+      return false
+    end
+  end
+  return true
+end
+
+local function CanUseGroupHotPower(frame, event, state)
+  if not (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") then return false end
+  if not StrictGroupFrame(frame) then return false end
+  if not (state and state.power) then return false end
+  if state.powerText then
+    local rt = frame and frame._msufTextRuntime
+    if not (rt and rt.powerSlotCount == 1 and rt.powerColorByType ~= true) then
+      return false
+    end
+  end
+  return true
 end
 
 local function SelectHotHealthFlagsRunner(state)
@@ -1446,6 +1485,384 @@ local HOT_EVENT_RUNNERS = {
   UNIT_FACTION = RunHotHealthFaction,
 }
 
+local function BuildUnitFilteredDirectHandler(event, state, runner)
+  local healthFn = state.health
+  if runner == RunHotHealthOnly and healthFn then
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      healthFn(frame, event, frame.unit)
+      return true
+    end
+  elseif runner == RunHotHealthNameOnly and healthFn and state.name then
+    local nameFn = state.name
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      healthFn(frame, event, unit)
+      nameFn(frame, event, unit)
+      return true
+    end
+  elseif runner == RunHotHealthTextOnly and healthFn and state.healthText then
+    local textFn = state.healthText
+    local healthTick = event == "UNIT_HEALTH"
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local hp, maxHP = healthFn(frame, event, unit)
+      if HealthTextNeedsUpdate(frame, healthTick, hp, maxHP) then
+        textFn(frame, event, unit, hp, maxHP)
+      end
+      return true
+    end
+  elseif runner == RunHotHealthTextTickOnly and healthFn and state.healthText then
+    local textFn = state.healthText
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local hp, maxHP = healthFn(frame, event, unit)
+      if HealthTextNeedsTickUpdate(frame, hp, maxHP) then
+        textFn(frame, event, unit, hp, maxHP)
+      end
+      return true
+    end
+  elseif runner == RunHotHealthPredictionOnly and healthFn and state.prediction then
+    local predictionFn = state.prediction
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local hp, maxHP, calc = healthFn(frame, event, unit)
+      predictionFn(frame, event, unit, hp, maxHP, calc)
+      return true
+    end
+  elseif runner == RunHotHealthTextPredictionOnly and healthFn and state.healthText and state.prediction then
+    local textFn = state.healthText
+    local predictionFn = state.prediction
+    local healthTick = event == "UNIT_HEALTH"
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local hp, maxHP, calc = healthFn(frame, event, unit)
+      if HealthTextNeedsUpdate(frame, healthTick, hp, maxHP) then
+        textFn(frame, event, unit, hp, maxHP)
+      end
+      predictionFn(frame, event, unit, hp, maxHP, calc)
+      return true
+    end
+  elseif runner == RunHotHealthTextPredictionTickOnly and healthFn and state.healthText and state.prediction then
+    local textFn = state.healthText
+    local predictionFn = state.prediction
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local hp, maxHP, calc = healthFn(frame, event, unit)
+      if HealthTextNeedsTickUpdate(frame, hp, maxHP) then
+        textFn(frame, event, unit, hp, maxHP)
+      end
+      predictionFn(frame, event, unit, hp, maxHP, calc)
+      return true
+    end
+  elseif runner == RunHotHealthGroupVisualsOnly and healthFn and state.groupVisuals then
+    local groupFn = state.groupVisuals
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local hp, maxHP = healthFn(frame, event, unit)
+      groupFn(frame, event, unit, hp, maxHP)
+      return true
+    end
+  elseif runner == RunHotHealthTextGroupVisuals and healthFn and state.healthText and state.groupVisuals then
+    local textFn = state.healthText
+    local groupFn = state.groupVisuals
+    local healthTick = event == "UNIT_HEALTH"
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local hp, maxHP = healthFn(frame, event, unit)
+      if HealthTextNeedsUpdate(frame, healthTick, hp, maxHP) then
+        textFn(frame, event, unit, hp, maxHP)
+      end
+      groupFn(frame, event, unit, hp, maxHP)
+      return true
+    end
+  elseif runner == RunHotHealthTextTickGroupVisuals and healthFn and state.healthText and state.groupVisuals then
+    local textFn = state.healthText
+    local groupFn = state.groupVisuals
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local hp, maxHP = healthFn(frame, event, unit)
+      if HealthTextNeedsTickUpdate(frame, hp, maxHP) then
+        textFn(frame, event, unit, hp, maxHP)
+      end
+      groupFn(frame, event, unit, hp, maxHP)
+      return true
+    end
+  elseif runner == RunHotHealthFlagsGroupState then
+    local groupVisualsFn = state.groupVisuals
+    local groupStatusFn = state.groupStatus
+    if healthFn or groupVisualsFn or groupStatusFn then
+      return function(frame, _, a, b, c)
+        if frame._msufDisabledByConfig == true then return true end
+        local unit = frame.unit
+        if healthFn then healthFn(frame, event, unit, a, b, c) end
+        if groupVisualsFn then groupVisualsFn(frame, event, unit, a, b, c) end
+        if groupStatusFn then groupStatusFn(frame, event, unit, a, b, c) end
+        return true
+      end
+    end
+  elseif runner == RunHotGroupFlagsState then
+    local groupVisualsFn = state.groupVisuals
+    local groupStatusFn = state.groupStatus
+    if groupVisualsFn or groupStatusFn then
+      return function(frame, _, a, b, c)
+        if frame._msufDisabledByConfig == true then return true end
+        local unit = frame.unit
+        if groupVisualsFn then groupVisualsFn(frame, event, unit, a, b, c) end
+        if groupStatusFn then groupStatusFn(frame, event, unit, a, b, c) end
+        return true
+      end
+    end
+  elseif runner == RunHotGroupStatusOnly and state.groupStatus then
+    local groupStatusFn = state.groupStatus
+    return function(frame, _, a, b, c)
+      if frame._msufDisabledByConfig == true then return true end
+      groupStatusFn(frame, event, frame.unit, a, b, c)
+      return true
+    end
+  end
+
+  local powerFn = state.power
+  if runner == RunHotPowerOnly and powerFn then
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      powerFn(frame, event, frame.unit)
+      return true
+    end
+  elseif runner == RunHotPowerTextOnly and powerFn and state.powerText then
+    local textFn = state.powerText
+    local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local power, maxPower, powerType, powerToken, powerMetaChanged = powerFn(frame, event, unit)
+      if PowerTextNeedsUpdate(frame, powerTick, power, maxPower) then
+        textFn(frame, event, unit, power, maxPower, powerType, powerToken, powerMetaChanged)
+      end
+      return true
+    end
+  elseif runner == RunHotPowerTextTickOnly and powerFn and state.powerText then
+    local textFn = state.powerText
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      local power, maxPower, powerType, powerToken, powerMetaChanged = powerFn(frame, event, unit)
+      if PowerTextNeedsTickUpdate(frame, power, maxPower) then
+        textFn(frame, event, unit, power, maxPower, powerType, powerToken, powerMetaChanged)
+      end
+      return true
+    end
+  elseif runner == RunHotPowerTextStandalone and state.powerText then
+    local textFn = state.powerText
+    local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      if PowerTextNeedsUpdate(frame, powerTick) then
+        textFn(frame, event, unit)
+      end
+      return true
+    end
+  elseif runner == RunHotPowerTextTickStandalone and state.powerText then
+    local textFn = state.powerText
+    return function(frame)
+      if frame._msufDisabledByConfig == true then return true end
+      local unit = frame.unit
+      if PowerTextNeedsTickUpdate(frame) then
+        textFn(frame, event, unit)
+      end
+      return true
+    end
+  end
+  return nil
+end
+
+local function IgnoreFastEvent()
+  return true
+end
+
+local function BuildGroupHotHandler(event, state, runner)
+  local wantHealth = state and state.gfHotHealth == true
+  local wantPower = state and state.gfHotPower == true
+  if not (wantHealth or wantPower) then return nil end
+  return function(frame, unit, a, b, c)
+    if not frame or frame._msufDisabledByConfig == true then
+      return true
+    end
+    if unit and issecretvalue(unit) == true then
+      unit = nil
+    end
+    local frameUnit = frame.unit
+    if unit and unit ~= frameUnit then
+      return true
+    end
+    -- Inlined StrictGroupFrame (frame._msufIsGroupFrame and spec.scope=="group").
+    -- This runs on every hot event, so the function-call frame is worth removing;
+    -- the fields are read anyway (spec is needed for the serial check below).
+    local spec = frame.MSUFSpec
+    if not (frame._msufIsGroupFrame == true and spec and spec.scope == "group") then
+      GroupHotViolation(frame, event)
+      return true
+    end
+    -- Profiling helpers are function calls even when disabled (they early-out
+    -- internally). Gate them behind the flag inline so the common (profiling off)
+    -- path pushes zero extra frames per event.
+    local profiling = MSUF and MSUF._profEnabled == true
+    local profGF, profName, profToken
+    if profiling then
+      profGF, profName, profToken = StartGFProfileDynamic("gfHot:", event)
+    end
+    local hot = frame._msufGFHot
+    local serial = spec._msufGFCompileSerial or 0
+    if hot and hot.serial ~= serial then
+      local gf = MSUF and MSUF.GF
+      hot = gf and gf.RebindGroupHotRuntime and gf.RebindGroupHotRuntime(frame, spec) or nil
+      if hot and hot.serial ~= serial then
+        hot = nil
+        frame._msufGFHot = nil
+        frame._msufGFHotSerial = nil
+      end
+    end
+    local fn = hot and (wantHealth and hot.health or hot.power)
+    if fn then
+      local result = fn(frame, event, unit or frameUnit, a, b, c)
+      if profiling then EndGFProfile(profGF, profName, profToken) end
+      return result
+    end
+    -- Documented group fallback: non-hotpath-capable configs still use the
+    -- precompiled runner selected for this event. They must not drop into the
+    -- generic element-list dispatcher.
+    runner(frame, state, event, unit or frameUnit, true, a, b, c)
+    if profiling then EndGFProfile(profGF, profName, profToken) end
+    return true
+  end
+end
+
+local function StoreFastEventHandler(frame, event, handler)
+  if not frame then
+    return
+  end
+  local handlers = frame._msufFastEventHandlers
+  if handler then
+    if not handlers then
+      handlers = {}
+      frame._msufFastEventHandlers = handlers
+    end
+    handlers[event] = handler
+  elseif handlers then
+    handlers[event] = nil
+  end
+end
+
+local function BuildFastEventHandler(event, state)
+  if not state then
+    return nil
+  end
+  if state.empty == true then
+    return IgnoreFastEvent
+  end
+  local runner = state.runner
+  if not runner then
+    return nil
+  end
+
+  local unitScoped = state.unitScoped == true
+  local frameUnitFiltered = state.frameUnitFiltered == true
+  local needsContext = state.needsDispatchContext == true
+
+  if unitScoped then
+    local groupHot = BuildGroupHotHandler(event, state, runner)
+    if groupHot then
+      return groupHot
+    end
+    if frameUnitFiltered and not needsContext then
+      local direct = BuildUnitFilteredDirectHandler(event, state, runner)
+      if direct then
+        return direct
+      end
+      return function(frame, _, a, b, c)
+        if frame._msufDisabledByConfig == true then
+          return true
+        end
+        runner(frame, state, event, frame.unit, true, a, b, c)
+        return true
+      end
+    end
+    if needsContext then
+      return function(frame, unit, a, b, c)
+        if not frame or frame._msufDisabledByConfig == true then
+          return true
+        end
+        if unit and issecretvalue(unit) == true then
+          unit = nil
+        end
+        local frameUnit = frame.unit
+        if not frameUnitFiltered and unit and unit ~= frameUnit then
+          return true
+        end
+        BeginDispatchContext(frame)
+        runner(frame, state, event, unit or frameUnit, true, a, b, c)
+        frame._msufDispatchActive = nil
+        return true
+      end
+    end
+    return function(frame, unit, a, b, c)
+      if not frame or frame._msufDisabledByConfig == true then
+        return true
+      end
+      if unit and issecretvalue(unit) == true then
+        unit = nil
+      end
+      local frameUnit = frame.unit
+      if not frameUnitFiltered and unit and unit ~= frameUnit then
+        return true
+      end
+      runner(frame, state, event, unit or frameUnit, true, a, b, c)
+      return true
+    end
+  end
+
+  if needsContext then
+    return function(frame, unit, a, b, c)
+      if not frame or frame._msufDisabledByConfig == true then
+        return true
+      end
+      if unit and issecretvalue(unit) == true then
+        unit = nil
+      end
+      local frameUnit = frame.unit
+      local sameUnit = (not unit) or unit == frameUnit
+      local eventUnit = sameUnit and (unit or frameUnit) or unit
+      BeginDispatchContext(frame)
+      runner(frame, state, event, eventUnit, sameUnit, a, b, c)
+      frame._msufDispatchActive = nil
+      return true
+    end
+  end
+  return function(frame, unit, a, b, c)
+    if not frame or frame._msufDisabledByConfig == true then
+      return true
+    end
+    if unit and issecretvalue(unit) == true then
+      unit = nil
+    end
+    local frameUnit = frame.unit
+    local sameUnit = (not unit) or unit == frameUnit
+    local eventUnit = sameUnit and (unit or frameUnit) or unit
+    runner(frame, state, event, eventUnit, sameUnit, a, b, c)
+    return true
+  end
+end
+
 do
   local missing
   for event, kind in pairs(HOT_EVENT_KIND) do
@@ -1465,13 +1882,14 @@ do
 end
 
 --- Hot state is built when element ownership changes, not when an event fires.
---- That lets DispatchFrameEvent use one preselected runner and prebound update
---- functions for common UNIT_* events.
+--- That lets RunCompiledFrameEvent use one preselected runner and prebound
+--- update functions for common UNIT_* events.
 RebuildHotEventState = function(frame, event, owners)
   local kind = HOT_EVENT_KIND[event]
   local states = frame and frame._msufHotEventState
   if not kind or not owners then
     if states then states[event] = nil end
+    StoreFastEventHandler(frame, event, nil)
     return
   end
   if not states then
@@ -1506,13 +1924,11 @@ RebuildHotEventState = function(frame, event, owners)
     local rt = frame and frame._msufTextRuntime
     local text = MSUF.UFText
     state.healthText = rt and rt.healthHot or (text and text.UpdateHealth) or state.healthText
-    state.healthTextDirty = rt and rt.healthDirty or nil
   end
   if state.powerText then
     local rt = frame and frame._msufTextRuntime
     local text = MSUF.UFText
     state.powerText = rt and rt.powerHot or (text and text.UpdatePower) or state.powerText
-    state.powerTextDirty = rt and rt.powerDirty or nil
   end
   if state.health and event == "UNIT_HEALTH" then
     state.health = frame._msufUpdateHealthValue or state.health
@@ -1530,10 +1946,6 @@ RebuildHotEventState = function(frame, event, owners)
     state.prediction = frame._msufUpdatePredictionHealthValue or state.prediction
   elseif state.prediction and event == "UNIT_CONNECTION" then
     state.prediction = frame._msufUpdatePredictionConnectionState or state.prediction
-  elseif state.prediction and kind == 9 then
-    state.predictionQueue = frame._msufQueuePredictionUpdate
-    state.predictionQueueBit = frame._msufQueuePredictionBit
-    state.predictionBit = PREDICTION_QUEUE_BITS[event]
   end
   if state.groupVisuals and (event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH") then
     state.groupVisuals = frame._msufUpdateGroupVisualsHealthValue or state.groupVisuals
@@ -1561,6 +1973,8 @@ RebuildHotEventState = function(frame, event, owners)
     state.runner = SelectHotConnectionRunner(state) or state.runner
   end
   state.runner = SelectHotGroupRunner(frame, event, state) or state.runner
+  state.gfHotHealth = CanUseGroupHotHealth(frame, event, state) or nil
+  state.gfHotPower = CanUseGroupHotPower(frame, event, state) or nil
   state.unitScoped = not (frame._msufEventUnitless and frame._msufEventUnitless[event])
   state.frameUnitFiltered = state.unitScoped == true
     and frame._msufFrameUnitEvents
@@ -1580,7 +1994,30 @@ RebuildHotEventState = function(frame, event, owners)
     state.needsDispatchContext = nil
   end
   state.empty = state.hasWork ~= true
+  StoreFastEventHandler(frame, event, BuildFastEventHandler(event, state))
 end
+
+function RunCompiledFrameEvent(frame, event, unit, ...)
+  local handlers = frame and frame._msufFastEventHandlers
+  local handler = handlers and handlers[event]
+  if handler then
+    return handler(frame, unit, ...)
+  end
+  local alias = EVENT_ALIAS[event]
+  if alias then
+    handler = handlers and handlers[alias]
+    if handler then
+      return handler(frame, unit, ...)
+    end
+    event = alias
+  end
+  if StrictGroupFrame(frame) and HOT_EVENT_KIND[event] then
+    return BlockOldGroupHotDispatch(frame, event)
+  end
+  return DispatchFrameEvent(frame, event, unit, ...)
+end
+UF.RunCompiledFrameEvent = RunCompiledFrameEvent
+UF.DispatchFastFrameEvent = RunCompiledFrameEvent
 
 --- Single frame OnEvent entry point installed by Core. Prefer adding new event
 --- handling through hot-state metadata or element ownership rather than adding
@@ -1594,16 +2031,16 @@ function DispatchFrameEvent(frame, event, unit, ...)
   if unit and issecretvalue(unit) == true then
     unit = nil
   end
+  local alias = EVENT_ALIAS[event]
+  if alias then
+    event = alias
+  end
+  if StrictGroupFrame(frame) and HOT_EVENT_KIND[event] then
+    return BlockOldGroupHotDispatch(frame, event)
+  end
 
   local hotStates = frame._msufHotEventState
   local hotState = hotStates and hotStates[event]
-  if not hotState then
-    local alias = EVENT_ALIAS[event]
-    if alias then
-      event = alias
-      hotState = hotStates and hotStates[event]
-    end
-  end
   if hotState then
     if hotState.empty == true then
       return
@@ -1681,6 +2118,7 @@ local RUNTIME_IDENTITY_MISSING_EXIT = {
   MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
   MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
   MSUF_GF_UNIT_IDENTITY = true,
+  MSUF_GF_UNIT_STRUCTURE = true,
 }
 local RUNTIME_MISSING_AURA_CLEAR = {
   MSUF_UNIT_IDENTITY = true,
@@ -1697,6 +2135,7 @@ local RUNTIME_PING_REFRESH = {
   MSUF_UNIT_IDENTITY_SOFT = true,
   MSUF_UNIT_IDENTITY_SOFT_DEFERRED = true,
   MSUF_GF_UNIT_IDENTITY = true,
+  MSUF_GF_UNIT_STRUCTURE = true,
 }
 local BOSS_IDENTITY_UNITS = {
   boss1 = true,
@@ -1898,6 +2337,7 @@ local RUNTIME_REASON_RUNNERS = {
   MSUF_UNIT_IDENTITY_AURAS = RuntimeRunIdentityAuras,
   MSUF_UNIT_IDENTITY_SOFT_AURAS = RuntimeRunIdentityAuras,
   MSUF_GF_UNIT_IDENTITY = RuntimeRunGroupIdentity,
+  MSUF_GF_UNIT_STRUCTURE = RuntimeRunGroupIdentity,
 }
 
 FrameRuntimeUpdate = function(frame, reason)
@@ -1910,6 +2350,7 @@ FrameRuntimeUpdate = function(frame, reason)
     return
   end
   reason = reason or "MSUF_FORCE_UPDATE"
+  local profGF, profName, profToken = StartGFProfileDynamic("uf:Runtime:", reason)
   local unit = frame.unit
   if RUNTIME_PING_REFRESH[reason] then
     if UF.InstallPingCompatibility then UF.InstallPingCompatibility(frame) end
@@ -1919,11 +2360,14 @@ FrameRuntimeUpdate = function(frame, reason)
     if RUNTIME_MISSING_AURA_CLEAR[reason] == true then
       RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
     end
+    EndGFProfile(profGF, profName, profToken)
     return
   end
   local runner = RUNTIME_REASON_RUNNERS[reason]
   if runner then
-    return runner(frame, reason)
+    local result = runner(frame, reason)
+    EndGFProfile(profGF, profName, profToken)
+    return result
   end
   local mask = RUNTIME_REASON_MASKS[reason]
   local hp, maxHP, calc
@@ -1986,6 +2430,7 @@ FrameRuntimeUpdate = function(frame, reason)
   if not mask or mask.auras then
     RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Auras", reason, unit)
   end
+  EndGFProfile(profGF, profName, profToken)
 end
 
 local function RuntimeUpdateFrame(frame, _, reason)

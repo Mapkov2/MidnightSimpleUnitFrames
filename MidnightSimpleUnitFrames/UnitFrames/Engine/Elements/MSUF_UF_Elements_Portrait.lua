@@ -7,7 +7,7 @@ local UF = V.UF or MSUF.UF
 local Layers = UF and UF.Layers or {}
 
 -- Unitframe portrait element.
--- Handles 2D/class portraits, shape masks, dynamic border colors, and queued portrait busts.
+-- Handles 2D/class portraits, shape masks, dynamic border colors, and portrait busts.
 -- It bridges identity events into cached visual updates without owning unitframe layout.
 local CreateFrame = V.CreateFrame or CreateFrame
 local UnitClass = V.UnitClass or UnitClass
@@ -69,11 +69,6 @@ local SetShown = V.SetShown
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local Portrait = {}
-local portraitQueue = {}
-local portraitQueueCount = 0
-local portraitQueueDriver
-local portraitQueueScheduled = false
-local PORTRAIT_QUEUE_BATCH_SIZE = 1
 local ApplyUnitPortrait
 local ResolvePortraitBorderColor
 local PortraitBorderNeedsUpdate
@@ -190,81 +185,22 @@ local function PortraitFrameVisible(frame)
   return holder ~= nil
 end
 
-local function FlushQueuedPortraits()
-  local count = portraitQueueCount
-  if count <= 0 then
-    portraitQueueScheduled = false
-    if portraitQueueDriver then
-      portraitQueueDriver:Hide()
-    end
-    return
-  end
-
-  local limit = count < PORTRAIT_QUEUE_BATCH_SIZE and count or PORTRAIT_QUEUE_BATCH_SIZE
-  for i = 1, limit do
-    local frame = portraitQueue[i]
-    portraitQueue[i] = nil
-    if frame and frame._msufPortraitQueued == true then
-      frame._msufPortraitQueued = nil
-      local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
-      local texture = frame.portrait
-      if p and p.enabled == true and p.render ~= "CLASS" and texture and PortraitFrameVisible(frame) then
-        frame._msufPortraitNeedsVisibleRefresh = nil
-        if frame._msufPortraitForceRefresh == true then
-          frame._msufPortraitForceRefresh = nil
-        end
-        ApplyUnitPortrait(texture, frame.unit, frame, p)
-        if PortraitBorderNeedsUpdate("MSUF_PORTRAIT_FLUSH", p) then
-          LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
-        end
-      elseif p and p.enabled == true and texture and not PortraitFrameVisible(frame) then
-        frame._msufPortraitNeedsVisibleRefresh = true
-      end
-    end
-  end
-
-  local remaining = count - limit
-  if remaining > 0 then
-    for i = 1, remaining do
-      portraitQueue[i] = portraitQueue[i + limit]
-      portraitQueue[i + limit] = nil
-    end
-    portraitQueueCount = remaining
-    portraitQueueScheduled = true
-    if portraitQueueDriver then
-      portraitQueueDriver:Show()
-    end
-  else
-    portraitQueueCount = 0
-    portraitQueueScheduled = false
-    if portraitQueueDriver then
-      portraitQueueDriver:Hide()
-    end
-  end
-end
-
-local function QueuePortraitUpdate(frame)
+local function ApplyPortraitUpdate(frame)
   if not frame then
     return
   end
-  if frame._msufPortraitQueued ~= true then
-    portraitQueueCount = portraitQueueCount + 1
-    portraitQueue[portraitQueueCount] = frame
-    frame._msufPortraitQueued = true
+  local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
+  local texture = frame.portrait
+  if p and p.enabled == true and p.render ~= "CLASS" and texture and PortraitFrameVisible(frame) then
+    frame._msufPortraitNeedsVisibleRefresh = nil
+    frame._msufPortraitForceRefresh = nil
+    ApplyUnitPortrait(texture, frame.unit, frame, p)
+  elseif p and p.enabled == true and texture and not PortraitFrameVisible(frame) then
+    frame._msufPortraitNeedsVisibleRefresh = true
   end
-  if portraitQueueScheduled then
-    return
-  end
-  portraitQueueScheduled = true
-  if not portraitQueueDriver then
-    portraitQueueDriver = CreateFrame("Frame")
-    portraitQueueDriver:Hide()
-  end
-  portraitQueueDriver:SetScript("OnUpdate", FlushQueuedPortraits)
-  portraitQueueDriver:Show()
 end
 
-local function Queue2DPortraitEvent(event, identityVisual)
+local function ShouldRefresh2DPortraitForEvent(event, identityVisual)
   return identityVisual == true
     or event == "MSUF_PORTRAIT_ONSHOW"
     or QUEUED_2D_PORTRAIT_EVENTS[event] == true
@@ -730,7 +666,6 @@ function Portrait.Disable(frame)
   local holder = frame.MSUFPortraitHolder
   frame._msufPortraitNeedsVisibleRefresh = nil
   frame._msufPortraitForceRefresh = nil
-  frame._msufPortraitQueued = nil
   frame._msufUpdatePortraitConnection = nil
   frame._msufPortraitRuntimeCfg = nil
   frame._msufPortraitFrameHeight = nil
@@ -763,7 +698,7 @@ function Portrait.UpdateConnectionState(frame, event, unit)
   end
   unit = unit or frame.unit
   if UnitPortraitKeyChanged(texture, unit, frame, p) then
-    QueuePortraitUpdate(frame)
+    ApplyPortraitUpdate(frame)
   else
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil
@@ -796,22 +731,19 @@ function Portrait.Update(frame, event, unit)
   local class
   if p.render == "CLASS" then
     frame._msufPortraitNeedsVisibleRefresh = nil
-    frame._msufPortraitQueued = nil
     frame._msufPortraitForceRefresh = nil
     class = UnitClassToken(unit)
     ApplyClassPortrait(texture, unit, p, class, frame)
   else
-    if Queue2DPortraitEvent(event, identityVisual) then
+    if ShouldRefresh2DPortraitForEvent(event, identityVisual) then
       if UnitPortraitKeyChanged(texture, unit, frame, p) then
-        QueuePortraitUpdate(frame)
+        ApplyPortraitUpdate(frame)
       else
         frame._msufPortraitNeedsVisibleRefresh = nil
-        frame._msufPortraitQueued = nil
         frame._msufPortraitForceRefresh = nil
       end
     else
       frame._msufPortraitNeedsVisibleRefresh = nil
-      frame._msufPortraitQueued = nil
       if frame._msufPortraitForceRefresh == true then
         frame._msufPortraitForceRefresh = nil
       end

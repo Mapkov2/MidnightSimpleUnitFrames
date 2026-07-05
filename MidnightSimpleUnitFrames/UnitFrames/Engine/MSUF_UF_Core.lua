@@ -23,7 +23,6 @@ local next = next
 local tostring = tostring
 local table_sort = table.sort
 local pcall = pcall
-local unpack = unpack or table.unpack
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local UnitExists = UnitExists
@@ -37,7 +36,6 @@ UF.frames = UF.frames or {}
 UF.frameList = UF.frameList or {}
 UF.attachedFrames = UF.attachedFrames or {}
 UF.attachedFrameList = UF.attachedFrameList or {}
-UF.dirtyQueues = UF.dirtyQueues or {}
 UF.elements = UF.elements or {}
 UF.elementOrder = UF.elementOrder or {}
 UF.pendingApply = UF.pendingApply or {}
@@ -138,6 +136,18 @@ UF.UnitExistsSafe = UnitExistsSafe
 
 local function DispatchToken(frame)
   return frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+end
+
+local function CurrentFrameEventScript()
+  return UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent or UF.DispatchFrameEvent
+end
+
+local function IsCoreFrameEventScript(script)
+  return script ~= nil and (
+    script == UF.RunCompiledFrameEvent
+    or script == UF.DispatchFastFrameEvent
+    or script == UF.DispatchFrameEvent
+  )
 end
 UF.DispatchToken = DispatchToken
 
@@ -577,17 +587,25 @@ local eventDriver = UF.eventDriver
 local eventFrames = UF.eventFrames or {}
 local eventFrameCounts = UF.eventFrameCounts or {}
 local eventUnitFrames = UF.eventUnitFrames or {}
+local eventUnitFrameCounts = UF.eventUnitFrameCounts or {}
 local eventUnitlessFrames = UF.eventUnitlessFrames or {}
 local eventUnitlessFrameCounts = UF.eventUnitlessFrameCounts or {}
 local eventDerivedFrames = UF.eventDerivedFrames or {}
 local eventDerivedFrameCounts = UF.eventDerivedFrameCounts or {}
+local unitEventDrivers = UF.unitEventDrivers or {}
+local unitEventDriverEvents = UF.unitEventDriverEvents or {}
+local eventUnitDriverSources = UF.eventUnitDriverSources or {}
 UF.eventFrames = eventFrames
 UF.eventFrameCounts = eventFrameCounts
 UF.eventUnitFrames = eventUnitFrames
+UF.eventUnitFrameCounts = eventUnitFrameCounts
 UF.eventUnitlessFrames = eventUnitlessFrames
 UF.eventUnitlessFrameCounts = eventUnitlessFrameCounts
 UF.eventDerivedFrames = eventDerivedFrames
 UF.eventDerivedFrameCounts = eventDerivedFrameCounts
+UF.unitEventDrivers = unitEventDrivers
+UF.unitEventDriverEvents = unitEventDriverEvents
+UF.eventUnitDriverSources = eventUnitDriverSources
 
 local UNIT_EVENT_UNITLESS_ALLOWED = {
   UNIT_NAME_UPDATE = true,
@@ -686,18 +704,142 @@ local function FrameUnitMatches(frame, unit)
   return attrUnit == unit
 end
 
+local function CheckGroupUnitInvariant(frame, event, unit)
+  if event ~= "UNIT_HEALTH" or not (frame and frame._msufIsGroupFrame == true) then
+    return
+  end
+  local gf = MSUF and MSUF.GF
+  if gf and gf.CheckUnitFrameInvariant then
+    gf.CheckUnitFrameInvariant(frame, event, unit)
+  end
+end
+
+local function ResolveFixedGroupEventFrame(frame, event, unit, frames)
+  local gf = MSUF and MSUF.GF
+  if not (gf and gf._unitFrameMapProven == true and gf.FrameForUnit) then
+    return frame
+  end
+  if not (frame and frame._msufIsGroupFrame == true and unit and issecretvalue(unit) ~= true) then
+    return frame
+  end
+  local mapped = gf.FrameForUnit(unit)
+  if mapped and mapped ~= frame and frames and frames[mapped] then
+    gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
+    return mapped
+  end
+  return frame
+end
+
+local function FixedGroupEventFrame(event, unit, frames)
+  local gf = MSUF and MSUF.GF
+  if not (gf and gf._unitFrameMapProven == true and gf.FrameForUnit) then
+    return nil
+  end
+  local frame = gf.FrameForUnit(unit)
+  if frame and frames and frames[frame] then
+    gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
+    return frame
+  end
+  return nil
+end
+
+local GROUP_DIRECT_UNIT_EVENTS = {
+  UNIT_HEALTH = true,
+  UNIT_MAXHEALTH = true,
+  UNIT_MAX_HEALTH_MODIFIERS_CHANGED = true,
+  UNIT_POWER_UPDATE = true,
+  UNIT_MAXPOWER = true,
+  UNIT_DISPLAYPOWER = true,
+  UNIT_POWER_BAR_SHOW = true,
+  UNIT_POWER_BAR_HIDE = true,
+  UNIT_FLAGS = true,
+  UNIT_CONNECTION = true,
+  UNIT_THREAT_SITUATION_UPDATE = true,
+  UNIT_ABSORB_AMOUNT_CHANGED = true,
+  UNIT_HEAL_ABSORB_AMOUNT_CHANGED = true,
+  UNIT_HEAL_PREDICTION = true,
+  INCOMING_RESURRECT_CHANGED = true,
+  UNIT_IN_RANGE_UPDATE = true,
+  UNIT_PHASE = true,
+  UNIT_CTR_OPTIONS = true,
+  UNIT_OTHER_PARTY_CHANGED = true,
+}
+
+local function DirectMappedGroupFrame(event, unit, frames, eventUnits, unitFrames, unitFrameCount, unitlessFrames, derivedFrames)
+  if not GROUP_DIRECT_UNIT_EVENTS[event] or unitlessFrames or derivedFrames then
+    return nil
+  end
+  local gf = MSUF and MSUF.GF
+  if not (gf and gf.FrameForUnit) then
+    return nil
+  end
+  -- Activate the EUI-style direct route as soon as the unit->frame map is
+  -- consistent. AutoProveUnitFrameMap does at most one full-map scan per roster
+  -- revision (revision-gated), so this is not per-event work in steady state --
+  -- the first hot event after a roster change proves it, then every subsequent
+  -- event takes the fast path below. Without this the map is never proven in
+  -- normal play and every hot event falls through to the generic driver loop.
+  if gf._unitFrameMapProven ~= true and gf.AutoProveUnitFrameMap then
+    gf.AutoProveUnitFrameMap()
+  end
+  if gf._unitFrameMapProven ~= true then
+    return nil
+  end
+  local frame = gf.FrameForUnit(unit)
+  if not (frame and frame._msufIsGroupFrame == true and frames and frames[frame]) then
+    return nil
+  end
+  if unitFrameCount ~= 1 or not (unitFrames and unitFrames[frame]) then
+    return nil
+  end
+  -- Diagnostic counter only read by /msufprof; skip the write on the hot path
+  -- unless profiling is active.
+  if gf._profDetail == true or gf._profMapWatch == true then
+    gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
+  end
+  return frame
+end
+
+local function StartCoreEventProfile(event)
+  if not (MSUF and MSUF._profEnabled == true and MSUF.ProfBegin) then
+    return nil, nil, nil
+  end
+  local name = "coreEvent:" .. tostring(event)
+  return MSUF, name, MSUF.ProfBegin(name)
+end
+
+local function EndCoreEventProfile(prof, name, token)
+  if token and prof and prof.ProfEnd then
+    prof.ProfEnd(name, token)
+  end
+end
+
+local function ProfBegin(name)
+  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+    return MSUF.ProfBegin(name)
+  end
+end
+
+local function ProfEnd(name, token)
+  if token and MSUF and MSUF.ProfEnd then
+    MSUF.ProfEnd(name, token)
+  end
+end
+
 local function EventDriverOnEvent(_, event, unit, ...)
   local frames = eventFrames[event]
   if not frames then
     return
   end
-  local dispatch = UF.DispatchFrameEvent
+  local dispatch = (HOT_EVENT_KIND[event] and (UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent)) or UF.DispatchFrameEvent
   if not dispatch then
     return
   end
+  local profGF, profName, profToken = StartCoreEventProfile(event)
 
   if UNIT_EVENT_HAS_UNIT[event] then
     if not unit or issecretvalue(unit) == true then
+      EndCoreEventProfile(profGF, profName, profToken)
       return
     end
 
@@ -714,29 +856,53 @@ local function EventDriverOnEvent(_, event, unit, ...)
         dispatch(frame, event, unit, ...)
       end
     end
-    local unitFrames = eventUnitFrames[event]
-    unitFrames = unitFrames and unitFrames[unit]
+    local eventUnits = eventUnitFrames[event]
+    local unitFrames = eventUnits and eventUnits[unit]
+    local unitCounts = eventUnitFrameCounts[event]
+    local unitFrameCount = unitCounts and unitCounts[unit] or 0
+    local directFrame = DirectMappedGroupFrame(event, unit, frames, eventUnits, unitFrames, unitFrameCount, unitlessFrames, derivedFrames)
+    if directFrame then
+      dispatch(directFrame, event, unit, ...)
+      EndCoreEventProfile(profGF, profName, profToken)
+      return
+    end
+
     if unitFrames then
+      local fixedDispatched
       for frame in pairs(unitFrames) do
-        if not FrameUnitMatches(frame, unit) then
+        local target = ResolveFixedGroupEventFrame(frame, event, unit, frames)
+        if target ~= frame then
+          fixedDispatched = fixedDispatched or {}
+          if not fixedDispatched[target] and not (unitlessFrames and unitlessFrames[target]) then
+            fixedDispatched[target] = true
+            CheckGroupUnitInvariant(target, event, unit)
+            dispatch(target, event, unit, ...)
+          end
+        elseif fixedDispatched and fixedDispatched[frame] then
+          -- Already delivered through the proven unit->button map.
+        elseif not FrameUnitMatches(frame, unit) then
           RemoveEventUnitFrame(frame, event, frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] or unit)
         elseif not (unitlessFrames and unitlessFrames[frame]) then
+          CheckGroupUnitInvariant(frame, event, unit)
           dispatch(frame, event, unit, ...)
         end
       end
     else
-      local frame = UF.frames[unit]
+      local frame = FixedGroupEventFrame(event, unit, frames) or UF.frames[unit]
       if frame and frames[frame] and not (unitlessFrames and unitlessFrames[frame])
         and not (frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event]) then
+        CheckGroupUnitInvariant(frame, event, unit)
         dispatch(frame, event, unit, ...)
       end
     end
+    EndCoreEventProfile(profGF, profName, profToken)
     return
   end
 
   for frame in pairs(frames) do
     dispatch(frame, event, unit, ...)
   end
+  EndCoreEventProfile(profGF, profName, profToken)
 end
 
 local function AddDerivedEventFrame(frame, event, sourceUnit)
@@ -814,7 +980,18 @@ local function AddEventUnitFrame(frame, event, unit)
     byUnit = {}
     byEvent[unit] = byUnit
   end
+  if byUnit[frame] then
+    frame._msufDriverEventUnits = frame._msufDriverEventUnits or {}
+    frame._msufDriverEventUnits[event] = unit
+    return
+  end
   byUnit[frame] = true
+  local countsByEvent = eventUnitFrameCounts[event]
+  if not countsByEvent then
+    countsByEvent = {}
+    eventUnitFrameCounts[event] = countsByEvent
+  end
+  countsByEvent[unit] = (countsByEvent[unit] or 0) + 1
   frame._msufDriverEventUnits = frame._msufDriverEventUnits or {}
   frame._msufDriverEventUnits[event] = unit
   if RefreshEventDriverRegistration then
@@ -829,11 +1006,25 @@ RemoveEventUnitFrame = function(frame, event, unit)
   local byEvent = eventUnitFrames[event]
   local byUnit = byEvent and byEvent[unit]
   if byUnit then
-    byUnit[frame] = nil
-    if next(byUnit) == nil then
-      byEvent[unit] = nil
-      if next(byEvent) == nil then
-        eventUnitFrames[event] = nil
+    if byUnit[frame] then
+      byUnit[frame] = nil
+      local countsByEvent = eventUnitFrameCounts[event]
+      if countsByEvent then
+        local count = (countsByEvent[unit] or 1) - 1
+        if count <= 0 then
+          countsByEvent[unit] = nil
+          if next(countsByEvent) == nil then
+            eventUnitFrameCounts[event] = nil
+          end
+        else
+          countsByEvent[unit] = count
+        end
+      end
+      if next(byUnit) == nil then
+        byEvent[unit] = nil
+        if next(byEvent) == nil then
+          eventUnitFrames[event] = nil
+        end
       end
     end
   end
@@ -948,6 +1139,91 @@ EnsureEventDriver = function()
   return eventDriver
 end
 
+local function EnsureUnitEventDriver(unit)
+  if not IsUnitToken(unit) then
+    return nil
+  end
+  local driver = unitEventDrivers[unit]
+  if not driver then
+    -- One tracker per unit keeps RegisterUnitEvent filters exact and avoids
+    -- API-side unit-list limits while preserving the central dispatch path.
+    driver = CreateFrame("Frame")
+    driver:SetScript("OnEvent", EventDriverOnEvent)
+    unitEventDrivers[unit] = driver
+  end
+  return driver
+end
+
+local function ClearUnitEventDriverRegistration(event)
+  local oldSources = event and eventUnitDriverSources[event]
+  if not oldSources then
+    return false
+  end
+  for unit in pairs(oldSources) do
+    local driver = unitEventDrivers[unit]
+    if driver then
+      driver:UnregisterEvent(event)
+    end
+    local events = unitEventDriverEvents[unit]
+    if events then
+      events[event] = nil
+    end
+  end
+  eventUnitDriverSources[event] = nil
+  return true
+end
+
+local function SyncUnitEventDriverRegistration(event, units, unitCount)
+  if not (event and units and unitCount and unitCount > 0) then
+    return ClearUnitEventDriverRegistration(event)
+  end
+  local newSources = {}
+  local hasSources
+  for i = 1, unitCount do
+    local unit = units[i]
+    if IsUnitToken(unit) then
+      newSources[unit] = true
+      hasSources = true
+    end
+  end
+  if not hasSources then
+    return ClearUnitEventDriverRegistration(event)
+  end
+
+  local oldSources = eventUnitDriverSources[event]
+  if oldSources then
+    for unit in pairs(oldSources) do
+      if not newSources[unit] then
+        local driver = unitEventDrivers[unit]
+        if driver then
+          driver:UnregisterEvent(event)
+        end
+        local events = unitEventDriverEvents[unit]
+        if events then
+          events[event] = nil
+        end
+      end
+    end
+  end
+
+  for unit in pairs(newSources) do
+    local events = unitEventDriverEvents[unit]
+    if not events then
+      events = {}
+      unitEventDriverEvents[unit] = events
+    end
+    if events[event] ~= true then
+      local driver = EnsureUnitEventDriver(unit)
+      if driver then
+        driver:RegisterUnitEvent(event, unit)
+        events[event] = true
+      end
+    end
+  end
+  eventUnitDriverSources[event] = newSources
+  return true
+end
+
 local function EventNeedsCentralDriver(event)
   if not event then
     return false
@@ -966,12 +1242,15 @@ local function RunEventDriverRegistration(event)
     EnsureEventDriver()
     local signature, units, unitCount = CentralDriverRegistration(event)
     if registered ~= signature then
-      if registered then
+      if registered == "event" then
         eventDriver:UnregisterEvent(event)
+      elseif registered then
+        ClearUnitEventDriverRegistration(event)
       end
       if units and unitCount > 0 then
-        eventDriver:RegisterUnitEvent(event, unpack(units, 1, unitCount))
+        SyncUnitEventDriverRegistration(event, units, unitCount)
       else
+        ClearUnitEventDriverRegistration(event)
         eventDriver:RegisterEvent(event)
       end
       eventDriver._msufRegistered = eventDriver._msufRegistered or {}
@@ -979,7 +1258,11 @@ local function RunEventDriverRegistration(event)
     end
   elseif registered then
     eventDriver._msufRegistered[event] = nil
-    eventDriver:UnregisterEvent(event)
+    if registered == "event" then
+      eventDriver:UnregisterEvent(event)
+    else
+      ClearUnitEventDriverRegistration(event)
+    end
   end
 end
 
@@ -1144,6 +1427,7 @@ RefreshFrameUnitEventRouting = function(frame)
   end
   UF.EndEventRegistrationBatch()
 end
+UF.RefreshFrameUnitEventRouting = RefreshFrameUnitEventRouting
 
 local function RegisterDriverFrameEvent(frame, event)
   local frames = eventFrames[event]
@@ -1192,8 +1476,10 @@ local function UnregisterDriverFrameEvent(frame, event)
     eventFrameCounts[event] = nil
     eventFrames[event] = nil
     eventUnitFrames[event] = nil
+    eventUnitFrameCounts[event] = nil
     eventUnitlessFrameCounts[event] = nil
     eventUnitlessFrames[event] = nil
+    ClearUnitEventDriverRegistration(event)
     if eventDriver and eventDriver._msufRegistered and eventDriver._msufRegistered[event] then
       eventDriver._msufRegistered[event] = nil
       eventDriver:UnregisterEvent(event)
@@ -1535,12 +1821,13 @@ function UF.AttachFrameMethods(frame, opts)
     frame._msufDispatchToken = 0
   end
   local ownEventScript = not (opts and opts.ownEvents == false) and frame._msufCoreOwnEvents ~= false
+  local eventScript = CurrentFrameEventScript()
   if frame._msufCleanCoreMethods then
     if ownEventScript then
-      if frame:GetScript("OnEvent") ~= UF.DispatchFrameEvent then
-        frame:SetScript("OnEvent", UF.DispatchFrameEvent)
+      if eventScript and frame:GetScript("OnEvent") ~= eventScript then
+        frame:SetScript("OnEvent", eventScript)
       end
-    elseif frame:GetScript("OnEvent") == UF.DispatchFrameEvent then
+    elseif IsCoreFrameEventScript(frame:GetScript("OnEvent")) then
       frame:SetScript("OnEvent", nil)
     end
     frame._msufCleanCoreOwnEventScript = ownEventScript and true or nil
@@ -1556,8 +1843,10 @@ function UF.AttachFrameMethods(frame, opts)
   frame.RegisterElementEvent = RegisterElementEvent
   frame.UnregisterElementEvents = UnregisterElementEvents
   if ownEventScript then
-      frame:SetScript("OnEvent", UF.DispatchFrameEvent)
-  elseif frame:GetScript("OnEvent") == UF.DispatchFrameEvent then
+    if eventScript then
+      frame:SetScript("OnEvent", eventScript)
+    end
+  elseif IsCoreFrameEventScript(frame:GetScript("OnEvent")) then
     frame:SetScript("OnEvent", nil)
   end
   frame._msufCleanCoreOwnEventScript = ownEventScript and true or nil
@@ -1717,20 +2006,28 @@ local function ForceUpdateFrame(frame)
 end
 
 function UF.ForceUpdate(unit)
+  local profName, profToken
+  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+    profName = unit and ("uf:ForceUpdate:" .. tostring(unit)) or "uf:ForceUpdate:all"
+    profToken = MSUF.ProfBegin(profName)
+  end
   if InCombatLockdown and InCombatLockdown() then
     UF.MarkDirty(unit)
     local factory = UF.Factory
     if factory and factory.EnsureDeferredDriver then
       factory.EnsureDeferredDriver()
     end
+    ProfEnd(profName, profToken)
     return false
   end
   if unit then
     if issecretvalue(unit) == true then
+      ProfEnd(profName, profToken)
       return false
     end
     local units = UF.UnitsForConfigKey(unit)
     if not units then
+      ProfEnd(profName, profToken)
       return false
     end
     for i = 1, #units do
@@ -1739,9 +2036,11 @@ function UF.ForceUpdate(unit)
         UF.FrameForceUpdate(frame, "MSUF_FORCE_UPDATE")
       end
     end
+    ProfEnd(profName, profToken)
     return true
   end
   UF.ForEachFrame(ForceUpdateFrame)
+  ProfEnd(profName, profToken)
   return true
 end
 
@@ -1784,6 +2083,12 @@ function UF.ApplySpec(frame, spec, reason, mask)
   if not (frame and spec) then
     return false
   end
+  local scope = (spec and spec.scope) or frame._msufCoreScope or "unit"
+  local profName, profToken
+  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+    profName = "uf:ApplySpec:" .. tostring(scope) .. ":" .. tostring(reason or "apply")
+    profToken = MSUF.ProfBegin(profName)
+  end
   -- Elements share events (health/prediction/text all ride UNIT_HEALTH); batch
   -- the central-driver refresh so each touched event re-registers once per
   -- apply instead of once per element.
@@ -1814,5 +2119,6 @@ function UF.ApplySpec(frame, spec, reason, mask)
   if reason then
     UF.FrameRuntimeUpdate(frame, reason)
   end
+  ProfEnd(profName, profToken)
   return true
 end

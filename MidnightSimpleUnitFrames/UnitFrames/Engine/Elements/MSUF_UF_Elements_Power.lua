@@ -19,6 +19,8 @@ local CreateFrame = C.CreateFrame
 local UnitPower = C.UnitPower
 local UnitPowerMax = C.UnitPowerMax
 local UnitPowerType = C.UnitPowerType
+local UnitPowerPercent = C.UnitPowerPercent
+local SCALE_100 = C.SCALE_100
 local tonumber = C.tonumber
 local floor = C.floor
 local WHITE = C.WHITE
@@ -44,6 +46,12 @@ local PowerColor = C.PowerColor
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local InCombatLockdown = _G.InCombatLockdown
 local Power = {}
+
+local function PowerCanUseStaticHotpath(spec)
+  local power = spec and spec.power
+  local mode = power and power.mode
+  return mode == "dark" or mode == "unified" or mode == "static"
+end
 
 --- Cooldown-viewer widths are unreliable while their Edit Mode layout has not
 --- settled (combat reload). Prefer the persisted profile cache during lockdown
@@ -628,7 +636,16 @@ function Power.Apply(frame, spec)
   elseif ApplyBarGradient then
     ApplyBarGradient(frame, bar, power.barGradient, "powerGradients")
   end
-  frame._msufUpdatePowerValue = frame.unit == "player" and Power.UpdateValuePlain or Power.UpdateValue
+  -- Group + static-color power can be promoted to the EUI percent path by the
+  -- text runtime (registered after Power) once it knows the power-text mode. See
+  -- Power.SelectGroupPowerUpdater / Runtime.BuildGroupHot.
+  frame._msufGroupPowerStaticHot = (frame._msufIsGroupFrame == true
+    and PowerCanUseStaticHotpath(spec)) or nil
+  if PowerCanUseStaticHotpath(spec) then
+    frame._msufUpdatePowerValue = frame.unit == "player" and Power.UpdateValueStaticPlain or Power.UpdateValueStatic
+  else
+    frame._msufUpdatePowerValue = frame.unit == "player" and Power.UpdateValuePlain or Power.UpdateValue
+  end
   if power.enabled == true then
     SetShownCached(bar, true)
     SetShownCached(bg, true)
@@ -684,6 +701,139 @@ function Power.UpdateValuePlain(frame, event, unit)
     ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, powerType, powerToken, true))
   end
   return power, maxPower, powerType, powerToken, powerMetaChanged
+end
+
+function Power.UpdateValueStaticPlain(frame, event, unit)
+  unit = unit or frame.unit
+  if issecretvalue(unit) == true or unit ~= "player" then
+    return Power.UpdateValueStatic(frame, event, unit)
+  end
+  local bar = frame.targetPowerBar
+  if not bar or bar._msufShown == false or (bar._msufShown == nil and bar.IsShown and not bar:IsShown()) then
+    return
+  end
+
+  local power = UnitPower(unit) or 0
+  local maxPower
+  if bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then
+    maxPower = bar._msufPowerMax
+  else
+    maxPower = UnitPowerMax(unit)
+    if issecretvalue(maxPower) == true then
+      return Power.UpdateValueStatic(frame, event, unit)
+    end
+    if maxPower == nil then maxPower = 1 end
+    StorePowerMax(frame, bar, unit, maxPower, false)
+  end
+
+  if bar._msufMinMaxInit ~= true then
+    SetBarMinMaxPlain(bar, maxPower)
+    bar._msufMinMaxInit = true
+  end
+  SetBarValuePlain(bar, power, true)
+
+  if bar._msufStatusR == nil then
+    ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, nil, nil, true))
+  end
+  return power, maxPower, nil, nil, false
+end
+
+function Power.UpdateValueStatic(frame, event, unit)
+  unit = unit or frame.unit
+  local bar = frame.targetPowerBar
+  if not bar or bar._msufShown == false or (bar._msufShown == nil and bar.IsShown and not bar:IsShown()) then
+    return
+  end
+
+  local power = UnitPower(unit)
+  local powerSecret = issecretvalue(power) == true
+  if not powerSecret and power == nil then power = 0 end
+  local maxPower, maxSecret
+  if bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then
+    maxPower = bar._msufPowerMax
+    maxSecret = bar._msufPowerMaxSecret == true
+  else
+    maxPower = UnitPowerMax(unit)
+    maxSecret = issecretvalue(maxPower) == true
+    if not maxSecret and maxPower == nil then maxPower = 1 end
+    StorePowerMax(frame, bar, unit, maxPower, maxSecret)
+  end
+
+  if bar._msufMinMaxInit ~= true then
+    SetBarMinMaxKnown(bar, maxPower, maxSecret)
+    bar._msufMinMaxInit = true
+  end
+  SetBarValueKnown(bar, power, powerSecret, true)
+
+  if bar._msufStatusR == nil then
+    ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, nil, nil, true))
+  end
+  return power, maxPower, nil, nil, false
+end
+
+--- EUI-parity percent path for group frames whose power color is static (mode
+--- dark/unified/static -- color set once, never per-type) and whose power text
+--- needs no absolute value. One UnitPowerPercent C-call handles value + secret +
+--- scale-to-100; no UnitPower, no UnitPowerMax, no MaxPower cache. MinMax pinned
+--- to (0,100) once, so only the fill moves per event; leaner than EUI, which
+--- re-sets MinMax and recolors every event. UnitPowerType is cheap and never
+--- secret. Returns the percent first so the compiled text writer reuses it
+--- (dispatch key mode 4). Later returns nil: this path is gated on "no max/type
+--- needed by text", so no caller reads them.
+function Power.UpdateValueGroupPercent(frame, event, unit)
+  unit = unit or frame.unit
+  local bar = frame.targetPowerBar
+  if not bar or bar._msufShown == false or (bar._msufShown == nil and bar.IsShown and not bar:IsShown()) then
+    return
+  end
+
+  local powerType = UnitPowerType(unit)
+  if issecretvalue(powerType) == true then powerType = nil end
+  local pct = UnitPowerPercent(unit, powerType or 0, true, SCALE_100)
+  local pctSecret = issecretvalue(pct) == true
+  if not pctSecret and pct == nil then pct = 0 end
+
+  -- Always (re-)assert the 0-100 scale: UNIT_DISPLAYPOWER runs the full absolute
+  -- Power.Update (which pins MinMax to the absolute max), so a shared _msufMinMaxInit
+  -- guard would leave the bar on absolute min/max while we feed it a percent.
+  -- SetBarMinMaxKnown dedups internally (no-op when already 0-100), so this is one
+  -- field compare in steady state, like EUI's per-event SetMinMaxValues.
+  SetBarMinMaxKnown(bar, 100, false)
+  bar._msufMinMaxInit = true
+  SetBarValueKnown(bar, pct, pctSecret, true)
+
+  if bar._msufStatusR == nil then
+    ApplyPowerStatusColor(bar, frame, PowerColor(frame, unit, nil, nil, true))
+  end
+  return pct, nil, nil, nil, false
+end
+
+--- Called by the text runtime once the power-text mode is resolved. Promotes a
+--- static-color group power bar to the percent path when NO consumer needs an
+--- absolute power number (dispatch key mode 0/4) and the ScaleTo100 curve is
+--- available. Idempotent and reversible (restores UpdateValueStatic if a number
+--- slot is added). Mirrors Health.SelectGroupHealthUpdater. Only meaningful when
+--- the frame is a group frame on the static color hotpath; other frames keep
+--- their Apply-selected updater.
+function Power.SelectGroupPowerUpdater(frame)
+  if frame._msufGroupPowerStaticHot ~= true then
+    return
+  end
+  local rt = frame._msufTextRuntime
+  local mode = rt and rt.powerDispatchKeyMode or 0
+  local percentOnly = SCALE_100 ~= nil and UnitPowerPercent ~= nil
+    and (mode == 0 or mode == 4)
+  if percentOnly then
+    if frame._msufUpdatePowerValue ~= Power.UpdateValueGroupPercent then
+      frame._msufUpdatePowerValue = Power.UpdateValueGroupPercent
+      local bar = frame.targetPowerBar
+      if bar then bar._msufMinMaxInit = nil end
+    end
+  elseif frame._msufUpdatePowerValue == Power.UpdateValueGroupPercent then
+    frame._msufUpdatePowerValue = Power.UpdateValueStatic
+    local bar = frame.targetPowerBar
+    if bar then bar._msufMinMaxInit = nil end
+  end
 end
 
 function Power.UpdateValue(frame, event, unit)

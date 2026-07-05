@@ -15,6 +15,25 @@ local TS = GF.TargetedSpells or {}
 GF.TargetedSpells = TS
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 
+local function ProfBegin(name)
+  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+    return MSUF.ProfBegin(name)
+  end
+end
+
+local function ProfEnd(name, token)
+  if token and MSUF and MSUF.ProfEnd then
+    MSUF.ProfEnd(name, token)
+  end
+end
+
+local function ProfEventBegin(prefix, event)
+  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+    local name = prefix .. tostring(event)
+    return name, MSUF.ProfBegin(name)
+  end
+end
+
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
 local C_NamePlate = C_NamePlate
@@ -465,8 +484,19 @@ local function ReleaseTextIcon(icon)
   end
 end
 
+local function IconRuntimeVisible(icon)
+  if not icon then return false end
+  if icon.IsVisible then
+    return icon:IsVisible() == true
+  end
+  if icon.IsShown then
+    return icon:IsShown() == true
+  end
+  return true
+end
+
 local function UpdateIconText(icon, now)
-  if not (icon and settings.textEnabled == true and icon._msufTSEndTime) then
+  if not (icon and settings.textEnabled == true and icon._msufTSEndTime and IconRuntimeVisible(icon)) then
     if icon and icon.text then
       icon.text:SetText("")
       icon.text:Hide()
@@ -493,6 +523,8 @@ local function UpdateIconText(icon, now)
 end
 
 local function TextTickerPulse()
+  local profName = "group:targetedSpells:textTicker"
+  local profToken = ProfBegin(profName)
   local now = (GetTime and GetTime()) or 0
   for icon in pairs(activeTextIcons) do
     if not UpdateIconText(icon, now) then
@@ -502,6 +534,7 @@ local function TextTickerPulse()
   if activeTextCount <= 0 then
     StopTextTicker()
   end
+  ProfEnd(profName, profToken)
 end
 
 local function StartTextTicker()
@@ -513,6 +546,10 @@ end
 
 local function ActivateTextIcon(icon)
   if not icon then return end
+  if not IconRuntimeVisible(icon) then
+    ReleaseTextIcon(icon)
+    return
+  end
   if icon._msufTSTextActive ~= true then
     activeTextIcons[icon] = true
     activeTextCount = activeTextCount + 1
@@ -1060,6 +1097,8 @@ local function ResolveCasterSample(caster, generation)
 end
 
 RunSampleQueue = function()
+  local profName = "group:targetedSpells:sampleQueue"
+  local profToken = ProfBegin(profName)
   sampleTimerAt = nil
   local now = (GetTime and GetTime()) or 0
   local out = sampleHead
@@ -1101,6 +1140,7 @@ RunSampleQueue = function()
   if nextDue then
     ArmSampleQueue(nextDue)
   end
+  ProfEnd(profName, profToken)
 end
 
 local function QueueCasterSamples(caster, firstDelay)
@@ -1297,7 +1337,7 @@ end
 
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:SetScript("OnEvent", function(_, event, unit)
+local function TargetedSpellsOnEvent(_, event, unit)
   if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
     TS.RefreshConfig(true)
     return
@@ -1330,6 +1370,13 @@ eventFrame:SetScript("OnEvent", function(_, event, unit)
       DropCasterState(unit)
     end
   end
+end
+
+eventFrame:SetScript("OnEvent", function(self, event, unit)
+  local profName, profToken = ProfEventBegin("group:targetedSpells:event:", event)
+  local result = TargetedSpellsOnEvent(self, event, unit)
+  ProfEnd(profName, profToken)
+  return result
 end)
 
 local function InitialRefresh()

@@ -253,25 +253,6 @@ local function ApplySideTextOffsets(text, outPrefix, confPrefix, legacyPrefix, b
   end
 end
 
-local function ReadTextThrottle(msValue, secValue, fallback)
-  local throttle = Number(msValue, nil)
-  if throttle ~= nil then
-    return throttle / 1000
-  end
-  throttle = Number(secValue, fallback)
-  if throttle > 10 then
-    throttle = throttle / 1000
-  end
-  return throttle
-end
-
-local function ClampTextThrottle(throttle, disabled)
-  if disabled then return 0 end
-  if throttle < 0 then return 0 end
-  if throttle > 1 then return 1 end
-  return throttle
-end
-
 local function ResolveBarMode(general)
   local mode = general and general.barMode
   if type(mode) == "string" then
@@ -541,6 +522,18 @@ local function ResolveHealthTextColorByHealth(general, conf)
   local enabled = general and general.colorHealthTextByHealth == true
   if conf and conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil then
     enabled = conf.colorHealthTextByHealth == true
+  end
+  return enabled
+end
+
+local function ResolvePowerTextColorByType(general, conf)
+  local enabled = general and general.colorPowerTextByType == true
+  if conf and conf.fontOverride == true then
+    if conf.powerTextColorByType ~= nil then
+      enabled = conf.powerTextColorByType == true
+    elseif conf.colorPowerTextByType ~= nil then
+      enabled = conf.colorPowerTextByType == true
+    end
   end
   return enabled
 end
@@ -1490,13 +1483,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   ApplyNpcTypeFlags(text, general, "npcTypeColorText")
   ResolveToTInline(db, general, unit, text)
   text.healthColorByHealth = ResolveHealthTextColorByHealth(general, conf)
-  if conf.powerTextColorByType ~= nil then
-    text.powerColorByType = conf.powerTextColorByType == true
-  elseif conf.colorPowerTextByType ~= nil then
-    text.powerColorByType = conf.colorPowerTextByType == true
-  else
-    text.powerColorByType = general.colorPowerTextByType == true
-  end
+  text.powerColorByType = ResolvePowerTextColorByType(general, conf)
   text.directLayout = conf.directTextLayout == true
   if text.directLayout == true then
     CopyDirectTextLayout(text, conf)
@@ -1512,16 +1499,6 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   end
   text.shortNumbers = general.useShortNumbers ~= false
   text.hidePercentSymbol = general.hidePercentSymbol == true
-  text.healthThrottle = ClampTextThrottle(
-    ReadTextThrottle(conf.hpTextThrottleMs or conf.healthTextThrottleMs or general.hpTextThrottleMs or general.healthTextThrottleMs,
-      conf.hpTextThrottle or conf.healthTextThrottle or general.hpTextThrottle or general.healthTextThrottle, 0.10),
-    conf.hpTextThrottleEnabled == false or conf.healthTextThrottleEnabled == false
-      or general.hpTextThrottleEnabled == false or general.healthTextThrottleEnabled == false)
-  text.powerThrottle = ClampTextThrottle(
-    ReadTextThrottle(conf.powerTextThrottleMs or general.powerTextThrottleMs,
-      conf.powerTextThrottle or general.powerTextThrottle, key == "player" and 0.05 or 0.10),
-    key == "player" and bars.realtimePowerText == true
-      or conf.powerTextThrottleEnabled == false or general.powerTextThrottleEnabled == false)
 end
 
 local function CompileUnitHealth(out, conf, general, bars)

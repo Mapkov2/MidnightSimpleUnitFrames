@@ -299,8 +299,8 @@ function HUD.ResetCurrentPosition()
                 conf.offsetY = 0
                 if type(_G.MSUF_GF_RefreshAll) == "function" then
                     _G.MSUF_GF_RefreshAll()
-                elseif type(_G.MSUF_GF_RebuildAll) == "function" then
-                    _G.MSUF_GF_RebuildAll()
+                elseif type(_G.MSUF_GF_Refresh) == "function" then
+                    _G.MSUF_GF_Refresh()
                 end
                 if type(_G.MSUF_EM2_SyncGFPopups) == "function" then _G.MSUF_EM2_SyncGFPopups() end
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end

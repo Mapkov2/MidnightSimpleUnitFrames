@@ -43,8 +43,6 @@ local ReadDeadCached = UF.ReadDeadCached
 local UpdateTextSlots = Text.UpdateTextSlots
 local UpdateTextSlotsPlain = Text.UpdateTextSlotsPlain or UpdateTextSlots
 local UpdateTextSlotsSecret = Text.UpdateTextSlotsSecret or UpdateTextSlots
-local QueueHealthTextFlush = Text.QueueHealthTextFlush
-local QueuePowerTextFlush = Text.QueuePowerTextFlush
 local ResolveHealthTextModes = Text.ResolveHealthTextModes
 local AnchorInlineToName = Text.AnchorInlineToName
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
@@ -91,6 +89,13 @@ local function PercentCacheKeyFromValue(pct, decimals)
   return floor(pct + 0.5)
 end
 
+local function PercentFromValues(cur, maxValue)
+  if type(cur) == "number" and type(maxValue) == "number" and maxValue > 0 then
+    return (cur / maxValue) * 100
+  end
+  return nil
+end
+
 local function ConsumeDispatchPercent(rt, valueKey, readyKey)
   if rt and rt[readyKey] == true then
     local pct = rt[valueKey]
@@ -99,6 +104,154 @@ local function ConsumeDispatchPercent(rt, valueKey, readyKey)
     return pct, true
   end
   return nil, false
+end
+
+local function ClearGFHotHealthKeys(rt)
+  if not rt then return end
+  rt._msufGFHotHealthHP = nil
+  rt._msufGFHotHealthMax = nil
+  rt._msufGFHotHealthMissing = nil
+end
+
+local function ClearGFHotPowerKeys(rt)
+  if not rt then return end
+  rt._msufGFHotPower = nil
+  rt._msufGFHotPowerMax = nil
+end
+
+local function WriteGFHotSlot(slot, cur, maxValue, pct, pctKnown, rt, missing)
+  if not slot then return end
+  if missing ~= nil then
+    rt.healthMissing = missing
+  end
+  if nativeSecrets and (issecretvalue(cur) == true
+    or issecretvalue(maxValue) == true
+    or (pctKnown == true and issecretvalue(pct) == true)
+    or (missing ~= nil and issecretvalue(missing) == true)) then
+    local writer = slot.secretWriter or slot.writer
+    if writer then writer(slot, cur, maxValue, pct, true, rt) end
+    return
+  end
+  local writer = slot.plainWriter or slot.writer
+  if writer then writer(slot, cur, maxValue, pct, pctKnown == true, rt) end
+end
+
+local function GFHotHealthNeedsUpdate(frame, rt, unit, hp, hpMax)
+  local pct, pctKnown = nil, false
+  if nativeSecrets and (issecretvalue(hp) == true or issecretvalue(hpMax) == true) then
+    if rt.healthNeedsPercent == true then
+      pct = HealthPercent(unit)
+      pctKnown = issecretvalue(pct) == true or pct ~= nil
+    end
+    ClearGFHotHealthKeys(rt)
+    return true, pct, pctKnown, nil
+  end
+  if hp == nil or hpMax == nil then
+    if rt.healthNeedsPercent == true then
+      pct = HealthPercent(unit)
+      pctKnown = issecretvalue(pct) == true or pct ~= nil
+    end
+    ClearGFHotHealthKeys(rt)
+    return true, pct, pctKnown, nil
+  end
+
+  local keyMissing = false
+  local missing
+  if rt.healthNeedsMissing == true then
+    missing = MissingHealthFromValues(hp, hpMax)
+    if missing == nil then
+      local calc = frame and frame._msufHealthCalc
+      missing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
+    end
+    if issecretvalue(missing) == true then
+      ClearGFHotHealthKeys(rt)
+      return true, nil, false, missing
+    end
+    keyMissing = missing or false
+  end
+
+  local mode = rt.healthDispatchKeyMode or 0
+  local keyHP, keyMax = false, false
+  if mode == 1 then
+    keyHP = hp
+  elseif mode == 2 then
+    keyMax = hpMax
+  elseif mode == 3 then
+    keyHP, keyMax = hp, hpMax
+  elseif mode == 4 or mode == 5 then
+    pct = PercentFromValues(hp, hpMax) or HealthPercent(unit)
+    pctKnown = issecretvalue(pct) == true or pct ~= nil
+    if issecretvalue(pct) == true then
+      ClearGFHotHealthKeys(rt)
+      return true, pct, true, missing
+    end
+    keyHP = PercentCacheKeyFromValue(pct, rt.healthPercentDecimals)
+    if keyHP == false then
+      ClearGFHotHealthKeys(rt)
+      return true, pct, pctKnown, missing
+    end
+    keyMax = mode == 5 and hpMax or false
+  end
+
+  if rt._msufGFHotHealthHP == keyHP
+    and rt._msufGFHotHealthMax == keyMax
+    and rt._msufGFHotHealthMissing == keyMissing then
+    return false, pct, pctKnown, missing
+  end
+  rt._msufGFHotHealthHP = keyHP
+  rt._msufGFHotHealthMax = keyMax
+  rt._msufGFHotHealthMissing = keyMissing
+  return true, pct, pctKnown, missing
+end
+
+local function GFHotPowerNeedsUpdate(rt, unit, power, powerMax)
+  local pct, pctKnown = nil, false
+  if nativeSecrets and (issecretvalue(power) == true or issecretvalue(powerMax) == true) then
+    if rt.powerNeedsPercent == true then
+      pct = PowerPercent(unit)
+      pctKnown = issecretvalue(pct) == true or pct ~= nil
+    end
+    ClearGFHotPowerKeys(rt)
+    return true, pct, pctKnown
+  end
+  if power == nil or powerMax == nil then
+    if rt.powerNeedsPercent == true then
+      pct = PowerPercent(unit)
+      pctKnown = issecretvalue(pct) == true or pct ~= nil
+    end
+    ClearGFHotPowerKeys(rt)
+    return true, pct, pctKnown
+  end
+
+  local mode = rt.powerDispatchKeyMode or 0
+  local keyPower, keyMax = false, false
+  if mode == 1 then
+    keyPower = power
+  elseif mode == 2 then
+    keyMax = powerMax
+  elseif mode == 3 then
+    keyPower, keyMax = power, powerMax
+  elseif mode == 4 or mode == 5 then
+    pct = PercentFromValues(power, powerMax) or PowerPercent(unit)
+    pctKnown = issecretvalue(pct) == true or pct ~= nil
+    if issecretvalue(pct) == true then
+      ClearGFHotPowerKeys(rt)
+      return true, pct, true
+    end
+    keyPower = PercentCacheKeyFromValue(pct, 0)
+    if keyPower == false then
+      ClearGFHotPowerKeys(rt)
+      return true, pct, pctKnown
+    end
+    keyMax = mode == 5 and powerMax or false
+  end
+
+  if rt._msufGFHotPower == keyPower and rt._msufGFHotPowerMax == keyMax then
+    return false, pct, pctKnown
+  end
+  rt._msufGFHotPower = keyPower
+  rt._msufGFHotPowerMax = keyMax
+  return true, pct, pctKnown
 end
 
 local function RegionShown(region)
@@ -418,22 +571,6 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   local missingNeedsValues = rt.healthNeedsMissing == true
   local needHPValue = needsCurrent or colorByHealth or percentNeedsValues or missingNeedsValues
   local needMaxValue = needsMax or colorByHealth or percentNeedsValues or missingNeedsValues
-  local throttle = rt.healthThrottle or 0
-  if throttle > 0 and healthTick and GetTime then
-    local now = GetTime()
-    local nextTime = rt.nextHealthTextTime
-    if nextTime and now < nextTime then
-      rt.pendingHP, rt.pendingHPMax = hp, hpMax
-      rt.healthTextPending = true
-      QueueHealthTextFlush(frame, rt, nextTime - now)
-      return
-    end
-    rt.nextHealthTextTime = now + throttle
-  else
-    rt.pendingHP, rt.pendingHPMax = nil, nil
-    rt.healthTextPending = nil
-    rt.nextHealthTextTime = nil
-  end
 
   if rt.healthPlain == true then
     if (needHPValue and hp == nil) or (needMaxValue and hpMax == nil) then
@@ -595,38 +732,6 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt)
 end
 
-local function MarkHealthDirtyRuntime(frame, event, unit, hp, hpMax)
-  unit = unit or frame.unit
-  local rt = frame._msufTextRuntime
-  if not rt or not rt.healthSlotCount or rt.healthSlotCount <= 0 then
-    return
-  end
-  if event ~= "UNIT_HEALTH" or not GetTime or not QueueHealthTextFlush then
-    return UpdateHealthRuntime(frame, event, unit, hp, hpMax)
-  end
-
-  local throttle = rt.healthThrottle or 0
-  if throttle <= 0 then
-    return UpdateHealthRuntime(frame, event, unit, hp, hpMax)
-  end
-
-  rt.pendingHP, rt.pendingHPMax = hp, hpMax
-  rt.healthTextPending = true
-  if rt.healthTimerActive == true then
-    return
-  end
-
-  local now = GetTime()
-  local nextTime = rt.nextHealthTextTime
-
-  if not nextTime or now >= nextTime then
-    rt.nextHealthTextTime = now + throttle
-    QueueHealthTextFlush(frame, rt, 0)
-  else
-    QueueHealthTextFlush(frame, rt, nextTime - now)
-  end
-end
-
 local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   unit = unit or frame.unit
   local rt = frame._msufTextRuntime
@@ -639,7 +744,8 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       or event == "MSUF_UNIT_IDENTITY_FAST"
       or event == "MSUF_UNIT_IDENTITY_SOFT"
       or event == "MSUF_UNIT_IDENTITY_SOFT_FAST"
-      or event == "MSUF_GF_UNIT_IDENTITY")
+      or event == "MSUF_GF_UNIT_IDENTITY"
+      or event == "MSUF_GF_UNIT_STRUCTURE")
   local seededPowerType
   if identityChanged then
     frame._msufTextPowerType = nil
@@ -711,27 +817,6 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   local percentNeedsValues = false
   local needPowerValue = needsCurrent or percentNeedsValues
   local needMaxValue = needsMax or percentNeedsValues
-  local throttle = rt.powerThrottle or 0
-  if throttle > 0
-    and animate
-    and GetTime then
-    rt.pendingPower, rt.pendingPowerMax = power, powerMax
-    rt.powerTextPending = true
-    if rt.powerTimerActive == true then
-      return
-    end
-    local now = GetTime()
-    local nextTime = rt.nextPowerTextTime
-    if nextTime and now < nextTime then
-      QueuePowerTextFlush(frame, rt, nextTime - now)
-      return
-    end
-    rt.nextPowerTextTime = now + throttle
-  else
-    rt.pendingPower, rt.pendingPowerMax = nil, nil
-    rt.powerTextPending = nil
-    rt.nextPowerTextTime = nil
-  end
 
   if rt.powerPlain == true then
     if (needPowerValue and power == nil) or (needMaxValue and powerMax == nil) then
@@ -830,56 +915,13 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
   UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt)
 end
 
-local function MarkPowerDirtyRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-  unit = unit or frame.unit
-  local rt = frame._msufTextRuntime
-  if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
-    return
-  end
-  local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
-  if not powerTick
-    or not GetTime
-    or not QueuePowerTextFlush then
-    return UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-  end
-
-  local throttle = rt.powerThrottle or 0
-  if throttle <= 0 then
-    return UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-  end
-
-  SeedCachedPowerType(frame, unit, powerType, powerToken)
-  SeedCachedPowerMax(frame, unit, powerMax)
-  rt.pendingPower, rt.pendingPowerMax = power, powerMax
-  rt.powerTextPending = true
-  if rt.powerTimerActive == true then
-    return
-  end
-
-  local now = GetTime()
-  local nextTime = rt.nextPowerTextTime
-
-  if not nextTime or now >= nextTime then
-    rt.nextPowerTextTime = now + throttle
-    QueuePowerTextFlush(frame, rt, 0)
-  else
-    QueuePowerTextFlush(frame, rt, nextTime - now)
-  end
-end
-
 Text.RuntimeHotFunctions = {
   healthHot = UpdateHealthRuntime,
-  healthDirty = MarkHealthDirtyRuntime,
-  healthFlush = Text.FlushPendingHealthText,
   powerHot = UpdatePowerRuntime,
-  powerDirty = MarkPowerDirtyRuntime,
-  powerFlush = Text.FlushPendingPowerText,
 }
 
 Text.UpdateHealth = UpdateHealthRuntime
-Text.MarkHealthDirty = MarkHealthDirtyRuntime
 Text.UpdatePower = UpdatePowerRuntime
-Text.MarkPowerDirty = MarkPowerDirtyRuntime
 
 local NAME_EVENTS = { "UNIT_NAME_UPDATE" }
 local NAME_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" }
@@ -1005,6 +1047,141 @@ local function InlineEnabled(frame, spec)
   return frame and frame.unit == "target" and spec and spec.showName ~= false and inline and inline.enabled == true
 end
 
+local function StrictGroupSpec(frame, spec)
+  return frame
+    and frame._msufIsGroupFrame == true
+    and spec
+    and spec.scope == "group"
+end
+
+local function ElementActive(frame, name)
+  local active = frame and frame._msufActiveElements
+  return active and active[name] == true
+end
+
+-- Dedup for the percent-fed text path: the health updater already produced the
+-- percent (EUI percent bar path), so there is no raw hp/hpMax and no second
+-- UnitHealthPercent call. Keyed purely on the rounded percent bucket.
+local function GFHotHealthPercentNeedsUpdate(rt, pct)
+  local pctSecret = issecretvalue(pct) == true
+  if pctSecret then
+    ClearGFHotHealthKeys(rt)
+    return true, true
+  end
+  local keyHP = PercentCacheKeyFromValue(pct, rt.healthPercentDecimals)
+  if keyHP == false then
+    ClearGFHotHealthKeys(rt)
+    return true, pct ~= nil
+  end
+  if rt._msufGFHotHealthHP == keyHP and rt._msufGFHotHealthMax == false then
+    return false, pct ~= nil
+  end
+  rt._msufGFHotHealthHP = keyHP
+  rt._msufGFHotHealthMax = false
+  rt._msufGFHotHealthMissing = false
+  return true, pct ~= nil
+end
+
+-- Percent-fed variant of BuildGFHotHealthText. Used only when the frame runs the
+-- EUI percent bar updater (dispatch key mode 4, no absolute-HP slot). The `hp`
+-- argument IS the percent; missing/current/max are all irrelevant here so the
+-- writer receives (cur=nil, max=nil, pct=hp).
+local function BuildGFHotHealthTextFromPercent(frame, rt)
+  if not (rt and rt.healthSlotCount == 1 and rt.healthColorByHealth ~= true) then
+    return nil
+  end
+  local slot = rt.healthSlots and rt.healthSlots[1]
+  if not (slot and (slot.plainWriter or slot.secretWriter or slot.writer)) then
+    return nil
+  end
+  return function(frame, event, unit, pct)
+    local update, pctKnown = GFHotHealthPercentNeedsUpdate(rt, pct)
+    if not update then return end
+    rt.healthMissing = nil
+    rt._lastHpRaw, rt._lastHpMaxRaw = nil, nil
+    WriteGFHotSlot(slot, nil, nil, pct, pctKnown, rt)
+  end
+end
+
+local function BuildGFHotHealthText(frame, rt)
+  if not (rt and rt.healthSlotCount == 1 and rt.healthColorByHealth ~= true) then
+    return nil
+  end
+  local slot = rt.healthSlots and rt.healthSlots[1]
+  if not (slot and (slot.plainWriter or slot.secretWriter or slot.writer)) then
+    return nil
+  end
+  return function(frame, event, unit, hp, hpMax)
+    local update, pct, pctKnown, missing = GFHotHealthNeedsUpdate(frame, rt, unit, hp, hpMax)
+    if not update then return end
+    rt._lastHpRaw, rt._lastHpMaxRaw = hp, hpMax
+    if rt.healthNeedsMissing == true then
+      rt.healthMissing = missing
+    else
+      rt.healthMissing = nil
+    end
+    WriteGFHotSlot(slot, hp, hpMax, pct, pctKnown, rt, missing)
+  end
+end
+
+local function BuildGFHotPowerText(frame, rt)
+  if not (rt and rt.powerSlotCount == 1 and rt.powerColorByType ~= true) then
+    return nil
+  end
+  local slot = rt.powerSlots and rt.powerSlots[1]
+  if not (slot and (slot.plainWriter or slot.secretWriter or slot.writer)) then
+    return nil
+  end
+  return function(frame, event, unit, power, powerMax)
+    local update, pct, pctKnown = GFHotPowerNeedsUpdate(rt, unit, power, powerMax)
+    if not update then return end
+    rt.healthMissing = nil
+    rt._lastPowerRaw, rt._lastPowerMaxRaw = power, powerMax
+    WriteGFHotSlot(slot, power, powerMax, pct, pctKnown, rt)
+  end
+end
+
+-- Dedup for the percent-fed power text path: the power updater already produced
+-- the percent (EUI percent bar path), no raw power/max, no second call. Keyed on
+-- the rounded percent bucket (power text uses 0 decimals).
+local function GFHotPowerPercentNeedsUpdate(rt, pct)
+  if issecretvalue(pct) == true then
+    ClearGFHotPowerKeys(rt)
+    return true, true
+  end
+  local keyPower = PercentCacheKeyFromValue(pct, 0)
+  if keyPower == false then
+    ClearGFHotPowerKeys(rt)
+    return true, pct ~= nil
+  end
+  if rt._msufGFHotPower == keyPower and rt._msufGFHotPowerMax == false then
+    return false, pct ~= nil
+  end
+  rt._msufGFHotPower = keyPower
+  rt._msufGFHotPowerMax = false
+  return true, pct ~= nil
+end
+
+-- Percent-fed variant of BuildGFHotPowerText. Used only when the frame runs the
+-- EUI percent power updater (dispatch key mode 4). The `power` argument IS the
+-- percent; max is irrelevant so the writer receives (cur=nil, max=nil, pct).
+local function BuildGFHotPowerTextFromPercent(frame, rt)
+  if not (rt and rt.powerSlotCount == 1 and rt.powerColorByType ~= true) then
+    return nil
+  end
+  local slot = rt.powerSlots and rt.powerSlots[1]
+  if not (slot and (slot.plainWriter or slot.secretWriter or slot.writer)) then
+    return nil
+  end
+  return function(frame, event, unit, pct)
+    local update, pctKnown = GFHotPowerPercentNeedsUpdate(rt, pct)
+    if not update then return end
+    rt.healthMissing = nil
+    rt._lastPowerRaw, rt._lastPowerMaxRaw = nil, nil
+    WriteGFHotSlot(slot, nil, nil, pct, pctKnown, rt)
+  end
+end
+
 function Text.IsEnabled(frame, spec)
   return (spec and spec.showName ~= false)
     or HealthTextEnabled(spec)
@@ -1029,11 +1206,161 @@ local Runtime = {
   SetShownCached = SetShownCached,
   UpdateName = Text.UpdateName,
   UpdateHealth = Text.UpdateHealth,
-  MarkHealthDirty = Text.MarkHealthDirty,
   UpdatePower = Text.UpdatePower,
-  MarkPowerDirty = Text.MarkPowerDirty,
   UpdateInline = Text.UpdateInline,
 }
+
+function Runtime.BuildGroupHot(frame, spec, hot)
+  if not StrictGroupSpec(frame, spec) then
+    if frame then
+      frame._msufGFHot = nil
+      frame._msufGFHotSerial = nil
+    end
+    return nil
+  end
+
+  hot = hot or {}
+  hot.serial = spec._msufGFCompileSerial or 0
+  hot.health = nil
+  hot.healthText = nil
+  hot.power = nil
+  hot.powerText = nil
+  hot.powerWanted = nil
+
+  local rt = frame._msufTextRuntime
+
+  -- Health registers before the text elements, so Health.Apply could not see
+  -- this spec's resolved health-text mode. Now that the runtime is built, let
+  -- Health promote the frame to the EUI percent-only updater when no consumer
+  -- needs an absolute HP number. Must run before the text builder and healthFn
+  -- capture below so both branch on the final updater choice.
+  local healthElement = UF and UF.elements and UF.elements.Health
+  if healthElement and healthElement.SelectGroupHealthUpdater then
+    healthElement.SelectGroupHealthUpdater(frame)
+  end
+  local healthFn = frame._msufUpdateHealthValue
+  local healthPercentFed = healthElement
+    and healthFn == healthElement.UpdateValueGroupPercent
+
+  -- Same for power: let Power promote the frame to its EUI percent updater.
+  local powerElement = UF and UF.elements and UF.elements.Power
+  if powerElement and powerElement.SelectGroupPowerUpdater then
+    powerElement.SelectGroupPowerUpdater(frame)
+  end
+  local powerFn = frame._msufUpdatePowerValue
+  local powerPercentFed = powerElement
+    and powerFn == powerElement.UpdateValueGroupPercent
+
+  -- Percent-fed frames get a text builder that consumes the percent the bar
+  -- updater already computed (no second UnitHealthPercent/UnitPowerPercent, no
+  -- cache clear).
+  local healthText = healthPercentFed
+    and BuildGFHotHealthTextFromPercent(frame, rt)
+    or BuildGFHotHealthText(frame, rt)
+  local powerText = powerPercentFed
+    and BuildGFHotPowerTextFromPercent(frame, rt)
+    or BuildGFHotPowerText(frame, rt)
+  hot.healthText = healthText
+  hot.powerText = powerText
+
+  -- gf is stable for the frame's lifetime; capture it once at build time so the
+  -- hot closures don't re-read MSUF.GF every event. The single `gf._profDetail`
+  -- field read is the only per-event profiling cost when instrumentation is off
+  -- (map-watch/invariant checks are folded behind it).
+  local gf = MSUF and MSUF.GF
+  if healthFn and (not ElementActive(frame, "HealthText") or healthText) then
+    if healthPercentFed then
+      -- No prediction/groupVisuals here (SelectGroupHealthUpdater excludes them),
+      -- so the closure only drives the bar + percent-fed text. healthFn returns
+      -- the percent as its first value.
+      hot.health = function(frame, event, unit)
+        if gf and (gf._profDetail == true or gf._profMapWatch == true) then
+          if gf._profMapWatch == true and gf.CheckUnitFrameInvariant then
+            gf.CheckUnitFrameInvariant(frame, event, unit)
+          end
+          local token = gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("health")
+          local pct = healthFn(frame, event, unit)
+          if healthText then healthText(frame, event, unit, pct) end
+          if token and gf.ProfEnd then gf.ProfEnd("health", token) end
+          return true
+        end
+        local pct = healthFn(frame, event, unit)
+        if healthText then healthText(frame, event, unit, pct) end
+        return true
+      end
+    else
+      local predictionFn = ElementActive(frame, "Prediction") and frame._msufUpdatePredictionHealthValue or nil
+      local groupVisualsFn = ElementActive(frame, "GroupVisuals") and frame._msufUpdateGroupVisualsHealthValue or nil
+      hot.health = function(frame, event, unit)
+        if gf and (gf._profDetail == true or gf._profMapWatch == true) then
+          if gf._profMapWatch == true and gf.CheckUnitFrameInvariant then
+            gf.CheckUnitFrameInvariant(frame, event, unit)
+          end
+          local token = gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("health")
+          local hp, hpMax, calc = healthFn(frame, event, unit)
+          if healthText then healthText(frame, event, unit, hp, hpMax) end
+          if predictionFn then predictionFn(frame, event, unit, hp, hpMax, calc) end
+          if groupVisualsFn then groupVisualsFn(frame, event, unit, hp, hpMax) end
+          if token and gf.ProfEnd then gf.ProfEnd("health", token) end
+          return true
+        end
+        local hp, hpMax, calc = healthFn(frame, event, unit)
+        if healthText then healthText(frame, event, unit, hp, hpMax) end
+        if predictionFn then predictionFn(frame, event, unit, hp, hpMax, calc) end
+        if groupVisualsFn then groupVisualsFn(frame, event, unit, hp, hpMax) end
+        return true
+      end
+    end
+  end
+
+  hot.powerWanted = (spec.power and spec.power.enabled == true)
+    or (rt and (rt.powerSlotCount or 0) > 0)
+    or nil
+  if powerFn and (not ElementActive(frame, "PowerText") or powerText) then
+    if powerPercentFed then
+      -- Percent power updater returns the percent as its first value; the
+      -- percent-fed text builder consumes it. No raw power/max threaded.
+      hot.power = function(frame, event, unit)
+        if gf and (gf._profDetail == true or gf._profMapWatch == true) then
+          if gf._profMapWatch == true and gf.CheckUnitFrameInvariant then
+            gf.CheckUnitFrameInvariant(frame, event, unit)
+          end
+          local token = gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("power")
+          local pct = powerFn(frame, event, unit)
+          if powerText then powerText(frame, event, unit, pct) end
+          if token and gf.ProfEnd then gf.ProfEnd("power", token) end
+          return true
+        end
+        local pct = powerFn(frame, event, unit)
+        if powerText then powerText(frame, event, unit, pct) end
+        return true
+      end
+    else
+      hot.power = function(frame, event, unit)
+        if gf and (gf._profDetail == true or gf._profMapWatch == true) then
+          if gf._profMapWatch == true and gf.CheckUnitFrameInvariant then
+            gf.CheckUnitFrameInvariant(frame, event, unit)
+          end
+          local token = gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("power")
+          local power, powerMax, powerType, powerToken, powerMetaChanged = powerFn(frame, event, unit)
+          if powerText then powerText(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged) end
+          if token and gf.ProfEnd then gf.ProfEnd("power", token) end
+          return true
+        end
+        local power, powerMax, powerType, powerToken, powerMetaChanged = powerFn(frame, event, unit)
+        if powerText then powerText(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged) end
+        return true
+      end
+    end
+  end
+
+  ClearGFHotHealthKeys(rt)
+  ClearGFHotPowerKeys(rt)
+  frame._msufGFHot = hot
+  frame._msufGFHotSerial = hot.serial
+  return hot
+end
+
 MSUF.UFTextRuntime = Runtime
 
 local TextStructure = {}
@@ -1104,13 +1431,6 @@ end
 
 function HealthText.Update(frame, event, unit, hp, hpMax)
   local rt = frame and frame._msufTextRuntime
-  if event == "UNIT_HEALTH" then
-    local fn = rt and (rt.healthDirty or rt.healthHot)
-    if fn then
-      return fn(frame, event, unit or frame.unit, hp, hpMax)
-    end
-    return Text.MarkHealthDirty(frame, event, unit or frame.unit, hp, hpMax)
-  end
   local fn = rt and rt.healthHot
   if fn then
     return fn(frame, event, unit or frame.unit, hp, hpMax)
@@ -1147,16 +1467,6 @@ end
 
 function PowerText.Update(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   local rt = frame and frame._msufTextRuntime
-  if rt and rt.powerThrottle and rt.powerThrottle > 0 then
-    local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
-    if powerTick then
-      local fn = rt.powerDirty or rt.powerHot
-      if fn then
-        return fn(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-      end
-      return Text.MarkPowerDirty(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)
-    end
-  end
   local fn = rt and rt.powerHot
   if fn then
     return fn(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)

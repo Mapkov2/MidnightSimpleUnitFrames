@@ -61,6 +61,7 @@ local appliedPowerHeight = setmetatable({}, { __mode = "k" })
 local appliedRoleValue = setmetatable({}, { __mode = "k" })
 local UNIT_ATTR = "unit"
 local UNIT_CHANGED_REASON = "MSUF_GF_UNIT_IDENTITY"
+local UNIT_STRUCTURE_REASON = "MSUF_GF_UNIT_STRUCTURE"
 
 local APPLY_MASK = {
   Health = true, Power = true, Text = true, NameText = true,
@@ -71,11 +72,6 @@ local APPLY_MASK = {
   GroupCornerIndicators = true, Auras = true,
 }
 GF.GROUP_APPLY_MASK = APPLY_MASK
-
-local UNIT_CHANGE_FAST_MASK = {
-  GroupRangeFade = true,
-  Prediction = true,
-}
 
 local ApplyUnitChangeFast
 
@@ -413,6 +409,20 @@ local function HeaderLayoutNonce(frame)
   return 0
 end
 
+local function MarkUnitMapChanged()
+  GF._unitFrameMapRevision = (GF._unitFrameMapRevision or 0) + 1
+  GF._unitFrameMapProven = nil
+  GF._unitFrameMapCleanChecks = 0
+end
+
+local function FrameMatchesUnit(frame, unit)
+  if not (frame and IsUnitToken(unit) and GF.frames[frame] == true) then
+    return false
+  end
+  local attrValue = frame.GetAttribute and frame:GetAttribute("unit") or nil
+  return frame.unit == unit and (not frame.GetAttribute or attrValue == unit)
+end
+
 local function IndexFrameUnit(frame, unit)
   if not frame then return end
   local old = frame._msufGFIndexedUnit
@@ -420,10 +430,21 @@ local function IndexFrameUnit(frame, unit)
   local byUnit = GF.unitFrames
   if IsUnitToken(old) and (not unitOk or old ~= unit) and byUnit[old] == frame then
     byUnit[old] = nil
+    MarkUnitMapChanged()
   end
   if unitOk then
+    local previous = byUnit[unit]
+    if previous and previous ~= frame then
+      GF._unitFrameMapMismatches = (GF._unitFrameMapMismatches or 0) + 1
+      GF._unitFrameMapProven = nil
+      GF._unitFrameMapLastMismatch = "index conflict unit=" .. tostring(unit)
+    end
+    local changed = previous ~= frame or frame._msufGFIndexedUnit ~= unit
     byUnit[unit] = frame
     frame._msufGFIndexedUnit = unit
+    if changed then
+      MarkUnitMapChanged()
+    end
   else
     frame._msufGFIndexedUnit = nil
   end
@@ -444,12 +465,37 @@ function GF.FrameForUnit(unit)
     return nil
   end
   local frame = unit and GF.unitFrames and GF.unitFrames[unit]
-  local frameUnit = frame and frame.unit
-  if frame and GF.frames[frame] == true
-    and frameUnit == unit then
+  if FrameMatchesUnit(frame, unit) then
     return frame
   end
+  if frame then
+    local frameUnit = frame.unit
+    local attrUnitValue = frame.GetAttribute and frame:GetAttribute("unit") or nil
+    GF._unitFrameMapMismatches = (GF._unitFrameMapMismatches or 0) + 1
+    GF._unitFrameMapProven = nil
+    GF._unitFrameMapLastMismatch = "lookup mismatch unit=" .. tostring(unit)
+      .. " frameUnit=" .. tostring(frameUnit)
+      .. " attrUnit=" .. tostring(attrUnitValue)
+  end
   return nil
+end
+
+function GF.ValidateUnitFrameMap(frame, unit)
+  if not (frame and IsUnitToken(unit)) then
+    return false
+  end
+  local mapped = GF.unitFrames and GF.unitFrames[unit] or nil
+  local attrUnitValue = frame.GetAttribute and frame:GetAttribute("unit") or nil
+  if mapped == frame and FrameMatchesUnit(frame, unit) then
+    return true
+  end
+  GF._unitFrameMapMismatches = (GF._unitFrameMapMismatches or 0) + 1
+  GF._unitFrameMapProven = nil
+  GF._unitFrameMapLastMismatch = "validate mismatch unit=" .. tostring(unit)
+    .. " frameUnit=" .. tostring(frame.unit)
+    .. " attrUnit=" .. tostring(attrUnitValue)
+    .. " mappedSame=" .. tostring(mapped == frame)
+  return false
 end
 
 local function MarkApplied(frame, kind, unit, spec)
@@ -476,11 +522,35 @@ local function HasSameApplyState(frame, kind, unit, spec)
     and appliedRoleValue[frame] == (status and status.roleValue or false)
 end
 
+local function RebindGroupHotRuntime(frame, spec)
+  if not frame then return nil end
+  if not (frame._msufIsGroupFrame == true and spec and spec.scope == "group") then
+    frame._msufGFHot = nil
+    frame._msufGFHotSerial = nil
+    return nil
+  end
+  local runtime = MSUF and MSUF.UFTextRuntime
+  if runtime and type(runtime.BuildGroupHot) == "function" then
+    return runtime.BuildGroupHot(frame, spec, frame._msufGFHot)
+  end
+  frame._msufGFHot = nil
+  frame._msufGFHotSerial = nil
+  return nil
+end
+GF.RebindGroupHotRuntime = RebindGroupHotRuntime
+
+local function ApplyGroupStructureSpec(frame, spec, reason, mask)
+  UF.ApplySpec(frame, spec, reason or "MSUF_GF_APPLY", mask or APPLY_MASK)
+  RebindGroupHotRuntime(frame, spec)
+end
+GF.ApplyStructureSpec = ApplyGroupStructureSpec
+
 ApplyUnitChangeFast = function(frame, kind, unit)
   if not (frame and kind and type(unit) == "string" and unit ~= "" and frame.MSUFSpec and GF.CompileSpec) then
     return false
   end
 
+  local profToken = GF.ProfBegin and GF.ProfBegin("unitChange")
   childKind[frame] = kind
   frame._msufGFKind = kind
   frame._msufIsGroupFrame = true
@@ -501,12 +571,13 @@ ApplyUnitChangeFast = function(frame, kind, unit)
     and appliedPowerEnabled[frame] == (power and power.enabled or false)
     and appliedPowerHeight[frame] == (power and power.height or 0)
 
-  if sameStructure and frame.ForceUpdate then
-    frame:ForceUpdate(UNIT_CHANGED_REASON)
-  elseif sameStructure then
-    UF.ApplySpec(frame, spec, UNIT_CHANGED_REASON, UNIT_CHANGE_FAST_MASK)
+  if sameStructure then
+    RebindGroupHotRuntime(frame, spec)
+    if UF.FrameRuntimeUpdate then
+      UF.FrameRuntimeUpdate(frame, UNIT_CHANGED_REASON)
+    end
   else
-    UF.ApplySpec(frame, spec, UNIT_CHANGED_REASON, APPLY_MASK)
+    ApplyGroupStructureSpec(frame, spec, UNIT_STRUCTURE_REASON)
   end
   MarkApplied(frame, kind, unit, spec)
   attrUnit[frame] = unit
@@ -516,6 +587,7 @@ ApplyUnitChangeFast = function(frame, kind, unit)
   scanUnit[frame] = unit
   scanKind[frame] = kind
   TrackFrame(frame, unit)
+  if GF.ProfEnd then GF.ProfEnd("unitChange", profToken) end
   return true
 end
 
@@ -544,6 +616,7 @@ function GF.UntrackFrame(frame)
   local indexedUnit = frame._msufGFIndexedUnit
   if indexedUnit and GF.unitFrames and GF.unitFrames[indexedUnit] == frame then
     GF.unitFrames[indexedUnit] = nil
+    MarkUnitMapChanged()
   end
   frame._msufGFIndexedUnit = nil
   scanNonce[frame] = nil
@@ -557,6 +630,8 @@ function GF.UntrackFrame(frame)
   appliedPowerEnabled[frame] = nil
   appliedPowerHeight[frame] = nil
   appliedRoleValue[frame] = nil
+  frame._msufGFHot = nil
+  frame._msufGFHotSerial = nil
   local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.unit
   local uf = _G.MSUF_UnitFrames
   if type(unit) == "string" and uf and uf[unit] == frame then
@@ -575,15 +650,29 @@ end
 --- the adapter's main hot/warm path, so it skips identical unit/spec states.
 function GF.ApplyButton(frame, kind, reason)
   if not frame then return false end
+  local profToken = GF.ProfBegin and GF.ProfBegin("applyButton")
   local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.unit
-  if type(unit) ~= "string" or unit == "" then return false end
+  if type(unit) ~= "string" or unit == "" then
+    if GF.ProfEnd then GF.ProfEnd("applyButton", profToken) end
+    return false
+  end
   local layoutNonce = HeaderLayoutNonce(frame)
+
+  if frame.MSUFSpec
+    and kind
+    and frame.unit ~= nil
+    and frame.unit ~= unit then
+    local applied = ApplyUnitChangeFast(frame, kind, unit)
+    if GF.ProfEnd then GF.ProfEnd("applyButton", profToken) end
+    return applied
+  end
 
   if reason == "MSUF_GF_SCAN"
     and frame.MSUFSpec
     and scanNonce[frame] == layoutNonce
     and scanUnit[frame] == unit
     and scanKind[frame] == kind then
+    if GF.ProfEnd then GF.ProfEnd("applyButton", profToken) end
     return true
   end
 
@@ -601,11 +690,13 @@ function GF.ApplyButton(frame, kind, reason)
   end
   UF.RefreshNativePingIcon(frame)
   if HasSameApplyState(frame, kind, unit, spec) then
+    RebindGroupHotRuntime(frame, spec)
     attrUnit[frame] = unit
     scanNonce[frame] = layoutNonce
     scanUnit[frame] = unit
     scanKind[frame] = kind
     TrackFrame(frame, unit)
+    if GF.ProfEnd then GF.ProfEnd("applyButton", profToken) end
     return true
   end
 
@@ -625,7 +716,7 @@ function GF.ApplyButton(frame, kind, reason)
       frame:SetAttribute("*type2", "togglemenu")
     end
   end
-  UF.ApplySpec(frame, spec, reason or "MSUF_GF_APPLY", APPLY_MASK)
+  ApplyGroupStructureSpec(frame, spec, reason or "MSUF_GF_APPLY")
   MarkApplied(frame, kind, unit, spec)
   attrUnit[frame] = unit
   ApplyClickCast(frame, spec)
@@ -635,6 +726,7 @@ function GF.ApplyButton(frame, kind, reason)
   scanKind[frame] = kind
 
   TrackFrame(frame, unit)
+  if GF.ProfEnd then GF.ProfEnd("applyButton", profToken) end
   return true
 end
 

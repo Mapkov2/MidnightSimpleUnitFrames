@@ -1394,8 +1394,7 @@ function GF.ResetAllToDefaults()
 
     GF.EnsureDB()
 
-    if GF.RebuildAll then GF.RebuildAll() end
-    if GF.RefreshVisuals then GF.RefreshVisuals() end
+    if GF.RefreshAll then GF.RefreshAll() end
 
     return true
 end
@@ -1403,7 +1402,7 @@ end
 ---
 --- Raid Layout Situations
 --- Stores per-situation geometry overrides (Mythic / Normal-HC / Open World).
---- On situation change: save current - load target - RebuildAll.
+--- On situation change: save current - load target - refresh geometry.
 --- Auto-detect via difficultyID on PLAYER_ENTERING_WORLD.
 ---
 local LAYOUT_GEO_KEYS = {
@@ -1456,7 +1455,11 @@ function GF.SwitchRaidLayout(situationKey, kind)
     conf._activeRaidLayout = situationKey
     GF.LoadRaidLayout(conf, situationKey)
     GF.InvalidateConfCache()
-    if GF.RebuildAll then GF.RebuildAll() end
+    if GF.RefreshGeometry then
+        GF.RefreshGeometry()
+    elseif GF.RefreshAll then
+        GF.RefreshAll()
+    end
     return true
 end
 

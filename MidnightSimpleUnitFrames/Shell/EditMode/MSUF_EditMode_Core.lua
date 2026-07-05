@@ -929,8 +929,8 @@ local function RestoreState(snap)
             DeepRestore(db[dbKey], snap.data)
             if _G.MSUF_GF_RefreshAll then
                 _G.MSUF_GF_RefreshAll()
-            elseif _G.MSUF_GF_RebuildAll then
-                _G.MSUF_GF_RebuildAll()
+            elseif _G.MSUF_GF_Refresh then
+                _G.MSUF_GF_Refresh()
             end
             if _G.MSUF_EM2_SyncGFPopups then _G.MSUF_EM2_SyncGFPopups() end
         end

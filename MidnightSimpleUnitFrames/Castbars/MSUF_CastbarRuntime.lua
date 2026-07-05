@@ -239,6 +239,7 @@ function Runtime:ApplyActive(frame, state, options)
     if options.resetRuntime ~= false then
         frame.castDuration = nil
         frame.castElapsed = nil
+        frame.endTime = nil
         frame.MSUF_timerDriven = nil
         frame.MSUF_timerRangeSet = nil
         frame._msufLastSBValue = nil
@@ -281,6 +282,10 @@ function Runtime:ApplyActive(frame, state, options)
         frame:UpdateColorForInterruptible()
     end
 
+    if options.skipShow ~= true and frame.Show then
+        frame:Show()
+    end
+
     if options.skipRegister ~= true and type(_G.MSUF_RegisterCastbar) == "function" then
         _G.MSUF_RegisterCastbar(frame)
     end
@@ -290,10 +295,6 @@ function Runtime:ApplyActive(frame, state, options)
         and type(_G.MSUF_UpdateCastTimeText_FromStatusBar) == "function"
     then
         _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
-    end
-
-    if options.skipShow ~= true and frame.Show then
-        frame:Show()
     end
 
     if type(_G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then

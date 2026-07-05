@@ -57,6 +57,7 @@ local rosterEventsRegistered = false
 local lastRosterMode
 local lastRosterSignature
 local lastRosterStructureSignature
+local lastRosterLayoutSignature
 local lastDifficultyToken
 local rosterSignatureParts = {}
 local ROSTER_EVENTS = { "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "ROLE_CHANGED_INFORM" }
@@ -75,6 +76,7 @@ local bor = bit and bit.bor or bit32 and bit32.bor
 local DIRTY_FLAGS = {
   GF.DIRTY_GEOMETRY, GF.DIRTY_VISUAL, GF.DIRTY_FONT, GF.DIRTY_COLOR,
   GF.DIRTY_BORDER, GF.DIRTY_LAYOUT, GF.DIRTY_AURAS,
+  GF.DIRTY_UNIT_BINDING, GF.DIRTY_CONFIG,
 }
 local function Has(mask, flag)
   if not mask then return false end
@@ -99,7 +101,11 @@ local MASK_RUNTIME = Metadata.MASK_RUNTIME or {}
 local DIRTY_APPLY_MASKS = Metadata.dirtyApplyMasks or {}
 
 local function DirtyApplyMask(mask)
-  if not mask or mask == GF.DIRTY_ALL or Has(mask, GF.DIRTY_GEOMETRY) or Has(mask, GF.DIRTY_LAYOUT) then
+  if not mask or mask == GF.DIRTY_ALL
+    or Has(mask, GF.DIRTY_GEOMETRY)
+    or Has(mask, GF.DIRTY_LAYOUT)
+    or Has(mask, GF.DIRTY_UNIT_BINDING)
+    or Has(mask, GF.DIRTY_CONFIG) then
     return nil
   end
   return DIRTY_APPLY_MASKS[mask] or MASK_RUNTIME
@@ -144,15 +150,32 @@ local function DropSpecs(kind)
 end
 
 local function ApplyFrameDirty(frame, kind, mask, reason)
+  local profToken = GF.ProfBegin and GF.ProfBegin("applySpec")
   local applyMask = DirtyApplyMask(mask)
   if not applyMask then
-    return GF.ApplyButton and GF.ApplyButton(frame, kind, reason or "MSUF_GF_DIRTY_FULL")
+    local result = GF.ApplyButton and GF.ApplyButton(frame, kind, reason or "MSUF_GF_DIRTY_FULL")
+    if GF.ProfEnd then GF.ProfEnd("applySpec", profToken) end
+    return result
   end
   if not (UF and UF.ApplySpec and GF.CompileSpec) then
-    return GF.ApplyButton and GF.ApplyButton(frame, kind, reason or "MSUF_GF_DIRTY_FALLBACK")
+    local result = GF.ApplyButton and GF.ApplyButton(frame, kind, reason or "MSUF_GF_DIRTY_FALLBACK")
+    if GF.ProfEnd then GF.ProfEnd("applySpec", profToken) end
+    return result
   end
   local spec = GF.CompileSpec(kind, frame, frame and frame.unit)
-  return UF.ApplySpec(frame, spec, DirtyRuntimeReason(mask, reason), applyMask)
+  local dirtyReason = DirtyRuntimeReason(mask, reason)
+  local applyStructure = GF.ApplyStructureSpec
+  local result
+  if applyStructure then
+    result = applyStructure(frame, spec, dirtyReason, applyMask)
+  else
+    result = UF.ApplySpec(frame, spec, dirtyReason, applyMask)
+    if GF.RebindGroupHotRuntime then
+      GF.RebindGroupHotRuntime(frame, spec)
+    end
+  end
+  if GF.ProfEnd then GF.ProfEnd("applySpec", profToken) end
+  return result
 end
 
 local function RefreshVisualsFrame(frame, _, frameKind, refreshKind, mask)
@@ -193,10 +216,14 @@ function GF.DeferGroupRuntime(reason, kind, mask)
   -- rebind children while in combat is reduced to flags and replayed on regen.
   reason = reason or "refresh"
   GF._pendingGroupRuntime = reason
-  if reason == "roster" or reason == "zone" then
-    GF._pendingGroupRebuild = true
-    GF._pendingGroupDropSpecs = true
+  if reason == "roster" then
+    GF._pendingGroupUnitBinding = true
     RememberPendingRebuildReason(reason)
+  elseif reason == "zone" then
+    GF._pendingGroupLayout = true
+    GF._pendingGroupDropSpecs = true
+  elseif reason == "layout" or reason == "geometry" or reason == "setup" then
+    GF._pendingGroupLayout = true
   elseif reason == "rebuild" then
     GF._pendingGroupRebuild = true
     RememberPendingRebuildReason(reason)
@@ -411,11 +438,37 @@ local function CurrentRosterSignature(includeRoles)
   return table_concat(parts, "\031", 1, n)
 end
 
+local function CurrentRosterLayoutSignature()
+  local mode = RosterMode()
+  local parts = rosterSignatureParts
+  wipe(parts)
+  local raidKind = LiveRaidKind()
+  local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
+  local wantRaid = (IsInRaid and IsInRaid()) and raidConf.enabled == true
+  local n = 1
+  parts[n] = mode
+  n = n + 1
+  parts[n] = ShouldShowParty() and "party:on" or "party:off"
+  n = n + 1
+  parts[n] = wantRaid and "raid:on" or "raid:off"
+  n = n + 1
+  parts[n] = raidKind
+  if mode == "raid" then
+    n = n + 1
+    parts[n] = tostring(GetNumGroupMembers and (GetNumGroupMembers() or 0) or 0)
+  elseif mode == "party" then
+    n = n + 1
+    parts[n] = tostring(GetNumSubgroupMembers and (GetNumSubgroupMembers() or 0) or 0)
+  end
+  return table_concat(parts, "\031", 1, n)
+end
+
 local function RefreshRosterSignature()
   -- Track two signatures: structural changes need secure header work, while
   -- role-only changes are handled by per-frame runtime/status refreshes.
   lastRosterSignature = CurrentRosterSignature(true)
   lastRosterStructureSignature = CurrentRosterSignature(false)
+  lastRosterLayoutSignature = CurrentRosterLayoutSignature()
 end
 
 local function CurrentDifficultyToken()
@@ -434,6 +487,11 @@ end
 local function RosterStructureChanged()
   local current = CurrentRosterSignature(false)
   return current ~= lastRosterStructureSignature
+end
+
+local function RosterLayoutChanged()
+  local current = CurrentRosterLayoutSignature()
+  return current ~= lastRosterLayoutSignature
 end
 
 local function HeaderKindForKey(key)
@@ -507,11 +565,21 @@ local function ScheduleRosterSettle()
     if token ~= rosterSettleToken or RosterMode() ~= "raid" then
       return
     end
-    local structureChanged = GF._forceRecreateHeaders == true or RosterStructureChanged()
+    local layoutChanged = GF._forceRecreateHeaders == true or RosterLayoutChanged()
+    local bindingChanged = RosterStructureChanged()
     local stateChanged = RosterSignatureChanged()
-    if structureChanged or not ScanRaidHeaderChildren() then
+    if layoutChanged then
       GF._forceScanHeaders = true
-      GF.RebuildAll()
+      GF.RefreshHeaderLayout("rosterSettle")
+      return
+    end
+    if bindingChanged then
+      if not ScanRaidHeaderChildren() then
+        GF._forceScanHeaders = true
+        GF.RefreshUnitBindings()
+      else
+        RefreshRosterStateBindings()
+      end
       return
     end
     if stateChanged then
@@ -610,9 +678,10 @@ end
 
 local function RunScheduledRosterRebuild()
   rosterRebuildQueued = false
-  local structureChanged = GF._forceRecreateHeaders == true or RosterStructureChanged()
+  local layoutChanged = GF._forceRecreateHeaders == true or RosterLayoutChanged()
+  local bindingChanged = RosterStructureChanged()
   local stateChanged = RosterSignatureChanged()
-  if not structureChanged then
+  if not layoutChanged and not bindingChanged then
     if stateChanged then
       RefreshRosterStateBindings()
       GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
@@ -622,8 +691,12 @@ local function RunScheduledRosterRebuild()
     if GF.RefreshClickCastFrames then GF.RefreshClickCastFrames() end
     return
   end
-  DropSpecs()
-  GF.RebuildAll(true)
+  if layoutChanged then
+    GF._forceScanHeaders = true
+    GF.RefreshHeaderLayout("rosterLayout")
+    return
+  end
+  GF.RefreshUnitBindings()
 end
 
 local function ScheduleRosterRebuild()
@@ -732,15 +805,100 @@ function GF.UpdateGroupVisibility()
   return true
 end
 
+--- Header layout refresh: update anchors/secure-header attributes and schedule
+--- child scans, but do not drop compiled specs or force a full visual sweep.
+function GF.RefreshHeaderLayout(reason)
+  local profToken = GF.ProfBegin and GF.ProfBegin("layout")
+  if InCombat() then
+    GF.DeferGroupRuntime("layout")
+    if GF.ProfEnd then GF.ProfEnd("layout", profToken) end
+    return false
+  end
+  if not DBReady() then
+    ScheduleDBReadyRetry(GF.RefreshHeaderLayout)
+    if GF.ProfEnd then GF.ProfEnd("layout", profToken) end
+    return false
+  end
+  if GF.EnsureDB then GF.EnsureDB() end
+
+  local wantParty = ShouldShowParty() and not PreviewSuppressesHeader("party")
+  local raidKind = LiveRaidKind()
+  local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
+  local wantRaid = (IsInRaid and IsInRaid()) and raidConf.enabled == true and not PreviewSuppressesHeader("raid")
+
+  if not wantParty and GF.headers and GF.headers.party then
+    HideOrRetireHeader("party")
+  end
+  if not wantRaid and GF.headers and GF.headers.raid then
+    HideOrRetireHeader("raid")
+  end
+
+  if wantParty and GF.SetupHeader then
+    local party = GF.SetupHeader("party", "party")
+    if party then party:Show() end
+  end
+  if wantRaid and GF.SetupHeader then
+    local raid = GF.SetupHeader("raid", raidKind)
+    if raid then raid:Show() end
+  end
+
+  ApplyHeaderSceneAlpha("party")
+  ApplyHeaderSceneAlpha("raid")
+  if GF.ApplyBlizzardGroupFrameOwnership then
+    GF.ApplyBlizzardGroupFrameOwnership(reason or "layout")
+  end
+  GF._forceScanHeaders = nil
+  GF._forceRecreateHeaders = nil
+  RefreshRosterSignature()
+  if GF.ProfEnd then GF.ProfEnd("layout", profToken) end
+  return true
+end
+
+--- Unit-binding refresh: ask existing secure headers for their current children
+--- and let Adapter's ApplyUnitChangeFast rebind changed units. This is the
+--- common roster path and must not become a global RebuildAll.
+function GF.RefreshUnitBindings(kind)
+  local profToken = GF.ProfBegin and GF.ProfBegin("unitBinding")
+  if InCombat() then
+    GF.DeferGroupRuntime("roster", kind, GF.DIRTY_UNIT_BINDING)
+    if GF.ProfEnd then GF.ProfEnd("unitBinding", profToken) end
+    return false
+  end
+  if GF._forceRecreateHeaders == true or RosterLayoutChanged() then
+    local result = GF.RefreshHeaderLayout("unitBinding")
+    if GF.ProfEnd then GF.ProfEnd("unitBinding", profToken) end
+    return result
+  end
+  local didScan = false
+  if GF.ScheduleScan and GF.headers then
+    if (not kind or kind == "party") and GF.headers.party then
+      GF.ScheduleScan("party", "party")
+      didScan = true
+    end
+    local raidKind = LiveRaidKind()
+    if (not kind or kind == "raid" or kind == "mythicraid" or kind == raidKind) and GF.headers.raid then
+      GF.ScheduleScan("raid", raidKind)
+      didScan = true
+    end
+  end
+  GF._forceScanHeaders = nil
+  RefreshRosterStateBindings()
+  if GF.ProfEnd then GF.ProfEnd("unitBinding", profToken) end
+  return didScan
+end
+
 --- Full structural pass: rebuild secure headers, drop compiled specs when
 --- needed, bump Auras3 config, and refresh Blizzard ownership.
 function GF.RebuildAll(preInvalidated, auras3ConfigBumped)
+  local profToken = GF.ProfBegin and GF.ProfBegin("rebuildAll")
   if InCombat() then
     GF.DeferGroupRuntime("rebuild")
+    if GF.ProfEnd then GF.ProfEnd("rebuildAll", profToken) end
     return false
   end
   if not DBReady() then
     ScheduleDBReadyRetry(GF.RebuildAll)
+    if GF.ProfEnd then GF.ProfEnd("rebuildAll", profToken) end
     return false
   end
   if preInvalidated ~= true then
@@ -779,6 +937,7 @@ function GF.RebuildAll(preInvalidated, auras3ConfigBumped)
   GF._forceScanHeaders = nil
   GF._forceRecreateHeaders = nil
   RefreshRosterSignature()
+  if GF.ProfEnd then GF.ProfEnd("rebuildAll", profToken) end
   return true
 end
 
@@ -837,6 +996,7 @@ RunRefreshVisualsSlice = function()
   local deadline = budgeted and (RefreshSliceNow() + REFRESH_SLICE_BUDGET) or nil
   local kind, mask = refreshSliceKind, refreshSliceMask
   local live = GF.frames
+  local profToken = GF.ProfBegin and GF.ProfBegin("refreshVisuals")
   while refreshSliceIndex < refreshSliceCount do
     local i = refreshSliceIndex + 1
     refreshSliceIndex = i
@@ -848,10 +1008,12 @@ RunRefreshVisualsSlice = function()
       RefreshVisualsFrame(frame, nil, frameKind, kind, mask)
     end
     if deadline and refreshSliceIndex < refreshSliceCount and RefreshSliceNow() >= deadline then
+      if GF.ProfEnd then GF.ProfEnd("refreshVisuals", profToken) end
       ScheduleRefreshVisualsSlice()
       return
     end
   end
+  if GF.ProfEnd then GF.ProfEnd("refreshVisuals", profToken) end
   ResetRefreshSlice()
 end
 
@@ -893,6 +1055,7 @@ end
 
 function GF.RefreshAll(preInvalidated)
   if InCombat() then
+    GF.DeferGroupRuntime("layout", nil, GF.DIRTY_ALL)
     GF.DeferGroupRuntime("refresh", nil, GF.DIRTY_ALL)
     return false
   end
@@ -900,26 +1063,27 @@ function GF.RefreshAll(preInvalidated)
     InvalidateSpecs()
   end
   BumpAuras3ConfigForGroup(GF.DIRTY_ALL)
-  GF.RebuildAll(true, true)
+  GF.RefreshHeaderLayout("refreshAll")
   GF.RefreshVisuals(nil, GF.DIRTY_ALL, true, true)
   return true
 end
 
 RefreshStructuralMask = function(mask)
   if InCombat() then
-    GF.DeferGroupRuntime("rebuild")
+    GF.DeferGroupRuntime("layout")
     GF.DeferGroupRuntime("refresh", nil, mask)
     return false
   end
   local dirty = mask or GF.DIRTY_ALL
+  InvalidateSpecs()
   BumpAuras3ConfigForGroup(dirty)
-  GF.RebuildAll(true, true)
+  GF.RefreshHeaderLayout("structural")
   GF.RefreshVisuals(nil, dirty, true, true)
   return true
 end
 
 GF.Refresh = GF.RefreshAll
-GF.RefreshGeometry = GF.RebuildAll
+GF.RefreshGeometry = function() return RefreshStructuralMask(GF.DIRTY_GEOMETRY) end
 GF.RefreshOverlays = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_AURAS) end
 GF.RefreshColors = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_COLOR) end
 GF.RefreshBorder = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_BORDER) end
@@ -927,6 +1091,12 @@ GF.RefreshOutlineGeometry = GF.RefreshBorder
 GF.RefreshFonts = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_FONT) end
 
 function GF.MarkDirty(frame, mask)
+  if mask and Has(mask, GF.DIRTY_UNIT_BINDING)
+    and not Has(mask, GF.DIRTY_GEOMETRY)
+    and not Has(mask, GF.DIRTY_LAYOUT)
+    and not Has(mask, GF.DIRTY_CONFIG) then
+    return GF.RefreshUnitBindings(frame and frame._msufGFKind)
+  end
   InvalidateSpecs(frame and frame._msufGFKind)
   if frame and frame._msufGFKind then
     return ApplyFrameDirty(frame, frame._msufGFKind, mask, "MSUF_GF_MARK_DIRTY")
@@ -935,10 +1105,19 @@ function GF.MarkDirty(frame, mask)
 end
 
 function GF.MarkAllDirty(mask)
-  InvalidateSpecs()
-  if not mask or mask == GF.DIRTY_ALL or Has(mask, GF.DIRTY_GEOMETRY) or Has(mask, GF.DIRTY_LAYOUT) then
+  if mask and Has(mask, GF.DIRTY_UNIT_BINDING)
+    and not Has(mask, GF.DIRTY_GEOMETRY)
+    and not Has(mask, GF.DIRTY_LAYOUT)
+    and not Has(mask, GF.DIRTY_CONFIG) then
+    return GF.RefreshUnitBindings()
+  end
+  if not mask or mask == GF.DIRTY_ALL
+    or Has(mask, GF.DIRTY_GEOMETRY)
+    or Has(mask, GF.DIRTY_LAYOUT)
+    or Has(mask, GF.DIRTY_CONFIG) then
     return RefreshStructuralMask(mask)
   end
+  InvalidateSpecs()
   return GF.RefreshVisuals(nil, mask, true)
 end
 
@@ -962,17 +1141,20 @@ function GF.EM2_NudgePreview(key, dx, dy)
   if not conf then return false end
   conf.offsetX = floor(((tonumber(conf.offsetX) or 0) + (tonumber(dx) or 0)) + 0.5)
   conf.offsetY = floor(((tonumber(conf.offsetY) or 0) + (tonumber(dy) or 0)) + 0.5)
-  GF.RebuildAll()
+  GF.RefreshGeometry()
   return true
 end
 
 --- Collapse multiple deferred requests into one post-combat action set. Roster
---- changes win over simple visual refreshes because unit identity can change.
-local function TakePendingGroupRuntime(rosterChanged, rosterStateChanged)
+--- changes are split into layout, unit-binding, and state work so regen does
+--- not turn every roster burst into a full structural rebuild.
+local function TakePendingGroupRuntime(rosterLayoutChanged, rosterBindingChanged, rosterStateChanged)
   local pending = GF._pendingGroupRuntime
   local rebuild = GF._pendingGroupRebuild == true
   local rebuildReason = GF._pendingGroupRebuildReason
   local dropSpecs = GF._pendingGroupDropSpecs == true
+  local layout = GF._pendingGroupLayout == true
+  local unitBinding = GF._pendingGroupUnitBinding == true
   local visibility = GF._pendingGroupVisibility == true
   local refresh = GF._pendingGroupRefresh == true
   local refreshKind = GF._pendingGroupRefreshKind
@@ -983,18 +1165,22 @@ local function TakePendingGroupRuntime(rosterChanged, rosterStateChanged)
   GF._pendingGroupRebuild = nil
   GF._pendingGroupRebuildReason = nil
   GF._pendingGroupDropSpecs = nil
+  GF._pendingGroupLayout = nil
+  GF._pendingGroupUnitBinding = nil
   GF._pendingGroupVisibility = nil
   GF._pendingGroupRefresh = nil
   GF._pendingGroupRefreshKind = nil
   GF._pendingGroupRefreshMask = nil
   GF._pendingGroupRefreshMaskSet = nil
 
-  if pending and not (rebuild or dropSpecs or visibility or refresh) then
+  if pending and not (rebuild or dropSpecs or layout or unitBinding or visibility or refresh) then
     if pending == "roster" then
-      stateOnly = true
+      unitBinding = true
     elseif pending == "zone" then
-      rebuild = true
+      layout = true
       dropSpecs = true
+    elseif pending == "layout" or pending == "geometry" or pending == "setup" then
+      layout = true
     elseif pending == "rebuild" then
       rebuild = true
     elseif pending == "visibility" then
@@ -1004,23 +1190,28 @@ local function TakePendingGroupRuntime(rosterChanged, rosterStateChanged)
     end
   end
 
-  if rosterChanged then
-    rebuild = true
-    dropSpecs = true
+  if rosterLayoutChanged then
+    layout = true
+    unitBinding = true
     stateOnly = false
+  elseif rosterBindingChanged then
+    unitBinding = true
   elseif rebuildReason == "roster" and GF._forceRecreateHeaders ~= true then
     rebuild = false
     dropSpecs = false
-    stateOnly = true
+    unitBinding = false
+    stateOnly = rosterStateChanged == true
   elseif rosterStateChanged then
     stateOnly = true
   end
 
-  return pending or rosterChanged or stateOnly, rebuild, dropSpecs, visibility, refresh, refreshKind, refreshMask, stateOnly
+  return pending or rosterLayoutChanged or rosterBindingChanged or stateOnly,
+    rebuild, dropSpecs, layout, unitBinding, visibility, refresh, refreshKind, refreshMask, stateOnly
 end
 
-local function FlushPendingGroupRuntime(rosterChanged, rosterStateChanged)
-  local hasPending, rebuild, dropSpecs, visibility, refresh, refreshKind, refreshMask, stateOnly = TakePendingGroupRuntime(rosterChanged, rosterStateChanged)
+local function FlushPendingGroupRuntime(rosterLayoutChanged, rosterBindingChanged, rosterStateChanged)
+  local hasPending, rebuild, dropSpecs, layout, unitBinding, visibility, refresh, refreshKind, refreshMask, stateOnly =
+    TakePendingGroupRuntime(rosterLayoutChanged, rosterBindingChanged, rosterStateChanged)
   if not hasPending then
     return false
   end
@@ -1031,8 +1222,14 @@ local function FlushPendingGroupRuntime(rosterChanged, rosterStateChanged)
   if rebuild then
     GF.RebuildAll(dropSpecs == true)
   end
-  if visibility and not rebuild then
+  if layout and not rebuild then
+    GF.RefreshHeaderLayout("regenLayout")
+  end
+  if visibility and not (rebuild or layout) then
     GF.UpdateGroupVisibility()
+  end
+  if unitBinding and not rebuild then
+    GF.RefreshUnitBindings()
   end
   if stateOnly and not rebuild then
     RefreshRosterStateBindings()
@@ -1057,16 +1254,18 @@ local function OnEvent(self, event, ...)
     ExportPublic("MSUF_InCombat", false)
     RegisterNameEvents()
     RegisterRosterEvents()
+    local rosterLayoutChanged = GF._forceRecreateHeaders == true or RosterLayoutChanged()
+    local rosterBindingChanged = RosterStructureChanged()
     local rosterStateChanged = RosterSignatureChanged()
-    local rosterChanged = GF._forceRecreateHeaders == true or RosterStructureChanged()
     if rosterStateChanged then
       MarkRosterMode()
-      if rosterChanged then
+      rosterLayoutChanged = GF._forceRecreateHeaders == true or rosterLayoutChanged or RosterLayoutChanged()
+      if rosterLayoutChanged or rosterBindingChanged then
         if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
         GF._forceScanHeaders = true
       end
     end
-    if not FlushPendingGroupRuntime(rosterChanged, rosterStateChanged) then
+    if not FlushPendingGroupRuntime(rosterLayoutChanged, rosterBindingChanged, rosterStateChanged) then
       GF.RefreshGroupNames()
       if GF.RefreshClickCastFrames then
         GF.RefreshClickCastFrames()
@@ -1145,6 +1344,8 @@ local GF_PUBLIC_ALIASES = {
   { "MSUF_GF_RefreshAll", "RefreshAll" },
   { "MSUF_GF_Refresh", "RefreshAll" },
   { "MSUF_GF_RefreshVisuals", "RefreshVisuals" },
+  { "MSUF_GF_RefreshHeaderLayout", "RefreshHeaderLayout" },
+  { "MSUF_GF_RefreshUnitBindings", "RefreshUnitBindings" },
   { "MSUF_GF_RefreshGeometry", "RefreshGeometry" },
   { "MSUF_GF_UpdateGroupVisibility", "UpdateGroupVisibility" },
   { "MSUF_GF_RefreshOverlays", "RefreshOverlays" },

@@ -100,6 +100,17 @@ end
 function Engine:ForceRefresh()
 end
 
+function Engine:Invalidate(unit)
+    if unit then
+        buildStateCacheTime[unit] = nil
+        return
+    end
+
+    for key in pairs(buildStateCacheTime) do
+        buildStateCacheTime[key] = nil
+    end
+end
+
 function Engine:GetState(unit)
     return Engine._state and Engine._state[unit]
 end

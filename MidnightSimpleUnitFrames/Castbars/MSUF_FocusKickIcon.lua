@@ -86,7 +86,8 @@ local function SyncTimeText()
         return
     end
 
-    local source = iconFrame.MSUF_sourceCastBar or _G.FocusCastBar or _G.MSUF_FocusCastBar
+    local source = iconFrame.MSUF_sourceCastBar or _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+        or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
     if not (source and source.timeText) then
         if iconFrame.MSUF_lastMirrorText ~= "" or iconFrame.MSUF_lastMirrorAlpha ~= 0 then
             iconFrame.MSUF_lastMirrorText = ""
@@ -326,7 +327,8 @@ local function PlayInterruptFeedback()
     if After then
         After(0.18, function()
             if not iconFrame then return end
-            local source = _G.FocusCastBar or _G.MSUF_FocusCastBar
+            local source = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+                or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
             ApplyInterruptibilityColor(
                 source and source.isNotInterruptible == true,
                 source and source._msufApiNotInterruptibleRaw
@@ -611,7 +613,8 @@ local function ApplyCastState(state)
         end
     end
 
-    iconFrame.MSUF_sourceCastBar = _G.FocusCastBar or _G.MSUF_FocusCastBar
+    iconFrame.MSUF_sourceCastBar = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+        or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
     ApplyInterruptibilityColor(state.isNotInterruptible == true, state.apiNotInterruptibleRaw)
     iconFrame._msufLastCastState = state
     iconFrame:Show()

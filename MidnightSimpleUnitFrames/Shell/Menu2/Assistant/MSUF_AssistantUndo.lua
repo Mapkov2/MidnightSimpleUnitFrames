@@ -101,7 +101,6 @@ local function BroadApply(reason)
         if type(MSUF.GF.RefreshAll) == "function" then
             MSUF.GF.RefreshAll()
         else
-            if type(MSUF.GF.RebuildAll) == "function" then MSUF.GF.RebuildAll() end
             if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
         end
         if type(MSUF.GF.RefreshPreviewLayout) == "function" then MSUF.GF.RefreshPreviewLayout() end
@@ -129,7 +128,6 @@ local function BroadApplySteps(reason)
                 if type(MSUF.GF.RefreshAll) == "function" then
                     MSUF.GF.RefreshAll()
                 else
-                    if type(MSUF.GF.RebuildAll) == "function" then MSUF.GF.RebuildAll() end
                     if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
                 end
                 if type(MSUF.GF.RefreshPreviewLayout) == "function" then MSUF.GF.RefreshPreviewLayout() end

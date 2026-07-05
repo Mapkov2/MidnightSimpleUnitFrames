@@ -373,6 +373,18 @@ local function IsPowerTextEnabled(kind, conf)
   return conf.showPowerText == true or conf.showPower == true
 end
 
+local function ResolvePowerTextColorByType(conf, general)
+  local enabled = general and general.colorPowerTextByType == true
+  if conf and conf.fontOverride == true then
+    if conf.powerTextColorByType ~= nil then
+      enabled = conf.powerTextColorByType == true
+    elseif conf.colorPowerTextByType ~= nil then
+      enabled = conf.colorPowerTextByType == true
+    end
+  end
+  return enabled
+end
+
 local function ResolveTextSlotHidePercentSymbol(conf, general, key)
   if conf and conf[key] ~= nil then
     return conf[key] == true
@@ -1135,6 +1147,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       powerCenterY = powerY + Num(conf.powerTextCenterOffsetY, 0),
       powerRightX = powerX + Num(conf.powerTextRightOffsetX, 0),
       powerRightY = powerY + Num(conf.powerTextRightOffsetY, 0),
+      powerColorByType = ResolvePowerTextColorByType(conf, general),
       shortNumbers = true,
     },
     prediction = CompilePrediction(kind, conf, texture),

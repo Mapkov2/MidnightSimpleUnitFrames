@@ -349,19 +349,9 @@ local function ApplyPreviewText(frame, hp, hpMax, power, powerMax)
   local rt = frame and frame._msufTextRuntime
   if not (text and rt and text.UpdateTextSlots) then return end
 
-  rt.healthTextPending = nil
-  rt.healthTimerActive = nil
-  rt.pendingHP = nil
-  rt.pendingHPMax = nil
-  rt.nextHealthTextTime = nil
   rt.healthMissing = max(0, (hpMax or 0) - (hp or 0))
   text.UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, PercentFactory((hp / max(hpMax, 1)) * 100), rt.healthNeedsPercent, rt)
 
-  rt.powerTextPending = nil
-  rt.powerTimerActive = nil
-  rt.pendingPower = nil
-  rt.pendingPowerMax = nil
-  rt.nextPowerTextTime = nil
   text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PercentFactory((power / max(powerMax, 1)) * 100), rt.powerNeedsPercent, rt)
 end
 

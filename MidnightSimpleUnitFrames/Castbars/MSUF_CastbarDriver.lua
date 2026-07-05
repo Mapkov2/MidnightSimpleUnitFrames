@@ -14,6 +14,25 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
+local function ProfBegin(name)
+    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+        return MSUF.ProfBegin(name)
+    end
+end
+
+local function ProfEnd(name, token)
+    if token and MSUF and MSUF.ProfEnd then
+        MSUF.ProfEnd(name, token)
+    end
+end
+
+local function ProfEventBegin(prefix, event)
+    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+        local name = prefix .. tostring(event)
+        return name, MSUF.ProfBegin(name)
+    end
+end
+
 local C_Timer = _G.C_Timer
 local GetTime = _G.GetTime
 local GetCVar = _G.GetCVar
@@ -270,6 +289,129 @@ local function BuildState(frame)
     return nil
 end
 
+local function InvalidateBuildState(unit)
+    local engine = (_G.MSUF_GetCastbarEngine and _G.MSUF_GetCastbarEngine()) or nil
+    if engine and engine.Invalidate then
+        engine:Invalidate(unit)
+    end
+end
+
+local function ResetFallbackTiming(frame)
+    frame.endTime = nil
+    frame._msufPlainEndTime = nil
+    frame._msufPlainTotal = nil
+    frame._msufRemaining = nil
+    frame._msufLastTimeDecimal = nil
+    frame._msufLastTimeTotalDecimal = nil
+    frame._msufTimerAssumeCountdown = nil
+    frame._msufLastSBValue = nil
+    frame._msufZeroCount = nil
+end
+
+local function CaptureFallbackTiming(frame, state)
+    if not (frame and state) then return nil, nil end
+    local startMS = ToPlainNumber(state.startTimeMS)
+    local endMS = ToPlainNumber(state.endTimeMS)
+    if type(endMS) ~= "number" then
+        return nil, nil
+    end
+
+    local now = GetTime and GetTime() or 0
+    local endSeconds = endMS / 1000
+    local remaining = endSeconds - now
+    if type(remaining) ~= "number" or remaining <= 0 then
+        return nil, nil
+    end
+
+    local total
+    if type(startMS) == "number" then
+        total = (endMS - startMS) / 1000
+    end
+    if type(total) ~= "number" or total <= 0 then
+        total = remaining
+    end
+    if remaining > total then
+        remaining = total
+    end
+
+    frame.endTime = endSeconds
+    frame._msufPlainEndTime = endSeconds
+    frame._msufPlainTotal = total
+    frame._msufRemaining = remaining
+    return remaining, total
+end
+
+local function SetFallbackStatusBar(frame, remaining, total, reverseFill)
+    local statusBar = frame and frame.statusBar
+    if not (statusBar and statusBar.SetMinMaxValues and statusBar.SetValue) then
+        return false
+    end
+    if statusBar.SetReverseFill then
+        statusBar:SetReverseFill(reverseFill and true or false)
+    end
+    if total <= 0 then
+        total = 0.001
+    end
+    if remaining < 0 then
+        remaining = 0
+    elseif remaining > total then
+        remaining = total
+    end
+    statusBar:SetMinMaxValues(0, total)
+    statusBar:SetValue(reverseFill and remaining or (total - remaining))
+    return true
+end
+
+local function ApplyFallbackActiveDuration(frame, state, isChannel)
+    ResetFallbackTiming(frame)
+    local remaining, total = CaptureFallbackTiming(frame, state)
+    if not (remaining and total) then
+        return false
+    end
+
+    frame.interrupted = nil
+    frame.MSUF_castActive = true
+    frame.MSUF_durationObj = nil
+    frame.MSUF_timerDriven = nil
+    frame.MSUF_isChanneled = isChannel
+    frame.MSUF_channelDirect = (isChannel and (frame.unit == "target" or frame.unit == "focus")) and true or nil
+    frame._msufHardStopNoChannelSince = nil
+    frame._msufHardStopNoCastSince = nil
+
+    if frame.icon and state.icon then
+        frame.icon:SetTexture(state.icon)
+    end
+    if type(_G.MSUF_CB_ApplyTexts) == "function" then
+        _G.MSUF_CB_ApplyTexts(frame, nil, state.text or state.spellName or "", nil)
+    elseif frame.castText and frame.castText.SetText then
+        frame.castText:SetText(state.text or state.spellName or "")
+    end
+
+    local reverseFill = state.reverseFill
+    if reverseFill == nil and type(_G.MSUF_GetReverseFillSafe) == "function" then
+        reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChannel)
+    end
+    reverseFill = reverseFill == true
+    frame._msufStripeReverseFill = reverseFill
+    if not SetFallbackStatusBar(frame, remaining, total, reverseFill) then
+        return false
+    end
+
+    local castState = frame._msufCastState or {}
+    frame._msufCastState = castState
+    castState.key = frame._msufBarKey or frame.unit
+    castState.unit = frame.unit
+    castState.active = true
+    castState.phase = state.castType or (isChannel and "CHANNEL" or "CAST")
+    castState.castType = castState.phase
+    castState.spellName = state.spellName
+    castState.text = state.text or state.spellName
+    castState.icon = state.icon
+    castState.durationObj = nil
+    castState.holdUntil = nil
+    return true
+end
+
 local function StoreActiveStateIdentity(frame, state)
     if not frame then return end
 
@@ -311,8 +453,11 @@ local function RefreshFromEngine(frame)
 
     local state = BuildState(frame)
     StoreActiveStateIdentity(frame, state)
-    if not (state and state.active and state.spellName) and CastbarAlreadyIdle(frame) then return end
+    if not (state and state.active and state.spellName) and CastbarAlreadyIdle(frame) then
+        return state, false
+    end
     frame:Cast(state)
+    return state, true
 end
 
 local function ClearStopExpectation(frame)
@@ -458,6 +603,30 @@ local function AdvanceCastToken(frame)
     return frame._msufCastToken
 end
 
+local function HandleTargetFocusChanged(frame)
+    ClearStopExpectation(frame)
+    ClearStartRetry(frame)
+    AdvanceCastToken(frame)
+    frame._msufInterruptToken = (frame._msufInterruptToken or 0) + 1
+    frame.timer = nil
+    frame.interrupted = nil
+    frame.MSUF_kickInterruptibleConfirmed = nil
+    StoreActiveStateIdentity(frame, nil)
+    InvalidateBuildState(frame.unit)
+
+    local _, applied = RefreshFromEngine(frame)
+    if applied then
+        return
+    end
+
+    SetSafetyOnUpdate(frame, false)
+    if CastbarAlreadyIdle(frame) then
+        return
+    end
+
+    StopDriverFrame(frame, "HARDHIDE", false)
+end
+
 local function ScheduleStopConfirmation(frame, castType)
     if not frame or frame.interrupted then return end
 
@@ -573,9 +742,8 @@ local function HandleDriverEvent(frame, event, eventUnit)
         local token = AdvanceCastToken(frame)
         frame.isNotInterruptible = false
         frame.MSUF_kickInterruptibleConfirmed = nil
-        RefreshFromEngine(frame)
+        local state = RefreshFromEngine(frame)
 
-        local state = BuildState(frame)
         if not (state and state.active and state.spellName) then
             EnsureDriverCallbacks(frame)
             frame._msufStartRetryToken = token
@@ -662,14 +830,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
 
     if (event == "PLAYER_TARGET_CHANGED" and frame.unit == "target")
         or (event == "PLAYER_FOCUS_CHANGED" and frame.unit == "focus") then
-        ClearStopExpectation(frame)
-        ClearStartRetry(frame)
-        AdvanceCastToken(frame)
-        frame._msufInterruptToken = (frame._msufInterruptToken or 0) + 1
-        frame.timer = nil
-        frame.interrupted = nil
-        frame.MSUF_kickInterruptibleConfirmed = nil
-        RefreshFromEngine(frame)
+        HandleTargetFocusChanged(frame)
     end
 end
 
@@ -687,6 +848,8 @@ local function CreateCastBar(frameName, unit)
     local frame = CreateFrame("Frame", frameName, UIParent)
     frame:SetClampedToScreen(true)
     frame.unit = unit
+    frame._msufCastbarDriver = true
+    frame._msufBarKey = unit
     frame.reverseFill = false
     function frame:UpdateColorForInterruptible()
         if not (self and self.statusBar and self.statusBar.SetStatusBarColor) then
@@ -738,7 +901,10 @@ local function CreateCastBar(frameName, unit)
     end
 
     frame:SetScript("OnEvent", function(self, event, eventUnit, ...)
-        HandleDriverEvent(self, event, eventUnit, ...)
+        local profName, profToken = ProfEventBegin("castbar:driverEvent:", event)
+        local result = HandleDriverEvent(self, event, eventUnit, ...)
+        ProfEnd(profName, profToken)
+        return result
     end)
 
     function frame:Cast(state)
@@ -801,16 +967,18 @@ local function CreateCastBar(frameName, unit)
             ClearEmpowerState(self)
         end
 
-        if spellName and durationObj then
-            state.durationObj = durationObj
-            state.text = label or spellName
-            state.icon = icon
-            _G.MSUF_Castbar_ApplyActiveDuration(self, state, {
-                skipColor = true,
-                skipRegister = true,
-                skipTimeText = true,
-                skipShow = true,
-            })
+        if spellName and (durationObj or ApplyFallbackActiveDuration(self, state, isChannel)) then
+            if durationObj then
+                state.durationObj = durationObj
+                state.text = label or spellName
+                state.icon = icon
+                _G.MSUF_Castbar_ApplyActiveDuration(self, state, {
+                    skipColor = true,
+                    skipRegister = true,
+                    skipTimeText = true,
+                    skipShow = true,
+                })
+            end
 
             local reverseFill = _G.MSUF_GetReverseFillSafe(self, isChannel)
             self._msufStripeReverseFill = reverseFill
@@ -819,15 +987,14 @@ local function CreateCastBar(frameName, unit)
             if self.UpdateColorForInterruptible then
                 _G.MSUF_CB_ApplyColor(self)
             end
+            self:Show()
+            self.MSUF_castActive = true
             if _G.MSUF_RegisterCastbar then
                 _G.MSUF_RegisterCastbar(self)
             end
             if self.timeText then
                 _G.MSUF_UpdateCastTimeText_FromStatusBar(self)
             end
-
-            self:Show()
-            self.MSUF_castActive = true
 
             if _G.MSUF_KickReady_RefreshFrame then
                 if not self._msufKickReadyDeferredCB then
@@ -1002,15 +1169,25 @@ local function EnsureDriverUnit(unit)
     end
 
     if unit == "target" then
-        if not _G.TargetCastBar then
-            return CreateCastBar("TargetCastBar", "target")
+        local frame = _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbar
+        if frame and frame._msufCastbarDriver == true then
+            return frame
         end
-        return _G.TargetCastBar
+        frame = _G.TargetCastBar
+        if frame and frame._msufCastbarDriver == true then
+            return frame
+        end
+        return CreateCastBar("MSUF_TargetCastBar", "target")
     elseif unit == "focus" then
-        if not _G.FocusCastBar then
-            return CreateCastBar("FocusCastBar", "focus")
+        local frame = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+        if frame and frame._msufCastbarDriver == true then
+            return frame
         end
-        return _G.FocusCastBar
+        frame = _G.FocusCastBar
+        if frame and frame._msufCastbarDriver == true then
+            return frame
+        end
+        return CreateCastBar("MSUF_FocusCastBar", "focus")
     end
 
     return nil
@@ -1068,9 +1245,15 @@ end
 
 local function GetExistingDriverFrame(unit)
     if unit == "target" then
-        return _G.TargetCastBar or _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbar
+        local frame = _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbar
+        if frame and frame._msufCastbarDriver == true then return frame end
+        frame = _G.TargetCastBar
+        if frame and frame._msufCastbarDriver == true then return frame end
     elseif unit == "focus" then
-        return _G.FocusCastBar or _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+        local frame = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+        if frame and frame._msufCastbarDriver == true then return frame end
+        frame = _G.FocusCastBar
+        if frame and frame._msufCastbarDriver == true then return frame end
     end
     return nil
 end

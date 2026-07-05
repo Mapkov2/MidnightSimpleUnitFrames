@@ -349,7 +349,6 @@ local function ApplyHistorySnapshot(snapshot, reason)
         if type(MSUF.GF.RefreshAll) == "function" then
             SafeInvoke(MSUF.GF.RefreshAll)
         else
-            if type(MSUF.GF.RebuildAll) == "function" then SafeInvoke(MSUF.GF.RebuildAll) end
             if type(MSUF.GF.RefreshVisuals) == "function" then SafeInvoke(MSUF.GF.RefreshVisuals) end
         end
         if type(MSUF.GF.RefreshPreviewLayout) == "function" then SafeInvoke(MSUF.GF.RefreshPreviewLayout) end

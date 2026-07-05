@@ -22,6 +22,18 @@ local C_Timer = _G.C_Timer
 local next = next
 local type = type
 
+local function ProfBegin(name)
+  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+    return MSUF.ProfBegin(name)
+  end
+end
+
+local function ProfEnd(name, token)
+  if token and MSUF and MSUF.ProfEnd then
+    MSUF.ProfEnd(name, token)
+  end
+end
+
 local STATUS_EVENT_KIND = {
   RAID_TARGET_UPDATE = 1,
   PARTY_LEADER_CHANGED = 2,
@@ -589,12 +601,16 @@ local function RunStatusPollFrame(frame)
 end
 
 local function RunStatusPollFrames()
+  local profName = "group:statusPoll"
+  local profToken = ProfBegin(profName)
   if StatusPollCombatBlocked() then
+    ProfEnd(profName, profToken)
     return
   end
   for i = 1, #statusPollFrames do
     RunStatusPollFrame(statusPollFrames[i])
   end
+  ProfEnd(profName, profToken)
 end
 
 --- PERF: the poll cadence runs on a C_Timer ticker instead of a per-frame

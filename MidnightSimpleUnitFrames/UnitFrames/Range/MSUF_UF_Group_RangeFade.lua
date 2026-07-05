@@ -34,6 +34,18 @@ local FreshUnitState = UF.FreshUnitState
 local ReadConnectedCached = UF.ReadConnectedCached
 local UnitExistsSafe = UF.UnitExistsSafe
 
+local function ProfBegin(name)
+  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
+    return MSUF.ProfBegin(name)
+  end
+end
+
+local function ProfEnd(name, token)
+  if token and MSUF and MSUF.ProfEnd then
+    MSUF.ProfEnd(name, token)
+  end
+end
+
 local RANGE_EVENTS = {
   "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE",
   "UNIT_CTR_OPTIONS", "UNIT_OTHER_PARTY_CHANGED",
@@ -315,10 +327,13 @@ local function RefreshSettledRange(frame)
 end
 
 FlushRangeSettle = function()
+  local profName = "group:rangeSettle"
+  local profToken = ProfBegin(profName)
   if InCombatLockdown and InCombatLockdown() then
     rangeSettleQueued = nil
     rangeSettleCursor = nil
     rangeSettleAfterCombat = true
+    ProfEnd(profName, profToken)
     return
   end
   rangeSettleAfterCombat = nil
@@ -339,16 +354,22 @@ FlushRangeSettle = function()
     end
     if i <= last then
       rangeSettleCursor = i
-      if QueueRangeSettleNextFrame() then return end
+      if QueueRangeSettleNextFrame() then
+        ProfEnd(profName, profToken)
+        return
+      end
       FlushRangeSettle()
+      ProfEnd(profName, profToken)
       return
     end
     rangeSettleQueued = nil
     rangeSettleCursor = nil
+    ProfEnd(profName, profToken)
     return
   end
   rangeSettleQueued = nil
   rangeSettleCursor = nil
+  ProfEnd(profName, profToken)
 end
 
 local function QueueRangeSettle(delay)
@@ -706,6 +727,8 @@ local function QueueOfflineDelayFrame(frame, delay)
 end
 
 local function FlushOfflineDelayFrames()
+  local profName = "group:offlineDelay"
+  local profToken = ProfBegin(profName)
   local now = GetTime and GetTime() or 0
   local nextAt
   local live = GF and GF.frames
@@ -738,6 +761,7 @@ local function FlushOfflineDelayFrames()
   if nextAt then
     ScheduleOfflineDelayTimer(nextAt)
   end
+  ProfEnd(profName, profToken)
 end
 
 local function OfflineDelayTimerCallback()

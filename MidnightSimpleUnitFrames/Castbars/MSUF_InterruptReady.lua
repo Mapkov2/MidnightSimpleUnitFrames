@@ -601,8 +601,10 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
 end
 
 local function ForEachCastbar(callback)
-    callback(_G.MSUF_TargetCastbar or _G.TargetCastBar)
-    callback(_G.MSUF_FocusCastbar or _G.FocusCastBar)
+    callback(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar
+        or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar))
+    callback(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar
+        or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar))
 
     local bossCastbars = _G.MSUF_BossCastbars
     if type(bossCastbars) == "table" then
