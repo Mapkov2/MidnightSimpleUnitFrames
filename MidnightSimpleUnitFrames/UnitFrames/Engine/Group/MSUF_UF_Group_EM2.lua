@@ -285,6 +285,65 @@ local function AnchorPoint(conf)
   return point
 end
 
+local function PointFraction(point)
+  local fx, fy
+  if point == "LEFT" or point == "TOPLEFT" or point == "BOTTOMLEFT" then
+    fx = 0
+  elseif point == "RIGHT" or point == "TOPRIGHT" or point == "BOTTOMRIGHT" then
+    fx = 1
+  else
+    fx = 0.5
+  end
+  if point == "BOTTOM" or point == "BOTTOMLEFT" or point == "BOTTOMRIGHT" then
+    fy = 0
+  elseif point == "TOP" or point == "TOPLEFT" or point == "TOPRIGHT" then
+    fy = 1
+  else
+    fy = 0.5
+  end
+  return fx, fy
+end
+
+local function ClampBoxAxis(minEdge, maxEdge, screenMax)
+  local size = (maxEdge or 0) - (minEdge or 0)
+  if size <= 0 or not (screenMax and screenMax > 0) then
+    return 0
+  end
+  if size <= screenMax then
+    if minEdge < 0 then return -minEdge end
+    if maxEdge > screenMax then return screenMax - maxEdge end
+    return 0
+  end
+  if minEdge > 0 then return -minEdge end
+  if maxEdge < screenMax then return screenMax - maxEdge end
+  return 0
+end
+
+local function ClampAnchorOffsetOnScreen(point, parent, offsetX, offsetY, totalW, totalH)
+  if not (parent and parent.GetLeft and UIParent and UIParent.GetWidth) then
+    return offsetX, offsetY
+  end
+  local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
+  if not (screenW and screenH and screenW > 0 and screenH > 0) then
+    return offsetX, offsetY
+  end
+  local pLeft, pRight = parent:GetLeft(), parent:GetRight()
+  local pBottom, pTop = parent:GetBottom(), parent:GetTop()
+  if not (pLeft and pRight and pBottom and pTop) then
+    return offsetX, offsetY
+  end
+  local fx, fy = PointFraction(point)
+  local px = pLeft + (pRight - pLeft) * fx + (offsetX or 0)
+  local py = pBottom + (pTop - pBottom) * fy + (offsetY or 0)
+  local boxW, boxH = totalW or 0, totalH or 0
+  local left = px - boxW * fx
+  local bottom = py - boxH * fy
+  local dx = ClampBoxAxis(left, left + boxW, screenW)
+  local dy = ClampBoxAxis(bottom, bottom + boxH, screenH)
+  if dx == 0 and dy == 0 then return offsetX, offsetY end
+  return (offsetX or 0) + dx, (offsetY or 0) + dy
+end
+
 local function IsPreviewActive(kind)
   if not (_em2Active and _previewShownByEM2 and KindEnabled(kind) and ShouldShowPreviewKind(kind)) then
     return false
@@ -310,7 +369,7 @@ local function EnsureContainer(kind)
   f:SetPoint("CENTER", UIParent, "CENTER", GetDefaultCenter(kind))
   f:SetFrameStrata("FULLSCREEN")
   f:SetFrameLevel(320)
-  f:SetClampedToScreen(true)
+  f:SetClampedToScreen(false)
   f:EnableMouse(true)
   f:Hide()
   f.msufConfigKey = KIND_TO_KEY[kind]
@@ -456,7 +515,9 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
   if cx == nil then cx = defX end
   if cy == nil then cy = defY end
   local point = AnchorPoint(conf)
-  anchor:SetPoint(point, ResolveAnchorFrame(conf), point, floor(cx + 0.5), floor(cy + 0.5))
+  local parent = ResolveAnchorFrame(conf)
+  cx, cy = ClampAnchorOffsetOnScreen(point, parent, floor(cx + 0.5), floor(cy + 0.5), totalW, totalH)
+  anchor:SetPoint(point, parent, point, floor(cx + 0.5), floor(cy + 0.5))
   anchor:Show()
   return anchor
 end

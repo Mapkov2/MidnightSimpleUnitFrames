@@ -89,6 +89,65 @@ local function AnchorPoint(conf)
   return point
 end
 
+local function PointFraction(point)
+  local fx, fy
+  if point == "LEFT" or point == "TOPLEFT" or point == "BOTTOMLEFT" then
+    fx = 0
+  elseif point == "RIGHT" or point == "TOPRIGHT" or point == "BOTTOMRIGHT" then
+    fx = 1
+  else
+    fx = 0.5
+  end
+  if point == "BOTTOM" or point == "BOTTOMLEFT" or point == "BOTTOMRIGHT" then
+    fy = 0
+  elseif point == "TOP" or point == "TOPLEFT" or point == "TOPRIGHT" then
+    fy = 1
+  else
+    fy = 0.5
+  end
+  return fx, fy
+end
+
+local function ClampBoxAxis(minEdge, maxEdge, screenMax)
+  local size = (maxEdge or 0) - (minEdge or 0)
+  if size <= 0 or not (screenMax and screenMax > 0) then
+    return 0
+  end
+  if size <= screenMax then
+    if minEdge < 0 then return -minEdge end
+    if maxEdge > screenMax then return screenMax - maxEdge end
+    return 0
+  end
+  if minEdge > 0 then return -minEdge end
+  if maxEdge < screenMax then return screenMax - maxEdge end
+  return 0
+end
+
+local function ClampPreviewOffsetOnScreen(point, relative, x, y, totalW, totalH)
+  if not (relative and relative.GetLeft and UIParent and UIParent.GetWidth) then
+    return x, y
+  end
+  local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
+  if not (screenW and screenH and screenW > 0 and screenH > 0) then
+    return x, y
+  end
+  local pLeft, pRight = relative:GetLeft(), relative:GetRight()
+  local pBottom, pTop = relative:GetBottom(), relative:GetTop()
+  if not (pLeft and pRight and pBottom and pTop) then
+    return x, y
+  end
+  local fx, fy = PointFraction(point)
+  local px = pLeft + (pRight - pLeft) * fx + (x or 0)
+  local py = pBottom + (pTop - pBottom) * fy + (y or 0)
+  local boxW, boxH = totalW or 0, totalH or 0
+  local left = px - boxW * fx
+  local bottom = py - boxH * fy
+  local dx = ClampBoxAxis(left, left + boxW, screenW)
+  local dy = ClampBoxAxis(bottom, bottom + boxH, screenH)
+  if dx == 0 and dy == 0 then return x, y end
+  return (x or 0) + dx, (y or 0) + dy
+end
+
 local function ResolveAnchorFrame(conf)
   local name = conf and (conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo)
   if type(name) == "string" and name ~= "" and name ~= "FREE" and name ~= "UIParent" then
@@ -204,6 +263,7 @@ local function PositionContainer(kind, count)
     local cx, cy = tonumber(conf.offsetX), tonumber(conf.offsetY)
     if cx == nil or cy == nil then cx, cy = DefaultCenter(kind) end
     point, relative, x, y = AnchorPoint(conf), ResolveAnchorFrame(conf), floor(cx + 0.5), floor(cy + 0.5)
+    x, y = ClampPreviewOffsetOnScreen(point, relative, x, y, containerW, containerH)
   end
   local containerKey = tostring(point) .. "\030" .. tostring(relative) .. "\030" .. tostring(x) .. "\030" .. tostring(y)
     .. "\030" .. tostring(containerW) .. "\030" .. tostring(containerH)

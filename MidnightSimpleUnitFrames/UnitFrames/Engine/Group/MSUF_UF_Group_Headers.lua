@@ -222,6 +222,21 @@ local function PointFraction(point)
   return fx, fy
 end
 
+local function ClampBoxAxis(minEdge, maxEdge, screenMax)
+  local size = (maxEdge or 0) - (minEdge or 0)
+  if size <= 0 or not (screenMax and screenMax > 0) then
+    return 0
+  end
+  if size <= screenMax then
+    if minEdge < 0 then return -minEdge end
+    if maxEdge > screenMax then return screenMax - maxEdge end
+    return 0
+  end
+  if minEdge > 0 then return -minEdge end
+  if maxEdge < screenMax then return screenMax - maxEdge end
+  return 0
+end
+
 --- Keep anchor frames on screen when possible; child layout remains relative to
 --- the anchor so saved offsets stay meaningful.
 local function ClampAnchorOnScreen(anchor, point, parent, offsetX, offsetY, totalW, totalH)
@@ -246,19 +261,8 @@ local function ClampAnchorOnScreen(anchor, point, parent, offsetX, offsetY, tota
   local right = left + boxW
   local top = bottom + boxH
 
-  local dx, dy = 0, 0
-  if left < 0 then
-    dx = -left
-  elseif right > screenW then
-    dx = (screenW - right)
-    if left + dx < 0 then dx = -left end   -- box wider than screen: pin left
-  end
-  if bottom < 0 then
-    dy = -bottom
-    if top + dy > screenH then dy = screenH - top end  -- taller than screen: pin top
-  elseif top > screenH then
-    dy = screenH - top
-  end
+  local dx = ClampBoxAxis(left, right, screenW)
+  local dy = ClampBoxAxis(bottom, top, screenH)
   if dx == 0 and dy == 0 then
     return
   end

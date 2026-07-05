@@ -103,8 +103,14 @@ local function UnitVisualBounds(frame)
     return bounds.l, bounds.r, bounds.t, bounds.b
 end
 
+local function IsGroupMoverConfig(cfg)
+    local popupType = cfg and cfg.popupType
+    return popupType == "gf_party" or popupType == "gf_raid" or popupType == "gf_mythicraid"
+end
+
 local function SyncMoverToFrame(mover, frame, cfg)
     if not frame then return end
+    if mover.SetClampedToScreen then mover:SetClampedToScreen(not IsGroupMoverConfig(cfg)) end
     local l, r, t, b
     if cfg and cfg.popupType == "unit" then
         l, r, t, b = UnitVisualBounds(frame)
