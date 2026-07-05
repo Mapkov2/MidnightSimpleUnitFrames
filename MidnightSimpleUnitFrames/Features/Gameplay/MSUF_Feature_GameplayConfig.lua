@@ -49,7 +49,14 @@ local gameplayDBCache
 local function EnsureGameplayDefaults()
     -- Defaults are intentionally centralized so Menu2, assistant registry, and runtime all
     -- agree on missing-field behavior after profile import or version migration.
-    if not MSUF_DB then
+    if type(MSUF_DB) ~= "table" or type(_G.MSUF_ActiveProfile) ~= "string" then
+        if type(_G.MSUF_InitProfiles) == "function" then
+            _G.MSUF_InitProfiles()
+        elseif type(_G.MSUF_EnsureDB) == "function" then
+            _G.MSUF_EnsureDB()
+        end
+    end
+    if type(MSUF_DB) ~= "table" then
         MSUF_DB = {}
     end
     if type(MSUF_DB.gameplay) ~= "table" then
