@@ -920,6 +920,17 @@ function Text.Apply(frame, spec)
   frame._msufPowerTextColorToken = nil
   frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
   local rt = CompileTextRuntime(frame, spec, text)
+  -- Single-frame percent-path promotion: now that healthDispatchKeyMode is known,
+  -- let Health switch a percent-eligible single frame (no absolute-HP text, no
+  -- prediction) to Health.UpdateValuePercent so its health ticks skip the
+  -- UnitHealth/Max/Store work. Group frames get this via Runtime.BuildGroupHot, so
+  -- only drive it here for non-group frames to avoid a double call.
+  if frame._msufIsGroupFrame ~= true then
+    local healthElement = UF and UF.elements and UF.elements.Health
+    if healthElement and healthElement.SelectGroupHealthUpdater then
+      healthElement.SelectGroupHealthUpdater(frame)
+    end
+  end
   if UpdateHealthTextColor then
     UpdateHealthTextColor(frame, rt, frame.unit)
   end
