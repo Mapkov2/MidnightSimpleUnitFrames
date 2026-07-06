@@ -2281,18 +2281,14 @@ function A3.RenderFrame(frame, reason)
     local cfgReady = false
 
     if DEFERRED_IDENTITY_REASONS[reason] == true then
-        -- Coalesce target/focus swaps off the tick; the container's own
-        -- UNIT_AURA full-update repopulates content. See FlushIdentityQueue.
-        cfg = FrameAuraConfig(frame, frame.unit)
-        cfgReady = true
-        if not (cfg and cfg.enabled == true) then
-            HideState(frame)
-            return false
-        end
-        if RootAppliedConfigIsCurrent(frame.Auras, frame, cfg, nil)
-            and A3.QueueIdentityAuraRebuild(frame) then
-            return true
-        end
+        -- Target/focus swap keeps the same unit token, so the container does NOT
+        -- self-refresh (no UNIT_AURA, SetUnit is a no-op). Always queue the forced
+        -- rebuild -- this is the proven B4 behavior. Do NOT gate on
+        -- RootAppliedConfigIsCurrent: on a same-token swap the applied config
+        -- usually looks "current", which made the perf refactor skip the rebuild
+        -- and fall through to a non-forced refresh, leaving the new unit's auras
+        -- stale. QueueIdentityAuraRebuild coalesces to one forced reparse next tick.
+        if A3.QueueIdentityAuraRebuild(frame) then return true end
     end
     if IDENTITY_AURA_REFRESH_REASONS[reason] == true then
         -- Group identity stays synchronous so roster builds settle in one pass,
