@@ -1,5 +1,29 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta6 - 2026-07-06
+
+### Bug Fixes
+- Fixed auras not refreshing on target and focus swaps, which could leave the previous unit's buffs and debuffs showing on the new unit.
+- Restored the proven forced aura refresh on every target/focus identity change so the native aura container always reparses for the new unit instead of skipping the rebuild when the applied config looked unchanged.
+
+### Performance Highlights
+- Added a direct frame event path for RegisterUnitEvent-owned frames so hot unit events run their prebuilt handler immediately instead of going through the broad event router, removing the redundant re-derivation of which frame an event belonged to.
+- Added an Ellesmere-style value hot path that bakes the exact health and power work into one closure per frame and event, so value ticks skip the generic runner layer.
+- Added a percent-only health path for single frames (target, focus, boss, pet) that uses one UnitHealthPercent call and skips UnitHealth, UnitHealthMax, and store bookkeeping, so a boss target taking sustained damage costs far less per health tick.
+- Added direct group-frame health and power dispatch for frequent value updates.
+
+### Runtime Optimizations
+- Single-frame health color is now re-resolved only on identity, flag, and faction changes and deduplicated on plain health ticks, so target swaps stay correct without per-tick color work.
+- Removed a legacy value-handler baker that a profiling session proved never produced a real health or power handler in practice; value events still run correctly through the unified path.
+- Added distinct profiling labels for the direct event path so `/msufprof` shows whether the lean dispatch actually ran.
+
+### What To Test First
+- Rapid target and focus swapping, including quick swaps with multiple visible buff and debuff lanes, to confirm auras always update for the new unit.
+- Target-of-target and focus-target aura and health behavior.
+- Boss, target, focus, and pet health under sustained damage, and health bar color on target swaps between players, NPCs, and different reactions.
+- Frequent group health and power changes in party and raid layouts.
+- `/msufprof` fast-path, lean-event, and identity diagnostic output.
+
 ## 6.0-Beta5 - 2026-07-05
 
 ### Performance Highlights
