@@ -227,14 +227,19 @@ function Health.Apply(frame, spec)
   if ApplyBarGradient then
     ApplyBarGradient(frame, frame.hpBar, spec and spec.health and spec.health.barGradient, "hpGradients")
   end
-  local groupStaticHot = frame._msufIsGroupFrame == true
-    and frame._msufHealthColorByHealth ~= true
+  local colorStable = frame._msufHealthColorByHealth ~= true
     and frame._msufHealthBgDynamic ~= true
     and frame._msufPowerBgDynamic ~= true
-  -- Remembered so the text runtime (registered after Health) can promote this
-  -- frame to the percent-only updater once it knows the resolved health text
-  -- mode. See Health.SelectGroupHealthUpdater / Runtime.BuildGroupHot.
+  local groupStaticHot = frame._msufIsGroupFrame == true and colorStable
+  -- Single (non-group) frames that use the static hotpath are ALSO percent-path
+  -- candidates: the text runtime promotes them to Health.UpdateValuePercent when
+  -- no consumer needs an absolute HP number, so a boss target's sustained-damage
+  -- ticks skip the UnitHealth/Max/Store work. Both flags are read by the unified
+  -- Health.SelectPercentHealthUpdater. Group ones keep their existing updaters.
+  local singleStaticHot = frame._msufIsGroupFrame ~= true and colorStable
+    and HealthCanUseStaticHotpath(frame, spec)
   frame._msufGroupStaticHot = groupStaticHot or nil
+  frame._msufSingleStaticHot = singleStaticHot or nil
   if groupStaticHot then
     frame._msufUpdateHealthValue = Health.UpdateValueGroupStatic
     frame._msufUpdateHealthMaxValue = Health.UpdateMaxValueStatic
@@ -498,6 +503,47 @@ function Health.UpdateValueGroupPercent(frame, event, unit)
   return pct, nil
 end
 
+--- Percent path for SINGLE frames (target/focus/boss/pet). Same idea as
+--- UpdateValueGroupPercent -- one UnitHealthPercent C-call, no UnitHealth/
+--- UnitHealthMax/Store bookkeeping, MinMax pinned to (0,100) -- so a boss target
+--- taking sustained damage spends far less per health tick. The one difference
+--- from the group variant: single-frame health COLOR depends on unit identity
+--- (class/reaction/NPC changes on a target swap), so color is resolved on any
+--- non-tick event (identity/flags/faction) and dedup-skipped on a plain tick,
+--- exactly like Health.UpdateValueStatic. No RefreshGroupDeadStateFromHealth
+--- (that is group-only and early-outs anyway).
+function Health.UpdateValuePercent(frame, event, unit)
+  unit = unit or frame.unit
+  local bar = frame.hpBar
+  if not bar then
+    return
+  end
+
+  local pct = UnitHealthPercent(unit, true, SCALE_100)
+  local pctSecret = issecretvalue(pct) == true
+  if not pctSecret and pct == nil then pct = 0 end
+
+  if bar._msufMinMaxInit ~= true then
+    SetBarMinMaxKnown(bar, 100, false)
+    bar._msufMinMaxInit = true
+  end
+  SetBarValueKnown(bar, pct, pctSecret, event == "UNIT_HEALTH")
+  if event ~= "UNIT_HEALTH" then
+    SnapBarInterpolation(bar)
+  end
+
+  -- Color: on a plain health tick keep the resolved color (dedup on _msufStatusR
+  -- + zero-health toggle); on any identity/flag/faction event re-resolve, because
+  -- the unit or its class/reaction/state may have changed.
+  local zeroHealth = not pctSecret and pct == 0
+  local tick = event == "UNIT_HEALTH"
+  if not tick or bar._msufStatusR == nil or bar._msufStaticZeroHealth ~= zeroHealth then
+    bar._msufStaticZeroHealth = zeroHealth
+    ApplyHealthStatusColor(bar, frame, unit, nil, nil, nil, event or "UNIT_HEALTH")
+  end
+  return pct, nil
+end
+
 --- Called by the text runtime once the health-text mode is resolved (it is
 --- registered after Health, so Health.Apply cannot see the text runtime for the
 --- current spec). Promotes a group-static-hot frame to the EUI percent path when
@@ -507,22 +553,37 @@ end
 --- without it (older client) the percent API is unavailable and we keep static.
 --- Idempotent and reversible: a later config change that adds a number slot
 --- re-runs this and restores the static updater.
+--- Unified percent-path promotion for BOTH group and single frames. Called from
+--- the text runtime once the health-text mode is known. Picks the percent updater
+--- when NO consumer needs an absolute HP number (dispatch key mode 0/4) and the
+--- frame is percent-eligible (static color, no gradient/bg-match, no prediction/
+--- group-visuals that need raw hp). Group frames use the Group* pair, single
+--- frames the plain pair. Idempotent + reversible: a config change that adds an
+--- absolute-number text slot re-runs this and restores the static updater. The
+--- name is kept (SelectGroupHealthUpdater) since callers reference it.
 function Health.SelectGroupHealthUpdater(frame)
-  if frame._msufGroupStaticHot ~= true then
+  local isGroup = frame._msufGroupStaticHot == true
+  local isSingle = frame._msufSingleStaticHot == true
+  if not (isGroup or isSingle) then
     return
   end
-  -- Prediction and group health-visuals consume RAW hp/hpMax (heal/absorb bars,
-  -- over-absorb glow). The percent path produces neither, so it is only eligible
-  -- when both are inactive; otherwise those consumers would get a percent where
-  -- absolute health is required. Cheap active-flag reads; the elements applied
-  -- before the text runtime that calls this.
-  local active = frame._msufActiveElements
-  if active and (active.Prediction == true or active.GroupVisuals == true) then
-    if frame._msufUpdateHealthValue == Health.UpdateValueGroupPercent then
-      frame._msufUpdateHealthValue = Health.UpdateValueGroupStatic
+  local percentFn = isGroup and Health.UpdateValueGroupPercent or Health.UpdateValuePercent
+  local staticFn = isGroup and Health.UpdateValueGroupStatic
+    or (frame.unit == "player" and Health.UpdateValueStaticPlain or Health.UpdateValueStatic)
+
+  local function useStatic()
+    if frame._msufUpdateHealthValue == percentFn then
+      frame._msufUpdateHealthValue = staticFn
       local bar = frame.hpBar
       if bar then bar._msufMinMaxInit = nil end
     end
+  end
+
+  -- Prediction (and group health-visuals) consume RAW hp/hpMax (heal/absorb bars,
+  -- over-absorb glow), which the percent path does not produce -> not eligible.
+  local active = frame._msufActiveElements
+  if active and (active.Prediction == true or (isGroup and active.GroupVisuals == true)) then
+    useStatic()
     return
   end
   local rt = frame._msufTextRuntime
@@ -530,16 +591,13 @@ function Health.SelectGroupHealthUpdater(frame)
   local percentOnly = SCALE_100 ~= nil and UnitHealthPercent ~= nil
     and (mode == 0 or mode == 4)
   if percentOnly then
-    if frame._msufUpdateHealthValue ~= Health.UpdateValueGroupPercent then
-      frame._msufUpdateHealthValue = Health.UpdateValueGroupPercent
-      -- Pinned to (0,100); force the next update to re-init min/max.
+    if frame._msufUpdateHealthValue ~= percentFn then
+      frame._msufUpdateHealthValue = percentFn
       local bar = frame.hpBar
       if bar then bar._msufMinMaxInit = nil end
     end
-  elseif frame._msufUpdateHealthValue == Health.UpdateValueGroupPercent then
-    frame._msufUpdateHealthValue = Health.UpdateValueGroupStatic
-    local bar = frame.hpBar
-    if bar then bar._msufMinMaxInit = nil end
+  else
+    useStatic()
   end
 end
 

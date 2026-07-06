@@ -415,6 +415,17 @@ local function MarkUnitMapChanged()
   GF._unitFrameMapCleanChecks = 0
 end
 
+local function ProveUnitMapIfReady()
+  if GF._suspendAutoMapProof == true then
+    GF._unitFrameMapProofPending = true
+    return
+  end
+  local prove = GF.AutoProveUnitFrameMap
+  if type(prove) == "function" then
+    prove()
+  end
+end
+
 local function FrameMatchesUnit(frame, unit)
   if not (frame and IsUnitToken(unit) and GF.frames[frame] == true) then
     return false
@@ -531,7 +542,12 @@ local function RebindGroupHotRuntime(frame, spec)
   end
   local runtime = MSUF and MSUF.UFTextRuntime
   if runtime and type(runtime.BuildGroupHot) == "function" then
-    return runtime.BuildGroupHot(frame, spec, frame._msufGFHot)
+    local hot = runtime.BuildGroupHot(frame, spec, frame._msufGFHot)
+    local rebindHandlers = UF and UF.RebindGroupHotEventHandlers
+    if hot and type(rebindHandlers) == "function" then
+      rebindHandlers(frame)
+    end
+    return hot
   end
   frame._msufGFHot = nil
   frame._msufGFHotSerial = nil
@@ -587,6 +603,7 @@ ApplyUnitChangeFast = function(frame, kind, unit)
   scanUnit[frame] = unit
   scanKind[frame] = kind
   TrackFrame(frame, unit)
+  ProveUnitMapIfReady()
   if GF.ProfEnd then GF.ProfEnd("unitChange", profToken) end
   return true
 end
@@ -696,6 +713,7 @@ function GF.ApplyButton(frame, kind, reason)
     scanUnit[frame] = unit
     scanKind[frame] = kind
     TrackFrame(frame, unit)
+    ProveUnitMapIfReady()
     if GF.ProfEnd then GF.ProfEnd("applyButton", profToken) end
     return true
   end
@@ -726,6 +744,7 @@ function GF.ApplyButton(frame, kind, reason)
   scanKind[frame] = kind
 
   TrackFrame(frame, unit)
+  ProveUnitMapIfReady()
   if GF.ProfEnd then GF.ProfEnd("applyButton", profToken) end
   return true
 end
@@ -806,7 +825,13 @@ function GF.ScanHeader(key, kind)
     -- of once per (child, element, event).
     local batched = UF and UF.BeginEventRegistrationBatch
     if batched then UF.BeginEventRegistrationBatch() end
+    GF._suspendAutoMapProof = true
     local found, first = ScanChildVarargs(kind, token, header:GetChildren())
+    GF._suspendAutoMapProof = nil
+    if GF._unitFrameMapProofPending == true then
+      GF._unitFrameMapProofPending = nil
+      ProveUnitMapIfReady()
+    end
     if batched then UF.EndEventRegistrationBatch() end
     if first then
       MeasureFirstCenterDelta(header, key, kind, first)

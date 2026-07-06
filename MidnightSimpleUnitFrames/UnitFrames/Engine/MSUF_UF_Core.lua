@@ -139,12 +139,13 @@ local function DispatchToken(frame)
 end
 
 local function CurrentFrameEventScript()
-  return UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent or UF.DispatchFrameEvent
+  return UF.DispatchHotFrameEvent or UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent or UF.DispatchFrameEvent
 end
 
 local function IsCoreFrameEventScript(script)
   return script ~= nil and (
-    script == UF.RunCompiledFrameEvent
+    script == UF.DispatchHotFrameEvent
+    or script == UF.RunCompiledFrameEvent
     or script == UF.DispatchFastFrameEvent
     or script == UF.DispatchFrameEvent
   )
@@ -716,13 +717,13 @@ end
 
 local function ResolveFixedGroupEventFrame(frame, event, unit, frames)
   local gf = MSUF and MSUF.GF
-  if not (gf and gf._unitFrameMapProven == true and gf.FrameForUnit) then
+  if not (gf and gf._unitFrameMapProven == true and gf.unitFrames) then
     return frame
   end
   if not (frame and frame._msufIsGroupFrame == true and unit and issecretvalue(unit) ~= true) then
     return frame
   end
-  local mapped = gf.FrameForUnit(unit)
+  local mapped = gf.unitFrames[unit]
   if mapped and mapped ~= frame and frames and frames[mapped] then
     gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
     return mapped
@@ -732,10 +733,10 @@ end
 
 local function FixedGroupEventFrame(event, unit, frames)
   local gf = MSUF and MSUF.GF
-  if not (gf and gf._unitFrameMapProven == true and gf.FrameForUnit) then
+  if not (gf and gf._unitFrameMapProven == true and gf.unitFrames) then
     return nil
   end
-  local frame = gf.FrameForUnit(unit)
+  local frame = gf.unitFrames[unit]
   if frame and frames and frames[frame] then
     gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
     return frame
@@ -770,7 +771,7 @@ local function DirectMappedGroupFrame(event, unit, frames, eventUnits, unitFrame
     return nil
   end
   local gf = MSUF and MSUF.GF
-  if not (gf and gf.FrameForUnit) then
+  if not (gf and gf.unitFrames) then
     return nil
   end
   -- Activate the EUI-style direct route as soon as the unit->frame map is
@@ -785,7 +786,7 @@ local function DirectMappedGroupFrame(event, unit, frames, eventUnits, unitFrame
   if gf._unitFrameMapProven ~= true then
     return nil
   end
-  local frame = gf.FrameForUnit(unit)
+  local frame = gf.unitFrames[unit]
   if not (frame and frame._msufIsGroupFrame == true and frames and frames[frame]) then
     return nil
   end
@@ -798,6 +799,32 @@ local function DirectMappedGroupFrame(event, unit, frames, eventUnits, unitFrame
     gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
   end
   return frame
+end
+
+local function DispatchDirectGroupHotEvent(event, unit, ...)
+  if not GROUP_DIRECT_UNIT_EVENTS[event]
+    or eventUnitlessFrameCounts[event] ~= nil
+    or eventDerivedFrameCounts[event] ~= nil then
+    return false
+  end
+  local gf = MSUF and MSUF.GF
+  if not (gf and gf._unitFrameMapProven == true and gf.unitFrames) then
+    return false
+  end
+  local frame = gf.unitFrames[unit]
+  if not (frame and frame._msufIsGroupFrame == true) then
+    return false
+  end
+  local handlers = frame._msufFastEventHandlers
+  local handler = handlers and handlers[event]
+  if not handler then
+    return false
+  end
+  handler(frame, unit, ...)
+  if gf._profDetail == true or gf._profMapWatch == true then
+    gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
+  end
+  return true
 end
 
 local function StartCoreEventProfile(event)
@@ -831,7 +858,7 @@ local function EventDriverOnEvent(_, event, unit, ...)
   if not frames then
     return
   end
-  local dispatch = (HOT_EVENT_KIND[event] and (UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent)) or UF.DispatchFrameEvent
+  local dispatch = (HOT_EVENT_KIND[event] and (UF.DispatchHotFrameEvent or UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent)) or UF.DispatchFrameEvent
   if not dispatch then
     return
   end
@@ -839,6 +866,10 @@ local function EventDriverOnEvent(_, event, unit, ...)
 
   if UNIT_EVENT_HAS_UNIT[event] then
     if not unit or issecretvalue(unit) == true then
+      EndCoreEventProfile(profGF, profName, profToken)
+      return
+    end
+    if DispatchDirectGroupHotEvent(event, unit, ...) then
       EndCoreEventProfile(profGF, profName, profToken)
       return
     end
@@ -1140,21 +1171,15 @@ EnsureEventDriver = function()
 end
 
 --- Lean OnEvent for the per-unit tracker frames. A per-unit tracker already
---- knows its unit (RegisterUnitEvent filtered on the C side), so the generic
---- EventDriverOnEvent fan-out -- iterating unitless sets, derived-unit maps and
---- the unit->frames table, plus DirectMappedGroupFrame -- is wasted work. This
---- is the ~7ms/UNIT_HEALTH the profiler showed: the tracker delivered the event,
---- then the generic router re-derived which frame it belonged to.
+--- knows its unit (RegisterUnitEvent filtered on the C side), so the broad
+--- EventDriverOnEvent fan-out -- unitless sets, derived-unit maps and the
+--- unit->frames table -- is wasted work for clean hot events. This is the
+--- ~7ms/UNIT_HEALTH the profiler showed: the tracker delivered the event, then
+--- the broad router re-derived which frame it belonged to.
 ---
---- Fast path (the overwhelmingly common case): the event has NO unitless owners
---- and NO derived-unit owners, so the only possible target is the frame(s)
---- registered for this exact unit. Dispatch straight into that frame's
---- precompiled _msufFastEventHandlers via `dispatch`, with the same
---- FrameUnitMatches safety the generic path uses. Any complication (unitless or
---- derived owners present, or the event is not a hot kind) falls back to the
---- unchanged EventDriverOnEvent -- correctness first, speed only where provably
---- safe. Covers single frames (UF.frames[unit]) and group frames
---- (eventUnitFrames[event][unit]) identically.
+--- Hot path: the event has NO unitless owners and NO derived-unit owners, so
+--- the target is the direct group-frame map, the exact unit-frame set, or the
+--- single UF.frames[unit] entry. Dispatch straight into _msufFastEventHandlers.
 local function UnitDriverOnEvent(self, event, unit, ...)
   -- Non-unit event on a unit tracker should not happen (trackers only register
   -- unit-filtered events), but stay correct if it does.
@@ -1164,22 +1189,25 @@ local function UnitDriverOnEvent(self, event, unit, ...)
   if not unit or issecretvalue(unit) == true then
     return
   end
-  -- Bail to the generic router if anything makes the fan-out non-trivial.
+  -- Non-direct event shapes are intentionally handled by the broad router.
   if (UnitEventAllowsUnitless(event) and eventUnitlessFrames[event])
     or eventDerivedFrames[event] then
     return EventDriverOnEvent(self, event, unit, ...)
+  end
+  if DispatchDirectGroupHotEvent(event, unit, ...) then
+    return
   end
   local frames = eventFrames[event]
   if not frames then
     return
   end
-  local dispatch = HOT_EVENT_KIND[event] and (UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent)
+  local dispatch = HOT_EVENT_KIND[event] and (UF.DispatchHotFrameEvent or UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent)
   if not dispatch then
-    -- Not a compiled hot event: let the generic path handle element lists.
+    -- Not a compiled hot event: keep it on the broad event dispatcher.
     return EventDriverOnEvent(self, event, unit, ...)
   end
-  -- Distinct profile name ("leanEvent:") so /msufprof shows whether this fast
-  -- path actually ran vs the generic "coreEvent:" fallback.
+  -- Distinct profile name ("leanEvent:") so /msufprof shows whether this direct
+  -- path actually ran instead of "coreEvent:".
   local profGF, profName, profToken
   if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
     profName = "leanEvent:" .. tostring(event)
@@ -1188,19 +1216,45 @@ local function UnitDriverOnEvent(self, event, unit, ...)
 
   local eventUnits = eventUnitFrames[event]
   local unitFrames = eventUnits and eventUnits[unit]
+  local unitCounts = eventUnitFrameCounts[event]
+  local unitFrameCount = unitCounts and unitCounts[unit] or 0
+  local directFrame = DirectMappedGroupFrame(event, unit, frames, eventUnits, unitFrames, unitFrameCount, nil, nil)
+  if directFrame then
+    local handlers = directFrame._msufFastEventHandlers
+    local handler = handlers and handlers[event]
+    if handler then
+      handler(directFrame, unit, ...)
+    else
+      dispatch(directFrame, event, unit, ...)
+    end
+    if profToken and profGF and profGF.ProfEnd then profGF.ProfEnd(profName, profToken) end
+    return
+  end
   if unitFrames then
     for frame in pairs(unitFrames) do
       if not FrameUnitMatches(frame, unit) then
         RemoveEventUnitFrame(frame, event, frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] or unit)
       else
-        dispatch(frame, event, unit, ...)
+        local handlers = frame._msufFastEventHandlers
+        local handler = handlers and handlers[event]
+        if handler then
+          handler(frame, unit, ...)
+        else
+          dispatch(frame, event, unit, ...)
+        end
       end
     end
   else
     local frame = UF.frames[unit]
     if frame and frames[frame]
       and not (frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event]) then
-      dispatch(frame, event, unit, ...)
+      local handlers = frame._msufFastEventHandlers
+      local handler = handlers and handlers[event]
+      if handler then
+        handler(frame, unit, ...)
+      else
+        dispatch(frame, event, unit, ...)
+      end
     end
   end
   if profToken and profGF and profGF.ProfEnd then profGF.ProfEnd(profName, profToken) end
