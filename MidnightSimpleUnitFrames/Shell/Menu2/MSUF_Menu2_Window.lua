@@ -665,20 +665,44 @@ local function UpdateNav(key)
         M.navHeaderState[group] = true
         if M.nav and M.nav._msuf2NavReflow then M.nav:_msuf2NavReflow() end
     end
+    local activeNavKey = (M.navPrimaryForKey and M.navPrimaryForKey[key]) or key
     local localeKey = CurrentMenuLocaleKey()
     local labelsDirty = M._msuf2NavLocaleKey ~= localeKey
     M._msuf2NavLocaleKey = localeKey
     for pageKey, btn in pairs(M.navButtons) do
         if labelsDirty and btn._msuf2RawLabel and btn.SetText then btn:SetText(M.Tr(btn._msuf2RawLabel)) end
-        if btn.SetActive then btn:SetActive(pageKey == key) end
+        if btn.SetActive then btn:SetActive(pageKey == activeNavKey) end
     end
-    M._msuf2NavActiveKey = key
+    M._msuf2NavActiveKey = activeNavKey
     if labelsDirty and M.navHeaders then
         for _, btn in pairs(M.navHeaders) do
             if btn._msuf2RawLabel and btn.SetText then btn:SetText(string.upper(M.Tr(btn._msuf2RawLabel))) end
         end
     end
+    if labelsDirty and M.navTitles then
+        for _, title in pairs(M.navTitles) do
+            if title._msuf2RawLabel and title.SetText then title:SetText(string.upper(M.Tr(title._msuf2RawLabel))) end
+        end
+    end
     if labelsDirty and M.nav and M.nav.searchBox then UpdateSearchPlaceholder(M.nav.searchBox) end
+end
+local function RememberPrimaryNavPage(key)
+    local primary = M.navPrimaryForKey and M.navPrimaryForKey[key]
+    if type(primary) ~= "string" or primary == "" then return end
+    M.navLastPageForPrimary = type(M.navLastPageForPrimary) == "table" and M.navLastPageForPrimary or {}
+    M.navLastPageForPrimary[primary] = key
+end
+function M.ResolvePrimaryNavClickTarget(primaryKey)
+    primaryKey = tostring(primaryKey or "")
+    local last = type(M.navLastPageForPrimary) == "table" and M.navLastPageForPrimary[primaryKey] or nil
+    if type(last) == "string"
+        and M.pages[last]
+        and M.navPrimaryForKey
+        and M.navPrimaryForKey[last] == primaryKey
+    then
+        return last
+    end
+    return primaryKey
 end
 local function CurrentMenuDataRevision()
     return tonumber(M._msuf2MenuDataRevision) or 0
@@ -771,6 +795,7 @@ local function CreateContext(key, wrapper, entry)
         entry = entry,
         refreshers = entry.refreshers,
         width = CONTENT_W - 34,
+        fullWidth = CONTENT_W - 34,
         hiddenBuild = entry.hiddenBuild == true,
     }
     function ctx:SetContentHeight(height)
@@ -786,6 +811,108 @@ local function CreateContext(key, wrapper, entry)
         M.AddRefresher(ctx, fn)
     end
     return ctx
+end
+local SECONDARY_NAV_GROUPS = {
+    groupframes = {
+        title = "Party/Raid Frames",
+        mode = "tabs",
+        primary = "gf_layout",
+        tabs = {
+            { key = "gf_layout", label = "Layout", width = 64 },
+            { key = "gf_bars", label = "Health & Text", width = 108 },
+            { key = "gf_indicators", label = "Status & Indicators", width = 138 },
+            { key = "gf_auras", label = "Auras", width = 58 },
+        },
+    },
+    auras = {
+        title = "Auras",
+        mode = "tabs",
+        primary = "auras3_styling",
+        tabs = {
+            { key = "auras3_styling", label = "Style", width = 56 },
+            { key = "auras3_filters", label = "Filters", width = 66 },
+        },
+    },
+}
+local SECONDARY_NAV_BY_KEY = {}
+for _, group in pairs(SECONDARY_NAV_GROUPS) do
+    for i = 1, #(group.tabs or {}) do
+        local tab = group.tabs[i]
+        if tab and tab.key then SECONDARY_NAV_BY_KEY[tab.key] = group end
+    end
+end
+local SECONDARY_NAV_RAIL_W = 132
+local SECONDARY_NAV_GAP = 12
+local SECONDARY_NAV_MIN_RAIL_WIDTH = 680
+local SECONDARY_NAV_TAB_PAD_X = 8
+local function SecondaryNavButton(parent, label, width, active)
+    local style = {
+        bg = { 0.022, 0.032, 0.064, 0.94 },
+        border = { 0.090, 0.135, 0.250, 0.58 },
+        textColor = { 0.78, 0.87, 0.98, 1 },
+        hoverBg = { 0.032, 0.046, 0.086, 0.96 },
+        hoverBorder = { 0.120, 0.215, 0.405, 0.72 },
+        activeBg = { 0.040, 0.100, 0.240, 0.98 },
+        activeBorder = { 0.200, 0.430, 0.850, 0.94 },
+        activeTextColor = { 0.94, 0.98, 1.00, 1 },
+        stripe = true,
+    }
+    return W.TopButton(parent, M.Tr(label), width, 24, style, active)
+end
+local function BuildSecondaryTabs(ctx, key, group)
+    if not (ctx and ctx.wrapper and group and group.tabs) then return end
+    ctx._msuf2TopInset = 40
+    local bar = CreateFrame("Frame", nil, ctx.wrapper)
+    bar:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", 12, -12)
+    bar:SetSize(ctx.width or 720, 30)
+    local x = SECONDARY_NAV_TAB_PAD_X
+    for i = 1, #group.tabs do
+        local tab = group.tabs[i]
+        local w = tonumber(tab.width) or 72
+        local btn = SecondaryNavButton(bar, tab.label, w, key == tab.key)
+        btn._msuf2SkipHistoryCheckpoint = true
+        btn:SetPoint("TOPLEFT", bar, "TOPLEFT", x, -2)
+        btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
+        x = x + w + 6
+    end
+    ctx._msuf2SecondaryNav = bar
+end
+local function BuildSecondaryRail(ctx, key, group)
+    if not (ctx and ctx.wrapper and group and group.tabs) then return end
+    local fullW = tonumber(ctx.fullWidth or ctx.width) or 720
+    if fullW < SECONDARY_NAV_MIN_RAIL_WIDTH then
+        BuildSecondaryTabs(ctx, key, group)
+        return
+    end
+    ctx._msuf2ContentX = 12 + SECONDARY_NAV_RAIL_W + SECONDARY_NAV_GAP
+    ctx.width = math.max(360, fullW - SECONDARY_NAV_RAIL_W - SECONDARY_NAV_GAP)
+    local rail = T.Panel(ctx.wrapper, nil, T.colors.panel2, T.colors.borderSoft or T.colors.border)
+    T.ApplySurface(rail, "rail")
+    rail:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", 12, -12)
+    rail:SetSize(SECONDARY_NAV_RAIL_W, math.max(260, math.min(CONTENT_H - 24, 520)))
+    local title = T.Font(rail, "GameFontNormalSmall", M.Tr(group.title or ""), T.colors.accent)
+    title:SetPoint("TOPLEFT", rail, "TOPLEFT", 10, -12)
+    title:SetPoint("TOPRIGHT", rail, "TOPRIGHT", -10, -12)
+    title:SetJustifyH("LEFT")
+    local y = -38
+    for i = 1, #group.tabs do
+        local tab = group.tabs[i]
+        local btn = SecondaryNavButton(rail, tab.label, SECONDARY_NAV_RAIL_W - 20, key == tab.key)
+        btn._msuf2SkipHistoryCheckpoint = true
+        btn:SetPoint("TOPLEFT", rail, "TOPLEFT", 10, y)
+        btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
+        y = y - 30
+    end
+    ctx._msuf2SecondaryNav = rail
+end
+local function BuildSecondaryPageNav(ctx, key)
+    local group = SECONDARY_NAV_BY_KEY[key]
+    if not group then return end
+    if group.mode == "rail" then
+        BuildSecondaryRail(ctx, key, group)
+    else
+        BuildSecondaryTabs(ctx, key, group)
+    end
 end
 local function BuildPlaceholderPage(ctx, requestedKey)
     local b = W.PageBuilder(ctx)
@@ -836,6 +963,7 @@ local function BuildPageEntry(key, hidden)
     local entry = { key = key, wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion, layoutVersion = layoutVersion, hiddenBuild = hidden and true or false }
     M.cache[key] = entry
     local ctx = CreateContext(key, wrapper, entry)
+    BuildSecondaryPageNav(ctx, key)
     local prevBuildKey = M._msuf2SearchBuildKey
     M._msuf2SearchBuildKey = key
     local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
@@ -974,6 +1102,7 @@ function M.SelectPage(key)
         if M.activeKey == key then M.activeKey = nil end
     end
     if key == M.activeKey and cached then
+        RememberPrimaryNavPage(key)
         M.CallIf(M.ReleasePinnedPreviews, "SELECT_CACHED", key)
         M.CallIf(M.ReleaseGFNativePreviews, "SELECT_CACHED", key)
         RunRefreshers(cached)
@@ -1008,6 +1137,7 @@ function M.SelectPage(key)
         end
     end
     entry.wrapper:Show()
+    RememberPrimaryNavPage(key)
     RunRefreshers(entry)
     SetTitle(key)
     UpdateNav(key)
@@ -1332,13 +1462,19 @@ local function BuildWindow()
     T.ApplySurface(status, "status")
     status:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     status:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-    status:SetHeight(46)
+    status:SetHeight(58)
     local statusTopLine = status:CreateTexture(nil, "ARTWORK", nil, 6)
     statusTopLine:SetTexture("Interface\\Buttons\\WHITE8X8")
     statusTopLine:SetHeight(1)
     statusTopLine:SetPoint("TOPLEFT", status, "TOPLEFT", 0, 0)
     statusTopLine:SetPoint("TOPRIGHT", status, "TOPRIGHT", 0, 0)
     statusTopLine:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.25)
+    local statusBottomLine = status:CreateTexture(nil, "ARTWORK", nil, 6)
+    statusBottomLine:SetTexture("Interface\\Buttons\\WHITE8X8")
+    statusBottomLine:SetHeight(1)
+    statusBottomLine:SetPoint("BOTTOMLEFT", status, "BOTTOMLEFT", 14, 0)
+    statusBottomLine:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -14, 0)
+    statusBottomLine:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.16)
     local function StatusText(point, relativeTo, relativePoint, x, y, justify, alpha)
         local fs = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
         fs:SetPoint(point, relativeTo, relativePoint, x, y)
@@ -1346,12 +1482,12 @@ local function BuildWindow()
         if alpha then fs:SetAlpha(alpha) end
         return fs
     end
-    local sbProfile = StatusText("LEFT", status, "LEFT", 24, 11)
+    local sbProfile = StatusText("LEFT", status, "LEFT", 24, 15)
     local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 14, 0)
     local sbCombat = StatusText("LEFT", sbEdit, "RIGHT", 14, 0)
-    local sbVersion = StatusText("RIGHT", status, "RIGHT", -18, 11, "RIGHT", 0.50)
-    local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -18, 11, "RIGHT", 0)
-    sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 11)
+    local sbVersion = StatusText("RIGHT", status, "RIGHT", -18, 15, "RIGHT", 0.50)
+    local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -18, 15, "RIGHT", 0)
+    sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 15)
     status.profileText = sbProfile
     status.editText = sbEdit
     status.combatText = sbCombat
@@ -1376,7 +1512,7 @@ local function BuildWindow()
         if f.RefreshStatus then f:RefreshStatus() end
     end
     local toolbarEdit = T.Button(status, L_EDIT_MODE_OFF, 150, 24)
-    toolbarEdit:SetPoint("RIGHT", status, "RIGHT", -26, -10)
+    toolbarEdit:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -26, 10)
     T.CenterButtonLabel(toolbarEdit)
     if T.SkinPrimaryButton then T.SkinPrimaryButton(toolbarEdit) end
     toolbarEdit:SetScript("OnClick", RunToolbarEditMode)

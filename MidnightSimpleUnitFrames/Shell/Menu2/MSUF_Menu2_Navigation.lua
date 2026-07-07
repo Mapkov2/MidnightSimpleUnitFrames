@@ -25,7 +25,9 @@ end
 local function NavRows(rows)
     local nav = {}
     for _, cols in ipairs(PipeRows(rows)) do
-        if cols[1] == "H" then
+        if cols[1] == "T" then
+            nav[#nav + 1] = { title = cols[2], id = cols[3] }
+        elseif cols[1] == "H" then
             nav[#nav + 1] = { header = cols[2], id = cols[3], defaultOpen = cols[4] ~= "0" }
         elseif cols[1] == "P" then
             local item = { key = cols[2], label = cols[3] }
@@ -37,34 +39,47 @@ local function NavRows(rows)
 end
 M.navItems = NavRows [[
 P|home|Dashboard
-H|Frames|unitframes|1
-P|uf_player|Player|unitframes
-P|uf_target|Target|unitframes
-P|uf_boss|Boss Frames|unitframes
-P|uf_focus|Focus|unitframes
-P|uf_pet|Pet|unitframes
-P|uf_targettarget|Target of Target|unitframes
-P|uf_focustarget|Focus Target|unitframes
-H|Group Frames|groupframes|1
-P|gf_layout|Layout|groupframes
-P|gf_bars|Health & Text|groupframes
-P|gf_indicators|Status & Indicators|groupframes
-P|gf_auras|Auras|groupframes
-H|Auras|auras|1
-P|auras3_styling|Style|auras
-P|auras3_filters|Filters|auras
-H|Appearance|globalstyle|1
-P|opt_bars|Bars|globalstyle
-P|opt_castbar|Castbars|globalstyle
-P|opt_colors|Colors|globalstyle
-P|opt_fonts|Fonts|globalstyle
-P|opt_misc|Miscellaneous|globalstyle
-P|classpower|Class Resources
-P|gameplay|Gameplay
+T|Frames|frames
+P|uf_player|Unitframes|frames
+P|gf_layout|Party/Raid Frames|frames
+T|Appearance|appearance
+P|opt_bars|Bars|appearance
+P|opt_castbar|Cast Bars|appearance
+P|opt_colors|Colors|appearance
+P|opt_fonts|Fonts|appearance
+P|auras3_styling|Auras|appearance
+P|opt_misc|Miscellaneous|appearance
+T|Features|features
+P|classpower|Class Resources|features
+P|gameplay|Gameplay|features
 P|profiles|Profiles
-H|Advanced|modules|0
-P|modules|Modules|modules
 ]]
+M.navPrimaryForKey = {
+    home = "home",
+    uf_player = "uf_player",
+    uf_target = "uf_player",
+    uf_boss = "uf_player",
+    uf_focus = "uf_player",
+    uf_pet = "uf_player",
+    uf_targettarget = "uf_player",
+    uf_focustarget = "uf_player",
+    gf_layout = "gf_layout",
+    gf_bars = "gf_layout",
+    gf_indicators = "gf_layout",
+    gf_auras = "gf_layout",
+    auras3_styling = "auras3_styling",
+    auras3_filters = "auras3_styling",
+    auras3_buffs = "auras3_styling",
+    auras3_debuffs = "auras3_styling",
+    opt_bars = "opt_bars",
+    opt_castbar = "opt_castbar",
+    opt_colors = "opt_colors",
+    opt_fonts = "opt_fonts",
+    opt_misc = "opt_misc",
+    classpower = "classpower",
+    gameplay = "gameplay",
+    profiles = "profiles",
+}
 local function AliasRows(rows)
     local aliases = {}
     for line in Lines(rows) do
@@ -79,14 +94,14 @@ local function AliasRows(rows)
 end
 M.ALIASES = AliasRows [[
 home=<empty>|home|menu|main|options|opt
-uf_player=player
+uf_player=player|frames|frame|unitframes|unit_frames|unitframe|unit_frame
 uf_target=target
 uf_targettarget=tot|targettarget
 uf_focustarget=focustarget|focus_target|focustargettarget|ft
 uf_focus=focus
 uf_boss=boss
 uf_pet=pet
-opt_bars=bars
+opt_bars=bars|appearance|appearances|look|looks|style|globalstyle|global_style
 opt_fonts=fonts
 auras3_styling=aura|auras|auras3|auras3_rendering|aura_rendering|aurarendering|aura_renderer|aurarenderer|aura_style|aurastyle|aura_styling|aurastyling|aura_visibility|auravisibility
 auras3_buffs=buff|buffs|aura_buffs|aurabuffs|buff_settings|buffsettings
@@ -98,7 +113,7 @@ opt_misc=misc
 classpower=classpower|class
 gameplay=gameplay
 profiles=profiles
-gf_layout=layout|group|groupframes
+gf_layout=layout|group|groupframes|partyraid|party_raid|party/raid|partyframes|party_frames|raidframes|raid_frames|party|raid
 gf_bars=health
 gf_indicators=status|statuses|indicator|indicators|status_indicators|statusindicator|group_status|group_indicators|groupindicators
 modules=modules

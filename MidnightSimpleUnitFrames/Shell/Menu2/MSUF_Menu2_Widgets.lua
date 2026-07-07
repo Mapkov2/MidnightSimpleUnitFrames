@@ -334,11 +334,13 @@ end
 --- collapsible section state, search metadata registration, and content height.
 function W.PageBuilder(ctx)
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
+    local contentX = tonumber(ctx and ctx._msuf2ContentX) or 12
+    local topInset = tonumber(ctx and ctx._msuf2TopInset) or 0
     local b = {
         ctx = ctx,
         parent = ctx.wrapper,
-        x = 12,
-        y = -12,
+        x = contentX,
+        y = -12 - topInset,
         width = ctx.width or 720,
         collapsibles = {},
         layoutEntries = {},
@@ -1750,6 +1752,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
         btn._msuf2Value = item.value
         btn._msuf2BaseWidth = width
         T.CenterButtonLabel(btn)
+        if btn.RefreshVisual then btn:RefreshVisual() end
         btn:SetScript("OnClick", function()
             if type(opts.setValue) == "function" then opts.setValue(item.value) end
             if type(opts.onChange) == "function" then opts.onChange(item.value) end
