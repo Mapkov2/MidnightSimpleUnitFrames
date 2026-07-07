@@ -1851,19 +1851,9 @@ end
 local function SetButtonDepthArt(btn, base, edgeColor, active, hover)
     local art = EnsureButtonDepthArt(btn)
     if not art then return end
-    local alpha = active and 1.00 or hover and 0.82 or 0.58
-    local top = art.top
-    local bottom = art.bottom
-    local lip = art.lip
-    local glow = T.colors.coreGlow or T.colors.accent
-    top:SetVertexColor(glow[1], glow[2], glow[3], 0.055 * alpha)
-    top:Show()
-    local shadow = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
-    bottom:SetVertexColor(shadow[1], shadow[2], shadow[3], 0.150 * alpha)
-    bottom:Show()
-    local ec = edgeColor or T.colors.accent
-    lip:SetVertexColor(ec[1], ec[2], ec[3], (active and 0.22 or hover and 0.16 or 0.10))
-    lip:Show()
+    if art.top and art.top.Hide then art.top:Hide() end
+    if art.bottom and art.bottom.Hide then art.bottom:Hide() end
+    if art.lip and art.lip.Hide then art.lip:Hide() end
 end
 local function HideButtonDepthArt(btn)
     local art = btn and btn._msuf2ButtonDepthArt

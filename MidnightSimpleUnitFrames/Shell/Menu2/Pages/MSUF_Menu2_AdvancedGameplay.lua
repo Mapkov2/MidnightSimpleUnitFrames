@@ -17,12 +17,6 @@ local ApplyGameplay = M.ApplyGameplay
 local VT = M.ValueTextList
 local function BuildGameplay(ctx)
     local b = W.PageBuilder(ctx)
-    local head = b:Header("Gameplay", "Here are several gameplay enhancement options you can toggle on or off.", 74)
-    local edit = T.Button(head, "MSUF Edit Mode", 128, 24)
-    if W.StyleTopActionButton then W.StyleTopActionButton(edit) end
-    edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -20)
-    if W.CreatePageResetButton then W.CreatePageResetButton(ctx, head, edit, { width = 88 }) end
-    M.WireEditModeButton(ctx, edit, { defer = true })
     local disabledRefresh
     local previewRefresh
     local function ApplyGameplayUI()

@@ -654,6 +654,7 @@ function W.PageBuilder(ctx)
             sub:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -6)
             sub:SetWidth(self.width - 28)
             sub:SetJustifyH("LEFT")
+            section.subtitle = sub
         end
         self.y = self.y - (height or 78) - 12
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
@@ -977,19 +978,7 @@ function W.CreatePageResetButton(ctx, parent, anchor, opts)
     return btn
 end
 function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
-    if not (builder and builder.Header) then return nil end
-    local head = builder:Header(title, subtitle, height or 72)
-    local edit = StyleTopActionButton(T.Button(head, "MSUF Edit Mode", 128, 24))
-    RegisterSearchObject(edit, "MSUF Edit Mode", "button")
-    edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -14)
-    W.CreatePageResetButton(ctx, head, edit, { width = 88 })
-    M.WireEditModeButton(ctx, edit, {
-        afterClick = function()
-            if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
-            if M.RequestRefresh then M.RequestRefresh(nil, "edit-mode-header") elseif M.Refresh then M.Refresh() end
-        end,
-    })
-    return head, edit
+    return nil, nil
 end
 function W.SetCollapsibleToggleText(section, openText, closedText)
     local entry = section and section._msuf2CollapsibleEntry
@@ -1292,12 +1281,12 @@ local CORE_SURFACE = (T and T.colors and T.colors.coreSurface) or { 0.014, 0.038
 local CORE_RAISED = (T and T.colors and T.colors.coreRaised) or { 0.026, 0.070, 0.110, 1.00 }
 local CORE_RIM = (T and T.colors and T.colors.coreRim) or { 0.043, 0.096, 0.150, 1.00 }
 local CORE_BLUE = (T and T.colors and T.colors.coreBlue) or { 0.060, 0.250, 0.390, 1.00 }
-local SWITCH_BG_ON = { 0.055, 0.305, 0.475, 0.98 }
-local SWITCH_BG_OFF = { 0.018, 0.075, 0.120, 0.92 }
-local SWITCH_EDGE_ON = { 0.150, 0.560, 0.800, 0.98 }
-local SWITCH_EDGE_OFF = { 0.070, 0.260, 0.390, 0.84 }
-local SWITCH_KNOB_ON = { 0.145, 0.500, 0.740, 1.00 }
-local SWITCH_KNOB_OFF = { 0.050, 0.170, 0.250, 1.00 }
+local SWITCH_BG_ON = { 0.020, 0.090, 0.135, 0.96 }
+local SWITCH_BG_OFF = { 0.014, 0.022, 0.048, 0.96 }
+local SWITCH_EDGE_ON = { 0.160, 0.560, 0.760, 0.86 }
+local SWITCH_EDGE_OFF = { 0.095, 0.145, 0.255, 0.82 }
+local SWITCH_KNOB_ON = { 0.380, 0.760, 0.900, 1.00 }
+local SWITCH_KNOB_OFF = { 0.680, 0.760, 0.940, 1.00 }
 local function PlaySwitchFeedback(button)
     if not (button and button._msuf2SwitchFlash) then return end
     local checked = button.GetChecked and button:GetChecked()
@@ -1316,7 +1305,7 @@ local function RefreshSwitchVisual(button, hover)
     local bg = checked and SWITCH_BG_ON or SWITCH_BG_OFF
     local br = checked and SWITCH_EDGE_ON or SWITCH_EDGE_OFF
     local kb = checked and SWITCH_KNOB_ON or SWITCH_KNOB_OFF
-    local mul = enabled and (checked and (pressed and 1.22 or hover and 1.17 or 1.10) or (pressed and 1.16 or hover and 1.10 or 1.04)) or 1
+    local mul = enabled and (pressed and 1.10 or hover and 1.08 or 1) or 1
     local alpha = enabled and 1 or 0.58
     if button._msuf2SwitchFill then button._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] * alpha) end
     if button._msuf2SwitchEdge then button._msuf2SwitchEdge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] * alpha) end
@@ -1326,7 +1315,7 @@ local function RefreshSwitchVisual(button, hover)
         local pad = button._msuf2SwitchKnobPad or 2
         knob:ClearAllPoints()
         UseControlTexture(knob, button._msuf2SwitchKnobTexture or "Interface\\Buttons\\WHITE8X8")
-        knob:SetSize(pressed and (size + 1) or size, pressed and (size + 1) or size)
+        knob:SetSize(size, size)
         knob:SetPoint(checked and "RIGHT" or "LEFT", button, checked and "RIGHT" or "LEFT", checked and -pad or pad, 0)
         knob:SetVertexColor(kb[1], kb[2], kb[3], kb[4] * alpha)
         if knob.SetAlpha then knob:SetAlpha(alpha) end
@@ -1583,8 +1572,8 @@ function W.ToggleAt(section, label, x, y, labelWidth)
     return CreateToggle(section, label, x or 14, y or -38, labelWidth)
 end
 function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
-    local switchW, switchH = 44, 22
-    local knobSize = 18
+    local switchW, switchH = 35, 18
+    local knobSize = 14
     local knobPad = 2
     local switchTrackTexture = (T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
     local switchKnobTexture = (T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
@@ -1594,7 +1583,7 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn:SetSize(switchW, switchH)
     if btn.RegisterForClicks then btn:RegisterForClicks("LeftButtonUp") end
     if btn.EnableMouse then btn:EnableMouse(true) end
-    if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -4, -4) end
+    if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -3, -3) end
     local edge = ControlTexture(btn, "_msuf2SwitchEdge", "BACKGROUND", 0, switchTrackTexture)
     edge:SetAllPoints(btn)
     local fill = ControlTexture(btn, "_msuf2SwitchFill", "BACKGROUND", 1, switchTrackTexture)
@@ -1610,18 +1599,18 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn._msuf2SwitchKnobSize = knobSize
     btn._msuf2SwitchKnobPad = knobPad
     btn._msuf2SwitchKnobTexture = switchKnobTexture
-    btn._msuf2ProxyBaseWidth = switchW + 14
+    btn._msuf2ProxyBaseWidth = switchW + 12
     btn._msuf2UpdateToggleProxyBounds = UpdateToggleProxyBounds
     local side = labelSide or "RIGHT"
     local labelFS = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     SetSearchText(labelFS, label)
     labelFS:SetJustifyH(side == "LEFT" and "RIGHT" or "LEFT")
-    if not labelWidth and section and section._msuf2Width then labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - switchW - 34) end
+    if not labelWidth and section and section._msuf2Width then labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - switchW - 30) end
     if labelWidth then labelFS:SetWidth(max(20, labelWidth - (side == "RIGHT" and 22 or 0))) end
     if side == "LEFT" then
-        labelFS:SetPoint("RIGHT", btn, "LEFT", -9, 0)
+        labelFS:SetPoint("RIGHT", btn, "LEFT", -8, 0)
     else
-        labelFS:SetPoint("LEFT", btn, "RIGHT", 9, 0)
+        labelFS:SetPoint("LEFT", btn, "RIGHT", 8, 0)
     end
     if side == "HIDDEN" then labelFS:Hide() end
     btn._msuf2Label = labelFS

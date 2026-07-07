@@ -352,7 +352,7 @@ local function BuildDashboardUX(ctx)
         local ui = A.dashboardUI
         if ui and ui.input then
             ui.input:SetText("")
-            if ui.input.ClearFocus then ui.input:ClearFocus() end
+            if ui.input.SetFocus then ui.input:SetFocus() end
             if ui.input._msufAssistantPlaceholder and ui.input._msufAssistantPlaceholder.SetShown then ui.input._msufAssistantPlaceholder:SetShown(true) end
         end
         if type(A.RequestRefreshUI) == "function" then
@@ -504,28 +504,8 @@ local function BuildDashboardUX(ctx)
         return true
     end
     M.dashboardEditModeButton = nil
-    local compactHeader = layoutW < 640
-    local tinyHeader = layoutW < 430
-    local headerH = tinyHeader and 128 or (compactHeader and 104 or 86)
-    local header = Card(root, "Dashboard", x0, y0, layoutW, headerH, T.colors.panel2, T.colors.cardBorder)
-    local editW = 150
-    local taskW = 96
-    local headerTextW = compactHeader and (layoutW - 32) or (layoutW - 32)
-    W.Text(header, "Ask MSUF, review setup, and open recovery tools when needed.", 16, -42, headerTextW, T.colors.muted)
-    if tinyHeader then
-        local available = max(160, layoutW - 32)
-        local smallTaskW = min(taskW, floor((available - 10) * 0.40))
-        local smallEditW = min(editW, available - smallTaskW - 10)
-        Button(header, "New Task", 16, -82, smallTaskW, 26, StartNewAssistantTask)
-        M.dashboardEditModeButton = Button(header, "MSUF Edit Mode", 16 + smallTaskW + 10, -82, smallEditW, 26, ToggleEditMode, "primary")
-    elseif compactHeader then
-        local actionY = compactHeader and -66 or -26
-        local actionX = layoutW - editW - 16
-        M.dashboardEditModeButton = Button(header, "MSUF Edit Mode", actionX, actionY, editW, 28, ToggleEditMode, "primary")
-        Button(header, "New Task", actionX - taskW - 12, actionY, taskW, 28, StartNewAssistantTask)
-    end
     M.TrackRefresh(ctx, RefreshDashboardEditModeButtonSafe)
-    local mainTop = y0 - headerH - 16
+    local mainTop = y0
     local tinyHero = mainW < 390
     local heroH = tinyHero and 398 or (mainW < 560 and 382 or 360)
     local hero = Card(root, "", x0, mainTop, mainW, heroH, T.colors.glassHost, T.colors.cardBorder)
