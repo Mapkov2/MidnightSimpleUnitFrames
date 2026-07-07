@@ -1241,7 +1241,7 @@ local function BuildBars(ctx)
         prioContainer:SetRowsEnabled(enabled)
     end
     prioContainer = M.UnitSectionsShared.MakeDragSortRows(priorityCard, nil, {
-        x = -2, y = -82, width = 190, rowHeight = 22, gap = 4, maxRows = rowMax,
+        x = 16, y = -82, width = min(220, priorityCardW - 32), rowHeight = 22, gap = 4, maxRows = rowMax,
         bg = { 0.12, 0.12, 0.12, 0.85 },
         border = { 0.30, 0.30, 0.30, 0.60 },
         disabledAlpha = 0.4,

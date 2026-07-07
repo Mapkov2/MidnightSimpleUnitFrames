@@ -813,17 +813,6 @@ local function CreateContext(key, wrapper, entry)
     return ctx
 end
 local SECONDARY_NAV_GROUPS = {
-    groupframes = {
-        title = "Party/Raid Frames",
-        mode = "tabs",
-        primary = "gf_layout",
-        tabs = {
-            { key = "gf_layout", label = "Layout", width = 64 },
-            { key = "gf_bars", label = "Health & Text", width = 108 },
-            { key = "gf_indicators", label = "Status & Indicators", width = 138 },
-            { key = "gf_auras", label = "Auras", width = 58 },
-        },
-    },
     auras = {
         title = "Auras",
         mode = "tabs",
@@ -844,7 +833,8 @@ end
 local SECONDARY_NAV_RAIL_W = 132
 local SECONDARY_NAV_GAP = 12
 local SECONDARY_NAV_MIN_RAIL_WIDTH = 680
-local SECONDARY_NAV_TAB_PAD_X = 8
+local SECONDARY_NAV_TAB_PAD_X = 14
+local SECONDARY_NAV_TAB_PAD_Y = 5
 local function SecondaryNavButton(parent, label, width, active)
     local style = {
         bg = { 0.022, 0.032, 0.064, 0.94 },
@@ -855,23 +845,22 @@ local function SecondaryNavButton(parent, label, width, active)
         activeBg = { 0.040, 0.100, 0.240, 0.98 },
         activeBorder = { 0.200, 0.430, 0.850, 0.94 },
         activeTextColor = { 0.94, 0.98, 1.00, 1 },
-        stripe = true,
     }
     return W.TopButton(parent, M.Tr(label), width, 24, style, active)
 end
 local function BuildSecondaryTabs(ctx, key, group)
     if not (ctx and ctx.wrapper and group and group.tabs) then return end
-    ctx._msuf2TopInset = 40
+    ctx._msuf2TopInset = 44
     local bar = CreateFrame("Frame", nil, ctx.wrapper)
     bar:SetPoint("TOPLEFT", ctx.wrapper, "TOPLEFT", 12, -12)
-    bar:SetSize(ctx.width or 720, 30)
+    bar:SetSize(ctx.width or 720, 34)
     local x = SECONDARY_NAV_TAB_PAD_X
     for i = 1, #group.tabs do
         local tab = group.tabs[i]
         local w = tonumber(tab.width) or 72
         local btn = SecondaryNavButton(bar, tab.label, w, key == tab.key)
         btn._msuf2SkipHistoryCheckpoint = true
-        btn:SetPoint("TOPLEFT", bar, "TOPLEFT", x, -2)
+        btn:SetPoint("TOPLEFT", bar, "TOPLEFT", x, -SECONDARY_NAV_TAB_PAD_Y)
         btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
         x = x + w + 6
     end
@@ -1109,6 +1098,7 @@ function M.SelectPage(key)
         RequestBossPagePreviewForKey(key)
         RequestGroupPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+        if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
         M.CallIf(M.PostponeAssistantPerformanceWarmup, "select-page")
         return true
     end
@@ -1141,6 +1131,7 @@ function M.SelectPage(key)
     RunRefreshers(entry)
     SetTitle(key)
     UpdateNav(key)
+    if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
     RequestBossPagePreviewForKey(key)
     RequestGroupPagePreviewForKey(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
@@ -1496,8 +1487,13 @@ local function BuildWindow()
     status.text = sbProfile
     f.status = status
     local function RunToolbarNewTask()
-        if type(M.StartNewAssistantTask) == "function" then return M.StartNewAssistantTask() end
         if type(M.SelectPage) == "function" then M.SelectPage("home") end
+        if type(M.StartNewAssistantTask) == "function" then return M.StartNewAssistantTask() end
+        if _G.C_Timer and _G.C_Timer.After then
+            _G.C_Timer.After(0, function()
+                if type(M.StartNewAssistantTask) == "function" then M.StartNewAssistantTask() end
+            end)
+        end
     end
     local function RunToolbarEditMode()
         if type(M.ToggleDashboardEditMode) == "function" then return M.ToggleDashboardEditMode() end
@@ -1521,7 +1517,26 @@ local function BuildWindow()
     toolbarTask:SetPoint("RIGHT", toolbarEdit, "LEFT", -12, 0)
     T.CenterButtonLabel(toolbarTask)
     toolbarTask:SetScript("OnClick", RunToolbarNewTask)
+    local toolbarReset = T.Button(status, "Reset All", 88, 24)
+    toolbarReset:SetPoint("RIGHT", toolbarTask, "LEFT", -12, 0)
+    T.CenterButtonLabel(toolbarReset)
+    if T.SkinDangerButton then T.SkinDangerButton(toolbarReset) end
+    toolbarReset:SetScript("OnClick", function()
+        local key = M.activeKey
+        if key and M.ShowPageResetConfirm and M.PageHasReset and M.PageHasReset(key) then
+            M.ShowPageResetConfirm(key)
+        end
+    end)
+    local function RefreshToolbarPageReset()
+        local key = M.activeKey
+        local shown = key and M.PageHasReset and M.PageHasReset(key)
+        toolbarReset:SetShown(shown and true or false)
+        if toolbarReset.SetEnabled then toolbarReset:SetEnabled(shown and true or false) end
+    end
+    M.RefreshToolbarPageReset = RefreshToolbarPageReset
+    RefreshToolbarPageReset()
     status.newTaskButton = toolbarTask
+    status.resetPageButton = toolbarReset
     status.editModeButton = toolbarEdit
     function M.ShowStatusFeedback(text, kind, seconds)
         if not (f and f.status and f.status.feedbackText and text and text ~= "") then return end
@@ -1602,6 +1617,7 @@ local function BuildWindow()
             sbVersion:SetText(versionText)
         end
         RefreshDashboardEditModeButton()
+        RefreshToolbarPageReset()
     end
     local STATUS_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD", "PLAYER_DIFFICULTY_CHANGED" }
     local function SetStatusEventsRegistered(registered)

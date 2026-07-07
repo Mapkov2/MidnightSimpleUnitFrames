@@ -531,10 +531,18 @@ local function BuildInlineClassPowerPreview(ctx, b)
 end
 local function BuildClassPower(ctx)
     local b = W.PageBuilder(ctx)
-    local head = b:Header("Class Resources", "Class resource first; optional attached Player Power, second HP and alternative mana bars below.", 94)
-    local previewW = min(330, max(220, (ctx.width or 900) - 380))
+    local headH = 54
+    local head = T.Panel(b.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
+    T.ApplySurface(head, "status")
+    head:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
+    head:SetSize(b.width, headH)
+    head._msuf2Width = b.width
+    b.y = b.y - headH - 8
+    if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(b.y) + 28) end
+
+    local previewW = min(330, max(180, (ctx.width or 900) - 438))
     local previewDrop = W.Dropdown(head, "Preview resource", CLASS_POWER_PREVIEW_VALUES, previewW)
-    MoveWidget(previewDrop, head, 14, -48, previewW)
+    MoveWidget(previewDrop, head, 14, -15, previewW)
     previewDrop:SetOnValueChanged(function(value)
         M.SetClassPowerPreviewSpecKey(value)
         previewDrop:SetValue(M.GetClassPowerPreviewSpecKey())
@@ -544,18 +552,15 @@ local function BuildClassPower(ctx)
     M.TrackRefresh(ctx, function() previewDrop:SetValue(M.GetClassPowerPreviewSpecKey()) end)
     local colors = T.Button(head, "Class Color", 112, 24)
     if W.StyleTopActionButton then W.StyleTopActionButton(colors) end
-    colors:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -14)
+    colors:SetPoint("TOPRIGHT", head, "TOPRIGHT", -16, -15)
     colors:SetScript("OnClick", function() M.SelectPage("opt_colors") end)
-    local edit = T.Button(head, "MSUF Edit Mode", 128, 24)
-    if W.StyleTopActionButton then W.StyleTopActionButton(edit) end
-    edit:SetPoint("RIGHT", colors, "LEFT", -10, 0)
     local quickSetup = T.Button(head, "Quick Setup: Class Bar", 158, 24)
     if W.StyleTopSuccessButton then
         W.StyleTopSuccessButton(quickSetup)
     elseif W.StyleTopActionButton then
         W.StyleTopActionButton(quickSetup)
     end
-    quickSetup:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -54)
+    quickSetup:SetPoint("RIGHT", colors, "LEFT", -8, 0)
     quickSetup:SetScript("OnClick", ExecuteQuickSetup)
     quickSetup:SetScript("OnEnter", function(self)
         if not GameTooltip then return end
@@ -583,12 +588,9 @@ local function BuildClassPower(ctx)
     quickSetup:SetScript("OnLeave", function()
         if GameTooltip then GameTooltip:Hide() end
     end)
-    if W.CreatePageResetButton then W.CreatePageResetButton(ctx, head, quickSetup, { width = 88 }) end
-    M.WireEditModeButton(ctx, edit)
     BuildInlineClassPowerPreview(ctx, b)
     local layoutWidth = ctx.width or 900
     local compactLayout = layoutWidth < 620
-    b:Header("Class Resource Bar", "Combo Points, Runes, Holy Power, Chi and similar class-specific resources.", 64)
     local display = b:CollapsibleSection("classpower_display", "Class Resource Layout", compactLayout and 820 or 540, true)
     local cpControls, textControls, dpbControls, dpbPlayerControls = {}, {}, {}, {}
     local dpbTextControls, dpbSlotTextControls = {}, {}
@@ -817,7 +819,6 @@ local function BuildClassPower(ctx)
     local hideFull = SwitchAt(ctx, visibility, "Hide when full", 32, -118, visibilityW - 48, Bars, "classPowerHideWhenFull", false, ApplyClassPower)
     local hideEmpty = SwitchAt(ctx, visibility, "Hide when empty", 32, -150, visibilityW - 48, Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
     AddControls(cpControls, hideOOC, hideFull, hideEmpty)
-    b:Header("Attached Player Bars", "Optional Player Power and second HP bars managed by the Class Resources stack.", 64)
     local dpbCompact = layoutWidth < 680
     local dpb = b:CollapsibleSection("classpower_detached_power", "Player Power Bar", dpbCompact and 920 or 640, false)
     local dpbWidth = dpb._msuf2Width or ctx.width or 900
@@ -1047,7 +1048,6 @@ local function BuildClassPower(ctx)
     AddNamedControls(phpTextPositionControls, phpTextFields, "x y")
     AddTooltip(phpTextEnable, "HP Text", "Controls only this second HP bar. The normal Player unitframe HP text remains separate.")
     AddTooltip(phpTextShared, "Use Player HP Text", "Uses Player HP text settings and copies already-rendered Player HP text when it is current. Local Text X/Y still belong to this bar.")
-    b:Header("Other Resource Bars", "Extra class/resource bars that are not the main class-resource row.", 64)
     local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana", 306, false)
     local altManaCardW = min(620, (altMana._msuf2Width or ctx.width or 900) - 28)
     local altManaControlW = min(360, altManaCardW - 64)

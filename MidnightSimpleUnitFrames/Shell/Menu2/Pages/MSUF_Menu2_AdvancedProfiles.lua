@@ -203,7 +203,6 @@ local function DeleteCreatedProfile(name)
 end
 local function BuildProfiles(ctx)
     local b = W.PageBuilder(ctx)
-    local head = b:Header("Profiles", "Create, switch, copy, delete, export and import profiles.", 64)
     EnsureProfilePopups()
     local contentW = ctx.width or 920
     local buttonW, buttonH, buttonGap = 190, 24, 14
@@ -530,7 +529,6 @@ end
 local function BuildModules(ctx)
     local b = W.PageBuilder(ctx)
     local head = b:Header("Modules", "Optional MSUF style and visual modules.", 64)
-    if W.CreatePageResetButton then W.CreatePageResetButton(ctx, head, nil, { width = 88, y = -20 }) end
     local style = b:CollapsibleSection("modules_style", "Style", 96, true)
     local enable = W.SwitchAt(style, "MSUF Style", 14, -38, 220)
     M.BindBoolWidget(ctx, enable,

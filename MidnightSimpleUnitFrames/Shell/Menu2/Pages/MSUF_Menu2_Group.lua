@@ -285,18 +285,57 @@ local OnOffBadge, BadgeNumber, OptionText = M.OnOffBadge, M.BadgeNumber, M.Optio
 local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
     return Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, "_msuf2GroupFrameGateAlwaysEnabled")
 end
+local GROUP_PAGE_TABS = {
+    { key = "gf_layout", label = "Layout", width = 64 },
+    { key = "gf_bars", label = "Health & Text", width = 108 },
+    { key = "gf_indicators", label = "Status & Indicators", width = 138 },
+    { key = "gf_auras", label = "Auras", width = 58 },
+}
+local GROUP_FLOW_TAB_STYLE = {
+    bg = { 0.018, 0.032, 0.064, 0.95 },
+    border = { 0.090, 0.150, 0.280, 0.70 },
+    textColor = { 0.78, 0.87, 0.98, 1 },
+    hoverBg = { 0.032, 0.054, 0.096, 0.98 },
+    hoverBorder = { 0.140, 0.255, 0.460, 0.86 },
+    activeBg = { 0.045, 0.155, 0.405, 0.98 },
+    activeBorder = { 0.210, 0.490, 0.920, 0.98 },
+    activeTextColor = { 0.94, 0.98, 1.00, 1 },
+}
+local GROUP_SCOPE_BUTTON_STYLE = {
+    bg = { 0.026, 0.040, 0.084, 0.95 },
+    border = { 0.095, 0.165, 0.330, 0.68 },
+    textColor = { 0.80, 0.88, 0.98, 1 },
+    hoverBg = { 0.036, 0.056, 0.108, 0.98 },
+    hoverBorder = { 0.150, 0.265, 0.500, 0.86 },
+    activeBg = { 0.050, 0.130, 0.315, 0.98 },
+    activeBorder = { 0.220, 0.520, 0.960, 0.98 },
+    activeTextColor = { 0.96, 0.99, 1.00, 1 },
+}
+local GROUP_RESET_BUTTON_STYLE = {
+    bg = { 0.070, 0.026, 0.034, 0.94 },
+    border = { 0.340, 0.090, 0.110, 0.82 },
+    textColor = { 1.00, 0.82, 0.82, 1 },
+    hoverBg = { 0.090, 0.035, 0.045, 0.96 },
+    hoverBorder = { 0.420, 0.120, 0.140, 0.90 },
+    activeBg = { 0.070, 0.026, 0.034, 0.94 },
+    activeBorder = { 0.340, 0.090, 0.110, 0.82 },
+    activeTextColor = { 1.00, 0.82, 0.82, 1 },
+}
 local function ScopeSection(ctx, builder)
-    local compactTop = (tonumber(builder.width) or 0) < 600
-    local h = compactTop and 78 or 48
+    local pageW = tonumber(builder.width) or 720
+    local compactTop = pageW < 940
+    local commandH = compactTop and 84 or 54
+    local h = commandH
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
-    sec:SetSize(builder.width, h)
-    sec._msuf2Width = builder.width
+    sec:SetSize(pageW, h)
+    sec._msuf2Width = pageW
     builder.y = builder.y - h - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
-    local function MakeTopButton(parent, text, width, opts)
-        return W.TopButton(parent, text, width, 24, opts or {})
+
+    local function MakeTopButton(parent, text, width, opts, buttonH)
+        return W.TopButton(parent, text, width, buttonH or 24, opts or {})
     end
     local function AddScopeTooltip(frame, title, text)
         return M.AddTooltip and M.AddTooltip(frame, title, text, {
@@ -319,90 +358,44 @@ local function ScopeSection(ctx, builder)
         end
         RefreshContext(ctx)
     end
+
+    local command = sec
+
+    local tabX = 14
+    for i = 1, #GROUP_PAGE_TABS do
+        local tab = GROUP_PAGE_TABS[i]
+        local tabW = tonumber(tab.width) or 72
+        local btn = MakeTopButton(command, M.Tr(tab.label), tabW, GROUP_FLOW_TAB_STYLE)
+        btn._msuf2SkipHistoryCheckpoint = true
+        btn:SetPoint("TOPLEFT", command, "TOPLEFT", tabX, -15)
+        if btn.SetActive then btn:SetActive(ctx and ctx.key == tab.key) end
+        btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
+        tabX = tabX + tabW + 8
+    end
+
+    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", compactTop and 82 or 86, 24)) or MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86)
+    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, compactTop and -48 or -15)
+
     local scopeBtns = {}
-    local previous
-    local rowY = compactTop and -14 or -12
+    local rowY = compactTop and -48 or -15
+    local scopeGap = 8
+    local totalScopeW = 0
+    for i = 1, #SCOPE_VALUES do
+        local info = SCOPE_VALUES[i]
+        totalScopeW = totalScopeW + ((info.value == "mythicraid") and 68 or 56)
+        if i > 1 then totalScopeW = totalScopeW + scopeGap end
+    end
+    local actionW = compactTop and 82 or 86
+    local scopeX = compactTop and 14 or max(14, pageW - actionW - totalScopeW - 44)
     for i = 1, #SCOPE_VALUES do
         local info = SCOPE_VALUES[i]
         local width = (info.value == "mythicraid") and 68 or 56
-        local btn = MakeTopButton(sec, ScopeShortLabel(info.value), width, {
-            bg = { 0.026, 0.040, 0.084, 0.95 },
-            border = { 0.095, 0.165, 0.330, 0.62 },
-            activeBg = { 0.050, 0.110, 0.255, 0.98 },
-            activeBorder = { 0.200, 0.430, 0.850, 0.92 },
-        })
-        if previous then
-            btn:SetPoint("TOPLEFT", previous, "TOPRIGHT", 6, 0)
-        else
-            btn:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, rowY)
-        end
+        local btn = MakeTopButton(command, ScopeShortLabel(info.value), width, GROUP_SCOPE_BUTTON_STYLE)
+        btn:SetPoint("TOPLEFT", command, "TOPLEFT", scopeX, rowY)
         btn:SetScript("OnClick", function() SelectScope(info.value) end)
         scopeBtns[info.value] = btn
-        previous = btn
+        scopeX = scopeX + width + scopeGap
     end
-    local actionY = compactTop and -46 or rowY
-    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", compactTop and 82 or 86, 24)) or MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86)
-    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
-    local edit = (W.RoleButton and W.RoleButton(sec, M.Tr("MSUF Edit Mode"), "primary", compactTop and 118 or 128, 24)) or MakeTopButton(sec, M.Tr("MSUF Edit Mode"), compactTop and 118 or 128)
-    edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
-    local reset = MakeTopButton(sec, M.Tr("Reset Scopes"), compactTop and 94 or 104, {
-        bg = { 0.070, 0.026, 0.034, 0.94 },
-        border = { 0.340, 0.090, 0.110, 0.82 },
-        textColor = { 1.00, 0.82, 0.82, 1 },
-        hoverBg = { 0.090, 0.035, 0.045, 0.96 },
-        hoverBorder = { 0.420, 0.120, 0.140, 0.90 },
-        activeBg = { 0.070, 0.026, 0.034, 0.94 },
-        activeBorder = { 0.340, 0.090, 0.110, 0.82 },
-        activeTextColor = { 1.00, 0.82, 0.82, 1 },
-    })
-    reset:SetPoint("RIGHT", edit, "LEFT", -8, 0)
-    AddScopeTooltip(reset, "Reset Scopes", "Resets Party, Raid, and Mythic Raid Group Frame settings for the active profile.")
-    AddScopeTooltip(edit, "MSUF Edit Mode", "Drag frames to move them. Group aura handles can be selected in previews; Blizzard-controlled aura blocks cannot be dragged.")
-    local function RefreshTop()
-        local current = CurrentScope()
-        for i = 1, #SCOPE_VALUES do
-            local info = SCOPE_VALUES[i]
-            if scopeBtns[info.value] and scopeBtns[info.value].SetActive then scopeBtns[info.value]:SetActive(current == info.value) end
-        end
-        if edit.SetText then edit:SetText(M.IsMSUFEditModeActive() and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
-    end
-    local gfResetPopup = M.InstallStaticPopup("MSUF2_GF_RESET_ALL_CONFIRM", {
-        text = M.Tr("Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
-        button1 = YES or M.Tr("Yes"),
-        button2 = NO or M.Tr("No"),
-    })
-    gfResetPopup.OnAccept = function()
-        local function ResetAllGroupFrames()
-            local gf = GF()
-            if gf and type(gf.ResetAllToDefaults) == "function" and gf.ResetAllToDefaults() then
-                RefreshGFPreview()
-                RefreshContext(ctx)
-                if M.ShowStatusFeedback then
-                    M.ShowStatusFeedback("Group frames reset", "ok", 1.4)
-                elseif print then
-                    print(M.Tr("|cffffd700MSUF:|r Group Frames reset to defaults."))
-                end
-            end
-        end
-        M.RunWithHistory("Reset Group Frames", "group:resetAll", ResetAllGroupFrames)
-    end
-    reset:SetScript("OnClick", function()
-        if StaticPopup_Show then StaticPopup_Show("MSUF2_GF_RESET_ALL_CONFIRM") end
-    end)
-    M.WireEditModeButton(ctx, edit, {
-        blockConfig = true,
-        defer = true,
-        source = "msuf2_group",
-        unit = function() return "gf_" .. CurrentScope() end,
-        afterClick = function(enabled)
-            if M.ShowStatusFeedback then M.ShowStatusFeedback(enabled and "Edit mode on" or "Edit mode off", "info", 1.1) end
-            local function RefreshAfterToggle()
-                RefreshTop()
-                RequestGFPagePreview()
-            end
-            C_Timer.After(0, RefreshAfterToggle)
-        end,
-    })
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
     local copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
         width = 430,
@@ -431,6 +424,13 @@ local function ScopeSection(ctx, builder)
     })
     copy:SetScript("OnClick", function(self) if copyPopup then copyPopup.Show(self) end end)
     sec:SetScript("OnHide", function() if copyPopup then copyPopup.Hide() end end)
+    local function RefreshTop()
+        local current = CurrentScope()
+        for i = 1, #SCOPE_VALUES do
+            local info = SCOPE_VALUES[i]
+            if scopeBtns[info.value] and scopeBtns[info.value].SetActive then scopeBtns[info.value]:SetActive(current == info.value) end
+        end
+    end
     M.TrackRefresh(ctx, RefreshTop)
 end
 local GroupPage = M.GroupPage or {}

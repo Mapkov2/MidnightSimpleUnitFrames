@@ -358,41 +358,42 @@ local function BuildPreview(ctx, builder, unit)
     M.TrackCollapsibleRefresh(ctx, sec, RefreshPreviewState)
 end
 local function BuildTopActions(ctx, builder, unit, label)
-    local compactTop = (tonumber(builder.width) or 0) < 980
-    local sectionH = compactTop and 78 or 48
+    local pageW = tonumber(builder.width) or 720
+    local compactTabs = pageW < 980
+    local sectionH = 54
     local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
-    sec:SetSize(builder.width, sectionH)
-    sec._msuf2Width = builder.width
+    sec:SetSize(pageW, sectionH)
+    sec._msuf2Width = pageW
     builder.y = builder.y - sectionH - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
     local function MakeTopButton(parent, text, width, active, opts)
         return W.TopButton(parent, text, width, 24, opts or TOP_BUTTON_STYLE, active)
     end
-    local rowY = compactTop and -14 or -12
+    local rowY = -15
     local editing = T.Font(sec, "GameFontNormalSmall", M.Tr("Editing:"), { 0.72, 0.82, 1.00, 1 })
-    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, rowY - 4)
+    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, rowY - 4)
     local previousTab
     local tabStyle = {
-        bg = { 0.030, 0.045, 0.092, 0.94 },
-        border = { 0.105, 0.170, 0.320, 0.56 },
+        bg = { 0.026, 0.040, 0.084, 0.95 },
+        border = { 0.095, 0.165, 0.330, 0.68 },
         textColor = { 0.86, 0.92, 1.00, 1 },
-        hoverBg = { 0.036, 0.052, 0.104, 0.96 },
-        hoverBorder = { 0.180, 0.330, 0.680, 0.86 },
-        activeBg = { 0.030, 0.045, 0.092, 0.96 },
-        activeBorder = { 0.205, 0.390, 0.820, 0.92 },
+        hoverBg = { 0.036, 0.056, 0.108, 0.98 },
+        hoverBorder = { 0.150, 0.265, 0.500, 0.86 },
+        activeBg = { 0.050, 0.130, 0.315, 0.98 },
+        activeBorder = { 0.220, 0.520, 0.960, 0.98 },
         activeTextColor = { 0.94, 0.98, 1.00, 1 },
     }
     for i = 1, #UNIT_TAB_ORDER do
         local tabUnit = UNIT_TAB_ORDER[i]
         local pageKey = UNIT_PAGE_FOR_UNIT[tabUnit]
-        local tab = MakeTopButton(sec, UnitTopTabLabel(tabUnit, compactTop), UnitTopTabWidth(tabUnit, compactTop), tabUnit == unit, tabStyle)
+        local tab = MakeTopButton(sec, UnitTopTabLabel(tabUnit, compactTabs), UnitTopTabWidth(tabUnit, compactTabs), tabUnit == unit, tabStyle)
         tab._msuf2SkipHistoryCheckpoint = true
         if previousTab then
-            tab:SetPoint("TOPLEFT", previousTab, "TOPRIGHT", compactTop and 4 or 6, 0)
+            tab:SetPoint("TOPLEFT", previousTab, "TOPRIGHT", compactTabs and 4 or 6, 0)
         else
-            tab:SetPoint("TOPLEFT", sec, "TOPLEFT", compactTop and 74 or 82, rowY)
+            tab:SetPoint("TOPLEFT", sec, "TOPLEFT", compactTabs and 82 or 92, rowY)
         end
         if pageKey and pageKey ~= ctx.key then
             tab:SetScript("OnClick", function() M.SelectPage(pageKey) end)
@@ -401,24 +402,8 @@ local function BuildTopActions(ctx, builder, unit, label)
         end
         previousTab = tab
     end
-    local actionY = compactTop and -46 or rowY
-    local copy = W.TopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86, 24, nil, false)
-    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
-    local edit = W.TopButton(sec, M.Tr("MSUF Edit Mode"), compactTop and 118 or 128, 24, nil, false)
-    edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
-    if W.CreatePageResetButton then W.CreatePageResetButton(ctx, sec, edit, { width = compactTop and 84 or 88 }) end
-    local function RefreshEditButton()
-        local active = IsEditModeActive()
-        edit:SetText(active and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode"))
-        edit:SetActive(false)
-    end
-    edit:SetScript("OnClick", function()
-        local wasActive = IsEditModeActive()
-        ToggleEditMode(unit)
-        if M.ShowStatusFeedback then M.ShowStatusFeedback(wasActive and M.Tr("Edit mode off") or M.Tr("Edit mode on"), "info", 1.2) end
-        C_Timer.After(0, RefreshEditButton)
-    end)
-    M.TrackRefresh(ctx, RefreshEditButton)
+    local copy = W.TopButton(sec, M.Tr("Copy To"), 82, 24, nil, false)
+    copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, rowY)
     local function DefaultScopes()
         if type(NewCopyScopeDefaults) == "function" then return NewCopyScopeDefaults() end
         local t = {}
