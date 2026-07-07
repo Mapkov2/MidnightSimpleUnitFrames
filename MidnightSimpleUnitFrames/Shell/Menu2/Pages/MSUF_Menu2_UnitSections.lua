@@ -73,6 +73,23 @@ local TOP_BUTTON_STYLE = {
 local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet", "all" }
 local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, pet = 38, all = 38 }
 local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", boss = "Boss", all = "All" }
+local UNIT_TAB_ORDER = { "player", "target", "boss", "focus", "pet", "targettarget", "focustarget" }
+local UNIT_TAB_LABELS = { boss = "Boss Frames", targettarget = "Target's Target", focustarget = "Focus Target" }
+local UNIT_TAB_COMPACT_LABELS = { boss = "Boss", targettarget = "ToT", focustarget = "FT" }
+local UNIT_TAB_WIDTHS = { player = 58, target = 62, boss = 92, focus = 58, pet = 46, targettarget = 108, focustarget = 98 }
+local UNIT_TAB_COMPACT_WIDTHS = { player = 50, target = 54, boss = 54, focus = 50, pet = 40, targettarget = 42, focustarget = 36 }
+local UNIT_PAGE_FOR_UNIT = {}
+for pageKey, pageInfo in pairs(UNIT_PAGES or {}) do
+    if pageInfo and pageInfo.unit then UNIT_PAGE_FOR_UNIT[pageInfo.unit] = pageKey end
+end
+local function UnitTopTabLabel(unit, compact)
+    if compact then return M.Tr(UNIT_TAB_COMPACT_LABELS[unit] or UNIT_TAB_LABELS[unit] or UnitTopLabel(unit)) end
+    return M.Tr(UNIT_TAB_LABELS[unit] or UnitTopLabel(unit))
+end
+local function UnitTopTabWidth(unit, compact)
+    local widths = compact and UNIT_TAB_COMPACT_WIDTHS or UNIT_TAB_WIDTHS
+    return widths[unit] or UnitTopPillWidth(unit)
+end
 local TOT_INLINE_SEPARATOR_VALUES = {}
 local TOT_INLINE_SEPARATOR_OPTIONS = {}
 for i = 1, #SEPARATORS do
@@ -341,25 +358,23 @@ local function BuildPreview(ctx, builder, unit)
     M.TrackCollapsibleRefresh(ctx, sec, RefreshPreviewState)
 end
 local function BuildTopActions(ctx, builder, unit, label)
-    local compactTop = (tonumber(builder.width) or 0) < 600
-    local sectionH = compactTop and 72 or 30
-    local sec = CreateFrame("Frame", nil, builder.parent)
+    local compactTop = (tonumber(builder.width) or 0) < 980
+    local sectionH = compactTop and 78 or 48
+    local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
+    T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(builder.width, sectionH)
     sec._msuf2Width = builder.width
     builder.y = builder.y - sectionH - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
-    local line = sec:CreateTexture(nil, "ARTWORK")
-    line:SetPoint("BOTTOMLEFT", sec, "BOTTOMLEFT", 4, 1)
-    line:SetPoint("BOTTOMRIGHT", sec, "BOTTOMRIGHT", -4, 1)
-    line:SetHeight(1)
-    line:SetColorTexture(0.22, 0.42, 0.70, 0.42)
     local function MakeTopButton(parent, text, width, active, opts)
         return W.TopButton(parent, text, width, 24, opts or TOP_BUTTON_STYLE, active)
     end
+    local rowY = compactTop and -14 or -12
     local editing = T.Font(sec, "GameFontNormalSmall", M.Tr("Editing:"), { 0.72, 0.82, 1.00, 1 })
-    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, compactTop and -15 or -6)
-    local unitPill = MakeTopButton(sec, UnitTopLabel(unit), UnitTopPillWidth(unit), true, {
+    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, rowY - 4)
+    local previousTab
+    local tabStyle = {
         bg = { 0.030, 0.045, 0.092, 0.94 },
         border = { 0.105, 0.170, 0.320, 0.56 },
         textColor = { 0.86, 0.92, 1.00, 1 },
@@ -368,10 +383,25 @@ local function BuildTopActions(ctx, builder, unit, label)
         activeBg = { 0.030, 0.045, 0.092, 0.96 },
         activeBorder = { 0.205, 0.390, 0.820, 0.92 },
         activeTextColor = { 0.94, 0.98, 1.00, 1 },
-    })
-    unitPill:SetPoint("LEFT", editing, "RIGHT", 8, 0)
-    unitPill:EnableMouse(false)
-    local actionY = compactTop and -42 or -2
+    }
+    for i = 1, #UNIT_TAB_ORDER do
+        local tabUnit = UNIT_TAB_ORDER[i]
+        local pageKey = UNIT_PAGE_FOR_UNIT[tabUnit]
+        local tab = MakeTopButton(sec, UnitTopTabLabel(tabUnit, compactTop), UnitTopTabWidth(tabUnit, compactTop), tabUnit == unit, tabStyle)
+        tab._msuf2SkipHistoryCheckpoint = true
+        if previousTab then
+            tab:SetPoint("TOPLEFT", previousTab, "TOPRIGHT", compactTop and 4 or 6, 0)
+        else
+            tab:SetPoint("TOPLEFT", sec, "TOPLEFT", compactTop and 74 or 82, rowY)
+        end
+        if pageKey and pageKey ~= ctx.key then
+            tab:SetScript("OnClick", function() M.SelectPage(pageKey) end)
+        else
+            tab:EnableMouse(false)
+        end
+        previousTab = tab
+    end
+    local actionY = compactTop and -46 or rowY
     local copy = W.TopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86, 24, nil, false)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
     local edit = W.TopButton(sec, M.Tr("MSUF Edit Mode"), compactTop and 118 or 128, 24, nil, false)

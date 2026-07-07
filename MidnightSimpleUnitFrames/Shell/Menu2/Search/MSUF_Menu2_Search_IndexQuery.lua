@@ -735,6 +735,7 @@ local function BuildSearchPageInfos()
     for i = 1, #NAV_ITEMS do
         local item = NAV_ITEMS[i]
         if item.header then groupLabels[item.id or item.header] = item.header end
+        if item.title then groupLabels[item.id or item.title] = item.title end
     end
 
     local infos, seen = {}, {}

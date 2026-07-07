@@ -47,8 +47,12 @@ local function CheckNavigation(issues)
             if type(item.id) ~= "string" or item.id == "" then
                 Report(issues, "warn", ("nav header '%s' has no group id"):format(tostring(item.header)))
             end
+        elseif item.title then
+            if type(item.id) ~= "string" or item.id == "" then
+                Report(issues, "warn", ("nav title '%s' has no group id"):format(tostring(item.title)))
+            end
         else
-            Report(issues, "error", ("nav row %d is neither page nor header (DSL parse defect)"):format(i))
+            Report(issues, "error", ("nav row %d is neither page nor header/title (DSL parse defect)"):format(i))
         end
     end
     for key in pairs(iconGrid) do

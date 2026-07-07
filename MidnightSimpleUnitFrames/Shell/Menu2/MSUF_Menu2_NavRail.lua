@@ -79,6 +79,14 @@ local function NavPillVisualWidth(parent)
     M._navPillVisualWidth = width
     return width
 end
+local function ResolveNavClickTarget(key)
+    local fn = M.ResolvePrimaryNavClickTarget
+    if type(fn) == "function" then
+        local target = fn(key)
+        if type(target) == "string" and target ~= "" then return target end
+    end
+    return key
+end
 local function NormalizeNavToken(text)
     text = tostring(text or ""):lower()
     text = text:gsub("&", " and ")
@@ -176,7 +184,7 @@ local function SubmitAssistantQuery(query)
 end
 local function CreateNavButton(parent, key, label, indent)
     local btn = T.Button(parent, M.Tr(label), NavItemWidth(indent), NAV_BUTTON_H)
-    btn:SetScript("OnClick", function() M.SelectPage(key) end)
+    btn:SetScript("OnClick", function() M.SelectPage(ResolveNavClickTarget(key)) end)
     btn._msuf2SkipHistoryCheckpoint = true
     btn._msuf2NavItem = true
     btn._msuf2NavIndent = indent or 0
@@ -382,6 +390,7 @@ local function BuildNavRail(parent)
     M.nav = parent
     M.navButtons = {}
     M.navHeaders = {}
+    M.navTitles = {}
     M.navGroupForKey = {}
     M.navHeaderState = M.navHeaderState or {}
     local brandIconFrame = CreateFrame("Frame", nil, parent)
@@ -596,9 +605,21 @@ local function BuildNavRail(parent)
     parent._msuf2NavList = list
     M.CallIf(T.StyleScrollFrame, listScroll, parent)
     local created = {}
-    for i = 1, #NAV do
-        local item = NAV[i]
-        if item.header then
+    local navItems = CurrentNavItems()
+    for i = 1, #navItems do
+        local item = navItems[i]
+        if item.title then
+            local id = item.id or item.title
+            if M.navHeaderState[id] == nil then M.navHeaderState[id] = true end
+            local title = T.Font(list, "GameFontDisableSmall", string.upper(M.Tr(item.title)), T.colors.navHeaderText or T.colors.muted)
+            title:SetJustifyH("LEFT")
+            title:SetSize(NavItemWidth(0), 16)
+            title._msuf2NavTitle = true
+            title._msuf2NavTitleId = id
+            title._msuf2RawLabel = item.title
+            M.navTitles[id] = title
+            created[#created + 1] = { kind = "title", id = id, frame = title }
+        elseif item.header then
             local id = item.id or item.header
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
             local btn = T.Button(list, string.upper(M.Tr(item.header)), NavItemWidth(0), NAV_BUTTON_H)
@@ -641,6 +662,13 @@ local function BuildNavRail(parent)
             if advancedHidden and (item.id == "modules" or item.group == "modules") then
                 if btn then btn:Hide() end
                 if item.frame then item.frame:Hide() end
+            elseif item.kind == "title" then
+                local frame = item.frame
+                frame:Show()
+                frame:ClearAllPoints()
+                if y < -4 then y = y - 8 else y = y - 4 end
+                frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + 2, y)
+                y = y - 18
             elseif item.kind == "header" then
                 btn:Show()
                 if btn.SetScale then btn:SetScale(1) end
@@ -655,7 +683,7 @@ local function BuildNavRail(parent)
                 frame:ClearAllPoints()
                 frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y - 2)
                 y = y - 32
-            elseif not item.group or M.navHeaderState[item.group] then
+            elseif not item.group or M.navHeaderState[item.group] ~= false then
                 btn:Show()
                 if btn.SetScale then btn:SetScale(1) end
                 if btn.SetWidth and btn._msuf2NavBaseWidth then btn:SetWidth(btn._msuf2NavBaseWidth) end

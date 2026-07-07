@@ -287,8 +287,9 @@ local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
 end
 local function ScopeSection(ctx, builder)
     local compactTop = (tonumber(builder.width) or 0) < 600
-    local h = compactTop and 72 or 40
-    local sec = CreateFrame("Frame", nil, builder.parent)
+    local h = compactTop and 78 or 48
+    local sec = T.Panel(builder.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
+    T.ApplySurface(sec, "status")
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(builder.width, h)
     sec._msuf2Width = builder.width
@@ -320,6 +321,7 @@ local function ScopeSection(ctx, builder)
     end
     local scopeBtns = {}
     local previous
+    local rowY = compactTop and -14 or -12
     for i = 1, #SCOPE_VALUES do
         local info = SCOPE_VALUES[i]
         local width = (info.value == "mythicraid") and 68 or 56
@@ -330,15 +332,15 @@ local function ScopeSection(ctx, builder)
             activeBorder = { 0.200, 0.430, 0.850, 0.92 },
         })
         if previous then
-            btn:SetPoint("LEFT", previous, "RIGHT", 6, 0)
+            btn:SetPoint("TOPLEFT", previous, "TOPRIGHT", 6, 0)
         else
-            btn:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -8)
+            btn:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, rowY)
         end
         btn:SetScript("OnClick", function() SelectScope(info.value) end)
         scopeBtns[info.value] = btn
         previous = btn
     end
-    local actionY = compactTop and -42 or -10
+    local actionY = compactTop and -46 or rowY
     local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", compactTop and 82 or 86, 24)) or MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
     local edit = (W.RoleButton and W.RoleButton(sec, M.Tr("MSUF Edit Mode"), "primary", compactTop and 118 or 128, 24)) or MakeTopButton(sec, M.Tr("MSUF Edit Mode"), compactTop and 118 or 128)
