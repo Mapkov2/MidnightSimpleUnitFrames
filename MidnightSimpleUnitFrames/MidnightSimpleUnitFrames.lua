@@ -1075,10 +1075,12 @@ local function MSUF_NormalizeBarBorderScope(frameOrUnit)
     if unit == "boss" or unit:sub(1, 4) == "boss" then return "boss" end
     return unit
 end
-local function MSUF_GetScopedBarBorderThicknessDB(scopeKey)
+local function MSUF_GetScopedBarBorderDB(scopeKey)
     if scopeKey == "shared" or not MSUF_DB then return nil end
     local db = MSUF_DB[scopeKey]
-    if type(db) == "table" and db.hlOverride and db.barOutlineThickness ~= nil then
+    if type(db) == "table" and db.hlOverride
+        and (db.barOutlineThickness ~= nil or db.barOutlineStrata ~= nil or db.barOutlineLevelOffset ~= nil)
+    then
         return db
     end
     return nil
@@ -1093,10 +1095,29 @@ local function MSUF_GetDesiredBarBorderThicknessAndStamp(frameOrUnit)
 
     local barsDB = MSUF_DB and MSUF_DB.bars
     local gDB    = MSUF_DB and MSUF_DB.general
-    local scopedDB = MSUF_GetScopedBarBorderThicknessDB(scopeKey)
+    local scopedDB = MSUF_GetScopedBarBorderDB(scopeKey)
     local raw = (scopedDB and scopedDB.barOutlineThickness) or (barsDB and barsDB.barOutlineThickness)
+    local rawStrata = (scopedDB and scopedDB.barOutlineStrata) or (barsDB and barsDB.barOutlineStrata)
+    local normalizeStrata = _G.MSUF_NormalizeFrameStrata
+    local strata
+    if type(normalizeStrata) == "function" then
+        strata = normalizeStrata(rawStrata, "AUTO")
+    elseif rawStrata == nil or rawStrata == "" then
+        strata = "AUTO"
+    else
+        rawStrata = tostring(rawStrata):upper()
+        local rank = _G.MSUF_FRAME_STRATA_RANK
+        strata = (rank and rank[rawStrata]) and rawStrata or "AUTO"
+    end
+    local strataRank = _G.MSUF_FRAME_STRATA_RANK
+    local strataToken = (strataRank and strataRank[strata]) or 0
+    local levelOffset = tonumber((scopedDB and scopedDB.barOutlineLevelOffset) or (barsDB and barsDB.barOutlineLevelOffset))
+    levelOffset = math_floor((levelOffset or 2) + 0.5)
+    if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
     local rawNum = (type(raw) == "number") and raw or tonumber(raw)
-    local rawToken = rawNum and math_floor(rawNum * 10 + 0.5) or -999
+    local rawBit = rawNum and 1 or 0
+    local rawToken = rawNum and math_floor(rawNum * 10 + 0.5) or 0
+    if rawToken < 0 then rawToken = 0 elseif rawToken > 80 then rawToken = 80 end
     local useBit = 1
     if gDB and gDB.useBarBorder == false then useBit = 0 end
     local showToken = 1 -- nil/unspecified
@@ -1106,7 +1127,7 @@ local function MSUF_GetDesiredBarBorderThicknessAndStamp(frameOrUnit)
     local styleId = MSUF_GetBarBorderStyleId(gDB and gDB.barBorderStyle)
     local scopeId = MSUF_BarBorderScopeIds[scopeKey] or 99
     local scopeBit = scopedDB and 1 or 0
-    local stamp = scopeId * 10000000 + scopeBit * 1000000 + rawToken * 10000 + useBit * 1000 + showToken * 10 + styleId
+    local stamp = scopeId * 10000000000 + scopeBit * 1000000000 + strataToken * 100000000 + levelOffset * 1000000 + rawBit * 100000 + rawToken * 1000 + useBit * 100 + showToken * 10 + styleId
 
     local cache = scopeCache[scopeKey]
     if not cache or cache.stamp ~= stamp then
@@ -1131,13 +1152,23 @@ local function MSUF_GetDesiredBarBorderThicknessAndStamp(frameOrUnit)
         cache = cache or {}
         cache.stamp = stamp
         cache.thickness = thickness
+        cache.strata = strata
+        cache.levelOffset = levelOffset
         scopeCache[scopeKey] = cache
         if scopeKey == "shared" then
             MSUF_BarBorderCache.stamp = stamp
             MSUF_BarBorderCache.thickness = thickness
+            MSUF_BarBorderCache.strata = strata
+            MSUF_BarBorderCache.levelOffset = levelOffset
         end
     end
-    return cache.thickness, cache.stamp
+    return cache.thickness, cache.stamp, cache.strata, cache.levelOffset
+end
+_G.MSUF_GetDesiredBarBorderStrata = function(frameOrUnit)
+    return select(3, MSUF_GetDesiredBarBorderThicknessAndStamp(frameOrUnit))
+end
+_G.MSUF_GetDesiredBarBorderLevelOffset = function(frameOrUnit)
+    return select(4, MSUF_GetDesiredBarBorderThicknessAndStamp(frameOrUnit))
 end
 _G.MSUF_BarBorderCache = MSUF_BarBorderCache
 _G.MSUF_GetDesiredBarBorderThicknessAndStamp = MSUF_GetDesiredBarBorderThicknessAndStamp
@@ -1385,6 +1416,7 @@ local MSUF_ECV_ANCHORS = {
     target       = { "LEFT",  "RIGHT",  20,   0 },
     focus        = { "TOP",   "LEFT",    0,   0 },
     targettarget = { "TOP",   "RIGHT",   0, -40 },
+    focustarget  = { "TOP",   "RIGHT",   0,  40 },
 }
 local MSUF_MAX_BOSS_FRAMES = 5          -- how many boss frames MSUF creates/handles
 local MSUF_TEX_WHITE8 = "Interface\\Buttons\\WHITE8x8"
@@ -1807,6 +1839,9 @@ local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
     if not conf then return anchor end
 
     local customName = conf.anchorFrameName
+    if customName == "UIParent" or customName == "WorldFrame" then
+        customName = nil
+    end
     if type(customName) == "string" and customName ~= "" then
         local custom = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and customName == "EssentialCooldownViewer") and _G.MSUF_GetEffectiveCooldownFrame(customName) or (_G and _G[customName])
         if custom and custom ~= UIParent and custom ~= WorldFrame and (not custom.IsForbidden or not custom:IsForbidden()) then
@@ -1817,6 +1852,13 @@ local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
 
     local atv = conf.anchorToUnitframe
     if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
+        if atv == "EssentialCooldownViewer" then
+            local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(atv)) or (_G and _G[atv])
+            if cdm and cdm ~= UIParent and cdm ~= WorldFrame and (not cdm.IsForbidden or not cdm:IsForbidden()) then
+                return cdm
+            end
+            return anchor, atv
+        end
         local uf = _G and (_G.MSUF_UnitFrames or _G.UnitFrames)
         local rel = uf and uf[atv] or nil
         if not rel then rel = _G and _G["MSUF_" .. atv] or nil end
@@ -1827,6 +1869,24 @@ local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
     end
 
     return anchor
+end
+
+local function MSUF_UsesEssentialCooldownAnchor(conf, general)
+    if general and general.anchorToCooldown == true then return true end
+    if general and general.anchorName == "EssentialCooldownViewer" then return true end
+    if type(conf) ~= "table" then return false end
+    return conf.anchorFrameName == "EssentialCooldownViewer"
+        or conf.anchorToUnitframe == "EssentialCooldownViewer"
+end
+
+local function MSUF_IsDefaultAnchorName(anchorName)
+    return anchorName == nil
+        or anchorName == ""
+        or anchorName == "UIParent"
+        or anchorName == "WorldFrame"
+        or anchorName == "GLOBAL"
+        or anchorName == "global"
+        or anchorName == "FREE"
 end
 
 local function MSUF_IsUnitFrameAnchor(anchor)
@@ -2347,7 +2407,7 @@ local function MSUF_HasLateAnchorConfig()
     for i = 1, #MSUF_LATE_ANCHOR_UNIT_KEYS do
         local conf = db[MSUF_LATE_ANCHOR_UNIT_KEYS[i]]
         if type(conf) == "table" then
-            if type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= "" then return true end
+            if not MSUF_IsDefaultAnchorName(conf.anchorFrameName) then return true end
             local atv = conf.anchorToUnitframe
             if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
                 return true
@@ -2619,17 +2679,18 @@ local function PositionUnitFrame(f, unit, refreshConfig)
     local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
     local _g = MSUF_DB and MSUF_DB.general
     local anchor, missingAnchorName = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
+    local wantsCooldownAnchor = MSUF_UsesEssentialCooldownAnchor(conf, _g)
     local isCooldownAnchor = false
     local usesExternalAnchor = false
     local unresolvedConfiguredAnchor = missingAnchorName ~= nil
-    if _g and _g.anchorToCooldown then
+    if wantsCooldownAnchor then
         usesExternalAnchor = true
-    elseif type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= "" then
+    elseif not MSUF_IsDefaultAnchorName(conf.anchorFrameName) then
         usesExternalAnchor = true
     elseif MSUF_ShouldSnapshotExternalAnchor(anchor) then
         usesExternalAnchor = true
     end
-    if (_g and _g.anchorToCooldown and not ecv) or unresolvedConfiguredAnchor then
+    if (wantsCooldownAnchor and not ecv) or unresolvedConfiguredAnchor then
         unresolvedConfiguredAnchor = true
         if type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
             _G.MSUF_ScheduleLateAnchorReanchor()
@@ -2657,7 +2718,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             return
         end
     end
-    if _g and _g.anchorToCooldown then
+    if wantsCooldownAnchor then
         if ecv and anchor == ecv then
             isCooldownAnchor = true
         elseif not ecv then
@@ -2701,7 +2762,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             anchor = UIParent
         end
     end
-    if _g and _g.anchorToCooldown and isCooldownAnchor then
+    if wantsCooldownAnchor and isCooldownAnchor then
         local rule = MSUF_ECV_ANCHORS[key]
         if rule then
             local point, relPoint, baseX, extraY = rule[1], rule[2], rule[3], rule[4]
@@ -2746,13 +2807,13 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             -- VERTICAL_DOWN (default) and any legacy/unknown value (including pre-migration invertBossOrder==false)
             y = baseY + step * spacing
         end
-        if _g and _g.anchorToCooldown and isCooldownAnchor and inLockdown then
+        if wantsCooldownAnchor and isCooldownAnchor and inLockdown then
             if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
                 _G.MSUF_RequestUnitFrameReanchorAfterCombat()
             end
             return
         end
-        if _g and _g.anchorToCooldown and isCooldownAnchor then
+        if wantsCooldownAnchor and isCooldownAnchor then
             MSUF_ApplyPoint(f, "CENTER", anchor, "CENTER", x, y)
             f._msufPositionInitialized = true
             f._msufHardLockedToUIParent = nil
@@ -2777,13 +2838,13 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit)
         end
     else
-        if _g and _g.anchorToCooldown and isCooldownAnchor and inLockdown then
+        if wantsCooldownAnchor and isCooldownAnchor and inLockdown then
             if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
                 _G.MSUF_RequestUnitFrameReanchorAfterCombat()
             end
             return
         end
-        if _g and _g.anchorToCooldown and isCooldownAnchor then
+        if wantsCooldownAnchor and isCooldownAnchor then
             MSUF_ApplyPoint(f, "CENTER", anchor, "CENTER", conf.offsetX or 0, conf.offsetY or 0)
             f._msufPositionInitialized = true
             f._msufHardLockedToUIParent = nil
@@ -2856,7 +2917,7 @@ local function MSUF_FrameShouldHardLockPosition(frame)
 
     local g = MSUF_DB and MSUF_DB.general
     if g and g.anchorToCooldown == true then return true end
-    if type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= "" then return true end
+    if not MSUF_IsDefaultAnchorName(conf.anchorFrameName) then return true end
 
     local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame and MSUF_GetAnchorFrame() or UIParent)
     return MSUF_ShouldSnapshotExternalAnchor(anchor)
@@ -4031,7 +4092,6 @@ local _UF = {
     QueueVis   = _G.MSUF_QueueUnitframeVisual,
     LeaderIcon = MSUF_ApplyLeaderIconLayout,
     RaidMarker = MSUF_ApplyRaidMarkerLayout,
-    TPASync    = nil,  -- forward decl: assigned after definition below
 }
 
 local function MSUF_SyncTargetPowerBar(self, unit, barsConf, isPlayer, isTarget, isFocus)
@@ -4637,108 +4697,157 @@ end
         self._msufAlphaLayeredFastHits = nil
         if applyAlpha then applyAlpha(self, key) end
     end
-    if _UF.TPASync then
-        _UF.TPASync(self)
-    end
  end
+
 do
-    local function MSUF_TPA_GetOrCreate(name)
-        if not _G or not name then return nil end
-        local f = _G[name]
-        if f then return f end
-        f = F.CreateFrame("Frame", name, UIParent)
-        f:SetSize(1, 1)
-        if f.SetAlpha then f:SetAlpha(0) end
-        if f.Show then f:Show() end
-        _G[name] = f
-         return f
+    local SKIRON_ANCHOR_EVENT = "SkironCooldownManager.AnchorProxy.SizeChanged"
+    local SKIRON_RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00, 4.00, 8.00, 12.00 }
+    local SKIRON_PRIMARY_GROUPS = { 1, 101 }
+    local registeredSkiron
+
+    local function MSUF_SkironFrameUsable(frame)
+        if not (frame and frame ~= UIParent and frame ~= WorldFrame) then return false end
+        if frame.IsForbidden and frame:IsForbidden() then return false end
+        if frame.IsShown and not frame:IsShown() then return false end
+        local width = frame.GetWidth and frame:GetWidth() or 0
+        local height = frame.GetHeight and frame:GetHeight() or 0
+        return width > 0 and height > 0 and frame.SetPoint ~= nil
     end
-    local function MSUF_TPA_Snap(anchorName, target)
-        local a = MSUF_TPA_GetOrCreate(anchorName)
-        if not a or not a.ClearAllPoints or not a.SetPoint then return end
-        a:ClearAllPoints()
-        a:SetPoint("CENTER", target or UIParent, "CENTER", 0, 0)
-     end
-    local function MSUF_TPA_SyncFromUnitFrame(uf)
-        if not uf or not uf.unit then return end
-        local unit = uf.unit
-        if unit ~= "player" and unit ~= "target" then return end
-        if unit == "player" then
-            MSUF_TPA_Snap("MSUF_TPA_PlayerFrame", uf)
-            local pb = uf.targetPowerBar or uf.powerBar or uf
-            MSUF_TPA_Snap("MSUF_TPA_PlayerPowerBar", pb)
-            local sp = pb
-            MSUF_TPA_Snap("MSUF_TPA_PlayerSecondaryPower", sp)
-        else
-            MSUF_TPA_Snap("MSUF_TPA_TargetFrame", uf)
-            local pb = uf.targetPowerBar or uf.powerBar or uf
-            MSUF_TPA_Snap("MSUF_TPA_TargetPowerBar", pb)
-            MSUF_TPA_Snap("MSUF_TPA_TargetSecondaryPower", pb)
+
+    local function MSUF_IsSkironGroupFrame(frame)
+        local name = frame and frame.GetName and frame:GetName()
+        return type(name) == "string"
+            and (name:match("^SCM_GroupAnchorProxy_%d+$") or name:match("^SCM_GroupAnchor_%d+$"))
     end
-     end
-    _G.MSUF_TPA_SyncAnchors = function(uf)
-        MSUF_TPA_SyncFromUnitFrame(uf)
-     end
-    _G.MSUF_UpdateThirdPartyAnchors_All = function()
-        if not _G or not _G.MSUF_UnitFrames then return end
-        MSUF_TPA_SyncFromUnitFrame(_G.MSUF_UnitFrames.player)
-        MSUF_TPA_SyncFromUnitFrame(_G.MSUF_UnitFrames.target)
-     end
-_G.MSUF_TPA_EnsureAllAnchors = function()
-    MSUF_TPA_GetOrCreate("MSUF_TPA_PlayerFrame")
-    MSUF_TPA_GetOrCreate("MSUF_TPA_TargetFrame")
-    MSUF_TPA_GetOrCreate("MSUF_TPA_PlayerPowerBar")
-    MSUF_TPA_GetOrCreate("MSUF_TPA_TargetPowerBar")
-    MSUF_TPA_GetOrCreate("MSUF_TPA_PlayerSecondaryPower")
-    MSUF_TPA_GetOrCreate("MSUF_TPA_TargetSecondaryPower")
- end
-end
--- Resolve forward-declared hot-path local (TPA defined above)
-_UF.TPASync = _G.MSUF_TPA_SyncAnchors
-do
-    local function MSUF_TryRegisterBCDMAnchors()
-        if _G.MSUF_BCDM_AnchorsRegistered then return true end
-        if not C_AddOns or not C_AddOns.IsAddOnLoaded or not C_AddOns.IsAddOnLoaded("BetterCooldownManager") then return false end
-        if not _G or not _G.BCDMG or type(_G.BCDMG.AddAnchors) ~= "function" then  return false end
-        local function MSUF_BCDM_AddAnchors(addOnName, addToTypes, anchorTable)
-            local api = _G.BCDMG
-            if not api then return false end
-            local fn = api.AddAnchors
-            if type(fn) ~= "function" then  return false end
-            local ok = true; fn(api, addOnName, addToTypes, anchorTable)
-            if ok then return true end
-            fn(addOnName, addToTypes, anchorTable)
-            return ok and true or false
+
+    local function MSUF_GetSkironAnchorFrame(prefix, group)
+        return _G[prefix .. tostring(group)]
     end
-            _G.MSUF_TPA_EnsureAllAnchors()
-        local msufColor = "|cFFFFD700Midnight|rSimpleUnitFrames"
-        local anchors = {
-            ["MSUF_player"] = msufColor .. ": Player Frame",
-            ["MSUF_target"] = msufColor .. ": Target Frame",
-            ["MSUF_TPA_PlayerFrame"]          = msufColor .. ": Player Frame (Proxy)",
-            ["MSUF_TPA_TargetFrame"]          = msufColor .. ": Target Frame (Proxy)",
-            ["MSUF_TPA_PlayerPowerBar"]       = msufColor .. ": Player Power Bar",
-            ["MSUF_TPA_TargetPowerBar"]       = msufColor .. ": Target Power Bar",
-            ["MSUF_TPA_PlayerSecondaryPower"] = msufColor .. ": Player Secondary Power",
-            ["MSUF_TPA_TargetSecondaryPower"] = msufColor .. ": Target Secondary Power",
-        }
-        MSUF_BCDM_AddAnchors("MidnightSimpleUnitFrames", { "Power", "SecondaryPower", "CastBar" }, anchors)
-        MSUF_BCDM_AddAnchors("MidnightSimpleUnitFrames", { "Utility", "Buffs", "BuffBar", "Custom", "AdditionalCustom", "Item", "Trinket", "ItemSpell" }, anchors)
-        _G.MSUF_BCDM_AnchorsRegistered = true
-            _G.MSUF_UpdateThirdPartyAnchors_All()
-         return true
+
+    local function MSUF_FindUsableSkironGroupAnchor(group)
+        local proxy = MSUF_GetSkironAnchorFrame("SCM_GroupAnchorProxy_", group)
+        if MSUF_SkironFrameUsable(proxy) then return proxy end
+
+        local groupAnchor = MSUF_GetSkironAnchorFrame("SCM_GroupAnchor_", group)
+        if MSUF_SkironFrameUsable(groupAnchor) then return groupAnchor end
     end
-    if not MSUF_TryRegisterBCDMAnchors() then
-        local f = F.CreateFrame("Frame")
-        f:RegisterEvent("ADDON_LOADED")
-        f:SetScript("OnEvent", function(_, _, addon)
-            if addon == "BetterCooldownManager" then
-                MSUF_TryRegisterBCDMAnchors()
-                if f.UnregisterEvent then f:UnregisterEvent("ADDON_LOADED") end
-                if f.SetScript then f:SetScript("OnEvent", nil) end
+
+    local function MSUF_ResolveSkironAnchorSource(preferredFrame, isActiveProxy)
+        if MSUF_SkironFrameUsable(preferredFrame) and (isActiveProxy or MSUF_IsSkironGroupFrame(preferredFrame)) then
+            return preferredFrame
+        end
+
+        for i = 1, #SKIRON_PRIMARY_GROUPS do
+            local frame = MSUF_FindUsableSkironGroupAnchor(SKIRON_PRIMARY_GROUPS[i])
+            if frame then return frame end
+        end
+
+        for group = 1, 15 do
+            local frame = MSUF_FindUsableSkironGroupAnchor(group)
+            if frame then return frame end
+        end
+
+        for group = 101, 115 do
+            local frame = MSUF_FindUsableSkironGroupAnchor(group)
+            if frame then return frame end
+        end
+    end
+
+    local function MSUF_EnsureSkironAnchorProxy(source, isActiveProxy)
+        source = MSUF_ResolveSkironAnchorSource(source, isActiveProxy)
+        if not source then return nil, false end
+
+        local proxy = _G.MSUF_SkironCooldownAnchor
+        if not proxy then
+            proxy = CreateFrame("Frame", "MSUF_SkironCooldownAnchor", UIParent)
+            proxy._msufStableAnchorProxy = true
+            proxy._msufExternalAnchorCacheKey = "SkironCooldownManager"
+            if proxy.EnableMouse then proxy:EnableMouse(false) end
+            if proxy.SetAlpha then proxy:SetAlpha(0) end
+            _G.MSUF_SkironCooldownAnchor = proxy
+        end
+
+        local sourceWidth = source.GetWidth and source:GetWidth() or 0
+        local sourceHeight = source.GetHeight and source:GetHeight() or 0
+        local changed = proxy.MSUFSkironSource ~= source
+            or proxy.MSUFSkironSourceWidth ~= sourceWidth
+            or proxy.MSUFSkironSourceHeight ~= sourceHeight
+        if changed then
+            proxy:ClearAllPoints()
+            proxy:SetAllPoints(source)
+            proxy.MSUFSkironSource = source
+            proxy.MSUFSkironSourceWidth = sourceWidth
+            proxy.MSUFSkironSourceHeight = sourceHeight
+        end
+        if proxy.Show then proxy:Show() end
+        return proxy, changed
+    end
+
+    _G.MSUF_GetSkironCooldownAnchorProxy = function()
+        return MSUF_EnsureSkironAnchorProxy()
+    end
+
+    local function MSUF_RequestSkironAnchorApply()
+        if _G.MSUF_IsUnitFramePositionLocked and _G.MSUF_IsUnitFramePositionLocked() then
+            if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+                _G.MSUF_RequestUnitFrameReanchorAfterCombat()
             end
-         end)
+            return
+        end
+        if _G.MSUF_ForceReanchorAllUnitFrames_Once then
+            _G.MSUF_ForceReanchorAllUnitFrames_Once(true)
+        end
     end
+
+    local function MSUF_RefreshSkironAnchorProxy(source, isActiveProxy)
+        local proxy, changed = MSUF_EnsureSkironAnchorProxy(source, isActiveProxy)
+        if changed and proxy then
+            MSUF_RequestSkironAnchorApply()
+        end
+        return proxy ~= nil
+    end
+
+    local function MSUF_ScheduleSkironAnchorResolve()
+        local function run()
+            MSUF_RefreshSkironAnchorProxy()
+        end
+        if not (C_Timer and C_Timer.After) then
+            run()
+            return
+        end
+        for i = 1, #SKIRON_RETRY_DELAYS do
+            C_Timer.After(SKIRON_RETRY_DELAYS[i], run)
+        end
+    end
+
+    local function MSUF_OnSkironAnchorProxySizeChanged(_, proxyGroup, proxy, _width, _height, selectedAnchorRef, isActiveProxy)
+        if not (isActiveProxy or proxyGroup == 1 or selectedAnchorRef == "ANCHOR:1") then return end
+        MSUF_RefreshSkironAnchorProxy(proxy, isActiveProxy)
+    end
+
+    _G.MSUF_RegisterSkironAnchorProxy = function()
+        if registeredSkiron then
+            MSUF_ScheduleSkironAnchorResolve()
+            return true
+        end
+        if not (EventRegistry and type(EventRegistry.RegisterCallback) == "function") then
+            return false
+        end
+        EventRegistry:RegisterCallback(SKIRON_ANCHOR_EVENT, MSUF_OnSkironAnchorProxySizeChanged, "MidnightSimpleUnitFrames")
+        registeredSkiron = true
+        MSUF_ScheduleSkironAnchorResolve()
+        return true
+    end
+
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("ADDON_LOADED")
+    f:RegisterEvent("PLAYER_LOGIN")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:SetScript("OnEvent", function(_, event, addon)
+        if event == "ADDON_LOADED" and addon ~= "SkironCooldownManager" then return end
+        _G.MSUF_RegisterSkironAnchorProxy()
+    end)
+    _G.MSUF_RegisterSkironAnchorProxy()
 end
 
 -- Borders system (aggro/dispel/purge outlines + UI_SCALE handler) moved to MSUF_Borders.lua
@@ -5359,58 +5468,56 @@ local function MSUF_EnableUnitFrameDrag(f, unit)
         end
         if not anchor or not anchor.GetCenter or not self.GetCenter then return end
         local _g = MSUF_DB and MSUF_DB.general
-        if _g and _g.anchorToCooldown then
-            local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or (_G and _G["EssentialCooldownViewer"])
-            if ecv and anchor == ecv then
-                local rule = MSUF_ECV_ANCHORS and MSUF_ECV_ANCHORS[key]
-                if rule then
-                    local point, relPoint, baseX, extraY = rule[1], rule[2], rule[3] or 0, rule[4] or 0
-                    local function _PointXY(fr, p)
-                        if not fr or not p then return nil, nil end
-                        if p == "CENTER" then
-                            return fr:GetCenter()
-                        end
-                        local l, r, t, b = fr:GetLeft(), fr:GetRight(), fr:GetTop(), fr:GetBottom()
-                        if not (l and r and t and b) then
-                             return nil, nil
-                        end
-                        local cx = (l + r) * 0.5
-                        local cy = (t + b) * 0.5
-                        if p == "TOPLEFT" then return l, t end
-                        if p == "TOP" then return cx, t end
-                        if p == "TOPRIGHT" then return r, t end
-                        if p == "LEFT" then return l, cy end
-                        if p == "RIGHT" then return r, cy end
-                        if p == "BOTTOMLEFT" then return l, b end
-                        if p == "BOTTOM" then return cx, b end
-                        if p == "BOTTOMRIGHT" then return r, b end
+        local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or (_G and _G["EssentialCooldownViewer"])
+        if MSUF_UsesEssentialCooldownAnchor(conf, _g) and ecv and anchor == ecv then
+            local rule = MSUF_ECV_ANCHORS and MSUF_ECV_ANCHORS[key]
+            if rule then
+                local point, relPoint, baseX, extraY = rule[1], rule[2], rule[3] or 0, rule[4] or 0
+                local function _PointXY(fr, p)
+                    if not fr or not p then return nil, nil end
+                    if p == "CENTER" then
                         return fr:GetCenter()
                     end
-                    local ax2, ay2 = _PointXY(ecv, relPoint)
-                    local fx2, fy2 = _PointXY(self, point)
-                    if ax2 and ay2 and fx2 and fy2 then
-                        local fs = (self.GetEffectiveScale and self:GetEffectiveScale()) or 1
-                        local as = (ecv.GetEffectiveScale and ecv:GetEffectiveScale()) or 1
-                        if fs == 0 then fs = 1 end
-                        if as == 0 then as = 1 end
-                        local x = (fx2 * fs - ax2 * as) / as
-                        local y = (fy2 * fs - ay2 * as) / as
-                        conf.offsetX = math_floor(((x - baseX)) + 0.5)
-                        conf.offsetY = math_floor(((y - extraY)) + 0.5)
-                        if _G.MSUF_CacheUnitFrameScreenPosition then
-                            _G.MSUF_CacheUnitFrameScreenPosition(self, key, unit, point)
-                        end
-                        if MSUF_SyncUnitPositionPopup then
-                            MSUF_SyncUnitPositionPopup(unit, conf)
-                        end
-                        if MSUF_UpdateEditModeInfo then
-                            MSUF_UpdateEditModeInfo()
-                        end
-                         return
+                    local l, r, t, b = fr:GetLeft(), fr:GetRight(), fr:GetTop(), fr:GetBottom()
+                    if not (l and r and t and b) then
+                         return nil, nil
                     end
+                    local cx = (l + r) * 0.5
+                    local cy = (t + b) * 0.5
+                    if p == "TOPLEFT" then return l, t end
+                    if p == "TOP" then return cx, t end
+                    if p == "TOPRIGHT" then return r, t end
+                    if p == "LEFT" then return l, cy end
+                    if p == "RIGHT" then return r, cy end
+                    if p == "BOTTOMLEFT" then return l, b end
+                    if p == "BOTTOM" then return cx, b end
+                    if p == "BOTTOMRIGHT" then return r, b end
+                    return fr:GetCenter()
+                end
+                local ax2, ay2 = _PointXY(ecv, relPoint)
+                local fx2, fy2 = _PointXY(self, point)
+                if ax2 and ay2 and fx2 and fy2 then
+                    local fs = (self.GetEffectiveScale and self:GetEffectiveScale()) or 1
+                    local as = (ecv.GetEffectiveScale and ecv:GetEffectiveScale()) or 1
+                    if fs == 0 then fs = 1 end
+                    if as == 0 then as = 1 end
+                    local x = (fx2 * fs - ax2 * as) / as
+                    local y = (fy2 * fs - ay2 * as) / as
+                    conf.offsetX = math_floor(((x - baseX)) + 0.5)
+                    conf.offsetY = math_floor(((y - extraY)) + 0.5)
+                    if _G.MSUF_CacheUnitFrameScreenPosition then
+                        _G.MSUF_CacheUnitFrameScreenPosition(self, key, unit, point)
+                    end
+                    if MSUF_SyncUnitPositionPopup then
+                        MSUF_SyncUnitPositionPopup(unit, conf)
+                    end
+                    if MSUF_UpdateEditModeInfo then
+                        MSUF_UpdateEditModeInfo()
+                    end
+                     return
                 end
             end
-    end
+        end
         local ax, ay = anchor:GetCenter()
         local fx, fy = self:GetCenter()
         if not ax or not ay or not fx or not fy then return end

@@ -1438,6 +1438,45 @@ function GF.GetBarOutlineThickness(kind)
     return t
 end
 
+--- Resolve frame outline strata with scope override support.
+--- AUTO preserves the existing renderer-owned layering behavior.
+function GF.GetBarOutlineStrata(kind)
+    local conf = GF.GetConf(kind)
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local raw = nil
+    if conf and conf.hlOverride and conf.barOutlineStrata ~= nil then
+        raw = conf.barOutlineStrata
+    elseif bars then
+        raw = bars.barOutlineStrata
+    end
+    local normalize = _G.MSUF_NormalizeFrameStrata
+    if type(normalize) == "function" then return normalize(raw, "AUTO") end
+    if raw == nil or raw == "" then return "AUTO" end
+    raw = tostring(raw):upper()
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return (rank and rank[raw]) and raw or "AUTO"
+end
+
+--- Resolve frame outline level offset with scope override support.
+--- When unset, group frames keep the historical AUTO level resolved in render code.
+function GF.GetBarOutlineLevelOffset(kind)
+    local conf = GF.GetConf(kind)
+    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
+    local raw = nil
+    local explicit = false
+    if conf and conf.hlOverride and conf.barOutlineLevelOffset ~= nil then
+        raw = conf.barOutlineLevelOffset
+        explicit = true
+    elseif bars and bars.barOutlineLevelOffset ~= nil then
+        raw = bars.barOutlineLevelOffset
+        explicit = true
+    end
+    if not explicit then return 4, false end
+    local n = math_floor((tonumber(raw) or 4) + 0.5)
+    if n < 0 then n = 0 elseif n > 30 then n = 30 end
+    return n, true
+end
+
 --- Resolve bar texture path (falls through to global MSUF bar texture)
 function GF.ResolveBarTexture(kind)
     local conf = GF.GetConf(kind)
