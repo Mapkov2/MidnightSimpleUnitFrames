@@ -135,6 +135,59 @@ local GROUP_KEY_TO_KIND = {
     gf_mythicraid = "mythicraid",
 }
 
+local function GroupGeometryMask(gf)
+    return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
+end
+
+local function RequestGroupGeometryApply(kind, reason)
+    if not kind then return false end
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local apply = (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
+    if not (apply and type(apply.RequestGroup) == "function") then return false end
+    apply.RequestGroup(kind, "geometry", reason or "EM2_GROUP_GEOMETRY")
+    if type(apply.Flush) == "function" then apply.Flush() end
+    return true
+end
+
+local function RefreshGroupGeometryScoped(kind)
+    if not kind then return false end
+    if RequestGroupGeometryApply(kind, "EM2_HUD_GROUP_GEOMETRY") then
+        return true
+    end
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.RefreshGeometry) == "function" then
+        gf.RefreshGeometry(kind)
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshGeometry) == "function" then
+        _G.MSUF_GF_RefreshGeometry(kind)
+        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
+            _G.MSUF_GF_RefreshUnitBindings(kind)
+        end
+        if type(_G.MSUF_GF_RefreshVisuals) == "function" then
+            _G.MSUF_GF_RefreshVisuals(kind, GroupGeometryMask(gf))
+        end
+        return true
+    end
+    if gf and type(gf.RefreshVisuals) == "function" then
+        gf.RefreshVisuals(kind, GroupGeometryMask(gf))
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshVisuals) == "function" then
+        _G.MSUF_GF_RefreshVisuals(kind)
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshAll) == "function" then
+        _G.MSUF_GF_RefreshAll()
+        return true
+    end
+    if type(_G.MSUF_GF_Refresh) == "function" then
+        _G.MSUF_GF_Refresh()
+        return true
+    end
+    return false
+end
+
 local LABEL_BY_KEY = {
     player = "Player",
     target = "Target",
@@ -297,11 +350,7 @@ function HUD.ResetCurrentPosition()
                 end
                 conf.offsetX = (groupKind == "party") and -400 or -500
                 conf.offsetY = 0
-                if type(_G.MSUF_GF_RefreshAll) == "function" then
-                    _G.MSUF_GF_RefreshAll()
-                elseif type(_G.MSUF_GF_Refresh) == "function" then
-                    _G.MSUF_GF_Refresh()
-                end
+                RefreshGroupGeometryScoped(groupKind)
                 if type(_G.MSUF_EM2_SyncGFPopups) == "function" then _G.MSUF_EM2_SyncGFPopups() end
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             end
@@ -1086,10 +1135,10 @@ local function EnsureHUD()
         sh.showInEditMode = not (sh.showInEditMode and true or false)
         SetActive(auraBtn, sh.showInEditMode)
         local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.RefreshAll) == "function" then
-            a3.RefreshAll()
-        elseif a3 and type(a3.RefreshEditPreview) == "function" then
+        if a3 and type(a3.RefreshEditPreview) == "function" then
             a3.RefreshEditPreview()
+        elseif a3 and type(a3.RefreshAll) == "function" then
+            a3.RefreshAll()
         end
         HUD.SetStatus(HelpText(sh.showInEditMode and "EM_AURAS_ON" or "EM_AURAS_OFF"), "info")
     end, "Toggle aura preview icons\nand aura mover boxes.")

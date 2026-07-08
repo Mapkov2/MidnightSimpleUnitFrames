@@ -36,6 +36,59 @@ local IsConfigCombatLocked   = U.IsConfigCombatLocked
 local BlockConfigCombatLocked = U.BlockConfigCombatLocked
 local ThemeColor             = U.ThemeColor
 
+local function GroupGeometryMask(gf)
+    return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
+end
+
+local function RequestGroupGeometryApply(kind, reason)
+    if not kind then return false end
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local apply = (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
+    if not (apply and type(apply.RequestGroup) == "function") then return false end
+    apply.RequestGroup(kind, "geometry", reason or "EM2_GROUP_GEOMETRY")
+    if type(apply.Flush) == "function" then apply.Flush() end
+    return true
+end
+
+local function RefreshGroupGeometryScoped(kind)
+    if not kind then return false end
+    if RequestGroupGeometryApply(kind, "EM2_LAYOUT_GROUP_GEOMETRY") then
+        return true
+    end
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.RefreshGeometry) == "function" then
+        gf.RefreshGeometry(kind)
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshGeometry) == "function" then
+        _G.MSUF_GF_RefreshGeometry(kind)
+        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
+            _G.MSUF_GF_RefreshUnitBindings(kind)
+        end
+        if type(_G.MSUF_GF_RefreshVisuals) == "function" then
+            _G.MSUF_GF_RefreshVisuals(kind, GroupGeometryMask(gf))
+        end
+        return true
+    end
+    if gf and type(gf.RefreshVisuals) == "function" then
+        gf.RefreshVisuals(kind, GroupGeometryMask(gf))
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshVisuals) == "function" then
+        _G.MSUF_GF_RefreshVisuals(kind)
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshAll) == "function" then
+        _G.MSUF_GF_RefreshAll()
+        return true
+    end
+    if type(_G.MSUF_GF_Refresh) == "function" then
+        _G.MSUF_GF_Refresh()
+        return true
+    end
+    return false
+end
+
 local function T()
     local legacy = _G.MSUF_THEME or {}
     local bg = ThemeColor("bg", { legacy.bgR or 0.08, legacy.bgG or 0.09, legacy.bgB or 0.10, legacy.bgA or 0.94 })
@@ -815,8 +868,10 @@ local function NudgeTarget(dx, dy)
                 g[yKey] = floor(((tonumber(g[yKey]) or 0) + ndy) + 0.5)
                 if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
                     _G.MSUF_ApplyCastbarUnitAndSync(unit)
+                elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+                    _G.MSUF_ApplyCastbarVisualsForUnit(unit)
                 elseif _G.MSUF_UpdateCastbarVisuals then
-                    _G.MSUF_UpdateCastbarVisuals()
+                    _G.MSUF_UpdateCastbarVisuals(unit)
                     EM2.CastPopup.Sync()
                 end
             end
@@ -873,7 +928,9 @@ local function NudgeTarget(dx, dy)
                     end
                 end
                 local a3 = MSUF and MSUF.MSUF_Auras3
-                if a3 and type(a3.RefreshUnit) == "function" then
+                if a3 and type(a3.RequestScope) == "function" then
+                    for _, k in ipairs(applyKeys) do a3.RequestScope(k, "AURAS3_EDITMODE_NUDGE") end
+                elseif a3 and type(a3.RefreshUnit) == "function" then
                     for _, k in ipairs(applyKeys) do a3.RefreshUnit(k) end
                 elseif a3 and type(a3.RefreshAll) == "function" then
                     a3.RefreshAll()
@@ -1084,7 +1141,12 @@ local function ResolveNamedEditAnchor(name)
         local cooldownFrame = type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(name) or nil
         return cooldownFrame or _G[name]
     end
-    local uf = _G.MSUF_UnitFrames or _G.UnitFrames
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.GetFrame) == "function" then
+        local frame = UF.GetFrame(name)
+        if frame then return frame end
+    end
+    local uf = UF and UF.frames
     if uf and uf[name] then return uf[name] end
     return _G[name] or _G["MSUF_" .. name]
 end
@@ -1254,12 +1316,17 @@ local function ApplyCastbarDragPosition(d, centerX, centerY)
     if not positioned then
         local rfName = d.castbarReanchorFunc
         local rf = rfName and _G[rfName] or nil
-        if type(rf) == "function" then
-            rf()
-        elseif type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+        if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
             _G.MSUF_ApplyCastbarUnitAndSync(d.castbarUnit)
-        elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-            _G.MSUF_UpdateCastbarVisuals()
+        else
+            if type(rf) == "function" then
+                rf()
+            end
+            if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+                _G.MSUF_ApplyCastbarVisualsForUnit(d.castbarUnit)
+            elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+                _G.MSUF_UpdateCastbarVisuals(d.castbarUnit)
+            end
         end
     end
 
@@ -1566,6 +1633,10 @@ function Ticker.BeginDrag(mover, key, cfg)
     end
 
     local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid") or (bar and bar._msufIsGroupFrame == true) or false
+    local groupKind = (key == "gf_party" and "party")
+        or (key == "gf_raid" and "raid")
+        or (key == "gf_mythicraid" and "mythicraid")
+        or (bar and bar._msufGFKind)
     local anchor = isCastbar and UIParent or (isGroupFrame and ResolveGroupAnchor(conf)) or ResolveAnchor(key, conf)
 
     local bossAdjX, bossAdjY
@@ -1668,6 +1739,7 @@ function Ticker.BeginDrag(mover, key, cfg)
         popupSyncAcc = 0.05,
         focusNotifyAcc = 0.05,
         isGroupFrame = isGroupFrame,
+        groupKind    = groupKind,
         isCastbar    = isCastbar,
         castbarUnit  = castbarUnit,
         castbarXKey  = castbarXKey,
@@ -1761,13 +1833,7 @@ function Ticker.EndDrag()
         elseif d.isGroupFrame then
             if not IsConfigCombatLocked() then
                 local profileStarted = EditPerfStart()
-                if MSUF and MSUF.GF and type(MSUF.GF.RefreshGeometry) == "function" then
-                    MSUF.GF.RefreshGeometry()
-                elseif type(_G.MSUF_GF_RefreshAll) == "function" then
-                    _G.MSUF_GF_RefreshAll()
-                elseif type(_G.MSUF_GF_Refresh) == "function" then
-                    _G.MSUF_GF_Refresh()
-                end
+                RefreshGroupGeometryScoped(d.groupKind)
                 EditPerfStop("Group.DragEndGeometry", profileStarted)
             end
             C_Timer.After(0.06, function()

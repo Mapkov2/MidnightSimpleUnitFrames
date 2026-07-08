@@ -49,13 +49,94 @@ function Util.ApplyAllSettingsSafe()
     return false
 end
 
+local function EditGroupKindForKey(key)
+    key = tostring(key or "")
+    if key == "gf_party" or key == "party" then return "party" end
+    if key == "gf_raid" or key == "raid" then return "raid" end
+    if key == "gf_mythicraid" or key == "mythicraid" then return "mythicraid" end
+end
+
+local function EditCastbarUnitForKey(key)
+    key = tostring(key or "")
+    if key:sub(1, 8) == "castbar_" then key = key:sub(9) end
+    if key == "player" or key == "target" or key == "focus" or key == "boss" then return key end
+    if key:match("^boss%d+$") then return "boss" end
+end
+
+local function RequestGroupGeometryApply(kind, reason)
+    if not kind then return false end
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local apply = (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
+    if not (apply and type(apply.RequestGroup) == "function") then return false end
+    apply.RequestGroup(kind, "geometry", reason or "EM2_GROUP_GEOMETRY")
+    if type(apply.Flush) == "function" then apply.Flush() end
+    return true
+end
+
+local function ApplyGroupSettingsForKeySafe(kind)
+    if RequestGroupGeometryApply(kind, "EM2_CORE_GROUP_GEOMETRY") then
+        return true
+    end
+    local gf = MSUF and MSUF.GF
+    if type(gf) ~= "table" or not kind then return false end
+    local started = EditCoreProfileStart()
+    local did = false
+    local dirty
+    if gf.DIRTY_GEOMETRY and gf.DIRTY_LAYOUT then
+        dirty = gf.DIRTY_GEOMETRY + gf.DIRTY_LAYOUT
+    else
+        dirty = gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL
+    end
+    if _G.InCombatLockdown and _G.InCombatLockdown() and type(gf.DeferGroupRuntime) == "function" then
+        gf.DeferGroupRuntime("layout", kind, dirty)
+        did = true
+    else
+        if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry(kind); did = true end
+        if type(gf.RefreshVisuals) == "function" and dirty then gf.RefreshVisuals(kind, dirty); did = true end
+    end
+    EditCoreProfileStop("editApply", "GF.Apply:" .. tostring(kind), started)
+    return did
+end
+
+local function ApplyCastbarSettingsForKeySafe(unit)
+    unit = EditCastbarUnitForKey(unit)
+    if not unit then return false end
+    local started = EditCoreProfileStart()
+    local did = false
+    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+        _G.MSUF_ApplyCastbarUnitAndSync(unit)
+        did = true
+    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+        did = true
+    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+        _G.MSUF_UpdateCastbarVisuals(unit)
+        did = true
+    end
+    EditCoreProfileStop("editApply", "Castbar.Apply:" .. tostring(unit), started)
+    return did
+end
+
 function Util.ApplySettingsForKeySafe(key)
+    local groupKind = EditGroupKindForKey(key)
+    if groupKind then return ApplyGroupSettingsForKeySafe(groupKind) end
+
+    if tostring(key or ""):sub(1, 8) == "castbar_" then
+        return ApplyCastbarSettingsForKeySafe(key)
+    end
+
     local UF = MSUF and MSUF.UF
     if UF and UF.Apply then
         local started = EditCoreProfileStart()
         local ok = UF.Apply(key) == true
         EditCoreProfileStop("editApply", "UF.Apply:" .. tostring(key or "nil"), started)
         return ok
+    end
+    if type(_G.MSUF_ApplyUnitFrameKey_Immediate) == "function" and key then
+        local started = EditCoreProfileStart()
+        _G.MSUF_ApplyUnitFrameKey_Immediate(key)
+        EditCoreProfileStop("editApply", "UF.ApplyImmediate:" .. tostring(key), started)
+        return true
     end
     return false
 end
@@ -474,10 +555,17 @@ local function SnapshotDB()
 end
 
 local function InvalidateAllFrameCaches()
-    local uf = _G.MSUF_UnitFrames
-    if not uf then return end
-    for _, f in pairs(uf) do
-        if f.cachedConfig then f.cachedConfig = nil end
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.ForEachFrame) == "function" then
+        UF.ForEachFrame(function(f)
+            if f and f.cachedConfig then f.cachedConfig = nil end
+        end)
+        return
+    end
+    local frames = UF and UF.frames
+    if not frames then return end
+    for _, f in pairs(frames) do
+        if f and f.cachedConfig then f.cachedConfig = nil end
     end
 end
 
@@ -541,7 +629,9 @@ local function RestoreRuntimeAfterEditModeExit()
         _G.MSUF_UpdateBossCastbarPreview()
     end
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.RefreshAll) == "function" then
+    if a3 and type(a3.RefreshEditPreview) == "function" then
+        a3.RefreshEditPreview()
+    elseif a3 and type(a3.RefreshAll) == "function" then
         a3.RefreshAll()
     end
 end
@@ -883,6 +973,91 @@ local function ResolveGFDBKey(key)
     return nil
 end
 
+local function ResolveGFKind(key)
+    if key == "gf_party" then return "party" end
+    if key == "gf_raid" then return "raid" end
+    if key == "gf_mythicraid" then return "mythicraid" end
+    if key == "party" or key == "raid" or key == "mythicraid" then return key end
+    return nil
+end
+
+local function NormalizeCastbarUndoUnit(unit)
+    unit = tostring(unit or "")
+    if unit:match("^boss%d+$") then return "boss" end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+    return nil
+end
+
+local function ApplyCastbarUndo(unit)
+    unit = NormalizeCastbarUndoUnit(unit)
+    if unit and type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+        _G.MSUF_ApplyCastbarUnitAndSync(unit)
+        return true
+    end
+    if unit and type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+        return true
+    end
+    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+        _G.MSUF_UpdateCastbarVisuals(unit)
+        return true
+    end
+    return false
+end
+
+local function ApplyAuraUndo(unit)
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if not a3 then return false end
+    unit = tostring(unit or "")
+    if unit ~= "" and unit ~= "shared" and unit ~= "global" and unit ~= "*" then
+        if type(a3.RequestScope) == "function" then return a3.RequestScope(unit, "EM2_AURA_UNDO") end
+        if type(a3.RefreshUnit) == "function" then return a3.RefreshUnit(unit) end
+    end
+    if type(a3.RefreshAll) == "function" then return a3.RefreshAll() end
+    return false
+end
+
+local function ApplyGFUndo(key, dbKey)
+    local gf = MSUF and MSUF.GF
+    local kind = ResolveGFKind(key) or ResolveGFKind(dbKey)
+    if RequestGroupGeometryApply(kind, "EM2_UNDO_GROUP_GEOMETRY") then
+        return true
+    end
+    if gf and type(gf.RefreshGeometry) == "function" then
+        gf.RefreshGeometry(kind)
+        if type(gf.RefreshUnitBindings) == "function" then
+            gf.RefreshUnitBindings(kind)
+        end
+        if type(gf.RefreshVisuals) == "function" then
+            gf.RefreshVisuals(kind, gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)
+        end
+        return true
+    end
+    if gf and type(gf.RefreshVisuals) == "function" then
+        gf.RefreshVisuals(kind, gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)
+        return true
+    end
+    if kind and type(_G.MSUF_GF_RefreshGeometry) == "function" then
+        _G.MSUF_GF_RefreshGeometry(kind)
+        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
+            _G.MSUF_GF_RefreshUnitBindings(kind)
+        end
+        if type(_G.MSUF_GF_RefreshVisuals) == "function" then
+            _G.MSUF_GF_RefreshVisuals(kind)
+        end
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshAll) == "function" then
+        _G.MSUF_GF_RefreshAll()
+        return true
+    end
+    if type(_G.MSUF_GF_Refresh) == "function" then
+        _G.MSUF_GF_Refresh()
+        return true
+    end
+    return false
+end
+
 local function CaptureState(category, key)
     local db = _G.MSUF_DB
     if not db then return nil end
@@ -915,28 +1090,24 @@ local function RestoreState(snap)
     elseif snap.category == "castbar" then
         db.general = db.general or {}
         DeepRestore(db.general, snap.data)
-        if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
-        ApplyAllSettingsSafe()
+        ApplyCastbarUndo(snap.key)
     elseif snap.category == "aura" then
         db.auras3 = db.auras3 or {}
         DeepRestore(db.auras3, snap.data)
-        local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
+        ApplyAuraUndo(snap.key)
     elseif snap.category == "gf" then
         local dbKey = snap.dbKey or ResolveGFDBKey(snap.key)
         if dbKey then
             db[dbKey] = db[dbKey] or {}
             DeepRestore(db[dbKey], snap.data)
-            if _G.MSUF_GF_RefreshAll then
-                _G.MSUF_GF_RefreshAll()
-            elseif _G.MSUF_GF_Refresh then
-                _G.MSUF_GF_Refresh()
-            end
+            ApplyGFUndo(snap.key, dbKey)
             if _G.MSUF_EM2_SyncGFPopups then _G.MSUF_EM2_SyncGFPopups() end
         end
     end
 
-    if _G.MSUF_UpdateAllFonts then _G.MSUF_UpdateAllFonts() end
+    if snap.category == "unit" and type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+        _G.MSUF_ForceTextLayoutForUnitKey(snap.key)
+    end
 
     --- Sync popups
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end

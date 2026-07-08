@@ -37,11 +37,13 @@ function Handles.Install(box, deps)
     -- The old monolith closed over the native preview mock. After splitting the
     -- file, bind it explicitly so preview handles never fall back to UIParent.
     local mock = box._mock or box
-    local dragBounds = UIParent or box
-    box._dragFrame = CreateFrame("Frame", nil, box)
-    box._dragFrame:SetAllPoints(dragBounds)
+    local dragParent = box._stage or box
+    box._dragFrame = CreateFrame("Frame", nil, dragParent)
+    box._dragFrame:SetAllPoints(dragParent)
     box._dragFrame:EnableMouse(true)
-    if box._dragFrame.SetFrameStrata then box._dragFrame:SetFrameStrata("TOOLTIP") end
+    if box._dragFrame.SetFrameLevel and dragParent.GetFrameLevel then
+        box._dragFrame:SetFrameLevel((dragParent:GetFrameLevel() or 0) + 140)
+    end
     box._dragFrame:Hide()
     local function SelectHandle(handle)
         box._selectedHandle = handle
@@ -82,6 +84,12 @@ function Handles.Install(box, deps)
     local function RefreshGroupPreviewAfterMove(handle)
         local gf = MSUF and MSUF.GF
         local refreshKind = (handle and handle._cfgTargetedSpells) and "party" or H.CurrentScope()
+        if gf and type(gf.InvalidateCompiledSpecs) == "function" then
+            gf.InvalidateCompiledSpecs(refreshKind)
+        end
+        if handle and handle._cfgSpell and gf and gf.SpellIndicators and type(gf.SpellIndicators.InvalidateRuntimeCaches) == "function" then
+            gf.SpellIndicators.InvalidateRuntimeCaches()
+        end
         if gf and gf.RefreshVisuals then
             local dirty = gf.DIRTY_VISUAL or 0x02
             if handle and (handle._cfgGroup or handle._cfgSpell) then dirty = gf.DIRTY_AURAS or dirty end
@@ -349,6 +357,7 @@ function Handles.Install(box, deps)
             or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
             or 1
         box._dragFrame._handle = handle
+        if box._dragFrame.SetAllPoints then box._dragFrame:SetAllPoints(box._stage or box) end
         box._dragFrame:SetScript("OnUpdate", UpdateHandleDrag)
         box._dragFrame:Show()
         RefreshHandleSelection(box)

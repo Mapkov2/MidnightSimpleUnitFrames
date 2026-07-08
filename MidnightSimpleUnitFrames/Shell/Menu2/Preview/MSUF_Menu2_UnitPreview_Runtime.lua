@@ -9,6 +9,15 @@ MSUF = MSUF or (_G.MSUF_NS) or {}
 local Runtime = MSUF.UFPreviewRuntime or {}
 MSUF.UFPreviewRuntime = Runtime
 local lastDBRef, lastProfileName
+local function CoreFrame(unit)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(unit)
+        if frame then return frame end
+    end
+    local frames = uf and uf.frames
+    return unit and frames and frames[unit] or nil
+end
 local function ClampRuntimeVisualScale(scale)
     scale = tonumber(scale)
     if not scale or scale <= 0 then return 1 end
@@ -38,8 +47,7 @@ function Runtime.SpecForPreviewKey(key)
 end
 function Runtime.VisualScaleForPreviewKey(key)
     local runtimeUnit = key == "boss" and "boss1" or key
-    local frames = _G.MSUF_UnitFrames
-    local frame = runtimeUnit and ((frames and frames[runtimeUnit]) or _G["MSUF_" .. runtimeUnit])
+    local frame = CoreFrame(runtimeUnit) or (runtimeUnit and _G["MSUF_" .. runtimeUnit])
     local scale = frame and frame.GetScale and frame:GetScale()
     if scale then return ClampRuntimeVisualScale(scale) end
     local db = _G.MSUF_DB

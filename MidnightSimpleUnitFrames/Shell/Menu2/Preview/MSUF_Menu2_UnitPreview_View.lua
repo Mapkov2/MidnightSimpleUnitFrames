@@ -182,8 +182,10 @@ end
 local function ApplyCastbarRuntimeForKey(key)
     if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
         _G.MSUF_ApplyCastbarUnitAndSync(key)
+    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        _G.MSUF_ApplyCastbarVisualsForUnit(key)
     elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals()
+        _G.MSUF_UpdateCastbarVisuals(key)
     end
     if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup(key) end
 end
@@ -234,7 +236,7 @@ local function ReadBarsHandleOffsets(handle)
     return x, y, xKey, yKey
 end
 local function RefreshClassPowerRuntime(box, reason)
-    if type(_G.MSUF_ClassPower_Refresh) == "function" then _G.MSUF_ClassPower_Refresh() end
+    if type(_G.MSUF_ClassPower_Apply) == "function" then _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, playerHP = true, syncNow = false }) elseif type(_G.MSUF_ClassPower_Refresh) == "function" then _G.MSUF_ClassPower_Refresh() end
     if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
     ApplyPanelUnit(box and box._msufPanel, "player", reason or "UNIT_PREVIEW_CLASS_POWER_MOVE")
 end

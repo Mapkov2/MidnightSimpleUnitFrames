@@ -152,7 +152,11 @@ local function ReapplyCastbar(unit)
             or (unit == "focus" and "MSUF_ReanchorFocusCastBar")
             or (unit == "boss" and "MSUF_ReanchorBossCastBar")
         if type(_G[fn]) == "function" then _G[fn]() end
-        if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
+        if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+            _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+        elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+            _G.MSUF_UpdateCastbarVisuals(unit)
+        end
     end
     if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then _G.MSUF_PositionCastbarPreviewUnit(unit) end
     SyncMovers()

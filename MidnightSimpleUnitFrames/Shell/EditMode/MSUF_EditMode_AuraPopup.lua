@@ -127,13 +127,26 @@ end
 
 local function ReapplyAuras(units)
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.RefreshUnit) == "function" then
+    if a3 and type(a3.RequestScope) == "function" then
+        for i = 1, #units do a3.RequestScope(units[i], "EM2_AURA_POPUP_APPLY") end
+    elseif a3 and type(a3.RefreshUnit) == "function" then
         for i = 1, #units do a3.RefreshUnit(units[i]) end
     elseif a3 and type(a3.RefreshAll) == "function" then
         a3.RefreshAll()
     end
     if a3 and type(a3.RefreshEditPreview) == "function" then
-        a3.RefreshEditPreview()
+        local bossDone = false
+        for i = 1, #units do
+            local unit = units[i]
+            if IsBoss(unit) then
+                if not bossDone then
+                    a3.RefreshEditPreview("boss")
+                    bossDone = true
+                end
+            else
+                a3.RefreshEditPreview(unit)
+            end
+        end
     end
     SyncMovers()
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh("EM2_AURA_POPUP_APPLY") end

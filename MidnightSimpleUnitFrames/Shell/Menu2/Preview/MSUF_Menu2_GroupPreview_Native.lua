@@ -397,21 +397,61 @@ local function ResolvePreviewStatusbarTexture(conf, key)
     end
     return "Interface\\Buttons\\WHITE8X8"
 end
+local function NormalizeHealthMode(mode)
+    if type(mode) ~= "string" then return nil end
+    mode = mode:lower()
+    if mode == "global" then return nil end
+    if mode == "class" or mode == "gradient" or mode == "dark" or mode == "unified" then return mode end
+    if mode == "custom" then return "unified" end
+    return nil
+end
+local function PreviewGradientHealth(conf, cache)
+    local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
+    conf = conf or {}
+    return {
+        gradientLowR = (cache and cache.healthGradientLowR) or conf.healthGradientLowR or general.healthGradientLowR or 1,
+        gradientLowG = (cache and cache.healthGradientLowG) or conf.healthGradientLowG or general.healthGradientLowG or 0,
+        gradientLowB = (cache and cache.healthGradientLowB) or conf.healthGradientLowB or general.healthGradientLowB or 0,
+        gradientMidR = (cache and cache.healthGradientMidR) or conf.healthGradientMidR or general.healthGradientMidR or 1,
+        gradientMidG = (cache and cache.healthGradientMidG) or conf.healthGradientMidG or general.healthGradientMidG or 1,
+        gradientMidB = (cache and cache.healthGradientMidB) or conf.healthGradientMidB or general.healthGradientMidB or 0,
+        gradientHighR = (cache and cache.healthGradientHighR) or conf.healthGradientHighR or general.healthGradientHighR or 0,
+        gradientHighG = (cache and cache.healthGradientHighG) or conf.healthGradientHighG or general.healthGradientHighG or 1,
+        gradientHighB = (cache and cache.healthGradientHighB) or conf.healthGradientHighB or general.healthGradientHighB or 0,
+    }
+end
+local function PreviewGradientColor(conf, cache, pct)
+    local health = PreviewGradientHealth(conf, cache)
+    local p = max(0, min(1, tonumber(pct) or 0.72))
+    local common = MSUF and MSUF.UFBarTextCommon
+    if common and type(common.PreviewHealthGradientColor) == "function" then
+        local r, g, b = common.PreviewHealthGradientColor(health, p)
+        if r ~= nil then return r, g, b end
+    end
+    local lr, lg, lb = health.gradientLowR, health.gradientLowG, health.gradientLowB
+    local mr, mg, mb = health.gradientMidR, health.gradientMidG, health.gradientMidB
+    local hr, hg, hb = health.gradientHighR, health.gradientHighG, health.gradientHighB
+    if p <= 0.5 then
+        local t = p * 2
+        return lr + (mr - lr) * t, lg + (mg - lg) * t, lb + (mb - lb) * t
+    end
+    local t = (p - 0.5) * 2
+    return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t
+end
 local function HealthColor(conf, pct, classToken)
     conf = conf or {}
-    local gfMode = conf.gfBarMode
     local getCache = _G.MSUF_UFCore_GetSettingsCache
     local cache = type(getCache) == "function" and getCache() or nil
-    local mode
-    if gfMode and gfMode ~= "GLOBAL" then
-        mode = gfMode
-    else
-        local globalMode = cache and cache.barMode
-        if globalMode == "dark" or globalMode == "unified" then
-            mode = globalMode
-        else
-            mode = conf.healthColorMode or "CLASS"
+    local mode = NormalizeHealthMode(conf.gfBarMode)
+    if not mode then
+        local general = _G.MSUF_DB and _G.MSUF_DB.general or nil
+        local globalMode = NormalizeHealthMode((cache and cache.barMode) or (general and general.barMode))
+        if globalMode == "gradient" and cache and cache.healthGradientEnabled == false then
+            globalMode = "class"
+        elseif globalMode == "gradient" and not cache and general and general.enableHealthGradient == false then
+            globalMode = "class"
         end
+        mode = globalMode or NormalizeHealthMode(conf.healthColorMode) or "class"
     end
     if mode == "dark" then
         return conf.gfDarkR or (cache and cache.darkBarR) or 0,
@@ -423,7 +463,7 @@ local function HealthColor(conf, pct, classToken)
             conf.gfUnifiedG or (cache and cache.unifiedBarG) or 0.60,
             conf.gfUnifiedB or (cache and cache.unifiedBarB) or 0.90
     end
-    if mode == "CLASS" then
+    if mode == "class" then
         local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
         local r, g, b
         if type(fastClass) == "function" then r, g, b = fastClass(classToken) end
@@ -433,11 +473,8 @@ local function HealthColor(conf, pct, classToken)
         end
         return r or 0.2, g or 0.8, b or 0.2
     end
-    if mode == "GRADIENT" then
-        local p = max(0, min(1, tonumber(pct) or 0.72))
-        local r = p > 0.5 and (1 - (p - 0.5) * 2) or 1
-        local g = p > 0.5 and 1 or (p * 2)
-        return r, g, 0
+    if mode == "gradient" then
+        return PreviewGradientColor(conf, cache, pct)
     end
     return conf.healthCustomR or 0.2,
         conf.healthCustomG or 0.8,

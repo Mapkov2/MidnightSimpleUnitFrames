@@ -11,6 +11,15 @@ local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
 local Castbar = MSUF.UFPreviewCastbar or {}
 MSUF.UFPreviewCastbar = Castbar
+local function CoreFrame(unit)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(unit)
+        if frame then return frame end
+    end
+    local frames = uf and uf.frames
+    return unit and frames and frames[unit] or nil
+end
 function Castbar.OffsetFields(unitKey)
     -- Runtime and preview need the same DB keys for offsets, but only runtime owns live frame
     -- anchoring. Keep the key translation here and the actual SetPoint calls in render code.
@@ -93,8 +102,7 @@ end
 local function RuntimeUnitFrame(key)
     key = CanonKey(key)
     local unit = key == "boss" and "boss1" or key
-    local frames = _G.MSUF_UnitFrames
-    return unit and ((frames and frames[unit]) or _G["MSUF_" .. unit])
+    return CoreFrame(unit) or (unit and _G["MSUF_" .. unit])
 end
 local function EffectiveScaleProxy(frame)
     local scale = frame and frame.GetEffectiveScale and frame:GetEffectiveScale()
