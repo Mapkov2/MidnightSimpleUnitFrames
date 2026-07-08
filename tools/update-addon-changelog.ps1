@@ -203,7 +203,7 @@ $previousVersion = if (-not [string]::IsNullOrWhiteSpace($PreviousVersion)) {
 } elseif ($currentVersionIsPrerelease -and $selected.Count -gt 1) {
     $selected[1].version
 } elseif ($selected.Count -gt 1) {
-    $selected[$selected.Count - 1].version
+    $selected[1].version
 } else {
     ""
 }
