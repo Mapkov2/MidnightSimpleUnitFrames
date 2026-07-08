@@ -220,11 +220,12 @@ local function _applyHighlightBorderStyle(border, conf, edgeSz, ofs, texKey, lay
         local owner = anchor:GetParent() or anchor
         local base = owner and owner.health or anchor
         local offset = border._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER or ((layer == "ABOVE_BORDER") and 8 or 3)
-        local wantLvl = GF.SyncFrameLayerAbove and GF.SyncFrameLayerAbove(border, base, offset)
+        local syncLayer = GF.SyncHighlightBorderLayer or GF.SyncFrameLayerAbove
+        local wantLvl = syncLayer and syncLayer(border, base, offset)
             or ((base.GetFrameLevel and base:GetFrameLevel() or anchor:GetFrameLevel()) + offset)
         if border._msufHLLvl ~= wantLvl then
             border._msufHLLvl = wantLvl
-            if not GF.SyncFrameLayerAbove then border:SetFrameLevel(wantLvl) end
+            if not syncLayer then border:SetFrameLevel(wantLvl) end
         end
     end
 end
@@ -279,6 +280,7 @@ local function _GF_QuickBorderUpdate(f)
 
     -- Priority 3: Target
     if f._msufGFIsTarget and c.targetEn then
+        border._msufGFHLLogicalKey = "target"
         if border._msufHLActivePrio ~= 3 then
             border._msufHLActivePrio = 3
             _applyHighlightBorderStyle(border, nil,
@@ -298,6 +300,7 @@ local function _GF_QuickBorderUpdate(f)
 
     -- Priority 4: Focus
     if f._msufGFIsFocus and c.focusEn then
+        border._msufGFHLLogicalKey = "focus"
         if border._msufHLActivePrio ~= 4 then
             border._msufHLActivePrio = 4
             _applyHighlightBorderStyle(border, nil,
@@ -336,6 +339,7 @@ local function UpdateTargetIndicator(f, unit)
 
     local isTarget = UnitIsUnit and _UnsecretBool(UnitIsUnit(unit, "target")) == true
     if isTarget then
+        border._msufGFHLLogicalKey = "target"
         _applyHighlightBorderStyle(border, nil,
             c.tgtSize or 2,
             c.tgtOfs or 0,

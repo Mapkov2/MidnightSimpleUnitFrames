@@ -936,7 +936,8 @@ local function ApplyEffectBorderStyles(f, kind)
     local function syncHighlightBorder(hb)
         if not hb then return end
         local layerOffset = hb._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER or 10
-        local wantLevel = GF.SyncFrameLayerAbove and GF.SyncFrameLayerAbove(hb, f.health or anchor, layerOffset)
+        local syncLayer = GF.SyncHighlightBorderLayer or GF.SyncFrameLayerAbove
+        local wantLevel = syncLayer and syncLayer(hb, f.health or anchor, layerOffset)
             or ((f.health and f.health.GetFrameLevel and f.health:GetFrameLevel() or baseLvl) + layerOffset)
         if hb._msufGFStyleOfs ~= hlOfs then
             hb._msufGFStyleOfs = hlOfs
@@ -946,7 +947,7 @@ local function ApplyEffectBorderStyles(f, kind)
         end
         if hb._msufGFStyleLevel ~= wantLevel then
             hb._msufGFStyleLevel = wantLevel
-            if not GF.SyncFrameLayerAbove then hb:SetFrameLevel(wantLevel) end
+            if not syncLayer then hb:SetFrameLevel(wantLevel) end
         end
     end
     if f._msufGFHighlightBorders then

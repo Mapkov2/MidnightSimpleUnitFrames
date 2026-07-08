@@ -804,7 +804,9 @@ local function GFEnsureHighlightBorder(f, layerKind)
     border:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
     border:EnableMouse(false)
     border._msufGFHLKey = layerKind
-    if GF.SyncFrameLayerAbove then
+    if GF.SyncHighlightBorderLayer then
+        GF.SyncHighlightBorderLayer(border, f.health or parent, GF.LAYER_HIGHLIGHT_BORDER or 10)
+    elseif GF.SyncFrameLayerAbove then
         GF.SyncFrameLayerAbove(border, f.health or parent, GF.LAYER_HIGHLIGHT_BORDER or 10)
     end
     border:Hide()

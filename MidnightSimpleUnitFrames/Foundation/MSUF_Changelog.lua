@@ -27,6 +27,8 @@ local data = {
                         "Added scope-aware Frame Outline strata and frame-level offset controls for unit frames and group frames.",
                         "Fixed Group Frame Outline geometry so secure-header refreshes cannot reset the outline to the inner bar bounds.",
                         "Fixed Group Frame Outline live refresh so opening or using the options menu no longer requires a reload to apply the outline correctly.",
+                        "Fixed Unit Auras scope override clipping in compact layouts.",
+                        "Lowered Group Frame mouseover, target, and focus highlight strata so selected/hover borders no longer draw over Blizzard panels while aggro and dispel highlights keep their priority.",
                         "Fixed Class Resource menu clipping issues in compact layouts.",
                         "Replaced the menu logo with the current MSUF logo.",
                     },

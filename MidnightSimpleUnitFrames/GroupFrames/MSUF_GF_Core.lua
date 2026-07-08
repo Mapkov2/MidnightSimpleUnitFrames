@@ -768,6 +768,16 @@ function GF.SyncFrameLayerAbove(child, parent, offset, strata)
     return _G.MSUF_SyncFrameLayerAbove(child, parent, offset, strata or GF.STRATA_EFFECT)
 end
 
+function GF.HighlightBorderStrata(border)
+    local key = border and (border._msufGFHLLogicalKey or border._msufGFHLKey)
+    if key == "target" or key == "focus" then return "LOW" end
+    return nil
+end
+
+function GF.SyncHighlightBorderLayer(border, parent, offset)
+    return GF.SyncFrameLayerAbove(border, parent, offset, GF.HighlightBorderStrata(border))
+end
+
 function GF.SetFrameLayerLevel(frame, owner, layer, fallback)
     if not (frame and frame.SetFrameLevel) then return end
     frame:SetFrameLevel(GF.GetFrameLayerLevel(owner, layer, fallback))
@@ -1084,20 +1094,20 @@ local function BuildFrameHierarchy(f, kind)
     local hlBorder = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
     hlBorder:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, 0)
     hlBorder:SetPoint("BOTTOMRIGHT", barGroup, "BOTTOMRIGHT", 0, 0)
-    GF.SyncFrameLayerAbove(hlBorder, health, GF.LAYER_HIGHLIGHT_BORDER)
     hlBorder:EnableMouse(false)
     hlBorder:Hide()
     f._msufGFHighlightBorder = hlBorder
     f._msufGFHighlightBorders = { dispel = hlBorder }
     hlBorder._msufGFHLKey = "dispel"
+    GF.SyncHighlightBorderLayer(hlBorder, health, GF.LAYER_HIGHLIGHT_BORDER)
 
     local function CreateHighlightBorderLayer(key)
         local border = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
         border:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, 0)
         border:SetPoint("BOTTOMRIGHT", barGroup, "BOTTOMRIGHT", 0, 0)
-        GF.SyncFrameLayerAbove(border, health, GF.LAYER_HIGHLIGHT_BORDER)
         border:EnableMouse(false)
         border._msufGFHLKey = key
+        GF.SyncHighlightBorderLayer(border, health, GF.LAYER_HIGHLIGHT_BORDER)
         border:Hide()
         f._msufGFHighlightBorders[key] = border
         return border
@@ -1874,13 +1884,13 @@ local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
                         if border then
                             local hofs = border._msufHLOfs or 0
                             _AnchorTwoPointIfChanged(border, child.barGroup or child, "highlight", -hofs, hofs, hofs, -hofs, force)
-                            GF.SyncFrameLayerAbove(border, child.health or child.barGroup or child, border._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER)
+                            GF.SyncHighlightBorderLayer(border, child.health or child.barGroup or child, border._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER)
                         end
                     end
                 elseif child._msufGFHighlightBorder then
                     local hofs = child._msufGFHighlightBorder._msufHLOfs or 0
                     _AnchorTwoPointIfChanged(child._msufGFHighlightBorder, child.barGroup or child, "highlight", -hofs, hofs, hofs, -hofs, force)
-                    GF.SyncFrameLayerAbove(child._msufGFHighlightBorder, child.health or child.barGroup or child, child._msufGFHighlightBorder._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER)
+                    GF.SyncHighlightBorderLayer(child._msufGFHighlightBorder, child.health or child.barGroup or child, child._msufGFHighlightBorder._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER)
                 end
                 if child._msufGFDispelOverlays then
                     for _, overlay in pairs(child._msufGFDispelOverlays) do
