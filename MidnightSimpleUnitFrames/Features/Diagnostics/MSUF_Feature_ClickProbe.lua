@@ -943,11 +943,11 @@ SlashCmdList["MSUFDISPATCH"] = function()
     end)
 end
 
--- /msufvs: side-by-side per-frame profiler peak for MSUF vs UnhaltedUnitFrames
--- (and oUF if separate), sampled from C_AddOnProfiler every frame. Click MSUF
--- frames, then UUF frames, in the SAME window. If UUF spikes the same on its
--- own frames, the cost is the shared secure pipeline. If UUF stays flat while
--- MSUF spikes, MSUF has a real defect and this proves it.
+-- /msufvs: side-by-side per-frame profiler peak for MSUF and comparison frames,
+-- sampled from C_AddOnProfiler every frame. Click MSUF frames, then comparison
+-- frames, in the SAME window. If both spike the same on their own frames, the
+-- cost is the shared secure pipeline. If comparison frames stay flat while MSUF
+-- spikes, MSUF has a real defect and this proves it.
 SLASH_MSUFVS1 = "/msufvs"
 SlashCmdList["MSUFVS"] = function()
     local P = _G.C_AddOnProfiler
@@ -958,7 +958,7 @@ SlashCmdList["MSUFVS"] = function()
     end
     -- discover loaded addon names to compare against
     local names = { "MidnightSimpleUnitFrames" }
-    local candidates = { "UnhaltedUnitFrames", "oUF", "UnhaltedUnitFrames_Options" }
+    local candidates = { "UnhaltedUnitFrames", "UnhaltedUnitFrames_Options" }
     local C_AddOns = _G.C_AddOns
     for _, n in ipairs(candidates) do
         local loaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded(n)
@@ -969,7 +969,7 @@ SlashCmdList["MSUFVS"] = function()
     for _, n in ipairs(names) do peak[n] = 0 end
     local driver = CreateFrame("Frame")
     local elapsed = 0
-    print("|cff7fd5ffMSUF VS|r 8s -- click MSUF frames for 4s, then UUF frames for 4s. Comparing: " .. table.concat(names, ", "))
+    print("|cff7fd5ffMSUF VS|r 8s -- click MSUF frames for 4s, then comparison frames for 4s. Comparing: " .. table.concat(names, ", "))
     driver:SetOnUpdateMode("RunWhenVisible")
     driver:SetScript("OnUpdate", function(self, dt)
         elapsed = elapsed + dt
@@ -984,7 +984,7 @@ SlashCmdList["MSUFVS"] = function()
             for _, n in ipairs(names) do
                 print(string.format("  %.3fms | %s", peak[n], n))
             end
-            print("  If UUF/oUF peak ~= MSUF peak after clicking their frames, it's the shared secure pipeline.")
+            print("  If the comparison peak ~= MSUF peak after clicking its frames, it's the shared secure pipeline.")
             print("  If they stayed near 0 while MSUF spiked, MSUF has a real defect.")
         end
     end)
