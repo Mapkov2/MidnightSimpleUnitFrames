@@ -45,6 +45,17 @@ local function _GF_IsHighlightEnabled()
     return true
 end
 
+local function _GF_SyncMouseoverHighlightStrata(hb, anchor)
+    if not (hb and hb.SetFrameStrata) then return end
+    local strata = anchor and anchor.GetFrameStrata and anchor:GetFrameStrata() or "LOW"
+    if _G.MSUF_IsValidFrameStrata and not _G.MSUF_IsValidFrameStrata(strata) then
+        strata = "LOW"
+    end
+    if not hb.GetFrameStrata or hb:GetFrameStrata() ~= strata then
+        hb:SetFrameStrata(strata)
+    end
+end
+
 local function _GF_EnsureHoverLine(hb, key)
     local lines = hb._msufGFHoverLines
     if not lines then
@@ -70,6 +81,7 @@ local function _GF_StyleMouseoverHighlight(f, hb)
 
     if hb.SetBackdrop then hb:SetBackdrop(nil) end
     if hb.SetClipsChildren then hb:SetClipsChildren(false) end
+    _GF_SyncMouseoverHighlightStrata(hb, anchor)
 
     if hb._msufGFHoverOffset ~= ofs or hb._msufGFHoverSize ~= sz then
         hb._msufGFHoverOffset = ofs

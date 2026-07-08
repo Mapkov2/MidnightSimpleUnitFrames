@@ -1084,12 +1084,12 @@ local function BuildAuras(ctx)
     M.AddRefresher(ctx, RefreshScopeButtons)
 
     local overrideY = compactSetup and (scopeSingleColumn and -166 or -158) or -108
-    LabelAt(scopeCard, "Overrides", 16, overrideY + 4, 76, "GameFontNormalSmall", T.colors.muted)
+    LabelAt(scopeCard, "Overrides", 16, overrideY + 4, compactSetup and (leftW - 32) or 76, "GameFontNormalSmall", T.colors.muted)
     local overrideStartX = compactSetup and 16 or 106
     local overrideWidths = scopeSingleColumn
         and { leftW - 32, leftW - 32, leftW - 32, leftW - 32, 106, 92 }
         or { 128, 112, 120, 118, 92, 82 }
-    local overridePos = FlowTopLeft(overrideWidths, overrideStartX, overrideY + 8, leftW - 16, 8, 28, 22)
+    local overridePos = FlowTopLeft(overrideWidths, overrideStartX, compactSetup and (overrideY - 18) or (overrideY + 8), leftW - 16, 8, 28, 22)
     local overrideFilters = FitInlineToggle(ValueToggleAt(ctx, scopeCard, "Custom filters", overridePos[1].x, overridePos[1].y,
         function()
             local s = AuraScope()
