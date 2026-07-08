@@ -839,12 +839,14 @@ local function BuildGroupBlacklistHash(group)
 
     local presets = PublicAuraPresetSpells()
     local hash, n = nil, 0
-    for catKey, enabled in pairs(cats) do
-        if enabled == true then
-            local spells = presets and presets[catKey]
-            if type(spells) == "table" then
-                for spellID, value in pairs(spells) do
-                    hash, n = AddGroupBlacklistEntry(hash, n, spellID, value)
+    if type(cats) == "table" then
+        for catKey, enabled in pairs(cats) do
+            if enabled == true then
+                local spells = presets and presets[catKey]
+                if type(spells) == "table" then
+                    for spellID, value in pairs(spells) do
+                        hash, n = AddGroupBlacklistEntry(hash, n, spellID, value)
+                    end
                 end
             end
         end
@@ -897,15 +899,20 @@ GF_AURA_FILTER.DEBUFF_FILTER_ITEMS = {
 }
 local GF_NATIVE_BUFF_TOKENS = {
     PLAYER = true, RAID = true, RAID_IN_COMBAT = true, INCLUDE_NAME_PLATE_ONLY = true,
-    CANCELABLE = true, NOT_CANCELABLE = true, EXTERNAL_DEFENSIVE = true, BIG_DEFENSIVE = true,
+    CANCELABLE = true, EXTERNAL_DEFENSIVE = true, BIG_DEFENSIVE = true,
 }
 local GF_NATIVE_DEBUFF_TOKENS = {
     PLAYER = true, RAID = true, RAID_IN_COMBAT = true, INCLUDE_NAME_PLATE_ONLY = true,
     RAID_PLAYER_DISPELLABLE = true, CROWD_CONTROL = true,
 }
+local GF_LEGACY_NATIVE_TOKENS = {
+    NOT_CANCELABLE = "!CANCELABLE",
+}
 local function ResolveGFNativeFilter(token, baseFilter, validTokens)
     token = tostring(token or "ALL"):upper()
     if token == "DISPELLABLE" then token = "RAID_PLAYER_DISPELLABLE" end
+    local legacy = GF_LEGACY_NATIVE_TOKENS[token]
+    if legacy then return baseFilter .. "|" .. legacy end
     if token == "ALL" or token == "" then return baseFilter end
     if validTokens[token] then return baseFilter .. "|" .. token end
     return baseFilter
@@ -948,10 +955,16 @@ end
 
 local function InvalidateGroupBlacklist(scope, groupKey)
     local af = AuraFilter()
-    if not (af and type(af.InvalidateBlacklistHash) == "function") then return end
     local a, b = GroupScopeKinds(scope)
-    af.InvalidateBlacklistHash(GroupAuraGroup(a, groupKey))
-    if b then af.InvalidateBlacklistHash(GroupAuraGroup(b, groupKey)) end
+    if af and type(af.InvalidateBlacklistHash) == "function" then
+        af.InvalidateBlacklistHash(GroupAuraGroup(a, groupKey))
+        if b then af.InvalidateBlacklistHash(GroupAuraGroup(b, groupKey)) end
+    end
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.InvalidateCompiledSpecs) == "function" then
+        gf.InvalidateCompiledSpecs(a)
+        if b then gf.InvalidateCompiledSpecs(b) end
+    end
 end
 
 local function CompactKey(value)

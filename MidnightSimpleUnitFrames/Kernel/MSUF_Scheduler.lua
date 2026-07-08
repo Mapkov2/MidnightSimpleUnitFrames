@@ -1,4 +1,4 @@
---- MSUF_Scheduler.lua - central next-frame / delayed scheduler
+--- MSUF_Scheduler.lua - central next-frame scheduler
 --- Replaces scattered C_Timer.After(0, ...) runtime deferrals with keyed,
 --- deduped scheduling. Secret-safe: no protected/secret API reads here.
 
@@ -135,25 +135,6 @@ function Scheduler.ScheduleOnce(key, fn)
     QueueNextFrame(key, fn)
 end
 
-function Scheduler.ScheduleDelayOnce(key, delay, fn)
-    if type(fn) ~= "function" then return end
-    key = key or fn
-    if pending[key] then return end
-    pending[key] = fn
-
-    if C_Timer and C_Timer.After then
-        C_Timer.After(delay or 0, function()
-            local cb = pending[key]
-            pending[key] = nil
-            if type(cb) == "function" then SafeCall(cb) end
-        end)
-    else
-        local cb = pending[key]
-        pending[key] = nil
-        if type(cb) == "function" then SafeCall(cb) end
-    end
-end
-
 local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
@@ -162,5 +143,4 @@ end
 ExportPublic("MSUF_Scheduler", Scheduler)
 ExportPublic("MSUF_RunNextFrame", Scheduler.RunNextFrame)
 ExportPublic("MSUF_ScheduleOnce", Scheduler.ScheduleOnce)
-ExportPublic("MSUF_ScheduleDelayOnce", Scheduler.ScheduleDelayOnce)
 ExportPublic("MSUF_Core_RunNextFrame", _G.MSUF_Core_RunNextFrame or Scheduler.RunNextFrame)

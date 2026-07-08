@@ -329,6 +329,79 @@ end
 
 local INTERRUPT_FEEDBACK_DURATION = _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5
 
+local fallbackCastState = {}
+
+local function InvalidateCastState(unit)
+    if not unit then return end
+    local getEngine = _G.MSUF_GetCastbarEngine
+    local engine = type(getEngine) == "function" and getEngine() or nil
+    if engine and type(engine.Invalidate) == "function" then
+        engine:Invalidate(unit)
+    end
+end
+
+local function BuildCastState(unit, frame)
+    local buildState = _G.MSUF_BuildCastState
+    if type(buildState) == "function" then
+        return buildState(unit, frame and frame._msufPlayerState or frame)
+    end
+
+    local state = fallbackCastState
+    state.active = false
+    state.unit = unit
+    state.castType = "NONE"
+    state.spellName = nil
+    state.text = nil
+    state.icon = nil
+    state.spellId = nil
+    state.castID = nil
+    state.castBarID = nil
+    state.startTimeMS = nil
+    state.endTimeMS = nil
+    state.durationObj = nil
+    state.apiNotInterruptibleRaw = nil
+    if not unit then return state end
+
+    local spellName, text, icon, startMS, endMS, _, castGUID, apiNotInterruptibleRaw, spellID, castBarID =
+        _G.UnitCastingInfo(unit)
+    if spellName then
+        state.active = true
+        state.castType = "CAST"
+        state.spellName = spellName
+        state.text = text or spellName
+        state.icon = icon
+        state.startTimeMS = startMS
+        state.endTimeMS = endMS
+        state.apiNotInterruptibleRaw = apiNotInterruptibleRaw
+        state.spellId = spellID
+        state.castID = castGUID
+        state.castBarID = castBarID
+        if type(_G.UnitCastingDuration) == "function" then
+            state.durationObj = _G.UnitCastingDuration(unit)
+        end
+        return state
+    end
+
+    spellName, text, icon, startMS, endMS, _, apiNotInterruptibleRaw, spellID, _, _, castBarID =
+        _G.UnitChannelInfo(unit)
+    if spellName then
+        state.active = true
+        state.castType = "CHANNEL"
+        state.spellName = spellName
+        state.text = text or spellName
+        state.icon = icon
+        state.startTimeMS = startMS
+        state.endTimeMS = endMS
+        state.apiNotInterruptibleRaw = apiNotInterruptibleRaw
+        state.spellId = spellID
+        state.castBarID = castBarID
+        if type(_G.UnitChannelDuration) == "function" then
+            state.durationObj = _G.UnitChannelDuration(unit)
+        end
+    end
+    return state
+end
+
 local function GetEffectiveUnit(frame)
     local unit = (frame and frame.unit) or "player"
     if unit == "player"
@@ -336,12 +409,12 @@ local function GetEffectiveUnit(frame)
         and _G.UnitHasVehicleUI("player")
         and type(_G.UnitExists) == "function"
         and _G.UnitExists("vehicle") then
-        if (type(_G.UnitCastingInfo) == "function" and _G.UnitCastingInfo("vehicle"))
-            or (type(_G.UnitChannelInfo) == "function" and _G.UnitChannelInfo("vehicle")) then
-            return "vehicle"
+        local vehicleState = BuildCastState("vehicle", frame)
+        if vehicleState and vehicleState.active == true then
+            return "vehicle", vehicleState
         end
     end
-    return unit
+    return unit, BuildCastState(unit, frame)
 end
 
 local function ClearActiveCastIdentity(frame)
@@ -559,6 +632,27 @@ local function ApplyActiveCast(
     end
 end
 
+local function ApplyCastState(frame, state)
+    if not (frame and state and state.active == true) then return false end
+    local castType = state.castType == "CHANNEL" and "CHANNEL" or "CAST"
+    ApplyActiveCast(
+        frame,
+        state.unit or frame.unit or "player",
+        castType,
+        state.spellName,
+        state.text,
+        state.icon,
+        state.startTimeMS,
+        state.endTimeMS,
+        state.apiNotInterruptibleRaw,
+        state.spellId,
+        state.castID,
+        state.castBarID,
+        state.durationObj
+    )
+    return true
+end
+
 local CAST_START_EVENTS = {
     UNIT_SPELLCAST_START = true,
     UNIT_SPELLCAST_INTERRUPTIBLE = true,
@@ -605,7 +699,7 @@ local function UnhaltedUpdate(frame, event)
     if not frame or not frame.unit or not frame.statusBar then return end
     if frame.isEmpower then return end
 
-    local unit = GetEffectiveUnit(frame)
+    local unit, state = GetEffectiveUnit(frame)
     if event == "UNIT_SPELLCAST_INTERRUPTIBLE" then
         frame.isNotInterruptible = false
     elseif event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
@@ -617,67 +711,23 @@ local function UnhaltedUpdate(frame, event)
     end
 
     if CAST_START_EVENTS[event] then
-        local spellName, text, icon, startMS, endMS, _, castGUID, apiNotInterruptibleRaw, spellID, castBarID =
-            _G.UnitCastingInfo(unit)
-        if not spellName then
-            if _G.UnitChannelInfo(unit) then
-                return UnhaltedUpdate(frame, "UNIT_SPELLCAST_CHANNEL_START")
-            end
-            return UnhaltedUpdate(frame, "UNIT_SPELLCAST_STOP")
+        if not state or state.unit ~= unit then
+            state = BuildCastState(unit, frame)
         end
-
-        local durationObj
-        if type(_G.UnitCastingDuration) == "function" then
-            durationObj = _G.UnitCastingDuration(unit)
+        if ApplyCastState(frame, state) then
+            return
         end
-        ApplyActiveCast(
-            frame,
-            unit,
-            "CAST",
-            spellName,
-            text,
-            icon,
-            startMS,
-            endMS,
-            apiNotInterruptibleRaw,
-            spellID,
-            castGUID,
-            castBarID,
-            durationObj
-        )
-        return
+        return UnhaltedUpdate(frame, "UNIT_SPELLCAST_STOP")
     end
 
     if CHANNEL_START_EVENTS[event] then
-        local spellName, text, icon, startMS, endMS, _, apiNotInterruptibleRaw, spellID, _, _, castBarID =
-            _G.UnitChannelInfo(unit)
-        if not spellName then
-            if _G.UnitCastingInfo(unit) then
-                return UnhaltedUpdate(frame, "UNIT_SPELLCAST_START")
-            end
-            return UnhaltedUpdate(frame, "UNIT_SPELLCAST_STOP")
+        if not state or state.unit ~= unit then
+            state = BuildCastState(unit, frame)
         end
-
-        local durationObj
-        if type(_G.UnitChannelDuration) == "function" then
-            durationObj = _G.UnitChannelDuration(unit)
+        if ApplyCastState(frame, state) then
+            return
         end
-        ApplyActiveCast(
-            frame,
-            unit,
-            "CHANNEL",
-            spellName,
-            text,
-            icon,
-            startMS,
-            endMS,
-            apiNotInterruptibleRaw,
-            spellID,
-            nil,
-            castBarID,
-            durationObj
-        )
-        return
+        return UnhaltedUpdate(frame, "UNIT_SPELLCAST_STOP")
     end
 
     if CAST_STOP_EVENTS[event] then
@@ -690,14 +740,16 @@ local function CastPlayerCastbar(frame)
     if frame.isEmpower then return end
     if frame.MSUF_testMode then return end
 
-    local unit = GetEffectiveUnit(frame)
-    if _G.UnitCastingInfo(unit) then
-        UnhaltedUpdate(frame, "UNIT_SPELLCAST_START")
-    elseif _G.UnitChannelInfo(unit) then
-        UnhaltedUpdate(frame, "UNIT_SPELLCAST_CHANNEL_START")
-    else
-        UnhaltedUpdate(frame, "UNIT_SPELLCAST_STOP")
+    InvalidateCastState("player")
+    InvalidateCastState("vehicle")
+    local unit, state = GetEffectiveUnit(frame)
+    if not state or state.unit ~= unit then
+        state = BuildCastState(unit, frame)
     end
+    if ApplyCastState(frame, state) then
+        return
+    end
+    UnhaltedUpdate(frame, "UNIT_SPELLCAST_STOP")
 end
 
 local function ScheduleSoftResync(frame)
@@ -717,23 +769,15 @@ local function HideIfNoLongerCasting(owner)
     if not frame or not frame.unit then return end
     if frame.MSUF_testMode then return end
 
-    local unit = frame.unit or "player"
-    if unit == "player"
-        and type(_G.UnitHasVehicleUI) == "function"
-        and _G.UnitHasVehicleUI("player")
-        and type(_G.UnitExists) == "function"
-        and _G.UnitExists("vehicle") then
-        if (type(_G.UnitCastingInfo) == "function" and _G.UnitCastingInfo("vehicle"))
-            or (type(_G.UnitChannelInfo) == "function" and _G.UnitChannelInfo("vehicle")) then
-            unit = "vehicle"
-        end
+    local unit, state = GetEffectiveUnit(frame)
+    if not state or state.unit ~= unit then
+        state = BuildCastState(unit, frame)
     end
-
-    local cast = _G.UnitCastingInfo(unit)
-    local channel = _G.UnitChannelInfo(unit)
-    if cast or channel then
+    if state and state.active == true then
         if _G.MSUF_PlayerCastbar_Cast then
             _G.MSUF_PlayerCastbar_Cast(frame)
+        else
+            ApplyCastState(frame, state)
         end
         return
     end
@@ -856,6 +900,12 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
     if frame.MSUF_testMode then return end
 
     local eventUnit = select(1, ...)
+    InvalidateCastState(eventUnit)
+    if eventUnit == "player" then
+        InvalidateCastState("vehicle")
+    elseif eventUnit == "vehicle" then
+        InvalidateCastState("player")
+    end
 
     if HandleEmpowerEvent(frame, event, ...) then return end
     if HandleActiveEmpowerEvent(frame, event, ...) then return end

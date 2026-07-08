@@ -124,6 +124,12 @@ local function IsBossCastbarUnit(unit)
 end
 ExportPublic("MSUF_IsBossCastbarUnit", IsBossCastbarUnit)
 
+local function NormalizeCastbarUnit(unit)
+    unit = tostring(unit or ""):lower()
+    if unit:match("^boss") then return "boss" end
+    return GetCastbarUnitInfo(unit) and unit or nil
+end
+
 local function GetCastbarPrefix(unit)
     local info = GetCastbarUnitInfo(unit)
     return info and info.prefix or nil
@@ -156,13 +162,21 @@ local function GetCastbarUnitFromFrame(frame)
 end
 ExportPublic("MSUF_GetCastbarUnitFromFrame", GetCastbarUnitFromFrame)
 
+local ApplyCastbarVisualsForUnit
+
 local function ApplyCastbarUnitAndSync(unit)
+    unit = NormalizeCastbarUnit(unit)
     if not unit then return end
     if not _G.MSUF_DB then _G.MSUF_EnsureDB() end
 
     if IsBossCastbarUnit(unit) then
         if _G.MSUF_ApplyBossCastbarPositionSetting then _G.MSUF_ApplyBossCastbarPositionSetting() end
         if _G.MSUF_ApplyBossCastbarTimeSetting then _G.MSUF_ApplyBossCastbarTimeSetting() end
+        if ApplyCastbarVisualsForUnit then
+            ApplyCastbarVisualsForUnit("boss")
+        elseif _G.MSUF_UpdateCastbarVisuals then
+            _G.MSUF_UpdateCastbarVisuals("boss")
+        end
         if not IsInCombat() and _G.MSUF_UpdateBossCastbarPreview then _G.MSUF_UpdateBossCastbarPreview() end
         if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then _G.MSUF_PositionCastbarPreviewUnit("boss") end
         if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup("boss") end
@@ -177,7 +191,11 @@ local function ApplyCastbarUnitAndSync(unit)
         _G.MSUF_ReanchorFocusCastBar()
     end
 
-    if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+    if ApplyCastbarVisualsForUnit then
+        ApplyCastbarVisualsForUnit(unit)
+    elseif _G.MSUF_UpdateCastbarVisuals then
+        _G.MSUF_UpdateCastbarVisuals(unit)
+    end
     if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then _G.MSUF_PositionCastbarPreviewUnit(unit) end
     if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo(unit) end
     if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup(unit) end
@@ -513,6 +531,16 @@ ExportPublic("MSUF_UpdateCastbarTextures", UpdateCastbarTextures)
 local function UpdateCastbarFillDirection()
     BumpCastbarStyleRevision()
 
+    local function FrameStateIsChanneledOrEmpowered(frame)
+        if not (frame and frame.unit) then return false end
+        local buildState = _G.MSUF_BuildCastState
+        if type(buildState) ~= "function" then
+            return _G.UnitChannelInfo and _G.UnitChannelInfo(frame.unit) and true or false
+        end
+        local state = buildState(frame.unit, frame)
+        return state and (state.castType == "CHANNEL" or state.castType == "EMPOWER") or false
+    end
+
     local function ApplyFillDirectionForFrame(frame)
         if not (frame and frame.statusBar and frame.statusBar.SetReverseFill) then return end
 
@@ -522,7 +550,7 @@ local function UpdateCastbarFillDirection()
         elseif frame.MSUF_isChanneled then
             isChanneled = true
         elseif frame.unit and (frame.unit == "player" or frame.unit == "target" or frame.unit == "focus") then
-            if _G.UnitChannelInfo and _G.UnitChannelInfo(frame.unit) then isChanneled = true end
+            isChanneled = FrameStateIsChanneledOrEmpowered(frame)
         end
 
         RefreshCastbarStyleCache(frame)
@@ -860,7 +888,7 @@ local function ApplyCastbarVisualFrame(frame, context)
     end
 end
 
-local function UpdateCastbarVisuals()
+local function BuildCastbarVisualContext()
     BumpCastbarStyleRevision()
     local db = EnsureDB()
     local general = db.general or {}
@@ -899,7 +927,7 @@ local function UpdateCastbarVisuals()
     if baseFontSize <= 0 then baseFontSize = 14 end
     local effectiveSpellFontSize = spellFontSize > 0 and spellFontSize or baseFontSize
 
-    local context = {
+    return {
         showIcon = showIcon,
         showSpellName = showSpellName,
         iconOffsetX = iconOffsetX,
@@ -916,7 +944,15 @@ local function UpdateCastbarVisuals()
         shadowY = shadowY,
         spellFontSize = effectiveSpellFontSize,
     }
+end
 
+local function UpdateCastbarVisuals(unit)
+    unit = NormalizeCastbarUnit(unit)
+    if unit and ApplyCastbarVisualsForUnit then
+        return ApplyCastbarVisualsForUnit(unit)
+    end
+
+    local context = BuildCastbarVisualContext()
     ApplyCastbarVisualFrame(_G.MSUF_PlayerCastbar, context)
     ApplyCastbarVisualFrame(_G.MSUF_TargetCastbar, context)
     ApplyCastbarVisualFrame(_G.MSUF_FocusCastbar, context)
@@ -944,6 +980,53 @@ local function UpdateCastbarVisuals()
     end
 end
 ExportPublic("MSUF_UpdateCastbarVisuals", UpdateCastbarVisuals)
+
+local function ApplyCastbarVisualFrameCold(frame, context)
+    if not frame then return false end
+    ApplyCastbarVisualFrame(frame, context)
+    if type(_G.MSUF_RefreshCastbarFrame) == "function" then
+        _G.MSUF_RefreshCastbarFrame(frame)
+    end
+    return true
+end
+
+ApplyCastbarVisualsForUnit = function(unit)
+    unit = IsBossCastbarUnit(unit) and "boss" or tostring(unit or "")
+    local context = BuildCastbarVisualContext()
+    local did = false
+    if unit == "player" then
+        did = ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbar, context) or did
+        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbarPreview, context) or did end
+    elseif unit == "target" then
+        did = ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, context) or did
+        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbarPreview, context) or did end
+    elseif unit == "focus" then
+        did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, context) or did
+        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbarPreview, context) or did end
+    elseif unit == "boss" then
+        local maxBossFrames = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+        if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
+        for index = 1, maxBossFrames do
+            did = ApplyCastbarVisualFrameCold(_G["MSUF_boss" .. index .. "CastBar"], context) or did
+        end
+        if not IsInCombat() then
+            did = ApplyCastbarVisualFrameCold(_G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1, context) or did
+        end
+    end
+    return did
+end
+ExportPublic("MSUF_ApplyCastbarVisualsForUnit", ApplyCastbarVisualsForUnit)
+
+do
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.RegisterVisualRefreshCallback) == "function" then
+        UF.RegisterVisualRefreshCallback("Castbars", function(unit)
+            if unit ~= nil and unit ~= "*" then
+                ApplyCastbarVisualsForUnit(unit)
+            end
+        end)
+    end
+end
 
 MSUF.Castbars = MSUF.Castbars or {}
 MSUF.Castbars._GetFontPath = GetFontPath

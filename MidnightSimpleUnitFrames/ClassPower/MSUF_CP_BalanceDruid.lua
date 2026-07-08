@@ -15,6 +15,16 @@ do
         return value
     end
 
+    local function CoreUnitFrame(unit)
+        local UF = MSUF and MSUF.UF
+        if UF and type(UF.GetFrame) == "function" then
+            local frame = UF.GetFrame(unit)
+            if frame then return frame end
+        end
+        local frames = UF and UF.frames
+        return unit and frames and frames[unit] or nil
+    end
+
     local function ProfBegin(name)
         if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
             return MSUF.ProfBegin(name)
@@ -113,7 +123,7 @@ local function _checkActive()
 end
 
 local function _getPowerBar()
-    local pf = _G.MSUF_player or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player)
+    local pf = CoreUnitFrame("player") or _G.MSUF_player
     return pf and pf.targetPowerBar or nil
 end
 

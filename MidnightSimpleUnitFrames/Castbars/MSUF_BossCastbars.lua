@@ -525,8 +525,10 @@ local function SetBossCastbarsEnabled(enabled)
         end
     end
 
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals()
+    if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        _G.MSUF_ApplyCastbarVisualsForUnit("boss")
+    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+        _G.MSUF_UpdateCastbarVisuals("boss")
     end
 
     RefreshBossPreviewIfAllowed()

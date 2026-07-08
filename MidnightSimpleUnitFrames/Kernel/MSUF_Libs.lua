@@ -961,7 +961,13 @@ RegisterBundledFonts = function()
             if type(_G.MSUF_UpdateAllBarTextures) == "function" then
                 _G.MSUF_UpdateAllBarTextures()
             end
-            if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+            local applyCastbarUnit = _G.MSUF_ApplyCastbarVisualsForUnit
+            if type(applyCastbarUnit) == "function" then
+                applyCastbarUnit("player")
+                applyCastbarUnit("target")
+                applyCastbarUnit("focus")
+                applyCastbarUnit("boss")
+            elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
                 _G.MSUF_UpdateCastbarVisuals()
             end
         end

@@ -41,6 +41,18 @@ ns.MSUF_CastbarEngine = ns.MSUF_CastbarEngine or {}
 
 local Engine = ns.MSUF_CastbarEngine
 local buildStateCacheTime = {}
+local INACTIVE_STATE = { active = false }
+local GetTime = _G.GetTime
+local UnitCastingInfo = _G.UnitCastingInfo
+local UnitChannelInfo = _G.UnitChannelInfo
+local UnitCastingDuration = _G.UnitCastingDuration
+local UnitChannelDuration = _G.UnitChannelDuration
+local GetUnitEmpowerStageCount = _G.GetUnitEmpowerStageCount
+local UnitShouldDisplaySpellTargetName = _G.UnitShouldDisplaySpellTargetName
+local UnitSpellTargetName = _G.UnitSpellTargetName
+local UnitSpellTargetClass = _G.UnitSpellTargetClass
+local ToPlain = _G.ToPlain
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 Engine.VERSION = 3
 Engine._subs = Engine._subs or {}
@@ -156,6 +168,18 @@ local function PreserveInterruptState(_, previousState)
     return false
 end
 
+local function PlainBool(value)
+    if value == nil then
+        return false
+    end
+
+    if issecretvalue(value) == true and type(ToPlain) == "function" then
+        value = ToPlain(value)
+    end
+
+    return value == true or value == 1 or value == "true"
+end
+
 local function UnitIsEmpowering(unit)
     if unit ~= "player" then
         return false
@@ -174,7 +198,7 @@ end
 --- helpers ask for state during one event burst.
 function Engine:BuildState(unit, previousState)
     if not unit then
-        return { active = false }
+        return INACTIVE_STATE
     end
 
     local now = GetTime()
@@ -197,6 +221,12 @@ function Engine:BuildState(unit, previousState)
     state.text = nil
     state.icon = nil
     state.spellId = nil
+    state.castID = nil
+    state.castBarID = nil
+    state.delayTimeMS = nil
+    state.isTradeskill = nil
+    state.isEmpowered = nil
+    state.numEmpowerStages = nil
     state.startTimeMS = nil
     state.endTimeMS = nil
     state.durationObj = nil
@@ -204,8 +234,12 @@ function Engine:BuildState(unit, previousState)
     state.apiNotInterruptible = nil
     state.apiNotInterruptibleRaw = nil
     state.reverseFill = nil
+    state.targetInfoReady = nil
+    state.targetNameAllowed = nil
+    state.targetName = nil
+    state.targetClass = nil
 
-    local name, text, icon, startTimeMS, endTimeMS, _, _, apiNotInterruptible, spellId = UnitCastingInfo(unit)
+    local name, text, icon, startTimeMS, endTimeMS, isTradeskill, castID, apiNotInterruptible, spellId, castBarID, delayTimeMS = UnitCastingInfo(unit)
     if name then
         local isEmpower = UnitIsEmpowering(unit)
 
@@ -214,6 +248,11 @@ function Engine:BuildState(unit, previousState)
         state.text = text or name
         state.icon = icon
         state.spellId = spellId
+        state.castID = castID
+        state.castBarID = castBarID
+        state.delayTimeMS = delayTimeMS
+        state.isTradeskill = isTradeskill
+        state.isEmpowered = isEmpower
         state.startTimeMS = startTimeMS
         state.endTimeMS = endTimeMS
         state.active = true
@@ -229,7 +268,7 @@ function Engine:BuildState(unit, previousState)
         return state
     end
 
-    name, text, icon, startTimeMS, endTimeMS, _, apiNotInterruptible, spellId = UnitChannelInfo(unit)
+    name, text, icon, startTimeMS, endTimeMS, isTradeskill, apiNotInterruptible, spellId, isEmpowered, numEmpowerStages, castBarID = UnitChannelInfo(unit)
     if name then
         state.castType = "CHANNEL"
         state.apiNotInterruptible = apiNotInterruptible
@@ -238,6 +277,10 @@ function Engine:BuildState(unit, previousState)
         state.text = text or name
         state.icon = icon
         state.spellId = spellId
+        state.castBarID = castBarID
+        state.isTradeskill = isTradeskill
+        state.isEmpowered = isEmpowered
+        state.numEmpowerStages = numEmpowerStages
         state.startTimeMS = startTimeMS
         state.endTimeMS = endTimeMS
         state.active = true
@@ -254,9 +297,52 @@ function Engine:BuildState(unit, previousState)
     return state
 end
 
+function Engine:ResolveTargetInfo(state)
+    if not (state and state.active == true and state.unit) then
+        return nil
+    end
+
+    if state.targetInfoReady == true then
+        return state.targetName, state.targetClass, state.targetNameAllowed == true
+    end
+
+    state.targetInfoReady = true
+    state.targetNameAllowed = false
+    state.targetName = nil
+    state.targetClass = nil
+
+    local unit = state.unit
+    if not (UnitShouldDisplaySpellTargetName and UnitSpellTargetName) then
+        return nil
+    end
+
+    if not PlainBool(UnitShouldDisplaySpellTargetName(unit)) then
+        return nil
+    end
+
+    local targetName = UnitSpellTargetName(unit)
+    if not targetName then
+        return nil
+    end
+
+    state.targetNameAllowed = true
+    state.targetName = targetName
+    if UnitSpellTargetClass then
+        state.targetClass = UnitSpellTargetClass(unit)
+    end
+
+    return state.targetName, state.targetClass, true
+end
+
 if not _G.MSUF_BuildCastState then
     ExportPublic("MSUF_BuildCastState", function(unit, previousState)
         return Engine:BuildState(unit, previousState)
+    end)
+end
+
+if not _G.MSUF_ResolveCastbarTargetInfo then
+    ExportPublic("MSUF_ResolveCastbarTargetInfo", function(state)
+        return Engine:ResolveTargetInfo(state)
     end)
 end
 

@@ -38,6 +38,11 @@ local GetTime = _G.GetTime
 local GetCVar = _G.GetCVar
 local UnitExists = _G.UnitExists
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
+local UnitShouldDisplaySpellTargetName = _G.UnitShouldDisplaySpellTargetName
+local UnitSpellTargetName = _G.UnitSpellTargetName
+local UnitSpellTargetClass = _G.UnitSpellTargetClass
+local C_ClassColor = _G.C_ClassColor
+local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 local CreateFrame = _G.CreateFrame
 local UIParent = _G.UIParent
 local type = type
@@ -129,7 +134,9 @@ local function SetDriverEventsRegistered(frame, unit, enabled)
 end
 
 local function AnchorDriverFrameToUnitFrame(frame, unit)
-    local unitFrame = _G["MSUF_" .. unit]
+    local uf = MSUF and MSUF.UF
+    local unitFrame = uf and type(uf.GetFrame) == "function" and uf.GetFrame(unit) or nil
+    unitFrame = unitFrame or (uf and uf.frames and uf.frames[unit]) or _G["MSUF_" .. unit]
     if not unitFrame then return end
 
     frame:ClearAllPoints()
@@ -192,6 +199,22 @@ local function ToPlainNumber(value)
     end
 
     return nil
+end
+
+local function ToPlainBool(value)
+    if value == nil then return false end
+    if toPlainIsSecret(value) == true and ToPlain then
+        value = ToPlain(value)
+    end
+    return value == true or value == 1 or value == "true"
+end
+
+local function CastStateActive(state)
+    return state ~= nil and ToPlainBool(state.active) == true
+end
+
+local function CastStateHasSpell(state)
+    return CastStateActive(state) and state.spellName ~= nil
 end
 
 local function GetRemainingFromStatusBar(frame)
@@ -415,7 +438,7 @@ end
 local function StoreActiveStateIdentity(frame, state)
     if not frame then return end
 
-    if state and state.active then
+    if CastStateActive(state) then
         frame._msufActiveSeq = state.spellSequenceID
         frame._msufActiveCastType = state.castType
         return
@@ -453,7 +476,7 @@ local function RefreshFromEngine(frame)
 
     local state = BuildState(frame)
     StoreActiveStateIdentity(frame, state)
-    if not (state and state.active and state.spellName) and CastbarAlreadyIdle(frame) then
+    if not CastStateHasSpell(state) and CastbarAlreadyIdle(frame) then
         return state, false
     end
     frame:Cast(state)
@@ -484,6 +507,14 @@ local function StopDriverFrame(frame, reason, unregisterCastbar)
     ClearStopExpectation(frame)
     ClearStartRetry(frame)
     HideChannelHasteMarkers(frame)
+    if frame.castTargetText then
+        if type(_G.MSUF_SetTextIfChanged) == "function" then
+            _G.MSUF_SetTextIfChanged(frame.castTargetText, "")
+        else
+            frame.castTargetText:SetText("")
+        end
+        frame.castTargetText:Hide()
+    end
     _G.MSUF_CB_ResetStateOnStop(frame, reason)
     if unregisterCastbar and _G.MSUF_UnregisterCastbar then
         _G.MSUF_UnregisterCastbar(frame)
@@ -505,7 +536,7 @@ local function EnsureDriverCallbacks(frame)
         if StopExpectationInvalid() then return end
 
         local state = BuildState(frame)
-        if state and state.active then
+        if CastStateActive(state) then
             StoreActiveStateIdentity(frame, state)
             frame:Cast(state)
             return
@@ -524,7 +555,7 @@ local function EnsureDriverCallbacks(frame)
         if StopExpectationInvalid() then return end
 
         local state = BuildState(frame)
-        if state and state.active then
+        if CastStateActive(state) then
             StoreActiveStateIdentity(frame, state)
             frame:Cast(state)
             return
@@ -542,7 +573,7 @@ local function EnsureDriverCallbacks(frame)
         if StopExpectationInvalid() then return end
 
         local state = BuildState(frame)
-        if state and state.active then
+        if CastStateActive(state) then
             StoreActiveStateIdentity(frame, state)
             frame:Cast(state)
             return
@@ -560,7 +591,7 @@ local function EnsureDriverCallbacks(frame)
         if StopExpectationInvalid() then return end
 
         local state = BuildState(frame)
-        if state and state.active then
+        if CastStateActive(state) then
             StoreActiveStateIdentity(frame, state)
             frame:Cast(state)
             return
@@ -581,7 +612,7 @@ local function EnsureDriverCallbacks(frame)
         if (frame._msufCastToken or 0) ~= (frame._msufStartRetryToken or 0) then return end
 
         local state = BuildState(frame)
-        if state and state.active then
+        if CastStateActive(state) then
             StoreActiveStateIdentity(frame, state)
             frame:Cast(state)
         end
@@ -603,7 +634,7 @@ local function AdvanceCastToken(frame)
     return frame._msufCastToken
 end
 
-local function HandleTargetFocusChanged(frame)
+local function InvalidateTargetFocusState(frame)
     ClearStopExpectation(frame)
     ClearStartRetry(frame)
     AdvanceCastToken(frame)
@@ -613,18 +644,115 @@ local function HandleTargetFocusChanged(frame)
     frame.MSUF_kickInterruptibleConfirmed = nil
     StoreActiveStateIdentity(frame, nil)
     InvalidateBuildState(frame.unit)
+end
 
-    local _, applied = RefreshFromEngine(frame)
-    if applied then
+local function CastTargetTextEnabled(frame)
+    if not (frame and frame.castTargetText) then return false end
+    local unit = frame.unit
+    if unit == "target" then
+        return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.castbarTargetShowTargetName == true
+    elseif unit == "focus" then
+        return _G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.castbarFocusShowTargetName == true
+    end
+    return false
+end
+
+local function SetCastTargetText(frame, text)
+    local fs = frame and frame.castTargetText
+    if not fs then return end
+    if type(_G.MSUF_SetTextIfChanged) == "function" then
+        _G.MSUF_SetTextIfChanged(fs, text or "")
+    else
+        fs:SetText(text or "")
+    end
+end
+
+local function ApplyCastTargetTextColor(frame, classFilename)
+    local fs = frame and frame.castTargetText
+    if not fs then return end
+    local c
+    if classFilename and C_ClassColor and C_ClassColor.GetClassColor then
+        c = C_ClassColor.GetClassColor(classFilename)
+        if c and c.GetRGB then
+            fs:SetTextColor(c:GetRGB())
+            return
+        end
+    end
+    c = classFilename and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classFilename]
+    if c then
+        fs:SetTextColor(c.r or 1, c.g or 1, c.b or 1)
+    else
+        fs:SetTextColor(1, 1, 1)
+    end
+end
+
+local function ResolveCastTargetInfo(state)
+    local engine = (_G.MSUF_GetCastbarEngine and _G.MSUF_GetCastbarEngine()) or nil
+    if engine and type(engine.ResolveTargetInfo) == "function" then
+        return engine:ResolveTargetInfo(state)
+    end
+
+    local unit = state and state.unit
+    if not (unit and UnitShouldDisplaySpellTargetName and UnitSpellTargetName) then
+        return nil
+    end
+    if not ToPlainBool(UnitShouldDisplaySpellTargetName(unit)) then
+        return nil
+    end
+
+    local targetName = UnitSpellTargetName(unit)
+    if not targetName then
+        return nil
+    end
+
+    return targetName, UnitSpellTargetClass and UnitSpellTargetClass(unit) or nil, true
+end
+
+local function UpdateCastTargetText(frame, state)
+    local fs = frame and frame.castTargetText
+    if not fs then return end
+    if not CastTargetTextEnabled(frame) or not CastStateHasSpell(state) then
+        SetCastTargetText(frame, "")
+        fs:Hide()
         return
     end
+
+    local targetName, targetClass = ResolveCastTargetInfo(state)
+    if not targetName then
+        SetCastTargetText(frame, "")
+        fs:Hide()
+        return
+    end
+
+    SetCastTargetText(frame, targetName)
+    ApplyCastTargetTextColor(frame, targetClass)
+    fs:Show()
+end
+
+local function RefreshTargetFocusImmediate(frame)
+    local state = BuildState(frame)
+    if CastStateHasSpell(state) then
+        StoreActiveStateIdentity(frame, state)
+        frame:Cast(state)
+        return true
+    end
+
+    StoreActiveStateIdentity(frame, nil)
+    UpdateCastTargetText(frame, nil)
 
     SetSafetyOnUpdate(frame, false)
     if CastbarAlreadyIdle(frame) then
-        return
+        return false
     end
 
     StopDriverFrame(frame, "HARDHIDE", false)
+    return false
+end
+
+local function ScheduleTargetFocusChanged(frame)
+    if not frame then return end
+    InvalidateTargetFocusState(frame)
+    RefreshTargetFocusImmediate(frame)
 end
 
 local function ScheduleStopConfirmation(frame, castType)
@@ -744,7 +872,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
         frame.MSUF_kickInterruptibleConfirmed = nil
         local state = RefreshFromEngine(frame)
 
-        if not (state and state.active and state.spellName) then
+        if not CastStateHasSpell(state) then
             EnsureDriverCallbacks(frame)
             frame._msufStartRetryToken = token
             if not frame._msufStartRetryPending then
@@ -793,7 +921,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
         end
 
         local state = BuildState(frame)
-        if state and state.active then
+        if CastStateActive(state) then
             StoreActiveStateIdentity(frame, state)
             frame:Cast(state)
         end
@@ -830,7 +958,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
 
     if (event == "PLAYER_TARGET_CHANGED" and frame.unit == "target")
         or (event == "PLAYER_FOCUS_CHANGED" and frame.unit == "focus") then
-        HandleTargetFocusChanged(frame)
+        ScheduleTargetFocusChanged(frame)
     end
 end
 
@@ -908,7 +1036,7 @@ local function CreateCastBar(frameName, unit)
     end)
 
     function frame:Cast(state)
-        if not (state and state.active and state.unit == self.unit and state.spellName) then
+        if not (CastStateHasSpell(state) and state.unit == self.unit) then
             state = BuildState(self)
         end
 
@@ -920,7 +1048,7 @@ local function CreateCastBar(frameName, unit)
 
         local spellName, label, icon, startTimeMS, endTimeMS
         local isChannel = false
-        if state and state.active and state.spellName then
+        if CastStateHasSpell(state) then
             spellName = state.spellName
             label = state.text or state.spellName
             icon = state.icon
@@ -941,7 +1069,7 @@ local function CreateCastBar(frameName, unit)
         end
 
         local durationObj = (state and state.durationObj ~= nil) and state.durationObj or nil
-        if durationObj == nil and state and state.active then
+        if durationObj == nil and CastStateActive(state) then
             local sequenceID = state.spellSequenceID
             if type(sequenceID) == "number"
                 and self._msufLastDurationSeq == sequenceID
@@ -951,13 +1079,13 @@ local function CreateCastBar(frameName, unit)
             end
         end
 
-        if state and state.active and durationObj ~= nil then
+        if CastStateActive(state) and durationObj ~= nil then
             local sequenceID = state.spellSequenceID
             if type(sequenceID) == "number" then
                 self._msufLastDurationSeq = sequenceID
                 self._msufLastDurationObj = durationObj
             end
-        elseif not (state and state.active) then
+        elseif not CastStateActive(state) then
             self._msufApiNotInterruptibleRaw = nil
             self._msufLastDurationSeq = nil
             self._msufLastDurationObj = nil
@@ -995,16 +1123,10 @@ local function CreateCastBar(frameName, unit)
             if self.timeText then
                 _G.MSUF_UpdateCastTimeText_FromStatusBar(self)
             end
+            UpdateCastTargetText(self, state)
 
             if _G.MSUF_KickReady_RefreshFrame then
-                if not self._msufKickReadyDeferredCB then
-                    self._msufKickReadyDeferredCB = function()
-                        if self and self.MSUF_castActive == true and _G.MSUF_KickReady_RefreshFrame then
-                            _G.MSUF_KickReady_RefreshFrame(self, nil)
-                        end
-                    end
-                end
-                C_Timer.After(0, self._msufKickReadyDeferredCB)
+                _G.MSUF_KickReady_RefreshFrame(self, state)
             end
 
             if self.unit ~= "player" then
@@ -1015,6 +1137,7 @@ local function CreateCastBar(frameName, unit)
             SetSafetyOnUpdate(self, false)
             self.MSUF_castActive = false
             self.MSUF_kickInterruptibleConfirmed = nil
+            UpdateCastTargetText(self, nil)
             if self.kickReadyBox then self.kickReadyBox:Hide() end
             if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
 
@@ -1028,7 +1151,7 @@ local function CreateCastBar(frameName, unit)
                 if not self or self._msufHideToken ~= hideToken or not self.unit then return end
 
                 local nextState = BuildState(self)
-                if nextState and nextState.active then
+                if CastStateActive(nextState) then
                     self:Cast(nextState)
                     return
                 end
@@ -1114,7 +1237,7 @@ local function CreateCastBar(frameName, unit)
             if not self or self._msufHideToken ~= hideToken or not self.unit then return end
 
             local nextState = BuildState(self)
-            if nextState and nextState.active then
+            if CastStateActive(nextState) then
                 self.interrupted = nil
                 self:Cast(nextState)
                 return
@@ -1281,13 +1404,35 @@ local function ApplyDriverBackendState(unit)
     return nil
 end
 
+local function ApplyCastbarUnitCold(unit)
+    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+        _G.MSUF_ApplyCastbarUnitAndSync(unit)
+        return true
+    end
+    if unit == "target" and type(_G.MSUF_ReanchorTargetCastBar) == "function" then
+        _G.MSUF_ReanchorTargetCastBar()
+    elseif unit == "focus" and type(_G.MSUF_ReanchorFocusCastBar) == "function" then
+        _G.MSUF_ReanchorFocusCastBar()
+    elseif unit == "player" and type(_G.MSUF_ReanchorPlayerCastBar) == "function" then
+        _G.MSUF_ReanchorPlayerCastBar()
+    end
+    if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+        return true
+    end
+    return false
+end
+
 local function MSUF_CastbarDriver_OnLogin()
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
-    if _G.MSUF_ReanchorTargetCastBar then _G.MSUF_ReanchorTargetCastBar() end
-    if _G.MSUF_ReanchorFocusCastBar then _G.MSUF_ReanchorFocusCastBar() end
-    if _G.MSUF_ReanchorPlayerCastBar then _G.MSUF_ReanchorPlayerCastBar() end
-    if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+    local applied = false
+    applied = ApplyCastbarUnitCold("target") or applied
+    applied = ApplyCastbarUnitCold("focus") or applied
+    applied = ApplyCastbarUnitCold("player") or applied
+    if not applied then
+        if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+    end
     if _G.MSUF_UpdateCastbarTextures then _G.MSUF_UpdateCastbarTextures() end
 end
 

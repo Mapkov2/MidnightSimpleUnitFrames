@@ -29,7 +29,7 @@ local type = type
 local tonumber = tonumber
 local tostring = tostring
 
--- Cached _G.MSUF_UnitFrames table (refreshed lazily; may be nil early at login).
+-- Cached Core unitframe table (refreshed lazily; may be nil early at login).
 local unitFramesCache
 
 -- Per-unit castbar DB keys + default anchor offsets (dx/dy used when the saved
@@ -90,7 +90,8 @@ local function CastbarFrameInset(g)
 end
 
 local function GetUnitFrames()
-    unitFramesCache = _G.MSUF_UnitFrames or unitFramesCache or _G.UnitFrames
+    local uf = MSUF and MSUF.UF
+    unitFramesCache = (uf and uf.frames) or unitFramesCache
     return unitFramesCache
 end
 
@@ -161,17 +162,23 @@ end
 ------------------------------------------------------------------------
 
 -- The MSUF unitframe object for a unit (handles boss1..boss5 indexing).
-local function GetUnitframe(unit)
+local function GetCoreUnitframe(unit)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(unit)
+        if frame then return frame end
+    end
     local frames = GetUnitFrames()
+    return (frames and frames[unit]) or _G["MSUF_" .. tostring(unit or "")]
+end
+
+local function GetUnitframe(unit)
     unit = tostring(unit or "")
     local index = tonumber(unit:match("^boss(%d+)$")) or 1
     if NormalizeUnit(unit) == "boss" then
-        return (frames and frames["boss" .. index])
-            or _G["MSUF_boss" .. index]
-            or (frames and frames.boss1)
-            or _G.MSUF_boss1
+        return GetCoreUnitframe("boss" .. index) or GetCoreUnitframe("boss1")
     end
-    return (frames and frames[unit]) or _G["MSUF_" .. unit]
+    return GetCoreUnitframe(unit)
 end
 
 -- The visible health bar of a unitframe (preferred width source), or the frame
