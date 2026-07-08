@@ -470,16 +470,41 @@ end
 
 local BAR_GRADIENT_ELEMENTS = { "Health", "Power" }
 
+local function NormalizeGradientScope(scope)
+  scope = tostring(scope or ""):lower()
+  if scope == "" or scope == "*" or scope == "shared" or scope == "global" or scope == "all" then return nil end
+  if scope == "tot" or scope == "targetoftarget" then return "targettarget" end
+  if scope == "focus_target" or scope == "focustargettarget" then return "focustarget" end
+  return scope
+end
+
+local function GradientGroupKinds(scope)
+  scope = NormalizeGradientScope(scope)
+  if scope == "gf_party" or scope == "party" then return "party" end
+  if scope == "gf_raid" or scope == "raid" then return "raid", "mythicraid" end
+  if scope == "gf_mythicraid" or scope == "mythicraid" then return "mythicraid" end
+  return nil
+end
+
 local function UpdateAllBarGradients(unit)
   local refreshed = false
+  local kindA, kindB = GradientGroupKinds(unit)
+  local unitScope = NormalizeGradientScope(unit)
   if UF and type(UF.RefreshElements) == "function" then
-    refreshed = UF.RefreshElements(unit, BAR_GRADIENT_ELEMENTS, "MSUF2_GRADIENT") or refreshed
+    if not kindA then
+      refreshed = UF.RefreshElements(unitScope, BAR_GRADIENT_ELEMENTS, "MSUF2_GRADIENT") or refreshed
+    end
   end
   local GF = MSUF and MSUF.GF
   if GF and type(GF.RefreshVisuals) == "function" then
-    refreshed = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL) or refreshed
+    if kindA then
+      refreshed = GF.RefreshVisuals(kindA, GF.DIRTY_VISUAL) or refreshed
+      if kindB then refreshed = GF.RefreshVisuals(kindB, GF.DIRTY_VISUAL) or refreshed end
+    elseif not unitScope then
+      refreshed = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL) or refreshed
+    end
   end
-  if _G.MSUF_RoundedUF_Active == true and type(_G.MSUF_RoundedUF_OnApplyAll) == "function" then
+  if not unitScope and _G.MSUF_RoundedUF_Active == true and type(_G.MSUF_RoundedUF_OnApplyAll) == "function" then
     _G.MSUF_RoundedUF_OnApplyAll()
   end
   return refreshed
@@ -843,7 +868,7 @@ local function GradientFromValues(health, hp, maxHP)
   return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t, true
 end
 
-local function GradientColor(unit, calc, frame, hp, maxHP)
+local function GradientColor(unit, calc, frame)
   local spec = frame and frame.MSUFSpec
   local health = spec and spec.health or nil
   local curve = HealthGradientCurve(health)
@@ -861,7 +886,25 @@ local function GradientColor(unit, calc, frame, hp, maxHP)
       return r, g, b, true
     end
   end
-  local r, g, b, raw = GradientFromValues(health, hp, maxHP)
+  return 0.2, 0.8, 0.2, false
+end
+
+local function PreviewHealthGradientColor(health, pct)
+  pct = Clamp01(pct, 1)
+  local curve = HealthGradientCurve(health)
+  if curve and curve.EvaluateUnpacked then
+    local r, g, b = curve:EvaluateUnpacked(pct)
+    if r ~= nil then
+      return r, g, b, true
+    end
+  elseif curve and curve.Evaluate then
+    local color = curve:Evaluate(pct)
+    if color and color.GetRGB then
+      local r, g, b = color:GetRGB()
+      return r, g, b, true
+    end
+  end
+  local r, g, b, raw = GradientFromValues(health, pct * 100, 100)
   if raw == true then
     return r, g, b, true
   end
@@ -1064,6 +1107,7 @@ MSUF.UFBarTextCommon = {
   UnitNPCKind = UnitNPCKind,
   NPCColor = NPCColor,
   GradientColor = GradientColor,
+  PreviewHealthGradientColor = PreviewHealthGradientColor,
   HealthColor = HealthColor,
   ApplyHealthStatusColor = ApplyHealthStatusColor,
   ApplyBackgrounds = ApplyBackgrounds,

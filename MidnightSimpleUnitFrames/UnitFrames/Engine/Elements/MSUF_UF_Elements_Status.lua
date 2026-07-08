@@ -802,8 +802,8 @@ local function UpdateLeaderPair(frame, status)
   local exists = UnitExistsSafe(unit)
   -- Unit-type early-out: only a PLAYER can be group leader/assistant, so a
   -- non-player target (any mob) can never show these. Skip the two group-query
-  -- API calls entirely and just ensure the icons are hidden. This is the oUF-
-  -- style guard that makes rapid target-swaps over mobs cheap.
+  -- API calls entirely and just ensure the icons are hidden. This guard makes
+  -- rapid target-swaps over mobs cheap.
   if exists and UnitIsPlayer and not BoolTrue(UnitIsPlayer(unit)) then
     if leaderTex and leaderTex._msufStatusShown ~= false then SetShown(leaderTex, false); leaderTex._msufStatusShown = false end
     if assistTex and assistTex._msufStatusShown ~= false then SetShown(assistTex, false); assistTex._msufStatusShown = false end
@@ -1848,7 +1848,7 @@ local STATUS_REFRESH_ALIASES = {
   "MSUF_RefreshEliteIconFrames",
 }
 for i = 1, #STATUS_REFRESH_ALIASES do
-  _G[STATUS_REFRESH_ALIASES[i]] = function()
-    return RefreshStatus(nil, "MSUF_STATUS")
+  _G[STATUS_REFRESH_ALIASES[i]] = function(unit, reason)
+    return RefreshStatus(unit, reason or "MSUF_STATUS")
   end
 end

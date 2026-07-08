@@ -34,14 +34,19 @@ local function HideFrameHighlight(frame)
 end
 
 local function HideExistingHighlights()
-  local frames = _G.MSUF_UnitFrames
-  if type(frames) == "table" then
-    for _, frame in pairs(frames) do
-      HideFrameHighlight(frame)
+  local uf = MSUF and MSUF.UF
+  if uf and type(uf.ForEachFrame) == "function" then
+    uf.ForEachFrame(HideFrameHighlight)
+  else
+    local frames = uf and uf.frames
+    if type(frames) == "table" then
+      for _, frame in pairs(frames) do
+        HideFrameHighlight(frame)
+      end
     end
   end
 
-  local list = _G.MSUF_UnitFramesList
+  local list = uf and uf.frameList
   if type(list) == "table" then
     for i = 1, #list do
       HideFrameHighlight(list[i])
@@ -197,8 +202,12 @@ local function HighlightDebug()
     .. " roundedOwns=" .. tostring(RoundedOwnsMouseover()))
   local f = _G.MSUF_target
   if not f then
-    local list = _G.MSUF_UnitFramesList
-    if type(list) == "table" then
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+      f = uf.GetFrame("target")
+    end
+    local list = not f and uf and uf.frameList
+    if not f and type(list) == "table" then
       for i = 1, #list do
         if list[i] and list[i].unit == "target" then f = list[i] break end
       end

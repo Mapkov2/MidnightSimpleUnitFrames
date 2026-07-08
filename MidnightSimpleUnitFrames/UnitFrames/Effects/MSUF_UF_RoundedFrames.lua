@@ -1114,12 +1114,16 @@ ApplyToGroupFrame = function(f, kind)
 end
 
 local function ForEachUnitFrame(fn)
-  local frames = _G.MSUF_UnitFrames
+  if type(fn) ~= "function" then return end
+  local UF = MSUF and MSUF.UF
+  if UF and type(UF.ForEachFrame) == "function" then
+    UF.ForEachFrame(fn)
+    return
+  end
+  local frames = UF and UF.frames
   if not frames then return end
   for _, f in pairs(frames) do
-    if type(fn) == "function" then
-      fn(f)
-    end
+    fn(f)
   end
 end
 
@@ -1175,10 +1179,38 @@ local function ApplyAll()
   end
 end
 
+local function ApplyVisualRefreshUnit(unit)
+  if not IsEnabled() then return end
+  if IsCombatLocked() then
+    DeferApply()
+    return
+  end
+  ExportPublic("MSUF_RoundedUF_Active", true)
+  ExportPublic("MSUF_RoundedUF_MouseoverActive", RoundedMouseoverEnabled() and true or nil)
+
+  local UF = MSUF and MSUF.UF
+  if unit ~= nil and unit ~= "*" then
+    local frame = nil
+    if UF and type(UF.GetFrame) == "function" then frame = UF.GetFrame(unit) end
+    if not frame and UF and type(UF.frames) == "table" then frame = UF.frames[unit] end
+    if not frame then frame = _G["MSUF_" .. tostring(unit)] end
+    if frame then ApplyToUnitFrame(frame) end
+    return
+  end
+
+  ForEachUnitFrame(function(f)
+    if not IsGroupFrame(f) then ApplyToUnitFrame(f) end
+  end)
+end
+
 local function HookOnce()
   local eventFrame = MSUF.__msufRoundedEventFrame
   if eventFrame and eventFrame.RegisterEvent then
     eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+  end
+  local UF = MSUF and MSUF.UF
+  if UF and type(UF.RegisterVisualRefreshCallback) == "function" then
+    UF.RegisterVisualRefreshCallback("RoundedFrames", ApplyVisualRefreshUnit)
   end
   if MSUF.__msufRoundedUF_Hooked then return end
   MSUF.__msufRoundedUF_Hooked = true

@@ -1442,6 +1442,30 @@ function GF.LoadRaidLayout(conf, situationKey)
     end
 end
 
+local function RefreshRaidLayoutKind(kind)
+    if GF.RefreshGeometry then
+        return GF.RefreshGeometry(kind)
+    end
+    local did = false
+    if GF.RefreshHeaderLayout then
+        did = GF.RefreshHeaderLayout(kind) or did
+    end
+    if GF.RefreshUnitBindings then
+        did = GF.RefreshUnitBindings(kind) or did
+    end
+    if GF.RefreshVisuals then
+        local dirty = GF.DIRTY_GEOMETRY or GF.DIRTY_LAYOUT or GF.DIRTY_VISUAL
+        did = GF.RefreshVisuals(kind, dirty) or did
+    end
+    if did then
+        return true
+    end
+    if GF.RefreshAll then
+        return GF.RefreshAll()
+    end
+    return false
+end
+
 --- Switch active situation: save current - load new - rebuild
 function GF.SwitchRaidLayout(situationKey, kind)
     kind = kind or (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
@@ -1455,11 +1479,7 @@ function GF.SwitchRaidLayout(situationKey, kind)
     conf._activeRaidLayout = situationKey
     GF.LoadRaidLayout(conf, situationKey)
     GF.InvalidateConfCache()
-    if GF.RefreshGeometry then
-        GF.RefreshGeometry()
-    elseif GF.RefreshAll then
-        GF.RefreshAll()
-    end
+    RefreshRaidLayoutKind(kind)
     return true
 end
 
@@ -2909,4 +2929,3 @@ ExportPublic("MSUF_GF_Val", GF.Val)
 ExportPublic("MSUF_GF_GetHighlightVal", GF.GetHighlightVal)
 ExportPublic("MSUF_GF_InvalidateConfCache", GF.InvalidateConfCache)
 ExportPublic("MSUF_GF_ResetAllToDefaults", GF.ResetAllToDefaults)
-

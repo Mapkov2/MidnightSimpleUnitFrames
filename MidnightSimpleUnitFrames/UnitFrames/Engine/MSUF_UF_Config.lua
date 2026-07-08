@@ -160,6 +160,14 @@ local function OutlineModeEnabled(value, fallback)
   return value == 1
 end
 
+local function ClampFrameOutlineLevelOffset(value)
+  if value == nil then return nil end
+  value = floor((tonumber(value) or 0) + 0.5)
+  if value < 0 then return 0 end
+  if value > 60 then return 60 end
+  return value
+end
+
 local function CopyColor(dst, r, g, b, a)
   dst.r = Number(r, dst.r or 1)
   dst.g = Number(g, dst.g or 1)
@@ -1670,6 +1678,7 @@ local function CompileUnitBorder(out, conf, general, bars)
   end
   border.thickness = Number(outlineThickness, 1)
   border.enabled = bars.showBarBorder ~= false and border.thickness > 0
+  border.levelOffset = ClampFrameOutlineLevelOffset(conf.hlOverride == true and conf.barOutlineLevelOffset ~= nil and conf.barOutlineLevelOffset or bars.barOutlineLevelOffset)
   border.r = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
   border.g = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)
   border.b = Number(ScopedValue(conf, general, "barOutlineColorB", general.barBorderB), 0)
@@ -1896,6 +1905,7 @@ local function BuildSettingsCache(db)
       dst.r, dst.g, dst.b = fallback[1], fallback[2], fallback[3]
     end
   end
+  Config.settingsCacheDirty = nil
   return cache
 end
 
@@ -1904,6 +1914,9 @@ function Config.GetSettingsCache()
   local cache = Config.settingsCache
   if Config.dirty == true and ConfigInCombat() and cache.dbRef ~= nil then
     return cache
+  end
+  if Config.settingsCacheDirty == true then
+    return BuildSettingsCache(db)
   end
   if cache.dbRef == db and cache.settingsSerial == (Config.serial or 0) then
     return cache
@@ -1914,11 +1927,11 @@ end
 ExportPublic("MSUF_UFCore_GetSettingsCache", Config.GetSettingsCache)
 
 function Config.RefreshSettingsCache()
+  Config.settingsCacheDirty = true
   if ConfigInCombat() then
     Config.dirty = true
     return Config.settingsCache
   end
-  Config.Refresh()
   return Config.GetSettingsCache()
 end
 

@@ -102,26 +102,32 @@ local function GroupGeometryMask(gf)
   return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
 end
 
-local function RefreshGroupGeometry(gf)
+local function RefreshGroupGeometry(gf, kind)
   if not gf or ConfigLocked() then return false end
+  if type(gf.InvalidateCompiledSpecs) == "function" then gf.InvalidateCompiledSpecs(kind) end
   if type(gf.RefreshGeometry) == "function" then
-    return gf.RefreshGeometry()
+    return gf.RefreshGeometry(kind)
+  end
+  if type(gf.RefreshVisuals) == "function" then
+    return gf.RefreshVisuals(kind, GroupGeometryMask(gf))
   end
   if type(gf.RefreshAll) == "function" then
     return gf.RefreshAll()
   end
-  if type(gf.RefreshVisuals) == "function" then
-    return gf.RefreshVisuals(nil, GroupGeometryMask(gf))
-  end
   return false
 end
 
-local function RefreshGroupBounds(gf)
+local function RefreshGroupBounds(gf, kind)
   if not gf or ConfigLocked() then return false end
-  if type(gf.MarkAllDirty) == "function" then
+  if type(gf.InvalidateCompiledSpecs) == "function" then gf.InvalidateCompiledSpecs(kind) end
+  if type(gf.RefreshGeometry) == "function" then
+    return gf.RefreshGeometry(kind)
+  elseif kind and type(gf.RefreshVisuals) == "function" then
+    return gf.RefreshVisuals(kind, GroupGeometryMask(gf))
+  elseif type(gf.MarkAllDirty) == "function" then
     return gf.MarkAllDirty(GroupGeometryMask(gf))
   end
-  return RefreshGroupGeometry(gf)
+  return RefreshGroupGeometry(gf, kind)
 end
 
 local function ShowConfigLock()
@@ -249,7 +255,7 @@ local function GetSelectedPreviewKind()
   local stateKey = EM2.State and EM2.State.GetUnitKey and EM2.State.GetUnitKey()
   local stateKind = NormalizeKind(stateKey)
   if stateKind then return stateKind end
-  return GetLiveGroupKind()
+  return nil
 end
 
 local function ShouldShowPreviewKind(kind)
@@ -940,7 +946,7 @@ local function NudgePreviewKind(kind, dx, dy)
   if gf and HasNativePreviewAPI(gf) and gf.RefreshPreviewLayout then
     gf.RefreshPreviewLayout(kind)
   elseif gf then
-    RefreshGroupGeometry(gf)
+    RefreshGroupGeometry(gf, kind)
   end
   if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
   RefreshGFPositionUI(kind)
@@ -1290,7 +1296,7 @@ local function RefreshAfterPopupApply(mode)
 
   -- Group popups edit bounds only. Route them through the geometry dirty path
   -- so Auras3 config and text/color-only runtime work are not swept every time.
-  RefreshGroupBounds(gf)
+  RefreshGroupBounds(gf, mode)
 
   if _em2Active then
     if _previewShownByEM2 and HasNativePreviewAPI(gf) then

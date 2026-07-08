@@ -48,18 +48,23 @@ local function Queue(fn, tokenName)
   end
 end
 
-local function QueueCastbarRefresh()
+local function QueueCastbarRefresh(unit)
+  unit = CastbarUnit(unit)
   Queue(function()
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-      _G.MSUF_UpdateCastbarVisuals()
+    if unit and type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+      _G.MSUF_ApplyCastbarUnitAndSync(unit)
+    elseif unit and type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+      _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+      _G.MSUF_UpdateCastbarVisuals(unit)
     end
-    if type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
+    if (not unit or unit == "player") and type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
       _G.MSUF_ApplyPlayerChannelTickMarkers()
     end
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    if (not unit or unit == "boss") and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
       _G.MSUF_UpdateBossCastbarPreview()
     end
-  end, "_msufCastbarRefreshQueued")
+  end, "_msufCastbarRefreshQueued_" .. tostring(unit or "all"))
 end
 
 local function HideMSUFCastbar(unit)
@@ -102,7 +107,7 @@ function Castbars.Enable(frame)
   if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then
     _G.MSUF_SuppressBlizzardPlayerCastbars()
   end
-  QueueCastbarRefresh()
+  QueueCastbarRefresh(unit)
 end
 
 function Castbars.Disable(frame)
@@ -110,7 +115,7 @@ function Castbars.Disable(frame)
     return
   end
   HideMSUFCastbar(frame.unit)
-  QueueCastbarRefresh()
+  QueueCastbarRefresh(frame.unit)
 end
 
 function Castbars.Apply(frame, spec)
@@ -130,17 +135,27 @@ function ClassPower.IsEnabled(frame, spec)
   return frame.unit == "player" and spec and spec.classPower and spec.classPower.enabled == true
 end
 
-function ClassPower.Enable(frame)
+local function ApplyClassPowerCold(opts)
+  if type(_G.MSUF_ClassPower_Apply) == "function" then
+    _G.MSUF_ClassPower_Apply(opts)
+    return true
+  end
+  if type(_G.MSUF_ClassPower_Refresh) == "function" then
+    _G.MSUF_ClassPower_Refresh()
+    if type(_G.MSUF_ClassPower_RefreshCDMWidthBindings) == "function" then
+      _G.MSUF_ClassPower_RefreshCDMWidthBindings(false)
+    end
+    return true
+  end
+  return false
+end
+
+function ClassPower.Enable(frame, full)
   if frame and frame.unit ~= "player" then
     return
   end
   Queue(function()
-    if type(_G.MSUF_ClassPower_Refresh) == "function" then
-      _G.MSUF_ClassPower_Refresh()
-    end
-    if type(_G.MSUF_ClassPower_RefreshCDMWidthBindings) == "function" then
-      _G.MSUF_ClassPower_RefreshCDMWidthBindings(false)
-    end
+    ApplyClassPowerCold(full and { full = true, cdm = true, syncNow = false } or { anchor = true, syncNow = false })
     if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
       _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player")
     end
@@ -156,12 +171,7 @@ function ClassPower.Disable(frame)
     return
   end
   Queue(function()
-    if type(_G.MSUF_ClassPower_Refresh) == "function" then
-      _G.MSUF_ClassPower_Refresh()
-    end
-    if type(_G.MSUF_ClassPower_RefreshCDMWidthBindings) == "function" then
-      _G.MSUF_ClassPower_RefreshCDMWidthBindings(false)
-    end
+    ApplyClassPowerCold({ full = true, cdm = true, syncNow = false })
   end, "_msufClassPowerRefreshQueued")
 end
 
@@ -169,10 +179,15 @@ function ClassPower.Apply(frame, spec)
   if frame.unit ~= "player" then
     return
   end
-  if ClassPower.IsEnabled(frame, spec) then
-    ClassPower.Enable(frame, spec)
+  local enabled = ClassPower.IsEnabled(frame, spec)
+  local full = frame._msufClassPowerCoreEnabled ~= enabled
+  frame._msufClassPowerCoreEnabled = enabled
+  if enabled then
+    ClassPower.Enable(frame, full)
   else
-    ClassPower.Disable(frame)
+    if full then
+      ClassPower.Disable(frame)
+    end
   end
 end
 

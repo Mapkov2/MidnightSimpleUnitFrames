@@ -52,6 +52,10 @@ local POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWE
 local POWER_TEXT_VALUE_META_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 
+local function IsFiniteNumber(value)
+  return type(value) == "number" and value == value and (value - value) == 0
+end
+
 function Text.SetDisplayNameResolver(resolver)
   ReadDisplayName = type(resolver) == "function" and resolver or UnitName
 end
@@ -67,7 +71,7 @@ local function MissingHealthFromValues(hp, hpMax)
   if issecretvalue(hp) == true or issecretvalue(hpMax) == true then
     return nil
   end
-  if type(hp) ~= "number" or type(hpMax) ~= "number" then
+  if not IsFiniteNumber(hp) or not IsFiniteNumber(hpMax) then
     return nil
   end
   local missing = hpMax - hp
@@ -83,6 +87,9 @@ local function PercentCacheKeyFromValue(pct, decimals)
   if type(pct) ~= "number" then
     return pct or false
   end
+  if not IsFiniteNumber(pct) then
+    return false
+  end
   if NormalizePercentDecimals(decimals) >= 1 then
     return floor(pct * 10 + 0.5)
   end
@@ -90,7 +97,7 @@ local function PercentCacheKeyFromValue(pct, decimals)
 end
 
 local function PercentFromValues(cur, maxValue)
-  if type(cur) == "number" and type(maxValue) == "number" and maxValue > 0 then
+  if IsFiniteNumber(cur) and IsFiniteNumber(maxValue) and maxValue > 0 then
     return (cur / maxValue) * 100
   end
   return nil
@@ -320,7 +327,15 @@ local function SeedCachedPowerType(frame, unit, powerType, powerToken)
 end
 
 local function SeedCachedPowerMax(frame, unit, powerMax)
-  if not frame or powerMax == nil or issecretvalue(powerMax) == true then
+  if not frame then
+    return false
+  end
+  if issecretvalue(powerMax) == true then
+    frame._msufTextPowerMax = nil
+    frame._msufTextPowerMaxUnit = nil
+    return false
+  end
+  if powerMax == nil then
     return false
   end
   frame._msufTextPowerMax = powerMax
@@ -357,6 +372,11 @@ local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powe
   end
 
   local maxPower = frame._msufTextPowerMax
+  if issecretvalue(maxPower) == true then
+    maxPower = nil
+    frame._msufTextPowerMax = nil
+    frame._msufTextPowerMaxUnit = nil
+  end
   if needMax ~= false then
     local cacheUnit = unit
     local maxUnit = frame._msufTextPowerMaxUnit
@@ -376,9 +396,14 @@ local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powe
       else
         maxPower = UnitPowerMax(unit)
       end
-      if issecretvalue(maxPower) ~= true and maxPower == nil then maxPower = 1 end
-      frame._msufTextPowerMax = maxPower
-      frame._msufTextPowerMaxUnit = cacheUnit
+      if issecretvalue(maxPower) == true then
+        frame._msufTextPowerMax = nil
+        frame._msufTextPowerMaxUnit = nil
+      else
+        if maxPower == nil then maxPower = 1 end
+        frame._msufTextPowerMax = maxPower
+        frame._msufTextPowerMaxUnit = cacheUnit
+      end
     end
   else
     maxPower = nil
@@ -662,7 +687,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       else
         canCompareText = false
       end
-      if keyHP == nil then
+      if keyHP == nil or keyHP == false then
         canCompareText = false
         keyHP = false
       end
@@ -866,6 +891,9 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     elseif mode == 4 or mode == 5 then
       if pctOverrideSet and issecretvalue(pctOverride) ~= true then
         keyPower = PercentCacheKeyFromValue(pctOverride, 0)
+        if keyPower == false then
+          canCompareText = false
+        end
       else
         canCompareText = false
       end
@@ -1059,9 +1087,6 @@ local function ElementActive(frame, name)
   return active and active[name] == true
 end
 
--- Dedup for the percent-fed text path: the health updater already produced the
--- percent (EUI percent bar path), so there is no raw hp/hpMax and no second
--- UnitHealthPercent call. Keyed purely on the rounded percent bucket.
 local function GFHotHealthPercentNeedsUpdate(rt, pct)
   local pctSecret = issecretvalue(pct) == true
   if pctSecret then
@@ -1082,12 +1107,14 @@ local function GFHotHealthPercentNeedsUpdate(rt, pct)
   return true, pct ~= nil
 end
 
--- Percent-fed variant of BuildGFHotHealthText. Used only when the frame runs the
--- EUI percent bar updater (dispatch key mode 4, no absolute-HP slot). The `hp`
--- argument IS the percent; missing/current/max are all irrelevant here so the
--- writer receives (cur=nil, max=nil, pct=hp).
 local function BuildGFHotHealthTextFromPercent(frame, rt)
-  if not (rt and rt.healthSlotCount == 1 and rt.healthColorByHealth ~= true) then
+  if not (rt
+    and rt.healthSlotCount == 1
+    and rt.healthColorByHealth ~= true
+    and rt.healthDispatchKeyMode == 4
+    and rt.healthNeedsCurrent ~= true
+    and rt.healthNeedsMax ~= true
+    and rt.healthNeedsMissing ~= true) then
     return nil
   end
   local slot = rt.healthSlots and rt.healthSlots[1]
@@ -1141,9 +1168,6 @@ local function BuildGFHotPowerText(frame, rt)
   end
 end
 
--- Dedup for the percent-fed power text path: the power updater already produced
--- the percent (EUI percent bar path), no raw power/max, no second call. Keyed on
--- the rounded percent bucket (power text uses 0 decimals).
 local function GFHotPowerPercentNeedsUpdate(rt, pct)
   if issecretvalue(pct) == true then
     ClearGFHotPowerKeys(rt)
@@ -1162,11 +1186,13 @@ local function GFHotPowerPercentNeedsUpdate(rt, pct)
   return true, pct ~= nil
 end
 
--- Percent-fed variant of BuildGFHotPowerText. Used only when the frame runs the
--- EUI percent power updater (dispatch key mode 4). The `power` argument IS the
--- percent; max is irrelevant so the writer receives (cur=nil, max=nil, pct).
 local function BuildGFHotPowerTextFromPercent(frame, rt)
-  if not (rt and rt.powerSlotCount == 1 and rt.powerColorByType ~= true) then
+  if not (rt
+    and rt.powerSlotCount == 1
+    and rt.powerColorByType ~= true
+    and rt.powerDispatchKeyMode == 4
+    and rt.powerNeedsCurrent ~= true
+    and rt.powerNeedsMax ~= true) then
     return nil
   end
   local slot = rt.powerSlots and rt.powerSlots[1]
@@ -1180,6 +1206,11 @@ local function BuildGFHotPowerTextFromPercent(frame, rt)
     rt._lastPowerRaw, rt._lastPowerMaxRaw = nil, nil
     WriteGFHotSlot(slot, nil, nil, pct, pctKnown, rt)
   end
+end
+
+if Text.RuntimeHotFunctions then
+  Text.RuntimeHotFunctions.healthFromPercent = BuildGFHotHealthTextFromPercent
+  Text.RuntimeHotFunctions.powerFromPercent = BuildGFHotPowerTextFromPercent
 end
 
 function Text.IsEnabled(frame, spec)
@@ -1209,157 +1240,6 @@ local Runtime = {
   UpdatePower = Text.UpdatePower,
   UpdateInline = Text.UpdateInline,
 }
-
-function Runtime.BuildGroupHot(frame, spec, hot)
-  if not StrictGroupSpec(frame, spec) then
-    if frame then
-      frame._msufGFHot = nil
-      frame._msufGFHotSerial = nil
-    end
-    return nil
-  end
-
-  hot = hot or {}
-  hot.serial = spec._msufGFCompileSerial or 0
-  hot.health = nil
-  hot.healthText = nil
-  hot.power = nil
-  hot.powerText = nil
-  hot.powerWanted = nil
-
-  local rt = frame._msufTextRuntime
-
-  -- Health registers before the text elements, so Health.Apply could not see
-  -- this spec's resolved health-text mode. Now that the runtime is built, let
-  -- Health promote the frame to the EUI percent-only updater when no consumer
-  -- needs an absolute HP number. Must run before the text builder and healthFn
-  -- capture below so both branch on the final updater choice.
-  local healthElement = UF and UF.elements and UF.elements.Health
-  if healthElement and healthElement.SelectGroupHealthUpdater then
-    healthElement.SelectGroupHealthUpdater(frame)
-  end
-  local healthFn = frame._msufUpdateHealthValue
-  local healthPercentFed = healthElement
-    and healthFn == healthElement.UpdateValueGroupPercent
-
-  -- Same for power: let Power promote the frame to its EUI percent updater.
-  local powerElement = UF and UF.elements and UF.elements.Power
-  if powerElement and powerElement.SelectGroupPowerUpdater then
-    powerElement.SelectGroupPowerUpdater(frame)
-  end
-  local powerFn = frame._msufUpdatePowerValue
-  local powerPercentFed = powerElement
-    and powerFn == powerElement.UpdateValueGroupPercent
-
-  -- Percent-fed frames get a text builder that consumes the percent the bar
-  -- updater already computed (no second UnitHealthPercent/UnitPowerPercent, no
-  -- cache clear).
-  local healthText = healthPercentFed
-    and BuildGFHotHealthTextFromPercent(frame, rt)
-    or BuildGFHotHealthText(frame, rt)
-  local powerText = powerPercentFed
-    and BuildGFHotPowerTextFromPercent(frame, rt)
-    or BuildGFHotPowerText(frame, rt)
-  hot.healthText = healthText
-  hot.powerText = powerText
-
-  -- gf is stable for the frame's lifetime; capture it once at build time so the
-  -- hot closures don't re-read MSUF.GF every event. The single `gf._profDetail`
-  -- field read is the only per-event profiling cost when instrumentation is off
-  -- (map-watch/invariant checks are folded behind it).
-  local gf = MSUF and MSUF.GF
-  if healthFn and (not ElementActive(frame, "HealthText") or healthText) then
-    if healthPercentFed then
-      -- No prediction/groupVisuals here (SelectGroupHealthUpdater excludes them),
-      -- so the closure only drives the bar + percent-fed text. healthFn returns
-      -- the percent as its first value.
-      hot.health = function(frame, event, unit)
-        if gf and (gf._profDetail == true or gf._profMapWatch == true) then
-          if gf._profMapWatch == true and gf.CheckUnitFrameInvariant then
-            gf.CheckUnitFrameInvariant(frame, event, unit)
-          end
-          local token = gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("health")
-          local pct = healthFn(frame, event, unit)
-          if healthText then healthText(frame, event, unit, pct) end
-          if token and gf.ProfEnd then gf.ProfEnd("health", token) end
-          return true
-        end
-        local pct = healthFn(frame, event, unit)
-        if healthText then healthText(frame, event, unit, pct) end
-        return true
-      end
-    else
-      local predictionFn = ElementActive(frame, "Prediction") and frame._msufUpdatePredictionHealthValue or nil
-      local groupVisualsFn = ElementActive(frame, "GroupVisuals") and frame._msufUpdateGroupVisualsHealthValue or nil
-      hot.health = function(frame, event, unit)
-        if gf and (gf._profDetail == true or gf._profMapWatch == true) then
-          if gf._profMapWatch == true and gf.CheckUnitFrameInvariant then
-            gf.CheckUnitFrameInvariant(frame, event, unit)
-          end
-          local token = gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("health")
-          local hp, hpMax, calc = healthFn(frame, event, unit)
-          if healthText then healthText(frame, event, unit, hp, hpMax) end
-          if predictionFn then predictionFn(frame, event, unit, hp, hpMax, calc) end
-          if groupVisualsFn then groupVisualsFn(frame, event, unit, hp, hpMax) end
-          if token and gf.ProfEnd then gf.ProfEnd("health", token) end
-          return true
-        end
-        local hp, hpMax, calc = healthFn(frame, event, unit)
-        if healthText then healthText(frame, event, unit, hp, hpMax) end
-        if predictionFn then predictionFn(frame, event, unit, hp, hpMax, calc) end
-        if groupVisualsFn then groupVisualsFn(frame, event, unit, hp, hpMax) end
-        return true
-      end
-    end
-  end
-
-  hot.powerWanted = (spec.power and spec.power.enabled == true)
-    or (rt and (rt.powerSlotCount or 0) > 0)
-    or nil
-  if powerFn and (not ElementActive(frame, "PowerText") or powerText) then
-    if powerPercentFed then
-      -- Percent power updater returns the percent as its first value; the
-      -- percent-fed text builder consumes it. No raw power/max threaded.
-      hot.power = function(frame, event, unit)
-        if gf and (gf._profDetail == true or gf._profMapWatch == true) then
-          if gf._profMapWatch == true and gf.CheckUnitFrameInvariant then
-            gf.CheckUnitFrameInvariant(frame, event, unit)
-          end
-          local token = gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("power")
-          local pct = powerFn(frame, event, unit)
-          if powerText then powerText(frame, event, unit, pct) end
-          if token and gf.ProfEnd then gf.ProfEnd("power", token) end
-          return true
-        end
-        local pct = powerFn(frame, event, unit)
-        if powerText then powerText(frame, event, unit, pct) end
-        return true
-      end
-    else
-      hot.power = function(frame, event, unit)
-        if gf and (gf._profDetail == true or gf._profMapWatch == true) then
-          if gf._profMapWatch == true and gf.CheckUnitFrameInvariant then
-            gf.CheckUnitFrameInvariant(frame, event, unit)
-          end
-          local token = gf._profDetail == true and gf.ProfBegin and gf.ProfBegin("power")
-          local power, powerMax, powerType, powerToken, powerMetaChanged = powerFn(frame, event, unit)
-          if powerText then powerText(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged) end
-          if token and gf.ProfEnd then gf.ProfEnd("power", token) end
-          return true
-        end
-        local power, powerMax, powerType, powerToken, powerMetaChanged = powerFn(frame, event, unit)
-        if powerText then powerText(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged) end
-        return true
-      end
-    end
-  end
-
-  ClearGFHotHealthKeys(rt)
-  ClearGFHotPowerKeys(rt)
-  frame._msufGFHot = hot
-  frame._msufGFHotSerial = hot.serial
-  return hot
-end
 
 MSUF.UFTextRuntime = Runtime
 
@@ -1431,6 +1311,20 @@ end
 
 function HealthText.Update(frame, event, unit, hp, hpMax)
   local rt = frame and frame._msufTextRuntime
+  local percentFn = rt and rt.healthHotFromPercent
+  if percentFn then
+    local pct, pctReady
+    if hp ~= nil and hpMax == nil then
+      pct, pctReady = hp, true
+    elseif rt._dispatchHealthPercentReady == true then
+      pct, pctReady = rt._dispatchHealthPercent, true
+      rt._dispatchHealthPercent = nil
+      rt._dispatchHealthPercentReady = nil
+    end
+    if pctReady == true then
+      return percentFn(frame, event, unit or frame.unit, pct)
+    end
+  end
   local fn = rt and rt.healthHot
   if fn then
     return fn(frame, event, unit or frame.unit, hp, hpMax)
@@ -1467,6 +1361,20 @@ end
 
 function PowerText.Update(frame, event, unit, power, powerMax, powerType, powerToken, powerMetaChanged)
   local rt = frame and frame._msufTextRuntime
+  local percentFn = rt and rt.powerHotFromPercent
+  if percentFn then
+    local pct, pctReady
+    if power ~= nil and powerMax == nil then
+      pct, pctReady = power, true
+    elseif rt._dispatchPowerPercentReady == true then
+      pct, pctReady = rt._dispatchPowerPercent, true
+      rt._dispatchPowerPercent = nil
+      rt._dispatchPowerPercentReady = nil
+    end
+    if pctReady == true then
+      return percentFn(frame, event, unit or frame.unit, pct)
+    end
+  end
   local fn = rt and rt.powerHot
   if fn then
     return fn(frame, event, unit or frame.unit, power, powerMax, powerType, powerToken, powerMetaChanged)

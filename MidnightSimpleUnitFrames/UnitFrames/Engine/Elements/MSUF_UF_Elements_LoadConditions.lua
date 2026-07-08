@@ -177,9 +177,9 @@ local UnregisterUnitWatch = _G.UnregisterUnitWatch
 -- macro-conditional engine re-evaluate that expression on state changes
 -- (including target changes for @target-relative frames). That secure
 -- evaluation is billed to MSUF and was the per-click profiler spike that no
--- Lua probe could see (oUF/UUF use RegisterUnitWatch alone for this case).
+-- Lua probe could see.
 -- So: only install the state driver when there is REAL conditional work;
--- otherwise hand visibility to RegisterUnitWatch like UUF does.
+-- otherwise hand visibility to RegisterUnitWatch.
 local function VisibilityNeedsDriver(spec)
   local load = spec and spec.load
   if load and load.active == true then
@@ -194,7 +194,12 @@ local function VisibilityNeedsDriver(spec)
   return false
 end
 
+local function VisibilityFrame(frame)
+  return frame
+end
+
 local function RegisterVisibility(frame, spec)
+  local visibilityFrame = VisibilityFrame(frame)
   -- Existence-only visibility: use the lightweight unit watch, never a secure
   -- state driver. Tear down any driver left from a previous conditional config.
   if not VisibilityNeedsDriver(spec) and not ShouldForcePreview(frame) and RegisterUnitWatch then
@@ -211,12 +216,12 @@ local function RegisterVisibility(frame, spec)
       end
     elseif frame._msufVisibilityExpr ~= nil then
       if UnregisterStateDriver then
-        UnregisterStateDriver(frame, "visibility")
+        UnregisterStateDriver(visibilityFrame, "visibility")
       end
       frame._msufVisibilityExpr = nil
     end
     if frame._msufUnitWatched ~= true then
-      RegisterUnitWatch(frame)
+      RegisterUnitWatch(visibilityFrame)
       frame._msufUnitWatched = true
     end
     frame._msufVisibilityManaged = nil
@@ -237,10 +242,10 @@ local function RegisterVisibility(frame, spec)
       -- Swapping from unit-watch to driver: the watch and the driver both
       -- manage visibility, so drop the watch first to avoid double control.
       if frame._msufUnitWatched == true then
-        UnregisterUnitWatch(frame)
+        UnregisterUnitWatch(visibilityFrame)
         frame._msufUnitWatched = nil
       end
-      RegisterStateDriver(frame, "visibility", visibility)
+      RegisterStateDriver(visibilityFrame, "visibility", visibility)
       frame._msufVisibilityExpr = visibility
     end
     return true
@@ -253,7 +258,7 @@ local function RegisterVisibility(frame, spec)
     show = UnitExistsPlain(frame.unit)
   end
   if frame._msufLoadShown ~= show then
-    frame:SetShown(show)
+    visibilityFrame:SetShown(show)
     frame._msufLoadShown = show
   end
   return true
@@ -359,6 +364,10 @@ local function BossPreviewPowerPercent()
   return 100
 end
 
+local function BossLiveUnitExists(unit)
+  return UnitExistsPlain(unit) == true
+end
+
 local function BossPreviewConfigDirty()
   return UF.Config and UF.Config.dirty == true
 end
@@ -416,7 +425,8 @@ end
 local function ApplyBossPreviewFrames(active)
   for i = 1, 5 do
     local frame = UF.frames and UF.frames["boss" .. i]
-    if frame and active then
+    local unit = "boss" .. i
+    if frame and active and not BossLiveUnitExists(unit) then
       frame:Show()
       if frame.SetAlpha then frame:SetAlpha(1) end
       if frame.EnableMouse then frame:EnableMouse(true) end
@@ -463,6 +473,10 @@ end
 
 local function RefreshBossAuras()
   local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.RequestScope) == "function" then
+    A3.RequestScope("boss", "MSUF_BOSS_PREVIEW")
+    return
+  end
   if A3 and type(A3.RequestUnit) == "function" then
     A3.RequestUnit("boss")
     return
@@ -490,13 +504,20 @@ function UF.ApplyBossPreviewState(active, reason)
     return true
   end
 
+  if not active then
+    ApplyBossPreviewFrames(false)
+  end
   UF.RefreshVisibilityDrivers("boss")
   if active and type(UF.RefreshElements) == "function" then
+    UF.RefreshElements("boss", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
+  elseif type(UF.RefreshElements) == "function" then
     UF.RefreshElements("boss", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
   end
   UF.UpdateRuntime("boss", refreshReason)
 
-  ApplyBossPreviewFrames(active)
+  if active then
+    ApplyBossPreviewFrames(true)
+  end
   RefreshBossAuras()
   if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
     _G.MSUF_UpdateBossCastbarPreview()

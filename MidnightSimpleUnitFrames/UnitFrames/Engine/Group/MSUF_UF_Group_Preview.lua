@@ -321,9 +321,21 @@ local function PreviewHealthColor(frame, class, hpPct)
   local health = frame and frame.MSUFSpec and frame.MSUFSpec.health
   local mode = health and health.mode
   if mode == "gradient" then
-    local r = hpPct > 0.5 and (1 - (hpPct - 0.5) * 2) or 1
-    local g = hpPct > 0.5 and 1 or hpPct * 2
-    return r, g, 0
+    local common = MSUF and MSUF.UFBarTextCommon
+    if common and type(common.PreviewHealthGradientColor) == "function" then
+      local r, g, b = common.PreviewHealthGradientColor(health, hpPct)
+      if r ~= nil then return r, g, b end
+    end
+    local p = max(0, min(1, tonumber(hpPct) or 0.72))
+    local lr, lg, lb = health.gradientLowR or 1, health.gradientLowG or 0, health.gradientLowB or 0
+    local mr, mg, mb = health.gradientMidR or 1, health.gradientMidG or 1, health.gradientMidB or 0
+    local hr, hg, hb = health.gradientHighR or 0, health.gradientHighG or 1, health.gradientHighB or 0
+    if p <= 0.5 then
+      local t = p * 2
+      return lr + (mr - lr) * t, lg + (mg - lg) * t, lb + (mb - lb) * t
+    end
+    local t = (p - 0.5) * 2
+    return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t
   elseif mode == "custom" or mode == "unified" or mode == "dark" then
     return health.r or 0.1, health.g or 0.6, health.b or 0.9
   end

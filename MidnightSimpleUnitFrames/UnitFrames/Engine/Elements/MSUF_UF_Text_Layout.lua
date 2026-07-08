@@ -923,8 +923,8 @@ function Text.Apply(frame, spec)
   -- Single-frame percent-path promotion: now that healthDispatchKeyMode is known,
   -- let Health switch a percent-eligible single frame (no absolute-HP text, no
   -- prediction) to Health.UpdateValuePercent so its health ticks skip the
-  -- UnitHealth/Max/Store work. Group frames get this via Runtime.BuildGroupHot, so
-  -- only drive it here for non-group frames to avoid a double call.
+  -- UnitHealth/Max/Store work. Group frames get this from the group adapter's
+  -- apply/rebind path, so only drive it here for non-group frames.
   if frame._msufIsGroupFrame ~= true then
     local healthElement = UF and UF.elements and UF.elements.Health
     if healthElement and healthElement.SelectGroupHealthUpdater then
