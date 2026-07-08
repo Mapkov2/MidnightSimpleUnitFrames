@@ -4,10 +4,50 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.60",
-    previousVersion = "5.54",
-    rangeLabel = "5.54 -> 5.60",
+    currentVersion = "5.70",
+    previousVersion = "5.60",
+    rangeLabel = "5.60 -> 5.70",
     entries = {
+        {
+            version = "5.70",
+            date = "2026-07-08",
+            sections = {
+                {
+                    title = "Layout and Menu",
+                    bullets = {
+                        "Moved the MSUF2 navigation rail into the 6.0-style layout while keeping the 5.x feature set intact.",
+                        "Added optional navigation icons, fixed their reopen positioning, and kept them disabled by default for fresh profiles.",
+                        "Added smooth menu scrolling with a Misc option to disable it.",
+                        "Restored scope controls on Unit Frames and Group Frames pages after the nav rail layout update.",
+                    },
+                },
+                {
+                    title = "Frame and Bar Fixes",
+                    bullets = {
+                        "Added scope-aware Frame Outline strata and frame-level offset controls for unit frames and group frames.",
+                        "Fixed Group Frame Outline geometry so secure-header refreshes cannot reset the outline to the inner bar bounds.",
+                        "Fixed Group Frame Outline live refresh so opening or using the options menu no longer requires a reload to apply the outline correctly.",
+                        "Fixed Class Resource menu clipping issues in compact layouts.",
+                        "Replaced the menu logo with the current MSUF logo.",
+                    },
+                },
+                {
+                    title = "Combat and Castbars",
+                    bullets = {
+                        "Fixed Warrior Whirlwind cleave stacks so the bar only appears after a valid Improved Whirlwind target hit.",
+                        "Fixed the GCD castbar path for current WoW cooldown APIs.",
+                        "Added a WoW 12.1 compatibility warning for MSUF 5.x stable builds that points users to the current CurseForge Beta.",
+                    },
+                },
+                {
+                    title = "Performance Notes",
+                    bullets = {
+                        "Kept the new outline strata, frame-level, smooth-scroll, icon, and layout apply work on cold menu paths.",
+                        "Kept combat and castbar fixes event-driven and cache-aware without adding constant polling.",
+                    },
+                },
+            },
+        },
         {
             version = "5.60",
             date = "2026-06-19",
@@ -74,19 +114,6 @@ local data = {
                         "Kept the new range recovery finite and event-driven instead of adding constant polling.",
                         "Kept the missing buff scan on the existing cached aura path where possible.",
                         "Kept the new font and Blizzard-frame safeguards on cold apply/login paths.",
-                    },
-                },
-            },
-        },
-        {
-            version = "5.54",
-            date = "2026-05-27",
-            sections = {
-                {
-                    title = "Critical Fixes",
-                    bullets = {
-                        "Fixed Blizzard-rendered group-frame private auras reusing a stale Blizzard settings-change handler after instance or roster transitions.",
-                        "Fixed group-frame absorb and heal-absorb overlays drawing over the normal frame outline on party and raid frames.",
                     },
                 },
             },
