@@ -792,41 +792,61 @@ local function LayoutOutlineLines(owner, edge)
     end
 end
 
-local function ApplyFrameBorderLevel(f, border)
+local function ApplyFrameBorderLevel(f, border, kind)
     if not (f and border and border.SetFrameLevel) then return end
     local anchor = f.barGroup or f
     local base = f.health or anchor
     local baseLevel = base and base.GetFrameLevel and base:GetFrameLevel() or 0
     local absorbTopLevel = baseLevel + 3
-    local wantLevel = absorbTopLevel + 1
-    local minTextLevel
-    local layer = f.nameTextLayer
-    local level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
-    if level then minTextLevel = level end
-    layer = f.healthTextLayer
-    level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
-    if level and (not minTextLevel or level < minTextLevel) then
-        minTextLevel = level
+    local outlineOffset, explicitOffset = nil, false
+    if GF.GetBarOutlineLevelOffset then
+        outlineOffset, explicitOffset = GF.GetBarOutlineLevelOffset(kind)
     end
-    layer = f.powerTextLayer
-    level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
-    if level and (not minTextLevel or level < minTextLevel) then
-        minTextLevel = level
-    end
-    layer = f.statusTextLayer
-    level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
-    if level and (not minTextLevel or level < minTextLevel) then
-        minTextLevel = level
-    end
-    if minTextLevel and wantLevel >= minTextLevel then
-        local belowText = minTextLevel - 1
-        if belowText > absorbTopLevel then
-            wantLevel = belowText
+
+    local wantLevel
+    if explicitOffset then
+        wantLevel = baseLevel + (tonumber(outlineOffset) or 4)
+    else
+        wantLevel = absorbTopLevel + 1
+        local minTextLevel
+        local layer = f.nameTextLayer
+        local level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+        if level then minTextLevel = level end
+        layer = f.healthTextLayer
+        level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+        if level and (not minTextLevel or level < minTextLevel) then
+            minTextLevel = level
         end
+        layer = f.powerTextLayer
+        level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+        if level and (not minTextLevel or level < minTextLevel) then
+            minTextLevel = level
+        end
+        layer = f.statusTextLayer
+        level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+        if level and (not minTextLevel or level < minTextLevel) then
+            minTextLevel = level
+        end
+        if minTextLevel and wantLevel >= minTextLevel then
+            local belowText = minTextLevel - 1
+            if belowText > absorbTopLevel then
+                wantLevel = belowText
+            end
+        end
+        if wantLevel <= absorbTopLevel then wantLevel = absorbTopLevel + 1 end
     end
-    if wantLevel <= absorbTopLevel then wantLevel = absorbTopLevel + 1 end
-    if GF.SyncFrameLayerAbove and base then
+
+    if GF.ClampFrameLevel then wantLevel = GF.ClampFrameLevel(wantLevel) end
+
+    local outlineStrata = (GF.GetBarOutlineStrata and GF.GetBarOutlineStrata(kind)) or "AUTO"
+    local usedSyncLayer = false
+    if outlineStrata ~= "AUTO" and border.SetFrameStrata then
+        if not border.GetFrameStrata or border:GetFrameStrata() ~= outlineStrata then
+            border:SetFrameStrata(outlineStrata)
+        end
+    elseif GF.SyncFrameLayerAbove and base then
         wantLevel = GF.SyncFrameLayerAbove(border, base, wantLevel - baseLevel) or wantLevel
+        usedSyncLayer = true
     elseif anchor and anchor.GetFrameStrata and border.SetFrameStrata then
         local strata = anchor:GetFrameStrata()
         if strata and (not border.GetFrameStrata or border:GetFrameStrata() ~= strata) then
@@ -835,7 +855,7 @@ local function ApplyFrameBorderLevel(f, border)
     end
     if border._msufGFFrameBorderLevel ~= wantLevel then
         border._msufGFFrameBorderLevel = wantLevel
-        if not GF.SyncFrameLayerAbove then
+        if not usedSyncLayer then
             border:SetFrameLevel(wantLevel)
         end
     end
@@ -868,7 +888,7 @@ local function ApplyFrameBorder(f, kind)
     if bf then
         local borderSize = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2
         if fScale ~= 1 then borderSize = ScaleValue(borderSize, fScale, 0) end
-        ApplyFrameBorderLevel(f, bf)
+        ApplyFrameBorderLevel(f, bf, kind)
         if borderSize > 0 then
             if bf.SetBackdrop and bf._msufGFLineOutlineBackdropCleared ~= true then
                 bf:SetBackdrop(nil)

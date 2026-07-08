@@ -85,6 +85,43 @@ local SetControlsEnabled = GP.SetControlsEnabled
 local ApplyFonts = GP.ApplyFonts
 local ApplyBars = GP.ApplyBars
 local ApplyCastbars = GP.ApplyCastbars
+
+local FALLBACK_FRAME_STRATA_VALUES = {
+    { value = "AUTO", text = "Auto (Frame)" },
+    { value = "BACKGROUND", text = "BACKGROUND" },
+    { value = "LOW", text = "LOW" },
+    { value = "MEDIUM", text = "MEDIUM" },
+    { value = "HIGH", text = "HIGH" },
+    { value = "DIALOG", text = "DIALOG" },
+    { value = "FULLSCREEN", text = "FULLSCREEN" },
+    { value = "FULLSCREEN_DIALOG", text = "FULLSCREEN_DIALOG" },
+    { value = "TOOLTIP", text = "TOOLTIP" },
+}
+
+local function FrameStrataValues()
+    local fn = _G.MSUF_FrameStrataDropdownValues
+    if type(fn) == "function" then return fn(true) end
+    return FALLBACK_FRAME_STRATA_VALUES
+end
+
+local function NormalizeFrameOutlineStrata(value)
+    local normalize = _G.MSUF_NormalizeFrameStrata
+    if type(normalize) == "function" then return normalize(value, "AUTO") end
+    if value == nil or value == "" then return "AUTO" end
+    value = tostring(value):upper()
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return (rank and rank[value]) and value or "AUTO"
+end
+
+local function NormalizeFrameOutlineLevelOffset(value, fallback)
+    local n = tonumber(value)
+    if n == nil then n = tonumber(fallback) end
+    n = floor((n or 2) + 0.5)
+    if n < 0 then return 0 end
+    if n > 30 then return 30 end
+    return n
+end
+
 local function BuildBars(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Bars", "Textures, gradients, outlines and highlight borders.", 72)
@@ -97,6 +134,10 @@ local function BuildBars(ctx)
         local scope = CurrentBarsScope()
         if type(IsGFScope) == "function" then return IsGFScope(scope) end
         return scope == "gf_party" or scope == "gf_raid"
+    end
+
+    local function CurrentFrameOutlineLevelDefault()
+        return CurrentBarsScopeIsGroupFrame() and 4 or 2
     end
 
     local function ScopedBarsControlsActive()
@@ -958,8 +999,13 @@ local function BuildBars(ctx)
         SetControlEnabled(healPredAnchor, groupScope and scopedActive and healPredOn or ((not groupScope) and scopedActive and mode ~= 1 and healPredOn))
     end)
 
-    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 126, false)
-    local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, 300)
+    local compactOutline = (ctx.width or 720) < 620
+    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", compactOutline and 246 or 178, false)
+    local outlineLeftX = 30
+    local outlineLeftW = min(300, max(220, (ctx.width or 720) - 86))
+    local outlineRightX = outlineLeftX + outlineLeftW + 52
+    local outlineRightW = min(260, max(220, (ctx.width or 720) - outlineRightX - 42))
+    local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, outlineLeftW)
     M.BindSlider(ctx, outlineSlider,
         function() return tonumber(BarScopeGetBars("barOutlineThickness", 1)) or 1 end,
         function(v)
@@ -967,8 +1013,52 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_BAR_OUTLINE")
             ApplyOutlineRuntime()
         end)
+    W.MoveWidget(outlineSlider, outline, outlineLeftX, -54, outlineLeftW, "LEFT")
+
+    local outlineStrata = W.Dropdown(outline, "Frame outline strata", FrameStrataValues, outlineRightW)
+    M.BindDropdown(ctx, outlineStrata,
+        function() return NormalizeFrameOutlineStrata(BarScopeGetBars("barOutlineStrata", "AUTO")) end,
+        function(v)
+            BarScopeSetBars("barOutlineStrata", NormalizeFrameOutlineStrata(v), "MSUF2_BAR_OUTLINE_STRATA")
+            ApplyBars("MSUF2_BAR_OUTLINE_STRATA")
+            ApplyOutlineRuntime()
+        end)
+
+    local outlineLevel = W.Slider(outline, "", 0, 30, 1, outlineLeftW)
+    M.BindSlider(ctx, outlineLevel,
+        function()
+            return NormalizeFrameOutlineLevelOffset(BarScopeGetBars("barOutlineLevelOffset", CurrentFrameOutlineLevelDefault()), CurrentFrameOutlineLevelDefault())
+        end,
+        function(v)
+            BarScopeSetBars("barOutlineLevelOffset", NormalizeFrameOutlineLevelOffset(v, CurrentFrameOutlineLevelDefault()), "MSUF2_BAR_OUTLINE_LEVEL")
+            ApplyBars("MSUF2_BAR_OUTLINE_LEVEL")
+            ApplyOutlineRuntime()
+        end)
+    local function RefreshOutlineLevelLabel(value)
+        value = value or NormalizeFrameOutlineLevelOffset(BarScopeGetBars("barOutlineLevelOffset", CurrentFrameOutlineLevelDefault()), CurrentFrameOutlineLevelDefault())
+        if outlineLevel._msuf2Title then
+            outlineLevel._msuf2Title:SetText(string.format(M.Tr("Frame level offset: +%d"), value))
+        end
+    end
+    outlineLevel:HookScript("OnValueChanged", function(self, value)
+        if self._msuf2Refreshing then return end
+        RefreshOutlineLevelLabel(NormalizeFrameOutlineLevelOffset(value, CurrentFrameOutlineLevelDefault()))
+    end)
+    RefreshOutlineLevelLabel()
+
+    if compactOutline then
+        W.MoveWidget(outlineStrata, outline, outlineLeftX, -124, outlineLeftW, "LEFT")
+        W.MoveWidget(outlineLevel, outline, outlineLeftX, -194, outlineLeftW, "LEFT")
+    else
+        W.MoveWidget(outlineStrata, outline, outlineRightX, -54, outlineRightW, "LEFT")
+        W.MoveWidget(outlineLevel, outline, outlineLeftX, -124, outlineLeftW, "LEFT")
+    end
     M.AddRefresher(ctx, function()
-        SetControlEnabled(outlineSlider, ScopedBarsControlsActive())
+        local active = ScopedBarsControlsActive()
+        SetControlEnabled(outlineSlider, active)
+        SetControlEnabled(outlineStrata, active)
+        SetControlEnabled(outlineLevel, active)
+        RefreshOutlineLevelLabel()
     end)
 
     local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", 246, true)

@@ -255,6 +255,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         g.unitInfoTooltipStyle = "classic"
         g.tooltipPosX = nil
         g.tooltipPosY = nil
+        g.smoothMenuScroll = false
+        g.showNavigationIcons = false
     end
     MSUF_Defaults_NormalizePortraitRenderDB(db)
  end
@@ -638,6 +640,13 @@ if g.slashMenuSnapEnabled == nil then
 end
 if g.hideAdvancedMenu == nil then
     g.hideAdvancedMenu = true
+end
+local legacyMenuVisualDefaults = g._msufFactoryProfileApplied ~= true
+if g.smoothMenuScroll == nil then
+    g.smoothMenuScroll = legacyMenuVisualDefaults
+end
+if g.showNavigationIcons == nil then
+    g.showNavigationIcons = legacyMenuVisualDefaults
 end
     if g.editModeSnapToGrid == nil then
         g.editModeSnapToGrid = false -- Default: Snap OFF
@@ -1721,6 +1730,14 @@ if MSUF_DB.bars.barOutlineThickness == nil then
         local style = (MSUF_DB.general and MSUF_DB.general.barBorderStyle) or "THIN"
         local map = { THIN = 2, THICK = 3, SHADOW = 4, GLOW = 4 }
         MSUF_DB.bars.barOutlineThickness = map[style] or 2
+    end
+end
+do
+    local normalize = _G.MSUF_NormalizeFrameStrata
+    if type(normalize) == "function" then
+        MSUF_DB.bars.barOutlineStrata = normalize(MSUF_DB.bars.barOutlineStrata, "AUTO")
+    elseif MSUF_DB.bars.barOutlineStrata == nil then
+        MSUF_DB.bars.barOutlineStrata = "AUTO"
     end
 end
 -- Bar background alpha (0..100). Independent from unit alpha in/out of combat.

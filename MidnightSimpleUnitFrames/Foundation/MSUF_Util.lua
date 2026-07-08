@@ -171,6 +171,56 @@ if type(_G.MSUF_FRAME_STRATA_RANK) ~= "table" then
     }
 end
 
+if type(_G.MSUF_FRAME_STRATA_VALUES) ~= "table" then
+    _G.MSUF_FRAME_STRATA_VALUES = {
+        "BACKGROUND",
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "DIALOG",
+        "FULLSCREEN",
+        "FULLSCREEN_DIALOG",
+        "TOOLTIP",
+    }
+end
+
+if type(_G.MSUF_IsValidFrameStrata) ~= "function" then
+    function _G.MSUF_IsValidFrameStrata(value)
+        return type(value) == "string" and _G.MSUF_FRAME_STRATA_RANK[value] ~= nil
+    end
+end
+
+if type(_G.MSUF_NormalizeFrameStrata) ~= "function" then
+    function _G.MSUF_NormalizeFrameStrata(value, fallback)
+        if value == nil or value == "" then
+            if fallback == "AUTO" then return "AUTO" end
+            if _G.MSUF_IsValidFrameStrata(fallback) then return fallback end
+            return "MEDIUM"
+        end
+        value = tostring(value):upper()
+        if value == "AUTO" and fallback == "AUTO" then return "AUTO" end
+        if _G.MSUF_IsValidFrameStrata(value) then return value end
+        if fallback == "AUTO" then return "AUTO" end
+        if _G.MSUF_IsValidFrameStrata(fallback) then return fallback end
+        return "MEDIUM"
+    end
+end
+
+if type(_G.MSUF_FrameStrataDropdownValues) ~= "function" then
+    function _G.MSUF_FrameStrataDropdownValues(includeAuto)
+        local out = {}
+        if includeAuto ~= false then
+            out[#out + 1] = { value = "AUTO", text = "Auto (Frame)" }
+        end
+        local values = _G.MSUF_FRAME_STRATA_VALUES
+        for i = 1, #values do
+            local key = values[i]
+            out[#out + 1] = { value = key, text = key }
+        end
+        return out
+    end
+end
+
 if type(_G.MSUF_EFFECT_FRAME_STRATA) ~= "string" or _G.MSUF_EFFECT_FRAME_STRATA == "" then
     _G.MSUF_EFFECT_FRAME_STRATA = "HIGH"
 end
@@ -186,10 +236,12 @@ end
 
 if type(_G.MSUF_MaxFrameStrata) ~= "function" then
     function _G.MSUF_MaxFrameStrata(a, b)
-        if not a or a == "" then return b end
-        if not b or b == "" then return a end
+        if not _G.MSUF_IsValidFrameStrata(a) then a = nil end
+        if not _G.MSUF_IsValidFrameStrata(b) then b = nil end
+        if not a then return b end
+        if not b then return a end
         local rank = _G.MSUF_FRAME_STRATA_RANK
-        return ((rank[a] or 0) >= (rank[b] or 0)) and a or b
+        return (rank[a] >= rank[b]) and a or b
     end
 end
 

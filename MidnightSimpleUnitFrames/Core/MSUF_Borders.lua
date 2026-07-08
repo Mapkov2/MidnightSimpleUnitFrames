@@ -1704,6 +1704,66 @@ local function _ApplyUFBarBorderTint(self, showTint, r, g, b)
     end
 end
 
+if type(_G.MSUF_BorderNormalizeOutlineStrata) ~= "function" then
+    function _G.MSUF_BorderNormalizeOutlineStrata(value)
+        local normalize = _G.MSUF_NormalizeFrameStrata
+        if type(normalize) == "function" then return normalize(value, "AUTO") end
+        if value == nil or value == "" then return "AUTO" end
+        value = tostring(value):upper()
+        local rank = _G.MSUF_FRAME_STRATA_RANK
+        return (rank and rank[value]) and value or "AUTO"
+    end
+end
+
+if type(_G.MSUF_BorderResolveOutlineStrata) ~= "function" then
+    function _G.MSUF_BorderResolveOutlineStrata(self, fallbackFrame)
+        local getter = _G.MSUF_GetDesiredBarBorderStrata
+        local strata = (type(getter) == "function") and getter(self) or nil
+        strata = _G.MSUF_BorderNormalizeOutlineStrata(strata)
+        if strata == "AUTO" then
+            local source = (fallbackFrame and fallbackFrame.GetFrameStrata and fallbackFrame)
+                or (self and self.GetFrameStrata and self)
+            strata = source and source:GetFrameStrata() or "MEDIUM"
+        end
+        return _G.MSUF_BorderNormalizeOutlineStrata(strata) ~= "AUTO" and strata or "MEDIUM"
+    end
+end
+
+if type(_G.MSUF_BorderResolveOutlineLevelOffset) ~= "function" then
+    function _G.MSUF_BorderResolveOutlineLevelOffset(self, fallback)
+        local getter = _G.MSUF_GetDesiredBarBorderLevelOffset
+        local offset = (type(getter) == "function") and getter(self) or nil
+        offset = tonumber(offset)
+        if offset == nil then offset = tonumber(fallback) or 2 end
+        offset = math_floor(offset + 0.5)
+        if offset < 0 then return 0 end
+        if offset > 30 then return 30 end
+        return offset
+    end
+end
+
+if type(_G.MSUF_BorderSetFrameStrataIfChanged) ~= "function" then
+    function _G.MSUF_BorderSetFrameStrataIfChanged(frame, strata, owner)
+        if not (frame and frame.SetFrameStrata and strata) then return end
+        local cache = owner or frame
+        if cache._msufLastFrameStrata ~= strata or not frame.GetFrameStrata or frame:GetFrameStrata() ~= strata then
+            frame:SetFrameStrata(strata)
+            cache._msufLastFrameStrata = strata
+        end
+    end
+end
+
+if type(_G.MSUF_BorderClampOutlineFrameLevel) ~= "function" then
+    function _G.MSUF_BorderClampOutlineFrameLevel(level)
+        local clamp = _G.MSUF_ClampFrameLevel
+        if type(clamp) == "function" then return clamp(level) end
+        level = tonumber(level) or 0
+        if level < 0 then return 0 end
+        if level > 10000 then return 10000 end
+        return level
+    end
+end
+
 local function MSUF_ReadDetachedPowerBarBorder(self)
     local unitKey = self and (self.msufConfigKey or self.unit)
     local readEnabled = _G.MSUF_ReadUnitPowerBarBorderEnabled
@@ -1770,9 +1830,14 @@ local function MSUF_ApplyDetachedPowerBarOutline(self)
         self._msufDetachedPBOutline = outline
         outline._msufLastEdgeSize = -1
         outline._msufLastFrameLevel = -1
+        outline._msufLastFrameStrata = nil
     end
 
-    local frameLevel = (pb.GetFrameLevel and pb:GetFrameLevel() or 0) + 2
+    local outlineStrata = _G.MSUF_BorderResolveOutlineStrata(self, pb)
+    _G.MSUF_BorderSetFrameStrataIfChanged(outline, outlineStrata)
+
+    local levelOffset = _G.MSUF_BorderResolveOutlineLevelOffset(self, 2)
+    local frameLevel = _G.MSUF_BorderClampOutlineFrameLevel((pb.GetFrameLevel and pb:GetFrameLevel() or 0) + levelOffset)
     if outline._msufLastFrameLevel ~= frameLevel and outline.SetFrameLevel then
         outline:SetFrameLevel(frameLevel)
         outline._msufLastFrameLevel = frameLevel
@@ -1828,10 +1893,12 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
         local template = (BackdropTemplateMixin and "BackdropTemplate") or nil
         local f = F.CreateFrame("Frame", nil, self, template)
         f:EnableMouse(false)
-        f:SetFrameStrata(self:GetFrameStrata())
-        local baseLevel = self:GetFrameLevel() + 2
+        local outlineStrata = _G.MSUF_BorderResolveOutlineStrata(self, self)
+        _G.MSUF_BorderSetFrameStrataIfChanged(f, outlineStrata, o)
+        local levelOffset = _G.MSUF_BorderResolveOutlineLevelOffset(self, 2)
+        local baseLevel = _G.MSUF_BorderClampOutlineFrameLevel((self:GetFrameLevel() or 0) + levelOffset)
         if self.hpBar and self.hpBar.GetFrameLevel then
-            baseLevel = self.hpBar:GetFrameLevel() + 2
+            baseLevel = _G.MSUF_BorderClampOutlineFrameLevel((self.hpBar:GetFrameLevel() or 0) + levelOffset)
         end
         f:SetFrameLevel(baseLevel)
         o.frame = f
@@ -1851,12 +1918,12 @@ local function MSUF_ApplyBarOutline(self, thickness, o)
         return
     end
 
-    if f.SetFrameStrata and self.GetFrameStrata then
-        f:SetFrameStrata(self:GetFrameStrata())
-    end
-    local frameLevel = self:GetFrameLevel() + 2
+    local outlineStrata = _G.MSUF_BorderResolveOutlineStrata(self, self)
+    _G.MSUF_BorderSetFrameStrataIfChanged(f, outlineStrata, o)
+    local levelOffset = _G.MSUF_BorderResolveOutlineLevelOffset(self, 2)
+    local frameLevel = _G.MSUF_BorderClampOutlineFrameLevel((self:GetFrameLevel() or 0) + levelOffset)
     if hb.GetFrameLevel then
-        frameLevel = hb:GetFrameLevel() + 2
+        frameLevel = _G.MSUF_BorderClampOutlineFrameLevel((hb:GetFrameLevel() or 0) + levelOffset)
     end
     if o._msufLastFrameLevel ~= frameLevel and f.SetFrameLevel then
         f:SetFrameLevel(frameLevel)
@@ -2345,7 +2412,7 @@ do
 end
 
 -- Cold-path helpers for the Bars menu (no runtime cost during combat/raiding).
--- 1) Live-apply outline thickness while the Settings panel is open.
+-- 1) Live-apply outline thickness/layering while the Settings panel is open.
 -- 2) Aggro border test mode so users can tune thickness visually.
 _G.MSUF_ApplyBarOutlineThickness_All = _G.MSUF_ApplyBarOutlineThickness_All or function()
     -- IMPORTANT: Live updates must not depend on gradient toggles or queued UFCore flush.
@@ -2362,6 +2429,7 @@ _G.MSUF_ApplyBarOutlineThickness_All = _G.MSUF_ApplyBarOutlineThickness_All or f
     end
     MSUF_ForEachUnitFrame(_Iter_SyncBorderStamps)
 end
+_G.MSUF_ApplyBarOutlineLayer_All = _G.MSUF_ApplyBarOutlineLayer_All or _G.MSUF_ApplyBarOutlineThickness_All
 
 _G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active, scope)
     active = _MSUF_EnableBorderTestMode(active)
