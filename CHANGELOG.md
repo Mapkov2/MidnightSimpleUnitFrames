@@ -1,5 +1,33 @@
 # Changelog
 
+## 5.70 - 2026-07-08
+
+### Layout and Menu
+
+- Moved the MSUF2 navigation rail into the 6.0-style layout while keeping the 5.x feature set intact.
+- Added optional navigation icons, fixed their reopen positioning, and kept them disabled by default for fresh profiles.
+- Added smooth menu scrolling with a Misc option to disable it.
+- Restored scope controls on Unit Frames and Group Frames pages after the nav rail layout update.
+
+### Frame and Bar Fixes
+
+- Added scope-aware Frame Outline strata and frame-level offset controls for unit frames and group frames.
+- Fixed Group Frame Outline geometry so secure-header refreshes cannot reset the outline to the inner bar bounds.
+- Fixed Group Frame Outline live refresh so opening or using the options menu no longer requires a reload to apply the outline correctly.
+- Fixed Class Resource menu clipping issues in compact layouts.
+- Replaced the menu logo with the current MSUF logo.
+
+### Combat and Castbars
+
+- Fixed Warrior Whirlwind cleave stacks so the bar only appears after a valid Improved Whirlwind target hit.
+- Fixed the GCD castbar path for current WoW cooldown APIs.
+- Added a WoW 12.1 compatibility warning for MSUF 5.x stable builds that points users to the current CurseForge Beta.
+
+### Performance Notes
+
+- Kept the new outline strata, frame-level, smooth-scroll, icon, and layout apply work on cold menu paths.
+- Kept combat and castbar fixes event-driven and cache-aware without adding constant polling.
+
 ## 5.60 - 2026-06-19
 
 ### Fixes
