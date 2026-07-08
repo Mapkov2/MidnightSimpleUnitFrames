@@ -22,7 +22,6 @@ local UnitGroupRolesAssigned = V.UnitGroupRolesAssigned or UnitGroupRolesAssigne
 local tonumber = V.tonumber or tonumber
 local tostring = V.tostring or tostring
 local type = V.type or type
-local floor = V.floor or math.floor
 local IsNil = V.IsNil or function(value) return value == nil end
 local NotSecretValue = V.NotSecretValue or function(_) return true end
 local IsSecretValue = _G.issecretvalue or function(_) return false end
@@ -83,8 +82,10 @@ local function SetBorderOverlayStrata(frame, overlay, strata)
   if strata == nil or strata == "" or strata == "AUTO" then
     strata = frame.GetFrameStrata and frame:GetFrameStrata() or nil
   end
-  if strata and overlay._msufBorderStrata ~= strata and (not overlay.GetFrameStrata or overlay:GetFrameStrata() ~= strata) then
-    overlay:SetFrameStrata(strata)
+  if strata and (overlay._msufBorderStrata ~= strata or not overlay.GetFrameStrata or overlay:GetFrameStrata() ~= strata) then
+    if not overlay.GetFrameStrata or overlay:GetFrameStrata() ~= strata then
+      overlay:SetFrameStrata(strata)
+    end
     overlay._msufBorderStrata = strata
   end
 end
