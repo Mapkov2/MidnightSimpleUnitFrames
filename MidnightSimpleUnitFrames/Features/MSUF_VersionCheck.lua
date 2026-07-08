@@ -28,8 +28,8 @@ local LE_PARTY_CATEGORY_INSTANCE = LE_PARTY_CATEGORY_INSTANCE
 
 local INCOMPATIBLE_121_TOC = 120100
 local COMPAT_POPUP_KEY = "MSUF_5X_CLIENT_121_WARNING"
-local COMPAT_POPUP_TEXT = "|cffff5555MSUF 5.x is not compatible with WoW 12.1.|r\n\nYou are running WoW %s. MSUF 5.x only supports patch 12.0.7 or older.\n\nPlease download the current MSUF Alpha/Beta version for WoW 12.1, then reload your UI."
-local COMPAT_CHAT_TEXT = "|cffff5555MSUF:|r MSUF 5.x is not compatible with WoW 12.1. Please install the current MSUF Alpha/Beta for WoW 12.1. MSUF 5.x only supports patch 12.0.7 or older."
+local COMPAT_POPUP_TEXT = "|cffff5555MSUF %s is not supported on WoW 12.1.|r\n\nYou are running WoW %s. MSUF 5.x stable builds are for WoW 12.0.x.\n\nPlease update to the latest MSUF Beta version on CurseForge for WoW 12.1, then reload your UI."
+local COMPAT_CHAT_TEXT = "|cffff5555MSUF:|r MSUF %s is not supported on WoW %s. Update to the latest MSUF Beta version on CurseForge for WoW 12.1, then reload your UI."
 
 local function Tr(text)
     local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
@@ -145,8 +145,9 @@ local function CheckClientCompatibility()
 
     clientCompatNotified = true
 
-    local message = string_format(Tr(COMPAT_POPUP_TEXT), clientVersion)
-    print(Tr(COMPAT_CHAT_TEXT))
+    local addonVersion = tostring(myVersionStr or "5.x")
+    local message = string_format(Tr(COMPAT_POPUP_TEXT), addonVersion, clientVersion)
+    print(string_format(Tr(COMPAT_CHAT_TEXT), addonVersion, clientVersion))
 
     if EnsureClientCompatibilityDialog() and _G.StaticPopup_Show then
         _G.StaticPopup_Show(COMPAT_POPUP_KEY, message)
