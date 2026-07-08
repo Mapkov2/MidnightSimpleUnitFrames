@@ -177,12 +177,13 @@ local function Layer(value, fallback)
   return value
 end
 
-local function ClampFrameOutlineLevelOffset(value)
-  if value == nil then return nil end
-  value = floor((tonumber(value) or 0) + 0.5)
-  if value < 0 then return 0 end
-  if value > 60 then return 60 end
-  return value
+local function NormalizeFrameOutlineStrata(value)
+  local normalize = _G.MSUF_NormalizeFrameStrata
+  if type(normalize) == "function" then return normalize(value, "AUTO") end
+  if value == nil or value == "" then return "AUTO" end
+  value = tostring(value):upper()
+  local rank = _G.MSUF_FRAME_STRATA_RANK
+  return rank and rank[value] and value or "AUTO"
 end
 
 local _groupSizeCacheAt, _groupSizeCacheValue = 0, 0
@@ -1053,7 +1054,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
   local nameFontSize = Num(conf.nameFontSize, 12)
   local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)
   local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
-  local borderLevelOffset = ClampFrameOutlineLevelOffset(conf.hlOverride == true and conf.barOutlineLevelOffset ~= nil and conf.barOutlineLevelOffset or (bars and bars.barOutlineLevelOffset))
+  local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or (bars and bars.barOutlineStrata))
 
   return {
     _msufGFCompileSerial = GF._compiledSpecSerial or 1,
@@ -1172,7 +1173,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     border = {
       enabled = conf.borderEnabled ~= false,
       thickness = borderThickness,
-      levelOffset = borderLevelOffset,
+      strata = borderStrata,
       r = Num(ScopedValue(conf, general, "barOutlineColorR", conf.borderR or general and general.barBorderR), 0),
       g = Num(ScopedValue(conf, general, "barOutlineColorG", conf.borderG or general and general.barBorderG), 0),
       b = Num(ScopedValue(conf, general, "barOutlineColorB", conf.borderB or general and general.barBorderB), 0),

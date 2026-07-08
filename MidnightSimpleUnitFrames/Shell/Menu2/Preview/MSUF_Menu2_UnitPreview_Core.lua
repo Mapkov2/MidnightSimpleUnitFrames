@@ -129,15 +129,6 @@ local FRAME_BORDER_OPTS = {
     texture = TEX_W8,
     snapOff = PreviewSnapOff,
 }
-local function PreviewFrameBorderLevelOffset(border)
-    if border and border.levelOffset ~= nil then
-        local offset = floor((tonumber(border.levelOffset) or 0) + 0.5)
-        if offset < 0 then return 0 end
-        if offset > 10000 then return 10000 end
-        return offset
-    end
-    return Layers.PREVIEW_FRAME_BORDER_OFFSET or 40
-end
 local function EnsureFrameBorderOverlay(mock, border)
     if not (mock and mock.CreateTexture) then return nil end
     local overlay = mock._msufPreviewFrameBorder
@@ -148,7 +139,13 @@ local function EnsureFrameBorderOverlay(mock, border)
         overlay._edges = {}
         mock._msufPreviewFrameBorder = overlay
     end
-    if overlay.SetFrameLevel and mock.GetFrameLevel then overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + PreviewFrameBorderLevelOffset(border)) end
+    if overlay.SetFrameLevel and mock.GetFrameLevel then overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + (Layers.PREVIEW_FRAME_BORDER_OFFSET or 40)) end
+    if overlay.SetFrameStrata and border and border.strata and border.strata ~= "AUTO" then
+        if not overlay.GetFrameStrata or overlay:GetFrameStrata() ~= border.strata then overlay:SetFrameStrata(border.strata) end
+    elseif overlay.SetFrameStrata and mock.GetFrameStrata then
+        local strata = mock:GetFrameStrata()
+        if strata and (not overlay.GetFrameStrata or overlay:GetFrameStrata() ~= strata) then overlay:SetFrameStrata(strata) end
+    end
     return overlay
 end
 local function SetFrameBorderShown(mock, shown)
