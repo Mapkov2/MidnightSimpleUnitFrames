@@ -19,8 +19,17 @@ local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
 local BARS_PAGE_WORK_DELAY = 0.04
-local FRAME_OUTLINE_LEVEL_DEFAULT = 35
-local FRAME_OUTLINE_LEVEL_MAX = 60
+local FRAME_OUTLINE_STRATA = {
+    { value = "AUTO", text = "Auto (Frame)" },
+    { value = "BACKGROUND", text = "BACKGROUND" },
+    { value = "LOW", text = "LOW" },
+    { value = "MEDIUM", text = "MEDIUM" },
+    { value = "HIGH", text = "HIGH" },
+    { value = "DIALOG", text = "DIALOG" },
+    { value = "FULLSCREEN", text = "FULLSCREEN" },
+    { value = "FULLSCREEN_DIALOG", text = "FULLSCREEN_DIALOG" },
+    { value = "TOOLTIP", text = "TOOLTIP" },
+}
 local DISPEL_BORDER_121_PTR_DISABLED = false
 local PURGE_BORDER_121_PTR_DISABLED = true
 local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel uses native 12.1 AuraContainer detection. Purge border stays disabled until Blizzard exposes a safe purge/stealable filter."
@@ -51,17 +60,37 @@ local function ScheduleBarsPageWork(key, delay, fn)
         Run()
     end
 end
-local function NormalizeFrameOutlineLevelOffset(value, fallback)
-    local n = floor((tonumber(value) or fallback or FRAME_OUTLINE_LEVEL_DEFAULT) + 0.5)
-    if n < 0 then return 0 end
-    if n > FRAME_OUTLINE_LEVEL_MAX then return FRAME_OUTLINE_LEVEL_MAX end
-    return n
+local function NormalizeFrameOutlineStrata(value)
+    local normalize = _G.MSUF_NormalizeFrameStrata
+    if type(normalize) == "function" then return normalize(value, "AUTO") end
+    if value == nil or value == "" then return "AUTO" end
+    value = tostring(value):upper()
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return rank and rank[value] and value or "AUTO"
 end
-local function RefreshFrameOutlineLevelLabel(slider, value)
+local function FrameOutlineStrataIndex(value)
+    value = NormalizeFrameOutlineStrata(value)
+    for i = 1, #FRAME_OUTLINE_STRATA do
+        if FRAME_OUTLINE_STRATA[i].value == value then return i - 1 end
+    end
+    return 0
+end
+local function FrameOutlineStrataValue(index)
+    index = floor((tonumber(index) or 0) + 0.5) + 1
+    if index < 1 then index = 1 elseif index > #FRAME_OUTLINE_STRATA then index = #FRAME_OUTLINE_STRATA end
+    return FRAME_OUTLINE_STRATA[index].value
+end
+local function FrameOutlineStrataLabel(valueOrIndex)
+    local value = type(valueOrIndex) == "number" and FrameOutlineStrataValue(valueOrIndex) or NormalizeFrameOutlineStrata(valueOrIndex)
+    for i = 1, #FRAME_OUTLINE_STRATA do
+        if FRAME_OUTLINE_STRATA[i].value == value then return M.Tr(FRAME_OUTLINE_STRATA[i].text) end
+    end
+    return M.Tr("Auto (Frame)")
+end
+local function RefreshFrameOutlineStrataLabel(slider, value)
     if not slider then return end
-    value = NormalizeFrameOutlineLevelOffset(value, FRAME_OUTLINE_LEVEL_DEFAULT)
     if slider._msuf2Title then
-        slider._msuf2Title:SetText(string.format(M.Tr("Frame level offset: +%d"), value))
+        slider._msuf2Title:SetText(M.Tr("Frame outline strata") .. ": " .. FrameOutlineStrataLabel(value))
     end
 end
 local function ApplyService()
@@ -1069,23 +1098,30 @@ local function BuildBars(ctx)
             RequestOutlineRuntime()
         end,
         1, { step = 1, roundStep = true })
-    outline._msuf2OutlineLevel = W.Slider(outline, "", 0, FRAME_OUTLINE_LEVEL_MAX, 1, 300)
-    M.BindNumberWidget(ctx, outline._msuf2OutlineLevel,
+    outline._msuf2OutlineStrata = W.Slider(outline, "", 0, #FRAME_OUTLINE_STRATA - 1, 1, 300)
+    outline._msuf2OutlineStrata:SetValueFormatter(function(value) return FrameOutlineStrataLabel(value) end)
+    outline._msuf2OutlineStrata:SetValueParser(function(text)
+        text = tostring(text or ""):upper()
+        for i = 1, #FRAME_OUTLINE_STRATA do
+            if text == FRAME_OUTLINE_STRATA[i].value or text == tostring(FRAME_OUTLINE_STRATA[i].text):upper() then return i - 1 end
+        end
+        return FrameOutlineStrataIndex(text)
+    end)
+    M.BindSlider(ctx, outline._msuf2OutlineStrata,
         function()
-            return NormalizeFrameOutlineLevelOffset(BarScopeGetBars("barOutlineLevelOffset", FRAME_OUTLINE_LEVEL_DEFAULT), FRAME_OUTLINE_LEVEL_DEFAULT)
+            return FrameOutlineStrataIndex(BarScopeGetBars("barOutlineStrata", "AUTO"))
         end,
         function(v)
-            BarScopeSetBars("barOutlineLevelOffset", NormalizeFrameOutlineLevelOffset(v, FRAME_OUTLINE_LEVEL_DEFAULT), "MSUF2_BAR_OUTLINE_LEVEL")
-            ApplyBars("MSUF2_BAR_OUTLINE_LEVEL")
+            BarScopeSetBars("barOutlineStrata", FrameOutlineStrataValue(v), "MSUF2_BAR_OUTLINE_STRATA")
+            ApplyBars("MSUF2_BAR_OUTLINE_STRATA")
             RequestOutlineRuntime()
-        end,
-        FRAME_OUTLINE_LEVEL_DEFAULT, { step = 1, roundStep = true })
-    outline._msuf2OutlineLevel:HookScript("OnValueChanged", function(self, value)
+        end)
+    outline._msuf2OutlineStrata:HookScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
-        RefreshFrameOutlineLevelLabel(self, value)
+        RefreshFrameOutlineStrataLabel(self, value)
     end)
-    M.AddRefresher(ctx, function() RefreshFrameOutlineLevelLabel(outline._msuf2OutlineLevel, BarScopeGetBars("barOutlineLevelOffset", FRAME_OUTLINE_LEVEL_DEFAULT)) end)
-    RefreshFrameOutlineLevelLabel(outline._msuf2OutlineLevel, BarScopeGetBars("barOutlineLevelOffset", FRAME_OUTLINE_LEVEL_DEFAULT))
+    M.AddRefresher(ctx, function() RefreshFrameOutlineStrataLabel(outline._msuf2OutlineStrata, BarScopeGetBars("barOutlineStrata", "AUTO")) end)
+    RefreshFrameOutlineStrataLabel(outline._msuf2OutlineStrata, BarScopeGetBars("barOutlineStrata", "AUTO"))
     local outlineColor = W.Color(outline, "Outline color")
     W.MoveWidget(outlineColor, outline, 30, -150)
     M.BindColor(ctx, outlineColor,
@@ -1101,7 +1137,7 @@ local function BuildBars(ctx)
             end
         end)
     M.BindGateGroup(ctx, nil, {
-        { controls = { outlineSlider, outline._msuf2OutlineLevel, outlineColor }, on = ScopedBarsControlsActive },
+        { controls = { outlineSlider, outline._msuf2OutlineStrata, outlineColor }, on = ScopedBarsControlsActive },
     })
     local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", 246, true)
     local roundLeftX = 30
