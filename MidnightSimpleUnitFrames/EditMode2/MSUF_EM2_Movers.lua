@@ -386,7 +386,7 @@ end
 _G.MSUF_GetAnchorFrame = function()
     local db = _G.MSUF_DB
     local g = db and db.general or {}
-    if g.anchorToCooldown then
+    if g.anchorToCooldown or g.anchorName == "EssentialCooldownViewer" then
         local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
         if ecv then return ecv end
         return UIParent

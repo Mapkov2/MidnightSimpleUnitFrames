@@ -221,10 +221,35 @@ do
         return false
     end
 
+    local function CurrentCombatLogEventInfo()
+        if type(CombatLogGetCurrentEventInfo) == "function" then
+            return CombatLogGetCurrentEventInfo()
+        end
+        if C_CombatLog and type(C_CombatLog.GetCurrentEventInfo) == "function" then
+            return C_CombatLog.GetCurrentEventInfo()
+        end
+    end
+
+    local function GeneratorAllowed(spellID, known)
+        if not GENERATORS[spellID] then return false end
+        if (spellID == 6343 or spellID == 435222) then
+            return known and known(CRASHING_THUNDER)
+        end
+        return true
+    end
+
+    local function GrantStacksFromGeneratorHit()
+        stacks = MAX_STACKS
+        expiresAt = GetTime() + DURATION
+        ScheduleExpiry()
+        if _wwRender then _wwRender() end
+    end
+
     -- Warrior-only: own event frame (Sensei pattern)
     if PLAYER_CLASS == "WARRIOR" then
         local f = CreateFrame("Frame")
         f:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+        f:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
         f:RegisterEvent("PLAYER_DEAD")
         f:RegisterEvent("PLAYER_ALIVE")
         f:SetScript("OnEvent", function(_, event, unit, castGUID, spellID)
@@ -235,6 +260,18 @@ do
                 if _wwRender then _wwRender() end
                 return
             end
+
+            if event == "COMBAT_LOG_EVENT_UNFILTERED" then
+                local _, subevent, _, sourceGUID, _, _, _, _, _, _, _, cleuSpellID, _, _, missType = CurrentCombatLogEventInfo()
+                if sourceGUID ~= (UnitGUID and UnitGUID("player")) then return end
+                if subevent ~= "SPELL_DAMAGE" and subevent ~= "SPELL_BUILDING_DAMAGE" and not (subevent == "SPELL_MISSED" and missType == "ABSORB") then return end
+
+                local known = C_SpellBook and C_SpellBook.IsSpellKnown
+                if not GeneratorAllowed(cleuSpellID, known) then return end
+                GrantStacksFromGeneratorHit()
+                return
+            end
+
             if event ~= "UNIT_SPELLCAST_SUCCEEDED" or unit ~= "player" then return end
 
             local known = C_SpellBook and C_SpellBook.IsSpellKnown
@@ -245,18 +282,6 @@ do
             -- Unhinged no-consume window
             if known and known(UNHINGED) and BLADESTORMS[spellID] then
                 noConsumeUntil = GetTime() + 2
-            end
-
-            -- Generator â†’ max stacks
-            if GENERATORS[spellID] then
-                if (spellID == 6343 or spellID == 435222) then
-                    if not (known and known(CRASHING_THUNDER)) then return end
-                end
-                stacks = MAX_STACKS
-                expiresAt = GetTime() + DURATION
-                ScheduleExpiry()
-                if _wwRender then _wwRender() end
-                return
             end
 
             -- Spender â†’ consume 1

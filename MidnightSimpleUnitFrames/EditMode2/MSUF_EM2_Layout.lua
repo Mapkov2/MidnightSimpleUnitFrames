@@ -1150,7 +1150,7 @@ local function OnUpdate(self, elapsed)
                         or _G["EssentialCooldownViewer"]
                     local ecvRule = d.ecvRule
 
-                    if _g and _g.anchorToCooldown and ecv and anchor == ecv and ecvRule then
+                    if _g and (_g.anchorToCooldown or _g.anchorName == "EssentialCooldownViewer") and ecv and anchor == ecv and ecvRule then
                         -- ECV path: PositionUnitFrame uses point-to-point
                         -- We wrote center-to-center offset above, need to convert for ECV
                         local point, relPoint, baseX, extraY = ecvRule[1], ecvRule[2], ecvRule[3] or 0, ecvRule[4] or 0

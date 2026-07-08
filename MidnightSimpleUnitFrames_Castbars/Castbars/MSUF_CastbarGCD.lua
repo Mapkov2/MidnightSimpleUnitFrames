@@ -11,6 +11,9 @@ local GetSpellBaseCooldown = GetSpellBaseCooldown
 local UnitCastingInfo = UnitCastingInfo
 local UnitChannelInfo = UnitChannelInfo
 local CreateFrame = CreateFrame
+local C_Timer = C_Timer
+
+local GCD_PENDING_TIMEOUT = 0.45
 
 -- ============================================================
 -- DB / toggles
@@ -66,6 +69,8 @@ function _G.MSUF_SetGCDBarEnabled(enabled)
             drv:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "vehicle")
         else
             drv:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+            drv:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
+            drv:UnregisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
         end
     end
 
@@ -114,6 +119,7 @@ function _G.MSUF_GCD_GetDurationForSpellID(spellID)
     end
 
     -- 2nd return value is base GCD (ms) for that spell. If 0/nil -> no GCD triggered.
+    if type(GetSpellBaseCooldown) ~= "function" then return nil end
     local _, gcdMS = GetSpellBaseCooldown(spellID)
     if not gcdMS or gcdMS <= 0 then
         _gcdSkipCache[spellID] = true  -- cache: this spell has no GCD
@@ -157,6 +163,94 @@ function _G.MSUF_GCD_GetDurationForSpellID(spellID)
     end
 
     return scaled, info.name, info.iconID
+end
+
+local _pendingGCD
+
+local function MSUF_GCD_GetInstantSpellInfo(spellID)
+    if not spellID then return nil end
+    if _gcdSkipCache[spellID] then return nil end
+    if not (C_Spell and C_Spell.GetSpellInfo) then return nil end
+
+    local info = C_Spell.GetSpellInfo(spellID)
+    if not info then return nil end
+
+    local castTime = info.castTime
+    if castTime and castTime > 0 then
+        _gcdSkipCache[spellID] = true
+        return nil
+    end
+
+    return info.name, info.iconID
+end
+
+local function MSUF_GCD_NormalizeBaseDuration(durationSec)
+    if not durationSec or durationSec <= 0 then return nil end
+
+    local minGCD = (durationSec > 1.49) and 0.75 or 1.0
+    if durationSec < minGCD then
+        durationSec = minGCD
+    end
+
+    return durationSec
+end
+
+local function MSUF_GCD_GetLegacyBaseDuration(spellID)
+    if type(GetSpellBaseCooldown) ~= "function" then return nil, false end
+
+    local ok, _, gcdMS = pcall(GetSpellBaseCooldown, spellID)
+    if not ok then return nil, false end
+
+    gcdMS = tonumber(gcdMS)
+    if not gcdMS or gcdMS <= 0 then
+        return nil, true
+    end
+
+    return MSUF_GCD_NormalizeBaseDuration(gcdMS / 1000), true
+end
+
+local function MSUF_GCD_GetActiveCooldownDuration(spellID)
+    if not (C_Spell and C_Spell.GetSpellCooldown) then return nil end
+
+    local info = C_Spell.GetSpellCooldown(spellID)
+    if type(info) ~= "table" or info.isOnGCD ~= true then return nil end
+
+    local duration = tonumber(info.duration) or 0
+    local startTime = tonumber(info.startTime) or 0
+    if duration <= 0 or startTime <= 0 then return nil end
+
+    local now = Now()
+    local remaining = (startTime + duration) - now
+    if remaining <= 0.05 then return nil end
+
+    return (remaining < duration) and remaining or duration
+end
+
+-- Modern path: prefer Blizzard's SpellCooldownInfo table when responding
+-- to cooldown updates; keep GetSpellBaseCooldown only as a nil-safe fallback.
+function _G.MSUF_GCD_GetDurationForSpellID(spellID, allowCooldownInfo)
+    if not spellID then return nil end
+    if _gcdSkipCache[spellID] then return nil end
+
+    local name, icon = MSUF_GCD_GetInstantSpellInfo(spellID)
+    if not name and not icon then return nil end
+
+    if allowCooldownInfo then
+        local liveDuration = MSUF_GCD_GetActiveCooldownDuration(spellID)
+        if liveDuration then
+            return liveDuration, name, icon
+        end
+    end
+
+    local baseDuration, baseKnown = MSUF_GCD_GetLegacyBaseDuration(spellID)
+    if baseDuration then
+        return baseDuration, name, icon
+    end
+    if baseKnown and (allowCooldownInfo or not (C_Spell and C_Spell.GetSpellCooldown)) then
+        _gcdSkipCache[spellID] = true
+    end
+
+    return nil
 end
 
 -- ============================================================
@@ -375,6 +469,85 @@ local function EnsurePlayerBarExists()
     return bar
 end
 
+local function SetPendingCooldownEvents(enabled)
+    local drv = _G.MSUF_GCDBarDriver
+    if not drv then return end
+
+    if enabled then
+        drv:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+        drv:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+    else
+        drv:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
+        drv:UnregisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+    end
+end
+
+local function ClearPendingGCD()
+    _pendingGCD = nil
+    SetPendingCooldownEvents(false)
+end
+
+local TryPendingGCD
+
+local function QueuePendingGCD(unitTarget, spellID, spellName, spellIcon)
+    _pendingGCD = {
+        unit = unitTarget or "player",
+        spellID = spellID,
+        name = spellName,
+        icon = spellIcon,
+        expires = Now() + GCD_PENDING_TIMEOUT,
+    }
+
+    SetPendingCooldownEvents(true)
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.03, function() TryPendingGCD("deferred") end)
+        C_Timer.After(0.12, function() TryPendingGCD("deferred") end)
+    end
+end
+
+TryPendingGCD = function(_reason)
+    local pending = _pendingGCD
+    if not pending then return end
+
+    if type(_G.MSUF_IsGCDBarEnabled) == "function" and not _G.MSUF_IsGCDBarEnabled() then
+        ClearPendingGCD()
+        return
+    end
+
+    if Now() > (pending.expires or 0) then
+        ClearPendingGCD()
+        return
+    end
+
+    local unit = pending.unit or "player"
+    if UnitCastingInfo(unit) or UnitChannelInfo(unit) then
+        ClearPendingGCD()
+        return
+    end
+
+    if type(_G.MSUF_IsCastbarEnabledForUnit) == "function" then
+        if not _G.MSUF_IsCastbarEnabledForUnit("player") then
+            ClearPendingGCD()
+            return
+        end
+    end
+
+    local bar = EnsurePlayerBarExists()
+    if not bar or bar.isEmpower or bar.MSUF_testMode then
+        ClearPendingGCD()
+        return
+    end
+
+    local dur, name, icon = _G.MSUF_GCD_GetDurationForSpellID(pending.spellID, true)
+    if not dur then return end
+
+    ClearPendingGCD()
+    if type(_G.MSUF_PlayerGCDBar_Start) == "function" then
+        _G.MSUF_PlayerGCDBar_Start(bar, unit, dur, name or pending.name, icon or pending.icon)
+    end
+end
+
 local function OnSucceeded(_, _, unitTarget, _, spellID)
     if unitTarget ~= "player" and unitTarget ~= "vehicle" then
         return
@@ -408,35 +581,48 @@ local function OnSucceeded(_, _, unitTarget, _, spellID)
     if bar.isEmpower then return end
     if bar.MSUF_testMode then return end
 
-    local dur, name, icon = _G.MSUF_GCD_GetDurationForSpellID(spellID)
-    if not dur then return end
+    local dur, name, icon = _G.MSUF_GCD_GetDurationForSpellID(spellID, false)
+    if not dur then
+        name, icon = MSUF_GCD_GetInstantSpellInfo(spellID)
+        if name or icon then
+            QueuePendingGCD(unitTarget, spellID, name, icon)
+        end
+        return
+    end
 
     if type(_G.MSUF_PlayerGCDBar_Start) == "function" then
         _G.MSUF_PlayerGCDBar_Start(bar, unitTarget, dur, name, icon)
     end
 end
 
+local function OnCooldownUpdate()
+    TryPendingGCD("cooldown")
+end
+
 local driver = CreateFrame("Frame", "MSUF_GCDBarDriver")
 -- Always register initially (DB might not be loaded yet â†’ defaults to enabled).
 -- A deferred sync below will unregister if the saved setting is off.
 driver:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player", "vehicle")
-driver:SetScript("OnEvent", OnSucceeded)
+local DriverOnEvent
 
 -- Deferred cold-state sync: once DB is available, unregister event if GCD bar was saved as disabled.
 -- Uses PLAYER_ENTERING_WORLD (fires once per login/reload, after SavedVariables are loaded).
 local function SyncGCDRegistration(self, event)
     self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-    self:SetScript("OnEvent", OnSucceeded)  -- restore to GCD handler only
+    self:SetScript("OnEvent", DriverOnEvent)
     if _G.MSUF_IsGCDBarEnabled and not _G.MSUF_IsGCDBarEnabled() then
         self:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     end
 end
 driver:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- Temporarily multiplex OnEvent to handle both PLAYER_ENTERING_WORLD and UNIT_SPELLCAST_SUCCEEDED.
-driver:SetScript("OnEvent", function(self, event, ...)
+DriverOnEvent = function(self, event, ...)
     if event == "PLAYER_ENTERING_WORLD" then
         SyncGCDRegistration(self, event)
+    elseif event == "SPELL_UPDATE_COOLDOWN" or event == "ACTIONBAR_UPDATE_COOLDOWN" then
+        OnCooldownUpdate(self, event, ...)
     else
         OnSucceeded(self, event, ...)
     end
-end)
+end
+driver:SetScript("OnEvent", DriverOnEvent)
