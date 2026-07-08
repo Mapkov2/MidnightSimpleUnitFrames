@@ -22,8 +22,8 @@ local CASTBAR_FIELDS = {
     -- Castbar settings live in general DB rather than each unit DB. Keep this map as the one
     -- place where unit pages translate a unit key into the correct castbar field names.
     player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight", match = "castbarPlayerMatchWidth" },
-    target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", match = "castbarTargetMatchWidth" },
-    focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", timeFormat = "castbarFocusTimeFormat", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", match = "castbarFocusMatchWidth" },
+    target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", targetName = "castbarTargetShowTargetName", timeFormat = "castbarTargetTimeFormat", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", match = "castbarTargetMatchWidth" },
+    focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName", timeFormat = "castbarFocusTimeFormat", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", match = "castbarFocusMatchWidth" },
     boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat", w = "bossCastbarWidth", h = "bossCastbarHeight", match = "bossCastbarMatchWidth" },
 }
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
@@ -277,6 +277,7 @@ local function CopyCastbar(g, src, dst)
     g[d.time] = g[s.time]
     g[d.icon] = g[s.icon]
     g[d.text] = g[s.text]
+    if s.targetName and d.targetName then g[d.targetName] = g[s.targetName] end
     g[d.timeFormat] = g[s.timeFormat]
     g[d.w] = g[s.w]
     g[d.h] = g[s.h]
@@ -302,10 +303,18 @@ local function ForEachAuraRuntimeTarget(unit, callback)
     callback(unit)
 end
 local function ApplyAuras3Unit(unit)
+    local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    if apply and type(apply.RequestAuras) == "function" then
+        return apply.RequestAuras(unit, "MSUF2_COPY_UNIT_AURAS")
+    end
     local a3 = MSUF and MSUF.MSUF_Auras3
     local model = a3 and a3.MenuModel
     if model and type(model.Apply) == "function" then
         model.Apply(unit, "MSUF2_COPY_UNIT_AURAS")
+        return true
+    end
+    if a3 and type(a3.RequestScope) == "function" then
+        a3.RequestScope(unit, "MSUF2_COPY_UNIT_AURAS")
         return true
     end
     if a3 and type(a3.RefreshUnit) == "function" then
@@ -317,7 +326,7 @@ local function ApplyAuras3Unit(unit)
         return true
     end
     if a3 and type(a3.RequestApply) == "function" then
-        a3.RequestApply("MSUF2_COPY_UNIT_AURAS")
+        a3.RequestApply(unit, "MSUF2_COPY_UNIT_AURAS")
         return true
     end
     return false
@@ -439,10 +448,10 @@ local function CopyUnitSettings(unit, target, scopes)
             auras = copiedAuras,
         })
     end
-    local function FinishCopy()
+    local function FinishCopy(statusUnit)
         if scopes.status then
-            Call("MSUF_RefreshAllIndicators")
-            Call("MSUF_RefreshStatusIndicators")
+            Call("MSUF_RefreshAllIndicators", statusUnit, "MSUF2_COPY_UNIT_STATUS")
+            Call("MSUF_RefreshStatusIndicators", statusUnit, "MSUF2_COPY_UNIT_STATUS")
         end
         Call("MSUF_UFPreview_RequestRefresh", "COPY_UNIT_SETTINGS")
     end
@@ -459,7 +468,7 @@ local function CopyUnitSettings(unit, target, scopes)
     target = CanonUnitKey(target)
     if not target or target == srcKey then return end
     CopyOne(target)
-    FinishCopy()
+    FinishCopy(target)
 end
 local function ToggleEditMode(unit)
     if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return end
@@ -479,11 +488,20 @@ local function BossPagePreviewInCombat()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
 end
+local function CoreFrame(unit)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(unit)
+        if frame then return frame end
+    end
+    local frames = uf and uf.frames
+    return unit and frames and frames[unit] or nil
+end
 local function BossPreviewFramesVisible()
-    local frames = _G.MSUF_UnitFrames
     local sawFrame = false
     for i = 1, 5 do
-        local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
+        local unit = "boss" .. i
+        local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
         if frame then
             sawFrame = true
             if frame.IsShown and not frame:IsShown() then return false end
@@ -654,10 +672,12 @@ local function ReadStatusString(unit, key, default)
     return value or ""
 end
 local function RefreshStatusRuntime(unit, spec)
-    if spec and spec.refresh then Call(spec.refresh) end
-    if spec and spec.statusRuntime then
-        Call("MSUF_RefreshStatusIndicators")
-        Call("MSUF_RequestStatusIconsRefreshForCurrent")
+    local runtimeRefreshed = false
+    if spec and spec.refresh then
+        runtimeRefreshed = Call(spec.refresh, unit, "MSUF2_STATUS_INDICATOR")
+    end
+    if spec and spec.statusRuntime and not runtimeRefreshed then
+        Call("MSUF_RefreshStatusIndicators", unit, "MSUF2_STATUS_INDICATOR")
     end
     if spec and spec.value == "level" then
         if unit == "boss" and _G.MSUF_BossTestMode and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR") end

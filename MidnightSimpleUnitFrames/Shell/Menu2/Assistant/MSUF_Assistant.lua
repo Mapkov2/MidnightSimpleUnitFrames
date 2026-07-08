@@ -121,20 +121,33 @@ end
 
 local function ScheduleNextFrame(key, fn)
     if type(fn) ~= "function" then return false end
-    if type(_G.MSUF_ScheduleOnce) == "function" then
-        _G.MSUF_ScheduleOnce(tostring(key or "MSUF_ASSISTANT"), fn)
-        return true
+    AP.nextFramePending = AP.nextFramePending or {}
+    AP.nextFrameOrder = AP.nextFrameOrder or {}
+    local nextFramePending = AP.nextFramePending
+    local nextFrameOrder = AP.nextFrameOrder
+    key = tostring(key or "MSUF_ASSISTANT")
+    if nextFramePending[key] == nil then
+        nextFrameOrder[#nextFrameOrder + 1] = key
     end
-    local scheduler = (MSUF and MSUF.Scheduler) or _G.MSUF_Scheduler
-    if scheduler and type(scheduler.RunNextFrame) == "function" then
-        scheduler.RunNextFrame(fn)
-        return true
+    nextFramePending[key] = fn
+    if AP.nextFrameQueued then return true end
+    AP.nextFrameQueued = true
+    local function Run()
+        AP.nextFrameQueued = false
+        local pending = AP.nextFramePending or {}
+        local order = AP.nextFrameOrder or {}
+        AP.nextFramePending = {}
+        AP.nextFrameOrder = {}
+        for i = 1, #order do
+            local cb = pending[order[i]]
+            if type(cb) == "function" then cb() end
+        end
     end
     if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        _G.C_Timer.After(0, fn)
+        _G.C_Timer.After(0, Run)
         return true
     end
-    fn()
+    Run()
     return false
 end
 
@@ -161,6 +174,16 @@ function A.RecordPerfSample(label, startedMs, detail)
     if elapsed >= 250 and sample.label ~= "assistant.submit.deferred" then A.lastSlowAssistantPerf = sample end
     PushPerfTrace(sample)
     return sample
+end
+
+function A.RecordSlowPerfSample(label, startedMs, detail, thresholdMs)
+    if not startedMs then return nil end
+    local now = PerfNowMs()
+    if not now then return nil end
+    local elapsed = now - startedMs
+    if elapsed < 0 then elapsed = 0 end
+    if elapsed < (tonumber(thresholdMs) or 8) then return nil end
+    return A.RecordPerfSample(label, startedMs, detail)
 end
 
 function A.GetLastPerfSample()
@@ -5342,14 +5365,24 @@ ExecuteChoice = function(choice)
 end
 
 local function RunApplies(changedSettings)
+    local totalStartedMs = PerfNowMs()
     local applied = {}
     for i = 1, #changedSettings do
         local setting = changedSettings[i]
         if setting and type(setting.apply) == "function" and not applied[setting.key] then
             applied[setting.key] = true
+            local settingStartedMs = PerfNowMs()
             setting.apply()
+            A.RecordSlowPerfSample("assistant.apply.setting", settingStartedMs, setting.key or setting.label or i, 4)
         end
     end
+    local apply = (MSUF and MSUF.MSUF2 and MSUF.MSUF2.ApplyService) or _G.MSUF_Menu2_ApplyService
+    if apply and type(apply.Flush) == "function" then
+        local flushStartedMs = PerfNowMs()
+        apply.Flush()
+        A.RecordSlowPerfSample("assistant.apply.flush", flushStartedMs, tostring(#changedSettings), 4)
+    end
+    A.RecordSlowPerfSample("assistant.apply.total", totalStartedMs, tostring(#changedSettings), 8)
 end
 
 local function NormalizeTextSlot(slot)
@@ -6256,7 +6289,9 @@ function A.HandleCommandInput(text)
     local pending = HandlePending(text)
     if pending then return NormalizePlanResult(pending) end
 
+    local parseStartedMs = PerfNowMs()
     local parsed = A.Parse and A.Parse(text) or nil
+    A.RecordSlowPerfSample("assistant.parse", parseStartedMs, text, 8)
     if not parsed then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
     AP.RememberMentionedContext(parsed)
 
@@ -6328,11 +6363,13 @@ function A.HandleInput(text)
     local hadPendingResults = CurrentPendingResults() ~= nil
     A._pendingResultFollowupHandled = nil
     local result
+    local routeStartedMs = PerfNowMs()
     if type(A.RouteInput) == "function" then
         result = NormalizePlanResult(A.RouteInput(text, A.HandleCommandInput))
     else
         result = NormalizePlanResult(A.HandleCommandInput(text))
     end
+    A.RecordSlowPerfSample("assistant.route", routeStartedMs, text, 8)
     local pendingResultReply = A._pendingResultFollowupHandled == true
     A._pendingResultFollowupHandled = nil
     if ShouldClearPendingResultsAfterHandledInput(result, hadPendingResults, pendingResultReply) then ClearPendingResults() end
@@ -6805,10 +6842,23 @@ function AP.TryImmediateMutationResult(text, opts)
     if not exactColorCandidate and parser and type(parser.ExtractColor) == "function" then
         exactColorCandidate = parser.ExtractColor(text, normalized) ~= nil
     end
+    local registry = A.Registry
+    local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
+    local exactColorIndexReady = type(settings) == "table"
+        and parser._exactColorSettingIndexSettings == settings
+        and parser._exactColorSettingIndexCount == #settings
+        and type(parser._exactColorSettingIndex) == "table"
+    local exactAliasIndexReady = type(settings) == "table"
+        and parser._registryExactAliasSettings == settings
+        and parser._registryExactAliasCount == #settings
+        and type(parser._registryExactAliasIndex) == "table"
     if not plan and A._ParseClassColorFastShortcut and exactColorCandidate then
         plan = A._ParseClassColorFastShortcut(normalized, text)
     end
-    if not plan and A._ParseExactColorSettingFastShortcut and exactColorCandidate then
+    if not plan and A._ParsePowerColorTokenFastShortcut and exactColorCandidate then
+        plan = A._ParsePowerColorTokenFastShortcut(normalized, text)
+    end
+    if not plan and exactColorIndexReady and A._ParseExactColorSettingFastShortcut and exactColorCandidate then
         plan = A._ParseExactColorSettingFastShortcut(normalized, text)
     end
     if not plan and A._ParseMouseoverHighlightFastShortcut and normalized:find("highlight", 1, true) then
@@ -6817,7 +6867,7 @@ function AP.TryImmediateMutationResult(text, opts)
     if not plan and A._ParseBarGradientPriorityShortcut and normalized:find("gradient", 1, true) then
         plan = A._ParseBarGradientPriorityShortcut(normalized)
     end
-    if not plan and parser.ParseRegistryExactAliasShortcut then
+    if not plan and exactAliasIndexReady and parser.ParseRegistryExactAliasShortcut then
         local firstWord = normalized:match("^(%S+)")
         local deterministicRegistryMutation =
             firstWord == "set" or firstWord == "change" or firstWord == "make"
@@ -7069,6 +7119,9 @@ function A.WarmupPerformanceIndexes(reason)
             end
             if parser and settings and type(parser._EnsureExactColorSettingIndex) == "function" then
                 parser._EnsureExactColorSettingIndex(settings)
+            end
+            if parser and settings and type(parser._EnsureRegistryExactAliasIndex) == "function" then
+                parser._EnsureRegistryExactAliasIndex(settings)
             end
         end),
         A.CoroutineStep(function()

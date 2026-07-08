@@ -15,110 +15,82 @@ local min = math.min
 local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled]])
 local KLR, WL, ColorRows, KeyLabelMap, ValueTextPairs, SetControlsEnabled = M.KeyLabelRows, M.WordList, M.ColorRows, M.KeyLabelMap, M.ValueTextPairs, W.SetControlsEnabled
-local colorApplyQueued = false
-local auraColorFanoutQueued = false
-local classPowerColorFanoutQueued = false
-local portraitColorFanoutQueued = false
-local unitframeColorReloadPromptQueued = false
-local COLOR_APPLY_DELAY = 0.04
--- Multiple color sliders can fire in one frame while dragging. Queue a single apply so live
--- frames repaint once per frame instead of per slider event.
 local ColorValueAt
-local function FlushColorApply()
-    colorApplyQueued = false
+
+local function CurrentApplyService()
+    return M.ApplyService or _G.MSUF_Menu2_ApplyService
+end
+
+local function RequestGeneral(reason, opts)
+    if type(M.RequestGeneralApply) == "function" then
+        return M.RequestGeneralApply(reason, opts)
+    end
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestGeneral) == "function" then
+        return apply.RequestGeneral(reason, opts)
+    end
+    return false
+end
+
+local function ApplyColors()
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestColors) == "function" then
+        return apply.RequestColors("MSUF2_COLORS")
+    end
     local api = MSUF and MSUF._colorsAPI
     local pushed = api and type(api.PushVisualUpdates) == "function"
     if pushed then api.PushVisualUpdates() end
-    M.RequestGeneralApply("MSUF2_COLORS", { preview = true, applyAll = false, colors = true, colorsPushed = pushed })
+    return RequestGeneral("MSUF2_COLORS", { preview = true, applyAll = false, colors = true, colorsPushed = pushed })
 end
-local function ApplyColors()
-    if colorApplyQueued then return end
-    colorApplyQueued = true
-    if type(_G.MSUF_ScheduleOnce) == "function" then
-        if type(_G.MSUF_ScheduleDelayOnce) == "function" then
-            _G.MSUF_ScheduleDelayOnce("MSUF2_COLORS_APPLY", COLOR_APPLY_DELAY, FlushColorApply)
-        else
-            _G.MSUF_ScheduleOnce("MSUF2_COLORS_APPLY", FlushColorApply)
-        end
-    else
-        _G.C_Timer.After(COLOR_APPLY_DELAY, FlushColorApply)
-    end
-end
-local function ScheduleColorFanout(key, flagName, fn)
-    if flagName == "auras" then
-        if auraColorFanoutQueued then return end
-        auraColorFanoutQueued = true
-    elseif flagName == "classpower" then
-        if classPowerColorFanoutQueued then return end
-        classPowerColorFanoutQueued = true
-    elseif flagName == "portrait" then
-        if portraitColorFanoutQueued then return end
-        portraitColorFanoutQueued = true
-    end
-    local function Run()
-        if flagName == "auras" then auraColorFanoutQueued = false
-        elseif flagName == "classpower" then classPowerColorFanoutQueued = false
-        elseif flagName == "portrait" then portraitColorFanoutQueued = false end
-        fn()
-    end
-    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
-        _G.MSUF_ScheduleDelayOnce(key, COLOR_APPLY_DELAY, Run)
-    else
-        _G.C_Timer.After(COLOR_APPLY_DELAY, Run)
-    end
-end
-local function ShowUnitframeColorReloadPrompt()
-    if unitframeColorReloadPromptQueued then return end
-    unitframeColorReloadPromptQueued = true
-    local function Show()
-        unitframeColorReloadPromptQueued = false
-        if type(_G.StaticPopup_FindVisible) == "function" and _G.StaticPopup_FindVisible("MSUF_RELOAD_RECOMMENDED") then return end
-        CallGlobal("MSUF_ShowReloadRecommendedPopup", "Unitframe color changes")
-    end
-    if type(_G.MSUF_ScheduleOnce) == "function" then
-        _G.MSUF_ScheduleOnce("MSUF2_UNITFRAME_COLOR_RELOAD_PROMPT", Show)
-    else
-        _G.C_Timer.After(0, Show)
-    end
-end
+
 local function ApplyUnitframeColorWithReload()
     ApplyColors()
-    ShowUnitframeColorReloadPrompt()
 end
 local function ApplyCastbarColors()
-    ApplyColors()
     M.RequestGeneralApply("MSUF2_CASTBAR_COLORS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })
     CallGlobal("MSUF_KickReady_RefreshAll")
+end
+local function ApplyBossTargetHighlightColor()
+    local reason = "MSUF2_BOSS_TARGET_HIGHLIGHT_COLOR"
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestBossTargetBorder) == "function" then
+        return apply.RequestBossTargetBorder(reason, "boss")
+    end
+    CallGlobal("MSUF_UFCore_RefreshSettingsCache", reason)
+    if apply and type(apply.RequestUnit) == "function" then
+        return apply.RequestUnit("boss", reason, { preview = true })
+    end
+    return CallGlobal("MSUF_UFCore_NotifyConfigChanged", "boss", true, true, reason)
 end
 local function ApplyGameplayColors()
     ApplyColors()
 end
 local function ApplyAuraColors()
-    ApplyAuras()
     ApplyColors()
-    -- Aura timer bucket coloring is baked into a C-side formatter at button-create
-    -- time, so a plain RefreshAll (which reuses lanes) would not pick up new
-    -- colors/thresholds. Bump the native visual generation to force lane recreate.
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.ApplyFontsFromGlobal) == "function" then a3.ApplyFontsFromGlobal() end
-    ScheduleColorFanout("MSUF2_AURA_COLOR_FANOUT", "auras", function()
-        CallGlobal("MSUF_GF_ForceAuraTextColorRefresh")
-    end)
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestAuraFonts) == "function" then
+        apply.RequestAuraFonts("shared", "MSUF2_AURA_COLORS")
+    else
+        ApplyAuras()
+    end
+    CallGlobal("MSUF_GF_ForceAuraTextColorRefresh")
 end
 local function ApplyClassPowerColors()
-    ApplyColors()
-    ScheduleColorFanout("MSUF2_CLASSPOWER_COLOR_FANOUT", "classpower", function()
-        CallGlobal("MSUF_ClassPower_InvalidateColors")
-        CallGlobal("MSUF_ClassPower_Refresh")
-        CallGlobal("MSUF_ClassPower_RefreshTextures")
-    end)
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestClassPower) == "function" then
+        return apply.RequestClassPower("MSUF2_CLASSPOWER_COLORS", { colors = true, playerHP = true }, { preview = true, applyAll = false, colors = true, colorScope = "player" })
+    end
+    RequestGeneral("MSUF2_CLASSPOWER_COLORS", { preview = true, applyAll = false, colors = true, colorScope = "player" })
+    CallGlobal("MSUF_ClassPower_InvalidateColors")
 end
 local function ApplyPortraitColors(reason)
-    ApplyColors()
-    ScheduleColorFanout("MSUF2_PORTRAIT_COLOR_FANOUT", "portrait", function()
-        CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason or "PORTRAIT_COLORS")
-        CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "PORTRAIT_COLORS")
-    end)
+    reason = reason or "PORTRAIT_COLORS"
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestGeneral) == "function" then
+        return apply.RequestGeneral(reason, { preview = true, applyAll = true, colors = true })
+    end
+    CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
+    CallGlobal("MSUF_UFPreview_RequestRefresh", reason)
 end
 local COLOR_CLASS_TOKENS = WL [[WARRIOR PALADIN HUNTER ROGUE PRIEST DEATHKNIGHT SHAMAN MAGE WARLOCK MONK DRUID DEMONHUNTER EVOKER]]
 local COLOR_CLASS_LABELS = KeyLabelMap [[WARRIOR=Warrior|PALADIN=Paladin|HUNTER=Hunter|ROGUE=Rogue|PRIEST=Priest|DEATHKNIGHT=Death Knight|SHAMAN=Shaman|MAGE=Mage|WARLOCK=Warlock|MONK=Monk|DRUID=Druid|DEMONHUNTER=Demon Hunter|EVOKER=Evoker]]
@@ -233,7 +205,6 @@ end
 local function SetHighlightRGB(r, g, b)
     G().highlightColor = { r, g, b }
     ApplyColors()
-    if MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate(nil) end
     --- Repaint the mouseover highlight cache so the new colour applies live.
     if _G.MSUF_RefreshMouseoverHighlight then _G.MSUF_RefreshMouseoverHighlight() end
 end
@@ -943,10 +914,7 @@ local function BuildColors(ctx)
         SetHighlightRGB(HighlightRGB())
         SetControlEnabled(highlightColor, G().highlightEnabled ~= false)
     end)
-    CH.TableColorAt(ctx, highlight, "Boss target highlight color", 12, -104, G, "bossTargetHighlightColor", 1, 0.82, 0, function()
-        ApplyColors()
-        if MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate(nil) end
-    end)
+    CH.TableColorAt(ctx, highlight, "Boss target highlight color", 12, -104, G, "bossTargetHighlightColor", 1, 0.82, 0, ApplyBossTargetHighlightColor)
     M.BindGateGroup(ctx, nil, {
         { controls = highlightColor, on = function() return G().highlightEnabled ~= false end },
     })

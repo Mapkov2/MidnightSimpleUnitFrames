@@ -28,13 +28,21 @@ end
 local function ProfileStop(bucket, key, started)
     if started and M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then M.ProfileStop(bucket, key, started) end
 end
+local castbarPageWorkPending = {}
 local function ScheduleCastbarPageWork(key, delay, fn)
-    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
-        _G.MSUF_ScheduleDelayOnce(key, delay or CASTBAR_PAGE_WORK_DELAY, fn)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(delay or CASTBAR_PAGE_WORK_DELAY, fn)
+    if type(fn) ~= "function" then return end
+    key = key or fn
+    if castbarPageWorkPending[key] then return end
+    castbarPageWorkPending[key] = fn
+    local function Run()
+        local cb = castbarPageWorkPending[key]
+        castbarPageWorkPending[key] = nil
+        if type(cb) == "function" then cb() end
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay or CASTBAR_PAGE_WORK_DELAY, Run)
     else
-        fn()
+        Run()
     end
 end
 local function NormalizeCastbarPreviewUnit(unit)
@@ -90,9 +98,6 @@ local function BuildCastbars(ctx)
     b:GlobalStyleHeader("Castbar", "Castbar behavior, textures and interrupt indicators.", 72)
     local function ApplyCastbarTextures(reason)
         Call("MSUF_UpdateCastbarTextures_Immediate")
-        Call("MSUF_UpdateCastbarTextures")
-        Call("MSUF_UpdateCastbarVisuals_Immediate")
-        Call("MSUF_UpdateCastbarVisuals")
         Call("MSUF_UpdateBossCastbarPreview")
         ApplyCastbars(reason or "MSUF2_CASTBAR_TEXTURES")
     end

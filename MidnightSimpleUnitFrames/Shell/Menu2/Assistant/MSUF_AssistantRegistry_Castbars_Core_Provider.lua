@@ -81,7 +81,7 @@ function A.CastbarsRegistry.BuildPlayerCastbarProviderRegistrar(ctx)
             end,
             set = function(value) SetCastbarProvider(unit, value) end,
             apply = function()
-                ApplyCastbar("MSUF_ASSISTANT_CASTBAR_PROVIDER")
+                ApplyCastbar("MSUF_ASSISTANT_CASTBAR_PROVIDER", unit)
                 CallGlobal("MSUF_SuppressBlizzardPlayerCastbars")
             end,
             combatSafe = false,

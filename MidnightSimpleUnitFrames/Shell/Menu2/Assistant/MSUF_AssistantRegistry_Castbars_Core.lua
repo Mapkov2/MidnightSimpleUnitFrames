@@ -69,7 +69,7 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
             aliases = aliases,
             get = function() return GetCastbarBackend(unit, GeneralDB()) ~= "HIDE" end,
             set = function(value) SetCastbarBackend(unit, value and true or false) end,
-            apply = function() ApplyCastbar("MSUF_ASSISTANT_CASTBAR_ENABLE") end,
+            apply = function() ApplyCastbar("MSUF_ASSISTANT_CASTBAR_ENABLE", unit) end,
             combatSafe = false,
         })
     end
@@ -95,7 +95,7 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
             set = function(value)
                 GeneralDB()[key] = ClampNumber(value, minValue, maxValue, 1)
             end,
-            apply = function() ApplyCastbar("MSUF_ASSISTANT_CASTBAR_GEOMETRY") end,
+            apply = function() ApplyCastbar("MSUF_ASSISTANT_CASTBAR_GEOMETRY", unit) end,
             combatSafe = false,
         })
     end
@@ -107,7 +107,7 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
             frameType = frameType,
             valueAliases = valueAliases,
             reason = "MSUF_ASSISTANT_CASTBAR_DETAIL",
-            apply = ApplyCastbar,
+            apply = function(reason) ApplyCastbar(reason or "MSUF_ASSISTANT_CASTBAR_DETAIL", unit) end,
         })
     end
 
@@ -129,7 +129,7 @@ function A.CastbarsRegistry.BuildCoreContext(ctx)
             set = function(value)
                 GeneralDB()[dbKey] = value and true or false
             end,
-            apply = function() ApplyCastbar("MSUF_ASSISTANT_CASTBAR_DETAIL") end,
+            apply = function() ApplyCastbar("MSUF_ASSISTANT_CASTBAR_DETAIL", unit) end,
             combatSafe = false,
         })
     end

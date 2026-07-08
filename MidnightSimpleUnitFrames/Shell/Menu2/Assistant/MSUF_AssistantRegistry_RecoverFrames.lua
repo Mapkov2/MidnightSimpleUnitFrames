@@ -44,6 +44,7 @@ Registry:RegisterAction({
     combatSafe = false,
     confirmRequired = true,
     captureProfileSnapshot = true,
+    aliasNoArgs = true,
     -- Aliases avoid the exact "reset [all] frame positions" phrasing owned by
     -- the reset_all_unit_positions action; these lean on the rescue framing.
     aliases = {

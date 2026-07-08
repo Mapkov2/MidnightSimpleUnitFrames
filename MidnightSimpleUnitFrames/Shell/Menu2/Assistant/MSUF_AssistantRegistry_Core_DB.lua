@@ -74,13 +74,18 @@ function A.RegistryCoreBuilders.BuildDBHelpers(ctx)
     end
     A.ClampNumber = A.ClampNumber or ClampNumber
 
-    local ApplyService = (MRef and MRef.ApplyService) or _G.MSUF_Menu2_ApplyService
-    local CallGlobal = (type(ApplyService) == "table" and type(ApplyService.CallGlobal) == "function")
-        and ApplyService.CallGlobal
-        or function(name, ...)
-            local fn = _G[name]
-            if type(fn) == "function" then fn(...) end
+    local function CurrentApplyService()
+        return (MRef and MRef.ApplyService) or (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+    end
+
+    local function CallGlobal(name, ...)
+        local ApplyService = CurrentApplyService()
+        if type(ApplyService) == "table" and type(ApplyService.CallGlobal) == "function" then
+            return ApplyService.CallGlobal(name, ...)
         end
+        local fn = _G[name]
+        if type(fn) == "function" then return fn(...) end
+    end
 
     return {
         EnsureDB = EnsureDB,

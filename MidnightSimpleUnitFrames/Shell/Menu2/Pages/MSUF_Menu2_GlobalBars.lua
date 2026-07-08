@@ -19,6 +19,8 @@ local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
 local BARS_PAGE_WORK_DELAY = 0.04
+local FRAME_OUTLINE_LEVEL_DEFAULT = 35
+local FRAME_OUTLINE_LEVEL_MAX = 60
 local DISPEL_BORDER_121_PTR_DISABLED = false
 local PURGE_BORDER_121_PTR_DISABLED = true
 local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel uses native 12.1 AuraContainer detection. Purge border stays disabled until Blizzard exposes a safe purge/stealable filter."
@@ -32,14 +34,38 @@ local ROUNDED_PREVIEW_EDGE = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_edge_4x.t
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
 local Call, DB, G, Bars, Unit, ReadG, SetG, ReadGBool, SetGBool, ReadB, SetB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, SetPriorityOrder, NormalizePriorityKey, RefreshBorderTestModes, SetAbsorbTextureTest, ClearAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars = M.Pick(GP, [[Call DB G Bars Unit ReadG SetG ReadGBool SetGBool ReadB SetB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor SetPriorityOrder NormalizePriorityKey RefreshBorderTestModes SetAbsorbTextureTest ClearAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars]])
 NormalizePriorityKey = NormalizePriorityKey or function(key) return key end
+local barsPageWorkPending = {}
 local function ScheduleBarsPageWork(key, delay, fn)
-    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
-        _G.MSUF_ScheduleDelayOnce(key, delay or BARS_PAGE_WORK_DELAY, fn)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(delay or BARS_PAGE_WORK_DELAY, fn)
-    else
-        fn()
+    if type(fn) ~= "function" then return end
+    key = key or fn
+    if barsPageWorkPending[key] then return end
+    barsPageWorkPending[key] = fn
+    local function Run()
+        local cb = barsPageWorkPending[key]
+        barsPageWorkPending[key] = nil
+        if type(cb) == "function" then cb() end
     end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay or BARS_PAGE_WORK_DELAY, Run)
+    else
+        Run()
+    end
+end
+local function NormalizeFrameOutlineLevelOffset(value, fallback)
+    local n = floor((tonumber(value) or fallback or FRAME_OUTLINE_LEVEL_DEFAULT) + 0.5)
+    if n < 0 then return 0 end
+    if n > FRAME_OUTLINE_LEVEL_MAX then return FRAME_OUTLINE_LEVEL_MAX end
+    return n
+end
+local function RefreshFrameOutlineLevelLabel(slider, value)
+    if not slider then return end
+    value = NormalizeFrameOutlineLevelOffset(value, FRAME_OUTLINE_LEVEL_DEFAULT)
+    if slider._msuf2Title then
+        slider._msuf2Title:SetText(string.format(M.Tr("Frame level offset: +%d"), value))
+    end
+end
+local function ApplyService()
+    return M.ApplyService or _G.MSUF_Menu2_ApplyService
 end
 local function BarsProfileStart()
     return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
@@ -82,38 +108,124 @@ local function BuildBars(ctx)
         if scope == "gf_raid" then return "raid" end
         return scope
     end
+    local function CurrentGroupFrameRefreshKinds()
+        local scope = CurrentBarsScope()
+        if scope == "gf_party" then return "party" end
+        if scope == "gf_raid" then return "raid", "mythicraid" end
+        if scope == "gf_mythicraid" then return "mythicraid" end
+        return nil
+    end
+    local function UnitApplyKey(unit)
+        unit = tostring(unit or "")
+        if unit:match("^boss%d+$") then return "boss" end
+        return unit
+    end
+    local function RequestUnitRuntime(unit, reason, opts)
+        unit = UnitApplyKey(unit)
+        if unit == "" then return false end
+        opts = opts or { preview = true }
+        local applyService = ApplyService()
+        if applyService and type(applyService.RequestUnit) == "function" then
+            return applyService.RequestUnit(unit, reason or "MSUF2_BARS_UNIT_RUNTIME", opts) ~= false
+        end
+        if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+            return Call("MSUF_UFCore_NotifyConfigChanged", unit, true, true, reason or "MSUF2_BARS_UNIT_RUNTIME")
+        end
+        return false
+    end
+    local function RequestUnitsRuntime(units, reason, opts)
+        local seen
+        local did = false
+        for i = 1, #units do
+            local unit = UnitApplyKey(units[i])
+            if unit ~= "" then
+                if not seen then seen = {} end
+                if not seen[unit] then
+                    seen[unit] = true
+                    did = RequestUnitRuntime(unit, reason, opts) or did
+                end
+            end
+        end
+        return did
+    end
+    local function RequestGroupFrameDirty(dirty, reason)
+        local applyService = ApplyService()
+        if not applyService then return false end
+        local kindA, kindB = CurrentGroupFrameRefreshKinds()
+        if type(applyService.RequestGroupDirtyMask) == "function" then
+            if kindA then
+                local did = applyService.RequestGroupDirtyMask(kindA, dirty, reason or "MSUF2_GF_BARS_RUNTIME") ~= false
+                if kindB then did = (applyService.RequestGroupDirtyMask(kindB, dirty, reason or "MSUF2_GF_BARS_RUNTIME") ~= false) or did end
+                return did
+            end
+            return applyService.RequestGroupDirtyMask(nil, dirty, reason or "MSUF2_GF_BARS_RUNTIME") ~= false
+        end
+        if type(applyService.RequestGroup) == "function" then
+            if kindA then
+                local did = applyService.RequestGroup(kindA, "visual", reason or "MSUF2_GF_BARS_RUNTIME") ~= false
+                if kindB then did = (applyService.RequestGroup(kindB, "visual", reason or "MSUF2_GF_BARS_RUNTIME") ~= false) or did end
+                return did
+            end
+            return applyService.RequestGroup(nil, "visual", reason or "MSUF2_GF_BARS_RUNTIME") ~= false
+        end
+        return false
+    end
+    local function GroupKindMatches(frame, kindA, kindB)
+        if not kindA then return true end
+        local frameKind = frame and frame._msufGFKind
+        return frameKind == kindA or frameKind == kindB
+    end
     local function RefreshGroupFrameVisuals()
         -- Group frames have their own visual caches. Invalidate them explicitly when global
         -- bar settings can affect party/raid previews or live secure children.
         local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        local dirty = (GF and GF.DIRTY_VISUAL) or true
+        if RequestGroupFrameDirty(dirty, "MSUF2_GF_BARS_VISUALS") then return end
         if not GF then return end
+        local kindA, kindB = CurrentGroupFrameRefreshKinds()
         if GF.InvalidateConfCache then GF.InvalidateConfCache() end
         if GF.RefreshVisuals then
-            GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
+            if kindA then
+                GF.RefreshVisuals(kindA, dirty)
+                if kindB then GF.RefreshVisuals(kindB, dirty) end
+            else
+                GF.RefreshVisuals(nil, dirty)
+            end
         elseif _G.MSUF_GF_RefreshOverlays then
             _G.MSUF_GF_RefreshOverlays()
         end
     end
     local function RefreshGroupFrameBorders()
         local GF = _G.MSUF_NS and _G.MSUF_NS.GF
+        local dirty = (GF and (GF.DIRTY_BORDER or GF.DIRTY_VISUAL)) or true
+        if RequestGroupFrameDirty(dirty, "MSUF2_GF_BARS_BORDER") then return end
         if not GF then return end
+        local kindA, kindB = CurrentGroupFrameRefreshKinds()
         if GF.InvalidateConfCache then GF.InvalidateConfCache() end
         local refreshBorder = _G.MSUF_GF_RefreshBorder
         if refreshBorder and GF.frames then
             for frame in pairs(GF.frames) do
-                if GF.BuildFrameCache then GF.BuildFrameCache(frame) end
-                local c = frame and frame._c
-                if frame and frame.unit and c and GF.DispelScanActive and GF.DispelScanActive(c) and GF._UpdateDispel then
-                    GF._UpdateDispel(frame, frame.unit)
-                else
-                    refreshBorder(frame, frame and frame.unit)
+                if GroupKindMatches(frame, kindA, kindB) then
+                    if GF.BuildFrameCache then GF.BuildFrameCache(frame) end
+                    local c = frame and frame._c
+                    if frame and frame.unit and c and GF.DispelScanActive and GF.DispelScanActive(c) and GF._UpdateDispel then
+                        GF._UpdateDispel(frame, frame.unit)
+                    else
+                        refreshBorder(frame, frame and frame.unit)
+                    end
                 end
             end
         elseif GF.RefreshVisuals then
-            GF.RefreshVisuals(nil, GF.DIRTY_BORDER or GF.DIRTY_VISUAL)
+            if kindA then
+                GF.RefreshVisuals(kindA, dirty)
+                if kindB then GF.RefreshVisuals(kindB, dirty) end
+            else
+                GF.RefreshVisuals(nil, dirty)
+            end
         end
     end
-    local function RefreshUnitBorders(units)
+    local function RefreshUnitBorders(units, reason)
+        if RequestUnitsRuntime(units, reason or "MSUF2_BORDER", { preview = true }) then return end
         local UF = MSUF and MSUF.UF
         local frames = UF and UF.frames
         for i = 1, #units do
@@ -124,6 +236,8 @@ local function BuildBars(ctx)
     end
     local UNITFRAME_AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
     local function RefreshUnitAuras(units, reason)
+        reason = reason or "MSUF2_UF_DISPEL_OVERLAY"
+        if RequestUnitsRuntime(units, reason, { preview = true, auras = true, notify = false }) then return end
         local UF = MSUF and MSUF.UF
         local A3 = MSUF and MSUF.MSUF_Auras3 or _G.MSUF_Auras3
         local frames = UF and UF.frames
@@ -132,7 +246,7 @@ local function BuildBars(ctx)
             local spec = UF and UF.Config and UF.Config.RefreshUnit and UF.Config.RefreshUnit(unit)
             local frame = (frames and frames[unit]) or _G["MSUF_" .. tostring(unit)]
             if frame and UF and type(UF.ApplyElementToFrame) == "function" then
-                UF.ApplyElementToFrame(frame, "Auras", spec or frame.MSUFSpec, reason or "MSUF2_UF_DISPEL_OVERLAY")
+                UF.ApplyElementToFrame(frame, "Auras", spec or frame.MSUFSpec, reason)
             elseif A3 and type(A3.RefreshUnit) == "function" then
                 A3.RefreshUnit(unit)
             end
@@ -157,6 +271,10 @@ local function BuildBars(ctx)
     end
     local outlineRuntimeQueued = false
     local function RequestOutlineRuntime()
+        local applyService = ApplyService()
+        if applyService and type(applyService.RequestBarOutline) == "function" then
+            return applyService.RequestBarOutline("MSUF2_BAR_OUTLINE", CurrentBarsScope())
+        end
         if outlineRuntimeQueued then return end
         outlineRuntimeQueued = true
         ScheduleBarsPageWork("MSUF2_BARS_OUTLINE_RUNTIME", BARS_PAGE_WORK_DELAY, function()
@@ -170,7 +288,7 @@ local function BuildBars(ctx)
         Call("MSUF_UFCore_RefreshSettingsCache", "MSUF2_AGGRO_BORDER_RUNTIME")
         Call("MSUF_ApplyBarOutlineThickness_All")
         Call("MSUF_AggroOutline_ApplyEventRegistration")
-        RefreshUnitBorders({ "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" })
+        RefreshUnitBorders({ "player", "target", "focus", "boss" }, "MSUF2_AGGRO_BORDER_RUNTIME")
         RefreshGroupFrameBorders()
         RefreshGroupFrameVisuals()
     end
@@ -179,20 +297,25 @@ local function BuildBars(ctx)
         Call("MSUF_ApplyBarOutlineThickness_All")
         Call("MSUF_DispelOutline_ApplyEventRegistration")
         Call("MSUF_RefreshDispelOutlineStates", true)
-        RefreshUnitBorders({ "player", "target", "focus", "targettarget" })
+        RefreshUnitBorders({ "player", "target", "focus", "targettarget" }, "MSUF2_DISPEL_BORDER_RUNTIME")
         Call("MSUF_RefreshUnitDispelOverlays")
         RefreshGroupFrameBorders()
         if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(true, BorderTestScope()) end
         if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(true, BorderTestScope()) end
     end
     local function ApplyBossTargetBorderRuntime()
-        Call("MSUF_UFCore_RefreshSettingsCache", "MSUF2_BOSS_TARGET_BORDER_RUNTIME")
-        if MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate(nil) end
-        RefreshUnitBorders({ "boss1", "boss2", "boss3", "boss4", "boss5" })
+        local reason = "MSUF2_BOSS_TARGET_BORDER_RUNTIME"
+        Call("MSUF_UFCore_RefreshSettingsCache", reason)
+        if RequestUnitRuntime("boss", reason, { preview = true }) then return end
+        if MSUF and MSUF.UF and MSUF.UF.RefreshBorders then
+            MSUF.UF.RefreshBorders("boss")
+        else
+            RefreshUnitBorders({ "boss1", "boss2", "boss3", "boss4", "boss5" })
+        end
     end
     local function ApplyHighlightPriorityRuntime()
         Call("MSUF_UFCore_RefreshSettingsCache", "MSUF2_HIGHLIGHT_PRIORITY_RUNTIME")
-        RefreshUnitBorders({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss1", "boss2", "boss3", "boss4", "boss5" })
+        RefreshUnitBorders({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }, "MSUF2_HIGHLIGHT_PRIORITY_RUNTIME")
         RefreshGroupFrameBorders()
         Call("MSUF_UFPreview_RequestRefresh", "MSUF2_HIGHLIGHT_PRIORITY")
     end
@@ -208,6 +331,10 @@ local function BuildBars(ctx)
     local highlightPriorityRuntimeQueued = false
     local allHighlightBorderRuntimeQueued = false
     local function RequestAggroBorderRuntime()
+        local applyService = ApplyService()
+        if applyService and type(applyService.RequestAggroBorder) == "function" then
+            return applyService.RequestAggroBorder("MSUF2_AGGRO_BORDER_RUNTIME", CurrentBarsScope())
+        end
         if aggroBorderRuntimeQueued then return end
         aggroBorderRuntimeQueued = true
         ScheduleBarsPageWork("MSUF2_AGGRO_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
@@ -218,6 +345,13 @@ local function BuildBars(ctx)
         end)
     end
     local function RequestDispelPurgeBorderRuntime()
+        local applyService = ApplyService()
+        if applyService and type(applyService.RequestDispelPurgeBorder) == "function" then
+            local result = applyService.RequestDispelPurgeBorder("MSUF2_DISPEL_PURGE_BORDER_RUNTIME", CurrentBarsScope())
+            if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(true, BorderTestScope()) end
+            if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(true, BorderTestScope()) end
+            return result
+        end
         if dispelPurgeBorderRuntimeQueued then return end
         dispelPurgeBorderRuntimeQueued = true
         ScheduleBarsPageWork("MSUF2_DISPEL_PURGE_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
@@ -238,6 +372,10 @@ local function BuildBars(ctx)
         end)
     end
     local function RequestBossTargetBorderRuntime()
+        local applyService = ApplyService()
+        if applyService and type(applyService.RequestBossTargetBorder) == "function" then
+            return applyService.RequestBossTargetBorder("MSUF2_BOSS_TARGET_BORDER_RUNTIME", "boss")
+        end
         if bossTargetBorderRuntimeQueued then return end
         bossTargetBorderRuntimeQueued = true
         ScheduleBarsPageWork("MSUF2_BOSS_TARGET_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
@@ -258,6 +396,10 @@ local function BuildBars(ctx)
         end)
     end
     local function RequestAllHighlightBorderRuntime()
+        local applyService = ApplyService()
+        if applyService and type(applyService.RequestHighlightBorders) == "function" then
+            return applyService.RequestHighlightBorders("MSUF2_ALL_HIGHLIGHT_BORDER_RUNTIME", CurrentBarsScope())
+        end
         if allHighlightBorderRuntimeQueued then return end
         allHighlightBorderRuntimeQueued = true
         ScheduleBarsPageWork("MSUF2_ALL_HIGHLIGHT_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
@@ -268,18 +410,26 @@ local function BuildBars(ctx)
         end)
     end
     local function ApplyRoundedRuntime()
+        local applyService = ApplyService()
+        if applyService and type(applyService.RequestRoundedBars) == "function" then
+            return applyService.RequestRoundedBars("MSUF2_ROUNDED", CurrentBarsScope())
+        end
         Call("MSUF_ApplyRoundedUnitframes")
         if M.RequestGeneralApply then
-            M.RequestGeneralApply("MSUF2_ROUNDED", { preview = true, applyAll = false, bars = true })
+            M.RequestGeneralApply("MSUF2_ROUNDED", { preview = true, applyAll = false, bars = true, barsScope = CurrentBarsScope() })
+        elseif Call("MSUF_UFCore_NotifyConfigChanged", nil, true, true, "MSUF2_ROUNDED") then
+            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_ROUNDED")
         else
             Call("MSUF_RefreshAllFrames")
             Call("MSUF_UFPreview_RequestRefresh", "MSUF2_ROUNDED")
         end
         RefreshGroupFrameVisuals()
-        Call("MSUF_GF_RefreshPreviewLayout", "party")
-        Call("MSUF_GF_RefreshPreviewLayout", "raid")
-        Call("MSUF_GF_RefreshPreviewLayout", "mythicraid")
-        Call("MSUF_GF_RefreshPreviewBox")
+        if not RequestGroupFrameDirty(true, "MSUF2_ROUNDED_GF_PREVIEW") then
+            Call("MSUF_GF_RefreshPreviewLayout", "party")
+            Call("MSUF_GF_RefreshPreviewLayout", "raid")
+            Call("MSUF_GF_RefreshPreviewLayout", "mythicraid")
+            Call("MSUF_GF_RefreshPreviewBox")
+        end
     end
     local function ShowRoundedReloadRequiredPopup()
         if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
@@ -545,10 +695,23 @@ local function BuildBars(ctx)
             local strength = tonumber(GradientScopeGet("gradientStrength", nil))
             if not (strength and strength > 0) then GradientScopeSet("gradientStrength", 0.45) end
         end
-        M.RequestGeneralApply(reason or "MSUF2_GRADIENT", { preview = true, applyAll = false, notify = false, bars = true })
+        local scope = CurrentBarsScope()
+        local applyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
+        if applyService and type(applyService.RequestBarGradients) == "function" then
+            applyService.RequestBarGradients(reason or "MSUF2_GRADIENT", scope)
+            return
+        end
+        M.RequestGeneralApply(reason or "MSUF2_GRADIENT", {
+            preview = true,
+            applyAll = false,
+            notify = false,
+            bars = true,
+            barGradients = true,
+            barsScope = scope,
+        })
         ScheduleBarsPageWork("MSUF2_BARS_GRADIENT_RUNTIME", BARS_PAGE_WORK_DELAY, function()
             local started = BarsProfileStart()
-            Call("MSUF_UpdateAllBarGradients")
+            Call("MSUF_UpdateAllBarGradients", scope)
             BarsProfileStop("GradientRuntime", started)
         end)
     end
@@ -896,7 +1059,7 @@ local function BuildBars(ctx)
         SetControlEnabled(healPredToggle, groupScope and scopedActive or sharedActive)
         SetControlEnabled(absorbControls.healAnchor, scopedActive and healPredOn)
     end))
-    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 170, false)
+    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 220, false)
     local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, 300)
     M.BindNumberWidget(ctx, outlineSlider,
         function() return tonumber(BarScopeGetBars("barOutlineThickness", 1)) or 1 end,
@@ -906,8 +1069,25 @@ local function BuildBars(ctx)
             RequestOutlineRuntime()
         end,
         1, { step = 1, roundStep = true })
+    outline._msuf2OutlineLevel = W.Slider(outline, "", 0, FRAME_OUTLINE_LEVEL_MAX, 1, 300)
+    M.BindNumberWidget(ctx, outline._msuf2OutlineLevel,
+        function()
+            return NormalizeFrameOutlineLevelOffset(BarScopeGetBars("barOutlineLevelOffset", FRAME_OUTLINE_LEVEL_DEFAULT), FRAME_OUTLINE_LEVEL_DEFAULT)
+        end,
+        function(v)
+            BarScopeSetBars("barOutlineLevelOffset", NormalizeFrameOutlineLevelOffset(v, FRAME_OUTLINE_LEVEL_DEFAULT), "MSUF2_BAR_OUTLINE_LEVEL")
+            ApplyBars("MSUF2_BAR_OUTLINE_LEVEL")
+            RequestOutlineRuntime()
+        end,
+        FRAME_OUTLINE_LEVEL_DEFAULT, { step = 1, roundStep = true })
+    outline._msuf2OutlineLevel:HookScript("OnValueChanged", function(self, value)
+        if self._msuf2Refreshing then return end
+        RefreshFrameOutlineLevelLabel(self, value)
+    end)
+    M.AddRefresher(ctx, function() RefreshFrameOutlineLevelLabel(outline._msuf2OutlineLevel, BarScopeGetBars("barOutlineLevelOffset", FRAME_OUTLINE_LEVEL_DEFAULT)) end)
+    RefreshFrameOutlineLevelLabel(outline._msuf2OutlineLevel, BarScopeGetBars("barOutlineLevelOffset", FRAME_OUTLINE_LEVEL_DEFAULT))
     local outlineColor = W.Color(outline, "Outline color")
-    W.MoveWidget(outlineColor, outline, 30, -96)
+    W.MoveWidget(outlineColor, outline, 30, -150)
     M.BindColor(ctx, outlineColor,
         function()
             return tonumber(BarScopeGet("barOutlineColorR", ReadG("barOutlineColorR", 0))) or 0,
@@ -921,7 +1101,7 @@ local function BuildBars(ctx)
             end
         end)
     M.BindGateGroup(ctx, nil, {
-        { controls = { outlineSlider, outlineColor }, on = ScopedBarsControlsActive },
+        { controls = { outlineSlider, outline._msuf2OutlineLevel, outlineColor }, on = ScopedBarsControlsActive },
     })
     local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", 246, true)
     local roundLeftX = 30

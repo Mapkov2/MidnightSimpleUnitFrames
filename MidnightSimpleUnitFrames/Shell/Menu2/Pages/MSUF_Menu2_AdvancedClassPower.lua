@@ -25,14 +25,31 @@ local MoveWidget = W.MoveWidget or AP.MoveWidget
 local SetControlsEnabled = W.SetControlsEnabled
 local CPPreview = M.ClassPowerPreview or {}
 local function AddTooltip(control, title, body) if M.AddTooltip then M.AddTooltip(control, title, body, { hook = true, owner = "ANCHOR_RIGHT" }) end end
-local function ApplyClassPower()
-    -- ClassPower spans several runtimes: core bars, textures, cooldown-manager width binding,
-    -- inline preview, and global preview alpha. Keep the page fanout centralized here.
-    CallGlobal("MSUF_ClassPower_Refresh")
-    CallGlobal("MSUF_ClassPower_RefreshTextures")
-    CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
+local APPLY_CLASSPOWER_GENERAL = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
+local APPLY_CLASSPOWER_TEXT_GENERAL = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
+local CLASSPOWER_FULL = { full = true, cdm = true }
+local CLASSPOWER_VISUALS = { visuals = true }
+local CLASSPOWER_TEXT = { fonts = true, text = true }
+local CLASSPOWER_QUICK_RUNTIME = { full = true, cdm = true, playerHP = true, anchor = true, syncNow = false }
+local CLASSPOWER_QUICK_FLAGS = { unit = "player", preview = true, applyAll = false, power = true, classpower = true, classpowerApplied = true }
+local function ApplyClassPowerRuntime(reason, runtime, flags)
+    local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    if ApplyService and type(ApplyService.RequestClassPower) == "function" then
+        RefreshClassPowerInlinePreview()
+        return ApplyService.RequestClassPower(reason or "MSUF2_CLASSPOWER", runtime, flags or APPLY_CLASSPOWER_GENERAL)
+    end
+    CallGlobal("MSUF_ClassPower_Apply", runtime)
     RefreshClassPowerInlinePreview()
-    M.RequestGeneralApply("MSUF2_CLASSPOWER", { preview = true, applyAll = false, classpower = true })
+    M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER", flags or APPLY_CLASSPOWER_GENERAL)
+end
+local function ApplyClassPower()
+    ApplyClassPowerRuntime("MSUF2_CLASSPOWER", CLASSPOWER_FULL, APPLY_CLASSPOWER_GENERAL)
+end
+local function ApplyClassPowerVisuals()
+    ApplyClassPowerRuntime("MSUF2_CLASSPOWER_VISUALS", CLASSPOWER_VISUALS, APPLY_CLASSPOWER_GENERAL)
+end
+local function ApplyClassPowerText()
+    ApplyClassPowerRuntime("MSUF2_CLASSPOWER_TEXT", CLASSPOWER_TEXT, APPLY_CLASSPOWER_TEXT_GENERAL)
 end
 local TextureValues = M.StatusBarTextureItems
 local VT, VTP = M.ValueTextList, M.ValueTextPairs
@@ -205,18 +222,56 @@ local function BindBarsAlphaPercent(ctx, section, label, key, default, apply, st
         (default or 0) * 100, { step = step or 5, roundStep = true })
     return slider
 end
-local APPLY_DETACHED_POWER = { preview = true, power = true, applyAll = false }
-local APPLY_DETACHED_POWER_TEXT = { preview = true, power = true, text = true, fonts = true, applyAll = false }
-local APPLY_PLAYER_HP = { preview = true, applyAll = false, classpower = true }
-local APPLY_PLAYER_HP_TEXT = { preview = true, text = true, fonts = true, applyAll = false }
+local APPLY_DETACHED_POWER = { preview = true, power = true, detachedPowerBar = true, applyAll = false, unit = "player", classpowerApplied = true }
+local APPLY_DETACHED_POWER_TEXT = { preview = true, power = true, text = true, fonts = true, applyAll = false, unit = "player", classpowerApplied = true }
+local APPLY_PLAYER_HP = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
+local APPLY_PLAYER_HP_TEXT = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
+local CP_APPLY_DETACHED_POWER = { anchor = true, cdm = true, playerHP = true, syncNow = false }
+local CP_APPLY_PLAYER_HP = { playerHP = true }
+local CP_APPLY_PLAYER_HP_TEXTURES = { playerHPTextures = true }
+
+local function MergeClassPowerRuntime(dst, src)
+    if type(src) ~= "table" then return dst end
+    dst = type(dst) == "table" and dst or {}
+    for key, value in pairs(src) do
+        if value == true then
+            dst[key] = true
+        elseif value == false and key == "syncNow" then
+            dst[key] = false
+        end
+    end
+    return dst
+end
+
 local function ApplyClassPowerPage(reason, flags, ...)
-    for i = 1, select("#", ...) do CallGlobal(select(i, ...)) end
+    local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    local classPowerRuntime
+    for i = 1, select("#", ...) do
+        local action = select(i, ...)
+        if type(action) == "table" then
+            if ApplyService and type(ApplyService.RequestClassPower) == "function" then
+                classPowerRuntime = MergeClassPowerRuntime(classPowerRuntime, action)
+            else
+                CallGlobal("MSUF_ClassPower_Apply", action)
+            end
+        elseif type(action) == "function" then
+            action()
+        else
+            CallGlobal(action)
+        end
+    end
     RefreshClassPowerInlinePreview()
-    M.RequestGeneralApply(reason, flags)
+    if classPowerRuntime and ApplyService and type(ApplyService.RequestClassPower) == "function" then
+        return ApplyService.RequestClassPower(reason or "MSUF2_CLASSPOWER_PAGE", classPowerRuntime, flags)
+    end
+    if type(flags) == "table" and flags.unit and type(M.RequestUnitApply) == "function" then
+        M.RequestUnitApply(flags.unit, reason, flags)
+    else
+        M.RequestGeneralApply(reason, flags)
+    end
 end
 local function ApplyDetachedPowerBar()
-    ApplyClassPowerPage("MSUF2_DETACHED_POWER_BAR", APPLY_DETACHED_POWER,
-        "MSUF_DetachedPowerBar_RefreshTextures", "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_ClassPower_PlayerHP_Refresh")
+    ApplyClassPowerPage("MSUF2_DETACHED_POWER_BAR", APPLY_DETACHED_POWER, CP_APPLY_DETACHED_POWER)
 end
 local function ApplyDetachedPowerText()
     local db = M.EnsureDB()
@@ -224,21 +279,25 @@ local function ApplyDetachedPowerText()
         db.player.hpPowerTextOverride = nil
         if type(M.SyncDirectPowerTextOffsets) == "function" then M.SyncDirectPowerTextOffsets(db.player) end
     end
-    ApplyClassPowerPage("MSUF2_DETACHED_POWER_TEXT", APPLY_DETACHED_POWER_TEXT,
-        "MSUF_DetachedPowerBar_RefreshTextures", "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_ClassPower_PlayerHP_Refresh")
+    ApplyClassPowerPage("MSUF2_DETACHED_POWER_TEXT", APPLY_DETACHED_POWER_TEXT, CP_APPLY_PLAYER_HP)
 end
 local function ApplyDetachedPowerBarOutline()
-    CallGlobal("MSUF_ApplyBarOutlineThickness_All")
+    local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    if ApplyService and type(ApplyService.RequestBarOutline) == "function" then
+        ApplyService.RequestBarOutline("MSUF2_DETACHED_POWER_OUTLINE", "player")
+    else
+        CallGlobal("MSUF_ApplyBarOutlineThickness_All", "player")
+    end
     ApplyDetachedPowerBar()
 end
 local function ApplyPlayerHPBar()
-    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP", APPLY_PLAYER_HP, "MSUF_ClassPower_PlayerHP_Refresh")
+    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP", APPLY_PLAYER_HP, CP_APPLY_PLAYER_HP)
 end
 local function ApplyPlayerHPTextures()
-    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXTURES", APPLY_PLAYER_HP, "MSUF_ClassPower_PlayerHP_RefreshTextures")
+    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXTURES", APPLY_PLAYER_HP, CP_APPLY_PLAYER_HP_TEXTURES)
 end
 local function ApplyPlayerHPText()
-    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXT", APPLY_PLAYER_HP_TEXT, "MSUF_ClassPower_PlayerHP_Refresh")
+    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXT", APPLY_PLAYER_HP_TEXT, CP_APPLY_PLAYER_HP)
 end
 local function Player()
     local db = M.EnsureDB()
@@ -370,7 +429,9 @@ local function QuickGetVisibleCDM()
     return nil
 end
 local function QuickPlayerFrame()
-    return (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player) or _G.MSUF_player
+    local uf = MSUF and MSUF.UF
+    local frame = uf and type(uf.GetFrame) == "function" and uf.GetFrame("player") or nil
+    return frame or (uf and uf.frames and uf.frames.player) or _G.MSUF_player
 end
 local function QuickClassPowerVisible()
     local c = _G.MSUF_ClassPowerContainer
@@ -437,10 +498,18 @@ local function QuickApplyPhase1(offsets)
     })
 end
 local function QuickRefreshAll(reason)
+    reason = reason or "ClassPowerQuickSetup"
+    local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    if ApplyService and type(ApplyService.RequestClassPower) == "function" then
+        RefreshClassPowerInlinePreview()
+        return ApplyService.RequestClassPower(reason, CLASSPOWER_QUICK_RUNTIME, CLASSPOWER_QUICK_FLAGS)
+    end
     ApplyClassPower()
-    CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
-    CallGlobal("MSUF_ClassPower_PlayerHP_Refresh")
-    CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, false, true, reason or "ClassPowerQuickSetup")
+    if not CallGlobal("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", "player", true) then
+        CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
+    end
+    CallGlobal("MSUF_ClassPower_Apply", { playerHP = true })
+    CallGlobal("MSUF_UFCore_NotifyConfigChanged", "player", false, true, reason)
 end
 local function QuickMarkOffered()
     local db = M.EnsureDB()
@@ -779,13 +848,13 @@ local function BuildClassPower(ctx)
         width = min(620, styleInnerW), frames = styleTabFrames, defaultTab = "resources",
         x = styleLeftX, y = -44,
     })
-    M.Assign(cp, BuildBoundControls(resourcesFrame, Bars, ApplyClassPower, {
+    M.Assign(cp, BuildBoundControls(resourcesFrame, Bars, ApplyClassPowerVisuals, {
         { "color", "toggle", "Color by resource type", "classPowerColorByType", true },
         { "comboColor", "dropdown", "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260, "classPowerComboPointColorMode", "default" },
         { "fgTex", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "classPowerTexture", "" },
         { "bgTex", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "classPowerBgTexture", "" },
     }))
-    M.Assign(cp, BuildBoundControls(textFrame, Bars, ApplyClassPower, {
+    M.Assign(cp, BuildBoundControls(textFrame, Bars, ApplyClassPowerText, {
         { "font", "slider", "Font size", 6, 32, 1, 300, "classPowerFontSize", 16 },
         { "textX", "slider", "Text X", -200, 200, 1, 300, "classPowerTextOffsetX", 0 },
         { "textY", "slider", "Text Y", -200, 200, 1, 300, "classPowerTextOffsetY", 0 },

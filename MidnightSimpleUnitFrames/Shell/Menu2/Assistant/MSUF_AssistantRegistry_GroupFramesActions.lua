@@ -128,6 +128,20 @@ local function WordSet(words)
     return out
 end
 
+local function MaskHas(mask, flag)
+    mask = tonumber(mask) or 0
+    flag = tonumber(flag) or 0
+    if flag <= 0 then return false end
+    return mask % (flag * 2) >= flag
+end
+
+local function AddDirty(mask, flag)
+    if not flag then return mask or 0 end
+    mask = tonumber(mask) or 0
+    if MaskHas(mask, flag) then return mask end
+    return mask + flag
+end
+
 local GROUP_COPY_EXCLUDE = WordSet("offsetX offsetY point positionMode _hlMigrated")
 local GROUP_COPY_CATEGORIES = {
     { key = "general", keys = WordList("enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25") },
@@ -174,11 +188,96 @@ local function GroupConfig(kind)
     return db["gf_" .. tostring(kind)]
 end
 
-local function RefreshGroupCopyRuntime()
+local function GroupCopyDirtyMask(gf, scopes)
+    if not gf or type(scopes) ~= "table" then return nil end
+    if scopes.general then return nil end
+    if scopes.health or scopes.text or scopes.range or scopes.indicators or scopes.highlight or scopes.dstripe or scopes.features then
+        return gf.DIRTY_CONFIG or gf.DIRTY_ALL or gf.DIRTY_VISUAL
+    end
+    local dirty
+    if scopes.font then dirty = AddDirty(dirty, gf.DIRTY_FONT) end
+    if scopes.border then dirty = AddDirty(dirty, gf.DIRTY_BORDER) end
+    if scopes.auras then dirty = AddDirty(dirty, gf.DIRTY_AURAS) end
+    return dirty or gf.DIRTY_VISUAL
+end
+
+local function RefreshGroupCopyLegacy(dstKind, dirty, structural)
+    if not dstKind then return false end
+    local did = false
+    if structural then
+        if type(_G.MSUF_GF_RefreshGeometry) == "function" then _G.MSUF_GF_RefreshGeometry(dstKind); did = true end
+        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then _G.MSUF_GF_RefreshUnitBindings(dstKind); did = true end
+    end
+    if type(_G.MSUF_GF_RefreshVisuals) == "function" then _G.MSUF_GF_RefreshVisuals(dstKind, dirty); did = true end
+    return did
+end
+
+local function RequestGroupCopyRuntime(dstKind, dirty, structural)
+    if not dstKind then return false end
+    local apply = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+    local GP = M and M.GroupPage
+    if not apply then
+        if GP and type(GP.QueueGF) == "function" then
+            return GP.QueueGF(dstKind, structural and "rebuild" or "visual") ~= false
+        end
+        return false
+    end
+    if structural then
+        if type(apply.RequestGroup) == "function" then
+            return apply.RequestGroup(dstKind, "rebuild", "MSUF_ASSISTANT_GROUP_COPY")
+        end
+        if GP and type(GP.QueueGF) == "function" then
+            return GP.QueueGF(dstKind, "rebuild") ~= false
+        end
+        return false
+    end
+    if dirty and type(apply.RequestGroupDirtyMask) == "function" then
+        return apply.RequestGroupDirtyMask(dstKind, dirty, "MSUF_ASSISTANT_GROUP_COPY")
+    end
+    if type(apply.RequestGroup) == "function" then
+        return apply.RequestGroup(dstKind, "visual", "MSUF_ASSISTANT_GROUP_COPY")
+    end
+    if GP and type(GP.QueueGF) == "function" then
+        return GP.QueueGF(dstKind, "visual") ~= false
+    end
+    return false
+end
+
+local function RefreshGroupCopyRuntime(dstKind, scopes)
     local gf = MSUF and (MSUF.GF or MSUF.GroupFrames)
-    if gf and type(gf.RefreshAll) == "function" then gf.RefreshAll(); return end
-    if gf and type(gf.RebuildAll) == "function" then gf.RebuildAll(); return end
-    if gf and type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout() end
+    local dirty = GroupCopyDirtyMask(gf, scopes)
+    local structural = not (type(scopes) == "table" and scopes.general ~= true)
+    if RequestGroupCopyRuntime(dstKind, dirty, structural) then
+        return
+    end
+    if not gf then
+        RefreshGroupCopyLegacy(dstKind, dirty, structural)
+        return
+    end
+    if type(scopes) == "table" and scopes.general ~= true and type(gf.RefreshVisuals) == "function" then
+        gf.RefreshVisuals(dstKind, dirty)
+        if type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout(dstKind) end
+        return
+    end
+    if dstKind and type(gf.Rebuild) == "function" then
+        gf.Rebuild(dstKind)
+        if type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout(dstKind) end
+        return
+    end
+    if dstKind and type(gf.RefreshGeometry) == "function" then
+        gf.RefreshGeometry(dstKind)
+        if type(gf.RefreshUnitBindings) == "function" then gf.RefreshUnitBindings(dstKind) end
+        if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(dstKind, gf.DIRTY_ALL) end
+        if type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout(dstKind) end
+        return
+    end
+    if RefreshGroupCopyLegacy(dstKind, dirty or (gf and gf.DIRTY_ALL), structural) then
+        if type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout(dstKind) end
+        return
+    end
+    if type(gf.RefreshAll) == "function" then gf.RefreshAll(); return end
+    if type(gf.RebuildAll) == "function" then gf.RebuildAll(); return end
+    if type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout(dstKind) end
 end
 
 local function CopyGroupSettingsFallback(srcKind, dstKind, scopes)
@@ -210,7 +309,7 @@ local function CopyGroupSettingsFallback(srcKind, dstKind, scopes)
             if copy then dstConf[key] = DeepCopyGroupValue(value) end
         end
     end
-    RefreshGroupCopyRuntime()
+    RefreshGroupCopyRuntime(dstKind, scopes)
     return true
 end
 Registry:RegisterAction({

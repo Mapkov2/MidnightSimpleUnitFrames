@@ -18,36 +18,89 @@ function A.RegistryCoreBuilders.BuildBarApplyHelpers(ctx)
     local CallGlobal = ctx.CallGlobal
     local ApplyGeneral = ctx.ApplyGeneral
     local ApplyColors = ctx.ApplyColors
-    local MSUFRef = ctx.MSUF or MSUF
+    local MRef = ctx.M or M
     if type(CallGlobal) ~= "function" or type(ApplyGeneral) ~= "function" then return nil end
     if type(ApplyColors) ~= "function" then return nil end
-    local ApplyService = _G.MSUF_Menu2_ApplyService
 
-    local function RequestBars(reason)
+    local function CurrentApplyService()
+        return (MRef and MRef.ApplyService) or (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+    end
+
+    local function RequestBars(reason, scope)
+        local ApplyService = CurrentApplyService()
         if ApplyService and type(ApplyService.RequestBars) == "function" then
-            return ApplyService.RequestBars(reason)
+            return ApplyService.RequestBars(reason, scope)
         end
-        return ApplyGeneral(reason or "MSUF_ASSISTANT_BARS", { preview = true, applyAll = false, bars = true })
+        return ApplyGeneral(reason or "MSUF_ASSISTANT_BARS", { preview = true, applyAll = false, bars = true, barsScope = scope })
     end
 
-    local function ApplyBars(reason)
-        RequestBars(reason or "MSUF_ASSISTANT_BARS")
+    local function RequestBarGradients(reason, scope)
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestBarGradients) == "function" then
+            return ApplyService.RequestBarGradients(reason, scope)
+        end
+        if ApplyService and type(ApplyService.RequestGeneral) == "function" then
+            return ApplyService.RequestGeneral(reason or "MSUF_ASSISTANT_BAR_GRADIENT", {
+                preview = true,
+                applyAll = false,
+                notify = false,
+                bars = true,
+                barGradients = true,
+                barsScope = scope,
+            })
+        end
+        ApplyGeneral(reason or "MSUF_ASSISTANT_BAR_GRADIENT", {
+            preview = true,
+            applyAll = false,
+            notify = false,
+            bars = true,
+            barGradients = true,
+            barsScope = scope,
+        })
+        return CallGlobal("MSUF_UpdateAllBarGradients", scope)
     end
 
-    local function ApplyBarGradients(reason)
-        ApplyGeneral(reason or "MSUF_ASSISTANT_BAR_GRADIENT", { preview = true, applyAll = false, notify = false, bars = true })
-        CallGlobal("MSUF_UpdateAllBarGradients")
+    local function ApplyBars(reason, scope)
+        RequestBars(reason or "MSUF_ASSISTANT_BARS", scope)
     end
 
-    local function ApplyBarOutline(reason)
-        ApplyBars(reason or "MSUF_ASSISTANT_BAR_OUTLINE")
+    local function ApplyBarGradients(reason, scope)
+        RequestBarGradients(reason or "MSUF_ASSISTANT_BAR_GRADIENT", scope)
+    end
+
+    local function RefreshBossTargetBorderFallback(reason, scope)
+        reason = reason or "MSUF_ASSISTANT_BOSS_TARGET_BORDER"
+        ApplyGeneral(reason, { preview = true, applyAll = false, notify = false })
+        CallGlobal("MSUF_UFCore_RefreshSettingsCache", reason)
+        local refreshScope = tostring(scope or "")
+        if refreshScope ~= "boss" and not refreshScope:match("^boss%d+$") then refreshScope = "boss" end
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestUnit) == "function" then
+            return ApplyService.RequestUnit(refreshScope, reason, { preview = true })
+        end
+        if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+            return _G.MSUF_UFCore_NotifyConfigChanged(refreshScope, true, true, reason)
+        end
+        return false
+    end
+
+    local function ApplyBarOutline(reason, scope)
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestBarOutline) == "function" then
+            return ApplyService.RequestBarOutline(reason or "MSUF_ASSISTANT_BAR_OUTLINE", scope)
+        end
+        ApplyBars(reason or "MSUF_ASSISTANT_BAR_OUTLINE", scope)
         CallGlobal("MSUF_ApplyBarOutlineThickness_All")
         CallGlobal("MSUF_GF_RefreshOutlineGeometry")
         CallGlobal("MSUF_ApplyRoundedUnitframes")
     end
 
-    local function ApplyRoundedBars(reason)
-        ApplyBars(reason or "MSUF_ASSISTANT_ROUNDED_BARS")
+    local function ApplyRoundedBars(reason, scope)
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestRoundedBars) == "function" then
+            return ApplyService.RequestRoundedBars(reason or "MSUF_ASSISTANT_ROUNDED_BARS", scope)
+        end
+        ApplyBars(reason or "MSUF_ASSISTANT_ROUNDED_BARS", scope)
         CallGlobal("MSUF_ApplyRoundedUnitframes")
         CallGlobal("MSUF_GF_RefreshPreviewLayout", "party")
         CallGlobal("MSUF_GF_RefreshPreviewLayout", "raid")
@@ -55,15 +108,23 @@ function A.RegistryCoreBuilders.BuildBarApplyHelpers(ctx)
         CallGlobal("MSUF_GF_RefreshPreviewBox")
     end
 
-    local function ApplyAggroBorder(reason)
-        ApplyBars(reason or "MSUF_ASSISTANT_AGGRO_BORDER")
+    local function ApplyAggroBorder(reason, scope)
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestAggroBorder) == "function" then
+            return ApplyService.RequestAggroBorder(reason or "MSUF_ASSISTANT_AGGRO_BORDER", scope)
+        end
+        ApplyBars(reason or "MSUF_ASSISTANT_AGGRO_BORDER", scope)
         CallGlobal("MSUF_UFCore_RefreshSettingsCache", "MSUF_ASSISTANT_AGGRO_BORDER")
         CallGlobal("MSUF_ApplyBarOutlineThickness_All")
         CallGlobal("MSUF_AggroOutline_ApplyEventRegistration")
     end
 
-    local function ApplyDispelPurgeBorder(reason)
-        ApplyBars(reason or "MSUF_ASSISTANT_DISPEL_PURGE_BORDER")
+    local function ApplyDispelPurgeBorder(reason, scope)
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestDispelPurgeBorder) == "function" then
+            return ApplyService.RequestDispelPurgeBorder(reason or "MSUF_ASSISTANT_DISPEL_PURGE_BORDER", scope)
+        end
+        ApplyBars(reason or "MSUF_ASSISTANT_DISPEL_PURGE_BORDER", scope)
         CallGlobal("MSUF_UFCore_RefreshSettingsCache", "MSUF_ASSISTANT_DISPEL_PURGE_BORDER")
         CallGlobal("MSUF_ApplyBarOutlineThickness_All")
         CallGlobal("MSUF_DispelOutline_ApplyEventRegistration")
@@ -71,21 +132,26 @@ function A.RegistryCoreBuilders.BuildBarApplyHelpers(ctx)
         CallGlobal("MSUF_RefreshUnitDispelOverlays")
     end
 
-    local function ApplyBossTargetBorder(reason)
-        ApplyBars(reason or "MSUF_ASSISTANT_BOSS_TARGET_BORDER")
-        CallGlobal("MSUF_UFCore_RefreshSettingsCache", "MSUF_ASSISTANT_BOSS_TARGET_BORDER")
-        local UF = MSUFRef and MSUFRef.UF
-        if UF and type(UF.ForceUpdate) == "function" then UF.ForceUpdate(nil) end
+    local function ApplyBossTargetBorder(reason, scope)
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestBossTargetBorder) == "function" then
+            return ApplyService.RequestBossTargetBorder(reason or "MSUF_ASSISTANT_BOSS_TARGET_BORDER", scope)
+        end
+        return RefreshBossTargetBorderFallback(reason or "MSUF_ASSISTANT_BOSS_TARGET_BORDER", scope)
     end
 
-    local function ApplyHighlightBorders(reason)
-        ApplyAggroBorder(reason or "MSUF_ASSISTANT_HIGHLIGHT_BORDERS")
-        ApplyDispelPurgeBorder(reason or "MSUF_ASSISTANT_HIGHLIGHT_BORDERS")
-        ApplyBossTargetBorder(reason or "MSUF_ASSISTANT_HIGHLIGHT_BORDERS")
+    local function ApplyHighlightBorders(reason, scope)
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestHighlightBorders) == "function" then
+            return ApplyService.RequestHighlightBorders(reason or "MSUF_ASSISTANT_HIGHLIGHT_BORDERS", scope)
+        end
+        ApplyAggroBorder(reason or "MSUF_ASSISTANT_HIGHLIGHT_BORDERS", scope)
+        ApplyDispelPurgeBorder(reason or "MSUF_ASSISTANT_HIGHLIGHT_BORDERS", scope)
+        RefreshBossTargetBorderFallback(reason or "MSUF_ASSISTANT_HIGHLIGHT_BORDERS", scope)
     end
 
-    local function ApplyAbsorbBars(reason)
-        ApplyBars(reason or "MSUF_ASSISTANT_ABSORB_BARS")
+    local function ApplyAbsorbBars(reason, scope)
+        ApplyBars(reason or "MSUF_ASSISTANT_ABSORB_BARS", scope)
     end
 
     return {

@@ -22,6 +22,27 @@ function A.GlobalRegistry.RegisterHighlightColorSettings(ctx)
     local SetTableRGB = ctx.SetTableRGB
     local ColorFromName = ctx.ColorFromName
     local ApplyColors = ctx.ApplyColors
+    local function CurrentApplyService()
+        return (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+    end
+
+    local function ApplyBossTargetHighlightColor(reason)
+        reason = reason or "MSUF_ASSISTANT_BOSS_TARGET_HIGHLIGHT_COLOR"
+        local apply = CurrentApplyService()
+        if apply and type(apply.RequestBossTargetBorder) == "function" then
+            return apply.RequestBossTargetBorder(reason, "boss") ~= false
+        end
+        if type(_G.MSUF_UFCore_RefreshSettingsCache) == "function" then
+            _G.MSUF_UFCore_RefreshSettingsCache(reason)
+        end
+        if apply and type(apply.RequestUnit) == "function" then
+            return apply.RequestUnit("boss", reason, { preview = true }) ~= false
+        end
+        if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+            return _G.MSUF_UFCore_NotifyConfigChanged("boss", true, true, reason) ~= false
+        end
+        return false
+    end
 
     if type(ColorSetting) ~= "function" or type(RegisterGeneralBoolean) ~= "function" then return end
     if type(GeneralDB) ~= "function" or type(TableRGB) ~= "function" then return end
@@ -46,5 +67,5 @@ function A.GlobalRegistry.RegisterHighlightColorSettings(ctx)
         return TableRGB(GeneralDB(), "bossTargetHighlightColor", 1, 0.82, 0)
     end, function(r, g, b)
         SetTableRGB(GeneralDB(), "bossTargetHighlightColor", r, g, b)
-    end, { category = "Colors / Mouseover Highlight", attribute = "bossTargetHighlightColor", defaultR = 1, defaultG = 0.82, defaultB = 0, apply = ApplyColors })
+    end, { category = "Colors / Mouseover Highlight", attribute = "bossTargetHighlightColor", defaultR = 1, defaultG = 0.82, defaultB = 0, apply = ApplyBossTargetHighlightColor })
 end

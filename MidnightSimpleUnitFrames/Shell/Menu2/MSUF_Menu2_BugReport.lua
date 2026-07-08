@@ -496,19 +496,30 @@ local function AddFrameSummaryLine(lines, label, frame)
 end
 local function AddMSUFFrameContext(lines)
     AddHeader(lines, "MSUF Frames")
-    local frames = _G.MSUF_UnitFrames
-    if type(frames) ~= "table" or not CanAccessTable(frames) then
-        Add(lines, "MSUF_UnitFrames registry unavailable.")
+    local rows = {}
+    local uf = MSUF and MSUF.UF
+    local ok
+    if uf and type(uf.ForEachFrame) == "function" then
+        ok = pcall(function()
+            uf.ForEachFrame(function(frame)
+                rows[#rows + 1] = { key = tostring(frame and (frame.unit or frame.MSUFUnitKey) or #rows + 1), frame = frame }
+            end)
+        end)
+    end
+    local frames = (not ok or #rows == 0) and (uf and uf.frames) or nil
+    if #rows == 0 and (type(frames) ~= "table" or not CanAccessTable(frames)) then
+        Add(lines, "UFCore frame registry unavailable.")
     else
-        local rows = {}
         -- Limit frame enumeration to keep reports usable even if an addon leak leaves stale
         -- frame entries in the registry.
-        local ok = pcall(function()
-            for key, frame in pairs(frames) do
-                rows[#rows + 1] = { key = tostring(key), frame = frame }
-                if #rows >= 40 then break end
-            end
-        end)
+        if #rows == 0 then
+            ok = pcall(function()
+                for key, frame in pairs(frames) do
+                    rows[#rows + 1] = { key = tostring(key), frame = frame }
+                    if #rows >= 40 then break end
+                end
+            end)
+        end
         if ok and #rows > 0 then
             table.sort(rows, function(a, b) return a.key < b.key end)
             for i = 1, #rows do

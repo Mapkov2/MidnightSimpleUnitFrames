@@ -38,7 +38,8 @@ function A.GroupFramesRegistry.BuildTextColorContext(ctx)
         return value
     end
 
-    local function RegisterGroupColor(scope, attr, keyPrefix, label, dr, dg, db, aliases)
+    local function RegisterGroupColor(scope, attr, keyPrefix, label, dr, dg, db, aliases, opts)
+        opts = type(opts) == "table" and opts or {}
         local settingKey = keyPrefix:match("Color$") and keyPrefix or (keyPrefix .. "Color")
         Registry:RegisterSetting({
             key = "gf_" .. scope .. "." .. settingKey,
@@ -60,7 +61,7 @@ function A.GroupFramesRegistry.BuildTextColorContext(ctx)
                 conf[keyPrefix .. "B"] = GroupClamp01(type(value) == "table" and (value.b or value[3]) or db, db)
             end,
             sameValue = GroupColorSame,
-            apply = function() ApplyGroup(scope, "visual") end,
+            apply = function() ApplyGroup(scope, opts.mode or "visual") end,
             combatSafe = false,
         })
     end

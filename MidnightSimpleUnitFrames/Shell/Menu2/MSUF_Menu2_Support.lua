@@ -29,6 +29,28 @@ end
 local function Print(msg)
     if type(print) == "function" then print("|cff00ff00MSUF:|r " .. tostring(msg or "")) end
 end
+local function GetCoreFrame(unitKey)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(unitKey)
+        if frame then return frame end
+    end
+    local frames = uf and uf.frames
+    return unitKey and frames and frames[unitKey] or nil
+end
+local function ForEachCoreFrame(fn)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.ForEachFrame) == "function" then
+        uf.ForEachFrame(function(frame)
+            if frame then fn(frame, frame.unit or frame.MSUFUnitKey) end
+        end)
+        return true
+    end
+    local frames = uf and uf.frames
+    if type(frames) ~= "table" then return false end
+    for unitKey, frame in pairs(frames) do fn(frame, unitKey) end
+    return true
+end
 local function Tr(text)
     if type(M.Tr) == "function" then
         local translated = M.Tr(text)
@@ -1201,9 +1223,7 @@ local function CollectMsufScaleFrames()
             frames[#frames + 1] = frame
         end
     end
-    if type(_G.MSUF_UnitFrames) == "table" then
-        for unitKey, frame in pairs(_G.MSUF_UnitFrames) do add(frame, unitKey) end
-    end
+    ForEachCoreFrame(add)
     for i = 1, #MSUF_SCALE_FRAME_GLOBALS do add(_G[MSUF_SCALE_FRAME_GLOBALS[i]]) end
     if type(_G.MSUF_BossCastbars) == "table" then
         for i = 1, 5 do add(_G.MSUF_BossCastbars[i]) end

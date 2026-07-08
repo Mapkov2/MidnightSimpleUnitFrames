@@ -2026,6 +2026,8 @@ end
     if g.castbarTargetShowSpellName == nil then g.castbarTargetShowSpellName = true end
     if g.castbarFocusShowSpellName == nil then g.castbarFocusShowSpellName = true end
     if g.castbarPlayerShowSpellName == nil then g.castbarPlayerShowSpellName = true end
+    if g.castbarTargetShowTargetName == nil then g.castbarTargetShowTargetName = false end
+    if g.castbarFocusShowTargetName == nil then g.castbarFocusShowTargetName = false end
     if g.castbarTargetTextOffsetX == nil then g.castbarTargetTextOffsetX = 0 end
     if g.castbarTargetTextOffsetY == nil then g.castbarTargetTextOffsetY = 0 end
     if g.castbarFocusTextOffsetX == nil then g.castbarFocusTextOffsetX = 0 end

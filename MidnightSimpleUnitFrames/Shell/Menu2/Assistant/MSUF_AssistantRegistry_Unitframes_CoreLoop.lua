@@ -67,13 +67,8 @@ function A.UnitframesRegistry.RegisterCoreLoopSettings(ctx)
                 end
             end,
             apply = function(unitKey)
-                if type(CallGlobal) == "function" then
-                    CallGlobal("MSUF_ShowReloadRecommendedPopup", "Unitframe color changes")
-                elseif type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-                    _G.MSUF_ShowReloadRecommendedPopup("Unitframe color changes")
-                end
                 if M and type(M.RequestUnitApply) == "function" then
-                    M.RequestUnitApply(unitKey, "MSUF_ASSISTANT_HEALTH_COLOR_MODE", { preview = true })
+                    M.RequestUnitApply(unitKey, "MSUF_ASSISTANT_HEALTH_COLOR_MODE", { preview = true, colors = true })
                 end
             end,
         })

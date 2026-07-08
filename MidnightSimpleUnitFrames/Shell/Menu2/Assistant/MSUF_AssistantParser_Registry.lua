@@ -1350,6 +1350,7 @@ local function RegistryCandidateListForToken(token)
 end
 
 P.RegistryCandidateSettings = function(text, settings, includeAliases)
+    local startedMs = _G.debugprofilestop and _G.debugprofilestop() or nil
     includeAliases = includeAliases == true
     P._EnsureRegistryCandidateIndex(settings, includeAliases)
     local cacheKey = (includeAliases and "full:" or "light:") .. Normalize(text)
@@ -1409,7 +1410,13 @@ P.RegistryCandidateSettings = function(text, settings, includeAliases)
             end
         end
     end
-    if #out == 0 and skippedValueToken and not includeAliases then return {} end
+    if #out == 0 and skippedValueToken and not includeAliases then
+        if type(A.RecordSlowPerfSample) == "function" then
+            local detail = (includeAliases and "full" or "light") .. ":0:" .. Normalize(text):sub(1, 80)
+            A.RecordSlowPerfSample("assistant.registry.candidates", startedMs, detail, 8)
+        end
+        return {}
+    end
     if #out == 0 then
         for i = 1, selectedCount do
             if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -1433,6 +1440,10 @@ P.RegistryCandidateSettings = function(text, settings, includeAliases)
             local oldKey = table.remove(P._registryCandidateCacheOrder, 1)
             P._registryCandidateCache[oldKey] = nil
         end
+    end
+    if type(A.RecordSlowPerfSample) == "function" then
+        local detail = (includeAliases and "full" or "light") .. ":" .. tostring(#out) .. ":" .. Normalize(text):sub(1, 80)
+        A.RecordSlowPerfSample("assistant.registry.candidates", startedMs, detail, 8)
     end
     return out
 end

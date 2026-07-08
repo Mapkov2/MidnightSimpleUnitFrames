@@ -168,8 +168,9 @@ local function FontScopeGet(key, default, rootKey)
 end
 local function FontScopeSet(key, value, reason, rootKey)
     local shared = rootKey and DB() or G()
-    ScopeWrite(CurrentFontScope(), "fontOverride", shared, rootKey or key, value)
-    M.RequestGeneralApply(reason or "MSUF2_FONTS_SCOPE", { preview = true, applyAll = false, fonts = true })
+    local scope = CurrentFontScope()
+    ScopeWrite(scope, "fontOverride", shared, rootKey or key, value)
+    M.RequestGeneralApply(reason or "MSUF2_FONTS_SCOPE", { preview = true, applyAll = false, fonts = true, fontScope = scope })
 end
 local function BarScopeGet(key, default)
     local scope = CurrentBarsScope()
@@ -178,14 +179,15 @@ end
 local function BarScopeSet(key, value, reason)
     local scope = CurrentBarsScope()
     ScopeWrite(scope, BarsFlagForKey(scope, key), G(), key, value)
-    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false, bars = true })
+    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
 end
 local function BarScopeGetBars(key, default)
     return ScopeRead(CurrentBarsScope(), "hlOverride", Bars(), key, default)
 end
 local function BarScopeSetBars(key, value, reason)
-    ScopeWrite(CurrentBarsScope(), "hlOverride", Bars(), key, value)
-    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false, bars = true })
+    local scope = CurrentBarsScope()
+    ScopeWrite(scope, "hlOverride", Bars(), key, value)
+    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
 end
 local function NormalizeFontKey(key)
     local fn = _G.MSUF_NormalizeFontKey or (MSUF and MSUF.MSUF_NormalizeFontKey)
@@ -537,10 +539,10 @@ end
 local SetControlEnabled = W.SetControlEnabled
 local SetControlsEnabled = W.SetControlsEnabled
 local function ApplyFonts(reason)
-    M.RequestGeneralApply(reason or "MSUF2_FONTS", { preview = true, applyAll = false, fonts = true })
+    M.RequestGeneralApply(reason or "MSUF2_FONTS", { preview = true, applyAll = false, fonts = true, fontScope = CurrentFontScope() })
 end
 function ApplyBars(reason)
-    M.RequestGeneralApply(reason or "MSUF2_BARS", { preview = true, applyAll = false, bars = true })
+    M.RequestGeneralApply(reason or "MSUF2_BARS", { preview = true, applyAll = false, bars = true, barsScope = CurrentBarsScope() })
 end
 local function ApplyCastbars(reason)
     M.RequestGeneralApply(reason or "MSUF2_CASTBARS", { castbar = true, castbarTextures = true, preview = true, applyAll = false })

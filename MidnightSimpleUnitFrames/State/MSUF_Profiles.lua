@@ -164,6 +164,29 @@ MSUF_ProfileIO_CallGlobal = function(name, ...)
     end
     return MSUF_ProfileIO_RunProtected(name, fn, ...)
 end
+
+local function MSUF_ProfileIO_ApplyCastbarRuntime(reason)
+    MSUF_ProfileIO_CallGlobal("MSUF_Castbars_OnSettingsChanged", reason)
+    local units = { "player", "target", "focus", "boss" }
+    local applied = false
+    for i = 1, #units do
+        local unit = units[i]
+        if MSUF_ProfileIO_CallGlobal("MSUF_ApplyCastbarUnitAndSync", unit) then
+            applied = true
+        elseif MSUF_ProfileIO_CallGlobal("MSUF_ApplyCastbarVisualsForUnit", unit) then
+            applied = true
+        end
+    end
+    if applied then
+        return true
+    end
+    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorPlayerCastBar")
+    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorTargetCastBar")
+    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorFocusCastBar")
+    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorBossCastBar")
+    return MSUF_ProfileIO_CallGlobal("MSUF_UpdateCastbarVisuals")
+end
+
 local MSUF_ProfileIO_PostProfileRuntimeApply
 local function MSUF_ProfileIO_InCombatLockdown()
     return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
@@ -223,16 +246,13 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     end
     MSUF_ProfileIO_CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
     MSUF_ProfileIO_CallGlobal("MSUF_ApplyModules")
-    MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_Refresh")
-    MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshTextures")
-    MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
+    if not MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_Apply", { full = true, cdm = true }) then
+        MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_Refresh")
+        MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshTextures")
+        MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
+    end
     MSUF_ProfileIO_CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
-    MSUF_ProfileIO_CallGlobal("MSUF_Castbars_OnSettingsChanged", reason)
-    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorPlayerCastBar")
-    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorTargetCastBar")
-    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorFocusCastBar")
-    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorBossCastBar")
-    MSUF_ProfileIO_CallGlobal("MSUF_UpdateCastbarVisuals")
+    MSUF_ProfileIO_ApplyCastbarRuntime(reason)
 end
 --- Compact codec (backward compatible)
 --- New export format (preferred):
@@ -2923,6 +2943,51 @@ local function MSUF_ProfileIO_ShouldSkipUUFImportSection(payload, isUUFImport, a
     end
     return false
 end
+local function MSUF_ProfileIO_AuraImportScopes(payload)
+    if type(payload) ~= "table" then
+        return nil, false
+    end
+
+    local g = payload.general
+    if type(g) == "table" then
+        for k in pairs(MSUF_AURA_GENERAL_KEYS) do
+            if g[k] ~= nil then
+                return nil, true
+            end
+        end
+    end
+
+    local auras = payload.auras3
+    if type(auras) ~= "table" then
+        return nil, false
+    end
+
+    local scopes, seen = {}, {}
+    local function AddScope(scope)
+        scope = tostring(scope or "")
+        if scope ~= "" and not seen[scope] then
+            seen[scope] = true
+            scopes[#scopes + 1] = scope
+        end
+    end
+
+    for key, value in pairs(auras) do
+        if key == "perUnit" and type(value) == "table" then
+            for unit, conf in pairs(value) do
+                if type(conf) == "table" then
+                    AddScope(unit)
+                end
+            end
+        else
+            return nil, true
+        end
+    end
+
+    if #scopes > 0 then
+        return scopes, false
+    end
+    return nil, true
+end
 --- After a profile import we must explicitly refresh Auras/Auras3 so the live UI matches without /reload.
 --- Keep this scoped (Auras only) to avoid unintended regressions in other modules.
 local function MSUF_ProfileIO_PostImportApply_Auras(kind, payload, isUUFImport)
@@ -2930,27 +2995,35 @@ local function MSUF_ProfileIO_PostImportApply_Auras(kind, payload, isUUFImport)
     if MSUF_ProfileIO_ShouldSkipUUFImportSection(payload, isUUFImport, "aurasApplied") then
         return
     end
-    local touched = false
-    if type(payload.auras3) == "table" then
-        touched = true
-    else
-        local g = payload.general
-        if type(g) == "table" then
-            for k in pairs(MSUF_AURA_GENERAL_KEYS) do
-                if g[k] ~= nil then
-                    touched = true
-                    break
-                end
+    local scopes, full = MSUF_ProfileIO_AuraImportScopes(payload)
+    if not full and not scopes then  return end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if not full and scopes then
+        local called = false
+        for i = 1, #scopes do
+            local scope = scopes[i]
+            if a3 and type(a3.ApplyFontsFromGlobal) == "function" then
+                a3.ApplyFontsFromGlobal(scope, "MSUF_PROFILE_IMPORT_AURAS")
+                called = true
+            elseif a3 and type(a3.RequestScope) == "function" then
+                a3.RequestScope(scope, "MSUF_PROFILE_IMPORT_AURAS")
+                called = true
+            elseif a3 and type(a3.RefreshUnit) == "function" then
+                a3.RefreshUnit(scope)
+                called = true
+            else
+                full = true
+                break
             end
         end
-    end
-    if not touched then  return end
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.RefreshAll) == "function" then
-        a3.RefreshAll()
+        if called and not full then
+            return
+        end
     end
     if a3 and type(a3.ApplyFontsFromGlobal) == "function" then
-        a3.ApplyFontsFromGlobal()
+        a3.ApplyFontsFromGlobal(nil, "MSUF_PROFILE_IMPORT_AURAS")
+    elseif a3 and type(a3.RefreshAll) == "function" then
+        a3.RefreshAll()
     end
 end
 local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload, isUUFImport)
@@ -2958,11 +3031,26 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload, isUUFIm
     if MSUF_ProfileIO_ShouldSkipUUFImportSection(payload, isUUFImport, "groupFramesApplied") then
         return
     end
+    local touchedKinds, seenKinds = {}, {}
+    local function AddKind(groupKind)
+        if groupKind and not seenKinds[groupKind] then
+            seenKinds[groupKind] = true
+            touchedKinds[#touchedKinds + 1] = groupKind
+        end
+    end
+    if type(payload.gf_party) == "table" then AddKind("party") end
+    if type(payload.gf_raid) == "table" then AddKind("raid") end
+    if type(payload.gf_mythicraid) == "table" then AddKind("mythicraid") end
     local touched = (kind == "groupframe") or (kind == "groupframes")
     if not touched then
-        touched = (type(payload.gf_party) == "table") or (type(payload.gf_raid) == "table") or (type(payload.gf_mythicraid) == "table")
+        touched = (#touchedKinds > 0)
     end
     if not touched then  return end
+    if #touchedKinds == 0 then
+        AddKind("party")
+        AddKind("raid")
+        AddKind("mythicraid")
+    end
     MSUF_ProfileIO_EnsureGroupFramesDB()
     local af = MSUF_ProfileIO_GetGFAuraFilter()
     if af and type(af.InvalidateAllBlacklistHashes) == "function" then
@@ -2972,10 +3060,36 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload, isUUFIm
         _G.MSUF_GF_InvalidateConfCache()
     end
     local gf = (type(MSUF) == "table" and MSUF.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF)
-    if gf and type(gf.RequestAuraRefresh) == "function" then
+    if gf and type(gf.Rebuild) == "function" then
+        for i = 1, #touchedKinds do
+            gf.Rebuild(touchedKinds[i])
+        end
+        return
+    elseif gf and type(gf.RefreshGeometry) == "function" then
+        for i = 1, #touchedKinds do
+            local groupKind = touchedKinds[i]
+            gf.RefreshGeometry(groupKind)
+            if type(gf.RefreshUnitBindings) == "function" then gf.RefreshUnitBindings(groupKind) end
+            if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(groupKind, gf.DIRTY_ALL or gf.DIRTY_CONFIG or gf.DIRTY_VISUAL) end
+        end
+        return
+    elseif gf and type(gf.RequestAuraRefresh) == "function" then
         gf.RequestAuraRefresh()
     elseif gf and type(gf.MarkAllDirty) == "function" then
         gf.MarkAllDirty(gf.DIRTY_AURAS or gf.DIRTY_ALL or 0x3F)
+    end
+    if type(_G.MSUF_GF_RefreshGeometry) == "function" then
+        for i = 1, #touchedKinds do
+            local groupKind = touchedKinds[i]
+            _G.MSUF_GF_RefreshGeometry(groupKind)
+            if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
+                _G.MSUF_GF_RefreshUnitBindings(groupKind)
+            end
+            if type(_G.MSUF_GF_RefreshVisuals) == "function" then
+                _G.MSUF_GF_RefreshVisuals(groupKind)
+            end
+        end
+        return
     end
     if type(_G.MSUF_GF_Refresh) == "function" then
         _G.MSUF_GF_Refresh()
@@ -2987,34 +3101,44 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload, isUUFIm
 end
 local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
     if type(payload) ~= "table" then  return end
-    local touched = (kind == "unitframe") or (kind == "all")
-    if not touched then
-        for _, unitKey in ipairs(MSUF_UNITFRAME_UNIT_KEYS) do
-            local conf = payload[unitKey]
-            if type(conf) == "table" then
-                for alphaKey in pairs(MSUF_UNITFRAME_ALPHA_KEYS) do
-                    if conf[alphaKey] ~= nil then
-                        touched = true
-                        break
-                    end
-                end
-            end
-            if touched then  break end
+    local full = (kind == "all")
+    local touchedUnits, seenUnits = {}, {}
+    local function AddUnit(unitKey)
+        unitKey = tostring(unitKey or "")
+        if unitKey == "tot" then unitKey = "targettarget" end
+        if unitKey ~= "" and not seenUnits[unitKey] then
+            seenUnits[unitKey] = true
+            touchedUnits[#touchedUnits + 1] = unitKey
         end
     end
-    if not touched and type(payload.tot) == "table" then
+    for _, unitKey in ipairs(MSUF_UNITFRAME_UNIT_KEYS) do
+        local conf = payload[unitKey]
+        if type(conf) == "table" then
+            for alphaKey in pairs(MSUF_UNITFRAME_ALPHA_KEYS) do
+                if conf[alphaKey] ~= nil then
+                    AddUnit(unitKey)
+                    break
+                end
+            end
+        end
+    end
+    if type(payload.tot) == "table" then
         for alphaKey in pairs(MSUF_UNITFRAME_ALPHA_KEYS) do
             if payload.tot[alphaKey] ~= nil then
-                touched = true
+                AddUnit("targettarget")
                 break
             end
         end
     end
-    if not touched then  return end
+    if not full and #touchedUnits == 0 then  return end
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     local refresh = _G.MSUF_RefreshAllUnitAlphas or _G.MSUF_RequestAlphaRefresh
     if type(refresh) == "function" then
-        refresh()
+        if full then
+            refresh()
+        else
+            for i = 1, #touchedUnits do refresh(touchedUnits[i]) end
+        end
     end
 end
 local function MSUF_ApplySnapshotToActiveProfile(snapshot)
@@ -3486,8 +3610,8 @@ local function MSUF_ProfileIO_ApplyUUFCastbarGeneral(unitKey, castbar, general)
     if type(castbar) ~= "table" or type(general) ~= "table" then return end
     local map = {
         player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", memory = "castbarPlayerBackendBeforeHide", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight", x = "castbarPlayerOffsetX", y = "castbarPlayerOffsetY", match = "castbarPlayerMatchWidth", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", time = "showPlayerCastTime", textX = "castbarPlayerTextOffsetX", textY = "castbarPlayerTextOffsetY", timeX = "castbarPlayerTimeOffsetX", timeY = "castbarPlayerTimeOffsetY" },
-        target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", memory = "castbarTargetBackendBeforeHide", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", match = "castbarTargetMatchWidth", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", time = "showTargetCastTime", textX = "castbarTargetTextOffsetX", textY = "castbarTargetTextOffsetY", timeX = "castbarTargetTimeOffsetX", timeY = "castbarTargetTimeOffsetY" },
-        focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", memory = "castbarFocusBackendBeforeHide", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", x = "castbarFocusOffsetX", y = "castbarFocusOffsetY", match = "castbarFocusMatchWidth", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", time = "showFocusCastTime", textX = "castbarFocusTextOffsetX", textY = "castbarFocusTextOffsetY", timeX = "castbarFocusTimeOffsetX", timeY = "castbarFocusTimeOffsetY" },
+        target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", memory = "castbarTargetBackendBeforeHide", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", match = "castbarTargetMatchWidth", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", targetName = "castbarTargetShowTargetName", time = "showTargetCastTime", textX = "castbarTargetTextOffsetX", textY = "castbarTargetTextOffsetY", timeX = "castbarTargetTimeOffsetX", timeY = "castbarTargetTimeOffsetY" },
+        focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", memory = "castbarFocusBackendBeforeHide", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", x = "castbarFocusOffsetX", y = "castbarFocusOffsetY", match = "castbarFocusMatchWidth", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName", time = "showFocusCastTime", textX = "castbarFocusTextOffsetX", textY = "castbarFocusTextOffsetY", timeX = "castbarFocusTimeOffsetX", timeY = "castbarFocusTimeOffsetY" },
         boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", memory = "bossCastbarBackendBeforeHide", w = "bossCastbarWidth", h = "bossCastbarHeight", x = "bossCastbarOffsetX", y = "bossCastbarOffsetY", match = "bossCastbarMatchWidth", icon = "showBossCastIcon", text = "showBossCastName", time = "showBossCastTime", textX = "bossCastTextOffsetX", textY = "bossCastTextOffsetY", timeX = "bossCastTimeOffsetX", timeY = "bossCastTimeOffsetY" },
     }
     local keys = map[unitKey]
@@ -3519,6 +3643,12 @@ local function MSUF_ProfileIO_ApplyUUFCastbarGeneral(unitKey, castbar, general)
         if unitKey == "boss" then
             general.bossCastNameFontSize = tonumber(spellName.FontSize) or general.bossCastNameFontSize
         end
+    end
+    local targetName = type(text.TargetName) == "table" and text.TargetName
+        or type(text.CastTargetName) == "table" and text.CastTargetName
+        or nil
+    if keys.targetName and targetName then
+        general[keys.targetName] = targetName.Enabled == true
     end
     local duration = type(text.Duration) == "table" and text.Duration or nil
     if duration then

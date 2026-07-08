@@ -169,7 +169,7 @@ local function BuildStatus(ctx, builder, unit)
             function() return ReadBool(unit, "stateIconsTestMode", ReadGeneralBool("stateIconsTestMode", false)) end,
             function(value)
                 SetBool(unit, "stateIconsTestMode", value, reason, { preview = true })
-                Call("MSUF_RequestStatusIconsRefreshForCurrent")
+                Call("MSUF_RequestStatusIconsRefreshForCurrent", unit, reason or "MSUF2_STATUS_TEST")
             end)
         RegisterStatusSearch(control, searchLabel, keywords)
         return control
@@ -237,7 +237,7 @@ local function BuildStatus(ctx, builder, unit)
     M.BindBoolWidget(ctx, midnight,
         function() return ReadGeneralBool("statusIconsUseMidnightStyle", false) end,
         function(value)
-            SetGeneralBool("statusIconsUseMidnightStyle", value, "MSUF2_STATUS_STYLE", { preview = true, applyAll = true })
+            SetGeneralBool("statusIconsUseMidnightStyle", value, "MSUF2_STATUS_STYLE", { preview = true, applyAll = false, notify = false })
             Call("MSUF_SetStatusIconStyleUseMidnight", value and true or false)
             Call("MSUF_RequestStatusIconsRefreshForCurrent")
         end)
