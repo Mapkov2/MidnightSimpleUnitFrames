@@ -729,8 +729,10 @@ local function GetCombatTimerAnchorFrame(g)
     if key == "none" then
         return UIParent
     end
-    local list = _G.MSUF_UnitFrames
-    return (list and list[key]) or (_G and _G["MSUF_" .. key]) or UIParent
+    local uf = MSUF and MSUF.UF
+    local frame = uf and type(uf.GetFrame) == "function" and uf.GetFrame(key) or nil
+    local list = uf and uf.frames
+    return frame or (list and list[key]) or (_G and _G["MSUF_" .. key]) or UIParent
 end
 
 local function ApplyCombatTimerAnchor(g)

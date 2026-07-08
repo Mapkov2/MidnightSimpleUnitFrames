@@ -695,9 +695,48 @@ local function RefreshCastbarFrame(frame)
 end
 ExportPublic("MSUF_RefreshCastbarFrame", RefreshCastbarFrame)
 
-local function UpdateCastbarVisuals(...)
+local function RefreshCastbarUnit(unit)
+    unit = NormalizeUnit(unit)
+    if unit == "player" then
+        RefreshCastbarFrame(_G.MSUF_PlayerCastbar)
+        RefreshCastbarFrame(_G.MSUF_PlayerCastbarPreview)
+        return true
+    elseif unit == "target" then
+        RefreshCastbarFrame(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar)
+        RefreshCastbarFrame(_G.MSUF_TargetCastbarPreview)
+        return true
+    elseif unit == "focus" then
+        RefreshCastbarFrame(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar)
+        RefreshCastbarFrame(_G.MSUF_FocusCastbarPreview)
+        return true
+    elseif unit == "boss" then
+        RefreshCastbarFrame(_G.MSUF_BossCastbarPreview)
+        RefreshCastbarFrame(_G.MSUF_BossCastbarPreview1)
+
+        local maxBoss = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+        if maxBoss < 1 or maxBoss > 12 then maxBoss = 5 end
+        for index = 2, maxBoss do
+            RefreshCastbarFrame(_G["MSUF_BossCastbarPreview" .. index])
+        end
+
+        local bossCastbars = _G.MSUF_BossCastbars
+        if type(bossCastbars) == "table" then
+            for index = 1, #bossCastbars do
+                RefreshCastbarFrame(bossCastbars[index])
+            end
+        end
+        return true
+    end
+    return false
+end
+
+local function UpdateCastbarVisuals(unit, ...)
     if type(previousUpdateCastbarVisuals) == "function" and previousUpdateCastbarVisuals ~= _G.MSUF_UpdateCastbarVisuals then
-        previousUpdateCastbarVisuals(...)
+        previousUpdateCastbarVisuals(unit, ...)
+    end
+
+    if RefreshCastbarUnit(unit) then
+        return true
     end
 
     RefreshCastbarFrame(_G.MSUF_PlayerCastbar)

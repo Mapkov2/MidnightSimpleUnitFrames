@@ -98,8 +98,10 @@ local function ApplyUnitAndSync(unit)
             reanchor()
         end
 
-        if type(MSUF_UpdateCastbarVisuals) == "function" then
-            MSUF_UpdateCastbarVisuals()
+        if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+            _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+        elseif type(MSUF_UpdateCastbarVisuals) == "function" then
+            MSUF_UpdateCastbarVisuals(unit)
         end
 
         if unit == "boss" and not InCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then

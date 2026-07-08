@@ -37,12 +37,43 @@ local function EnsureDBSafe()
     end
 end
 
-local function ForEachUnitFrame(fn)
+local function NormalizeScope(scope)
+    scope = tostring(scope or ""):lower()
+    if scope == "" or scope == "*" or scope == "shared" or scope == "global" or scope == "all" then return nil end
+    if scope == "tot" or scope == "targetoftarget" then return "targettarget" end
+    if scope == "focus_target" or scope == "focustargettarget" then return "focustarget" end
+    if scope:match("^boss%d+$") then return scope end
+    return scope
+end
+
+local function GroupKindsForScope(scope)
+    scope = NormalizeScope(scope)
+    if scope == "gf_party" or scope == "party" then return "party" end
+    if scope == "gf_raid" or scope == "raid" then return "raid", "mythicraid" end
+    if scope == "gf_mythicraid" or scope == "mythicraid" then return "mythicraid" end
+    return nil
+end
+
+local function UnitFrameInScope(frame, scope)
+    scope = NormalizeScope(scope)
+    if not scope then return true end
+    if GroupKindsForScope(scope) then return false end
+    local unit = frame and frame.unit
+    if unit == scope then return true end
+    local UF = MSUF and MSUF.UF
+    local units = UF and type(UF.UnitsForConfigKey) == "function" and UF.UnitsForConfigKey(scope) or nil
+    for i = 1, #(units or {}) do
+        if units[i] == unit then return true end
+    end
+    return false
+end
+
+local function ForEachUnitFrame(fn, scope)
     local UF = MSUF and MSUF.UF
     local frames = UF and UF.frames
     if type(frames) ~= "table" then return end
     for _, frame in pairs(frames) do
-        if frame then fn(frame) end
+        if frame and UnitFrameInScope(frame, scope) then fn(frame) end
     end
 end
 
@@ -62,15 +93,22 @@ end
 local _iterState = {}
 local PREDICTION_REFRESH_ELEMENTS = { "Prediction" }
 
-local function RefreshPredictionElements(reason)
+local function RefreshPredictionElements(reason, scope)
     local refreshed = false
+    local kindA, kindB = GroupKindsForScope(scope)
+    local normalized = NormalizeScope(scope)
     local UF = MSUF and MSUF.UF
-    if UF and type(UF.RefreshElements) == "function" then
-        refreshed = UF.RefreshElements(nil, PREDICTION_REFRESH_ELEMENTS, reason or "MSUF2_ABSORB_TEXTURE") or refreshed
+    if not kindA and UF and type(UF.RefreshElements) == "function" then
+        refreshed = UF.RefreshElements(normalized, PREDICTION_REFRESH_ELEMENTS, reason or "MSUF2_ABSORB_TEXTURE") or refreshed
     end
     local GF = MSUF and MSUF.GF
     if GF and type(GF.RefreshVisuals) == "function" then
-        refreshed = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL) or refreshed
+        if kindA then
+            refreshed = GF.RefreshVisuals(kindA, GF.DIRTY_VISUAL) or refreshed
+            if kindB then refreshed = GF.RefreshVisuals(kindB, GF.DIRTY_VISUAL) or refreshed end
+        elseif not normalized then
+            refreshed = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL) or refreshed
+        end
     end
     return refreshed
 end
@@ -104,7 +142,12 @@ end
 
 --- Immediate refresh path used by the deferred wrapper and direct callers. Keep
 --- this frame-iteration-only; it should not normalize profile texture keys.
-local function UpdateAllBarTextures()
+local function UpdateAllBarTextures(scope)
+    local kindA = GroupKindsForScope(scope)
+    if kindA then
+        RefreshPredictionElements("MSUF2_BAR_TEXTURE", scope)
+        return
+    end
     local getBarTexture = _G.MSUF_GetBarTexture
     if type(getBarTexture) ~= "function" then return end
     local texHP = getBarTexture()
@@ -116,25 +159,25 @@ local function UpdateAllBarTextures()
     _iterState.texDPB = (dpb and dpb.ResolveFg and dpb.ResolveFg()) or texHP
     _iterState.applyBg = _G.MSUF_ApplyBarBackgroundVisual
 
-    ForEachUnitFrame(_Iter_ApplyAllBarTex)
-    RefreshPredictionElements("MSUF2_BAR_TEXTURE")
-    if _G.MSUF_RoundedUF_Active == true then
+    ForEachUnitFrame(_Iter_ApplyAllBarTex, scope)
+    RefreshPredictionElements("MSUF2_BAR_TEXTURE", scope)
+    if not NormalizeScope(scope) and _G.MSUF_RoundedUF_Active == true then
         local applyRounded = _G.MSUF_RoundedUF_OnApplyAll
         if type(applyRounded) == "function" then
             applyRounded()
         end
     end
 
-    if _G.MSUF_UpdateCastbarTextures_Immediate then
+    if not NormalizeScope(scope) and _G.MSUF_UpdateCastbarTextures_Immediate then
         _G.MSUF_UpdateCastbarTextures_Immediate()
-    elseif type(_G.MSUF_UpdateCastbarTextures) == "function" then
+    elseif not NormalizeScope(scope) and type(_G.MSUF_UpdateCastbarTextures) == "function" then
         _G.MSUF_UpdateCastbarTextures()
     end
 end
 
-local function UpdateAbsorbBarTextures()
-    local refreshed = RefreshPredictionElements("MSUF2_ABSORB_TEXTURE")
-    if _G.MSUF_RoundedUF_Active == true then
+local function UpdateAbsorbBarTextures(scope)
+    local refreshed = RefreshPredictionElements("MSUF2_ABSORB_TEXTURE", scope)
+    if not NormalizeScope(scope) and _G.MSUF_RoundedUF_Active == true then
         local applyRounded = _G.MSUF_RoundedUF_OnApplyAll
         if type(applyRounded) == "function" then
             applyRounded()
@@ -154,15 +197,20 @@ local function DetachedPowerBarRefreshTextures()
         dpb.bgK = false
         dpb.bgC = nil
     end
-    UpdateAllBarTextures()
+    UpdateAllBarTextures("player")
 end
 Export("MSUF_DetachedPowerBar_RefreshTextures", DetachedPowerBarRefreshTextures)
 
 if not _G.MSUF_UpdateAllBarTextures_Immediate then
     ExportPublic("MSUF_UpdateAllBarTextures_Immediate", _G.MSUF_UpdateAllBarTextures)
-    ExportPublic("MSUF_UpdateAllBarTextures", function()
+    ExportPublic("MSUF_UpdateAllBarTextures", function(scope)
         local st = _G.MSUF_ApplyCommitState
         if st then st.bars = true end
+        local UF = MSUF and MSUF.UF
+        local normalized = NormalizeScope(scope)
+        if normalized and not GroupKindsForScope(normalized) and UF and type(UF.MarkDirty) == "function" then
+            UF.MarkDirty(normalized)
+        end
         ScheduleApplyCommit()
     end)
     _G.UpdateAllBarTextures = _G.UpdateAllBarTextures or _G.MSUF_UpdateAllBarTextures

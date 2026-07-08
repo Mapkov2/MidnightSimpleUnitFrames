@@ -14,6 +14,16 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
+local function CoreUnitFrame(unit)
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.GetFrame) == "function" then
+        local frame = UF.GetFrame(unit)
+        if frame then return frame end
+    end
+    local frames = UF and UF.frames
+    return unit and frames and frames[unit] or nil
+end
+
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
@@ -658,8 +668,7 @@ builders.LAYOUT = function(E)
         --- anchor dimensions changed, ask the power-bar embed layout to refresh
         --- outside combat or mark it dirty for the post-combat pass.
         local needPBRefresh = false
-        local uf = _G.MSUF_UnitFrames
-        local pf = uf and uf.player
+        local pf = CoreUnitFrame("player") or _G.MSUF_player
         local powerSpec = pf and pf.MSUFSpec and pf.MSUFSpec.power
         if powerSpec and powerSpec.detached == true and (powerSpec.detachedSyncClass == true or powerSpec.detachedAnchorClass == true) then
             local anchorW = math_floor(userW + 0.5)

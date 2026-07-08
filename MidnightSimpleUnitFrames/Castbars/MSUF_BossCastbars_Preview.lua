@@ -12,6 +12,16 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
+local function CoreFrame(unit)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(unit)
+        if frame then return frame end
+    end
+    local frames = uf and uf.frames
+    return unit and frames and frames[unit] or nil
+end
+
 local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
 if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
     MAX_BOSS_FRAMES = 5
@@ -75,8 +85,8 @@ ExportPublic("MSUF_BeginBossCastbarPreviewBatch", BeginBossCastbarPreviewBatch)
 ExportPublic("MSUF_EndBossCastbarPreviewBatch", EndBossCastbarPreviewBatch)
 
 local function BossUnitFrame(index)
-    local unitFrames = _G.MSUF_UnitFrames
-    return (unitFrames and unitFrames["boss" .. index]) or _G["MSUF_boss" .. index]
+    local unit = "boss" .. index
+    return CoreFrame(unit) or _G["MSUF_" .. unit]
 end
 
 local function HideAllBossCastbarPreviews()
@@ -180,8 +190,10 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
 
     if type(_G.MSUF_RefreshCastbarFrame) == "function" then
         _G.MSUF_RefreshCastbarFrame(preview)
+    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        _G.MSUF_ApplyCastbarVisualsForUnit("boss")
     elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals()
+        _G.MSUF_UpdateCastbarVisuals("boss")
     end
 
     if type(_G.MSUF_ApplyBossCastbarTextsLayout) == "function" then

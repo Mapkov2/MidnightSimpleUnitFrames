@@ -4,7 +4,7 @@
 --- MSUF 6.0 is 12.1-only for aura display work. This file intentionally does
 --- not inspect or transform aura payload data itself. Blizzard's native
 --- AuraContainer owns tracking, filtering, and assignment; MSUF only builds the
---- visual containers, AuraButton pools, layout, and refresh surface.
+--- visual containers, initializeFrame customization, layout, and refresh surface.
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 
@@ -36,9 +36,6 @@ local UF = MSUF.UF
 if not (UF and UF.RegisterElement) then return end
 if A3.__unitFrameBackendLoaded then return end
 A3.__unitFrameBackendLoaded = true
-if A3.swapUseUpdateAllAuras == nil then
-    A3.swapUseUpdateAllAuras = false
-end
 
 local type, tostring, tonumber, pairs, next = type, tostring, tonumber, pairs, next
 local table_concat, table_sort = table.concat, table.sort
@@ -70,15 +67,6 @@ local IDENTITY_AURA_REFRESH_REASONS = {
     MSUF_UNIT_IDENTITY_AURAS = true,
     MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
     MSUF_GF_UNIT_IDENTITY = true,
-}
--- Identity reasons safe to coalesce and flush next tick. A target/focus swap
--- keeps the same unit token, so MSUF must ask the container for one content
--- refresh. Coalesce that refresh by frame so swap spam resolves to the latest
--- identity once per tick instead of forcing synchronous reparses per event.
--- Group identity is intentionally excluded so roster builds settle in one pass.
-local DEFERRED_IDENTITY_REASONS = {
-    MSUF_UNIT_IDENTITY_AURAS = true,
-    MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
 }
 local COLD_APPLY_REASONS = {
     MSUF_ELEMENT_REFRESH = true,
@@ -292,6 +280,7 @@ local GROUP_LANE_SPECS = {
         spacingKey = "buffSpacing", perRowKey = "buffPerRow", growthXKey = "buffGrowthX",
         growthYKey = "buffGrowthY", anchorKey = "buffAnchor", xKey = "buffOffsetX",
         yKey = "buffOffsetY", layerKey = "buffLayer", filterKey = "buffFilter",
+        blacklistHashKey = "buffBlacklistHash",
         showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
         swipeReverseKey = "buffCooldownSwipeReverse",
         showDurationBarKey = "buffShowDurationBar", durationBarHeightKey = "buffDurationBarHeight",
@@ -311,6 +300,7 @@ local GROUP_LANE_SPECS = {
         spacingKey = "debuffSpacing", perRowKey = "debuffPerRow", growthXKey = "debuffGrowthX",
         growthYKey = "debuffGrowthY", anchorKey = "debuffAnchor", xKey = "debuffOffsetX",
         yKey = "debuffOffsetY", layerKey = "debuffLayer", filterKey = "debuffFilter",
+        blacklistHashKey = "debuffBlacklistHash",
         showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse",
         showDurationBarKey = "debuffShowDurationBar", durationBarHeightKey = "debuffDurationBarHeight",
@@ -330,6 +320,7 @@ local GROUP_LANE_SPECS = {
         spacingKey = "externalSpacing", perRowKey = "externalPerRow", growthXKey = "externalGrowthX",
         growthYKey = "externalGrowthY", anchorKey = "externalAnchor", xKey = "externalOffsetX",
         yKey = "externalOffsetY", layerKey = "externalLayer", filterKey = "externalFilter",
+        blacklistHashKey = "externalBlacklistHash",
         showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks", swipeKey = "externalShowCooldownSwipe",
         swipeReverseKey = "externalCooldownSwipeReverse",
         showDurationBarKey = "externalShowDurationBar", durationBarHeightKey = "externalDurationBarHeight",
@@ -349,15 +340,14 @@ local function InCombat()
 end
 
 -- NOTE: Inbound AuraContainer/AuraButton methods (SetEnabled, SetUnit,
--- AddAuraFrame, SetIcon, ...) are secure delegates. Call them directly from
--- our code. Wrapping them does not fix forbidden table access and makes PTR
--- stack traces harder to reason about.
+-- AddAuraGroup/AddAuraSlot on PTR4, SetIcon, ...)
+-- are secure delegates. Call them directly from our code. Wrapping them does
+-- not fix forbidden table access and makes PTR stack traces harder to reason
+-- about.
 --
--- PTR3 exposes UpdateAllAuras() as the intended stable-token refresh hook,
--- but addon-created CustomAuraContainers still fail to refresh reliably on
--- target/focus swaps on current PTR builds. Keep the content-correct
--- ClearAuraFilters()+AddAuraFilter() path as default, coalesced by frame.
--- A3.swapUseUpdateAllAuras=true remains an opt-in A/B switch for future PTRs.
+-- PTR4 containers own AuraButton creation and anchoring. MSUF does not create
+-- AuraButton objects directly; all lane/sensor buttons are created by
+-- AddAuraGroup/AddAuraSlot and customized in initializeFrame.
 
 local function IsAddOnLoaded(addonName)
     if C_AddOns and type(C_AddOns.IsAddOnLoaded) == "function" then
@@ -598,6 +588,61 @@ local function EffectiveUnitTables(auras, unit)
     return effectiveLayout, shared, filters or shared.filters
 end
 
+local function EffectiveUnitBlacklist(auras, unit)
+    if type(auras) ~= "table" then return nil end
+    local shared = type(auras.shared) == "table" and auras.shared or {}
+    local perUnit = type(auras.perUnit) == "table" and auras.perUnit or nil
+    local unitCfg = perUnit and perUnit[unit] or nil
+    if unitCfg and unitCfg.overrideBlacklist == true and type(unitCfg.blacklist) == "table" then
+        return unitCfg.blacklist
+    end
+    return shared.blacklist
+end
+
+local function AuraSpellIDFromKey(value)
+    value = tostring(value or "")
+    local id = tonumber(value:match("spell:(%d+)") or value:match("#(%d+)") or value:match("^(%d+)$"))
+    return id and math_floor(id + 0.5) or nil
+end
+
+local function CandidateFiltersFromExcludeSpellIDs(spellIDs)
+    if type(spellIDs) ~= "table" then return nil, nil end
+    local out, parts, count = nil, nil, 0
+    for key, enabled in pairs(spellIDs) do
+        local spellID
+        if enabled == true or enabled == nil then
+            spellID = AuraSpellIDFromKey(key)
+        elseif enabled ~= false then
+            local valueType = type(enabled)
+            if valueType == "number" or valueType == "string" then
+                spellID = AuraSpellIDFromKey(enabled) or AuraSpellIDFromKey(key)
+            elseif valueType == "table" and enabled.enabled ~= false then
+                spellID = AuraSpellIDFromKey(enabled.spellID or enabled.spellId or enabled.id or enabled[1]) or AuraSpellIDFromKey(key)
+            end
+        end
+        if spellID then
+            if not out then out, parts = {}, {} end
+            if out[spellID] ~= true then
+                out[spellID] = true
+                count = count + 1
+                parts[count] = tostring(spellID)
+            end
+        end
+    end
+    if count == 0 then return nil, nil end
+    table_sort(parts)
+    return { excludeSpellIDs = out }, "excludeSpellIDs:" .. table_concat(parts, ",")
+end
+
+local function CandidateFiltersFromBlacklist(blacklist)
+    local spells = type(blacklist) == "table" and blacklist.spells or nil
+    return CandidateFiltersFromExcludeSpellIDs(spells)
+end
+
+local function CandidateFiltersFromBlacklistHash(hash)
+    return CandidateFiltersFromExcludeSpellIDs(hash)
+end
+
 local function GrowthParts(growth, rowWrap)
     growth = tostring(growth or "RIGHT")
     rowWrap = tostring(rowWrap or "DOWN")
@@ -635,7 +680,6 @@ local VALID_NATIVE_FILTER_TOKENS = {
     PLAYER = true,
     RAID = true,
     CANCELABLE = true,
-    NOT_CANCELABLE = true,
     MAW = true,
     INCLUDE_NAME_PLATE_ONLY = true,
     EXTERNAL_DEFENSIVE = true,
@@ -648,17 +692,28 @@ local VALID_NATIVE_FILTER_TOKENS = {
 local LEGACY_NATIVE_FILTER_TOKENS = {
     ALL = false,
     DISPELLABLE = "RAID_PLAYER_DISPELLABLE",
+    NOT_CANCELABLE = "!CANCELABLE",
 }
 
 local function AddNativeFilterToken(out, seen, token, baseToken)
     token = tostring(token or ""):upper():gsub("^%s+", ""):gsub("%s+$", "")
+    local negated = token:sub(1, 1) == "!"
+    if negated then
+        token = token:sub(2):gsub("^%s+", ""):gsub("%s+$", "")
+    end
     local legacy = LEGACY_NATIVE_FILTER_TOKENS[token]
     if legacy ~= nil then
         if legacy == false then return end
         token = legacy
+        negated = token:sub(1, 1) == "!"
+        if negated then
+            token = token:sub(2):gsub("^%s+", ""):gsub("%s+$", "")
+        end
     end
     if token == "" or not VALID_NATIVE_FILTER_TOKENS[token] then return end
+    if negated and (token == "HELPFUL" or token == "HARMFUL") then return end
     if (token == "HELPFUL" or token == "HARMFUL") and token ~= baseToken then return end
+    if negated then token = "!" .. token end
     if seen[token] then return end
     seen[token] = true
     out[#out + 1] = token
@@ -685,11 +740,13 @@ local function GridShape(maxCount, perRow, verticalGrowth)
     return major, minor
 end
 
-local LaneTrackingSignature, LaneLayoutSignature
+local LaneTrackingSignature, LaneStructuralSignature, LaneLayoutSignature
+local SensorTrackingSignature, SensorStructuralSignature, SensorLayoutSignature
 
 local function FinalizeLane(lane)
     if lane then
         lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
+        lane._msufA3StructuralSignature = LaneStructuralSignature(lane)
         lane._msufA3LayoutSignature = LaneLayoutSignature(lane)
     end
     return lane
@@ -706,7 +763,7 @@ local function NativeFilter(baseFilter, filters)
         if filters.raid == true then filter = filter .. "|RAID" end
         if filters.includeNameplateOnly == true then filter = filter .. "|INCLUDE_NAME_PLATE_ONLY" end
         if filters.cancelable == true and helpful then filter = filter .. "|CANCELABLE" end
-        if filters.notCancelable == true and helpful then filter = filter .. "|NOT_CANCELABLE" end
+        if filters.notCancelable == true and helpful then filter = filter .. "|!CANCELABLE" end
         if filters.raidInCombat == true then filter = filter .. "|RAID_IN_COMBAT" end
         if filters.includeDispellable == true and harmful then filter = filter .. "|RAID_PLAYER_DISPELLABLE" end
         if filters.dispellable == true and harmful then filter = filter .. "|RAID_PLAYER_DISPELLABLE" end
@@ -826,7 +883,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     }
 end
 
-local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
+local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidateFilters, candidateFilterSignature)
     local spec = LANE_SPECS[kind]
     local filters = type(filtersRoot) == "table" and type(filtersRoot[spec.filterKey]) == "table" and filtersRoot[spec.filterKey] or nil
     local sizeDefault = ReadRaw(layout, shared, spec.sizeKey) or ReadRaw(layout, shared, "iconSize") or DEFAULT_SHARED.iconSize
@@ -847,6 +904,8 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind)
         unit = unit,
         enabled = enabled == true,
         nativeFilter = NativeFilter(spec.filter, filters),
+        candidateFilters = candidateFilters,
+        candidateFilterSignature = candidateFilterSignature,
         max = Round(maxCount),
         size = size,
         spacing = spacing,
@@ -894,6 +953,7 @@ end
 local function CompileGroupLane(unit, source, kind)
     local spec = GROUP_LANE_SPECS[kind]
     if not (spec and type(source) == "table") then return nil end
+    local candidateFilters, candidateFilterSignature = CandidateFiltersFromBlacklistHash(source[spec.blacklistHashKey])
     local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 128)
     local spacing = ClampNumber(source[spec.spacingKey] or source.spacing, 1, 0, 64)
     local perRow = ClampNumber(source[spec.perRowKey] or source.perRow, spec.defaultPerRow, 1, 40)
@@ -910,6 +970,8 @@ local function CompileGroupLane(unit, source, kind)
         unit = unit,
         enabled = enabled == true,
         nativeFilter = NormalizeNativeFilterString(source[spec.filterKey], spec.filter),
+        candidateFilters = candidateFilters,
+        candidateFilterSignature = candidateFilterSignature,
         max = Round(maxCount),
         size = size,
         spacing = spacing,
@@ -959,6 +1021,14 @@ local function InvalidateUnitRuntimeConfig(unit)
     if not unit then return nil end
     local runtimeCache = A3._runtimeConfigCache
     if runtimeCache then runtimeCache[unit] = nil end
+    local frame = (A3._runtimeFrames and A3._runtimeFrames[unit])
+        or (UF and UF.GetFrame and UF.GetFrame(unit))
+        or (UF and UF.frames and UF.frames[unit])
+        or _G["MSUF_" .. unit]
+    if frame then
+        if frame.MSUFSpec then frame.MSUFSpec._msufA3UnitAuraConfigCache = nil end
+        if frame.Auras then frame.Auras.needFullUpdate = true end
+    end
     return unit
 end
 
@@ -986,8 +1056,10 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local dispelBorder = CompileDispelSensor(unit, frameSpec, false, "border")
     local dispelOverlay = CompileDispelSensor(unit, frameSpec, false, "overlay")
     local layout, sharedLayout, filtersRoot = EffectiveUnitTables(auras, unit)
-    local buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff")
-    local debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff")
+    local blacklist = EffectiveUnitBlacklist(auras, unit)
+    local candidateFilters, candidateFilterSignature = CandidateFiltersFromBlacklist(blacklist)
+    local buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff", candidateFilters, candidateFilterSignature)
+    local debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff", candidateFilters, candidateFilterSignature)
     return {
         unit = unit,
         enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
@@ -1007,9 +1079,27 @@ function A3.ResolveUnitFrameConfig(unit, frameSpec)
     local visualGen = A3._nativeVisualGen or 0
     if frameSpec ~= nil then
         -- Frame-spec configs also consume UnitFrame border/overlay settings.
-        -- Those are cold-path spec data and can change without touching the
-        -- Auras DB generation, so rebuild them from the current spec.
-        return BuildUnitFrameConfig(unit, frameSpec)
+        -- Cache them on the compiled spec so runtime events do not re-walk DB
+        -- and do not accidentally push ApplyConfig/AddAuraGroup into hot paths.
+        local specSerial = (UF and UF.Config and UF.Config.serial) or 0
+        local cached = frameSpec._msufA3UnitAuraConfigCache
+        if cached
+            and cached.unit == unit
+            and cached.gen == gen
+            and cached.visualGen == visualGen
+            and cached.specSerial == specSerial
+        then
+            return cached.config
+        end
+        local cfg = BuildUnitFrameConfig(unit, frameSpec)
+        frameSpec._msufA3UnitAuraConfigCache = {
+            unit = unit,
+            gen = gen,
+            visualGen = visualGen,
+            specSerial = specSerial,
+            config = cfg,
+        }
+        return cfg
     end
     A3._runtimeConfigCache = A3._runtimeConfigCache or {}
     local cached = A3._runtimeConfigCache[unit]
@@ -1270,6 +1360,8 @@ end
 local _durationTextOptions = {}
 local _durationBarOptions = {}
 local RegisterNativeContainer
+local ConfigureContainer
+local SyncDispelSensorGeometry
 
 local function PlaceStackText(fs, owner, lane)
     if not (fs and owner and lane) then return end
@@ -1325,11 +1417,83 @@ local function PlaceCooldownText(fs, owner, lane)
     end
 end
 
-local function CallButtonMethod(button, methodName, ...)
-    local method = button and button[methodName]
-    if type(method) ~= "function" then return false end
-    method(button, ...)
+local PTR4_AURA_CONTAINER_METHODS = {
+    "SetUnit",
+    "SetEnabled",
+    "AddAuraGroup",
+    "SetAuraGroupLayout",
+    "SetAuraGroupMaxFrameCount",
+    "SetAuraGroupCandidateFilters",
+    "AddAuraSlot",
+    "SetAuraSlotCandidateFilters",
+    "AddItemEnchantment",
+}
+
+local PTR4_AURA_BUTTON_METHODS = {
+    "SetIcon",
+    "ClearIcon",
+    "SetDurationCooldown",
+    "ClearDurationCooldown",
+    "SetDurationBar",
+    "ClearDurationBar",
+    "SetDurationText",
+    "ClearDurationText",
+    "SetApplicationCount",
+    "ClearApplicationCount",
+    "SetAuraBorder",
+    "ClearAuraBorder",
+    "SetAuraSymbol",
+    "ClearAuraSymbol",
+    "SetMouseMotionEnabled",
+    "SetCancelAuraButtons",
+}
+
+local function ValidatePTR4AuraContainerContract(container)
+    if not container then return false end
+    for i = 1, #PTR4_AURA_CONTAINER_METHODS do
+        local methodName = PTR4_AURA_CONTAINER_METHODS[i]
+        if type(container[methodName]) ~= "function" then
+            A3.nativeAuraRuntimeAvailable = false
+            A3.nativeAuraRuntimeError = "PTR4 AuraContainer missing " .. methodName
+            return false
+        end
+    end
     return true
+end
+
+local function ValidatePTR4AuraButtonContract(button)
+    if not button then
+        A3.nativeAuraRuntimeAvailable = false
+        A3.nativeAuraRuntimeError = "PTR4 AuraButton missing"
+        error(A3.nativeAuraRuntimeError, 3)
+    end
+    for i = 1, #PTR4_AURA_BUTTON_METHODS do
+        local methodName = PTR4_AURA_BUTTON_METHODS[i]
+        if type(button[methodName]) ~= "function" then
+            A3.nativeAuraRuntimeAvailable = false
+            A3.nativeAuraRuntimeError = "PTR4 AuraButton missing " .. methodName
+            error(A3.nativeAuraRuntimeError, 3)
+        end
+    end
+    return true
+end
+
+local function ConfigurePTR4AuraContainer(container, unit)
+    container:SetUnit(unit)
+    if type(container.SetPrivateAurasEnabled) == "function" then container:SetPrivateAurasEnabled(true) end
+    container:SetEnabled(true)
+end
+
+local function FlowDirectionValue(directionName)
+    directionName = tostring(directionName or "RIGHT"):upper()
+    local flow = _G.AnchorUtil and _G.AnchorUtil.FlowDirection
+    if flow then
+        if directionName == "LEFT" and flow.Left ~= nil then return flow.Left end
+        if directionName == "RIGHT" and flow.Right ~= nil then return flow.Right end
+        if directionName == "UP" and flow.Up ~= nil then return flow.Up end
+        if directionName == "DOWN" and flow.Down ~= nil then return flow.Down end
+    end
+    return directionName
 end
 
 local function EnsureRoot(frame)
@@ -1340,9 +1504,9 @@ local function EnsureRoot(frame)
     root._msufA3NativeRoot = true
     root:SetAllPoints(frame)
     root:SetScript("OnShow", function(self)
-        -- Re-show needs a content reparse: while hidden the container is
-        -- unregistered from UNIT_AURA, so it missed any aura changes.
-        if RefreshAppliedNativeRoot then RefreshAppliedNativeRoot(self, true) end
+        -- Child AuraContainers already run UpdateAllAuras from their secure
+        -- OnShow; avoid a second forced full parse here.
+        if RefreshAppliedNativeRoot then RefreshAppliedNativeRoot(self, false) end
     end)
     root:Hide()
     frame.Auras = root
@@ -1387,7 +1551,11 @@ end
 
 LaneTrackingSignature = function(lane)
     return tostring(lane.unit) .. "\030" .. tostring(lane.kind) .. "\030" .. tostring(lane.nativeFilter)
-        .. "\030" .. tostring(lane.max)
+        .. "\030" .. tostring(lane.max) .. "\030" .. tostring(lane.candidateFilterSignature)
+end
+
+LaneStructuralSignature = function(lane)
+    return tostring(lane.kind) .. "\030" .. tostring(lane.nativeFilter)
 end
 
 LaneLayoutSignature = function(lane)
@@ -1413,17 +1581,72 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.alpha) .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
 
-local function SensorTrackingSignature(sensor)
+SensorTrackingSignature = function(sensor)
     return tostring(sensor.unit) .. "\030" .. tostring(sensor.kind) .. "\030" .. tostring(sensor.nativeFilter)
         .. "\030" .. tostring(sensor.max) .. "\030" .. tostring(sensor.filterCount) .. "\030" .. tostring(sensor.filterMax)
 end
 
-local function SensorLayoutSignature(sensor)
+SensorStructuralSignature = function(sensor)
+    return tostring(sensor.kind) .. "\030" .. tostring(sensor.nativeFilter)
+        .. "\030" .. tostring(sensor.max) .. "\030" .. tostring(sensor.filterCount) .. "\030" .. tostring(sensor.filterMax)
+end
+
+SensorLayoutSignature = function(sensor)
     return tostring(sensor.visual) .. "\030" .. tostring(sensor.target)
         .. "\030" .. tostring(sensor.style) .. "\030" .. tostring(sensor.alpha)
         .. "\030" .. tostring(sensor.thickness) .. "\030" .. tostring(sensor.layer)
         .. "\030" .. tostring(sensor.size) .. "\030" .. tostring(sensor.slotSignature)
         .. "\030" .. tostring(sensor.trigger) .. "\030" .. tostring(A3._nativeVisualGen or 0)
+end
+
+local DISPEL_SENSOR_ORDER = { "dispelBorder", "dispelOverlay", "dispelCorner" }
+
+local function BuildDispelSensorRootConfig(sensors)
+    if type(sensors) ~= "table" then return nil end
+    local list, trackingParts, structuralParts, layoutParts, unit, maxCount, layer
+    for i = 1, #DISPEL_SENSOR_ORDER do
+        local sensor = sensors[DISPEL_SENSOR_ORDER[i]]
+        if sensor and sensor.enabled == true then
+            if not list then
+                list, trackingParts, structuralParts, layoutParts = {}, {}, {}, {}
+                unit = sensor.unit
+                maxCount = 0
+                layer = 0
+            end
+            list[#list + 1] = sensor
+            trackingParts[#trackingParts + 1] = sensor._msufA3TrackingSignature or SensorTrackingSignature(sensor)
+            structuralParts[#structuralParts + 1] = sensor._msufA3StructuralSignature or SensorStructuralSignature(sensor)
+            layoutParts[#layoutParts + 1] = sensor._msufA3LayoutSignature or SensorLayoutSignature(sensor)
+            maxCount = maxCount + math_max(1, sensor.max or 1)
+            layer = math_max(layer, sensor.layer or 0)
+        end
+    end
+    if not list then return nil end
+    return {
+        sensor = true,
+        sensorRoot = true,
+        kind = "dispelSensors",
+        rootKey = "DispelSensor",
+        unit = unit,
+        enabled = true,
+        sensors = list,
+        max = maxCount,
+        layer = layer,
+        _msufA3TrackingSignature = table_concat(trackingParts, "\029"),
+        _msufA3StructuralSignature = table_concat(structuralParts, "\029"),
+        _msufA3LayoutSignature = table_concat(layoutParts, "\029"),
+    }
+end
+
+local function GetDispelSensorRootConfig(cfg)
+    if not cfg then return nil end
+    local cached = cfg.sensorRoot
+    if cached ~= nil then
+        return cached ~= false and cached or nil
+    end
+    cached = BuildDispelSensorRootConfig(cfg.sensors)
+    cfg.sensorRoot = cached or false
+    return cached
 end
 
 local function LayoutButton(button, lane, index)
@@ -1538,22 +1761,28 @@ local function SyncContainerGeometry(container, lane, parentFrame)
     if parentFrame then
         container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1))
     end
-    for i = 1, (container.createdButtons or lane.max or 0) do
-        SyncButtonGeometry(container[i], lane, i)
+    if container._msufA3ManagedAuraGroups ~= true then
+        for i = 1, (container.createdButtons or lane.max or 0) do
+            SyncButtonGeometry(container[i], lane, i)
+        end
     end
     return true
 end
 
 local function PrepareAuraButton(button, lane, index)
+    ValidatePTR4AuraButtonContract(button)
     button._msufA3NativeButton = true
     button._msufA3LaneKind = lane.kind
     button:SetSize(lane.size, lane.size)
     button:SetFrameLevel((button:GetParent():GetFrameLevel() or 0) + 1)
+    if lane.unit == "player" and lane.kind == "buff" then
+        button:SetCancelAuraButtons("RightButtonUp")
+    end
 
     local barOnly = lane.showDurationBar == true and lane.durationBarDisplay == "BAR_ONLY"
     local icon = button.Icon
     if barOnly then
-        CallButtonMethod(button, "ClearIcon")
+        button:ClearIcon()
         if icon then
             icon:SetAlpha(0)
             icon:Hide()
@@ -1567,7 +1796,7 @@ local function PrepareAuraButton(button, lane, index)
         icon:SetAllPoints(button)
         icon:SetAlpha(1)
         icon:Show()
-        CallButtonMethod(button, "SetIcon", icon)
+        button:SetIcon(icon)
     end
 
     -- Native cooldown swipe. Blizzard's ApplyDurationCooldown drives this from
@@ -1591,10 +1820,10 @@ local function PrepareAuraButton(button, lane, index)
         if cooldown then
             if type(cooldown.SetReverse) == "function" then cooldown:SetReverse(lane.cooldownSwipeReverse == true) end
             cooldown:Show()
-            CallButtonMethod(button, "SetDurationCooldown", cooldown)
+            button:SetDurationCooldown(cooldown)
         end
     else
-        CallButtonMethod(button, "ClearDurationCooldown")
+        button:ClearDurationCooldown()
         if button._msufA3Cooldown then button._msufA3Cooldown:Hide() end
     end
 
@@ -1610,23 +1839,20 @@ local function PrepareAuraButton(button, lane, index)
         if type(bar.SetFrameLevel) == "function" then bar:SetFrameLevel((button:GetFrameLevel() or 0) + 2) end
         LayoutDurationBar(button, bar, lane)
         ApplyDurationBarColor(bar)
-        if CallButtonMethod(button, "SetDurationBar", bar, ResolveDurationBarOptions(lane)) then
-            bar:Show()
-        else
-            bar:Hide()
-        end
+        button:SetDurationBar(bar, ResolveDurationBarOptions(lane))
+        bar:Show()
     else
-        CallButtonMethod(button, "ClearDurationBar")
+        button:ClearDurationBar()
         if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
     end
 
-    local duration = button.Text or button.DurationText
-    if not duration then
-        duration = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        button.Text = duration
-    end
-    duration:Hide()
     if lane.showCooldownText == true then
+        local duration = button.Text or button.DurationText
+        if not duration then
+            duration = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            button.Text = duration
+        end
+        duration:Hide()
         ApplyFont(duration, lane.cooldownSize)
         PlaceCooldownText(duration, button, lane)
         duration:Show()
@@ -1637,30 +1863,34 @@ local function PrepareAuraButton(button, lane, index)
         local formatter = BuildAuraDurationFormatter(lane)
         if formatter then
             _durationTextOptions.formatter = formatter
-            CallButtonMethod(button, "SetDurationText", duration, _durationTextOptions)
+            button:SetDurationText(duration, _durationTextOptions)
             _durationTextOptions.formatter = nil
         else
             _durationTextOptions.formatter = nil
-            CallButtonMethod(button, "SetDurationText", duration)
+            button:SetDurationText(duration)
         end
     else
-        CallButtonMethod(button, "ClearDurationText")
+        button:ClearDurationText()
+        local duration = button.Text or button.DurationText
+        if duration then duration:Hide() end
     end
 
-    local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
-    if not count then
-        count = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        button._msufA3ApplicationCount = count
-    end
-    button.Count = count
-    count:Hide()
     if lane.showStacks == true then
+        local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
+        if not count then
+            count = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            button._msufA3ApplicationCount = count
+        end
+        button.Count = count
+        count:Hide()
         ApplyFont(count, lane.stackSize)
         PlaceStackText(count, button, lane)
         count:Show()
-        CallButtonMethod(button, "SetApplicationCount", count, {})
+        button:SetApplicationCount(count, {})
     else
-        CallButtonMethod(button, "ClearApplicationCount")
+        button:ClearApplicationCount()
+        local count = button._msufA3ApplicationCount or button.Count or button.ApplicationCount
+        if count then count:Hide() end
     end
 
     local auraBorderBound = false
@@ -1671,9 +1901,10 @@ local function PrepareAuraButton(button, lane, index)
         end
         LayoutAuraBorder(button, border, lane)
         button._msufA3AuraBorder = border
-        auraBorderBound = CallButtonMethod(button, "SetAuraBorder", border, GetAuraBorderOptions(lane.showAuraSymbol))
+        button:SetAuraBorder(border, GetAuraBorderOptions(lane.showAuraSymbol))
+        auraBorderBound = true
     else
-        CallButtonMethod(button, "ClearAuraBorder")
+        button:ClearAuraBorder()
         if button._msufA3AuraBorder and button._msufA3AuraBorder.Hide then button._msufA3AuraBorder:Hide() end
     end
 
@@ -1689,15 +1920,17 @@ local function PrepareAuraButton(button, lane, index)
         symbol:SetJustifyH("RIGHT")
         symbol:SetJustifyV("BOTTOM")
         ApplyFont(symbol, math_min(lane.stackSize or DEFAULT_SHARED.stackTextSize, 14))
-        CallButtonMethod(button, "SetAuraSymbol", symbol, { showWhenHarmful = true, showWhenHelpful = false })
+        button:SetAuraSymbol(symbol, { showWhenHarmful = true, showWhenHelpful = false })
     else
-        CallButtonMethod(button, "ClearAuraSymbol")
+        button:ClearAuraSymbol()
         if button._msufA3AuraSymbol and button._msufA3AuraSymbol.Hide then button._msufA3AuraSymbol:Hide() end
     end
 
-    CallButtonMethod(button, "SetMouseMotionEnabled", lane.showTooltip ~= false)
+    button:SetMouseMotionEnabled(lane.showTooltip ~= false)
 
-    SyncButtonGeometry(button, lane, index)
+    if button._msufA3ManagedAuraButton ~= true then
+        SyncButtonGeometry(button, lane, index)
+    end
 end
 
 local function DispelSensorTarget(parentFrame, sensor)
@@ -1772,25 +2005,13 @@ local function GetSensorBorderOptions()
     return AURA_SENSOR_BORDER_OPTIONS
 end
 
-local SENSOR_FILTER_OPTIONS = {}
-local function AddDispelSensorAuraFilters(container, sensor)
-    if not (container and sensor and sensor.nativeFilter) then return false end
-    local count = math_floor((tonumber(sensor.filterCount) or 1) + 0.5)
-    if count < 1 then count = 1 end
-    SENSOR_FILTER_OPTIONS.maxFrameCount = math_floor((tonumber(sensor.filterMax) or tonumber(sensor.max) or 1) + 0.5)
-    if SENSOR_FILTER_OPTIONS.maxFrameCount < 1 then SENSOR_FILTER_OPTIONS.maxFrameCount = 1 end
-    for _ = 1, count do
-        container:AddAuraFilter(sensor.nativeFilter, SENSOR_FILTER_OPTIONS)
-    end
-    return true
-end
-
 local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     if not (button and sensor and parentFrame) then return false end
+    ValidatePTR4AuraButtonContract(button)
     button._msufA3NativeButton = true
     button._msufA3DispelSensor = sensor.visual
     if button.EnableMouse then button:EnableMouse(false) end
-    CallButtonMethod(button, "SetMouseMotionEnabled", false)
+    button:SetMouseMotionEnabled(false)
     LayoutDispelSensorButton(button, sensor, parentFrame, index)
 
     local icon = button.Icon
@@ -1801,12 +2022,12 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     icon:ClearAllPoints()
     icon:SetAllPoints(button)
     icon:SetAlpha(0)
-    CallButtonMethod(button, "SetIcon", icon)
-    CallButtonMethod(button, "ClearApplicationCount")
-    CallButtonMethod(button, "ClearDurationCooldown")
-    CallButtonMethod(button, "ClearDurationText")
-    CallButtonMethod(button, "ClearDurationBar")
-    CallButtonMethod(button, "ClearAuraSymbol")
+    button:SetIcon(icon)
+    button:ClearApplicationCount()
+    button:ClearDurationCooldown()
+    button:ClearDurationText()
+    button:ClearDurationBar()
+    button:ClearAuraSymbol()
 
     local region = button._msufA3DispelSensorRegion
     if not region then
@@ -1817,20 +2038,232 @@ local function PrepareDispelSensorButton(button, sensor, parentFrame, index)
     if sensor.visual == "corner" then
         region:SetTexture("Interface\\Buttons\\WHITE8X8")
         region:SetAlpha(Clamp01(sensor.alpha, 1))
-        CallButtonMethod(button, "SetAuraBorder", region, GetSensorOverlayOptions())
+        button:SetAuraBorder(region, GetSensorOverlayOptions())
     elseif sensor.visual == "overlay" then
         region:SetTexture("Interface\\Buttons\\WHITE8X8")
         region:SetAlpha(Clamp01(sensor.alpha, 0.35))
-        CallButtonMethod(button, "SetAuraBorder", region, GetSensorOverlayOptions())
+        button:SetAuraBorder(region, GetSensorOverlayOptions())
     else
         region:SetTexture(MSUF_AURA_SENSOR_EDGE_TEXTURE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         region:SetAlpha(0.82)
-        CallButtonMethod(button, "SetAuraBorder", region, GetSensorBorderOptions())
+        button:SetAuraBorder(region, GetSensorBorderOptions())
     end
     return true
 end
 
-local function SyncDispelSensorGeometry(container, sensor, parentFrame)
+local function ManagedAuraKey(config)
+    return "msuf_" .. tostring(config and config.kind or "auras")
+end
+
+local function BuildManagedAuraGroupOptions(container, lane)
+    local nextIndex = 0
+    return {
+        maxFrameCount = lane.max,
+        candidateFilters = lane.candidateFilters,
+        initializeFrame = function(button)
+            nextIndex = nextIndex + 1
+            button._msufA3ManagedAuraButton = true
+            container[nextIndex] = button
+            PrepareAuraButton(button, container._msufA3NativeLaneConfig or lane, nextIndex)
+        end,
+    }
+end
+
+local function ManagedAuraGroupLayoutOptions(lane)
+    local anchor = lane.initialAnchor or "TOPLEFT"
+    local horizontal = FlowDirectionValue(lane.growthX)
+    local vertical = FlowDirectionValue(lane.growthY)
+    local size = lane.size or DEFAULT_SHARED.iconSize
+    local spacing = lane.spacing or DEFAULT_SHARED.spacing
+    local perRow = lane.perRow or DEFAULT_SHARED.perRow
+    return {
+        anchorPoint = anchor,
+        horizontalGrowthDirection = horizontal,
+        verticalGrowthDirection = vertical,
+        maxFramesPerRow = perRow,
+        frameWidth = size,
+        frameHeight = size,
+        frameSpacingX = spacing,
+        frameSpacingY = spacing,
+    }
+end
+
+local function ApplyManagedAuraGroupLayout(container, groupKey, lane)
+    container:SetAuraGroupLayout(groupKey, ManagedAuraGroupLayoutOptions(lane))
+    A3.nativeAuraRuntimeLayoutError = nil
+    return true
+end
+
+local function CreateNativeAuraContainer(root)
+    local container = CreateFrame("AuraContainer", nil, root, "CustomAuraContainerTemplate")
+    if not container then
+        A3.nativeAuraRuntimeAvailable = false
+        A3.nativeAuraRuntimeError = "CustomAuraContainerTemplate is unavailable"
+        return nil
+    end
+    if not ValidatePTR4AuraContainerContract(container) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    return container
+end
+
+local function CreateManagedNativeLane(container, lane, parentFrame)
+    if not container then return nil end
+    A3.nativeAuraRuntimeAvailable = true
+    ConfigureContainer(container, lane, parentFrame)
+    container._msufA3ManagedAuraGroups = true
+    container._msufA3ManagedGroupKey = ManagedAuraKey(lane)
+    container.createdButtons = lane.max or 0
+    ConfigurePTR4AuraContainer(container, lane.unit)
+
+    container:AddAuraGroup(container._msufA3ManagedGroupKey, lane.nativeFilter, BuildManagedAuraGroupOptions(container, lane))
+    if not ApplyManagedAuraGroupLayout(container, container._msufA3ManagedGroupKey, lane) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    if not RegisterNativeContainer(container) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    container:Show()
+    A3.nativeAuraRuntimeError = nil
+    return container
+end
+
+local function BuildManagedAuraSlotOptions(container, sensor, parentFrame, buttonIndex, sensorIndex)
+    return {
+        maxFrameCount = 1,
+        initializeFrame = function(button)
+            button._msufA3ManagedAuraButton = true
+            container[buttonIndex] = button
+            PrepareDispelSensorButton(button, sensor, parentFrame, sensorIndex or buttonIndex)
+        end,
+    }
+end
+
+local function CreateManagedDispelSensor(container, sensor, parentFrame)
+    if not container then return nil end
+    A3.nativeAuraRuntimeAvailable = true
+    container._msufA3ManagedAuraSlots = true
+    container._msufA3NativeLane = sensor.kind
+    container._msufA3NativeRegistered = nil
+    container._msufA3NativeRegistrationPending = nil
+    container.unit = sensor.unit
+    container.createdButtons = sensor.max or 1
+    ConfigurePTR4AuraContainer(container, sensor.unit)
+    SyncDispelSensorGeometry(container, sensor, parentFrame)
+
+    for i = 1, container.createdButtons do
+        local slotKey = ManagedAuraKey(sensor) .. "_" .. tostring(i)
+        container:AddAuraSlot(slotKey, sensor.nativeFilter, BuildManagedAuraSlotOptions(container, sensor, parentFrame, i, i))
+    end
+    if not RegisterNativeContainer(container) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    container:Show()
+    A3.nativeAuraRuntimeError = nil
+    return container
+end
+
+local function AddDispelSensorSlots(container, sensor, parentFrame, firstButtonIndex)
+    local buttonIndex = firstButtonIndex or 0
+    local count = math_max(1, sensor and sensor.max or 1)
+    for sensorIndex = 1, count do
+        buttonIndex = buttonIndex + 1
+        local slotKey = ManagedAuraKey(sensor) .. "_" .. tostring(sensorIndex)
+        container._msufA3SensorButtonSlots[buttonIndex] = {
+            sensor = sensor,
+            sensorIndex = sensorIndex,
+        }
+        container:AddAuraSlot(slotKey, sensor.nativeFilter, BuildManagedAuraSlotOptions(container, sensor, parentFrame, buttonIndex, sensorIndex))
+    end
+    return buttonIndex
+end
+
+local function SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame)
+    if not (container and sensorRoot and sensorRoot.sensorRoot == true) then return false end
+    parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
+    if not parentFrame then return false end
+    container._msufA3NativeLaneConfig = sensorRoot
+    container._msufA3ParentFrame = parentFrame
+    local sig = sensorRoot._msufA3LayoutSignature
+    if sig ~= nil
+        and container._msufA3GeomSig == sig
+        and container._msufA3GeomParent == parentFrame
+    then
+        return true
+    end
+    container._msufA3GeomSig = sig
+    container._msufA3GeomParent = parentFrame
+    local root = container:GetParent()
+    if root then container:SetAllPoints(root) end
+    if parentFrame and container.SetFrameLevel then
+        container:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (sensorRoot.layer or 14))
+    end
+    local slots = container._msufA3SensorButtonSlots
+    if slots then
+        for buttonIndex = 1, #slots do
+            local slot = slots[buttonIndex]
+            if slot then
+                PrepareDispelSensorButton(container[buttonIndex], slot.sensor, parentFrame, slot.sensorIndex)
+            end
+        end
+    end
+    return true
+end
+
+local function CreateManagedDispelSensorRoot(container, sensorRoot, parentFrame)
+    if not container then return nil end
+    A3.nativeAuraRuntimeAvailable = true
+    container._msufA3ManagedAuraSlots = true
+    container._msufA3NativeLane = sensorRoot.kind
+    container._msufA3NativeRegistered = nil
+    container._msufA3NativeRegistrationPending = nil
+    container._msufA3SensorButtonSlots = {}
+    container.unit = sensorRoot.unit
+    container.createdButtons = sensorRoot.max or 1
+    ConfigurePTR4AuraContainer(container, sensorRoot.unit)
+    SyncDispelSensorRootGeometry(container, sensorRoot, parentFrame)
+
+    local buttonIndex = 0
+    local sensors = sensorRoot.sensors or {}
+    for i = 1, #sensors do
+        buttonIndex = AddDispelSensorSlots(container, sensors[i], parentFrame, buttonIndex)
+    end
+    container.createdButtons = buttonIndex
+    if not RegisterNativeContainer(container) then
+        if container.Hide then container:Hide() end
+        return nil
+    end
+    container:Show()
+    A3.nativeAuraRuntimeError = nil
+    return container
+end
+
+local function UpdateDispelSensorRootSlots(container, sensorRoot)
+    local slots = container and container._msufA3SensorButtonSlots
+    local sensors = sensorRoot and sensorRoot.sensors
+    if not (slots and type(sensors) == "table") then return false end
+    local buttonIndex = 0
+    for i = 1, #sensors do
+        local sensor = sensors[i]
+        local count = math_max(1, sensor and sensor.max or 1)
+        for sensorIndex = 1, count do
+            buttonIndex = buttonIndex + 1
+            if not slots[buttonIndex] then slots[buttonIndex] = {} end
+            slots[buttonIndex].sensor = sensor
+            slots[buttonIndex].sensorIndex = sensorIndex
+        end
+    end
+    for i = buttonIndex + 1, #slots do
+        slots[i] = nil
+    end
+    return true
+end
+
+SyncDispelSensorGeometry = function(container, sensor, parentFrame)
     if not (container and sensor) then return false end
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     if not parentFrame then return false end
@@ -1865,43 +2298,23 @@ local function CreateNativeDispelSensor(root, sensor, parentFrame)
         A3.nativeAuraRuntimeError = AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
         return nil
     end
-    local container = CreateFrame("AuraContainer", nil, root, "CustomAuraContainerTemplate")
-    if not container then
-        A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = "CustomAuraContainerTemplate is unavailable"
-        return nil
-    end
-    A3.nativeAuraRuntimeAvailable = true
-    container._msufA3NativeLane = sensor.kind
-    container._msufA3NativeRegistered = nil
-    container._msufA3NativeRegistrationPending = nil
-    container.unit = sensor.unit
-    container.createdButtons = sensor.max or 1
-    container:Show()
-    container:SetUnit(sensor.unit)
-    if type(container.SetEnabled) == "function" then container:SetEnabled(true) end
-    for i = 1, container.createdButtons do
-        local button = CreateFrame("AuraButton", nil, container, "CustomAuraButtonTemplate")
-        if not button then
-            A3.nativeAuraRuntimeAvailable = false
-            A3.nativeAuraRuntimeError = "CustomAuraButtonTemplate is unavailable"
-            if container.Hide then container:Hide() end
-            return nil
-        end
-        PrepareDispelSensorButton(button, sensor, parentFrame, i)
-        container[i] = button
-        container:AddAuraFrame(button)
-    end
-    AddDispelSensorAuraFilters(container, sensor)
-    if not RegisterNativeContainer(container) then
-        if container.Hide then container:Hide() end
-        return nil
-    end
-    A3.nativeAuraRuntimeError = nil
-    return container
+    local container = CreateNativeAuraContainer(root)
+    if not container then return nil end
+    return CreateManagedDispelSensor(container, sensor, parentFrame)
 end
 
-local function ConfigureContainer(container, lane, parentFrame)
+local function CreateNativeDispelSensorRoot(root, sensorRoot, parentFrame)
+    if not EnsureBlizzardAuraContainerLoaded() then
+        A3.nativeAuraRuntimeAvailable = false
+        A3.nativeAuraRuntimeError = AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
+        return nil
+    end
+    local container = CreateNativeAuraContainer(root)
+    if not container then return nil end
+    return CreateManagedDispelSensorRoot(container, sensorRoot, parentFrame)
+end
+
+ConfigureContainer = function(container, lane, parentFrame)
     container._msufA3NativeLane = lane.kind
     container._msufA3NativeRegistered = nil
     container._msufA3NativeRegistrationPending = nil
@@ -1914,6 +2327,147 @@ local function NativeContainerVisible(container)
     if type(container.IsVisible) == "function" and container:IsVisible() ~= true then return false end
     if type(container.IsShown) == "function" and container:IsShown() ~= true then return false end
     return true
+end
+
+local DIRECT_IDENTITY_REFRESH_UNITS = {
+    target = true,
+    focus = true,
+    boss1 = true,
+    boss2 = true,
+    boss3 = true,
+    boss4 = true,
+    boss5 = true,
+}
+
+local DIRECT_IDENTITY_REFRESH_ALL_EVENTS = {
+    PLAYER_ENTERING_WORLD = true,
+}
+
+local DIRECT_IDENTITY_REFRESH_GROUP_EVENTS = {
+    GROUP_ROSTER_UPDATE = true,
+}
+
+local DIRECT_IDENTITY_EVENT_UNITS = {
+    PLAYER_TARGET_CHANGED = { "target" },
+    PLAYER_FOCUS_CHANGED = { "focus" },
+    INSTANCE_ENCOUNTER_ENGAGE_UNIT = { "boss1", "boss2", "boss3", "boss4", "boss5" },
+}
+
+local function IsGroupUnitToken(unit)
+    return type(unit) == "string" and (unit:match("^party%d+$") ~= nil or unit:match("^raid%d+$") ~= nil)
+end
+
+local function DirectIdentityRefreshUnitEligible(unit)
+    if DIRECT_IDENTITY_REFRESH_UNITS[unit] == true then return true end
+    return IsGroupUnitToken(unit)
+end
+
+local function DirectIdentityRefreshUnit(unit)
+    local byUnit = A3._directIdentityAuraContainers
+    local containers = byUnit and byUnit[unit]
+    if not containers then return false end
+    local any = false
+    for container in pairs(containers) do
+        if container and NativeContainerVisible(container) and type(container.UpdateAllAuras) == "function" then
+            container:UpdateAllAuras()
+            any = true
+        end
+    end
+    return any
+end
+
+local function DirectIdentityRefreshAll(groupOnly)
+    local byUnit = A3._directIdentityAuraContainers
+    if not byUnit then return false end
+    local any = false
+    for unit in pairs(byUnit) do
+        if groupOnly ~= true or IsGroupUnitToken(unit) then
+            any = DirectIdentityRefreshUnit(unit) or any
+        end
+    end
+    return any
+end
+
+local function FlushScheduledDirectIdentityRefreshAll()
+    local groupOnly = A3._directIdentityRefreshGroupOnly == true
+    A3._directIdentityRefreshPending = nil
+    A3._directIdentityRefreshGroupOnly = nil
+    DirectIdentityRefreshAll(groupOnly)
+end
+
+local function ScheduleDirectIdentityRefreshAll(groupOnly)
+    if A3._directIdentityRefreshPending == true then
+        if groupOnly ~= true then A3._directIdentityRefreshGroupOnly = nil end
+        return true
+    end
+    A3._directIdentityRefreshPending = true
+    A3._directIdentityRefreshGroupOnly = groupOnly == true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, FlushScheduledDirectIdentityRefreshAll)
+    else
+        FlushScheduledDirectIdentityRefreshAll()
+    end
+    return true
+end
+
+local function EnsureDirectIdentityRefreshFrame()
+    if A3._directIdentityAuraFrame then return A3._directIdentityAuraFrame end
+    local frame = CreateFrame("Frame")
+    frame:SetScript("OnEvent", function(_, event)
+        if DIRECT_IDENTITY_REFRESH_ALL_EVENTS[event] == true then
+            ScheduleDirectIdentityRefreshAll(false)
+            return
+        end
+        if DIRECT_IDENTITY_REFRESH_GROUP_EVENTS[event] == true then
+            ScheduleDirectIdentityRefreshAll(true)
+            return
+        end
+        local units = DIRECT_IDENTITY_EVENT_UNITS[event]
+        if not units then return end
+        for i = 1, #units do
+            DirectIdentityRefreshUnit(units[i])
+        end
+    end)
+    frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+    frame:RegisterEvent("PLAYER_FOCUS_CHANGED")
+    frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+    frame:RegisterEvent("GROUP_ROSTER_UPDATE")
+    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    A3._directIdentityAuraFrame = frame
+    return frame
+end
+
+local UnregisterDirectIdentityRefreshContainer
+
+local function RegisterDirectIdentityRefreshContainer(container)
+    local unit = container and container.unit
+    if not DirectIdentityRefreshUnitEligible(unit) then
+        UnregisterDirectIdentityRefreshContainer(container)
+        return false
+    end
+    A3._directIdentityAuraContainers = A3._directIdentityAuraContainers or {}
+    if container._msufA3DirectIdentityUnit and container._msufA3DirectIdentityUnit ~= unit then
+        local oldSet = A3._directIdentityAuraContainers[container._msufA3DirectIdentityUnit]
+        if oldSet then oldSet[container] = nil end
+    end
+    local set = A3._directIdentityAuraContainers[unit]
+    if not set then
+        set = {}
+        A3._directIdentityAuraContainers[unit] = set
+    end
+    set[container] = true
+    container._msufA3DirectIdentityUnit = unit
+    EnsureDirectIdentityRefreshFrame()
+    return true
+end
+
+UnregisterDirectIdentityRefreshContainer = function(container)
+    local unit = container and container._msufA3DirectIdentityUnit
+    if not unit then return end
+    local byUnit = A3._directIdentityAuraContainers
+    local set = byUnit and byUnit[unit]
+    if set then set[container] = nil end
+    container._msufA3DirectIdentityUnit = nil
 end
 
 RegisterNativeContainer = function(container, forceRefresh)
@@ -1932,7 +2486,8 @@ RegisterNativeContainer = function(container, forceRefresh)
     -- through the container's cheap incremental delta path (added/updated/
     -- removed) instead of an MSUF forced reparse. SetEnabled is a secure
     -- delegate (safe to call directly) and is idempotent.
-    if type(container.SetEnabled) == "function" then container:SetEnabled(true) end
+    container:SetEnabled(true)
+    RegisterDirectIdentityRefreshContainer(container)
     container._msufA3NativeRegistered = true
     container._msufA3NativeRegistrationPending = nil
     return true
@@ -1940,10 +2495,22 @@ end
 
 local function UnregisterNativeContainer(container)
     if not container then return true end
-    if type(container.SetEnabled) == "function" then container:SetEnabled(false) end
+    UnregisterDirectIdentityRefreshContainer(container)
+    container:SetEnabled(false)
     container._msufA3NativeRegistered = nil
     container._msufA3NativeRegistrationPending = nil
     return true
+end
+
+local function RebindNativeContainerUnit(container, unit)
+    if not (container and type(unit) == "string" and unit ~= "") then return false end
+    local changed = container.unit ~= unit or (type(container.GetUnit) == "function" and container:GetUnit() ~= unit)
+    container.unit = unit
+    if changed and type(container.SetUnit) == "function" then
+        container:SetUnit(unit)
+    end
+    RegisterDirectIdentityRefreshContainer(container)
+    return changed
 end
 
 local function CreateNativeLane(root, lane, parentFrame)
@@ -1953,47 +2520,9 @@ local function CreateNativeLane(root, lane, parentFrame)
         return nil
     end
 
-    local container = CreateFrame("AuraContainer", nil, root, "CustomAuraContainerTemplate")
-    if not container then
-        A3.nativeAuraRuntimeAvailable = false
-        A3.nativeAuraRuntimeError = "CustomAuraContainerTemplate is unavailable"
-        return nil
-    end
-    A3.nativeAuraRuntimeAvailable = true
-    ConfigureContainer(container, lane, parentFrame)
-    container:Show()
-    container:SetUnit(lane.unit)
-    -- Enable before the filter and frames so the container registers for UNIT_AURA
-    -- and its setup parses run over zero filters (cheap). The one populating parse
-    -- then happens once, on AddAuraFilter below, against the already-built pool --
-    -- instead of AddAuraFilter parsing empty, then re-parsing on SetEnabled.
-    if type(container.SetEnabled) == "function" then container:SetEnabled(true) end
-    -- Add buttons one at a time. The batch AddAuraFramesFromTable() TAINTS on 12.1:
-    -- it ipairs/indexes the addon-owned table inside the secure delegate and throws
-    -- "cannot be accessed while tainted" (unlike AddAuraFilter, which securecopies
-    -- its options). Per-frame AddAuraFrame only ever passes a single forbidden
-    -- object, so it is safe -- and because the filter is added afterwards, each
-    -- AddAuraFrame here re-walks over zero filters (cheap); the one populating parse
-    -- happens on AddAuraFilter below.
-    for i = 1, lane.max do
-        local button = CreateFrame("AuraButton", nil, container, "CustomAuraButtonTemplate")
-        if not button then
-            A3.nativeAuraRuntimeAvailable = false
-            A3.nativeAuraRuntimeError = "CustomAuraButtonTemplate is unavailable"
-            if container.Hide then container:Hide() end
-            return nil
-        end
-        PrepareAuraButton(button, lane, i)
-        container[i] = button
-        container:AddAuraFrame(button)
-    end
-    container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
-    if not RegisterNativeContainer(container) then
-        if container.Hide then container:Hide() end
-        return nil
-    end
-    A3.nativeAuraRuntimeError = nil
-    return container
+    local container = CreateNativeAuraContainer(root)
+    if not container then return nil end
+    return CreateManagedNativeLane(container, lane, parentFrame)
 end
 
 local function HideLane(lane)
@@ -2007,23 +2536,50 @@ local function ApplyLane(root, lane, parentFrame, forceRecreate)
     if not (root and lane and lane.enabled) then return nil end
     local key = lane.rootKey
     local trackingSignature = lane._msufA3TrackingSignature or LaneTrackingSignature(lane)
+    local structuralSignature = lane._msufA3StructuralSignature or LaneStructuralSignature(lane)
     local layoutSignature = lane._msufA3LayoutSignature or LaneLayoutSignature(lane)
     local current = root[key]
-    if forceRecreate ~= true
-        and current
-        and current._msufA3TrackingSignature == trackingSignature
-        and current._msufA3LayoutSignature == layoutSignature
-    then
+    if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
+        RebindNativeContainerUnit(current, lane.unit)
+        local refresh = false
+        local layoutChanged = current._msufA3LayoutSignature ~= layoutSignature
+        if current._msufA3MaxFrameCount ~= lane.max then
+            current:SetAuraGroupMaxFrameCount(current._msufA3ManagedGroupKey, lane.max)
+            current._msufA3MaxFrameCount = lane.max
+            refresh = true
+        end
+        if current._msufA3CandidateFilterSignature ~= lane.candidateFilterSignature then
+            current:SetAuraGroupCandidateFilters(current._msufA3ManagedGroupKey, lane.candidateFilters)
+            current._msufA3CandidateFilterSignature = lane.candidateFilterSignature
+        end
+        if layoutChanged then
+            ApplyManagedAuraGroupLayout(current, current._msufA3ManagedGroupKey, lane)
+        end
         SyncContainerGeometry(current, lane, parentFrame)
+        if layoutChanged then
+            for i = 1, (current.createdButtons or lane.max or 0) do
+                if current[i] then PrepareAuraButton(current[i], lane, i) end
+            end
+        end
         current:Show()
-        return RegisterNativeContainer(current) and current or nil
+        if not RegisterNativeContainer(current) then return nil end
+        if refresh == true and NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
+            current:UpdateAllAuras()
+        end
+        current._msufA3TrackingSignature = trackingSignature
+        current._msufA3StructuralSignature = structuralSignature
+        current._msufA3LayoutSignature = layoutSignature
+        return current
     end
     HideLane(current)
     root[key] = nil
     current = CreateNativeLane(root, lane, parentFrame)
     if current then
         current._msufA3TrackingSignature = trackingSignature
+        current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
+        current._msufA3MaxFrameCount = lane.max
+        current._msufA3CandidateFilterSignature = lane.candidateFilterSignature
         root[key] = current
     end
     return current
@@ -2033,25 +2589,59 @@ local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)
     if not (root and sensor and sensor.enabled) then return nil end
     local key = sensor.rootKey
     local trackingSignature = sensor._msufA3TrackingSignature or SensorTrackingSignature(sensor)
+    local structuralSignature = sensor._msufA3StructuralSignature or SensorStructuralSignature(sensor)
     local layoutSignature = sensor._msufA3LayoutSignature or SensorLayoutSignature(sensor)
     local current = root[key]
-    if forceRecreate ~= true
-        and current
-        and current._msufA3TrackingSignature == trackingSignature
-        and current._msufA3LayoutSignature == layoutSignature
-    then
+    if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
+        RebindNativeContainerUnit(current, sensor.unit)
         SyncDispelSensorGeometry(current, sensor, parentFrame)
         current:Show()
-        return RegisterNativeContainer(current) and current or nil
+        if not RegisterNativeContainer(current) then return nil end
+        current._msufA3TrackingSignature = trackingSignature
+        current._msufA3StructuralSignature = structuralSignature
+        current._msufA3LayoutSignature = layoutSignature
+        return current
     end
     HideLane(current)
     root[key] = nil
     current = CreateNativeDispelSensor(root, sensor, parentFrame)
     if current then
         current._msufA3TrackingSignature = trackingSignature
+        current._msufA3StructuralSignature = structuralSignature
         current._msufA3LayoutSignature = layoutSignature
         sensor._msufA3TrackingSignature = trackingSignature
+        sensor._msufA3StructuralSignature = structuralSignature
         sensor._msufA3LayoutSignature = layoutSignature
+        root[key] = current
+    end
+    return current
+end
+
+local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreate)
+    if not (root and sensorRoot and sensorRoot.enabled == true and sensorRoot.sensorRoot == true) then return nil end
+    local key = sensorRoot.rootKey or "DispelSensor"
+    local trackingSignature = sensorRoot._msufA3TrackingSignature
+    local structuralSignature = sensorRoot._msufA3StructuralSignature
+    local layoutSignature = sensorRoot._msufA3LayoutSignature
+    local current = root[key]
+    if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
+        RebindNativeContainerUnit(current, sensorRoot.unit)
+        UpdateDispelSensorRootSlots(current, sensorRoot)
+        SyncDispelSensorRootGeometry(current, sensorRoot, parentFrame)
+        current:Show()
+        if not RegisterNativeContainer(current) then return nil end
+        current._msufA3TrackingSignature = trackingSignature
+        current._msufA3StructuralSignature = structuralSignature
+        current._msufA3LayoutSignature = layoutSignature
+        return current
+    end
+    HideLane(current)
+    root[key] = nil
+    current = CreateNativeDispelSensorRoot(root, sensorRoot, parentFrame)
+    if current then
+        current._msufA3TrackingSignature = trackingSignature
+        current._msufA3StructuralSignature = structuralSignature
+        current._msufA3LayoutSignature = layoutSignature
         root[key] = current
     end
     return current
@@ -2059,29 +2649,17 @@ end
 
 local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame)
     lane = lane or (container and container._msufA3NativeLaneConfig)
-    if lane and lane.sensor == true then
+    if lane and lane.sensorRoot == true then
+        SyncDispelSensorRootGeometry(container, lane, parentFrame)
+    elseif lane and lane.sensor == true then
         SyncDispelSensorGeometry(container, lane, parentFrame)
     else
         SyncContainerGeometry(container, lane, parentFrame)
     end
-    if not RegisterNativeContainer(container) then return false end
+    if not RegisterNativeContainer(container, forceRefresh == true) then return false end
     if not NativeContainerVisible(container) then return true end
-    if forceRefresh == true and lane and lane.nativeFilter and lane.max then
-        -- Stable-token swaps need a full content refresh. UpdateAllAuras() is
-        -- cheaper in theory, but current PTR builds still leave addon-created
-        -- CustomAuraContainers stale in this path. Default to the proven
-        -- content-correct filter re-add route, still coalesced by frame in
-        -- FlushIdentityQueue. Keep UpdateAllAuras as an explicit A/B switch.
-        if A3.swapUseUpdateAllAuras == true and type(container.UpdateAllAuras) == "function" then
-            container:UpdateAllAuras()
-        else
-            container:ClearAuraFilters()
-            if lane.sensor == true then
-                AddDispelSensorAuraFilters(container, lane)
-            else
-                container:AddAuraFilter(lane.nativeFilter, { maxFrameCount = lane.max })
-            end
-        end
+    if forceRefresh == true and type(container.UpdateAllAuras) == "function" then
+        container:UpdateAllAuras()
     end
     return true
 end
@@ -2105,18 +2683,10 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
         any = true
         ok = RefreshNativeContainer(root.Externals, forceRefresh, lanes.external, root:GetParent()) and ok
     end
-    local sensors = cfg.sensors
-    if sensors and sensors.dispelBorder and sensors.dispelBorder.enabled then
+    local sensorRoot = GetDispelSensorRootConfig(cfg)
+    if sensorRoot and sensorRoot.enabled then
         any = true
-        ok = RefreshNativeContainer(root.DispelBorderSensor, forceRefresh, sensors.dispelBorder, root:GetParent()) and ok
-    end
-    if sensors and sensors.dispelOverlay and sensors.dispelOverlay.enabled then
-        any = true
-        ok = RefreshNativeContainer(root.DispelOverlaySensor, forceRefresh, sensors.dispelOverlay, root:GetParent()) and ok
-    end
-    if sensors and sensors.dispelCorner and sensors.dispelCorner.enabled then
-        any = true
-        ok = RefreshNativeContainer(root.DispelCornerSensor, forceRefresh, sensors.dispelCorner, root:GetParent()) and ok
+        ok = RefreshNativeContainer(root.DispelSensor, forceRefresh, sensorRoot, root:GetParent()) and ok
     end
     if ok and any then A3.nativeAuraRuntimeError = nil end
     return ok and any
@@ -2132,51 +2702,13 @@ EnsureNativeAuraRefreshDriver = function()
     return true
 end
 
--- Deferred, coalesced identity flush. On a same-token target/focus swap the
--- container does NOT self-refresh: UNIT_AURA does not fire just because the
--- "target" token repoints to a new GUID, and SetUnit() is a no-op when the token
--- is unchanged -- so the new unit's auras would otherwise never load. We
--- therefore trigger a content reparse here, but keep it off the synchronous
--- identity tick and coalesce it: enqueue the frame in a frame-keyed set and run
--- one forced refresh next tick (vs the old path's synchronous reparse on every
--- identity event). Frame-keyed => natural coalescing under swap spam; the unit is
--- re-read at flush so the latest identity wins. Steady-state aura changes
--- (expiry/refresh/stacks) on the current target are handled separately by the
--- container's own UNIT_AURA once it is enabled (see RegisterNativeContainer).
-local _identityQueue
-local _identityFlushScheduled = false
-
-local function FlushIdentityQueue()
-    local profName = "auras3:FlushIdentityQueue"
-    local profToken = ProfBegin(profName)
-    _identityFlushScheduled = false
-    local queue = _identityQueue
-    _identityQueue = nil
-    if not queue then
-        ProfEnd(profName, profToken)
-        return
-    end
-    for frame in pairs(queue) do
-        local root = frame and frame.Auras
-        -- Only touch frames that still own applied native auras; a frame disabled
-        -- between enqueue and flush must not be resurrected here.
-        if root and root._msufA3NativeRoot == true and root._msufA3Applied == true then
-            -- One coalesced reparse per settled identity tick. (UnitGUID is a secret
-            -- value on 12.1 and errors when compared while tainted, so we cannot gate
-            -- on whether the GUID changed -- the deferral + frame-keyed coalescing
-            -- already collapse swap spam to one reparse per tick, which is the win.)
-            RefreshAppliedNativeAuras(frame, true)
-        end
-    end
-    ProfEnd(profName, profToken)
-end
-
 local function HideState(frame)
     local root = frame and frame.Auras
     if not (root and root._msufA3NativeRoot) then return end
     HideLane(root.Buffs)
     HideLane(root.Debuffs)
     HideLane(root.Externals)
+    HideLane(root.DispelSensor)
     HideLane(root.DispelBorderSensor)
     HideLane(root.DispelOverlaySensor)
     HideLane(root.DispelCornerSensor)
@@ -2212,21 +2744,20 @@ local function ApplyConfig(frame, cfg, reason)
     root:SetAllPoints(frame)
     root:Show()
     local lanes = cfg.lanes or {}
-    local sensors = cfg.sensors or {}
+    local sensorRoot = GetDispelSensorRootConfig(cfg)
     local forceRecreate = false
     local ok = true
     if lanes.buff and lanes.buff.enabled and not ApplyLane(root, lanes.buff, frame, forceRecreate) then ok = false end
     if lanes.debuff and lanes.debuff.enabled and not ApplyLane(root, lanes.debuff, frame, forceRecreate) then ok = false end
     if lanes.external and lanes.external.enabled and not ApplyLane(root, lanes.external, frame, forceRecreate) then ok = false end
-    if sensors.dispelBorder and sensors.dispelBorder.enabled and not ApplyDispelSensor(root, sensors.dispelBorder, frame, forceRecreate) then ok = false end
-    if sensors.dispelOverlay and sensors.dispelOverlay.enabled and not ApplyDispelSensor(root, sensors.dispelOverlay, frame, forceRecreate) then ok = false end
-    if sensors.dispelCorner and sensors.dispelCorner.enabled and not ApplyDispelSensor(root, sensors.dispelCorner, frame, forceRecreate) then ok = false end
+    if sensorRoot and sensorRoot.enabled and not ApplyDispelSensorRoot(root, sensorRoot, frame, forceRecreate) then ok = false end
     if not (lanes.buff and lanes.buff.enabled) then HideLane(root.Buffs) end
     if not (lanes.debuff and lanes.debuff.enabled) then HideLane(root.Debuffs) end
     if not (lanes.external and lanes.external.enabled) then HideLane(root.Externals) end
-    if not (sensors.dispelBorder and sensors.dispelBorder.enabled) then HideLane(root.DispelBorderSensor) end
-    if not (sensors.dispelOverlay and sensors.dispelOverlay.enabled) then HideLane(root.DispelOverlaySensor) end
-    if not (sensors.dispelCorner and sensors.dispelCorner.enabled) then HideLane(root.DispelCornerSensor) end
+    if not (sensorRoot and sensorRoot.enabled) then HideLane(root.DispelSensor) end
+    HideLane(root.DispelBorderSensor)
+    HideLane(root.DispelOverlaySensor)
+    HideLane(root.DispelCornerSensor)
     root._msufA3Config = cfg
     root._msufA3Applied = ok == true
     root._msufA3ConfigGen = ConfigGen(cfg)
@@ -2236,6 +2767,31 @@ local function ApplyConfig(frame, cfg, reason)
     root.needFullUpdate = nil
     root:Show()
     return ok == true
+end
+
+local function RootCanReuseContainersForConfig(root, cfg)
+    if not (root and root._msufA3NativeRoot == true and root._msufA3Applied == true and cfg and cfg.enabled == true) then
+        return false
+    end
+    local lanes = cfg.lanes or {}
+    local function laneOK(key, lane)
+        if lane and lane.enabled == true then
+            local current = root[key]
+            return current and current._msufA3StructuralSignature == (lane._msufA3StructuralSignature or LaneStructuralSignature(lane))
+        end
+        return root[key] == nil or not root[key].IsShown or root[key]:IsShown() ~= true
+    end
+    if not laneOK("Buffs", lanes.buff) then return false end
+    if not laneOK("Debuffs", lanes.debuff) then return false end
+    if not laneOK("Externals", lanes.external) then return false end
+    local sensorRoot = GetDispelSensorRootConfig(cfg)
+    if sensorRoot and sensorRoot.enabled == true then
+        local current = root.DispelSensor
+        if not (current and current._msufA3StructuralSignature == sensorRoot._msufA3StructuralSignature) then return false end
+    elseif root.DispelSensor and root.DispelSensor.IsShown and root.DispelSensor:IsShown() == true then
+        return false
+    end
+    return true
 end
 
 function A3.SetUnitFrameOwner(unit, frame, owns)
@@ -2280,21 +2836,10 @@ function A3.RenderFrame(frame, reason)
     local cfg
     local cfgReady = false
 
-    if DEFERRED_IDENTITY_REASONS[reason] == true then
-        -- Target/focus swap keeps the same unit token, so the container does NOT
-        -- self-refresh (no UNIT_AURA, SetUnit is a no-op). Always queue the forced
-        -- rebuild -- this is the proven B4 behavior. Do NOT gate on
-        -- RootAppliedConfigIsCurrent: on a same-token swap the applied config
-        -- usually looks "current", which made the perf refactor skip the rebuild
-        -- and fall through to a non-forced refresh, leaving the new unit's auras
-        -- stale. QueueIdentityAuraRebuild coalesces to one forced reparse next tick.
-        if A3.QueueIdentityAuraRebuild(frame) then return true end
-    end
     if IDENTITY_AURA_REFRESH_REASONS[reason] == true then
         -- Group identity stays synchronous so roster builds settle in one pass,
-        -- but never forces a filter rebuild: keep geometry/registration current
-        -- (no ClearAuraFilters/AddAuraFilter) and let the container's UNIT_AURA
-        -- own aura content.
+        -- but never forces filter reconstruction: keep geometry/registration
+        -- current and let the container's UNIT_AURA own aura content.
         if not cfgReady then cfg = FrameAuraConfig(frame, frame.unit) end
         cfgReady = true
         if not (cfg and cfg.enabled == true) then
@@ -2315,27 +2860,28 @@ function A3.RenderFrame(frame, reason)
     return ApplyConfig(frame, cfg, reason)
 end
 
-A3.ForceUpdateFrame = A3.RenderFrame
-A3.RenderCachedFrame = A3.RenderFrame
-
-function A3.QueueIdentityAuraRebuild(frame)
+A3.RenderUnitChangedFrame = function(frame, oldUnit, newUnit)
     if not frame then return false end
-    local root = frame.Auras
-    if not (root and root._msufA3NativeRoot == true and root._msufA3Applied == true) then
+    if type(newUnit) == "string" and newUnit ~= "" then
+        frame.unit = newUnit
+        frame.unitKey = newUnit
+    end
+    local cfg = FrameAuraConfig(frame, frame.unit)
+    if not (cfg and cfg.enabled == true) then
+        HideState(frame)
         return false
     end
-    _identityQueue = _identityQueue or {}
-    _identityQueue[frame] = true
-    if not _identityFlushScheduled then
-        if C_Timer and C_Timer.After then
-            _identityFlushScheduled = true
-            C_Timer.After(0, FlushIdentityQueue)
-        else
-            FlushIdentityQueue()
-        end
+    local root = frame.Auras
+    if InCombat() and not RootCanReuseContainersForConfig(root, cfg) then
+        return false
     end
-    return true
+    return ApplyConfig(frame, cfg, "MSUF_UNIT_CHANGED_AURAS")
 end
+
+A3.OnFrameUnitChanged = A3.RenderUnitChangedFrame
+
+A3.ForceUpdateFrame = A3.RenderFrame
+A3.RenderCachedFrame = A3.RenderFrame
 
 function A3.RuntimeOwnsUnit(unit)
     unit = NormalizeRuntimeUnit(unit)
@@ -2344,8 +2890,8 @@ end
 
 local function ApplyRuntimeUnit(runtimeUnit)
     local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
+        or (UF.GetFrame and UF.GetFrame(runtimeUnit))
         or (UF.frames and UF.frames[runtimeUnit])
-        or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[runtimeUnit])
         or _G["MSUF_" .. runtimeUnit]
     if not frame then return false end
     if UF.ApplyElementToFrame then
@@ -2377,6 +2923,9 @@ end
 function A3._RequestGroupKindNow(kind)
     local gf = A3._GroupAPI()
     if not gf then return false end
+    if type(gf.RefreshVisuals) == "function" then
+        return gf.RefreshVisuals(kind, gf.DIRTY_AURAS) == true
+    end
     local didWork = false
     if type(gf.ForEachFrame) == "function" then
         didWork = gf.ForEachFrame(function(frame, frameUnit, frameKind)
@@ -2397,6 +2946,9 @@ function A3._RequestGroupUnitNow(unit)
     local gf = A3._GroupAPI()
     if not (gf and type(unit) == "string" and unit ~= "") then return false end
     local frame = type(gf.FrameForUnit) == "function" and gf.FrameForUnit(unit) or nil
+    if frame and type(gf.MarkDirty) == "function" then
+        return gf.MarkDirty(frame, gf.DIRTY_AURAS) == true
+    end
     return frame and A3._ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) or false
 end
 
@@ -2468,8 +3020,40 @@ function A3.RefreshAll()
     return true
 end
 
-function A3.RequestApply()
+local REQUEST_APPLY_SCOPE_KEYS = {
+    player = true, target = true, focus = true, boss = true,
+    party = true, raid = true, mythicraid = true,
+    gf_party = true, gf_raid = true, gf_mythicraid = true,
+    group = true, groups = true,
+    shared = true, global = true, all = true, ["*"] = true,
+}
+
+local function LooksLikeApplyScope(value)
+    value = tostring(value or ""):lower()
+    if value == "" then return false end
+    if REQUEST_APPLY_SCOPE_KEYS[value] then return true end
+    return value:match("^boss%d+$") ~= nil
+        or value:match("^party%d+$") ~= nil
+        or value:match("^raid%d+$") ~= nil
+end
+
+function A3.RequestApply(scopeOrReason, reason)
+    if LooksLikeApplyScope(scopeOrReason) then
+        return A3.RequestScope(scopeOrReason, reason or "AURAS3_REQUEST_APPLY")
+    end
     return A3.RefreshAll()
+end
+
+function A3.RequestScope(scope, reason)
+    scope = tostring(scope or "shared"):lower()
+    if scope == "" or scope == "shared" or scope == "global" or scope == "all" or scope == "*" then
+        return A3.RefreshAll()
+    end
+    local result = A3.RefreshUnit(scope)
+    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+        _G.MSUF_UFPreview_RequestRefresh(reason or "AURAS3_SCOPE_APPLY")
+    end
+    return result
 end
 
 if type(MSUF.RegisterLocaleCallback) == "function" then
@@ -2491,8 +3075,11 @@ function A3.RefreshUnit(unit)
     return A3.RequestUnit(unit)
 end
 
-function A3.ApplyFontsFromGlobal()
+function A3.ApplyFontsFromGlobal(scope, reason)
     A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1
+    if scope ~= nil then
+        return A3.RequestScope(scope, reason or "AURAS3_FONT_VISUALS")
+    end
     return A3.RefreshAll()
 end
 
@@ -2514,12 +3101,13 @@ function AurasElement.Create(frame)
 end
 
 function AurasElement.Apply(frame)
-    return A3.RenderFrame(frame)
+    return frame ~= nil
 end
 
 function AurasElement.Enable(frame)
     if IsGroupFrame(frame) then
         frame._msufA3GroupRuntime = true
+        frame._msufA3NativeGroupConfig = nil
         local cfg = ResolveGroupFrameConfig(frame, frame and frame.unit)
         if not (cfg and cfg.enabled) then
             HideState(frame)
@@ -2536,12 +3124,12 @@ end
 
 function AurasElement.Update(frame, event)
     if event ~= nil and not ReasonRequiresAuraApply(event) then
-        local cfg = FrameAuraConfig(frame, frame and frame.unit)
-        if not (cfg and cfg.enabled == true) then
-            HideState(frame)
-            return false
+        local root = frame and frame.Auras
+        if root and root._msufA3NativeRoot == true and root._msufA3Applied == true then
+            RefreshAppliedNativeAuras(frame, false)
+            return true
         end
-        return FrameAppliedConfigIsCurrent(frame, event, cfg)
+        return false
     end
     return A3.RenderFrame(frame, event)
 end

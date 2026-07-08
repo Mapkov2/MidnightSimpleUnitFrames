@@ -8,6 +8,7 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 
 local type = type
+local tostring = tostring
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
@@ -123,6 +124,28 @@ function A3.RequestUnit()
     return false
 end
 
+function A3.RequestScope()
+    A3.BumpRuntimeConfig()
+    return true
+end
+
+local REQUEST_APPLY_SCOPE_KEYS = {
+    player = true, target = true, focus = true, boss = true,
+    party = true, raid = true, mythicraid = true,
+    gf_party = true, gf_raid = true, gf_mythicraid = true,
+    group = true, groups = true,
+    shared = true, global = true, all = true, ["*"] = true,
+}
+
+local function LooksLikeApplyScope(value)
+    value = tostring(value or ""):lower()
+    if value == "" then return false end
+    if REQUEST_APPLY_SCOPE_KEYS[value] then return true end
+    return value:match("^boss%d+$") ~= nil
+        or value:match("^party%d+$") ~= nil
+        or value:match("^raid%d+$") ~= nil
+end
+
 function A3.RefreshAll()
     A3.BumpRuntimeConfig()
     return true
@@ -130,7 +153,19 @@ end
 
 A3.RefreshRuntime = A3.RefreshAll
 
+function A3.RequestApply(scopeOrReason, reason)
+    if LooksLikeApplyScope(scopeOrReason) and type(A3.RequestScope) == "function" then
+        return A3.RequestScope(scopeOrReason, reason or "AURAS3_REQUEST_APPLY")
+    end
+    return A3.RefreshAll()
+end
+
 function A3.RefreshUnit()
+    A3.BumpRuntimeConfig()
+    return true
+end
+
+function A3.ApplyFontsFromGlobal()
     A3.BumpRuntimeConfig()
     return true
 end

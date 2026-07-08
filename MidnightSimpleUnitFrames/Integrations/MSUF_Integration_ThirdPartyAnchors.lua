@@ -107,7 +107,9 @@ local function RequestSkironAnchorApply()
         -- re-anchor onto the proxy during lockdown (combat reload). Secure
         -- unit-frame geometry stays queued for the regen driver above.
         TraceCP("proxy resolved in combat -> CP refresh")
-        if type(_G.MSUF_ClassPower_Refresh) == "function" then
+        if type(_G.MSUF_ClassPower_Apply) == "function" then
+            _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
+        elseif type(_G.MSUF_ClassPower_Refresh) == "function" then
             _G.MSUF_ClassPower_Refresh()
         end
         return

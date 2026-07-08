@@ -24,6 +24,8 @@ local C_Timer               = C_Timer
 local _G                    = _G
 local type                  = type
 local tonumber              = tonumber
+local CreateFrame           = _G.CreateFrame
+local InCombatLockdown      = _G.InCombatLockdown
 local debugprofilestop      = _G.debugprofilestop
 local RunNextFrame          = _G.MSUF_RunNextFrame or _G.MSUF_Core_RunNextFrame or function(fn)
     if type(fn) ~= "function" then return end
@@ -59,12 +61,53 @@ local function _general()
 end
 
 ---
+---
 --- Helper: apply visual updates (COALESCED)
 --- Color picker drag can fire 30+ times/sec. Without coalescing,
 --- each drag fires UpdateAllFonts + RefreshAllFrames + ... per tick.
---- We batch into a single C_Timer.After(0) flush.
+--- We batch locally; this runtime no longer depends on the global scheduler.
 ---
 local _pushPending = false
+local _castbarPushPending = false
+local _colorCombatDeferred = false
+local _castbarCombatDeferred = false
+local _combatDeferFrame
+local PushVisualUpdates
+local PushCastbarVisualUpdates
+
+local function InCombat()
+    return InCombatLockdown and InCombatLockdown()
+end
+
+local function EnsureCombatDeferFrame()
+    if _combatDeferFrame or type(CreateFrame) ~= "function" then
+        return _combatDeferFrame
+    end
+    _combatDeferFrame = CreateFrame("Frame")
+    _combatDeferFrame:SetScript("OnEvent", function(self, event)
+        if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        local color = _colorCombatDeferred
+        local castbar = _castbarCombatDeferred
+        _colorCombatDeferred = false
+        _castbarCombatDeferred = false
+        if color and PushVisualUpdates then PushVisualUpdates() end
+        if castbar and PushCastbarVisualUpdates then PushCastbarVisualUpdates() end
+    end)
+    return _combatDeferFrame
+end
+
+local function DeferVisualFlushUntilCombatEnds(kind)
+    if kind == "castbar" then
+        _castbarCombatDeferred = true
+    else
+        _colorCombatDeferred = true
+    end
+    local frame = EnsureCombatDeferFrame()
+    if frame then frame:RegisterEvent("PLAYER_REGEN_ENABLED") end
+    return true
+end
+
 local function _ProfileStart()
     local profiler = MSUF and MSUF.MSUF2
     if profiler and type(profiler.ProfileStart) == "function" then
@@ -89,13 +132,14 @@ local function _ProfiledCall(key, fn, ...)
 end
 
 local function _RefreshUnitFrameColors()
-    if _ProfiledCall("UF.RefreshColors", _G.MSUF_RefreshAllFrameColors) then return end
-    if _ProfiledCall("UF.RefreshColors", MSUF and MSUF.UF and MSUF.UF.RefreshColors) then return end
-    _ProfiledCall("UF.RefreshIdentityColors", _G.MSUF_RefreshAllIdentityColors)
-    _ProfiledCall("UF.RefreshPowerTextColors", _G.MSUF_RefreshAllPowerTextColors)
+    if _ProfiledCall("UF.RefreshColors", _G.MSUF_RefreshAllFrameColors) then return true end
+    if _ProfiledCall("UF.RefreshColors", MSUF and MSUF.UF and MSUF.UF.RefreshColors) then return true end
+    local did = _ProfiledCall("UF.RefreshIdentityColors", _G.MSUF_RefreshAllIdentityColors)
+    did = _ProfiledCall("UF.RefreshPowerTextColors", _G.MSUF_RefreshAllPowerTextColors) or did
+    return did
 end
 
-local function _RefreshAllBarBackgroundVisuals()
+local function _RefreshAllBarBackgroundVisuals(colorsAlreadyRefreshed)
     local applyBg = _G.MSUF_ApplyBarBackgroundVisual
     local refreshHP = _G.MSUF_UFCore_RefreshHealthBarColor
     local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
@@ -105,7 +149,7 @@ local function _RefreshAllBarBackgroundVisuals()
 
     for _, frame in pairs(frames) do
         if frame and (frame.hpBarBG or frame.powerBarBG or frame.bg) then
-            if type(refreshHP) == "function" and frame.hpBar then
+            if colorsAlreadyRefreshed ~= true and type(refreshHP) == "function" and frame.hpBar then
                 refreshHP(frame)
             end
             applyBg(frame)
@@ -117,21 +161,23 @@ local function _RefreshAllBarBackgroundVisuals()
 end
 
 local function _PushVisualUpdates_Flush()
+    if InCombat() then
+        _pushPending = false
+        return DeferVisualFlushUntilCombatEnds("color")
+    end
     local flushStarted = _ProfileStart()
     --- PERF (4.22 Beta hotfix): pending flag stays TRUE during the entire
-    --- flush body. The fallback path's pending dedup remains correct: any
-    --- PushVisualUpdates() call during this flush is dropped, and the next
-    --- one after we finish schedules normally. The primary path uses
-    --- MSUF_ScheduleOnce and is unaffected. Cleared at END.
+    --- flush body. Pending dedup remains correct: any PushVisualUpdates()
+    --- call during this flush is dropped, and the next one after we finish
+    --- schedules normally. Cleared at END.
     ---
     --- Same defense-in-depth pattern as _gfRosterFlush.
     ExportPublic("MSUF_ColorStyleRevision", (_G.MSUF_ColorStyleRevision or 0) + 1)
     --- Invalidate settings cache so color tint fields (powerBgTint, barBgTint,
     --- aggro/dispel/purge, etc.) are re-read from DB before frames refresh.
     _ProfiledCall("UF.RefreshSettingsCache", _G.MSUF_UFCore_RefreshSettingsCache, "COLOR_CHANGE")
-    _ProfiledCall("BarBackgroundVisuals", _RefreshAllBarBackgroundVisuals)
-
-    _RefreshUnitFrameColors()
+    local colorsAlreadyRefreshed = _RefreshUnitFrameColors()
+    _ProfiledCall("BarBackgroundVisuals", _RefreshAllBarBackgroundVisuals, colorsAlreadyRefreshed)
     _ProfiledCall("CastbarVisuals", _G.MSUF_UpdateCastbarVisuals)
     if MSUF.MSUF_ApplyGameplayVisuals then
         _ProfiledCall("GameplayVisuals", MSUF.MSUF_ApplyGameplayVisuals)
@@ -165,22 +211,39 @@ local function _PushVisualUpdates_Flush()
     _ProfileStop("Flush", flushStarted)
 end
 
-local function PushVisualUpdates()
-    local delay = _G.MSUF_ScheduleDelayOnce
-    if type(delay) == "function" then
-        delay("COLOR_PUSH_VISUALS", COLOR_PUSH_DELAY, _PushVisualUpdates_Flush)
-        return
+local function _PushCastbarVisuals_Flush()
+    if InCombat() then
+        _castbarPushPending = false
+        return DeferVisualFlushUntilCombatEnds("castbar")
     end
-    local sched = _G.MSUF_ScheduleOnce
-    if type(sched) == "function" then
-        sched("COLOR_PUSH_VISUALS", _PushVisualUpdates_Flush)
-        return
-    end
+    local flushStarted = _ProfileStart()
+    _ProfiledCall("CastbarVisuals", _G.MSUF_UpdateCastbarVisuals)
+    _ProfiledCall("BossCastbarPreview", _G.MSUF_UpdateBossCastbarPreview)
+    _ProfiledCall("UnitPreview.RequestRefresh", _G.MSUF_UFPreview_RequestRefresh, "MSUF_CASTBAR_COLOR_CHANGE")
+    _castbarPushPending = false
+    _ProfileStop("CastbarFlush", flushStarted)
+end
 
-    --- Fallback for very early load before Kernel/MSUF_Scheduler.lua exports globals.
+PushVisualUpdates = function()
+    if InCombat() then return DeferVisualFlushUntilCombatEnds("color") end
     if _pushPending then return end
     _pushPending = true
-    RunNextFrame(_PushVisualUpdates_Flush)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(COLOR_PUSH_DELAY, _PushVisualUpdates_Flush)
+    else
+        RunNextFrame(_PushVisualUpdates_Flush)
+    end
+end
+
+PushCastbarVisualUpdates = function()
+    if InCombat() then return DeferVisualFlushUntilCombatEnds("castbar") end
+    if _castbarPushPending then return end
+    _castbarPushPending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(COLOR_PUSH_DELAY, _PushCastbarVisuals_Flush)
+    else
+        RunNextFrame(_PushCastbarVisuals_Flush)
+    end
 end
 
 --- ---------------------------------------------------------------------------
@@ -216,21 +279,21 @@ local function _getRGBA(rKey, gKey, bKey, aKey, defR, defG, defB, defA)
 end
 
 --- Helper: simple RGB set + PushVisualUpdates
-local function _setRGB(rKey, gKey, bKey, r, g, b, defR, defG, defB)
+local function _setRGB(rKey, gKey, bKey, r, g, b, defR, defG, defB, pushFn)
     local gen = _general()
     if not gen then return end
     gen[rKey] = r or defR
     gen[gKey] = g or defG
     gen[bKey] = b or defB
-    PushVisualUpdates()
+    if type(pushFn) == "function" then pushFn() else PushVisualUpdates() end
 end
 
 --- Helper: simple RGBA set + PushVisualUpdates
-local function _setRGBA(rKey, gKey, bKey, aKey, r, g, b, a, defR, defG, defB, defA)
+local function _setRGBA(rKey, gKey, bKey, aKey, r, g, b, a, defR, defG, defB, defA, pushFn)
     local gen = _general()
     if not gen then return end
     gen[rKey] = r or defR; gen[gKey] = g or defG; gen[bKey] = b or defB; gen[aKey] = a or defA
-    PushVisualUpdates()
+    if type(pushFn) == "function" then pushFn() else PushVisualUpdates() end
 end
 
 --- Helper: RGB get with palette fallback
@@ -294,19 +357,19 @@ local function GetCastbarTextColor()
 end
 ExportPublic("MSUF_GetCastbarTextColor", GetCastbarTextColor)
 local function SetCastbarTextColor(r, g, b)
-    _setRGB("castbarFontR", "castbarFontG", "castbarFontB", r, g, b, 1, 1, 1)
+    _setRGB("castbarFontR", "castbarFontG", "castbarFontB", r, g, b, 1, 1, 1, PushCastbarVisualUpdates)
 end
 local function ResetCastbarTextColorToGlobal()
     local g = _general(); if not g then return end
-    g.castbarFontR, g.castbarFontG, g.castbarFontB = nil, nil, nil; PushVisualUpdates()
+    g.castbarFontR, g.castbarFontG, g.castbarFontB = nil, nil, nil; PushCastbarVisualUpdates()
 end
 
 --- - Castbar Border Color -
 local function GetCastbarBorderColor() return _getRGBA("castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA", 0, 0, 0, 1) end
-local function SetCastbarBorderColor(r, g, b, a) _setRGBA("castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA", r, g, b, a, 0, 0, 0, 1) end
+local function SetCastbarBorderColor(r, g, b, a) _setRGBA("castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA", r, g, b, a, 0, 0, 0, 1, PushCastbarVisualUpdates) end
 local function ResetCastbarBorderColor()
     local g = _general(); if not g then return end
-    g.castbarBorderR, g.castbarBorderG, g.castbarBorderB, g.castbarBorderA = nil, nil, nil, nil; PushVisualUpdates()
+    g.castbarBorderR, g.castbarBorderG, g.castbarBorderB, g.castbarBorderA = nil, nil, nil, nil; PushCastbarVisualUpdates()
 end
 
 --- - Castbar Background Color -
@@ -316,36 +379,36 @@ local function GetCastbarBackgroundColor()
     return tonumber(g.castbarBgR) or 0.10, tonumber(g.castbarBgG) or 0.10, tonumber(g.castbarBgB) or 0.10, tonumber(g.castbarBgA) or 0.85
 end
 ExportPublic("MSUF_GetCastbarBackgroundColor", GetCastbarBackgroundColor)
-local function SetCastbarBackgroundColor(r, g, b, a) _setRGBA("castbarBgR", "castbarBgG", "castbarBgB", "castbarBgA", r, g, b, a, 0.10, 0.10, 0.10, 0.85) end
+local function SetCastbarBackgroundColor(r, g, b, a) _setRGBA("castbarBgR", "castbarBgG", "castbarBgB", "castbarBgA", r, g, b, a, 0.10, 0.10, 0.10, 0.85, PushCastbarVisualUpdates) end
 local function ResetCastbarBackgroundColor()
     local g = _general(); if not g then return end
-    g.castbarBgR, g.castbarBgG, g.castbarBgB, g.castbarBgA = nil, nil, nil, nil; PushVisualUpdates()
+    g.castbarBgR, g.castbarBgG, g.castbarBgB, g.castbarBgA = nil, nil, nil, nil; PushCastbarVisualUpdates()
 end
 
 --- - Cast Colors (interruptible / non-interruptible / feedback) -
 local function GetInterruptibleCastColor() return _getRGBPalette("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", "castbarInterruptibleColor", "turquoise", 0, 0.9, 0.8) end
 ExportPublic("MSUF_GetInterruptibleCastColor", GetInterruptibleCastColor)
-local function SetInterruptibleCastColor(r, g, b) _setRGB("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", r, g, b, 0, 0.9, 0.8) end
+local function SetInterruptibleCastColor(r, g, b) _setRGB("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", r, g, b, 0, 0.9, 0.8, PushCastbarVisualUpdates) end
 local function GetNonInterruptibleCastColor() return _getRGBTonumber("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", "castbarNonInterruptibleColor", "red", 0.4, 0.01, 0.01) end
 ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
-local function SetNonInterruptibleCastColor(r, g, b) _setRGB("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", r, g, b, 0.4, 0.01, 0.01) end
+local function SetNonInterruptibleCastColor(r, g, b) _setRGB("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", r, g, b, 0.4, 0.01, 0.01, PushCastbarVisualUpdates) end
 local function GetInterruptFeedbackCastColor() return _getRGBTonumber("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", "castbarInterruptFeedbackColor", "yellow", 1.0, 0.82, 0.0) end
-local function SetInterruptFeedbackCastColor(r, g, b) _setRGB("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", r, g, b, 1.0, 0.82, 0.0) end
+local function SetInterruptFeedbackCastColor(r, g, b) _setRGB("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", r, g, b, 1.0, 0.82, 0.0, PushCastbarVisualUpdates) end
 local function GetInterruptUnavailableCastColor() return _getRGBTonumber("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", "castbarInterruptUnavailableColor", nil, 1.0, 0.494117647, 0.137254902) end
 ExportPublic("MSUF_GetInterruptUnavailableCastColor", GetInterruptUnavailableCastColor)
-local function SetInterruptUnavailableCastColor(r, g, b) _setRGB("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", r, g, b, 1.0, 0.494117647, 0.137254902) end
+local function SetInterruptUnavailableCastColor(r, g, b) _setRGB("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", r, g, b, 1.0, 0.494117647, 0.137254902, PushCastbarVisualUpdates) end
 
 --- - Player Castbar Override -
 local function GetPlayerCastbarOverrideEnabled() return (_general() or {}).playerCastbarOverrideEnabled and true or false end
 local function SetPlayerCastbarOverrideEnabled(enabled)
-    local g = _general(); if not g then return end; g.playerCastbarOverrideEnabled = enabled and true or false; PushVisualUpdates()
+    local g = _general(); if not g then return end; g.playerCastbarOverrideEnabled = enabled and true or false; PushCastbarVisualUpdates()
 end
 local function GetPlayerCastbarOverrideMode() return (_general() or {}).playerCastbarOverrideMode or "COLOR" end
 local function SetPlayerCastbarOverrideMode(mode)
-    local g = _general(); if not g then return end; g.playerCastbarOverrideMode = mode; PushVisualUpdates()
+    local g = _general(); if not g then return end; g.playerCastbarOverrideMode = mode; PushCastbarVisualUpdates()
 end
 local function GetPlayerCastbarOverrideColor() return _getRGB("playerCastbarOverrideR", "playerCastbarOverrideG", "playerCastbarOverrideB", 0.0, 0.6, 1.0) end
-local function SetPlayerCastbarOverrideColor(r, g, b) _setRGB("playerCastbarOverrideR", "playerCastbarOverrideG", "playerCastbarOverrideB", r, g, b, 0.0, 0.6, 1.0) end
+local function SetPlayerCastbarOverrideColor(r, g, b) _setRGB("playerCastbarOverrideR", "playerCastbarOverrideG", "playerCastbarOverrideB", r, g, b, 0.0, 0.6, 1.0, PushCastbarVisualUpdates) end
 
 --- - Class Colors -
 local CLASS_TOKENS = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
@@ -487,6 +550,7 @@ ExportPublic("MSUF_GetBarOutlineColor", GetBarOutlineColor)
 --- -
 MSUF._colorsAPI = {
     PushVisualUpdates               = PushVisualUpdates,
+    PushCastbarVisualUpdates        = PushCastbarVisualUpdates,
     GetGlobalFontColor              = GetGlobalFontColor,
     SetGlobalFontColor              = SetGlobalFontColor,
     ResetGlobalFontToPalette        = ResetGlobalFontToPalette,

@@ -2,7 +2,7 @@
 --- Features:
 --- 1. ClassPower (segmented): Combo Points, Holy Power, Soul Shards (incl.
 --- fractional for Destruction), Arcane Charges, Chi, Essence.
---- 2. DK Runes: individual per-rune cooldown animation + sort order (oUF).
+--- 2. DK Runes: individual per-rune cooldown animation + sort order.
 --- 3. DH Devourer: Soul Fragments (aura-based, normalized 0-1, dual color).
 --- 4. Enh Shaman: Maelstrom Weapon stacks (aura-based segments).
 --- 5. Vehicle: auto-switch to combo points in vehicle UI.
@@ -21,11 +21,21 @@
 if _G.__MSUF_ClassPower_Loaded then return end
 _G.__MSUF_ClassPower_Loaded = true
 
-local addonName, MSUF = ...
+local MSUF = select(2, ...)
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
+end
+
+local function CoreUnitFrame(unit)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(unit)
+        if frame then return frame end
+    end
+    local frames = uf and uf.frames
+    return unit and frames and frames[unit] or nil
 end
 
 local function ProfBegin(name)
@@ -472,7 +482,7 @@ end
 
 --- ClassPower: returns powerType, renderMode, isAuraPower
 local function GetClassPowerType()
-    --- Vehicle override: always combo points (oUF pattern)
+    --- Vehicle override: always combo points.
     if UnitHasVehicleUI and UnitHasVehicleUI("player") then
         local hasCP = PlayerVehicleHasComboPoints and PlayerVehicleHasComboPoints()
         if hasCP then
@@ -625,6 +635,7 @@ local _cachedColorToken = nil
 local _cachedBgColorToken = nil
 local _cachedBgColorR, _cachedBgColorG, _cachedBgColorB = 0, 0, 0
 local _staggerCachedTier = 0  --- Stagger: avoid redundant SetStatusBarColor when tier unchanged
+local _cachedChargedR, _cachedChargedG, _cachedChargedB
 
 --- Maelstrom Weapon 5+ threshold color (cached independently)
 local _mwAbove5R, _mwAbove5G, _mwAbove5B
@@ -731,18 +742,26 @@ local function ResolveClassPowerBgColor(powerType)
     return 0, 0, 0
 end
 
---- Public: invalidate class power color cache (called from Colors panel)
-local function MSUF_ClassPower_InvalidateColors()
+local function CP_InvalidateColorCaches()
     _cachedColorToken = nil
     _cachedBgColorToken = nil
-    _cachedChargedR = nil  --- also invalidate charged cache
-    _staggerCachedTier = 0  --- force stagger color re-apply
-    _mwAbove5Resolved = false  --- force MW threshold color re-resolve
+    _cachedChargedR = nil
+    _cachedChargedG = nil
+    _cachedChargedB = nil
+    _staggerCachedTier = 0
+    _mwAbove5Resolved = false
+end
+
+--- Public: invalidate class power color cache (called from Colors panel)
+local function MSUF_ClassPower_InvalidateColors()
+    CP_InvalidateColorCaches()
     --- Balance Druid: refresh eclipse + prediction overlay colors
     if _G.MSUF_BAL_InvalidateColors then
         _G.MSUF_BAL_InvalidateColors()
     end
-    if _G.MSUF_ClassPower_Refresh then
+    if _G.MSUF_ClassPower_Apply then
+        _G.MSUF_ClassPower_Apply({ visuals = true, playerHP = true })
+    elseif _G.MSUF_ClassPower_Refresh then
         _G.MSUF_ClassPower_Refresh()
     end
 end
@@ -771,7 +790,6 @@ local function RefreshChargedPoints()
 end
 
 --- Charged/empowered color resolution
-local _cachedChargedR, _cachedChargedG, _cachedChargedB
 
 local function ResolveChargedColor()
     if _cachedChargedR then
@@ -1140,7 +1158,7 @@ ExportPublic("MSUF_CDM_GetScaledWidth", CDM_GetScaledWidth)
 --- Legacy color-only refresh / texture refresh now live in
 --- ClassPower presentation helpers.
 
---- CPK.MODE.FRACTIONAL: Destruction Warlock - partial Soul Shard fill (oUF pattern)
+--- CPK.MODE.FRACTIONAL: Destruction Warlock - partial Soul Shard fill.
 --- UnitPower(unit, type, true) / UnitPowerDisplayMod(type) gives e.g. 3.7
 --- Fractional mode runner moved to ClassPower/Modes/MSUF_CP_Mode_Fractional.lua
 
@@ -1439,7 +1457,7 @@ end
 --- Master show/hide + layout integration
 
 local function GetPlayerFrame()
-    return _G.MSUF_player or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player) or nil
+    return CoreUnitFrame("player") or _G.MSUF_player or nil
 end
 
 local PHP = { visible = false }
@@ -1544,7 +1562,9 @@ local function FullRefresh()
         playerFrame._msufCPSizeHooked = true
         playerFrame:HookScript("OnSizeChanged", function()
             if not CP_ConfigClassPowerEnabled() then return end
-            if _G.MSUF_ClassPower_Refresh then
+            if _G.MSUF_ClassPower_Apply then
+                _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
+            elseif _G.MSUF_ClassPower_Refresh then
                 _G.MSUF_ClassPower_Refresh()
             end
         end)
@@ -1874,11 +1894,15 @@ end
 --- Defined once at file scope - zero closure allocations per PLAYER_ENTERING_WORLD.
 local function _CP_DeferredPBRelayout()
     if not (CP.visible or AM.visible or PHP.visible or CP.CDMWidthWantsSync()) then return end
-    local fr = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player
+    local fr = CoreUnitFrame("player") or _G.MSUF_player
     if fr and fr._msufStampCache then
         fr._msufStampCache["PBEmbedLayout"] = nil
     end
-    FullRefresh()
+    if _G.MSUF_ClassPower_Apply then
+        _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
+    else
+        FullRefresh()
+    end
 end
 
 --- Dynamic hot-path event binding (CP-1): only keep runtime events that the
@@ -2311,12 +2335,11 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     if event == "PLAYER_ENTERING_WORLD" then
         EnsureDefaults()
-        --- Retry until player frame is available (fixes slow load when
-        --- MSUF_UnitFrames.player isn't ready after a single fixed delay).
+        --- Retry until the Core player frame is available after login load.
         local retries = 0
         local function TryRefresh()
             retries = retries + 1
-            local pf = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player
+            local pf = CoreUnitFrame("player") or _G.MSUF_player
             if pf then
                 FullRefresh()
                 --- Deferred re-layout: frame dimensions and CDM frames may not
@@ -2356,7 +2379,7 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 --- Public API (for Options, Edit Mode, and other modules)
 
-local function MSUF_ClassPower_IsRuntimeActive()
+CP.IsRuntimeActive = function()
     return CP.visible == true
         or AM.visible == true
         or PHP.visible == true
@@ -2364,17 +2387,16 @@ local function MSUF_ClassPower_IsRuntimeActive()
         or _cpStructuralEventsBound == true
         or CP._cdmWidthEventsActive == true
 end
-ExportPublic("MSUF_ClassPower_IsRuntimeActive", MSUF_ClassPower_IsRuntimeActive)
+ExportPublic("MSUF_ClassPower_IsRuntimeActive", CP.IsRuntimeActive)
 
 --- Force full refresh (call after changing DB values)
-local function MSUF_ClassPower_Refresh()
-    _cachedColorToken = nil  --- Invalidate color cache
-    _cachedBgColorToken = nil
+CP.RefreshPublic = function()
+    CP_InvalidateColorCaches()
     FullRefresh()
 end
-ExportPublic("MSUF_ClassPower_Refresh", MSUF_ClassPower_Refresh)
+ExportPublic("MSUF_ClassPower_Refresh", CP.RefreshPublic)
 
-local function MSUF_ClassPower_RefreshCDMWidthBindings(syncNow)
+CP.RefreshCDMWidthBindings = function(syncNow)
     _CP_RefreshConfig()
     if CP_PlayerHPNeedsRefresh() then
         CP_PlayerHPRefresh(GetPlayerFrame())
@@ -2384,26 +2406,28 @@ local function MSUF_ClassPower_RefreshCDMWidthBindings(syncNow)
         CP.CDMWidthSyncLayouts(true)
     end
 end
-ExportPublic("MSUF_ClassPower_RefreshCDMWidthBindings", MSUF_ClassPower_RefreshCDMWidthBindings)
+ExportPublic("MSUF_ClassPower_RefreshCDMWidthBindings", CP.RefreshCDMWidthBindings)
 
-local function MSUF_ClassPower_PlayerHP_Refresh()
+CP.PlayerHPRefreshPublic = function()
     _CP_RefreshConfig()
     CP_PlayerHPRefresh(GetPlayerFrame())
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(CP_ConfigAnyFeatureEnabled())
 end
-ExportPublic("MSUF_ClassPower_PlayerHP_Refresh", MSUF_ClassPower_PlayerHP_Refresh)
+ExportPublic("MSUF_ClassPower_PlayerHP_Refresh", CP.PlayerHPRefreshPublic)
 
-local function MSUF_ClassPower_PlayerHP_RefreshTextures()
+CP.PlayerHPRefreshTextures = function()
+    _CP_RefreshConfig()
     if PHP.visible then
         PHP._textureStamp = nil
         CP_PlayerHPRefresh(GetPlayerFrame())
     end
 end
-ExportPublic("MSUF_ClassPower_PlayerHP_RefreshTextures", MSUF_ClassPower_PlayerHP_RefreshTextures)
+ExportPublic("MSUF_ClassPower_PlayerHP_RefreshTextures", CP.PlayerHPRefreshTextures)
 
 --- Refresh bar textures (call after texture change in settings)
-local function MSUF_ClassPower_RefreshTextures()
+CP.RefreshTexturesPublic = function()
+    _CP_RefreshConfig()
     if CP.visible then CP_RefreshTexture() end
     if AM.visible then AM_RefreshTexture() end
     if PHP.visible then
@@ -2411,10 +2435,33 @@ local function MSUF_ClassPower_RefreshTextures()
         CP_PlayerHPRefresh(GetPlayerFrame())
     end
 end
-ExportPublic("MSUF_ClassPower_RefreshTextures", MSUF_ClassPower_RefreshTextures)
+ExportPublic("MSUF_ClassPower_RefreshTextures", CP.RefreshTexturesPublic)
+
+ExportPublic("MSUF_ClassPower_RefreshLayout", function()
+    _CP_RefreshConfig()
+    if not (CP.visible and CP_Layout) then
+        return false
+    end
+    local playerFrame = GetPlayerFrame()
+    if not playerFrame then
+        return false
+    end
+    local b = _cpDB.bars or {}
+    local cpHeight = tonumber(b.classPowerHeight) or 4
+    if cpHeight < 2 then cpHeight = 2 elseif cpHeight > 30 then cpHeight = 30 end
+    local maxP = tonumber(CP.currentMax) or 0
+    if maxP <= 0 then
+        return false
+    end
+    CP_Layout(playerFrame, maxP, cpHeight, CP.powerType)
+    CP._pf = playerFrame
+    CP._layoutH = cpHeight
+    return true
+end)
 
 --- Refresh class power text font (called from UpdateAllFonts)
-local function MSUF_ClassPower_ApplyFonts()
+CP.ApplyFontsPublic = function()
+    _CP_RefreshConfig()
     if CP.visible and _cpDB.showText then
         _cpFontRev = 0  --- force re-apply
         CP_ApplyFont()
@@ -2424,17 +2471,100 @@ local function MSUF_ClassPower_ApplyFonts()
         CP_PlayerHPApplyFont()
     end
 end
-ExportPublic("MSUF_ClassPower_ApplyFonts", MSUF_ClassPower_ApplyFonts)
+ExportPublic("MSUF_ClassPower_ApplyFonts", CP.ApplyFontsPublic)
+
+CP.RefreshVisualsPublic = function()
+    _CP_RefreshConfig()
+    CP_InvalidateColorCaches()
+    if CP.visible then
+        CP_CompileVisual(CP.powerType, CP.renderMode, CP.currentMax)
+        if CP_RefreshTexture then CP_RefreshTexture() end
+        if CP_ApplyFont then CP_ApplyFont() end
+        if CP_ApplyColors then CP_ApplyColors(CP.powerType) end
+    end
+    if AM.visible and AM_RefreshTexture then AM_RefreshTexture() end
+    if PHP.visible then
+        PHP._textureStamp = nil
+        PHP._fontStamp = nil
+        CP_PlayerHPRefresh(GetPlayerFrame())
+    end
+end
+ExportPublic("MSUF_ClassPower_RefreshVisuals", CP.RefreshVisualsPublic)
+
+CP.ApplyPublic = function(opts)
+    if type(opts) ~= "table" then
+        CP.RefreshPublic()
+        return true
+    end
+
+    local did = false
+    if opts.full == true or opts.structure == true or opts.layout == true then
+        CP.RefreshPublic()
+        did = true
+    else
+        local visuals = opts.visuals == true or opts.colors == true or opts.textures == true
+        if visuals then
+            if opts.colors == true and _G.MSUF_BAL_InvalidateColors then
+                _G.MSUF_BAL_InvalidateColors()
+            end
+            CP.RefreshVisualsPublic()
+            did = true
+        end
+        if (opts.fonts == true or opts.text == true) and not visuals then
+            CP.ApplyFontsPublic()
+            did = true
+        end
+        if opts.anchor == true or opts.reanchor == true or opts.geometry == true then
+            if _G.MSUF_ClassPower_RefreshLayout and _G.MSUF_ClassPower_RefreshLayout() then
+                did = true
+            end
+        end
+    end
+
+    if opts.playerHPTextures == true then
+        CP.PlayerHPRefreshTextures()
+        did = true
+    elseif opts.playerHP == true then
+        CP.PlayerHPRefreshPublic()
+        did = true
+    end
+
+    if opts.cdm == true or opts.width == true then
+        CP.RefreshCDMWidthBindings(opts.syncNow ~= false)
+        did = true
+    elseif opts.events == true then
+        _CP_RefreshConfig()
+        CP_RefreshEventBindings()
+        CP_SetStructuralEventsBound(CP_ConfigAnyFeatureEnabled())
+        did = true
+    end
+
+    if not did then
+        _CP_RefreshConfig()
+    end
+    return true
+end
+ExportPublic("MSUF_ClassPower_Apply", CP.ApplyPublic)
+
+do
+    if MSUF and MSUF.UF and type(MSUF.UF.RegisterVisualRefreshCallback) == "function" then
+        MSUF.UF.RegisterVisualRefreshCallback("ClassPower", function(unit)
+            if unit == "player" then
+                CP.ApplyPublic({ visuals = true, playerHP = true })
+            end
+        end)
+    end
+end
 
 --- Compatibility: hook bar texture change for live refresh.
---- Options panels should call MSUF_ClassPower_Refresh() after DB changes.
+--- Options panels should prefer MSUF_ClassPower_Apply(opts) after DB changes.
 do
     --- Deferred hook: MSUF_TryApplyBarTextureLive is created in Options (LoadOnDemand).
     --- We post-hook it on first FullRefresh when it exists.
-    local _texHooked = false
-    local _origFullRefresh = FullRefresh
+    CP._texHooked = false
+    CP._origFullRefresh = FullRefresh
     FullRefresh = function()
-        if not _texHooked then
+        if not CP._texHooked then
             local origTex = _G.MSUF_TryApplyBarTextureLive
             if type(origTex) == "function" then
                 ExportPublic("MSUF_TryApplyBarTextureLive", function(...)
@@ -2446,10 +2576,10 @@ do
                         CP_PlayerHPRefresh(GetPlayerFrame())
                     end
                 end)
-                _texHooked = true
+                CP._texHooked = true
             end
         end
-        _origFullRefresh()
+        CP._origFullRefresh()
     end
 end
 
@@ -2460,19 +2590,18 @@ end
 --- on BOTH SetMinMaxValues AND SetValue - identical to MidnightRogueBars.
 --- Secret-safe: nil-guarded, no arithmetic on return values.
 --- This section only provides the public toggle API for the options panel.
-local function MSUF_SmoothPowerBar_Apply()
+CP.SmoothPowerBarApply = function()
     --- Refresh the cached flags in UFCore's DIRECT_APPLY hot path.
     if _G.MSUF_UFCore_RefreshSettingsCache then
         _G.MSUF_UFCore_RefreshSettingsCache("SMOOTH_POWER")
     end
 end
-ExportPublic("MSUF_SmoothPowerBar_Apply", MSUF_SmoothPowerBar_Apply)
+ExportPublic("MSUF_SmoothPowerBar_Apply", CP.SmoothPowerBarApply)
 
 --- Phase 4: Module Registration
 do
-    local reg = _G.MSUF_RegisterModule
-    if type(reg) == "function" then
-        reg("ClassPower", {
+    if type(_G.MSUF_RegisterModule) == "function" then
+        _G.MSUF_RegisterModule("ClassPower", {
             order = 30,
             IsEnabled = function()
                 if not MSUF_DB then return true end

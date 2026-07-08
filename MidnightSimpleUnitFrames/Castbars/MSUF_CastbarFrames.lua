@@ -124,6 +124,17 @@ function G.MSUF_BuildCastbarFrameElements(frame)
     frame.timeText:SetPoint("RIGHT", statusBar, "RIGHT", -2, 0)
     frame.timeText:SetText("")
 
+    if frame.unit == "target" or frame.unit == "focus" then
+        frame.castTargetText = statusBar:CreateFontString(nil, "OVERLAY")
+        frame.CastTargetNameText = frame.castTargetText
+        frame.castTargetText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+        frame.castTargetText:SetJustifyH("RIGHT")
+        frame.castTargetText:SetPoint("TOPLEFT", statusBar, "BOTTOMLEFT", 2, -1)
+        frame.castTargetText:SetPoint("TOPRIGHT", statusBar, "BOTTOMRIGHT", -2, -1)
+        frame.castTargetText:SetText("")
+        frame.castTargetText:Hide()
+    end
+
     frame.spark = CreateSpark(statusBar, barHeight)
 
     if type(G.MSUF_ApplyCastbarOutline) == "function" then

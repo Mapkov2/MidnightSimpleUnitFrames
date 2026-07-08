@@ -8,6 +8,16 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
+local function CoreFrame(unit)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(unit)
+        if frame then return frame end
+    end
+    local frames = uf and uf.frames
+    return unit and frames and frames[unit] or nil
+end
+
 local PREVIEW_LABELS = {
     player = "Player castbar preview",
     target = "Target castbar preview",
@@ -122,7 +132,7 @@ local function GetDesiredPreviewSize(unit, frame)
 
     local width = tonumber(general[config.width]) or tonumber(general.castbarGlobalWidth) or 250
     local height = tonumber(general[config.height]) or tonumber(general.castbarGlobalHeight) or 18
-    local unitFrame = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unit]
+    local unitFrame = CoreFrame(unit)
 
     if not general[config.detached] and unitFrame and unitFrame.GetWidth then
         width = tonumber(general[config.width]) or unitFrame:GetWidth() or width
@@ -216,8 +226,7 @@ local function PositionPreview(unit, frame)
         _G.MSUF_ApplyCastbarTimeTextLayout(frame, unit)
     end
 
-    local unitFrames = _G.MSUF_UnitFrames
-    local parent = general[config.detached] and UIParent or (unitFrames and unitFrames[unit])
+    local parent = general[config.detached] and UIParent or CoreFrame(unit)
     if not parent then return end
 
     local offsetX = tonumber(general[config.x])
@@ -372,8 +381,10 @@ local function SetUnitTestMode(unit, enabled, transient)
     StartPreviewTest(frame)
     if type(_G.MSUF_RefreshCastbarFrame) == "function" then
         _G.MSUF_RefreshCastbarFrame(frame)
+    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
     elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals()
+        _G.MSUF_UpdateCastbarVisuals(unit)
     end
 end
 
@@ -566,8 +577,15 @@ local function UpdatePlayerCastbarPreview()
         _G.MSUF_UpdateBossCastbarPreview()
         SetupBossCastbarPreviewEditMode()
     end
-    if type(refreshFrame) ~= "function" and type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals()
+    if type(refreshFrame) ~= "function" then
+        local applyUnit = _G.MSUF_ApplyCastbarVisualsForUnit
+        if type(applyUnit) == "function" then
+            for unit in pairs(PREVIEW_UNITS) do applyUnit(unit) end
+            applyUnit("boss")
+        elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+            for unit in pairs(PREVIEW_UNITS) do _G.MSUF_UpdateCastbarVisuals(unit) end
+            _G.MSUF_UpdateCastbarVisuals("boss")
+        end
     end
     if type(_G.MSUF_UpdateCastbarTextures) == "function" then _G.MSUF_UpdateCastbarTextures() end
 end

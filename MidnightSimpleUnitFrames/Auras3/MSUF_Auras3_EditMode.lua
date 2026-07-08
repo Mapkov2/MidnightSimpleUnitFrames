@@ -1,5 +1,4 @@
 --- Auras3/MSUF_Auras3_EditMode.lua
---- Cold-path edit mode preview and movement for the oUF-style Auras3 runtime.
 ---
 --- This file intentionally does not own live aura objects and does not add
 --- per-aura render callbacks. It owns only edit-mode fake previews, drag
@@ -41,6 +40,15 @@ local AURA_DRAG_RUNTIME_INTERVAL = 0.05
 local AURA_PENDING_DRAG_THRESHOLD = 3
 local AURA_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
+local function IsBossScope(unit)
+    return tostring(unit or ""):lower() == "boss"
+end
+
+local function ForEachBossUnit(fn)
+    if type(fn) ~= "function" then return end
+    for i = 1, 5 do fn("boss" .. i) end
+end
+
 local GROUPS = {
     buff = {
         label = "Buffs",
@@ -255,10 +263,11 @@ end
 
 local function GetFrame(unit)
     if not unit then return nil end
-    local frames = _G.MSUF_UnitFrames
+    local uf = MSUF and MSUF.UF
     return (A3._runtimeFrames and A3._runtimeFrames[unit])
         or (A3._unitFrameOwners and A3._unitFrameOwners[unit])
-        or (frames and frames[unit])
+        or (uf and type(uf.GetFrame) == "function" and uf.GetFrame(unit))
+        or (uf and uf.frames and uf.frames[unit])
         or _G["MSUF_" .. unit]
 end
 
@@ -1493,6 +1502,10 @@ local function RefreshSignature(unit, kind, cfg, metrics, textCfg, shownIcons, s
 end
 
 function EM.HideUnit(unit)
+    if IsBossScope(unit) then
+        ForEachBossUnit(EM.HideUnit)
+        return
+    end
     local byUnit = EM.groups and EM.groups[unit]
     SetRuntimeAuraHidden(unit, false)
     if not byUnit then return end
@@ -1506,6 +1519,10 @@ end
 
 function EM.RefreshUnit(unit)
     if not unit then return end
+    if IsBossScope(unit) then
+        ForEachBossUnit(EM.RefreshUnit)
+        return
+    end
     if not UnitPreviewActive(unit) then
         EM.HideUnit(unit)
         return
@@ -1677,7 +1694,13 @@ local CoreRefreshUnit = A3.RefreshUnit
 function A3.RefreshUnit(unit)
     if not unit then return end
     if IsEditModeActive() then
-        PromoteRuntimeLayout(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+        if IsBossScope(unit) then
+            ForEachBossUnit(function(bossUnit)
+                PromoteRuntimeLayout(bossUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+            end)
+        else
+            PromoteRuntimeLayout(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+        end
     end
     local frame = GetFrame(unit)
     if frame and frame.Auras then frame.Auras.needFullUpdate = true end
@@ -1688,6 +1711,15 @@ end
 
 function A3.UpdateUnitAnchor(unit)
     if not unit then return end
+    if IsBossScope(unit) then
+        if IsEditModeActive() then
+            ForEachBossUnit(function(bossUnit)
+                PromoteRuntimeLayout(bossUnit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
+            end)
+        end
+        EM.RefreshUnit("boss")
+        return
+    end
     if IsEditModeActive() then
         PromoteRuntimeLayout(unit, rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
     end
@@ -1695,6 +1727,10 @@ function A3.UpdateUnitAnchor(unit)
 end
 
 function A3.RefreshEditPreview(unit)
+    if not IsEditModeActive() then
+        if unit then return EM.HideUnit(unit) end
+        return EM.HideAll()
+    end
     if unit then return EM.RefreshUnit(unit) end
     return EM.RefreshAll()
 end

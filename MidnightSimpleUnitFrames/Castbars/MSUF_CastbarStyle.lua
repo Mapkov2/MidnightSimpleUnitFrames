@@ -34,6 +34,16 @@ local function NormalizeUnit(unit)
     return unit
 end
 
+local function FrameStateIsChanneledOrEmpowered(frame)
+    if not (frame and frame.unit) then return false end
+    local buildState = _G.MSUF_BuildCastState
+    if type(buildState) ~= "function" then
+        return UnitChannelInfo and UnitChannelInfo(frame.unit) and true or false
+    end
+    local state = buildState(frame.unit, frame)
+    return state and (state.castType == "CHANNEL" or state.castType == "EMPOWER") or false
+end
+
 local function PrefixForUnit(unit)
     unit = NormalizeUnit(unit)
 
@@ -398,7 +408,7 @@ local function UpdateCastbarFillDirection()
 
         local isChanneledOrEmpowered = frame.isEmpower
             or frame.MSUF_isChanneled
-            or (frame.unit and UnitChannelInfo and UnitChannelInfo(frame.unit))
+            or FrameStateIsChanneledOrEmpowered(frame)
 
         local reverseFill = type(_G.MSUF_GetReverseFillSafe) == "function"
             and _G.MSUF_GetReverseFillSafe(frame, isChanneledOrEmpowered and true or false)
@@ -430,7 +440,13 @@ local function UpdateCastbarFillDirection()
         end
     end
 
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+    local applyUnit = _G.MSUF_ApplyCastbarVisualsForUnit
+    if type(applyUnit) == "function" then
+        applyUnit("player")
+        applyUnit("target")
+        applyUnit("focus")
+        applyUnit("boss")
+    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
         _G.MSUF_UpdateCastbarVisuals()
     end
 end

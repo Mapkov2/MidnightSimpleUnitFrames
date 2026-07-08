@@ -143,6 +143,40 @@ do
         end
     end
 
+    local function _ForEachTotemManagedContainer(frame, callback)
+        local seen = {}
+        local function Visit(container)
+            if not container or seen[container] then return end
+            seen[container] = true
+            callback(container)
+        end
+
+        Visit(frame and frame.layoutParent)
+        if type(_G.GetPlayerBottomManagedFrameContainer) == "function" then
+            Visit(_G.GetPlayerBottomManagedFrameContainer())
+        end
+        Visit(_G.PlayerBottomManagedFrameContainer)
+        Visit(_G.PlayerFrameBottomManagedFramesContainer)
+    end
+
+    local function _RemoveFromTotemManagedContainers(frame)
+        _ForEachTotemManagedContainer(frame, function(container)
+            if type(container.RemoveManagedFrame) == "function" then
+                container:RemoveManagedFrame(frame)
+            end
+        end)
+    end
+
+    local function _ReturnToTotemManagedContainer(frame)
+        if not (frame and frame.IsShown and frame:IsShown()) then return end
+
+        _ForEachTotemManagedContainer(frame, function(container)
+            if type(container.AddManagedFrame) == "function" then
+                container:AddManagedFrame(frame)
+            end
+        end)
+    end
+
     local function _StoreOriginalLayout(frame)
         if not frame or originalLayout then return end
 
@@ -219,10 +253,9 @@ do
         if info.scale and frame.SetScale then frame:SetScale(info.scale) end
         if info.strata and frame.SetFrameStrata then frame:SetFrameStrata(info.strata) end
         if info.level and frame.SetFrameLevel then frame:SetFrameLevel(info.level) end
-        if info.ignoreFramePositionManager ~= nil then
-            frame.ignoreFramePositionManager = info.ignoreFramePositionManager
-        end
+        frame.ignoreFramePositionManager = info.ignoreFramePositionManager
         if frame.Layout then frame:Layout() end
+        _ReturnToTotemManagedContainer(frame)
 
         -- Returning true means ownership is back with Blizzard and MSUF should stop applying
         -- preview offsets until the user enables the helper again.
@@ -243,6 +276,7 @@ do
 
         managed = true
         frame.ignoreFramePositionManager = true
+        _RemoveFromTotemManagedContainers(frame)
 
         if frame.SetParent then
             frame:SetParent(playerFrame or UIParent)
