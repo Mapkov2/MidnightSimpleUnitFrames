@@ -434,34 +434,68 @@ function T.ApplyMenuAtmosphere(frame, host, nav)
     end
 end
 
-function T.AttachNavIcon(btn, navKey, isChild)
+local function LayoutNavButtonLabel(btn, isChild, hasIcon)
+    if not (btn and btn._msuf2Label) then return end
+    btn._msuf2Label:ClearAllPoints()
+    btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", hasIcon and (isChild and 24 or 26) or 10, 0)
+    btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
+    btn._msuf2Label:SetJustifyH("LEFT")
+    btn._msuf2Label._msuf2NavBasePoints = nil
+end
+
+function T.SetNavIconVisible(btn, visible)
+    if not btn then return end
+    visible = visible and true or false
+    btn._msuf2NavIconVisible = visible
+    if btn._msuf2NavIcon then
+        if btn._msuf2NavIcon.SetShown then
+            btn._msuf2NavIcon:SetShown(visible)
+        elseif visible then
+            btn._msuf2NavIcon:Show()
+        else
+            btn._msuf2NavIcon:Hide()
+        end
+    end
+    LayoutNavButtonLabel(btn, btn._msuf2NavIconIsChild, visible and btn._msuf2NavIcon ~= nil)
+    if btn.RefreshVisual then btn:RefreshVisual() end
+end
+
+function T.AttachNavIcon(btn, navKey, isChild, visible)
     if not (btn and btn.CreateTexture and navKey) then return end
+    btn._msuf2NavIconKey = navKey
+    btn._msuf2NavIconIsChild = isChild and true or false
     local grid = T.navIconGrid and T.navIconGrid[navKey]
     local color = T.navIconColors and T.navIconColors[navKey]
-    if not (grid and color) then return end
-    local icon = btn:CreateTexture(nil, "ARTWORK", nil, 3)
-    icon:SetSize(14, 14)
-    icon:SetTexture(T.media.navIcons)
+    if not (grid and color) then
+        LayoutNavButtonLabel(btn, isChild, false)
+        return
+    end
+    local icon = btn._msuf2NavIcon
+    if not icon then
+        icon = btn:CreateTexture(nil, "ARTWORK", nil, 3)
+        icon:SetSize(14, 14)
+        icon:SetTexture(T.media.navIcons)
+        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
+        btn._msuf2NavIcon = icon
+    else
+        icon:ClearAllPoints()
+        icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
+    end
+    icon._msuf2NavBasePoints = nil
     local col, row = grid[1], grid[2]
     icon:SetTexCoord(col / 8, (col + 1) / 8, row / 8, (row + 1) / 8)
-    icon:SetVertexColor(color[1], color[2], color[3], 0.50)
-    icon:SetPoint("LEFT", btn, "LEFT", isChild and 8 or 10, 0)
-    btn._msuf2NavIcon = icon
     btn._msuf2NavIconColor = color
-    local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
-    stripe:SetTexture("Interface\\Buttons\\WHITE8X8")
-    stripe:SetWidth(3)
-    stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -4)
-    stripe:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 1, 4)
-    stripe:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1.00)
-    stripe:Hide()
-    btn._msuf2NavStripe = stripe
-    if btn._msuf2Label then
-        btn._msuf2Label:ClearAllPoints()
-        btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", isChild and 24 or 26, 0)
-        btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
-        btn._msuf2Label:SetJustifyH("LEFT")
+    if not btn._msuf2NavStripe then
+        local stripe = btn:CreateTexture(nil, "ARTWORK", nil, 6)
+        stripe:SetTexture("Interface\\Buttons\\WHITE8X8")
+        stripe:SetWidth(3)
+        stripe:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -4)
+        stripe:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 1, 4)
+        stripe:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1.00)
+        stripe:Hide()
+        btn._msuf2NavStripe = stripe
     end
+    T.SetNavIconVisible(btn, visible ~= false)
 end
 
 local function HideNativeSliderTexture(region, keep)
@@ -1176,6 +1210,17 @@ local function ClampScrollValue(value, maxValue)
     return value
 end
 
+local SMOOTH_SCROLL_SPEED = 14
+local SMOOTH_SCROLL_MAX_ELAPSED = 0.050
+local SMOOTH_SCROLL_EPSILON = 0.45
+
+local function MenuSmoothScrollEnabled()
+    local g = M.GetGeneralDB and M.GetGeneralDB()
+    if type(g) ~= "table" then return false end
+    if g.reduceMotion == true or g.reducedMotion == true then return false end
+    return g.smoothMenuScroll == true
+end
+
 local function PixelBarTexture(texture)
     if not texture then return texture end
     texture:SetTexture("Interface\\Buttons\\WHITE8X8")
@@ -1235,42 +1280,131 @@ function T.StyleScrollFrame(scroll, anchor)
     end
 
     local rawSetVerticalScroll = scroll.SetVerticalScroll
+    local function CurrentMaxScroll()
+        local maxScroll = scroll._msuf2MaxScroll
+        if maxScroll == nil then
+            local child = scroll.GetScrollChild and scroll:GetScrollChild()
+            local childH = (child and child.GetHeight and child:GetHeight()) or 0
+            local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
+            maxScroll = math.max(0, childH - frameH)
+        end
+        return maxScroll
+    end
+    local function SetRawScroll(offset)
+        local maxScroll = CurrentMaxScroll()
+        offset = ClampScrollValue(offset, maxScroll)
+        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        if rawSetVerticalScroll and math.abs(offset - current) > 0.01 then rawSetVerticalScroll(scroll, offset) end
+        if bar and bar._msuf2LastScrollValue ~= offset then
+            bar._msuf2LastScrollValue = offset
+            bar._msuf2Refreshing = true
+            bar:SetValue(offset)
+            bar._msuf2Refreshing = nil
+        end
+        return offset
+    end
+    local function StopSmoothScroll()
+        scroll._msuf2SmoothScrollTarget = nil
+        local driver = scroll._msuf2SmoothScrollDriver
+        if driver then driver:Hide() end
+    end
+    local function SmoothScrollOnUpdate(_, elapsed)
+        local target = scroll._msuf2SmoothScrollTarget
+        if target == nil then
+            StopSmoothScroll()
+            return
+        end
+        target = ClampScrollValue(target, CurrentMaxScroll())
+        scroll._msuf2SmoothScrollTarget = target
+        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        local delta = target - current
+        if (not MenuSmoothScrollEnabled()) or math.abs(delta) <= SMOOTH_SCROLL_EPSILON then
+            SetRawScroll(target)
+            StopSmoothScroll()
+            return
+        end
+        elapsed = tonumber(elapsed) or 0
+        if elapsed > SMOOTH_SCROLL_MAX_ELAPSED then elapsed = SMOOTH_SCROLL_MAX_ELAPSED end
+        local blend = math.min(1, elapsed * SMOOTH_SCROLL_SPEED)
+        if blend <= 0 then return end
+        SetRawScroll(current + delta * blend)
+    end
+    local function EnsureSmoothScrollDriver()
+        local driver = scroll._msuf2SmoothScrollDriver
+        if driver then return driver end
+        driver = CreateFrame("Frame", nil, scroll)
+        driver:Hide()
+        driver:SetScript("OnUpdate", SmoothScrollOnUpdate)
+        scroll._msuf2SmoothScrollDriver = driver
+        return driver
+    end
+    local function SmoothScrollTo(offset)
+        local target = ClampScrollValue(offset, CurrentMaxScroll())
+        if not MenuSmoothScrollEnabled() then
+            SetRawScroll(target)
+            StopSmoothScroll()
+            return
+        end
+        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        if math.abs(target - current) <= SMOOTH_SCROLL_EPSILON then
+            SetRawScroll(target)
+            StopSmoothScroll()
+            return
+        end
+        scroll._msuf2SmoothScrollTarget = target
+        EnsureSmoothScrollDriver():Show()
+    end
     local function Refresh()
         local child = scroll.GetScrollChild and scroll:GetScrollChild()
         local childH = (child and child.GetHeight and child:GetHeight()) or 0
         local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
         local maxScroll = math.max(0, childH - frameH)
         scroll._msuf2MaxScroll = maxScroll
+        if scroll._msuf2SmoothScrollTarget ~= nil then scroll._msuf2SmoothScrollTarget = ClampScrollValue(scroll._msuf2SmoothScrollTarget, maxScroll) end
 
         if maxScroll <= 1 or frameH <= 0 then
+            StopSmoothScroll()
             if rawSetVerticalScroll and (scroll:GetVerticalScroll() or 0) ~= 0 then
                 rawSetVerticalScroll(scroll, 0)
             end
-            bar._msuf2Refreshing = true
-            bar:SetValue(0)
-            bar._msuf2Refreshing = nil
-            bar:Hide()
+            if bar._msuf2LastScrollValue ~= 0 then
+                bar._msuf2LastScrollValue = 0
+                bar._msuf2Refreshing = true
+                bar:SetValue(0)
+                bar._msuf2Refreshing = nil
+            end
+            if bar.Hide and bar:IsShown() then bar:Hide() end
             return
         end
 
-        bar:Show()
-        bar:SetMinMaxValues(0, maxScroll)
+        if bar.Show and not bar:IsShown() then bar:Show() end
+        if bar._msuf2LastMaxScroll ~= maxScroll then
+            bar._msuf2LastMaxScroll = maxScroll
+            bar:SetMinMaxValues(0, maxScroll)
+        end
         local visibleRatio = frameH / math.max(childH, 1)
         local thumbH = math.floor(math.max(34, math.min(frameH, frameH * visibleRatio)) + 0.5)
-        if thumb and thumb.SetHeight then thumb:SetHeight(thumbH) end
+        if thumb and thumb.SetHeight and thumb._msuf2LastHeight ~= thumbH then
+            thumb._msuf2LastHeight = thumbH
+            thumb:SetHeight(thumbH)
+        end
 
         local offset = ClampScrollValue(scroll:GetVerticalScroll() or 0, maxScroll)
         if offset ~= (scroll:GetVerticalScroll() or 0) and rawSetVerticalScroll then
             rawSetVerticalScroll(scroll, offset)
         end
-        bar._msuf2Refreshing = true
-        bar:SetValue(offset)
-        bar._msuf2Refreshing = nil
+        if bar._msuf2LastScrollValue ~= offset then
+            bar._msuf2LastScrollValue = offset
+            bar._msuf2Refreshing = true
+            bar:SetValue(offset)
+            bar._msuf2Refreshing = nil
+        end
         Paint(bar._msuf2Hover)
     end
 
     scroll._msuf2RefreshScrollBar = Refresh
     scroll.SetVerticalScroll = function(self, offset)
+        StopSmoothScroll()
         local maxScroll = self._msuf2MaxScroll
         if maxScroll == nil then
             local child = self.GetScrollChild and self:GetScrollChild()
@@ -1278,7 +1412,9 @@ function T.StyleScrollFrame(scroll, anchor)
             local frameH = (self.GetHeight and self:GetHeight()) or 0
             maxScroll = math.max(0, childH - frameH)
         end
-        rawSetVerticalScroll(self, ClampScrollValue(offset, maxScroll))
+        local clamped = ClampScrollValue(offset, maxScroll)
+        local current = (self.GetVerticalScroll and self:GetVerticalScroll()) or 0
+        if rawSetVerticalScroll and math.abs(clamped - current) > 0.01 then rawSetVerticalScroll(self, clamped) end
         if self._msuf2RefreshScrollBar then self:_msuf2RefreshScrollBar() end
     end
 
@@ -1287,7 +1423,13 @@ function T.StyleScrollFrame(scroll, anchor)
         local step = 64
         if IsShiftKeyDown and IsShiftKeyDown() then step = 180 end
         if IsControlKeyDown and IsControlKeyDown() then step = math.max(step, (scroll.GetHeight and scroll:GetHeight()) or step) end
-        scroll:SetVerticalScroll((scroll:GetVerticalScroll() or 0) - delta * step)
+        local current = scroll._msuf2SmoothScrollTarget or (scroll:GetVerticalScroll() or 0)
+        if MenuSmoothScrollEnabled() then
+            SmoothScrollTo(current - delta * step)
+        else
+            StopSmoothScroll()
+            scroll:SetVerticalScroll((scroll:GetVerticalScroll() or 0) - delta * step)
+        end
     end
 
     scroll:EnableMouseWheel(true)
@@ -1309,12 +1451,16 @@ function T.StyleScrollFrame(scroll, anchor)
     end)
     bar:SetScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
+        StopSmoothScroll()
         local maxScroll = scroll._msuf2MaxScroll or 0
-        if rawSetVerticalScroll then rawSetVerticalScroll(scroll, ClampScrollValue(value, maxScroll)) end
+        local clamped = ClampScrollValue(value, maxScroll)
+        local current = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
+        if rawSetVerticalScroll and math.abs(clamped - current) > 0.01 then rawSetVerticalScroll(scroll, clamped) end
         Refresh()
     end)
     scroll:HookScript("OnScrollRangeChanged", Refresh)
     scroll:HookScript("OnSizeChanged", Refresh)
+    scroll:HookScript("OnHide", StopSmoothScroll)
     if bar.HookScript then bar:HookScript("OnShow", function() Paint(bar._msuf2Hover) end) end
 
     Refresh()

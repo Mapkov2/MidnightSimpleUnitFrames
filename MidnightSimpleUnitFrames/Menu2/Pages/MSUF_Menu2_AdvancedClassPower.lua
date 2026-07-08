@@ -578,7 +578,7 @@ local function BuildClassPower(ctx)
 
     local layoutWidth = ctx.width or 900
     local compactLayout = layoutWidth < 620
-    local display = b:CollapsibleSection("classpower_display", "Layout", compactLayout and 444 or 268, true)
+    local display = b:CollapsibleSection("classpower_display", "Layout", compactLayout and 468 or 292, true)
     local cpControls = {}
     local textControls = {}
     local dpbControls = {}
@@ -613,11 +613,12 @@ local function BuildClassPower(ctx)
     local layoutRightW = compactLayout and layoutLeftW or max(250, layoutWidth - layoutRightX - 32)
     local layoutControlW = compactLayout and max(250, min(320, layoutWidth - layoutLeftX - 42)) or 300
     local positionTopY = compactLayout and -266 or -64
-    W.ControlCard(display, "Bar", nil, layoutLeftX - 14, -38, layoutLeftW + 28, compactLayout and 196 or 210)
-    W.ControlCard(display, "Position", nil, layoutRightX - 14, compactLayout and -240 or -38, layoutRightW + 28, 190)
-    MoveWidget(cpHeight, display, layoutLeftX, -98, layoutControlW)
-    MoveWidget(cpWidthMode, display, layoutLeftX, -150, layoutControlW)
-    MoveWidget(cpWidth, display, layoutLeftX, -202, layoutControlW)
+    W.ControlCard(display, "Bar", nil, layoutLeftX - 14, -38, layoutLeftW + 28, compactLayout and 246 or 234)
+    W.ControlCard(display, "Position", nil, layoutRightX - 14, compactLayout and -264 or -38, layoutRightW + 28, 190)
+    MoveWidget(cpEnable, display, layoutLeftX, -76, 180)
+    MoveWidget(cpHeight, display, layoutLeftX, -122, layoutControlW)
+    MoveWidget(cpWidthMode, display, layoutLeftX, -174, layoutControlW)
+    MoveWidget(cpWidth, display, layoutLeftX, -226, layoutControlW)
     MoveWidget(cpX, display, layoutRightX, positionTopY, layoutControlW)
     MoveWidget(cpY, display, layoutRightX, positionTopY - 52, layoutControlW)
     MoveWidget(cpLevel, display, layoutRightX, positionTopY - 104, layoutControlW)
@@ -703,12 +704,12 @@ local function BuildClassPower(ctx)
     MoveWidget(cpOutline, visual, styleRightX, -318, styleRightControlW)
     MoveWidget(cpGap, visual, styleRightX, -370, styleRightControlW)
 
-    local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 196, false)
+    local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 220, false)
     local visibilityW = min(560, (visibility._msuf2Width or ctx.width or 900) - 28)
-    W.ControlCard(visibility, "Auto-Hide Rules", nil, 14, -38, visibilityW, 134)
-    local hideOOC = SwitchAt(ctx, visibility, "Hide out of combat", 32, -64, visibilityW - 48, Bars, "classPowerHideOOC", false, ApplyClassPower)
-    local hideFull = SwitchAt(ctx, visibility, "Hide when full", 32, -96, visibilityW - 48, Bars, "classPowerHideWhenFull", false, ApplyClassPower)
-    local hideEmpty = SwitchAt(ctx, visibility, "Hide when empty", 32, -128, visibilityW - 48, Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
+    W.ControlCard(visibility, "Auto-Hide Rules", nil, 14, -38, visibilityW, 158)
+    local hideOOC = SwitchAt(ctx, visibility, "Hide out of combat", 32, -76, visibilityW - 48, Bars, "classPowerHideOOC", false, ApplyClassPower)
+    local hideFull = SwitchAt(ctx, visibility, "Hide when full", 32, -108, visibilityW - 48, Bars, "classPowerHideWhenFull", false, ApplyClassPower)
+    local hideEmpty = SwitchAt(ctx, visibility, "Hide when empty", 32, -140, visibilityW - 48, Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
     for _, control in ipairs({ hideOOC, hideFull, hideEmpty }) do cpControls[#cpControls + 1] = control end
 
     local dpb = b:CollapsibleSection("classpower_detached_power", "Detached Power Bar", 382, false)

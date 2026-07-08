@@ -56,11 +56,15 @@ local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 900, 700
 local MIN_WINDOW_W, MIN_WINDOW_H = 620, 430
 local MAX_WINDOW_W, MAX_WINDOW_H = 1600, 1100
 local WINDOW_W, WINDOW_H = DEFAULT_WINDOW_W, DEFAULT_WINDOW_H
-local NAV_W = 174
+local NAV_W = 158
 local CONTENT_W = WINDOW_W - NAV_W - 24
 local CONTENT_H = WINDOW_H - 74
 local NAV_BUTTON_H = 20
 local NAV_BUTTON_STEP = 23
+local NAV_ITEM_X = 8
+local NAV_ITEM_RIGHT_PAD = 8
+local NAV_ITEM_INDENT = 12
+local NAV_SCROLL_GUTTER = 7
 local MENU_BASE_SCALE = 1.08
 local MENU_NORMAL_FRAME_STRATA = "DIALOG"
 local MENU_EDIT_FRAME_STRATA = "FULLSCREEN"
@@ -126,34 +130,49 @@ M.ApplyMenuPopupFramePriority = ApplyMenuPopupFramePriority
 
 local NAV = {
     { key = "home", label = "Dashboard" },
-    { header = "Frames", id = "unitframes", defaultOpen = true },
-    { key = "uf_player", label = "Player", group = "unitframes" },
-    { key = "uf_target", label = "Target", group = "unitframes" },
-    { key = "uf_boss", label = "Boss Frames", group = "unitframes" },
-    { key = "uf_focus", label = "Focus", group = "unitframes" },
-    { key = "uf_pet", label = "Pet", group = "unitframes" },
-    { key = "uf_targettarget", label = "Target of Target", group = "unitframes" },
-    { key = "uf_focustarget", label = "Focus Target", group = "unitframes" },
-    { header = "Group Frames", id = "groupframes", defaultOpen = true },
-    { key = "gf_layout", label = "Layout", group = "groupframes" },
-    { key = "gf_bars", label = "Health & Text", group = "groupframes" },
-    { key = "gf_indicators", label = "Indicators", group = "groupframes" },
-    { key = "gf_auras", label = "Buffs & Debuffs", group = "groupframes" },
-    { header = "Auras", id = "auras", defaultOpen = true },
-    { key = "auras2", label = "Unit Auras", group = "auras" },
-    { header = "Appearance", id = "globalstyle", defaultOpen = true },
-    { key = "opt_bars", label = "Bars", group = "globalstyle" },
-    { key = "opt_castbar", label = "Castbars", group = "globalstyle" },
-    { key = "opt_colors", label = "Colors", group = "globalstyle" },
-    { key = "opt_fonts", label = "Fonts", group = "globalstyle" },
-    { key = "opt_misc", label = "Miscellaneous", group = "globalstyle" },
-    { key = "classpower", label = "Class Resources" },
-    { key = "gameplay", label = "Gameplay" },
+    { title = "Frames", id = "frames" },
+    { key = "uf_player", label = "Unitframes", group = "frames" },
+    { key = "gf_layout", label = "Party/Raid Frames", group = "frames" },
+    { title = "Appearance", id = "appearance" },
+    { key = "opt_bars", label = "Bars", group = "appearance" },
+    { key = "opt_castbar", label = "Cast Bars", group = "appearance" },
+    { key = "opt_colors", label = "Colors", group = "appearance" },
+    { key = "opt_fonts", label = "Fonts", group = "appearance" },
+    { key = "auras2", label = "Auras", group = "appearance" },
+    { key = "opt_misc", label = "Miscellaneous", group = "appearance" },
+    { title = "Features", id = "features" },
+    { key = "classpower", label = "Class Resources", group = "features" },
+    { key = "gameplay", label = "Gameplay", group = "features" },
     { key = "profiles", label = "Profiles" },
-    { header = "Advanced", id = "modules", defaultOpen = false },
+    { title = "Advanced", id = "modules" },
     { key = "modules", label = "Modules", group = "modules" },
 }
 M.navItems = NAV
+
+M.navPrimaryForKey = {
+    home = "home",
+    uf_player = "uf_player",
+    uf_target = "uf_player",
+    uf_boss = "uf_player",
+    uf_focus = "uf_player",
+    uf_pet = "uf_player",
+    uf_targettarget = "uf_player",
+    uf_focustarget = "uf_player",
+    gf_layout = "gf_layout",
+    gf_bars = "gf_layout",
+    gf_indicators = "gf_layout",
+    gf_auras = "gf_layout",
+    auras2 = "auras2",
+    opt_bars = "opt_bars",
+    opt_castbar = "opt_castbar",
+    opt_colors = "opt_colors",
+    opt_fonts = "opt_fonts",
+    opt_misc = "opt_misc",
+    classpower = "classpower",
+    gameplay = "gameplay",
+    profiles = "profiles",
+    modules = "modules",
+}
 
 M.navHelp = M.navHelp or {
     home = "Start here for setup, scaling, support, changelog, and safe recovery actions.",
@@ -187,6 +206,12 @@ local ALIASES = {
     main = "home",
     options = "home",
     opt = "home",
+    frame = "uf_player",
+    frames = "uf_player",
+    unitframe = "uf_player",
+    unit_frame = "uf_player",
+    unitframes = "uf_player",
+    unit_frames = "uf_player",
     player = "uf_player",
     target = "uf_target",
     tot = "uf_targettarget",
@@ -198,8 +223,16 @@ local ALIASES = {
     focus = "uf_focus",
     boss = "uf_boss",
     pet = "uf_pet",
+    appearance = "opt_bars",
+    appearances = "opt_bars",
     bars = "opt_bars",
+    global_style = "opt_bars",
+    globalstyle = "opt_bars",
+    look = "opt_bars",
+    looks = "opt_bars",
+    style = "opt_bars",
     fonts = "opt_fonts",
+    aura = "auras2",
     auras = "auras2",
     auras2 = "auras2",
     castbar = "opt_castbar",
@@ -213,6 +246,15 @@ local ALIASES = {
     health = "gf_bars",
     group = "gf_layout",
     groupframes = "gf_layout",
+    party = "gf_layout",
+    ["party/raid"] = "gf_layout",
+    party_raid = "gf_layout",
+    party_frames = "gf_layout",
+    partyframes = "gf_layout",
+    partyraid = "gf_layout",
+    raid = "gf_layout",
+    raid_frames = "gf_layout",
+    raidframes = "gf_layout",
     class = "classpower",
     modules = "modules",
     search = "search",
@@ -443,6 +485,11 @@ local function IsAdvancedNavHidden()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return true end
     return g.hideAdvancedMenu ~= false
+end
+
+local function NavIconsEnabled()
+    local g = M.GetGeneralDB and M.GetGeneralDB()
+    return type(g) == "table" and g.showNavigationIcons == true
 end
 
 local function WindowVisualScale(frame)
@@ -771,6 +818,7 @@ local function UpdateNav(key)
         M.navHeaderState[group] = true
         if M.nav and M.nav._msuf2NavReflow then M.nav:_msuf2NavReflow() end
     end
+    local activeNavKey = (M.navPrimaryForKey and M.navPrimaryForKey[key]) or key
     local localeKey = CurrentMenuLocaleKey()
     local labelsDirty = M._msuf2NavLocaleKey ~= localeKey
     M._msuf2NavLocaleKey = localeKey
@@ -780,15 +828,15 @@ local function UpdateNav(key)
             if btn._msuf2RawLabel and btn.SetText then
                 btn:SetText(M.Tr(btn._msuf2RawLabel))
             end
-            if btn.SetActive then btn:SetActive(pageKey == key) end
+            if btn.SetActive then btn:SetActive(pageKey == activeNavKey) end
         end
-    elseif previousKey ~= key then
+    elseif previousKey ~= activeNavKey then
         local previous = previousKey and M.navButtons[previousKey]
         if previous and previous.SetActive then previous:SetActive(false) end
-        local current = key and M.navButtons[key]
+        local current = activeNavKey and M.navButtons[activeNavKey]
         if current and current.SetActive then current:SetActive(true) end
     end
-    M._msuf2NavActiveKey = key
+    M._msuf2NavActiveKey = activeNavKey
     if labelsDirty and M.navHeaders then
         for _, btn in pairs(M.navHeaders) do
             if btn._msuf2RawLabel and btn.SetText then
@@ -796,9 +844,36 @@ local function UpdateNav(key)
             end
         end
     end
+    if labelsDirty and M.navTitles then
+        for _, title in pairs(M.navTitles) do
+            if title._msuf2RawLabel and title.SetText then
+                title:SetText(string.upper(M.Tr(title._msuf2RawLabel)))
+            end
+        end
+    end
     if labelsDirty and M.nav and M.nav.searchBox then
         UpdateSearchPlaceholder(M.nav.searchBox)
     end
+end
+
+local function RememberPrimaryNavPage(key)
+    local primary = M.navPrimaryForKey and M.navPrimaryForKey[key]
+    if type(primary) ~= "string" or primary == "" then return end
+    M.navLastPageForPrimary = type(M.navLastPageForPrimary) == "table" and M.navLastPageForPrimary or {}
+    M.navLastPageForPrimary[primary] = key
+end
+
+function M.ResolvePrimaryNavClickTarget(primaryKey)
+    primaryKey = tostring(primaryKey or "")
+    local last = type(M.navLastPageForPrimary) == "table" and M.navLastPageForPrimary[primaryKey] or nil
+    if type(last) == "string"
+        and M.pages[last]
+        and M.navPrimaryForKey
+        and M.navPrimaryForKey[last] == primaryKey
+    then
+        return last
+    end
+    return primaryKey
 end
 
 local function RunRefreshers(entry)
@@ -1243,6 +1318,7 @@ function M.SelectPage(key)
         if M.activeKey == key then M.activeKey = nil end
     end
     if key == M.activeKey and cached then
+        RememberPrimaryNavPage(key)
         RunRefreshers(cached)
         SyncBossPagePreviewForKey(key)
         SyncGroupPagePreviewForKey(key)
@@ -1263,6 +1339,7 @@ function M.SelectPage(key)
 
     M.activeKey = key
     if key ~= "search" then M.PersistMenuStateValue("lastPage", key) end
+    RememberPrimaryNavPage(key)
     if M.frame then M.frame._msufCurrentKey = key end
     if M.scrollChild then
         M.scrollChild:SetHeight(entry.height or CONTENT_H)
@@ -1297,18 +1374,42 @@ function M.AttachNavTooltip(frame, title, text)
     end)
 end
 
+local function NavItemWidth(indent)
+    return NAV_W - NAV_ITEM_X - NAV_ITEM_RIGHT_PAD - (tonumber(indent) or 0)
+end
+
+local function ResolveNavClickTarget(key)
+    local fn = M.ResolvePrimaryNavClickTarget
+    if type(fn) == "function" then
+        local target = fn(key)
+        if type(target) == "string" and target ~= "" then return target end
+    end
+    return key
+end
+
 local function CreateNavButton(parent, key, label, indent)
-    local btn = T.Button(parent, M.Tr(label), NAV_W - 38 - (indent or 0), NAV_BUTTON_H)
-    btn:SetScript("OnClick", function() M.SelectPage(key) end)
+    local btn = T.Button(parent, M.Tr(label), NavItemWidth(indent), NAV_BUTTON_H)
+    btn:SetScript("OnClick", function() M.SelectPage(ResolveNavClickTarget(key)) end)
     btn._msuf2SkipHistoryCheckpoint = true
     btn._msuf2NavItem = true
     btn._msuf2NavIndent = indent or 0
     btn._msuf2RawLabel = label
-    if T.AttachNavIcon then T.AttachNavIcon(btn, key, (indent or 0) > 0) end
+    if T.AttachNavIcon then T.AttachNavIcon(btn, key, (indent or 0) > 0, NavIconsEnabled()) end
     M.AttachNavTooltip(btn, label, M.navHelp and M.navHelp[key])
     M.navButtons[key] = btn
     if btn.RefreshVisual then btn:RefreshVisual() end
     return btn
+end
+
+function M.RefreshNavIconVisibility()
+    local buttons = M.navButtons
+    if type(buttons) ~= "table" then return end
+    local visible = NavIconsEnabled()
+    for key, btn in pairs(buttons) do
+        if btn and btn._msuf2NavItem and T.AttachNavIcon then
+            T.AttachNavIcon(btn, key, (btn._msuf2NavIndent or 0) > 0, visible)
+        end
+    end
 end
 
 local function ApplyNavHeaderVisual(btn, open)
@@ -1438,7 +1539,7 @@ end
 
 local function CreateHistoryControls(parent)
     local row = CreateFrame("Frame", nil, parent)
-    local rowW = NAV_W - 38
+    local rowW = NavItemWidth(0)
     row:SetSize(rowW, 26)
     local buttonGap = 6
     local buttonW = floor((rowW - buttonGap) * 0.5)
@@ -1538,11 +1639,36 @@ local function BuildNav(parent)
     EnsurePersistentMenuState()
     M.navButtons = {}
     M.navHeaders = {}
+    M.navTitles = {}
     M.navGroupForKey = {}
     M.navHeaderState = M.navHeaderState or {}
+
+    local brandIconFrame = CreateFrame("Frame", nil, parent)
+    brandIconFrame:SetSize(26, 26)
+    brandIconFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 11, -8)
+    brandIconFrame:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 1) + 10)
+    local brandIcon = brandIconFrame:CreateTexture(nil, "ARTWORK")
+    brandIcon:SetTexture(T.media.logo)
+    brandIcon:SetAllPoints(brandIconFrame)
+    if brandIcon.SetTexCoord then brandIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    if brandIconFrame.CreateMaskTexture and brandIcon.AddMaskTexture and T.media and T.media.superellipse then
+        local mask = brandIconFrame:CreateMaskTexture(nil, "ARTWORK")
+        mask:SetTexture(T.media.superellipse, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetAllPoints(brandIcon)
+        brandIcon:AddMaskTexture(mask)
+        brandIconFrame._msuf2BrandIconMask = mask
+    end
+    local brand = T.Font(parent, "GameFontHighlightSmall", "MSUF", T.colors.title or T.colors.text)
+    brand:SetPoint("LEFT", brandIconFrame, "RIGHT", 8, 0)
+    brand:SetPoint("RIGHT", parent, "RIGHT", -12, 0)
+    brand:SetJustifyH("LEFT")
+    parent._msuf2BrandIconFrame = brandIconFrame
+    parent._msuf2BrandIcon = brandIcon
+    parent._msuf2BrandTitle = brand
+
     local search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    search:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -8)
-    search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -10, -8)
+    search:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -38)
+    search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -10, -38)
     search:SetHeight(18)
     search:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 1) + 20)
     search:EnableMouse(true)
@@ -1712,10 +1838,10 @@ local function BuildNav(parent)
     end)
 
     local listScroll = CreateFrame("ScrollFrame", nil, parent)
-    listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -34)
-    listScroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -14, 6)
+    listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -66)
+    listScroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -NAV_SCROLL_GUTTER, 6)
     local list = CreateFrame("Frame", nil, listScroll)
-    list:SetSize(NAV_W - 18, 1)
+    list:SetSize(NAV_W - NAV_SCROLL_GUTTER, 1)
     listScroll:SetScrollChild(list)
     parent._msuf2NavListScroll = listScroll
     parent._msuf2NavList = list
@@ -1724,10 +1850,21 @@ local function BuildNav(parent)
     local created = {}
     for i = 1, #NAV do
         local item = NAV[i]
-        if item.header then
+        if item.title then
+            local id = item.id or item.title
+            M.navHeaderState[id] = true
+            local title = T.Font(list, "GameFontDisableSmall", string.upper(M.Tr(item.title)), T.colors.navHeaderText or T.colors.muted)
+            title:SetJustifyH("LEFT")
+            title:SetSize(NavItemWidth(0), 16)
+            title._msuf2NavTitle = true
+            title._msuf2NavTitleId = id
+            title._msuf2RawLabel = item.title
+            M.navTitles[id] = title
+            created[#created + 1] = { kind = "title", id = id, frame = title }
+        elseif item.header then
             local id = item.id or item.header
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
-            local btn = T.Button(list, string.upper(M.Tr(item.header)), NAV_W - 38, NAV_BUTTON_H)
+            local btn = T.Button(list, string.upper(M.Tr(item.header)), NavItemWidth(0), NAV_BUTTON_H)
             btn._msuf2NavHeader = true
             btn._msuf2NavHeaderId = id
             btn._msuf2RawLabel = item.header
@@ -1751,7 +1888,7 @@ local function BuildNav(parent)
             M.navHeaders[id] = btn
             created[#created + 1] = { kind = "header", id = id, button = btn }
         elseif item.key then
-            local indent = item.group and 12 or 0
+            local indent = item.group and NAV_ITEM_INDENT or 0
             local btn = CreateNavButton(list, item.key, item.label, indent)
             AttachNavHoverGrow(btn)
             if item.group then M.navGroupForKey[item.key] = item.group end
@@ -1762,6 +1899,7 @@ local function BuildNav(parent)
         end
     end
     function parent:_msuf2NavReflow()
+        if M.RefreshNavIconVisibility then M.RefreshNavIconVisibility() end
         local y = -4
         local advancedHidden = IsAdvancedNavHidden()
         for i = 1, #created do
@@ -1770,22 +1908,29 @@ local function BuildNav(parent)
             if advancedHidden and (item.id == "modules" or item.group == "modules") then
                 if btn then btn:Hide() end
                 if item.frame then item.frame:Hide() end
+            elseif item.kind == "title" then
+                local frame = item.frame
+                frame:Show()
+                frame:ClearAllPoints()
+                if y < -4 then y = y - 8 else y = y - 4 end
+                frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + 2, y)
+                y = y - 18
             elseif item.kind == "header" then
                 btn:Show()
                 btn:ClearAllPoints()
-                btn:SetPoint("TOPLEFT", list, "TOPLEFT", 12, y)
+                btn:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y)
                 ApplyNavHeaderVisual(btn, M.navHeaderState[item.id])
                 y = y - NAV_BUTTON_STEP
             elseif item.kind == "history" then
                 local frame = item.frame
                 frame:Show()
                 frame:ClearAllPoints()
-                frame:SetPoint("TOPLEFT", list, "TOPLEFT", 12, y - 2)
+                frame:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X, y - 2)
                 y = y - 32
-            elseif not item.group or M.navHeaderState[item.group] then
+            elseif not item.group or M.navHeaderState[item.group] ~= false then
                 btn:Show()
                 btn:ClearAllPoints()
-                btn:SetPoint("TOPLEFT", list, "TOPLEFT", 12 + (btn._msuf2NavIndent or 0), y)
+                btn:SetPoint("TOPLEFT", list, "TOPLEFT", NAV_ITEM_X + (btn._msuf2NavIndent or 0), y)
                 y = y - NAV_BUTTON_STEP
             else
                 if btn then btn:Hide() end
@@ -1793,7 +1938,7 @@ local function BuildNav(parent)
             end
         end
         local contentH = math.max(math.abs(y) + 8, (listScroll.GetHeight and listScroll:GetHeight()) or 1)
-        list:SetSize(NAV_W - 18, contentH)
+        list:SetSize(NAV_W - NAV_SCROLL_GUTTER, contentH)
         if listScroll._msuf2RefreshScrollBar then listScroll:_msuf2RefreshScrollBar() end
         if M.RefreshHistoryControls then M.RefreshHistoryControls() end
     end

@@ -25,6 +25,13 @@ local SCOPE_VALUES = {
     { value = "mythicraid", text = "Mythic Raid" },
 }
 
+local GROUP_PAGE_TABS = {
+    { key = "gf_layout", label = "Layout", width = 74 },
+    { key = "gf_bars", label = "Health & Text", width = 116 },
+    { key = "gf_indicators", label = "Status & Indicators", width = 154 },
+    { key = "gf_auras", label = "Auras", width = 70 },
+}
+
 local GROWTH_VALUES = {
     { value = "DOWN", text = "Down" },
     { value = "UP", text = "Up" },
@@ -559,8 +566,8 @@ local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
 end
 
 local function ScopeSection(ctx, builder)
-    local compactTop = (tonumber(builder.width) or 0) < 600
-    local h = compactTop and 72 or 40
+    local compactTop = (tonumber(builder.width) or 0) < 760
+    local h = compactTop and 104 or 74
     local sec = CreateFrame("Frame", nil, builder.parent)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(builder.width, h)
@@ -664,8 +671,34 @@ local function ScopeSection(ctx, builder)
         RefreshContext(ctx)
     end
 
+    local pageBtns = {}
+    local previousPage
+    for i = 1, #GROUP_PAGE_TABS do
+        local info = GROUP_PAGE_TABS[i]
+        local key, label = info.key, info.label
+        local btn = MakeTopButton(sec, M.Tr(label), info.width or 82, {
+            bg = { 0.026, 0.040, 0.084, 0.95 },
+            border = { 0.095, 0.165, 0.330, 0.62 },
+            activeBg = { 0.050, 0.110, 0.255, 0.98 },
+            activeBorder = { 0.200, 0.430, 0.850, 0.92 },
+        })
+        if previousPage then
+            btn:SetPoint("LEFT", previousPage, "RIGHT", 6, 0)
+        else
+            btn:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -8)
+        end
+        btn:SetScript("OnClick", function()
+            if M.activeKey ~= key and type(M.SelectPage) == "function" then M.SelectPage(key) end
+        end)
+        if type(M.AttachNavTooltip) == "function" then
+            M.AttachNavTooltip(btn, label, M.navHelp and M.navHelp[key])
+        end
+        pageBtns[key] = btn
+        previousPage = btn
+    end
+
     local editing = T.Font(sec, "GameFontNormalSmall", M.Tr("Editing:"), { 0.72, 0.82, 1.00, 1 })
-    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -15)
+    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, compactTop and -46 or -44)
 
     local scopeBtns = {}
     local previous
@@ -689,7 +722,7 @@ local function ScopeSection(ctx, builder)
         previous = btn
     end
 
-    local actionY = compactTop and -42 or -10
+    local actionY = compactTop and -74 or -44
     local copy = MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
     local edit = MakeTopButton(sec, M.Tr("MSUF Edit Mode"), compactTop and 118 or 128)
@@ -710,6 +743,10 @@ local function ScopeSection(ctx, builder)
 
     local function RefreshTop()
         local current = CurrentScope()
+        for i = 1, #GROUP_PAGE_TABS do
+            local info = GROUP_PAGE_TABS[i]
+            if pageBtns[info.key] and pageBtns[info.key].SetActive then pageBtns[info.key]:SetActive(M.activeKey == info.key) end
+        end
         for i = 1, #SCOPE_VALUES do
             local info = SCOPE_VALUES[i]
             if scopeBtns[info.value] and scopeBtns[info.value].SetActive then scopeBtns[info.value]:SetActive(current == info.value) end
