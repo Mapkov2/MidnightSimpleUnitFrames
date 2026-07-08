@@ -61,7 +61,8 @@ local function UpdateOverlay()
     local l   = _overlay.lines
     local ecv = GetECV()
     local g   = MSUF_DB and MSUF_DB.general
-    local uf  = UnitFrames or _G.MSUF_UnitFrames or _G.UnitFrames
+    local UF = MSUF and MSUF.UF
+    local frames = UF and UF.frames
 
     l[1]:SetText("|cFFFFFF00MSUF Position Debug|r  Combat: "
         .. (_G.MSUF_InCombat and "|cFFFF4444IN|r" or "|cFF44FF44OUT|r"))
@@ -87,7 +88,9 @@ local function UpdateOverlay()
 
     local units = { "player", "target", "focus", "targettarget", "pet", "boss1" }
     for i, unit in ipairs(units) do
-        local frame = uf and uf[unit]
+        local frame = (UF and type(UF.GetFrame) == "function" and UF.GetFrame(unit))
+            or (frames and frames[unit])
+            or _G["MSUF_" .. unit]
         local li = l[3 + i]
         if frame then
             local cx, cy = frame:GetCenter()

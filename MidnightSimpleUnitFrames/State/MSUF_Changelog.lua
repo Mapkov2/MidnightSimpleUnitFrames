@@ -27,7 +27,7 @@ local data = {
                     title = "Performance Highlights",
                     bullets = {
                         "Added a direct frame event path for RegisterUnitEvent-owned frames so hot unit events run their prebuilt handler immediately instead of going through the broad event router, removing the redundant re-derivation of which frame an event belonged to.",
-                        "Added an Ellesmere-style value hot path that bakes the exact health and power work into one closure per frame and event, so value ticks skip the generic runner layer.",
+                        "Added a direct value hot path that bakes the exact health and power work into one closure per frame and event, so value ticks skip the generic runner layer.",
                         "Added a percent-only health path for single frames (target, focus, boss, pet) that uses one UnitHealthPercent call and skips UnitHealth, UnitHealthMax, and store bookkeeping, so a boss target taking sustained damage costs far less per health tick.",
                         "Added direct group-frame health and power dispatch for frequent value updates.",
                     },
