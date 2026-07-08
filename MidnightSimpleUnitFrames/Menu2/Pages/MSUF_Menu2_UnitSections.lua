@@ -223,6 +223,16 @@ local AlphaModeValue = UP.AlphaModeValue
 local NormalizeBossLayoutMode = UP.NormalizeBossLayoutMode
 local UpdateLoadActive = UP.UpdateLoadActive
 
+local UNIT_SCOPE_TABS = {
+    { key = "uf_player", unit = "player", label = "Player", width = 56 },
+    { key = "uf_target", unit = "target", label = "Target", width = 62 },
+    { key = "uf_boss", unit = "boss", label = "Boss", width = 54 },
+    { key = "uf_focus", unit = "focus", label = "Focus", width = 58 },
+    { key = "uf_pet", unit = "pet", label = "Pet", width = 46 },
+    { key = "uf_targettarget", unit = "targettarget", label = "ToT", width = 46 },
+    { key = "uf_focustarget", unit = "focustarget", label = "FT", width = 38 },
+}
+
 local function ToTInlineNPCColorAvailable()
     local fn = _G.MSUF_UFCore_IsToTInlineNPCColorModeAvailable
     if type(fn) == "function" then return fn() == true end
@@ -465,7 +475,7 @@ local function BuildPreview(ctx, builder, unit)
 end
 
 local function BuildTopActions(ctx, builder, unit, label)
-    local compactTop = (tonumber(builder.width) or 0) < 600
+    local compactTop = (tonumber(builder.width) or 0) < 820
     local sectionH = compactTop and 72 or 30
     local sec = CreateFrame("Frame", nil, builder.parent)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
@@ -565,18 +575,39 @@ local function BuildTopActions(ctx, builder, unit, label)
     local editing = T.Font(sec, "GameFontNormalSmall", M.Tr("Editing:"), { 0.72, 0.82, 1.00, 1 })
     editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, compactTop and -15 or -6)
 
-    local unitPill = MakeTopButton(sec, UnitTopLabel(unit), UnitTopPillWidth(unit), true, {
+    local unitTabStyle = {
         bg = { 0.030, 0.045, 0.092, 0.94 },
         border = { 0.105, 0.170, 0.320, 0.56 },
         textColor = { 0.86, 0.92, 1.00, 1 },
         hoverBg = { 0.036, 0.052, 0.104, 0.96 },
         hoverBorder = { 0.180, 0.330, 0.680, 0.86 },
-        activeBg = { 0.030, 0.045, 0.092, 0.96 },
+        activeBg = { 0.060, 0.130, 0.315, 0.98 },
         activeBorder = { 0.205, 0.390, 0.820, 0.92 },
         activeTextColor = { 0.94, 0.98, 1.00, 1 },
-    })
-    unitPill:SetPoint("LEFT", editing, "RIGHT", 8, 0)
-    unitPill:EnableMouse(false)
+    }
+    local previousUnitTab
+    for i = 1, #UNIT_SCOPE_TABS do
+        local info = UNIT_SCOPE_TABS[i]
+        local key, tabUnit, tabLabel = info.key, info.unit, info.label
+        local active = tabUnit == unit
+        local btn = MakeTopButton(sec, M.Tr(tabLabel), info.width or UnitTopPillWidth(tabUnit), active, unitTabStyle)
+        if previousUnitTab then
+            btn:SetPoint("LEFT", previousUnitTab, "RIGHT", 6, 0)
+        else
+            btn:SetPoint("LEFT", editing, "RIGHT", 8, 0)
+        end
+        if active then
+            btn:EnableMouse(false)
+        else
+            btn:SetScript("OnClick", function()
+                if type(M.SelectPage) == "function" then M.SelectPage(key) end
+            end)
+            if type(M.AttachNavTooltip) == "function" then
+                M.AttachNavTooltip(btn, tabLabel, M.navHelp and M.navHelp[key])
+            end
+        end
+        previousUnitTab = btn
+    end
 
     local actionY = compactTop and -42 or -2
     local copy = MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86, false, TOP_ACTION_STYLE)

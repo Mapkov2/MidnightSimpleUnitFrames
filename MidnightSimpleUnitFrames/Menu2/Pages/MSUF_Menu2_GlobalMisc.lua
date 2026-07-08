@@ -200,7 +200,7 @@ local function BuildMisc(ctx)
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
 
-    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 158, true)
+    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 224, true)
     local menuSnap = W.Toggle(menuBehavior, "Enable Windows-style edge snap for this menu")
     M.BindToggle(ctx, menuSnap,
         function() return ReadGBool("slashMenuSnapEnabled", true) end,
@@ -215,6 +215,24 @@ local function BuildMisc(ctx)
             if M.RefreshAdvancedNavVisibility then M.RefreshAdvancedNavVisibility() end
         end)
     W.MoveWidget(advancedHidden, menuBehavior, 14, -118, 280, "LEFT")
+    local smoothScroll = W.Toggle(menuBehavior, "Smooth menu scrolling")
+    M.BindToggle(ctx, smoothScroll,
+        function() return ReadGBool("smoothMenuScroll", false) end,
+        function(v)
+            SetGBool("smoothMenuScroll", v, "MSUF2_MENU_SMOOTH_SCROLL", { preview = false, applyAll = false, notify = false })
+            if not v and M.scrollFrame and M.scrollFrame.SetVerticalScroll then
+                M.scrollFrame:SetVerticalScroll(M.scrollFrame:GetVerticalScroll() or 0)
+            end
+        end)
+    W.MoveWidget(smoothScroll, menuBehavior, 14, -148, 280, "LEFT")
+    local navIcons = W.Toggle(menuBehavior, "Show navigation icons")
+    M.BindToggle(ctx, navIcons,
+        function() return ReadGBool("showNavigationIcons", false) end,
+        function(v)
+            SetGBool("showNavigationIcons", v, "MSUF2_NAV_ICONS", { preview = false, applyAll = false, notify = false })
+            if M.RefreshNavIconVisibility then M.RefreshNavIconVisibility() end
+        end)
+    W.MoveWidget(navIcons, menuBehavior, 14, -178, 280, "LEFT")
 
     local unitInterval, castInterval, budget, urgent
     local updates = b:CollapsibleSection("misc_updates", "Update intervals", 402, true)
