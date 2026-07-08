@@ -129,7 +129,16 @@ local FRAME_BORDER_OPTS = {
     texture = TEX_W8,
     snapOff = PreviewSnapOff,
 }
-local function EnsureFrameBorderOverlay(mock)
+local function PreviewFrameBorderLevelOffset(border)
+    if border and border.levelOffset ~= nil then
+        local offset = floor((tonumber(border.levelOffset) or 0) + 0.5)
+        if offset < 0 then return 0 end
+        if offset > 10000 then return 10000 end
+        return offset
+    end
+    return Layers.PREVIEW_FRAME_BORDER_OFFSET or 40
+end
+local function EnsureFrameBorderOverlay(mock, border)
     if not (mock and mock.CreateTexture) then return nil end
     local overlay = mock._msufPreviewFrameBorder
     if not overlay then
@@ -139,7 +148,7 @@ local function EnsureFrameBorderOverlay(mock)
         overlay._edges = {}
         mock._msufPreviewFrameBorder = overlay
     end
-    if overlay.SetFrameLevel and mock.GetFrameLevel then overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + (Layers.PREVIEW_FRAME_BORDER_OFFSET or 40)) end
+    if overlay.SetFrameLevel and mock.GetFrameLevel then overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + PreviewFrameBorderLevelOffset(border)) end
     return overlay
 end
 local function SetFrameBorderShown(mock, shown)
@@ -159,7 +168,7 @@ function Core.ApplyFrameBorder(box, border, scale)
     end
     thickness = floor((thickness * (tonumber(scale) or 1)) + 0.5)
     if thickness < 1 then thickness = 1 elseif thickness > 30 then thickness = 30 end
-    local overlay = EnsureFrameBorderOverlay(mock)
+    local overlay = EnsureFrameBorderOverlay(mock, border)
     if not overlay then return end
     overlay:ClearAllPoints()
     overlay:SetPoint("TOPLEFT", mock, "TOPLEFT", -thickness, thickness)

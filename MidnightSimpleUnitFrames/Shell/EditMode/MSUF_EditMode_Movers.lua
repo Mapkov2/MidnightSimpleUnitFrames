@@ -402,7 +402,12 @@ local Reg = EM2.Registry
 
 --- Frame resolvers (always live, no cached refs)
 local function GetUF(key)
-    local uf = _G.MSUF_UnitFrames
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.GetFrame) == "function" then
+        local frame = UF.GetFrame(key)
+        if frame then return frame end
+    end
+    local uf = UF and UF.frames
     if uf and uf[key] then return uf[key] end
     return _G["MSUF_" .. key]
 end
@@ -786,8 +791,14 @@ local function SchedulePreviewMoverSync(delay)
 end
 
 local function GetPreviewFrame(unitKey)
-    return _G["MSUF_" .. unitKey]
-        or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[unitKey])
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.GetFrame) == "function" then
+        local frame = UF.GetFrame(unitKey)
+        if frame then return frame end
+    end
+    local frames = UF and UF.frames
+    return (frames and frames[unitKey])
+        or _G["MSUF_" .. unitKey]
 end
 
 local function ForPreviewFrames(fn)
@@ -894,7 +905,11 @@ local function MSUF_SyncAllUnitPreviews()
 
     --- 4) Aura refresh
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.RefreshAll) == "function" then
+    if a3 and type(a3.RefreshEditPreview) == "function" then
+        local started = PreviewProfileStart()
+        a3.RefreshEditPreview()
+        PreviewProfileStop("Auras3.RefreshEditPreview", started)
+    elseif a3 and type(a3.RefreshAll) == "function" then
         local started = PreviewProfileStart()
         a3.RefreshAll()
         PreviewProfileStop("Auras3.RefreshAll", started)
@@ -1084,9 +1099,13 @@ do
             if batchingBossPreview then endBossBatch() end
         end)
 
-        Phase(0.08, "Auras3.RefreshAll", function()
+        Phase(0.08, "Auras3.RefreshEditPreview", function()
             local a3 = MSUF and MSUF.MSUF_Auras3
-            if a3 and type(a3.RefreshAll) == "function" then a3.RefreshAll() end
+            if a3 and type(a3.RefreshEditPreview) == "function" then
+                a3.RefreshEditPreview()
+            elseif a3 and type(a3.RefreshAll) == "function" then
+                a3.RefreshAll()
+            end
         end)
 
         Phase(0.10, "PreviewSettle", function()
@@ -1195,7 +1214,13 @@ local MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or 
     }
     local ra = reanchorFns[unit]
     if ra and type(_G[ra]) == "function" then _G[ra]() end
-    if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+        _G.MSUF_ApplyCastbarUnitAndSync(unit)
+    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+    elseif _G.MSUF_UpdateCastbarVisuals then
+        _G.MSUF_UpdateCastbarVisuals(unit)
+    end
     RefreshUFPreview("EM2_CASTBAR_ANCHOR_TOGGLE", unit)
 end
 ExportPublic("MSUF_EM_SetCastbarAnchoredToUnit", MSUF_EM_SetCastbarAnchoredToUnit)

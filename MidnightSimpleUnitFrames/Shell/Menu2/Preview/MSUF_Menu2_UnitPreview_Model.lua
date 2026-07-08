@@ -493,14 +493,36 @@ local function NPCColor(kind)
     if kind == "npcRegular" then return 0.70, 0.56, 0.33 end
     return 0.85, 0.10, 0.10
 end
-local function GradientPreviewColor(pct)
+local function PreviewGradientHealth(cache, g)
+    return {
+        gradientLowR = (cache and cache.healthGradientLowR) or g.healthGradientLowR or 1,
+        gradientLowG = (cache and cache.healthGradientLowG) or g.healthGradientLowG or 0,
+        gradientLowB = (cache and cache.healthGradientLowB) or g.healthGradientLowB or 0,
+        gradientMidR = (cache and cache.healthGradientMidR) or g.healthGradientMidR or 1,
+        gradientMidG = (cache and cache.healthGradientMidG) or g.healthGradientMidG or 1,
+        gradientMidB = (cache and cache.healthGradientMidB) or g.healthGradientMidB or 0,
+        gradientHighR = (cache and cache.healthGradientHighR) or g.healthGradientHighR or 0,
+        gradientHighG = (cache and cache.healthGradientHighG) or g.healthGradientHighG or 1,
+        gradientHighB = (cache and cache.healthGradientHighB) or g.healthGradientHighB or 0,
+    }
+end
+local function GradientPreviewColor(pct, health)
     pct = Clamp01(pct, 0.75)
+    local common = MSUF and MSUF.UFBarTextCommon
+    if common and type(common.PreviewHealthGradientColor) == "function" then
+        local r, g, b = common.PreviewHealthGradientColor(health, pct)
+        if r ~= nil then return r, g, b end
+    end
+    health = health or {}
+    local lr, lg, lb = health.gradientLowR or 1, health.gradientLowG or 0, health.gradientLowB or 0
+    local mr, mg, mb = health.gradientMidR or 1, health.gradientMidG or 1, health.gradientMidB or 0
+    local hr, hg, hb = health.gradientHighR or 0, health.gradientHighG or 1, health.gradientHighB or 0
     if pct < 0.5 then
         local t = pct * 2
-        return 1, t, 0
+        return lr + (mr - lr) * t, lg + (mg - lg) * t, lb + (mb - lb) * t
     end
     local t = (pct - 0.5) * 2
-    return 1 - t, 1, 0
+    return mr + (hr - mr) * t, mg + (hg - mg) * t, mb + (hb - mb) * t
 end
 local PREVIEW_HEALTH_MODE_ALIASES = {
     CLASS = "class", class = "class",
@@ -537,7 +559,7 @@ local function HealthColor(key, data)
         if data.isPlayer then return ClassColor(data.class) end
         return NPCColor(PreviewNPCKind(key, data, cache))
     end
-    if mode == "gradient" then return GradientPreviewColor(data.hp) end
+    if mode == "gradient" then return GradientPreviewColor(data.hp, PreviewGradientHealth(cache, g)) end
     if mode == "unified" then
         return (cache and cache.unifiedBarR) or g.unifiedBarR or 0.10,
                (cache and cache.unifiedBarG) or g.unifiedBarG or 0.60,

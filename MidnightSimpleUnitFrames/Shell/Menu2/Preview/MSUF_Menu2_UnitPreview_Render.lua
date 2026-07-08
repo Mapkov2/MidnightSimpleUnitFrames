@@ -863,7 +863,11 @@ function Preview.Refresh(box, reason)
     else
         mock.absorb:Hide()
     end
-    local hr, hg, hb = runtimeSpec and runtimeSpec.health and runtimeSpec.health.r, runtimeSpec and runtimeSpec.health and runtimeSpec.health.g, runtimeSpec and runtimeSpec.health and runtimeSpec.health.b
+    local hr, hg, hb
+    if runtimeSpec and runtimeSpec.health
+        and (runtimeSpec.health.mode == "dark" or runtimeSpec.health.mode == "unified" or runtimeSpec.health.mode == "custom") then
+        hr, hg, hb = runtimeSpec.health.r, runtimeSpec.health.g, runtimeSpec.health.b
+    end
     if not hr then hr, hg, hb = R.HealthColor(key, data) end
     local hbr, hbg, hbb, hba
     local healthBg = runtimeSpec and runtimeSpec.health and runtimeSpec.health.background

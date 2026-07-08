@@ -16,6 +16,12 @@ end
 
 local U = EM2.Util or {}
 local ApplyAllSettingsSafe = U.ApplyAllSettingsSafe or function() return false end
+local function ApplySettingsForKeySafe(key)
+    local util = EM2 and EM2.Util or U
+    local fn = util and util.ApplySettingsForKeySafe
+    if type(fn) == "function" then return fn(key) end
+    return false
+end
 local Menu2Style = _G.MSUF_EM2_Menu2Style or {}
 local Factory = EM2.PopupFactory or {}
 local Quick = EM2.QuickPopup or Menu2Style.QuickPopup or {}
@@ -134,6 +140,35 @@ local UnitSectionForComponent = U.UnitSectionForComponent
 local SyncMovers = U.SyncMovers or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
 local NotifyPositionChanged = U.NotifyPositionChanged or function(key, immediate) if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, immediate) end end
 
+local function FrameForUnitKey(key)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(key)
+        if frame then return frame end
+    end
+    local frames = uf and uf.frames or _G.MSUF_UnitFrames
+    return key and frames and frames[key] or nil
+end
+
+local function ApplyPowerLayoutForUnitKey(key, detached)
+    local M = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    local ApplyService = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+    if ApplyService and type(ApplyService.ApplyPowerLayout) == "function" then
+        return ApplyService.ApplyPowerLayout(key, detached == true, true)
+    end
+    if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
+        return _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true)
+    end
+    local frame = FrameForUnitKey(key) or (pf and pf.parent)
+    if type(_G.MSUF_ApplyPowerBarEmbedLayout) == "function" and frame then
+        return _G.MSUF_ApplyPowerBarEmbedLayout(frame)
+    end
+    if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+        return _G.MSUF_ApplyPowerBarEmbedLayout_All()
+    end
+    return false
+end
+
 local function Apply()
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit then return end
@@ -154,7 +189,6 @@ local function Apply()
             if pf.dpbAnchorBtn then conf.detachedPowerBarAnchorToClassPower = pf.dpbAnchorBtn._checked and true or false end
         end
     end
-    if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end
     --- Direct SetSize: MarkDirty/UpdateSimpleUnitFrame only handles health/power/text,
     --- not frame dimensions. Apply width/height immediately.
     if pf.parent and conf.width and conf.height then
@@ -168,7 +202,7 @@ local function Apply()
     if pf.parent then
         local cs=_G.MSUF_NS and _G.MSUF_NS.Cache; if cs and cs.ClearStamp then cs.ClearStamp(pf.parent, "PBEmbedLayout") end
     end
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout)=="function" and pf.parent then _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent) end
+    ApplyPowerLayoutForUnitKey(key, conf.powerBarDetached == true and CanDetachPower(key))
     if pf._refreshVisibility then pf._refreshVisibility() end
     SyncMovers()
     RefreshUFPreview("EM2_UNIT_POPUP_APPLY", key)
@@ -293,13 +327,7 @@ local function ApplyDetachPower(checked)
         if key == "player" and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
     end
     if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey)=="function" then
-        _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true)
-    elseif type(_G.MSUF_ApplyPowerBarEmbedLayout_All)=="function" then
-        _G.MSUF_ApplyPowerBarEmbedLayout_All()
-    elseif type(_G.MSUF_ApplyPowerBarEmbedLayout)=="function" and pf.parent then
-        _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent)
-    end
+    ApplyPowerLayoutForUnitKey(key, conf.powerBarDetached == true)
     if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP_DETACH") end
     SyncMovers()
     RefreshUFPreview("EM2_UNIT_POPUP_DETACH", key)
@@ -341,8 +369,15 @@ local function CopyBoundsTo(targetKey)
     dst.offsetY = San(src.offsetY, 0)
     if src.width ~= nil then dst.width = floor(max(40, min(800, tonumber(src.width) or 250)) + 0.5) end
     if src.height ~= nil then dst.height = floor(max(8, min(200, tonumber(src.height) or 40)) + 0.5) end
-    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(targetKey) end
-    if not ApplyAllSettingsSafe() and type(_G.MSUF_UpdateAllFrames)=="function" then _G.MSUF_UpdateAllFrames() end
+    local applied = false
+    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then
+        _G.MSUF_ApplyUnitFrameKey_Immediate(targetKey)
+        applied = true
+    elseif ApplySettingsForKeySafe(targetKey) then
+        applied = true
+    end
+    ApplyPowerLayoutForUnitKey(targetKey, dst.powerBarDetached == true and CanDetachPower(targetKey))
+    if not applied and not ApplyAllSettingsSafe() and type(_G.MSUF_UpdateAllFrames)=="function" then _G.MSUF_UpdateAllFrames() end
     SyncMovers()
     RefreshUFPreview("EM2_UNIT_POPUP_COPY_BOUNDS", targetKey)
     if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(targetKey, "frame", nil, { source = "unit-copy", duration = 0.32 }) end

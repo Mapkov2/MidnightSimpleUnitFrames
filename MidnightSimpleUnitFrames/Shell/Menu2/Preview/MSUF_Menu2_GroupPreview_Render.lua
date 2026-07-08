@@ -267,8 +267,12 @@ function Render.Install(box, ctx, deps)
         mock._health:ClearAllPoints()
         mock._health:SetPoint("TOPLEFT", mock, "TOPLEFT", inset, -inset)
         mock._health:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -inset, powerH > 0 and (powerH + inset) or inset)
-        local hr, hg, hb = runtimeHealth.r, runtimeHealth.g, runtimeHealth.b
-        if not hr then hr, hg, hb = HealthColor(conf, 0.72, cls) end
+        local runtimeHealthMode = runtimeHealth and runtimeHealth.mode
+        local hr, hg, hb
+        if runtimeHealthMode == "dark" or runtimeHealthMode == "unified" or runtimeHealthMode == "custom" then
+            hr, hg, hb = runtimeHealth.r, runtimeHealth.g, runtimeHealth.b
+        end
+        if not hr then hr, hg, hb = HealthColor(conf, hpPct or 0.72, cls) end
         local groupVisual = (runtimeSpec and runtimeSpec.group) or {}
         mock._health:SetStatusBarColor(hr, hg, hb, tonumber(groupVisual.hpBarAlpha) or tonumber(conf.hpBarAlpha) or 1)
         if mock._health.SetMinMaxValues then mock._health:SetMinMaxValues(0, 1) end

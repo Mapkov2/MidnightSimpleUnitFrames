@@ -425,19 +425,51 @@ local function CallApply(handle, reason)
     local moveOnly = reason == "CLASSPOWER_PREVIEW_MOVE" and kind ~= "powerText"
     if not moveOnly then
         if kind == "class" or kind == "classText" then
-            if type(_G.MSUF_ClassPower_Refresh) == "function" then _G.MSUF_ClassPower_Refresh() end
+            if type(_G.MSUF_ClassPower_Apply) == "function" then
+                _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, playerHP = true, syncNow = false })
+            elseif type(_G.MSUF_ClassPower_Refresh) == "function" then
+                _G.MSUF_ClassPower_Refresh()
+                if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
+            end
             if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
-            if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
         elseif kind == "power" or kind == "powerText" then
             if kind == "powerText" and type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then _G.MSUF_ForceTextLayoutForUnitKey("player") end
             if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true) end
-            if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
+            if type(_G.MSUF_ClassPower_Apply) == "function" then
+                _G.MSUF_ClassPower_Apply({ playerHP = true })
+            elseif type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then
+                _G.MSUF_ClassPower_PlayerHP_Refresh()
+            end
         elseif kind == "hp" or kind == "hpText" then
-            if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
+            if type(_G.MSUF_ClassPower_Apply) == "function" then
+                _G.MSUF_ClassPower_Apply({ playerHP = true })
+            elseif type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then
+                _G.MSUF_ClassPower_PlayerHP_Refresh()
+            end
         end
     end
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason or "CLASSPOWER_PREVIEW_MOVE") end
-    if type(M.RequestGeneralApply) == "function" then M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER_PREVIEW_MOVE", { preview = true, power = kind == "power" or kind == "powerText", text = kind == "powerText" or kind == "hpText", applyAll = false, notify = false, history = false }) end
+    local applyReason = reason or "MSUF2_CLASSPOWER_PREVIEW_MOVE"
+    if (kind == "power" or kind == "powerText") and type(M.RequestUnitApply) == "function" then
+        M.RequestUnitApply("player", applyReason, {
+            preview = true,
+            power = true,
+            text = kind == "powerText",
+            fonts = kind == "powerText",
+            notify = false,
+            history = false,
+            classpowerApplied = true,
+        })
+    elseif type(M.RequestGeneralApply) == "function" then
+        M.RequestGeneralApply(applyReason, {
+            preview = true,
+            applyAll = false,
+            notify = false,
+            history = false,
+            classpower = true,
+            classpowerApplied = true,
+        })
+    end
 end
 local function StoreForHandle(handle)
     if not handle then return nil end
