@@ -177,6 +177,14 @@ local function Layer(value, fallback)
   return value
 end
 
+local function ClampFrameOutlineLevelOffset(value)
+  if value == nil then return nil end
+  value = floor((tonumber(value) or 0) + 0.5)
+  if value < 0 then return 0 end
+  if value > 60 then return 60 end
+  return value
+end
+
 local _groupSizeCacheAt, _groupSizeCacheValue = 0, 0
 --- Group-size reads are used for dynamic aura scaling. Cache briefly so one
 --- refresh pass does not call into roster APIs for every compiled frame.
@@ -267,6 +275,16 @@ local function NormalizeHealthMode(value)
   return value ~= "GLOBAL" and HEALTH_MODE_ALIASES[value] or nil
 end
 
+local function GlobalHealthMode(cache, general)
+  local mode = NormalizeHealthMode(cache and cache.barMode) or NormalizeHealthMode(general and general.barMode)
+  if mode == "gradient" then
+    local enabled = cache and cache.healthGradientEnabled
+    if enabled == nil then enabled = general and general.enableHealthGradient ~= false end
+    if enabled == false then mode = "class" end
+  end
+  return mode
+end
+
 --- Resolve the effective health-color model once per compile. Runtime visual
 --- code receives concrete mode/color fields instead of profile fallback logic.
 local function ResolveHealthVisual(conf)
@@ -275,12 +293,7 @@ local function ResolveHealthVisual(conf)
   local general = GeneralDB()
   local mode = NormalizeHealthMode(conf.gfBarMode)
   if not mode then
-    local globalMode = cache and cache.barMode or general and general.barMode
-    if globalMode == "dark" or globalMode == "unified" then
-      mode = globalMode
-    else
-      mode = NormalizeHealthMode(conf.healthColorMode) or "class"
-    end
+    mode = GlobalHealthMode(cache, general) or NormalizeHealthMode(conf.healthColorMode) or "class"
   end
 
   local out = {
@@ -725,11 +738,12 @@ function GF.GetBlizzardAuraTypeFlags(conf)
     IsBlizzardAuraTypeEnabled(conf, "privateAuras")
 end
 
-local NATIVE_AURA_BLACKLIST_HASHES_ENABLED = false
+local NATIVE_AURA_BLACKLIST_HASHES_ENABLED = true
 
 local function AuraBlacklistHash(kind, groupKey, group)
-  -- 12.1 native AuraContainers cannot consume addon SpellID/category
-  -- blacklist hashes. Keep saved legacy data out of compiled group specs.
+  -- PTR 12.1 CustomAuraContainer candidateFilters can consume SpellID maps.
+  -- Keep the expensive category expansion cached in the AuraFilter helper and
+  -- pass only the resolved hash into the compiled spec.
   if not NATIVE_AURA_BLACKLIST_HASHES_ENABLED then return nil end
 
   local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
@@ -1038,6 +1052,8 @@ local function CompileSpecUncached(kind, frame, unit, conf)
   local prioEnabled, prioOrder = CompileBorderPriority(conf, general)
   local nameFontSize = Num(conf.nameFontSize, 12)
   local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)
+  local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
+  local borderLevelOffset = ClampFrameOutlineLevelOffset(conf.hlOverride == true and conf.barOutlineLevelOffset ~= nil and conf.barOutlineLevelOffset or (bars and bars.barOutlineLevelOffset))
 
   return {
     _msufGFCompileSerial = GF._compiledSpecSerial or 1,
@@ -1156,6 +1172,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     border = {
       enabled = conf.borderEnabled ~= false,
       thickness = borderThickness,
+      levelOffset = borderLevelOffset,
       r = Num(ScopedValue(conf, general, "barOutlineColorR", conf.borderR or general and general.barBorderR), 0),
       g = Num(ScopedValue(conf, general, "barOutlineColorG", conf.borderG or general and general.barBorderG), 0),
       b = Num(ScopedValue(conf, general, "barOutlineColorB", conf.borderB or general and general.barBorderB), 0),

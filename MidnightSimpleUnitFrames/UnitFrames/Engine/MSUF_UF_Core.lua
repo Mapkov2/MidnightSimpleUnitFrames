@@ -1,27 +1,19 @@
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-
---- UnitFrames/Engine/MSUF_UF_Core.lua
----
---- Owns the frame registry, element registry, and event-routing contract for
---- the unit-frame engine. Config compiles specs, Factory creates/positions
---- frames, Dispatch runs event updates; Core is the glue that keeps those
---- pieces attached without making every element know about every other element.
-
 MSUF.UF = MSUF.UF or {}
 MSUF.UF.Elements = MSUF.UF.Elements or {}
 
 local UF = MSUF.UF
 local Elements = UF.Elements
 local Metadata = UF.Metadata or {}
-local EMPTY_METADATA_SET = {}
-local HOT_EVENT_KIND = Metadata.hotEventKind or {}
+
 local type = type
 local pairs = pairs
 local next = next
 local tostring = tostring
-local table_sort = table.sort
+local tonumber = tonumber
+local table_remove = table.remove
 local pcall = pcall
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
@@ -31,7 +23,7 @@ local UnitIsDead = UnitIsDead
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
-UF.version = "6.0-clean-core"
+UF.version = "8.1-ouf-direct-event-core"
 UF.frames = UF.frames or {}
 UF.frameList = UF.frameList or {}
 UF.attachedFrames = UF.attachedFrames or {}
@@ -43,18 +35,9 @@ UF.pendingElementRefreshes = UF.pendingElementRefreshes or {}
 UF.visualRefreshCallbacks = UF.visualRefreshCallbacks or {}
 UF.initialized = UF.initialized or false
 
-UF.unitOrder = {
-  "player",
-  "target",
-  "focus",
-  "targettarget",
-  "focustarget",
-  "pet",
-  "boss1",
-  "boss2",
-  "boss3",
-  "boss4",
-  "boss5",
+UF.unitOrder = UF.unitOrder or {
+  "player", "target", "focus", "targettarget", "focustarget", "pet",
+  "boss1", "boss2", "boss3", "boss4", "boss5",
 }
 
 UF.unitLookup = UF.unitLookup or {}
@@ -75,41 +58,62 @@ UF.configKeyUnits = UF.configKeyUnits or {
 }
 UF.singleUnitLists = UF.singleUnitLists or {}
 
-local BOSS_UNITS = {
-  boss1 = true,
-  boss2 = true,
-  boss3 = true,
-  boss4 = true,
-  boss5 = true,
+local BASIC_ELEMENTS = {
+  LoadConditions = true,
+  Health = true,
+  Power = true,
+  Text = true,
+  NameText = true,
+  HealthText = true,
+  PowerText = true,
+  InlineToT = true,
+}
+UF.basicElements = BASIC_ELEMENTS
+
+local IDENTITY_ELEMENTS = {
+  NameText = true,
+  HealthText = true,
+  PowerText = true,
+  InlineToT = true,
 }
 
-local DEPENDENT_UNIT_PARENTS = {
+local IDENTITY_BAR_ELEMENTS = {
+  Health = true,
+  Power = true,
+}
+
+local HEALTH_EVENTS = {
+  UNIT_HEALTH = true,
+  UNIT_MAXHEALTH = true,
+}
+
+local POWER_EVENTS = {
+  UNIT_POWER_UPDATE = true,
+  UNIT_POWER_FREQUENT = true,
+  UNIT_MAXPOWER = true,
+  UNIT_DISPLAYPOWER = true,
+}
+
+local BOSS_UNITS = {
+  boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
+}
+
+UF.dependentUnitParents = UF.dependentUnitParents or {
   targettarget = "target",
   focustarget = "focus",
 }
-UF.dependentUnitParents = UF.dependentUnitParents or {}
-for unit, parent in pairs(DEPENDENT_UNIT_PARENTS) do
-  UF.dependentUnitParents[unit] = UF.dependentUnitParents[unit] or parent
-end
 
---- Dependent units look like normal unit tokens to elements, but their identity
---- is owned by their parent target/focus relationship. Runtime has special
---- polling/coalescing for them; keep the relationship centralized here.
 function UF.ParentUnitForDependentUnit(unit)
-  return UF.dependentUnitParents[unit]
+  return UF.dependentUnitParents and UF.dependentUnitParents[unit]
 end
 
 function UF.IsDependentUnit(unit)
-  return UF.dependentUnitParents[unit] ~= nil
+  return UF.ParentUnitForDependentUnit(unit) ~= nil
 end
 
 function UF.ConfigKeyForUnit(unit)
-  if BOSS_UNITS[unit] then
-    return "boss"
-  end
-  if unit == "targetoftarget" or unit == "tot" then
-    return "targettarget"
-  end
+  if BOSS_UNITS[unit] then return "boss" end
+  if unit == "targetoftarget" or unit == "tot" then return "targettarget" end
   return unit
 end
 
@@ -123,34 +127,12 @@ end
 UF.IsUnitToken = IsUnitToken
 
 local function UnitExistsSafe(unit)
-  if not UnitExists then
-    return true
-  end
+  if not UnitExists then return true end
   local exists = UnitExists(unit)
-  if issecretvalue(exists) == true then
-    return true
-  end
+  if issecretvalue(exists) == true then return true end
   return exists == true or exists == 1
 end
 UF.UnitExistsSafe = UnitExistsSafe
-
-local function DispatchToken(frame)
-  return frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
-end
-
-local function CurrentFrameEventScript()
-  return UF.DispatchHotFrameEvent or UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent or UF.DispatchFrameEvent
-end
-
-local function IsCoreFrameEventScript(script)
-  return script ~= nil and (
-    script == UF.DispatchHotFrameEvent
-    or script == UF.RunCompiledFrameEvent
-    or script == UF.DispatchFastFrameEvent
-    or script == UF.DispatchFrameEvent
-  )
-end
-UF.DispatchToken = DispatchToken
 
 local function FreshUnitState(frame, unit)
   local state = frame and frame._msufUnitState
@@ -166,95 +148,46 @@ end
 UF.FreshUnitState = FreshUnitState
 
 local function ReadConnectedCached(frame, unit, state)
-  if state == nil then
-    state = FreshUnitState(frame, unit)
-  end
+  state = state or FreshUnitState(frame, unit)
   if state and state.connectedKnown == true then
     return state.connected == true, true
   end
-  local token = DispatchToken(frame)
-  if token
-    and frame._msufGFConnectedToken == token
-    and frame._msufGFConnectedUnit == unit then
-    return frame._msufGFConnectedValue, frame._msufGFConnectedKnown
-  end
-  if not UnitIsConnected then
-    return true, true
-  end
+  if not UnitIsConnected then return true, true end
   local connected = UnitIsConnected(unit)
-  if issecretvalue(connected) == true or connected == nil then
-    if token then
-      frame._msufGFConnectedToken = token
-      frame._msufGFConnectedUnit = unit
-      frame._msufGFConnectedValue = true
-      frame._msufGFConnectedKnown = false
-    end
-    return true, false
-  end
-  connected = connected == true or connected == 1
-  if token then
-    frame._msufGFConnectedToken = token
-    frame._msufGFConnectedUnit = unit
-    frame._msufGFConnectedValue = connected
-    frame._msufGFConnectedKnown = true
-  end
-  return connected, true
+  if issecretvalue(connected) == true or connected == nil then return true, false end
+  return connected == true or connected == 1, true
 end
 UF.ReadConnectedCached = ReadConnectedCached
 
 local function ReadDeadCached(frame, unit, state)
-  if state == nil then
-    state = FreshUnitState(frame, unit)
-  end
+  state = state or FreshUnitState(frame, unit)
   if state and state.deadKnown == true then
     return state.dead == true, true
   end
-  local token = DispatchToken(frame)
-  if token
-    and frame._msufGFDeadToken == token
-    and frame._msufGFDeadUnit == unit then
-    return frame._msufGFDeadValue, frame._msufGFDeadKnown
-  end
-  if not (UnitIsDeadOrGhost or UnitIsDead) then
-    return false, true
-  end
+  if not (UnitIsDeadOrGhost or UnitIsDead) then return false, true end
   local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) or nil
   if (issecretvalue(dead) == true or dead == nil) and UnitIsDead then
     dead = UnitIsDead(unit)
   end
-  if issecretvalue(dead) == true or dead == nil then
-    if token then
-      frame._msufGFDeadToken = token
-      frame._msufGFDeadUnit = unit
-      frame._msufGFDeadValue = false
-      frame._msufGFDeadKnown = false
-    end
-    return false, false
-  end
-  dead = dead == true or dead == 1
-  if token then
-    frame._msufGFDeadToken = token
-    frame._msufGFDeadUnit = unit
-    frame._msufGFDeadValue = dead
-    frame._msufGFDeadKnown = true
-  end
-  return dead, true
+  if issecretvalue(dead) == true or dead == nil then return false, false end
+  return dead == true or dead == 1, true
 end
 UF.ReadDeadCached = ReadDeadCached
 
 local function Clamp01(value, fallback)
   value = tonumber(value)
-  if value == nil then
-    value = fallback
-  end
-  if value < 0 then
-    return 0
-  elseif value > 1 then
-    return 1
-  end
+  if value == nil then value = fallback end
+  if value < 0 then return 0 end
+  if value > 1 then return 1 end
   return value
 end
 UF.Clamp01 = Clamp01
+
+local function NumberWithFallback(value, fallback)
+  value = tonumber(value)
+  return value == nil and fallback or value
+end
+UF.NumberWithFallback = NumberWithFallback
 
 local function NormalizeDispelDetectTrigger(value)
   value = tostring(value or ""):upper()
@@ -271,17 +204,13 @@ UF.NormalizeDispelDetectTrigger = NormalizeDispelDetectTrigger
 
 local function NormalizeDispelOverlayTrigger(value)
   value = tostring(value or ""):upper()
-  if value == "BORDER" or value == "INHERIT" or value == "SAME" then
-    return "BORDER"
-  end
+  if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
   return NormalizeDispelDetectTrigger(value)
 end
 UF.NormalizeDispelOverlayTrigger = NormalizeDispelOverlayTrigger
 
 local function NormalizeDispelOverlayStyle(value)
-  if value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT" then
-    return value
-  end
+  if value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT" then return value end
   return "FULL"
 end
 UF.NormalizeDispelOverlayStyle = NormalizeDispelOverlayStyle
@@ -295,60 +224,38 @@ end
 UF.NormalizeRangeFadeLayerMode = NormalizeRangeFadeLayerMode
 
 local function NormalizeAbsorbTestScope(scope)
-  scope = tostring(scope or "shared"):lower()
-  scope = scope:gsub("%s+", "")
-  scope = scope:gsub("%-", "_")
-  if scope == "" or scope == "all" or scope == "global" then
-    return "shared"
-  elseif scope == "gf_party" or scope == "group_party" or scope == "gfparty" then
-    return "party"
-  elseif scope == "gf_raid" or scope == "gf_mythicraid" or scope == "group_raid" or scope == "gfraid" or scope == "mythic" or scope == "mythicraid" then
-    return "raid"
-  elseif scope == "focus_target" then
-    return "focustarget"
-  elseif scope == "targetoftarget" or scope == "tot" then
-    return "targettarget"
-  end
+  scope = tostring(scope or "shared"):lower():gsub("%s+", ""):gsub("%-", "_")
+  if scope == "" or scope == "all" or scope == "global" then return "shared" end
+  if scope == "gf_party" or scope == "group_party" or scope == "gfparty" then return "party" end
+  if scope == "gf_raid" or scope == "gf_mythicraid" or scope == "group_raid"
+    or scope == "gfraid" or scope == "mythic" or scope == "mythicraid" then return "raid" end
+  if scope == "focus_target" then return "focustarget" end
+  if scope == "targetoftarget" or scope == "tot" then return "targettarget" end
   return scope
 end
 UF.NormalizeAbsorbTestScope = NormalizeAbsorbTestScope
 
 local function AbsorbTextureTestEnabledForScope(scope)
-  if _G.MSUF_AbsorbTextureTestMode ~= true then
-    return false
-  end
+  if _G.MSUF_AbsorbTextureTestMode ~= true then return false end
   local wanted = NormalizeAbsorbTestScope(_G.MSUF_AbsorbTextureTestScope)
   return wanted == "shared" or wanted == NormalizeAbsorbTestScope(scope)
 end
 UF.AbsorbTextureTestEnabledForScope = AbsorbTextureTestEnabledForScope
 
 local function ConfigScopedValue(conf, general, key, fallback)
-  if conf and conf.hlOverride == true and conf[key] ~= nil then
-    return conf[key]
-  end
-  if general and general[key] ~= nil then
-    return general[key]
-  end
+  if conf and conf.hlOverride == true and conf[key] ~= nil then return conf[key] end
+  if general and general[key] ~= nil then return general[key] end
   return fallback
 end
 UF.ConfigScopedValue = ConfigScopedValue
 
 local BORDER_PRIORITY_DEFAULTS = { "dispel", "aggro", "purge", "bossTarget" }
-local BORDER_PRIORITY_ALLOWED = {
-  dispel = true,
-  aggro = true,
-  purge = true,
-  bossTarget = true,
-}
+local BORDER_PRIORITY_ALLOWED = { dispel = true, aggro = true, purge = true, bossTarget = true }
 local BORDER_PRIORITY_ALIAS = {
-  Dispel = "dispel", DISPEL = "dispel",
-  Magic = "dispel", MAGIC = "dispel",
-  Curse = "dispel", CURSE = "dispel",
-  Disease = "dispel", DISEASE = "dispel",
-  Poison = "dispel", POISON = "dispel",
-  Bleed = "dispel", BLEED = "dispel",
-  Aggro = "aggro", AGGRO = "aggro",
-  Purge = "purge", PURGE = "purge",
+  Dispel = "dispel", DISPEL = "dispel", Magic = "dispel", MAGIC = "dispel",
+  Curse = "dispel", CURSE = "dispel", Disease = "dispel", DISEASE = "dispel",
+  Poison = "dispel", POISON = "dispel", Bleed = "dispel", BLEED = "dispel",
+  Aggro = "aggro", AGGRO = "aggro", Purge = "purge", PURGE = "purge",
   BossTarget = "bossTarget", Boss_Target = "bossTarget",
   ["Boss Target"] = "bossTarget", ["boss target"] = "bossTarget",
   boss_target = "bossTarget", bosstarget = "bossTarget", BOSS_TARGET = "bossTarget",
@@ -376,46 +283,27 @@ local function CompileBorderPriority(conf, general)
       local key = raw[i]
       if type(key) == "string" then key = BORDER_PRIORITY_ALIAS[key] or key end
       if BORDER_PRIORITY_ALLOWED[key] and not used[key] then
-        order[#order + 1] = key
         used[key] = true
+        order[#order + 1] = key
       end
     end
   end
   for i = 1, #BORDER_PRIORITY_DEFAULTS do
     local key = BORDER_PRIORITY_DEFAULTS[i]
     if not used[key] then
-      order[#order + 1] = key
       used[key] = true
+      order[#order + 1] = key
     end
   end
   return enabled, order
 end
 UF.CompileBorderPriority = CompileBorderPriority
 
-local GRADIENT_DIR_KEYS = {
-  LEFT = "gradientDirLeft",
-  RIGHT = "gradientDirRight",
-  UP = "gradientDirUp",
-  DOWN = "gradientDirDown",
-}
-
-local function GradientKeyActive(conf, key)
-  if not (conf and conf.hlOverride == true and conf.gradientOverride == true) then
-    return false
-  end
-  if conf.gradientOverrideVersion ~= 2 then
-    return conf[key] ~= nil
-  end
-  return type(conf.gradientOverrideKeys) == "table" and conf.gradientOverrideKeys[key] == true
-end
-
 local function GradientScopedValue(conf, general, key, fallback)
-  if GradientKeyActive(conf, key) and conf[key] ~= nil then
+  if conf and conf.hlOverride == true and conf.gradientOverride == true and conf[key] ~= nil then
     return conf[key]
   end
-  if general and general[key] ~= nil then
-    return general[key]
-  end
+  if general and general[key] ~= nil then return general[key] end
   return fallback
 end
 
@@ -426,38 +314,18 @@ local function ResolveBarGradient(conf, general, enabledKey)
   local down = GradientScopedValue(conf, general, "gradientDirDown", false) == true
   if not (left or right or up or down) then
     local legacy = GradientScopedValue(conf, general, "gradientDirection", "RIGHT")
-    if not GRADIENT_DIR_KEYS[legacy] then
-      legacy = "RIGHT"
-    end
-    if legacy == "LEFT" then
-      left = true
-    elseif legacy == "UP" then
-      up = true
-    elseif legacy == "DOWN" then
-      down = true
-    else
-      right = true
-    end
+    left = legacy == "LEFT"
+    up = legacy == "UP"
+    down = legacy == "DOWN"
+    right = not (left or up or down)
   end
   return {
     enabled = GradientScopedValue(conf, general, enabledKey, false) == true,
     strength = Clamp01(GradientScopedValue(conf, general, "gradientStrength", 0.45), 0.45),
-    left = left,
-    right = right,
-    up = up,
-    down = down,
+    left = left, right = right, up = up, down = down,
   }
 end
 UF.ResolveBarGradient = ResolveBarGradient
-
-local function NumberWithFallback(value, fallback)
-  value = tonumber(value)
-  if value == nil then
-    return fallback
-  end
-  return value
-end
-UF.NumberWithFallback = NumberWithFallback
 
 function UF.FillPredictionColors(dst, general, conf, scopedValue, numberFn)
   scopedValue = scopedValue or ConfigScopedValue
@@ -478,9 +346,7 @@ end
 
 function UF.UnitsForConfigKey(key)
   local units = UF.configKeyUnits[key]
-  if units then
-    return units
-  end
+  if units then return units end
   if UF.unitLookup[key] then
     units = UF.singleUnitLists[key]
     if not units then
@@ -494,10 +360,6 @@ end
 
 function UF.FrameName(unit)
   return "MSUF_" .. tostring(unit or "unknown")
-end
-
-local function IsElementRegistered(name)
-  return type(name) == "string" and type(UF.elements[name]) == "table"
 end
 
 local UPDATE_KEYS = UF._updateKeys or setmetatable({}, {
@@ -514,1416 +376,508 @@ local function GetUpdateKey(name)
   return UPDATE_KEYS[name]
 end
 
---- Elements are small capability modules (Health, Power, Text, Status, etc.).
---- Registering an element only declares it; frames decide at ApplySpec time
---- whether it is enabled and which events it owns.
+function UF.BasicElementAllowed(name)
+  return BASIC_ELEMENTS[name] == true
+end
+
+local function HotElementAllowed(name)
+  return BASIC_ELEMENTS[name] == true
+end
+UF.CoreElementAllowed = HotElementAllowed
+
+local function ApplyElementAllowed(name)
+  if HotElementAllowed(name) == true then return true end
+  if Metadata.runtimeUpdateOwners and Metadata.runtimeUpdateOwners[name] == true then return true end
+  if Metadata.defaultApplyMask and Metadata.defaultApplyMask[name] == true then return true end
+  return false
+end
+UF.ApplyElementAllowed = ApplyElementAllowed
+
 function UF.ElementEnabled(element, frame, spec)
   return not element or type(element.IsEnabled) ~= "function" or element.IsEnabled(frame, spec) ~= false
 end
 
-local ElementEnabled = UF.ElementEnabled
-
 function UF.RegisterElement(name, element)
-  if type(name) ~= "string" or type(element) ~= "table" then
-    return false
-  end
+  if type(name) ~= "string" or type(element) ~= "table" then return false end
   if not UF.elements[name] then
     UF.elementOrder[#UF.elementOrder + 1] = name
   end
   UF.elements[name] = element
   Elements[name] = element
-  GetUpdateKey(name) -- bake "_msufUpdate"..name into UPDATE_KEYS once
+  GetUpdateKey(name)
   return true
 end
 
-local UNIT_EVENT_HAS_UNIT = {
-  UNIT_HEALTH = true,
-  UNIT_MAXHEALTH = true,
-  UNIT_MAX_HEALTH_MODIFIERS_CHANGED = true,
-  UNIT_FLAGS = true,
-  UNIT_FACTION = true,
-  UNIT_POWER_UPDATE = true,
-  UNIT_POWER_FREQUENT = true,
-  UNIT_MAXPOWER = true,
-  UNIT_DISPLAYPOWER = true,
-  UNIT_POWER_BAR_SHOW = true,
-  UNIT_POWER_BAR_HIDE = true,
-  UNIT_CONNECTION = true,
-  UNIT_NAME_UPDATE = true,
-  UNIT_TARGET = true,
-  UNIT_THREAT_SITUATION_UPDATE = true,
-  UNIT_THREAT_LIST_UPDATE = true,
-  UNIT_PORTRAIT_UPDATE = true,
-  UNIT_MODEL_CHANGED = true,
-  UNIT_ENTERED_VEHICLE = true,
-  UNIT_EXITED_VEHICLE = true,
-  UNIT_HEAL_PREDICTION = true,
-  UNIT_ABSORB_AMOUNT_CHANGED = true,
-  UNIT_HEAL_ABSORB_AMOUNT_CHANGED = true,
-  UNIT_LEVEL = true,
-  UNIT_CLASSIFICATION_CHANGED = true,
-  INCOMING_RESURRECT_CHANGED = true,
-  UNIT_IN_RANGE_UPDATE = true,
-  UNIT_PHASE = true,
-  UNIT_CTR_OPTIONS = true,
-  UNIT_OTHER_PARTY_CHANGED = true,
-}
-
---- Event routing model:
---- * eventFrames tracks every frame interested in an event.
---- * eventUnitFrames narrows normal UNIT_* events by concrete unit token.
---- * eventUnitlessFrames handles events where Blizzard gives no useful unit.
---- * eventDerivedFrames handles dependent relationships such as ToT/FoT.
---- Dispatch consumes the owner map built here so hot events do not rediscover
---- which element should run.
-local ReindexFrameUnitFilter
-local ClearFrameUnitFilter
-local ApplyFrameUnitFilter
-local EnsureEventDriver
-local RefreshEventDriverRegistration
-local RefreshFrameUnitEventRouting
-local RemoveEventUnitFrame
-
-local eventDriver = UF.eventDriver
-local eventFrames = UF.eventFrames or {}
-local eventFrameCounts = UF.eventFrameCounts or {}
-local eventUnitFrames = UF.eventUnitFrames or {}
-local eventUnitFrameCounts = UF.eventUnitFrameCounts or {}
-local eventUnitlessFrames = UF.eventUnitlessFrames or {}
-local eventUnitlessFrameCounts = UF.eventUnitlessFrameCounts or {}
-local eventDerivedFrames = UF.eventDerivedFrames or {}
-local eventDerivedFrameCounts = UF.eventDerivedFrameCounts or {}
-local unitEventDrivers = UF.unitEventDrivers or {}
-local unitEventDriverEvents = UF.unitEventDriverEvents or {}
-local eventUnitDriverSources = UF.eventUnitDriverSources or {}
-UF.eventFrames = eventFrames
-UF.eventFrameCounts = eventFrameCounts
-UF.eventUnitFrames = eventUnitFrames
-UF.eventUnitFrameCounts = eventUnitFrameCounts
-UF.eventUnitlessFrames = eventUnitlessFrames
-UF.eventUnitlessFrameCounts = eventUnitlessFrameCounts
-UF.eventDerivedFrames = eventDerivedFrames
-UF.eventDerivedFrameCounts = eventDerivedFrameCounts
-UF.unitEventDrivers = unitEventDrivers
-UF.unitEventDriverEvents = unitEventDriverEvents
-UF.eventUnitDriverSources = eventUnitDriverSources
-
-local UNIT_EVENT_UNITLESS_ALLOWED = {
-  UNIT_NAME_UPDATE = true,
-  UNIT_FACTION = true,
-  UNIT_FLAGS = true,
-  UNIT_CONNECTION = true,
-  UNIT_CLASSIFICATION_CHANGED = true,
-}
-local INLINE_DERIVED_TARGET_EVENTS = UNIT_EVENT_UNITLESS_ALLOWED
-
-local function UnitEventAllowsUnitless(event)
-  return not UNIT_EVENT_HAS_UNIT[event] or UNIT_EVENT_UNITLESS_ALLOWED[event] == true
+local function FrameVisibleForEvent(frame)
+  if not frame then return false end
+  local spec = frame.MSUFSpec
+  if spec and spec.enabled == false then return false end
+  if frame.IsVisible and not frame:IsVisible()
+    and _G.MSUF_PreviewTestMode ~= true
+    and _G.MSUF_BossTestMode ~= true
+    and _G.MSUF2_BossUnitframePreviewActive ~= true then
+    return false
+  end
+  return true
 end
 
-local function DerivedEventSource(frame, event)
-  local unit = frame and frame.unit
+local function IdentityUnitExists(frame, unit)
+  if not IsUnitToken(unit) then return false end
+  if _G.MSUF_PreviewTestMode == true
+    or _G.MSUF_BossTestMode == true
+    or _G.MSUF2_BossUnitframePreviewActive == true
+    or _G.MSUF_UnitEditModeActive == true then
+    return true
+  end
+  return UnitExistsSafe(unit)
+end
+
+local function BeginFrameEvent(frame)
+  frame._msufDispatchToken = (frame._msufDispatchToken or 0) + 1
+  frame._msufDispatchActive = true
+  frame._msufUnitState = nil
+end
+
+local function EndFrameEvent(frame)
+  frame._msufDispatchActive = nil
+end
+
+local function FrameOnEvent(frame, event, unit, ...)
+  if not FrameVisibleForEvent(frame) then return end
+  local path = frame[event]
+  if path then return path(frame, event, unit, ...) end
+end
+
+local function IsUnitEvent(event)
+  return type(event) == "string" and (event:sub(1, 5) == "UNIT_" or event == "INCOMING_RESURRECT_CHANGED")
+end
+
+local function DependentSource(frame, event)
   if event == "UNIT_TARGET" then
-    if unit == "targettarget" then
-      return "target"
-    elseif unit == "focustarget" then
-      return "focus"
-    end
-  elseif unit == "target" and INLINE_DERIVED_TARGET_EVENTS[event] == true then
-    return "targettarget"
+    return frame and UF.ParentUnitForDependentUnit(frame.unit)
+  end
+  if event == "UNIT_PET" and frame and frame.unit == "pet" then
+    return "player"
   end
   return nil
 end
 
-local function DependentEventSource(frame, event)
-  local unit = frame and frame.unit
-  if event == "UNIT_TARGET" then
-    return UF.ParentUnitForDependentUnit and UF.ParentUnitForDependentUnit(unit)
-  end
-  return nil
-end
-
-local function AddEventSource(sourceUnits, sourceSet, unit)
-  if not unit or sourceSet[unit] then
-    return
-  end
-  sourceSet[unit] = true
-  sourceUnits[#sourceUnits + 1] = unit
-end
-
-local function BuildCentralUnitSources(event)
-  local sourceUnits, sourceSet = {}, {}
-  local byUnit = eventUnitFrames[event]
-  if byUnit then
-    for unit in pairs(byUnit) do
-      AddEventSource(sourceUnits, sourceSet, unit)
-    end
-  end
-  local derived = eventDerivedFrames[event]
-  if derived then
-    for unit in pairs(derived) do
-      AddEventSource(sourceUnits, sourceSet, unit)
-    end
-  end
-  if #sourceUnits > 1 then
-    table_sort(sourceUnits)
-  end
-  return sourceUnits
-end
-
-local function CentralDriverRegistration(event)
-  if not UNIT_EVENT_HAS_UNIT[event] or eventUnitlessFrameCounts[event] ~= nil then
-    return "event", nil, 0
-  end
-  local sourceUnits = BuildCentralUnitSources(event)
-  local count = #sourceUnits
-  if count > 0 and eventDriver then
-    local signature = "unit"
-    for i = 1, count do
-      signature = signature .. ":" .. sourceUnits[i]
-    end
-    return signature, sourceUnits, count
-  end
-  return "event", nil, 0
-end
-
-local function FrameUnitMatches(frame, unit)
-  if not (frame and unit) then
-    return false
-  end
-  if unit and issecretvalue(unit) == true then
-    return false
-  end
-  local frameUnit = frame.unit
-  if frameUnit == unit then
-    return true
-  end
-  local attrUnit = frame.GetAttribute and frame:GetAttribute("unit")
-  if issecretvalue(attrUnit) == true then
-    return false
-  end
-  return attrUnit == unit
-end
-
-local function CheckGroupUnitInvariant(frame, event, unit)
-  if event ~= "UNIT_HEALTH" or not (frame and frame._msufIsGroupFrame == true) then
-    return
-  end
-  local gf = MSUF and MSUF.GF
-  if gf and gf.CheckUnitFrameInvariant then
-    gf.CheckUnitFrameInvariant(frame, event, unit)
-  end
-end
-
-local function ResolveFixedGroupEventFrame(frame, event, unit, frames)
-  local gf = MSUF and MSUF.GF
-  if not (gf and gf._unitFrameMapProven == true and gf.unitFrames) then
-    return frame
-  end
-  if not (frame and frame._msufIsGroupFrame == true and unit and issecretvalue(unit) ~= true) then
-    return frame
-  end
-  local mapped = gf.unitFrames[unit]
-  if mapped and mapped ~= frame and frames and frames[mapped] then
-    gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
-    return mapped
-  end
-  return frame
-end
-
-local function FixedGroupEventFrame(event, unit, frames)
-  local gf = MSUF and MSUF.GF
-  if not (gf and gf._unitFrameMapProven == true and gf.unitFrames) then
-    return nil
-  end
-  local frame = gf.unitFrames[unit]
-  if frame and frames and frames[frame] then
-    gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
-    return frame
-  end
-  return nil
-end
-
-local GROUP_DIRECT_UNIT_EVENTS = {
-  UNIT_HEALTH = true,
-  UNIT_MAXHEALTH = true,
-  UNIT_MAX_HEALTH_MODIFIERS_CHANGED = true,
-  UNIT_POWER_UPDATE = true,
-  UNIT_MAXPOWER = true,
-  UNIT_DISPLAYPOWER = true,
-  UNIT_POWER_BAR_SHOW = true,
-  UNIT_POWER_BAR_HIDE = true,
-  UNIT_FLAGS = true,
-  UNIT_CONNECTION = true,
-  UNIT_THREAT_SITUATION_UPDATE = true,
-  UNIT_ABSORB_AMOUNT_CHANGED = true,
-  UNIT_HEAL_ABSORB_AMOUNT_CHANGED = true,
-  UNIT_HEAL_PREDICTION = true,
-  INCOMING_RESURRECT_CHANGED = true,
-  UNIT_IN_RANGE_UPDATE = true,
-  UNIT_PHASE = true,
-  UNIT_CTR_OPTIONS = true,
-  UNIT_OTHER_PARTY_CHANGED = true,
-}
-
-local function DirectMappedGroupFrame(event, unit, frames, eventUnits, unitFrames, unitFrameCount, unitlessFrames, derivedFrames)
-  if not GROUP_DIRECT_UNIT_EVENTS[event] or unitlessFrames or derivedFrames then
-    return nil
-  end
-  local gf = MSUF and MSUF.GF
-  if not (gf and gf.unitFrames) then
-    return nil
-  end
-  -- Activate the EUI-style direct route as soon as the unit->frame map is
-  -- consistent. AutoProveUnitFrameMap does at most one full-map scan per roster
-  -- revision (revision-gated), so this is not per-event work in steady state --
-  -- the first hot event after a roster change proves it, then every subsequent
-  -- event takes the fast path below. Without this the map is never proven in
-  -- normal play and every hot event falls through to the generic driver loop.
-  if gf._unitFrameMapProven ~= true and gf.AutoProveUnitFrameMap then
-    gf.AutoProveUnitFrameMap()
-  end
-  if gf._unitFrameMapProven ~= true then
-    return nil
-  end
-  local frame = gf.unitFrames[unit]
-  if not (frame and frame._msufIsGroupFrame == true and frames and frames[frame]) then
-    return nil
-  end
-  if unitFrameCount ~= 1 or not (unitFrames and unitFrames[frame]) then
-    return nil
-  end
-  -- Diagnostic counter only read by /msufprof; skip the write on the hot path
-  -- unless profiling is active.
-  if gf._profDetail == true or gf._profMapWatch == true then
-    gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
-  end
-  return frame
-end
-
-local function DispatchDirectGroupHotEvent(event, unit, ...)
-  if not GROUP_DIRECT_UNIT_EVENTS[event]
-    or eventUnitlessFrameCounts[event] ~= nil
-    or eventDerivedFrameCounts[event] ~= nil then
-    return false
-  end
-  local gf = MSUF and MSUF.GF
-  if not (gf and gf._unitFrameMapProven == true and gf.unitFrames) then
-    return false
-  end
-  local frame = gf.unitFrames[unit]
-  if not (frame and frame._msufIsGroupFrame == true) then
-    return false
-  end
-  local handlers = frame._msufFastEventHandlers
-  local handler = handlers and handlers[event]
-  if not handler then
-    return false
-  end
-  handler(frame, unit, ...)
-  if gf._profDetail == true or gf._profMapWatch == true then
-    gf._fixedGroupDispatches = (gf._fixedGroupDispatches or 0) + 1
-  end
-  return true
-end
-
-local function StartCoreEventProfile(event)
-  if not (MSUF and MSUF._profEnabled == true and MSUF.ProfBegin) then
-    return nil, nil, nil
-  end
-  local name = "coreEvent:" .. tostring(event)
-  return MSUF, name, MSUF.ProfBegin(name)
-end
-
-local function EndCoreEventProfile(prof, name, token)
-  if token and prof and prof.ProfEnd then
-    prof.ProfEnd(name, token)
-  end
-end
-
-local function ProfBegin(name)
-  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-    return MSUF.ProfBegin(name)
-  end
-end
-
-local function ProfEnd(name, token)
-  if token and MSUF and MSUF.ProfEnd then
-    MSUF.ProfEnd(name, token)
-  end
-end
-
-local function EventDriverOnEvent(_, event, unit, ...)
-  local frames = eventFrames[event]
-  if not frames then
-    return
-  end
-  local dispatch = (HOT_EVENT_KIND[event] and (UF.DispatchHotFrameEvent or UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent)) or UF.DispatchFrameEvent
-  if not dispatch then
-    return
-  end
-  local profGF, profName, profToken = StartCoreEventProfile(event)
-
-  if UNIT_EVENT_HAS_UNIT[event] then
-    if not unit or issecretvalue(unit) == true then
-      EndCoreEventProfile(profGF, profName, profToken)
-      return
-    end
-    if DispatchDirectGroupHotEvent(event, unit, ...) then
-      EndCoreEventProfile(profGF, profName, profToken)
-      return
-    end
-
-    local unitlessFrames = UnitEventAllowsUnitless(event) and eventUnitlessFrames[event] or nil
-    if unitlessFrames then
-      for ownerFrame in pairs(unitlessFrames) do
-        dispatch(ownerFrame, event, unit, ...)
-      end
-    end
-    local derived = eventDerivedFrames[event]
-    local derivedFrames = derived and derived[unit]
-    if derivedFrames then
-      for frame in pairs(derivedFrames) do
-        dispatch(frame, event, unit, ...)
-      end
-    end
-    local eventUnits = eventUnitFrames[event]
-    local unitFrames = eventUnits and eventUnits[unit]
-    local unitCounts = eventUnitFrameCounts[event]
-    local unitFrameCount = unitCounts and unitCounts[unit] or 0
-    local directFrame = DirectMappedGroupFrame(event, unit, frames, eventUnits, unitFrames, unitFrameCount, unitlessFrames, derivedFrames)
-    if directFrame then
-      dispatch(directFrame, event, unit, ...)
-      EndCoreEventProfile(profGF, profName, profToken)
-      return
-    end
-
-    if unitFrames then
-      local fixedDispatched
-      for frame in pairs(unitFrames) do
-        local target = ResolveFixedGroupEventFrame(frame, event, unit, frames)
-        if target ~= frame then
-          fixedDispatched = fixedDispatched or {}
-          if not fixedDispatched[target] and not (unitlessFrames and unitlessFrames[target]) then
-            fixedDispatched[target] = true
-            CheckGroupUnitInvariant(target, event, unit)
-            dispatch(target, event, unit, ...)
-          end
-        elseif fixedDispatched and fixedDispatched[frame] then
-          -- Already delivered through the proven unit->button map.
-        elseif not FrameUnitMatches(frame, unit) then
-          RemoveEventUnitFrame(frame, event, frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] or unit)
-        elseif not (unitlessFrames and unitlessFrames[frame]) then
-          CheckGroupUnitInvariant(frame, event, unit)
-          dispatch(frame, event, unit, ...)
-        end
-      end
-    else
-      local frame = FixedGroupEventFrame(event, unit, frames) or UF.frames[unit]
-      if frame and frames[frame] and not (unitlessFrames and unitlessFrames[frame])
-        and not (frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event]) then
-        CheckGroupUnitInvariant(frame, event, unit)
-        dispatch(frame, event, unit, ...)
-      end
-    end
-    EndCoreEventProfile(profGF, profName, profToken)
-    return
-  end
-
-  for frame in pairs(frames) do
-    dispatch(frame, event, unit, ...)
-  end
-  EndCoreEventProfile(profGF, profName, profToken)
-end
-
-local function AddDerivedEventFrame(frame, event, sourceUnit)
-  if not (frame and event and sourceUnit and UNIT_EVENT_HAS_UNIT[event]) then
-    return false
-  end
-  if frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event] then
-    ClearFrameUnitFilter(frame, event)
-  end
-  local centralUnit = frame._msufDriverEventUnits and frame._msufDriverEventUnits[event]
-  if centralUnit then
-    RemoveEventUnitFrame(frame, event, centralUnit)
-  end
-  local byEvent = eventDerivedFrames[event]
-  if not byEvent then
-    byEvent = {}
-    eventDerivedFrames[event] = byEvent
-  end
-  local byUnit = byEvent[sourceUnit]
-  if not byUnit then
-    byUnit = {}
-    byEvent[sourceUnit] = byUnit
-  end
-  if byUnit[frame] then
-    return true
-  end
-  byUnit[frame] = true
-  eventDerivedFrameCounts[event] = (eventDerivedFrameCounts[event] or 0) + 1
-  frame._msufDerivedEventUnits = frame._msufDerivedEventUnits or {}
-  frame._msufDerivedEventUnits[event] = sourceUnit
-  if RefreshEventDriverRegistration then
-    RefreshEventDriverRegistration(event)
-  end
-  return true
-end
-local function RemoveDerivedEventFrame(frame, event)
-  local sourceUnit = frame and frame._msufDerivedEventUnits and frame._msufDerivedEventUnits[event]
-  if not (frame and event and sourceUnit) then
-    return
-  end
-  local byEvent = eventDerivedFrames[event]
-  local byUnit = byEvent and byEvent[sourceUnit]
-  if byUnit and byUnit[frame] then
-    byUnit[frame] = nil
-    if next(byUnit) == nil then
-      byEvent[sourceUnit] = nil
-      if next(byEvent) == nil then
-        eventDerivedFrames[event] = nil
-      end
-    end
-    local count = (eventDerivedFrameCounts[event] or 1) - 1
-    if count <= 0 then
-      eventDerivedFrameCounts[event] = nil
-    else
-      eventDerivedFrameCounts[event] = count
-    end
-  end
-  frame._msufDerivedEventUnits[event] = nil
-  if RefreshEventDriverRegistration then
-    RefreshEventDriverRegistration(event)
-  end
-end
-
-local function AddEventUnitFrame(frame, event, unit)
-  if not (frame and event and unit and UNIT_EVENT_HAS_UNIT[event]) then
-    return
-  end
-  local byEvent = eventUnitFrames[event]
-  if not byEvent then
-    byEvent = {}
-    eventUnitFrames[event] = byEvent
-  end
-  local byUnit = byEvent[unit]
-  if not byUnit then
-    byUnit = {}
-    byEvent[unit] = byUnit
-  end
-  if byUnit[frame] then
-    frame._msufDriverEventUnits = frame._msufDriverEventUnits or {}
-    frame._msufDriverEventUnits[event] = unit
-    return
-  end
-  byUnit[frame] = true
-  local countsByEvent = eventUnitFrameCounts[event]
-  if not countsByEvent then
-    countsByEvent = {}
-    eventUnitFrameCounts[event] = countsByEvent
-  end
-  countsByEvent[unit] = (countsByEvent[unit] or 0) + 1
-  frame._msufDriverEventUnits = frame._msufDriverEventUnits or {}
-  frame._msufDriverEventUnits[event] = unit
-  if RefreshEventDriverRegistration then
-    RefreshEventDriverRegistration(event)
-  end
-end
-
-RemoveEventUnitFrame = function(frame, event, unit)
-  if not (frame and event and unit and UNIT_EVENT_HAS_UNIT[event]) then
-    return
-  end
-  local byEvent = eventUnitFrames[event]
-  local byUnit = byEvent and byEvent[unit]
-  if byUnit then
-    if byUnit[frame] then
-      byUnit[frame] = nil
-      local countsByEvent = eventUnitFrameCounts[event]
-      if countsByEvent then
-        local count = (countsByEvent[unit] or 1) - 1
-        if count <= 0 then
-          countsByEvent[unit] = nil
-          if next(countsByEvent) == nil then
-            eventUnitFrameCounts[event] = nil
-          end
-        else
-          countsByEvent[unit] = count
-        end
-      end
-      if next(byUnit) == nil then
-        byEvent[unit] = nil
-        if next(byEvent) == nil then
-          eventUnitFrames[event] = nil
-        end
-      end
-    end
-  end
-  if frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] == unit then
-    frame._msufDriverEventUnits[event] = nil
-  end
-  if RefreshEventDriverRegistration then
-    RefreshEventDriverRegistration(event)
-  end
-end
-
-local function ReindexFrameUnitEvents(frame, oldUnit, newUnit)
-  local registered = frame and frame._msufDriverEventUnits
-  if not registered or oldUnit == newUnit then
-    return
-  end
-  for event, unit in pairs(registered) do
-    if unit == oldUnit then
-      RemoveEventUnitFrame(frame, event, oldUnit)
-      AddEventUnitFrame(frame, event, newUnit)
-    end
-  end
-end
-
-function UF.OnUnitChanged(frame, oldUnit, newUnit)
-  if not frame then
-    return false
-  end
-  oldUnit = oldUnit or frame.unit
-  if newUnit ~= nil then
-    frame.unit = newUnit
-    frame.unitKey = newUnit
-  end
-  -- Unit unchanged: every event is already registered to this unit, so the
-  -- routing refresh is pure waste. RefreshFrameUnitEventRouting loops all
-  -- registered events and re-calls RegisterUnitEvent for each (a C call per
-  -- event) -- on a group child with ~15-20 events that ran per click even when
-  -- the secure header rewrote the unit attribute to the SAME value. The
-  -- fallback ReindexFrameUnitEvents already guards oldUnit==newUnit; this makes
-  -- the primary path match.
-  if oldUnit == frame.unit then
-    return true
-  end
-  if RefreshFrameUnitEventRouting then
-    RefreshFrameUnitEventRouting(frame)
+local function ElementEvents(element, unitless, frame, spec)
+  local getter
+  if unitless then
+    getter = element.GetUnitlessEvents
   else
-    ReindexFrameUnitEvents(frame, oldUnit, frame.unit)
-    ReindexFrameUnitFilter(frame, oldUnit, frame.unit)
+    getter = element.GetEvents
   end
-  return true
+  if type(getter) == "function" then return getter(frame, spec) end
+  if unitless then return element.unitlessEvents end
+  return element.events
 end
 
-local function PromoteEventToCentralDriver(frame, event)
-  if frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event] then
-    ClearFrameUnitFilter(frame, event)
+local function AddEventHandler(frame, event, update, unitless)
+  if type(event) ~= "string" or event == "" or not update then return end
+  local events = frame._msufEvents
+  if not events then
+    events = {}
+    frame._msufEvents = events
   end
-end
-
-local function RegisterDriverFrameUnitlessEvent(frame, event)
-  local sourceUnit = DerivedEventSource(frame, event)
-  if sourceUnit then
-    return AddDerivedEventFrame(frame, event, sourceUnit)
-  end
-  if UNIT_EVENT_HAS_UNIT[event] and not UnitEventAllowsUnitless(event) then
-    return false
-  end
-  PromoteEventToCentralDriver(frame, event)
-  local frames = eventUnitlessFrames[event]
-  if not frames then
-    frames = {}
-    eventUnitlessFrames[event] = frames
-  end
-  if frames[frame] then
-    return true
-  end
-  frames[frame] = true
-  eventUnitlessFrameCounts[event] = (eventUnitlessFrameCounts[event] or 0) + 1
-  if RefreshEventDriverRegistration then
-    RefreshEventDriverRegistration(event)
-  end
-  return true
-end
-
-local function UnregisterDriverFrameUnitlessEvent(frame, event)
-  if frame and frame._msufDerivedEventUnits and frame._msufDerivedEventUnits[event] then
-    RemoveDerivedEventFrame(frame, event)
-    return
-  end
-  local frames = eventUnitlessFrames[event]
-  if not (frames and frames[frame]) then
-    return
-  end
-  frames[frame] = nil
-  local count = (eventUnitlessFrameCounts[event] or 1) - 1
-  if count <= 0 then
-    eventUnitlessFrameCounts[event] = nil
-    eventUnitlessFrames[event] = nil
-  else
-    eventUnitlessFrameCounts[event] = count
-  end
-  if RefreshEventDriverRegistration then
-    RefreshEventDriverRegistration(event)
-  end
-end
-
-EnsureEventDriver = function()
-  if not eventDriver then
-    eventDriver = CreateFrame("Frame")
-    eventDriver:SetScript("OnEvent", EventDriverOnEvent)
-    UF.eventDriver = eventDriver
-  end
-  return eventDriver
-end
-
---- Lean OnEvent for the per-unit tracker frames. A per-unit tracker already
---- knows its unit (RegisterUnitEvent filtered on the C side), so the broad
---- EventDriverOnEvent fan-out -- unitless sets, derived-unit maps and the
---- unit->frames table -- is wasted work for clean hot events. This is the
---- ~7ms/UNIT_HEALTH the profiler showed: the tracker delivered the event, then
---- the broad router re-derived which frame it belonged to.
----
---- Hot path: the event has NO unitless owners and NO derived-unit owners, so
---- the target is the direct group-frame map, the exact unit-frame set, or the
---- single UF.frames[unit] entry. Dispatch straight into _msufFastEventHandlers.
-local function UnitDriverOnEvent(self, event, unit, ...)
-  -- Non-unit event on a unit tracker should not happen (trackers only register
-  -- unit-filtered events), but stay correct if it does.
-  if not UNIT_EVENT_HAS_UNIT[event] then
-    return EventDriverOnEvent(self, event, unit, ...)
-  end
-  if not unit or issecretvalue(unit) == true then
-    return
-  end
-  -- Non-direct event shapes are intentionally handled by the broad router.
-  if (UnitEventAllowsUnitless(event) and eventUnitlessFrames[event])
-    or eventDerivedFrames[event] then
-    return EventDriverOnEvent(self, event, unit, ...)
-  end
-  if DispatchDirectGroupHotEvent(event, unit, ...) then
-    return
-  end
-  local frames = eventFrames[event]
-  if not frames then
-    return
-  end
-  local dispatch = HOT_EVENT_KIND[event] and (UF.DispatchHotFrameEvent or UF.RunCompiledFrameEvent or UF.DispatchFastFrameEvent)
-  if not dispatch then
-    -- Not a compiled hot event: keep it on the broad event dispatcher.
-    return EventDriverOnEvent(self, event, unit, ...)
-  end
-  -- Distinct profile name ("leanEvent:") so /msufprof shows whether this direct
-  -- path actually ran instead of "coreEvent:".
-  local profGF, profName, profToken
-  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-    profName = "leanEvent:" .. tostring(event)
-    profGF, profToken = MSUF, MSUF.ProfBegin(profName)
-  end
-
-  local eventUnits = eventUnitFrames[event]
-  local unitFrames = eventUnits and eventUnits[unit]
-  local unitCounts = eventUnitFrameCounts[event]
-  local unitFrameCount = unitCounts and unitCounts[unit] or 0
-  local directFrame = DirectMappedGroupFrame(event, unit, frames, eventUnits, unitFrames, unitFrameCount, nil, nil)
-  if directFrame then
-    local handlers = directFrame._msufFastEventHandlers
-    local handler = handlers and handlers[event]
-    if handler then
-      handler(directFrame, unit, ...)
-    else
-      dispatch(directFrame, event, unit, ...)
+  local list = events[event]
+  if not list then
+    list = {}
+    events[event] = list
+    local names = frame._msufEventNames
+    if not names then
+      names = {}
+      frame._msufEventNames = names
     end
-    if profToken and profGF and profGF.ProfEnd then profGF.ProfEnd(profName, profToken) end
-    return
+    names[#names + 1] = event
   end
-  if unitFrames then
-    for frame in pairs(unitFrames) do
-      if not FrameUnitMatches(frame, unit) then
-        RemoveEventUnitFrame(frame, event, frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] or unit)
+  list[#list + 1] = update
+  list[#list + 1] = unitless == true
+end
+
+local function CompileFrameEventPath(frame, event, list)
+  local target = frame._msufFrameUnitEventTargets and frame._msufFrameUnitEventTargets[event]
+  local count = #list
+  local healthEvent = HEALTH_EVENTS[event] == true
+  local powerEvent = POWER_EVENTS[event] == true
+  if healthEvent or powerEvent then
+    local barUpdate = healthEvent and frame[GetUpdateKey("Health")] or frame[GetUpdateKey("Power")]
+    local textUpdate = healthEvent and frame[GetUpdateKey("HealthText")] or frame[GetUpdateKey("PowerText")]
+    local barFn, textFn
+    local direct = true
+    for i = 1, count, 2 do
+      local update = list[i]
+      if update == barUpdate then
+        barFn = update
+      elseif update == textUpdate then
+        textFn = update
       else
-        local handlers = frame._msufFastEventHandlers
-        local handler = handlers and handlers[event]
-        if handler then
-          handler(frame, unit, ...)
-        else
-          dispatch(frame, event, unit, ...)
-        end
-      end
-    end
-  else
-    local frame = UF.frames[unit]
-    if frame and frames[frame]
-      and not (frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event]) then
-      local handlers = frame._msufFastEventHandlers
-      local handler = handlers and handlers[event]
-      if handler then
-        handler(frame, unit, ...)
-      else
-        dispatch(frame, event, unit, ...)
-      end
-    end
-  end
-  if profToken and profGF and profGF.ProfEnd then profGF.ProfEnd(profName, profToken) end
-end
-
-local function EnsureUnitEventDriver(unit)
-  if not IsUnitToken(unit) then
-    return nil
-  end
-  local driver = unitEventDrivers[unit]
-  if not driver then
-    -- One tracker per unit keeps RegisterUnitEvent filters exact and avoids
-    -- API-side unit-list limits. The lean UnitDriverOnEvent skips the generic
-    -- fan-out since the tracker's unit is already known.
-    driver = CreateFrame("Frame")
-    driver:SetScript("OnEvent", UnitDriverOnEvent)
-    unitEventDrivers[unit] = driver
-  end
-  return driver
-end
-
-local function ClearUnitEventDriverRegistration(event)
-  local oldSources = event and eventUnitDriverSources[event]
-  if not oldSources then
-    return false
-  end
-  for unit in pairs(oldSources) do
-    local driver = unitEventDrivers[unit]
-    if driver then
-      driver:UnregisterEvent(event)
-    end
-    local events = unitEventDriverEvents[unit]
-    if events then
-      events[event] = nil
-    end
-  end
-  eventUnitDriverSources[event] = nil
-  return true
-end
-
-local function SyncUnitEventDriverRegistration(event, units, unitCount)
-  if not (event and units and unitCount and unitCount > 0) then
-    return ClearUnitEventDriverRegistration(event)
-  end
-  local newSources = {}
-  local hasSources
-  for i = 1, unitCount do
-    local unit = units[i]
-    if IsUnitToken(unit) then
-      newSources[unit] = true
-      hasSources = true
-    end
-  end
-  if not hasSources then
-    return ClearUnitEventDriverRegistration(event)
-  end
-
-  local oldSources = eventUnitDriverSources[event]
-  if oldSources then
-    for unit in pairs(oldSources) do
-      if not newSources[unit] then
-        local driver = unitEventDrivers[unit]
-        if driver then
-          driver:UnregisterEvent(event)
-        end
-        local events = unitEventDriverEvents[unit]
-        if events then
-          events[event] = nil
-        end
-      end
-    end
-  end
-
-  for unit in pairs(newSources) do
-    local events = unitEventDriverEvents[unit]
-    if not events then
-      events = {}
-      unitEventDriverEvents[unit] = events
-    end
-    if events[event] ~= true then
-      local driver = EnsureUnitEventDriver(unit)
-      if driver then
-        driver:RegisterUnitEvent(event, unit)
-        events[event] = true
-      end
-    end
-  end
-  eventUnitDriverSources[event] = newSources
-  return true
-end
-
-local function EventNeedsCentralDriver(event)
-  if not event then
-    return false
-  end
-  if UNIT_EVENT_HAS_UNIT[event] then
-    return eventUnitlessFrameCounts[event] ~= nil
-      or eventUnitFrames[event] ~= nil
-      or eventDerivedFrameCounts[event] ~= nil
-  end
-  return eventFrameCounts[event] ~= nil
-end
-
-local function RunEventDriverRegistration(event)
-  local registered = eventDriver and eventDriver._msufRegistered and eventDriver._msufRegistered[event]
-  if EventNeedsCentralDriver(event) then
-    EnsureEventDriver()
-    local signature, units, unitCount = CentralDriverRegistration(event)
-    if registered ~= signature then
-      if registered == "event" then
-        eventDriver:UnregisterEvent(event)
-      elseif registered then
-        ClearUnitEventDriverRegistration(event)
-      end
-      if units and unitCount > 0 then
-        SyncUnitEventDriverRegistration(event, units, unitCount)
-      else
-        ClearUnitEventDriverRegistration(event)
-        eventDriver:RegisterEvent(event)
-      end
-      eventDriver._msufRegistered = eventDriver._msufRegistered or {}
-      eventDriver._msufRegistered[event] = signature
-    end
-  elseif registered then
-    eventDriver._msufRegistered[event] = nil
-    if registered == "event" then
-      eventDriver:UnregisterEvent(event)
-    else
-      ClearUnitEventDriverRegistration(event)
-    end
-  end
-end
-
---- PERF: header scans and spec applies register/unregister many (frame, event)
---- pairs in one synchronous pass; recomputing the central driver's unit-source
---- signature for every pair is O(frames x events) with table churn. A batch
---- collects touched events and refreshes each exactly once at End. Batches are
---- strictly same-frame (WoW delivers events only between frames), so deferral
---- can never misroute an event; a batch left open by an error self-heals on the
---- next frame via the GetTime fence below.
-local driverRefreshBatchDepth = 0
-local driverRefreshBatchTime
-local driverRefreshPending = {}
-
-RefreshEventDriverRegistration = function(event)
-  if not event then
-    return
-  end
-  if driverRefreshBatchDepth > 0 then
-    local now = _G.GetTime and _G.GetTime() or driverRefreshBatchTime
-    if now == driverRefreshBatchTime then
-      driverRefreshPending[event] = true
-      return
-    end
-    driverRefreshBatchDepth = 0
-    for pending in pairs(driverRefreshPending) do
-      driverRefreshPending[pending] = nil
-      RunEventDriverRegistration(pending)
-    end
-  end
-  RunEventDriverRegistration(event)
-end
-
-function UF.BeginEventRegistrationBatch()
-  if driverRefreshBatchDepth > 0 then
-    -- Fence: a batch is only valid within the frame that opened it. If an
-    -- earlier batch was left open by an error, heal it here (flush its pending
-    -- events) before opening a new one, so registrations can never stay
-    -- deferred across frames.
-    local now = _G.GetTime and _G.GetTime() or driverRefreshBatchTime
-    if now ~= driverRefreshBatchTime then
-      driverRefreshBatchDepth = 0
-      for pending in pairs(driverRefreshPending) do
-        driverRefreshPending[pending] = nil
-        RunEventDriverRegistration(pending)
-      end
-    end
-  end
-  driverRefreshBatchDepth = driverRefreshBatchDepth + 1
-  driverRefreshBatchTime = _G.GetTime and _G.GetTime() or driverRefreshBatchTime
-end
-
-function UF.EndEventRegistrationBatch()
-  if driverRefreshBatchDepth > 0 then
-    driverRefreshBatchDepth = driverRefreshBatchDepth - 1
-  end
-  if driverRefreshBatchDepth > 0 then
-    return
-  end
-  for event in pairs(driverRefreshPending) do
-    driverRefreshPending[event] = nil
-    RunEventDriverRegistration(event)
-  end
-end
-
-ApplyFrameUnitFilter = function(frame, event, unit)
-  if not (frame and event and unit and UNIT_EVENT_HAS_UNIT[event]) then
-    return
-  end
-  local registered = frame._msufFrameUnitEvents
-  if not registered then
-    registered = {}
-    frame._msufFrameUnitEvents = registered
-  end
-  if registered[event] == unit then
-    return true
-  end
-  if registered[event] ~= nil and frame.UnregisterEvent then
-    frame:UnregisterEvent(event)
-    registered[event] = nil
-  end
-  frame:RegisterUnitEvent(event, unit)
-  registered[event] = unit
-  return true
-end
-
-ClearFrameUnitFilter = function(frame, event)
-  local registered = frame and frame._msufFrameUnitEvents
-  if not (registered and registered[event]) then
-    return
-  end
-  registered[event] = nil
-  if frame.UnregisterEvent then
-    frame:UnregisterEvent(event)
-  end
-end
-
-ReindexFrameUnitFilter = function(frame, oldUnit, newUnit)
-  local registered = frame and frame._msufFrameUnitEvents
-  if not registered or oldUnit == newUnit then
-    return
-  end
-  if not newUnit then
-    for event in pairs(registered) do
-      ClearFrameUnitFilter(frame, event)
-    end
-    return
-  end
-  for event, unit in pairs(registered) do
-    if unit == oldUnit then
-      ApplyFrameUnitFilter(frame, event, newUnit)
-    end
-  end
-end
-
-local function FrameHasUnitlessForEvent(frame, event)
-  local unitless = frame and frame._msufEventUnitless
-  return unitless and unitless[event] == true
-end
-
-RefreshFrameUnitEventRouting = function(frame)
-  local ownersByEvent = frame and frame._msufEventOwners
-  if not ownersByEvent then
-    return
-  end
-  -- Unit changes touch every registered event of the frame; refresh the
-  -- central driver once per event at the end instead of once per add/remove.
-  UF.BeginEventRegistrationBatch()
-  local unit = frame.unit
-  for event in pairs(ownersByEvent) do
-    if UNIT_EVENT_HAS_UNIT[event] then
-      local centralUnit = frame._msufDriverEventUnits and frame._msufDriverEventUnits[event]
-      local dependentSource = DependentEventSource(frame, event)
-      if FrameHasUnitlessForEvent(frame, event) then
-        if centralUnit then
-          RemoveEventUnitFrame(frame, event, centralUnit)
-        end
-        local sourceUnit = DerivedEventSource(frame, event)
-        if sourceUnit then
-          AddDerivedEventFrame(frame, event, sourceUnit)
-        end
-        ClearFrameUnitFilter(frame, event)
-      elseif dependentSource then
-        if centralUnit then
-          RemoveEventUnitFrame(frame, event, centralUnit)
-        end
-        ClearFrameUnitFilter(frame, event)
-        AddDerivedEventFrame(frame, event, dependentSource)
-      elseif unit and frame.RegisterUnitEvent and frame._msufCoreOwnEvents ~= false then
-        if centralUnit then
-          RemoveEventUnitFrame(frame, event, centralUnit)
-        end
-        if not ApplyFrameUnitFilter(frame, event, unit) then
-          AddEventUnitFrame(frame, event, unit)
-        end
-      else
-        ClearFrameUnitFilter(frame, event)
-        AddEventUnitFrame(frame, event, unit)
-      end
-      RefreshEventDriverRegistration(event)
-    end
-  end
-  UF.EndEventRegistrationBatch()
-end
-UF.RefreshFrameUnitEventRouting = RefreshFrameUnitEventRouting
-
-local function RegisterDriverFrameEvent(frame, event)
-  local frames = eventFrames[event]
-  if not frames then
-    frames = {}
-    eventFrames[event] = frames
-  end
-  if not frames[frame] then
-    frames[frame] = true
-    eventFrameCounts[event] = (eventFrameCounts[event] or 0) + 1
-  end
-  local dependentSource = UNIT_EVENT_HAS_UNIT[event] and DependentEventSource(frame, event) or nil
-  if dependentSource then
-    ClearFrameUnitFilter(frame, event)
-    AddDerivedEventFrame(frame, event, dependentSource)
-    RefreshEventDriverRegistration(event)
-    return
-  end
-  if UNIT_EVENT_HAS_UNIT[event]
-    and frame.unit
-    and frame.RegisterUnitEvent
-    and frame._msufCoreOwnEvents ~= false
-    and not FrameHasUnitlessForEvent(frame, event)
-  then
-    if not ApplyFrameUnitFilter(frame, event, frame.unit) then
-      AddEventUnitFrame(frame, event, frame.unit)
-    end
-    RefreshEventDriverRegistration(event)
-    return
-  end
-  ClearFrameUnitFilter(frame, event)
-  AddEventUnitFrame(frame, event, frame.unit)
-  RefreshEventDriverRegistration(event)
-end
-
-local function UnregisterDriverFrameEvent(frame, event)
-  local frames = eventFrames[event]
-  if not (frames and frames[frame]) then
-    return
-  end
-  frames[frame] = nil
-  ClearFrameUnitFilter(frame, event)
-  RemoveEventUnitFrame(frame, event, frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] or frame.unit)
-  local count = (eventFrameCounts[event] or 1) - 1
-  if count <= 0 then
-    eventFrameCounts[event] = nil
-    eventFrames[event] = nil
-    eventUnitFrames[event] = nil
-    eventUnitFrameCounts[event] = nil
-    eventUnitlessFrameCounts[event] = nil
-    eventUnitlessFrames[event] = nil
-    ClearUnitEventDriverRegistration(event)
-    if eventDriver and eventDriver._msufRegistered and eventDriver._msufRegistered[event] then
-      eventDriver._msufRegistered[event] = nil
-      eventDriver:UnregisterEvent(event)
-    end
-  else
-    eventFrameCounts[event] = count
-    RefreshEventDriverRegistration(event)
-  end
-end
-
-local wipe = _G.wipe or table.wipe
-local function ClearArray(t)
-  wipe(t)
-end
-
-local function RebuildFrameEventList(frame, event)
-  local owners = frame and frame._msufEventOwners and frame._msufEventOwners[event]
-  local lists = frame and frame._msufEventElementLists
-  if not owners then
-    if lists then
-      lists[event] = nil
-    end
-    if frame and frame._msufHotEventState then
-      frame._msufHotEventState[event] = nil
-    end
-    return
-  end
-  if HOT_EVENT_KIND[event] then
-    if lists then
-      lists[event] = nil
-    end
-  else
-    if not lists then
-      lists = {}
-      frame._msufEventElementLists = lists
-    end
-    local list = lists[event]
-    if not list then
-      list = {}
-      lists[event] = list
-    else
-      ClearArray(list)
-    end
-    local n = 0
-    for i = 1, #UF.elementOrder do
-      local name = UF.elementOrder[i]
-      local mode = owners[name]
-      if mode ~= nil then
-        local element = UF.elements[name]
-        if element and element.Update then
-          n = n + 1
-          list[n] = element.Update
-          n = n + 1
-          list[n] = mode
-        end
-      end
-    end
-  end
-  local rebuild = UF.RebuildHotEventState
-  if rebuild then
-    rebuild(frame, event, owners)
-  end
-end
-
-local function AddChangedEvent(changedEvents, event)
-  if not (changedEvents and event) then
-    return
-  end
-  for i = 1, #changedEvents do
-    if changedEvents[i] == event then
-      return
-    end
-  end
-  changedEvents[#changedEvents + 1] = event
-end
-
-local function RebuildFrameEventListOrDefer(frame, event, changedEvents)
-  if changedEvents then
-    AddChangedEvent(changedEvents, event)
-  else
-    RebuildFrameEventList(frame, event)
-  end
-end
-
-local function RegisterElementEvent(frame, elementName, event, unitless, changedEvents)
-  if not (frame and event and elementName) then
-    return
-  end
-
-  local owners = frame._msufEventOwners
-  if not owners then
-    owners = {}
-    frame._msufEventOwners = owners
-  end
-  local byElement = owners[event]
-  local createdOwners = false
-  if not byElement then
-    byElement = {}
-    owners[event] = byElement
-    RegisterDriverFrameEvent(frame, event)
-    createdOwners = true
-  end
-
-  if unitless == true then
-    if not RegisterDriverFrameUnitlessEvent(frame, event) then
-      if createdOwners then
-        owners[event] = nil
-        UnregisterDriverFrameEvent(frame, event)
-      end
-      return
-    end
-    local unitlessOwners = frame._msufEventUnitless
-    if not unitlessOwners then
-      unitlessOwners = {}
-      frame._msufEventUnitless = unitlessOwners
-    end
-    unitlessOwners[event] = true
-  end
-  local previous = byElement[elementName]
-  if unitless == true then
-    byElement[elementName] = previous == true and "both" or "unitless"
-  else
-    byElement[elementName] = previous == "unitless" and "both" or true
-  end
-  RebuildFrameEventListOrDefer(frame, event, changedEvents)
-end
-
---- Removing an element must also tear down event ownership. The owner map can
---- contain unit-only, unitless, or "both" modes, so unregistration keeps the
---- central driver counts in sync instead of just unregistering the frame event.
-local function UnregisterElementEvent(frame, owners, elementName, event, changedEvents)
-  local byElement = owners and owners[event]
-  if not (byElement and byElement[elementName] ~= nil) then
-    return
-  end
-  byElement[elementName] = nil
-  if next(byElement) == nil then
-    owners[event] = nil
-    if frame._msufEventUnitless and frame._msufEventUnitless[event] == true then
-      frame._msufEventUnitless[event] = nil
-      if next(frame._msufEventUnitless) == nil then
-        frame._msufEventUnitless = nil
-      end
-      UnregisterDriverFrameUnitlessEvent(frame, event)
-    end
-    RebuildFrameEventListOrDefer(frame, event, changedEvents)
-    UnregisterDriverFrameEvent(frame, event)
-  elseif frame._msufEventUnitless and frame._msufEventUnitless[event] == true then
-    local hasUnitless = false
-    for _, mode in pairs(byElement) do
-      if mode == "unitless" or mode == "both" then
-        hasUnitless = true
+        direct = false
         break
       end
     end
-    if not hasUnitless then
-      frame._msufEventUnitless[event] = nil
-      if next(frame._msufEventUnitless) == nil then
-        frame._msufEventUnitless = nil
+    if direct == true and (barFn or textFn) then
+      if healthEvent then
+        if target then
+          return function(self, ev, _unit, ...)
+            BeginFrameEvent(self)
+            local hp, hpMax, percentReady
+            if barFn then hp, hpMax, percentReady = barFn(self, ev, target, ...) end
+            if textFn then
+              if percentReady == true then textFn(self, ev, target, nil, nil, ...) else textFn(self, ev, target, hp, hpMax, ...) end
+            end
+            EndFrameEvent(self)
+          end
+        end
+        return function(self, ev, unit, ...)
+          BeginFrameEvent(self)
+          local u = unit or self.unit
+          local hp, hpMax, percentReady
+          if barFn then hp, hpMax, percentReady = barFn(self, ev, u, ...) end
+          if textFn then
+            if percentReady == true then textFn(self, ev, u, nil, nil, ...) else textFn(self, ev, u, hp, hpMax, ...) end
+          end
+          EndFrameEvent(self)
+        end
       end
-      UnregisterDriverFrameUnitlessEvent(frame, event)
+      if target then
+        return function(self, ev, _unit, ...)
+          BeginFrameEvent(self)
+          local power, powerMax, powerType, powerToken, metaChanged
+          if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, target, ...) end
+          if textFn then textFn(self, ev, target, powerMax == nil and nil or power, powerMax, powerType, powerToken, metaChanged, ...) end
+          EndFrameEvent(self)
+        end
+      end
+      return function(self, ev, unit, ...)
+        BeginFrameEvent(self)
+        local u = unit or self.unit
+        local power, powerMax, powerType, powerToken, metaChanged
+        if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, u, ...) end
+        if textFn then textFn(self, ev, u, powerMax == nil and nil or power, powerMax, powerType, powerToken, metaChanged, ...) end
+        EndFrameEvent(self)
+      end
     end
-    RebuildFrameEventListOrDefer(frame, event, changedEvents)
-  else
-    RebuildFrameEventListOrDefer(frame, event, changedEvents)
+  end
+  if count == 2 then
+    local update = list[1]
+    if list[2] == true then
+      return function(self, ev, _unit, ...)
+        BeginFrameEvent(self)
+        update(self, ev, self.unit, ...)
+        EndFrameEvent(self)
+      end
+    elseif target then
+      return function(self, ev, _unit, ...)
+        BeginFrameEvent(self)
+        update(self, ev, target, ...)
+        EndFrameEvent(self)
+      end
+    end
+    return function(self, ev, unit, ...)
+      BeginFrameEvent(self)
+      update(self, ev, unit or self.unit, ...)
+      EndFrameEvent(self)
+    end
+  end
+
+  if target then
+    return function(self, ev, unit, ...)
+      BeginFrameEvent(self)
+      for i = 1, count, 2 do
+        local update = list[i]
+        update(self, ev, list[i + 1] == true and self.unit or target, ...)
+      end
+      EndFrameEvent(self)
+    end
+  end
+
+  return function(self, ev, unit, ...)
+    BeginFrameEvent(self)
+    for i = 1, count, 2 do
+      local update = list[i]
+      update(self, ev, list[i + 1] == true and self.unit or (unit or self.unit), ...)
+    end
+    EndFrameEvent(self)
   end
 end
 
-local function UnregisterElementEvents(frame, elementName, changedEvents)
-  local owners = frame and frame._msufEventOwners
-  if not owners then
+local function RegisterFrameEvent(frame, event, unitless)
+  if not (frame and frame.RegisterEvent) then return end
+  if unitless == true or not IsUnitEvent(event) or not frame.RegisterUnitEvent then
+    frame:RegisterEvent(event)
     return
   end
+  local source = DependentSource(frame, event) or frame.unit
+  local ok = pcall(frame.RegisterUnitEvent, frame, event, source)
+  if not ok then
+    frame:RegisterEvent(event)
+  elseif source and source ~= frame.unit then
+    frame._msufFrameUnitEvents = frame._msufFrameUnitEvents or {}
+    frame._msufFrameUnitEventTargets = frame._msufFrameUnitEventTargets or {}
+    frame._msufFrameUnitEvents[event] = source
+    frame._msufFrameUnitEventTargets[event] = frame.unit
+  end
+end
 
-  local refs = frame._msufElementEventRefs and frame._msufElementEventRefs[elementName]
-  if refs then
-    local events = refs.events
-    if type(events) == "table" then
-      for i = 1, #events do
-        UnregisterElementEvent(frame, owners, elementName, events[i], changedEvents)
+local function ClearFrameEvents(frame)
+  if frame and frame.UnregisterAllEvents then frame:UnregisterAllEvents() end
+  if frame then
+    local names = frame._msufEventNames
+    if names then
+      for i = 1, #names do
+        frame[names[i]] = nil
+        names[i] = nil
       end
     end
-    events = refs.unitlessEvents
-    if type(events) == "table" then
-      for i = 1, #events do
-        UnregisterElementEvent(frame, owners, elementName, events[i], changedEvents)
+    frame._msufEvents = nil
+    frame._msufEventNames = nil
+    frame._msufFrameUnitEvents = nil
+    frame._msufFrameUnitEventTargets = nil
+  end
+end
+
+local function ElementUpdateFunction(frame, name)
+  local key = UPDATE_KEYS[name]
+  return key and frame[key] or nil
+end
+
+local function FrameHasActiveElement(frame, name)
+  return frame and frame._msufActiveElements and frame._msufActiveElements[name] == true
+end
+
+local function IdentityEventUpdate(frame, event)
+  if not frame then return end
+  event = event or "MSUF_UNIT_IDENTITY"
+  local unit = frame.unit
+  if not IdentityUnitExists(frame, unit) then return end
+  local barPath = frame._msufIdentityBarPath
+  if barPath then barPath(frame, event, unit) end
+  local path = frame._msufIdentityPath
+  if path then return path(frame, event, unit) end
+end
+
+local function FrameNeedsIdentityLifecycle(frame)
+  local active = frame and frame._msufActiveElements
+  if not active then return false end
+  for i = 1, #UF.elementOrder do
+    local name = UF.elementOrder[i]
+    if (IDENTITY_ELEMENTS[name] == true or IDENTITY_BAR_ELEMENTS[name] == true)
+      and active[name] == true
+      and ElementUpdateFunction(frame, name) then
+      return true
+    end
+  end
+  return false
+end
+
+local function IsBossUnit(unit)
+  if type(unit) ~= "string" or unit:sub(1, 4) ~= "boss" then return false end
+  local index = tonumber(unit:sub(5))
+  return index and index >= 1 and index <= 5
+end
+
+local function AddIdentityLifecycleHandlers(frame)
+  if not FrameNeedsIdentityLifecycle(frame) then return end
+  local unit = frame.unit
+  AddEventHandler(frame, "PLAYER_ENTERING_WORLD", IdentityEventUpdate, true)
+  if unit == "target" then
+    AddEventHandler(frame, "PLAYER_TARGET_CHANGED", IdentityEventUpdate, true)
+  elseif unit == "focus" then
+    AddEventHandler(frame, "PLAYER_FOCUS_CHANGED", IdentityEventUpdate, true)
+  elseif unit == "pet" then
+    AddEventHandler(frame, "UNIT_PET", IdentityEventUpdate, false)
+  elseif unit == "targettarget" then
+    AddEventHandler(frame, "PLAYER_TARGET_CHANGED", IdentityEventUpdate, true)
+    AddEventHandler(frame, "UNIT_TARGET", IdentityEventUpdate, false)
+  elseif unit == "focustarget" then
+    AddEventHandler(frame, "PLAYER_FOCUS_CHANGED", IdentityEventUpdate, true)
+    AddEventHandler(frame, "UNIT_TARGET", IdentityEventUpdate, false)
+  elseif IsBossUnit(unit) then
+    AddEventHandler(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", IdentityEventUpdate, true)
+  end
+end
+
+local function CompileRuntimePath(list, count)
+  if count == 1 then
+    local fn = list[1]
+    return function(frame, event, unit)
+      return fn(frame, event, unit)
+    end
+  end
+  if count == 2 then
+    local a, b = list[1], list[2]
+    return function(frame, event, unit)
+      a(frame, event, unit)
+      return b(frame, event, unit)
+    end
+  end
+  if count and count > 2 then
+    return function(frame, event, unit)
+      for i = 1, count do
+        list[i](frame, event, unit)
       end
     end
-    return
   end
+  return nil
+end
 
-  for event, byElement in pairs(owners) do
-    if byElement[elementName] ~= nil then
-      UnregisterElementEvent(frame, owners, elementName, event, changedEvents)
+local function BuildRuntimeList(frame, include, listKey, countKey, labelKey, pathKey)
+  local list = frame[listKey] or {}
+  local labels = frame[labelKey] or {}
+  frame[listKey], frame[labelKey] = list, labels
+  local n = 0
+  for i = 1, #UF.elementOrder do
+    local name = UF.elementOrder[i]
+    if include(frame, name) == true then
+      local update = ElementUpdateFunction(frame, name)
+      if update then
+        n = n + 1
+        list[n] = update
+        labels[n] = name
+      end
     end
+  end
+  for i = n + 1, #list do list[i] = nil end
+  for i = n + 1, #labels do labels[i] = nil end
+  frame[countKey] = n > 0 and n or nil
+  if pathKey then
+    frame[pathKey] = CompileRuntimePath(list, n)
   end
 end
 
-local function ElementEvents(element, kind, frame, spec)
-  local getter = kind == "unitless" and element.GetUnitlessEvents or element.GetEvents
-  if type(getter) == "function" then
-    return getter(frame, spec)
-  end
-  return kind == "unitless" and element.unitlessEvents or element.events
-end
-
-local function SyncRuntimeDriverIfNeeded()
-  if UF._msufApplyingSpec == true then
-    return
-  end
-  local sync = UF.SyncRuntimeDriver
-  if type(sync) == "function" then
-    sync()
-  end
-end
-
---- Diff each element's declared event set against the frame. Keep new element
---- event declarations as stable tables when possible; stable refs let this
---- function skip rebuild work during repeated ApplySpec calls.
-local function SyncElementEvents(frame, name, element, spec)
-  local events = ElementEvents(element, "unit", frame, spec)
-  local unitlessEvents = ElementEvents(element, "unitless", frame, spec)
-  local eventRefs = frame._msufElementEventRefs
-  if eventRefs then
-    local refs = eventRefs[name]
-    if refs and refs.events == events and refs.unitlessEvents == unitlessEvents then
-      return
+local function CompileIdentityBarPath(frame)
+  local active = frame and frame._msufActiveElements
+  if not active then return nil end
+  local health = active.Health == true and ElementUpdateFunction(frame, "Health") or nil
+  local power = active.Power == true and ElementUpdateFunction(frame, "Power") or nil
+  if health and power then
+    return function(self, event, unit)
+      health(self, event, unit)
+      power(self, event, unit)
     end
   end
-
-  local changedEvents = frame._msufChangedEventsScratch
-  if not changedEvents then
-    changedEvents = {}
-    frame._msufChangedEventsScratch = changedEvents
-  else
-    ClearArray(changedEvents)
-  end
-  UnregisterElementEvents(frame, name, changedEvents)
-
-  if type(events) == "table" then
-    for i = 1, #events do
-      RegisterElementEvent(frame, name, events[i], false, changedEvents)
+  if health then
+    return function(self, event, unit)
+      health(self, event, unit)
     end
   end
-
-  if type(unitlessEvents) == "table" then
-    for i = 1, #unitlessEvents do
-      RegisterElementEvent(frame, name, unitlessEvents[i], true, changedEvents)
+  if power then
+    return function(self, event, unit)
+      power(self, event, unit)
     end
   end
-
-  for i = 1, #changedEvents do
-    RebuildFrameEventList(frame, changedEvents[i])
-  end
-  ClearArray(changedEvents)
-
-  if not eventRefs then
-    eventRefs = {}
-    frame._msufElementEventRefs = eventRefs
-  end
-  local refs = eventRefs[name]
-  if not refs then
-    refs = {}
-    eventRefs[name] = refs
-  end
-  refs.events = events
-  refs.unitlessEvents = unitlessEvents
+  return nil
 end
 
-local function FrameEnableElement(frame, name)
-  if not (frame and IsElementRegistered(name)) then
-    return false
-  end
-  frame._msufActiveElements = frame._msufActiveElements or {}
-  local element = UF.elements[name]
-  local spec = frame.MSUFSpec
-  if frame._msufActiveElements[name] == true then
-    SyncElementEvents(frame, name, element, spec)
+function UF.RebuildRuntimeStatusState(frame)
+  if not frame then return false end
+  BuildRuntimeList(frame, function(_, name)
+    return IDENTITY_ELEMENTS[name] == true and FrameHasActiveElement(frame, name)
+  end, "_msufIdentityFns", "_msufIdentityCount", "_msufIdentityLabels", "_msufIdentityPath")
+  BuildRuntimeList(frame, function(_, name)
+    return HotElementAllowed(name) == true and FrameHasActiveElement(frame, name)
+  end, "_msufRuntimeAllFns", "_msufRuntimeAllCount", "_msufRuntimeAllLabels", "_msufRuntimeAllPath")
+  frame._msufGroupIdentityFns = frame._msufIdentityFns
+  frame._msufGroupIdentityCount = frame._msufIdentityCount
+  frame._msufGroupIdentityLabels = frame._msufIdentityLabels
+  frame._msufGroupIdentityPath = frame._msufIdentityPath
+  frame._msufIdentityBarPath = CompileIdentityBarPath(frame)
+  return true
+end
+
+local function RebuildFrameEvents(frame)
+  if not frame then return false end
+  ClearFrameEvents(frame)
+  local active = frame._msufActiveElements
+  if not active then
+    UF.RebuildRuntimeStatusState(frame)
     return true
   end
+  for i = 1, #UF.elementOrder do
+    local name = UF.elementOrder[i]
+    if active[name] == true and HotElementAllowed(name) == true then
+      local element = UF.elements[name]
+      local update = ElementUpdateFunction(frame, name)
+      if element and update then
+        local events = ElementEvents(element, false, frame, frame.MSUFSpec)
+        if type(events) == "table" then
+          for j = 1, #events do AddEventHandler(frame, events[j], update, false) end
+        end
+        events = ElementEvents(element, true, frame, frame.MSUFSpec)
+        if type(events) == "table" then
+          for j = 1, #events do AddEventHandler(frame, events[j], update, true) end
+        end
+      end
+    end
+  end
+  AddIdentityLifecycleHandlers(frame)
+  local events = frame._msufEvents
+  local names = frame._msufEventNames
+  if events and names then
+    for n = 1, #names do
+      local event = names[n]
+      local list = events[event]
+      local unitless = false
+      for i = 2, #list, 2 do
+        if list[i] == true then unitless = true break end
+      end
+      RegisterFrameEvent(frame, event, unitless)
+      frame[event] = CompileFrameEventPath(frame, event, list)
+    end
+  end
+  UF.RebuildRuntimeStatusState(frame)
+  if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
+  return true
+end
+UF.RefreshFrameUnitEventRouting = RebuildFrameEvents
 
-  if element.Create and not frame._msufCreatedElements[name] then
-    element.Create(frame, spec)
-    frame._msufCreatedElements[name] = true
-  end
-  if element.Enable and element.Enable(frame, spec) == false then
-    return false
-  end
-
-  if element and element.Update then
-    frame[GetUpdateKey(name)] = element.Update
-  end
-  SyncElementEvents(frame, name, element, spec)
-  frame._msufActiveElements[name] = true
-  local rebuildRuntimeStatus = UF.RebuildRuntimeStatusState
-  if rebuildRuntimeStatus then
-    rebuildRuntimeStatus(frame)
-  end
-  SyncRuntimeDriverIfNeeded()
+function UF.RunLeanIdentity(frame, event)
+  if not FrameVisibleForEvent(frame) then return false end
+  local path = frame._msufIdentityPath
+  local barPath = frame._msufIdentityBarPath
+  if not (path or barPath) then return false end
+  local unit = frame.unit
+  if not IdentityUnitExists(frame, unit) then return false end
+  BeginFrameEvent(frame)
+  event = event or "MSUF_UNIT_IDENTITY"
+  if barPath then barPath(frame, event, unit) end
+  if path then path(frame, event, unit) end
+  EndFrameEvent(frame)
   return true
 end
 
-local function FrameDisableElement(frame, name)
-  if not (frame and frame._msufActiveElements and frame._msufActiveElements[name]) then
-    return false
-  end
-  local element = UF.elements[name]
-  UnregisterElementEvents(frame, name)
-  if frame._msufElementEventRefs then
-    frame._msufElementEventRefs[name] = nil
-  end
-  frame._msufActiveElements[name] = nil
-  frame[GetUpdateKey(name)] = nil
-  if element and element.Disable then
-    element.Disable(frame)
-  end
-  local rebuildRuntimeStatus = UF.RebuildRuntimeStatusState
-  if rebuildRuntimeStatus then
-    rebuildRuntimeStatus(frame)
-  end
-  SyncRuntimeDriverIfNeeded()
+function UF.FrameRuntimeUpdate(frame, reason)
+  if not FrameVisibleForEvent(frame) then return false end
+  local path = frame._msufRuntimeAllPath
+  if not path then return false end
+  BeginFrameEvent(frame)
+  local unit = frame.unit
+  reason = reason or "MSUF_FORCE_UPDATE"
+  path(frame, reason, unit)
+  EndFrameEvent(frame)
   return true
+end
+
+function UF.FrameForceUpdate(frame, reason)
+  return UF.FrameRuntimeUpdate(frame, reason or "MSUF_FORCE_UPDATE")
+end
+
+function UF.UpdateRuntime(unit, reason)
+  if unit and issecretvalue(unit) == true then return false end
+  if unit then
+    local units = UF.UnitsForConfigKey(unit)
+    if not units then return false end
+    local didWork = false
+    for i = 1, #units do didWork = UF.FrameRuntimeUpdate(UF.frames[units[i]], reason) or didWork end
+    return didWork
+  end
+  local didWork = false
+  UF.ForEachFrame(function(frame)
+    didWork = UF.FrameRuntimeUpdate(frame, reason) or didWork
+  end)
+  return didWork
 end
 
 local function FrameIsElementEnabled(frame, name)
@@ -1931,70 +885,67 @@ local function FrameIsElementEnabled(frame, name)
 end
 UF.FrameIsElementEnabled = FrameIsElementEnabled
 
+function UF.OptimizeFrameHotpaths(frame)
+  if not frame then return false end
+  local health = UF.elements and UF.elements.Health
+  if health and type(health.SelectGroupHealthUpdater) == "function" then
+    health.SelectGroupHealthUpdater(frame)
+  end
+  local power = UF.elements and UF.elements.Power
+  if power and type(power.SelectGroupPowerUpdater) == "function" then
+    power.SelectGroupPowerUpdater(frame)
+  end
+  return true
+end
 
---- AttachFrame installs the small Core API onto a concrete frame. Non-unit
---- adapters can opt out of Core's OnEvent ownership but still reuse element
---- enable/disable, spec storage, and runtime refresh plumbing.
-function UF.AttachFrameMethods(frame, opts)
-  if not frame then
-    return frame
+local function FrameDisableElement(frame, name)
+  if not (frame and frame._msufActiveElements and frame._msufActiveElements[name]) then return false end
+  local element = UF.elements[name]
+  frame._msufActiveElements[name] = nil
+  frame[GetUpdateKey(name)] = nil
+  if element and element.Disable then element.Disable(frame) end
+  return true
+end
+
+local function FrameEnableElement(frame, name)
+  local element = UF.elements[name]
+  if not (frame and element and ApplyElementAllowed(name) == true) then return false end
+  frame._msufCreatedElements = frame._msufCreatedElements or {}
+  frame._msufActiveElements = frame._msufActiveElements or {}
+  if element.Create and not frame._msufCreatedElements[name] then
+    element.Create(frame, frame.MSUFSpec)
+    frame._msufCreatedElements[name] = true
   end
-  if frame._msufDispatchToken == nil then
-    frame._msufDispatchToken = 0
-  end
-  local ownEventScript = not (opts and opts.ownEvents == false) and frame._msufCoreOwnEvents ~= false
-  local eventScript = CurrentFrameEventScript()
-  if frame._msufCleanCoreMethods then
-    if ownEventScript then
-      if eventScript and frame:GetScript("OnEvent") ~= eventScript then
-        frame:SetScript("OnEvent", eventScript)
-      end
-    elseif IsCoreFrameEventScript(frame:GetScript("OnEvent")) then
-      frame:SetScript("OnEvent", nil)
-    end
-    frame._msufCleanCoreOwnEventScript = ownEventScript and true or nil
-    return frame
-  end
-  frame._msufCleanCoreMethods = true
+  if element.Enable and element.Enable(frame, frame.MSUFSpec) == false then return false end
+  if element.Update then frame[GetUpdateKey(name)] = element.Update end
+  frame._msufActiveElements[name] = true
+  UF.OptimizeFrameHotpaths(frame)
+  if UF._msufApplyingSpec ~= true then RebuildFrameEvents(frame) end
+  return true
+end
+
+function UF.AttachFrameMethods(frame)
+  if not frame then return frame end
+  if frame._msufOufCoreMethods == true then return frame end
+  frame._msufOufCoreMethods = true
+  frame._msufDispatchToken = frame._msufDispatchToken or 0
   frame._msufCreatedElements = frame._msufCreatedElements or {}
   frame._msufActiveElements = frame._msufActiveElements or {}
   frame.EnableElement = FrameEnableElement
   frame.DisableElement = FrameDisableElement
   frame.IsElementEnabled = FrameIsElementEnabled
-  frame.ForceUpdate = UF.FrameForceUpdate
-  frame.RegisterElementEvent = RegisterElementEvent
-  frame.UnregisterElementEvents = UnregisterElementEvents
-  if ownEventScript then
-    if eventScript then
-      frame:SetScript("OnEvent", eventScript)
-    end
-  elseif IsCoreFrameEventScript(frame:GetScript("OnEvent")) then
-    frame:SetScript("OnEvent", nil)
-  end
-  frame._msufCleanCoreOwnEventScript = ownEventScript and true or nil
+  frame.ForceUpdate = function(self, reason) return UF.FrameForceUpdate(self, reason) end
+  frame.UpdateAllElements = function(self, event) return UF.FrameRuntimeUpdate(self, event or "MSUF_FORCE_UPDATE") end
+  if frame.SetScript then frame:SetScript("OnEvent", FrameOnEvent) end
   return frame
 end
 
 function UF.AttachFrame(frame, opts)
-  if not frame then
-    return nil
-  end
+  if not frame then return nil end
   opts = type(opts) == "table" and opts or nil
-  if opts and opts.ownEvents ~= nil then
-    frame._msufCoreOwnEvents = opts.ownEvents ~= false
-  elseif frame._msufCoreOwnEvents == nil then
-    frame._msufCoreOwnEvents = true
-  end
-  frame._msufCoreScope = opts and opts.scope or frame._msufCoreScope or "unit"
-  frame._msufCoreAdapter = opts and opts.adapter or frame._msufCoreAdapter
+  UF.AttachFrameMethods(frame)
+  frame._msufCoreScope = opts and opts.scope or frame._msufCoreScope or "single"
   frame._msufVisualRoot = opts and opts.visualRoot or frame._msufVisualRoot or frame
-  UF.AttachFrameMethods(frame, opts)
-  if opts and opts.unit ~= nil then
-    UF.OnUnitChanged(frame, frame.unit, opts.unit)
-  end
-  if frame._msufDispatchToken == nil then
-    frame._msufDispatchToken = 0
-  end
   if UF.attachedFrames[frame] ~= true then
     UF.attachedFrames[frame] = true
     UF.attachedFrameList[#UF.attachedFrameList + 1] = frame
@@ -2003,110 +954,80 @@ function UF.AttachFrame(frame, opts)
 end
 
 function UF.ForEachFrame(fn, a, b, c)
-  if type(fn) ~= "function" then
-    return
+  if type(fn) ~= "function" then return end
+  for i = 1, #UF.frameList do
+    local frame = UF.frameList[i]
+    if frame then fn(frame, nil, a, b, c) end
   end
-  local any
-  for i = 1, #UF.unitOrder do
-    local frame = UF.frames[UF.unitOrder[i]]
-    if frame then
-      if fn(frame, frame.unit, a, b, c) == true then
-        any = true
-      end
-    end
-  end
-  return any
 end
 
 function UF.ForEachAttachedFrame(fn, scope)
-  if type(fn) ~= "function" then
-    return
-  end
+  if type(fn) ~= "function" then return end
   for i = 1, #UF.attachedFrameList do
     local frame = UF.attachedFrameList[i]
-    if frame and UF.attachedFrames[frame] == true and (scope == nil or frame._msufCoreScope == scope) then
-      fn(frame, frame.unit)
-    end
+    if frame and (scope == nil or frame._msufCoreScope == scope) then fn(frame) end
   end
 end
 
 function UF.SetFrameSpec(frame, spec, unitFallback)
-  if not (frame and spec) then
-    return frame
-  end
+  if not (frame and spec) then return nil end
+  local unit = spec.unit or unitFallback or frame.unit
   frame.MSUFSpec = spec
+  frame.MSUFUnitKey = unit
+  frame.unit = unit
+  frame.unitKey = unit
   frame.cachedConfig = spec
   frame.configKey = spec.key
-  frame.unitKey = spec.unit or unitFallback or frame.unit
   return frame
 end
 
-function UF.DetachFrame(frame)
-  if not frame then
-    return false
+function UF.OnUnitChanged(frame, oldUnit, newUnit)
+  if not frame then return false end
+  if newUnit ~= nil then
+    frame.unit = newUnit
+    frame.unitKey = newUnit
   end
-  -- Detaching unwinds every element/event pair; batch the central-driver
-  -- refresh so each touched event re-registers once per detach.
-  local wasApplyingSpec = UF._msufApplyingSpec
+  frame._msufUnitState = nil
+  RebuildFrameEvents(frame)
+  UF.RunLeanIdentity(frame, "MSUF_UNIT_IDENTITY")
+  local A3 = MSUF and MSUF.MSUF_Auras3
+  if A3 and type(A3.OnFrameUnitChanged) == "function" then
+    A3.OnFrameUnitChanged(frame, oldUnit, newUnit)
+  end
+  return true
+end
+
+function UF.DetachFrame(frame)
+  if not frame then return false end
+  local wasApplying = UF._msufApplyingSpec
   UF._msufApplyingSpec = true
-  UF.BeginEventRegistrationBatch()
   if frame._msufActiveElements then
-    while true do
-      local name = next(frame._msufActiveElements)
-      if not name then break end
+    for name in pairs(frame._msufActiveElements) do
       FrameDisableElement(frame, name)
     end
   end
-  local owners = frame._msufEventOwners
-  if owners then
-    for event in pairs(owners) do
-      if frame._msufEventUnitless and frame._msufEventUnitless[event] == true then
-        UnregisterDriverFrameUnitlessEvent(frame, event)
-      end
-      UnregisterDriverFrameEvent(frame, event)
-    end
-  end
-  local driverUnits = frame._msufDriverEventUnits
-  if driverUnits then
-    for event, unit in pairs(driverUnits) do
-      RemoveEventUnitFrame(frame, event, unit)
-    end
-  end
-  local derivedUnits = frame._msufDerivedEventUnits
-  if derivedUnits then
-    for event in pairs(derivedUnits) do
-      RemoveDerivedEventFrame(frame, event)
-    end
-  end
-  frame._msufEventOwners = nil
-  frame._msufEventUnitless = nil
-  frame._msufElementEventRefs = nil
-  frame._msufEventElementLists = nil
-  frame._msufHotEventState = nil
-  frame._msufRuntimeVisualFns = nil
-  frame._msufRuntimeVisualCount = nil
-  frame._msufRuntimeSoftVisualFns = nil
-  frame._msufRuntimeSoftVisualCount = nil
-  frame._msufChangedEventsScratch = nil
-  frame._msufDriverEventUnits = nil
-  frame._msufDerivedEventUnits = nil
+  ClearFrameEvents(frame)
+  frame._msufIdentityFns = nil
+  frame._msufIdentityCount = nil
+  frame._msufIdentityLabels = nil
+  frame._msufIdentityPath = nil
+  frame._msufIdentityBarPath = nil
+  frame._msufRuntimeAllFns = nil
+  frame._msufRuntimeAllCount = nil
+  frame._msufRuntimeAllLabels = nil
+  frame._msufRuntimeAllPath = nil
+  frame._msufGroupIdentityPath = nil
   frame._msufCoreScope = nil
-  frame._msufCoreAdapter = nil
+  frame._msufVisualRoot = nil
   UF.attachedFrames[frame] = nil
   for i = #UF.attachedFrameList, 1, -1 do
     if UF.attachedFrameList[i] == frame then
-      table.remove(UF.attachedFrameList, i)
+      table_remove(UF.attachedFrameList, i)
       break
     end
   end
-  UF.EndEventRegistrationBatch()
-  UF._msufApplyingSpec = wasApplyingSpec
-  if wasApplyingSpec ~= true then
-    local sync = UF.SyncRuntimeDriver
-    if type(sync) == "function" then
-      sync()
-    end
-  end
+  UF._msufApplyingSpec = wasApplying
+  if wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
   return true
 end
 
@@ -2117,130 +1038,103 @@ end
 
 function UF.Apply(unit)
   local factory = UF.Factory
-  if not (factory and factory.Apply) then
-    return false
-  end
+  if not (factory and factory.Apply) then return false end
   return factory.Apply(unit)
 end
 
-local function ForceUpdateFrame(frame)
-  UF.FrameForceUpdate(frame, "MSUF_FORCE_UPDATE")
-end
-
 function UF.ForceUpdate(unit)
-  local profName, profToken
-  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-    profName = unit and ("uf:ForceUpdate:" .. tostring(unit)) or "uf:ForceUpdate:all"
-    profToken = MSUF.ProfBegin(profName)
-  end
   if InCombatLockdown and InCombatLockdown() then
-    UF.MarkDirty(unit)
+    if UF.MarkDirty then UF.MarkDirty(unit) end
     local factory = UF.Factory
-    if factory and factory.EnsureDeferredDriver then
-      factory.EnsureDeferredDriver()
-    end
-    ProfEnd(profName, profToken)
+    if factory and factory.EnsureDeferredDriver then factory.EnsureDeferredDriver() end
     return false
   end
   if unit then
-    if issecretvalue(unit) == true then
-      ProfEnd(profName, profToken)
-      return false
-    end
+    if issecretvalue(unit) == true then return false end
     local units = UF.UnitsForConfigKey(unit)
-    if not units then
-      ProfEnd(profName, profToken)
-      return false
-    end
-    for i = 1, #units do
-      local frame = UF.frames[units[i]]
-      if frame then
-        UF.FrameForceUpdate(frame, "MSUF_FORCE_UPDATE")
-      end
-    end
-    ProfEnd(profName, profToken)
+    if not units then return false end
+    for i = 1, #units do UF.FrameForceUpdate(UF.frames[units[i]], "MSUF_FORCE_UPDATE") end
     return true
   end
-  UF.ForEachFrame(ForceUpdateFrame)
-  ProfEnd(profName, profToken)
+  UF.ForEachFrame(function(frame) UF.FrameForceUpdate(frame, "MSUF_FORCE_UPDATE") end)
   return true
 end
 
-local function ApplyElementToFrame(frame, name, spec, updateReason)
+function UF.ApplyElementToFrame(frame, name, spec, updateReason)
   local element = UF.elements[name]
-  if not (frame and element) then
-    return false
-  end
-  if spec then
-    UF.SetFrameSpec(frame, spec)
-  elseif frame.MSUFSpec then
-    UF.SetFrameSpec(frame, frame.MSUFSpec)
-  end
-  local enabled = ElementEnabled(element, frame, frame.MSUFSpec)
-  if not enabled then
-    if not FrameDisableElement(frame, name) and element.Disable then
-      element.Disable(frame)
-    end
+  if not (frame and element) then return false end
+  if spec then UF.SetFrameSpec(frame, spec) end
+  frame._msufCreatedElements = frame._msufCreatedElements or {}
+  frame._msufActiveElements = frame._msufActiveElements or {}
+  if ApplyElementAllowed(name) ~= true or UF.ElementEnabled(element, frame, frame.MSUFSpec) == false then
+    FrameDisableElement(frame, name)
     return true
   end
   if element.Create and not frame._msufCreatedElements[name] then
     element.Create(frame, frame.MSUFSpec)
     frame._msufCreatedElements[name] = true
   end
-  if element.Apply then
-    element.Apply(frame, frame.MSUFSpec)
+  if element.Apply then element.Apply(frame, frame.MSUFSpec) end
+  if element.Enable and element.Enable(frame, frame.MSUFSpec) == false then
+    FrameDisableElement(frame, name)
+    return true
   end
-  FrameEnableElement(frame, name)
-  if updateReason and element.Update then
-    element.Update(frame, updateReason, frame.unit)
-  end
+  if element.Update then frame[GetUpdateKey(name)] = element.Update end
+  frame._msufActiveElements[name] = true
+  UF.OptimizeFrameHotpaths(frame)
+  if updateReason and element.Update then element.Update(frame, updateReason, frame.unit) end
+  if UF._msufApplyingSpec ~= true then RebuildFrameEvents(frame) end
   return true
 end
 
-UF.ApplyElementToFrame = ApplyElementToFrame
-
-local DEFAULT_APPLY_MASK = Metadata.defaultApplyMask or EMPTY_METADATA_SET
+local DEFAULT_APPLY_MASK = Metadata.defaultApplyMask or true
 
 function UF.ApplySpec(frame, spec, reason, mask)
-  if not (frame and spec) then
-    return false
-  end
-  local scope = (spec and spec.scope) or frame._msufCoreScope or "unit"
-  local profName, profToken
-  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-    profName = "uf:ApplySpec:" .. tostring(scope) .. ":" .. tostring(reason or "apply")
-    profToken = MSUF.ProfBegin(profName)
-  end
-  -- Elements share events (health/prediction/text all ride UNIT_HEALTH); batch
-  -- the central-driver refresh so each touched event re-registers once per
-  -- apply instead of once per element.
-  local wasApplyingSpec = UF._msufApplyingSpec
+  if not (frame and spec) then return false end
+  local wasApplying = UF._msufApplyingSpec
   UF._msufApplyingSpec = true
-  UF.BeginEventRegistrationBatch()
-  UF.AttachFrame(frame, {
-    scope = frame._msufCoreScope,
-    visualRoot = frame._msufVisualRoot,
-    ownEvents = frame._msufCoreOwnEvents,
-  })
+  UF.AttachFrame(frame, { scope = spec.scope or frame._msufCoreScope or "single" })
   UF.SetFrameSpec(frame, spec)
   mask = mask or DEFAULT_APPLY_MASK
+  local full = mask == true
   for i = 1, #UF.elementOrder do
     local name = UF.elementOrder[i]
-    if mask == true or mask[name] == true then
-      ApplyElementToFrame(frame, name, nil, nil)
+    if full or (type(mask) == "table" and mask[name] == true) then
+      UF.ApplyElementToFrame(frame, name, nil, nil)
     end
   end
-  UF.EndEventRegistrationBatch()
-  UF._msufApplyingSpec = wasApplyingSpec
-  if wasApplyingSpec ~= true then
-    local sync = UF.SyncRuntimeDriver
-    if type(sync) == "function" then
-      sync()
-    end
-  end
-  if reason then
-    UF.FrameRuntimeUpdate(frame, reason)
-  end
-  ProfEnd(profName, profToken)
+  UF.OptimizeFrameHotpaths(frame)
+  RebuildFrameEvents(frame)
+  UF._msufApplyingSpec = wasApplying
+  if wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+  if reason then UF.FrameRuntimeUpdate(frame, reason) end
   return true
 end
+
+function UF.BeginEventRegistrationBatch()
+  UF._msufApplyingSpec = true
+end
+
+function UF.EndEventRegistrationBatch()
+  UF._msufApplyingSpec = nil
+  if UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+end
+
+function UF.RebuildHotEventState()
+  return true
+end
+
+function UF.RebindGroupHotEventHandlers()
+  return true
+end
+
+function UF.DumpIdentityList(unit)
+  local frame = unit and UF.frames[unit]
+  local labels = frame and frame._msufIdentityLabels
+  if not labels then return "" end
+  local out = {}
+  for i = 1, #labels do out[i] = tostring(labels[i]) end
+  return table.concat(out, ",")
+end
+
+MSUF.UnitFrames = UF

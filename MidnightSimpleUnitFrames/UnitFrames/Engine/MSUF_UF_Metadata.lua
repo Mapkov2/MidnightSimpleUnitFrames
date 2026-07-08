@@ -100,7 +100,7 @@ Metadata.hotStateSpecs = {
   [10] = BuildHotSpecs(
     "LevelIndicator:level EliteIndicator:elite Health:health NameText:name InlineToT:inline:inlineMode " ..
     "IncomingResIndicator:incomingRes GroupStatusRuntime:groupStatus"),
-  [11] = BuildHotSpecs("Alpha:alpha CombatIndicator:combat LoadConditions:load Auras:auras"),
+  [11] = BuildHotSpecs("Alpha:alpha CombatIndicator:combat LoadConditions:load"),
   [12] = BuildHotSpecs("RaidMarkerIndicator:raidMarker GroupStatusRuntime:groupStatus"),
   [13] = BuildHotSpecs("LeaderIndicator:leader RaidGroupIndicator:raidGroup GroupStatusRuntime:groupStatus"),
   [14] = BuildHotSpecs("LevelIndicator:level"),
@@ -116,7 +116,7 @@ Metadata.runtimeUpdateOwners = BuildNameSet(
   "RaidGroupIndicator EliteIndicator StatusTextIndicator CombatIndicator " ..
   "RestingIndicator IncomingResIndicator PVPIndicator Prediction Borders " ..
   "LoadConditions GroupStatusRuntime RangeFade GroupRangeFade GroupVisuals " ..
-  "GroupCornerIndicators Auras")
+  "GroupCornerIndicators")
 
 local MASK_HEALTH = { health = true }
 local MASK_POWER = { power = true }
@@ -131,15 +131,16 @@ local MASK_DISABLED = {}
 local MASK_CASTBAR_SYNC = BuildNameSet("health power name portrait status borders")
 local MASK_BARS_BORDERS = BuildNameSet("health power borders")
 local MASK_COLOR_CHANGE = BuildNameSet("health power name inline portrait status prediction borders")
-local MASK_UNIT_IDENTITY = BuildNameSet("load health power name inline portrait status prediction alpha borders auras")
+local MASK_UNIT_IDENTITY = BuildNameSet("load health power name inline portrait status prediction alpha borders")
 local MASK_UNIT_IDENTITY_FAST = BuildNameSet("load health power name")
 local MASK_UNIT_IDENTITY_VISUAL = BuildNameSet("inline portrait status prediction alpha borders")
 local MASK_UNIT_IDENTITY_AURAS = { auras = true }
-local MASK_UNIT_IDENTITY_SOFT = BuildNameSet("load health power name inline portrait status prediction auras")
+local MASK_UNIT_IDENTITY_SOFT = BuildNameSet("load health power name inline portrait status prediction")
 local MASK_UNIT_IDENTITY_SOFT_FAST = MASK_UNIT_IDENTITY_FAST
 local MASK_UNIT_IDENTITY_SOFT_VISUAL = BuildNameSet("inline portrait status prediction")
 local MASK_UNIT_IDENTITY_SOFT_AURAS = { auras = true }
-local MASK_GROUP_UNIT_IDENTITY = BuildNameSet("load health power name groupStatus prediction groupVisuals groupRange borders auras")
+local MASK_GROUP_UNIT_IDENTITY = BuildNameSet("load health power name groupStatus prediction groupVisuals groupRange borders")
+local MASK_GROUP_UNIT_STRUCTURE = BuildNameSet("load health power name groupStatus prediction groupVisuals groupRange borders auras")
 
 local runtimeReasonMasks = {}
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_FONT_RUNTIME, "FONT_RUNTIME MSUF2_HP_TEXT_COLOR")
@@ -152,7 +153,8 @@ AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_SOFT, "MSUF_UNIT_ID
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_SOFT_FAST, "MSUF_UNIT_IDENTITY_SOFT_FAST")
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_SOFT_VISUAL, "MSUF_UNIT_IDENTITY_SOFT_VISUAL")
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_SOFT_AURAS, "MSUF_UNIT_IDENTITY_SOFT_AURAS")
-AddRuntimeReasonMasks(runtimeReasonMasks, MASK_GROUP_UNIT_IDENTITY, "MSUF_GF_UNIT_IDENTITY MSUF_GF_UNIT_STRUCTURE")
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_GROUP_UNIT_IDENTITY, "MSUF_GF_UNIT_IDENTITY")
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_GROUP_UNIT_STRUCTURE, "MSUF_GF_UNIT_STRUCTURE")
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_ALPHA, "MSUF_ALPHA")
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BORDERS, "MSUF_BORDER_LAYOUT MSUF2_BORDER")
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BAR_OUTLINE, "MSUF2_BAR_OUTLINE MSUF2_BAR_OUTLINE_COLOR")
@@ -184,7 +186,7 @@ Metadata.runtimeReasonMasks = runtimeReasonMasks
 
 Metadata.defaultApplyMask = BuildNameSet(
   "Health Power Text NameText HealthText PowerText StatusIndicators Prediction " ..
-  "Borders LoadConditions RangeFade Auras")
+  "Borders LoadConditions RangeFade Auras Castbars ClassPower")
 
 Metadata.refreshElementGroups = {
   healthTextBorder = BuildNameList("Health Text NameText HealthText InlineToT Borders"),

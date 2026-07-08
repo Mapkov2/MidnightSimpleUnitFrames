@@ -6,14 +6,5 @@
   <Script file="Engine\Elements\MSUF_UF_Text_Format.lua"/>
   <Script file="Engine\Elements\MSUF_UF_Text_Layout.lua"/>
   <Script file="Engine\Elements\MSUF_UF_Text_Runtime.lua"/>
-  <Script file="Engine\Elements\MSUF_UF_Elements_Prediction.lua"/>
-  <Script file="Engine\Elements\MSUF_UF_Visuals_Common.lua"/>
-  <Script file="Engine\Elements\MSUF_UF_Elements_Portrait.lua"/>
-  <Script file="Engine\Elements\MSUF_UF_Elements_Alpha.lua"/>
-  <Script file="Range\MSUF_UF_RangeFade.lua"/>
-  <Script file="Engine\Elements\MSUF_UF_Elements_Borders.lua"/>
-  <Script file="Engine\Elements\MSUF_UF_Highlight.lua"/>
-  <Script file="Engine\Elements\MSUF_UF_Elements_Status.lua"/>
   <Script file="Engine\Elements\MSUF_UF_Elements_LoadConditions.lua"/>
-  <Script file="Engine\Elements\MSUF_UF_Elements_Bridges.lua"/>
 </Ui>

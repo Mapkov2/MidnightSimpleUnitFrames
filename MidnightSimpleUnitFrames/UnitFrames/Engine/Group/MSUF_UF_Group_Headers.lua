@@ -15,6 +15,7 @@ local UF = MSUF.UF
 
 local CreateFrame = CreateFrame
 local UIParent = UIParent
+local PetBattleFrameHider = PetBattleFrameHider
 local InCombatLockdown = InCombatLockdown
 local floor = math.floor
 local tonumber = tonumber
@@ -68,6 +69,13 @@ local VALID_ROLES = {
 
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
+end
+
+local function ResolvePetBattleFrameHider()
+  if UF and UF.GetPetBattleFrameHider then
+    return UF.GetPetBattleFrameHider()
+  end
+  return MSUF._petBattleFrameHider or PetBattleFrameHider or UIParent
 end
 
 --- Retiring a header must also untrack its children so Adapter does not keep
@@ -272,10 +280,13 @@ end
 
 local function EnsureAnchor(key, conf, totalW, totalH)
   local anchor = GF.anchors[key]
+  local desiredParent = ResolvePetBattleFrameHider()
   if not anchor then
-    anchor = CreateFrame("Frame", AnchorName(key), UIParent)
+    anchor = CreateFrame("Frame", AnchorName(key), desiredParent)
     anchor:EnableMouse(false)
     GF.anchors[key] = anchor
+  elseif anchor.GetParent and anchor.SetParent and anchor:GetParent() ~= desiredParent then
+    anchor:SetParent(desiredParent)
   end
   anchor:SetSize(totalW, totalH)
   anchor:ClearAllPoints()
@@ -733,12 +744,41 @@ local function ApplySortAttributes(header, state)
   return changed
 end
 
-local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate"
-local PING_INIT_VERSION = 3
+local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate, SecureHandlerStateTemplate, SecureHandlerEnterLeaveTemplate, PingableUnitFrameTemplate"
+local PING_INIT_VERSION = 6
+local INITIAL_ATTRIBUTE_NAMES = "_onenter,_onleave,refreshUnitChange,_onstate-vehicleui"
+local INITIAL_ONENTER = [[
+local snippet = self:GetAttribute('clickcast_onenter')
+if snippet then
+  self:Run(snippet)
+end
+]]
+local INITIAL_ONLEAVE = [[
+local snippet = self:GetAttribute('clickcast_onleave')
+if snippet then
+  self:Run(snippet)
+end
+]]
+local INITIAL_REFRESH_UNIT_CHANGE = [[
+local unit = self:GetAttribute('unit')
+if unit then
+  RegisterStateDriver(self, 'vehicleui', '[@' .. unit .. ',unithasvehicleui]vehicle; novehicle')
+else
+  UnregisterStateDriver(self, 'vehicleui')
+end
+]]
+local INITIAL_VEHICLE_STATE = [[
+local unit = self:GetAttribute('unit')
+if newstate == 'vehicle' and unit and UnitPlayerOrPetInRaid(unit) and not UnitTargetsVehicleInRaidUI(unit) then
+  self:SetAttribute('toggleForVehicle', false)
+else
+  self:SetAttribute('toggleForVehicle', true)
+end
+]]
 
 local function ButtonTemplate()
-  if UF and type(UF.GetSecureUnitButtonTemplate) == "function" then
-    return UF.GetSecureUnitButtonTemplate()
+  if UF and type(UF.GetSecureHeaderUnitButtonTemplate) == "function" then
+    return UF.GetSecureHeaderUnitButtonTemplate()
   end
   return SECURE_UNIT_BUTTON_TEMPLATE
 end
@@ -746,16 +786,19 @@ end
 local _initCfgNonce = 0
 local function BuildInitialConfigFunction(w, h)
   _initCfgNonce = _initCfgNonce + 1
-  local pingInit = UF and type(UF.GetSecurePingInitialConfig) == "function" and UF.GetSecurePingInitialConfig() or ""
   return string.format([[
 self:ClearAllPoints()
 self:SetWidth(%.3f)
 self:SetHeight(%.3f)
+self:SetAttribute('type1', nil)
 self:SetAttribute('*type1', 'target')
+self:SetAttribute('type2', nil)
 self:SetAttribute('*type2', 'togglemenu')
-%s
+self:SetAttribute('*clickbutton2', nil)
+self:SetAttribute('toggleForVehicle', true)
+self:SetAttribute('ping-receiver', true)
 -- nonce %d
-]], w, h, pingInit, _initCfgNonce)
+]], w, h, _initCfgNonce)
 end
 
 local function ApplyGroupBorder(anchor, conf)
@@ -852,9 +895,16 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
 
   local changed = false
   changed = SetAttrIfChanged(header, "template", buttonTemplate) or changed
+  changed = SetAttrIfChanged(header, "templateType", "Button") or changed
   changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
   changed = SetAttrIfChanged(header, "initial-height", initialHeight) or changed
   changed = SetAttrIfChanged(header, "_msufPingInitVersion", PING_INIT_VERSION) or changed
+  changed = SetAttrIfChanged(header, "_initialAttributeNames", INITIAL_ATTRIBUTE_NAMES) or changed
+  changed = SetAttrIfChanged(header, "_initialAttribute-_onenter", INITIAL_ONENTER) or changed
+  changed = SetAttrIfChanged(header, "_initialAttribute-_onleave", INITIAL_ONLEAVE) or changed
+  changed = SetAttrIfChanged(header, "_initialAttribute-refreshUnitChange", INITIAL_REFRESH_UNIT_CHANGE) or changed
+  changed = SetAttrIfChanged(header, "_initialAttribute-_onstate-vehicleui", INITIAL_VEHICLE_STATE) or changed
+  changed = SetAttrIfChanged(header, "oUF-headerType", "group") or changed
   if UF and type(UF.ForEachPingBindingAttribute) == "function" then
     UF.ForEachPingBindingAttribute(function(attribute, key)
       changed = SetAttrIfChanged(header, attribute, key) or changed
@@ -924,8 +974,7 @@ function GF.SetupHeader(key, kind)
   end
 
   if not header then
-    header = CreateFrame("Frame", HeaderName(key), UIParent, "SecureGroupHeaderTemplate")
-    header:SetParent(anchor)
+    header = CreateFrame("Frame", HeaderName(key), anchor, "SecureGroupHeaderTemplate")
     GF.headers[key] = header
     newHeader = true
   end

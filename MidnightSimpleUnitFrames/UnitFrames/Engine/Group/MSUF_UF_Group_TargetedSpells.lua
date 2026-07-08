@@ -62,6 +62,7 @@ local pairs = pairs
 local pcall = pcall
 local string_format = string.format
 local type = type
+local bitBand = (_G.bit and _G.bit.band) or (_G.bit32 and _G.bit32.band)
 local wipe = wipe or function(t)
   for k in pairs(t) do
     t[k] = nil
@@ -1235,6 +1236,28 @@ function TS.RefreshConfig(reseed)
   end
 end
 
+local function MaskHas(mask, flag)
+  mask = tonumber(mask)
+  flag = tonumber(flag)
+  if not mask or not flag or flag <= 0 then return false end
+  if bitBand then return bitBand(mask, flag) ~= 0 end
+  return (mask % (flag * 2)) >= flag
+end
+
+local function RefreshMaskAffectsTargetedSpells(mask)
+  if mask == nil then return true end
+  if mask == GF.DIRTY_ALL or mask == GF.DIRTY_CONFIG then return true end
+  return MaskHas(mask, GF.DIRTY_VISUAL)
+      or MaskHas(mask, GF.DIRTY_LAYOUT)
+      or MaskHas(mask, GF.DIRTY_GEOMETRY)
+      or MaskHas(mask, GF.DIRTY_UNIT_BINDING)
+end
+
+function TS.RequestApply(reseed)
+  TS.RefreshConfig(reseed == true)
+  return true
+end
+
 function TS.IsActive()
   return active == true
 end
@@ -1323,7 +1346,8 @@ local function InstallHooks()
     GF.RefreshVisuals = function(...)
       local result = originalRefreshVisuals(...)
       local kind = select(1, ...)
-      if kind == nil or kind == "party" then
+      local mask = select(2, ...)
+      if (kind == nil or kind == "party") and RefreshMaskAffectsTargetedSpells(mask) then
         TS.RefreshConfig(false)
       end
       return result

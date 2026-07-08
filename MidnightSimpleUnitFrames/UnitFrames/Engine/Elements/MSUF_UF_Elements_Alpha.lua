@@ -337,20 +337,39 @@ end
 UF.RegisterElement("Alpha", Alpha)
 
 do
-  local pending
+  local pendingAll
+  local pendingUnits = {}
 
   local function Flush()
-    pending = nil
-    if _G.MSUF_RefreshAllUnitAlphas then
-      return _G.MSUF_RefreshAllUnitAlphas()
+    local refresh = _G.MSUF_RefreshAllUnitAlphas
+    if type(refresh) ~= "function" then
+      pendingAll = nil
+      for unit in pairs(pendingUnits) do pendingUnits[unit] = nil end
+      return false
     end
+    if pendingAll then
+      pendingAll = nil
+      for unit in pairs(pendingUnits) do pendingUnits[unit] = nil end
+      return refresh()
+    end
+    local did = false
+    for unit in pairs(pendingUnits) do
+      pendingUnits[unit] = nil
+      did = refresh(unit) or did
+    end
+    return did
   end
 
-  function Alpha.RequestRefresh()
-    if pending then
-      return true
+  function Alpha.RequestRefresh(unit)
+    if unit ~= nil then
+      unit = tostring(unit or "")
+      if unit == "" or unit == "*" then unit = nil end
     end
-    pending = true
+    if unit then
+      pendingUnits[unit] = true
+    else
+      pendingAll = true
+    end
     local scheduleOnce = _G.MSUF_ScheduleOnce
     if type(scheduleOnce) == "function" then
       scheduleOnce("UF_ALPHA_FLUSH", Flush)
@@ -361,14 +380,14 @@ do
   end
 end
 
-local function RequestAlphaRefresh()
-  return Alpha.RequestRefresh()
+local function RequestAlphaRefresh(unit)
+  return Alpha.RequestRefresh(unit)
 end
 ExportPublic("MSUF_RequestAlphaRefresh", RequestAlphaRefresh)
 
-local function RefreshCombatUnitAlphas()
+local function RefreshCombatUnitAlphas(unit)
   if _G.MSUF_RefreshAllUnitAlphas then
-    return _G.MSUF_RefreshAllUnitAlphas()
+    return _G.MSUF_RefreshAllUnitAlphas(unit)
   end
   return false
 end

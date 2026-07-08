@@ -22,6 +22,7 @@ local UnitGroupRolesAssigned = V.UnitGroupRolesAssigned or UnitGroupRolesAssigne
 local tonumber = V.tonumber or tonumber
 local tostring = V.tostring or tostring
 local type = V.type or type
+local floor = V.floor or math.floor
 local IsNil = V.IsNil or function(value) return value == nil end
 local NotSecretValue = V.NotSecretValue or function(_) return true end
 local IsSecretValue = _G.issecretvalue or function(_) return false end
@@ -58,6 +59,17 @@ local DEFAULT_HIGHLIGHT_PRIORITY = { "dispel", "aggro", "purge", "bossTarget" }
 local BORDER_LEVEL_NORMAL = 35
 local BORDER_LEVEL_DEFAULT = 40
 local BORDER_LEVEL_OVER_NATIVE_DISPEL = 50
+
+local function ClampBorderLevelOffset(value, fallback)
+  value = floor((tonumber(value) or fallback or BORDER_LEVEL_NORMAL) + 0.5)
+  if value < 0 then return 0 end
+  if value > 10000 then return 10000 end
+  return value
+end
+
+local function NormalBorderLevel(cfg)
+  return cfg and cfg.levelOffset ~= nil and ClampBorderLevelOffset(cfg.levelOffset, BORDER_LEVEL_NORMAL) or BORDER_LEVEL_NORMAL
+end
 
 local function EnsureBorderOverlay(parent)
   local overlay = parent.MSUFBorderOverlay
@@ -481,7 +493,7 @@ local function HighlightBorderLevel(cfg, key)
     local dispelIndex = PriorityIndex(cfg, "dispel")
     local keyIndex = PriorityIndex(cfg, key)
     if dispelIndex and keyIndex and dispelIndex < keyIndex then
-      return BORDER_LEVEL_NORMAL
+      return NormalBorderLevel(cfg)
     end
   end
   return BORDER_LEVEL_OVER_NATIVE_DISPEL
@@ -552,7 +564,7 @@ function Borders.Apply(frame, spec)
     LayoutBorder(frame, BorderHighlightThickness(cfg))
     Borders.Update(frame, "MSUF_BORDER_APPLY", frame.unit)
   else
-    SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL)
+    SetBorderOverlayLevel(frame, NormalBorderLevel(cfg))
     LayoutBorder(frame, BorderNormalThickness(cfg))
     SetBorder(frame, true, NormalBorderColor(cfg))
   end
@@ -603,7 +615,7 @@ function Borders.Update(frame)
     SetBorder(frame, false)
     return
   end
-  SetBorderOverlayLevel(frame, BORDER_LEVEL_NORMAL)
+  SetBorderOverlayLevel(frame, NormalBorderLevel(cfg))
   LayoutBorder(frame, BorderNormalThickness(cfg))
   SetBorder(frame, true, NormalBorderColor(cfg))
 end

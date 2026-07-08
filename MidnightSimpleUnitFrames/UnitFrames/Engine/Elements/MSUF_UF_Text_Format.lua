@@ -56,11 +56,26 @@ local ApplyText = Apply.Text or function(fs, text)
   fs._aText = text
   fs._aTextPlain = true
 end
-local ValueOrDefault = Text.ValueOrDefault or function(value, fallback)
-  if value == nil then return fallback end
-  return value
-end
 local pairs = pairs
+
+local function IsFiniteNumber(value)
+  return type(value) == "number" and value == value and (value - value) == 0
+end
+
+local function FiniteNumberOr(value, fallback)
+  if type(value) == "number" then
+    return IsFiniteNumber(value) and value or fallback
+  end
+  if value == nil then
+    return fallback
+  end
+  local number = tonumber and tonumber(value) or nil
+  return IsFiniteNumber(number) and number or fallback
+end
+
+local function FiniteNumberOrNil(value)
+  return FiniteNumberOr(value, nil)
+end
 
 local INT_TEXT_0_100 = {}
 local PERCENT_TEXT_0_100 = {}
@@ -143,14 +158,18 @@ local function ValueArg(value, canSecret)
   if issecretvalue(value) == true then
     return value
   end
-  return ValueOrDefault(value, 0)
+  return FiniteNumberOr(value, 0)
 end
 
 local function HealthPercent(unit)
   if not UnitHealthPercent or not SCALE_100 or type(unit) ~= "string" or unit == "" then
     return nil
   end
-  return UnitHealthPercent(unit, true, SCALE_100)
+  local pct = UnitHealthPercent(unit, true, SCALE_100)
+  if issecretvalue(pct) == true then
+    return pct
+  end
+  return FiniteNumberOrNil(pct)
 end
 
 local function PowerPercent(unit)
@@ -159,7 +178,11 @@ local function PowerPercent(unit)
   end
   local powerType = UnitPowerType and UnitPowerType(unit) or nil
   if issecretvalue(powerType) == true then powerType = nil end
-  return UnitPowerPercent(unit, powerType, false, SCALE_100)
+  local pct = UnitPowerPercent(unit, powerType, false, SCALE_100)
+  if issecretvalue(pct) == true then
+    return pct
+  end
+  return FiniteNumberOrNil(pct)
 end
 
 local function NormalizePercentDecimals(decimals)
@@ -171,7 +194,7 @@ local function MissingHealthFromValues(cur, maxValue)
   if nativeSecrets and (issecretvalue(cur) == true or issecretvalue(maxValue) == true) then
     return nil
   end
-  if type(cur) ~= "number" or type(maxValue) ~= "number" then
+  if not IsFiniteNumber(cur) or not IsFiniteNumber(maxValue) then
     return nil
   end
   local missing = maxValue - cur
@@ -208,14 +231,15 @@ local function FormatValue(value, short, canSecret)
     end
     return value
   end
+  value = FiniteNumberOr(value, 0)
   if not short then
     if BreakUpLargeNumbers then
-      return BreakUpLargeNumbers(ValueOrDefault(value, 0))
+      return BreakUpLargeNumbers(value)
     end
     return SmallIntegerText(value) or format("%d", value or 0)
   end
   if AbbreviateShortNumber then
-    return AbbreviateShortNumber(ValueOrDefault(value, 0))
+    return AbbreviateShortNumber(value)
   end
   return CompactNumber(value)
 end
@@ -224,6 +248,10 @@ local function FormatPercentValue(value, hideSymbol, canSecret, decimals)
   if issecretvalue(value) == true then
     return value
   end
+  if value == nil then
+    return nil
+  end
+  value = FiniteNumberOrNil(value)
   if value == nil then
     return nil
   end
@@ -306,6 +334,7 @@ local function SlotPercent(slot, pct)
 end
 
 local function SlotValuePlain(slot, value)
+  value = FiniteNumberOr(value, 0)
   if not slot.short then
     if BreakUpLargeNumbers then
       return BreakUpLargeNumbers(value or 0)
@@ -319,6 +348,10 @@ local function SlotValuePlain(slot, value)
 end
 
 local function SlotPercentPlain(slot, pct)
+  if pct == nil then
+    return nil
+  end
+  pct = FiniteNumberOrNil(pct)
   if pct == nil then
     return nil
   end
@@ -668,13 +701,26 @@ local function SecretWrite(slot, cur, maxValue, pct)
   if not fs then return end
   local code = slot.secretCode
   local fn = slot.secretValueFn
+  local needsCur = code == 1 or code == 3 or code == 4 or code == 6 or code == 7 or code == 8 or code == 9 or code == 12
+  local needsMax = code == 2 or code == 3 or code == 4 or code == 8 or code == 9 or code == 10 or code == 11 or code == 12
+  local needsPct = code == 5 or code == 6 or code == 7 or code == 8 or code == 9 or code == 10 or code == 11 or code == 12
   if fn then
-    if code == 1 or code == 3 or code == 4 or code == 6 or code == 7 or code == 8 or code == 9 or code == 12 then
-      cur = fn(cur)
+    if needsCur then
+      cur = issecretvalue(cur) == true and fn(cur) or fn(FiniteNumberOr(cur, 0))
     end
-    if code == 2 or code == 3 or code == 4 or code == 8 or code == 9 or code == 10 or code == 11 or code == 12 then
-      maxValue = fn(maxValue)
+    if needsMax then
+      maxValue = issecretvalue(maxValue) == true and fn(maxValue) or fn(FiniteNumberOr(maxValue, 0))
     end
+  else
+    if needsCur and issecretvalue(cur) ~= true then
+      cur = FiniteNumberOr(cur, 0)
+    end
+    if needsMax and issecretvalue(maxValue) ~= true then
+      maxValue = FiniteNumberOr(maxValue, 0)
+    end
+  end
+  if needsPct and issecretvalue(pct) ~= true then
+    pct = FiniteNumberOr(pct, 0)
   end
   fs._aText = nil
   fs._aTextPlain = nil
@@ -1003,17 +1049,23 @@ local function CompileTextRuntime(frame, spec, text)
   if hot then
     if rt.healthSlotCount > 0 then
       rt.healthHot = hot.healthHot
+      rt.healthHotFromPercent = hot.healthFromPercent and hot.healthFromPercent(frame, rt) or nil
     else
       rt.healthHot = nil
+      rt.healthHotFromPercent = nil
     end
     if rt.powerSlotCount > 0 then
       rt.powerHot = hot.powerHot
+      rt.powerHotFromPercent = hot.powerFromPercent and hot.powerFromPercent(frame, rt) or nil
     else
       rt.powerHot = nil
+      rt.powerHotFromPercent = nil
     end
   else
     rt.healthHot = nil
+    rt.healthHotFromPercent = nil
     rt.powerHot = nil
+    rt.powerHotFromPercent = nil
   end
   return rt
 end

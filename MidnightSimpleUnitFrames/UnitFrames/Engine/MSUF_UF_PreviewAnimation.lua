@@ -32,6 +32,16 @@ local PREVIEW_NAME_LABELS = {
   focustarget = "Focus Target Name Position",
   pet = "Pet Name Position",
 }
+
+local function CoreFrame(unit)
+  local uf = MSUF and MSUF.UF
+  if uf and type(uf.GetFrame) == "function" then
+    local frame = uf.GetFrame(unit)
+    if frame then return frame end
+  end
+  local frames = uf and uf.frames
+  return unit and frames and frames[unit] or nil
+end
 local CASTBAR_PREVIEWS = {
   { name = "MSUF_PlayerCastbarPreview", unit = "player", label = "Test Cast" },
   { name = "MSUF_TargetCastbarPreview", unit = "target", label = "Test Cast" },
@@ -824,8 +834,7 @@ function PA.ApplyUnitFrame(frame, index, kind)
 end
 
 local function PreviewFrame(unit)
-  local frames = _G.MSUF_UnitFrames
-  return (frames and frames[unit]) or _G["MSUF_" .. unit]
+  return CoreFrame(unit) or _G["MSUF_" .. unit]
 end
 
 local function RefreshUnitPreviewFrames()

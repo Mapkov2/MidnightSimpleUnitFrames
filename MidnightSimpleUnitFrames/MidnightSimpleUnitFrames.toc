@@ -3,7 +3,7 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.0-beta6
+## Version: 6.0-beta7
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI
@@ -14,6 +14,7 @@
 ## X-MSUF-IconPack-Name: UX Pro
 ## X-MSUF-IconFolder: Media\Icons\UXPro
 ## X-MSUF-HasMidnightSuffix: 1
+## X-MSUF-UFCore: MidnightSimpleUnitFrames
 ## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
 ## AddonCompartmentFunc: MSUF_AddonCompartment_OnClick
 ## AddonCompartmentFuncOnEnter: MSUF_AddonCompartment_OnEnter
@@ -84,7 +85,7 @@ Media\MSUF_Media.lua
 Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua
 Runtime\MSUF_ChatAndTooltips.lua
-UnitFrames\MSUF_UnitFrames_Engine.xml
+UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore.xml
 Runtime\MSUF_Colors.lua
 Kernel\MSUF_BlizzardFrames.lua
 
@@ -110,15 +111,13 @@ Features\Versioning\MSUF_ChangelogPopup.lua
 Runtime\MSUF_BarBackgroundRuntime.lua
 Runtime\MSUF_IconLayoutRuntime.lua
 Runtime\MSUF_FontRegistry.lua
-UnitFrames\MSUF_UnitFrames_Elements.xml
+UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml
 Integrations\MSUF_Integration_NSRTNicknames.lua
 Integrations\MSUF_Integration_ThirdPartyAnchors.lua
-UnitFrames\MSUF_UnitFrames_Factory.xml
+UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Factory.xml
 Auras3\MSUF_Auras3_Runtime.xml
 Runtime\MSUF_FontRuntime.lua
 Runtime\MSUF_TextureRuntime.lua
-Features\Diagnostics\MSUF_Feature_DebugPosition.lua
-Features\Diagnostics\MSUF_Feature_ClickProbe.lua
 
 # ---------------------------------------------------------------
 # CASTBARS / CLASS POWER
@@ -153,7 +152,7 @@ ClassPower\MSUF_CP_Controller.lua
 # ---------------------------------------------------------------
 # GROUP FRAMES
 # ---------------------------------------------------------------
-MSUF_GroupFrames.xml
+UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Group.xml
 
 # ---------------------------------------------------------------
 # OPTIONS

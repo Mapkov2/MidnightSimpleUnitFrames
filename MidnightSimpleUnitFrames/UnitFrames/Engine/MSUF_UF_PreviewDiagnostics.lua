@@ -32,7 +32,11 @@ end
 
 local function UnitFrameForKey(key)
   local unit = key == "boss" and "boss1" or key
-  local frames = _G.MSUF_UnitFrames
+  if unit and UF and type(UF.GetFrame) == "function" then
+    local frame = UF.GetFrame(unit)
+    if frame then return frame end
+  end
+  local frames = UF and UF.frames
   return unit and ((frames and frames[unit]) or _G["MSUF_" .. unit]) or nil
 end
 

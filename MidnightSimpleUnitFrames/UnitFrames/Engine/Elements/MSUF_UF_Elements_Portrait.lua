@@ -101,16 +101,6 @@ local function BumpPortraitGenerationForEvent(event)
   end
 end
 
-if CreateFrame then
-  local generationFrame = CreateFrame("Frame")
-  generationFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
-  generationFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
-  generationFrame:RegisterEvent("PORTRAITS_UPDATED")
-  generationFrame:SetScript("OnEvent", function(_, event)
-    BumpPortraitGenerationForEvent(event)
-  end)
-end
-
 local function SetTextureCached(texture, value)
   if texture and texture._msufTexture ~= value then
     texture:SetTexture(value)
@@ -423,15 +413,28 @@ local function UnitClassToken(unit)
   return nil
 end
 
+local function LiveUnitExists(unit)
+  if not (unit and UnitExists) then
+    return false
+  end
+  local exists = UnitExists(unit)
+  if issecretvalue(exists) == true then
+    return true
+  end
+  return exists == true or exists == 1
+end
+
 local function BossPreviewActive(unit, frame)
-  return type(unit) == "string"
-    and unit:match("^boss[1-5]$")
-    and (
-      (frame and frame._msufBossPreviewForced == true)
-      or _G.MSUF2_BossUnitframePreviewActive == true
-      or _G.MSUF_BossTestMode == true
-      or _G.MSUF_PreviewTestMode == true
-    )
+  if type(unit) ~= "string" or not unit:match("^boss[1-5]$") then
+    return false
+  end
+  if LiveUnitExists(unit) then
+    return false
+  end
+  return (frame and frame._msufBossPreviewForced == true)
+    or _G.MSUF2_BossUnitframePreviewActive == true
+    or _G.MSUF_BossTestMode == true
+    or _G.MSUF_PreviewTestMode == true
 end
 
 local function BossPreviewClassToken(unit, frame)
@@ -657,8 +660,21 @@ function Portrait.Apply(frame, spec)
   LayoutPortraitBorder(holder, p, ResolvePortraitBorderColor(frame, p))
   SetShown(holder, true)
   SetShown(frame.portrait, true)
-  if p.render ~= "CLASS" and frame.portrait then
-    SetTexCoordCached(frame.portrait, Get2DPortraitTexCoords(p))
+  if frame.portrait then
+    if PortraitFrameVisible(frame) then
+      frame._msufPortraitNeedsVisibleRefresh = nil
+      frame._msufPortraitForceRefresh = nil
+      if p.render == "CLASS" then
+        ApplyClassPortrait(frame.portrait, frame.unit, p, nil, frame)
+      else
+        ApplyUnitPortrait(frame.portrait, frame.unit, frame, p)
+      end
+    else
+      frame._msufPortraitNeedsVisibleRefresh = true
+      if p.render ~= "CLASS" then
+        SetTexCoordCached(frame.portrait, Get2DPortraitTexCoords(p))
+      end
+    end
   end
 end
 

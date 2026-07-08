@@ -145,8 +145,6 @@ function GF.ProfileDump()
       .. " addonMetric=" .. tostring(AddOnMetricEnabled())
       .. " detail=" .. tostring(GF._profDetail == true)
       .. " mapWatch=" .. tostring(GF._profMapWatch == true))
-    -- Fast-path status in the FIRST line so it never scrolls off: is the
-    -- EUI-style direct route active, and how many events took it?
     print(string.format("|cff7fd5ffMSUF Prof|r FASTPATH proven=%s fixedDispatches=%d rev=%d",
       tostring(GF._unitFrameMapProven == true),
       GF._fixedGroupDispatches or 0,
@@ -252,19 +250,6 @@ function GF.CheckUnitFrameInvariant(frame, event, unit)
   return false
 end
 
---- Automatic, live-play proof of the unit->frame map. The DirectMappedGroupFrame
---- fast path in Core (EUI-style: event arrives, one FrameForUnit(unit) lookup,
---- dispatch straight to that button) is gated on GF._unitFrameMapProven. That
---- flag was previously only set by the incremental /msufprof map-watch counter,
---- so in normal play it stayed nil and every hot event took the expensive
---- generic driver path (per-frame FrameUnitMatches + invariant checks). This
---- proves the whole map in ONE O(active-frames) pass whenever the roster has
---- settled: iterate GF.unitFrames, confirm each entry is self-consistent
---- (mapped==frame and attr/frame.unit==unit and the frame is live). One
---- inconsistency aborts (leaves the safe generic path active). Runs at most once
---- per map revision (GF._unitFrameMapRevision, bumped by MarkUnitMapChanged on
---- any roster/binding change), so it is not per-event work. Combat-safe: pure
---- reads, no secure calls, no frame mutation.
 function GF.AutoProveUnitFrameMap()
   local rev = GF._unitFrameMapRevision or 0
   if GF._unitFrameMapProven == true and GF._autoProvenRevision == rev then
