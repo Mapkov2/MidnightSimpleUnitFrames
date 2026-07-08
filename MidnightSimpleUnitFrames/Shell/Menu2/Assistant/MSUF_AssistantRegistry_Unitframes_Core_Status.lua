@@ -58,10 +58,9 @@ function A.UnitframesRegistry.BuildStatusCoreContext(ctx)
         return out
     end
 
-    local function ApplyStatus(unit, reason, statusRuntime, level)
-        if statusRuntime then
-            CallGlobal("MSUF_RefreshStatusIndicators")
-            CallGlobal("MSUF_RequestStatusIconsRefreshForCurrent")
+    local function ApplyStatus(unit, reason, statusRuntime, level, runtimeRefreshed)
+        if statusRuntime and not runtimeRefreshed then
+            CallGlobal("MSUF_RefreshStatusIndicators", unit, reason or "MSUF_ASSISTANT_STATUS")
         end
         if level then
             if unit == "boss" and _G.MSUF_BossTestMode and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
@@ -72,8 +71,12 @@ function A.UnitframesRegistry.BuildStatusCoreContext(ctx)
     end
 
     local function ApplyStatusRefresh(unit, refresh, statusRuntime, level)
-        if refresh then CallGlobal(refresh) end
-        ApplyStatus(unit, "MSUF_ASSISTANT_STATUS", statusRuntime, level)
+        local runtimeRefreshed = false
+        if refresh then
+            CallGlobal(refresh, unit, "MSUF_ASSISTANT_STATUS")
+            runtimeRefreshed = true
+        end
+        ApplyStatus(unit, "MSUF_ASSISTANT_STATUS", statusRuntime, level, runtimeRefreshed)
     end
 
     local function StatusIconOpts(spec, opts)

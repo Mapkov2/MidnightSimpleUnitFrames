@@ -47,8 +47,8 @@ local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     SYMBOL = "ui-debuff-border-magic-icon",
 }
 local DEBUFF_EXCLUSIVE = VTP "none=None|raid=Raid"
-local NATIVE_EXACT_AURA_FILTERS_ENABLED = false
-local NATIVE_EXACT_AURA_FILTERS_DISABLED_TEXT = "Temporarily disabled for 12.1 native AuraContainers. Blizzard currently exposes filter strings only, not SpellID whitelist/blacklist predicates."
+local NATIVE_EXACT_AURA_FILTERS_ENABLED = true
+local NATIVE_EXACT_AURA_FILTERS_TEXT = "Exact SpellID filters use Blizzard 12.1 AuraContainer candidateFilters where the client permits identity filtering."
 local GROUP_NATIVE_FILTER_LABELS = {
     ALL = "All",
     PLAYER = "Player",
@@ -139,6 +139,14 @@ local pendingAuraGlobalReason
 local pendingAuraRefreshCtx
 local pendingAuraRefreshReason
 local auraApplyQueued = false
+local function RequestAuraRuntime(scope, reason)
+    local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    if apply and type(apply.RequestAuras) == "function" then
+        return apply.RequestAuras(scope or "shared", reason or "AURAS3_MENU2_BATCH")
+    end
+    Model.Apply(scope or "shared", reason or "AURAS3_MENU2_BATCH")
+    return true
+end
 local function AurasProfileStart()
     return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
 end
@@ -147,13 +155,21 @@ local function AurasProfileStop(key, started, extraCount)
         M.ProfileStop("aurasPage", key, started, extraCount)
     end
 end
+local auraMenuWorkPending = {}
 local function ScheduleAuraMenuWork(key, delay, fn)
-    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
-        _G.MSUF_ScheduleDelayOnce(key, delay or AURA_MENU_APPLY_DELAY, fn)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(delay or AURA_MENU_APPLY_DELAY, fn)
+    if type(fn) ~= "function" then return end
+    key = key or fn
+    if auraMenuWorkPending[key] then return end
+    auraMenuWorkPending[key] = fn
+    local function Run()
+        local cb = auraMenuWorkPending[key]
+        auraMenuWorkPending[key] = nil
+        if type(cb) == "function" then cb() end
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay or AURA_MENU_APPLY_DELAY, Run)
     else
-        fn()
+        Run()
     end
 end
 local function AurasMenuCombatLocked()
@@ -181,11 +197,11 @@ local function FlushAuraApply()
     local started = AurasProfileStart()
     local count = 0
     if global then
-        Model.Apply("shared", globalReason or "AURAS3_MENU2_BATCH")
+        RequestAuraRuntime("shared", globalReason or "AURAS3_MENU2_BATCH")
         count = 1
     else
         for unit in pairs(units) do
-            Model.Apply(unit, reasons[unit] or "AURAS3_MENU2_BATCH")
+            RequestAuraRuntime(unit, reasons[unit] or "AURAS3_MENU2_BATCH")
             count = count + 1
         end
     end
@@ -1398,7 +1414,7 @@ local function BuildUnitStyle(ctx, b, scope)
         if unit == "shared" then
             hint:SetText("Shared preview groups frames by identical icon size and swipe direction; labels show the actual frame icon size. Font family follows Global Style > Fonts.")
         else
-            hint:SetText(editable and "Font family follows Global Style > Fonts. Legacy blacklists are read-only on Filters." or "This scope inherits the Shared aura style.")
+            hint:SetText(editable and "Font family follows Global Style > Fonts. SpellID blacklists are on Filters." or "This scope inherits the Shared aura style.")
         end
     end)
 end
@@ -1576,7 +1592,7 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
         AddTooltip(exclusiveDrop, "Exclusive Mode", "Uses Blizzard's debuff mode selector. Other enabled tokens can still narrow the result further.")
         filterControls[#filterControls + 1] = exclusiveDrop
     end
-    W.Text(section, "Native 12.1 AuraContainers currently support Blizzard filter tokens only. Exact SpellID whitelist/blacklist data is shown below as read-only legacy data.", 24, -506, w - 48, T.colors.muted)
+    W.Text(section, "Native 12.1 AuraContainers use filter tokens plus SpellID candidate filters where the client permits identity filtering.", 24, -506, w - 48, T.colors.muted)
     M.TrackRefresh(ctx, function()
         local customRules = scope == "shared" or not Model.UseSharedRules(scope)
         local filtersOn = customRules and Model.ScopeFiltersEnabled(scope)
@@ -1599,8 +1615,8 @@ local function BuildUnitBlacklist(ctx, b, scope)
                 ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_INHERIT", true)
             end)
     end
-    local manual = Card(section, "Blacklist", "Read-only legacy SpellID list for Buff and Debuff filtering.", 24, -72, colW, 222)
-    local preset = Card(section, "Blacklist Presets", "Read-only legacy aura ID groups.", rightX, -72, colW, 222)
+    local manual = Card(section, "Blacklist", "SpellIDs hidden through native AuraContainer candidate filters.", 24, -72, colW, 222)
+    local preset = Card(section, "Blacklist Presets", "Preset SpellID groups for the native blacklist.", rightX, -72, colW, 222)
     local inputValue = ""
     local input = BindTextInput(ctx, manual, "Spell ID, spell link, or resolvable spell name", 16, -82, colW - 32,
         function() return inputValue end,
@@ -1621,7 +1637,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
         Model.RemoveBlacklistSpell(scope, value)
         ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_REMOVE", true)
     end)
-    W.Text(manual, NATIVE_EXACT_AURA_FILTERS_DISABLED_TEXT, 16, -176, colW - 32, T.colors.muted)
+    W.Text(manual, NATIVE_EXACT_AURA_FILTERS_TEXT, 16, -176, colW - 32, T.colors.muted)
     local function CurrentPreset()
         local key = M.auraBlacklistPreset or "RAID_BUFFS"
         local values = Model.BlacklistPresetValues()
@@ -1669,7 +1685,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
     local current = Card(section, "Current List", nil, 24, -318, w - 48, 184)
     local prepared = W.Text(current, "", 16, -18, w - 80, T.colors.accent)
     local emptyText = W.Text(current, "No blacklisted spells.", 16, -48, w - 80, T.colors.muted)
-    local moreText = W.Text(current, "Read-only while the 12.1 native backend is active.", 16, -164, w - 80, T.colors.muted)
+    local moreText = W.Text(current, "Click an entry to remove it from this blacklist.", 16, -164, w - 80, T.colors.muted)
     local listScroll = CreateFrame("ScrollFrame", nil, current, "UIPanelScrollFrameTemplate")
     listScroll:SetPoint("TOPLEFT", current, "TOPLEFT", 16, -42)
     listScroll:SetSize(w - 82, 116)
@@ -1716,7 +1732,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
     end
     M.TrackRefresh(ctx, function()
         editEnabled = NATIVE_EXACT_AURA_FILTERS_ENABLED and (scope == "shared" or not Model.UseSharedBlacklist(scope))
-        if useShared then W.SetControlEnabled(useShared, false) end
+        if useShared then W.SetControlEnabled(useShared, true) end
         W.SetControlsEnabled(blacklistEditControls, editEnabled)
         local count = Model.BlacklistPreparedCount(scope)
         prepared:SetText(count == 1 and "1 prepared blacklist entry" or (tostring(count) .. " prepared blacklist entries"))
@@ -1767,10 +1783,16 @@ local function GFReadBlacklistCat(scope, groupKey, catKey)
 end
 local function GFInvalidateBlacklist(scope, groupKey)
     local af = AuraFilter()
-    if not (af and type(af.InvalidateBlacklistHash) == "function") then return end
     local a, b = GroupScopeKinds(scope)
-    af.InvalidateBlacklistHash(GFAuraGroup(a, groupKey))
-    if b then af.InvalidateBlacklistHash(GFAuraGroup(b, groupKey)) end
+    if af and type(af.InvalidateBlacklistHash) == "function" then
+        af.InvalidateBlacklistHash(GFAuraGroup(a, groupKey))
+        if b then af.InvalidateBlacklistHash(GFAuraGroup(b, groupKey)) end
+    end
+    local gf = MSUF and MSUF.GF
+    if gf and type(gf.InvalidateCompiledSpecs) == "function" then
+        gf.InvalidateCompiledSpecs(a)
+        if b then gf.InvalidateCompiledSpecs(b) end
+    end
 end
 local function GFWriteBlacklistCat(scope, groupKey, catKey, value)
     if Model and type(Model.WriteGroupBlacklistCategory) == "function" then
@@ -1810,11 +1832,11 @@ local function BuildGroupFilters(ctx, b, scope)
     BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180))
     local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
     BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
-    W.Text(filter, "Category blacklist data below is read-only in the native 12.1 backend.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
-    local blacklist = Card(section, "Category Blacklist", "Read-only legacy category data for " .. ScopeLabel(scope) .. ".", 24, -304, w - 48, 324)
+    W.Text(filter, "Category blacklists below are expanded into SpellID candidate filters for the selected lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
+    local blacklist = Card(section, "Category Blacklist", "SpellID category filters for " .. ScopeLabel(scope) .. ".", 24, -304, w - 48, 324)
     W.LabelAt(blacklist, "Active", 16, -50, 70, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(blacklist, lane == "buff" and "Buff category blacklist" or "Debuff category blacklist", 86, -50, 260, "GameFontHighlightSmall", T.colors.text)
-    W.Text(blacklist, NATIVE_EXACT_AURA_FILTERS_DISABLED_TEXT, 16, -72, w - 96, T.colors.muted)
+    W.Text(blacklist, NATIVE_EXACT_AURA_FILTERS_TEXT, 16, -72, w - 96, T.colors.muted)
     local af = AuraFilter()
     local meta = af and af.DECLASSIFIED_META
     if not (type(meta) == "table" and #meta > 0) then
@@ -1844,7 +1866,7 @@ end
 local function BuildAuraFiltersPage(ctx)
     local b = W.PageBuilder(ctx)
     Model.EnsureDB()
-    b:GlobalStyleHeader("Aura Filters", "Native 12.1 Buff and Debuff filters; legacy whitelist/blacklist data is read-only.", 72)
+    b:GlobalStyleHeader("Aura Filters", "Native 12.1 Buff and Debuff filters, including SpellID blacklist candidate filters.", 72)
     local scope = BuildAuraFilterScopeOverrideSection(ctx, b)
     if IsGroupScope(scope) then
         BuildGroupFilters(ctx, b, scope)

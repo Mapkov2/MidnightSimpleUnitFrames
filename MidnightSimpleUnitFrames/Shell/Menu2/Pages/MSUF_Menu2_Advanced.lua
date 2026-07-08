@@ -8,6 +8,7 @@ MSUF.MSUF2 = M
 -- pages. Keep page-specific controls in their domain files and common glue here.
 local W = M.Widgets
 local WL = M.WordList
+local C_Timer = _G.C_Timer
 local AURA_LAYOUT_OVERRIDE_KEYS = WL "iconSize spacing cooldownTextSize stackTextSize reminderGrowth"
 local AURA_CAPS_OVERRIDE_KEYS = WL "maxBuffs maxDebuffs maxIcons perRow layoutMode growth buffGrowth debuffGrowth rowWrap buffRowWrap debuffRowWrap buffDebuffAnchor splitSpacing stackCountAnchor sortOrder"
 local function CallGlobal(name, ...)
@@ -115,14 +116,17 @@ local function ApplyAuras()
         local api = MSUF and MSUF.MSUF_Auras3
         if api and api.DB and type(api.DB.InvalidateCache) == "function" then api.DB.InvalidateCache() end
         if api and api.Colors and type(api.Colors.InvalidateCache) == "function" then api.Colors.InvalidateCache() end
-        if api and type(api.RequestApply) == "function" then
+        local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
+        if apply and type(apply.RequestAuras) == "function" then
+            apply.RequestAuras("shared", "MSUF2_AURAS_APPLY")
+        elseif api and type(api.RequestApply) == "function" then
             api.RequestApply()
         end
     end
-    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
-        _G.MSUF_ScheduleDelayOnce("MSUF2_AURAS_APPLY", A3_APPLY_DELAY, Run)
-    else
+    if C_Timer and C_Timer.After then
         C_Timer.After(A3_APPLY_DELAY, Run)
+    else
+        Run()
     end
 end
 local function AurasDB()

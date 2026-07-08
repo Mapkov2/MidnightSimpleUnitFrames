@@ -16,10 +16,15 @@ function A.RegistryCoreBuilders.BuildAuraApplyHelpers(ctx)
     ctx = type(ctx) == "table" and ctx or {}
 
     local MSUFRef = ctx.MSUF or MSUF
+    local MRef = ctx.M or M
     local EnsureDB = ctx.EnsureDB
     local CallGlobal = ctx.CallGlobal
     local ApplyGroup = ctx.ApplyGroup
     if type(EnsureDB) ~= "function" or type(CallGlobal) ~= "function" or type(ApplyGroup) ~= "function" then return nil end
+
+    local function CurrentApplyService()
+        return (MRef and MRef.ApplyService) or (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+    end
 
     local function AuraModel()
         local a3 = MSUFRef and MSUFRef.MSUF_Auras3
@@ -27,16 +32,27 @@ function A.RegistryCoreBuilders.BuildAuraApplyHelpers(ctx)
     end
 
     local function ApplyAura(scope, reason)
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestAuras) == "function" then
+            return ApplyService.RequestAuras(scope or "shared", reason or "MSUF_ASSISTANT_AURAS")
+        end
         local Model = AuraModel()
         if Model and type(Model.Apply) == "function" then
             Model.Apply(scope or "shared", reason or "MSUF_ASSISTANT_AURAS")
-            return
+            return true
         end
         local a3 = MSUFRef and MSUFRef.MSUF_Auras3
-        if a3 and type(a3.RequestApply) == "function" then
-            a3.RequestApply()
+        if a3 and type(a3.RequestScope) == "function" then
+            a3.RequestScope(scope or "shared", reason or "MSUF_ASSISTANT_AURAS")
+            CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "MSUF_ASSISTANT_AURAS")
+            return true
+        elseif a3 and type(a3.RequestApply) == "function" then
+            a3.RequestApply(scope or "shared", reason or "MSUF_ASSISTANT_AURAS")
+            CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "MSUF_ASSISTANT_AURAS")
+            return true
         end
         CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "MSUF_ASSISTANT_AURAS")
+        return false
     end
 
     local function ApplyAuraText(reason)
@@ -46,10 +62,11 @@ function A.RegistryCoreBuilders.BuildAuraApplyHelpers(ctx)
         if ct and type(ct.ForceRecolor) == "function" then ct.ForceRecolor("unit") end
         CallGlobal("MSUF_GF_InvalidateCooldownTextCurve")
         CallGlobal("MSUF_GF_ForceCooldownTextRecolor")
-        ApplyAura("shared", reason or "MSUF_ASSISTANT_AURA_TEXT")
-        ApplyGroup("party", "visual")
-        ApplyGroup("raid", "visual")
-        ApplyGroup("mythicraid", "visual")
+        if not ApplyAura("shared", reason or "MSUF_ASSISTANT_AURA_TEXT") then
+            ApplyGroup("party", "auras")
+            ApplyGroup("raid", "auras")
+            ApplyGroup("mythicraid", "auras")
+        end
     end
 
     local function EnsureAuraFallbackDB()

@@ -2135,7 +2135,25 @@ function W.AttachPinnedPreview(body, box, opts)
     local pinnedHeight = tonumber(opts.pinnedHeight)
     local pinned = false
     local restoring = false
+    local applyingPinnedState = false
+    local pinnedStateRefreshQueued = false
     local record
+    local ApplyPinnedState
+    local function QueuePinnedStateRefresh()
+        if pinnedStateRefreshQueued then return end
+        pinnedStateRefreshQueued = true
+        local function RunQueuedRefresh()
+            pinnedStateRefreshQueued = false
+            if box._msuf2PinnedPreviewRecord == record and type(ApplyPinnedState) == "function" then
+                ApplyPinnedState()
+            end
+        end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, RunQueuedRefresh)
+        elseif not applyingPinnedState then
+            RunQueuedRefresh()
+        end
+    end
     local function EnsureRestoreSlot()
         if not originalParent then return nil end
         local slot = box._msuf2PinnedPreviewRestoreSlot
@@ -2296,13 +2314,19 @@ function W.AttachPinnedPreview(body, box, opts)
         if slotTop <= (scrollTop + (opts.threshold or 6)) then return false end
         return true
     end
-    local function ApplyPinnedState()
+    ApplyPinnedState = function()
+        if applyingPinnedState then
+            QueuePinnedStateRefresh()
+            return
+        end
         if restoring then return end
         if box._msuf2PinnedPreviewRecord and box._msuf2PinnedPreviewRecord ~= record then return end
+        applyingPinnedState = true
         if not BodyVisible() then
             Restore()
             if pageKey and box.Hide then box:Hide() end
             RefreshButton()
+            applyingPinnedState = false
             return
         end
         if box.Show then box:Show() end
@@ -2330,6 +2354,7 @@ function W.AttachPinnedPreview(body, box, opts)
             Restore()
         end
         RefreshButton()
+        applyingPinnedState = false
     end
     pinBtn:SetScript("OnClick", function()
         M.previewPinState[stateKey] = not PinEnabled()
@@ -2369,7 +2394,7 @@ function W.AttachPinnedPreview(body, box, opts)
     end
     if box.HookScript then
         box:HookScript("OnHide", Restore)
-        box:HookScript("OnSizeChanged", ApplyPinnedState)
+        box:HookScript("OnSizeChanged", QueuePinnedStateRefresh)
     end
     C_Timer.After(0, ApplyPinnedState)
     RefreshButton()

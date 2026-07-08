@@ -937,34 +937,58 @@ end
 local function StopPanelNeonPulse(depth)
     if not depth then return end
     if depth._neonPulse and depth._neonPulse.Stop then depth._neonPulse:Stop() end
+    if depth._neonPulse2 and depth._neonPulse2.Stop then depth._neonPulse2:Stop() end
     if depth.leftGlint and depth.leftGlint.SetAlpha then depth.leftGlint:SetAlpha(1) end
     if depth.rightGlint and depth.rightGlint.SetAlpha then depth.rightGlint:SetAlpha(1) end
     if depth.cornerGlow and depth.cornerGlow.SetAlpha then depth.cornerGlow:SetAlpha(1) end
 end
-local function StartPanelNeonPulse(depth, strong)
+local function CreatePanelNeonSweep(tex, duration, travelX, fromAlpha, toAlpha, delay)
+    if not (tex and tex.CreateAnimationGroup) then return nil end
+    local group = tex:CreateAnimationGroup()
+    if group.SetLooping then group:SetLooping("REPEAT") end
+    local travel = group:CreateAnimation("Translation")
+    if travel.SetOffset then travel:SetOffset(travelX or 0, 0) end
+    if travel.SetDuration then travel:SetDuration(duration or 7.0) end
+    if travel.SetSmoothing then travel:SetSmoothing("NONE") end
+    if travel.SetOrder then travel:SetOrder(1) end
+    local fadeIn = group:CreateAnimation("Alpha")
+    if fadeIn.SetFromAlpha then fadeIn:SetFromAlpha(fromAlpha or 0.12) end
+    if fadeIn.SetToAlpha then fadeIn:SetToAlpha(toAlpha or 0.78) end
+    if fadeIn.SetDuration then fadeIn:SetDuration(1.10) end
+    if fadeIn.SetSmoothing then fadeIn:SetSmoothing("OUT") end
+    if fadeIn.SetOrder then fadeIn:SetOrder(1) end
+    local fadeOut = group:CreateAnimation("Alpha")
+    if fadeOut.SetFromAlpha then fadeOut:SetFromAlpha(toAlpha or 0.78) end
+    if fadeOut.SetToAlpha then fadeOut:SetToAlpha(fromAlpha or 0.12) end
+    if fadeOut.SetDuration then fadeOut:SetDuration(1.20) end
+    if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN") end
+    if fadeOut.SetOrder then fadeOut:SetOrder(2) end
+    if delay and delay > 0 then
+        if travel.SetStartDelay then travel:SetStartDelay(delay) end
+        if fadeIn.SetStartDelay then fadeIn:SetStartDelay(delay) end
+    end
+    return group
+end
+local function StartPanelNeonPulse(depth, strong, frameWidth, glintWidth)
     if not (depth and depth.leftGlint and depth.leftGlint.CreateAnimationGroup) then return end
     if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then
         StopPanelNeonPulse(depth)
         return
     end
-    if not depth._neonPulse then
-        local group = depth.leftGlint:CreateAnimationGroup()
-        if group.SetLooping then group:SetLooping("REPEAT") end
-        local fadeIn = group:CreateAnimation("Alpha")
-        if fadeIn.SetFromAlpha then fadeIn:SetFromAlpha(strong and 0.64 or 0.58) end
-        if fadeIn.SetToAlpha then fadeIn:SetToAlpha(strong and 0.92 or 0.78) end
-        if fadeIn.SetDuration then fadeIn:SetDuration(strong and 5.40 or 6.40) end
-        if fadeIn.SetSmoothing then fadeIn:SetSmoothing("IN_OUT") end
-        if fadeIn.SetOrder then fadeIn:SetOrder(1) end
-        local fadeOut = group:CreateAnimation("Alpha")
-        if fadeOut.SetFromAlpha then fadeOut:SetFromAlpha(strong and 0.92 or 0.78) end
-        if fadeOut.SetToAlpha then fadeOut:SetToAlpha(strong and 0.62 or 0.54) end
-        if fadeOut.SetDuration then fadeOut:SetDuration(strong and 7.20 or 8.40) end
-        if fadeOut.SetSmoothing then fadeOut:SetSmoothing("IN_OUT") end
-        if fadeOut.SetOrder then fadeOut:SetOrder(2) end
-        depth._neonPulse = group
+    local w = math.max(1, tonumber(frameWidth) or 180)
+    local glintW = math.max(24, tonumber(glintWidth) or 72)
+    local duration = strong and 18.0 or 22.0
+    local travelX = w + glintW + 24
+    local key = tostring(strong and 1 or 0) .. ":" .. tostring(math.floor(w + 0.5)) .. ":" .. tostring(math.floor(glintW + 0.5))
+    if depth._neonMotionKey ~= key then
+        if depth._neonPulse and depth._neonPulse.Stop then depth._neonPulse:Stop() end
+        if depth._neonPulse2 and depth._neonPulse2.Stop then depth._neonPulse2:Stop() end
+        depth._neonPulse = CreatePanelNeonSweep(depth.leftGlint, duration, travelX, 0.015, strong and 0.30 or 0.22, 0)
+        depth._neonPulse2 = CreatePanelNeonSweep(depth.rightGlint, duration, travelX, 0.010, strong and 0.18 or 0.13, duration * 0.56)
+        depth._neonMotionKey = key
     end
     if depth._neonPulse and depth._neonPulse.Play and (not depth._neonPulse.IsPlaying or not depth._neonPulse:IsPlaying()) then depth._neonPulse:Play() end
+    if depth._neonPulse2 and depth._neonPulse2.Play and (not depth._neonPulse2.IsPlaying or not depth._neonPulse2:IsPlaying()) then depth._neonPulse2:Play() end
 end
 local function ApplyPanelAssetDepth(frame, variant)
     local depth = EnsurePanelAssetDepth(frame)
@@ -1004,25 +1028,37 @@ local function ApplyPanelAssetDepth(frame, variant)
     end
     local w = (frame.GetWidth and frame:GetWidth()) or 180
     local glintW = math.max(36, math.min(strong and 118 or 86, math.floor(w * (strong and 0.115 or 0.095) + 0.5)))
+    local animateNeon = not (T.ReducedMotionEnabled and T.ReducedMotionEnabled())
     if depth.leftGlint then
+        depth.leftGlint:ClearAllPoints()
+        depth.leftGlint:SetPoint("TOPLEFT", frame, "TOPLEFT", animateNeon and -glintW or 12, -4)
         depth.leftGlint:SetWidth(glintW)
         depth.leftGlint:SetTexture((T.media and T.media.gradH) or WHITE8)
         depth.leftGlint._msuf2TextureMode = nil
-        depth.leftGlint:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.105 or 0.064)
+        depth.leftGlint:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.055 or 0.036)
+        if depth.leftGlint.SetAlpha then depth.leftGlint:SetAlpha(animateNeon and 0.015 or 0.62) end
         depth.leftGlint:Show()
     end
     if depth.rightGlint then
-        depth.rightGlint:SetWidth(math.floor(glintW * 0.70 + 0.5))
-        depth.rightGlint:SetTexture((T.media and T.media.gradHRev) or WHITE8)
+        local rightW = math.floor(glintW * 0.70 + 0.5)
+        depth.rightGlint:ClearAllPoints()
+        if animateNeon then
+            depth.rightGlint:SetPoint("TOPLEFT", frame, "TOPLEFT", -rightW, -4)
+        else
+            depth.rightGlint:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -4)
+        end
+        depth.rightGlint:SetWidth(rightW)
+        depth.rightGlint:SetTexture((T.media and (animateNeon and T.media.gradH or T.media.gradHRev)) or WHITE8)
         depth.rightGlint._msuf2TextureMode = nil
-        depth.rightGlint:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.076 or 0.046)
+        depth.rightGlint:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.040 or 0.026)
+        if depth.rightGlint.SetAlpha then depth.rightGlint:SetAlpha(animateNeon and 0.010 or 0.52) end
         depth.rightGlint:Show()
     end
     if depth.cornerGlow then
         depth.cornerGlow:SetVertexColor(glow[1], glow[2], glow[3], strong and 0.026 or 0.014)
         depth.cornerGlow:Show()
     end
-    StartPanelNeonPulse(depth, strong)
+    StartPanelNeonPulse(depth, strong, w, glintW)
 end
 local function HidePanelAssetDepth(frame)
     local depth = frame and frame._msuf2PanelAssetDepth

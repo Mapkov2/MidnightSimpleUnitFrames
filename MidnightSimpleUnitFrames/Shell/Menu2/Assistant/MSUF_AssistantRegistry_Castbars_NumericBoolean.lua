@@ -41,7 +41,8 @@ function A.CastbarsRegistry.BuildNumericBooleanRegistrar(ctx)
                 GeneralDB()[dbKey] = value and 1 or 0
             end,
             apply = function()
-                if opts.apply then opts.apply(opts.reason or ("MSUF_ASSISTANT_" .. dbKey)) else ApplyCastbar(opts.reason or ("MSUF_ASSISTANT_" .. dbKey)) end
+                local reason = opts.reason or ("MSUF_ASSISTANT_" .. dbKey)
+                if opts.apply then opts.apply(reason) else ApplyCastbar(reason, opts.unit) end
             end,
             combatSafe = opts.combatSafe == true,
             description = opts.description,

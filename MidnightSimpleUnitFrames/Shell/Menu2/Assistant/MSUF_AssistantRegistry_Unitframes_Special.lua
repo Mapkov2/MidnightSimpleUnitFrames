@@ -240,8 +240,8 @@ Registry:RegisterSetting({
         g.bossTargetOutlineMode = enabled and 1 or 0
     end,
     apply = function()
-        if M and type(M.RequestGeneralApply) == "function" then
-            M.RequestGeneralApply("MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
+        if M and type(M.RequestUnitApply) == "function" then
+            M.RequestUnitApply("boss", "MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
         else
             CallGlobal("MSUF_UFPreview_RequestRefresh", "MSUF2_BOSS_TARGET_HIGHLIGHT")
         end

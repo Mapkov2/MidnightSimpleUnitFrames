@@ -54,12 +54,17 @@ function A.UnitframesRegistry.BuildTextSpecialCoreContext(ctx)
     end
 
     local function ApplyToTInline(reason)
-        ApplyUnit("target", reason or "MSUF_ASSISTANT_TOT_INLINE", { text = true, preview = true })
-        ApplyUnit("targettarget", reason or "MSUF_ASSISTANT_TOT_INLINE", { text = true, preview = true })
-        local UF = MSUFRef and MSUFRef.UF
-        if UF and type(UF.ForceUpdate) == "function" then UF.ForceUpdate("targettarget") end
+        reason = reason or "MSUF_ASSISTANT_TOT_INLINE"
+        ApplyUnit("target", reason, { text = true, preview = true })
+        ApplyUnit("targettarget", reason, { text = true, preview = true })
+        local apply = (MRef and MRef.ApplyService) or _G.MSUF_Menu2_ApplyService
+        if apply and type(apply.Flush) == "function" then
+            apply.Flush()
+        elseif type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+            _G.MSUF_UFCore_NotifyConfigChanged("targettarget", true, true, reason)
+        end
         CallGlobal("MSUF_UpdateTargetToTInlineNow")
-        CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "MSUF_ASSISTANT_TOT_INLINE")
+        CallGlobal("MSUF_UFPreview_RequestRefresh", reason)
     end
 
     local function CleanToTInlineCustomSeparator(value)

@@ -16,11 +16,12 @@ function A.GlobalRegistry.RegisterBaseAppearanceSettings(ctx)
     if type(ctx) ~= "table" then return end
 
     local ApplyVisuals = ctx.ApplyVisuals
+    local ApplyColors = ctx.ApplyColors
     local ApplyFonts = ctx.ApplyFonts
     local RegisterGeneralNumberSetting = ctx.RegisterGeneralNumberSetting
     local RegisterGeneralEnum = ctx.RegisterGeneralEnum
     local RegisterGeneralString = ctx.RegisterGeneralString
-    if type(ApplyVisuals) ~= "function" or type(ApplyFonts) ~= "function" then return end
+    if type(ApplyVisuals) ~= "function" or type(ApplyColors) ~= "function" or type(ApplyFonts) ~= "function" then return end
     if type(RegisterGeneralNumberSetting) ~= "function" or type(RegisterGeneralEnum) ~= "function" then return end
     if type(RegisterGeneralString) ~= "function" then return end
 
@@ -32,7 +33,7 @@ function A.GlobalRegistry.RegisterBaseAppearanceSettings(ctx)
     RegisterGeneralEnum("barMode", "barMode", "Global Bar Mode", "dark", { "dark", "class", "unified", "gradient" }, BAR_MODE_ALIASES, {
         category = "Global / Bars",
         frameType = "bars",
-        apply = ApplyVisuals,
+        apply = ApplyColors,
         reason = "MSUF_ASSISTANT_BAR_MODE",
         valueAliases = {
             dark = "dark",

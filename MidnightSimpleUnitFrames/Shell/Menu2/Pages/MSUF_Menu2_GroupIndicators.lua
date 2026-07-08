@@ -566,13 +566,18 @@ local function BuildTargetedSpellsSection(ctx, b)
     local textCard = W.ControlCard(targeted, Tr("Cooldown Text"), nil, rightX, -326, rightW, 486)
     local RefreshTargetedSpellState
     local function NotifyTargetedSpells()
-        QueueGF("party", "visual")
-        M.CallIf(RefreshGFPreview)
-        if type(M.RefreshGFNativePreviews) == "function" then M.RefreshGFNativePreviews("GF_TARGETED_SPELLS") end
-        local gf = GF and GF()
-        local ts = gf and gf.TargetedSpells
-        if ts and type(ts.RefreshConfig) == "function" then
-            ts.RefreshConfig()
+        local apply = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+        if apply and type(apply.RequestGroup) == "function" then
+            apply.RequestGroup("party", "targetedSpells", "GF_TARGETED_SPELLS")
+        else
+            QueueGF("party", "visual")
+            M.CallIf(RefreshGFPreview)
+            if type(M.RefreshGFNativePreviews) == "function" then M.RefreshGFNativePreviews("GF_TARGETED_SPELLS") end
+            local gf = GF and GF()
+            local ts = gf and gf.TargetedSpells
+            if ts and type(ts.RefreshConfig) == "function" then
+                ts.RefreshConfig()
+            end
         end
     end
     local function SetTS(key, value)

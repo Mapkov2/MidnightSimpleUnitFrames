@@ -120,13 +120,15 @@ function A.EditModeRegistry.BuildPreviewControls(ctx)
         if changed then shared.showInEditMode = value end
         if changed then
             local a3 = MSUF and MSUF.MSUF_Auras3
-            local refreshAll = a3 and type(a3.RefreshAll) == "function" and a3.RefreshAll or nil
             local refreshPreview = a3 and type(a3.RefreshEditPreview) == "function" and a3.RefreshEditPreview or nil
-            if IsEditModeActive() and refreshAll then
-                refreshAll()
-            else
-                if refreshPreview then refreshPreview() end
-                if refreshAll then refreshAll() end
+            if refreshPreview then
+                refreshPreview()
+            elseif M and M.ApplyService and type(M.ApplyService.RequestAuras) == "function" then
+                M.ApplyService.RequestAuras("shared", "MSUF_ASSISTANT_AURA_EDIT_PREVIEW")
+            elseif _G.MSUF_Menu2_ApplyService and type(_G.MSUF_Menu2_ApplyService.RequestAuras) == "function" then
+                _G.MSUF_Menu2_ApplyService.RequestAuras("shared", "MSUF_ASSISTANT_AURA_EDIT_PREVIEW")
+            elseif a3 and type(a3.RefreshAll) == "function" then
+                a3.RefreshAll()
             end
         end
         RefreshHUDControls()

@@ -946,9 +946,9 @@ local function BuildDashboardUX(ctx)
                 dbScale.msufUiScale = scaleValue
                 pendingMsufScale = nil
                 if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scaleValue) end
-                if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false }) end
-                local UF = MSUF and MSUF.UF
-                if UF and UF.Apply then UF.Apply(nil) end
+                if M.RequestGeneralApply then
+                    M.RequestGeneralApply("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = true, frames = true })
+                end
             end,
         })
         local RefreshMenuScale = BuildSimpleScaleColumn({

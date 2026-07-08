@@ -37,7 +37,7 @@ local function ResetGlobalScopeOverride(flag, scope, applyFn, reason)
     scope = NormalizeGlobalScope(scope)
     if scope == "shared" then return false, "Shared options already use the base value, so there is no override to reset." end
     GlobalScopeSetOverride(scope, flag, false)
-    if type(applyFn) == "function" then applyFn(reason) end
+    if type(applyFn) == "function" then applyFn(reason, scope) end
     return true, "Done. " .. GlobalScopeLabel(scope) .. " now follows Shared options."
 end
 

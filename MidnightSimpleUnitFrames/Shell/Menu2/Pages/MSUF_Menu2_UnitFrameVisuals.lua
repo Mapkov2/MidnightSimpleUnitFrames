@@ -38,6 +38,15 @@ local function NormalizeCastbarTabKey(key)
     if key ~= "general" and key ~= "icon" and key ~= "spell" and key ~= "time" and key ~= "advanced" then key = "general" end
     return key
 end
+local function CastbarTabHeight(unit, tab)
+    tab = NormalizeCastbarTabKey(tab)
+    local height = CASTBAR_TAB_HEIGHTS[tab] or CASTBAR_TAB_HEIGHTS.general
+    local fields = CASTBAR_FIELDS and CASTBAR_FIELDS[unit]
+    if tab == "spell" and fields and fields.targetName then
+        height = height + 64
+    end
+    return height
+end
 local function CurrentCastbarTab(unit)
     if unit == nil then return "general" end
     M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
@@ -207,7 +216,10 @@ local function BuildPower(ctx, builder, unit)
         if type(value) == "function" then return value() end
         return value
     end
-    local function BindPowerSlider(parent, addFn, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason, readFn)
+    local POWER_OPTS = { power = true, preview = true }
+    local DETACHED_POWER_OPTS = { power = true, detachedPowerBar = true, preview = true }
+    local POWER_TEXT_OPTS = M.KeySetFromWords "power text preview"
+    local function BindPowerSlider(parent, addFn, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason, readFn, opts)
         local control = addFn(W.Slider(parent, label, minValue, maxValue, step, 300))
         W.MoveWidget(control, parent, x, y, width, "CENTER")
         M.BindNumberWidget(ctx, control,
@@ -215,12 +227,10 @@ local function BuildPower(ctx, builder, unit)
                 if readFn then return readFn() end
                 return ReadNumber(unit, key, ResolveDefault(defaultValue))
             end,
-            function(v) SetNumber(unit, key, v, reason, { power = true, preview = true }) end,
+            function(v) SetNumber(unit, key, v, reason, opts or POWER_OPTS) end,
             ResolveDefault(defaultValue), { step = step, roundStep = true })
         return control
     end
-    local POWER_OPTS = { power = true, preview = true }
-    local POWER_TEXT_OPTS = M.KeySetFromWords "power text preview"
     local function BindPowerToggle(parent, addFn, label, x, y, width, key, defaultValue, reason, readFn, afterSet, opts)
         local control = addFn(W.ToggleAt(parent, label, x, y, width))
         M.BindBoolWidget(ctx, control,
@@ -234,7 +244,7 @@ local function BuildPower(ctx, builder, unit)
     local function BuildPowerControls(parent, addFn, specs)
         return M.BuildControlSpecs(specs, {
             toggle = function(s, i) return BindPowerToggle(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11]), s[12] or s[6] or i end,
-            slider = function(s, i) return BindPowerSlider(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12]), s[13] or s[9] or i end,
+            slider = function(s, i) return BindPowerSlider(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s.opts), s[13] or s[9] or i end,
         })
     end
     local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 126)
@@ -302,7 +312,7 @@ local function BuildPower(ctx, builder, unit)
                 if isPlayer and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "FOLLOW_CLASS" end
                 if isPlayer and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
             end
-            M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", { power = true, preview = true })
+            M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", DETACHED_POWER_OPTS)
             RefreshPowerEnabled()
             RefreshClassPowerDetachedState()
         end)
@@ -324,17 +334,17 @@ local function BuildPower(ctx, builder, unit)
         sliderTop = -148
         local playerDetached = BuildPowerControls(detachedCard, AddDetachedControl, {
             { "toggle", "Sync width to Class Resource", 16, -94, detachedLeftW, "detachedPowerBarSyncClassPower", true, "MSUF2_POWER_DETACHED_SYNC",
-            function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end, nil, nil, "sync" },
-            { "toggle", "Anchor to Class Resource", detachedRightX, -94, detachedRightW, "detachedPowerBarAnchorToClassPower", false, "MSUF2_POWER_DETACHED_ANCHOR" },
+            function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end, nil, DETACHED_POWER_OPTS, "sync" },
+            { "toggle", "Anchor to Class Resource", detachedRightX, -94, detachedRightW, "detachedPowerBarAnchorToClassPower", false, "MSUF2_POWER_DETACHED_ANCHOR", nil, nil, DETACHED_POWER_OPTS },
         })
         detachedSync = playerDetached.sync
     end
     local detachedFields = BuildPowerControls(detachedCard, AddDetachedControl, {
-        { "slider", "Detached X", 16, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetX", 0, "MSUF2_POWER_DETACHED_X" },
-        { "slider", "Detached Y", detachedRightX, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetY", -4, "MSUF2_POWER_DETACHED_Y" },
-        { "slider", "Detached width", 16, sliderTop - 66, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W", nil, "width" },
-        { "slider", "Detached height", detachedRightX, sliderTop - 66, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil, "height" },
-        { "slider", "Detached layer", 16, sliderTop - 132, detachedSliderW, 0, 20, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER" },
+        { "slider", "Detached X", 16, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetX", 0, "MSUF2_POWER_DETACHED_X", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached Y", detachedRightX, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetY", -4, "MSUF2_POWER_DETACHED_Y", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached width", 16, sliderTop - 66, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached height", detachedRightX, sliderTop - 66, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil, "height", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached layer", 16, sliderTop - 132, detachedSliderW, 0, 20, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },
     })
     detachedWidth, detachedHeight = detachedFields.width, detachedFields.height
     if isPlayer then
@@ -349,12 +359,12 @@ local function BuildPower(ctx, builder, unit)
                 local conf = GetConf(unit)
                 conf.detachedPowerBarShape = v
                 if v == "ORB" and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
-                M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED_SHAPE", { power = true, preview = true })
+                M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED_SHAPE", DETACHED_POWER_OPTS)
                 RefreshPowerEnabled()
                 RefreshClassPowerDetachedState()
             end)
         if M.AddTooltip then M.AddTooltip(detachedShape, "Detached Shape", "Orb is a single bottom-to-top filled mana/power sphere. Follow Class Resource maps Circle to Round and Diamond/Hex to Crystal.", { hook = true, owner = "ANCHOR_RIGHT" }) end
-        orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 198, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE")
+        orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 198, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE", nil, DETACHED_POWER_OPTS)
     end
     local function PowerOn() return ReadBool(unit, "showPowerBar", true) end
     local function DetachedOn() return PowerOn() and ReadBool(unit, "powerBarDetached", false) end
@@ -404,7 +414,7 @@ end
 local function BuildCastbar(ctx, builder, unit)
     local fields = CASTBAR_FIELDS[unit]
     if not fields then return end
-    local sec = builder:CollapsibleSection("castbar", "Castbar", CASTBAR_TAB_HEIGHTS[CurrentCastbarTab(unit)] or CASTBAR_TAB_HEIGHTS.general, false)
+    local sec = builder:CollapsibleSection("castbar", "Castbar", CastbarTabHeight(unit, CurrentCastbarTab(unit)), false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 16
     local cardGap = 28
@@ -540,7 +550,7 @@ local function BuildCastbar(ctx, builder, unit)
             if fields.backend then g[fields.backend] = backend end
             g[fields.enable] = (backend == "MSUF")
         end
-        M.RequestGeneralApply("MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true, applyAll = false })
+        M.RequestUnitApply(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
         Call("MSUF_Castbars_OnSettingsChanged", "menu2_backend")
         if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
         RefreshCastbarEnabled()
@@ -590,7 +600,7 @@ local function BuildCastbar(ctx, builder, unit)
     local providerCard = W.ControlCard(generalTab, "Provider", nil, rightX, -4, rightW, 132)
     local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -154, sectionW - 32, 150)
     local iconCard = W.ControlCard(iconTab, "Icon", nil, leftX, -4, leftW, 332)
-    local spellCard = W.ControlCard(spellTab, "Spell Name Text", nil, leftX, -4, leftW, 332)
+    local spellCard = W.ControlCard(spellTab, "Spell Name Text", nil, leftX, -4, leftW, fields.targetName and 390 or 332)
     local timeCard = W.ControlCard(timeTab, "Cast Time Text", nil, leftX, -4, leftW, 332)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
     local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 118)
@@ -602,7 +612,7 @@ local function BuildCastbar(ctx, builder, unit)
             M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
             M.unitCastbarTabSelection[unit] = NormalizeCastbarTabKey(v)
         end,
-        afterRefresh = function(tab) SetCastbarSectionHeight(CASTBAR_TAB_HEIGHTS[tab] or CASTBAR_TAB_HEIGHTS.general) end,
+        afterRefresh = function(tab) SetCastbarSectionHeight(CastbarTabHeight(unit, tab)) end,
         x = 20, y = -58,
     })
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -318, "Use MSUF", 96)
@@ -703,6 +713,17 @@ local function BuildCastbar(ctx, builder, unit)
         { "slider", "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TextOffsetX"), 0, "MSUF2_CASTBAR_SPELL_X" },
         { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TextOffsetY"), 0, "MSUF2_CASTBAR_SPELL_Y" },
     })
+    if fields.targetName then
+        local targetName = W.ToggleAt(spellCard, "Show target name", 16, -358, 220)
+        AddControl(spellControls, targetName)
+        W.AttachUnitEditFocus(targetName, unit, "castbar")
+        M.BindBoolWidget(ctx, targetName,
+            function() return ReadGeneralBool(fields.targetName, false) end,
+            function(v)
+                SetGeneralBool(fields.targetName, v, "MSUF2_CASTBAR_TARGET_NAME", { castbar = true, preview = true })
+                RefreshCastbarEnabled()
+            end)
+    end
     local function ReadSpellTextWidthMode()
         local value = tostring(ReadGeneralValue(DetailKey("SpellNameTruncate"), "AUTO") or "AUTO"):upper()
         if value == "CLIP" or value == "NONE" then return value end
@@ -782,5 +803,5 @@ end
 if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({ id = "portrait", title = "Portrait", height = 612, placement = "after_inline_text", order = 10, build = BuildPortrait })
     UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end, placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower })
-    UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CASTBAR_TAB_HEIGHTS[CurrentCastbarTab(unit)] or CASTBAR_TAB_HEIGHTS.general end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar })
+    UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CastbarTabHeight(unit, CurrentCastbarTab(unit)) end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar })
 end

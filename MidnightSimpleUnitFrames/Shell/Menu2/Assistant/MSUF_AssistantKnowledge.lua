@@ -907,6 +907,7 @@ local function InsertTopResult(results, entry, limit)
 end
 
 function K.Search(query, limit, opts)
+    local startedMs = _G.debugprofilestop and _G.debugprofilestop() or nil
     opts = opts or {}
     local index = K.EnsureIndexIfSafe()
     if not index then return nil end
@@ -938,6 +939,9 @@ function K.Search(query, limit, opts)
     K.searchCache = K.searchCache or {}
     K.searchCacheOrder = K.searchCacheOrder or {}
     RememberCache(K.searchCache, K.searchCacheOrder, cacheKey, out, SEARCH_CACHE_LIMIT)
+    if type(A.RecordSlowPerfSample) == "function" then
+        A.RecordSlowPerfSample("assistant.knowledge.search", startedMs, tostring(#out) .. ":" .. Normalize(query):sub(1, 80), 8)
+    end
     return out
 end
 

@@ -23,11 +23,20 @@ local function ApplyBossPagePreviewFallback(active, reason)
     end
     if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncBossUnitframePreviewWithUnitEdit() end
 end
+local function CoreFrame(unit)
+    local uf = MSUF and MSUF.UF
+    if uf and type(uf.GetFrame) == "function" then
+        local frame = uf.GetFrame(unit)
+        if frame then return frame end
+    end
+    local frames = uf and uf.frames
+    return unit and frames and frames[unit] or nil
+end
 local function BossPreviewFramesVisible()
-    local frames = _G.MSUF_UnitFrames
     local sawFrame = false
     for i = 1, 5 do
-        local frame = (frames and frames["boss" .. i]) or _G["MSUF_boss" .. i]
+        local unit = "boss" .. i
+        local frame = CoreFrame(unit) or _G["MSUF_" .. unit]
         if frame then
             sawFrame = true
             if frame.IsShown and not frame:IsShown() then return false end
@@ -220,11 +229,12 @@ local function SyncGroupPagePreviewForKey(key, force)
     lastGFPreviewKind = kind
     lastGFPreviewEditMode = editMode
     lastGFPreviewRuntime = hasRuntime
-    if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind((active and not barMenuPreviews) and kind or nil) end
     if editMode then
+        if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(nil) end
         SetGFPagePreviewFlag(false)
         return
     end
+    if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind((active and not barMenuPreviews) and kind or nil) end
     if not hasRuntime then
         SetGFPagePreviewFlag(active, kind)
         return

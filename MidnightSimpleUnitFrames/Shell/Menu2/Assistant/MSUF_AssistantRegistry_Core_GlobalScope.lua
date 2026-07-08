@@ -82,7 +82,7 @@ local function RegisterScopedSetting(kind, scope, dbKey, attr, label, settingTyp
             GlobalScopeWrite(scope, opts.flag, ScopedSharedTable(opts.shared), dbKey, value)
         end,
         apply = function()
-            if opts.apply then opts.apply(opts.reason or ("MSUF_ASSISTANT_" .. dbKey)) end
+            if opts.apply then opts.apply(opts.reason or ("MSUF_ASSISTANT_" .. dbKey), scope) end
         end,
         combatSafe = opts.combatSafe == true,
         confirmRequired = opts.confirmRequired == true,

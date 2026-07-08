@@ -70,6 +70,36 @@ local TOP_BUTTON_STYLE = {
     activeTextColor = { 0.90, 0.95, 1.00, 1 },
     stripe = false,
 }
+
+local function CurrentApplyService()
+    local apply = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+    if type(apply) == "table" then return apply end
+    return nil
+end
+
+local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
+    opts = opts or {}
+    opts.history = false
+    if M and type(M.RequestUnitApply) == "function" then
+        local ok = M.RequestUnitApply(unit, reason or "MSUF2_UNIT_SECTION", opts) ~= false
+        if ok and flushNow then
+            local apply = CurrentApplyService()
+            if apply and type(apply.Flush) == "function" then apply.Flush() end
+        end
+        return ok
+    end
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestUnit) == "function" then
+        apply.RequestUnit(unit, reason or "MSUF2_UNIT_SECTION", opts)
+        if flushNow and type(apply.Flush) == "function" then apply.Flush() end
+        return true
+    end
+    if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+        _G.MSUF_UFCore_NotifyConfigChanged(unit, true, true, reason or "MSUF2_UNIT_SECTION")
+        return true
+    end
+    return false
+end
 local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet", "all" }
 local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, pet = 38, all = 38 }
 local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", boss = "Boss", all = "All" }
@@ -244,8 +274,7 @@ local function BuildPreview(ctx, builder, unit)
         panel._msufAPI = {
             ApplySettingsForKey = function(key)
                 key = key or unit
-                local UF = MSUF and MSUF.UF
-                if UF and UF.Apply then UF.Apply(key) end
+                RequestUnitRuntimeApply(key, "MSUF2_UNIT_PREVIEW_APPLY", { preview = true, text = true })
             end,
         }
         panel._msufOpenUnitSection = function() end
@@ -563,10 +592,7 @@ local function BuildBasics(ctx, builder, unit, label)
         function(v)
             local conf = GetConf(unit)
             conf.healthColorMode = NormalizeHealthColorMode(v)
-            M.RequestUnitApply(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true })
-            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-                _G.MSUF_ShowReloadRecommendedPopup("Unitframe color changes")
-            end
+            M.RequestUnitApply(unit, "MSUF2_HEALTH_COLOR_MODE", { preview = true, colors = true })
         end)
     if M.AddTooltip then
         M.AddTooltip(colorMode, "Health Color Scheme", "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.", { hook = true, owner = "ANCHOR_RIGHT" })
@@ -718,9 +744,8 @@ local function BuildInlineText(ctx, builder, unit)
     sec._msuf2CursorY = -72
     local inlineApplyFlags = { text = true, preview = true }
     local function ApplyToTInline(reason, forceToT, skipRefresh)
-        M.RequestUnitApply("target", reason, inlineApplyFlags)
-        M.RequestUnitApply("targettarget", reason, inlineApplyFlags)
-        if forceToT and MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate("targettarget") end
+        RequestUnitRuntimeApply("target", reason, inlineApplyFlags)
+        RequestUnitRuntimeApply("targettarget", reason, inlineApplyFlags, forceToT == true)
         Call("MSUF_UpdateTargetToTInlineNow")
         Call("MSUF_UFPreview_RequestRefresh", reason)
         if not skipRefresh and RefreshInlineControlState then RefreshInlineControlState() end
@@ -1030,7 +1055,7 @@ local function BuildBossLayout(ctx, builder, unit)
             local g = GetGeneral()
             g.bossTargetHighlightEnabled = v and true or false
             g.bossTargetOutlineMode = v and 1 or 0
-            M.RequestGeneralApply("MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
+            M.RequestUnitApply("boss", "MSUF2_BOSS_TARGET_HIGHLIGHT", { preview = true })
         end)
 end
 local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn, opts)

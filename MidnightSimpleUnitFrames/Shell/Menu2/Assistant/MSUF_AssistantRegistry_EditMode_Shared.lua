@@ -76,17 +76,17 @@ function A.EditModeRegistry.BuildSharedHelpers(ctx)
         if util and type(util.ApplyAllSettingsSafe) == "function" and util.ApplyAllSettingsSafe() then
             return true
         end
-        local UF = Namespace and Namespace.UF
-        if UF and type(UF.Apply) == "function" then
-            UF.Apply(nil)
-            return true
-        end
         if Menu and type(Menu.RequestGeneralApply) == "function" then
             Menu.RequestGeneralApply("MSUF_ASSISTANT_EDIT_MODE_CONTROL", { preview = true, applyAll = true })
             return true
         end
-        if type(_G.MSUF_RefreshAllFrames) == "function" then
-            _G.MSUF_RefreshAllFrames()
+        local apply = (Menu and Menu.ApplyService) or _G.MSUF_Menu2_ApplyService
+        if apply and type(apply.RequestGeneral) == "function" then
+            apply.RequestGeneral("MSUF_ASSISTANT_EDIT_MODE_CONTROL", { preview = true, applyAll = true })
+            return true
+        end
+        if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+            _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, "MSUF_ASSISTANT_EDIT_MODE_CONTROL")
             return true
         end
         return false

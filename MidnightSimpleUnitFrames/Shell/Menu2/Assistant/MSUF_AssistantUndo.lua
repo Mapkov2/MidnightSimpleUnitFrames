@@ -77,16 +77,76 @@ local function FlushApplyService()
     if apply and type(apply.Flush) == "function" then return apply.Flush() end
 end
 
-local function ScheduleNextFrame(key, fn)
-    if type(fn) ~= "function" then return false end
-    if type(_G.MSUF_ScheduleOnce) == "function" then
-        _G.MSUF_ScheduleOnce(tostring(key or "MSUF_ASSISTANT_BROAD_APPLY"), fn)
+local function RequestAurasRuntime(reason)
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestAuraFonts) == "function" then
+        return apply.RequestAuraFonts("shared", reason or "MSUF_ASSISTANT_UNDO_AURAS")
+    end
+    if apply and type(apply.RequestAuras) == "function" then
+        return apply.RequestAuras("shared", reason or "MSUF_ASSISTANT_UNDO_AURAS")
+    end
+    if MSUF and MSUF.MSUF_Auras3 and type(MSUF.MSUF_Auras3.RequestApply) == "function" then
+        MSUF.MSUF_Auras3.RequestApply()
         return true
     end
+    return false
+end
+
+local function RequestGroupRuntime(reason)
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestGroupReset) == "function" then
+        return apply.RequestGroupReset(reason or "MSUF_ASSISTANT_UNDO_GROUP")
+    end
+    if apply and type(apply.RequestGroup) == "function" then
+        return apply.RequestGroup("group", "reset", reason or "MSUF_ASSISTANT_UNDO_GROUP")
+    end
+    local GP = M and M.GroupPage
+    if GP and type(GP.QueueGF) == "function" then
+        GP.QueueGF("party", "rebuild")
+        GP.QueueGF("raid", "rebuild")
+        GP.QueueGF("mythicraid", "rebuild")
+        return true
+    end
+    if MSUF and MSUF.GF then
+        if type(MSUF.GF.RefreshAll) == "function" then
+            MSUF.GF.RefreshAll()
+        elseif type(MSUF.GF.RefreshVisuals) == "function" then
+            MSUF.GF.RefreshVisuals()
+        end
+        if type(MSUF.GF.RefreshPreviewLayout) == "function" then MSUF.GF.RefreshPreviewLayout() end
+        return true
+    end
+    return false
+end
+
+local function ScheduleNextFrame(key, fn)
+    if type(fn) ~= "function" then return false end
+    A.undoNextFramePending = A.undoNextFramePending or {}
+    A.undoNextFrameOrder = A.undoNextFrameOrder or {}
+    local nextFramePending = A.undoNextFramePending
+    local nextFrameOrder = A.undoNextFrameOrder
+    key = tostring(key or "MSUF_ASSISTANT_BROAD_APPLY")
+    if nextFramePending[key] == nil then
+        nextFrameOrder[#nextFrameOrder + 1] = key
+    end
+    nextFramePending[key] = fn
+    if A.undoNextFrameQueued then return true end
+    A.undoNextFrameQueued = true
+    local function Run()
+        A.undoNextFrameQueued = false
+        local pending = A.undoNextFramePending or {}
+        local order = A.undoNextFrameOrder or {}
+        A.undoNextFramePending = {}
+        A.undoNextFrameOrder = {}
+        for i = 1, #order do
+            local cb = pending[order[i]]
+            if type(cb) == "function" then cb() end
+        end
+    end
     if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        _G.C_Timer.After(0, fn)
+        _G.C_Timer.After(0, Run)
     else
-        fn()
+        Run()
     end
     return true
 end
@@ -97,17 +157,10 @@ local function BroadApply(reason)
     reason = reason or "MSUF_ASSISTANT_UNDO"
     RequestBroadRuntime(reason)
     FlushApplyService()
-    if MSUF and MSUF.GF then
-        if type(MSUF.GF.RefreshAll) == "function" then
-            MSUF.GF.RefreshAll()
-        else
-            if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
-        end
-        if type(MSUF.GF.RefreshPreviewLayout) == "function" then MSUF.GF.RefreshPreviewLayout() end
-    end
-    if MSUF and MSUF.MSUF_Auras3 and type(MSUF.MSUF_Auras3.RequestApply) == "function" then
-        MSUF.MSUF_Auras3.RequestApply()
-    end
+    RequestGroupRuntime(reason)
+    FlushApplyService()
+    RequestAurasRuntime(reason)
+    FlushApplyService()
     if M and type(M.MarkMenuDataDirty) == "function" then M.MarkMenuDataDirty(reason) end
     if M and M.frame and M.frame.IsShown and M.frame:IsShown() then
         if type(M.RequestRefresh) == "function" then M.RequestRefresh(nil, reason) elseif type(M.Refresh) == "function" then M.Refresh() end
@@ -124,19 +177,12 @@ local function BroadApplySteps(reason)
             FlushApplyService()
         end,
         function()
-            if MSUF and MSUF.GF then
-                if type(MSUF.GF.RefreshAll) == "function" then
-                    MSUF.GF.RefreshAll()
-                else
-                    if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
-                end
-                if type(MSUF.GF.RefreshPreviewLayout) == "function" then MSUF.GF.RefreshPreviewLayout() end
-            end
+            RequestGroupRuntime(reason)
+            FlushApplyService()
         end,
         function()
-            if MSUF and MSUF.MSUF_Auras3 and type(MSUF.MSUF_Auras3.RequestApply) == "function" then
-                MSUF.MSUF_Auras3.RequestApply()
-            end
+            RequestAurasRuntime(reason)
+            FlushApplyService()
             if M and type(M.MarkMenuDataDirty) == "function" then M.MarkMenuDataDirty(reason) end
             if M and M.frame and M.frame.IsShown and M.frame:IsShown() then
                 if type(M.RequestRefresh) == "function" then M.RequestRefresh(nil, reason) elseif type(M.Refresh) == "function" then M.Refresh() end

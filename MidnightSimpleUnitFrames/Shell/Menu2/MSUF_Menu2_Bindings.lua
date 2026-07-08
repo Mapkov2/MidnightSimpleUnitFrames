@@ -254,9 +254,7 @@ local function QueueMenuRefresh()
         refreshQueued = false
         if M.frame and M.frame.IsShown and M.frame:IsShown() and M.Refresh then M.Refresh() end
     end
-    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
-        _G.MSUF_ScheduleDelayOnce("MSUF2_MENU_HISTORY_REFRESH", MENU_REFRESH_DELAY, Run)
-    elseif C_Timer and C_Timer.After then
+    if C_Timer and C_Timer.After then
         C_Timer.After(MENU_REFRESH_DELAY, Run)
     else
         Run()
@@ -308,12 +306,174 @@ local function RebuildActivePage()
         NotifyHistoryChanged(true)
     end
 end
-local function ApplyHistorySnapshot(snapshot, reason)
+local function NormalizeHistoryUnit(unit)
+    if ApplyService.NormalizeUnit then return ApplyService.NormalizeUnit(unit) end
+    unit = (unit == "tot") and "targettarget" or unit
+    unit = (unit == "focus_target" or unit == "focustargettarget") and "focustarget" or unit
+    if not UNIT_KEYS[unit] then return nil end
+    return unit
+end
+local HISTORY_PAGE_RESET_UNITS = {
+    uf_player = "player",
+    uf_target = "target",
+    uf_targettarget = "targettarget",
+    uf_focustarget = "focustarget",
+    uf_focus = "focus",
+    uf_pet = "pet",
+    uf_boss = "boss",
+}
+local HISTORY_PAGE_RESET_FEATURES = {
+    opt_castbar = "castbar",
+    classpower = "classpower",
+    gameplay = "gameplay",
+    modules = "modules",
+}
+local HISTORY_CLASSPOWER_RUNTIME = { full = true, cdm = true }
+local HISTORY_CLASSPOWER_FLAGS = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
+local COLOR_CLASSPOWER_RUNTIME = { colors = true, playerHP = true }
+local COLOR_CLASSPOWER_FLAGS = { preview = true, applyAll = false, colors = true, colorScope = "player" }
+local function HistoryUnitFromSource(source)
+    if type(source) ~= "string" then return nil end
+    local unit = source:match("^unit:([^:]+):")
+    if unit then return NormalizeHistoryUnit(unit) end
+    unit = source:match("^apply:unit:([^:]+):")
+    if unit then return NormalizeHistoryUnit(unit) end
+    local pageKey = source:match("^page:reset:([^:]+)$")
+    if pageKey then return NormalizeHistoryUnit(HISTORY_PAGE_RESET_UNITS[pageKey]) end
+end
+local function HistoryFeatureFromSource(source)
+    if type(source) ~= "string" then return nil end
+    local pageKey = source:match("^page:reset:([^:]+)$")
+    if pageKey then return HISTORY_PAGE_RESET_FEATURES[pageKey] end
+end
+local function ApplyScopedFeatureRuntime(kind, reason)
+    kind = tostring(kind or "")
+    reason = reason or "MSUF2_HISTORY_FEATURE"
+    if kind == "castbar" then
+        if ApplyService.RequestCastbars then return ApplyService.RequestCastbars(reason, "history") ~= false end
+        if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { history = false, preview = true, applyAll = false, castbar = true, castbarTextures = true }) ~= false end
+        local did = CallGlobal("MSUF_UpdateCastbarVisuals")
+        did = CallGlobal("MSUF_UpdateBossCastbarPreview") or did
+        return did
+    end
+    if kind == "classpower" then
+        if ApplyService.RequestClassPower then
+            ApplyService.RequestClassPower(reason, HISTORY_CLASSPOWER_RUNTIME, HISTORY_CLASSPOWER_FLAGS)
+            return true
+        end
+        return CallGlobal("MSUF_ClassPower_Apply", { full = true, cdm = true })
+    end
+    if kind == "gameplay" then
+        if M.ApplyGameplay then
+            local ok, result = SafeInvoke(M.ApplyGameplay)
+            return ok == true and result ~= false
+        end
+        if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
+            local ok, result = SafeInvoke(MSUF.MSUF_RequestGameplayApply, reason)
+            return ok == true and result ~= false
+        end
+        if MSUF and type(MSUF.MSUF_ApplyGameplayVisuals) == "function" then
+            local ok, result = SafeInvoke(MSUF.MSUF_ApplyGameplayVisuals)
+            return ok == true and result ~= false
+        end
+        return false
+    end
+    if kind == "modules" then
+        return CallGlobal("MSUF_ApplyModules")
+    end
+    return false
+end
+local function ApplyScopedHistoryRestore(reason, source)
+    local unit = HistoryUnitFromSource(source)
+    local applyReason = reason or "MSUF2_HISTORY_UNIT"
+    if unit then
+        local opts = {
+            history = false,
+            preview = true,
+            text = true,
+            power = true,
+            fonts = true,
+            alpha = true,
+            castbar = true,
+            auras = true,
+        }
+        local ok = M.RequestUnitApply(unit, applyReason, opts) ~= false
+        if ApplyService.RequestGeneral then
+            ApplyService.RequestGeneral(applyReason, {
+                applyAll = false,
+                notify = false,
+                preview = false,
+                bars = true,
+                barsScope = unit,
+                colors = true,
+                colorScope = unit,
+            })
+            ok = true
+        end
+        return ok
+    end
+    local feature = HistoryFeatureFromSource(source)
+    if feature then return ApplyScopedFeatureRuntime(feature, applyReason) end
+    return false
+end
+
+local function RequestHistoryAurasRuntime(reason)
+    if ApplyService.RequestAuraFonts then
+        ApplyService.RequestAuraFonts("shared", reason or "MSUF2_HISTORY_AURAS")
+        return true
+    end
+    if ApplyService.RequestAuras then
+        ApplyService.RequestAuras("shared", reason or "MSUF2_HISTORY_AURAS")
+        return true
+    end
+    local auras = MSUF and MSUF.MSUF_Auras3
+    if auras and type(auras.RequestApply) == "function" then
+        SafeInvoke(auras.RequestApply)
+        return true
+    end
+    return false
+end
+
+local function RequestHistoryGroupRuntime(reason)
+    if ApplyService.RequestGroupReset then
+        ApplyService.RequestGroupReset(reason or "MSUF2_HISTORY_GROUP")
+        return true
+    end
+    if ApplyService.RequestGroup then
+        ApplyService.RequestGroup("group", "reset", reason or "MSUF2_HISTORY_GROUP")
+        return true
+    end
+    if MSUF and MSUF.GF then
+        if type(MSUF.GF.RefreshAll) == "function" then
+            SafeInvoke(MSUF.GF.RefreshAll)
+        else
+            if type(MSUF.GF.RefreshVisuals) == "function" then SafeInvoke(MSUF.GF.RefreshVisuals) end
+        end
+        if type(MSUF.GF.RefreshPreviewLayout) == "function" then SafeInvoke(MSUF.GF.RefreshPreviewLayout) end
+        return true
+    end
+    return false
+end
+
+local function FlushApplyServiceNow()
+    if ApplyService.Flush then
+        ApplyService.Flush()
+        return true
+    end
+    return false
+end
+
+local function ApplyHistorySnapshot(snapshot, reason, source)
     if type(snapshot) ~= "table" then return false end
     historyRestoring = true
     DeepReplace(M.EnsureDB(), snapshot)
     if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
+    if ApplyScopedHistoryRestore(reason, source) then
+        M.CallIf(M.MarkMenuDataDirty, reason or "history")
+        RebuildActivePage()
+        return true
+    end
     -- A restored profile snapshot may span UnitFrames, Auras3, ClassPower, GroupFrames, and
     -- Menu2 state, so restore fanout is centralized and explicit.
     M.RequestGeneralApply(reason or "MSUF2_HISTORY", { preview = true, alpha = true, castbar = true })
@@ -338,21 +498,12 @@ local function ApplyHistorySnapshot(snapshot, reason)
             if ok and type(scale) == "number" then M.frame:SetScale(scale) end
         end
     end
-    local auras = MSUF and MSUF.MSUF_Auras3
-    if auras and type(auras.RequestApply) == "function" then
-        SafeInvoke(auras.RequestApply)
-    end
+    RequestHistoryAurasRuntime(reason or "MSUF2_HISTORY_AURAS")
     if ApplyService.ApplyProfileFanout then
         ApplyService.ApplyProfileFanout("MSUF2_PROFILE_APPLY")
     end
-    if MSUF and MSUF.GF then
-        if type(MSUF.GF.RefreshAll) == "function" then
-            SafeInvoke(MSUF.GF.RefreshAll)
-        else
-            if type(MSUF.GF.RefreshVisuals) == "function" then SafeInvoke(MSUF.GF.RefreshVisuals) end
-        end
-        if type(MSUF.GF.RefreshPreviewLayout) == "function" then SafeInvoke(MSUF.GF.RefreshPreviewLayout) end
-    end
+    RequestHistoryGroupRuntime(reason or "MSUF2_HISTORY_GROUP")
+    FlushApplyServiceNow()
     M.CallIf(M.ApplyLocaleSelection)
     M.CallIf(M.MarkMenuDataDirty, reason or "history")
     RebuildActivePage()
@@ -486,7 +637,7 @@ function M.Undo()
     local entry = table.remove(undo)
     if not entry then return false end
     redo[#redo + 1] = entry
-    local ok = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO")
+    local ok = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO", entry.source)
     if ok and historySessionActive then historySessionDirty = #undo > 0 end
     NotifyHistoryChanged()
     if ok then CommandFeedback("Undid " .. FeedbackLabel(entry.label), "info", 1.25) end
@@ -498,7 +649,7 @@ function M.Redo()
     local entry = table.remove(redo)
     if not entry then return false end
     undo[#undo + 1] = entry
-    local ok = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO")
+    local ok = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO", entry.source)
     if ok and historySessionActive then historySessionDirty = true end
     NotifyHistoryChanged()
     if ok then CommandFeedback("Redid " .. FeedbackLabel(entry.label), "info", 1.25) end
@@ -591,13 +742,14 @@ local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf
 local CASTBAR_SUFFIX_KEYS = WL "TimeFormat IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderStyle SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY"
 local function BuildUnitCastbarResetKeys(spec)
     local keys = { spec.enable, spec.backend .. "Backend", spec.backend .. "BackendBeforeHide", spec.time, spec.icon, spec.name }
+    if spec.targetName then keys[#keys + 1] = spec.targetName end
     for i = 1, #CASTBAR_SUFFIX_KEYS do keys[#keys + 1] = spec.base .. CASTBAR_SUFFIX_KEYS[i] end
     return keys
 end
 local UNIT_CASTBAR_GENERAL_KEYS = {
     player = BuildUnitCastbarResetKeys({ base = "castbarPlayer", backend = "castbarPlayer", enable = "enablePlayerCastbar", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName" }),
-    target = BuildUnitCastbarResetKeys({ base = "castbarTarget", backend = "castbarTarget", enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName" }),
-    focus = BuildUnitCastbarResetKeys({ base = "castbarFocus", backend = "castbarFocus", enable = "enableFocusCastbar", time = "showFocusCastTime", icon = "castbarFocusShowIcon", name = "castbarFocusShowSpellName" }),
+    target = BuildUnitCastbarResetKeys({ base = "castbarTarget", backend = "castbarTarget", enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName", targetName = "castbarTargetShowTargetName" }),
+    focus = BuildUnitCastbarResetKeys({ base = "castbarFocus", backend = "castbarFocus", enable = "enableFocusCastbar", time = "showFocusCastTime", icon = "castbarFocusShowIcon", name = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName" }),
     boss = BuildUnitCastbarResetKeys({ base = "bossCast", backend = "bossCastbar", enable = "enableBossCastbar", time = "showBossCastTime", icon = "showBossCastIcon", name = "showBossCastName" }),
 }
 local function ResetInfo(label, kind, summary)
@@ -645,7 +797,7 @@ local BARS_GENERAL_KEYS = KSW [[
 ]]
 local BARS_SCOPE_KEYS = KSW [[
     hlOverride hpPowerTextOverride barTexture barBackgroundTexture barBgTexture absorbTextMode absorbAnchorMode healPredEnabled healPredAnchorMode
-    overAbsorbOverlay absorbBarOpacity healAbsorbBarOpacity barOutlineThickness highlightBorderThickness hlAggroSize
+    overAbsorbOverlay absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLevelOffset highlightBorderThickness hlAggroSize
     aggroOutlineMode dispelOutlineMode dispelBorderTrigger unitDispelOverlayEnabled unitDispelOverlayStyle
     unitDispelOverlayOnHealth unitDispelOverlayAlpha unitDispelOverlayTrigger
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
@@ -653,7 +805,7 @@ local BARS_SCOPE_KEYS = KSW [[
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
 ]]
 local BARS_TABLE_KEYS = KSW [[
-    barOutlineThickness smoothPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
+    barOutlineThickness barOutlineLevelOffset smoothPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedMouseover
 ]]
 local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth"
@@ -883,46 +1035,7 @@ local PAGE_RESET_HANDLERS = {
     gameplay = ResetGameplayPage,
     modules = ResetModulesPage,
 }
-local function ApplyAfterPageReset(pageKey, info)
-    local reason = "MSUF2_RESET_" .. tostring(pageKey or "PAGE")
-    if info and info.unit and M.RequestUnitApply then M.RequestUnitApply(info.unit, reason, { preview = true, text = true, power = true, alpha = true, castbar = true }) end
-    if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true, frames = true }) end
-    if info and info.kind == "gameplay" then M.CallIf(M.ApplyGameplay) end
-    local auras = MSUF and MSUF.MSUF_Auras3
-    -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
-    -- secure group headers or Auras3 lanes unnecessarily.
-    if info and (info.kind == "auras" or info.kind == "colors") then
-        if auras and type(auras.RequestApply) == "function" then
-            SafeInvoke(auras.RequestApply)
-        end
-    end
-    if info and (info.kind == "group" or info.kind == "bars" or info.kind == "fonts" or info.kind == "colors") then
-        local gf = MSUF and MSUF.GF
-        if gf then
-            if type(gf.InvalidateConfCache) == "function" then SafeInvoke(gf.InvalidateConfCache) end
-            if info.kind == "group" and type(gf.RefreshAll) == "function" then
-                SafeInvoke(gf.RefreshAll)
-            elseif info.kind == "fonts" and type(gf.RefreshFonts) == "function" then
-                SafeInvoke(gf.RefreshFonts)
-            elseif info.kind == "colors" and type(gf.RefreshColors) == "function" then
-                SafeInvoke(gf.RefreshColors)
-            elseif type(gf.RefreshVisuals) == "function" then
-                SafeInvoke(gf.RefreshVisuals, nil, gf.DIRTY_VISUAL or 2)
-            elseif type(gf.RebuildAll) == "function" then
-                SafeInvoke(gf.RebuildAll)
-            end
-            if type(gf.RequestAuraRefresh) == "function" then SafeInvoke(gf.RequestAuraRefresh) end
-        end
-    end
-    if info and info.kind == "classpower" then
-        CallGlobal("MSUF_ClassPower_Refresh")
-        CallGlobal("MSUF_ClassPower_RefreshTextures")
-        CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
-    end
-    if info and info.kind == "modules" then CallGlobal("MSUF_ApplyModules") end
-    if ApplyService.ApplyRestoreFanout then
-        ApplyService.ApplyRestoreFanout("MSUF2_RESTORE")
-    end
+local function FinishPageResetApply(pageKey)
     M.CallIf(M.ApplyLocaleSelection)
     if M.ApplyMenuFrameScale and M.frame then SafeInvoke(M.ApplyMenuFrameScale, M.frame) end
     if pageKey and M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
@@ -932,6 +1045,167 @@ local function ApplyAfterPageReset(pageKey, info)
     else
         QueueMenuRefresh()
     end
+end
+
+local function ApplyGroupPageResetRuntime(reason)
+    if ApplyService.RequestGroupReset then
+        return ApplyService.RequestGroupReset(reason or "MSUF2_RESET_GROUP") ~= false
+    end
+    local gf = MSUF and MSUF.GF
+    if not gf then return false end
+    if type(gf.InvalidateConfCache) == "function" then SafeInvoke(gf.InvalidateConfCache) end
+    if type(gf.RefreshAll) == "function" then
+        SafeInvoke(gf.RefreshAll)
+    elseif type(gf.RebuildAll) == "function" then
+        SafeInvoke(gf.RebuildAll)
+    elseif type(gf.RefreshVisuals) == "function" then
+        SafeInvoke(gf.RefreshVisuals, nil, gf.DIRTY_ALL or gf.DIRTY_CONFIG or gf.DIRTY_VISUAL)
+    end
+    if type(gf.RequestAuraRefresh) == "function" then SafeInvoke(gf.RequestAuraRefresh) end
+    if type(gf.RefreshPreviewLayout) == "function" then SafeInvoke(gf.RefreshPreviewLayout) end
+    return true
+end
+
+local function ApplyAurasPageResetRuntime(reason, visuals)
+    if visuals and ApplyService.RequestAuraFonts then
+        return ApplyService.RequestAuraFonts("shared", reason or "MSUF2_RESET_AURA_VISUALS") ~= false
+    end
+    if ApplyService.RequestAuras then
+        return ApplyService.RequestAuras("shared", reason or "MSUF2_RESET_AURAS", visuals and { visuals = true } or nil) ~= false
+    end
+    local auras = MSUF and MSUF.MSUF_Auras3
+    if auras and type(auras.RequestApply) == "function" then
+        SafeInvoke(auras.RequestApply, "shared", reason or "MSUF2_RESET_AURAS")
+        return true
+    end
+    if auras and type(auras.RefreshAll) == "function" then
+        SafeInvoke(auras.RefreshAll)
+        return true
+    end
+    return false
+end
+
+local function ApplyDomainPageResetRuntime(info, reason)
+    if not info then return false end
+    local kind = info.kind
+    if kind == "group" then
+        return ApplyGroupPageResetRuntime(reason)
+    end
+    if kind == "bars" then
+        if ApplyService.RequestBars then return ApplyService.RequestBars(reason) ~= false end
+        if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { preview = true, applyAll = false, bars = true }) ~= false end
+        return false
+    end
+    if kind == "fonts" then
+        if ApplyService.RequestFonts then return ApplyService.RequestFonts(reason) ~= false end
+        if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { preview = true, applyAll = false, fonts = true }) ~= false end
+        return false
+    end
+    if kind == "colors" then
+        local did = false
+        if ApplyService.RequestColors then
+            did = ApplyService.RequestColors(reason) ~= false or did
+        elseif M.RequestGeneralApply then
+            M.RequestGeneralApply(reason, { preview = true, applyAll = false, colors = true })
+            did = true
+        end
+        did = ApplyAurasPageResetRuntime(reason, true) or did
+        if ApplyService.RequestClassPower then
+            ApplyService.RequestClassPower(reason or "MSUF2_RESET_COLORS", COLOR_CLASSPOWER_RUNTIME, COLOR_CLASSPOWER_FLAGS)
+            did = true
+        else
+            did = CallGlobal("MSUF_ClassPower_InvalidateColors") or did
+        end
+        return did
+    end
+    if kind == "auras" then
+        return ApplyAurasPageResetRuntime(reason)
+    end
+    return false
+end
+
+local function ApplyAfterPageReset(pageKey, info)
+    local reason = "MSUF2_RESET_" .. tostring(pageKey or "PAGE")
+    if info and info.kind == "unit" and info.unit then
+        if M.RequestUnitApply then
+            M.RequestUnitApply(info.unit, reason, { history = false, preview = true, text = true, power = true, fonts = true, alpha = true, castbar = true, auras = true })
+        end
+        if ApplyService.RequestGeneral then
+            ApplyService.RequestGeneral(reason, {
+                applyAll = false,
+                notify = false,
+                preview = false,
+                bars = true,
+                barsScope = info.unit,
+                colors = true,
+                colorScope = info.unit,
+            })
+        end
+        FinishPageResetApply(pageKey)
+        return
+    end
+    if info and ApplyScopedFeatureRuntime(info.kind, reason) then
+        FinishPageResetApply(pageKey)
+        return
+    end
+    if ApplyDomainPageResetRuntime(info, reason) then
+        FinishPageResetApply(pageKey)
+        return
+    end
+    if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true, frames = true }) end
+    if info and info.kind == "gameplay" then M.CallIf(M.ApplyGameplay) end
+    -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
+    -- secure group headers or Auras3 lanes unnecessarily.
+    if info and (info.kind == "auras" or info.kind == "colors") then
+        ApplyAurasPageResetRuntime(reason, info.kind == "colors")
+    end
+    if info and (info.kind == "group" or info.kind == "bars" or info.kind == "fonts" or info.kind == "colors") then
+        if info.kind == "group" then
+            ApplyGroupPageResetRuntime(reason)
+        elseif ApplyService.RequestGroupDirtyMask then
+            local gf = MSUF and MSUF.GF
+            local dirty = gf and ((info.kind == "fonts" and gf.DIRTY_FONT)
+                or (info.kind == "colors" and gf.DIRTY_COLOR)
+                or gf.DIRTY_VISUAL)
+            if dirty then
+                ApplyService.RequestGroupDirtyMask("group", dirty, reason)
+            elseif ApplyService.RequestGroup then
+                local mode = (info.kind == "fonts" and "fonts") or (info.kind == "colors" and "colors") or "visual"
+                ApplyService.RequestGroup("group", mode, reason)
+            end
+        elseif ApplyService.RequestGroup then
+            local mode = (info.kind == "fonts" and "fonts") or (info.kind == "colors" and "colors") or "visual"
+            ApplyService.RequestGroup("group", mode, reason)
+        else
+            local gf = MSUF and MSUF.GF
+            if gf then
+                if type(gf.InvalidateConfCache) == "function" then SafeInvoke(gf.InvalidateConfCache) end
+                if info.kind == "fonts" and type(gf.RefreshFonts) == "function" then
+                    SafeInvoke(gf.RefreshFonts)
+                elseif info.kind == "colors" and type(gf.RefreshColors) == "function" then
+                    SafeInvoke(gf.RefreshColors)
+                elseif type(gf.RefreshVisuals) == "function" then
+                    SafeInvoke(gf.RefreshVisuals, nil, gf.DIRTY_VISUAL or 2)
+                elseif type(gf.RebuildAll) == "function" then
+                    SafeInvoke(gf.RebuildAll)
+                end
+                if type(gf.RequestAuraRefresh) == "function" then SafeInvoke(gf.RequestAuraRefresh) end
+            end
+        end
+    end
+    if info and info.kind == "classpower" then
+        if ApplyService.RequestClassPower then
+            ApplyService.RequestClassPower(reason or "MSUF2_RESET_CLASSPOWER", { full = true, cdm = true }, { preview = true, applyAll = false, classpower = true })
+        else
+            CallGlobal("MSUF_ClassPower_Apply", { full = true, cdm = true })
+        end
+    end
+    if info and info.kind == "modules" then CallGlobal("MSUF_ApplyModules") end
+    if ApplyService.ApplyRestoreFanout then
+        ApplyService.ApplyRestoreFanout("MSUF2_RESTORE")
+    end
+    FlushApplyServiceNow()
+    FinishPageResetApply(pageKey)
 end
 local function ResetProfilePage()
     local name = _G.MSUF_ActiveProfile or "Default"

@@ -2,10 +2,11 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+local C_Timer = _G.C_Timer
 
 -- Menu2 Group page foundation.
--- Owns party/raid/mythicraid option binding, preview sync, and page-local batching. Secure
--- header creation/rebuilds remain in the GroupFrames runtime and are only requested here.
+-- Owns party/raid/mythicraid option binding and preview sync. Apply work is routed through
+-- the shared Menu2 ApplyService when available; the page-local queue remains as a fallback.
 local W = M.Widgets
 local T = M.Theme
 local ControlGates = M.ControlGates or {}
@@ -28,6 +29,56 @@ local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, "pv
     [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon]], "enabled iconStyle customIcon size anchor x y layer")
 local function GF()
     return MSUF and MSUF.GF
+end
+local function CurrentApplyService()
+    local apply = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
+    if type(apply) == "table" then return apply end
+    return nil
+end
+local function MaskHas(mask, flag)
+    mask = tonumber(mask) or 0
+    flag = tonumber(flag) or 0
+    if flag <= 0 then return false end
+    return mask % (flag * 2) >= flag
+end
+local function AddDirty(mask, flag)
+    if not flag then return mask or 0 end
+    mask = tonumber(mask) or 0
+    if MaskHas(mask, flag) then return mask end
+    return mask + flag
+end
+local function MergeDirtyMask(gf, current, incoming)
+    if not current then return incoming end
+    if not incoming then return current end
+    if current == true or incoming == true then return true end
+    if gf then
+        if current == gf.DIRTY_ALL or incoming == gf.DIRTY_ALL then return gf.DIRTY_ALL end
+        if current == gf.DIRTY_CONFIG or incoming == gf.DIRTY_CONFIG then return gf.DIRTY_CONFIG end
+    end
+    if type(current) ~= "number" or type(incoming) ~= "number" then return incoming end
+    local out = current
+    if gf then
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_VISUAL) and gf.DIRTY_VISUAL or nil)
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_FONT) and gf.DIRTY_FONT or nil)
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_COLOR) and gf.DIRTY_COLOR or nil)
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_BORDER) and gf.DIRTY_BORDER or nil)
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_GEOMETRY) and gf.DIRTY_GEOMETRY or nil)
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_LAYOUT) and gf.DIRTY_LAYOUT or nil)
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AURAS) and gf.DIRTY_AURAS or nil)
+        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_UNIT_BINDING) and gf.DIRTY_UNIT_BINDING or nil)
+    end
+    return out
+end
+local function ModeDirtyMask(gf, mode)
+    if not gf then return nil end
+    if mode == "visual" or mode == nil then return gf.DIRTY_VISUAL end
+    if mode == "font" or mode == "fonts" then return gf.DIRTY_FONT end
+    if mode == "color" or mode == "colors" then return gf.DIRTY_COLOR end
+    if mode == "border" or mode == "borders" then return gf.DIRTY_BORDER end
+    if mode == "auras" then return gf.DIRTY_AURAS end
+    if mode == "geometry" then return AddDirty(gf.DIRTY_GEOMETRY, gf.DIRTY_LAYOUT) end
+    if mode == "config" then return gf.DIRTY_CONFIG end
+    return nil
 end
 local function GroupProfileStart()
     return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
@@ -93,44 +144,61 @@ local function FlushGF()
     end
     local rebuild = pendingGF.rebuild
     local geometry = pendingGF.geometry
-    local visual = pendingGF.visual
-    local font = pendingGF.font
-    local auras = pendingGF.auras
+    local dirtyMask = pendingGF.dirtyMask
     local kind = pendingGF.kind
     pendingGF.rebuild = nil
     pendingGF.geometry = nil
-    pendingGF.visual = nil
-    pendingGF.font = nil
-    pendingGF.auras = nil
+    pendingGF.dirtyMask = nil
     pendingGF.kind = nil
     if kind == false then kind = nil end
     if InCombatLockdown and InCombatLockdown() then
-        if rebuild and type(gf.RebuildAll) == "function" then gf.RebuildAll() end
-        if geometry then gf._pendingRefreshGeometry = true end
-        if auras and type(gf.DeferGroupRuntime) == "function" then gf.DeferGroupRuntime("refresh", kind, gf.DIRTY_AURAS) end
-        if font or visual or auras then gf._pendingRefreshVisuals = true end
+        if rebuild and type(gf.Rebuild) == "function" then
+            gf.Rebuild(kind)
+            RefreshGFPreview(kind)
+            GroupProfileStop("FlushGF", started)
+            return
+        elseif rebuild and type(gf.RebuildAll) == "function" then
+            gf.RebuildAll()
+            RefreshGFPreview(kind)
+            GroupProfileStop("FlushGF", started)
+            return
+        end
+        if geometry and type(gf.DeferGroupRuntime) == "function" then
+            gf.DeferGroupRuntime("layout", kind, dirtyMask)
+        elseif geometry then
+            gf._pendingRefreshGeometry = true
+        end
+        if dirtyMask and not geometry and type(gf.DeferGroupRuntime) == "function" then
+            gf.DeferGroupRuntime("refresh", kind, dirtyMask)
+        elseif dirtyMask and not geometry then
+            gf._pendingRefreshVisuals = true
+        end
         RefreshGFPreview(kind)
         GroupProfileStop("FlushGF", started)
         return
     end
-    if rebuild and type(gf.RebuildAll) == "function" then
-        gf.RebuildAll()
+    if rebuild then
+        if type(gf.Rebuild) == "function" then
+            gf.Rebuild(kind)
+        elseif type(gf.RebuildAll) == "function" then
+            gf.RebuildAll()
+        end
         RefreshGFPreview()
         GroupProfileStop("FlushGF", started)
         return
     end
     if geometry then
-        if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry() end
+        if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry(kind) end
     end
-    if font and type(gf.RefreshFonts) == "function" then gf.RefreshFonts(kind) end
-    if auras and type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind, gf.DIRTY_AURAS) end
-    if visual then
-        if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind) end
+    if dirtyMask then
+        if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind, dirtyMask) end
     end
     RefreshGFPreview(kind)
     GroupProfileStop("FlushGF", started)
 end
-local function QueueGF(kind, mode)
+local QueueGF
+local function QueueGFLegacy(kind, mode)
+    local gf = GF()
     if kind ~= nil then
         if pendingGF.kind == nil then
             pendingGF.kind = kind
@@ -140,20 +208,45 @@ local function QueueGF(kind, mode)
     end
     if mode == "rebuild" then pendingGF.rebuild = true end
     if mode == "geometry" then pendingGF.geometry = true end
-    if mode == "visual" then pendingGF.visual = true end
-    if mode == "font" then pendingGF.font = true end
-    if mode == "auras" then pendingGF.auras = true end
+    local dirty = ModeDirtyMask(gf, mode)
+    if dirty then pendingGF.dirtyMask = MergeDirtyMask(gf, pendingGF.dirtyMask, dirty) end
     if gfFlushQueued then return end
     gfFlushQueued = true
-    if type(_G.MSUF_ScheduleDelayOnce) == "function" then
-        _G.MSUF_ScheduleDelayOnce("MSUF2_GF_APPLY", GF_APPLY_DELAY, FlushGF)
-    elseif type(_G.MSUF_ScheduleOnce) == "function" then
-        _G.MSUF_ScheduleOnce("MSUF2_GF_APPLY", FlushGF)
-    elseif _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(GF_APPLY_DELAY, FlushGF)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(GF_APPLY_DELAY, FlushGF)
     else
         FlushGF()
     end
+end
+local function QueueGFDirtyMask(kind, dirtyMask)
+    local gf = GF()
+    if not dirtyMask then return QueueGF(kind, "visual") end
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestGroupDirtyMask) == "function" then
+        return apply.RequestGroupDirtyMask(kind, dirtyMask, "GF_PAGE_DIRTY")
+    end
+    if kind ~= nil then
+        if pendingGF.kind == nil then
+            pendingGF.kind = kind
+        elseif pendingGF.kind ~= kind then
+            pendingGF.kind = false
+        end
+    end
+    pendingGF.dirtyMask = MergeDirtyMask(gf, pendingGF.dirtyMask, dirtyMask)
+    if gfFlushQueued then return end
+    gfFlushQueued = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(GF_APPLY_DELAY, FlushGF)
+    else
+        FlushGF()
+    end
+end
+function QueueGF(kind, mode)
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestGroup) == "function" then
+        return apply.RequestGroup(kind, mode or "visual", "GF_PAGE")
+    end
+    return QueueGFLegacy(kind, mode)
 end
 local function Set(kind, key, value, mode)
     local function Write()
@@ -213,6 +306,19 @@ local function NewGFCopyScopes()
     end
     return scopes
 end
+local function GroupCopyDirtyMask(scopes)
+    local gf = GF()
+    if not gf or type(scopes) ~= "table" then return nil end
+    if scopes.general then return nil end
+    if scopes.health or scopes.text or scopes.range or scopes.indicators or scopes.highlight or scopes.dstripe or scopes.features then
+        return gf.DIRTY_CONFIG or gf.DIRTY_ALL or gf.DIRTY_VISUAL
+    end
+    local dirty
+    if scopes.font then dirty = AddDirty(dirty, gf.DIRTY_FONT) end
+    if scopes.border then dirty = AddDirty(dirty, gf.DIRTY_BORDER) end
+    if scopes.auras then dirty = AddDirty(dirty, gf.DIRTY_AURAS) end
+    return dirty or gf.DIRTY_VISUAL
+end
 local function CopyGroupSettings(srcKind, dstKind, scopes)
     local srcConf = Conf(srcKind)
     local dstConf = Conf(dstKind)
@@ -248,7 +354,11 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
             if copy then dstConf[key] = DeepCopy(value) end
         end
     end
-    QueueGF(dstKind, "rebuild")
+    if scopes.general then
+        QueueGF(dstKind, "rebuild")
+    else
+        QueueGFDirtyMask(dstKind, GroupCopyDirtyMask(scopes))
+    end
     RefreshGFPreview()
     return true
 end
@@ -1042,6 +1152,7 @@ M.Assign(GroupPage, {
     GF = GF,
     RefreshGFPreview = RefreshGFPreview,
     QueueGF = QueueGF,
+    QueueGFDirtyMask = QueueGFDirtyMask,
     RefreshContext = RefreshContext,
     ScopeSection = ScopeSection,
     BindScopeToggle = BindScopeToggle,

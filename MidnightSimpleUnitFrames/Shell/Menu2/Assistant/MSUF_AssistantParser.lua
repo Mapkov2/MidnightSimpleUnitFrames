@@ -4076,6 +4076,41 @@ local function ParseDispelBorderTriggerFastShortcut(text)
     }
 end
 
+function A._DispelBorderTriggerValue(setting, text)
+    local value = GroupDispelOverlayTriggerValue(text)
+    if value == "BORDER" then value = nil end
+    if value == nil and setting and P.EnumValueForText then value = P.EnumValueForText(setting, text) end
+    if value == nil and setting and P.ValueForRegistrySetting then value = P.ValueForRegistrySetting(setting, text, text) end
+    return value
+end
+
+function A._ParseScopedDispelBorderTriggerFastShortcut(text)
+    if not ContainsAny(text, P.RootPhrases[536]) then return nil end
+    if ContainsAny(text, P.RootPhrases[537]) then return nil end
+    local units = DetectUnits and DetectUnits(text) or {}
+    if #units == 0 then return nil end
+
+    local changes = {}
+    local seen = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        if unit ~= "" and not seen[unit] then
+            seen[unit] = true
+            local setting = A.Registry and A.Registry:GetSetting("barScope." .. unit .. ".dispelBorderTrigger")
+            local value = setting and A._DispelBorderTriggerValue(setting, text) or nil
+            if setting and value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = #changes == 1 and (changes[1].setting.label or "Dispel Border Detects") or "Dispel Border Detects",
+        bulkSafe = #changes > 1,
+        summary = "Changes which dispellable auras can trigger scoped unit-frame dispel borders.",
+    }
+end
+
 local function ParseUnitPortraitShapeFastShortcut(text)
     if not ContainsAny(text, P.RootPhrases[538]) then return nil end
     if ContainsAny(text, P.RootPhrases[539]) then return nil end
@@ -5074,6 +5109,9 @@ function A.ParseSimpleChange(text, ctxOverride)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return nil end
     local parsed = (A._ParseHumanSafetyGuidanceShortcut and A._ParseHumanSafetyGuidanceShortcut(normalized))
+        or (A._ParseDispelOverlayOpacityShortcut and A._ParseDispelOverlayOpacityShortcut(normalized))
+        or (A._ParseScopedDispelBorderTriggerFastShortcut and A._ParseScopedDispelBorderTriggerFastShortcut(normalized))
+        or (A._ParsePowerColorTokenFastShortcut and A._ParsePowerColorTokenFastShortcut(normalized, raw))
         or (A._ParseExactColorSettingFastShortcut and A._ParseExactColorSettingFastShortcut(normalized, raw))
         or (P.ParseAmbiguousFontTextColorShortcut and P.ParseAmbiguousFontTextColorShortcut(normalized))
         or (P.ParseAmbiguousColorShortcut and P.ParseAmbiguousColorShortcut(normalized, raw))
@@ -5169,6 +5207,32 @@ function A.Parse(text, ctxOverride)
         continuationPriorityParsed.raw = raw
         continuationPriorityParsed.normalized = normalized
         return continuationPriorityParsed
+    end
+    local earlyDispelOverlayOpacityParsed = A._ParseDispelOverlayOpacityShortcut and A._ParseDispelOverlayOpacityShortcut(normalized)
+    if earlyDispelOverlayOpacityParsed then
+        earlyDispelOverlayOpacityParsed.raw = raw
+        earlyDispelOverlayOpacityParsed.normalized = normalized
+        return earlyDispelOverlayOpacityParsed
+    end
+    local earlyScopedDispelBorderTriggerParsed = A._ParseScopedDispelBorderTriggerFastShortcut and A._ParseScopedDispelBorderTriggerFastShortcut(normalized)
+    if earlyScopedDispelBorderTriggerParsed then
+        earlyScopedDispelBorderTriggerParsed.raw = raw
+        earlyScopedDispelBorderTriggerParsed.normalized = normalized
+        return earlyScopedDispelBorderTriggerParsed
+    end
+    if LooksLikeAbsorbBarCommand(normalized) then
+        local earlyAbsorbBarParsed = ParseAbsorbBarShortcut and ParseAbsorbBarShortcut(normalized, raw)
+        if earlyAbsorbBarParsed then
+            earlyAbsorbBarParsed.raw = raw
+            earlyAbsorbBarParsed.normalized = normalized
+            return earlyAbsorbBarParsed
+        end
+    end
+    local earlyPowerColorTokenParsed = A._ParsePowerColorTokenFastShortcut and A._ParsePowerColorTokenFastShortcut(normalized, raw)
+    if earlyPowerColorTokenParsed then
+        earlyPowerColorTokenParsed.raw = raw
+        earlyPowerColorTokenParsed.normalized = normalized
+        return earlyPowerColorTokenParsed
     end
     -- Long exact-alias phrases are the most specific statement of intent a
     -- sentence can carry; resolve them before any topical fast path so a

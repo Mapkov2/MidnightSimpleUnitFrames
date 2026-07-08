@@ -21,19 +21,38 @@ function A.RegistryCoreBuilders.BuildApplyHelpers(ctx)
     local CallGlobal = ctx.CallGlobal
     if type(EnsureDB) ~= "function" or type(CallGlobal) ~= "function" then return nil end
 
+    local function CurrentApplyService()
+        return (MRef and MRef.ApplyService) or _G.MSUF_Menu2_ApplyService
+    end
+
     local function ApplyUnit(unit, reason, opts)
+        reason = reason or "MSUF_ASSISTANT_UNIT"
+        opts = opts or { preview = true }
         if MRef and type(MRef.RequestUnitApply) == "function" then
-            MRef.RequestUnitApply(unit, reason or "MSUF_ASSISTANT_UNIT", opts or { preview = true })
-        else
-            local UF = MSUFRef and MSUFRef.UF
-            if UF and type(UF.Apply) == "function" then UF.Apply(unit) end
+            return MRef.RequestUnitApply(unit, reason, opts)
         end
+        local apply = CurrentApplyService()
+        if apply and type(apply.RequestUnit) == "function" then
+            return apply.RequestUnit(unit, reason, opts)
+        end
+        if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
+            _G.MSUF_UFCore_NotifyConfigChanged(unit, true, true, reason)
+            return true
+        end
+        return false
     end
 
     local function ApplyGeneral(reason, opts)
+        reason = reason or "MSUF_ASSISTANT_GENERAL"
+        opts = opts or { preview = true }
         if MRef and type(MRef.RequestGeneralApply) == "function" then
-            MRef.RequestGeneralApply(reason or "MSUF_ASSISTANT_GENERAL", opts or { preview = true })
+            return MRef.RequestGeneralApply(reason, opts)
         end
+        local apply = CurrentApplyService()
+        if apply and type(apply.RequestGeneral) == "function" then
+            return apply.RequestGeneral(reason, opts)
+        end
+        return false
     end
 
     local ApplyAura, ApplyAuraText, AuraModel, EnsureAuraFallbackDB
@@ -99,6 +118,7 @@ function A.RegistryCoreBuilders.BuildApplyHelpers(ctx)
 
     local BuildAuraApplyHelpers = A.RegistryCoreBuilders and A.RegistryCoreBuilders.BuildAuraApplyHelpers
     local AuraApplyHelpers = type(BuildAuraApplyHelpers) == "function" and BuildAuraApplyHelpers({
+        M = MRef,
         MSUF = MSUFRef,
         EnsureDB = EnsureDB,
         CallGlobal = CallGlobal,
