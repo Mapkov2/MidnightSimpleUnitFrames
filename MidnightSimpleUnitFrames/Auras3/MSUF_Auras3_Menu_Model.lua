@@ -219,6 +219,7 @@ local SHARED_LAYOUT_KEYS = {
     buffDurationBarDisplay = true,
     buffDurationBarPosition = true,
     buffDurationBarDirection = true,
+    buffShowTooltip = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
     buffStackCountAnchor = true,
@@ -229,6 +230,7 @@ local SHARED_LAYOUT_KEYS = {
     debuffDurationBarDisplay = true,
     debuffDurationBarPosition = true,
     debuffDurationBarDirection = true,
+    debuffShowTooltip = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
     debuffStackCountAnchor = true,
@@ -269,6 +271,7 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     buffDurationBarDisplay = true,
     buffDurationBarPosition = true,
     buffDurationBarDirection = true,
+    buffShowTooltip = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
     buffStackCountAnchor = true,
@@ -279,6 +282,7 @@ local STYLE_SHARED_LAYOUT_KEYS = {
     debuffDurationBarDisplay = true,
     debuffDurationBarPosition = true,
     debuffDurationBarDirection = true,
+    debuffShowTooltip = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
     debuffStackCountAnchor = true,
@@ -330,6 +334,7 @@ local LANE_STYLE_KEYS = {
         durationBarDisplay = "buffDurationBarDisplay",
         durationBarPosition = "buffDurationBarPosition",
         durationBarDirection = "buffDurationBarDirection",
+        showTooltip = "buffShowTooltip",
         showCooldownText = "buffShowCooldownText",
         showStackCount = "buffShowStackCount",
         stackCountAnchor = "buffStackCountAnchor",
@@ -350,6 +355,7 @@ local LANE_STYLE_KEYS = {
         durationBarDisplay = "debuffDurationBarDisplay",
         durationBarPosition = "debuffDurationBarPosition",
         durationBarDirection = "debuffDurationBarDirection",
+        showTooltip = "debuffShowTooltip",
         showCooldownText = "debuffShowCooldownText",
         showStackCount = "debuffShowStackCount",
         debuffTypeBorderMode = "debuffTypeBorderMode",
@@ -393,6 +399,7 @@ local DEFAULT_SHARED = {
     buffDurationBarDisplay = "BAR_ONLY",
     buffDurationBarPosition = "BOTTOM",
     buffDurationBarDirection = "REMAINING",
+    buffShowTooltip = true,
     buffShowCooldownText = true,
     buffShowStackCount = true,
     debuffShowCooldownSwipe = true,
@@ -402,6 +409,7 @@ local DEFAULT_SHARED = {
     debuffDurationBarDisplay = "BAR_ONLY",
     debuffDurationBarPosition = "BOTTOM",
     debuffDurationBarDirection = "REMAINING",
+    debuffShowTooltip = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
     clickThroughAuras = false,
@@ -879,51 +887,76 @@ GF_AURA_FILTER.DECLASSIFIED_SPELLS = GF_AURA_FILTER.DECLASSIFIED_SPELLS or GF_AU
 GF_AURA_FILTER.DECLASSIFIED_META = GF_AURA_FILTER.DECLASSIFIED_META or GF_AURA_FILTER.PUBLIC_AURA_PRESET_META
 GF_AURA_FILTER.BUFF_FILTER_ITEMS = {
     { value = "ALL", text = "All Buffs" },
-    { value = "PLAYER", text = "My Buffs Only" },
-    { value = "RAID", text = "Raid Buffs" },
-    { value = "RAID_IN_COMBAT", text = "Raid In Combat" },
-    { value = "INCLUDE_NAME_PLATE_ONLY", text = "Include Nameplate-only" },
-    { value = "CANCELABLE", text = "Cancelable" },
-    { value = "NOT_CANCELABLE", text = "Not Cancelable" },
-    { value = "EXTERNAL_DEFENSIVE", text = "External Defensive" },
-    { value = "BIG_DEFENSIVE", text = "Big Defensive" },
+    { value = "Player", text = "Player" },
+    { value = "BigDefensivePlayer", text = "Big Defensive Player" },
+    { value = "ExternalDefensivePlayer", text = "External Defensive Player" },
+    { value = "RaidInCombatPlayer", text = "Raid In Combat Player" },
+    { value = "CancelablePlayer", text = "Cancelable Player" },
+    { value = "NotCancelablePlayer", text = "Not Cancelable Player" },
+    { value = "RaidPlayer", text = "Raid Player" },
+    { value = "BigDefensive", text = "Big Defensive" },
+    { value = "ExternalDefensive", text = "External Defensive" },
+    { value = "RaidInCombat", text = "Raid In Combat" },
+    { value = "Cancelable", text = "Cancelable" },
+    { value = "NotCancelable", text = "Not Cancelable" },
+    { value = "Raid", text = "Raid" },
 }
 GF_AURA_FILTER.DEBUFF_FILTER_ITEMS = {
     { value = "ALL", text = "All Debuffs" },
-    { value = "PLAYER", text = "My Debuffs Only" },
-    { value = "RAID", text = "Raid Debuffs" },
-    { value = "RAID_IN_COMBAT", text = "Raid In Combat" },
+    { value = "Player", text = "Player" },
+    { value = "RaidPlayer", text = "Raid Player" },
+    { value = "RaidInCombatPlayer", text = "Raid In Combat Player" },
+    { value = "Raid", text = "Raid" },
+    { value = "RaidInCombat", text = "Raid In Combat" },
     { value = "INCLUDE_NAME_PLATE_ONLY", text = "Include Nameplate-only" },
     { value = "RAID_PLAYER_DISPELLABLE", text = "Dispellable" },
     { value = "CROWD_CONTROL", text = "Crowd Control" },
 }
-local GF_NATIVE_BUFF_TOKENS = {
-    PLAYER = true, RAID = true, RAID_IN_COMBAT = true, INCLUDE_NAME_PLATE_ONLY = true,
-    CANCELABLE = true, EXTERNAL_DEFENSIVE = true, BIG_DEFENSIVE = true,
+local function GFNativeFilterKey(token)
+    return tostring(token or "ALL"):upper():gsub("[^A-Z0-9]", "")
+end
+local GF_NATIVE_BUFF_FILTERS = {
+    ALL = false,
+    PLAYER = "PLAYER",
+    BIGDEFENSIVEPLAYER = "BIG_DEFENSIVE|PLAYER",
+    EXTERNALDEFENSIVEPLAYER = "EXTERNAL_DEFENSIVE|PLAYER",
+    RAIDINCOMBATPLAYER = "RAID_IN_COMBAT|PLAYER",
+    CANCELABLEPLAYER = "CANCELABLE|PLAYER",
+    NOTCANCELABLEPLAYER = "!CANCELABLE|PLAYER",
+    RAIDPLAYER = "RAID|PLAYER",
+    BIGDEFENSIVE = "BIG_DEFENSIVE|!PLAYER",
+    EXTERNALDEFENSIVE = "EXTERNAL_DEFENSIVE|!PLAYER",
+    RAIDINCOMBAT = "RAID_IN_COMBAT|!PLAYER",
+    CANCELABLE = "CANCELABLE|!PLAYER",
+    NOTCANCELABLE = "!CANCELABLE|!PLAYER",
+    RAID = "RAID|!PLAYER",
+    INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
 }
-local GF_NATIVE_DEBUFF_TOKENS = {
-    PLAYER = true, RAID = true, RAID_IN_COMBAT = true, INCLUDE_NAME_PLATE_ONLY = true,
-    RAID_PLAYER_DISPELLABLE = true, CROWD_CONTROL = true,
+local GF_NATIVE_DEBUFF_FILTERS = {
+    ALL = false,
+    PLAYER = "PLAYER",
+    RAIDPLAYER = "RAID|PLAYER",
+    RAIDINCOMBATPLAYER = "RAID_IN_COMBAT|PLAYER",
+    RAID = "RAID|!PLAYER",
+    RAIDINCOMBAT = "RAID_IN_COMBAT|!PLAYER",
+    INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
+    RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
+    DISPELLABLE = "RAID_PLAYER_DISPELLABLE",
+    CROWDCONTROL = "CROWD_CONTROL",
 }
-local GF_LEGACY_NATIVE_TOKENS = {
-    NOT_CANCELABLE = "!CANCELABLE",
-}
-local function ResolveGFNativeFilter(token, baseFilter, validTokens)
-    token = tostring(token or "ALL"):upper()
-    if token == "DISPELLABLE" then token = "RAID_PLAYER_DISPELLABLE" end
-    local legacy = GF_LEGACY_NATIVE_TOKENS[token]
-    if legacy then return baseFilter .. "|" .. legacy end
-    if token == "ALL" or token == "" then return baseFilter end
-    if validTokens[token] then return baseFilter .. "|" .. token end
+local function ResolveGFNativeFilter(token, baseFilter, filterMap)
+    local filter = filterMap[GFNativeFilterKey(token)]
+    if filter == false then return baseFilter end
+    if type(filter) == "string" and filter ~= "" then return baseFilter .. "|" .. filter end
     return baseFilter
 end
 GF_AURA_FILTER.ResolveBuffFilter = function(token)
-    return ResolveGFNativeFilter(token, "HELPFUL", GF_NATIVE_BUFF_TOKENS)
+    return ResolveGFNativeFilter(token, "HELPFUL", GF_NATIVE_BUFF_FILTERS)
 end
 GF_AURA_FILTER.ResolveDebuffFilter = function(token)
-    return ResolveGFNativeFilter(token, "HARMFUL", GF_NATIVE_DEBUFF_TOKENS)
+    return ResolveGFNativeFilter(token, "HARMFUL", GF_NATIVE_DEBUFF_FILTERS)
 end
-GF_AURA_FILTER.EXTERNALS_TOKEN = "HELPFUL|EXTERNAL_DEFENSIVE"
+GF_AURA_FILTER.EXTERNALS_TOKEN = "HELPFUL|EXTERNAL_DEFENSIVE|!PLAYER"
 GF_AURA_FILTER.BuildBlacklistHash = GF_AURA_FILTER.BuildBlacklistHash or BuildGroupBlacklistHash
 GF_AURA_FILTER.InvalidateBlacklistHash = GF_AURA_FILTER.InvalidateBlacklistHash or function(group)
     if type(group) == "table" then _gfBlacklistHashCache[group] = nil end
@@ -2393,6 +2426,12 @@ function Model.Apply(unit, reason)
     end
     local normalizedScope = unit and NormalizeScope(unit) or "shared"
     local globalScope = (not unit) or normalizedScope == "shared" or IsGroupApplyScope(unit)
+    if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true then
+        if type(A3._QueueDeferredAuraRuntime) == "function" then
+            return A3._QueueDeferredAuraRuntime(unit or "shared", reason, false)
+        end
+        return false
+    end
     if globalScope and A3.BumpRuntimeConfig then A3.BumpRuntimeConfig() end
     local function RefreshGroup(scope)
         if A3.RequestUnit then
@@ -2427,5 +2466,9 @@ function Model.Apply(unit, reason)
         for i = 1, #BOSS_UNITS do Refresh(BOSS_UNITS[i]) end
         RefreshGroup("group")
     end
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason) end
+    if type(A3._NotifyAuraColdpathPreview) == "function" then
+        A3._NotifyAuraColdpathPreview(reason, unit or normalizedScope)
+    elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+        _G.MSUF_UFPreview_RequestRefresh(reason)
+    end
 end
