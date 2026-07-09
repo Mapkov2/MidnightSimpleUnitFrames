@@ -699,9 +699,9 @@ local function BuildGFBars(ctx)
         sizeDefault = 9,
     })
     local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls draw order when text overlaps bars, icons, or indicators.", textLeftX, -4, textCardW, 260)
-    local nameLayer = ScopeSlider(ctx, advancedLayers, "Name layer", 1, 15, 1, textSliderW, "nameTextLayer", 5, "font", 16, -76, textCardW - 72)
-    local hpLayer = ScopeSlider(ctx, advancedLayers, "HP layer", 1, 15, 1, textSliderW, "textLayer", 5, "font", 16, -136, textCardW - 72)
-    local powerLayer = ScopeSlider(ctx, advancedLayers, "Power layer", 1, 15, 1, textSliderW, "powerTextLayer", 2, "font", 16, -196, textCardW - 72)
+    local nameLayer = ScopeSlider(ctx, advancedLayers, "Name layer", 0, 30, 1, textSliderW, "nameTextLayer", 5, "font", 16, -76, textCardW - 72)
+    local hpLayer = ScopeSlider(ctx, advancedLayers, "HP layer", 0, 30, 1, textSliderW, "textLayer", 5, "font", 16, -136, textCardW - 72)
+    local powerLayer = ScopeSlider(ctx, advancedLayers, "Power layer", 0, 30, 1, textSliderW, "powerTextLayer", 2, "font", 16, -196, textCardW - 72)
     local function HookTextControls(kind, controls)
         for i = 1, #controls do HookGFPreviewTextFocus(controls[i][1], kind, controls[i][2]) end
     end

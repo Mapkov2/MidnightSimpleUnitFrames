@@ -620,7 +620,8 @@ local function SyncBarLayer(frame, hpBar, bar, levelOffset)
   end
   if bar.SetFrameStrata and frame.GetFrameStrata then
     local strata = frame:GetFrameStrata()
-    if strata and bar._msufFrameStrata ~= strata then
+    local cachedStrata = bar._msufFrameStrata
+    if issecretvalue(strata) ~= true and strata and (issecretvalue(cachedStrata) == true or cachedStrata ~= strata) then
       bar:SetFrameStrata(strata)
       bar._msufFrameStrata = strata
     end

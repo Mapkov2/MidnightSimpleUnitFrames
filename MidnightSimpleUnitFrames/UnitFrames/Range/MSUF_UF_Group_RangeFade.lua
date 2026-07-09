@@ -26,6 +26,7 @@ local UnitInRange = UnitInRange
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
 local GetTime = GetTime
+local unpack = unpack or table.unpack
 
 local Secrets = MSUF.Secrets or {}
 local issecretvalue = _G.issecretvalue or function(_) return false end
@@ -104,6 +105,10 @@ local function UnitEventMatchesFrame(frame, unit)
   return type(frameUnit) == "string"
     and frameUnit ~= ""
     and frameUnit == unit
+end
+
+local function FrameVisible(frame)
+  return not (frame and frame.IsVisible) or frame:IsVisible()
 end
 
 local function ClearRange(frame)
@@ -311,6 +316,10 @@ local function RefreshSettledRange(frame)
   if not (frame and frame._msufGFRangeRuntimeEnabled == true) then
     return
   end
+  if frame._msufGFRangeFadeEnabled ~= true then
+    ApplyAlpha(frame, "MSUF_GF_RANGE_SETTLE")
+    return
+  end
   local value, checked
   if FrameIsPlayerUnit(frame) then
     value, checked = true, true
@@ -479,6 +488,223 @@ local function SetSettleRegistration(frame, active)
     RemoveSettleFrame(frame)
   end
   RefreshSettleDriver()
+end
+
+local rangeDriver
+local rangeDriverDirty
+local rangeDriverRefreshQueued
+local rangeDriverFrames = {}
+local rangeDriverIndex = setmetatable({}, { __mode = "k" })
+local rangeDriverUnitFrame = {}
+local rangeDriverRangeUnits = {}
+local rangeDriverOfflineUnits = {}
+local rangeDriverRangeSet = {}
+local rangeDriverOfflineSet = {}
+
+local function ClearMap(t)
+  for k in pairs(t) do
+    t[k] = nil
+  end
+end
+
+local function RangeDriverUnitActive(frame)
+  return frame
+    and frame._msufGFRangeRuntimeEnabled == true
+    and (frame._msufGFRangeFadeEnabled == true or frame._msufGFHideOfflineEnabled == true)
+    and FrameVisible(frame)
+    and IsUnitToken(frame.unit)
+    and not FrameIsPlayerUnit(frame)
+end
+
+local function AddRangeDriverUnit(list, seen, unit)
+  if seen[unit] == true then
+    return
+  end
+  list[#list + 1] = unit
+  seen[unit] = true
+end
+
+local function CompactRangeDriverFrames()
+  ClearMap(rangeDriverUnitFrame)
+  ClearMap(rangeDriverRangeSet)
+  ClearMap(rangeDriverOfflineSet)
+  for i = 1, #rangeDriverRangeUnits do rangeDriverRangeUnits[i] = nil end
+  for i = 1, #rangeDriverOfflineUnits do rangeDriverOfflineUnits[i] = nil end
+
+  local write = 0
+  for read = 1, #rangeDriverFrames do
+    local frame = rangeDriverFrames[read]
+    if frame and frame._msufGFRangeDriverRegistered == true and RangeDriverUnitActive(frame) then
+      write = write + 1
+      rangeDriverFrames[write] = frame
+      rangeDriverIndex[frame] = write
+      local unit = frame.unit
+      frame._msufGFRangeDriverUnit = unit
+      if rangeDriverUnitFrame[unit] == nil then
+        rangeDriverUnitFrame[unit] = frame
+      end
+      if frame._msufGFRangeFadeEnabled == true then
+        AddRangeDriverUnit(rangeDriverRangeUnits, rangeDriverRangeSet, unit)
+      end
+      if frame._msufGFHideOfflineEnabled == true then
+        AddRangeDriverUnit(rangeDriverOfflineUnits, rangeDriverOfflineSet, unit)
+      end
+    else
+      if frame then
+        rangeDriverIndex[frame] = nil
+        frame._msufGFRangeDriverRegistered = nil
+        frame._msufGFRangeDriverUnit = nil
+        frame._msufGFRangeDriverMode = nil
+      end
+    end
+  end
+  for i = write + 1, #rangeDriverFrames do
+    local frame = rangeDriverFrames[i]
+    if frame then rangeDriverIndex[frame] = nil end
+    rangeDriverFrames[i] = nil
+  end
+  return #rangeDriverRangeUnits, #rangeDriverOfflineUnits
+end
+
+local RefreshRangeDriverNow
+
+local function RangeDriverOnEvent(_, event, unit, inRange)
+  if unit == nil or unit == "" or issecretvalue(unit) == true then
+    QueueRangeSettle(0)
+    return
+  end
+
+  local frame = rangeDriverUnitFrame[unit]
+  if not (frame and RangeDriverUnitActive(frame)) then
+    rangeDriverDirty = true
+    RefreshRangeDriverNow()
+    frame = rangeDriverUnitFrame[unit]
+  end
+
+  if frame then
+    GroupRangeFade.Update(frame, event, unit, inRange)
+  else
+    QueueRangeSettle(0)
+  end
+end
+
+local function EnsureRangeDriver()
+  if rangeDriver or not CreateFrame then
+    return rangeDriver
+  end
+  rangeDriver = CreateFrame("Frame")
+  rangeDriver:SetScript("OnEvent", RangeDriverOnEvent)
+  return rangeDriver
+end
+
+RefreshRangeDriverNow = function()
+  if rangeDriverDirty ~= true then
+    return
+  end
+  rangeDriverDirty = nil
+  rangeDriverRefreshQueued = nil
+  local driver = EnsureRangeDriver()
+  if not driver then
+    return
+  end
+  driver:UnregisterAllEvents()
+  local rangeCount, offlineCount = CompactRangeDriverFrames()
+  if rangeCount > 0 then
+    for i = 1, #RANGE_EVENTS do
+      driver:RegisterUnitEvent(RANGE_EVENTS[i], unpack(rangeDriverRangeUnits, 1, rangeCount))
+    end
+  end
+  if offlineCount > 0 then
+    for i = 1, #OFFLINE_EVENTS do
+      driver:RegisterUnitEvent(OFFLINE_EVENTS[i], unpack(rangeDriverOfflineUnits, 1, offlineCount))
+    end
+  end
+end
+
+local function QueueRangeDriverRefresh()
+  if rangeDriverDirty ~= true then
+    return
+  end
+  if rangeDriverRefreshQueued == true then
+    return
+  end
+  if UF and UF._msufApplyingSpec == true and C_Timer and C_Timer.After then
+    rangeDriverRefreshQueued = true
+    C_Timer.After(0, RefreshRangeDriverNow)
+    return
+  end
+  RefreshRangeDriverNow()
+end
+
+local function AddRangeDriverFrame(frame)
+  if not frame or rangeDriverIndex[frame] then
+    return
+  end
+  local n = #rangeDriverFrames + 1
+  rangeDriverFrames[n] = frame
+  rangeDriverIndex[frame] = n
+end
+
+local function RemoveRangeDriverFrame(frame)
+  local i = frame and rangeDriverIndex[frame]
+  if not i then
+    return
+  end
+  local last = #rangeDriverFrames
+  local tail = rangeDriverFrames[last]
+  rangeDriverFrames[i] = tail
+  rangeDriverFrames[last] = nil
+  rangeDriverIndex[frame] = nil
+  if tail and tail ~= frame then
+    rangeDriverIndex[tail] = i
+  end
+end
+
+local function SetRangeDriverRegistration(frame, active)
+  if not frame then
+    return
+  end
+  active = active == true and RangeDriverUnitActive(frame)
+  local unit = active and frame.unit or nil
+  local mode = active
+    and ((frame._msufGFRangeFadeEnabled == true and "r" or "") .. (frame._msufGFHideOfflineEnabled == true and "o" or ""))
+    or nil
+  local wasActive = frame._msufGFRangeDriverRegistered == true
+  if wasActive == active
+    and frame._msufGFRangeDriverUnit == unit
+    and frame._msufGFRangeDriverMode == mode then
+    return
+  end
+  if active then
+    AddRangeDriverFrame(frame)
+  else
+    RemoveRangeDriverFrame(frame)
+  end
+  frame._msufGFRangeDriverRegistered = active or nil
+  frame._msufGFRangeDriverUnit = unit
+  frame._msufGFRangeDriverMode = mode
+  rangeDriverDirty = true
+  QueueRangeDriverRefresh()
+end
+
+local function RangeDriverOnShow(self)
+  SetSettleRegistration(self, self and self._msufGFRangeRuntimeEnabled == true)
+  SetRangeDriverRegistration(self, self and self._msufGFRangeRuntimeEnabled == true)
+  RefreshSettledRange(self)
+end
+
+local function RangeDriverOnHide(self)
+  SetSettleRegistration(self, false)
+  SetRangeDriverRegistration(self, false)
+end
+
+local function HookRangeDriverVisibility(frame)
+  if not (frame and frame.HookScript) or frame._msufGFRangeDriverVisibilityHooked == true then
+    return
+  end
+  frame._msufGFRangeDriverVisibilityHooked = true
+  frame:HookScript("OnShow", RangeDriverOnShow)
+  frame:HookScript("OnHide", RangeDriverOnHide)
 end
 
 local function SetAlphaCached(region, alpha, key)
@@ -924,19 +1150,22 @@ end
 function GroupRangeFade.Apply(frame)
   ClearAlphaCaches(frame)
   CompileRangeRuntime(frame, frame and frame.MSUFSpec)
+  HookRangeDriverVisibility(frame)
   if UF.CompileAlphaRuntime then
     UF.CompileAlphaRuntime(frame, frame and frame.MSUFSpec)
   end
   if frame then
     frame._msufUpdateGroupRangeConnection = ApplyAlpha
   end
-  SetSettleRegistration(frame, frame and frame._msufGFRangeRuntimeEnabled == true)
+  SetSettleRegistration(frame, frame and frame._msufGFRangeRuntimeEnabled == true and FrameVisible(frame))
+  SetRangeDriverRegistration(frame, frame and frame._msufGFRangeRuntimeEnabled == true)
+  if frame then frame._msufGFRangeApplying = true end
   if FrameIsPlayerUnit(frame) then
     StoreRange(frame, true)
   else
     StoreRange(frame, nil)
+    RefreshSettledRange(frame)
   end
-  if frame then frame._msufGFRangeApplying = true end
   ApplyAlpha(frame, "MSUF_APPLY")
   if frame then frame._msufGFRangeApplying = nil end
 end
@@ -960,10 +1189,14 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
   elseif event == "UNIT_CONNECTION" then
     changed = true
   elseif event == "MSUF_GF_UNIT_IDENTITY" then
+    ClearOfflineDelay(frame)
+    SetSettleRegistration(frame, frame and frame._msufGFRangeRuntimeEnabled == true and FrameVisible(frame))
+    SetRangeDriverRegistration(frame, frame and frame._msufGFRangeRuntimeEnabled == true)
     if FrameIsPlayerUnit(frame) then
       StoreRange(frame, true)
     else
       ClearRange(frame)
+      RefreshSettledRange(frame)
     end
     changed = true
   elseif RANGE_SETTLE_EVENT[event] then
@@ -982,6 +1215,7 @@ function GroupRangeFade.Disable(frame)
   ClearOfflineDelay(frame)
   ClearAlphaCaches(frame)
   SetSettleRegistration(frame, false)
+  SetRangeDriverRegistration(frame, false)
   if frame then
     frame._msufUpdateGroupRangeConnection = nil
   end

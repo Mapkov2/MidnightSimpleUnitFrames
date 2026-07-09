@@ -719,10 +719,10 @@ end
 local function ClampStatusLayer(value, fallback)
   value = Number(value, fallback or 7)
   value = math.floor(value + 0.5)
-  if value < 1 then
-    return 1
-  elseif value > 10 then
-    return 10
+  if value < 0 then
+    return 0
+  elseif value > 30 then
+    return 30
   end
   return value
 end

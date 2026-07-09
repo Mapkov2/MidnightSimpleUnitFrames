@@ -7,6 +7,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 local floor = math.floor
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 local MASK_MEDIA = MEDIA .. "Masks\\"
@@ -141,10 +142,14 @@ local function EnsureFrameBorderOverlay(mock, border)
     end
     if overlay.SetFrameLevel and mock.GetFrameLevel then overlay:SetFrameLevel((mock:GetFrameLevel() or 0) + (Layers.PREVIEW_FRAME_BORDER_OFFSET or 40)) end
     if overlay.SetFrameStrata and border and border.strata and border.strata ~= "AUTO" then
-        if not overlay.GetFrameStrata or overlay:GetFrameStrata() ~= border.strata then overlay:SetFrameStrata(border.strata) end
+        local currentStrata = overlay.GetFrameStrata and overlay:GetFrameStrata() or nil
+        if issecretvalue(currentStrata) == true or currentStrata ~= border.strata then overlay:SetFrameStrata(border.strata) end
     elseif overlay.SetFrameStrata and mock.GetFrameStrata then
         local strata = mock:GetFrameStrata()
-        if strata and (not overlay.GetFrameStrata or overlay:GetFrameStrata() ~= strata) then overlay:SetFrameStrata(strata) end
+        if issecretvalue(strata) ~= true and strata then
+            local currentStrata = overlay.GetFrameStrata and overlay:GetFrameStrata() or nil
+            if issecretvalue(currentStrata) == true or currentStrata ~= strata then overlay:SetFrameStrata(strata) end
+        end
     end
     return overlay
 end

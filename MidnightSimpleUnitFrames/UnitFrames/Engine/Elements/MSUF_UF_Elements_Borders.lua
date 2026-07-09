@@ -79,11 +79,16 @@ end
 
 local function SetBorderOverlayStrata(frame, overlay, strata)
   if not (frame and overlay and overlay.SetFrameStrata) then return end
+  if IsSecretValue(strata) then strata = nil end
   if strata == nil or strata == "" or strata == "AUTO" then
     strata = frame.GetFrameStrata and frame:GetFrameStrata() or nil
   end
-  if strata and (overlay._msufBorderStrata ~= strata or not overlay.GetFrameStrata or overlay:GetFrameStrata() ~= strata) then
-    if not overlay.GetFrameStrata or overlay:GetFrameStrata() ~= strata then
+  if IsSecretValue(strata) or strata == nil or strata == "" then return end
+  local cachedStrata = overlay._msufBorderStrata
+  local currentStrata
+  if overlay.GetFrameStrata then currentStrata = overlay:GetFrameStrata() end
+  if IsSecretValue(cachedStrata) or IsSecretValue(currentStrata) or cachedStrata ~= strata or currentStrata ~= strata then
+    if IsSecretValue(currentStrata) or currentStrata ~= strata then
       overlay:SetFrameStrata(strata)
     end
     overlay._msufBorderStrata = strata

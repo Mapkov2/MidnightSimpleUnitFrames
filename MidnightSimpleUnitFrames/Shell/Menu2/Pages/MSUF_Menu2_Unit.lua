@@ -615,8 +615,8 @@ end
 local function ClampStatusLayer(value, default)
     value = tonumber(value) or default or 7
     value = floor(value + 0.5)
-    if value < 1 then return 1 end
-    if value > 10 then return 10 end
+    if value < 0 then return 0 end
+    if value > 30 then return 30 end
     return value
 end
 local function StatusAllowed(unit, spec)

@@ -454,7 +454,7 @@ local function BuildStatus(ctx, builder, unit)
     local y = BindStatusPlacementSlider(placementCard, "Y Offset", -500, 500, placeRightX, -116, placeRightW, "y", "defaultY", 0, "MSUF2_STATUS_Y", "Status indicator Y offset", {
         "y", "y offset", "vertical offset", "level y", "level y offset", "move level up", "move level down",
     })
-    local layer = BindStatusPlacementSlider(placementCard, "Layer", 1, 10, placeLeftX, -212, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
+    local layer = BindStatusPlacementSlider(placementCard, "Layer", 0, 30, placeLeftX, -212, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
         "level layer", "level draw order", "indicator layer", "draw order", "above text", "behind text",
     }, ClampSelectedStatusLayer)
     local reset = W.Button(placementCard, "Reset selected", 150)
@@ -534,7 +534,7 @@ local function BuildStatus(ctx, builder, unit)
     advanced.y = BindStatusPlacementSlider(advanced.card, "Y Offset (extended)", -1000, 1000, placeRightX, -58, placeRightW, "y", "defaultY", 0, "MSUF2_STATUS_ADV_Y", "Advanced status indicator Y offset", {
         "advanced y", "extended y offset", "wide y offset", "status icon advanced",
     })
-    advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 1, 10, placeLeftX, -128, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER", "Advanced status indicator layer", {
+    advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 0, 30, placeLeftX, -128, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER", "Advanced status indicator layer", {
         "advanced layer", "draw order", "status icon advanced",
     }, ClampSelectedStatusLayer)
     advanced.reset = W.Button(advanced.card, "Reset selected", 150)

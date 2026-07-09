@@ -385,7 +385,12 @@ local function ApplyIconFrame(icon, frame)
     frame.MSUFGFTargetedSpellsHolder = holder
   end
   if holder.SetFrameStrata and frame.GetFrameStrata then
-    holder:SetFrameStrata(frame:GetFrameStrata())
+    local strata = frame:GetFrameStrata()
+    local cachedStrata = holder._msufTSStrata
+    if issecretvalue(strata) ~= true and strata and (issecretvalue(cachedStrata) == true or cachedStrata ~= strata) then
+      holder:SetFrameStrata(strata)
+      holder._msufTSStrata = strata
+    end
   end
   local holderLevel = BaseFrameLevel(frame) + (Layers.TARGETED_SPELLS_BASE_OFFSET or 40) + settings.layer
   if holder.SetFrameLevel and holder._msufTSLevel ~= holderLevel then

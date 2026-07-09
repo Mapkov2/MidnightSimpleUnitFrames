@@ -31,7 +31,7 @@ SI.SpecMap = SI.SpecMap or {}
 
 local function SpellID(value)
   local id = tonumber(value)
-  return id and id > 0 and id or nil
+  return id and id > 0 and math.floor(id + 0.5) or nil
 end
 
 local function SpellName(id)
@@ -51,6 +51,11 @@ local function CopyTable(src)
     dst[k] = CopyTable(v)
   end
   return dst
+end
+
+local function NormalizeCustomDefaults(entry)
+  if type(entry) ~= "table" or entry.custom ~= true then return end
+  if entry._msufCustomOnlyOwnExplicit ~= true then entry.onlyOwn = false end
 end
 
 if type(SI.GetPlayerSpec) ~= "function" then
@@ -101,18 +106,32 @@ local function EnsureTrackable(specKey, auraKey, entry)
   SI.TrackableAuras[specKey] = list
   local name = tostring(ids[1])
   for i = 1, #list do
-    if list[i].name == name then return end
+    if list[i].name == name or SpellID(list[i].spellID or list[i].spellId or list[i].id) == ids[1] then return end
   end
   list[#list + 1] = {
     name = name,
     display = SpellName(ids[1]) or name,
     spellID = ids[1],
     color = { 0.45, 0.85, 1 },
+    custom = true,
   }
+end
+
+local function ClearCustomTrackables()
+  for _, list in pairs(SI.TrackableAuras or {}) do
+    if type(list) == "table" then
+      for i = #list, 1, -1 do
+        if type(list[i]) == "table" and list[i].custom == true then
+          table.remove(list, i)
+        end
+      end
+    end
+  end
 end
 
 function SI.RefreshFromDB()
   if not GF.GetConf then return end
+  ClearCustomTrackables()
   local kinds = { "party", "raid", "mythicraid" }
   for i = 1, #kinds do
     local conf = GF.GetConf(kinds[i])
@@ -121,6 +140,7 @@ function SI.RefreshFromDB()
       for specKey, specCfg in pairs(root) do
         if type(specCfg) == "table" then
           for auraKey, entry in pairs(specCfg) do
+            NormalizeCustomDefaults(entry)
             EnsureTrackable(specKey, auraKey, entry)
           end
         end
@@ -138,10 +158,18 @@ function SI.EnsureSpecConfig(siCfg, specKey)
   local defaults = SI.SpecDefaults and SI.SpecDefaults[specKey]
   if type(defaults) == "table" then
     for auraKey, def in pairs(defaults) do
-      if type(siCfg.specs[specKey][auraKey]) ~= "table" then
-        siCfg.specs[specKey][auraKey] = (GF._DeepCopyTable or CopyTable)(def)
+      local entry = siCfg.specs[specKey][auraKey]
+      if type(entry) ~= "table" then
+        entry = (GF._DeepCopyTable or CopyTable)(def)
+        siCfg.specs[specKey][auraKey] = entry
+      elseif type(def) == "table" then
+        local copy = GF._DeepCopyTable or CopyTable
+        if entry.placed == nil and def.placed ~= nil then entry.placed = copy(def.placed) end
+        if entry.frame == nil and def.frame ~= nil then entry.frame = copy(def.frame) end
+        if entry.onlyOwn == nil and def.onlyOwn ~= nil then entry.onlyOwn = def.onlyOwn end
       end
-      EnsureTrackable(specKey, auraKey, siCfg.specs[specKey][auraKey])
+      NormalizeCustomDefaults(entry)
+      EnsureTrackable(specKey, auraKey, entry)
     end
   end
   SI.RefreshFromDB()

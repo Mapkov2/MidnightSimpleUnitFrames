@@ -24,9 +24,59 @@ local gfFlushQueued = false
 local GF_APPLY_DELAY = 0.04
 local SCOPE_LABELS = { party = "Party", raid = "Raid", mythicraid = "Mythic Raid" }
 local SCOPE_SHORT_LABELS = { mythicraid = "Mythic" }
+local FRAME_STRATA_VALUES = {
+    { value = "AUTO", text = "Auto (Frame)" },
+    { value = "BACKGROUND", text = "BACKGROUND" },
+    { value = "LOW", text = "LOW" },
+    { value = "MEDIUM", text = "MEDIUM" },
+    { value = "HIGH", text = "HIGH" },
+    { value = "DIALOG", text = "DIALOG" },
+    { value = "FULLSCREEN", text = "FULLSCREEN" },
+    { value = "FULLSCREEN_DIALOG", text = "FULLSCREEN_DIALOG" },
+    { value = "TOOLTIP", text = "TOOLTIP" },
+}
+local FRAME_STRATA_COUNT = #FRAME_STRATA_VALUES
 local GROUP_SECTION_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
 local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, "pvpIcon statusText statusGhostText statusAFKText",
     [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon]], "enabled iconStyle customIcon size anchor x y layer")
+local function NormalizeFrameStrata(value, fallback)
+    local normalize = _G.MSUF_NormalizeFrameStrata
+    if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
+    if value == nil or value == "" then return fallback or "AUTO" end
+    value = tostring(value):upper()
+    if value == "AUTO" then return "AUTO" end
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return rank and rank[value] and value or (fallback or "AUTO")
+end
+local function FrameStrataIndex(value)
+    value = NormalizeFrameStrata(value, "AUTO")
+    for i = 1, FRAME_STRATA_COUNT do
+        if FRAME_STRATA_VALUES[i].value == value then return i - 1 end
+    end
+    return 0
+end
+local function FrameStrataValue(index)
+    index = floor((tonumber(index) or 0) + 0.5) + 1
+    if index < 1 then index = 1 elseif index > FRAME_STRATA_COUNT then index = FRAME_STRATA_COUNT end
+    return FRAME_STRATA_VALUES[index].value
+end
+local function FrameStrataLabel(valueOrIndex)
+    local value = type(valueOrIndex) == "number" and FrameStrataValue(valueOrIndex) or NormalizeFrameStrata(valueOrIndex, "AUTO")
+    if value == "AUTO" then return "AUTO" end
+    for i = 1, FRAME_STRATA_COUNT do
+        local row = FRAME_STRATA_VALUES[i]
+        if row.value == value then return M.Tr(row.text) end
+    end
+    return "AUTO"
+end
+local function FrameStrataParse(text)
+    text = tostring(text or ""):upper()
+    for i = 1, FRAME_STRATA_COUNT do
+        local row = FRAME_STRATA_VALUES[i]
+        if text == row.value or text == tostring(row.text):upper() then return i - 1 end
+    end
+    return FrameStrataIndex(text)
+end
 local function GF()
     return MSUF and MSUF.GF
 end
@@ -778,7 +828,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         end)
         M.AddTooltip(btn, function() return M.Format(M.Tr("Growth: %s"), M.Tr(info.text or "")) end, "Click to set group frame growth direction.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
         btn:SetScript("OnClick", function()
-            Set(CurrentScope(), "growth", info.value, "rebuild")
+            Set(CurrentScope(), "growth", info.value, "geometry")
             RefreshGrowthTiles()
         end)
         buttons[info.value] = btn
@@ -888,8 +938,9 @@ local function AuraGroup(kind, groupKey)
 end
 local function SpellIndicators(kind)
     local conf = Conf(kind)
-    if type(conf.spellIndicators) ~= "table" then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9 } end
+    if type(conf.spellIndicators) ~= "table" then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, strata = "AUTO" } end
     conf.spellIndicators.specs = conf.spellIndicators.specs or {}
+    if conf.spellIndicators.strata == nil then conf.spellIndicators.strata = "AUTO" end
     return conf.spellIndicators
 end
 local function IconStyleValues()
@@ -980,25 +1031,50 @@ local function SpellAuraValues(kind)
     local si = gf and gf.SpellIndicators
     local specKey = EffectiveSpellSpec(kind)
     local trackable = specKey and si and si.TrackableAuras and si.TrackableAuras[specKey]
+    local siCfg = SpellIndicators(kind)
+    local specCfg = type(siCfg.specs) == "table" and specKey and siCfg.specs[specKey] or nil
     local values = {}
     if type(trackable) == "table" then
         for i = 1, #trackable do
             local info = trackable[i]
             local key = info and info.name
-            if key then values[#values + 1] = { value = key, text = info.display or key } end
+            if key and (info.custom ~= true or (type(specCfg) == "table" and specCfg[key] ~= nil)) then
+                values[#values + 1] = { value = key, text = info.display or key }
+            end
         end
     end
     if #values == 0 then values[1] = { value = "", text = "No spells for current spec" } end
     return values
 end
+local function SpellSelectionKey(kind, specKey)
+    return tostring(kind or "") .. "\030" .. tostring(specKey or "")
+end
+local function SetCurrentSpellAura(kind, auraName)
+    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
+    local specKey = EffectiveSpellSpec(kind)
+    if specKey then M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] = auraName or "" end
+    M.gfSpellIndicatorSelection[kind] = auraName or ""
+end
+local function ClearCurrentSpellAura(kind, specKey)
+    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
+    specKey = specKey or EffectiveSpellSpec(kind)
+    if specKey then M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] = nil end
+    M.gfSpellIndicatorSelection[kind] = nil
+end
 local function CurrentSpellAura(kind)
     M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-    local selected = M.gfSpellIndicatorSelection[kind]
+    local specKey = EffectiveSpellSpec(kind)
+    local selected = specKey and M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] or nil
+    if selected == nil and not specKey then selected = M.gfSpellIndicatorSelection[kind] end
     local values = SpellAuraValues(kind)
     for i = 1, #values do
-        if values[i].value == selected then return selected end
+        if values[i].value == selected then
+            if specKey then M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] = selected end
+            return selected
+        end
     end
     selected = values[1] and values[1].value or ""
+    if specKey then M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] = selected end
     M.gfSpellIndicatorSelection[kind] = selected
     return selected
 end
@@ -1087,6 +1163,25 @@ local function BindNestedSlider(ctx, widget, getTable, key, default, mode)
         default, { step = 1, roundStep = true })
     return widget
 end
+local function BindNestedStrataSlider(ctx, widget, getTable, key, default, mode)
+    default = NormalizeFrameStrata(default, "AUTO")
+    if widget and widget.SetValueFormatter then widget:SetValueFormatter(function(value) return FrameStrataLabel(value) end) end
+    if widget and widget.SetValueParser then widget:SetValueParser(FrameStrataParse) end
+    M.BindSlider(ctx, widget,
+        function()
+            local tbl = getTable()
+            return FrameStrataIndex(tbl and tbl[key] or default)
+        end,
+        function(v)
+            local tbl = getTable()
+            if not tbl then return end
+            local value = FrameStrataValue(v)
+            if NormalizeFrameStrata(tbl[key], default) == value and tbl[key] ~= nil then return end
+            tbl[key] = value
+            QueueGF(CurrentScope(), mode or "visual")
+        end)
+    return widget
+end
 local function BindNestedDropdown(ctx, widget, getTable, key, default, mode)
     M.BindDropdownWidget(ctx, widget,
         function()
@@ -1114,13 +1209,12 @@ end
 ApplyScopeEnabledGate = function(ctx)
     local wrapper = ctx and ctx.wrapper
     if not wrapper then return end
-    local scope = CurrentScope()
-    local enabled = Bool(scope, "enabled", false)
     local gateKey = "groupFrameEnabled"
     if ControlGates.Apply then
-        ControlGates.Apply(wrapper, gateKey, enabled, { alwaysEnabledFlag = "_msuf2GroupFrameGateAlwaysEnabled" })
+        ControlGates.Apply(wrapper, gateKey, true, { alwaysEnabledFlag = "_msuf2GroupFrameGateAlwaysEnabled" })
         return
     end
+    local enabled = true
     if wrapper._msuf2GroupFrameGateKey == gateKey and wrapper._msuf2GroupFrameGateEnabled == enabled then return end
     wrapper._msuf2GroupFrameGateKey = gateKey
     wrapper._msuf2GroupFrameGateEnabled = enabled
@@ -1177,6 +1271,8 @@ M.Assign(GroupPage, {
     CurrentSpellMultiSpec = CurrentSpellMultiSpec,
     EffectiveSpellSpec = EffectiveSpellSpec,
     SpellAuraValues = SpellAuraValues,
+    SetCurrentSpellAura = SetCurrentSpellAura,
+    ClearCurrentSpellAura = ClearCurrentSpellAura,
     CurrentSpellAura = CurrentSpellAura,
     CurrentSpellConfig = CurrentSpellConfig,
     PlacedConfig = PlacedConfig,
@@ -1188,7 +1284,13 @@ M.Assign(GroupPage, {
     CICustomConfig = CICustomConfig,
     BindNestedToggle = BindNestedToggle,
     BindNestedSlider = BindNestedSlider,
+    BindNestedStrataSlider = BindNestedStrataSlider,
     BindNestedDropdown = BindNestedDropdown,
+    FrameStrataIndex = FrameStrataIndex,
+    FrameStrataValue = FrameStrataValue,
+    FrameStrataLabel = FrameStrataLabel,
+    FrameStrataParse = FrameStrataParse,
+    FrameStrataCount = FRAME_STRATA_COUNT,
     SetOptionEnabled = SetOptionEnabled,
     SetOptionsEnabled = SetOptionsEnabled,
     ApplyScopeEnabledGate = ApplyScopeEnabledGate,
