@@ -189,6 +189,8 @@ end
 
 local function FrameWidth(frame)
   if not (frame and frame.GetWidth) then return nil end
+  if frame._msufLegacyCooldownAnchor == true then return nil end
+  if frame.IsShown and not frame:IsShown() then return nil end
   local width = frame:GetWidth()
   if type(width) == "number" and width > 1 then return width end
   return nil

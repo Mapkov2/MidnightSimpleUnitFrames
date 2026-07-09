@@ -2112,7 +2112,13 @@ local function CP_SetEventBound(frame, event, want, unit)
 end
 
 CP._cdmWidthSig = CP._cdmWidthSig or {}
-CP._cdmWidthEventsActive = false
+
+local function CP_CDMWidthResolveFrame(frameName)
+    if type(frameName) ~= "string" or frameName == "" then return nil end
+    local resolver = _G.MSUF_GetEffectiveCooldownFrame
+    local frame = type(resolver) == "function" and resolver(frameName) or nil
+    return frame or _G[frameName]
+end
 
 function CP.CDMWidthIsPositionLocked()
     if type(_G.MSUF_IsUnitFramePositionLocked) == "function" and _G.MSUF_IsUnitFramePositionLocked() then
@@ -2134,20 +2140,40 @@ function CP.CDMWidthGetDetachedPowerBarName()
     return cdmName
 end
 
-function CP.CDMWidthGetNames()
+function CP.CDMWidthGetConfiguredNames()
     local b = _cpDB.bars or {}
     local cpName = (CP.visible and CPConst.CDM_FRAMES and CPConst.CDM_FRAMES[b.classPowerWidthMode or ""]) or nil
     local pbName = CP.CDMWidthGetDetachedPowerBarName()
     return cpName, pbName
 end
 
+function CP.CDMWidthHasConfiguredSync()
+    local cpName, pbName = CP.CDMWidthGetConfiguredNames()
+    return cpName ~= nil or pbName ~= nil
+end
+
+function CP.CDMWidthFrameUsable(frameName)
+    local cdm = CP_CDMWidthResolveFrame(frameName)
+    if not (cdm and cdm.GetWidth) or cdm._msufLegacyCooldownAnchor == true then return false end
+    if cdm.IsShown and not cdm:IsShown() then return false end
+    local w = cdm:GetWidth()
+    return type(w) == "number" and w >= 1
+end
+
+function CP.CDMWidthGetNames()
+    local cpName, pbName = CP.CDMWidthGetConfiguredNames()
+    if cpName and not CP.CDMWidthFrameUsable(cpName) then cpName = nil end
+    if pbName and not CP.CDMWidthFrameUsable(pbName) then pbName = nil end
+    return cpName, pbName
+end
+
 function CP.CDMWidthWantsSync()
     local cpName, pbName = CP.CDMWidthGetNames()
-    return (cpName ~= nil or pbName ~= nil), (cpName == "BuffIconCooldownViewer" or pbName == "BuffIconCooldownViewer")
+    return cpName ~= nil or pbName ~= nil
 end
 
 function CP.CDMWidthReadSig(frameName)
-    local cdm = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(frameName)) or _G[frameName]
+    local cdm = CP_CDMWidthResolveFrame(frameName)
     if not cdm or not cdm.GetWidth or (cdm.IsShown and not cdm:IsShown()) then return 0 end
     local w = cdm:GetWidth()
     if not w or w < 1 then return 0 end
@@ -2185,11 +2211,10 @@ function CP.CDMWidthSyncLayouts(force)
     end
 end
 
-function CP.CDMWidthSetEvents(active)
-    CP._cdmWidthEventsActive = active == true
-    CP_SetEventBound(eventFrame, "SPELL_UPDATE_COOLDOWN", active)
-    CP_SetEventBound(eventFrame, "ACTIONBAR_UPDATE_COOLDOWN", active)
-    CP_SetEventBound(eventFrame, "BAG_UPDATE_COOLDOWN", active)
+function CP.CDMWidthSetEvents()
+    CP_SetEventBound(eventFrame, "SPELL_UPDATE_COOLDOWN", false)
+    CP_SetEventBound(eventFrame, "ACTIONBAR_UPDATE_COOLDOWN", false)
+    CP_SetEventBound(eventFrame, "BAG_UPDATE_COOLDOWN", false)
 end
 
 local function CP_ShouldUseValuePowerEvents()
@@ -2215,8 +2240,6 @@ end
 CP_RefreshEventBindings = function()
     local useLite = CP_ShouldUseLiteBindings()
     CP._liteBindingsActive = useLite
-    local wantCDMWidthSync, wantCDMTrackedBuffs = CP.CDMWidthWantsSync()
-    local cdmWidthEventsActive = wantCDMWidthSync and not CP.CDMWidthIsPositionLocked()
 
     if not CP.visible and not AM.visible and not PHP.visible then
         CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", false, "player")
@@ -2224,7 +2247,7 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_DISPLAYPOWER", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_AURA", wantCDMTrackedBuffs and cdmWidthEventsActive, "player")
+        CP_SetEventBound(eventFrame, "UNIT_AURA", false, "player")
         CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", false)
         CP_SetEventBound(eventFrame, "UNIT_HEALTH", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", false, "player")
@@ -2234,11 +2257,11 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_INTERRUPTED", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", false, "player")
-        CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantCDMWidthSync)
-        CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", wantCDMWidthSync)
+        CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", false)
+        CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", false)
         CP_SetEventBound(eventFrame, "PLAYER_DEAD", false)
         CP_SetEventBound(eventFrame, "PLAYER_ALIVE", false)
-        CP.CDMWidthSetEvents(cdmWidthEventsActive)
+        CP.CDMWidthSetEvents()
         return
     end
 
@@ -2262,7 +2285,7 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", true)
         CP_SetEventBound(eventFrame, "PLAYER_DEAD", true)
         CP_SetEventBound(eventFrame, "PLAYER_ALIVE", true)
-        CP.CDMWidthSetEvents(cdmWidthEventsActive)
+        CP.CDMWidthSetEvents()
         return
     end
 
@@ -2285,7 +2308,7 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", wantMaxPower, "player")
     CP_SetEventBound(eventFrame, "UNIT_DISPLAYPOWER", wantDisplayPower, "player")
     CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", wantPointCharge, "player")
-    CP_SetEventBound(eventFrame, "UNIT_AURA", wantAura or (wantCDMTrackedBuffs and cdmWidthEventsActive), "player")
+    CP_SetEventBound(eventFrame, "UNIT_AURA", wantAura, "player")
     CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", wantRune)
     CP_SetEventBound(eventFrame, "UNIT_HEALTH", wantHealth, "player")
     CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", wantMaxHealth, "player")
@@ -2295,11 +2318,11 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_INTERRUPTED", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", wantSpellSucceeded, "player")
-    CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantRegen or wantCDMWidthSync)
-    CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", wantRegen or wantCDMWidthSync)
+    CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantRegen)
+    CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", wantRegen)
     CP_SetEventBound(eventFrame, "PLAYER_DEAD", wantDeadAlive)
     CP_SetEventBound(eventFrame, "PLAYER_ALIVE", wantDeadAlive)
-    CP.CDMWidthSetEvents(cdmWidthEventsActive)
+    CP.CDMWidthSetEvents()
 end
 
 local _cpAuraDeferred = false
@@ -2310,9 +2333,6 @@ local function CP_RunDeferredAuraUpdate()
     local profile = CP.modeProfile or CP_GetModeEventProfile(CP.renderMode, CP.powerType, CP.isAuraPower)
     if CP._liteBindingsActive == false or (CP.visible and profile and profile.aura == true) then
         OnAuraUpdate("player")
-    end
-    if CP._cdmWidthEventsActive then
-        CP.CDMWidthSyncLayouts(false)
     end
     ProfEnd(profName, profToken)
 end
@@ -2325,28 +2345,6 @@ local function CP_DeferAuraUpdate()
         scheduleOnce("MSUF_CP_AURA_UPDATE", CP_RunDeferredAuraUpdate)
     else
         C_Timer.After(0, CP_RunDeferredAuraUpdate)
-    end
-end
-
-local _cpCDMWidthDeferred = false
-local function CP_RunDeferredCDMWidthSync()
-    local profName = "classpower:deferredCDMWidth"
-    local profToken = ProfBegin(profName)
-    _cpCDMWidthDeferred = false
-    if CP._cdmWidthEventsActive then
-        CP.CDMWidthSyncLayouts(false)
-    end
-    ProfEnd(profName, profToken)
-end
-
-local function CP_DeferCDMWidthSync()
-    if _cpCDMWidthDeferred then return end
-    _cpCDMWidthDeferred = true
-    local scheduleOnce = _G.MSUF_ScheduleOnce
-    if type(scheduleOnce) == "function" then
-        scheduleOnce("MSUF_CP_CDM_WIDTH_SYNC", CP_RunDeferredCDMWidthSync)
-    else
-        C_Timer.After(0, CP_RunDeferredCDMWidthSync)
     end
 end
 
@@ -2372,14 +2370,6 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
             CPAuras.ProcessUnitAuraUpdate(arg2)
             CP_DeferAuraUpdate()
         end
-        return
-    end
-
-    if event == "SPELL_UPDATE_COOLDOWN"
-    or event == "ACTIONBAR_UPDATE_COOLDOWN"
-    or event == "BAG_UPDATE_COOLDOWN"
-    then
-        CP_DeferCDMWidthSync()
         return
     end
 
@@ -2547,6 +2537,19 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
         EnsureDefaults()
         return
     end
+
+    if event == "ADDON_LOADED" then
+        if arg1 ~= "Blizzard_CooldownViewer" and arg1 ~= "Blizzard_EditMode" then return end
+        if CP.CDMWidthHasConfiguredSync and CP.CDMWidthHasConfiguredSync() then
+            if type(CP.RefreshCDMWidthBindings) == "function" then
+                CP.RefreshCDMWidthBindings(false)
+            else
+                _CP_RefreshConfig()
+                if CP_RefreshEventBindings then CP_RefreshEventBindings() end
+            end
+        end
+        return
+    end
 end
 
 eventFrame:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
@@ -2560,6 +2563,7 @@ end)
 --- after FullRefresh only while Class Resource features are actually enabled.
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("ADDON_LOADED")
 
 --- Public API (for Options, Edit Mode, and other modules)
 
@@ -2569,7 +2573,6 @@ CP.IsRuntimeActive = function()
         or PHP.visible == true
         or _cpTickActive == true
         or _cpStructuralEventsBound == true
-        or CP._cdmWidthEventsActive == true
 end
 ExportPublic("MSUF_ClassPower_IsRuntimeActive", CP.IsRuntimeActive)
 
