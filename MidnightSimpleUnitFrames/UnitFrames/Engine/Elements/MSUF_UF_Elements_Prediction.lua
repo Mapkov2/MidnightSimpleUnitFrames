@@ -71,6 +71,7 @@ local TEST_ABSORB = 25
 local TEST_HEAL_ABSORB = 15
 local OVER_ABSORB_TEXTURE = "Interface\\RaidFrame\\Shield-Overshield"
 local OVER_ABSORB_GLOW_W = 8
+local PREDICTION_HEALER_UNIT = "player"
 local EMPTY_EVENTS = {}
 local DERIVED_PREDICTION_TARGET_EVENTS = { "UNIT_TARGET" }
 local PREDICTION_EVENT_BITS = {
@@ -386,24 +387,20 @@ local function UpdateCalc(frame, unit, cfg)
   if calc._msufPredictionCfg ~= cfg then
     ConfigureCalc(calc, cfg)
   end
-  UnitGetDetailedHealPrediction(unit, nil, calc)
+  UnitGetDetailedHealPrediction(unit, PREDICTION_HEALER_UNIT, calc)
   return calc
+end
+
+local function FallbackIncomingHeals(unit)
+  return UnitGetIncomingHeals and UnitGetIncomingHeals(unit, PREDICTION_HEALER_UNIT) or nil
 end
 
 local function CalcIncomingHeals(calc, unit)
   if calc and calc.GetIncomingHeals then
-    local value = calc:GetIncomingHeals()
-    if issecretvalue(value) == true or value ~= nil then
-      return value
-    end
+    local _, healer = calc:GetIncomingHeals()
+    return healer
   end
-  if calc and calc.GetTotalIncomingHeals then
-    local value = calc:GetTotalIncomingHeals()
-    if issecretvalue(value) == true or value ~= nil then
-      return value
-    end
-  end
-  return UnitGetIncomingHeals and UnitGetIncomingHeals(unit) or nil
+  return FallbackIncomingHeals(unit)
 end
 
 local function CalcDamageAbsorbs(calc, unit)
