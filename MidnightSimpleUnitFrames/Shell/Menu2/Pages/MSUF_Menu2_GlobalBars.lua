@@ -19,7 +19,8 @@ local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
 local BARS_PAGE_WORK_DELAY = 0.04
-local FRAME_OUTLINE_STRATA = {
+local OutlineStrata = {}
+OutlineStrata.values = {
     { value = "AUTO", text = "Auto (Frame)" },
     { value = "BACKGROUND", text = "BACKGROUND" },
     { value = "LOW", text = "LOW" },
@@ -30,6 +31,7 @@ local FRAME_OUTLINE_STRATA = {
     { value = "FULLSCREEN_DIALOG", text = "FULLSCREEN_DIALOG" },
     { value = "TOOLTIP", text = "TOOLTIP" },
 }
+OutlineStrata.count = #OutlineStrata.values
 local DISPEL_BORDER_121_PTR_DISABLED = false
 local PURGE_BORDER_121_PTR_DISABLED = true
 local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel uses native 12.1 AuraContainer detection. Purge border stays disabled until Blizzard exposes a safe purge/stealable filter."
@@ -60,7 +62,7 @@ local function ScheduleBarsPageWork(key, delay, fn)
         Run()
     end
 end
-local function NormalizeFrameOutlineStrata(value)
+function OutlineStrata.Normalize(value)
     local normalize = _G.MSUF_NormalizeFrameStrata
     if type(normalize) == "function" then return normalize(value, "AUTO") end
     if value == nil or value == "" then return "AUTO" end
@@ -68,29 +70,39 @@ local function NormalizeFrameOutlineStrata(value)
     local rank = _G.MSUF_FRAME_STRATA_RANK
     return rank and rank[value] and value or "AUTO"
 end
-local function FrameOutlineStrataIndex(value)
-    value = NormalizeFrameOutlineStrata(value)
-    for i = 1, #FRAME_OUTLINE_STRATA do
-        if FRAME_OUTLINE_STRATA[i].value == value then return i - 1 end
+function OutlineStrata.Index(value)
+    value = OutlineStrata.Normalize(value)
+    local values = OutlineStrata.values
+    for i = 1, #values do
+        if values[i].value == value then return i - 1 end
     end
     return 0
 end
-local function FrameOutlineStrataValue(index)
+function OutlineStrata.Value(index)
     index = floor((tonumber(index) or 0) + 0.5) + 1
-    if index < 1 then index = 1 elseif index > #FRAME_OUTLINE_STRATA then index = #FRAME_OUTLINE_STRATA end
-    return FRAME_OUTLINE_STRATA[index].value
+    if index < 1 then index = 1 elseif index > OutlineStrata.count then index = OutlineStrata.count end
+    return OutlineStrata.values[index].value
 end
-local function FrameOutlineStrataLabel(valueOrIndex)
-    local value = type(valueOrIndex) == "number" and FrameOutlineStrataValue(valueOrIndex) or NormalizeFrameOutlineStrata(valueOrIndex)
-    for i = 1, #FRAME_OUTLINE_STRATA do
-        if FRAME_OUTLINE_STRATA[i].value == value then return M.Tr(FRAME_OUTLINE_STRATA[i].text) end
+function OutlineStrata.Label(valueOrIndex)
+    local value = type(valueOrIndex) == "number" and OutlineStrata.Value(valueOrIndex) or OutlineStrata.Normalize(valueOrIndex)
+    local values = OutlineStrata.values
+    for i = 1, #values do
+        if values[i].value == value then return M.Tr(values[i].text) end
     end
     return M.Tr("Auto (Frame)")
 end
-local function RefreshFrameOutlineStrataLabel(slider, value)
+function OutlineStrata.Parse(text)
+    text = tostring(text or ""):upper()
+    local values = OutlineStrata.values
+    for i = 1, #values do
+        if text == values[i].value or text == tostring(values[i].text):upper() then return i - 1 end
+    end
+    return OutlineStrata.Index(text)
+end
+function OutlineStrata.RefreshLabel(slider, value)
     if not slider then return end
     if slider._msuf2Title then
-        slider._msuf2Title:SetText(M.Tr("Frame outline strata") .. ": " .. FrameOutlineStrataLabel(value))
+        slider._msuf2Title:SetText(M.Tr("Frame outline strata") .. ": " .. OutlineStrata.Label(value))
     end
 end
 local function ApplyService()
@@ -1098,30 +1110,24 @@ local function BuildBars(ctx)
             RequestOutlineRuntime()
         end,
         1, { step = 1, roundStep = true })
-    outline._msuf2OutlineStrata = W.Slider(outline, "", 0, #FRAME_OUTLINE_STRATA - 1, 1, 300)
-    outline._msuf2OutlineStrata:SetValueFormatter(function(value) return FrameOutlineStrataLabel(value) end)
-    outline._msuf2OutlineStrata:SetValueParser(function(text)
-        text = tostring(text or ""):upper()
-        for i = 1, #FRAME_OUTLINE_STRATA do
-            if text == FRAME_OUTLINE_STRATA[i].value or text == tostring(FRAME_OUTLINE_STRATA[i].text):upper() then return i - 1 end
-        end
-        return FrameOutlineStrataIndex(text)
-    end)
+    outline._msuf2OutlineStrata = W.Slider(outline, "", 0, OutlineStrata.count - 1, 1, 300)
+    outline._msuf2OutlineStrata:SetValueFormatter(function(value) return OutlineStrata.Label(value) end)
+    outline._msuf2OutlineStrata:SetValueParser(function(text) return OutlineStrata.Parse(text) end)
     M.BindSlider(ctx, outline._msuf2OutlineStrata,
         function()
-            return FrameOutlineStrataIndex(BarScopeGetBars("barOutlineStrata", "AUTO"))
+            return OutlineStrata.Index(BarScopeGetBars("barOutlineStrata", "AUTO"))
         end,
         function(v)
-            BarScopeSetBars("barOutlineStrata", FrameOutlineStrataValue(v), "MSUF2_BAR_OUTLINE_STRATA")
+            BarScopeSetBars("barOutlineStrata", OutlineStrata.Value(v), "MSUF2_BAR_OUTLINE_STRATA")
             ApplyBars("MSUF2_BAR_OUTLINE_STRATA")
             RequestOutlineRuntime()
         end)
     outline._msuf2OutlineStrata:HookScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
-        RefreshFrameOutlineStrataLabel(self, value)
+        OutlineStrata.RefreshLabel(self, value)
     end)
-    M.AddRefresher(ctx, function() RefreshFrameOutlineStrataLabel(outline._msuf2OutlineStrata, BarScopeGetBars("barOutlineStrata", "AUTO")) end)
-    RefreshFrameOutlineStrataLabel(outline._msuf2OutlineStrata, BarScopeGetBars("barOutlineStrata", "AUTO"))
+    M.AddRefresher(ctx, function() OutlineStrata.RefreshLabel(outline._msuf2OutlineStrata, BarScopeGetBars("barOutlineStrata", "AUTO")) end)
+    OutlineStrata.RefreshLabel(outline._msuf2OutlineStrata, BarScopeGetBars("barOutlineStrata", "AUTO"))
     local outlineColor = W.Color(outline, "Outline color")
     W.MoveWidget(outlineColor, outline, 30, -150)
     M.BindColor(ctx, outlineColor,

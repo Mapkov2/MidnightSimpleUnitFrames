@@ -51,21 +51,60 @@ local NATIVE_EXACT_AURA_FILTERS_ENABLED = true
 local NATIVE_EXACT_AURA_FILTERS_TEXT = "Exact SpellID filters use Blizzard 12.1 AuraContainer candidateFilters where the client permits identity filtering."
 local GROUP_NATIVE_FILTER_LABELS = {
     ALL = "All",
-    PLAYER = "Player",
-    RAID = "Raid",
-    RAID_IN_COMBAT = "Raid In Combat",
+    Player = "Player",
+    BigDefensivePlayer = "Big Defensive Player",
+    ExternalDefensivePlayer = "External Defensive Player",
+    RaidInCombatPlayer = "Raid In Combat Player",
+    CancelablePlayer = "Cancelable Player",
+    NotCancelablePlayer = "Not Cancelable Player",
+    RaidPlayer = "Raid Player",
+    BigDefensive = "Big Defensive",
+    ExternalDefensive = "External Defensive",
+    RaidInCombat = "Raid In Combat",
+    Cancelable = "Cancelable",
+    NotCancelable = "Not Cancelable",
+    Raid = "Raid",
     INCLUDE_NAME_PLATE_ONLY = "Include Nameplate-only",
-    CANCELABLE = "Cancelable",
-    NOT_CANCELABLE = "Not Cancelable",
     RAID_PLAYER_DISPELLABLE = "Dispellable",
-    EXTERNAL_DEFENSIVE = "External Defensive",
-    BIG_DEFENSIVE = "Big Defensive",
     CROWD_CONTROL = "Crowd Control",
 }
 local GROUP_NATIVE_FILTER_ALLOWED = {
-    buff = M.KeySetFromWords "ALL PLAYER RAID RAID_IN_COMBAT INCLUDE_NAME_PLATE_ONLY CANCELABLE NOT_CANCELABLE EXTERNAL_DEFENSIVE BIG_DEFENSIVE",
-    debuff = M.KeySetFromWords "ALL PLAYER RAID RAID_IN_COMBAT INCLUDE_NAME_PLATE_ONLY RAID_PLAYER_DISPELLABLE CROWD_CONTROL",
+    buff = {
+        ALL = true, Player = true, BigDefensivePlayer = true, ExternalDefensivePlayer = true,
+        RaidInCombatPlayer = true, CancelablePlayer = true, NotCancelablePlayer = true,
+        RaidPlayer = true, BigDefensive = true, ExternalDefensive = true, RaidInCombat = true,
+        Cancelable = true, NotCancelable = true, Raid = true,
+    },
+    debuff = {
+        ALL = true, Player = true, RaidPlayer = true, RaidInCombatPlayer = true,
+        Raid = true, RaidInCombat = true, INCLUDE_NAME_PLATE_ONLY = true,
+        RAID_PLAYER_DISPELLABLE = true, CROWD_CONTROL = true,
+    },
 }
+local GROUP_NATIVE_FILTER_CANONICAL = {
+    ALL = "ALL",
+    PLAYER = "Player",
+    BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
+    EXTERNALDEFENSIVEPLAYER = "ExternalDefensivePlayer",
+    RAIDINCOMBATPLAYER = "RaidInCombatPlayer",
+    CANCELABLEPLAYER = "CancelablePlayer",
+    NOTCANCELABLEPLAYER = "NotCancelablePlayer",
+    RAIDPLAYER = "RaidPlayer",
+    BIGDEFENSIVE = "BigDefensive",
+    EXTERNALDEFENSIVE = "ExternalDefensive",
+    RAIDINCOMBAT = "RaidInCombat",
+    CANCELABLE = "Cancelable",
+    NOTCANCELABLE = "NotCancelable",
+    RAID = "Raid",
+    INCLUDENAMEPLATEONLY = "INCLUDE_NAME_PLATE_ONLY",
+    RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
+    DISPELLABLE = "RAID_PLAYER_DISPELLABLE",
+    CROWDCONTROL = "CROWD_CONTROL",
+}
+local function CanonicalGroupFilterValue(value)
+    local key = tostring(value or "ALL"):upper():gsub("[^A-Z0-9]", "")
+    return GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
+end
 local function Tr(text)
     if type(M.Tr) == "function" then return M.Tr(text) end
     return text
@@ -673,8 +712,7 @@ local function GroupFilterValues(groupKey)
     if type(source) == "table" then
         for i = 1, #source do
             local item = source[i]
-            local value = item and tostring(item.value or item.key or ""):upper()
-            if value == "DISPELLABLE" then value = "RAID_PLAYER_DISPELLABLE" end
+            local value = CanonicalGroupFilterValue(item and (item.value or item.key))
             if allowed[value] then
                 out[#out + 1] = {
                     value = value,
@@ -685,9 +723,34 @@ local function GroupFilterValues(groupKey)
     end
     if #out > 0 then return out end
     if groupKey == "buff" then
-        return VT("ALL", "All Buffs", "PLAYER", "My Buffs Only", "RAID", "Raid Buffs", "RAID_IN_COMBAT", "Raid In Combat", "INCLUDE_NAME_PLATE_ONLY", "Include Nameplate-only", "CANCELABLE", "Cancelable", "NOT_CANCELABLE", "Not Cancelable", "EXTERNAL_DEFENSIVE", "External Defensive", "BIG_DEFENSIVE", "Big Defensive")
+        return VT(
+            "ALL", "All Buffs",
+            "Player", "Player",
+            "BigDefensivePlayer", "Big Defensive Player",
+            "ExternalDefensivePlayer", "External Defensive Player",
+            "RaidInCombatPlayer", "Raid In Combat Player",
+            "CancelablePlayer", "Cancelable Player",
+            "NotCancelablePlayer", "Not Cancelable Player",
+            "RaidPlayer", "Raid Player",
+            "BigDefensive", "Big Defensive",
+            "ExternalDefensive", "External Defensive",
+            "RaidInCombat", "Raid In Combat",
+            "Cancelable", "Cancelable",
+            "NotCancelable", "Not Cancelable",
+            "Raid", "Raid"
+        )
     end
-    return VT("ALL", "All Debuffs", "PLAYER", "My Debuffs Only", "RAID", "Raid Debuffs", "RAID_IN_COMBAT", "Raid In Combat", "INCLUDE_NAME_PLATE_ONLY", "Include Nameplate-only", "RAID_PLAYER_DISPELLABLE", "Dispellable", "CROWD_CONTROL", "Crowd Control")
+    return VT(
+        "ALL", "All Debuffs",
+        "Player", "Player",
+        "RaidPlayer", "Raid Player",
+        "RaidInCombatPlayer", "Raid In Combat Player",
+        "Raid", "Raid",
+        "RaidInCombat", "Raid In Combat",
+        "INCLUDE_NAME_PLATE_ONLY", "Include Nameplate-only",
+        "RAID_PLAYER_DISPELLABLE", "Dispellable",
+        "CROWD_CONTROL", "Crowd Control"
+    )
 end
 local function GFAnchorValues()
     local values = GP.STATUS_ICON_ANCHORS or GP.AURA_ANCHORS
@@ -699,6 +762,10 @@ local function BindGroupSwitch(ctx, parent, label, x, y, width, scope, groupKey,
         function()
             local group = GFReadGroup(scope, groupKey)
             local value = group[key]
+            if value == nil and key == "showTooltip" then
+                local root = GFReadRoot(scope)
+                value = root and root.showTooltip
+            end
             if value == nil then value = defaultValue end
             return value and true or false
         end,
@@ -749,11 +816,15 @@ local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope,
     return BindDropdown(ctx, parent, label, x, y, values, width,
         function()
             local group = GFReadGroup(scope, groupKey)
-            return group[key] or defaultValue
+            local value = group[key] or defaultValue
+            if key == "filterToken" then value = CanonicalGroupFilterValue(value) end
+            return value
         end,
         function(v)
-            GFWriteGroupValue(scope, groupKey, key, v or defaultValue, mode or "visual")
-            if afterSet then afterSet(v or defaultValue) end
+            local value = v or defaultValue
+            if key == "filterToken" then value = CanonicalGroupFilterValue(value) end
+            GFWriteGroupValue(scope, groupKey, key, value, mode or "visual")
+            if afterSet then afterSet(value) end
         end)
 end
 local function ReadGroupDebuffTypeBorderMode(scope, groupKey)
@@ -1330,7 +1401,7 @@ local function BuildUnitStyle(ctx, b, scope)
     refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, unit, 24, -34, pw - 48, previewBoxH, lane))
     local hint = W.Text(preview, "", 24, previewHintY, pw - 48, T.colors.muted)
 
-    local featuresH = 154 + extraDebuffControls
+    local featuresH = 188 + extraDebuffControls
     local features = b:CollapsibleSection(baseId .. "_features", LaneTitle(lane) .. " Basics", featuresH, true)
     local fw = BodyWidth(features)
     local featuresY = -44
@@ -1340,8 +1411,9 @@ local function BuildUnitStyle(ctx, b, scope)
     AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
     BindStyleSwitch(features, "Show Cooldown Text", 24, featuresY - 44, fw - 48, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
     BindStyleSwitch(features, "Show Cooldown Swipe", 24, featuresY - 76, fw - 48, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
+    BindStyleSwitch(features, "Show Tooltip", 24, featuresY - 108, fw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
     if lane == "debuff" then
-        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 126,
+        BindStyleDropdown(features, "Dispel-type Border", 24, featuresY - 158,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             fw - 48, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
     end
@@ -1368,19 +1440,18 @@ local function BuildUnitStyle(ctx, b, scope)
     BindStyleSlider(stack, "X", 24, -212, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
     BindStyleSlider(stack, "Y", 32 + stackSmallW, -212, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
 
-    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 474, true)
+    local cooldown = b:CollapsibleSection(baseId .. "_cooldown", LaneTitle(lane) .. " Cooldown Text", 426, true)
     local cw = BodyWidth(cooldown)
     W.Text(cooldown, "Timer font size, anchor, offset, and tooltip behavior for " .. scopeLabel .. " " .. laneName .. ".", 24, -42, cw - 48, T.colors.muted)
     BindStyleSlider(cooldown, "Text Size", 24, -82, 6, 40, 1, cw - 48, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
     BindStyleDropdown(cooldown, "Anchor", 24, -140, type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues(), cw - 48, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, "AURAS3_COOLDOWN_ANCHOR")
     BindStyleSlider(cooldown, "X", 24, -198, -40, 40, 1, cw - 48, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
     BindStyleSlider(cooldown, "Y", 24, -258, -40, 40, 1, cw - 48, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
-    BindStyleSwitch(cooldown, "Show Tooltip", 24, -306, cw - 48, "showTooltip", true, "AURAS3_TOOLTIP")
-    local swipeDirection = BindStyleDropdown(cooldown, "Swipe Direction", 24, -354, COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48, ReadScopeSwipeDirection, WriteScopeSwipeDirection, "AURAS3_COOLDOWN_SWIPE_DIRECTION")
+    local swipeDirection = BindStyleDropdown(cooldown, "Swipe Direction", 24, -306, COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48, ReadScopeSwipeDirection, WriteScopeSwipeDirection, "AURAS3_COOLDOWN_SWIPE_DIRECTION")
     AddTooltip(swipeDirection, "Cooldown swipe direction", "Selects the Blizzard cooldown swipe direction with Cooldown:SetReverse. This only affects the swipe overlay, not icon size or position.")
-    local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -412, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
+    local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -364, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
-    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then localized minutes.", 24, -456, cw - 48, T.colors.muted)
+    W.Text(cooldown, "Uses Blizzard DurationTextBinding; no Lua timer or OnUpdate work is added. Durations are unitless seconds below 1 minute, then localized minutes.", 24, -408, cw - 48, T.colors.muted)
 
     local durationBar = b:CollapsibleSection(baseId .. "_duration_bar", LaneTitle(lane) .. " Duration Bar", 358, false)
     local dbw = BodyWidth(durationBar)
@@ -1436,7 +1507,7 @@ local function BuildGroupStyle(ctx, b, scope)
     local pw = BodyWidth(preview)
     refreshMiniPreview = select(2, BuildMiniAuraPreview(ctx, preview, scope, 24, -34, pw - 48, 118, lane))
 
-    local features = b:CollapsibleSection(baseId .. "_features", "Group " .. LaneTitle(lane) .. " Basics", 154 + extraDebuffControls, true)
+    local features = b:CollapsibleSection(baseId .. "_features", "Group " .. LaneTitle(lane) .. " Basics", 186 + extraDebuffControls, true)
     local fw = BodyWidth(features)
     local colorsButton = ActionButton(features, "Open Aura Colors", 150, "normal")
     colorsButton:SetPoint("TOPLEFT", features, "TOPLEFT", 24, -42)
@@ -1444,8 +1515,9 @@ local function BuildGroupStyle(ctx, b, scope)
     AddTooltip(colorsButton, "Aura colors", "Opens Colors > Auras for timer, stack, highlight, and pandemic colors.")
     BindGroupSwitch(ctx, features, "Show Cooldown Text", 24, -82, fw - 48, scope, lane, "showCooldown", true, "visual", RefreshStylePreview)
     BindGroupSwitch(ctx, features, "Show Cooldown Swipe", 24, -114, fw - 48, scope, lane, "showCooldownSwipe", true, "visual", RefreshStylePreview)
+    BindGroupSwitch(ctx, features, "Show Tooltip", 24, -146, fw - 48, scope, lane, "showTooltip", true, "visual", RefreshStylePreview)
     if lane == "debuff" then
-        BindDropdown(ctx, features, "Dispel-type Border", 24, -166,
+        BindDropdown(ctx, features, "Dispel-type Border", 24, -198,
             type(Model.DebuffTypeBorderModeValues) == "function" and Model.DebuffTypeBorderModeValues() or DEBUFF_TYPE_BORDER_MODE_VALUES,
             fw - 48,
             function() return ReadGroupDebuffTypeBorderMode(scope, lane) end,
@@ -1494,14 +1566,13 @@ local function BuildGroupStyle(ctx, b, scope)
     BindGroupSlider(ctx, stack, "Stack X", 24, -210, -40, 40, 1, stackSmallW, scope, lane, "stackX", 0, "geometry", RefreshStylePreview)
     BindGroupSlider(ctx, stack, "Stack Y", 32 + stackSmallW, -210, -40, 40, 1, stackSmallW, scope, lane, "stackY", 0, "geometry", RefreshStylePreview)
 
-    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Group " .. LaneTitle(lane) .. " Behavior", 252, false)
+    local behavior = b:CollapsibleSection(baseId .. "_behavior", "Group " .. LaneTitle(lane) .. " Behavior", 220, false)
     local bw = BodyWidth(behavior)
     W.Text(behavior, "Shared group-frame aura behavior for " .. scopeLabel .. ".", 24, -42, bw - 48, T.colors.muted)
-    BindGroupRootSwitch(ctx, behavior, "Show Tooltip", 24, -82, bw - 48, scope, "showTooltip", true, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Sort by Duration", 24, -114, bw - 48, scope, "sortByDuration", false, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 24, -146, bw - 48, scope, "preferPlayer", false, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 24, -178, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
-    BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 24, -220, bw - 48, scope, "cooldownSwipeDarkenOnLoss", false, "visual", RefreshStylePreview)
+    BindGroupRootSwitch(ctx, behavior, "Sort by Duration", 24, -82, bw - 48, scope, "sortByDuration", false, "visual")
+    BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 24, -114, bw - 48, scope, "preferPlayer", false, "visual")
+    BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 24, -146, bw - 48, scope, "dynamicScale", false, "geometry", RefreshStylePreview)
+    BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 24, -188, bw - 48, scope, "cooldownSwipeDarkenOnLoss", false, "visual", RefreshStylePreview)
 end
 local function BuildAuraStylePage(ctx)
     local b = W.PageBuilder(ctx)

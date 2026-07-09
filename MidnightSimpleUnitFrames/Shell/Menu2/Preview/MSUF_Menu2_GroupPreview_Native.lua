@@ -518,15 +518,18 @@ local function CompiledAuraLane(auras, key, fallback)
     local prefix, showKey
     if key == "buff" then
         prefix, showKey = "buff", "showBuffs"
+    elseif key == "trackedBuff" then
+        prefix, showKey = "trackedBuff", "showTrackedBuffs"
     elseif key == "debuff" then
         prefix, showKey = "debuff", "showDebuffs"
     else
         return fallback or {}
     end
+    local maxKey = key == "trackedBuff" and "maxTrackedBuffs" or ("max" .. (key == "buff" and "Buffs" or "Debuffs"))
     local out = {
         _compiled = true,
         enabled = auras[showKey] == true,
-        max = auras["max" .. (key == "buff" and "Buffs" or "Debuffs")],
+        max = auras[maxKey],
         perRow = auras[prefix .. "PerRow"],
         size = auras[prefix .. "IconSize"],
         spacing = auras[prefix .. "Spacing"],
@@ -868,6 +871,9 @@ local function HandleOffsets(handle)
     if handle._cfgGroup then
         local auras = conf.auras or {}
         local cfg = auras[handle._cfgGroup] or {}
+        if handle._cfgTrackedBuff then
+            return cfg.trackedAnchor or "TOPLEFT", tonumber(cfg.trackedX) or 0, tonumber(cfg.trackedY) or 0
+        end
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
     elseif handle._cfgStatus then
         local spec = handle._statusSpec or CurrentStatusSpec()
@@ -1092,6 +1098,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         guides = true,
         bounds = true,
         buff = true,
+        trackedBuff = true,
         debuff = true,
         status = true,
         si = true,
@@ -1103,6 +1110,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         { "Guides", { 0.42, 0.72, 1.00 }, "layout", "guides" },
         { "Bounds", { 1.00, 0.22, 0.12 }, "layout", "bounds" },
         { "Buffs", { 0.20, 0.90, 0.35 }, "buffs", "buff" },
+        { "Tracked", { 0.42, 0.68, 1.00 }, "buffs", "trackedBuff" },
         { "Debuffs", { 0.90, 0.20, 0.22 }, "debuffs", "debuff" },
         { "Status", { 0.95, 0.78, 0.22 }, "sicons", "status" },
         { "Spells", { 0.86, 0.50, 1.00 }, "si", "si" },
@@ -1209,6 +1217,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     box._selectedHandle = nil
     local handleBundle = (M.GroupPreviewHandles and M.GroupPreviewHandles.Install and M.GroupPreviewHandles.Install(box, R)) or {}
     local buffHandle = handleBundle.buffHandle
+    local trackedBuffHandle = handleBundle.trackedBuffHandle
     local debuffHandle = handleBundle.debuffHandle
     local statusHandles = handleBundle.statusHandles or {}
     local spellHandle = handleBundle.spellHandle
@@ -1229,6 +1238,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local renderDeps = ShallowCopy(R) or {}
         renderDeps.width, renderDeps.mock = width, mock
         renderDeps.buffHandle, renderDeps.debuffHandle = buffHandle, debuffHandle
+        renderDeps.trackedBuffHandle = trackedBuffHandle
         renderDeps.statusHandles, renderDeps.spellHandle = statusHandles, spellHandle
         renderDeps.targetedHandle = targetedHandle
         renderDeps.statusSpecs = H.StatusSpecs and H.StatusSpecs()

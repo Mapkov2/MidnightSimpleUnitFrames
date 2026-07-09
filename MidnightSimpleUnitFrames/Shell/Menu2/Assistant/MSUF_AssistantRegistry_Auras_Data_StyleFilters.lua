@@ -17,6 +17,7 @@ Data.AURA_LANE_STYLE_BOOLEAN_SPECS = {
     { key = "showStackCount", label = "Show Stack Count", defaultValue = true, words = { "show stack count", "stack count", "stacks" } },
     { key = "showCooldownText", label = "Show Cooldown Text", defaultValue = true, words = { "show cooldown text", "cooldown text", "timer text" } },
     { key = "showCooldownSwipe", label = "Show Cooldown Swipe", defaultValue = true, words = { "show cooldown swipe", "cooldown swipe", "timer swipe" } },
+    { key = "showTooltip", label = "Show Tooltip", defaultValue = true, words = { "show tooltip", "tooltip", "aura tooltip", "aura tooltips" } },
     { key = "showDurationBar", label = "Show Duration Bar", defaultValue = false, words = { "show duration bar", "duration bar", "timer bar", "aura duration bar", "aura timer bar" } },
 }
 

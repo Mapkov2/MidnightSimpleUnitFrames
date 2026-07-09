@@ -84,13 +84,21 @@ function Handles.Install(box, deps)
     local function RefreshGroupPreviewAfterMove(handle)
         local gf = MSUF and MSUF.GF
         local refreshKind = (handle and handle._cfgTargetedSpells) and "party" or H.CurrentScope()
+        local auraGroupMove = handle and handle._cfgGroup
+        local a3 = MSUF and MSUF.MSUF_Auras3
+        local apply = (M and M.ApplyService) or _G.MSUF_Menu2_ApplyService
         if gf and type(gf.InvalidateCompiledSpecs) == "function" then
             gf.InvalidateCompiledSpecs(refreshKind)
         end
         if handle and handle._cfgSpell and gf and gf.SpellIndicators and type(gf.SpellIndicators.InvalidateRuntimeCaches) == "function" then
             gf.SpellIndicators.InvalidateRuntimeCaches()
         end
-        if gf and gf.RefreshVisuals then
+        if auraGroupMove and apply and type(apply.RequestAuras) == "function" then
+            apply.RequestAuras(refreshKind, "MSUF2_GROUP_PREVIEW_AURA_MOVE")
+            if type(apply.Flush) == "function" then apply.Flush() end
+        elseif auraGroupMove and a3 and type(a3.RequestScope) == "function" then
+            a3.RequestScope(refreshKind, "MSUF2_GROUP_PREVIEW_AURA_MOVE")
+        elseif gf and gf.RefreshVisuals then
             local dirty = gf.DIRTY_VISUAL or 0x02
             if handle and (handle._cfgGroup or handle._cfgSpell) then dirty = gf.DIRTY_AURAS or dirty end
             gf.RefreshVisuals(refreshKind, dirty)
@@ -99,6 +107,9 @@ function Handles.Install(box, deps)
             end
         elseif gf and gf.MarkAllDirty then
             gf.MarkAllDirty(gf.DIRTY_VISUAL or 0x02)
+        end
+        if auraGroupMove and (not (a3 and type(a3.RequestScope) == "function")) and a3 and type(a3._NotifyAuraColdpathPreview) == "function" then
+            a3._NotifyAuraColdpathPreview("MSUF2_GROUP_PREVIEW_AURA_MOVE", refreshKind)
         end
         if box.RequestRefresh then
             box:RequestRefresh("GROUP_PREVIEW_HANDLE_MOVE")
@@ -169,9 +180,15 @@ function Handles.Install(box, deps)
         if handle._cfgGroup then
             conf.auras = conf.auras or {}
             conf.auras[handle._cfgGroup] = conf.auras[handle._cfgGroup] or {}
-            conf.auras[handle._cfgGroup].anchor = anchor
-            conf.auras[handle._cfgGroup].x = cfgX
-            conf.auras[handle._cfgGroup].y = cfgY
+            if handle._cfgTrackedBuff then
+                conf.auras[handle._cfgGroup].trackedAnchor = anchor
+                conf.auras[handle._cfgGroup].trackedX = cfgX
+                conf.auras[handle._cfgGroup].trackedY = cfgY
+            else
+                conf.auras[handle._cfgGroup].anchor = anchor
+                conf.auras[handle._cfgGroup].x = cfgX
+                conf.auras[handle._cfgGroup].y = cfgY
+            end
         elseif handle._cfgStatus then
             local spec = handle._statusSpec or CurrentStatusSpec()
             if spec then
@@ -215,8 +232,13 @@ function Handles.Install(box, deps)
         if handle._cfgGroup then
             conf.auras = conf.auras or {}
             conf.auras[handle._cfgGroup] = conf.auras[handle._cfgGroup] or {}
-            conf.auras[handle._cfgGroup].x = cfgX
-            conf.auras[handle._cfgGroup].y = cfgY
+            if handle._cfgTrackedBuff then
+                conf.auras[handle._cfgGroup].trackedX = cfgX
+                conf.auras[handle._cfgGroup].trackedY = cfgY
+            else
+                conf.auras[handle._cfgGroup].x = cfgX
+                conf.auras[handle._cfgGroup].y = cfgY
+            end
         elseif handle._cfgStatus then
             local spec = handle._statusSpec or CurrentStatusSpec()
             if not spec then return false end
@@ -492,6 +514,11 @@ function Handles.Install(box, deps)
     local buffHandle = CreatePreviewHandle("buff", "buffs", { 0.36, 0.79, 0.36 }, "BUFFS", 86, 34, false)
     buffHandle._cfgGroup = "buff"
     AddIconPool(buffHandle, 6)
+    local trackedBuffHandle = CreatePreviewHandle("trackedBuff", "buffs", { 0.62, 0.78, 1.00 }, "TRACKED", 86, 34, false)
+    trackedBuffHandle._cfgGroup = "buff"
+    trackedBuffHandle._cfgTrackedBuff = true
+    trackedBuffHandle._previewText = "Tracked Buff Icons"
+    AddIconPool(trackedBuffHandle, 4)
     local debuffHandle = CreatePreviewHandle("debuff", "debuffs", { 0.89, 0.29, 0.29 }, "DEBUFFS", 86, 34, false)
     debuffHandle._cfgGroup = "debuff"
     AddIconPool(debuffHandle, 6)
@@ -580,6 +607,7 @@ function Handles.Install(box, deps)
     end
     return {
         buffHandle = buffHandle,
+        trackedBuffHandle = trackedBuffHandle,
         debuffHandle = debuffHandle,
         statusHandles = statusHandles,
         spellHandle = spellHandle,
