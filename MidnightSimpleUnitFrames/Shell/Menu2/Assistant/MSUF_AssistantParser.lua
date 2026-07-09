@@ -2697,62 +2697,7 @@ local function ParsePartyTargetedSpellFastShortcut(normalized, raw)
     local label
     local value
     local valueLabel
-    if ContainsAny(normalized, P.RootPhrases[367]) then
-        attr = "targetedSpellsTextColorByTime"
-        label = "Targeted Spell Cooldown Color by Time"
-        value = DetectBoolean(normalized)
-        if value == nil then value = true end
-    elseif ContainsAny(normalized, P.RootPhrases[368]) then
-        if ContainsAny(normalized, P.RootPhrases[369]) then
-            attr = "targetedSpellsTextSafeColor"
-            label = "Targeted Spell Safe Color"
-        elseif ContainsAny(normalized, P.RootPhrases[370]) then
-            attr = "targetedSpellsTextWarningColor"
-            label = "Targeted Spell Warning Color"
-        elseif ContainsAny(normalized, P.RootPhrases[371]) then
-            attr = "targetedSpellsTextUrgentColor"
-            label = "Targeted Spell Urgent Color"
-        else
-            return {
-                kind = "answer",
-                status = "ambiguous",
-                text = "Which Party Targeted Spell color should I change: Safe, Warning, or Urgent? Examples: 'set party targeted spell safe color to white', 'set party targeted spell warning color to yellow', or 'set party targeted spell urgent color to orange'.",
-                summary = "Clarifies which targeted spell timer color to change.",
-            }
-        end
-        local colorValue, colorLabel
-        if P.ColorShortcutValue then
-            colorValue, colorLabel = P.ColorShortcutValue(normalized, raw)
-        end
-        if not colorValue then return nil end
-        value = colorValue
-        valueLabel = colorLabel
-    elseif ContainsAny(normalized, P.RootPhrases[372]) then
-        attr = "targetedSpellsTextSize"
-        label = "Targeted Spell Cooldown Text Size"
-        value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, P.RootPhrases[373]) then
-        attr = "targetedSpellsTextEnabled"
-        label = "Targeted Spell Cooldown Text"
-        value = DetectBoolean(normalized)
-        if value == nil then value = true end
-    elseif ContainsAny(normalized, P.RootPhrases[374]) then
-        attr = "targetedSpellsTextDecimalBelow"
-        label = "Targeted Spell Cooldown Decimal Threshold"
-        value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, P.RootPhrases[375]) then
-        attr = "targetedSpellsTextSafeSeconds"
-        label = "Targeted Spell Safe Seconds"
-        value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, P.RootPhrases[376]) then
-        attr = "targetedSpellsTextWarningSeconds"
-        label = "Targeted Spell Warning Seconds"
-        value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, P.RootPhrases[377]) then
-        attr = "targetedSpellsTextUrgentSeconds"
-        label = "Targeted Spell Urgent Seconds"
-        value = FirstNumber(normalized)
-    elseif ContainsAny(normalized, P.RootPhrases[378]) then
+    if ContainsAny(normalized, P.RootPhrases[378]) then
         attr = "targetedSpellsIconSize"
         label = "Targeted Spell Icon Size"
         value = FirstNumber(normalized)

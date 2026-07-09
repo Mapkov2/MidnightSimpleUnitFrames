@@ -1058,38 +1058,7 @@ function Render.Install(box, ctx, deps)
             if maxValue ~= nil and value > maxValue then value = maxValue end
             return value
         end
-        local function TargetedColorValue(key, fallback)
-            return TargetedNumber(key, fallback or 1, 0, 1)
-        end
-        local function TargetedTimerColor(remaining)
-            if conf.targetedSpellsTextColorByTime ~= true then return 1, 1, 1 end
-            local urgent = TargetedNumber("targetedSpellsTextUrgentSeconds", 5, 0, 30)
-            local warning = TargetedNumber("targetedSpellsTextWarningSeconds", 15, 0, 60)
-            local safe = TargetedNumber("targetedSpellsTextSafeSeconds", 60, 0, 600)
-            if warning < urgent then warning = urgent end
-            if safe < warning then safe = warning end
-            if remaining <= urgent then
-                return TargetedColorValue("targetedSpellsTextUrgentR", 1),
-                    TargetedColorValue("targetedSpellsTextUrgentG", 0.55),
-                    TargetedColorValue("targetedSpellsTextUrgentB", 0.10)
-            elseif remaining <= warning then
-                return TargetedColorValue("targetedSpellsTextWarningR", 1),
-                    TargetedColorValue("targetedSpellsTextWarningG", 0.85),
-                    TargetedColorValue("targetedSpellsTextWarningB", 0.20)
-            elseif remaining <= safe then
-                return TargetedColorValue("targetedSpellsTextSafeR", 1),
-                    TargetedColorValue("targetedSpellsTextSafeG", 1),
-                    TargetedColorValue("targetedSpellsTextSafeB", 1)
-            end
-            return 1, 1, 1
-        end
-        local function TargetedTimerText(remaining)
-            local decimalBelow = TargetedNumber("targetedSpellsTextDecimalBelow", 3, 0, 30)
-            if decimalBelow > 0 and remaining < decimalBelow then
-                return string.format("%.1f", remaining)
-            end
-            return tostring(ceil(remaining))
-        end
+
         local function LayoutTargetedSpells()
             if not targetedHandle then return end
             local maxIcons = Int(conf.targetedSpellsMaxIcons, 3, 1, 5)
@@ -1143,8 +1112,6 @@ function Render.Install(box, ctx, deps)
             targetedHandle:SetPoint("BOTTOMLEFT", mock, anchor,
                 ConfigToOffset(conf.targetedSpellsX or 0, previewScale) - originX,
                 ConfigToOffset(conf.targetedSpellsY or 0, previewScale) - originY)
-            local showText = conf.targetedSpellsTextEnabled ~= false
-            local textSize = max(6, ScaleValue(conf.targetedSpellsTextSize or 10, previewScale, 6))
             for i = 1, maxIcons do
                 local tex = targetedHandle._icons and targetedHandle._icons[i]
                 local swipe = targetedHandle._iconSwipes and targetedHandle._iconSwipes[i]
@@ -1167,14 +1134,8 @@ function Render.Install(box, ctx, deps)
                         swipe:SetShown(true)
                     end
                     if timer then
-                        local remaining = (i == 1 and 2.4) or (i == 2 and 7) or max(1, 13 - (i * 2))
-                        SetPreviewFont(timer, textSize)
-                        timer:SetText(TargetedTimerText(remaining))
-                        local tr, tg, tb = TargetedTimerColor(remaining)
-                        timer:SetTextColor(tr or 1, tg or 1, tb or 1, 1)
-                        timer:ClearAllPoints()
-                        timer:SetPoint("CENTER", tex, "CENTER", 0, 0)
-                        timer:SetShown(showText)
+                        timer:SetText("")
+                        timer:Hide()
                     end
                     if border then border:Hide() end
                     if stack then stack:Hide() end
