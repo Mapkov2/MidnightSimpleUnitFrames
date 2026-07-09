@@ -8,10 +8,54 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta8",
-    previousVersion = "6.0-Beta7",
-    rangeLabel = "6.0-Beta7 -> 6.0-Beta8",
+    currentVersion = "6.0-Beta9",
+    previousVersion = "6.0-Beta8",
+    rangeLabel = "6.0-Beta8 -> 6.0-Beta9",
     entries = {
+        {
+            version = "6.0-Beta9",
+            date = "2026-07-09",
+            sections = {
+                {
+                    title = "Runtime Fixes",
+                    bullets = {
+                        "Fixed target portrait refreshes so portrait textures and model state recover more reliably after target, configuration, and preview changes.",
+                        "Fixed self-heal prediction calculation paths so player-driven incoming-heal prediction no longer double-counts or drops the local contribution in test scenarios.",
+                        "Fixed absorb prediction refresh behavior for menu test mode and forced prediction updates, including absorb, heal-absorb, over-absorb, and prediction visibility state.",
+                    },
+                },
+                {
+                    title = "Auras3 And Load Order",
+                    bullets = {
+                        "Embedded the Auras3 runtime directly into UFCore element loading so aura hooks initialize with the unit-frame backend instead of relying on a separate TOC runtime include.",
+                        "Tightened Auras3 edit-mode and performance-trace guards around UFCore frame resolution.",
+                    },
+                },
+                {
+                    title = "Menu2 And Previews",
+                    bullets = {
+                        "Fixed unit preview refresh paths for portrait, absorb, and heal-prediction states after option changes.",
+                        "Moved group-frame color controls into the advanced colors page and cleaned up the group bars page so group color settings are easier to find.",
+                        "Improved Assistant and menu routing for preview, group layout, group indicators, and color-related requests.",
+                    },
+                },
+                {
+                    title = "Release Workflow",
+                    bullets = {
+                        "Fixed annotated tag parsing for publish-target: curseforge so CurseForge-only beta releases do not accidentally publish to other destinations.",
+                    },
+                },
+                {
+                    title = "What To Test First",
+                    bullets = {
+                        "Target portrait changes after target swaps, /reload, preview toggles, and portrait option changes.",
+                        "Absorb, heal-absorb, over-absorb, and incoming-heal previews from the menu test controls.",
+                        "Group-frame color settings under Advanced Colors and the removed duplicate controls from Group Bars.",
+                        "Auras3 buff and debuff lanes after login and after switching edit/preview modes.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta8",
             date = "2026-07-09",
@@ -71,166 +115,6 @@ local data = {
                         "Absorb, heal-absorb, and over-absorb bars with normal, reverse, clamp, and follow modes.",
                         "Balance Druid Eclipse colors and aura-driven ClassPower resources on specs that use aura stacks or timers.",
                         "Group preview dragging for name, health text, power text, aura, and spell-indicator handles.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta7",
-            date = "2026-07-09",
-            sections = {
-                {
-                    title = "UFCore Rewrite",
-                    bullets = {
-                        "Moved the unit-frame backend behind the embedded MSUF_UFCore loader and removed the old broad dispatch module from the main runtime path.",
-                        "Reworked unit-frame, group-frame, health, power, text, border, status, load-condition, and factory runtime code around direct Core-owned frame APIs.",
-                        "Updated the TOC and XML load order so UFCore owns unit-frame elements, factory setup, and group-frame runtime loading.",
-                        "Preserved compatibility bridges for existing feature modules while routing live frame lookup through MSUF.UF and MSUF.GF.",
-                    },
-                },
-                {
-                    title = "Performance And Runtime",
-                    bullets = {
-                        "Routed hot unit events through direct frame handlers instead of the old broad dispatch path.",
-                        "Reduced normal menu and Assistant apply work by targeting UFCore scopes and dirty masks instead of forcing broad full-frame updates.",
-                        "Added opt-in Auras3 performance tracing with /msufa3trace tooling for focused aura profiling.",
-                        "Added diagnostics and rewrite notes for UFCore connection audits, click-spike tracing, and coldpath/hotpath migration checks.",
-                        "Kept click and secure-frame diagnostics out of the default hotpath unless explicitly invoked.",
-                    },
-                },
-                {
-                    title = "Auras",
-                    bullets = {
-                        "Core feature restored: the Aura Designer is usable again, including healer-focused aura and spell-indicator setup.",
-                        "Reconnected Auras3 to UFCore frame resolution and scoped apply paths for unit, target, focus, boss, pet, and group lanes.",
-                        "Added separate tooltip controls for buff and debuff lanes.",
-                        "Improved target/focus aura refresh behavior and native aura-container rebuild handling.",
-                        "Added tracked group-buff lane support backed by spell-indicator data.",
-                        "Added Auras3 spell-indicator runtime support for 12.1 CustomAuraContainer aura slots.",
-                        "Improved aura include/exclude spell-ID filtering, candidate signatures, and native filter handling.",
-                    },
-                },
-                {
-                    title = "Group Frames And Spell Indicators",
-                    bullets = {
-                        "Restored spell-indicator data load order for group frames inside the UFCore group embed.",
-                        "Added tracked-buff compilation from selected spell-indicator specs and enabled spell-indicator-driven tracked aura lanes.",
-                        "Improved group aura defaults, lane configuration, tooltip behavior, and external defensive filtering.",
-                        "Updated group indicator Assistant actions, page wiring, and search routing for the new tracked aura/spell-indicator paths.",
-                        "Improved group preview rendering for aura lanes, spell-indicator placements, and handle interactions.",
-                    },
-                },
-                {
-                    title = "Menu2, Assistant, And Search",
-                    bullets = {
-                        "Updated Menu2 apply service, bindings, pages, and Assistant registries to use scoped UFCore apply routes.",
-                        "Improved Assistant aura parsing, aura group-lane routing, and dashboard/status selector coverage.",
-                        "Added menu controls for frame-border strata and exposed the matching Global Bars control.",
-                        "Updated Menu2 aura, group aura, group indicator, and global bar pages for the new Aura3 and group tracked-buff options.",
-                        "Improved Menu2 search keywords, FAQ routing, and support text for the new aura and spell-indicator workflows.",
-                        "Added and localized new user-facing labels for the spell-indicator and tooltip reset flows.",
-                    },
-                },
-                {
-                    title = "Castbars, Class Power, And Integrations",
-                    bullets = {
-                        "Connected castbars, boss castbars, player castbar runtime, class power, and gameplay hooks to UFCore-first frame lookup.",
-                        "Updated previews and edit-mode interactions for castbars, class power, auras, group frames, and unit frames.",
-                        "Kept castbar and class-power live event paths external and direct while refreshing visuals through UFCore callbacks.",
-                        "Updated third-party anchor integration and runtime color/font/texture helpers for the UFCore rewrite.",
-                    },
-                },
-                {
-                    title = "Visuals And Previews",
-                    bullets = {
-                        "Updated Edit Mode movers, popups, HUD, and layout handling for UFCore-backed frames.",
-                        "Updated unit and group previews to resolve live frames through UFCore and render updated aura, castbar, class-power, text, and group layers.",
-                        "Replaced frame-border level-offset behavior with frame-border strata selection for more predictable overlay layering.",
-                        "Improved rounded-frame, border, highlight, alpha, portrait, and status element integration with scoped UFCore refreshes.",
-                    },
-                },
-                {
-                    title = "What To Test First",
-                    bullets = {
-                        "Rapid target and focus swaps with buffs, debuffs, tracked buffs, tooltips, and cooldown text enabled.",
-                        "Party, raid, and mythic raid group auras, especially spell-indicator tracked buffs and external defensive filters.",
-                        "Group indicator setup, Assistant commands for spell indicators, and Menu2 search routing for aura/group-aura settings.",
-                        "Frame-border strata on unit and group frames across normal UI, previews, and Edit Mode.",
-                        "Castbar, class power, rounded-frame, and third-party-anchor behavior after profile swaps and /reload.",
-                        "/msufa3trace, /msufclickcore, and UFCore diagnostics only when explicitly testing performance.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta6",
-            date = "2026-07-06",
-            sections = {
-                {
-                    title = "Bug Fixes",
-                    bullets = {
-                        "Fixed auras not refreshing on target and focus swaps, which could leave the previous unit's buffs and debuffs showing on the new unit.",
-                        "Restored the proven forced aura refresh on every target/focus identity change so the native aura container always reparses for the new unit instead of skipping the rebuild when the applied config looked unchanged.",
-                    },
-                },
-                {
-                    title = "Performance Highlights",
-                    bullets = {
-                        "Added a direct frame event path for RegisterUnitEvent-owned frames so hot unit events run their prebuilt handler immediately instead of going through the broad event router, removing the redundant re-derivation of which frame an event belonged to.",
-                        "Added an Ellesmere-style value hot path that bakes the exact health and power work into one closure per frame and event, so value ticks skip the generic runner layer.",
-                        "Added a percent-only health path for single frames (target, focus, boss, pet) that uses one UnitHealthPercent call and skips UnitHealth, UnitHealthMax, and store bookkeeping, so a boss target taking sustained damage costs far less per health tick.",
-                        "Added direct group-frame health and power dispatch for frequent value updates.",
-                    },
-                },
-                {
-                    title = "Runtime Optimizations",
-                    bullets = {
-                        "Single-frame health color is now re-resolved only on identity, flag, and faction changes and deduplicated on plain health ticks, so target swaps stay correct without per-tick color work.",
-                        "Removed a legacy value-handler baker that a profiling session proved never produced a real health or power handler in practice; value events still run correctly through the unified path.",
-                        "Added distinct profiling labels for the direct event path so /msufprof shows whether the lean dispatch actually ran.",
-                    },
-                },
-                {
-                    title = "What To Test First",
-                    bullets = {
-                        "Rapid target and focus swapping, including quick swaps with multiple visible buff and debuff lanes, to confirm auras always update for the new unit.",
-                        "Target-of-target and focus-target aura and health behavior.",
-                        "Boss, target, focus, and pet health under sustained damage, and health bar color on target swaps between players, NPCs, and different reactions.",
-                        "Frequent group health and power changes in party and raid layouts.",
-                        "/msufprof fast-path, lean-event, and identity diagnostic output.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta5",
-            date = "2026-07-05",
-            sections = {
-                {
-                    title = "Performance Highlights",
-                    bullets = {
-                        "Added lean Target, Focus, and target-of-target identity refreshes that use prebaked element update lists instead of the full runtime wrapper path.",
-                        "Added lean per-unit event dispatch for hot unit events so filtered unit trackers can call compiled frame handlers directly.",
-                        "Added direct group-frame health dispatch to reduce overhead on frequent health updates.",
-                        "Retired inactive group-frame runtime work when party, raid, or mythic raid frames are disabled or not active for the current roster state.",
-                    },
-                },
-                {
-                    title = "Runtime Optimizations",
-                    bullets = {
-                        "Reduced target/focus swap cost by skipping redundant visibility rebuilds and avoiding unnecessary player-only or NPC-only status API checks.",
-                        "Reduced group-frame background event work by unregistering name, roster, and Blizzard fallback listeners when group runtime is inactive.",
-                        "Tightened targeted-spell refreshes so party-only state is not recalculated for unrelated group-frame updates.",
-                        "Added profiling diagnostics for identity refreshes and fast-path dispatch verification.",
-                    },
-                },
-                {
-                    title = "What To Test First",
-                    bullets = {
-                        "Rapid target and focus swapping, including target-of-target and focus-target frames.",
-                        "Frequent group health changes in party and raid layouts.",
-                        "Enabling, disabling, and switching Party/Raid/Mythic Raid frames, including solo and inactive roster states.",
-                        "/msufprof fast-path, detail, and identity diagnostic output.",
                     },
                 },
             },

@@ -1,5 +1,30 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta9 - 2026-07-09
+
+### Runtime Fixes
+- Fixed target portrait refreshes so portrait textures and model state recover more reliably after target, configuration, and preview changes.
+- Fixed self-heal prediction calculation paths so player-driven incoming-heal prediction no longer double-counts or drops the local contribution in test scenarios.
+- Fixed absorb prediction refresh behavior for menu test mode and forced prediction updates, including absorb, heal-absorb, over-absorb, and prediction visibility state.
+
+### Auras3 And Load Order
+- Embedded the Auras3 runtime directly into UFCore element loading so aura hooks initialize with the unit-frame backend instead of relying on a separate TOC runtime include.
+- Tightened Auras3 edit-mode and performance-trace guards around UFCore frame resolution.
+
+### Menu2 And Previews
+- Fixed unit preview refresh paths for portrait, absorb, and heal-prediction states after option changes.
+- Moved group-frame color controls into the advanced colors page and cleaned up the group bars page so group color settings are easier to find.
+- Improved Assistant and menu routing for preview, group layout, group indicators, and color-related requests.
+
+### Release Workflow
+- Fixed annotated tag parsing for `publish-target: curseforge` so CurseForge-only beta releases do not accidentally publish to other destinations.
+
+### What To Test First
+- Target portrait changes after target swaps, `/reload`, preview toggles, and portrait option changes.
+- Absorb, heal-absorb, over-absorb, and incoming-heal previews from the menu test controls.
+- Group-frame color settings under Advanced Colors and the removed duplicate controls from Group Bars.
+- Auras3 buff and debuff lanes after login and after switching edit/preview modes.
+
 ## 6.0-Beta8 - 2026-07-09
 
 ### Group Auras And Spell Indicators
