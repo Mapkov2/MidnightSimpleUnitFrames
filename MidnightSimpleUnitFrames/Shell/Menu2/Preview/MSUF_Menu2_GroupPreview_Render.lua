@@ -10,6 +10,7 @@ local Render = M.GroupPreviewRender or {}
 M.GroupPreviewRender = Render
 local F = M.Fallbacks or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local function DefaultCompiledAuraLane(_, _, fallback) return fallback or {} end
 local function DefaultInt(value, fallback, minValue, maxValue)
     local n = math.floor((tonumber(value) or tonumber(fallback) or 0) + 0.0001)
@@ -20,6 +21,22 @@ end
 local function NumberOrOne(value) return tonumber(value) or 1 end
 local function DefaultAuraGrowth() return { px = 1, py = 0, sx = 0, sy = -1 } end
 local function DefaultClampLayer(value, fallback) return tonumber(value) or fallback or 0 end
+local function NormalizeFrameStrata(value, fallback)
+    local normalize = _G.MSUF_NormalizeFrameStrata
+    if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
+    if issecretvalue(value) == true then return fallback or "AUTO" end
+    if value == nil or value == "" then return fallback or "AUTO" end
+    value = tostring(value):upper()
+    if value == "AUTO" then return "AUTO" end
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return rank and rank[value] and value or (fallback or "AUTO")
+end
+local PREVIEW_UNITFRAME_STRATA = "MEDIUM"
+local PREVIEW_STRATA_LEVEL_STEP = 40
+local function FrameStrataRank(value)
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return rank and rank[value] or 0
+end
 local function DefaultClassColor(_, r, g, b) return r or 1, g or 1, b or 1 end
 local GROUP_RENDER_FALLBACKS = {
     CompiledSpec = F.Nil, CompiledAuraLane = DefaultCompiledAuraLane, RuntimeStatusConfig = F.Nil,
@@ -77,10 +94,74 @@ function Render.Install(box, ctx, deps)
     end
     local ConfigToOffset = deps.ConfigToOffset or function(value, scale) return Round((tonumber(value) or 0) * (tonumber(scale) or 1)) end
     local ResolvePreviewStatusbarTexture = deps.ResolveStatusbarTexture or function() return WHITE8X8 end
+    box._msufGFRenderState = {
+        floor = floor,
+        max = max,
+        min = min,
+        ceil = ceil,
+        H = H,
+        M = M,
+        MSUF = MSUF,
+        T = T,
+        width = width,
+        mock = mock,
+        WHITE8X8 = WHITE8X8,
+        GF_PREVIEW_NAMES = GF_PREVIEW_NAMES,
+        GF_PREVIEW_CLASSES = GF_PREVIEW_CLASSES,
+        GF_AURA_MOCK_ICON_IDS = GF_AURA_MOCK_ICON_IDS,
+        GF_PREVIEW_MIN_W = GF_PREVIEW_MIN_W,
+        GF_PREVIEW_MIN_H = GF_PREVIEW_MIN_H,
+        GF_PREVIEW_ROLE = GF_PREVIEW_ROLE,
+        GF_PREVIEW_ANCHOR_FRAC = GF_PREVIEW_ANCHOR_FRAC,
+        buffHandle = buffHandle,
+        trackedBuffHandle = trackedBuffHandle,
+        debuffHandle = debuffHandle,
+        statusHandles = statusHandles,
+        spellHandle = spellHandle,
+        targetedHandle = targetedHandle,
+        statusSpecs = statusSpecs,
+        CompiledSpec = CompiledSpec,
+        CompiledAuraLane = CompiledAuraLane,
+        RuntimeStatusConfig = RuntimeStatusConfig,
+        CurrentStatusSpec = CurrentStatusSpec,
+        StatusSpecEnabled = StatusSpecEnabled,
+        StatusSpecInMode = StatusSpecInMode,
+        StatusSpecIsText = StatusSpecIsText,
+        StatusText = StatusText,
+        StatusLabel = StatusLabel,
+        CurrentSpellConfig = CurrentSpellConfig,
+        CurrentSpellPlaced = CurrentSpellPlaced,
+        CurrentSpellTexture = CurrentSpellTexture,
+        CurrentSpellColor = CurrentSpellColor,
+        MockSpellTexture = MockSpellTexture,
+        Int = Int,
+        Round = Round,
+        ClampZoom = ClampZoom,
+        UpdateZoomControls = UpdateZoomControls,
+        AuraGrowth = AuraGrowth,
+        ApplyRounded = ApplyRounded,
+        ClampLayer = ClampLayer,
+        ClassColor = ClassColor,
+        HealthColor = HealthColor,
+        AddIconPool = AddIconPool,
+        ScaleValue = ScaleValue,
+        ConfigToOffset = ConfigToOffset,
+        ResolvePreviewStatusbarTexture = ResolvePreviewStatusbarTexture,
+        DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS,
+        PREVIEW_UNITFRAME_STRATA = PREVIEW_UNITFRAME_STRATA,
+        NormalizeFrameStrata = NormalizeFrameStrata,
+        FrameStrataRank = FrameStrataRank,
+        Layers = Layers,
+        issecretvalue = issecretvalue,
+    }
     --- Refresh is menu-only. It reads compiled/runtime-like specs to draw a mock
     --- group frame and must not rebuild secure headers or subscribe to roster
     --- events.
-    function box:Refresh()
+    function box:Refresh(reason)
+        if self._msufGFTextDragActive and reason ~= "GROUP_PREVIEW_TEXT_DRAG" and reason ~= "GROUP_PREVIEW_TEXT_DRAG_END" then
+            self._msufGFRefreshReason = reason or self._msufGFRefreshReason
+            return
+        end
         local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
         local profileStarted = profiling and M.ProfileStart() or nil
         local textHandles = self._textHandles or {}
@@ -141,6 +222,7 @@ function Render.Install(box, ctx, deps)
                 x = rawBuff.trackedX or 0,
                 y = rawBuff.trackedY or 0,
                 layer = rawBuff.trackedLayer or (conf.spellIndicators and conf.spellIndicators.layer) or 9,
+                strata = rawBuff.trackedStrata or (conf.spellIndicators and conf.spellIndicators.strata) or rawBuff.strata,
                 showCooldownSwipe = rawBuff.trackedShowCooldownSwipe,
                 cooldownSwipeReverse = rawBuff.trackedCooldownSwipeReverse,
                 showCooldown = rawBuff.trackedShowCooldown,
@@ -160,8 +242,10 @@ function Render.Install(box, ctx, deps)
         local debuffCfg = runtimeAuras and CompiledAuraLane(runtimeAuras, "debuff", rawAuras.debuff or {}) or (rawAuras.debuff or {})
         local statusSpec = CurrentStatusSpec()
         local selectedSpellCfg = CurrentSpellConfig(kind)
+        local rawSelectedPlaced = selectedSpellCfg and selectedSpellCfg.placed
         local selectedPlaced = CurrentSpellPlaced(kind)
         local selectedSpellPlacedEnabled = selectedPlaced and (selectedPlaced.type or "icon") ~= "none"
+        local selectedSpellNeedsPlacementPreview = selectedSpellCfg ~= nil and rawSelectedPlaced == nil
         local runtimeSpellIndicators = runtimeSpec and runtimeSpec.spellIndicators or nil
         local runtimeSpellItems = runtimeSpellIndicators and runtimeSpellIndicators.items or nil
         local runtimeSpellPlacedAvailable = false
@@ -226,6 +310,7 @@ function Render.Install(box, ctx, deps)
         else
             textAvailable = conf.showName ~= false or conf.showHPText ~= false or powerTextEnabled == true
         end
+        local selectedSpellAvailable = conf.spellIndicators and conf.spellIndicators.enabled == true and (selectedSpellPlacedEnabled or selectedSpellNeedsPlacementPreview)
         local layerAvailable = {
             guides = true,
             bounds = true,
@@ -234,7 +319,7 @@ function Render.Install(box, ctx, deps)
             debuff = AuraLaneAvailable(debuffCfg, 6),
             status = statusLayerAvailable,
             si = (runtimeSpellIndicators and runtimeSpellIndicators.enabled == true and (runtimeSpellPlacedAvailable or runtimeSpellEffect ~= nil))
-                or (runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.enabled == true and selectedSpellPlacedEnabled)
+                or selectedSpellAvailable
                 or false,
             targetedSpells = kind == "party" and conf.targetedSpellsEnabled == true,
             auraText = aurasEnabled and customAuraText,
@@ -353,7 +438,7 @@ function Render.Install(box, ctx, deps)
             frameScale = tonumber(sc2) or 1
         end
         liveW, liveH = max(1, liveW), max(1, liveH)
-        local autoZoom = min(GF_PREVIEW_MIN_W / liveW, GF_PREVIEW_MIN_H / liveH)
+        local autoZoom = min(self._msufGFRenderState.GF_PREVIEW_MIN_W / liveW, self._msufGFRenderState.GF_PREVIEW_MIN_H / liveH)
         autoZoom = max(1.4, min(2.8, autoZoom))
         local manualZoom = tonumber(self._manualZoom)
         local frozenZoom = tonumber(self._dragFrozenScale)
@@ -383,7 +468,7 @@ function Render.Install(box, ctx, deps)
         if runtimeSpec and runtimeSpec.backgroundAlpha ~= nil then bgAlpha = runtimeSpec.backgroundAlpha end
         mock:SetBackdropColor(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09, bgAlpha)
         mock:SetBackdropBorderColor(0, 0, 0, 0)
-        local cls = GF_PREVIEW_CLASSES[((kind == "party" and 5 or 2) % #GF_PREVIEW_CLASSES) + 1]
+        local cls = self._msufGFRenderState.GF_PREVIEW_CLASSES[((kind == "party" and 5 or 2) % #self._msufGFRenderState.GF_PREVIEW_CLASSES) + 1]
         local br, bg, bb = runtimeBorder.r or conf.borderR or 0, runtimeBorder.g or conf.borderG or 0, runtimeBorder.b or conf.borderB or 0
         mock._msufGFPreviewBorderR = br
         mock._msufGFPreviewBorderG = bg
@@ -508,18 +593,18 @@ function Render.Install(box, ctx, deps)
             if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
             mock._nameTextLayer:ClearAllPoints()
             mock._nameTextLayer:SetAllPoints(mock)
-            mock._nameTextLayer:SetFrameLevel(textBaseLevel + (tonumber(runtimeText.nameLayer) or tonumber(conf.nameTextLayer) or 5))
+            mock._nameTextLayer:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.nameLayer or conf.nameTextLayer, 5))
         end
         if mock._healthTextLayer then
             if mock._healthTextLayer.GetParent and mock._healthTextLayer:GetParent() ~= mock and mock._healthTextLayer.SetParent then mock._healthTextLayer:SetParent(mock) end
             mock._healthTextLayer:ClearAllPoints()
             mock._healthTextLayer:SetAllPoints(mock)
-            mock._healthTextLayer:SetFrameLevel(textBaseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 5))
+            mock._healthTextLayer:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
         end
         if mock._powerTextLayer then
             mock._powerTextLayer:ClearAllPoints()
             mock._powerTextLayer:SetAllPoints(mock)
-            mock._powerTextLayer:SetFrameLevel(textBaseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 2))
+            mock._powerTextLayer:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
         end
         local showText = LayerOn("text")
         local fontPath = (runtimeSpec and runtimeSpec.font) or (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
@@ -577,7 +662,7 @@ function Render.Install(box, ctx, deps)
             or 1
         local baselineOffset = (runtimeSpec and 0) or (gf and gf.ResolveFontBaselineOffset and gf.ResolveFontBaselineOffset(kind)) or 0
         SetPreviewFont(mock._nameFS, max(6, ScaleValue((runtimeSpec and runtimeSpec.nameFontSize) or conf.nameFontSize or 12, previewScale, 6)))
-        local previewName = GF_PREVIEW_NAMES[5]
+        local previewName = self._msufGFRenderState.GF_PREVIEW_NAMES[5]
         if gf and gf.ResolveNameTruncation and gf.TruncateName then
             local maxC, noEllipsis, clipSide = gf.ResolveNameTruncation(kind)
             if maxC and maxC > 0 then previewName = gf.TruncateName(previewName, maxC, noEllipsis, clipSide) end
@@ -854,10 +939,10 @@ function Render.Install(box, ctx, deps)
             perRow = max(Round(perRow), 1)
             if verticalGrowth == true then
                 local rows = min(count, perRow)
-                return ceil(count / perRow), rows
+                return math.ceil(count / perRow), rows
             end
             local cols = min(count, perRow)
-            return cols, ceil(count / perRow)
+            return cols, math.ceil(count / perRow)
         end
         local function LayoutAuraGroup(handle, groupKey, cfg, defaults)
             cfg = cfg or {}
@@ -1058,7 +1143,6 @@ function Render.Install(box, ctx, deps)
             if maxValue ~= nil and value > maxValue then value = maxValue end
             return value
         end
-
         local function LayoutTargetedSpells()
             if not targetedHandle then return end
             local maxIcons = Int(conf.targetedSpellsMaxIcons, 3, 1, 5)
@@ -1192,7 +1276,7 @@ function Render.Install(box, ctx, deps)
                     elseif spec.customIcon and type(conf[spec.customIcon]) == "string" and conf[spec.customIcon] ~= "" then
                         path, l, r, t, b = conf[spec.customIcon], 0, 1, 0, 1
                     elseif value == "roleIcon" and gf and gf.GetRoleTexture then
-                        path, l, r, t, b = gf.GetRoleTexture(kind, GF_PREVIEW_ROLE, runtimeCfg and runtimeCfg.style)
+                        path, l, r, t, b = gf.GetRoleTexture(kind, self._msufGFRenderState.GF_PREVIEW_ROLE, runtimeCfg and runtimeCfg.style)
                     elseif value == "leaderIcon" and gf and gf.GetLeaderTexture then
                         path, l, r, t, b = gf.GetLeaderTexture(kind, runtimeCfg and runtimeCfg.style)
                     elseif value == "assistIcon" and gf and gf.GetAssistTexture then
@@ -1251,6 +1335,7 @@ function Render.Install(box, ctx, deps)
             local spellR, spellG, spellB = (color and color[1]) or 0.69, (color and color[2]) or 0.50, (color and color[3]) or 0.88
             handle._icons = handle._icons or {}
             local spellTex = handle._icons[1]
+            local spellTimer = handle._iconTimers and handle._iconTimers[1]
             if spellType == "bar" then
                 local barW = max(spellSize * 2, ScaleValue(placed.barWidth or (spellBaseSize * 3), previewScale, 16))
                 handle:SetSize(barW, spellSize)
@@ -1262,6 +1347,7 @@ function Render.Install(box, ctx, deps)
                     spellTex:SetAllPoints(handle)
                     spellTex:Show()
                 end
+                if spellTimer then spellTimer:Hide() end
             elseif spellType == "square" then
                 handle:SetSize(spellSize, spellSize)
                 if spellTex then
@@ -1272,9 +1358,11 @@ function Render.Install(box, ctx, deps)
                     spellTex:SetAllPoints(handle)
                     spellTex:Show()
                 end
+                if spellTimer then spellTimer:Hide() end
             elseif spellType == "number" then
                 handle:SetSize(max(18, spellSize), max(18, spellSize))
                 if spellTex then spellTex:Hide() end
+                if spellTimer then spellTimer:Hide() end
                 if handle._label and handle._label.SetText then handle._label:SetText("9") end
             else
                 handle:SetSize(spellSize, spellSize)
@@ -1286,10 +1374,21 @@ function Render.Install(box, ctx, deps)
                     spellTex:SetAllPoints(handle)
                     spellTex:Show()
                 end
+                if spellTimer then
+                    local showCooldown = placed.showCooldown ~= false
+                    local cooldownSize = max(6, ScaleValue(placed.cooldownSize or 8, previewScale, 6))
+                    SetPreviewFont(spellTimer, cooldownSize)
+                    spellTimer:SetTextColor(1, 1, 1, 1)
+                    PlaceAuraPreviewText(spellTimer, spellTex or handle, "CENTER", 0, 0)
+                    spellTimer:SetText(showCooldown and "12" or "")
+                    spellTimer:SetShown(showCooldown)
+                end
             end
             if spellType ~= "number" and handle._label and handle._label.SetText then
                 handle._label:SetText(item and (item.display or item.auraName) or "SPELL")
             end
+            handle._msufSpellIndicatorLayer = item and item.layer or nil
+            handle._msufSpellIndicatorStrata = item and item.strata or nil
             LayoutHandle(handle, placed.anchor, placed.x, placed.y, "TOPLEFT")
             return true
         end
@@ -1301,13 +1400,13 @@ function Render.Install(box, ctx, deps)
                     local handle = box:EnsureSpellIndicatorHandle(item, i)
                     if handle and ConfigureSpellPreviewHandle(handle, item, placed) then
                         dynamicSpellHandlesUsed = true
-                        dynamicSpellHandlesActive[handle._msufSpellIndicatorPreviewKey] = true
+                        dynamicSpellHandlesActive[handle._msufSpellIndicatorPreviewKey] = handle
                     end
                 end
             end
         end
         if box.HideUnusedSpellIndicatorHandles then box:HideUnusedSpellIndicatorHandles(dynamicSpellHandlesActive) end
-        if dynamicSpellHandlesUsed then
+        if dynamicSpellHandlesUsed and not selectedSpellNeedsPlacementPreview then
             spellHandle:Hide()
         else
             local selectedSpellIcon = CurrentSpellTexture(kind)
@@ -1349,9 +1448,51 @@ function Render.Install(box, ctx, deps)
         end
         H.ApplyTextFocus(self, mock)
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
-        buffHandle:SetFrameLevel(baseLevel + ClampLayer(buffCfg.layer, 5))
-        if trackedBuffHandle then trackedBuffHandle:SetFrameLevel(baseLevel + ClampLayer(trackedBuffCfg.layer, 9)) end
-        debuffHandle:SetFrameLevel(baseLevel + ClampLayer(debuffCfg.layer, 6))
+        local liveFrameStrata, fallbackFrameStrata
+        if gf and type(gf.ForEachFrame) == "function" then
+            gf.ForEachFrame(function(frame, _, frameKind)
+                if not (frame and frame.GetFrameStrata) then return false end
+                local strata = frame:GetFrameStrata()
+                if issecretvalue(strata) == true or not strata or strata == "" then return false end
+                strata = NormalizeFrameStrata(strata, PREVIEW_UNITFRAME_STRATA)
+                if not fallbackFrameStrata then fallbackFrameStrata = strata end
+                if frameKind == kind or frame._msufGFKind == kind then
+                    liveFrameStrata = strata
+                    return true
+                end
+                return false
+            end, true)
+        end
+        liveFrameStrata = NormalizeFrameStrata(liveFrameStrata or fallbackFrameStrata or PREVIEW_UNITFRAME_STRATA, PREVIEW_UNITFRAME_STRATA)
+        if liveFrameStrata == "AUTO" then liveFrameStrata = PREVIEW_UNITFRAME_STRATA end
+        local liveFrameStrataRank = FrameStrataRank(liveFrameStrata)
+        local previewHostStrata = mock.GetFrameStrata and mock:GetFrameStrata() or nil
+        if issecretvalue(previewHostStrata) == true or previewHostStrata == nil or previewHostStrata == "" then
+            previewHostStrata = self.GetFrameStrata and self:GetFrameStrata() or nil
+            if issecretvalue(previewHostStrata) == true or previewHostStrata == "" then previewHostStrata = nil end
+        end
+        local function PreviewStrataOffset(value)
+            local strata = NormalizeFrameStrata(value, "AUTO")
+            if strata == "AUTO" then strata = liveFrameStrata end
+            local rank = FrameStrataRank(strata)
+            if rank == 0 or liveFrameStrataRank == 0 then return 0 end
+            return (rank - liveFrameStrataRank) * PREVIEW_STRATA_LEVEL_STEP
+        end
+        local function ApplyPreviewStrata(handle, value)
+            if handle and handle.SetFrameStrata and previewHostStrata then
+                local currentStrata = handle.GetFrameStrata and handle:GetFrameStrata() or nil
+                if issecretvalue(currentStrata) == true or currentStrata ~= previewHostStrata then
+                    handle:SetFrameStrata(previewHostStrata)
+                end
+            end
+            return PreviewStrataOffset(value)
+        end
+        local buffStrataOffset = ApplyPreviewStrata(buffHandle, buffCfg.strata)
+        local trackedBuffStrataOffset = ApplyPreviewStrata(trackedBuffHandle, trackedBuffCfg.strata)
+        local debuffStrataOffset = ApplyPreviewStrata(debuffHandle, debuffCfg.strata)
+        buffHandle:SetFrameLevel(baseLevel + buffStrataOffset + ClampLayer(buffCfg.layer, 5))
+        if trackedBuffHandle then trackedBuffHandle:SetFrameLevel(baseLevel + trackedBuffStrataOffset + ClampLayer(trackedBuffCfg.layer, 9)) end
+        debuffHandle:SetFrameLevel(baseLevel + debuffStrataOffset + ClampLayer(debuffCfg.layer, 6))
         for i = 1, #statusHandles do
             local handle = statusHandles[i]
             local spec = handle and handle._statusSpec
@@ -1361,18 +1502,27 @@ function Render.Install(box, ctx, deps)
             end
         end
         local spellLayer = conf.spellIndicators and conf.spellIndicators.layer
+        local spellStrata = conf.spellIndicators and conf.spellIndicators.strata
         if runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.layer ~= nil then spellLayer = runtimeSpec.spellIndicators.layer end
-        spellHandle:SetFrameLevel(baseLevel + ClampLayer(spellLayer, 9))
+        if runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.strata ~= nil then spellStrata = runtimeSpec.spellIndicators.strata end
+        local spellStrataOffset = ApplyPreviewStrata(spellHandle, selectedSpellCfg and selectedSpellCfg.strata or spellStrata)
+        spellHandle:SetFrameLevel(baseLevel + spellStrataOffset + ClampLayer(selectedSpellCfg and selectedSpellCfg.layer or spellLayer, 9))
+        for _, handle in pairs(dynamicSpellHandlesActive) do
+            if handle then
+                local handleStrataOffset = ApplyPreviewStrata(handle, handle._msufSpellIndicatorStrata or spellStrata)
+                handle:SetFrameLevel(baseLevel + handleStrataOffset + ClampLayer(handle._msufSpellIndicatorLayer or spellLayer, 9))
+            end
+        end
         if targetedHandle then targetedHandle:SetFrameLevel(baseLevel + (Layers.TARGETED_SPELLS_BASE_OFFSET or 40) + ClampLayer(conf.targetedSpellsLayer, 10)) end
-        textHandles.name:SetFrameLevel(baseLevel + (tonumber(runtimeText.nameLayer) or tonumber(conf.nameTextLayer) or 6))
-        textHandles.hpGroup:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))
-        textHandles.hpLeft:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))
-        textHandles.hpCenter:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))
-        textHandles.hpRight:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))
-        textHandles.powerGroup:SetFrameLevel(baseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 6))
-        textHandles.powerLeft:SetFrameLevel(baseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 6))
-        textHandles.powerCenter:SetFrameLevel(baseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 6))
-        textHandles.powerRight:SetFrameLevel(baseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 6))
+        textHandles.name:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.nameLayer or conf.nameTextLayer, 5))
+        textHandles.hpGroup:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
+        textHandles.hpLeft:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
+        textHandles.hpCenter:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
+        textHandles.hpRight:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
+        textHandles.powerGroup:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
+        textHandles.powerLeft:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
+        textHandles.powerCenter:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
+        textHandles.powerRight:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
         buffHandle:SetShown(layerAvailable.buff and LayerOn("buff"))
         if trackedBuffHandle then trackedBuffHandle:SetShown(layerAvailable.trackedBuff and LayerOn("trackedBuff")) end
         debuffHandle:SetShown(layerAvailable.debuff and LayerOn("debuff"))
@@ -1381,7 +1531,11 @@ function Render.Install(box, ctx, deps)
             local spec = handle and handle._statusSpec
             if handle then handle:SetShown(StatusSpecInMode(spec, statusSpec) and StatusConfigAvailable(spec) and LayerOn("status")) end
         end
-        spellHandle:SetShown(layerAvailable.si and LayerOn("si"))
+        local siVisible = layerAvailable.si and LayerOn("si")
+        spellHandle:SetShown(siVisible)
+        for _, handle in pairs(dynamicSpellHandlesActive) do
+            if handle then handle:SetShown(siVisible) end
+        end
         if targetedHandle then targetedHandle:SetShown(layerAvailable.targetedSpells and LayerOn("targetedSpells")) end
         buffHandle:SetAlpha(LayerAlpha("buff") * AuraPreviewAlpha(buffCfg))
         if trackedBuffHandle then trackedBuffHandle:SetAlpha(LayerAlpha("trackedBuff") * AuraPreviewAlpha(trackedBuffCfg)) end
@@ -1390,6 +1544,9 @@ function Render.Install(box, ctx, deps)
             if statusHandles[i] then statusHandles[i]:SetAlpha(LayerAlpha("status")) end
         end
         spellHandle:SetAlpha((selectedSpellCfg and selectedSpellCfg.enabled == false) and (LayerAlpha("si") * 0.45) or LayerAlpha("si"))
+        for _, handle in pairs(dynamicSpellHandlesActive) do
+            if handle then handle:SetAlpha(LayerAlpha("si")) end
+        end
         if targetedHandle then targetedHandle:SetAlpha(LayerAlpha("targetedSpells")) end
         textHandles.name:SetAlpha(LayerAlpha("text"))
         textHandles.hpGroup:SetAlpha(LayerAlpha("text"))

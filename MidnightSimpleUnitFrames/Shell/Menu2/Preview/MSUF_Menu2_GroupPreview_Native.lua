@@ -538,6 +538,7 @@ local function CompiledAuraLane(auras, key, fallback)
         x = auras[prefix .. "OffsetX"],
         y = auras[prefix .. "OffsetY"],
         layer = auras[prefix .. "Layer"],
+        strata = auras[prefix .. "Strata"],
         showCooldownSwipe = auras[prefix .. "ShowCooldownSwipe"],
         cooldownSwipeReverse = auras[prefix .. "CooldownSwipeReverse"],
         showCooldown = auras[prefix .. "ShowCooldown"],
@@ -1247,10 +1248,27 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         renderDeps.AddIconPool = AddIconPool
         M.GroupPreviewRender.Install(box, ctx, renderDeps)
     end
+    function box:CancelPendingRefresh()
+        self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
+        self._msufGFRefreshQueued = nil
+        self._msufGFRefreshReason = nil
+    end
+    function box:SetTextDragRefreshSuppressed(active)
+        if active then
+            self._msufGFTextDragActive = true
+            if self.CancelPendingRefresh then self:CancelPendingRefresh() end
+        else
+            self._msufGFTextDragActive = nil
+        end
+    end
     function box:RequestRefresh(reason)
         local hostShown = self._msufGFPreviewHostShown
         if type(hostShown) == "function" and not hostShown() then
             self:ReleaseRuntimePreview()
+            return
+        end
+        if self._msufGFTextDragActive then
+            self._msufGFRefreshReason = reason or self._msufGFRefreshReason
             return
         end
         if self._msufGFRefreshQueued then
