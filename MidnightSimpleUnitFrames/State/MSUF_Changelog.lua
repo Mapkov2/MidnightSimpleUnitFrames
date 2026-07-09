@@ -8,10 +8,97 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta6",
-    previousVersion = "6.0-Beta5",
-    rangeLabel = "6.0-Beta5 -> 6.0-Beta6",
+    currentVersion = "6.0-Beta7",
+    previousVersion = "6.0-Beta6",
+    rangeLabel = "6.0-Beta6 -> 6.0-Beta7",
     entries = {
+        {
+            version = "6.0-Beta7",
+            date = "2026-07-09",
+            sections = {
+                {
+                    title = "UFCore Rewrite",
+                    bullets = {
+                        "Moved the unit-frame backend behind the embedded MSUF_UFCore loader and removed the old broad dispatch module from the main runtime path.",
+                        "Reworked unit-frame, group-frame, health, power, text, border, status, load-condition, and factory runtime code around direct Core-owned frame APIs.",
+                        "Updated the TOC and XML load order so UFCore owns unit-frame elements, factory setup, and group-frame runtime loading.",
+                        "Preserved compatibility bridges for existing feature modules while routing live frame lookup through MSUF.UF and MSUF.GF.",
+                    },
+                },
+                {
+                    title = "Performance And Runtime",
+                    bullets = {
+                        "Routed hot unit events through direct frame handlers instead of the old broad dispatch path.",
+                        "Reduced normal menu and Assistant apply work by targeting UFCore scopes and dirty masks instead of forcing broad full-frame updates.",
+                        "Added opt-in Auras3 performance tracing with /msufa3trace tooling for focused aura profiling.",
+                        "Added diagnostics and rewrite notes for UFCore connection audits, click-spike tracing, and coldpath/hotpath migration checks.",
+                        "Kept click and secure-frame diagnostics out of the default hotpath unless explicitly invoked.",
+                    },
+                },
+                {
+                    title = "Auras",
+                    bullets = {
+                        "Core feature restored: the Aura Designer is usable again, including healer-focused aura and spell-indicator setup.",
+                        "Reconnected Auras3 to UFCore frame resolution and scoped apply paths for unit, target, focus, boss, pet, and group lanes.",
+                        "Added separate tooltip controls for buff and debuff lanes.",
+                        "Improved target/focus aura refresh behavior and native aura-container rebuild handling.",
+                        "Added tracked group-buff lane support backed by spell-indicator data.",
+                        "Added Auras3 spell-indicator runtime support for 12.1 CustomAuraContainer aura slots.",
+                        "Improved aura include/exclude spell-ID filtering, candidate signatures, and native filter handling.",
+                    },
+                },
+                {
+                    title = "Group Frames And Spell Indicators",
+                    bullets = {
+                        "Restored spell-indicator data load order for group frames inside the UFCore group embed.",
+                        "Added tracked-buff compilation from selected spell-indicator specs and enabled spell-indicator-driven tracked aura lanes.",
+                        "Improved group aura defaults, lane configuration, tooltip behavior, and external defensive filtering.",
+                        "Updated group indicator Assistant actions, page wiring, and search routing for the new tracked aura/spell-indicator paths.",
+                        "Improved group preview rendering for aura lanes, spell-indicator placements, and handle interactions.",
+                    },
+                },
+                {
+                    title = "Menu2, Assistant, And Search",
+                    bullets = {
+                        "Updated Menu2 apply service, bindings, pages, and Assistant registries to use scoped UFCore apply routes.",
+                        "Improved Assistant aura parsing, aura group-lane routing, and dashboard/status selector coverage.",
+                        "Added menu controls for frame-border strata and exposed the matching Global Bars control.",
+                        "Updated Menu2 aura, group aura, group indicator, and global bar pages for the new Aura3 and group tracked-buff options.",
+                        "Improved Menu2 search keywords, FAQ routing, and support text for the new aura and spell-indicator workflows.",
+                        "Added and localized new user-facing labels for the spell-indicator and tooltip reset flows.",
+                    },
+                },
+                {
+                    title = "Castbars, Class Power, And Integrations",
+                    bullets = {
+                        "Connected castbars, boss castbars, player castbar runtime, class power, and gameplay hooks to UFCore-first frame lookup.",
+                        "Updated previews and edit-mode interactions for castbars, class power, auras, group frames, and unit frames.",
+                        "Kept castbar and class-power live event paths external and direct while refreshing visuals through UFCore callbacks.",
+                        "Updated third-party anchor integration and runtime color/font/texture helpers for the UFCore rewrite.",
+                    },
+                },
+                {
+                    title = "Visuals And Previews",
+                    bullets = {
+                        "Updated Edit Mode movers, popups, HUD, and layout handling for UFCore-backed frames.",
+                        "Updated unit and group previews to resolve live frames through UFCore and render updated aura, castbar, class-power, text, and group layers.",
+                        "Replaced frame-border level-offset behavior with frame-border strata selection for more predictable overlay layering.",
+                        "Improved rounded-frame, border, highlight, alpha, portrait, and status element integration with scoped UFCore refreshes.",
+                    },
+                },
+                {
+                    title = "What To Test First",
+                    bullets = {
+                        "Rapid target and focus swaps with buffs, debuffs, tracked buffs, tooltips, and cooldown text enabled.",
+                        "Party, raid, and mythic raid group auras, especially spell-indicator tracked buffs and external defensive filters.",
+                        "Group indicator setup, Assistant commands for spell indicators, and Menu2 search routing for aura/group-aura settings.",
+                        "Frame-border strata on unit and group frames across normal UI, previews, and Edit Mode.",
+                        "Castbar, class power, rounded-frame, and third-party-anchor behavior after profile swaps and /reload.",
+                        "/msufa3trace, /msufclickcore, and UFCore diagnostics only when explicitly testing performance.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta6",
             date = "2026-07-06",
@@ -27,7 +114,7 @@ local data = {
                     title = "Performance Highlights",
                     bullets = {
                         "Added a direct frame event path for RegisterUnitEvent-owned frames so hot unit events run their prebuilt handler immediately instead of going through the broad event router, removing the redundant re-derivation of which frame an event belonged to.",
-                        "Added a direct value hot path that bakes the exact health and power work into one closure per frame and event, so value ticks skip the generic runner layer.",
+                        "Added an Ellesmere-style value hot path that bakes the exact health and power work into one closure per frame and event, so value ticks skip the generic runner layer.",
                         "Added a percent-only health path for single frames (target, focus, boss, pet) that uses one UnitHealthPercent call and skips UnitHealth, UnitHealthMax, and store bookkeeping, so a boss target taking sustained damage costs far less per health tick.",
                         "Added direct group-frame health and power dispatch for frequent value updates.",
                     },
@@ -160,119 +247,6 @@ local data = {
                         "Group-frame preview placement with large party, raid, and mythic raid layouts.",
                         "Frame recovery workflow from the Assistant.",
                         "Fresh install, profile reset, and profile swap behavior.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta3",
-            date = "2026-07-03",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Added selectable status icon packs for unit and group frames.",
-                        "Added per-indicator custom icon overrides and live icon previews.",
-                        "Added the first Assistant context-engine pass for smarter follow-up commands.",
-                        "Restored Wago-compatible profile exports with embedded full MSUF6 data.",
-                        "Added an MSUF button to the Blizzard Escape/Game Menu.",
-                    },
-                },
-                {
-                    title = "Status Icons And Indicators",
-                    bullets = {
-                        "Added bundled icon styles: Classic, Midnight, UX Pro, Glossy Orbs, Dark Emboss, Glass Panels, Neon Outline, Ring Symbols, Dots, Shapes, Diamonds, and Squares.",
-                        "Added external icon-pack support through public registration, addon metadata, and SharedMedia.",
-                        "Added style/custom-icon support for role, leader, assist, raid marker, ready check, summon, resurrection, PvP, phase, combat/resting, and elite indicators.",
-                        "Added Midnight-style switching and icon-pack filtering by supported indicator type.",
-                        "Added icon preview strips and custom icon asset dropdowns.",
-                        "Updated live unit-frame and group-frame status rendering to use the new icon resolver.",
-                    },
-                },
-                {
-                    title = "Menu And Preview Improvements",
-                    bullets = {
-                        "Added a Game Menu MSUF entry with addon icon.",
-                        "Added the showGameMenuButton default.",
-                        "Added smoother Menu2 scrolling for pages and dropdowns.",
-                        "Replaced the preview gear glyph with a drawn settings icon.",
-                        "Added Menu2 auto-height helpers.",
-                        "Added /msufmenucheck for read-only menu consistency checks.",
-                        "Unified live and preview layer constants for unit-frame and group-frame text, status, portrait, power, targeted-spell, and preview-overlay stacking.",
-                        "Added on-demand live-vs-preview layer diagnostics for unit and group previews without combat-time event, timer, or update overhead.",
-                        "Aligned unit and group preview mock text layering with runtime text-layer specs for closer 1:1 visual previews.",
-                    },
-                },
-                {
-                    title = "Assistant And Search",
-                    bullets = {
-                        "Split large parser phrase tables into _Data.lua modules.",
-                        "Added generated fallback coverage for scalar DB settings.",
-                        "Added /msufcoverage reports, stubs, manifest export, smoke tracking, and gate checks.",
-                        "Added no-op escalation for relative nudges like \"more to the right\".",
-                        "Added continuation follow-ups for partially repeated subjects like \"now move target leader up\".",
-                        "Added context scoring for recent unit/category/text-area matches.",
-                        "De-prioritized generated fallbacks during ambiguous matches.",
-                        "Prioritized long exact aliases before broad fast paths.",
-                        "Improved generated labels and aliases.",
-                        "Improved coverage/audit detection for three-segment scoped keys.",
-                        "Improved AutoCoverage labels for acronym boundaries.",
-                        "Added small synonym expansion for generated Assistant aliases.",
-                        "Added minimum-token exact-alias parsing.",
-                        "Added an early priority pass for long exact aliases.",
-                    },
-                },
-                {
-                    title = "Profiles And Imports",
-                    bullets = {
-                        "Added MSUF3-prefixed compact export support for Wago.",
-                        "Added normalized Wago compatibility payloads.",
-                        "Embedded full msuf6 snapshots in exported strings.",
-                        "Prefer embedded full MSUF6 data on import when available.",
-                        "Normalized aura and group-frame payloads for Wago compatibility.",
-                    },
-                },
-                {
-                    title = "Release And Publishing",
-                    bullets = {
-                        "Fixed compact prerelease tags like MSUF_6.0B3 so Wago and CurseForge publish them as beta instead of stable/release.",
-                        "Added MSUF_* tag support to the release workflow and normalized compact A/B tags to addon versions like 6.0-alpha3 and 6.0-beta3.",
-                        "Updated the release version marker to 6.0-beta3.",
-                    },
-                },
-                {
-                    title = "Class Resources And Power Text",
-                    bullets = {
-                        "Added left/center/right slot controls for detached Player Power text.",
-                        "Added per-slot value modes, delimiter, size, global offsets, per-slot offsets, and text layer.",
-                        "Cleared stale hpPowerTextOverride state when detached power text changes.",
-                        "Bumped the Class Resources page version.",
-                    },
-                },
-                {
-                    title = "Auras, Castbars, And Runtime Fixes",
-                    bullets = {
-                        "Added localized minute suffixes for aura duration text.",
-                        "Fixed sub-second decimal aura timer display.",
-                        "Reduced redundant boss castbar and castbar visual updates.",
-                        "Reduced redundant Interrupt Ready visual updates.",
-                        "Improved explicit non-interruptible Interrupt Ready colors.",
-                        "Added Player health lifecycle events for dead/alive/ghost updates.",
-                        "Improved target/focus portrait refresh handling.",
-                    },
-                },
-                {
-                    title = "What To Test First",
-                    bullets = {
-                        "Status icon packs and Midnight variants.",
-                        "Custom icon overrides and live previews.",
-                        "External icon packs via SharedMedia and addon metadata.",
-                        "Unit-frame and group-frame preview layering compared with the matching live frames.",
-                        "Assistant follow-ups, exact option names, /msufcoverage, and /msufcoverage gate.",
-                        "Wago export/import and full MSUF import from the same string.",
-                        "Detached Player Power text slots and offsets.",
-                        "Aura duration text around sub-second and minute-long timers.",
-                        "Castbar updates, Interrupt Ready visuals, portraits, and Player dead/ghost health refresh.",
                     },
                 },
             },

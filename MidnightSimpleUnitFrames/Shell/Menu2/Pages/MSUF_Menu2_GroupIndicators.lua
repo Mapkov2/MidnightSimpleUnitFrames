@@ -16,8 +16,10 @@ local min = math.min
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local VT = M.ValueTextList
 local WHITE_RGB = { 1, 1, 1 }
-local SPELL_INDICATORS_121_PTR_DISABLED = true
-local SPELL_INDICATORS_121_PTR_MESSAGE = "Disabled for 12.1 PTR; currently not working."
+local SPELL_INDICATORS_121_PTR_DISABLED = false
+local SPELL_INDICATORS_121_PTR_MESSAGE = "Native 12.1 AuraSlot SpellID filters are used for helpful auras on friendly Group Frames."
+local SPELL_INDICATOR_FRAME_EFFECTS_DISABLED = true
+local SPELL_INDICATOR_FRAME_EFFECTS_MESSAGE = "Frame effects are disabled for 12.1 PTR for now; icon placement and visuals stay active."
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
 local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
 local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText]])
@@ -1182,6 +1184,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         25, { step = 5, roundStep = true })
     W.MoveWidget(frameAlpha, spells, siRightX, -554, siRightW, "LEFT")
     local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -608)
+    local frameEffectNotice = W.Text(spells, Tr(SPELL_INDICATOR_FRAME_EFFECTS_MESSAGE), siRightX, -634, siRightW, T.colors.dim)
+    if frameEffectNotice and frameEffectNotice.SetWordWrap then frameEffectNotice:SetWordWrap(false) end
     local placedMissing = BindPlacedToggle("Show when missing", "missing", false, -690)
     local placedCooldownSwipe = BindPlacedToggle("Show Cooldown Swipe", "showCooldownSwipe", true, -722)
     local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -754)
@@ -1208,18 +1212,20 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local placedEnabled = hasSpell and placed and placed.type and placed.type ~= "none"
         local frame = FrameEffectConfig(CurrentScope(), false)
         local frameKind = frame and frame.type or "none"
-        local hasFrame = hasSpell and frameKind ~= "none"
+        local hasFrame = (not SPELL_INDICATOR_FRAME_EFFECTS_DISABLED) and hasSpell and frameKind ~= "none"
         local cdRelevant = placedEnabled and placed.type == "icon"
         local barRelevant = placedEnabled and placed.type == "bar"
         SetOptionEnabled(siEnable, not SPELL_INDICATORS_121_PTR_DISABLED)
         SetManyEnabled(indicatorsOn, siLayer, specDrop)
         SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
         SetOptionEnabled(multiSpecEnabled, indicatorsOn and multi and CurrentSpellMultiSpec(CurrentScope()) ~= "")
-        SetManyEnabled(hasSpell, spellEnabled, onlyMine, placedType, frameType)
-        SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth, placedMissing)
+        SetManyEnabled(hasSpell, spellEnabled, onlyMine, placedType)
+        SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth)
+        SetOptionEnabled(placedMissing, false)
         SetOptionEnabled(placedBarWidth, barRelevant)
         SetManyEnabled(cdRelevant, placedCooldownSwipe, placedCooldown)
         SetOptionEnabled(placedCooldownSize, cdRelevant and placed and placed.showCooldown ~= false)
+        SetOptionEnabled(frameType, false)
         SetManyEnabled(hasFrame, frameColor, framePriority)
         SetOptionEnabled(frameAlpha, hasFrame and (frameKind == "healthtint" or frameKind == "pulse"))
         SetOptionEnabled(frameThickness, hasFrame and (frameKind == "border" or frameKind == "glow"))
@@ -1227,12 +1233,15 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             OnOffBadge(indicatorsOn, "Enabled", "Disabled"),
         }
         if SPELL_INDICATORS_121_PTR_DISABLED then badges[#badges + 1] = { text = "12.1 PTR", kind = "muted", important = true } end
+        if SPELL_INDICATOR_FRAME_EFFECTS_DISABLED then badges[#badges + 1] = { text = "Effects off", kind = "muted" } end
         badges[#badges + 1] = { text = OptionText(SpellSpecValues, SpellIndicators(CurrentScope()).spec or "auto", "Auto"), kind = indicatorsOn and "info" or "muted" }
         badges[#badges + 1] = { text = hasSpell and tostring(CurrentSpellAura(CurrentScope()) or "") or "No spell", kind = hasSpell and "accent" or "muted" }
         SetSectionBadgesAndStatus(spells, badges)
     end)
     TrackSectionRefresh(ctx, spells, RefreshSpellIndicatorState)
 end
+
+GP.BuildSpellIndicatorsSection = BuildSpellIndicatorsSection
 
 local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     local corners = b:CollapsibleSection("ci", "Corner Indicators", 620, false)
@@ -1400,4 +1409,4 @@ local function BuildGFIndicators(ctx)
     BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_indicators", { title = "MSUF Group Status & Indicators", build = BuildGFIndicators, version = 15 })
+M.RegisterPage("gf_indicators", { title = "MSUF Group Status & Indicators", build = BuildGFIndicators, version = 17 })

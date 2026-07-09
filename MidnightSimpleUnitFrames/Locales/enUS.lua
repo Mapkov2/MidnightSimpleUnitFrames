@@ -97,6 +97,8 @@ L["Opens: Global Style > Bars > Rounded Texture"] = "Opens: Global Style > Bars 
 L["Power bars"] = "Power bars"
 L["Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"] = "Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"
 L["|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload."] = "|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload."
+L["Group frames were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"] = "Group frames were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"
+L["|cffffd700MSUF:|r Group frames were enabled or disabled. Reload the UI with /reload."] = "|cffffd700MSUF:|r Group frames were enabled or disabled. Reload the UI with /reload."
 L["Rounded frame texture"] = "Rounded frame texture"
 L["Rounded Texture"] = "Rounded Texture"
 

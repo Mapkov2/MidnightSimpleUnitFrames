@@ -31,6 +31,8 @@ if type(A3) ~= "table" then
     MSUF.MSUF_Auras3 = A3
 end
 ExportPublic("MSUF_Auras3", A3)
+local SpellIndicatorsRuntime = A3.SpellIndicators or {}
+A3.SpellIndicators = SpellIndicatorsRuntime
 
 function A3._TraceContext()
     local trace = A3 and A3.PerfTrace
@@ -970,7 +972,8 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     end
 
     local nativeFilter, maxCount = DispelSensorNativeFilter(trigger)
-    local target = visual == "overlay" and ((groupMode and overlay.dispelOverlayOnHealth ~= false) or (not groupMode and overlay.onHealth ~= false)) and "health" or "frame"
+    local overlayOnHealth = visual == "overlay" and ((groupMode and overlay.dispelOverlayOnHealth ~= false) or (not groupMode and overlay.onHealth ~= false))
+    local target = visual == "overlay" and (overlayOnHealth and "healthFill" or "healthBar") or "frame"
     local cornerCount = cornerSlots and #cornerSlots or nil
     return {
         sensor = true,
@@ -990,7 +993,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         size = cornerSlots and ClampNumber(corner and corner.size, 8, 1, 64) or nil,
         slots = cornerSlots,
         slotSignature = cornerSignature,
-        layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30)) or (visual == "overlay" and 13 or 45),
+        layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30)) or (visual == "overlay" and 2 or 45),
         trigger = trigger,
     }
 end
@@ -1233,10 +1236,11 @@ local function ResolveGroupFrameConfig(frame, unit)
     unit = unit or frame.unit
     local spec = frame.MSUFSpec
     local source = spec and (spec.auras or (spec.group and spec.group.auras))
+    local spellSource = spec and spec.spellIndicators
     local gen = A3._runtimeConfigGen or 1
     local visualGen = A3._nativeVisualGen or 0
     local cached = frame._msufA3NativeGroupConfig
-    if cached and frame._msufA3NativeGroupSource == source and frame._msufA3NativeGroupUnit == unit
+    if cached and frame._msufA3NativeGroupSource == source and frame._msufA3NativeGroupSpellSource == spellSource and frame._msufA3NativeGroupUnit == unit
         and frame._msufA3NativeGroupGen == gen and frame._msufA3NativeGroupVisualGen == visualGen then
         return cached
     end
@@ -1250,6 +1254,10 @@ local function ResolveGroupFrameConfig(frame, unit)
         _msufA3VisualGen = visualGen,
         _msufA3Source = source,
     }
+    local spellIndicatorRoot = type(unit) == "string" and unit ~= "" and SpellIndicatorsRuntime.CompileSlots
+        and SpellIndicatorsRuntime.CompileSlots(unit, spellSource) or nil
+    cfg.spellIndicators = spellIndicatorRoot
+    cfg.enabled = spellIndicatorRoot and spellIndicatorRoot.enabled == true or false
     if type(source) == "table" and type(unit) == "string" and unit ~= "" and source.enabled ~= false then
         local buff = CompileGroupLane(unit, source, "buff")
         local trackedBuff = CompileGroupLane(unit, source, "trackedBuff")
@@ -1259,7 +1267,8 @@ local function ResolveGroupFrameConfig(frame, unit)
         cfg.lanes.trackedBuff = trackedBuff
         cfg.lanes.debuff = debuff
         cfg.lanes.external = external
-        cfg.enabled = (buff and buff.enabled == true)
+        cfg.enabled = cfg.enabled == true
+            or (buff and buff.enabled == true)
             or (trackedBuff and trackedBuff.enabled == true)
             or (debuff and debuff.enabled == true)
             or (external and external.enabled == true)
@@ -1276,6 +1285,7 @@ local function ResolveGroupFrameConfig(frame, unit)
             or (dispelCorner and dispelCorner.enabled == true)
     end
     frame._msufA3NativeGroupSource = source
+    frame._msufA3NativeGroupSpellSource = spellSource
     frame._msufA3NativeGroupUnit = unit
     frame._msufA3NativeGroupGen = gen
     frame._msufA3NativeGroupVisualGen = visualGen
@@ -2155,10 +2165,28 @@ local function PrepareAuraButton(button, lane, index)
 end
 
 local function DispelSensorTarget(parentFrame, sensor)
-    if sensor and sensor.target == "health" and parentFrame then
-        return parentFrame.hpBar or parentFrame.Health or parentFrame.health or parentFrame
+    if sensor and sensor.visual == "overlay" and parentFrame then
+        local hp = parentFrame.hpBar or parentFrame.Health or parentFrame.health
+        if hp then
+            if sensor.target == "healthFill" and hp.GetStatusBarTexture then
+                return hp:GetStatusBarTexture() or hp
+            end
+            return hp
+        end
     end
     return parentFrame
+end
+
+local function DispelSensorFrameLevel(parentFrame, sensor, target)
+    local parentLevel = (parentFrame and parentFrame.GetFrameLevel and parentFrame:GetFrameLevel()) or 0
+    if sensor and sensor.visual == "overlay" then
+        local targetParent = target and target.GetParent and target:GetParent()
+        local targetLevel = target and target.GetFrameLevel and target:GetFrameLevel()
+            or (targetParent and targetParent.GetFrameLevel and targetParent:GetFrameLevel())
+            or parentLevel
+        return targetLevel + 1
+    end
+    return parentLevel + (sensor and sensor.layer or 14)
 end
 
 local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
@@ -2174,7 +2202,7 @@ local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
     else
         button:SetAllPoints(target)
     end
-    if button.SetFrameLevel then button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (sensor.layer or 14)) end
+    if button.SetFrameLevel then button:SetFrameLevel(DispelSensorFrameLevel(parentFrame, sensor, target)) end
     return true
 end
 
@@ -2550,14 +2578,14 @@ ConfigureContainer = function(container, lane, parentFrame)
     SyncContainerGeometry(container, lane, parentFrame)
 end
 
-local function NativeContainerVisible(container)
+A3._NativeContainerVisible = function(container)
     if not container then return false end
     if type(container.IsVisible) == "function" and container:IsVisible() ~= true then return false end
     if type(container.IsShown) == "function" and container:IsShown() ~= true then return false end
     return true
 end
 
-local DIRECT_IDENTITY_REFRESH_UNITS = {
+A3._directIdentityRefreshUnits = A3._directIdentityRefreshUnits or {
     target = true,
     focus = true,
     boss1 = true,
@@ -2567,37 +2595,37 @@ local DIRECT_IDENTITY_REFRESH_UNITS = {
     boss5 = true,
 }
 
-local DIRECT_IDENTITY_REFRESH_ALL_EVENTS = {
+A3._directIdentityRefreshAllEvents = A3._directIdentityRefreshAllEvents or {
     PLAYER_ENTERING_WORLD = true,
 }
 
-local DIRECT_IDENTITY_REFRESH_GROUP_EVENTS = {
+A3._directIdentityRefreshGroupEvents = A3._directIdentityRefreshGroupEvents or {
     GROUP_ROSTER_UPDATE = true,
 }
 
-local DIRECT_IDENTITY_EVENT_UNITS = {
+A3._directIdentityEventUnits = A3._directIdentityEventUnits or {
     PLAYER_TARGET_CHANGED = { "target" },
     PLAYER_FOCUS_CHANGED = { "focus" },
     INSTANCE_ENCOUNTER_ENGAGE_UNIT = { "boss1", "boss2", "boss3", "boss4", "boss5" },
 }
 
-local function IsGroupUnitToken(unit)
+A3._IsGroupUnitToken = function(unit)
     return type(unit) == "string" and (unit:match("^party%d+$") ~= nil or unit:match("^raid%d+$") ~= nil)
 end
 
-local function DirectIdentityRefreshUnitEligible(unit)
-    if DIRECT_IDENTITY_REFRESH_UNITS[unit] == true then return true end
-    return IsGroupUnitToken(unit)
+A3._DirectIdentityRefreshUnitEligible = function(unit)
+    if A3._directIdentityRefreshUnits[unit] == true then return true end
+    return A3._IsGroupUnitToken(unit)
 end
 
-local function DirectIdentityRefreshUnit(unit)
+A3._DirectIdentityRefreshUnit = function(unit)
     local traceToken = A3._TraceBegin("MSUF.DirectIdentityRefreshUnit", tostring(unit or "?"))
     local byUnit = A3._directIdentityAuraContainers
     local containers = byUnit and byUnit[unit]
     if not containers then return A3._TraceFinish(traceToken, false) end
     local any = false
     for container in pairs(containers) do
-        if container and NativeContainerVisible(container) and type(container.UpdateAllAuras) == "function" then
+        if container and A3._NativeContainerVisible(container) and type(container.UpdateAllAuras) == "function" then
             local updateToken = A3._TraceBeginContainer("MSUF.UpdateAllAuras", container, "identity")
             container:UpdateAllAuras()
             A3._TraceEnd(updateToken)
@@ -2607,26 +2635,26 @@ local function DirectIdentityRefreshUnit(unit)
     return A3._TraceFinish(traceToken, any)
 end
 
-local function DirectIdentityRefreshAll(groupOnly)
+A3._DirectIdentityRefreshAll = function(groupOnly)
     local byUnit = A3._directIdentityAuraContainers
     if not byUnit then return false end
     local any = false
     for unit in pairs(byUnit) do
-        if groupOnly ~= true or IsGroupUnitToken(unit) then
-            any = DirectIdentityRefreshUnit(unit) or any
+        if groupOnly ~= true or A3._IsGroupUnitToken(unit) then
+            any = A3._DirectIdentityRefreshUnit(unit) or any
         end
     end
     return any
 end
 
-local function FlushScheduledDirectIdentityRefreshAll()
+A3._FlushScheduledDirectIdentityRefreshAll = function()
     local groupOnly = A3._directIdentityRefreshGroupOnly == true
     A3._directIdentityRefreshPending = nil
     A3._directIdentityRefreshGroupOnly = nil
-    DirectIdentityRefreshAll(groupOnly)
+    A3._DirectIdentityRefreshAll(groupOnly)
 end
 
-local function ScheduleDirectIdentityRefreshAll(groupOnly)
+A3._ScheduleDirectIdentityRefreshAll = function(groupOnly)
     if A3._directIdentityRefreshPending == true then
         if groupOnly ~= true then A3._directIdentityRefreshGroupOnly = nil end
         return true
@@ -2634,29 +2662,29 @@ local function ScheduleDirectIdentityRefreshAll(groupOnly)
     A3._directIdentityRefreshPending = true
     A3._directIdentityRefreshGroupOnly = groupOnly == true
     if C_Timer and C_Timer.After then
-        C_Timer.After(0, FlushScheduledDirectIdentityRefreshAll)
+        C_Timer.After(0, A3._FlushScheduledDirectIdentityRefreshAll)
     else
-        FlushScheduledDirectIdentityRefreshAll()
+        A3._FlushScheduledDirectIdentityRefreshAll()
     end
     return true
 end
 
-local function EnsureDirectIdentityRefreshFrame()
+A3._EnsureDirectIdentityRefreshFrame = function()
     if A3._directIdentityAuraFrame then return A3._directIdentityAuraFrame end
     local frame = CreateFrame("Frame")
     frame:SetScript("OnEvent", function(_, event)
-        if DIRECT_IDENTITY_REFRESH_ALL_EVENTS[event] == true then
-            ScheduleDirectIdentityRefreshAll(false)
+        if A3._directIdentityRefreshAllEvents[event] == true then
+            A3._ScheduleDirectIdentityRefreshAll(false)
             return
         end
-        if DIRECT_IDENTITY_REFRESH_GROUP_EVENTS[event] == true then
-            ScheduleDirectIdentityRefreshAll(true)
+        if A3._directIdentityRefreshGroupEvents[event] == true then
+            A3._ScheduleDirectIdentityRefreshAll(true)
             return
         end
-        local units = DIRECT_IDENTITY_EVENT_UNITS[event]
+        local units = A3._directIdentityEventUnits[event]
         if not units then return end
         for i = 1, #units do
-            DirectIdentityRefreshUnit(units[i])
+            A3._DirectIdentityRefreshUnit(units[i])
         end
     end)
     frame:RegisterEvent("PLAYER_TARGET_CHANGED")
@@ -2668,12 +2696,10 @@ local function EnsureDirectIdentityRefreshFrame()
     return frame
 end
 
-local UnregisterDirectIdentityRefreshContainer
-
-local function RegisterDirectIdentityRefreshContainer(container)
+A3._RegisterDirectIdentityRefreshContainer = function(container)
     local unit = container and container.unit
-    if not DirectIdentityRefreshUnitEligible(unit) then
-        UnregisterDirectIdentityRefreshContainer(container)
+    if not A3._DirectIdentityRefreshUnitEligible(unit) then
+        A3._UnregisterDirectIdentityRefreshContainer(container)
         return false
     end
     A3._directIdentityAuraContainers = A3._directIdentityAuraContainers or {}
@@ -2688,11 +2714,11 @@ local function RegisterDirectIdentityRefreshContainer(container)
     end
     set[container] = true
     container._msufA3DirectIdentityUnit = unit
-    EnsureDirectIdentityRefreshFrame()
+    A3._EnsureDirectIdentityRefreshFrame()
     return true
 end
 
-UnregisterDirectIdentityRefreshContainer = function(container)
+A3._UnregisterDirectIdentityRefreshContainer = function(container)
     local unit = container and container._msufA3DirectIdentityUnit
     if not unit then return end
     local byUnit = A3._directIdentityAuraContainers
@@ -2708,7 +2734,7 @@ RegisterNativeContainer = function(container, forceRefresh)
         trace.WrapContainer(container)
     end
     if forceRefresh ~= true and container._msufA3NativeRegistered == true then return true end
-    if not NativeContainerVisible(container) then
+    if not A3._NativeContainerVisible(container) then
         container._msufA3NativeRegistrationPending = true
         return true
     end
@@ -2722,33 +2748,33 @@ RegisterNativeContainer = function(container, forceRefresh)
     -- removed) instead of an MSUF forced reparse. SetEnabled is a secure
     -- delegate (safe to call directly) and is idempotent.
     container:SetEnabled(true)
-    RegisterDirectIdentityRefreshContainer(container)
+    A3._RegisterDirectIdentityRefreshContainer(container)
     container._msufA3NativeRegistered = true
     container._msufA3NativeRegistrationPending = nil
     return true
 end
 
-local function UnregisterNativeContainer(container)
+A3._UnregisterNativeContainer = function(container)
     if not container then return true end
-    UnregisterDirectIdentityRefreshContainer(container)
+    A3._UnregisterDirectIdentityRefreshContainer(container)
     container:SetEnabled(false)
     container._msufA3NativeRegistered = nil
     container._msufA3NativeRegistrationPending = nil
     return true
 end
 
-local function RebindNativeContainerUnit(container, unit)
+A3._RebindNativeContainerUnit = function(container, unit)
     if not (container and type(unit) == "string" and unit ~= "") then return false end
     local changed = container.unit ~= unit or (type(container.GetUnit) == "function" and container:GetUnit() ~= unit)
     container.unit = unit
     if changed and type(container.SetUnit) == "function" then
         container:SetUnit(unit)
     end
-    RegisterDirectIdentityRefreshContainer(container)
+    A3._RegisterDirectIdentityRefreshContainer(container)
     return changed
 end
 
-local function CreateNativeLane(root, lane, parentFrame)
+A3._CreateNativeLane = function(root, lane, parentFrame)
     if not EnsureBlizzardAuraContainerLoaded() then
         A3.nativeAuraRuntimeAvailable = false
         A3.nativeAuraRuntimeError = AURA_CONTAINER_ADDON .. " is not loaded: " .. tostring(A3.nativeAuraRuntimeLoadError or "unknown")
@@ -2760,11 +2786,26 @@ local function CreateNativeLane(root, lane, parentFrame)
     return CreateManagedNativeLane(container, lane, parentFrame)
 end
 
-local function HideLane(lane)
+A3._HideLane = function(lane)
     if lane then
-        UnregisterNativeContainer(lane)
+        A3._UnregisterNativeContainer(lane)
         lane:Hide()
     end
+end
+
+if SpellIndicatorsRuntime and type(SpellIndicatorsRuntime.Install) == "function" then
+    SpellIndicatorsRuntime.Install({
+        addonName = AURA_CONTAINER_ADDON,
+        EnsureLoaded = EnsureBlizzardAuraContainerLoaded,
+        CreateContainer = CreateNativeAuraContainer,
+        ConfigureContainer = ConfigurePTR4AuraContainer,
+        RegisterContainer = RegisterNativeContainer,
+        RebindUnit = A3._RebindNativeContainerUnit,
+        IsVisible = A3._NativeContainerVisible,
+        HideContainer = A3._HideLane,
+        ValidateAuraButton = ValidatePTR4AuraButtonContract,
+        PrepareAuraButton = PrepareAuraButton,
+    })
 end
 
 function A3._ForEachEnabledNormalLane(lanes, fn)
@@ -2791,7 +2832,7 @@ function A3._HasEnabledNormalLane(lanes)
     return false
 end
 
-local function NormalLaneForRootKey(lanes, rootKey)
+A3._NormalLaneForRootKey = function(lanes, rootKey)
     if type(lanes) ~= "table" or rootKey == nil then return nil end
     local order = A3._normalAuraLaneOrder
     for i = 1, #order do
@@ -2800,22 +2841,22 @@ local function NormalLaneForRootKey(lanes, rootKey)
     end
 end
 
-local function HideNormalLaneContainers(root, lanes)
+A3._HideNormalLaneContainers = function(root, lanes)
     if not root then return end
-    HideLane(root[A3._sharedAuraRootKey])
+    A3._HideLane(root[A3._sharedAuraRootKey])
     root[A3._sharedAuraRootKey] = nil
     for i = 1, #NORMAL_LANE_ROOT_KEYS do
         local key = NORMAL_LANE_ROOT_KEYS[i]
-        local lane = NormalLaneForRootKey(lanes, key)
+        local lane = A3._NormalLaneForRootKey(lanes, key)
         if not (lane and lane.enabled == true) then
-            HideLane(root[key])
+            A3._HideLane(root[key])
             root[key] = nil
         end
     end
 end
 
-local function ApplyNormalLaneContainers(root, lanes, parentFrame, forceRecreate)
-    HideNormalLaneContainers(root, lanes)
+A3._ApplyNormalLaneContainers = function(root, lanes, parentFrame, forceRecreate)
+    A3._HideNormalLaneContainers(root, lanes)
     if type(lanes) ~= "table" then return true, false end
     local ok, any = true, false
     local order = A3._normalAuraLaneOrder
@@ -3037,7 +3078,7 @@ end
 function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
     local rootKey = A3._sharedAuraRootKey
     if not A3._HasEnabledNormalLane(lanes) then
-        HideLane(root and root[rootKey])
+        A3._HideLane(root and root[rootKey])
         if root then root[rootKey] = nil end
         return nil
     end
@@ -3047,7 +3088,7 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
     local layoutSignature = A3._SharedAuraContainerLayoutSignature(lanes)
     local current = root and root[rootKey]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
-        RebindNativeContainerUnit(current, A3._SharedAuraContainerUnit(lanes))
+        A3._RebindNativeContainerUnit(current, A3._SharedAuraContainerUnit(lanes))
         current._msufA3SharedLanes = lanes
         local refresh = false
         A3._ForEachEnabledNormalLane(lanes, function(lane, groupKey)
@@ -3070,7 +3111,7 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
         A3._SyncSharedAuraContainerGeometry(current, lanes, parentFrame)
         current:Show()
         if not RegisterNativeContainer(current) then return A3._TraceFinish(traceToken, nil) end
-        if refresh == true and NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
+        if refresh == true and A3._NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
             local updateToken = A3._TraceBeginContainer("MSUF.UpdateAllAuras", current, "sharedMaxFrameCount")
             current:UpdateAllAuras()
             A3._TraceEnd(updateToken)
@@ -3080,7 +3121,7 @@ function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
         current._msufA3LayoutSignature = layoutSignature
         return A3._TraceFinish(traceToken, current)
     end
-    HideLane(current)
+    A3._HideLane(current)
     if root then root[rootKey] = nil end
     current = A3._CreateSharedNativeAuraContainer(root, lanes, parentFrame)
     if current then
@@ -3101,7 +3142,7 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local layoutSignature = lane._msufA3LayoutSignature or LaneLayoutSignature(lane)
     local current = root[key]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
-        RebindNativeContainerUnit(current, lane.unit)
+        A3._RebindNativeContainerUnit(current, lane.unit)
         local refresh = false
         local layoutChanged = current._msufA3LayoutSignature ~= layoutSignature
         if current._msufA3MaxFrameCount ~= lane.max then
@@ -3124,7 +3165,7 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         end
         current:Show()
         if not RegisterNativeContainer(current) then return A3._TraceFinish(traceToken, nil) end
-        if refresh == true and NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
+        if refresh == true and A3._NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
             local updateToken = A3._TraceBeginContainer("MSUF.UpdateAllAuras", current, "maxFrameCount")
             current:UpdateAllAuras()
             A3._TraceEnd(updateToken)
@@ -3134,9 +3175,9 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         current._msufA3LayoutSignature = layoutSignature
         return A3._TraceFinish(traceToken, current)
     end
-    HideLane(current)
+    A3._HideLane(current)
     root[key] = nil
-    current = CreateNativeLane(root, lane, parentFrame)
+    current = A3._CreateNativeLane(root, lane, parentFrame)
     if current then
         current._msufA3TrackingSignature = trackingSignature
         current._msufA3StructuralSignature = structuralSignature
@@ -3157,7 +3198,7 @@ local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)
     local layoutSignature = sensor._msufA3LayoutSignature or SensorLayoutSignature(sensor)
     local current = root[key]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
-        RebindNativeContainerUnit(current, sensor.unit)
+        A3._RebindNativeContainerUnit(current, sensor.unit)
         SyncDispelSensorGeometry(current, sensor, parentFrame)
         current:Show()
         if not RegisterNativeContainer(current) then return A3._TraceFinish(traceToken, nil) end
@@ -3166,7 +3207,7 @@ local function ApplyDispelSensor(root, sensor, parentFrame, forceRecreate)
         current._msufA3LayoutSignature = layoutSignature
         return A3._TraceFinish(traceToken, current)
     end
-    HideLane(current)
+    A3._HideLane(current)
     root[key] = nil
     current = CreateNativeDispelSensor(root, sensor, parentFrame)
     if current then
@@ -3190,7 +3231,7 @@ local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreat
     local layoutSignature = sensorRoot._msufA3LayoutSignature
     local current = root[key]
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
-        RebindNativeContainerUnit(current, sensorRoot.unit)
+        A3._RebindNativeContainerUnit(current, sensorRoot.unit)
         UpdateDispelSensorRootSlots(current, sensorRoot)
         SyncDispelSensorRootGeometry(current, sensorRoot, parentFrame)
         current:Show()
@@ -3200,7 +3241,7 @@ local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreat
         current._msufA3LayoutSignature = layoutSignature
         return A3._TraceFinish(traceToken, current)
     end
-    HideLane(current)
+    A3._HideLane(current)
     root[key] = nil
     current = CreateNativeDispelSensorRoot(root, sensorRoot, parentFrame)
     if current then
@@ -3217,6 +3258,8 @@ local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame
     lane = lane or (container and container._msufA3NativeLaneConfig)
     if container and container._msufA3SharedAuraGroups == true then
         A3._SyncSharedAuraContainerGeometry(container, container._msufA3SharedLanes, parentFrame)
+    elseif SpellIndicatorsRuntime.IsRoot and SpellIndicatorsRuntime.SyncGeometry and SpellIndicatorsRuntime.IsRoot(lane) then
+        SpellIndicatorsRuntime.SyncGeometry(container, lane, parentFrame)
     elseif lane and lane.sensorRoot == true then
         SyncDispelSensorRootGeometry(container, lane, parentFrame)
     elseif lane and lane.sensor == true then
@@ -3225,7 +3268,7 @@ local function RefreshNativeContainer(container, forceRefresh, lane, parentFrame
         SyncContainerGeometry(container, lane, parentFrame)
     end
     if not RegisterNativeContainer(container, forceRefresh == true) then return A3._TraceFinish(traceToken, false) end
-    if not NativeContainerVisible(container) then return A3._TraceFinish(traceToken, true) end
+    if not A3._NativeContainerVisible(container) then return A3._TraceFinish(traceToken, true) end
     if forceRefresh == true and type(container.UpdateAllAuras) == "function" then
         local updateToken = A3._TraceBeginContainer("MSUF.UpdateAllAuras", container, "forceRefresh")
         container:UpdateAllAuras()
@@ -3254,11 +3297,16 @@ RefreshAppliedNativeRoot = function(root, forceRefresh)
         any = true
         ok = RefreshNativeContainer(root.DispelSensor, forceRefresh, sensorRoot, root:GetParent()) and ok
     end
+    local spellIndicatorRoot = SpellIndicatorsRuntime.RootConfig and SpellIndicatorsRuntime.RootConfig(cfg) or nil
+    if spellIndicatorRoot and spellIndicatorRoot.enabled then
+        any = true
+        ok = RefreshNativeContainer(root.SpellIndicators, forceRefresh, spellIndicatorRoot, root:GetParent()) and ok
+    end
     if ok and any then A3.nativeAuraRuntimeError = nil end
     return ok and any
 end
 
-local function RefreshAppliedNativeAuras(frame, forceRefresh)
+A3._RefreshAppliedNativeAuras = function(frame, forceRefresh)
     return RefreshAppliedNativeRoot(frame and frame.Auras, forceRefresh)
 end
 
@@ -3271,15 +3319,17 @@ end
 local function HideState(frame)
     local root = frame and frame.Auras
     if not (root and root._msufA3NativeRoot) then return end
-    HideLane(root[A3._sharedAuraRootKey])
-    HideLane(root.Buffs)
-    HideLane(root.TrackedBuffs)
-    HideLane(root.Debuffs)
-    HideLane(root.Externals)
-    HideLane(root.DispelSensor)
-    HideLane(root.DispelBorderSensor)
-    HideLane(root.DispelOverlaySensor)
-    HideLane(root.DispelCornerSensor)
+    A3._HideLane(root[A3._sharedAuraRootKey])
+    A3._HideLane(root.Buffs)
+    A3._HideLane(root.TrackedBuffs)
+    A3._HideLane(root.Debuffs)
+    A3._HideLane(root.Externals)
+    A3._HideLane(root.DispelSensor)
+    A3._HideLane(root.DispelBorderSensor)
+    A3._HideLane(root.DispelOverlaySensor)
+    A3._HideLane(root.DispelCornerSensor)
+    A3._HideLane(root.SpellIndicators)
+    if SpellIndicatorsRuntime.HideAll then SpellIndicatorsRuntime.HideAll(frame) end
     root._msufA3Config = nil
     root._msufA3Applied = nil
     root._msufA3ConfigGen = nil
@@ -3303,6 +3353,7 @@ local function HideState(frame)
     root.DispelBorderSensor = nil
     root.DispelOverlaySensor = nil
     root.DispelCornerSensor = nil
+    root.SpellIndicators = nil
     if frame then frame._msufA3UnitAuraOwner = nil end
 end
 
@@ -3323,16 +3374,23 @@ local function ApplyConfig(frame, cfg, reason)
     root:Show()
     local lanes = cfg.lanes or {}
     local sensorRoot = GetDispelSensorRootConfig(cfg)
+    local spellIndicatorRoot = SpellIndicatorsRuntime.RootConfig and SpellIndicatorsRuntime.RootConfig(cfg) or nil
     local forceRecreate = false
     local ok = true
     local lanesOk = true
-    lanesOk = ApplyNormalLaneContainers(root, lanes, frame, forceRecreate)
+    lanesOk = A3._ApplyNormalLaneContainers(root, lanes, frame, forceRecreate)
     ok = lanesOk and ok
     if sensorRoot and sensorRoot.enabled and not ApplyDispelSensorRoot(root, sensorRoot, frame, forceRecreate) then ok = false end
-    if not (sensorRoot and sensorRoot.enabled) then HideLane(root.DispelSensor) end
-    HideLane(root.DispelBorderSensor)
-    HideLane(root.DispelOverlaySensor)
-    HideLane(root.DispelCornerSensor)
+    if not (sensorRoot and sensorRoot.enabled) then A3._HideLane(root.DispelSensor) end
+    if spellIndicatorRoot and spellIndicatorRoot.enabled and (not SpellIndicatorsRuntime.Apply or not SpellIndicatorsRuntime.Apply(root, spellIndicatorRoot, frame, forceRecreate)) then ok = false end
+    if not (spellIndicatorRoot and spellIndicatorRoot.enabled) then
+        A3._HideLane(root.SpellIndicators)
+        root.SpellIndicators = nil
+        if SpellIndicatorsRuntime.HideAll then SpellIndicatorsRuntime.HideAll(frame) end
+    end
+    A3._HideLane(root.DispelBorderSensor)
+    A3._HideLane(root.DispelOverlaySensor)
+    A3._HideLane(root.DispelCornerSensor)
     root._msufA3Config = cfg
     root._msufA3Applied = ok == true
     root._msufA3ConfigGen = ConfigGen(cfg)
@@ -3355,7 +3413,7 @@ local function RootCanReuseContainersForConfig(root, cfg)
     end
     for i = 1, #NORMAL_LANE_ROOT_KEYS do
         local key = NORMAL_LANE_ROOT_KEYS[i]
-        local lane = NormalLaneForRootKey(lanes, key)
+        local lane = A3._NormalLaneForRootKey(lanes, key)
         local current = root[key]
         if lane and lane.enabled == true then
             if not (current and current._msufA3StructuralSignature == (lane._msufA3StructuralSignature or LaneStructuralSignature(lane))) then
@@ -3370,6 +3428,13 @@ local function RootCanReuseContainersForConfig(root, cfg)
         local current = root.DispelSensor
         if not (current and current._msufA3StructuralSignature == sensorRoot._msufA3StructuralSignature) then return false end
     elseif root.DispelSensor and root.DispelSensor.IsShown and root.DispelSensor:IsShown() == true then
+        return false
+    end
+    local spellIndicatorRoot = SpellIndicatorsRuntime.RootConfig and SpellIndicatorsRuntime.RootConfig(cfg) or nil
+    if spellIndicatorRoot and spellIndicatorRoot.enabled == true then
+        local current = root.SpellIndicators
+        if not (current and current._msufA3StructuralSignature == spellIndicatorRoot._msufA3StructuralSignature) then return false end
+    elseif root.SpellIndicators and root.SpellIndicators.IsShown and root.SpellIndicators:IsShown() == true then
         return false
     end
     return true
@@ -3429,14 +3494,14 @@ function A3.RenderFrame(frame, reason)
             return A3._TraceFinish(traceToken, false)
         end
         if RootAppliedConfigIsCurrent(frame.Auras, frame, cfg, nil)
-            and RefreshAppliedNativeAuras(frame, false) then
+            and A3._RefreshAppliedNativeAuras(frame, false) then
             return A3._TraceFinish(traceToken, true)
         end
         if InCombat() then return A3._TraceFinish(traceToken, false) end
     end
     if not cfgReady then cfg = FrameAuraConfig(frame, frame.unit) end
     if FrameAppliedConfigIsCurrent(frame, reason, cfg) then
-        RefreshAppliedNativeAuras(frame, false)
+        A3._RefreshAppliedNativeAuras(frame, false)
         return A3._TraceFinish(traceToken, true)
     end
     return A3._TraceFinish(traceToken, ApplyConfig(frame, cfg, reason))
@@ -3533,7 +3598,7 @@ function A3._NotifyAuraColdpathPreview(reason, scope)
     return did
 end
 
-local function ApplyRuntimeUnit(runtimeUnit)
+A3._ApplyRuntimeUnit = function(runtimeUnit)
     if InCombat() then return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_RUNTIME_UNIT") end
     local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
         or (UF.GetFrame and UF.GetFrame(runtimeUnit))
@@ -3601,19 +3666,19 @@ function A3._RequestGroupUnitNow(unit)
     return frame and A3._ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) or false
 end
 
-local function RequestUnitNow(unit)
+A3._RequestUnitNow = function(unit)
     unit = tostring(unit or "")
     if unit == "" or unit == "*" then
-        local didWork = ApplyRuntimeUnit("player")
-        didWork = ApplyRuntimeUnit("target") or didWork
-        didWork = ApplyRuntimeUnit("focus") or didWork
-        for i = 1, 5 do didWork = ApplyRuntimeUnit("boss" .. i) or didWork end
+        local didWork = A3._ApplyRuntimeUnit("player")
+        didWork = A3._ApplyRuntimeUnit("target") or didWork
+        didWork = A3._ApplyRuntimeUnit("focus") or didWork
+        for i = 1, 5 do didWork = A3._ApplyRuntimeUnit("boss" .. i) or didWork end
         didWork = A3._RequestGroupKindNow(nil) or didWork
         return didWork
     end
     if unit == "boss" then
         local didWork = false
-        for i = 1, 5 do didWork = ApplyRuntimeUnit("boss" .. i) or didWork end
+        for i = 1, 5 do didWork = A3._ApplyRuntimeUnit("boss" .. i) or didWork end
         return didWork
     end
     if unit == "group" or unit == "groups" then return A3._RequestGroupKindNow(nil) end
@@ -3625,29 +3690,29 @@ local function RequestUnitNow(unit)
     if unit == "mythicraid" or unit == "gf_mythicraid" then return A3._RequestGroupKindNow("mythicraid") end
     if unit:match("^party%d+$") or unit:match("^raid%d+$") then return A3._RequestGroupUnitNow(unit) end
     unit = NormalizeRuntimeUnit(unit)
-    return unit and ApplyRuntimeUnit(unit) or false
+    return unit and A3._ApplyRuntimeUnit(unit) or false
 end
 
 function A3.RequestUnit(unit)
     if InCombat() then return A3._QueueDeferredAuraRuntime(unit, "AURAS3_REQUEST_UNIT") end
-    return RequestUnitNow(unit)
+    return A3._RequestUnitNow(unit)
 end
 
-local function DoRefreshAll()
+A3._DoRefreshAll = function()
     A3.BumpRuntimeConfig()
     A3._runtimeConfigCache = nil
-    RequestUnitNow("*")
+    A3._RequestUnitNow("*")
     return true
 end
 
-local function FlushCoalescedRefreshAll()
+A3._FlushCoalescedRefreshAll = function()
     local profName = "auras3:FlushRefreshAll"
     local profToken = ProfBegin(profName)
     local pending = A3._refreshAllPending == true
     A3._refreshAllPending = nil
     A3._refreshAllCoalescing = nil
     if pending then
-        local result = DoRefreshAll()
+        local result = A3._DoRefreshAll()
         ProfEnd(profName, profToken)
         return result
     end
@@ -3689,16 +3754,16 @@ function A3.RefreshAll()
         return true
     end
     A3._refreshAllCoalescing = true
-    DoRefreshAll()
+    A3._DoRefreshAll()
     if C_Timer and C_Timer.After then
-        C_Timer.After(0, FlushCoalescedRefreshAll)
+        C_Timer.After(0, A3._FlushCoalescedRefreshAll)
     else
         A3._refreshAllCoalescing = nil
     end
     return true
 end
 
-local REQUEST_APPLY_SCOPE_KEYS = {
+A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
     player = true, target = true, focus = true, boss = true,
     party = true, raid = true, mythicraid = true,
     gf_party = true, gf_raid = true, gf_mythicraid = true,
@@ -3706,17 +3771,17 @@ local REQUEST_APPLY_SCOPE_KEYS = {
     shared = true, global = true, all = true, ["*"] = true,
 }
 
-local function LooksLikeApplyScope(value)
+A3._LooksLikeApplyScope = function(value)
     value = tostring(value or ""):lower()
     if value == "" then return false end
-    if REQUEST_APPLY_SCOPE_KEYS[value] then return true end
+    if A3._requestApplyScopeKeys[value] then return true end
     return value:match("^boss%d+$") ~= nil
         or value:match("^party%d+$") ~= nil
         or value:match("^raid%d+$") ~= nil
 end
 
 function A3.RequestApply(scopeOrReason, reason)
-    if LooksLikeApplyScope(scopeOrReason) then
+    if A3._LooksLikeApplyScope(scopeOrReason) then
         return A3.RequestScope(scopeOrReason, reason or "AURAS3_REQUEST_APPLY")
     end
     return A3.RefreshAll()
@@ -3805,7 +3870,7 @@ function AurasElement.Update(frame, event)
     if event ~= nil and not ReasonRequiresAuraApply(event) then
         local root = frame and frame.Auras
         if root and root._msufA3NativeRoot == true and root._msufA3Applied == true then
-            RefreshAppliedNativeAuras(frame, false)
+            A3._RefreshAppliedNativeAuras(frame, false)
             return true
         end
         return false

@@ -259,6 +259,9 @@ local function Set(kind, key, value, mode)
             conf.hlOverride = true
         end
         QueueGF(kind, mode or "visual")
+        if key == "enabled" and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
+            _G.MSUF_ShowGroupFrameReloadRequiredPopup()
+        end
         return true
     end
     return M.RunWithHistory("Group " .. tostring(key), "group:" .. tostring(kind) .. ":" .. tostring(key), Write)

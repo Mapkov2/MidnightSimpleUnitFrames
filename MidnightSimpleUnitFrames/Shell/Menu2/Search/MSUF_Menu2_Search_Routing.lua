@@ -594,11 +594,11 @@ range=range fade|range check|distance check|out of range
     gf_auras = [[
 buffs=buffs|buff|hots|own buffs|healer buffs|buff position|buff size|buff layer
 debuffs=debuffs|debuff|boss debuff|raid debuff|debuff position|debuff size|debuff layer
+si=spell indicators|custom spell|spell id|indicator spell|healer hots indicators|placed spell icons
 ]],
     gf_indicators = [[
-indicators=indicators|spell indicators|placed indicators|focus glow|frame effects
+indicators=indicators|focus glow|frame effects
 sicons=status icons|status icon|dead icon|ghost text|offline icon|afk|dnd|ready check|summon|resurrect|phase|leader icon|assist icon|role icon|raid marker|advanced status|advanced x offset|advanced y offset|advanced placement|extended x offset|extended y offset
-si=spell indicators|custom spell|spell id|indicator spell|healer hots indicators
 ci=corner indicators|corner dots|corner indicator|custom spell editor|slot assignments
 ]],
     profiles = [[

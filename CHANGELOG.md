@@ -1,5 +1,64 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta7 - 2026-07-09
+
+### UFCore Rewrite
+- Moved the unit-frame backend behind the embedded `MSUF_UFCore` loader and removed the old broad dispatch module from the main runtime path.
+- Reworked unit-frame, group-frame, health, power, text, border, status, load-condition, and factory runtime code around direct Core-owned frame APIs.
+- Updated the TOC and XML load order so UFCore owns unit-frame elements, factory setup, and group-frame runtime loading.
+- Preserved compatibility bridges for existing feature modules while routing live frame lookup through `MSUF.UF` and `MSUF.GF`.
+
+### Performance And Runtime
+- Routed hot unit events through direct frame handlers instead of the old broad dispatch path.
+- Reduced normal menu and Assistant apply work by targeting UFCore scopes and dirty masks instead of forcing broad full-frame updates.
+- Added opt-in Auras3 performance tracing with `/msufa3trace` tooling for focused aura profiling.
+- Added diagnostics and rewrite notes for UFCore connection audits, click-spike tracing, and coldpath/hotpath migration checks.
+- Kept click and secure-frame diagnostics out of the default hotpath unless explicitly invoked.
+
+### Auras
+- Core feature restored: the Aura Designer is usable again, including healer-focused aura and spell-indicator setup.
+- Reconnected Auras3 to UFCore frame resolution and scoped apply paths for unit, target, focus, boss, pet, and group lanes.
+- Added separate tooltip controls for buff and debuff lanes.
+- Improved target/focus aura refresh behavior and native aura-container rebuild handling.
+- Added tracked group-buff lane support backed by spell-indicator data.
+- Added Auras3 spell-indicator runtime support for 12.1 CustomAuraContainer aura slots.
+- Improved aura include/exclude spell-ID filtering, candidate signatures, and native filter handling.
+
+### Group Frames And Spell Indicators
+- Restored spell-indicator data load order for group frames inside the UFCore group embed.
+- Added tracked-buff compilation from selected spell-indicator specs and enabled spell-indicator-driven tracked aura lanes.
+- Improved group aura defaults, lane configuration, tooltip behavior, and external defensive filtering.
+- Updated group indicator Assistant actions, page wiring, and search routing for the new tracked aura/spell-indicator paths.
+- Improved group preview rendering for aura lanes, spell-indicator placements, and handle interactions.
+
+### Menu2, Assistant, And Search
+- Updated Menu2 apply service, bindings, pages, and Assistant registries to use scoped UFCore apply routes.
+- Improved Assistant aura parsing, aura group-lane routing, and dashboard/status selector coverage.
+- Added menu controls for frame-border strata and exposed the matching Global Bars control.
+- Updated Menu2 aura, group aura, group indicator, and global bar pages for the new Aura3 and group tracked-buff options.
+- Improved Menu2 search keywords, FAQ routing, and support text for the new aura and spell-indicator workflows.
+- Added and localized new user-facing labels for the spell-indicator and tooltip reset flows.
+
+### Castbars, Class Power, And Integrations
+- Connected castbars, boss castbars, player castbar runtime, class power, and gameplay hooks to UFCore-first frame lookup.
+- Updated previews and edit-mode interactions for castbars, class power, auras, group frames, and unit frames.
+- Kept castbar and class-power live event paths external and direct while refreshing visuals through UFCore callbacks.
+- Updated third-party anchor integration and runtime color/font/texture helpers for the UFCore rewrite.
+
+### Visuals And Previews
+- Updated Edit Mode movers, popups, HUD, and layout handling for UFCore-backed frames.
+- Updated unit and group previews to resolve live frames through UFCore and render updated aura, castbar, class-power, text, and group layers.
+- Replaced frame-border level-offset behavior with frame-border strata selection for more predictable overlay layering.
+- Improved rounded-frame, border, highlight, alpha, portrait, and status element integration with scoped UFCore refreshes.
+
+### What To Test First
+- Rapid target and focus swaps with buffs, debuffs, tracked buffs, tooltips, and cooldown text enabled.
+- Party, raid, and mythic raid group auras, especially spell-indicator tracked buffs and external defensive filters.
+- Group indicator setup, Assistant commands for spell indicators, and Menu2 search routing for aura/group-aura settings.
+- Frame-border strata on unit and group frames across normal UI, previews, and Edit Mode.
+- Castbar, class power, rounded-frame, and third-party-anchor behavior after profile swaps and `/reload`.
+- `/msufa3trace`, `/msufclickcore`, and UFCore diagnostics only when explicitly testing performance.
+
 ## 6.0-Beta6 - 2026-07-06
 
 ### Bug Fixes

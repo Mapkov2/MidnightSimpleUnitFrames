@@ -88,7 +88,7 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
     Registry:RegisterAction({
         key = "set_group_spell_indicator_aura",
         label = "Set Group Spell Indicator Aura",
-        page = "gf_indicators",
+        page = "gf_auras",
         type = "configure",
         combatSafe = false,
         captureSnapshot = true,
@@ -120,7 +120,7 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
     Registry:RegisterAction({
         key = "reset_group_spell_indicator_aura",
         label = "Reset Group Spell Indicator Aura",
-        page = "gf_indicators",
+        page = "gf_auras",
         type = "reset",
         combatSafe = false,
         captureSnapshot = true,
@@ -145,7 +145,7 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
     Registry:RegisterAction({
         key = "set_group_spell_indicator_multi_spec",
         label = "Set Group Spell Indicator Multi-Spec Entry",
-        page = "gf_indicators",
+        page = "gf_auras",
         type = "configure",
         combatSafe = false,
         captureSnapshot = true,
@@ -172,7 +172,7 @@ function A.GroupFramesRegistry.RegisterSpellIndicatorActions(ctx)
     Registry:RegisterAction({
         key = "move_group_spell_indicator_order",
         label = "Move Group Spell Indicator Order",
-        page = "gf_indicators",
+        page = "gf_auras",
         type = "configure",
         combatSafe = false,
         captureSnapshot = true,
