@@ -24,6 +24,13 @@ local function CoreUnitFrame(unit)
     return unit and frames and frames[unit] or nil
 end
 
+local function CP_IsUsableCooldownAnchorFrame(frame)
+    if not (frame and frame.GetWidth) or frame._msufLegacyCooldownAnchor == true then return false end
+    if frame.IsShown and not frame:IsShown() then return false end
+    local width = frame:GetWidth()
+    return type(width) == "number" and width > 0
+end
+
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
@@ -384,7 +391,7 @@ builders.LAYOUT = function(E)
             if proxy
                 and proxy._msufStableAnchorProxy == true
                 and not (proxy.IsProtected and proxy:IsProtected())
-                and (not proxy.IsShown or proxy:IsShown())
+                and CP_IsUsableCooldownAnchorFrame(proxy)
             then
                 lockdownProxy = proxy
             end
@@ -404,11 +411,7 @@ builders.LAYOUT = function(E)
                 CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
                 cachedCooldownAnchor = true
             else
-                CP_Trace("cache apply FAIL -> defer to regen")
-                CP._layoutDirty = true
-                ExportPublic("MSUF_ClassPowerLayoutDirty", true)
-                RequestUFReanchorAfterCombat()
-                return
+                CP_Trace("cache apply FAIL -> fallback")
             end
         end
 
@@ -421,7 +424,7 @@ builders.LAYOUT = function(E)
                 or (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
                 or _G["EssentialCooldownViewer"]
             local anchorFrame = nil
-            if ecv and ecv.IsShown and ecv:IsShown() then
+            if CP_IsUsableCooldownAnchorFrame(ecv) then
                 if not inLockdown or ecv == lockdownProxy then
                     anchorFrame = ecv
                 end
@@ -437,11 +440,6 @@ builders.LAYOUT = function(E)
                     _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", "TOP")
                 end
             else
-                if inLockdown then
-                    RequestUFReanchorAfterCombat()
-                elseif type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
-                    _G.MSUF_ScheduleLateAnchorReanchor()
-                end
                 if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
                     and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
                 then

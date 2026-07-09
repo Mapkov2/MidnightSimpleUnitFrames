@@ -111,6 +111,10 @@ local function NormalizeWidthSourceKind(kind)
     return WIDTH_SOURCE_KINDS[kind] and kind or nil
 end
 
+local function IsCooldownWidthSourceKind(kind)
+    return kind == "essential" or kind == "utility"
+end
+
 -- Whether the MSUF castbar should be used for this unit (vs disabled/Blizzard).
 local function ShouldUseMSUFCastbar(unit, g)
     local fn = _G.MSUF_ShouldUseMSUFCastbar
@@ -221,6 +225,35 @@ local function EffectiveCooldownViewer(viewerKey)
         and (_G.MSUF_GetEffectiveCooldownFrame and _G.MSUF_GetEffectiveCooldownFrame(viewerKey) or _G[viewerKey])
 end
 
+local function IsUsableCooldownWidthFrame(frame)
+    if not (frame and frame.GetWidth) or frame._msufLegacyCooldownAnchor == true then return false end
+    if frame.IsShown and not frame:IsShown() then return false end
+    local width = frame:GetWidth()
+    return type(width) == "number" and width > 0
+end
+
+local function CooldownWidthSourceFrame(kind)
+    local containerKey, viewerKey = WidthSourceNames(kind)
+    local container = containerKey and _G[containerKey] or nil
+    if IsUsableCooldownWidthFrame(container) then return container end
+
+    local viewer = EffectiveCooldownViewer(viewerKey)
+    if IsUsableCooldownWidthFrame(viewer) then return viewer end
+
+    local rawViewer = viewerKey and _G[viewerKey] or nil
+    if rawViewer ~= viewer and IsUsableCooldownWidthFrame(rawViewer) then return rawViewer end
+    return nil
+end
+
+local function CooldownWidthSourceUsable(kind)
+    return CooldownWidthSourceFrame(kind) ~= nil
+end
+
+local function WidthSourceRuntimeActive(kind)
+    kind = NormalizeWidthSourceKind(kind)
+    return kind ~= nil and (not IsCooldownWidthSourceKind(kind) or CooldownWidthSourceUsable(kind))
+end
+
 -- Effective width to apply, derived from the configured width source.
 local function WidthFromSource(unit, kind, targetFrame)
     kind = NormalizeWidthSourceKind(kind)
@@ -228,15 +261,7 @@ local function WidthFromSource(unit, kind, targetFrame)
         return ScaledWidth(GetUnitframeWidthSource(unit), targetFrame)
     end
 
-    local containerKey, viewerKey = WidthSourceNames(kind)
-    local w = ScaledWidth(_G[containerKey], targetFrame)
-    if not w then
-        w = ScaledWidth(EffectiveCooldownViewer(viewerKey), targetFrame)
-    end
-    if not w and viewerKey and _G[viewerKey] ~= EffectiveCooldownViewer(viewerKey) then
-        w = ScaledWidth(_G[viewerKey], targetFrame)
-    end
-    return w
+    return ScaledWidth(CooldownWidthSourceFrame(kind), targetFrame)
 end
 
 -- The configured (and validated) width-source kind for a unit, or nil.
@@ -313,6 +338,7 @@ local function WidthSourceSignature(g, unit)
 
     local matchSrc = ConfiguredWidthSource(g, unit)
     if not matchSrc then return nil end
+    if IsCooldownWidthSourceKind(matchSrc) and not CooldownWidthSourceUsable(matchSrc) then return nil end
 
     if matchSrc == "unitframe" then
         local count = unit == "boss" and 5 or 1
@@ -327,14 +353,7 @@ local function WidthSourceSignature(g, unit)
         return sig
     end
 
-    local containerKey, viewerKey = WidthSourceNames(matchSrc)
-    local container = containerKey and _G[containerKey] or nil
-    local viewer = EffectiveCooldownViewer(viewerKey)
-    local rawViewer = viewerKey and _G[viewerKey] or nil
-    return matchSrc
-        .. "|c=" .. FrameSignature(container)
-        .. "|v=" .. FrameSignature(viewer)
-        .. "|g=" .. FrameSignature(rawViewer)
+    return matchSrc .. "|cdm=" .. FrameSignature(CooldownWidthSourceFrame(matchSrc))
 end
 
 -- True (and stores the new signature) when the width source changed since last.
@@ -395,6 +414,9 @@ local function HookWidthSourceFrame(frame)
     if not (frame and frame.HookScript) or hookedWidthSourceFrames[frame] then
         return false
     end
+    if InCombat() and frame.IsProtected and frame:IsProtected() then
+        return false
+    end
     hookedWidthSourceFrames[frame] = true
     frame:HookScript("OnSizeChanged", QueueWidthSourceSync)
     frame:HookScript("OnShow", QueueWidthSourceSync)
@@ -417,6 +439,10 @@ local function EnsureWidthSourceHooks(g, unit)
             found = HookWidthSourceFrame(GetUnitframeWidthSource(sourceUnit)) or found
         end
         return found
+    end
+
+    if IsCooldownWidthSourceKind(matchSrc) then
+        return CooldownWidthSourceUsable(matchSrc)
     end
 
     local containerKey, viewerKey = WidthSourceNames(matchSrc)
@@ -443,9 +469,10 @@ local function WidthSourceRetryStep()
     local anyMissing = false
     local anyActive = false
     for _, unit in ipairs(CASTBAR_UNITS) do
-        if ConfiguredWidthSource(g, unit) then
-            anyActive = true
-            if not EnsureWidthSourceHooks(g, unit) then
+        local source = ConfiguredWidthSource(g, unit)
+        if source then
+            anyActive = WidthSourceRuntimeActive(source) or anyActive
+            if not EnsureWidthSourceHooks(g, unit) and not IsCooldownWidthSourceKind(source) then
                 anyMissing = true
             end
         end
@@ -493,8 +520,9 @@ function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
     end
 
     if unit then
-        if not ConfiguredWidthSource(g, unit) then return end
-        if not EnsureWidthSourceHooks(g, unit) then
+        local source = ConfiguredWidthSource(g, unit)
+        if not source then return end
+        if not EnsureWidthSourceHooks(g, unit) and not IsCooldownWidthSourceKind(source) then
             StartWidthSourceRetry()
         end
         if WidthSourceNeedsReanchor(g, unit) then
@@ -505,9 +533,10 @@ function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
 
     local anyActive = false
     for _, unitKey in ipairs(CASTBAR_UNITS) do
-        if ConfiguredWidthSource(g, unitKey) then
-            anyActive = true
-            if not EnsureWidthSourceHooks(g, unitKey) then
+        local source = ConfiguredWidthSource(g, unitKey)
+        if source then
+            anyActive = WidthSourceRuntimeActive(source) or anyActive
+            if not EnsureWidthSourceHooks(g, unitKey) and not IsCooldownWidthSourceKind(source) then
                 StartWidthSourceRetry()
             end
         end
@@ -522,7 +551,12 @@ do
     local boot = CreateFrame("Frame")
     boot:RegisterEvent("PLAYER_ENTERING_WORLD")
     boot:RegisterEvent("PLAYER_REGEN_ENABLED")
-    boot:SetScript("OnEvent", function(_, event)
+    boot:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
+    boot:RegisterEvent("ADDON_LOADED")
+    boot:SetScript("OnEvent", function(_, event, addon)
+        if event == "ADDON_LOADED" and addon ~= "Blizzard_CooldownViewer" and addon ~= "Blizzard_EditMode" then
+            return
+        end
         if event == "PLAYER_REGEN_ENABLED" then
             if not widthSourcePendingAfterCombat and not widthSourceQueued then
                 return

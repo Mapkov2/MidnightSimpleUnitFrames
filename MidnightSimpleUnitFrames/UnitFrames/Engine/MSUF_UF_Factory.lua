@@ -47,12 +47,29 @@ local function IsCooldownViewerAnchor(name)
   return COOLDOWN_ANCHORS[name] == true
 end
 
+local function ResolveCooldownViewerAnchor(name)
+  if not IsCooldownViewerAnchor(name) then return nil end
+  local resolver = _G.MSUF_GetEffectiveCooldownFrame
+  local frame = (type(resolver) == "function" and resolver(name)) or _G[name]
+  return frame
+end
+
+local function IsCooldownViewerAnchorFrameUsable(frame)
+  if not (frame and frame.GetWidth) or frame._msufLegacyCooldownAnchor == true then return false end
+  if frame.IsShown and not frame:IsShown() then return false end
+  local width = frame:GetWidth()
+  return type(width) == "number" and width > 0
+end
+
+local function IsCooldownViewerAnchorUsable(name)
+  return IsCooldownViewerAnchorFrameUsable(ResolveCooldownViewerAnchor(name))
+end
+
 local function ResolveNamedAnchor(name)
   if type(name) ~= "string" or name == "" then return nil, nil end
   if IsCooldownViewerAnchor(name) then
-    local resolver = _G.MSUF_GetEffectiveCooldownFrame
-    local frame = (type(resolver) == "function" and resolver(name)) or _G[name]
-    if frame then return frame, nil, true end
+    local frame = ResolveCooldownViewerAnchor(name)
+    if IsCooldownViewerAnchorUsable(name) then return frame, nil, true end
     return nil, name, true
   end
   if UF.frames and UF.frames[name] then return UF.frames[name], nil end
@@ -160,7 +177,8 @@ local function ApplyPosition(frame, spec)
   local key = ScreenCacheKey(spec, frame)
 
   if missingAnchorName then
-    if type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+    local missingCooldownAnchor = IsCooldownViewerAnchor(requestedAnchor)
+    if not missingCooldownAnchor and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
       _G.MSUF_ScheduleLateAnchorReanchor()
     end
     local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
@@ -556,21 +574,41 @@ local LATE_ANCHOR_KEYS = { "player", "target", "focus", "targettarget", "focusta
 local function HasLateAnchorConfig()
   local db = _G.MSUF_DB
   if type(db) ~= "table" then return false end
+  local general = type(db.general) == "table" and db.general or nil
+  if general and general.anchorToCooldown == true then
+    if IsCooldownViewerAnchorUsable("EssentialCooldownViewer") then return true end
+  end
+  local globalAnchor = general and general.anchorName
+  if IsCooldownViewerAnchor(globalAnchor) then
+    if IsCooldownViewerAnchorUsable(globalAnchor) then return true end
+  elseif type(globalAnchor) == "string"
+    and globalAnchor ~= ""
+    and globalAnchor ~= "UIParent"
+    and globalAnchor ~= "WorldFrame" then
+    return true
+  end
   for i = 1, #LATE_ANCHOR_KEYS do
     local conf = db[LATE_ANCHOR_KEYS[i]]
     if type(conf) == "table" then
       local frameName = conf.anchorFrameName
-      if type(frameName) == "string" and frameName ~= "" and not IsCooldownViewerAnchor(frameName) then
-        return true
+      if type(frameName) == "string" and frameName ~= "" then
+        if IsCooldownViewerAnchor(frameName) then
+          if IsCooldownViewerAnchorUsable(frameName) then return true end
+        else
+          return true
+        end
       end
       local anchorTo = conf.anchorToUnitframe
       if type(anchorTo) == "string"
         and anchorTo ~= ""
         and anchorTo ~= "GLOBAL"
         and anchorTo ~= "global"
-        and anchorTo ~= "FREE"
-        and not IsCooldownViewerAnchor(anchorTo) then
-        return true
+        and anchorTo ~= "FREE" then
+        if IsCooldownViewerAnchor(anchorTo) then
+          if IsCooldownViewerAnchorUsable(anchorTo) then return true end
+        else
+          return true
+        end
       end
     end
   end
@@ -632,7 +670,7 @@ do
   lateAnchorEvents:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
   lateAnchorEvents:RegisterEvent("ADDON_LOADED")
   lateAnchorEvents:SetScript("OnEvent", function(_, event, addon)
-    if event == "ADDON_LOADED" and addon ~= "Blizzard_EditMode" then return end
+    if event == "ADDON_LOADED" and addon ~= "Blizzard_EditMode" and addon ~= "Blizzard_CooldownViewer" then return end
     if HasLateAnchorConfig() then ScheduleLateAnchorReanchor() end
   end)
 end

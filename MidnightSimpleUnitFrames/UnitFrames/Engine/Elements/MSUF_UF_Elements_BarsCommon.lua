@@ -525,7 +525,7 @@ local function ExternalFrameWidth(frameName, relativeTo)
     return nil
   end
   local frame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(frameName)) or _G[frameName]
-  if not (frame and frame.GetWidth) or (frame.IsShown and not frame:IsShown()) then
+  if not (frame and frame.GetWidth) or frame._msufLegacyCooldownAnchor == true or (frame.IsShown and not frame:IsShown()) then
     return nil
   end
   local widthFn = _G.MSUF_CDM_GetScaledWidth
