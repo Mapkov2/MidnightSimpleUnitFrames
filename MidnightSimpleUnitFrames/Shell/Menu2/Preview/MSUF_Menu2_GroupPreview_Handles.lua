@@ -50,8 +50,13 @@ function Handles.Install(box, deps)
         if box.SetFocus then box:SetFocus() end
         if handle and handle._cfgStatus and handle._statusSpec then M.SetMenuStateValue("gfStatusIconSelection", handle._statusSpec.value) end
         if handle and handle._cfgSpellItem then
-            M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-            M.gfSpellIndicatorSelection[H.CurrentScope()] = handle._cfgSpellItem.auraName
+            local gp = M.GroupPage or {}
+            if type(gp.SetCurrentSpellAura) == "function" then
+                gp.SetCurrentSpellAura(H.CurrentScope(), handle._cfgSpellItem.auraName)
+            else
+                M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
+                M.gfSpellIndicatorSelection[H.CurrentScope()] = handle._cfgSpellItem.auraName
+            end
             local conf = H.Conf(H.CurrentScope())
             local si = conf and conf.spellIndicators
             if si and si.spec == "multi" then
@@ -120,7 +125,7 @@ function Handles.Install(box, deps)
             "groupPreview:" .. tostring(H.CurrentScope()) .. ":" .. tostring(handle and handle._key or "handle") .. ":" .. tostring(action or "move")
         )
     end
-    local function RefreshGroupPreviewAfterMove(handle)
+    local function RefreshGroupPreviewAfterMove(handle, skipPreviewRefresh)
         local gf = MSUF and MSUF.GF
         local refreshKind = (handle and handle._cfgTargetedSpells) and "party" or H.CurrentScope()
         local auraGroupMove = handle and handle._cfgGroup
@@ -150,14 +155,109 @@ function Handles.Install(box, deps)
         if auraGroupMove and (not (a3 and type(a3.RequestScope) == "function")) and a3 and type(a3._NotifyAuraColdpathPreview) == "function" then
             a3._NotifyAuraColdpathPreview("MSUF2_GROUP_PREVIEW_AURA_MOVE", refreshKind)
         end
-        if box.RequestRefresh then
-            box:RequestRefresh("GROUP_PREVIEW_HANDLE_MOVE")
-        elseif box.Refresh then
-            box:Refresh()
+        if not skipPreviewRefresh then
+            if box.RequestRefresh then
+                box:RequestRefresh("GROUP_PREVIEW_HANDLE_MOVE")
+            elseif box.Refresh then
+                box:Refresh()
+            end
         end
         RefreshHandleSelection(box)
     end
-    local function WriteTextHandleOffsets(handle, x, y, action, checkpoint)
+    local function RefreshTextDragPreview(handle)
+        UpdateHint(box, handle)
+        RefreshHandleSelection(box)
+    end
+    local function TextRegionsForHandle(handle)
+        if not (handle and box._mock) then return nil end
+        local kind = handle._cfgTextKind or H.CurrentTextKind()
+        local slot = handle._cfgTextSlot
+        if type(H.TextRegions) == "function" then
+            local regions = H.TextRegions(box._mock, kind, slot)
+            if regions then return regions end
+        end
+        local m = box._mock
+        if kind == "name" then
+            return { m._nameFS }
+        elseif kind == "hp" then
+            if slot == "left" then return { m._hpLeftFS } end
+            if slot == "center" then return { m._hpCenterFS } end
+            if slot == "right" then return { m._hpRightFS } end
+            return { m._hpLeftFS, m._hpCenterFS, m._hpRightFS }
+        elseif kind == "power" then
+            if slot == "left" then return { m._powerLeftFS } end
+            if slot == "center" then return { m._powerCenterFS } end
+            if slot == "right" then return { m._powerRightFS } end
+            return { m._powerLeftFS, m._powerCenterFS, m._powerRightFS }
+        end
+        return nil
+    end
+    local function CaptureTextDragFrame(list, frame)
+        if not (list and frame and frame.GetPoint and frame.ClearAllPoints and frame.SetPoint) then return end
+        if frame.IsShown and not frame:IsShown() then return end
+        local point, relTo, relPoint, xOfs, yOfs = frame:GetPoint(1)
+        if not point then return end
+        list[#list + 1] = { frame = frame, point = point, relTo = relTo, relPoint = relPoint, x = xOfs or 0, y = yOfs or 0 }
+    end
+    local function CaptureTextDragRegions(handle)
+        if not handle then return end
+        local captured = {}
+        local regions = TextRegionsForHandle(handle)
+        if regions then
+            for i = 1, #regions do
+                CaptureTextDragFrame(captured, regions[i])
+            end
+        end
+        local focus = box._msufMenuTextFocus
+        if focus and focus.kind == (handle._cfgTextKind or H.CurrentTextKind()) and focus.slot == handle._cfgTextSlot then
+            CaptureTextDragFrame(captured, box._msufMenuTextFocusFrame)
+        end
+        handle._textDragRegions = captured
+    end
+    local function TextDragNameRight(handle)
+        if not (handle and handle._cfgTextKind == "name") then return false end
+        local conf = H.Conf(H.CurrentScope()) or {}
+        return (conf.nameAnchor or "LEFT") == "RIGHT"
+    end
+    local function TextDragConfigDeltaX(handle, delta)
+        if TextDragNameRight(handle) then return -delta end
+        return delta
+    end
+    local function TextDragPixelDeltaX(handle, current, startValue, scale)
+        local delta = Round((tonumber(current) or 0) * scale) - Round((tonumber(startValue) or 0) * scale)
+        if TextDragNameRight(handle) then delta = -delta end
+        return delta
+    end
+    local function ApplyTextRegionDrag(handle, nextX, nextY)
+        if not handle then return false end
+        local previewScale = handle._previewScale or (box._mock and box._mock._previewScale) or 1
+        if previewScale <= 0 then previewScale = 1 end
+        local dx = TextDragPixelDeltaX(handle, nextX, handle._dragCfgStartX or 0, previewScale)
+        local dy = Round((tonumber(nextY) or 0) * previewScale) - Round((tonumber(handle._dragCfgStartY) or 0) * previewScale)
+        local moved = false
+        local captured = handle._textDragRegions
+        if captured then
+            for i = 1, #captured do
+                local item = captured[i]
+                local frame = item and item.frame
+                if frame and frame.ClearAllPoints and frame.SetPoint then
+                    frame:ClearAllPoints()
+                    frame:SetPoint(item.point, item.relTo or box._mock, item.relPoint or item.point, (item.x or 0) + dx, (item.y or 0) + dy)
+                    moved = true
+                end
+            end
+        end
+        if handle._dragPoint then
+            handle:ClearAllPoints()
+            handle:SetPoint(handle._dragPoint, handle._dragRelTo or box._mock, handle._dragRelPoint or handle._dragPoint, (handle._dragStartX or 0) + dx, (handle._dragStartY or 0) + dy)
+            moved = true
+        end
+        return moved
+    end
+    local function ReleaseTextDragRegions(handle)
+        if handle then handle._textDragRegions = nil end
+    end
+    local function WriteTextHandleOffsets(handle, x, y, action, checkpoint, previewOnly)
         if not handle then return false end
         local conf = H.Conf(H.CurrentScope())
         if not conf then return false end
@@ -165,7 +265,11 @@ function Handles.Install(box, deps)
         local xKey, yKey = H.TextOffsetKeys(kind, handle._cfgTextSlot)
         conf[xKey] = Round(x or 0)
         conf[yKey] = Round(y or 0)
-        RefreshGroupPreviewAfterMove(handle)
+        if previewOnly then
+            RefreshTextDragPreview(handle)
+        else
+            RefreshGroupPreviewAfterMove(handle)
+        end
         if checkpoint then CheckpointHandleHistory(handle, action or "Move") end
         return true
     end
@@ -315,8 +419,12 @@ function Handles.Install(box, deps)
             box._dragFrame:Hide()
         end
         local hadFrozenScale = box._dragFrozenScale ~= nil
-        box._dragFrozenScale = nil
+        local textDrag = handle and handle._cfgText
+        if not textDrag then box._dragFrozenScale = nil end
         if handle then
+            if textDrag then
+                if box.SetTextDragRefreshSuppressed then box:SetTextDragRefreshSuppressed(false) end
+            end
             handle._dragging = nil
             handle._dragPoint = nil
             handle._dragRelTo = nil
@@ -330,9 +438,13 @@ function Handles.Install(box, deps)
             handle._dragScale = nil
         end
         local didFinalRefresh
-        if wasDragging and handle and handle._cfgText then
+        if wasDragging and textDrag then
             if handle._lastDragX ~= nil or handle._lastDragY ~= nil then
+                RefreshGroupPreviewAfterMove(handle, true)
+                if box.Refresh then box:Refresh("GROUP_PREVIEW_TEXT_DRAG_END") end
+                if M.RequestRefresh then M.RequestRefresh(nil, "gf-text-drag-controls") end
                 CheckpointHandleHistory(handle, "Move")
+                didFinalRefresh = true
             else
                 RefreshHandleSelection(box)
             end
@@ -344,6 +456,10 @@ function Handles.Install(box, deps)
         end
         if hadFrozenScale and not box._manualZoom and not didFinalRefresh then
             if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_DRAG_END") elseif box.Refresh then box:Refresh() end
+        end
+        if textDrag then
+            ReleaseTextDragRegions(handle)
+            box._dragFrozenScale = nil
         end
     end
     box._dragFrame:SetScript("OnMouseUp", function(_, button)
@@ -365,12 +481,13 @@ function Handles.Install(box, deps)
             if previewScale <= 0 then previewScale = 1 end
             local dx = ((cx - (handle._dragCursorX or cx)) / uiScale) / previewScale
             local dy = ((cy - (handle._dragCursorY or cy)) / uiScale) / previewScale
-            local nextX = Round((handle._dragCfgStartX or 0) + dx)
+            local nextX = Round((handle._dragCfgStartX or 0) + TextDragConfigDeltaX(handle, dx))
             local nextY = Round((handle._dragCfgStartY or 0) + dy)
             if handle._lastDragX == nextX and handle._lastDragY == nextY then return end
             handle._lastDragX = nextX
             handle._lastDragY = nextY
-            WriteTextHandleOffsets(handle, nextX, nextY, "Move", false)
+            ApplyTextRegionDrag(handle, nextX, nextY)
+            WriteTextHandleOffsets(handle, nextX, nextY, "Move", false, true)
             return
         end
         local scale = handle._dragScale or 1
@@ -403,6 +520,12 @@ function Handles.Install(box, deps)
             local _, cfgX, cfgY = HandleOffsets(handle)
             handle._dragCfgStartX = tonumber(cfgX) or 0
             handle._dragCfgStartY = tonumber(cfgY) or 0
+            CaptureTextDragRegions(handle)
+            if box.SetTextDragRefreshSuppressed then
+                box:SetTextDragRefreshSuppressed(true)
+            elseif box.CancelPendingRefresh then
+                box:CancelPendingRefresh()
+            end
         end
         handle._dragPoint = point
         handle._dragRelTo = relativeTo or box._mock
@@ -538,9 +661,17 @@ function Handles.Install(box, deps)
             border:Hide()
             handle._iconBorders[i] = border
             local stack = handle._iconStacks[i] or handle:CreateFontString(nil, "OVERLAY")
+            if stack.SetFont and stack._msufGFPreviewFont ~= true then
+                stack:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+                stack._msufGFPreviewFont = true
+            end
             stack:Hide()
             handle._iconStacks[i] = stack
             local timer = handle._iconTimers[i] or handle:CreateFontString(nil, "OVERLAY")
+            if timer.SetFont and timer._msufGFPreviewFont ~= true then
+                timer:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+                timer._msufGFPreviewFont = true
+            end
             timer:Hide()
             handle._iconTimers[i] = timer
             local durationBar = handle._iconDurationBars[i] or handle:CreateTexture(nil, "OVERLAY")
