@@ -94,9 +94,9 @@ for _, scope in ipairs(SCOPES) do
     AddAliasesForUnit(aliases, scope, "spell indicators layer", "zauber indikatoren ebene")
     AddAliasesForUnit(aliases, scope, "tracked spell layer", "verfolgte zauber ebene")
     RegisterGroupNested(scope, "spellIndicators.layer", "spellIndicatorLayer", "Spell Indicator Layer", "number", aliases, {
-        min = 1, max = 15, step = 1,
+        min = 0, max = 30, step = 1,
         get = function() return tonumber(SpellDB(scope).layer) or 9 end,
-        set = function(value) SpellDB(scope).layer = ClampNumber(value, 1, 15, 1) end,
+        set = function(value) SpellDB(scope).layer = ClampNumber(value, 0, 30, 1) end,
         apply = ApplySpell,
     })
 

@@ -59,7 +59,7 @@ function A.GroupFramesRegistry.RegisterTextSettings(ctx, scope)
     aliases = {}
     AddAliasesForUnit(aliases, scope, "name layer")
     AddAliasesForUnit(aliases, scope, "name text layer")
-    RegisterGroupNumber(scope, "nameTextLayer", "nameTextLayer", "Name Text Layer", 5, 1, 15, 1, "font", aliases)
+    RegisterGroupNumber(scope, "nameTextLayer", "nameTextLayer", "Name Text Layer", 5, 0, 30, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "hp left text")
@@ -150,7 +150,7 @@ function A.GroupFramesRegistry.RegisterTextSettings(ctx, scope)
     aliases = {}
     AddAliasesForUnit(aliases, scope, "hp text layer")
     AddAliasesForUnit(aliases, scope, "health text layer")
-    RegisterGroupNumber(scope, "healthTextLayer", "textLayer", "HP Text Layer", 5, 1, 15, 1, "font", aliases)
+    RegisterGroupNumber(scope, "healthTextLayer", "textLayer", "HP Text Layer", 5, 0, 30, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "power left text")
@@ -192,7 +192,7 @@ function A.GroupFramesRegistry.RegisterTextSettings(ctx, scope)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "power text layer")
-    RegisterGroupNumber(scope, "powerTextLayer", "powerTextLayer", "Power Text Layer", 2, 1, 15, 1, "font", aliases)
+    RegisterGroupNumber(scope, "powerTextLayer", "powerTextLayer", "Power Text Layer", 2, 0, 30, 1, "font", aliases)
 
     for _, slotInfo in ipairs({
         { label = "HP Left Text", prefix = "hpTextLeft", words = { "hp left slot", "health left slot", "left hp slot" } },

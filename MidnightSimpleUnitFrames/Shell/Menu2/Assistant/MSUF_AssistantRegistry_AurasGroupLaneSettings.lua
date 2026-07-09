@@ -475,7 +475,7 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             Assistant._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
             Assistant._AssistantAddAllAuraNouns(aliases, lane, "all group", { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
             Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
-            RegisterGFAuraNumber(scope, lane, "Layer", "layer", laneInfo.label .. " Layer", layerDefault, 1, 15, aliases, "geometry")
+            RegisterGFAuraNumber(scope, lane, "Layer", "layer", laneInfo.label .. " Layer", layerDefault, 0, 30, aliases, "geometry")
 
             RegisterGroupAuraLaneGeometrySettings(ctx, scope, lane, laneInfo)
 

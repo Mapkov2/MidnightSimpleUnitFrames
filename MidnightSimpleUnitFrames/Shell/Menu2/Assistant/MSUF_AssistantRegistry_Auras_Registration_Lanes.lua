@@ -96,7 +96,7 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
     local function AuraReadLaneLayer(scope, lane)
         local Model = AuraModel()
         if Model and type(Model.ReadLaneLayer) == "function" then return Model.ReadLaneLayer(scope, lane) end
-        return AuraReadNumber(scope, AuraLaneKey(lane, "buffLayer", "debuffLayer"), lane == "buff" and 5 or 6, 1, 15)
+        return AuraReadNumber(scope, AuraLaneKey(lane, "buffLayer", "debuffLayer"), lane == "buff" and 5 or 6, 0, 30)
     end
 
     local function AuraWriteLaneLayer(scope, lane, value)
@@ -105,7 +105,7 @@ function A.AurasRegistry.BuildLaneRegistrationHelpers(ctx)
             Model.WriteLaneLayer(scope, lane, value)
             return
         end
-        AuraWriteNumber(scope, AuraLaneKey(lane, "buffLayer", "debuffLayer"), value, 1, 15)
+        AuraWriteNumber(scope, AuraLaneKey(lane, "buffLayer", "debuffLayer"), value, 0, 30)
     end
 
     local function AuraReadLaneGrowthPair(scope, lane)

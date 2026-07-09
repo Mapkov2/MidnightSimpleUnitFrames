@@ -105,6 +105,7 @@ local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
 local C_AddOns = _G.C_AddOns
 local C_Timer = _G.C_Timer
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local EMPTY_EVENTS = {}
@@ -349,6 +350,7 @@ local GROUP_LANE_SPECS = {
         spacingKey = "buffSpacing", perRowKey = "buffPerRow", growthXKey = "buffGrowthX",
         growthYKey = "buffGrowthY", anchorKey = "buffAnchor", xKey = "buffOffsetX",
         yKey = "buffOffsetY", layerKey = "buffLayer", filterKey = "buffFilter",
+        strataKey = "buffStrata",
         blacklistHashKey = "buffBlacklistHash",
         showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
         swipeReverseKey = "buffCooldownSwipeReverse", tooltipKey = "buffShowTooltip",
@@ -369,6 +371,7 @@ local GROUP_LANE_SPECS = {
         spacingKey = "trackedBuffSpacing", perRowKey = "trackedBuffPerRow", growthXKey = "trackedBuffGrowthX",
         growthYKey = "trackedBuffGrowthY", anchorKey = "trackedBuffAnchor", xKey = "trackedBuffOffsetX",
         yKey = "trackedBuffOffsetY", layerKey = "trackedBuffLayer", filterKey = "trackedBuffFilter",
+        strataKey = "trackedBuffStrata",
         blacklistHashKey = "trackedBuffBlacklistHash", includeHashKey = "trackedBuffIncludeHash",
         showTextKey = "trackedBuffShowCooldown", showStackKey = "trackedBuffShowStacks", swipeKey = "trackedBuffShowCooldownSwipe",
         swipeReverseKey = "trackedBuffCooldownSwipeReverse", tooltipKey = "trackedBuffShowTooltip",
@@ -389,6 +392,7 @@ local GROUP_LANE_SPECS = {
         spacingKey = "debuffSpacing", perRowKey = "debuffPerRow", growthXKey = "debuffGrowthX",
         growthYKey = "debuffGrowthY", anchorKey = "debuffAnchor", xKey = "debuffOffsetX",
         yKey = "debuffOffsetY", layerKey = "debuffLayer", filterKey = "debuffFilter",
+        strataKey = "debuffStrata",
         blacklistHashKey = "debuffBlacklistHash",
         showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse", tooltipKey = "debuffShowTooltip",
@@ -409,6 +413,7 @@ local GROUP_LANE_SPECS = {
         spacingKey = "externalSpacing", perRowKey = "externalPerRow", growthXKey = "externalGrowthX",
         growthYKey = "externalGrowthY", anchorKey = "externalAnchor", xKey = "externalOffsetX",
         yKey = "externalOffsetY", layerKey = "externalLayer", filterKey = "externalFilter",
+        strataKey = "externalStrata",
         blacklistHashKey = "externalBlacklistHash",
         showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks", swipeKey = "externalShowCooldownSwipe",
         swipeReverseKey = "externalCooldownSwipeReverse", tooltipKey = "externalShowTooltip",
@@ -485,6 +490,52 @@ end
 
 local function Clamp01(value, fallback)
     return ClampNumber(value, fallback or 1, 0, 1)
+end
+
+local function NormalizeFrameStrata(value, fallback)
+    local normalize = _G.MSUF_NormalizeFrameStrata
+    if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
+    if issecretvalue(value) == true then return fallback or "AUTO" end
+    if value == nil or value == "" then return fallback or "AUTO" end
+    value = tostring(value):upper()
+    if value == "AUTO" then return "AUTO" end
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return rank and rank[value] and value or (fallback or "AUTO")
+end
+
+local function ReadParentFrameStrata(parentFrame)
+    local strata
+    if parentFrame and parentFrame.GetFrameStrata then strata = parentFrame:GetFrameStrata() end
+    if issecretvalue(strata) == true then return nil end
+    return strata
+end
+
+local function ResolveFrameStrata(parentFrame, value)
+    if issecretvalue(value) == true then value = nil end
+    if value == nil or value == "" or value == "AUTO" then
+        return ReadParentFrameStrata(parentFrame)
+    end
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    if type(value) == "string" and rank and rank[value] then return value end
+    value = NormalizeFrameStrata(value, "AUTO")
+    if value ~= "AUTO" then return value end
+    return ReadParentFrameStrata(parentFrame)
+end
+
+local function SyncFrameStrata(frame, strata)
+    if not (frame and frame.SetFrameStrata) then return false end
+    if issecretvalue(strata) == true then return false end
+    if strata == nil or strata == "" then return false end
+    local cachedStrata = frame._msufA3FrameStrata
+    if issecretvalue(cachedStrata) ~= true and cachedStrata == strata then return false end
+    frame._msufA3FrameStrata = strata
+    local currentStrata
+    if frame.GetFrameStrata then currentStrata = frame:GetFrameStrata() end
+    if issecretvalue(currentStrata) == true or currentStrata ~= strata then
+        frame:SetFrameStrata(strata)
+        return true
+    end
+    return false
 end
 
 local function ReadRaw(primary, secondary, key)
@@ -1033,7 +1084,7 @@ local function CompileUnitLane(unit, shared, layout, filtersRoot, kind, candidat
         x = Round(ReadNumber(layout, shared, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)),
         y = Round(ReadNumber(layout, shared, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)),
         anchor = ReadAnchor(layout, shared, spec.anchorKey, spec.defaultAnchor),
-        layer = Round(ReadNumber(layout, shared, spec.layerKey, spec.defaultLayer, 1, 15)),
+        layer = Round(ReadNumber(layout, shared, spec.layerKey, spec.defaultLayer, 0, 30)),
         alpha = 1,
         growthX = growthX,
         growthY = growthY,
@@ -1086,6 +1137,9 @@ local function CompileGroupLane(unit, source, kind)
     if cooldownSwipeReverse == nil then cooldownSwipeReverse = source.cooldownSwipeReverse end
     local showTooltip = source[spec.tooltipKey]
     if showTooltip == nil then showTooltip = source.showTooltip end
+    local rawStrata = source[spec.strataKey]
+    if issecretvalue(rawStrata) == true then rawStrata = nil end
+    if rawStrata == nil then rawStrata = source.strata end
     return FinalizeLane({
         kind = kind,
         rootKey = spec.rootKey,
@@ -1106,7 +1160,8 @@ local function CompileGroupLane(unit, source, kind)
         x = Round(ClampNumber(source[spec.xKey], 0, -4096, 4096)),
         y = Round(ClampNumber(source[spec.yKey], 0, -4096, 4096)),
         anchor = ReadAnchor(source, nil, spec.anchorKey, spec.defaultAnchor),
-        layer = Round(ClampNumber(source[spec.layerKey], spec.defaultLayer, 1, 15)),
+        layer = Round(ClampNumber(source[spec.layerKey], spec.defaultLayer, 0, 30)),
+        strata = NormalizeFrameStrata(rawStrata, "AUTO"),
         alpha = Clamp01(source[spec.alphaKey], 1),
         growthX = growthX,
         growthY = growthY,
@@ -1231,16 +1286,58 @@ function A3.ResolveUnitFrameConfig(unit, frameSpec)
     return cfg
 end
 
+local function AppendSpellIndicatorItems(out, source)
+    local items = type(source) == "table" and source.enabled == true and type(source.items) == "table" and source.items or nil
+    if not items then return false end
+    local did = false
+    for i = 1, #items do
+        if type(items[i]) == "table" and items[i].enabled ~= false then
+            out[#out + 1] = items[i]
+            did = true
+        end
+    end
+    return did
+end
+
+local function AppendCornerCustomItems(out, corner)
+    local slots = type(corner) == "table" and corner.enabled == true and type(corner.customSlots) == "table" and corner.customSlots or nil
+    if not slots then return false end
+    local did = false
+    for i = 1, #slots do
+        if type(slots[i]) == "table" and slots[i].enabled ~= false then
+            out[#out + 1] = slots[i]
+            did = true
+        end
+    end
+    return did
+end
+
+local function BuildGroupSpellIndicatorSource(spellSource, cornerSource)
+    local items = {}
+    local hasSpells = AppendSpellIndicatorItems(items, spellSource)
+    local hasCorners = AppendCornerCustomItems(items, cornerSource)
+    if not hasSpells and not hasCorners then return nil end
+    if hasCorners ~= true and type(spellSource) == "table" and spellSource.enabled == true then return spellSource end
+    return {
+        enabled = true,
+        items = items,
+        layer = type(spellSource) == "table" and spellSource.layer or (type(cornerSource) == "table" and cornerSource.layer or 9),
+        strata = type(spellSource) == "table" and spellSource.strata or "AUTO",
+    }
+end
+
 local function ResolveGroupFrameConfig(frame, unit)
     if not frame then return nil end
     unit = unit or frame.unit
     local spec = frame.MSUFSpec
     local source = spec and (spec.auras or (spec.group and spec.group.auras))
     local spellSource = spec and spec.spellIndicators
+    local cornerSource = spec and spec.cornerIndicators
     local gen = A3._runtimeConfigGen or 1
     local visualGen = A3._nativeVisualGen or 0
     local cached = frame._msufA3NativeGroupConfig
-    if cached and frame._msufA3NativeGroupSource == source and frame._msufA3NativeGroupSpellSource == spellSource and frame._msufA3NativeGroupUnit == unit
+    if cached and frame._msufA3NativeGroupSource == source and frame._msufA3NativeGroupSpellSource == spellSource
+        and frame._msufA3NativeGroupCornerSource == cornerSource and frame._msufA3NativeGroupUnit == unit
         and frame._msufA3NativeGroupGen == gen and frame._msufA3NativeGroupVisualGen == visualGen then
         return cached
     end
@@ -1254,8 +1351,9 @@ local function ResolveGroupFrameConfig(frame, unit)
         _msufA3VisualGen = visualGen,
         _msufA3Source = source,
     }
+    local combinedSpellSource = BuildGroupSpellIndicatorSource(spellSource, cornerSource)
     local spellIndicatorRoot = type(unit) == "string" and unit ~= "" and SpellIndicatorsRuntime.CompileSlots
-        and SpellIndicatorsRuntime.CompileSlots(unit, spellSource) or nil
+        and SpellIndicatorsRuntime.CompileSlots(unit, combinedSpellSource) or nil
     cfg.spellIndicators = spellIndicatorRoot
     cfg.enabled = spellIndicatorRoot and spellIndicatorRoot.enabled == true or false
     if type(source) == "table" and type(unit) == "string" and unit ~= "" and source.enabled ~= false then
@@ -1286,6 +1384,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     end
     frame._msufA3NativeGroupSource = source
     frame._msufA3NativeGroupSpellSource = spellSource
+    frame._msufA3NativeGroupCornerSource = cornerSource
     frame._msufA3NativeGroupUnit = unit
     frame._msufA3NativeGroupGen = gen
     frame._msufA3NativeGroupVisualGen = visualGen
@@ -1699,6 +1798,7 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.width) .. "\030" .. tostring(lane.height)
         .. "\030" .. tostring(lane.anchor) .. "\030" .. tostring(lane.x)
         .. "\030" .. tostring(lane.y) .. "\030" .. tostring(lane.layer)
+        .. "\030" .. tostring(lane.strata)
         .. "\030" .. tostring(lane.xSign) .. "\030" .. tostring(lane.ySign)
         .. "\030" .. tostring(lane.verticalGrowth) .. "\030" .. tostring(lane.initialAnchor)
         .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.showCooldownSwipe)
@@ -1921,6 +2021,9 @@ local function SyncButtonGeometry(button, lane, index)
     local buttonParent = button:GetParent()
     button:SetAlpha(buttonParent and buttonParent._msufA3SharedAuraGroups == true and (lane.alpha or 1) or 1)
     local parentFrame = button._msufA3ParentFrame
+    if parentFrame then
+        SyncFrameStrata(button, ResolveFrameStrata(parentFrame, lane.strata))
+    end
     if parentFrame and button.SetFrameLevel then
         button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (lane.layer or 1) + 1)
     end
@@ -1947,6 +2050,11 @@ local function SyncContainerGeometry(container, lane, parentFrame)
     parentFrame = parentFrame or container._msufA3ParentFrame or container:GetParent()
     container._msufA3NativeLaneConfig = lane
     container._msufA3ParentFrame = parentFrame
+    local resolvedStrata
+    if parentFrame then
+        resolvedStrata = ResolveFrameStrata(parentFrame, lane.strata)
+        SyncFrameStrata(container, resolvedStrata)
+    end
     -- Geometry depends only on the lane's layout signature (size/spacing/anchor/
     -- offsets/level/growth/visual gen) and the parent frame. Content-only
     -- refreshes -- swaps, identity, UNIT_AURA -- reuse the same lane, so skip the
@@ -1955,6 +2063,14 @@ local function SyncContainerGeometry(container, lane, parentFrame)
     -- recreates the container, so a stale skip here is not possible.
     local sig = lane._msufA3LayoutSignature
     if sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
+        local cachedButtonStrata = container._msufA3ButtonFrameStrata
+        if resolvedStrata and (issecretvalue(cachedButtonStrata) == true or cachedButtonStrata ~= resolvedStrata) then
+            container._msufA3ButtonFrameStrata = resolvedStrata
+            for i = 1, (container.createdButtons or lane.max or 0) do
+                local button = container[i]
+                if button then SyncFrameStrata(button, resolvedStrata) end
+            end
+        end
         return true
     end
     container._msufA3GeomSig = sig
@@ -1974,6 +2090,7 @@ local function SyncContainerGeometry(container, lane, parentFrame)
             SyncButtonGeometry(container[i], lane, i)
         end
     end
+    container._msufA3ButtonFrameStrata = resolvedStrata
     return true
 end
 
@@ -2832,6 +2949,20 @@ function A3._HasEnabledNormalLane(lanes)
     return false
 end
 
+local function ResolveSharedContainerStrata(lanes, parentFrame)
+    local maxStrata = _G.MSUF_MaxFrameStrata
+    local strata = ResolveFrameStrata(parentFrame, "AUTO")
+    A3._ForEachEnabledNormalLane(lanes, function(lane)
+        local laneStrata = ResolveFrameStrata(parentFrame, lane and lane.strata)
+        if type(maxStrata) == "function" then
+            strata = maxStrata(strata, laneStrata)
+        else
+            strata = laneStrata or strata
+        end
+    end)
+    return strata
+end
+
 A3._NormalLaneForRootKey = function(lanes, rootKey)
     if type(lanes) ~= "table" or rootKey == nil then return nil end
     local order = A3._normalAuraLaneOrder
@@ -2944,6 +3075,7 @@ local function SyncSharedAuraButtonLayering(container)
     if type(groupLanes) ~= "table" then return false end
     local any = false
     for groupKey in pairs(groupLanes) do
+        local lane = groupLanes[groupKey]
         local group = type(container.GetAuraGroup) == "function" and container:GetAuraGroup(groupKey) or nil
         local frames = group and type(group.GetFramesByIndex) == "function" and group:GetFramesByIndex()
             or (container._msufA3GroupButtons and container._msufA3GroupButtons[groupKey])
@@ -2951,6 +3083,7 @@ local function SyncSharedAuraButtonLayering(container)
             for index = 1, #frames do
                 local button = frames[index]
                 if button then
+                    SyncFrameStrata(button, ResolveFrameStrata(container._msufA3ParentFrame, lane and lane.strata))
                     SyncCooldownTextLayering(button)
                     any = true
                 end
@@ -2996,6 +3129,7 @@ function A3._SyncSharedAuraContainerGeometry(container, lanes, parentFrame)
     if not parentFrame then return false end
     container._msufA3ParentFrame = parentFrame
     container._msufA3SharedLanes = lanes
+    SyncFrameStrata(container, ResolveSharedContainerStrata(lanes, parentFrame))
     local sig = A3._SharedAuraContainerLayoutSignature(lanes)
     if sig ~= nil and container._msufA3GeomSig == sig and container._msufA3GeomParent == parentFrame then
         SyncSharedAuraButtonLayering(container)

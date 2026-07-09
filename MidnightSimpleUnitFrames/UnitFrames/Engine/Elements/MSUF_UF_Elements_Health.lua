@@ -22,6 +22,8 @@ end
 
 local Health = {}
 local EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
+local STATUS_COLOR_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS" }
+local PLAYER_STATUS_COLOR_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 local IDENTITY_EVENTS = {
   MSUF_UNIT_IDENTITY = true,
   MSUF_UNIT_IDENTITY_FAST = true,
@@ -56,6 +58,7 @@ local function SetColor(frame, force)
     bar._msufR, bar._msufG, bar._msufB, bar._msufA = r, g, b, a
     bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
   end
+  frame._msufHealthStatusGone = nil
   local bg = frame.hpBarBG or frame.bg
   if bg then
     local ba = frame.MSUFSpec and frame.MSUFSpec.backgroundAlpha or 0.72
@@ -72,9 +75,28 @@ local function RuntimeColorEnabled(frame)
   return mode ~= "dark" and mode ~= "unified"
 end
 
+local function RuntimeColorEnabledForSpec(spec)
+  local health = spec and spec.health
+  local mode = health and health.mode
+  return mode ~= "dark" and mode ~= "unified"
+end
+
 local function RuntimeColorOnHealth(frame)
   local health = frame and frame.MSUFSpec and frame.MSUFSpec.health
   return health and health.mode == "gradient"
+end
+
+local function RuntimeColorOnHealthEvent(frame, value)
+  if RuntimeColorOnHealth(frame) then
+    return true
+  end
+  if frame and frame._msufHealthStatusGone == true then
+    return true
+  end
+  if issecretvalue(value) == true then
+    return false
+  end
+  return type(value) == "number" and value <= 0
 end
 
 local function ApplyRuntimeColor(frame, event, unit, hp, maxHP)
@@ -136,11 +158,14 @@ function Health.Apply(frame, spec)
   ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.unit)
 end
 
-function Health.GetEvents()
-  return EVENTS
+function Health.GetEvents(frame, spec)
+  return RuntimeColorEnabledForSpec(spec) and STATUS_COLOR_EVENTS or EVENTS
 end
 
-function Health.GetUnitlessEvents()
+function Health.GetUnitlessEvents(frame, spec)
+  if frame and frame.unit == "player" and RuntimeColorEnabledForSpec(spec) then
+    return PLAYER_STATUS_COLOR_EVENTS
+  end
   return nil
 end
 
@@ -219,7 +244,7 @@ function Health.Update(frame, event, unit)
   if not (frame and frame.hpBar and unit) then return end
   local ok, pct, maxValue, percentReady = UpdatePercent(frame, unit)
   if ok then
-    if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealth(frame) then
+    if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, pct) then
       if not ApplyRuntimeColor(frame, event, unit, pct, 100) then
         SetColor(frame)
       end
@@ -227,7 +252,7 @@ function Health.Update(frame, event, unit)
     return pct, maxValue, percentReady
   end
   local hp, maxHP, absolutePercentReady = UpdateAbsolute(frame, unit)
-  if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealth(frame) then
+  if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then
       SetColor(frame)
     end

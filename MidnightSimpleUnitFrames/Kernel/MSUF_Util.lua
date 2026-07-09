@@ -213,6 +213,21 @@ if type(_G.MSUF_EFFECT_FRAME_STRATA) ~= "string" or _G.MSUF_EFFECT_FRAME_STRATA 
     ExportPublic("MSUF_EFFECT_FRAME_STRATA", "HIGH")
 end
 
+local function IsSecretValue(value)
+    local issecretvalue = _G.issecretvalue
+    return type(issecretvalue) == "function" and issecretvalue(value) == true
+end
+local function NormalizeFrameStrata(value, fallback)
+    fallback = fallback or "AUTO"
+    if IsSecretValue(value) then return fallback end
+    if value == nil or value == "" then return fallback end
+    value = tostring(value):upper()
+    if value == "AUTO" then return "AUTO" end
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return rank and rank[value] and value or fallback
+end
+ExportPublic("MSUF_NormalizeFrameStrata", NormalizeFrameStrata)
+
 local ClampFrameLevel = _G.MSUF_ClampFrameLevel
 if type(ClampFrameLevel) ~= "function" then
     ClampFrameLevel = function(level)
@@ -224,38 +239,42 @@ if type(ClampFrameLevel) ~= "function" then
 end
 ExportPublic("MSUF_ClampFrameLevel", ClampFrameLevel)
 
-local MaxFrameStrata = _G.MSUF_MaxFrameStrata
-if type(MaxFrameStrata) ~= "function" then
-    MaxFrameStrata = function(a, b)
-        if not a or a == "" then return b end
-        if not b or b == "" then return a end
-        local rank = _G.MSUF_FRAME_STRATA_RANK
-        return ((rank[a] or 0) >= (rank[b] or 0)) and a or b
-    end
+local function MaxFrameStrata(a, b)
+    if IsSecretValue(a) then a = nil end
+    if IsSecretValue(b) then b = nil end
+    if not a or a == "" then return b end
+    if not b or b == "" then return a end
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return ((rank[a] or 0) >= (rank[b] or 0)) and a or b
 end
 ExportPublic("MSUF_MaxFrameStrata", MaxFrameStrata)
 
-local SyncFrameLayerAbove = _G.MSUF_SyncFrameLayerAbove
-if type(SyncFrameLayerAbove) ~= "function" then
-    SyncFrameLayerAbove = function(child, parent, offset, strata)
-        if not (child and parent) then return nil end
+local function SyncFrameLayerAbove(child, parent, offset, strata)
+    if not (child and parent) then return nil end
 
-        local parentStrata = parent.GetFrameStrata and parent:GetFrameStrata() or nil
-        local wantStrata = MaxFrameStrata(parentStrata, strata or _G.MSUF_EFFECT_FRAME_STRATA)
-        if wantStrata and child.SetFrameStrata and (not child.GetFrameStrata or child:GetFrameStrata() ~= wantStrata) then
+    local parentStrata
+    if parent.GetFrameStrata then parentStrata = parent:GetFrameStrata() end
+    if IsSecretValue(parentStrata) then parentStrata = nil end
+    if IsSecretValue(strata) then strata = nil end
+    if strata == nil or strata == "" then strata = _G.MSUF_EFFECT_FRAME_STRATA end
+    local wantStrata = MaxFrameStrata(parentStrata, strata)
+    if wantStrata and child.SetFrameStrata then
+        local currentStrata
+        if child.GetFrameStrata then currentStrata = child:GetFrameStrata() end
+        if IsSecretValue(currentStrata) or currentStrata ~= wantStrata then
             child:SetFrameStrata(wantStrata)
         end
-
-        if child.SetFrameLevel and parent.GetFrameLevel then
-            local level = ClampFrameLevel((parent:GetFrameLevel() or 0) + (tonumber(offset) or 1))
-            if not child.GetFrameLevel or child:GetFrameLevel() ~= level then
-                child:SetFrameLevel(level)
-            end
-            return level
-        end
-
-        return nil
     end
+
+    if child.SetFrameLevel and parent.GetFrameLevel then
+        local level = ClampFrameLevel((parent:GetFrameLevel() or 0) + (tonumber(offset) or 1))
+        if not child.GetFrameLevel or child:GetFrameLevel() ~= level then
+            child:SetFrameLevel(level)
+        end
+        return level
+    end
+
+    return nil
 end
 ExportPublic("MSUF_SyncFrameLayerAbove", SyncFrameLayerAbove)
 

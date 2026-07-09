@@ -490,7 +490,7 @@ local function ReadGroupConfig(unit, kind)
         x = Round(x),
         y = Round(y),
         anchor = anchor,
-        layer = Clamp(layer, spec.defaultLayer or 5, 1, 15),
+        layer = Clamp(layer, spec.defaultLayer or 5, 0, 30),
         size = Clamp(size, 26, 1, 128),
         spacing = spacing,
         perRow = Clamp(perRow, 12, 1, 40),

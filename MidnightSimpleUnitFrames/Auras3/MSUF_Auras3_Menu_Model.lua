@@ -1495,13 +1495,13 @@ end
 function Model.ReadLaneLayer(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    return Model.ReadNumber(unit, spec and spec.layerKey or "buffLayer", spec and spec.defaultLayer or 5, 1, 15)
+    return Model.ReadNumber(unit, spec and spec.layerKey or "buffLayer", spec and spec.defaultLayer or 5, 0, 30)
 end
 
 function Model.WriteLaneLayer(unit, kind, value)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
-    Model.WriteNumber(unit, spec and spec.layerKey or "buffLayer", value, 1, 15)
+    Model.WriteNumber(unit, spec and spec.layerKey or "buffLayer", value, 0, 30)
 end
 
 function Model.ReadStackAnchor(unit)

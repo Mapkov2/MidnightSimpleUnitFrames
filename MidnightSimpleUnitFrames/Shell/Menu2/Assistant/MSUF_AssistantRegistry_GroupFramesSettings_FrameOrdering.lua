@@ -77,7 +77,7 @@ function A.GroupFramesRegistry.RegisterFrameOrderingSettings(ctx, scope)
         ["grow left"] = "LEFT",
         ["to the left"] = "LEFT",
         links = "LEFT",
-    }, "rebuild", aliases, {
+    }, "geometry", aliases, {
         exactAliases = GroupGrowthExactAliases(scope),
     })
 

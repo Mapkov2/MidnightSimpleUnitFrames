@@ -154,25 +154,49 @@ local function GFPreviewCount(kind)
     if kind == "raid" then return 30 end
     return 5
 end
+local function LiveRaidKind(gf)
+    local kind = gf and type(gf.GetLiveRaidKind) == "function" and gf.GetLiveRaidKind() or nil
+    if kind == "mythicraid" then return "mythicraid" end
+    return "raid"
+end
+local function GroupConfEnabled(gf, kind)
+    local conf = gf and type(gf.GetConf) == "function" and gf.GetConf(kind) or nil
+    return conf and conf.enabled == true
+end
+local function LiveGroupFramesCoverKind(gf, kind)
+    kind = kind == "gf_party" and "party" or (kind == "gf_raid" and "raid" or (kind == "gf_mythicraid" and "mythicraid" or kind))
+    if kind == "party" then
+        if _G.IsInRaid and _G.IsInRaid() then return false end
+        if not GroupConfEnabled(gf, "party") then return false end
+        local conf = gf and type(gf.GetConf) == "function" and gf.GetConf("party") or nil
+        return (_G.IsInGroup and _G.IsInGroup()) or (conf and conf.showSolo == true) or false
+    elseif kind == "raid" or kind == "mythicraid" then
+        if not (_G.IsInRaid and _G.IsInRaid()) then return false end
+        local liveKind = LiveRaidKind(gf)
+        return GroupConfEnabled(gf, liveKind)
+    end
+    return false
+end
+local function ShowGFPreviewWhenNoLiveFrames(gf, kind)
+    if not (gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function") then return false end
+    if LiveGroupFramesCoverKind(gf, kind) then
+        gf.HidePreview(kind)
+        return false
+    end
+    return gf.ShowPreview(kind, GFPreviewCount(kind)) == true
+end
 
 -- The global Bars page previews party and raid at once. Mythic raid stays hidden here because
 -- it shares raid settings and would add visual noise without showing a different control path.
 local function ShowGFBarMenuPreviews(gf)
     if not gf then return end
-    gf.ShowPreview("party", GFPreviewCount("party"))
-    gf.ShowPreview("raid", GFPreviewCount("raid"))
+    ShowGFPreviewWhenNoLiveFrames(gf, "party")
+    ShowGFPreviewWhenNoLiveFrames(gf, "raid")
     gf.HidePreview("mythicraid")
 end
 local function SetGFPagePreviewFlag(active, kind)
     _G.MSUF2_GFPagePreviewActive = active and true or nil
     _G.MSUF2_GFPagePreviewKind = active and kind or nil
-end
-local function HideGFHeaders(gf)
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return end
-    if not (gf and gf.headers) then return end
-    if gf.headers.party then gf.headers.party:Hide() end
-    if type(gf.HideRaidHeaders) == "function" then gf.HideRaidHeaders(true)
-    elseif gf.headers.raid then gf.headers.raid:Hide() end
 end
 local function RestoreGFHeaders(gf)
     if _G.InCombatLockdown and _G.InCombatLockdown() then return end
@@ -246,7 +270,7 @@ local function SyncGroupPagePreviewForKey(key, force)
         return
     end
     SetGFPagePreviewFlag(true, kind)
-    HideGFHeaders(gf)
+    RestoreGFHeaders(gf)
     if gf.SetPreviewAnchor then
         gf.SetPreviewAnchor("party", nil)
         gf.SetPreviewAnchor("raid", nil)
@@ -259,7 +283,7 @@ local function SyncGroupPagePreviewForKey(key, force)
     if kind ~= "party" then gf.HidePreview("party") end
     if kind ~= "raid" then gf.HidePreview("raid") end
     if kind ~= "mythicraid" then gf.HidePreview("mythicraid") end
-    gf.ShowPreview(kind, GFPreviewCount(kind))
+    ShowGFPreviewWhenNoLiveFrames(gf, kind)
 end
 local function RequestGroupPagePreviewForKey(key, force)
     groupPreviewRequestSerial = groupPreviewRequestSerial + 1
