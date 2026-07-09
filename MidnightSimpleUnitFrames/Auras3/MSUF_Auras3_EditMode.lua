@@ -1635,6 +1635,7 @@ end
 
 local function RefreshEditModeAuras()
     CancelQueuedEditRefresh()
+    if IsConfigBlocked() then return end
     if IsEditModeActive() then
         EM.RefreshAll()
     else
@@ -1644,6 +1645,7 @@ end
 
 local function RequestEditModeAurasRefresh(delay)
     CancelQueuedEditRefresh()
+    if IsConfigBlocked() then return end
     if not IsEditModeActive() then
         EM.HideAll()
         return
@@ -1663,6 +1665,7 @@ local CoreRefreshAll = A3.RefreshAll
 function A3.RefreshAll(...)
     local ret
     if type(CoreRefreshAll) == "function" then ret = CoreRefreshAll(...) end
+    if IsConfigBlocked() then return ret end
     RequestEditModeAurasRefresh(0)
     return ret
 end
@@ -1692,6 +1695,10 @@ end
 
 local CoreRefreshUnit = A3.RefreshUnit
 function A3.RefreshUnit(unit)
+    if IsConfigBlocked() then
+        if type(CoreRefreshUnit) == "function" then return CoreRefreshUnit(unit) end
+        return false
+    end
     if not unit then return end
     if IsEditModeActive() then
         if IsBossScope(unit) then
@@ -1711,6 +1718,12 @@ end
 
 function A3.UpdateUnitAnchor(unit)
     if not unit then return end
+    if IsConfigBlocked() then
+        if type(A3._QueueDeferredAuraRuntime) == "function" then
+            return A3._QueueDeferredAuraRuntime(unit, "AURAS3_UPDATE_ANCHOR")
+        end
+        return false
+    end
     if IsBossScope(unit) then
         if IsEditModeActive() then
             ForEachBossUnit(function(bossUnit)
@@ -1727,6 +1740,7 @@ function A3.UpdateUnitAnchor(unit)
 end
 
 function A3.RefreshEditPreview(unit)
+    if IsConfigBlocked() then return false end
     if not IsEditModeActive() then
         if unit then return EM.HideUnit(unit) end
         return EM.HideAll()
