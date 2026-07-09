@@ -13,6 +13,7 @@ local Tr = M.TranslateText or M.Tr or function(text) return text end
 local floor = math.floor
 local max = math.max
 local min = math.min
+local table_concat = table.concat
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local VT = M.ValueTextList
 local WHITE_RGB = { 1, 1, 1 }
@@ -20,11 +21,20 @@ local SPELL_INDICATORS_121_PTR_DISABLED = false
 local SPELL_INDICATORS_121_PTR_MESSAGE = "Native 12.1 AuraSlot SpellID filters are used for helpful auras on friendly Group Frames."
 local SPELL_INDICATOR_FRAME_EFFECTS_DISABLED = true
 local SPELL_INDICATOR_FRAME_EFFECTS_MESSAGE = "Frame effects are disabled for 12.1 PTR for now; icon placement and visuals stay active."
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
 local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
-local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText]])
+local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura, ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, BindNestedStrataSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, OptionText, FrameStrataCount = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues SetCurrentSpellAura ClearCurrentSpellAura CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider BindNestedStrataSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge OptionText FrameStrataCount]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 OptionText = OptionText or M.OptionText
+SetCurrentSpellAura = SetCurrentSpellAura or function(kind, auraName)
+    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
+    M.gfSpellIndicatorSelection[kind] = auraName or ""
+end
+ClearCurrentSpellAura = ClearCurrentSpellAura or function(kind)
+    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
+    M.gfSpellIndicatorSelection[kind] = nil
+end
 local function IconPackValues()
     -- Style options come from the group runtime when available, with a small fallback for
     -- early load or test contexts where the runtime has not registered styles yet.
@@ -48,6 +58,85 @@ local TARGETED_SPELL_MODE_VALUES = VT("whenHealing", "When Healing", "always", "
 local TARGETED_SPELL_GROW_VALUES = VT("CENTER", "Centered", "RIGHT", "Right", "LEFT", "Left", "UP", "Up", "DOWN", "Down")
 local function SetManyEnabled(enabled, ...)
     for i = 1, select("#", ...) do SetOptionEnabled(select(i, ...), enabled) end
+end
+
+local CUSTOM_BUFF_LIMIT = 10
+local CUSTOM_BUFF_COLOR = { 0.45, 0.85, 1.00 }
+
+local function AddCustomBuffSpellID(out, seen, value)
+    local id = tonumber(value)
+    if not id then return 0 end
+    id = floor(id + 0.5)
+    if id <= 0 or seen[id] then return 0 end
+    seen[id] = true
+    out[#out + 1] = id
+    return 1
+end
+
+local function CustomBuffSpellIDs(value)
+    local out, seen = {}, {}
+    if type(value) == "number" then
+        AddCustomBuffSpellID(out, seen, value)
+        return #out > 0 and out or nil
+    end
+    value = tostring(value or "")
+    for token in value:gmatch("Hspell:(%d+)") do AddCustomBuffSpellID(out, seen, token) end
+    for token in value:gmatch("spell:(%d+)") do AddCustomBuffSpellID(out, seen, token) end
+    for token in value:gmatch("%d+") do AddCustomBuffSpellID(out, seen, token) end
+    return #out > 0 and out or nil
+end
+
+local function CustomBuffSpellIDListText(ids)
+    if type(ids) ~= "table" or #ids == 0 then return "" end
+    local parts = {}
+    for i = 1, #ids do parts[i] = tostring(ids[i]) end
+    return table_concat(parts, ",")
+end
+
+local function CustomBuffSpellID(value)
+    local ids = CustomBuffSpellIDs(value)
+    return ids and ids[1] or nil
+end
+
+local function CustomBuffInfo(spellID)
+    local name, icon
+    local cs = _G.C_Spell
+    if cs and type(cs.GetSpellInfo) == "function" then
+        local info = cs.GetSpellInfo(spellID)
+        if type(info) == "table" then
+            name = info.name
+            icon = info.iconID or info.iconFileID or info.icon
+        elseif type(info) == "string" then
+            name = info
+        end
+    end
+    if not name and cs and type(cs.GetSpellName) == "function" then name = cs.GetSpellName(spellID) end
+    if not icon and cs and type(cs.GetSpellTexture) == "function" then icon = cs.GetSpellTexture(spellID) end
+    if (not name or not icon) and type(_G.GetSpellInfo) == "function" then
+        local n, _, tex = _G.GetSpellInfo(spellID)
+        name = name or n
+        icon = icon or tex
+    end
+    return name or ("Buff " .. tostring(spellID)), icon or 136243
+end
+
+local function IsCustomBuffEntry(auraName, entry)
+    return (type(entry) == "table" and entry.custom == true) or CustomBuffSpellID(auraName) ~= nil
+end
+
+local function DefaultCustomBuffPlaced(index)
+    index = max(1, min(CUSTOM_BUFF_LIMIT, tonumber(index) or 1))
+    local col = (index - 1) % 5
+    local row = floor((index - 1) / 5)
+    return {
+        type = "icon",
+        anchor = "TOPLEFT",
+        x = 1 + col * 22,
+        y = -24 - row * 22,
+        size = 18,
+        showCooldownSwipe = true,
+        showCooldown = true,
+    }
 end
 
 local function BuildIndicatorsSection(ctx, b)
@@ -609,7 +698,6 @@ local function BuildTargetedSpellsSection(ctx, b)
         W.MoveWidget(control, parent, 16, y, width - 58, "CENTER")
         return control
     end
-
     local enable = BindTSToggle(W.SwitchAt(behavior, Tr("Targeted Spell Indicators"), leftW - 62, -24, 0, "HIDDEN"), "targetedSpellsEnabled", false)
     local mode = BindTSDropdown(behavior, "Mode", TARGETED_SPELL_MODE_VALUES, leftW, "targetedSpellsMode", "whenHealing", -74)
     local status = W.Text(behavior, "", 16, -124, leftW - 32, T.colors.muted)
@@ -648,7 +736,7 @@ local function BuildTargetedSpellsSection(ctx, b)
 end
 
 local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
-    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 864, false)
+    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 918, false)
     local siW = spells._msuf2Width or ctx.width or 720
     local siGap = 28
     local siLeftX = 30
@@ -658,10 +746,10 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local siRightW = max(240, min(390, siInnerW - siLeftW - siGap))
     do
         W.ControlCard(spells, Tr("Spell Set"), nil, siLeftX - 14, -38, siLeftW + 28, 334)
-        W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 304)
+        W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 358)
         W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -374, siLeftW + 28, 408)
-        W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -356, siRightW + 28, 286)
-        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -650, siRightW + 28, 194)
+        W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -410, siRightW + 28, 286)
+        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -704, siRightW + 28, 194)
     end
     local function SpellIndicatorRuntime()
         local gf = GF()
@@ -698,6 +786,180 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local info = CurrentAuraInfo(kind)
         return (info and info.color) or WHITE_RGB
     end
+    local function TrackableSpellID(si, specKey, info)
+        if type(info) ~= "table" then return nil end
+        local id = CustomBuffSpellID(info.spellID or info.spellId or info.id)
+        if id then return id end
+        local auraName = info.name
+        local ids = si and si.SpellIDs and si.SpellIDs[specKey]
+        id = ids and CustomBuffSpellID(ids[auraName])
+        if id then return id end
+        local secretIDs = si and si.SecretSpellIDs and si.SecretSpellIDs[specKey]
+        id = secretIDs and CustomBuffSpellID(secretIDs[auraName])
+        if id then return id end
+        local altIDs = si and si.AltSpellIDs and si.AltSpellIDs[specKey]
+        if type(altIDs) == "table" then
+            for altID, mappedAuraName in pairs(altIDs) do
+                if mappedAuraName == auraName then
+                    id = CustomBuffSpellID(altID)
+                    if id then return id end
+                end
+            end
+        end
+        return CustomBuffSpellID(auraName)
+    end
+    local function CustomEntryContainsSpellID(auraName, entry, spellID)
+        spellID = CustomBuffSpellID(spellID)
+        if not spellID then return false end
+        if CustomBuffSpellID(auraName) == spellID then return true end
+        if type(entry) ~= "table" then return false end
+        if CustomBuffSpellID(entry.spellID or entry.spellId or entry.id) == spellID then return true end
+        local ids = CustomBuffSpellIDs(entry.spells)
+        if type(ids) == "table" then
+            for i = 1, #ids do
+                if ids[i] == spellID then return true end
+            end
+        end
+        return false
+    end
+    local function ExistingCustomEntryForSpellIDs(specCfg, spellIDs)
+        if type(specCfg) ~= "table" or type(spellIDs) ~= "table" then return nil end
+        for auraName, entry in pairs(specCfg) do
+            if IsCustomBuffEntry(auraName, entry) then
+                for i = 1, #spellIDs do
+                    if CustomEntryContainsSpellID(auraName, entry, spellIDs[i]) then return auraName end
+                end
+            end
+        end
+        return nil
+    end
+    local function ExistingTrackableForSpellIDs(si, specKey, spellIDs, specCfg)
+        local trackable = specKey and si and si.TrackableAuras and si.TrackableAuras[specKey]
+        if type(trackable) ~= "table" or type(spellIDs) ~= "table" then return nil end
+        for i = 1, #trackable do
+            local info = trackable[i]
+            local id = TrackableSpellID(si, specKey, info)
+            for j = 1, #spellIDs do
+                if id == spellIDs[j]
+                    and (info.custom ~= true or (type(specCfg) == "table" and specCfg[info.name] ~= nil))
+                then
+                    return info and info.name
+                end
+            end
+        end
+        return nil
+    end
+    local function CountCustomBuffs(specCfg)
+        if type(specCfg) ~= "table" then return 0 end
+        local count = 0
+        for auraName, entry in pairs(specCfg) do
+            if IsCustomBuffEntry(auraName, entry) then count = count + 1 end
+        end
+        return count
+    end
+    local function AddCustomBuff(kind, specKey, rawValue)
+        local spellIDs = CustomBuffSpellIDs(rawValue)
+        local spellID = spellIDs and spellIDs[1] or nil
+        if not spellID then
+            if M.ShowStatusFeedback then M.ShowStatusFeedback(Tr("Enter valid buff Spell IDs."), "error", 3) end
+            return false
+        end
+        if not specKey then
+            if M.ShowStatusFeedback then M.ShowStatusFeedback(Tr("No spell-indicator spec selected."), "error", 3) end
+            return false
+        end
+        local si = SpellIndicatorRuntime()
+        local key = tostring(spellID)
+        local cfg = SpellIndicators(kind)
+        cfg.specs = cfg.specs or {}
+        cfg.specs[specKey] = cfg.specs[specKey] or {}
+        local specCfg = cfg.specs[specKey]
+        local existingAura = ExistingCustomEntryForSpellIDs(specCfg, spellIDs) or ExistingTrackableForSpellIDs(si, specKey, spellIDs, specCfg)
+        if existingAura and existingAura ~= key then
+            SetCurrentSpellAura(kind, existingAura)
+            if M.ShowStatusFeedback then M.ShowStatusFeedback(Tr("Buff already exists; selected existing icon."), "info", 3) end
+            M.CallIf(RefreshGFPreview)
+            RefreshPage()
+            return true
+        end
+        local exists = type(specCfg[key]) == "table"
+        local customCount = CountCustomBuffs(specCfg)
+        if not exists and customCount >= CUSTOM_BUFF_LIMIT then
+            if M.ShowStatusFeedback then M.ShowStatusFeedback(Tr("Custom buff limit reached."), "error", 3) end
+            return false
+        end
+        local display, icon = CustomBuffInfo(spellID)
+        local spellIDListText = CustomBuffSpellIDListText(spellIDs)
+        local function ApplyCustomBuff()
+            local entry = exists and specCfg[key] or {}
+            entry.enabled = true
+            if entry._msufCustomOnlyOwnExplicit ~= true then entry.onlyOwn = false end
+            entry.custom = true
+            entry.spellID = spellID
+            entry.spells = spellIDListText
+            entry.display = display
+            entry.icon = icon
+            if type(entry.placed) ~= "table" then entry.placed = DefaultCustomBuffPlaced(exists and max(1, customCount) or customCount + 1) end
+            specCfg[key] = entry
+            SetCurrentSpellAura(kind, key)
+            QueueSpellIndicators(kind)
+        end
+        M.RunWithHistory("Add Custom Buff", "group:spellCustomAdd:" .. tostring(kind) .. ":" .. tostring(specKey) .. ":" .. key, ApplyCustomBuff)
+        M.CallIf(RefreshGFPreview)
+        RefreshPage()
+        return true
+    end
+    local function RemoveCustomBuff(kind, specKey, auraName)
+        if not (kind and specKey and auraName and auraName ~= "") then return false end
+        local cfg = SpellIndicators(kind)
+        local specCfg = type(cfg.specs) == "table" and cfg.specs[specKey] or nil
+        local entry = type(specCfg) == "table" and specCfg[auraName] or nil
+        if not IsCustomBuffEntry(auraName, entry) then return false end
+        local function ApplyRemove()
+            specCfg[auraName] = nil
+            local order = cfg.sortOrder and cfg.sortOrder[specKey]
+            if type(order) == "table" then
+                for i = #order, 1, -1 do
+                    if order[i] == auraName then table.remove(order, i) end
+                end
+            end
+            if CurrentSpellAura(kind) == auraName then ClearCurrentSpellAura(kind, specKey) end
+            QueueSpellIndicators(kind)
+        end
+        M.RunWithHistory("Remove Custom Buff", "group:spellCustomRemove:" .. tostring(kind) .. ":" .. tostring(specKey) .. ":" .. tostring(auraName), ApplyRemove)
+        M.CallIf(RefreshGFPreview)
+        RefreshPage()
+        return true
+    end
+    local function ShowCustomBuffPopup(kind, specKey)
+        if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then return false end
+        M.InstallStaticPopup("MSUF2_GF_SPELL_CUSTOM_BUFF_ID", {
+            text = Tr("Enter buff Spell IDs"),
+            button1 = Tr("Add"),
+            button2 = _G.CANCEL or Tr("Cancel"),
+            hasEditBox = true,
+            maxLetters = 96,
+            OnShow = function(self)
+                local edit = self.editBox or self.EditBox
+                if edit then
+                    edit:SetText("")
+                    edit:SetFocus()
+                    if edit.HighlightText then edit:HighlightText() end
+                end
+            end,
+            OnAccept = function(self, data)
+                local edit = self.editBox or self.EditBox
+                local value = edit and edit:GetText() or ""
+                if type(data) == "table" and data.add then data.add(data.kind, data.specKey, value) end
+            end,
+            EditBoxOnEnterPressed = function(self)
+                local parent = self:GetParent()
+                if parent and parent.button1 then parent.button1:Click() end
+            end,
+        })
+        _G.StaticPopup_Show("MSUF2_GF_SPELL_CUSTOM_BUFF_ID", nil, nil, { kind = kind, specKey = specKey, add = AddCustomBuff })
+        return true
+    end
     local RefreshSpellIndicatorState = M.RefreshProxy()
     local siEnable = W.SwitchAt(spells, Tr("Spell Indicators"), siLeftX, -72, siLeftW)
     siEnable._msuf2GroupFrameGateAlwaysEnabled = true
@@ -720,18 +982,23 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         end)
     local siPtrNotice = W.Text(spells, Tr(SPELL_INDICATORS_121_PTR_MESSAGE), siLeftX, -96, siLeftW, T.colors.dim)
     if siPtrNotice and siPtrNotice.SetWordWrap then siPtrNotice:SetWordWrap(false) end
-    local siLayer = BindNestedSlider(ctx, W.Slider(spells, Tr("Layer"), 1, 15, 1, siRightW), function() return SpellIndicators(CurrentScope()) end, "layer", 9, "visual")
+    local function SelectedSpellConfigTable()
+        return CurrentSpellConfig(CurrentScope(), true) or SpellIndicators(CurrentScope())
+    end
+    local siLayer = BindNestedSlider(ctx, W.Slider(spells, Tr("Layer"), 0, 30, 1, siRightW), SelectedSpellConfigTable, "layer", 9, "visual")
     W.MoveWidget(siLayer, spells, siRightX, -72, siRightW, "LEFT")
+    local siStrata = BindNestedStrataSlider(ctx, W.Slider(spells, Tr("Frame Strata"), 0, (FrameStrataCount or 9) - 1, 1, siRightW), SelectedSpellConfigTable, "strata", "AUTO", "visual")
+    W.MoveWidget(siStrata, spells, siRightX, -126, siRightW, "LEFT")
     local specDrop = W.Dropdown(spells, Tr("Spec"), SpellSpecValues, siLeftW)
     M.BindDropdownWidget(ctx, specDrop,
         function() return SpellIndicators(CurrentScope()).spec or "auto" end,
         function(value)
             local kind = CurrentScope()
             SpellIndicators(kind).spec = value or "auto"
-            M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-            M.gfSpellIndicatorSelection[kind] = nil
             EnsureSpellDefaults(kind, EffectiveSpellSpec(kind))
             QueueSpellIndicators(kind)
+            M.CallIf(RefreshGFPreview)
+            RefreshSpellIndicatorState()
             RefreshPage()
         end)
     W.MoveWidget(specDrop, spells, siLeftX, -116, siLeftW, "LEFT")
@@ -739,13 +1006,17 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     M.BindDropdownWidget(ctx, multiSpecDrop,
         function() return CurrentSpellMultiSpec(CurrentScope()) end,
         function(value)
+            local kind = CurrentScope()
             M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
-            M.gfSpellMultiSpecSelection[CurrentScope()] = value or ""
-            EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
+            M.gfSpellMultiSpecSelection[kind] = value or ""
+            EnsureSpellDefaults(kind, EffectiveSpellSpec(kind))
+            QueueSpellIndicators(kind)
+            M.CallIf(RefreshGFPreview)
+            RefreshSpellIndicatorState()
             RefreshPage()
         end)
-    W.MoveWidget(multiSpecDrop, spells, siRightX, -136, siRightW, "LEFT")
-    local multiSpecEnabled = W.ToggleAt(spells, Tr("Track selected multi spec"), siRightX, -196, siRightW)
+    W.MoveWidget(multiSpecDrop, spells, siRightX, -190, siRightW, "LEFT")
+    local multiSpecEnabled = W.ToggleAt(spells, Tr("Track selected multi spec"), siRightX, -250, siRightW)
     M.BindBoolWidget(ctx, multiSpecEnabled,
         function()
             local cfg = SpellIndicators(CurrentScope())
@@ -760,6 +1031,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             cfg.multiSpecs = cfg.multiSpecs or {}
             cfg.multiSpecs[specKey] = value and true or nil
             QueueSpellIndicators(kind)
+            M.CallIf(RefreshGFPreview)
+            RefreshSpellIndicatorState()
             RefreshPage()
         end)
     local trackedSpellsLabel = W.LabelAt(spells, Tr("Tracked Spells"), siLeftX, -166, siLeftW, "GameFontNormalSmall", T.colors.accent)
@@ -782,11 +1055,30 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             for i = 1, #(trackable or {}) do order[#order + 1] = trackable[i].name end
             siCfg.sortOrder[specKey] = order
         end
+        local order = siCfg.sortOrder[specKey]
+        local seen = {}
+        for i = 1, #order do seen[order[i]] = true end
+        for i = 1, #(trackable or {}) do
+            local name = trackable[i] and trackable[i].name
+            if name and not seen[name] then
+                order[#order + 1] = name
+                seen[name] = true
+            end
+        end
         return siCfg.sortOrder[specKey]
     end
     local function GetOrderedTrackable(si, siCfg, specKey)
         local trackable = si and si.TrackableAuras and si.TrackableAuras[specKey]
         if type(trackable) ~= "table" then return nil end
+        local specCfg = type(siCfg and siCfg.specs) == "table" and siCfg.specs[specKey] or nil
+        local filtered = {}
+        for i = 1, #trackable do
+            local info = trackable[i]
+            if info and (info.custom ~= true or (type(specCfg) == "table" and specCfg[info.name] ~= nil)) then
+                filtered[#filtered + 1] = info
+            end
+        end
+        trackable = filtered
         local order = siCfg.sortOrder and siCfg.sortOrder[specKey]
         if type(order) ~= "table" or #order == 0 then return trackable end
         local byName, result = {}, {}
@@ -827,12 +1119,28 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         )
     end
     local function SpellTileOnEnter(self)
+        if self._isAddTile then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(Tr("Add custom buff"), 1, 1, 1)
+            GameTooltip:AddLine(Tr("Tracks a buff Spell ID through native AuraSlot filters."), 0.75, 0.78, 0.86)
+            GameTooltip:AddLine(M.Format("%d / %d", tonumber(self._customCount) or 0, CUSTOM_BUFF_LIMIT), 0.55, 0.70, 0.95)
+            GameTooltip:Show()
+            self:SetBackdropColor(0.055, 0.075, 0.115, 1)
+            self:SetBackdropBorderColor(CUSTOM_BUFF_COLOR[1], CUSTOM_BUFF_COLOR[2], CUSTOM_BUFF_COLOR[3], 1)
+            return
+        end
         local info, c = self._info or {}, self._color or WHITE_RGB
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(info.display or info.name, 1, 1, 1)
+        if self._customBuff then
+            local cfg = SpellConfigFor(CurrentScope(), self._specKey, self._auraName, false)
+            if cfg and cfg.spells and cfg.spells ~= "" then
+                GameTooltip:AddLine("IDs: " .. tostring(cfg.spells), 0.55, 0.70, 0.95)
+            end
+        end
         if info.secret then GameTooltip:AddLine(Tr("Secret aura (name/fingerprint matched)"), 0.72, 0.62, 0.95) end
         GameTooltip:AddLine(Tr("Left-click to configure"), 0.75, 0.78, 0.86)
-        GameTooltip:AddLine(Tr("Right-click to toggle"), 0.55, 0.82, 0.55)
+        GameTooltip:AddLine(Tr(self._customBuff and "Right-click to remove" or "Right-click to toggle"), 0.55, 0.82, 0.55)
         GameTooltip:AddLine(Tr("Drag to reorder"), 0.55, 0.70, 0.95)
         GameTooltip:Show()
         self:SetBackdropColor(0.070, 0.085, 0.125, 1)
@@ -841,17 +1149,20 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local function SpellTileOnLeave(self)
         GameTooltip:Hide()
         self:SetBackdropColor(0.035, 0.040, 0.070, 0.96)
-        SetSpellTileBorder(self, self._auraName == CurrentSpellAura(CurrentScope()), self._color or WHITE_RGB, 0.62, 0.82)
+        SetSpellTileBorder(self, (not self._isAddTile) and self._auraName == CurrentSpellAura(CurrentScope()), self._color or WHITE_RGB, self._isAddTile and 0.72 or 0.62, 0.82)
     end
     local function SpellTileOnDragStart(self)
+        if self._isAddTile then return end
         GameTooltip:Hide()
         self._dragged = true
         self:StartMoving()
         self:SetFrameStrata("TOOLTIP")
     end
     local function SpellTileOnDragStop(self)
+        if self._isAddTile then return end
         self:StopMovingOrSizing()
-        self:SetFrameStrata(spellTiles:GetFrameStrata())
+        local strata = spellTiles:GetFrameStrata()
+        if issecretvalue(strata) ~= true and strata then self:SetFrameStrata(strata) end
         local hostLeft, hostTop = spellTiles:GetLeft(), spellTiles:GetTop()
         local cx, cy = self:GetCenter()
         if not (hostLeft and hostTop and cx and cy) then return end
@@ -876,16 +1187,23 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         if SpellIndicators(CurrentScope()).enabled ~= true then return end
         if self._dragged then self._dragged = false; return end
         local currentKind = CurrentScope()
+        if self._isAddTile then
+            if button == "LeftButton" then ShowCustomBuffPopup(currentKind, self._specKey) end
+            return
+        end
         if button == "RightButton" then
-            local function ToggleSpellIndicator()
-                local cfg = SpellConfigFor(currentKind, self._specKey, self._auraName, true)
-                if cfg then cfg.enabled = cfg.enabled == false and true or false end
-                QueueSpellIndicators(currentKind)
+            if self._customBuff then
+                RemoveCustomBuff(currentKind, self._specKey, self._auraName)
+            else
+                local function ToggleSpellIndicator()
+                    local cfg = SpellConfigFor(currentKind, self._specKey, self._auraName, true)
+                    if cfg then cfg.enabled = cfg.enabled == false and true or false end
+                    QueueSpellIndicators(currentKind)
+                end
+                M.RunWithHistory("Toggle Spell Indicator", "group:spellToggle:" .. tostring(currentKind) .. ":" .. tostring(self._specKey) .. ":" .. tostring(self._auraName), ToggleSpellIndicator)
             end
-            M.RunWithHistory("Toggle Spell Indicator", "group:spellToggle:" .. tostring(currentKind) .. ":" .. tostring(self._specKey) .. ":" .. tostring(self._auraName), ToggleSpellIndicator)
         else
-            M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-            M.gfSpellIndicatorSelection[currentKind] = self._auraName
+            SetCurrentSpellAura(currentKind, self._auraName)
             M.CallIf(RefreshGFPreview)
         end
         RefreshPage()
@@ -904,6 +1222,11 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         tile.icon:SetSize(36, 36)
         tile.icon:SetPoint("TOP", tile, "TOP", 0, -3)
         tile.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        tile.addText = tile:CreateFontString(nil, "OVERLAY")
+        tile.addText:SetFont("Fonts\\FRIZQT__.TTF", 24, "OUTLINE")
+        tile.addText:SetPoint("CENTER", tile.icon, "CENTER", 0, 0)
+        tile.addText:SetText("+")
+        tile.addText:Hide()
         tile.label = tile:CreateFontString(nil, "OVERLAY")
         tile.label:SetFont("Fonts\\FRIZQT__.TTF", 7, "OUTLINE")
         tile.label:SetPoint("BOTTOM", tile, "BOTTOM", 0, 2)
@@ -934,15 +1257,14 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             trackedSpellsLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
         end
         for i = 1, #spellTiles._tiles do spellTiles._tiles[i]:Hide() end
-        if not trackable or #trackable == 0 then
+        trackable = type(trackable) == "table" and trackable or {}
+        local specCfg = type(siCfg.specs) == "table" and specKey and siCfg.specs[specKey] or nil
+        local customCount = CountCustomBuffs(specCfg)
+        if #trackable == 0 then
             spellTileHint:SetText(Tr("No spells for current spec."))
-            if spellTileHint.SetTextColor then
-                local c = indicatorsOn and T.colors.muted or T.colors.dim
-                spellTileHint:SetTextColor(c[1], c[2], c[3], c[4] or 1)
-            end
-            return
+        else
+            spellTileHint:SetText(Tr("Left-click configures, right-click toggles, drag to sort."))
         end
-        spellTileHint:SetText(Tr("Left-click configures, right-click toggles, drag to sort."))
         if spellTileHint.SetTextColor then
             local c = indicatorsOn and T.colors.muted or T.colors.dim
             spellTileHint:SetTextColor(c[1], c[2], c[3], c[4] or 1)
@@ -954,12 +1276,17 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             tile:ClearAllPoints()
             tile:SetPoint("TOPLEFT", spellTiles, "TOPLEFT", x, y)
             tile._slot, tile._auraName, tile._specKey, tile._trackable, tile._info, tile._dragged = i, info.name, specKey, trackable, info, false
+            tile._isAddTile = false
             local auraCfg = SpellConfigFor(kind, specKey, info.name, false)
+            tile._customBuff = IsCustomBuffEntry(info.name, auraCfg) or info.custom == true
             local disabled = auraCfg and auraCfg.enabled == false
             local tileEnabled = indicatorsOn and not disabled
             local selectedTile = info.name == selected
             local c = info.color or { 0.55, 0.65, 0.85 }
             tile._color = c
+            if tile.addText then tile.addText:Hide() end
+            tile.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            tile.icon:SetVertexColor(1, 1, 1, 1)
             if si and type(si.GetAuraIcon) == "function" then
                 if type(MSUF_SetIconTexture) == "function" then
                     MSUF_SetIconTexture(tile.icon, si.GetAuraIcon(specKey, info.name), "")
@@ -977,18 +1304,45 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             SetSpellTileBorder(tile, indicatorsOn and selectedTile, c, 0.42, indicatorsOn and 0.82 or 0.45)
             tile:Show()
         end
+        if specKey and customCount < CUSTOM_BUFF_LIMIT then
+            local slot = #trackable + 1
+            local tile = EnsureSpellTile(slot)
+            local x, y = TileSlotPos(slot)
+            tile:ClearAllPoints()
+            tile:SetPoint("TOPLEFT", spellTiles, "TOPLEFT", x, y)
+            tile._slot, tile._auraName, tile._specKey, tile._trackable, tile._info, tile._dragged = slot, nil, specKey, trackable, nil, false
+            tile._isAddTile = true
+            tile._customBuff = false
+            tile._customCount = customCount
+            tile._color = CUSTOM_BUFF_COLOR
+            tile.icon:SetTexture("Interface\\Buttons\\WHITE8x8")
+            tile.icon:SetTexCoord(0, 1, 0, 1)
+            tile.icon:SetVertexColor(0.055, 0.150, 0.220, indicatorsOn and 0.95 or 0.40)
+            tile.icon:SetDesaturated(false)
+            tile.icon:SetAlpha(indicatorsOn and 0.95 or 0.35)
+            if tile.addText then
+                tile.addText:SetText("+")
+                tile.addText:SetTextColor(0.70, 0.90, 1.00, indicatorsOn and 1 or 0.45)
+                tile.addText:Show()
+            end
+            tile.label:SetText(M.Format("%d/%d", customCount, CUSTOM_BUFF_LIMIT))
+            tile.label:SetTextColor(indicatorsOn and 0.70 or 0.45, indicatorsOn and 0.90 or 0.45, indicatorsOn and 1.00 or 0.45, 1)
+            tile:EnableMouse(indicatorsOn)
+            SetSpellTileBorder(tile, false, CUSTOM_BUFF_COLOR, 0.72, indicatorsOn and 0.82 or 0.45)
+            tile:Show()
+        end
     end
     local auraDrop = W.Dropdown(spells, Tr("Spell"), function() return SpellAuraValues(CurrentScope()) end, siRightW)
     M.BindDropdownWidget(ctx, auraDrop,
         function() return CurrentSpellAura(CurrentScope()) end,
         function(value)
-            M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-            M.gfSpellIndicatorSelection[CurrentScope()] = value
+            SetCurrentSpellAura(CurrentScope(), value)
             M.CallIf(RefreshGFPreview)
+            RefreshSpellIndicatorState()
             RefreshPage()
         end)
-    W.MoveWidget(auraDrop, spells, siRightX, -228, siRightW, "LEFT")
-    local spellEnabled = W.SwitchAt(spells, Tr("Enabled"), siRightX, -288, siRightW)
+    W.MoveWidget(auraDrop, spells, siRightX, -282, siRightW, "LEFT")
+    local spellEnabled = W.SwitchAt(spells, Tr("Enabled"), siRightX, -342, siRightW)
     M.BindBoolWidget(ctx, spellEnabled,
         function()
             local cfg = CurrentSpellConfig(CurrentScope(), false)
@@ -999,15 +1353,39 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             if cfg then cfg.enabled = value and true or false end
             QueueSpellIndicators(CurrentScope())
         end)
-    local onlyMine = W.ToggleAt(spells, Tr("Only my cast"), siRightX, -320, siRightW)
-    M.BindBoolWidget(ctx, onlyMine,
+    local customSpellIDs = W.TextInput(spells, Tr("Aura Spell IDs"), siRightW)
+    M.BindTextInput(ctx, customSpellIDs,
         function()
             local cfg = CurrentSpellConfig(CurrentScope(), false)
-            return cfg and cfg.onlyOwn ~= false or false
+            return cfg and cfg.spells or ""
         end,
         function(value)
             local cfg = CurrentSpellConfig(CurrentScope(), true)
-            if cfg then cfg.onlyOwn = value and true or false end
+            if not cfg then return end
+            local ids = CustomBuffSpellIDs(value)
+            if ids then
+                cfg.spells = CustomBuffSpellIDListText(ids)
+            else
+                cfg.spells = ""
+            end
+            QueueSpellIndicators(CurrentScope())
+        end,
+        true)
+    W.MoveWidget(customSpellIDs, spells, siRightX, -208, siRightW)
+    local onlyMine = W.ToggleAt(spells, Tr("Only my cast"), siRightX, -374, siRightW)
+    M.BindBoolWidget(ctx, onlyMine,
+        function()
+            local cfg = CurrentSpellConfig(CurrentScope(), false)
+            if not cfg then return false end
+            if cfg.custom == true and cfg._msufCustomOnlyOwnExplicit ~= true then return false end
+            return cfg.onlyOwn ~= false
+        end,
+        function(value)
+            local cfg = CurrentSpellConfig(CurrentScope(), true)
+            if cfg then
+                if cfg.custom == true then cfg._msufCustomOnlyOwnExplicit = true end
+                cfg.onlyOwn = value and true or false
+            end
             QueueSpellIndicators(CurrentScope())
         end)
     local function BindPlacedDropdown(label, values, key, default, y)
@@ -1093,6 +1471,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             placed.type = placed.type or "icon"
             placed.anchor = placed.anchor or "TOPLEFT"
             placed.size = tonumber(placed.size) or 18
+            placed.cooldownSize = tonumber(placed.cooldownSize) or 8
             if placed.showCooldownSwipe == nil then placed.showCooldownSwipe = true end
         end,
         RefreshPage)
@@ -1102,7 +1481,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local placedY = BindPlacedSlider("Y Offset", -100, 100, 1, "y", 0, -626)
     local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -680)
     local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -734)
-    local frameType = BindSpellSubType("Frame Effect", FRAME_EFFECT_TYPES, siRightX, -390, siRightW, "frame",
+    local frameType = BindSpellSubType("Frame Effect", FRAME_EFFECT_TYPES, siRightX, -444, siRightW, "frame",
         function(frame)
             if not frame.color then
                 local c = CurrentAuraColor(CurrentScope())
@@ -1127,8 +1506,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             end
             QueueSpellIndicators(CurrentScope())
         end)
-    W.MoveWidget(frameColor, spells, siRightX, -446, siRightW)
-    local framePriority = BindFrameSlider("Priority", 1, 10, 1, "priority", 5, -500)
+    W.MoveWidget(frameColor, spells, siRightX, -500, siRightW)
+    local framePriority = BindFrameSlider("Priority", 1, 10, 1, "priority", 5, -554)
     local frameAlpha = W.Slider(spells, Tr("Tint Alpha"), 5, 100, 5, siRightW)
     M.BindNumberWidget(ctx, frameAlpha,
         function()
@@ -1145,14 +1524,14 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
             QueueSpellIndicators(CurrentScope())
         end,
         25, { step = 5, roundStep = true })
-    W.MoveWidget(frameAlpha, spells, siRightX, -554, siRightW, "LEFT")
-    local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -608)
-    local frameEffectNotice = W.Text(spells, Tr(SPELL_INDICATOR_FRAME_EFFECTS_MESSAGE), siRightX, -634, siRightW, T.colors.dim)
+    W.MoveWidget(frameAlpha, spells, siRightX, -608, siRightW, "LEFT")
+    local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -662)
+    local frameEffectNotice = W.Text(spells, Tr(SPELL_INDICATOR_FRAME_EFFECTS_MESSAGE), siRightX, -688, siRightW, T.colors.dim)
     if frameEffectNotice and frameEffectNotice.SetWordWrap then frameEffectNotice:SetWordWrap(false) end
-    local placedMissing = BindPlacedToggle("Show when missing", "missing", false, -690)
-    local placedCooldownSwipe = BindPlacedToggle("Show Cooldown Swipe", "showCooldownSwipe", true, -722)
-    local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -754)
-    local placedCooldownSize = BindConfigSlider(PlacedConfig, siRightX, siRightW, "Cooldown Text Size", 6, 24, 1, "cooldownSize", 8, -786)
+    local placedMissing = BindPlacedToggle("Show when missing", "missing", false, -744)
+    local placedCooldownSwipe = BindPlacedToggle("Show Cooldown Swipe", "showCooldownSwipe", true, -776)
+    local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -808)
+    local placedCooldownSize = BindConfigSlider(PlacedConfig, siRightX, siRightW, "Cooldown Text Size", 6, 40, 1, "cooldownSize", 8, -840)
     RefreshSpellIndicatorState = RefreshSpellIndicatorState(function()
         if SPELL_INDICATORS_121_PTR_DISABLED and SpellIndicators(CurrentScope()).enabled ~= false then
             SpellIndicators(CurrentScope()).enabled = false
@@ -1172,6 +1551,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         end
         local placed = PlacedConfig(CurrentScope(), false)
         local hasSpell = indicatorsOn and EffectiveSpellSpec(CurrentScope()) ~= nil and CurrentSpellAura(CurrentScope()) ~= ""
+        local currentCfg = CurrentSpellConfig(CurrentScope(), false)
+        local customSpell = hasSpell and IsCustomBuffEntry(CurrentSpellAura(CurrentScope()), currentCfg)
         local placedEnabled = hasSpell and placed and placed.type and placed.type ~= "none"
         local frame = FrameEffectConfig(CurrentScope(), false)
         local frameKind = frame and frame.type or "none"
@@ -1179,10 +1560,11 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local cdRelevant = placedEnabled and placed.type == "icon"
         local barRelevant = placedEnabled and placed.type == "bar"
         SetOptionEnabled(siEnable, not SPELL_INDICATORS_121_PTR_DISABLED)
-        SetManyEnabled(indicatorsOn, siLayer, specDrop)
+        SetManyEnabled(indicatorsOn, siLayer, siStrata, specDrop)
         SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
         SetOptionEnabled(multiSpecEnabled, indicatorsOn and multi and CurrentSpellMultiSpec(CurrentScope()) ~= "")
         SetManyEnabled(hasSpell, spellEnabled, onlyMine, placedType)
+        SetOptionEnabled(customSpellIDs, customSpell)
         SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth)
         SetOptionEnabled(placedMissing, false)
         SetOptionEnabled(placedBarWidth, barRelevant)
