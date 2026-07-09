@@ -1377,9 +1377,9 @@ function R.TryColorContrastShortcut(text)    local norm = R.Normalize(text)
     if R.ContainsAny(norm, R.COLOR_CONTRAST_GROUP_TERMS) then
         return R.ColorContrastReply(
             "Group frame color and opacity help",
-            "For group frames, I can adjust health text, range fade, debuff stripe colors, bar colors, dispel overlays, and aura readability.",
-            "set raid range fade to 40; set party debuff stripe color red; open group health and text.",
-            "Open Group Health & Text | Open Group Layout"
+            "Group-frame colors and bar opacity live in Colors > Group Frame Colors and apply to Party, Raid, and Mythic Raid together. Group Health & Text still controls range fade, dispel overlay, text, power, and debuff stripe layout.",
+            "set raid range fade to 40; set group debuff stripe color red; open colors.",
+            "Open Colors | Open Group Health & Text"
         )
     end
 
@@ -2040,9 +2040,9 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
             if scopeKind == "group" then
                 return R.VisualSettingReply(
                     scopeLabel .. " Health Color Mode setting location",
-                    scopeLabel .. " Health Color Mode lives in Group Health & Text. Use that when Party, Raid, or Mythic Raid health bars should follow class colors, a custom color, dark mode, or another group health color mode.",
-                    "open group health and text; set " .. scope .. " health color mode to class; set " .. scope .. " custom health color green.",
-                    "Open Group Health & Text | set " .. scope .. " health color mode to class"
+                    "Group-frame Health Color Mode lives in Colors > Group Frame Colors and applies to Party, Raid, and Mythic Raid together.",
+                    "open colors; set group health color mode to class; set group custom health color green.",
+                    "Open Colors | set group health color mode to class"
                 )
             end
             if scopeKind == "unit" then
@@ -2055,9 +2055,9 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
             end
             return R.VisualSettingReply(
                 "Health color setting location",
-                "Unit-frame health color schemes live on each unit-frame page. Group-frame health color modes live in Group Health & Text. Global palette and bar colors live in Colors.",
+                "Unit-frame health color schemes live on each unit-frame page. Group-frame health color modes live in Colors > Group Frame Colors. Global palette and bar colors live in Colors.",
                 "set player health color scheme to class; set raid health color mode to class; open colors.",
-                "Open Player | Open Group Health & Text | Open Colors"
+                "Open Player | Open Colors"
             )
         end
         if wantsClassHealth and scopeKind == "unit" and hasCore then
@@ -2072,7 +2072,7 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
             return R.CoreControl(
                 coreHandler,
                 "set " .. scope .. " health color mode to class",
-                scopeLabel .. " Health Color Mode lives in Group Health & Text.",
+                "Group-frame Health Color Mode lives in Colors > Group Frame Colors and applies to Party, Raid, and Mythic Raid together.",
                 "info"
             )
         end
@@ -2087,9 +2087,9 @@ A.RouterTryVisualSettingShortcut = function(norm, coreHandler)
         if scopeKind == "group" then
             return R.VisualSettingReply(
                 scopeLabel .. " Opacity setting location",
-                scopeLabel .. " frame opacity lives in Group Health & Text. Use " .. scopeLabel .. " Health Bar Opacity for the filled health bar and " .. scopeLabel .. " Bar Background Opacity for the track/background.",
-                "open group health and text; set " .. scope .. " health bar opacity to 80; set " .. scope .. " bar background opacity to 70.",
-                "Open Group Health & Text | set " .. scope .. " health bar opacity to 80"
+                "Group-frame health and background opacity live in Colors > Group Frame Colors and apply to Party, Raid, and Mythic Raid together. Range Fade opacity stays in Group Health & Text.",
+                "open colors; set group health bar opacity to 80; set group bar background opacity to 70.",
+                "Open Colors | set group health bar opacity to 80"
             )
         end
         if scopeKind == "unit" then

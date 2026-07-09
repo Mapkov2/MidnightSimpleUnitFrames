@@ -186,6 +186,14 @@ local function CloseAutoFocusedSections(pageKey)
     if changed and relayout and relayout.RelayoutCollapsibles then relayout:RelayoutCollapsibles() end
     return changed and true or false
 end
+local function NotifyCollapsibleSectionState(entry, open)
+    if not entry then return end
+    open = open and true or false
+    if entry._msuf2LastNotifiedOpen == open then return end
+    entry._msuf2LastNotifiedOpen = open
+    local fn = M.OnCollapsibleSectionStateChanged
+    if type(fn) == "function" then fn(entry.pageKey, entry.sectionId, open, entry) end
+end
 local function ScrollToCollapsibleEntry(entry)
     local outer = entry and entry.outer
     local scroll = M.scrollFrame
@@ -396,6 +404,7 @@ function W.PageBuilder(ctx)
                 T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
                 if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
                 if entry._msuf2RefreshState then entry._msuf2RefreshState(entry) end
+                NotifyCollapsibleSectionState(entry, open)
                 y = y - entry.outer:GetHeight() - 8
             end
         end

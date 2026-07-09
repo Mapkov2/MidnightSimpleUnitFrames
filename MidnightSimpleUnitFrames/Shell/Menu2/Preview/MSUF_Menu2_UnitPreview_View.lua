@@ -994,6 +994,19 @@ local function BuildPreview(parent, panel, width, height)
     box.ApplyPinnedPreviewPresentation = function(self, pinned, opts)
         ApplyUnitPinnedPresentation(self, pinned, opts, sideW)
     end
+    function box:RequestRefresh(reason)
+        local preview = MSUF.UFPreview or Preview
+        if type(preview) == "table" then
+            if self:IsShown() then preview.active = self end
+            if type(preview.RequestRefreshForBox) == "function" then
+                preview.RequestRefreshForBox(self, reason)
+                return
+            end
+            if type(preview.Refresh) == "function" and self:IsShown() and (not self.IsVisible or self:IsVisible()) then
+                preview.Refresh(self, reason)
+            end
+        end
+    end
     local title = box:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     title:SetText(TR("Unit Frame Preview"))
@@ -1349,7 +1362,7 @@ local function BuildPreview(parent, panel, width, height)
         Preview.active = self
         if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
         RefreshPreviewAnimationButton(self)
-        Preview.RequestRefresh("SHOW")
+        self:RequestRefresh("SHOW")
     end)
     box:SetScript("OnHide", function(self)
         StopPreviewAnimationDriver(self)
@@ -1388,6 +1401,15 @@ local function BuildPreview(parent, panel, width, height)
             end
             RefreshHandleSelectionVisuals(self)
         end
+    end)
+    box:HookScript("OnSizeChanged", function(self, changedWidth, changedHeight)
+        if not self:IsShown() then return end
+        changedWidth = floor((tonumber(changedWidth) or self:GetWidth() or 0) + 0.5)
+        changedHeight = floor((tonumber(changedHeight) or self:GetHeight() or 0) + 0.5)
+        if self._msufUFPreviewRefreshWidth == changedWidth and self._msufUFPreviewRefreshHeight == changedHeight then return end
+        self._msufUFPreviewRefreshWidth = changedWidth
+        self._msufUFPreviewRefreshHeight = changedHeight
+        self:RequestRefresh("UNIT_PREVIEW_SIZE")
     end)
     return box
 end

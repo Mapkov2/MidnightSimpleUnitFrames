@@ -33,6 +33,19 @@ local function AttachGroupFocus(widget, component)
     W.AttachGroupEditFocus(widget, CurrentEditFocusKey, component or "layout")
     return widget
 end
+local function OpenGroupFrameColors()
+    _G.MSUF_EM2_MenuFocusRequest = {
+        pageKey = "opt_colors",
+        sectionId = "colors_group_frames",
+        explicit = true,
+        consumed = false,
+        source = "group-frame-basics",
+        changedAt = GetTime and GetTime() or 0,
+    }
+    if M.SelectPage and M.SelectPage("opt_colors") == false then
+        _G.MSUF_EM2_MenuFocusRequest = nil
+    end
+end
 local function BuildGFLayout(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -46,6 +59,13 @@ local function BuildGFLayout(ctx)
     local generalLeftToggleW = max(80, generalLeftW - 34)
     local generalRightToggleW = max(80, generalRightW - 34)
     local offlineSliderW = max(320, min(520, generalW - generalLeftX - 170))
+    local openColors = T.Button(general, "Colors", 112, 22)
+    openColors:SetPoint("TOPRIGHT", general, "TOPRIGHT", -20, -8)
+    if T.CenterButtonLabel then T.CenterButtonLabel(openColors) end
+    if M.AddTooltip then
+        M.AddTooltip(openColors, "Group Frame Colors", "Open Colors > Group Frame Colors for shared Party, Raid and Mythic Raid colors.", { hook = true })
+    end
+    openColors:SetScript("OnClick", OpenGroupFrameColors)
     W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
     local enableGroup = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Use MSUF group frames", generalLeftX, -64, generalLeftW), "layout"), "enabled", false, "rebuild")

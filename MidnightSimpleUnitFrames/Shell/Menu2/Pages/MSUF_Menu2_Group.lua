@@ -333,12 +333,19 @@ local function ScopeShortLabel(kind)
     return M.Tr(SCOPE_SHORT_LABELS[kind] or SCOPE_LABELS[kind] or "Party")
 end
 local GF_COPY_EXCLUDE = M.KeySetFromWords "offsetX offsetY point positionMode _hlMigrated"
+local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
+    gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
+    gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
+    alphaExcludeTextPortrait deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
+    debuffStripeAlpha debuffStripeColorR debuffStripeColorG debuffStripeColorB targetR targetG targetB
+    hlFocusColorR hlFocusColorG hlFocusColorB groupBorderR groupBorderG groupBorderB groupBorderA
+    ciAggroColorR ciAggroColorG ciAggroColorB
+]]
 local GF_COPY_CATEGORIES = {
     { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
     { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol textDelimiter hpTextReverse healthTextDecimals hpOffsetX hpOffsetY textLayer]] },
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline useGlobalFontColor fontR fontG fontB]] },
-    { key = "border", label = "Background & Opacity", keys = WL [[bgR bgG bgB hpBarAlpha hpBgAlpha alphaExcludeTextPortrait]] },
     { key = "range", label = "Range Fade", keys = WL [[rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha]] },
     { key = "indicators", label = "Status & Indicators", keys = GF_INDICATOR_COPY_FIELDS, prefix = WL [[si_ statusIcon indicator]] },
     { key = "auras", label = "Auras", tables = WL [[auras]] },
@@ -393,7 +400,7 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
         end
     end
     for key, value in pairs(srcConf) do
-        if not GF_COPY_EXCLUDE[key] then
+        if not GF_COPY_EXCLUDE[key] and not GF_SHARED_COLOR_KEYS[key] then
             local copy = allowKeys[key] or allowTables[key]
             if (not copy) and type(key) == "string" then
                 for i = 1, #allowPrefixes do
