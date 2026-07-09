@@ -817,6 +817,7 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "OffsetX"] = scale(group.x, 0)
   out[prefix .. "OffsetY"] = scale(group.y, 0)
   out[prefix .. "Layer"] = Layer(group.layer, defaults[4])
+  out[prefix .. "Strata"] = NormalizeFrameOutlineStrata(group.strata)
   out[prefix .. "Alpha"] = group.behindBar == true and LaneAlpha(group) or 1
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
   if group.showTooltip ~= nil then
@@ -857,25 +858,65 @@ local function AddSpellIDToHash(hash, spellID)
   return 1
 end
 
-local function AddSpellIDsForAura(hash, si, specKey, auraName)
+local function AddSpellIDAliasesToHash(hash, si, spellID)
+  spellID = tonumber(spellID)
+  if not spellID then return 0 end
+  spellID = floor(spellID + 0.5)
+  local aliases = si and ((si.AuraSpellIDAliases and si.AuraSpellIDAliases[spellID])
+    or (si.CustomAuraAliases and si.CustomAuraAliases[spellID]))
+  if aliases == nil then return 0 end
+  if type(aliases) ~= "table" then return AddSpellIDToHash(hash, aliases) end
+  local count = 0
+  for key, value in pairs(aliases) do
+    if value == true then
+      count = count + AddSpellIDToHash(hash, key)
+    elseif value ~= false then
+      count = count + AddSpellIDToHash(hash, value)
+    end
+  end
+  return count
+end
+
+local function AddSpellIDToHashWithAliases(hash, si, spellID)
+  local count = AddSpellIDToHash(hash, spellID)
+  count = count + AddSpellIDAliasesToHash(hash, si, spellID)
+  return count
+end
+
+local function AddSpellIDsForAura(hash, si, specKey, auraName, entry)
   if not (hash and si and specKey and auraName) then return 0 end
   local count = 0
+  local includeAliases = type(entry) == "table" and entry.custom == true
+  local function AddResolved(spellID)
+    if includeAliases then return AddSpellIDToHashWithAliases(hash, si, spellID) end
+    return AddSpellIDToHash(hash, spellID)
+  end
+  local id = tonumber(auraName)
+  if id then count = count + AddResolved(id) end
+  if type(entry) == "table" then
+    count = count + AddResolved(entry.spellID or entry.spellId or entry.id)
+    if includeAliases and type(entry.spells) == "string" then
+      for token in entry.spells:gmatch("%d+") do
+        count = count + AddResolved(token)
+      end
+    end
+  end
   local ids = si.SpellIDs and si.SpellIDs[specKey]
-  if ids then count = count + AddSpellIDToHash(hash, ids[auraName]) end
+  if ids then count = count + AddResolved(ids[auraName]) end
   local secretIDs = si.SecretSpellIDs and si.SecretSpellIDs[specKey]
-  if secretIDs then count = count + AddSpellIDToHash(hash, secretIDs[auraName]) end
+  if secretIDs then count = count + AddResolved(secretIDs[auraName]) end
   local altIDs = si.AltSpellIDs and si.AltSpellIDs[specKey]
   if type(altIDs) == "table" then
     for spellID, mappedAuraName in pairs(altIDs) do
-      if mappedAuraName == auraName then count = count + AddSpellIDToHash(hash, spellID) end
+      if mappedAuraName == auraName then count = count + AddResolved(spellID) end
     end
   end
   local linked = si.LinkedAuraRules and si.LinkedAuraRules[specKey] and si.LinkedAuraRules[specKey][auraName]
   if type(linked) == "table" then
-    count = count + AddSpellIDToHash(hash, linked.sourceSpellID)
+    count = count + AddResolved(linked.sourceSpellID)
     if type(linked.targetSpellIDs) == "table" then
       for i = 1, #linked.targetSpellIDs do
-        count = count + AddSpellIDToHash(hash, linked.targetSpellIDs[i])
+        count = count + AddResolved(linked.targetSpellIDs[i])
       end
     end
   end
@@ -884,7 +925,7 @@ local function AddSpellIDsForAura(hash, si, specKey, auraName)
     for i = 1, #trackable do
       local info = trackable[i]
       if info and info.name == auraName then
-        count = count + AddSpellIDToHash(hash, info.spellID or info.spellId or info.id)
+        count = count + AddResolved(info.spellID or info.spellId or info.id)
         break
       end
     end
@@ -939,7 +980,7 @@ local function BuildTrackedBuffIncludeHash(conf)
         local entry = type(specCfg) == "table" and specCfg[auraName] or nil
         if entry == nil then entry = def end
         if type(entry) == "table" and entry.enabled ~= false then
-          count = count + AddSpellIDsForAura(hash, si, specKey, auraName)
+          count = count + AddSpellIDsForAura(hash, si, specKey, auraName, entry)
         end
       end
     end
@@ -947,7 +988,7 @@ local function BuildTrackedBuffIncludeHash(conf)
       for auraName, entry in pairs(specCfg) do
         if not (type(defaults) == "table" and defaults[auraName] ~= nil)
           and type(entry) == "table" and entry.enabled ~= false then
-          count = count + AddSpellIDsForAura(hash, si, specKey, auraName)
+          count = count + AddSpellIDsForAura(hash, si, specKey, auraName, entry)
         end
       end
     end
@@ -1066,6 +1107,7 @@ local function CompileCoreAuras(kind, conf)
     x = Num(buff.trackedX, 0),
     y = Num(buff.trackedY, 0),
     layer = Num(buff.trackedLayer, Num(conf.spellIndicators and conf.spellIndicators.layer, 9)),
+    strata = buff.trackedStrata or buff.trackedFrameStrata or (conf.spellIndicators and conf.spellIndicators.strata),
     filterToken = buff.trackedOnlyOwn ~= false and "PLAYER" or "ALL",
     showTooltip = buff.trackedShowTooltip,
     showCooldownSwipe = buff.trackedShowCooldownSwipe,

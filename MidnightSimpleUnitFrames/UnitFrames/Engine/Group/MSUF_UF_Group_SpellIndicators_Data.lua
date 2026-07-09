@@ -140,6 +140,16 @@ SI.AltSpellIDs = {
   },
 }
 
+--- User-entered custom buff IDs can be spellbook override IDs while UnitAura
+--- exposes the base aura spellId. Compilers expand these only for custom IDs.
+SI.AuraSpellIDAliases = {
+  [403876] = { 498 }, -- Divine Protection override -> aura/base
+  [498] = { 403876 }, -- Divine Protection aura/base -> override
+  [642] = { 63148 }, -- Divine Shield cast -> aura
+  [63148] = { 642 }, -- Divine Shield aura -> cast
+}
+SI.CustomAuraAliases = SI.AuraSpellIDAliases
+
 SI.SelfOnlySpellIDs = {
   RestorationDruid = {
     [474754] = "SymbioticRelationship",
@@ -422,7 +432,12 @@ local function Placed(kind, anchor, x, y, size)
 end
 
 local function Frame(kind, r, g, b, a, priority)
-  return { frame = { type = kind, color = { r, g, b, a }, priority = priority } }
+  priority = tonumber(priority) or 1
+  local index = math.max(0, math.floor(priority + 0.5) - 1)
+  return {
+    placed = { type = "icon", anchor = "RIGHT", x = 2 + (index * 22), y = 0, size = 20 },
+    frame = { type = kind, color = { r, g, b, a }, priority = priority },
+  }
 end
 
 local function PlacedFrame(kind, anchor, x, y, size, frameKind, r, g, b, a, priority)
@@ -568,7 +583,19 @@ function SI.GetAuraIcon(specKey, auraName)
   local tex = SI.IconTextures[auraName]
   if tex then return tex end
   local ids = SI.SpellIDs[specKey]
-  local sid = ids and ids[auraName]
+  local sid = tonumber(auraName) or (ids and ids[auraName])
+  if not sid then
+    local list = SI.TrackableAuras and SI.TrackableAuras[specKey]
+    if type(list) == "table" then
+      for i = 1, #list do
+        local info = list[i]
+        if info and info.name == auraName then
+          sid = tonumber(info.spellID or info.spellId or info.id)
+          break
+        end
+      end
+    end
+  end
   if sid and C_Spell and C_Spell.GetSpellTexture then
     local t = C_Spell.GetSpellTexture(sid)
     if t then return t end

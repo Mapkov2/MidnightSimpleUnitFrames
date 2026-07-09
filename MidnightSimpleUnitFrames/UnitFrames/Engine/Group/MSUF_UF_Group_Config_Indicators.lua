@@ -39,6 +39,16 @@ local function Layer(value, fallback)
   return value
 end
 
+local function NormalizeFrameStrata(value, fallback)
+  local normalize = _G.MSUF_NormalizeFrameStrata
+  if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
+  if value == nil or value == "" then return fallback or "AUTO" end
+  value = tostring(value):upper()
+  if value == "AUTO" then return "AUTO" end
+  local rank = _G.MSUF_FRAME_STRATA_RANK
+  return rank and rank[value] and value or (fallback or "AUTO")
+end
+
 local function GeneralDB()
   local db = _G.MSUF_DB
   return type(db) == "table" and type(db.general) == "table" and db.general or nil
@@ -52,20 +62,101 @@ local CI_SLOT_FIELDS = {
   { "C", "CENTER", 0, 0 },
 }
 
+local function AddCustomSpellID(hash, list, spellID)
+  spellID = tonumber(spellID)
+  if not spellID then return 0 end
+  spellID = floor(spellID + 0.5)
+  if spellID <= 0 or hash[spellID] == true then return 0 end
+  hash[spellID] = true
+  list[#list + 1] = spellID
+  return 1
+end
+
+local function CustomSpellIDSignature(list)
+  if type(list) ~= "table" or #list == 0 then return nil end
+  local parts = {}
+  for i = 1, #list do parts[i] = tostring(list[i]) end
+  return table_concat(parts, ",")
+end
+
+local function ParseCustomSpellIDs(value)
+  if value == nil then return nil, nil, nil end
+  local hash, list, count = {}, {}, 0
+  value = tostring(value)
+  for token in value:gmatch("%d+") do
+    count = count + AddCustomSpellID(hash, list, token)
+  end
+  if count <= 0 then return nil, nil, nil end
+  table_sort(list)
+  return hash, list, CustomSpellIDSignature(list)
+end
+
+local function NormalizeCornerCustomFilter(value)
+  value = tostring(value or "HELPFUL|PLAYER"):upper():gsub("%s+", "")
+  local base = value:find("HARMFUL", 1, true) and "HARMFUL" or "HELPFUL"
+  if value:find("PLAYER", 1, true) then return base .. "|PLAYER" end
+  return base
+end
+
+local function CustomCornerColor(custom)
+  local color = type(custom and custom.color) == "table" and custom.color or nil
+  return {
+    Alpha(custom and (custom.r or (color and color.r) or (color and color[1])), 0.40),
+    Alpha(custom and (custom.g or (color and color.g) or (color and color[2])), 1.00),
+    Alpha(custom and (custom.b or (color and color.b) or (color and color[3])), 0.40),
+    Alpha(custom and (custom.a or custom.alpha or (color and color.a) or (color and color[4])), 1.00),
+  }
+end
+
+local function CompileCustomCornerSlot(conf, slot, size, alpha, layer)
+  local custom = type(conf and conf["ciCustom" .. tostring(slot and slot.key or "")]) == "table"
+    and conf["ciCustom" .. tostring(slot and slot.key or "")] or nil
+  local includeSpellIDs, spellIDs, spellIDSignature = ParseCustomSpellIDs(custom and custom.spells)
+  if not includeSpellIDs then return nil end
+  local color = CustomCornerColor(custom)
+  color[4] = Alpha(color[4], 1) * Alpha(alpha, 1)
+  return {
+    key = "corner:" .. tostring(slot.key),
+    cornerSlotKey = slot.key,
+    display = "Corner " .. tostring(slot.key),
+    enabled = true,
+    layer = layer,
+    onlyOwn = false,
+    spellIDs = spellIDs,
+    includeSpellIDs = includeSpellIDs,
+    spellIDSignature = spellIDSignature,
+    customFilter = NormalizeCornerCustomFilter(custom and custom.filter),
+    mode = tostring(custom and custom.mode or "present"),
+    placed = {
+      type = "square",
+      anchor = slot.anchor,
+      x = slot.x,
+      y = slot.y,
+      size = size,
+      barWidth = size,
+      missing = false,
+      showCooldownSwipe = false,
+      showCooldown = false,
+      showStacks = false,
+    },
+    color = color,
+  }
+end
+
 --- Corner indicators use normal runtime logic for threat slots and native
 --- AuraContainer sensors for dispellable slots.
 function GF.CompileCornerIndicators(conf)
   conf = conf or {}
   local general = GeneralDB() or {}
-  local slots, slotMap, aggroSlots, dispelSlots = {}, {}, {}, {}
-  local hasWork, needsThreat, needsDispel = false, false, false
+  local size = Num(conf.ciSize, 8)
+  local alpha = Alpha(conf.ciAlpha, 1)
+  local layer = Layer(conf.ciLayer, 7)
+  local slots, slotMap, aggroSlots, dispelSlots, customSlots = {}, {}, {}, {}, {}
+  local hasWork, needsThreat, needsDispel, needsCustom = false, false, false, false
   for i = 1, #CI_SLOT_FIELDS do
     local field = CI_SLOT_FIELDS[i]
     local slotKey = field[1]
     local category = conf["ciSlot" .. slotKey] or "none"
-    if category == "custom" then
-      category = "none"
-    end
     local slot = {
       key = slotKey,
       category = category,
@@ -74,13 +165,21 @@ function GF.CompileCornerIndicators(conf)
       y = field[4],
     }
     if category ~= "none" then
-      hasWork = true
       if category == "aggro" then
+        hasWork = true
         needsThreat = true
         aggroSlots[#aggroSlots + 1] = slot
       elseif category == "dispel" then
+        hasWork = true
         needsDispel = true
         dispelSlots[#dispelSlots + 1] = slot
+      elseif category == "custom" then
+        local customSlot = CompileCustomCornerSlot(conf, slot, size, alpha, layer)
+        if customSlot then
+          hasWork = true
+          needsCustom = true
+          customSlots[#customSlots + 1] = customSlot
+        end
       end
     end
     slots[#slots + 1] = slot
@@ -89,15 +188,17 @@ function GF.CompileCornerIndicators(conf)
   return {
     enabled = conf.ciEnabled == true,
     hasWork = hasWork,
-    needsAura = needsDispel,
+    needsAura = needsDispel or needsCustom,
     needsThreat = needsThreat,
     needsDispel = needsDispel,
-    size = Num(conf.ciSize, 8),
-    alpha = Alpha(conf.ciAlpha, 1),
-    layer = Layer(conf.ciLayer, 7),
+    needsCustom = needsCustom,
+    size = size,
+    alpha = alpha,
+    layer = layer,
     slots = slots,
     aggroSlots = aggroSlots,
     dispelSlots = dispelSlots,
+    customSlots = customSlots,
     slotMap = slotMap,
     aggroMode = conf.aggroMode or general.aggroMode or "ALL",
     aggroR = Num(conf.ciAggroColorR, 1),
@@ -129,35 +230,65 @@ local function AddSpellID(hash, list, spellID)
   return 1
 end
 
+local function AddSpellIDAliases(hash, list, si, spellID)
+  spellID = tonumber(spellID)
+  if not spellID then return 0 end
+  spellID = floor(spellID + 0.5)
+  local aliases = si and ((si.AuraSpellIDAliases and si.AuraSpellIDAliases[spellID])
+    or (si.CustomAuraAliases and si.CustomAuraAliases[spellID]))
+  if aliases == nil then return 0 end
+  if type(aliases) ~= "table" then return AddSpellID(hash, list, aliases) end
+  local count = 0
+  for key, value in pairs(aliases) do
+    if value == true then
+      count = count + AddSpellID(hash, list, key)
+    elseif value ~= false then
+      count = count + AddSpellID(hash, list, value)
+    end
+  end
+  return count
+end
+
+local function AddSpellIDWithAliases(hash, list, si, spellID)
+  local count = AddSpellID(hash, list, spellID)
+  count = count + AddSpellIDAliases(hash, list, si, spellID)
+  return count
+end
+
 local function AddSpellIDsForAura(hash, list, si, specKey, auraName, entry)
   if not (hash and list and si and specKey and auraName) then return 0 end
   local count = 0
+  local includeAliases = type(entry) == "table" and entry.custom == true
+  local function AddResolved(spellID)
+    if includeAliases then return AddSpellIDWithAliases(hash, list, si, spellID) end
+    return AddSpellID(hash, list, spellID)
+  end
   local id = tonumber(auraName)
-  if id then count = count + AddSpellID(hash, list, id) end
+  if id then count = count + AddResolved(id) end
   if type(entry) == "table" then
-    count = count + AddSpellID(hash, list, entry.spellID or entry.spellId or entry.id)
+    count = count + AddResolved(entry.spellID or entry.spellId or entry.id)
     if type(entry.spells) == "string" then
       for token in entry.spells:gmatch("%d+") do
-        count = count + AddSpellID(hash, list, token)
+        count = count + AddResolved(token)
       end
     end
   end
   local ids = si.SpellIDs and si.SpellIDs[specKey]
-  if ids then count = count + AddSpellID(hash, list, ids[auraName]) end
+  if ids then count = count + AddResolved(ids[auraName]) end
   local secretIDs = si.SecretSpellIDs and si.SecretSpellIDs[specKey]
-  if secretIDs then count = count + AddSpellID(hash, list, secretIDs[auraName]) end
+  if secretIDs then count = count + AddResolved(secretIDs[auraName]) end
   local altIDs = si.AltSpellIDs and si.AltSpellIDs[specKey]
   if type(altIDs) == "table" then
     for spellID, mappedAuraName in pairs(altIDs) do
-      if mappedAuraName == auraName then count = count + AddSpellID(hash, list, spellID) end
+      if mappedAuraName == auraName then count = count + AddResolved(spellID) end
     end
   end
   local linked = si.LinkedAuraRules and si.LinkedAuraRules[specKey] and si.LinkedAuraRules[specKey][auraName]
   if type(linked) == "table" then
-    count = count + AddSpellID(hash, list, linked.sourceSpellID)
+    count = count + AddResolved(linked.sourceSpellID)
     if type(linked.targetSpellIDs) == "table" then
       for i = 1, #linked.targetSpellIDs do
-        count = count + AddSpellID(hash, list, linked.targetSpellIDs[i])
+        count = count + AddResolved(linked.targetSpellIDs[i])
       end
     end
   end
@@ -166,7 +297,7 @@ local function AddSpellIDsForAura(hash, list, si, specKey, auraName, entry)
     for i = 1, #trackable do
       local info = trackable[i]
       if info and info.name == auraName then
-        count = count + AddSpellID(hash, list, info.spellID or info.spellId or info.id)
+        count = count + AddResolved(info.spellID or info.spellId or info.id)
         break
       end
     end
@@ -248,6 +379,7 @@ local function NormalizePlaced(placed)
     missing = false,
     showCooldownSwipe = placed.showCooldownSwipe ~= false,
     showCooldown = placed.showCooldown ~= false,
+    cooldownSize = Num(placed.cooldownSize, 8),
     showStacks = placed.showStacks ~= false,
   }
 end
@@ -286,21 +418,30 @@ local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, gl
   local info = TrackableInfo(si, specKey, auraName)
   local color = type(entry.color) == "table" and entry.color or (type(info and info.color) == "table" and info.color) or nil
   local display = entry.display or (info and info.display) or tostring(auraName)
+  local custom = entry.custom == true or (info and info.custom == true) or false
+  local onlyOwn
+  if custom then
+    onlyOwn = entry._msufCustomOnlyOwnExplicit == true and entry.onlyOwn == true
+  else
+    onlyOwn = entry.onlyOwn ~= false
+  end
   return {
     key = tostring(specKey) .. ":" .. tostring(auraName),
     specKey = specKey,
     auraName = auraName,
     display = display,
     enabled = true,
+    custom = custom,
     order = order or 999,
     layer = Layer(entry.layer, globalLayer or 9),
-    onlyOwn = entry.onlyOwn ~= false,
+    strata = entry.strata ~= nil and NormalizeFrameStrata(entry.strata, "AUTO") or nil,
+    onlyOwn = onlyOwn,
     spellIDs = ids,
     includeSpellIDs = hash,
     spellIDSignature = SpellIDSignature(ids),
     placed = placed,
     frame = frame,
-    icon = si.GetAuraIcon and si.GetAuraIcon(specKey, auraName) or nil,
+    icon = entry.icon or (si.GetAuraIcon and si.GetAuraIcon(specKey, auraName) or nil),
     color = {
       Alpha(color and (color[1] or color.r), 0.69),
       Alpha(color and (color[2] or color.g), 0.50),
@@ -351,6 +492,7 @@ function GF.CompileSpellIndicators(conf)
     return {
       enabled = false,
       layer = 9,
+      strata = NormalizeFrameStrata(siCfg and siCfg.strata, "AUTO"),
       spec = siCfg and siCfg.spec or "auto",
       activeSpec = nil,
       specs = {},
@@ -361,6 +503,7 @@ function GF.CompileSpellIndicators(conf)
     }
   end
   local layer = Layer(siCfg.layer, 9)
+  local strata = NormalizeFrameStrata(siCfg.strata, "AUTO")
   local specs = CollectSpecs(siCfg, si)
   local items, watched, watchedCount = {}, {}, 0
   for i = 1, #specs do
@@ -390,6 +533,7 @@ function GF.CompileSpellIndicators(conf)
   return {
     enabled = #items > 0,
     layer = layer,
+    strata = strata,
     spec = siCfg.spec or "auto",
     activeSpec = specs[1],
     specs = specs,
