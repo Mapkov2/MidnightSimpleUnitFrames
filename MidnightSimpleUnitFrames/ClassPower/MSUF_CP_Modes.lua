@@ -628,6 +628,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
     local CP = E.CP
     local _cpDB = E._cpDB
     local C_UnitAuras = E.C_UnitAuras
+    local GetTrackedPlayerAura = E.GetTrackedPlayerAura
     local C_Spell = E.C_Spell
     local CPK = E.CPK
     local WW = E.WW
@@ -635,6 +636,21 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
     local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local ResolveMWAbove5Color = E.ResolveMWAbove5Color
     local CP_CheckAutoHide = E.CP_CheckAutoHide
+
+    local function GetPlayerAura(spellID)
+        if type(GetTrackedPlayerAura) == "function" then
+            return GetTrackedPlayerAura(spellID)
+        end
+        return C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID and C_UnitAuras.GetPlayerAuraBySpellID(spellID) or nil
+    end
+
+    local function GetTrackedTipStacks()
+        if CP.spExpires and GetTime and GetTime() >= CP.spExpires then
+            CP.spStacks = 0
+            CP.spExpires = nil
+        end
+        return tonumber(CP.spStacks) or 0
+    end
 
     local function ResolveDHColor(isVoidMeta)
         local ov = _cpDB.colorOverrides
@@ -687,7 +703,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
         else
             local cur = 0
             if powerType == "MAELSTROM_WEAPON" then
-                local info = C_UnitAuras.GetPlayerAuraBySpellID(CPK.SPELL.MAELSTROM_WEAPON)
+                local info = GetPlayerAura(CPK.SPELL.MAELSTROM_WEAPON)
                 if info then
                     local apps = info.applications
                     if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
@@ -696,17 +712,28 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                 cur = WW.GetStacks()
             elseif powerType == "TIP_OF_THE_SPEAR" then
                 local tipAuraID = E.TIP and E.TIP.AURA_ID
+                local useLocal = CP.spLocalUntil and GetTime and GetTime() < CP.spLocalUntil
                 if tipAuraID then
-                    local info = C_UnitAuras.GetPlayerAuraBySpellID(tipAuraID)
+                    local info = not useLocal and GetPlayerAura(tipAuraID) or nil
                     if info then
                         local apps = info.applications
-                        if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
+                        if apps ~= nil and NotSecret(apps) then
+                            cur = tonumber(apps) or 0
+                            CP.spStacks = cur
+                            if info.expirationTime ~= nil and NotSecret(info.expirationTime) then
+                                CP.spExpires = tonumber(info.expirationTime)
+                            end
+                        else
+                            cur = GetTrackedTipStacks()
+                        end
+                    else
+                        cur = GetTrackedTipStacks()
                     end
                 end
             elseif powerType == "ICICLES" then
                 local icicleID = CPK.SPELL and CPK.SPELL.ICICLES
                 if icicleID then
-                    local info = C_UnitAuras.GetPlayerAuraBySpellID(icicleID)
+                    local info = GetPlayerAura(icicleID)
                     if info then
                         local apps = info.applications
                         if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
@@ -744,9 +771,9 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
 
     local function UpdateSingle(powerType, maxPower)
         local cur, displayCur, inMeta = 0, 0, false
-        inMeta = not not C_UnitAuras.GetPlayerAuraBySpellID(CPK.SPELL.VOID_METAMORPHOSIS)
+        inMeta = not not GetPlayerAura(CPK.SPELL.VOID_METAMORPHOSIS)
         if inMeta then
-            local whispers = C_UnitAuras.GetPlayerAuraBySpellID(CPK.SPELL.SILENCE_THE_WHISPERS)
+            local whispers = GetPlayerAura(CPK.SPELL.SILENCE_THE_WHISPERS)
             if whispers then
                 local apps = whispers.applications
                 if apps ~= nil and NotSecret(apps) then
@@ -760,7 +787,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                 end
             end
         else
-            local darkHeart = C_UnitAuras.GetPlayerAuraBySpellID(CPK.SPELL.DARK_HEART)
+            local darkHeart = GetPlayerAura(CPK.SPELL.DARK_HEART)
             if darkHeart then
                 local apps = darkHeart.applications
                 if apps ~= nil and NotSecret(apps) then
@@ -819,6 +846,8 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
     local math_floor = math.floor
     local CP = E.CP
     local C_UnitAuras = E.C_UnitAuras
+    local GetTrackedPlayerAura = E.GetTrackedPlayerAura
+    local NotSecret = E.NotSecret or function() return true end
     local GetTime = E.GetTime
     local EBON = E.EBON
     local CPK = E.CPK
@@ -830,9 +859,20 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
     local Update
     local SetOnUpdate
 
+    local function GetPlayerAura(spellID)
+        if type(GetTrackedPlayerAura) == "function" then
+            return GetTrackedPlayerAura(spellID)
+        end
+        return C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID and C_UnitAuras.GetPlayerAuraBySpellID(spellID) or nil
+    end
+
     Update = function(powerType, maxPower)
-        local aura = C_UnitAuras.GetPlayerAuraBySpellID(EBON.SPELL_ID)
-        local remaining = aura and (aura.expirationTime - GetTime()) or 0
+        local aura = GetPlayerAura(EBON.SPELL_ID)
+        local expirationTime = aura and aura.expirationTime
+        local remaining = 0
+        if expirationTime ~= nil and NotSecret(expirationTime) then
+            remaining = (tonumber(expirationTime) or 0) - GetTime()
+        end
         if remaining < 0 then remaining = 0 end
         local active = remaining > 0.05
         local mx = EBON.MAX_DURATION

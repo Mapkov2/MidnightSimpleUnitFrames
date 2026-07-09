@@ -879,8 +879,185 @@ local CP = {
     --- Spell Tracker state (Tip of the Spear only - Whirlwind uses WW module)
     spStacks    = 0,       --- current stack count
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
+    spLocalUntil = nil,    --- brief spellcast-led window before aura correction
     spCachedQ   = -1,      --- skip-if-same quantizer
 }
+
+local CPAuras = {
+    watched = {},
+    bySpell = {},
+    spellByInstance = {},
+}
+
+function CPAuras.NormalizeID(value)
+    if value == nil then return nil end
+    if NotSecret(value) == false then return nil end
+    return tonumber(value)
+end
+
+function CPAuras.AddSpell(spellID)
+    spellID = CPAuras.NormalizeID(spellID)
+    if spellID then CPAuras.watched[spellID] = true end
+end
+
+function CPAuras.AuraSpellID(aura)
+    return aura and CPAuras.NormalizeID(aura.spellId or aura.spellID or aura.id) or nil
+end
+
+function CPAuras.AuraInstanceID(aura)
+    return aura and CPAuras.NormalizeID(aura.auraInstanceID) or nil
+end
+
+function CPAuras.ClearSpell(spellID, auraInstanceID)
+    spellID = CPAuras.NormalizeID(spellID)
+    auraInstanceID = CPAuras.NormalizeID(auraInstanceID)
+    if auraInstanceID then CPAuras.spellByInstance[auraInstanceID] = nil end
+    if spellID then
+        local current = CPAuras.bySpell[spellID]
+        if not auraInstanceID or not current or CPAuras.AuraInstanceID(current) == auraInstanceID then
+            CPAuras.bySpell[spellID] = nil
+        end
+    end
+end
+
+function CPAuras.Store(aura)
+    local spellID = CPAuras.AuraSpellID(aura)
+    if not (spellID and CPAuras.watched[spellID]) then return false end
+
+    local auraInstanceID = CPAuras.AuraInstanceID(aura)
+    if auraInstanceID then
+        local oldSpellID = CPAuras.spellByInstance[auraInstanceID]
+        if oldSpellID and oldSpellID ~= spellID then
+            CPAuras.ClearSpell(oldSpellID, auraInstanceID)
+        end
+        CPAuras.spellByInstance[auraInstanceID] = spellID
+    end
+
+    CPAuras.bySpell[spellID] = aura
+    return true
+end
+
+function CPAuras.ClearAll()
+    if wipe then
+        wipe(CPAuras.bySpell)
+        wipe(CPAuras.spellByInstance)
+        return
+    end
+    for k in pairs(CPAuras.bySpell) do CPAuras.bySpell[k] = nil end
+    for k in pairs(CPAuras.spellByInstance) do CPAuras.spellByInstance[k] = nil end
+end
+
+function CPAuras.Fetch(spellID)
+    spellID = CPAuras.NormalizeID(spellID)
+    if not (spellID and C_UnitAuras) then return nil end
+
+    local aura
+    if type(C_UnitAuras.GetPlayerAuraBySpellID) == "function" then
+        aura = C_UnitAuras.GetPlayerAuraBySpellID(spellID)
+    end
+    if not aura and type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
+        aura = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
+    end
+    if aura then CPAuras.Store(aura) end
+    return aura
+end
+
+function CPAuras.IsExpired(aura)
+    local expirationTime = aura and aura.expirationTime
+    if expirationTime == nil or NotSecret(expirationTime) == false then return false end
+    expirationTime = tonumber(expirationTime)
+    return expirationTime and expirationTime > 0 and expirationTime <= GetTime()
+end
+
+function CPAuras.Get(spellID)
+    spellID = CPAuras.NormalizeID(spellID)
+    if not spellID then return nil end
+
+    local aura = CPAuras.bySpell[spellID]
+    if aura then
+        if not CPAuras.IsExpired(aura) then return aura end
+        CPAuras.ClearSpell(spellID, CPAuras.AuraInstanceID(aura))
+    end
+
+    return CPAuras.Fetch(spellID)
+end
+
+function CPAuras.Rebuild()
+    CPAuras.ClearAll()
+    CPAuras.ScanUnitAuras()
+    for spellID in pairs(CPAuras.watched) do
+        if not CPAuras.bySpell[spellID] then CPAuras.Fetch(spellID) end
+    end
+end
+
+function CPAuras.FetchByInstanceID(auraInstanceID)
+    auraInstanceID = CPAuras.NormalizeID(auraInstanceID)
+    if not (auraInstanceID and C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function") then
+        return nil
+    end
+    return C_UnitAuras.GetAuraDataByAuraInstanceID("player", auraInstanceID)
+end
+
+function CPAuras.ScanUnitAuras()
+    if not (C_UnitAuras and type(C_UnitAuras.GetUnitAuras) == "function") then return end
+    local auras = C_UnitAuras.GetUnitAuras("player", "HELPFUL")
+    if type(auras) ~= "table" then return end
+    for i = 1, #auras do
+        CPAuras.Store(auras[i])
+    end
+end
+
+function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo)
+    if unitAuraUpdateInfo == nil or unitAuraUpdateInfo.isFullUpdate then
+        CPAuras.Rebuild()
+        return
+    end
+
+    local addedAuras = unitAuraUpdateInfo.addedAuras
+    if addedAuras then
+        for i = 1, #addedAuras do
+            CPAuras.Store(addedAuras[i])
+        end
+    end
+
+    local updatedAuraInstanceIDs = unitAuraUpdateInfo.updatedAuraInstanceIDs
+    if updatedAuraInstanceIDs then
+        for i = 1, #updatedAuraInstanceIDs do
+            local auraInstanceID = CPAuras.NormalizeID(updatedAuraInstanceIDs[i])
+            local spellID = auraInstanceID and CPAuras.spellByInstance[auraInstanceID]
+            if spellID then
+                local aura = CPAuras.FetchByInstanceID(auraInstanceID)
+                if aura then
+                    CPAuras.Store(aura)
+                else
+                    CPAuras.ClearSpell(spellID, auraInstanceID)
+                end
+            end
+        end
+    end
+
+    local removedAuraInstanceIDs = unitAuraUpdateInfo.removedAuraInstanceIDs
+    if removedAuraInstanceIDs then
+        for i = 1, #removedAuraInstanceIDs do
+            local auraInstanceID = CPAuras.NormalizeID(removedAuraInstanceIDs[i])
+            local spellID = auraInstanceID and CPAuras.spellByInstance[auraInstanceID]
+            if spellID then CPAuras.ClearSpell(spellID, auraInstanceID) end
+        end
+    end
+end
+
+CPAuras.AddSpell(CPK.SPELL.MAELSTROM_WEAPON)
+CPAuras.AddSpell(TIP.AURA_ID)
+CPAuras.AddSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID)
+CPAuras.AddSpell(CPK.SPELL.VOID_METAMORPHOSIS)
+CPAuras.AddSpell(CPK.SPELL.SILENCE_THE_WHISPERS)
+CPAuras.AddSpell(CPK.SPELL.DARK_HEART)
+CPAuras.AddSpell(EBON.SPELL_ID)
+for spellID in pairs(CPConst.ECLIPSE_AURAS or {}) do
+    CPAuras.AddSpell(spellID)
+end
+
+ExportPublic("MSUF_CP_GetTrackedPlayerAura", CPAuras.Get)
 
 --- Cached alpha values (resolved once in FullRefresh, used in hot paths)
 local _filledAlpha = 1.0
@@ -1087,6 +1264,7 @@ do
         UnitPower = UnitPower,
         UnitPowerDisplayMod = UnitPowerDisplayMod,
         C_UnitAuras = C_UnitAuras,
+        GetTrackedPlayerAura = CPAuras.Get,
         C_Spell = C_Spell,
         GetSpec = GetSpec,
         GetTime = GetTime,
@@ -1217,6 +1395,8 @@ do
         CPK = CPK,
         EBON = EBON,
         C_UnitAuras = C_UnitAuras,
+        GetTrackedPlayerAura = CPAuras.Get,
+        NotSecret = NotSecret,
         GetTime = GetTime,
         GetRuneCooldown = GetRuneCooldown,
         UnitHasVehicleUI = UnitHasVehicleUI,
@@ -1537,6 +1717,7 @@ local function FullRefresh()
     local b = _cpDB.bars or {}
     local playerFrame = GetPlayerFrame()
     if not playerFrame then return end
+    CPAuras.Rebuild()
 
     --- Edit mode: keep class power visible as live preview so bars-menu
     --- adjustments (width, height, offsets) are visible immediately.
@@ -1631,7 +1812,7 @@ local function FullRefresh()
                 --- Maelstrom Weapon: max stacks from spell data
                 maxP = 10  --- default
                 local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
-                if type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
+                if spellMax ~= nil and NotSecret(spellMax) and tonumber(spellMax) and tonumber(spellMax) > 0 then maxP = tonumber(spellMax) end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6  --- Vengeance: 6 soul fragment segments
             elseif powerType == "WHIRLWIND" then
@@ -1640,6 +1821,7 @@ local function FullRefresh()
                 maxP = TIP.MAX_STACKS  --- Survival Hunter: 3 Tip of the Spear stacks
                 CP.spStacks = 0
                 CP.spExpires = nil
+                CP.spLocalUntil = nil
                 CP.spCachedQ = -1
             else
                 maxP = 10
@@ -1736,6 +1918,7 @@ local function FullRefresh()
         CP.wlPredDelta = 0
         CP.spStacks = 0
         CP.spExpires = nil
+        CP.spLocalUntil = nil
         CP.spCachedQ = -1
     end
 
@@ -2186,6 +2369,7 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     if event == "UNIT_AURA" then
         if arg1 == "player" then
+            CPAuras.ProcessUnitAuraUpdate(arg2)
             CP_DeferAuraUpdate()
         end
         return
