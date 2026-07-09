@@ -24,6 +24,7 @@ local max = V.max or math.max
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local PORTRAIT_2D_EVENTS = V.PORTRAIT_2D_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
 local PORTRAIT_2D_PLAYER_EVENTS = V.PORTRAIT_2D_PLAYER_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }
+local PORTRAIT_2D_DEPENDENT_EVENTS = V.PORTRAIT_2D_DEPENDENT_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
 local WHITE = V.WHITE or "Interface\\Buttons\\WHITE8x8"
 local QUESTION_MARK = V.QUESTION_MARK or "Interface\\ICONS\\INV_Misc_QuestionMark"
 local BOSS_PREVIEW_PORTRAIT = V.BOSS_PREVIEW_PORTRAIT or "Interface\\ICONS\\Achievement_Boss_LichKing"
@@ -58,13 +59,13 @@ local PORTRAIT_GUID_BUST_EVENTS = {
 local PORTRAIT_UNIT_STATE_EVENTS = {
   PLAYER_TARGET_CHANGED = true,
   PLAYER_FOCUS_CHANGED = true,
+  UNIT_TARGET = true,
   PORTRAITS_UPDATED = true,
   PARTY_MEMBER_ENABLE = true,
   PARTY_MEMBER_DISABLE = true,
 }
 local PORTRAIT_UNITLESS_EVENTS = { "PORTRAITS_UPDATED" }
-local TARGET_PORTRAIT_UNITLESS_EVENTS = { "PLAYER_TARGET_CHANGED", "PORTRAITS_UPDATED", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
-local FOCUS_PORTRAIT_UNITLESS_EVENTS = { "PLAYER_FOCUS_CHANGED", "PORTRAITS_UPDATED" }
+local TARGET_PORTRAIT_EXTRA_EVENTS = { "PORTRAITS_UPDATED", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
 local SetShown = V.SetShown
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
@@ -76,6 +77,8 @@ local LayoutPortraitBorder
 local portraitUnitGeneration = {
   target = 0,
   focus = 0,
+  targettarget = 0,
+  focustarget = 0,
 }
 local portraitGenerationEventStamp = {}
 
@@ -85,19 +88,29 @@ local function BumpPortraitUnitGeneration(unit)
   end
 end
 
-local function BumpPortraitGenerationForEvent(event)
+local function BumpPortraitGenerationForEvent(event, unit)
   local now = (_G.GetTime and _G.GetTime()) or 0
-  if portraitGenerationEventStamp[event] == now then
+  local stampKey = event
+  if event == "UNIT_TARGET" then
+    stampKey = event .. "|" .. (unit ~= nil and tostring(unit) or "")
+  end
+  if portraitGenerationEventStamp[stampKey] == now then
     return
   end
-  portraitGenerationEventStamp[event] = now
+  portraitGenerationEventStamp[stampKey] = now
   if event == "PLAYER_TARGET_CHANGED" then
     BumpPortraitUnitGeneration("target")
+    BumpPortraitUnitGeneration("targettarget")
   elseif event == "PLAYER_FOCUS_CHANGED" then
     BumpPortraitUnitGeneration("focus")
+    BumpPortraitUnitGeneration("focustarget")
+  elseif event == "UNIT_TARGET" then
+    BumpPortraitUnitGeneration(unit)
   elseif event == "PORTRAITS_UPDATED" then
     BumpPortraitUnitGeneration("target")
     BumpPortraitUnitGeneration("focus")
+    BumpPortraitUnitGeneration("targettarget")
+    BumpPortraitUnitGeneration("focustarget")
   end
 end
 
@@ -182,9 +195,10 @@ local function ApplyPortraitUpdate(frame)
   local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
   local texture = frame.portrait
   if p and p.enabled == true and p.render ~= "CLASS" and texture and PortraitFrameVisible(frame) then
+    local force = frame._msufPortraitForceRefresh == true
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil
-    ApplyUnitPortrait(texture, frame.unit, frame, p)
+    ApplyUnitPortrait(texture, frame.unit, frame, p, force)
   elseif p and p.enabled == true and texture and not PortraitFrameVisible(frame) then
     frame._msufPortraitNeedsVisibleRefresh = true
   end
@@ -475,7 +489,7 @@ local function ApplyClassPortrait(texture, unit, p, class, frame)
   end
 end
 
-ApplyUnitPortrait = function(texture, unit, frame, p)
+ApplyUnitPortrait = function(texture, unit, frame, p, force)
   local l, r, t, b = Get2DPortraitTexCoords(p)
   if BossPreviewActive(unit, frame) then
     SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
@@ -493,7 +507,7 @@ ApplyUnitPortrait = function(texture, unit, frame, p)
   end
 
   local key, exists = BuildUnitPortraitKey(unit, frame, p, guid)
-  if key ~= nil and texture._msufPortraitKey == key then
+  if force ~= true and key ~= nil and texture._msufPortraitKey == key then
     return
   end
 
@@ -611,9 +625,16 @@ end
 
 function Portrait.GetEvents(frame, spec)
   local p = spec and spec.portrait
-  if p and p.enabled == true and p.render ~= "CLASS" then
-    if (frame and frame.unit == "player") or (spec and spec.key == "player") then
+  if p and p.enabled == true then
+    local unit = frame and frame.unit or spec and spec.unit
+    if p.render == "CLASS" then
+      return EMPTY_EVENTS
+    end
+    if unit == "player" or (spec and spec.key == "player") then
       return PORTRAIT_2D_PLAYER_EVENTS
+    end
+    if unit == "targettarget" or unit == "focustarget" then
+      return PORTRAIT_2D_DEPENDENT_EVENTS
     end
     return PORTRAIT_2D_EVENTS
   end
@@ -622,14 +643,17 @@ end
 
 function Portrait.GetUnitlessEvents(frame, spec)
   local p = spec and spec.portrait
-  if not (p and p.enabled == true and p.render ~= "CLASS") then
+  if not (p and p.enabled == true) then
     return EMPTY_EVENTS
   end
   local unit = frame and frame.unit or spec and spec.unit
+  if p.render == "CLASS" then
+    return EMPTY_EVENTS
+  end
   if unit == "target" then
-    return TARGET_PORTRAIT_UNITLESS_EVENTS
-  elseif unit == "focus" then
-    return FOCUS_PORTRAIT_UNITLESS_EVENTS
+    return TARGET_PORTRAIT_EXTRA_EVENTS
+  elseif unit == "targettarget" then
+    return TARGET_PORTRAIT_EXTRA_EVENTS
   end
   return PORTRAIT_UNITLESS_EVENTS
 end
@@ -713,7 +737,7 @@ function Portrait.UpdateConnectionState(frame, event, unit)
     return
   end
   unit = unit or frame.unit
-  if UnitPortraitKeyChanged(texture, unit, frame, p) then
+  if frame._msufPortraitForceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then
     ApplyPortraitUpdate(frame)
   else
     frame._msufPortraitNeedsVisibleRefresh = nil
@@ -731,7 +755,9 @@ function Portrait.Update(frame, event, unit)
     return
   end
   unit = unit or frame.unit
-  BumpPortraitGenerationForEvent(event)
+  if PORTRAIT_UNIT_STATE_EVENTS[event] == true then
+    BumpPortraitGenerationForEvent(event, unit)
+  end
   local identityVisual = event == "MSUF_UNIT_IDENTITY_VISUAL"
     or event == "MSUF_UNIT_IDENTITY_SOFT"
     or event == "MSUF_UNIT_IDENTITY_SOFT_VISUAL"
@@ -752,7 +778,7 @@ function Portrait.Update(frame, event, unit)
     ApplyClassPortrait(texture, unit, p, class, frame)
   else
     if ShouldRefresh2DPortraitForEvent(event, identityVisual) then
-      if UnitPortraitKeyChanged(texture, unit, frame, p) then
+      if forceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then
         ApplyPortraitUpdate(frame)
       else
         frame._msufPortraitNeedsVisibleRefresh = nil
