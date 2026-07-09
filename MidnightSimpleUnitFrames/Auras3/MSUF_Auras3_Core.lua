@@ -4,7 +4,7 @@
 --- 6.0 keeps aura configuration, menu, edit-mode handles, previews, and the
 --- 12.1 native UnitFrame backend split so secure aura objects stay isolated
 --- from menu/edit code.
-local _, MSUF = ...
+local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 
 local type = type
@@ -22,6 +22,13 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 
 ExportPublic("MSUF_Auras3", A3)
+
+A3.addonName = addonName
+A3.embedTarget = (type(MSUF.UFCore) == "table" and MSUF.UFCore.embedTarget) or addonName
+A3.embedded = true
+if type(MSUF.UFCore) == "table" then
+    MSUF.UFCore.Auras3 = A3
+end
 
 A3.version = 3
 A3.frontendOnly = false

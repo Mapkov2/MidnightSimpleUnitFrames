@@ -115,7 +115,6 @@ UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Elements.xml
 Integrations\MSUF_Integration_NSRTNicknames.lua
 Integrations\MSUF_Integration_ThirdPartyAnchors.lua
 UnitFrames\Embeds\MSUF_UFCore\MSUF_UFCore_Factory.xml
-Auras3\MSUF_Auras3_Runtime.xml
 Runtime\MSUF_FontRuntime.lua
 Runtime\MSUF_TextureRuntime.lua
 

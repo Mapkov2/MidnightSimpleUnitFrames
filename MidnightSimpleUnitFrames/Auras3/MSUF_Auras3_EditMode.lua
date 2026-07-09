@@ -783,7 +783,7 @@ end
 
 local function EnsureAuraPendingDragFrame()
     if pendingAuraDragFrame then return pendingAuraDragFrame end
-    pendingAuraDragFrame = CreateFrame("Frame", "MSUF_A3_EditPendingDragFrame", UIParent)
+    pendingAuraDragFrame = CreateFrame("Frame", nil, UIParent)
     pendingAuraDragFrame:Hide()
     return pendingAuraDragFrame
 end
@@ -799,7 +799,7 @@ end
 
 local function EnsureAuraDragCaptureFrame()
     if auraDragCaptureFrame then return auraDragCaptureFrame end
-    auraDragCaptureFrame = CreateFrame("Button", "MSUF_A3_EditDragCaptureFrame", UIParent)
+    auraDragCaptureFrame = CreateFrame("Button", nil, UIParent)
     auraDragCaptureFrame:SetAllPoints(UIParent)
     auraDragCaptureFrame:SetFrameStrata("TOOLTIP")
     auraDragCaptureFrame:SetFrameLevel(1500)
@@ -1386,9 +1386,8 @@ local function CreateGroup(unit, kind)
     if byUnit[kind] then return byUnit[kind] end
 
     local spec = GROUPS[kind]
-    local safeUnit = tostring(unit):gsub("%W", "")
-    local name = "MSUF_A3_" .. safeUnit .. "_" .. kind .. "Preview"
-    local group = CreateFrame("Button", name, UIParent, "BackdropTemplate")
+    local snapName = "AuraPreview:" .. tostring(unit) .. ":" .. tostring(kind)
+    local group = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
     group:SetFrameStrata("TOOLTIP")
     group:SetFrameLevel(900)
     group:SetClampedToScreen(false)
@@ -1425,7 +1424,7 @@ local function CreateGroup(unit, kind)
 
     group._msufA3Unit = unit
     group._msufA3MoverKind = kind
-    group._msufA3SnapName = name
+    group._msufA3SnapName = snapName
     group:Hide()
 
     group:SetScript("OnMouseDown", function(self, button)

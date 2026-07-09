@@ -71,6 +71,12 @@ local function Round3(value)
     return math_floor((value * 1000) + 0.5) / 1000
 end
 
+local function ProfilerAddonName()
+    local target = A3 and A3.embedTarget
+    if type(target) == "string" and target ~= "" then return target end
+    return addonName
+end
+
 local function Wipe(tbl)
     if type(tbl) ~= "table" then return end
     for key in pairs(tbl) do
@@ -105,7 +111,7 @@ local function AddOnLastTimeMs()
     end
     local metric = Enum.AddOnProfilerMetric.LastTime
     if metric == nil then return nil end
-    local ok, value = pcall(C_AddOnProfiler.GetAddOnMetric, addonName, metric)
+    local ok, value = pcall(C_AddOnProfiler.GetAddOnMetric, ProfilerAddonName(), metric)
     if not ok or type(value) ~= "number" then return nil end
     return value * 1000
 end
