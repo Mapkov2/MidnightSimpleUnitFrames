@@ -1204,6 +1204,7 @@ builders.SPECIALS = function(env)
             local gain = known(TIP.PRIMAL_SURGE) and 2 or 1
             CP.spStacks = math_min(TIP.MAX_STACKS, CP.spStacks + gain)
             CP.spExpires = GetTime() + TIP.DURATION
+            CP.spLocalUntil = GetTime() + 0.35
             CP.spCachedQ = -1
             RunAuraSegmentedUpdate()
             return
@@ -1211,6 +1212,7 @@ builders.SPECIALS = function(env)
         if spellID == TIP.TAKEDOWN and known(TIP.TWIN_FANG) then
             CP.spStacks = math_min(TIP.MAX_STACKS, CP.spStacks + 2)
             CP.spExpires = GetTime() + TIP.DURATION
+            CP.spLocalUntil = GetTime() + 0.35
             CP.spCachedQ = -1
             RunAuraSegmentedUpdate()
             return
@@ -1218,6 +1220,7 @@ builders.SPECIALS = function(env)
         if TIP.SPENDERS[spellID] and CP.spStacks > 0 then
             CP.spStacks = CP.spStacks - 1
             if CP.spStacks == 0 then CP.spExpires = nil end
+            CP.spLocalUntil = GetTime() + 0.35
             CP.spCachedQ = -1
             RunAuraSegmentedUpdate()
         end
@@ -1226,6 +1229,7 @@ builders.SPECIALS = function(env)
     local function OnSpellTrackerReset()
         CP.spStacks = 0
         CP.spExpires = nil
+        CP.spLocalUntil = nil
         CP.spCachedQ = -1
     end
 

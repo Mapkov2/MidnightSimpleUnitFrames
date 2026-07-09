@@ -153,16 +153,149 @@ local function _SetEclipseColor(r, g, b, fallback)
     end
 end
 
+local _balAuras = {
+    watched = {},
+    bySpell = {},
+    spellByInstance = {},
+}
+
+local function _AuraID(value)
+    if value == nil or not NotSecret(value) then return nil end
+    return tonumber(value)
+end
+
+local function _AuraSpellID(aura)
+    return aura and _AuraID(aura.spellId or aura.spellID or aura.id) or nil
+end
+
+local function _AuraInstanceID(aura)
+    return aura and _AuraID(aura.auraInstanceID) or nil
+end
+
+local function _ClearTrackedAura(spellID, auraInstanceID)
+    spellID = _AuraID(spellID)
+    auraInstanceID = _AuraID(auraInstanceID)
+    if auraInstanceID then _balAuras.spellByInstance[auraInstanceID] = nil end
+    if spellID then
+        local current = _balAuras.bySpell[spellID]
+        if not auraInstanceID or not current or _AuraInstanceID(current) == auraInstanceID then
+            _balAuras.bySpell[spellID] = nil
+        end
+    end
+end
+
+local function _StoreTrackedAura(aura)
+    local spellID = _AuraSpellID(aura)
+    if not (spellID and _balAuras.watched[spellID]) then return false end
+    local auraInstanceID = _AuraInstanceID(aura)
+    if auraInstanceID then _balAuras.spellByInstance[auraInstanceID] = spellID end
+    _balAuras.bySpell[spellID] = aura
+    return true
+end
+
+local function _FetchTrackedAura(spellID)
+    spellID = _AuraID(spellID)
+    if not spellID then return nil end
+
+    local shared = _G.MSUF_CP_GetTrackedPlayerAura
+    if type(shared) == "function" then
+        local aura = shared(spellID)
+        if aura then
+            _StoreTrackedAura(aura)
+            return aura
+        end
+    end
+
+    if not C_UnitAuras then return nil end
+    local aura
+    if type(C_UnitAuras.GetPlayerAuraBySpellID) == "function" then
+        aura = C_UnitAuras.GetPlayerAuraBySpellID(spellID)
+    end
+    if not aura and type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
+        aura = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
+    end
+    if aura then _StoreTrackedAura(aura) end
+    return aura
+end
+
+local function _GetTrackedAura(spellID)
+    spellID = _AuraID(spellID)
+    if not spellID then return nil end
+    local aura = _balAuras.bySpell[spellID]
+    if aura and aura.expirationTime ~= nil and NotSecret(aura.expirationTime) then
+        local exp = tonumber(aura.expirationTime)
+        if exp and exp > 0 and exp <= GetTime() then
+            _ClearTrackedAura(spellID, _AuraInstanceID(aura))
+            aura = nil
+        end
+    end
+    return aura or _FetchTrackedAura(spellID)
+end
+
+local function _ScanUnitAuras()
+    if not (C_UnitAuras and type(C_UnitAuras.GetUnitAuras) == "function") then return end
+    local auras = C_UnitAuras.GetUnitAuras("player", "HELPFUL")
+    if type(auras) ~= "table" then return end
+    for i = 1, #auras do _StoreTrackedAura(auras[i]) end
+end
+
+local function _RebuildTrackedAuras()
+    for k in pairs(_balAuras.bySpell) do _balAuras.bySpell[k] = nil end
+    for k in pairs(_balAuras.spellByInstance) do _balAuras.spellByInstance[k] = nil end
+    for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
+        _balAuras.watched[auraID] = true
+    end
+    _ScanUnitAuras()
+    for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
+        if not _balAuras.bySpell[auraID] then _FetchTrackedAura(auraID) end
+    end
+end
+
+local function _ProcessAuraUpdate(unitAuraUpdateInfo)
+    if unitAuraUpdateInfo == nil or unitAuraUpdateInfo.isFullUpdate then
+        _RebuildTrackedAuras()
+        return
+    end
+
+    local addedAuras = unitAuraUpdateInfo.addedAuras
+    if addedAuras then
+        for i = 1, #addedAuras do _StoreTrackedAura(addedAuras[i]) end
+    end
+
+    local updatedAuraInstanceIDs = unitAuraUpdateInfo.updatedAuraInstanceIDs
+    if updatedAuraInstanceIDs and C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function" then
+        for i = 1, #updatedAuraInstanceIDs do
+            local auraInstanceID = _AuraID(updatedAuraInstanceIDs[i])
+            local spellID = auraInstanceID and _balAuras.spellByInstance[auraInstanceID]
+            if spellID then
+                local aura = C_UnitAuras.GetAuraDataByAuraInstanceID("player", auraInstanceID)
+                if aura then _StoreTrackedAura(aura) else _ClearTrackedAura(spellID, auraInstanceID) end
+            end
+        end
+    end
+
+    local removedAuraInstanceIDs = unitAuraUpdateInfo.removedAuraInstanceIDs
+    if removedAuraInstanceIDs then
+        for i = 1, #removedAuraInstanceIDs do
+            local auraInstanceID = _AuraID(removedAuraInstanceIDs[i])
+            local spellID = auraInstanceID and _balAuras.spellByInstance[auraInstanceID]
+            if spellID then _ClearTrackedAura(spellID, auraInstanceID) end
+        end
+    end
+end
+
 local function _refreshEclipses()
     _solarExp, _lunarExp, _caExp, _incExp = 0, 0, 0, 0
     for auraID, kind in pairs(CPConst.ECLIPSE_AURAS or {}) do
-        local aura = C_UnitAuras.GetPlayerAuraBySpellID(auraID)
-        if aura and aura.expirationTime then
-            local exp = aura.expirationTime
-            if kind == "SOLAR" then _solarExp = exp
-            elseif kind == "LUNAR" then _lunarExp = exp
-            elseif kind == "CA" then _caExp = exp
-            elseif kind == "INC" then _incExp = exp end
+        local aura = _GetTrackedAura(auraID)
+        if aura and aura.expirationTime and NotSecret(aura.expirationTime) then
+            local exp = tonumber(aura.expirationTime)
+            if exp then
+                if kind == "SOLAR" then _solarExp = exp
+                elseif kind == "LUNAR" then _lunarExp = exp
+                elseif kind == "CA" then _caExp = exp
+                elseif kind == "INC" then _incExp = exp end
+            end
         end
     end
     local now = GetTime()
@@ -352,6 +485,7 @@ local function _refreshActiveState()
     end
     _checkActive()
     if _active then
+        _RebuildTrackedAuras()
         _refreshEclipses()
         _applyEclipseColor()
     else
@@ -388,7 +522,7 @@ local function _deferAuraRefresh()
     end
 end
 
-    local function BalanceOnEvent(_, event, arg1, _, arg3)
+    local function BalanceOnEvent(_, event, arg1, arg2, arg3)
         if event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED" or event == "UPDATE_SHAPESHIFT_FORM" or event == "PLAYER_ENTERING_WORLD" then
             _refreshActiveState()
             return
@@ -406,6 +540,7 @@ end
         return
     end
     if event == "UNIT_AURA" and arg1 == "player" then
+        _ProcessAuraUpdate(arg2)
         _deferAuraRefresh()
         return
     end
