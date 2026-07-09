@@ -414,6 +414,7 @@ local PARTY_DEFAULTS = {
     dispelOverlayOnHealth = true,     --- true = clip to current health fill
     dispelOverlayAlpha    = 0.35,
     dispelOverlayTrigger  = "BORDER", --- BORDER / BY_ME(dispellable by player) / DISPEL_TYPE / ANY_DEBUFF
+    dispelOverlayStrata   = "AUTO",
 
     --- Debuff stripe (thin edge indicator for any debuff)
     debuffStripeEnabled   = false,
@@ -472,6 +473,7 @@ local PARTY_DEFAULTS = {
     ciEnabled         = true,
     ciSize            = 8,
     ciAlpha           = 1.0,
+    ciStrata          = "AUTO",
     ciSlotTL          = "dispel",
     ciSlotTR          = "aggro",
     ciSlotBL          = "none",
