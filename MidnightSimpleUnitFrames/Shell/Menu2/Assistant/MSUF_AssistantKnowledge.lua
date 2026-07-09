@@ -1088,10 +1088,10 @@ local PAGE_HELP = {
     gf_bars = {
         title = "Group Health & Text help",
         lines = {
-            "You can change Party, Raid, and Mythic Raid health, power, role power, text slots, text font sizes, bar colors, range fade, dispel overlay, debuff stripe, and related group bar options.",
-            "Examples: set raid health text size to 14; hide healer power bars in raid frames; set party range fade to 45; change raid debuff stripe color red.",
+            "You can change Party, Raid, and Mythic Raid health, power, role power, text slots, text font sizes, range fade, dispel overlay, debuff stripe layout, and related group bar options. Group-frame colors live in Colors > Group Frame Colors.",
+            "Examples: set raid health text size to 14; hide healer power bars in raid frames; set party range fade to 45; open group colors.",
         },
-        actions = { "Open Group Health & Text" },
+        actions = { "Open Group Health & Text", "Open Colors" },
     },
     gf_indicators = {
         title = "Group Status & Indicators help",
@@ -1933,7 +1933,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Group Health & Text help\nIn Group Frames > Health & Text, I can help with group health, power, role power, text slots, text font sizes, bar colors, range fade, dispel overlay, and debuff stripe options.\nExamples: change party health text; hide healer power bars in raid frames; set raid range fade to 40; open group health and text.\nYou can ask: Open Group Health & Text",
+            text = "Group Health & Text help\nIn Group Frames > Health & Text, I can help with group health, power, role power, text slots, text font sizes, range fade, dispel overlay, and debuff stripe layout options. Group-frame colors live in Colors > Group Frame Colors.\nExamples: change party health text; hide healer power bars in raid frames; set raid range fade to 40; open group health and text.\nYou can ask: Open Group Health & Text | Open Colors",
             status = "applied",
             summary = "Assistant group health text help",
         }

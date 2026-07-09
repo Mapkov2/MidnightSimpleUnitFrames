@@ -771,7 +771,7 @@ local PAGE_RESET_INFO = {
     auras3_filters = ResetInfo("Aura Filters", "auras", "scope-aware Buff and Debuff filters and blacklists"),
     auras3_styling = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
     opt_castbar = ResetInfo("Castbar", "castbar", "global castbar behavior, textures, boss castbar and interrupt indicator settings"),
-    opt_colors = ResetInfo("Colors", "colors", "frame colors, class/NPC colors, power colors, castbar colors, aura colors and gameplay color settings"),
+    opt_colors = ResetInfo("Colors", "colors", "frame colors, group-frame colors, class/NPC colors, power colors, castbar colors, aura colors and gameplay color settings"),
     opt_misc = ResetInfo("Miscellaneous", "misc", "language/menu behavior, update pacing, tooltips, Blizzard-frame handling, minimap icon, sounds and range-fade settings"),
     classpower = ResetInfo("Class Resources", "classpower", "class-resource layout, behavior, style, auto-hide, detached power bar and alternative mana settings"),
     gameplay = ResetInfo("Gameplay", "gameplay", "gameplay enhancement settings such as combat text, crosshair and click-cast behavior"),
@@ -833,6 +833,14 @@ local MODULES_GENERAL_KEYS = KS("styleEnabled")
 local COLOR_GENERAL_KEYS = KSW "highlightEnabled playerCastbarOverrideEnabled playerCastbarOverrideMode npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT"
 local COLOR_GAMEPLAY_KEYS = KS("combatStateColorSync")
 local COLOR_BARS_KEYS = KS("classPowerComboPointColorMode")
+local GROUP_COLOR_KEYS = KSW [[
+    gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
+    gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
+    alphaExcludeTextPortrait deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
+    debuffStripeAlpha debuffStripeColorR debuffStripeColorG debuffStripeColorB targetR targetG targetB
+    hlFocusColorR hlFocusColorG hlFocusColorB groupBorderR groupBorderG groupBorderB groupBorderA
+    ciAggroColorR ciAggroColorG ciAggroColorB
+]]
 local AURAS_GENERAL_PREFIXES = WL "auras"
 local AURAS_SHARED_COLOR_KEYS = KS("pandemicR", "pandemicG", "pandemicB")
 local function StartsWith(value, prefix)
@@ -1005,6 +1013,9 @@ local function ResetColorsPage(db, defaults)
     ReplaceRootTable(db, defaults, "npcColors")
     ResetRootFiltered(db, defaults, "gameplay", function(key) return COLOR_GAMEPLAY_KEYS[key] == true or IsColorKey(key) end)
     ResetRootFiltered(db, defaults, "bars", function(key) return COLOR_BARS_KEYS[key] == true end)
+    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
+        ResetUnitFiltered(db, defaults, key, function(scopeKey) return GROUP_COLOR_KEYS[scopeKey] == true end)
+    end
     ResetAurasSharedColors(db, defaults)
 end
 local function ResetMiscPage(db, defaults)
@@ -1115,6 +1126,10 @@ local function ApplyDomainPageResetRuntime(info, reason)
             did = true
         else
             did = CallGlobal("MSUF_ClassPower_InvalidateColors") or did
+        end
+        if ApplyService.RequestGroup then
+            ApplyService.RequestGroup("group", "visual", reason or "MSUF2_RESET_COLORS")
+            did = true
         end
         return did
     end

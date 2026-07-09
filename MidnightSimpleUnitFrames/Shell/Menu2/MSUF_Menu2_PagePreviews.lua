@@ -93,11 +93,40 @@ local function ResetBossPagePreviewCache()
 end
 local GF_PAGE_KEYS = M.KeySetFromWords "gf_layout gf_bars gf_auras gf_indicators"
 local GF_BAR_MENU_PREVIEW_KEYS = M.KeySetFromWords "opt_bars"
+local GF_SECTION_MENU_PREVIEW_KEYS = {
+    opt_colors = {
+        colors_group_frames = true,
+    },
+}
+local gfMenuPreviewSectionOpen = M._gfMenuPreviewSectionOpen
+if type(gfMenuPreviewSectionOpen) ~= "table" then
+    gfMenuPreviewSectionOpen = {}
+    M._gfMenuPreviewSectionOpen = gfMenuPreviewSectionOpen
+end
 local function IsGroupPageKey(key)
     return GF_PAGE_KEYS[key or ""] == true
 end
 local function IsGFBarMenuPreviewKey(key)
     return GF_BAR_MENU_PREVIEW_KEYS[key or ""] == true
+end
+local function GFPreviewSectionStateKey(pageKey, sectionId)
+    return tostring(pageKey or "") .. "\031" .. tostring(sectionId or "")
+end
+local function IsGFMenuPreviewSection(pageKey, sectionId)
+    local sections = GF_SECTION_MENU_PREVIEW_KEYS[tostring(pageKey or "")]
+    return sections and sections[tostring(sectionId or "")] == true
+end
+local function IsGFSectionMenuPreviewKey(key)
+    key = tostring(key or "")
+    local sections = GF_SECTION_MENU_PREVIEW_KEYS[key]
+    if not sections then return false end
+    for sectionId in pairs(sections) do
+        if gfMenuPreviewSectionOpen[GFPreviewSectionStateKey(key, sectionId)] == true then return true end
+    end
+    return false
+end
+local function IsGFDualMenuPreviewKey(key)
+    return IsGFBarMenuPreviewKey(key) or IsGFSectionMenuPreviewKey(key)
 end
 
 -- Status test mode is a temporary visual aid from the menu. Clear it when Menu2 closes so
@@ -235,10 +264,10 @@ local function SyncGroupPagePreviewForKey(key, force)
         return
     end
     local frameVisible = M.frame and M.frame.IsShown and M.frame:IsShown()
-    local barMenuPreviews = IsGFBarMenuPreviewKey(key)
-    local active = frameVisible and (IsGroupPageKey(key) or barMenuPreviews)
+    local dualMenuPreviews = IsGFDualMenuPreviewKey(key)
+    local active = frameVisible and (IsGroupPageKey(key) or dualMenuPreviews)
     local gf = MSUF and MSUF.GF
-    local kind = barMenuPreviews and "bars" or CurrentGFMenuScope()
+    local kind = dualMenuPreviews and "bars" or CurrentGFMenuScope()
     local editMode = M.IsMSUFEditModeActive and M.IsMSUFEditModeActive() and true or false
     local hasRuntime = gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function"
     if not force
@@ -258,7 +287,7 @@ local function SyncGroupPagePreviewForKey(key, force)
         SetGFPagePreviewFlag(false)
         return
     end
-    if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind((active and not barMenuPreviews) and kind or nil) end
+    if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind((active and not dualMenuPreviews) and kind or nil) end
     if not hasRuntime then
         SetGFPagePreviewFlag(active, kind)
         return
@@ -276,7 +305,7 @@ local function SyncGroupPagePreviewForKey(key, force)
         gf.SetPreviewAnchor("raid", nil)
         gf.SetPreviewAnchor("mythicraid", nil)
     end
-    if barMenuPreviews then
+    if dualMenuPreviews then
         ShowGFBarMenuPreviews(gf)
         return
     end
@@ -287,7 +316,7 @@ local function SyncGroupPagePreviewForKey(key, force)
 end
 local function RequestGroupPagePreviewForKey(key, force)
     groupPreviewRequestSerial = groupPreviewRequestSerial + 1
-    if force or not (IsGroupPageKey(key) or IsGFBarMenuPreviewKey(key)) then
+    if force or not (IsGroupPageKey(key) or IsGFDualMenuPreviewKey(key)) then
         SyncGroupPagePreviewForKey(key, force)
         return
     end
@@ -302,6 +331,13 @@ local function RequestGroupPagePreviewForKey(key, force)
         if M.activeKey ~= key then return end
         SyncGroupPagePreviewForKey(key, force)
     end)
+end
+local previousCollapsibleSectionStateChanged = M.OnCollapsibleSectionStateChanged
+function M.OnCollapsibleSectionStateChanged(pageKey, sectionId, open, entry)
+    if type(previousCollapsibleSectionStateChanged) == "function" then previousCollapsibleSectionStateChanged(pageKey, sectionId, open, entry) end
+    if not IsGFMenuPreviewSection(pageKey, sectionId) then return end
+    gfMenuPreviewSectionOpen[GFPreviewSectionStateKey(pageKey, sectionId)] = open and true or nil
+    if M.activeKey == pageKey then RequestGroupPagePreviewForKey(pageKey, true) end
 end
 M.SyncBossPagePreviewForKey = SyncBossPagePreviewForKey
 M.RequestBossPagePreviewForKey = RequestBossPagePreviewForKey

@@ -293,6 +293,273 @@ local function Card(parent, title, subtitle, x, y, width, height)
     if card and T.ApplyBackdrop then T.ApplyBackdrop(card, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
     return card
 end
+local GROUP_COLOR_DB_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
+local GROUP_COLOR_KINDS = { "party", "raid", "mythicraid" }
+local GROUP_BAR_MODES = (M.GroupSpecs and M.GroupSpecs.GF_BAR_MODES)
+    or ValueTextPairs "GLOBAL=Follow Global Style|CLASS=Class Color|dark=Dark Mode|unified=Unified Color|GRADIENT=Health Gradient|CUSTOM=Custom Color"
+local GROUP_HEALTH_MODES = (M.GroupSpecs and M.GroupSpecs.HEALTH_MODES)
+    or ValueTextPairs "CLASS=Class|GRADIENT=Gradient|CUSTOM=Custom"
+local function GroupTextureValues()
+    local specs = M.GroupSpecs
+    if specs and type(specs.SimpleTextures) == "function" then return specs.SimpleTextures() end
+    if type(M.StatusBarTextureItems) == "function" then return M.StatusBarTextureItems("Follow Global Style") end
+    return {}
+end
+local function GroupDBConf(dbKey)
+    local db = DB()
+    db[dbKey] = db[dbKey] or {}
+    return db[dbKey]
+end
+local function GroupRead(key, defaultValue)
+    local db = DB()
+    for i = 1, #GROUP_COLOR_DB_KEYS do
+        local conf = db[GROUP_COLOR_DB_KEYS[i]]
+        if conf and conf[key] ~= nil then return conf[key] end
+    end
+    return defaultValue
+end
+local function GroupNum(key, defaultValue)
+    return tonumber(GroupRead(key, defaultValue)) or defaultValue or 0
+end
+local function GroupBool(key, defaultValue)
+    local value = GroupRead(key, defaultValue and true or false)
+    return value and true or false
+end
+local function GroupScopesDiffer(keys)
+    if type(keys) ~= "table" then return false end
+    local db = DB()
+    for i = 1, #keys do
+        local key = keys[i]
+        local first, haveFirst
+        for s = 1, #GROUP_COLOR_DB_KEYS do
+            local conf = db[GROUP_COLOR_DB_KEYS[s]]
+            local value = conf and conf[key]
+            if not haveFirst then
+                first, haveFirst = value, true
+            elseif value ~= first then
+                return true
+            end
+        end
+    end
+    return false
+end
+local function RequestGroupColorApply(reason, mode)
+    local apply = CurrentApplyService()
+    if apply and type(apply.RequestGroup) == "function" then
+        return apply.RequestGroup("group", mode or "visual", reason or "MSUF2_GROUP_COLORS")
+    end
+    local GP = M.GroupPage
+    if GP and type(GP.QueueGF) == "function" then
+        for i = 1, #GROUP_COLOR_KINDS do GP.QueueGF(GROUP_COLOR_KINDS[i], mode or "visual") end
+        return true
+    end
+    return false
+end
+local function SetGroupValue(key, value, reason, mode, opts)
+    local changed = false
+    opts = opts or {}
+    for i = 1, #GROUP_COLOR_DB_KEYS do
+        local conf = GroupDBConf(GROUP_COLOR_DB_KEYS[i])
+        if conf[key] ~= value then
+            conf[key] = value
+            changed = true
+        end
+        if opts.texture == true and type(value) == "string" and value ~= "" and conf.hlOverride ~= true then
+            conf.hlOverride = true
+            changed = true
+        end
+    end
+    if changed then RequestGroupColorApply(reason, mode or "visual") end
+    return changed
+end
+local function SetGroupRGB(prefix, r, g, b, reason, mode)
+    local changed = false
+    for i = 1, #GROUP_COLOR_DB_KEYS do
+        local conf = GroupDBConf(GROUP_COLOR_DB_KEYS[i])
+        if conf[prefix .. "R"] ~= r or conf[prefix .. "G"] ~= g or conf[prefix .. "B"] ~= b then
+            conf[prefix .. "R"], conf[prefix .. "G"], conf[prefix .. "B"] = r, g, b
+            changed = true
+        end
+    end
+    if changed then RequestGroupColorApply(reason, mode or "visual") end
+end
+local function GroupRGB(prefix, dr, dg, db)
+    return GroupNum(prefix .. "R", dr), GroupNum(prefix .. "G", dg), GroupNum(prefix .. "B", db)
+end
+local function GroupColorAt(ctx, section, label, x, y, prefix, dr, dg, db, labelWidth, swatchWidth)
+    return ColorValueAt(ctx, section, label, x, y,
+        function() return GroupRGB(prefix, dr, dg, db) end,
+        function(r, g, b) SetGroupRGB(prefix, r, g, b, "MSUF2_GROUP_COLORS", "visual") end,
+        labelWidth, swatchWidth)
+end
+local function Clamp01(value, fallback)
+    value = tonumber(value)
+    if value == nil then value = fallback or 0 end
+    if value < 0 then return 0 end
+    if value > 1 then return 1 end
+    return value
+end
+local function PercentLabel(label, value)
+    return tostring(label or "") .. ": " .. tostring(floor(Clamp01(value, 0) * 100 + 0.5)) .. "%"
+end
+local function GroupAlphaSlider(ctx, parent, label, x, y, width, key, defaultValue)
+    local slider = W.Slider(parent, "", 0, 1, 0.05, width or 260)
+    M.BindNumberWidget(ctx, slider,
+        function() return GroupNum(key, defaultValue) end,
+        function(value) SetGroupValue(key, Clamp01(value, defaultValue), "MSUF2_GROUP_COLORS", "visual") end,
+        defaultValue)
+    MoveWidget(slider, parent, x, y)
+    if M.BindSliderLiveLabel then
+        M.BindSliderLiveLabel(ctx, slider, function() return GroupNum(key, defaultValue) end,
+            function(value) return PercentLabel(label, value) end, true)
+    end
+    return slider
+end
+local function CurrentGlobalBarColor()
+    local getCache = _G.MSUF_UFCore_GetSettingsCache
+    local cache = (type(getCache) == "function") and getCache() or nil
+    local modeKey = cache and cache.barMode
+    if modeKey == "unified" then
+        return cache.unifiedBarR or 0.10, cache.unifiedBarG or 0.60, cache.unifiedBarB or 0.90
+    elseif modeKey == "dark" then
+        return cache.darkBarR or 0, cache.darkBarG or 0, cache.darkBarB or 0
+    end
+    local g = G()
+    return g.unifiedBarR or 0.10, g.unifiedBarG or 0.60, g.unifiedBarB or 0.90
+end
+local function GroupBarMode()
+    local mode = GroupRead("gfBarMode", "GLOBAL")
+    if mode == nil or mode == "" then return "GLOBAL" end
+    return mode
+end
+local function GroupHealthBarRGB()
+    local mode = GroupBarMode()
+    if mode == "GLOBAL" then return CurrentGlobalBarColor() end
+    if mode == "dark" then return GroupRGB("gfDark", 0, 0, 0) end
+    if mode == "unified" then return GroupRGB("gfUnified", 0.10, 0.60, 0.90) end
+    if mode == "CUSTOM" then return GroupRGB("healthCustom", 0.20, 0.80, 0.20) end
+    return 0.20, 0.80, 0.20
+end
+local function SetGroupHealthBarRGB(r, g, b)
+    local mode = GroupBarMode()
+    if mode == "dark" then
+        SetGroupRGB("gfDark", r, g, b, "MSUF2_GROUP_HEALTH_COLOR", "visual")
+    elseif mode == "unified" then
+        SetGroupRGB("gfUnified", r, g, b, "MSUF2_GROUP_HEALTH_COLOR", "visual")
+    elseif mode == "CUSTOM" then
+        SetGroupRGB("healthCustom", r, g, b, "MSUF2_GROUP_HEALTH_COLOR", "visual")
+    end
+end
+local function BuildGroupFrameColors(ctx, b)
+    local pageW = ctx.width or 720
+    local group = b:CollapsibleSection("colors_group_frames", "Group Frame Colors", pageW >= 840 and 748 or 1368, false)
+    local w = group._msuf2Width or pageW
+    local wide = w >= 840
+    local gap = 16
+    local leftX = 24
+    local innerW = max(320, w - 48)
+    local leftW = wide and floor((innerW - gap) * 0.48) or innerW
+    local rightX = wide and (leftX + leftW + gap) or leftX
+    local rightW = wide and (innerW - leftW - gap) or innerW
+    local secondY = wide and -394 or -690
+    local health = Card(group, "Health Bars", "Shared by Party, Raid, and Mythic Raid.", leftX, -42, leftW, 282)
+    local background = Card(group, "Bar Background", "Shared bar fill texture, background texture, tint, and opacity.", rightX, wide and -42 or -340, rightW, 326)
+    local state = Card(group, "State Tints", "Dead/offline tint and debuff stripe colors.", leftX, secondY, leftW, 300)
+    local highlights = Card(group, "Group Highlights", "Target, focus, group-border, and corner-indicator colors.", rightX, wide and secondY or -1008, rightW, 288)
+
+    local mode = ValueDropdownAt(ctx, health, "Bar Color Mode", 16, -54, GROUP_BAR_MODES, min(280, leftW - 32),
+        GroupBarMode,
+        function(value)
+            value = value or "GLOBAL"
+            SetGroupValue("gfBarMode", value == "GLOBAL" and nil or value, "MSUF2_GROUP_HEALTH_MODE", "visual")
+            if value == "CLASS" or value == "GRADIENT" then
+                SetGroupValue("healthColorMode", value, "MSUF2_GROUP_HEALTH_MODE", "visual")
+            end
+            if M.RequestRefresh then M.RequestRefresh(ctx, "group-colors-mode") end
+        end)
+    local healthColor = ColorValueAt(ctx, health, "Health bar color", 16, -108, GroupHealthBarRGB, SetGroupHealthBarRGB)
+    local hpAlpha = GroupAlphaSlider(ctx, health, "Health bar opacity", 16, -156, max(220, leftW - 58), "hpBarAlpha", 1)
+    local keepText = ValueToggleAt(ctx, health, "Keep text + portrait visible", 16, -212,
+        function() return GroupBool("alphaExcludeTextPortrait", false) end,
+        function(value) SetGroupValue("alphaExcludeTextPortrait", value and true or false, "MSUF2_GROUP_ALPHA_KEEP_TEXT", "visual") end)
+    local healthHint = W.Text(health, "", 16, -244, leftW - 32, T.colors.muted)
+    if healthHint.SetWordWrap then healthHint:SetWordWrap(true) end
+
+    GroupColorAt(ctx, background, "Background Color", 16, -54, "bg", 0.10, 0.10, 0.10)
+    ValueDropdownAt(ctx, background, "Foreground Texture", 16, -92, GroupTextureValues(), min(290, rightW - 32),
+        function() return GroupRead("barTexture", "") or "" end,
+        function(value) SetGroupValue("barTexture", value or "", "MSUF2_GROUP_BAR_TEXTURE", "visual", { texture = true }) end)
+    ValueDropdownAt(ctx, background, "Background Texture", 16, -146, GroupTextureValues(), min(290, rightW - 32),
+        function() return GroupRead("barBgTexture", "") or "" end,
+        function(value) SetGroupValue("barBgTexture", value or "", "MSUF2_GROUP_BAR_BG_TEXTURE", "visual", { texture = true }) end)
+    GroupAlphaSlider(ctx, background, "Background opacity", 16, -202, max(220, rightW - 58), "hpBgAlpha", 0.85)
+    ValueDropdownAt(ctx, background, "Health color fallback", 16, -258, GROUP_HEALTH_MODES, min(290, rightW - 32),
+        function() return GroupRead("healthColorMode", "CLASS") or "CLASS" end,
+        function(value) SetGroupValue("healthColorMode", value or "CLASS", "MSUF2_GROUP_HEALTH_FALLBACK", "visual") end)
+
+    local deadToggle = ValueSwitchAt(ctx, state, "Dead / Offline Background", 16, -54, min(260, leftW - 32),
+        function() return GroupBool("deadBgEnabled", false) end,
+        function(value) SetGroupValue("deadBgEnabled", value and true or false, "MSUF2_GROUP_DEAD_BG", "visual") end)
+    local deadColor = GroupColorAt(ctx, state, "Background color", 16, -96, "deadBg", 0.60, 0.05, 0.05)
+    local deadAlpha = GroupAlphaSlider(ctx, state, "Dead/offline opacity", 16, -138, max(220, leftW - 58), "deadBgA", 0.90)
+    local offline = ValueToggleAt(ctx, state, "Also tint offline members", 16, -184,
+        function() return GroupBool("deadBgOffline", true) end,
+        function(value) SetGroupValue("deadBgOffline", value and true or false, "MSUF2_GROUP_DEAD_BG_OFFLINE", "visual") end)
+    local stripeColor = GroupColorAt(ctx, state, "Debuff stripe color", 16, -224, "debuffStripeColor", 0.80, 0.20, 0.20)
+    local stripeAlpha = GroupAlphaSlider(ctx, state, "Debuff stripe opacity", 16, -264, max(220, leftW - 58), "debuffStripeAlpha", 0.60)
+
+    GroupColorAt(ctx, highlights, "Target Highlight Color", 16, -54, "target", 1, 1, 1)
+    GroupColorAt(ctx, highlights, "Focus Highlight Color", 16, -92, "hlFocusColor", 0.50, 0.50, 1.00)
+    GroupColorAt(ctx, highlights, "Group Border Color", 16, -130, "groupBorder", 0.38, 0.68, 1.00)
+    GroupAlphaSlider(ctx, highlights, "Group border opacity", 16, -172, max(220, rightW - 58), "groupBorderA", 0.95)
+    GroupColorAt(ctx, highlights, "Corner aggro color", 16, -224, "ciAggroColor", 1.00, 0.55, 0.00)
+
+    local syncNote = W.Text(group, "Applies to Party, Raid and Mythic Raid together.", 24, wide and -704 or -1322, w - 48, T.colors.muted)
+    if syncNote.SetWordWrap then syncNote:SetWordWrap(true) end
+    M.BindGateGroup(ctx, nil, {
+        { controls = healthColor, on = function()
+            local current = GroupBarMode()
+            return current == "dark" or current == "unified" or current == "CUSTOM"
+        end },
+        { controls = { deadColor, deadAlpha, offline }, on = function() return GroupBool("deadBgEnabled", false) end },
+    }, {
+        also = function()
+            local current = GroupBarMode()
+            if current == "GLOBAL" then
+                healthHint:SetText("Follows Unitframe Global Coloring. The swatch previews the current global bar color.")
+                healthHint:Show()
+            elseif current == "CLASS" or current == "GRADIENT" then
+                healthHint:SetText("Class Color and Health Gradient are runtime colors, not a single editable swatch.")
+                healthHint:Show()
+            else
+                healthHint:Hide()
+            end
+            if syncNote then
+                local mixed = GroupScopesDiffer({
+                    "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB",
+                    "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB",
+                    "barTexture", "barBgTexture", "bgR", "bgG", "bgB", "hpBarAlpha", "hpBgAlpha",
+                    "alphaExcludeTextPortrait", "deadBgEnabled", "deadBgOffline", "deadBgR", "deadBgG", "deadBgB", "deadBgA",
+                    "debuffStripeAlpha", "debuffStripeColorR", "debuffStripeColorG", "debuffStripeColorB", "targetR", "targetG", "targetB",
+                    "hlFocusColorR", "hlFocusColorG", "hlFocusColorB", "groupBorderR", "groupBorderG", "groupBorderB",
+                    "groupBorderA", "ciAggroColorR", "ciAggroColorG", "ciAggroColorB",
+                })
+                syncNote:SetText(mixed
+                    and "Applies to Party, Raid and Mythic Raid together. Different existing scope values will sync on the next change."
+                    or "Applies to Party, Raid and Mythic Raid together.")
+            end
+        end,
+    })
+    return {
+        mode = mode,
+        healthColor = healthColor,
+        hpAlpha = hpAlpha,
+        keepText = keepText,
+        deadToggle = deadToggle,
+        stripeColor = stripeColor,
+        stripeAlpha = stripeAlpha,
+    }
+end
 local function NPCColorAt(ctx, section, row, x, y, apply)
     return ColorValueAt(ctx, section, row.label, x, y,
         function() return ApiRGB("GetNPCColor", row.dr, row.dg, row.db, row.key) end,
@@ -619,7 +886,7 @@ end
 local function BuildColors(ctx)
     local CH = COLOR_HELPERS
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Colors", "Frame, bar, aura, castbar and resource colors.", 72)
+    b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
     local font = b:CollapsibleSection("colors_font", "Global Font Color", 100, false)
     CH.ApiColorAt(ctx, font, "Global font color", 12, -10, "GetGlobalFontColor", "SetGlobalFontColor", 1, 1, 1)
     CH.ButtonAt(font, "Use font palette", 12, -50, 150, function()
@@ -842,6 +1109,7 @@ local function BuildColors(ctx)
     M.BindGateGroup(ctx, nil, {
         { controls = powerBg, on = function() return not (powerBgMatch:GetChecked() and true or false) end },
     })
+    BuildGroupFrameColors(ctx, b)
     local castbar = b:CollapsibleSection("colors_castbar", "Castbar Colors", 544, false)
     local castW = castbar._msuf2Width or ctx.width or 720
     CH.ApiColorSpecs(ctx, castbar, {
