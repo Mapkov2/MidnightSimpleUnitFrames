@@ -760,10 +760,10 @@ end
 local function AuraFilterString(groupKey, group)
   local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
   local token = group and group.filterToken
-  if groupKey == "buff" then
+  if groupKey == "buff" or groupKey == "trackedBuff" then
     return filter and filter.ResolveBuffFilter and filter.ResolveBuffFilter(token) or "HELPFUL"
   elseif groupKey == "externals" then
-    return filter and filter.EXTERNALS_TOKEN or "HELPFUL|EXTERNAL_DEFENSIVE"
+    return filter and filter.EXTERNALS_TOKEN or "HELPFUL|EXTERNAL_DEFENSIVE|!PLAYER"
   end
   return filter and filter.ResolveDebuffFilter and filter.ResolveDebuffFilter(token) or "HARMFUL"
 end
@@ -801,6 +801,7 @@ end
 
 local AURA_LANE_DEFAULTS = {
   buff = { "maxBuffs", 4, "BOTTOMRIGHT", 5, 8, 10 },
+  trackedBuff = { "maxTrackedBuffs", 4, "TOPLEFT", 9, 8, 10, true, false },
   debuff = { "maxDebuffs", 3, "TOPLEFT", 6, 8, 10 },
   external = { "maxExternals", 3, "CENTER", 7, 10, 10, false, false },
 }
@@ -818,6 +819,9 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "Layer"] = Layer(group.layer, defaults[4])
   out[prefix .. "Alpha"] = group.behindBar == true and LaneAlpha(group) or 1
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
+  if group.showTooltip ~= nil then
+    out[prefix .. "ShowTooltip"] = group.showTooltip == true
+  end
   out[prefix .. "ShowCooldownSwipe"] = group.showCooldownSwipe ~= false
   out[prefix .. "CooldownSwipeReverse"] = group.cooldownSwipeReverse == true
   out[prefix .. "ShowDurationBar"] = group.showDurationBar == true
@@ -840,6 +844,118 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   end
 end
 
+local function SpellIndicatorModule()
+  return GF.SpellIndicators or _G.MSUF_GF_SpellIndicators
+end
+
+local function AddSpellIDToHash(hash, spellID)
+  spellID = tonumber(spellID)
+  if not spellID then return 0 end
+  spellID = floor(spellID + 0.5)
+  if spellID <= 0 or hash[spellID] == true then return 0 end
+  hash[spellID] = true
+  return 1
+end
+
+local function AddSpellIDsForAura(hash, si, specKey, auraName)
+  if not (hash and si and specKey and auraName) then return 0 end
+  local count = 0
+  local ids = si.SpellIDs and si.SpellIDs[specKey]
+  if ids then count = count + AddSpellIDToHash(hash, ids[auraName]) end
+  local secretIDs = si.SecretSpellIDs and si.SecretSpellIDs[specKey]
+  if secretIDs then count = count + AddSpellIDToHash(hash, secretIDs[auraName]) end
+  local altIDs = si.AltSpellIDs and si.AltSpellIDs[specKey]
+  if type(altIDs) == "table" then
+    for spellID, mappedAuraName in pairs(altIDs) do
+      if mappedAuraName == auraName then count = count + AddSpellIDToHash(hash, spellID) end
+    end
+  end
+  local linked = si.LinkedAuraRules and si.LinkedAuraRules[specKey] and si.LinkedAuraRules[specKey][auraName]
+  if type(linked) == "table" then
+    count = count + AddSpellIDToHash(hash, linked.sourceSpellID)
+    if type(linked.targetSpellIDs) == "table" then
+      for i = 1, #linked.targetSpellIDs do
+        count = count + AddSpellIDToHash(hash, linked.targetSpellIDs[i])
+      end
+    end
+  end
+  local trackable = si.TrackableAuras and si.TrackableAuras[specKey]
+  if type(trackable) == "table" then
+    for i = 1, #trackable do
+      local info = trackable[i]
+      if info and info.name == auraName then
+        count = count + AddSpellIDToHash(hash, info.spellID or info.spellId or info.id)
+        break
+      end
+    end
+  end
+  return count
+end
+
+local function CollectSpellIndicatorSpecs(siCfg, si)
+  local out, seen = {}, {}
+  local selected = siCfg and siCfg.spec or "auto"
+  local function Add(specKey)
+    if specKey and si and si.SpecInfo and si.SpecInfo[specKey] and not seen[specKey] then
+      seen[specKey] = true
+      out[#out + 1] = specKey
+    end
+  end
+  if selected == "multi" then
+    local multi = type(siCfg and siCfg.multiSpecs) == "table" and siCfg.multiSpecs or nil
+    if multi then
+      for specKey, enabled in pairs(multi) do
+        if enabled then Add(specKey) end
+      end
+    end
+  elseif selected ~= "auto" then
+    Add(selected)
+  end
+  if #out == 0 and si and type(si.GetPlayerSpec) == "function" then
+    Add(si.GetPlayerSpec())
+  end
+  if #out == 0 and si and type(si.SpecInfo) == "table" then
+    for specKey in pairs(si.SpecInfo) do
+      Add(specKey)
+      break
+    end
+  end
+  return out
+end
+
+local function BuildTrackedBuffIncludeHash(conf)
+  local si = SpellIndicatorModule()
+  local siCfg = type(conf and conf.spellIndicators) == "table" and conf.spellIndicators or nil
+  if not (si and siCfg) then return nil, 0 end
+  siCfg.specs = siCfg.specs or {}
+  local specs = CollectSpellIndicatorSpecs(siCfg, si)
+  local hash, count = {}, 0
+  for i = 1, #specs do
+    local specKey = specs[i]
+    local specCfg = siCfg.specs and siCfg.specs[specKey]
+    local defaults = si.SpecDefaults and si.SpecDefaults[specKey]
+    if type(defaults) == "table" then
+      for auraName, def in pairs(defaults) do
+        local entry = type(specCfg) == "table" and specCfg[auraName] or nil
+        if entry == nil then entry = def end
+        if type(entry) == "table" and entry.enabled ~= false then
+          count = count + AddSpellIDsForAura(hash, si, specKey, auraName)
+        end
+      end
+    end
+    if type(specCfg) == "table" then
+      for auraName, entry in pairs(specCfg) do
+        if not (type(defaults) == "table" and defaults[auraName] ~= nil)
+          and type(entry) == "table" and entry.enabled ~= false then
+          count = count + AddSpellIDsForAura(hash, si, specKey, auraName)
+        end
+      end
+    end
+  end
+  if count <= 0 then return nil, 0 end
+  return hash, count
+end
+
 local function CompileCoreAuras(kind, conf)
   local root = type(conf.auras) == "table" and conf.auras or nil
   local buff = root and type(root.buff) == "table" and root.buff or {}
@@ -850,6 +966,12 @@ local function CompileCoreAuras(kind, conf)
   local showBuffs = rootEnabled and buff.enabled ~= false
   local showDebuffs = rootEnabled and debuff.enabled ~= false
   local showExternals = rootEnabled and externals.enabled ~= false
+  local trackedBuffIncludeHash, trackedBuffCount = BuildTrackedBuffIncludeHash(conf)
+  local trackedBuffMax = Num(buff.trackedMax, Num(conf.trackedBuffMax, trackedBuffCount > 0 and trackedBuffCount or 8))
+  local trackedBuffsEnabled = rootEnabled
+    and (buff.trackedEnabled == true or (buff.trackedEnabled == nil and type(conf.spellIndicators) == "table" and conf.spellIndicators.enabled == true))
+    and trackedBuffIncludeHash ~= nil
+    and trackedBuffMax > 0
   local privateEnabled = private.enabled
   if privateEnabled == nil then privateEnabled = conf.privateAurasEnabled ~= false end
   local showPrivate = rootEnabled and privateEnabled ~= false
@@ -867,10 +989,12 @@ local function CompileCoreAuras(kind, conf)
   end
   local debuffDispelBorderMode = NormalizeDispelBorderMode(debuff.dispelBorderMode, debuff.showDispelBorder == true)
   local buffGrowthX, buffGrowthY = SplitAuraGrowth(buff.growth, "LEFTUP")
+  local trackedBuffGrowthX, trackedBuffGrowthY = SplitAuraGrowth(buff.trackedGrowth or buff.growth, "RIGHTDOWN")
   local debuffGrowthX, debuffGrowthY = SplitAuraGrowth(debuff.growth, "RIGHTDOWN")
   local externalGrowthX, externalGrowthY = SplitAuraGrowth(externals.growth, "RIGHTDOWN")
   local auraScale = DynamicAuraScale(root)
   local defaultBuffSize = (kind == "raid" or kind == "mythicraid") and 16 or 22
+  local defaultTrackedBuffSize = (kind == "raid" or kind == "mythicraid") and 16 or 22
   local defaultDebuffSize = (kind == "raid" or kind == "mythicraid") and 16 or 20
   local defaultExternalSize = (kind == "raid" or kind == "mythicraid") and 22 or 28
   local function S(value, fallback, minValue)
@@ -878,6 +1002,7 @@ local function CompileCoreAuras(kind, conf)
   end
   local out = {
     enabled = showBuffs == true or showDebuffs == true or showExternals == true
+      or trackedBuffsEnabled == true
       or conf.dispelEnabled == true
       or conf.dispelOverlayEnabled == true,
     group = true,
@@ -898,6 +1023,7 @@ local function CompileCoreAuras(kind, conf)
       privateLayerFix = root == nil or root.blizzardPrivateLayerFix ~= false,
     },
     showBuffs = showBuffs,
+    showTrackedBuffs = trackedBuffsEnabled == true,
     showDebuffs = showDebuffs,
     showExternals = showExternals,
     showTooltip = root == nil or root.showTooltip ~= false,
@@ -933,6 +1059,39 @@ local function CompileCoreAuras(kind, conf)
     },
   }
   ApplyAuraLane(out, "buff", "buff", buff, AURA_LANE_DEFAULTS.buff, Num(conf.auraMaxIcons, 4), defaultBuffSize, buffGrowthX, buffGrowthY, S, kind)
+  local trackedBuff = {
+    max = trackedBuffMax,
+    size = Num(buff.trackedSize, Num(buff.size, defaultTrackedBuffSize)),
+    spacing = Num(buff.trackedSpacing, Num(buff.spacing, 1)),
+    perRow = Num(buff.trackedPerRow, Num(buff.perRow, 4)),
+    growth = buff.trackedGrowth or buff.growth or "RIGHTDOWN",
+    anchor = buff.trackedAnchor or "TOPLEFT",
+    x = Num(buff.trackedX, 0),
+    y = Num(buff.trackedY, 0),
+    layer = Num(buff.trackedLayer, Num(conf.spellIndicators and conf.spellIndicators.layer, 9)),
+    filterToken = buff.trackedOnlyOwn ~= false and "PLAYER" or "ALL",
+    showTooltip = buff.trackedShowTooltip,
+    showCooldownSwipe = buff.trackedShowCooldownSwipe,
+    cooldownSwipeReverse = buff.trackedCooldownSwipeReverse,
+    showDurationBar = buff.trackedShowDurationBar,
+    durationBarHeight = buff.trackedDurationBarHeight,
+    durationBarDisplay = buff.trackedDurationBarDisplay,
+    durationBarPosition = buff.trackedDurationBarPosition,
+    durationBarDirection = buff.trackedDurationBarDirection,
+    showCooldown = buff.trackedShowCooldown,
+    showStacks = buff.trackedShowStacks,
+    cooldownSize = buff.trackedCooldownSize,
+    cooldownAnchor = buff.trackedCooldownAnchor,
+    cooldownX = buff.trackedCooldownX,
+    cooldownY = buff.trackedCooldownY,
+    stackSize = buff.trackedStackSize,
+    stackAnchor = buff.trackedStackAnchor,
+    stackX = buff.trackedStackX,
+    stackY = buff.trackedStackY,
+  }
+  ApplyAuraLane(out, "trackedBuff", "trackedBuff", trackedBuff, AURA_LANE_DEFAULTS.trackedBuff, 8, defaultTrackedBuffSize, trackedBuffGrowthX, trackedBuffGrowthY, S, kind)
+  out.trackedBuffIncludeHash = trackedBuffIncludeHash
+  out.trackedBuffTrackedCount = trackedBuffCount or 0
   ApplyAuraLane(out, "debuff", "debuff", debuff, AURA_LANE_DEFAULTS.debuff, Num(conf.auraMaxIcons, 4), defaultDebuffSize, debuffGrowthX, debuffGrowthY, S, kind)
   ApplyAuraLane(out, "external", "externals", externals, AURA_LANE_DEFAULTS.external, 2, defaultExternalSize, externalGrowthX, externalGrowthY, S, kind)
   return out

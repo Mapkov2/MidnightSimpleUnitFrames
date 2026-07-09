@@ -297,6 +297,9 @@ GF.RefreshOutlineGeometry = GF.RefreshBorder
 GF.RefreshFonts = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_FONT) end
 
 function GF.MarkDirty(frame, mask)
+  if InCombat() then
+    return GF.DeferGroupRuntime("refresh", frame and frame._msufGFKind or nil, mask)
+  end
   if frame and frame._msufGFKind then
     return ApplyFrameDirty(frame, frame._msufGFKind, mask, "MSUF_GF_MARK_DIRTY")
   end
