@@ -89,6 +89,30 @@ function A.EditModeRegistry.BuildGroupPreviewHelpers(ctx)
         if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(nil) end
     end
 
+    local function LiveRaidKind(gf)
+        local kind = gf and type(gf.GetLiveRaidKind) == "function" and gf.GetLiveRaidKind() or nil
+        if kind == "mythicraid" then return "mythicraid" end
+        return "raid"
+    end
+
+    local function GroupConfEnabled(gf, scope)
+        local conf = gf and type(gf.GetConf) == "function" and gf.GetConf(scope) or nil
+        return conf and conf.enabled == true
+    end
+
+    local function LiveGroupFramesCoverScope(gf, scope)
+        if scope == "party" then
+            if _G.IsInRaid and _G.IsInRaid() then return false end
+            if not GroupConfEnabled(gf, "party") then return false end
+            local conf = gf and type(gf.GetConf) == "function" and gf.GetConf("party") or nil
+            return (_G.IsInGroup and _G.IsInGroup()) or (conf and conf.showSolo == true) or false
+        elseif scope == "raid" or scope == "mythicraid" then
+            if not (_G.IsInRaid and _G.IsInRaid()) then return false end
+            return GroupConfEnabled(gf, LiveRaidKind(gf))
+        end
+        return false
+    end
+
     local function ShowMenuGroupPreview(scope)
         PersistGroupPreviewScope(scope)
         OpenMenuPage(GROUP_PREVIEW_PAGES[Menu and Menu.activeKey] and Menu.activeKey or "gf_layout")
@@ -112,7 +136,12 @@ function A.EditModeRegistry.BuildGroupPreviewHelpers(ctx)
             if scope ~= "party" and type(gf.HidePreview) == "function" then gf.HidePreview("party") end
             if scope ~= "raid" and type(gf.HidePreview) == "function" then gf.HidePreview("raid") end
             if scope ~= "mythicraid" and type(gf.HidePreview) == "function" then gf.HidePreview("mythicraid") end
-            shown = gf.ShowPreview(scope, GROUP_PREVIEW_COUNTS[scope] or 5) ~= false
+            if LiveGroupFramesCoverScope(gf, scope) then
+                if type(gf.HidePreview) == "function" then gf.HidePreview(scope) end
+                shown = true
+            else
+                shown = gf.ShowPreview(scope, GROUP_PREVIEW_COUNTS[scope] or 5) ~= false
+            end
             if shown and type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout(scope) end
         end
 

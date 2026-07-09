@@ -16,6 +16,7 @@ local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local table_concat, table_sort = table.concat, table.sort
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local DEFAULT_SHARED = {
     cooldownTextSize = 8,
@@ -45,6 +46,52 @@ local function Clamp01(value, fallback)
     if n < 0 then return 0 end
     if n > 1 then return 1 end
     return n
+end
+
+local function NormalizeFrameStrata(value, fallback)
+    local normalize = _G.MSUF_NormalizeFrameStrata
+    if type(normalize) == "function" then return normalize(value, fallback or "AUTO") end
+    if issecretvalue(value) == true then return fallback or "AUTO" end
+    if value == nil or value == "" then return fallback or "AUTO" end
+    value = tostring(value):upper()
+    if value == "AUTO" then return "AUTO" end
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    return rank and rank[value] and value or (fallback or "AUTO")
+end
+
+local function ReadParentFrameStrata(parentFrame)
+    local strata
+    if parentFrame and parentFrame.GetFrameStrata then strata = parentFrame:GetFrameStrata() end
+    if issecretvalue(strata) == true then return nil end
+    return strata
+end
+
+local function ResolveFrameStrata(parentFrame, value)
+    if issecretvalue(value) == true then value = nil end
+    if value == nil or value == "" or value == "AUTO" then
+        return ReadParentFrameStrata(parentFrame)
+    end
+    local rank = _G.MSUF_FRAME_STRATA_RANK
+    if type(value) == "string" and rank and rank[value] then return value end
+    value = NormalizeFrameStrata(value, "AUTO")
+    if value ~= "AUTO" then return value end
+    return ReadParentFrameStrata(parentFrame)
+end
+
+local function SyncFrameStrata(frame, strata)
+    if not (frame and frame.SetFrameStrata) then return false end
+    if issecretvalue(strata) == true then return false end
+    if strata == nil or strata == "" then return false end
+    local cachedStrata = frame._msufA3FrameStrata
+    if issecretvalue(cachedStrata) ~= true and cachedStrata == strata then return false end
+    frame._msufA3FrameStrata = strata
+    local currentStrata
+    if frame.GetFrameStrata then currentStrata = frame:GetFrameStrata() end
+    if issecretvalue(currentStrata) == true or currentStrata ~= strata then
+        frame:SetFrameStrata(strata)
+        return true
+    end
+    return false
 end
 
 local function AddNativeFilterToken(out, seen, token, baseToken)
@@ -150,8 +197,9 @@ local function SlotLayoutSignature(slot)
     return tostring(slot.visual) .. "\030" .. tostring(slot.hiddenVisual)
         .. "\030" .. tostring(slot.anchor) .. "\030" .. tostring(slot.x) .. "\030" .. tostring(slot.y)
         .. "\030" .. tostring(slot.size) .. "\030" .. tostring(slot.width) .. "\030" .. tostring(slot.height)
-        .. "\030" .. tostring(slot.layer) .. "\030" .. tostring(slot.showCooldownText)
+        .. "\030" .. tostring(slot.layer) .. "\030" .. tostring(slot.strata) .. "\030" .. tostring(slot.showCooldownText)
         .. "\030" .. tostring(slot.showCooldownSwipe) .. "\030" .. tostring(slot.cooldownSwipeReverse)
+        .. "\030" .. tostring(slot.cooldownSize)
         .. "\030" .. tostring(slot.showStacks) .. "\030" .. tostring(color[1]) .. "\030" .. tostring(color[2])
         .. "\030" .. tostring(color[3]) .. "\030" .. tostring(color[4]) .. "\030" .. tostring(frame and frame.type)
         .. "\030" .. tostring(frame and frame.priority) .. "\030" .. tostring(frame and frame.thickness)
@@ -168,7 +216,7 @@ local function FinalizeSlot(slot)
     return slot
 end
 
-local function CompileSlot(unit, item, index, fallbackLayer)
+local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata)
     if not (type(unit) == "string" and unit ~= "" and type(item) == "table" and item.enabled == true) then return nil end
     local placed = type(item.placed) == "table" and item.placed or nil
     -- Live frame effects are temporarily disabled on 12.1 PTR. AuraSlot
@@ -188,7 +236,10 @@ local function CompileSlot(unit, item, index, fallbackLayer)
     local size = ClampNumber(placed and placed.size, hiddenVisual and 1 or 18, 1, 128)
     local width = visual == "bar" and ClampNumber(placed and placed.barWidth, size * 3, size, 256) or size
     local color = type(item.color) == "table" and item.color or nil
-    local nativeFilter = item.onlyOwn ~= false and "HELPFUL|PLAYER" or "HELPFUL"
+    local nativeFilter = item.nativeFilter or item.customFilter or (item.onlyOwn ~= false and "HELPFUL|PLAYER" or "HELPFUL")
+    local rawStrata = item.strata
+    if issecretvalue(rawStrata) == true then rawStrata = nil end
+    if rawStrata == nil then rawStrata = fallbackStrata end
     return FinalizeSlot({
         spellIndicatorSlot = true,
         kind = "spellIndicator",
@@ -197,7 +248,7 @@ local function CompileSlot(unit, item, index, fallbackLayer)
         display = item.display or item.auraName or tostring(index or ""),
         unit = unit,
         enabled = true,
-        nativeFilter = NormalizeNativeFilterString(nativeFilter, "HELPFUL"),
+        nativeFilter = NormalizeNativeFilterString(nativeFilter, nativeFilter),
         candidateFilters = candidateFilters,
         candidateFilterSignature = candidateFilterSignature,
         visual = visual,
@@ -217,7 +268,8 @@ local function CompileSlot(unit, item, index, fallbackLayer)
         anchor = SpellIndicatorAnchor(placed and placed.anchor, "TOPLEFT"),
         x = Round(ClampNumber(placed and placed.x, 0, -4096, 4096)),
         y = Round(ClampNumber(placed and placed.y, 0, -4096, 4096)),
-        layer = Round(ClampNumber(item.layer or fallbackLayer, fallbackLayer or 9, 1, 30)),
+        layer = Round(ClampNumber(item.layer or fallbackLayer, fallbackLayer or 9, 0, 30)),
+        strata = NormalizeFrameStrata(rawStrata, "AUTO"),
         alpha = 1,
         max = 1,
         spacing = 0,
@@ -237,7 +289,7 @@ local function CompileSlot(unit, item, index, fallbackLayer)
         showTooltip = false,
         showAuraBorder = false,
         showAuraSymbol = false,
-        cooldownSize = DEFAULT_SHARED.cooldownTextSize,
+        cooldownSize = ClampNumber(placed and placed.cooldownSize, DEFAULT_SHARED.cooldownTextSize, 6, 40),
         cooldownAnchor = "CENTER",
         cooldownX = 0,
         cooldownY = 0,
@@ -255,7 +307,7 @@ function Runtime.CompileSlots(unit, spellIndicators)
     end
     local slots, trackingParts, structuralParts, layoutParts = {}, {}, {}, {}
     for i = 1, #spellIndicators.items do
-        local slot = CompileSlot(unit, spellIndicators.items[i], i, spellIndicators.layer)
+        local slot = CompileSlot(unit, spellIndicators.items[i], i, spellIndicators.layer, spellIndicators.strata)
         if slot then
             slots[#slots + 1] = slot
             trackingParts[#trackingParts + 1] = slot._msufA3TrackingSignature
@@ -273,6 +325,7 @@ function Runtime.CompileSlots(unit, spellIndicators)
         slots = slots,
         max = #slots,
         layer = spellIndicators.layer or 9,
+        strata = NormalizeFrameStrata(spellIndicators.strata, "AUTO"),
         _msufA3TrackingSignature = table_concat(trackingParts, "\029"),
         _msufA3StructuralSignature = table_concat(structuralParts, "\029"),
         _msufA3LayoutSignature = table_concat(layoutParts, "\029"),
@@ -456,6 +509,7 @@ local function SyncMissingFrame(parentFrame, slot, button)
     frame:ClearAllPoints()
     frame:SetSize(slot.width or slot.size or 1, slot.height or slot.size or 1)
     frame:SetPoint(slot.anchor or "TOPLEFT", parentFrame, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
+    SyncFrameStrata(frame, ResolveFrameStrata(parentFrame, slot.strata))
     frame:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (slot.layer or 9) - 1)
     local tex = frame._tex
     local label = frame._label
@@ -488,6 +542,7 @@ local function SyncButtonGeometry(button, slot, parentFrame)
     button:ClearAllPoints()
     button:SetSize(slot.width or slot.size or 1, slot.height or slot.size or 1)
     button:SetPoint(slot.anchor or "TOPLEFT", parentFrame, slot.anchor or "TOPLEFT", slot.x or 0, slot.y or 0)
+    SyncFrameStrata(button, ResolveFrameStrata(parentFrame, slot.strata))
     if button.SetFrameLevel then button:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + (slot.layer or 9)) end
     return true
 end
@@ -584,6 +639,7 @@ function Runtime.SyncGeometry(container, slotRoot, parentFrame)
         container:ClearAllPoints()
         container:SetAllPoints(root)
     end
+    SyncFrameStrata(container, ResolveFrameStrata(parentFrame, slotRoot.strata))
     if container.SetFrameLevel then container:SetFrameLevel(parentFrame:GetFrameLevel() or 0) end
     local slots = container._msufA3SpellIndicatorButtonSlots
     if slots then

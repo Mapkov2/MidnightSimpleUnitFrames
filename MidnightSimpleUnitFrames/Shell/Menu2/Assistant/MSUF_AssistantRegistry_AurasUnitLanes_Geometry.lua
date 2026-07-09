@@ -146,7 +146,7 @@ function A.AurasRegistry.RegisterUnitLaneGeometrySettings(ctx, unit, laneInfo)
     Assistant._AssistantAddAuraAllLaneNouns(aliases, unit, { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
     Assistant._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
     Assistant._AssistantAddAllAuraNouns(aliases, lane, "all", { "layer", "z layer", "z level", "z order", "z index", "draw layer", "frame level", "strata" })
-    RegisterAuraUnitLaneNumber(unit, lane, "layer", laneInfo.label .. " Layer", lane == "buff" and 5 or 6, 1, 15, 1, aliases,
+    RegisterAuraUnitLaneNumber(unit, lane, "layer", laneInfo.label .. " Layer", lane == "buff" and 5 or 6, 0, 30, 1, aliases,
         function() return AuraReadLaneLayer(unit, lane) end,
         function(value) AuraWriteLaneLayer(unit, lane, value) end)
 end

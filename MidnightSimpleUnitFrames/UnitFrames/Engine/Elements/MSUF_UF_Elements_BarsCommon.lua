@@ -916,10 +916,15 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
   local health = spec and spec.health or {}
   local state = RefreshUnitState(frame, unit, spec, event or "UNIT_HEALTH")
   if state and state.existsKnown and state.exists == false then
+    frame._msufHealthStatusGone = true
     return 0.28, 0.28, 0.28
   end
   if state and ((state.deadKnown and state.dead == true) or (state.connectedKnown and state.connected == false)) then
+    frame._msufHealthStatusGone = true
     return 0.35, 0.35, 0.35
+  end
+  if frame then
+    frame._msufHealthStatusGone = nil
   end
 
   if health.mode == "dark" or health.mode == "unified" then
