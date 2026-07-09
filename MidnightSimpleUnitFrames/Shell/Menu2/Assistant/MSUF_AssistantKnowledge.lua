@@ -1096,12 +1096,12 @@ local PAGE_HELP = {
     gf_indicators = {
         title = "Group Status & Indicators help",
         lines = {
-            "You can change group status indicators, role/ready/summon icons, targeted spell indicators, spell indicators, corner indicators, and related editor choices available in MSUF.",
+            "You can change group status indicators, role/ready/summon icons, targeted spell indicators, corner indicators, and related editor choices available in MSUF.",
             "Examples: show party targeted spell indicators; set targeted spell icon size to 28; show raid ready check icon; move raid phase icon right.",
         },
         actions = { "Open Group Status & Indicators" },
     },
-    gf_auras = { title = "Group Auras help", lines = { "You can change Party, Raid, and Mythic Raid aura visibility, icon size, caps/count, layout, X/Y offsets, layer, live filters, private aura options, and group aura copy behavior. Saved group category blacklist data is read-only in the native 12.1 backend.", "Examples: set raid buff icon size to 24; cap party buffs at 4; set mythic raid debuff layer to 8; copy raid auras to party." }, actions = { "Open Group Auras", "Open Aura Filters" } },
+    gf_auras = { title = "Group Auras help", lines = { "You can change Party, Raid, and Mythic Raid aura visibility, icon size, caps/count, layout, X/Y offsets, layer, Spell Indicators, live filters, private aura options, and group aura copy behavior. Saved group category blacklist data is read-only in the native 12.1 backend.", "Examples: set raid buff icon size to 24; cap party buffs at 4; move party spell indicator right; copy raid auras to party." }, actions = { "Open Group Auras", "Open Aura Filters" } },
     classpower = { title = "Class Resources help", lines = { "You can change class resource mode, size, position, colors, and gameplay-specific class resource options available in MSUF." }, actions = { "Open Class Resources" } },
     gameplay = { title = "Gameplay help", lines = { "You can change gameplay features such as combat timer, sounds, totem/statue frame behavior, and related options." }, actions = { "Open Gameplay" } },
 }
@@ -1922,7 +1922,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Group Status & Indicators help\nIn Group Frames > Status & Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, targeted spell, spell, and corner indicators.\nExamples: show party targeted spell indicators; show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Status & Indicators",
+            text = "Group Status & Indicators help\nIn Group Frames > Status & Indicators, I can help with ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, targeted spell, and corner indicators. Spell Indicators are in Group Frames > Auras.\nExamples: show party targeted spell indicators; show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18.\nYou can ask: Open Group Status & Indicators",
             status = "applied",
             summary = "Assistant group status and indicators help",
         }

@@ -152,7 +152,7 @@ function A.DashboardRegistry.BuildStatusSelectors(ctx)
         PersistScalar("gfScope", scope)
         if spec then PersistTableValue("gfSpellMultiSpecSelection", scope, spec) end
         if aura then PersistTableValue("gfSpellIndicatorSelection", scope, aura) end
-        OpenMenuPage("gf_indicators")
+        OpenMenuPage("gf_auras")
         local specLabel = spec and ARef.GroupSpellSpecDisplay and ARef.GroupSpellSpecDisplay(spec) or spec
         if aura then
             return true, "Selected " .. GroupLabel(scope) .. " " .. DisplayEnumLabel(display, aura) .. " spell indicator."

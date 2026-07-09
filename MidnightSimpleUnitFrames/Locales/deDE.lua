@@ -75,6 +75,8 @@ L["MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nAp
 L["Include"] = "Einschließen"
 L["Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"] = "Rounded Frame Texture wurde geaendert.\n\nEin UI-Reload ist erforderlich, weil dieser Stil Frame-Masken und geschuetzte Frame-Visuals neu aufbaut.\n\nJetzt neu laden?"
 L["|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload."] = "|cffffd700MSUF:|r Rounded Frame Texture geaendert. Lade die UI mit /reload neu."
+L["Group frames were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"] = "Gruppenframes wurden aktiviert oder deaktiviert.\n\nEin UI-Reload ist erforderlich, um diese Aenderung vollstaendig anzuwenden.\n\nJetzt neu laden?"
+L["|cffffd700MSUF:|r Group frames were enabled or disabled. Reload the UI with /reload."] = "|cffffd700MSUF:|r Gruppenframes wurden aktiviert oder deaktiviert. Lade die UI mit /reload neu."
 L["Indicator"] = "Indikator"
 L["Inline Text"] = "Inline-Text"
 L["Install \"SharedMedia\" (LibSharedMedia-3.0) to unlock more bar textures. Without it, you can still pick Blizzard built-in textures."] = "Installiere „SharedMedia“ (LibSharedMedia-3.0), um mehr Balkentexturen freizuschalten. Ohne das Addon kannst du weiterhin Blizzard-Texturen wählen."

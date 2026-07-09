@@ -1,5 +1,6 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
     <Script file="MSUF_Auras3_Core.lua"/>
+    <Script file="MSUF_Auras3_SpellIndicators.lua"/>
     <Script file="MSUF_Auras3_UnitFrames.lua"/>
     <Script file="MSUF_Auras3_PerfTrace.lua"/>
     <Script file="MSUF_Auras3_EditMode.lua"/>

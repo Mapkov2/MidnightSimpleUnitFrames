@@ -287,7 +287,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "Where do I change aggro, threat, dispel, or raid markers?", "Use Global Style > Bars for highlight borders and Group Frames > Status & Indicators for role, threat, dispel, spell, corner, and raid-marker indicators.", "gf_indicators", "Opens: Group Frames > Status & Indicators", "Status Indicators Status Icons Spell Indicators Corner Indicators aggro threat dispel role icon raid marker", SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "aggro|threat|aggro border|threat border|status and indicators|dispel indicator|magic indicator|curse indicator|poison indicator|disease indicator|raid marker|role icon|ready check|leader icon"), 220, },
+            { "Where do I change aggro, threat, dispel, or raid markers?", "Use Global Style > Bars for highlight borders and Group Frames > Status & Indicators for role, threat, dispel, corner, and raid-marker indicators. Spell Indicators are in Group Frames > Auras.", "gf_indicators", "Opens: Group Frames > Status & Indicators", "Status Indicators Status Icons Corner Indicators aggro threat dispel role icon raid marker", SearchKeywordList(SEARCH_HIGHLIGHT_BORDER_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, "aggro|threat|aggro border|threat border|status and indicators|dispel indicator|magic indicator|curse indicator|poison indicator|disease indicator|raid marker|role icon|ready check|leader icon"), 220, },
         },
         {
             {

@@ -48,7 +48,15 @@ function A.GroupFramesRegistry.BuildRegisterCoreContext(ctx)
             end,
             set = function(value)
                 if opts.set then opts.set(scope, value); return end
-                GroupDB(scope)[dbKey] = value and true or false
+                local db = GroupDB(scope)
+                local oldValue = db[dbKey]
+                if oldValue == nil then oldValue = defaultValue and true or false end
+                local newValue = value and true or false
+                if oldValue == newValue then return end
+                db[dbKey] = newValue
+                if dbKey == "enabled" and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
+                    _G.MSUF_ShowGroupFrameReloadRequiredPopup()
+                end
             end,
             apply = function() ApplyGroup(scope, opts.mode or mode or "visual") end,
             description = opts.description,

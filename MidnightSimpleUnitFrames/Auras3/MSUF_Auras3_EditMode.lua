@@ -22,6 +22,7 @@ local GetCursorPosition = _G.GetCursorPosition
 local IsMouseButtonDown = _G.IsMouseButtonDown
 local InCombatLockdown = _G.InCombatLockdown
 local C_Timer = _G.C_Timer
+local issecretvalue = _G.issecretvalue
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
@@ -1053,9 +1054,17 @@ local function SafeFrameCall(frame, methodName, ...)
     return nil
 end
 
+local function IsSecretValue(value)
+    if type(issecretvalue) ~= "function" then return true end
+    local ok, secret = pcall(issecretvalue, value)
+    if not ok then return true end
+    return secret == true
+end
+
 local function SafeFrameBool(frame, methodName)
     local value = SafeFrameCall(frame, methodName)
     if value == nil then return nil end
+    if IsSecretValue(value) then return nil end
     return value == true
 end
 
@@ -1078,8 +1087,9 @@ local function SuppressAuraMouse(frame, forwardClicks)
     end
     if hasClick then SafeFrameCall(frame, "SetMouseClickEnabled", forwardClicks ~= false) end
     if hasMotion then SafeFrameCall(frame, "SetMouseMotionEnabled", false) end
-    if forwardClicks ~= false and frame._msufA3EditPropagateClicks ~= nil then
+    if forwardClicks ~= false then
         SafeFrameCall(frame, "SetPropagateMouseClicks", true)
+        frame._msufA3EditPropagateChanged = true
     end
 end
 
@@ -1090,33 +1100,44 @@ local function RestoreAuraMouse(frame, motionEnabled, fallbackClickEnabled)
     local clickEnabled = frame._msufA3EditClickEnabled
     local storedMotionEnabled = frame._msufA3EditMotionEnabled
     local propagateClicks = frame._msufA3EditPropagateClicks
+    local propagateChanged = frame._msufA3EditPropagateChanged
 
     frame._msufA3EditMouseStored = nil
     frame._msufA3EditMouseEnabled = nil
     frame._msufA3EditClickEnabled = nil
     frame._msufA3EditMotionEnabled = nil
     frame._msufA3EditPropagateClicks = nil
+    frame._msufA3EditPropagateChanged = nil
 
     local hasClick = type(frame.SetMouseClickEnabled) == "function"
     local hasMotion = type(frame.SetMouseMotionEnabled) == "function"
     if type(frame.EnableMouse) == "function" then
         if mouseEnabled ~= nil then
-            SafeFrameCall(frame, "EnableMouse", mouseEnabled == true)
+            SafeFrameCall(frame, "EnableMouse", mouseEnabled)
         elseif not hasClick and not hasMotion then
-            mouseEnabled = stored ~= true or fallbackClickEnabled == true or motionEnabled == true
-            SafeFrameCall(frame, "EnableMouse", mouseEnabled == true)
+            if stored ~= true or fallbackClickEnabled == true then
+                mouseEnabled = true
+            elseif motionEnabled ~= nil then
+                mouseEnabled = motionEnabled
+            else
+                mouseEnabled = false
+            end
+            SafeFrameCall(frame, "EnableMouse", mouseEnabled)
         end
     end
     if hasClick then
         if clickEnabled == nil then clickEnabled = fallbackClickEnabled == true end
-        SafeFrameCall(frame, "SetMouseClickEnabled", clickEnabled == true)
+        SafeFrameCall(frame, "SetMouseClickEnabled", clickEnabled)
     end
     if hasMotion then
         if motionEnabled == nil then motionEnabled = storedMotionEnabled end
-        SafeFrameCall(frame, "SetMouseMotionEnabled", motionEnabled == true)
+        if motionEnabled == nil then motionEnabled = false end
+        SafeFrameCall(frame, "SetMouseMotionEnabled", motionEnabled)
     end
     if propagateClicks ~= nil then
-        SafeFrameCall(frame, "SetPropagateMouseClicks", propagateClicks == true)
+        SafeFrameCall(frame, "SetPropagateMouseClicks", propagateClicks)
+    elseif propagateChanged == true then
+        SafeFrameCall(frame, "SetPropagateMouseClicks", false)
     end
 end
 

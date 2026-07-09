@@ -1070,6 +1070,27 @@ local function ShowReloadRecommendedPopup(label)
     _G.StaticPopup_Show("MSUF_RELOAD_RECOMMENDED", pendingReloadRecommendedLabel)
 end
 ExportPublic("MSUF_ShowReloadRecommendedPopup", ShowReloadRecommendedPopup)
+local function ShowGroupFrameReloadRequiredPopup()
+    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
+        if _G.print then _G.print(Tr("|cffffd700MSUF:|r Group frames were enabled or disabled. Reload the UI with /reload.")) end
+        return
+    end
+    M.InstallStaticPopup("MSUF2_GROUPFRAMES_RELOAD_REQUIRED", {
+        text = Tr("Group frames were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"),
+        button1 = _G.RELOAD or Tr("Reload"),
+        button2 = _G.CANCEL or Tr("Not now"),
+        hideOnEscape = false,
+        OnAccept = function()
+            if _G.InCombatLockdown and _G.InCombatLockdown() then
+                if _G.print then _G.print(Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
+                return
+            end
+            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+        end,
+    })
+    _G.StaticPopup_Show("MSUF2_GROUPFRAMES_RELOAD_REQUIRED")
+end
+ExportPublic("MSUF_ShowGroupFrameReloadRequiredPopup", ShowGroupFrameReloadRequiredPopup)
 local copyLinkPopup
 local copyLinkPopupSerial = 0
 local function EnsureCopyLinkPopup()

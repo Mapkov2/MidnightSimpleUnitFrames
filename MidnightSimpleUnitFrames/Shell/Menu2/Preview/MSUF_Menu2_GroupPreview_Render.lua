@@ -162,6 +162,27 @@ function Render.Install(box, ctx, deps)
         local selectedSpellCfg = CurrentSpellConfig(kind)
         local selectedPlaced = CurrentSpellPlaced(kind)
         local selectedSpellPlacedEnabled = selectedPlaced and (selectedPlaced.type or "icon") ~= "none"
+        local runtimeSpellIndicators = runtimeSpec and runtimeSpec.spellIndicators or nil
+        local runtimeSpellItems = runtimeSpellIndicators and runtimeSpellIndicators.items or nil
+        local runtimeSpellPlacedAvailable = false
+        local runtimeSpellEffect
+        if type(runtimeSpellItems) == "table" then
+            for i = 1, #runtimeSpellItems do
+                local item = runtimeSpellItems[i]
+                local placed = item and item.placed
+                if placed and (placed.type or "icon") ~= "none" then
+                    runtimeSpellPlacedAvailable = true
+                end
+                local effect = item and item.frame
+                if effect and effect.type and effect.type ~= "none" then
+                    local currentPriority = tonumber(runtimeSpellEffect and runtimeSpellEffect.priority) or 999
+                    local nextPriority = tonumber(effect.priority) or 5
+                    if not runtimeSpellEffect or nextPriority < currentPriority then
+                        runtimeSpellEffect = effect
+                    end
+                end
+            end
+        end
         local function StatusConfigAvailable(spec)
             if runtimeSpec then
                 local cfg = RuntimeStatusConfig(runtimeStatus, spec)
@@ -212,7 +233,9 @@ function Render.Install(box, ctx, deps)
             trackedBuff = AuraLaneAvailable(trackedBuffCfg, 4),
             debuff = AuraLaneAvailable(debuffCfg, 6),
             status = statusLayerAvailable,
-            si = (runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.enabled == true and selectedSpellPlacedEnabled) and true or false,
+            si = (runtimeSpellIndicators and runtimeSpellIndicators.enabled == true and (runtimeSpellPlacedAvailable or runtimeSpellEffect ~= nil))
+                or (runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.enabled == true and selectedSpellPlacedEnabled)
+                or false,
             targetedSpells = kind == "party" and conf.targetedSpellsEnabled == true,
             auraText = aurasEnabled and customAuraText,
             text = textAvailable,
@@ -239,6 +262,81 @@ function Render.Install(box, ctx, deps)
                 return v
             end
             return 1
+        end
+        local function HideSpellEffectPreview()
+            if mock._siPreviewTint then mock._siPreviewTint:Hide() end
+            if mock._siPreviewEdges then
+                for i = 1, #mock._siPreviewEdges do
+                    if mock._siPreviewEdges[i] then mock._siPreviewEdges[i]:Hide() end
+                end
+            end
+            if mock._siPreviewSavedNameColor and mock._nameFS and mock._nameFS.SetTextColor then
+                local c = mock._siPreviewSavedNameColor
+                mock._nameFS:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+            end
+            mock._siPreviewSavedNameColor = nil
+        end
+        local function EnsureSpellPreviewEdges()
+            if mock._siPreviewEdges then return mock._siPreviewEdges end
+            mock._siPreviewEdges = {}
+            for i = 1, 4 do
+                local tex = mock:CreateTexture(nil, "OVERLAY")
+                tex:SetTexture(WHITE8X8)
+                tex:Hide()
+                mock._siPreviewEdges[i] = tex
+            end
+            return mock._siPreviewEdges
+        end
+        local function ApplySpellEffectPreview(effect)
+            HideSpellEffectPreview()
+            if type(effect) ~= "table" then return end
+            local color = effect.color or {}
+            local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
+            local a = color[4] or 1
+            if effect.type == "healthtint" then
+                local tint = mock._siPreviewTint
+                if not tint then
+                    tint = mock:CreateTexture(nil, "OVERLAY")
+                    tint:SetTexture(WHITE8X8)
+                    mock._siPreviewTint = tint
+                end
+                tint:ClearAllPoints()
+                tint:SetAllPoints(mock._health or mock)
+                tint:SetVertexColor(r, g, b, effect.tintAlpha or a or 0.20)
+                tint:Show()
+            elseif effect.type == "namecolor" then
+                if mock._nameFS and mock._nameFS.SetTextColor then
+                    if mock._nameFS.GetTextColor then
+                        local cr, cg, cb, ca = mock._nameFS:GetTextColor()
+                        mock._siPreviewSavedNameColor = { cr, cg, cb, ca }
+                    end
+                    mock._nameFS:SetTextColor(r, g, b, a)
+                end
+            elseif effect.type == "border" or effect.type == "glow" or effect.type == "pulse" then
+                local edges = EnsureSpellPreviewEdges()
+                local thickness = max(1, ScaleValue(effect.thickness or (effect.type == "glow" and 3 or 2), mock._previewScale or 1, 1))
+                local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
+                top:ClearAllPoints()
+                top:SetPoint("TOPLEFT", mock, "TOPLEFT", -thickness, thickness)
+                top:SetPoint("TOPRIGHT", mock, "TOPRIGHT", thickness, thickness)
+                top:SetHeight(thickness)
+                bottom:ClearAllPoints()
+                bottom:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", -thickness, -thickness)
+                bottom:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", thickness, -thickness)
+                bottom:SetHeight(thickness)
+                left:ClearAllPoints()
+                left:SetPoint("TOPLEFT", top, "BOTTOMLEFT", 0, 0)
+                left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT", 0, 0)
+                left:SetWidth(thickness)
+                right:ClearAllPoints()
+                right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT", 0, 0)
+                right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT", 0, 0)
+                right:SetWidth(thickness)
+                for i = 1, 4 do
+                    edges[i]:SetVertexColor(r, g, b, effect.type == "glow" and min(1, a * 0.85) or a)
+                    edges[i]:Show()
+                end
+            end
         end
         self._title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
         local stageW = self._stage:GetWidth() or (width - 98)
@@ -1181,51 +1279,81 @@ function Render.Install(box, ctx, deps)
         for i = 1, #statusHandles do
             ConfigureStatusHandle(statusHandles[i])
         end
-        local selectedSpellIcon = CurrentSpellTexture(kind)
-        local spellType = (selectedPlaced and selectedPlaced.type) or "icon"
-        local spellBaseSize = tonumber(selectedPlaced and selectedPlaced.size) or 20
-        local spellSize = max(14, ScaleValue(spellBaseSize, previewScale, 10))
-        local spellR, spellG, spellB = CurrentSpellColor(kind)
-        spellHandle._icons = spellHandle._icons or {}
-        local spellTex = spellHandle._icons[1]
-        if spellType == "bar" then
-            local barW = max(spellSize * 2, ScaleValue((selectedPlaced and selectedPlaced.barWidth) or (spellBaseSize * 3), previewScale, 16))
-            spellHandle:SetSize(barW, spellSize)
-            if spellTex then
-                spellTex:SetTexture(WHITE8X8)
-                spellTex:SetTexCoord(0, 1, 0, 1)
-                spellTex:SetVertexColor(spellR, spellG, spellB, 1)
-                spellTex:ClearAllPoints()
-                spellTex:SetAllPoints(spellHandle)
-                spellTex:Show()
+        local dynamicSpellHandlesActive = {}
+        local dynamicSpellHandlesUsed = false
+        local function ConfigureSpellPreviewHandle(handle, item, placed, fallbackTexture, fallbackColor)
+            if not (handle and placed) then return false end
+            local spellType = placed.type or "icon"
+            local spellBaseSize = tonumber(placed.size) or 20
+            local spellSize = max(14, ScaleValue(spellBaseSize, previewScale, 10))
+            local color = item and item.color or fallbackColor
+            local spellR, spellG, spellB = (color and color[1]) or 0.69, (color and color[2]) or 0.50, (color and color[3]) or 0.88
+            handle._icons = handle._icons or {}
+            local spellTex = handle._icons[1]
+            if spellType == "bar" then
+                local barW = max(spellSize * 2, ScaleValue(placed.barWidth or (spellBaseSize * 3), previewScale, 16))
+                handle:SetSize(barW, spellSize)
+                if spellTex then
+                    spellTex:SetTexture(WHITE8X8)
+                    spellTex:SetTexCoord(0, 1, 0, 1)
+                    spellTex:SetVertexColor(spellR, spellG, spellB, 1)
+                    spellTex:ClearAllPoints()
+                    spellTex:SetAllPoints(handle)
+                    spellTex:Show()
+                end
+            elseif spellType == "square" then
+                handle:SetSize(spellSize, spellSize)
+                if spellTex then
+                    spellTex:SetTexture(WHITE8X8)
+                    spellTex:SetTexCoord(0, 1, 0, 1)
+                    spellTex:SetVertexColor(spellR, spellG, spellB, 1)
+                    spellTex:ClearAllPoints()
+                    spellTex:SetAllPoints(handle)
+                    spellTex:Show()
+                end
+            elseif spellType == "number" then
+                handle:SetSize(max(18, spellSize), max(18, spellSize))
+                if spellTex then spellTex:Hide() end
+                if handle._label and handle._label.SetText then handle._label:SetText("9") end
+            else
+                handle:SetSize(spellSize, spellSize)
+                if spellTex then
+                    spellTex:SetTexture((item and item.icon) or fallbackTexture or CurrentSpellTexture(kind))
+                    spellTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                    spellTex:SetVertexColor(1, 1, 1, 1)
+                    spellTex:ClearAllPoints()
+                    spellTex:SetAllPoints(handle)
+                    spellTex:Show()
+                end
             end
-        elseif spellType == "square" then
-            spellHandle:SetSize(spellSize, spellSize)
-            if spellTex then
-                spellTex:SetTexture(WHITE8X8)
-                spellTex:SetTexCoord(0, 1, 0, 1)
-                spellTex:SetVertexColor(spellR, spellG, spellB, 1)
-                spellTex:ClearAllPoints()
-                spellTex:SetAllPoints(spellHandle)
-                spellTex:Show()
+            if spellType ~= "number" and handle._label and handle._label.SetText then
+                handle._label:SetText(item and (item.display or item.auraName) or "SPELL")
             end
-        elseif spellType == "number" then
-            spellHandle:SetSize(max(18, spellSize), max(18, spellSize))
-            if spellTex then spellTex:Hide() end
-            if spellHandle._label and spellHandle._label.SetText then spellHandle._label:SetText("9") end
-        else
-            spellHandle:SetSize(spellSize, spellSize)
-            if spellTex then
-                spellTex:SetTexture(selectedSpellIcon)
-                spellTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-                spellTex:SetVertexColor(1, 1, 1, 1)
-                spellTex:ClearAllPoints()
-                spellTex:SetAllPoints(spellHandle)
-                spellTex:Show()
+            LayoutHandle(handle, placed.anchor, placed.x, placed.y, "TOPLEFT")
+            return true
+        end
+        if runtimeSpellIndicators and runtimeSpellIndicators.enabled == true and type(runtimeSpellItems) == "table" and box.EnsureSpellIndicatorHandle then
+            for i = 1, #runtimeSpellItems do
+                local item = runtimeSpellItems[i]
+                local placed = item and item.placed
+                if placed and (placed.type or "icon") ~= "none" then
+                    local handle = box:EnsureSpellIndicatorHandle(item, i)
+                    if handle and ConfigureSpellPreviewHandle(handle, item, placed) then
+                        dynamicSpellHandlesUsed = true
+                        dynamicSpellHandlesActive[handle._msufSpellIndicatorPreviewKey] = true
+                    end
+                end
             end
         end
-        if spellType ~= "number" and spellHandle._label and spellHandle._label.SetText then spellHandle._label:SetText("SPELL") end
-        LayoutHandle(spellHandle, selectedPlaced and selectedPlaced.anchor, selectedPlaced and selectedPlaced.x, selectedPlaced and selectedPlaced.y, "TOPLEFT")
+        if box.HideUnusedSpellIndicatorHandles then box:HideUnusedSpellIndicatorHandles(dynamicSpellHandlesActive) end
+        if dynamicSpellHandlesUsed then
+            spellHandle:Hide()
+        else
+            local selectedSpellIcon = CurrentSpellTexture(kind)
+            local spellR, spellG, spellB = CurrentSpellColor(kind)
+            ConfigureSpellPreviewHandle(spellHandle, nil, selectedPlaced or { type = "icon", size = 20, anchor = "TOPLEFT", x = 0, y = 0 }, selectedSpellIcon, { spellR, spellG, spellB, 1 })
+        end
+        ApplySpellEffectPreview(runtimeSpellEffect)
         textHandles.name._previewScale = previewScale
         textHandles.hpGroup._previewScale = previewScale
         textHandles.hpLeft._previewScale = previewScale

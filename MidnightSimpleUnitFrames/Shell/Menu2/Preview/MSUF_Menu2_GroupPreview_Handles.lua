@@ -49,6 +49,16 @@ function Handles.Install(box, deps)
         box._selectedHandle = handle
         if box.SetFocus then box:SetFocus() end
         if handle and handle._cfgStatus and handle._statusSpec then M.SetMenuStateValue("gfStatusIconSelection", handle._statusSpec.value) end
+        if handle and handle._cfgSpellItem then
+            M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
+            M.gfSpellIndicatorSelection[H.CurrentScope()] = handle._cfgSpellItem.auraName
+            local conf = H.Conf(H.CurrentScope())
+            local si = conf and conf.spellIndicators
+            if si and si.spec == "multi" then
+                M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
+                M.gfSpellMultiSpecSelection[H.CurrentScope()] = handle._cfgSpellItem.specKey
+            end
+        end
         if handle and handle._cfgTextKind then
             M.gfTextTabSelection = M.gfTextTabSelection or {}
             M.gfTextTabSelection[H.CurrentScope()] = handle._cfgTextKind
@@ -62,6 +72,35 @@ function Handles.Install(box, deps)
             end
         end
         RefreshHandleSelection(box)
+    end
+    local function SpellConfigForHandle(handle, create)
+        if handle and handle._cfgSpellItem then
+            local specKey = handle._cfgSpellItem.specKey
+            local auraName = handle._cfgSpellItem.auraName
+            if not (specKey and auraName and auraName ~= "") then return nil end
+            local conf = H.Conf(H.CurrentScope())
+            if not conf then return nil end
+            if type(conf.spellIndicators) ~= "table" then
+                if not create then return nil end
+                conf.spellIndicators = { enabled = true, spec = "auto", specs = {}, layer = 9 }
+            end
+            local si = conf.spellIndicators
+            si.specs = si.specs or {}
+            si.specs[specKey] = si.specs[specKey] or {}
+            if create and type(si.specs[specKey][auraName]) ~= "table" then
+                si.specs[specKey][auraName] = { enabled = true, onlyOwn = true }
+            end
+            return si.specs[specKey][auraName]
+        end
+        return CurrentSpellConfig(H.CurrentScope(), create)
+    end
+    local function SpellPlacedForHandle(handle, create)
+        local cfg = SpellConfigForHandle(handle, create)
+        if not cfg then return nil end
+        if create and type(cfg.placed) ~= "table" then
+            cfg.placed = { type = "icon", anchor = "TOPLEFT", x = 0, y = 0, size = 18, showCooldownSwipe = true }
+        end
+        return type(cfg.placed) == "table" and cfg.placed or nil
     end
     local function OpenHandleSettings(handle)
         if handle and handle._sectionKey and type(OpenSection) == "function" then
@@ -197,8 +236,8 @@ function Handles.Install(box, deps)
                 conf[spec.y] = cfgY
             end
         elseif handle._cfgSpell then
-            local placed = CurrentSpellPlaced(H.CurrentScope())
-            local spellCfg = CurrentSpellConfig(H.CurrentScope())
+            local placed = SpellPlacedForHandle(handle, false)
+            local spellCfg = SpellConfigForHandle(handle, false)
             if not placed and spellCfg then
                 spellCfg.placed = { type = "icon", size = 18 }
                 placed = spellCfg.placed
@@ -245,8 +284,8 @@ function Handles.Install(box, deps)
             conf[spec.x] = cfgX
             conf[spec.y] = cfgY
         elseif handle._cfgSpell then
-            local placed = CurrentSpellPlaced(H.CurrentScope())
-            local spellCfg = CurrentSpellConfig(H.CurrentScope())
+            local placed = SpellPlacedForHandle(handle, false)
+            local spellCfg = SpellConfigForHandle(handle, false)
             if not placed and spellCfg then
                 spellCfg.placed = { type = "icon", size = 18 }
                 placed = spellCfg.placed
@@ -539,7 +578,42 @@ function Handles.Install(box, deps)
     end
     local spellHandle = CreatePreviewHandle("si", "si", { 0.69, 0.50, 0.88 }, "SPELL", 44, 44, false)
     spellHandle._cfgSpell = true
+    spellHandle._sectionKey = "si"
     AddIconPool(spellHandle, 1)
+    local spellIndicatorHandles = {}
+    local function SpellIndicatorHandleKey(item, index)
+        local key = tostring(item and item.key or index or "spell")
+        key = key:gsub("[^%w_]+", "_")
+        if key == "" then key = tostring(index or "spell") end
+        return "si_" .. key
+    end
+    function box:EnsureSpellIndicatorHandle(item, index)
+        if type(item) ~= "table" then return nil end
+        local key = SpellIndicatorHandleKey(item, index)
+        local handle = spellIndicatorHandles[key]
+        if not handle then
+            local c = item.color or { 0.69, 0.50, 0.88 }
+            handle = CreatePreviewHandle(key, "si", { c[1] or 0.69, c[2] or 0.50, c[3] or 0.88 }, tostring(item.display or item.auraName or "SPELL"):upper(), 44, 44, false)
+            handle._cfgSpell = true
+            handle._sectionKey = "si"
+            AddIconPool(handle, 1)
+            spellIndicatorHandles[key] = handle
+        end
+        handle._cfgSpellItem = {
+            specKey = item.specKey,
+            auraName = item.auraName,
+        }
+        handle._previewText = item.display or item.auraName or "Spell"
+        handle._msufSpellIndicatorPreviewKey = key
+        return handle
+    end
+    function box:HideUnusedSpellIndicatorHandles(active)
+        active = active or {}
+        for key, handle in pairs(spellIndicatorHandles) do
+            if not active[key] then handle:Hide() end
+        end
+    end
+    box._spellIndicatorHandles = spellIndicatorHandles
     local targetedHandle = CreatePreviewHandle("targetedSpells", "targetedSpells", { 1.00, 0.52, 0.18 }, "TARGET", 72, 32, false)
     targetedHandle._cfgTargetedSpells = true
     targetedHandle._previewText = "Targeted Spells"

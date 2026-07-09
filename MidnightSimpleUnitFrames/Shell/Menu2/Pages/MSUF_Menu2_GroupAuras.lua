@@ -79,6 +79,7 @@ local function BuildGFAuras(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
+    local function RefreshPage() M.CallIf(M.SelectPage, ctx.key) end
     local AURA_POSITION_ANCHORS = (#STATUS_ICON_ANCHORS > 0 and STATUS_ICON_ANCHORS) or AURA_ANCHORS
     local AURA_GROWTH_VALUES = (#SPELL_GROWTH_VALUES > 0 and SPELL_GROWTH_VALUES)
         or VT("RIGHTDOWN", "Right then Down", "LEFTDOWN", "Left then Down", "RIGHTUP", "Right then Up", "LEFTUP", "Left then Up")
@@ -228,30 +229,12 @@ local function BuildGFAuras(ctx)
             dropdown = function(s) local widget = BindNestedDropdown(ctx, W.Dropdown(section, s[2], s[3], s[9]), function() return AuraGroup(CurrentScope(), groupKey) end, s[4], s[5], s[6]); W.MoveWidget(widget, section, s[7], s[8], s[9], s[10] or "CENTER"); return widget end,
             slider = function(s) local widget = BindNestedSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
         })
-        local trackedControls = groupKey == "buff" and BuildTrackedBuffControls(section, sectionW, leftX, rightX, leftW, rightW, def) or nil
         if groupKey == "debuff" then BuildDebuffPTRNotice(section, leftX, -410, sectionW - 72) end
         local function RefreshAuraGroupState()
             local cfg = AuraGroup(CurrentScope(), groupKey)
             local groupEnabled = LaneBackendEnabled(CurrentScope(), groupKey)
             SetOptionsEnabled(controls, groupEnabled)
             SetOptionEnabled(enable, true)
-            if trackedControls then
-                local trackedEnabled = (cfg.trackedEnabled ~= nil and cfg.trackedEnabled == true)
-                    or (cfg.trackedEnabled == nil and SpellIndicators and SpellIndicators(CurrentScope()).enabled == true)
-                SetOptionsEnabled(trackedControls, groupEnabled and trackedEnabled)
-                SetOptionEnabled(trackedControls[1], groupEnabled)
-                SetOptionEnabled(trackedControls[2], groupEnabled)
-                SetOptionEnabled(trackedControls[3], groupEnabled)
-                local count = CurrentTrackedBuffCount(CurrentScope())
-                SetSectionBadgesAndStatus(section, {
-                    OnOffBadge(groupEnabled, "Shown", "Hidden"),
-                    { text = "Max " .. BadgeNumber(cfg.max or def.max), kind = groupEnabled and "info" or "muted" },
-                    { text = BadgeNumber(cfg.size or def.size) .. "px", kind = groupEnabled and "info" or "muted" },
-                    { text = (trackedEnabled and "Tracked " or "Track ") .. BadgeNumber(count), kind = trackedEnabled and "accent" or "muted" },
-                    { text = OptionText(SpellSpecValues, SpellIndicators and SpellIndicators(CurrentScope()).spec or "auto", "Auto"), kind = trackedEnabled and "info" or "muted" },
-                })
-                return
-            end
             SetSectionBadgesAndStatus(section, {
                 OnOffBadge(groupEnabled, "Shown", "Hidden"),
                 { text = "Max " .. BadgeNumber(cfg.max or def.max), kind = groupEnabled and "info" or "muted" },
@@ -261,7 +244,10 @@ local function BuildGFAuras(ctx)
         M.TrackCollapsibleRefresh(ctx, section, RefreshAuraGroupState)
     end
     BuildAuraGroupSection("buff", "Buffs")
+    if GP.BuildSpellIndicatorsSection then
+        GP.BuildSpellIndicatorsSection(ctx, b, RefreshPage)
+    end
     BuildAuraGroupSection("debuff", "Debuffs")
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 17 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 19 })

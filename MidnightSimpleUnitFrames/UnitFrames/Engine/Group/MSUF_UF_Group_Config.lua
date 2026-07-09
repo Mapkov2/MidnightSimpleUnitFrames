@@ -968,10 +968,7 @@ local function CompileCoreAuras(kind, conf)
   local showExternals = rootEnabled and externals.enabled ~= false
   local trackedBuffIncludeHash, trackedBuffCount = BuildTrackedBuffIncludeHash(conf)
   local trackedBuffMax = Num(buff.trackedMax, Num(conf.trackedBuffMax, trackedBuffCount > 0 and trackedBuffCount or 8))
-  local trackedBuffsEnabled = rootEnabled
-    and (buff.trackedEnabled == true or (buff.trackedEnabled == nil and type(conf.spellIndicators) == "table" and conf.spellIndicators.enabled == true))
-    and trackedBuffIncludeHash ~= nil
-    and trackedBuffMax > 0
+  local trackedBuffsEnabled = false
   local privateEnabled = private.enabled
   if privateEnabled == nil then privateEnabled = conf.privateAurasEnabled ~= false end
   local showPrivate = rootEnabled and privateEnabled ~= false
