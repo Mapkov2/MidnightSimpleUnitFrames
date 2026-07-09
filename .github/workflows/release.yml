@@ -60,8 +60,21 @@ jobs:
         run: |
           $target = $env:RELEASE_PUBLISH_TARGET_INPUT
           $tag = $env:RELEASE_VERSION
-          $tagContents = git for-each-ref "refs/tags/$tag" --format='%(contents)' 2>$null
-          if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($tagContents)) {
+          $tagContents = ""
+          if (-not [string]::IsNullOrWhiteSpace($tag)) {
+            $tagRef = "refs/tags/$tag"
+            git fetch --force origin "$($tagRef):$($tagRef)" 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Could not fetch tag annotation for '$tag'. Falling back to workflow input/default publish target."
+            }
+            $tagContentLines = @(git for-each-ref $tagRef --format='%(contents)' 2>$null)
+            if ($LASTEXITCODE -ne 0) {
+              $tagContents = ""
+            } else {
+              $tagContents = $tagContentLines -join [Environment]::NewLine
+            }
+          }
+          if (-not [string]::IsNullOrWhiteSpace($tagContents)) {
             $match = [regex]::Match($tagContents, '(?im)^\s*publish-target\s*:\s*(all|github|wago|curseforge)\s*$')
             if ($match.Success) {
               $target = $match.Groups[1].Value
