@@ -752,11 +752,63 @@ local function LayoutBarIfNeeded(frame, bar, levelOffset, mode, reverse, followB
   LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
 end
 
+local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse)
+  local hpBar = frame and (frame.hpBar or frame.Health)
+  if not (bar and hpBar) then
+    return
+  end
+  local hpTexture = StatusTexture(hpBar) or hpBar
+  local runtimeWidth = tonumber(frame._msufPredictionFrameWidth)
+  local width = (hpBar.GetWidth and hpBar:GetWidth()) or runtimeWidth or 1
+  if not width or width <= 0 then
+    width = runtimeWidth or 1
+  end
+  local reverse = hpReverse ~= true
+
+  SyncBarLayer(frame, hpBar, bar, levelOffset)
+  local parentChanged = SetParentCached(bar, hpBar)
+  if hpBar.SetClipsChildren and hpBar._msufPredictionClipsChildren ~= true then
+    hpBar:SetClipsChildren(true)
+    hpBar._msufPredictionClipsChildren = true
+  end
+
+  if bar._msufHealAbsorbAnchorTarget == hpTexture
+    and bar._msufHealAbsorbWidth == width
+    and bar._msufHealAbsorbHpReverse == hpReverse
+    and bar._msufHealAbsorbLevelOffset == levelOffset
+    and bar._msufReverseFill == reverse
+    and parentChanged ~= true then
+    return
+  end
+
+  bar:ClearAllPoints()
+  bar:SetWidth(width)
+  if hpReverse == true then
+    bar:SetPoint("TOPLEFT", hpTexture, "TOPLEFT", 0, 0)
+    bar:SetPoint("BOTTOMLEFT", hpTexture, "BOTTOMLEFT", 0, 0)
+  else
+    bar:SetPoint("TOPRIGHT", hpTexture, "TOPRIGHT", 0, 0)
+    bar:SetPoint("BOTTOMRIGHT", hpTexture, "BOTTOMRIGHT", 0, 0)
+  end
+  bar._msufHealAbsorbAnchorTarget = hpTexture
+  bar._msufHealAbsorbWidth = width
+  bar._msufHealAbsorbHpReverse = hpReverse
+  bar._msufHealAbsorbLevelOffset = levelOffset
+
+  if bar.SetReverseFill and bar._msufReverseFill ~= reverse then
+    bar:SetReverseFill(reverse)
+    bar._msufReverseFill = reverse
+  end
+end
+
 local function NeedsHealthEvent(cfg)
   if not cfg then
     return false
   end
   if cfg.heal == true and NormalizeAnchorMode(cfg.healAnchorMode, 3) == 3 then
+    return true
+  end
+  if cfg.absorb == true and NormalizeAnchorMode(cfg.absorbAnchorMode, 2) == 3 then
     return true
   end
   if cfg.absorb == true and cfg.overAbsorbOverlay == true then
@@ -823,8 +875,8 @@ local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
   if healAbsorb then
     plans.UNIT_HEAL_ABSORB_AMOUNT_CHANGED = PredictionPlan(nil, nil, true, nil, nil, true, nil, true, nil)
   end
-  if clampHeal or overAbsorb then
-    plans.UNIT_HEALTH = PredictionPlan(nil, nil, nil, clampHeal, followAbsorb or overAbsorb, nil, nil, true, true)
+  if clampHeal or clampAbsorb or overAbsorb then
+    plans.UNIT_HEALTH = PredictionPlan(clampHeal, clampAbsorb, nil, clampHeal, followAbsorb or overAbsorb, nil, nil, true, true)
   end
   if heal or absorb or healAbsorb then
     plans.UNIT_MAXHEALTH = PredictionPlan(clampHeal, clampAbsorb, nil, heal, absorb, healAbsorb, true, clampHeal or clampAbsorb or healAbsorb or overAbsorb, heal or absorb or healAbsorb)
@@ -959,6 +1011,14 @@ local function ApplyPredictionBar(frame, cfg, spec, bar, active, level, mode, re
   if active ~= true then HideBar(bar) end
 end
 
+local function ApplyHealAbsorbBar(frame, cfg, spec, bar)
+  if not bar then return end
+  LayoutHealAbsorbBar(frame, bar, 3, frame._msufPredictionHpReverse == true)
+  SetTextureCached(bar, ResolveTexture(cfg.healAbsorbTexture, spec and spec.texture or WHITE))
+  SetColorCached(bar, cfg.healAbsorbR, cfg.healAbsorbG, cfg.healAbsorbB, cfg.healAbsorbA)
+  if cfg.healAbsorb ~= true then HideBar(bar) end
+end
+
 function Prediction.Apply(frame, spec)
   local cfg = spec and spec.prediction or {}
   Prediction.Create(frame, spec)
@@ -995,9 +1055,7 @@ function Prediction.Apply(frame, spec)
   else
     HideOverAbsorbGlow(frame)
   end
-  ApplyPredictionBar(frame, cfg, spec, frame.healAbsorbBar, cfg.healAbsorb,
-    3, 5, not frame._msufPredictionHpReverse,
-    "healAbsorbTexture", "healAbsorbR", "healAbsorbG", "healAbsorbB", "healAbsorbA")
+  ApplyHealAbsorbBar(frame, cfg, spec, frame.healAbsorbBar)
 end
 
 function Prediction.Disable(frame)
@@ -1224,7 +1282,7 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     end
   end
 
-  if UnitMissing(frame, unit) then
+  if cfg.test ~= true and UnitMissing(frame, unit) then
     Prediction.Disable(frame)
     return
   end
@@ -1256,6 +1314,7 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
       HideOverAbsorbGlow(frame)
     end
     if cfg.healAbsorb == true and frame.healAbsorbBar then
+      LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true)
       ShowValue(frame.healAbsorbBar, TEST_MAX, TEST_HEAL_ABSORB)
     elseif frame.healAbsorbBar then
       HideBar(frame.healAbsorbBar)
@@ -1352,6 +1411,7 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
   end
 
   if showHealAbsorb and frame.healAbsorbBar then
+    LayoutHealAbsorbBar(frame, frame.healAbsorbBar, 3, frame._msufPredictionHpReverse == true)
     if (forceMax == true or frame.healAbsorbBar._msufMaxReady ~= true) and issecretvalue(maxHP) ~= true and maxHP == nil then
       maxHP = ReadHealthMax(frame, unit)
     end

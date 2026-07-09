@@ -1072,7 +1072,6 @@ local function BuildBars(ctx)
     M.BindBoolWidget(ctx, absorbTest,
         function() return _G.MSUF_AbsorbTextureTestMode and true or false end,
         function(v) SetAbsorbTextureTest(v and true or false) end)
-    absorbTest:HookScript("OnHide", function() ClearAbsorbTextureTest() end)
     local overAbsorbOverlay = W.ToggleAt(absorb, "Over-absorb overlay", absorbRightX, -240, absorbRightW)
     M.BindBoolWidget(ctx, overAbsorbOverlay,
         function() return BarScopeGet("overAbsorbOverlay", ReadGBool("overAbsorbOverlay", false)) == true end,

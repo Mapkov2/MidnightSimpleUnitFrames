@@ -514,6 +514,9 @@ local function SetAbsorbTextureTest(enabled)
         ExportPublic("MSUF_AbsorbTextureTestMode", enabled and true or false)
         ExportPublic("MSUF_AbsorbTextureTestScope", enabled and scope or nil)
     end
+    if type(_G.MSUF_RefreshPredictionBars) == "function" then
+        _G.MSUF_RefreshPredictionBars(scope, "MSUF2_ABSORB_TEST")
+    end
     if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then
         _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
     else
@@ -529,6 +532,9 @@ local function ClearAbsorbTextureTest()
         ExportPublic("MSUF_AbsorbTextureTestScope", nil)
     end
     if wasEnabled then
+        if type(_G.MSUF_RefreshPredictionBars) == "function" then
+            _G.MSUF_RefreshPredictionBars(nil, "MSUF2_ABSORB_TEST_CLEAR")
+        end
         if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then
             _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
         else

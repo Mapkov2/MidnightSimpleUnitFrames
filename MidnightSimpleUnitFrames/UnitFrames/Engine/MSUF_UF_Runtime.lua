@@ -391,6 +391,50 @@ function UF.RefreshHealthLayout()
   return UF.RefreshElements(nil, REVERSE_FILL_ELEMENTS, "MSUF_REVERSE_FILL")
 end
 
+local PREDICTION_ELEMENTS = { "Prediction" }
+
+local function GroupPredictionScopeMatches(kind, scope)
+  if scope == nil or scope == "*" or scope == "shared" then return true end
+  if scope == "gf_party" then scope = "party" end
+  if scope == "gf_raid" or scope == "raid" then return kind == "raid" or kind == "mythicraid" end
+  if scope == "gf_mythicraid" then return kind == "mythicraid" end
+  return kind == scope
+end
+
+local function InvalidateGroupPredictionSpecs(GF, scope)
+  if not (GF and type(GF.InvalidateCompiledSpecs) == "function") then return end
+  if scope == nil or scope == "*" or scope == "shared" then
+    GF.InvalidateCompiledSpecs()
+  elseif scope == "gf_party" or scope == "party" then
+    GF.InvalidateCompiledSpecs("party")
+  elseif scope == "gf_raid" or scope == "raid" then
+    GF.InvalidateCompiledSpecs("raid")
+    GF.InvalidateCompiledSpecs("mythicraid")
+  elseif scope == "gf_mythicraid" or scope == "mythicraid" then
+    GF.InvalidateCompiledSpecs("mythicraid")
+  end
+end
+
+function UF.RefreshPredictionBars(scope, reason)
+  reason = reason or "MSUF2_ABSORB"
+  local did = UF.RefreshElements(scope == "shared" and nil or scope, PREDICTION_ELEMENTS, reason) or false
+  local GF = MSUF and MSUF.GF
+  if GF and type(GF.ForEachFrame) == "function" and type(GF.CompileSpec) == "function" and type(UF.ApplyElementToFrame) == "function" then
+    InvalidateGroupPredictionSpecs(GF, scope)
+    GF.ForEachFrame(function(frame, unit, kind)
+      if GroupPredictionScopeMatches(kind, scope) ~= true then return end
+      if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
+      local spec = GF.CompileSpec(kind, frame, unit)
+      if spec then
+        UF.SetFrameSpec(frame, spec, unit)
+        UF.ApplyElementToFrame(frame, "Prediction", spec, reason)
+        did = true
+      end
+    end, true)
+  end
+  return did
+end
+
 function UF.RefreshPowerLayout(unit)
   return UF.RefreshElements(unit, POWER_TEXT_ELEMENTS, "MSUF_POWER_LAYOUT")
 end
@@ -424,6 +468,7 @@ ExportPublic("MSUF_RefreshAllUnitAlphas", UF.RefreshAlphas)
 ExportPublic("MSUF_ApplyBarOutlineThickness_All", UF.RefreshBorders)
 ExportPublic("MSUF_ApplyPowerBarBorder_All", UF.RefreshBorders)
 ExportPublic("MSUF_ApplyReverseFillBars", UF.RefreshHealthLayout)
+ExportPublic("MSUF_RefreshPredictionBars", UF.RefreshPredictionBars)
 ExportPublic("MSUF_ApplyAllAlpha", UF.RefreshAlphas)
 ExportPublic("MSUF_ApplyPowerBarEmbedLayout_All", UF.RefreshPowerLayout)
 ExportPublic("MSUF_ApplyPowerBarEmbedLayout", UF.RefreshPowerLayoutForFrame)
