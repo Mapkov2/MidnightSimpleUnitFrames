@@ -58,6 +58,7 @@ function Render.Install(box, ctx, deps)
     local GF_PREVIEW_ROLE = deps.ROLE or "HEALER"
     local GF_PREVIEW_ANCHOR_FRAC = deps.ANCHOR_FRAC or {}
     local buffHandle = deps.buffHandle
+    local trackedBuffHandle = deps.trackedBuffHandle
     local debuffHandle = deps.debuffHandle
     local statusHandles = deps.statusHandles or {}
     local spellHandle = deps.spellHandle
@@ -127,7 +128,35 @@ function Render.Install(box, ctx, deps)
         local layerVisible = M.gfPreviewLayerVisible or {}
         local soloLayer = M.gfPreviewSoloLayer
         local rawAuras = conf.auras or {}
+        local function RawTrackedBuffLane(rawBuff)
+            rawBuff = rawBuff or {}
+            return {
+                enabled = rawBuff.trackedEnabled == true or (rawBuff.trackedEnabled == nil and conf.spellIndicators and conf.spellIndicators.enabled == true),
+                max = rawBuff.trackedMax or 8,
+                perRow = rawBuff.trackedPerRow or rawBuff.perRow or 4,
+                size = rawBuff.trackedSize or rawBuff.size or 22,
+                spacing = rawBuff.trackedSpacing or rawBuff.spacing or 1,
+                anchor = rawBuff.trackedAnchor or "TOPLEFT",
+                growth = rawBuff.trackedGrowth or "RIGHTDOWN",
+                x = rawBuff.trackedX or 0,
+                y = rawBuff.trackedY or 0,
+                layer = rawBuff.trackedLayer or (conf.spellIndicators and conf.spellIndicators.layer) or 9,
+                showCooldownSwipe = rawBuff.trackedShowCooldownSwipe,
+                cooldownSwipeReverse = rawBuff.trackedCooldownSwipeReverse,
+                showCooldown = rawBuff.trackedShowCooldown,
+                showStacks = rawBuff.trackedShowStacks,
+                cooldownSize = rawBuff.trackedCooldownSize,
+                cooldownAnchor = rawBuff.trackedCooldownAnchor,
+                cooldownX = rawBuff.trackedCooldownX,
+                cooldownY = rawBuff.trackedCooldownY,
+                stackSize = rawBuff.trackedStackSize,
+                stackAnchor = rawBuff.trackedStackAnchor,
+                stackX = rawBuff.trackedStackX,
+                stackY = rawBuff.trackedStackY,
+            }
+        end
         local buffCfg = runtimeAuras and CompiledAuraLane(runtimeAuras, "buff", rawAuras.buff or {}) or (rawAuras.buff or {})
+        local trackedBuffCfg = runtimeAuras and CompiledAuraLane(runtimeAuras, "trackedBuff", RawTrackedBuffLane(rawAuras.buff)) or RawTrackedBuffLane(rawAuras.buff)
         local debuffCfg = runtimeAuras and CompiledAuraLane(runtimeAuras, "debuff", rawAuras.debuff or {}) or (rawAuras.debuff or {})
         local statusSpec = CurrentStatusSpec()
         local selectedSpellCfg = CurrentSpellConfig(kind)
@@ -152,7 +181,7 @@ function Render.Install(box, ctx, deps)
         local customRenderer = false
         local aurasEnabled
         if runtimeAuras then
-            customRenderer = buffCfg.enabled == true or debuffCfg.enabled == true
+            customRenderer = buffCfg.enabled == true or trackedBuffCfg.enabled == true or debuffCfg.enabled == true
             aurasEnabled = customRenderer or runtimeAuras.enabled == true
         else
             aurasEnabled = rawAuras.enabled ~= false
@@ -169,7 +198,7 @@ function Render.Install(box, ctx, deps)
                 and (runtimeAuras and cfg.enabled == true or cfg.enabled ~= false)
                 and (tonumber(cfg.max) or defaultMax or 0) > 0
         end
-        local customAuraText = AuraLaneAvailable(buffCfg, 6) or AuraLaneAvailable(debuffCfg, 6)
+        local customAuraText = AuraLaneAvailable(buffCfg, 6) or AuraLaneAvailable(trackedBuffCfg, 4) or AuraLaneAvailable(debuffCfg, 6)
         local textAvailable
         if runtimeSpec then
             textAvailable = runtimeSpec.showName == true or runtimeSpec.showHealthText == true or powerTextEnabled == true
@@ -180,6 +209,7 @@ function Render.Install(box, ctx, deps)
             guides = true,
             bounds = true,
             buff = AuraLaneAvailable(buffCfg, 6),
+            trackedBuff = AuraLaneAvailable(trackedBuffCfg, 4),
             debuff = AuraLaneAvailable(debuffCfg, 6),
             status = statusLayerAvailable,
             si = (runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.enabled == true and selectedSpellPlacedEnabled) and true or false,
@@ -901,6 +931,12 @@ function Render.Install(box, ctx, deps)
             anchor = "BOTTOMRIGHT", growth = "LEFTUP",
             size = 22, perRow = 4, max = 6, spacing = 1, minSize = 8,
         })
+        if trackedBuffHandle then
+            LayoutAuraGroup(trackedBuffHandle, "trackedBuff", trackedBuffCfg, {
+                anchor = "TOPLEFT", growth = "RIGHTDOWN",
+                size = 22, perRow = 4, max = 4, spacing = 1, minSize = 8,
+            })
+        end
         LayoutAuraGroup(debuffHandle, "debuff", debuffCfg, {
             anchor = "TOPLEFT", growth = "RIGHTDOWN",
             size = 20, perRow = 3, max = 6, spacing = 1, minSize = 8,
@@ -1225,6 +1261,7 @@ function Render.Install(box, ctx, deps)
         H.ApplyTextFocus(self, mock)
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
         buffHandle:SetFrameLevel(baseLevel + ClampLayer(buffCfg.layer, 5))
+        if trackedBuffHandle then trackedBuffHandle:SetFrameLevel(baseLevel + ClampLayer(trackedBuffCfg.layer, 9)) end
         debuffHandle:SetFrameLevel(baseLevel + ClampLayer(debuffCfg.layer, 6))
         for i = 1, #statusHandles do
             local handle = statusHandles[i]
@@ -1248,6 +1285,7 @@ function Render.Install(box, ctx, deps)
         textHandles.powerCenter:SetFrameLevel(baseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 6))
         textHandles.powerRight:SetFrameLevel(baseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 6))
         buffHandle:SetShown(layerAvailable.buff and LayerOn("buff"))
+        if trackedBuffHandle then trackedBuffHandle:SetShown(layerAvailable.trackedBuff and LayerOn("trackedBuff")) end
         debuffHandle:SetShown(layerAvailable.debuff and LayerOn("debuff"))
         for i = 1, #statusHandles do
             local handle = statusHandles[i]
@@ -1257,6 +1295,7 @@ function Render.Install(box, ctx, deps)
         spellHandle:SetShown(layerAvailable.si and LayerOn("si"))
         if targetedHandle then targetedHandle:SetShown(layerAvailable.targetedSpells and LayerOn("targetedSpells")) end
         buffHandle:SetAlpha(LayerAlpha("buff") * AuraPreviewAlpha(buffCfg))
+        if trackedBuffHandle then trackedBuffHandle:SetAlpha(LayerAlpha("trackedBuff") * AuraPreviewAlpha(trackedBuffCfg)) end
         debuffHandle:SetAlpha(LayerAlpha("debuff") * AuraPreviewAlpha(debuffCfg))
         for i = 1, #statusHandles do
             if statusHandles[i] then statusHandles[i]:SetAlpha(LayerAlpha("status")) end

@@ -3197,6 +3197,19 @@ R.AURA_UNIT_FILTER_SPECS = {
 
 R.AURA_GROUP_FILTER_EFFECTS = {
     ALL = "shows the normal aura set for that group lane without applying an extra live filter token.",
+    Player = "shows only auras cast by you, your pet, or your vehicle.",
+    RaidPlayer = "keeps raid-frame relevant auras cast by you, your pet, or your vehicle.",
+    RaidInCombatPlayer = "uses Blizzard's stricter combat-aware raid-frame visibility for your own auras.",
+    Raid = "keeps raid-frame relevant auras not cast by you.",
+    RaidInCombat = "uses Blizzard's stricter combat-aware raid-frame visibility for auras not cast by you.",
+    CancelablePlayer = "shows cancelable buffs cast by you, your pet, or your vehicle.",
+    NotCancelablePlayer = "shows non-cancelable buffs cast by you, your pet, or your vehicle.",
+    ExternalDefensivePlayer = "shows external defensive cooldown buffs cast by you, your pet, or your vehicle.",
+    BigDefensivePlayer = "shows major defensive buffs cast by you, your pet, or your vehicle.",
+    Cancelable = "shows cancelable buffs not cast by you.",
+    NotCancelable = "shows non-cancelable buffs not cast by you.",
+    ExternalDefensive = "shows external defensive cooldown buffs not cast by you.",
+    BigDefensive = "shows major defensive buffs not cast by you.",
     PLAYER = "shows only auras cast by you, your pet, or your vehicle.",
     RAID = "keeps auras Blizzard marks as raid-frame relevant.",
     RAID_IN_COMBAT = "uses Blizzard's stricter combat-aware raid-frame visibility.",
@@ -3331,13 +3344,13 @@ function R.AuraRaidFilterRecommendationReply(norm)
     lines[#lines + 1] = "Short answer: start with Raid for general raid relevance, use Raid In Combat when you want less clutter during pulls, and use Dispellable Debuffs if your main job is cleansing."
     lines[#lines + 1] = "For a new player, think of filters as a sieve. The aura lane still exists, but the filter decides which icons are allowed through."
     lines[#lines + 1] = "Good raid starting points:"
-    lines[#lines + 1] = "- Raid or Mythic Raid debuffs: set the Debuff filter to RAID. If the frame is still too noisy, try RAID_IN_COMBAT."
+    lines[#lines + 1] = "- Raid or Mythic Raid debuffs: set the Debuff filter to Raid. If the frame is still too noisy, try RaidInCombat."
     lines[#lines + 1] = "- Healer dispels: use RAID_PLAYER_DISPELLABLE on debuffs when you only want debuffs your character can remove."
-    lines[#lines + 1] = "- DPS personal tracking: use PLAYER on target debuffs when you only care about your own DoTs."
-    lines[#lines + 1] = "- Defensive cooldown tracking: use BIG_DEFENSIVE for major defensives, or EXTERNAL_DEFENSIVE when you want externals on a unit."
+    lines[#lines + 1] = "- DPS personal tracking: use Player on target debuffs when you only care about your own DoTs."
+    lines[#lines + 1] = "- Defensive cooldown tracking: use BigDefensive for non-player major defensives, BigDefensivePlayer for yours, or ExternalDefensive for externals."
     lines[#lines + 1] = "I would not start with Include Nameplate-only. Use that only when you know a specific aura appears on nameplates but is missing from MSUF."
     lines[#lines + 1] = "MSUF detail: Player/Target/Focus/Boss use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane."
-    lines[#lines + 1] = "Examples: set raid debuff filter to RAID; set raid debuff filter to RAID_IN_COMBAT; set raid debuff filter to RAID_PLAYER_DISPELLABLE; turn on target debuff player filter."
+    lines[#lines + 1] = "Examples: set raid debuff filter to Raid; set raid debuff filter to RaidInCombat; set raid debuff filter to RAID_PLAYER_DISPELLABLE; turn on target debuff player filter."
     return {
         kind = "answer",
         status = "info",
@@ -3354,11 +3367,11 @@ function R.AuraFilterOverviewReply(norm)
     lines[#lines + 1] = "Filters do not move icons or resize them. They decide which Buff or Debuff icons are allowed to show."
     lines[#lines + 1] = "Common choices:"
     lines[#lines + 1] = "- ALL: no extra narrowing on group frames."
-    lines[#lines + 1] = "- PLAYER: only your own buffs/debuffs. Good for tracking your DoTs or HoTs."
-    lines[#lines + 1] = "- RAID: Blizzard's raid-frame relevant list. Good default for raids."
-    lines[#lines + 1] = "- RAID_IN_COMBAT: stricter raid list while fighting. Good when raid frames are too noisy."
+    lines[#lines + 1] = "- Player: only your own buffs/debuffs. Good for tracking your DoTs or HoTs."
+    lines[#lines + 1] = "- Raid / RaidPlayer: Blizzard's raid-frame relevant list, split by not-player vs player-applied auras."
+    lines[#lines + 1] = "- RaidInCombat / RaidInCombatPlayer: stricter raid list while fighting, split by not-player vs player-applied auras."
     lines[#lines + 1] = "- RAID_PLAYER_DISPELLABLE: debuffs your character can dispel. Good for healers."
-    lines[#lines + 1] = "- BIG_DEFENSIVE / EXTERNAL_DEFENSIVE: defensive cooldown tracking."
+    lines[#lines + 1] = "- BigDefensive / ExternalDefensive and their Player variants: defensive cooldown tracking."
     lines[#lines + 1] = "- CROWD_CONTROL: CC effects, usually more useful in PvP or control-heavy situations."
     lines[#lines + 1] = "To read the exact active state I need the frame and lane, for example Target Debuffs, Player Buffs, Raid Debuffs, or Party Buffs."
     lines[#lines + 1] = "Examples: what active target debuff filters do I have; explain party buff filters; what is a good filter for raid."
@@ -3448,11 +3461,11 @@ function R.AuraGroupFilterStatusReply(norm, scope, scopeLabel, lane, laneLabel, 
         lines[#lines + 1] = "That means normal auras outside this token may be hidden even when the lane itself is enabled."
     end
     if lane == "debuff" then
-        lines[#lines + 1] = "Raid beginner tip: RAID is the usual first pick, RAID_IN_COMBAT is cleaner during pulls, and RAID_PLAYER_DISPELLABLE is the healer-cleanse view."
+        lines[#lines + 1] = "Raid beginner tip: Raid is the usual not-player pick, RaidPlayer is your own raid auras, and RAID_PLAYER_DISPELLABLE is the healer-cleanse view."
     else
-        lines[#lines + 1] = "Raid beginner tip: RAID is the usual clean buff view; BIG_DEFENSIVE and EXTERNAL_DEFENSIVE are for defensive cooldown tracking."
+        lines[#lines + 1] = "Raid beginner tip: Raid is the usual not-player buff view; BigDefensive and ExternalDefensive are for non-player defensive cooldown tracking."
     end
-    lines[#lines + 1] = "Safe next commands: 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RAID', 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RAID_IN_COMBAT', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to ALL'."
+    lines[#lines + 1] = "Safe next commands: 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to Raid', 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RaidInCombat', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to ALL'."
 
     return {
         kind = "answer",

@@ -494,6 +494,13 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             RegisterGFAuraBoolean(scope, lane, "CooldownSwipe", "showCooldownSwipe", laneInfo.label .. " Cooldown Swipe", true, aliases)
 
             aliases = {}
+            AddGFAuraAliases(aliases, scope, lane, "tooltip")
+            AddGFAuraAliases(aliases, scope, lane, "tooltips")
+            AddGFAuraAliases(aliases, scope, lane, "aura tooltip")
+            AddGFAuraAliases(aliases, scope, lane, "aura tooltips")
+            RegisterGFAuraBoolean(scope, lane, "Tooltip", "showTooltip", laneInfo.label .. " Tooltips", true, aliases)
+
+            aliases = {}
             AddGFAuraAliases(aliases, scope, lane, "swipe direction")
             AddGFAuraAliases(aliases, scope, lane, "cooldown swipe direction")
             AddGFAuraAliases(aliases, scope, lane, "timer swipe direction")

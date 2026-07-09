@@ -52,6 +52,7 @@ local LaneCore = type(BuildGroupAuraLaneCore) == "function" and BuildGroupAuraLa
     UNIT_LABELS = UNIT_LABELS,
     UNIT_ALIASES = UNIT_ALIASES,
     AddAliasesForUnit = AddAliasesForUnit,
+    GFAurasRoot = GFAurasRoot,
     GFAuraLaneShown = GFAuraLaneShown,
     SetGFAuraLaneShown = SetGFAuraLaneShown,
     GFReadAuraNumber = GFReadAuraNumber,

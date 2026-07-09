@@ -529,6 +529,19 @@ local AURA_FILTER_EFFECTS = {
 
 local GROUP_AURA_FILTER_EFFECTS = {
     ALL = "shows the normal aura set without an extra live group-filter token.",
+    Player = "shows only your own auras.",
+    RaidPlayer = "shows raid-relevant auras applied by you.",
+    RaidInCombatPlayer = "shows combat raid-frame auras applied by you.",
+    Raid = "shows raid-relevant auras not applied by you.",
+    RaidInCombat = "shows combat raid-frame auras not applied by you.",
+    BigDefensivePlayer = "shows major defensive cooldown buffs applied by you.",
+    ExternalDefensivePlayer = "shows external defensive cooldown buffs applied by you.",
+    CancelablePlayer = "shows cancelable buffs applied by you.",
+    NotCancelablePlayer = "shows non-cancelable buffs applied by you.",
+    BigDefensive = "shows major defensive cooldown buffs not applied by you.",
+    ExternalDefensive = "shows external defensive cooldown buffs not applied by you.",
+    Cancelable = "shows cancelable buffs not applied by you.",
+    NotCancelable = "shows non-cancelable buffs not applied by you.",
     PLAYER = "shows only your own auras.",
     RAID = "shows raid-relevant auras.",
     RAID_IN_COMBAT = "shows a cleaner raid-relevant set during combat.",
@@ -578,12 +591,12 @@ local function AuraFilterGuidanceRecommendation()
         "Short answer: start with Raid for general raid relevance, use Raid In Combat when you want less clutter during pulls, and use Dispellable Debuffs if your main job is cleansing.",
         "For a new player, filters are a sieve: the aura lane still exists, but the filter decides which icons are allowed through.",
         "Good raid starting points:",
-        "- Raid or Mythic Raid debuffs: set the Debuff filter to RAID. If the frame is still too noisy, try RAID_IN_COMBAT.",
+        "- Raid or Mythic Raid debuffs: set the Debuff filter to Raid. If the frame is still too noisy, try RaidInCombat.",
         "- Healer dispels: use RAID_PLAYER_DISPELLABLE on debuffs when you only want debuffs your character can remove.",
-        "- DPS personal tracking: use PLAYER on target debuffs when you only care about your own DoTs.",
-        "- Defensive cooldown tracking: use BIG_DEFENSIVE for major defensives, or EXTERNAL_DEFENSIVE for externals.",
+        "- DPS personal tracking: use Player on target debuffs when you only care about your own DoTs.",
+        "- Defensive cooldown tracking: use BigDefensive for non-player major defensives, BigDefensivePlayer for your own, or ExternalDefensive for externals.",
         "MSUF detail: Player/Target/Focus/Boss use separate filter toggles. Party/Raid/Mythic Raid use one live dropdown token per Buff or Debuff lane.",
-        "Examples: set raid debuff filter to RAID; set raid debuff filter to RAID_IN_COMBAT; set raid debuff filter to RAID_PLAYER_DISPELLABLE; turn on target debuff player filter.",
+        "Examples: set raid debuff filter to Raid; set raid debuff filter to RaidInCombat; set raid debuff filter to RAID_PLAYER_DISPELLABLE; turn on target debuff player filter.",
     }
     return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Recommends beginner-friendly aura filters for raid use." }
 end
@@ -593,11 +606,11 @@ local function AuraFilterGuidanceOverview()
         "Aura filters, in normal words",
         "Filters do not move icons or resize them. They decide which Buff or Debuff icons are allowed to show.",
         "Common choices:",
-        "- PLAYER: only your own buffs/debuffs. Good for tracking your DoTs or HoTs.",
-        "- RAID: Blizzard's raid-frame relevant list. Good default for raids.",
-        "- RAID_IN_COMBAT: stricter raid list while fighting. Good when raid frames are too noisy.",
+        "- Player: only your own buffs/debuffs. Good for tracking your DoTs or HoTs.",
+        "- Raid / RaidPlayer: Blizzard's raid-frame relevant list, split by not-player vs player-applied auras.",
+        "- RaidInCombat / RaidInCombatPlayer: stricter raid list while fighting, split by not-player vs player-applied auras.",
         "- RAID_PLAYER_DISPELLABLE: debuffs your character can dispel. Good for healers.",
-        "- BIG_DEFENSIVE / EXTERNAL_DEFENSIVE: defensive cooldown tracking.",
+        "- BigDefensive / ExternalDefensive and their Player variants: defensive cooldown tracking.",
         "To read the exact active state I need the frame and lane, for example Target Debuffs, Player Buffs, Raid Debuffs, or Party Buffs.",
     }
     return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Explains aura filters for beginners." }
@@ -612,10 +625,15 @@ local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
     lines[#lines + 1] = filtersEnabled and "Filter gate: enabled. The active toggles below affect the live native AuraContainer." or "Filter gate: disabled. These filter toggles will not narrow the lane until filters are enabled."
     local active = {}
     local tokens = { lane == "buff" and "HELPFUL" or "HARMFUL" }
+    local playerScoped = false
+    local nonPlayerScoped = false
     local exclusive = AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter.exclusive")
     if tostring(exclusive or "none") ~= "none" then
         active[#active + 1] = "Exclusive: starts from the stricter " .. tostring(exclusive) .. " list."
-        if tostring(exclusive) == "raid" then tokens[#tokens + 1] = "RAID" end
+        if tostring(exclusive) == "raid" then
+            tokens[#tokens + 1] = "RAID"
+            nonPlayerScoped = true
+        end
     end
     local keys = UNIT_AURA_FILTER_KEYS[lane] or {}
     for i = 1, #keys do
@@ -623,10 +641,19 @@ local function AuraUnitFilterGuidance(scope, scopeLabel, lane, laneLabel)
         local value = AuraReadSettingValue("auras3." .. tostring(scope) .. "." .. tostring(lane) .. ".filter." .. tostring(key))
         if value == true then
             active[#active + 1] = tostring(AURA_FILTER_LABELS[key] or key) .. ": " .. tostring(AURA_FILTER_EFFECTS[key] or "narrows this lane.")
-            if key == "onlyMine" then tokens[#tokens + 1] = "PLAYER" end
-            if key == "raid" then tokens[#tokens + 1] = "RAID" end
-            if key == "raidInCombat" then tokens[#tokens + 1] = "RAID_IN_COMBAT" end
+            if key == "onlyMine" then playerScoped = true end
+            if key == "raid" then tokens[#tokens + 1] = "RAID"; nonPlayerScoped = true end
+            if key == "raidInCombat" then tokens[#tokens + 1] = "RAID_IN_COMBAT"; nonPlayerScoped = true end
+            if key == "cancelable" then tokens[#tokens + 1] = "CANCELABLE"; nonPlayerScoped = true end
+            if key == "notCancelable" then tokens[#tokens + 1] = "!CANCELABLE"; nonPlayerScoped = true end
+            if key == "externalDefensive" then tokens[#tokens + 1] = "EXTERNAL_DEFENSIVE"; nonPlayerScoped = true end
+            if key == "bigDefensive" then tokens[#tokens + 1] = "BIG_DEFENSIVE"; nonPlayerScoped = true end
         end
+    end
+    if playerScoped then
+        tokens[#tokens + 1] = "PLAYER"
+    elseif nonPlayerScoped then
+        tokens[#tokens + 1] = "!PLAYER"
     end
     if #active == 0 then
         lines[#lines + 1] = "Active filters right now: none. This lane is not being narrowed by MSUF's live filter toggles."
@@ -654,9 +681,9 @@ local function AuraGroupFilterGuidance(scope, scopeLabel, lane, laneLabel)
     lines[#lines + 1] = (laneEnabled == false) and laneLabel .. " lane is disabled, so the filter cannot show icons yet." or laneLabel .. " lane is enabled or using its default enabled state."
     lines[#lines + 1] = "Current live filter token: " .. token .. ". Plain English: it " .. tostring(GROUP_AURA_FILTER_EFFECTS[token] or "uses that group aura filter token for the lane.")
     lines[#lines + 1] = lane == "debuff"
-        and "Raid beginner tip: RAID is the usual first pick, RAID_IN_COMBAT is cleaner during pulls, and RAID_PLAYER_DISPELLABLE is the healer-cleanse view."
-        or "Raid beginner tip: RAID is the usual clean buff view; BIG_DEFENSIVE and EXTERNAL_DEFENSIVE are for defensive cooldown tracking."
-    lines[#lines + 1] = "Safe next commands: 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RAID', 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RAID_IN_COMBAT', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to ALL'."
+        and "Raid beginner tip: Raid is the usual not-player pick, RaidPlayer is your own raid auras, and RAID_PLAYER_DISPELLABLE is the healer-cleanse view."
+        or "Raid beginner tip: Raid is the usual not-player buff view; BigDefensive and ExternalDefensive are for non-player defensive cooldown tracking."
+    lines[#lines + 1] = "Safe next commands: 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to Raid', 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to RaidInCombat', or 'set " .. tostring(scope) .. " " .. tostring(lane) .. " filter to ALL'."
     return { kind = "answer", status = "info", result = "info", text = table.concat(lines, "\n"), summary = "Explains active group aura filter." }
 end
 
@@ -997,12 +1024,19 @@ local function ParseUnitAuraTooltipShortcut(text)
     if not scopes then return nil end
     local value = AuraBooleanValue(text)
     if value == nil then return nil end
+    local lanes = AuraShortcutLanes(text)
 
     local changes = {}
     for i = 1, #scopes do
         local scope = scopes[i]
         if scope.kind == "unit" and (scope.key == "player" or scope.key == "target" or scope.key == "focus" or scope.key == "boss") then
-            AddAuraRegisteredChange(changes, "auras3." .. tostring(scope.key) .. ".showTooltip", value, "Aura Tooltips")
+            for j = 1, #lanes do
+                AddAuraRegisteredChange(changes, "auras3." .. tostring(scope.key) .. "." .. tostring(lanes[j]) .. ".showTooltip", value, "Aura Tooltips")
+            end
+        elseif scope.kind == "group" and (scope.key == "party" or scope.key == "raid" or scope.key == "mythicraid") then
+            for j = 1, #lanes do
+                AddAuraRegisteredChange(changes, "gf_" .. tostring(scope.key) .. ".auras." .. tostring(lanes[j]) .. ".showTooltip", value, "Group Aura Tooltips")
+            end
         end
     end
     if #changes == 0 then return nil end
@@ -1714,7 +1748,8 @@ local function GroupAuraFilterExplicitScopes(text, value)
     if hasParty then scopes[#scopes + 1] = "party" end
     if hasMythic then scopes[#scopes + 1] = "mythicraid" end
     if hasRaidScope then
-        local raidPhraseLooksLikeFilterValue = value == "RAID" and hasRaidLanePhrase and not hasRaidFrameScope and (hasParty or hasMythic)
+        local raidPhraseLooksLikeFilterValue = (value == "RAID" or value == "Raid" or value == "RaidPlayer")
+            and hasRaidLanePhrase and not hasRaidFrameScope and (hasParty or hasMythic)
         if not raidPhraseLooksLikeFilterValue then scopes[#scopes + 1] = "raid" end
     end
     if #scopes > 0 then return scopes, true end
@@ -1727,7 +1762,11 @@ end
 local function GroupAuraFilterLaneForText(text, value)
     if ContainsAny(text, AurasPhrases[174]) and not ContainsAny(text, AurasPhrases[175]) then return "buff" end
     if ContainsAny(text, AurasPhrases[176]) then return "debuff" end
-    if value == "CANCELABLE" or value == "NOT_CANCELABLE" or value == "EXTERNAL_DEFENSIVE" or value == "BIG_DEFENSIVE" then return "buff" end
+    if value == "CANCELABLE" or value == "NOT_CANCELABLE" or value == "EXTERNAL_DEFENSIVE" or value == "BIG_DEFENSIVE"
+        or value == "Cancelable" or value == "NotCancelable" or value == "ExternalDefensive" or value == "BigDefensive"
+        or value == "CancelablePlayer" or value == "NotCancelablePlayer" or value == "ExternalDefensivePlayer" or value == "BigDefensivePlayer" then
+        return "buff"
+    end
     if value == "RAID_PLAYER_DISPELLABLE" or value == "CROWD_CONTROL" then return "debuff" end
     return nil
 end

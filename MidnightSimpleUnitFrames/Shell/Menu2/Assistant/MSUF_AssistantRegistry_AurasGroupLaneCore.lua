@@ -15,6 +15,7 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
     local UNIT_LABELS = ctx.UNIT_LABELS or {}
     local UNIT_ALIASES = ctx.UNIT_ALIASES or {}
     local AddAliasesForUnit = ctx.AddAliasesForUnit
+    local GFAurasRoot = ctx.GFAurasRoot
     local GFAuraLaneShown = ctx.GFAuraLaneShown
     local SetGFAuraLaneShown = ctx.SetGFAuraLaneShown
     local GFReadAuraNumber = ctx.GFReadAuraNumber
@@ -102,7 +103,12 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
             exactAliases = aliases,
             get = function()
                 if key == "enabled" then return GFAuraLaneShown(scope, lane) end
-                local value = GFReadAuraValue(scope, lane, key, defaultValue)
+                local value = GFReadAuraValue(scope, lane, key, nil)
+                if value == nil and key == "showTooltip" and type(GFAurasRoot) == "function" then
+                    local root = GFAurasRoot(scope)
+                    value = root and root.showTooltip
+                end
+                if value == nil then value = defaultValue end
                 return value and true or false
             end,
             set = function(value)

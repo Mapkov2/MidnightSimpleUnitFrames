@@ -37,6 +37,10 @@ local function MenuModel()
     local a3 = MSUF and MSUF.MSUF_Auras3
     return type(a3) == "table" and a3.MenuModel or nil
 end
+local function ApplyService()
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    return (menu and menu.ApplyService) or _G.MSUF_Menu2_ApplyService
+end
 local function NormalizeKind(kind)
     kind = tostring(kind or ""):lower()
     if kind == "buffs" then kind = "buff" end
@@ -60,13 +64,40 @@ end
 local function RuntimeUnit(unit)
     return unit == "boss" and "boss1" or unit
 end
-local function RefreshRuntime(unit)
+local function LiveApplyReason(reason, fallback)
+    reason = tostring(reason or "")
+    if reason == "" then return fallback or "MSUF2_UNIT_PREVIEW_AURA_APPLY" end
+    if reason:find("^MSUF2_", 1, false) or reason:find("^AURAS3_", 1, false) then return reason end
+    return "MSUF2_" .. reason
+end
+local function RefreshRuntime(unit, reason)
     unit = Auras.PreviewUnitKey(unit)
     if not unit then return false end
+    reason = LiveApplyReason(reason, "MSUF2_UNIT_PREVIEW_AURA_APPLY")
+    local apply = ApplyService()
+    if apply and type(apply.RequestAuras) == "function" then
+        apply.RequestAuras(unit, reason)
+        if type(apply.Flush) == "function" then apply.Flush() end
+        return true
+    elseif apply and type(apply.RequestUnit) == "function" then
+        apply.RequestUnit(unit, reason, { auras = true, preview = true })
+        if type(apply.Flush) == "function" then apply.Flush() end
+        return true
+    end
+    local model = MenuModel()
+    if model and type(model.Apply) == "function" then
+        model.Apply(unit, reason)
+        return true
+    end
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.BumpRuntimeConfig) == "function" then a3.BumpRuntimeConfig() end
+    if a3 and type(a3.BumpRuntimeConfig) == "function" and type(a3.RefreshUnit) ~= "function" then a3.BumpRuntimeConfig() end
     local function Refresh(runtime)
-        if a3 and type(a3.RequestUnit) == "function" then
+        if a3 and type(a3.UpdateUnitAnchor) == "function" then
+            a3.UpdateUnitAnchor(runtime)
+        end
+        if a3 and type(a3.RefreshUnit) == "function" then
+            a3.RefreshUnit(runtime)
+        elseif a3 and type(a3.RequestUnit) == "function" then
             a3.RequestUnit(runtime)
         end
     end
@@ -76,6 +107,20 @@ local function RefreshRuntime(unit)
         Refresh(unit)
     end
     return true
+end
+local function RequestPreviewRefresh(box, reason)
+    if not box then return false end
+    if type(Preview.RequestRefreshForBox) == "function" then
+        Preview.RequestRefreshForBox(box, reason)
+        return true
+    elseif type(Preview.RequestRefresh) == "function" then
+        Preview.RequestRefresh(reason)
+        return true
+    elseif type(Preview.Refresh) == "function" then
+        Preview.Refresh(box, reason)
+        return true
+    end
+    return false
 end
 local function SyncPopup(unit)
     if type(_G.MSUF_SyncAuras3PositionPopup) == "function" then _G.MSUF_SyncAuras3PositionPopup(RuntimeUnit(unit)) end
@@ -101,9 +146,7 @@ function Auras.WriteOffsets(handle, x, y, reason)
     model.WriteNumber(unit, spec.x, RoundOffset(x), -4096, 4096)
     model.WriteNumber(unit, spec.y, RoundOffset(y), -4096, 4096)
     if reason ~= "UNIT_PREVIEW_DRAG" then
-        local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.BumpRuntimeConfig) == "function" then a3.BumpRuntimeConfig() end
-        RefreshRuntime(unit)
+        RefreshRuntime(unit, reason or "MSUF2_UNIT_PREVIEW_AURA_MOVE")
         SyncPopup(unit)
     end
     return true
@@ -115,6 +158,32 @@ local function MoveFrameBy(frame, dx, dy)
     relPoint = relPoint or point
     frame:ClearAllPoints()
     frame:SetPoint(point, rel, relPoint, (tonumber(ox) or 0) + dx, (tonumber(oy) or 0) + dy)
+    return true
+end
+local function CaptureDragPoint(handle, key, frame)
+    if not (handle and key and frame and frame.GetPoint) then return nil end
+    local pointKey = "_msufAuraDrag" .. key .. "Point"
+    if handle[pointKey] then return true end
+    local point, rel, relPoint, ox, oy = frame:GetPoint(1)
+    handle[pointKey] = point or "BOTTOMLEFT"
+    handle["_msufAuraDrag" .. key .. "Rel"] = rel
+    handle["_msufAuraDrag" .. key .. "RelPoint"] = relPoint or point or "BOTTOMLEFT"
+    handle["_msufAuraDrag" .. key .. "X"] = tonumber(ox) or 0
+    handle["_msufAuraDrag" .. key .. "Y"] = tonumber(oy) or 0
+    return true
+end
+local function SetDragPoint(handle, key, frame, dx, dy)
+    if not (handle and key and frame and frame.SetPoint) then return false end
+    if not CaptureDragPoint(handle, key, frame) then return false end
+    local prefix = "_msufAuraDrag" .. key
+    frame:ClearAllPoints()
+    frame:SetPoint(
+        handle[prefix .. "Point"] or "BOTTOMLEFT",
+        handle[prefix .. "Rel"],
+        handle[prefix .. "RelPoint"] or handle[prefix .. "Point"] or "BOTTOMLEFT",
+        (tonumber(handle[prefix .. "X"]) or 0) + dx,
+        (tonumber(handle[prefix .. "Y"]) or 0) + dy
+    )
     return true
 end
 function Auras.DragOffsets(handle, x, y)
@@ -131,27 +200,46 @@ function Auras.DragOffsets(handle, x, y)
     if prevX == x and prevY == y then return true end
     local scale = tonumber(box._mockEffectiveScale) or tonumber(box._mockScale) or 1
     if scale <= 0 then scale = 1 end
-    local dx = RoundOffset((x - prevX) * scale)
-    local dy = RoundOffset((y - prevY) * scale)
+    local startX = tonumber(handle._startX) or prevX or x
+    local startY = tonumber(handle._startY) or prevY or y
+    local dx = RoundOffset((x - startX) * scale)
+    local dy = RoundOffset((y - startY) * scale)
     handle._msufAuraDragX = x
     handle._msufAuraDragY = y
-    if dx == 0 and dy == 0 then return true end
-    local moved = MoveFrameBy(handle, dx, dy)
     local visual = box.auraPreviewVisuals and box.auraPreviewVisuals[kind]
-    MoveFrameBy(visual, dx, dy)
+    local moved = SetDragPoint(handle, "Handle", handle, dx, dy)
+    if not moved and (dx ~= 0 or dy ~= 0) then moved = MoveFrameBy(handle, dx, dy) end
+    if visual then
+        if not SetDragPoint(handle, "Visual", visual, dx, dy) and (dx ~= 0 or dy ~= 0) then
+            MoveFrameBy(visual, dx, dy)
+        end
+    end
     return moved == true
 end
 function Auras.ClearDragOffsets(handle)
     if not handle then return end
     handle._msufAuraDragX = nil
     handle._msufAuraDragY = nil
+    handle._msufAuraDragHandlePoint = nil
+    handle._msufAuraDragHandleRel = nil
+    handle._msufAuraDragHandleRelPoint = nil
+    handle._msufAuraDragHandleX = nil
+    handle._msufAuraDragHandleY = nil
+    handle._msufAuraDragVisualPoint = nil
+    handle._msufAuraDragVisualRel = nil
+    handle._msufAuraDragVisualRelPoint = nil
+    handle._msufAuraDragVisualX = nil
+    handle._msufAuraDragVisualY = nil
 end
-function Auras.CommitOffsets(handle)
-    local unit = PreviewUnit(handle and handle._preview)
+function Auras.CommitOffsets(handle, reason)
+    local box = handle and handle._preview
+    local unit = PreviewUnit(box)
     if not unit then return false end
+    reason = reason or "MSUF2_UNIT_PREVIEW_AURA_DRAG_END"
     Auras.ClearDragOffsets(handle)
-    RefreshRuntime(unit)
+    RefreshRuntime(unit, reason)
     SyncPopup(unit)
+    RequestPreviewRefresh(box, reason)
     return true
 end
 function Auras.CreateHandles(box, makeHandle)
