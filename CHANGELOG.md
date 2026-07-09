@@ -1,5 +1,46 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta8 - 2026-07-09
+
+### Group Auras And Spell Indicators
+- Expanded group-frame tracked aura support so spell-indicator selections can drive tracked buff lanes more reliably.
+- Added multi-ID and alias-aware custom aura tracking for spell indicators, including linked aura IDs and custom spell lists.
+- Added custom corner indicator aura tracking backed by exact SpellID lists and native AuraContainer filters.
+- Added frame-strata support for group aura lanes and spell indicators so tracked buffs, custom indicators, and previews layer more predictably.
+- Improved spell-indicator cooldown text sizing and preview rendering for icon, square, bar, and number placements.
+
+### Class Power And Aura Tracking
+- Reworked ClassPower aura tracking for WoW 12.1 so aura-driven resources update from incremental `UNIT_AURA` data and full aura scans when needed.
+- Fixed Balance Druid Eclipse, Celestial Alignment, and Incarnation tracking for color and Astral Power prediction.
+- Improved aura-driven ClassPower modes such as Maelstrom Weapon, Tip of the Spear, Icicles, Demon Hunter soul-fragment states, and Ebon Might.
+- Added a short cast-led correction window for Tip of the Spear stacks while Blizzard aura state catches up.
+
+### Health, Absorbs, And Frame State
+- Fixed absorb and over-absorb layering by syncing prediction bars to safe frame strata and ignoring secret-backed strata values.
+- Hardened health, gradient, NPC-type, class-color, and power-color paths against invalid or secret unit tokens.
+- Improved dead, offline, and missing-unit health state handling so colors and bars recover cleanly after identity changes.
+- Improved CooldownViewer anchoring checks so unavailable or legacy cooldown frames do not force bad late-anchor behavior.
+
+### Group Frames, Range Fade, And Previews
+- Fixed group range fade and offline alpha updates with an event-driven range driver for active visible party and raid units.
+- Updated range/offline registration after group-frame identity changes, hide/show transitions, and combat-deferred settle passes.
+- Fixed group preview text dragging so name, health text, and power text handles update cleanly while moving.
+- Improved group page previews so live group frames are preserved when they already cover the selected party or raid scope.
+- Removed targeted-spell cooldown text from live, preview, and test paths.
+
+### Menu2 And Assistant
+- Updated Group Indicators and Group Auras controls for custom aura tracking, strata/layer handling, and tracked-buff previews.
+- Improved Assistant routing for group aura lanes, spell indicators, text dragging, frame ordering, and health/status settings.
+- Tightened group status registry coverage and menu search wiring for the updated indicator and aura paths.
+
+### What To Test First
+- Party and raid tracked buffs from spell-indicator selections, especially custom multi-ID entries and linked aura IDs.
+- Custom corner indicators with exact SpellID lists and helpful/harmful filter choices.
+- Range fade and offline alpha after roster changes, party-to-raid conversion, hide/show, combat, and `/reload`.
+- Absorb, heal-absorb, and over-absorb bars with normal, reverse, clamp, and follow modes.
+- Balance Druid Eclipse colors and aura-driven ClassPower resources on specs that use aura stacks or timers.
+- Group preview dragging for name, health text, power text, aura, and spell-indicator handles.
+
 ## 6.0-Beta7 - 2026-07-09
 
 ### UFCore Rewrite

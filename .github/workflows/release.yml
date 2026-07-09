@@ -352,6 +352,7 @@ jobs:
           Copy-Item -LiteralPath "MidnightSimpleUnitFrames" -Destination $stagePath -Recurse -Force
 
           foreach ($relativePath in @(
+            "MidnightSimpleUnitFrames/.codex-remote-attachments",
             "MidnightSimpleUnitFrames/docs",
             "MidnightSimpleUnitFrames/scripts",
             "MidnightSimpleUnitFrames/MSUF_PerfyHook.lua"
@@ -361,6 +362,11 @@ jobs:
               Remove-Item -LiteralPath $fullPath -Recurse -Force
             }
           }
+
+          Get-ChildItem -LiteralPath $stagePath -Directory -Force -Recurse -Filter ".codex-remote-attachments" |
+            ForEach-Object {
+              Remove-Item -LiteralPath $_.FullName -Recurse -Force
+            }
 
           $tocPath = Join-Path $stagePath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
           $tocContent = Get-Content -LiteralPath $tocPath -Raw
@@ -383,7 +389,7 @@ jobs:
           $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zipPath))
           try {
             $badEntry = $zip.Entries | Where-Object {
-              $_.FullName -match '(^|/)docs/|(^|/)scripts/|(^|/)tools/|(^|/)_local_workflows/'
+              $_.FullName -match '(^|/)\.codex-remote-attachments/|(^|/)docs/|(^|/)scripts/|(^|/)tools/|(^|/)_local_workflows/'
             } | Select-Object -First 1
             if ($badEntry) {
               throw "Release zip contains local-only path: $($badEntry.FullName)"

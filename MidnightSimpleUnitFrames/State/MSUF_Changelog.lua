@@ -8,10 +8,73 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta7",
-    previousVersion = "6.0-Beta6",
-    rangeLabel = "6.0-Beta6 -> 6.0-Beta7",
+    currentVersion = "6.0-Beta8",
+    previousVersion = "6.0-Beta7",
+    rangeLabel = "6.0-Beta7 -> 6.0-Beta8",
     entries = {
+        {
+            version = "6.0-Beta8",
+            date = "2026-07-09",
+            sections = {
+                {
+                    title = "Group Auras And Spell Indicators",
+                    bullets = {
+                        "Expanded group-frame tracked aura support so spell-indicator selections can drive tracked buff lanes more reliably.",
+                        "Added multi-ID and alias-aware custom aura tracking for spell indicators, including linked aura IDs and custom spell lists.",
+                        "Added custom corner indicator aura tracking backed by exact SpellID lists and native AuraContainer filters.",
+                        "Added frame-strata support for group aura lanes and spell indicators so tracked buffs, custom indicators, and previews layer more predictably.",
+                        "Improved spell-indicator cooldown text sizing and preview rendering for icon, square, bar, and number placements.",
+                    },
+                },
+                {
+                    title = "Class Power And Aura Tracking",
+                    bullets = {
+                        "Reworked ClassPower aura tracking for WoW 12.1 so aura-driven resources update from incremental UNIT_AURA data and full aura scans when needed.",
+                        "Fixed Balance Druid Eclipse, Celestial Alignment, and Incarnation tracking for color and Astral Power prediction.",
+                        "Improved aura-driven ClassPower modes such as Maelstrom Weapon, Tip of the Spear, Icicles, Demon Hunter soul-fragment states, and Ebon Might.",
+                        "Added a short cast-led correction window for Tip of the Spear stacks while Blizzard aura state catches up.",
+                    },
+                },
+                {
+                    title = "Health, Absorbs, And Frame State",
+                    bullets = {
+                        "Fixed absorb and over-absorb layering by syncing prediction bars to safe frame strata and ignoring secret-backed strata values.",
+                        "Hardened health, gradient, NPC-type, class-color, and power-color paths against invalid or secret unit tokens.",
+                        "Improved dead, offline, and missing-unit health state handling so colors and bars recover cleanly after identity changes.",
+                        "Improved CooldownViewer anchoring checks so unavailable or legacy cooldown frames do not force bad late-anchor behavior.",
+                    },
+                },
+                {
+                    title = "Group Frames, Range Fade, And Previews",
+                    bullets = {
+                        "Fixed group range fade and offline alpha updates with an event-driven range driver for active visible party and raid units.",
+                        "Updated range/offline registration after group-frame identity changes, hide/show transitions, and combat-deferred settle passes.",
+                        "Fixed group preview text dragging so name, health text, and power text handles update cleanly while moving.",
+                        "Improved group page previews so live group frames are preserved when they already cover the selected party or raid scope.",
+                        "Removed targeted-spell cooldown text from live, preview, and test paths.",
+                    },
+                },
+                {
+                    title = "Menu2 And Assistant",
+                    bullets = {
+                        "Updated Group Indicators and Group Auras controls for custom aura tracking, strata/layer handling, and tracked-buff previews.",
+                        "Improved Assistant routing for group aura lanes, spell indicators, text dragging, frame ordering, and health/status settings.",
+                        "Tightened group status registry coverage and menu search wiring for the updated indicator and aura paths.",
+                    },
+                },
+                {
+                    title = "What To Test First",
+                    bullets = {
+                        "Party and raid tracked buffs from spell-indicator selections, especially custom multi-ID entries and linked aura IDs.",
+                        "Custom corner indicators with exact SpellID lists and helpful/harmful filter choices.",
+                        "Range fade and offline alpha after roster changes, party-to-raid conversion, hide/show, combat, and /reload.",
+                        "Absorb, heal-absorb, and over-absorb bars with normal, reverse, clamp, and follow modes.",
+                        "Balance Druid Eclipse colors and aura-driven ClassPower resources on specs that use aura stacks or timers.",
+                        "Group preview dragging for name, health text, power text, aura, and spell-indicator handles.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta7",
             date = "2026-07-09",
@@ -168,85 +231,6 @@ local data = {
                         "Frequent group health changes in party and raid layouts.",
                         "Enabling, disabling, and switching Party/Raid/Mythic Raid frames, including solo and inactive roster states.",
                         "/msufprof fast-path, detail, and identity diagnostic output.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0-Beta4",
-            date = "2026-07-05",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        "Refreshed the Menu2 visual shell with stronger contrast, updated panel textures, clearer navigation states, and improved window controls.",
-                        "Added MSUF menu font selection.",
-                        "Added per-slot percent-symbol controls for unit-frame, group-frame, and Class Resource text.",
-                        "Improved unit and group previews so visible layers, pinned previews, zoom, and snap behavior are more reliable.",
-                        "Improved fresh-install and profile-reset handling so the bundled factory profile is applied more consistently.",
-                    },
-                },
-                {
-                    title = "Menu And Preview",
-                    bullets = {
-                        "Updated Menu2 panel, rail, popup, status, and navigation textures.",
-                        "Improved Menu2 window snapping, minimize/restore handling, close cleanup, and combat-entry cleanup.",
-                        "Improved pinned preview stability when switching pages or closing the menu.",
-                        "Improved unit preview fitting for text, status icons, portrait, power, castbar, auras, and class-resource layers.",
-                        "Improved group preview layer controls, hover hints, disabled-layer visuals, and restore placement.",
-                        "Reset preview zoom and pan when non-guide layers are toggled so changed layers stay visible.",
-                        "Reduced menu and Assistant warmup work during normal menu use.",
-                    },
-                },
-                {
-                    title = "Unit Frames And Text",
-                    bullets = {
-                        "Added per-slot percent-symbol visibility for health and power text.",
-                        "Added menu and Assistant support for the new percent-symbol text controls.",
-                        "Improved NPC type coloring for health bars, name text, and inline target-of-target names.",
-                        "Updated NPC type colors when unit classification changes.",
-                        "Improved safe handling for protected/secret unit values in color and text logic.",
-                        "Reduced redundant unit-frame identity, power text, and aura identity refresh work.",
-                    },
-                },
-                {
-                    title = "Group Frames And Edit Mode",
-                    bullets = {
-                        "Improved Party Targeted Spell Indicator performance.",
-                        "Improved group-frame preview and Edit Mode placement for large party, raid, and mythic raid layouts.",
-                        "Kept group-frame preview anchors clamped to screen bounds without forcing large layouts into bad positions.",
-                        "Fixed mover and popup geometry issues in Edit Mode.",
-                        "Stopped motion previews and menu preview interactions more cleanly when combat starts.",
-                    },
-                },
-                {
-                    title = "Assistant And Recovery",
-                    bullets = {
-                        "Added a frame recovery workflow for restoring hidden or misplaced frames.",
-                        "Improved Assistant handling for percent-symbol visibility requests.",
-                        "Improved Assistant setting search, exact aliases, follow-up parsing, and dashboard/changelog answers.",
-                        "Improved Assistant-facing labels and setting registry coverage for text and group-frame options.",
-                    },
-                },
-                {
-                    title = "Profiles And Defaults",
-                    bullets = {
-                        "Improved fresh-install detection when early startup modules already created small bootstrap database buckets.",
-                        "Preserved exported factory-profile values while filling only missing structural defaults.",
-                        "Initialized the active profile before Menu2, gameplay settings, and previews read MSUF_DB.",
-                        "Refreshed preview runtime specs after profile swaps or resets so previews do not use stale profile data.",
-                    },
-                },
-                {
-                    title = "What To Test First",
-                    bullets = {
-                        "Menu2 window controls, snapping, minimize/restore, and close behavior.",
-                        "Menu font selection and the refreshed Menu2 styling.",
-                        "Unit-frame, group-frame, and Class Resource percent-symbol toggles.",
-                        "NPC type colors on target, focus, boss, and target-of-target text.",
-                        "Group-frame preview placement with large party, raid, and mythic raid layouts.",
-                        "Frame recovery workflow from the Assistant.",
-                        "Fresh install, profile reset, and profile swap behavior.",
                     },
                 },
             },

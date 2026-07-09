@@ -779,7 +779,7 @@ end
 local function ProbePingGUID(self)
   local unit = self and self.GetAttribute and self:GetAttribute("unit")
   if unit and UnitExists and UnitExists(unit) then
-    return UnitGUID and UnitGUID(unit) or nil
+    if UnitGUID then return UnitGUID(unit) end
   end
 end
 
