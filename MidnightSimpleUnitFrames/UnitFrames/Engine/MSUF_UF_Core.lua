@@ -70,11 +70,17 @@ local BASIC_ELEMENTS = {
 }
 UF.basicElements = BASIC_ELEMENTS
 
+local EVENT_ELEMENTS = {
+  Portrait = true,
+  Prediction = true,
+}
+
 local IDENTITY_ELEMENTS = {
   NameText = true,
   HealthText = true,
   PowerText = true,
   InlineToT = true,
+  Portrait = true,
 }
 
 local IDENTITY_BAR_ELEMENTS = {
@@ -384,6 +390,10 @@ local function HotElementAllowed(name)
   return BASIC_ELEMENTS[name] == true
 end
 UF.CoreElementAllowed = HotElementAllowed
+
+local function EventElementAllowed(name)
+  return HotElementAllowed(name) == true or EVENT_ELEMENTS[name] == true
+end
 
 local function ApplyElementAllowed(name)
   if HotElementAllowed(name) == true then return true end
@@ -797,7 +807,7 @@ local function RebuildFrameEvents(frame)
   end
   for i = 1, #UF.elementOrder do
     local name = UF.elementOrder[i]
-    if active[name] == true and HotElementAllowed(name) == true then
+    if active[name] == true and EventElementAllowed(name) == true then
       local element = UF.elements[name]
       local update = ElementUpdateFunction(frame, name)
       if element and update then

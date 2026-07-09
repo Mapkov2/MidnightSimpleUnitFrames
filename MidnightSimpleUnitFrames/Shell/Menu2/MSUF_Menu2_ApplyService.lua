@@ -1037,6 +1037,9 @@ local function ApplyBarRuntime(opt)
     elseif wantsTextureRuntime and kindA then
         Apply.CallGlobal("MSUF_InvalidateAbsorbCache", scope)
     end
+    if wantsTextureRuntime then
+        Apply.CallGlobal("MSUF_RefreshPredictionBars", scope, opt and opt.reason or "MSUF2_ABSORB")
+    end
     if opt and opt.barGradients == true then
         Apply.CallGlobal("MSUF_UpdateAllBarGradients", scope)
     end
