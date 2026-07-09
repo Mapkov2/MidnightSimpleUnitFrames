@@ -18,6 +18,8 @@ tools/
 _local_workflows/
 MidnightSimpleUnitFrames/scripts/
 MidnightSimpleUnitFrames/docs/
+MidnightSimpleUnitFrames/.codex-remote-attachments/
+MidnightSimpleUnitFrames/**/.codex-remote-attachments/
 
 # Local standalone addon worktree; not part of the MSUF repo.
 /MidnightSimpleAuras/

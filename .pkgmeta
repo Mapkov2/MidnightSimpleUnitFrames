@@ -9,6 +9,8 @@ ignore:
   - .idea
   - CHANGELOG.md
   - dist
+  - MidnightSimpleUnitFrames/.codex-remote-attachments
+  - MidnightSimpleUnitFrames/**/.codex-remote-attachments
   - MidnightSimpleUnitFrames/docs
   - MidnightSimpleUnitFrames/scripts
   - tools
