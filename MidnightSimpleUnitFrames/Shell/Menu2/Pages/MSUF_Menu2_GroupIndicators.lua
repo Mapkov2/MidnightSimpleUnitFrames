@@ -19,8 +19,6 @@ local VT = M.ValueTextList
 local WHITE_RGB = { 1, 1, 1 }
 local SPELL_INDICATORS_121_PTR_DISABLED = false
 local SPELL_INDICATORS_121_PTR_MESSAGE = "Native 12.1 AuraSlot SpellID filters are used for helpful auras on friendly Group Frames."
-local SPELL_INDICATOR_FRAME_EFFECTS_DISABLED = true
-local SPELL_INDICATOR_FRAME_EFFECTS_MESSAGE = "Frame effects are disabled for 12.1 PTR for now; icon placement and visuals stay active."
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local STATUS_ICON_RESET_FIELDS = M.WordList "size anchor x y layer iconStyle customIcon"
 local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
@@ -64,6 +62,7 @@ local CUSTOM_BUFF_LIMIT = 10
 local CUSTOM_BUFF_COLOR = { 0.45, 0.85, 1.00 }
 
 local function AddCustomBuffSpellID(out, seen, value)
+    if issecretvalue(value) == true then return 0 end
     local id = tonumber(value)
     if not id then return 0 end
     id = floor(id + 0.5)
@@ -75,15 +74,47 @@ end
 
 local function CustomBuffSpellIDs(value)
     local out, seen = {}, {}
+    if issecretvalue(value) == true then return nil end
     if type(value) == "number" then
         AddCustomBuffSpellID(out, seen, value)
         return #out > 0 and out or nil
     end
     value = tostring(value or "")
-    for token in value:gmatch("Hspell:(%d+)") do AddCustomBuffSpellID(out, seen, token) end
+    -- Extract the actual ID from spell links first. Do not treat link payload,
+    -- color codes, ranks, or digits inside a spell name as additional IDs.
+    for token in value:gmatch("|Hspell:(%d+)") do AddCustomBuffSpellID(out, seen, token) end
     for token in value:gmatch("spell:(%d+)") do AddCustomBuffSpellID(out, seen, token) end
-    for token in value:gmatch("%d+") do AddCustomBuffSpellID(out, seen, token) end
+    local plain = value
+        :gsub("|c%x%x%x%x%x%x%x%x", "")
+        :gsub("|Hspell:%d+[^|]*|h.-|h", " ")
+        :gsub("spell:%d+", " ")
+        :gsub("|r", "")
+    if plain:match("^%s*[%d,%s;]+%s*$") then
+        for token in plain:gmatch("%d+") do AddCustomBuffSpellID(out, seen, token) end
+    end
     return #out > 0 and out or nil
+end
+
+local function ResolveCustomBuffSpellIDs(value)
+    if issecretvalue(value) == true then return nil end
+    local ids = CustomBuffSpellIDs(value)
+    if ids then return ids end
+    local identifier = tostring(value or ""):match("^%s*(.-)%s*$")
+    if identifier == "" then return nil end
+    local cs = _G.C_Spell
+    local resolver = cs and cs.GetSpellIDForSpellIdentifier
+    if type(resolver) ~= "function" then return nil end
+    local ok, spellID = pcall(resolver, identifier)
+    if not ok or issecretvalue(spellID) == true then return nil end
+    local out, seen = {}, {}
+    AddCustomBuffSpellID(out, seen, spellID)
+    return #out > 0 and out or nil
+end
+
+local function RequestCustomBuffSpellData(spellIDs)
+    local request = _G.C_Spell and _G.C_Spell.RequestLoadSpellData
+    if type(request) ~= "function" or type(spellIDs) ~= "table" then return end
+    for i = 1, #spellIDs do pcall(request, spellIDs[i]) end
 end
 
 local function CustomBuffSpellIDListText(ids)
@@ -103,21 +134,45 @@ local function CustomBuffInfo(spellID)
     local cs = _G.C_Spell
     if cs and type(cs.GetSpellInfo) == "function" then
         local info = cs.GetSpellInfo(spellID)
-        if type(info) == "table" then
+        if issecretvalue(info) ~= true and type(info) == "table" then
             name = info.name
             icon = info.iconID or info.iconFileID or info.icon
-        elseif type(info) == "string" then
+        elseif issecretvalue(info) ~= true and type(info) == "string" then
             name = info
         end
     end
+    if issecretvalue(name) == true then name = nil end
+    if issecretvalue(icon) == true then icon = nil end
     if not name and cs and type(cs.GetSpellName) == "function" then name = cs.GetSpellName(spellID) end
+    if issecretvalue(name) == true then name = nil end
     if not icon and cs and type(cs.GetSpellTexture) == "function" then icon = cs.GetSpellTexture(spellID) end
+    if issecretvalue(icon) == true then icon = nil end
     if (not name or not icon) and type(_G.GetSpellInfo) == "function" then
         local n, _, tex = _G.GetSpellInfo(spellID)
-        name = name or n
-        icon = icon or tex
+        if issecretvalue(n) ~= true then name = name or n end
+        if issecretvalue(tex) ~= true then icon = icon or tex end
     end
     return name or ("Buff " .. tostring(spellID)), icon or 136243
+end
+
+local function SuggestedActivePlayerAuraID(spellIDs)
+    if type(spellIDs) ~= "table" or #spellIDs ~= 1 then return nil end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return nil end
+    local enteredID = spellIDs[1]
+    local spellName = CustomBuffInfo(enteredID)
+    if issecretvalue(spellName) == true or type(spellName) ~= "string" or spellName == "" or spellName == ("Buff " .. tostring(enteredID)) then return nil end
+    local getByName = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataBySpellName
+    if type(getByName) ~= "function" then return nil end
+    local ok, aura = pcall(getByName, "player", spellName, "HELPFUL")
+    if not ok or issecretvalue(aura) == true then return nil end
+    if aura == nil or type(aura) ~= "table" then return nil end
+    local auraSpellID = aura.spellId
+    if issecretvalue(auraSpellID) == true then return nil end
+    auraSpellID = tonumber(auraSpellID)
+    if not auraSpellID then return nil end
+    auraSpellID = floor(auraSpellID + 0.5)
+    if auraSpellID <= 0 or auraSpellID == enteredID then return nil end
+    return auraSpellID, spellName
 end
 
 local function IsCustomBuffEntry(auraName, entry)
@@ -738,7 +793,7 @@ local function BuildTargetedSpellsSection(ctx, b)
 end
 
 local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
-    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 918, false)
+    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 1000, false)
     local siW = spells._msuf2Width or ctx.width or 720
     local siGap = 28
     local siLeftX = 30
@@ -750,8 +805,8 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         W.ControlCard(spells, Tr("Spell Set"), nil, siLeftX - 14, -38, siLeftW + 28, 334)
         W.ControlCard(spells, Tr("Selected Spell"), nil, siRightX - 14, -38, siRightW + 28, 358)
         W.ControlCard(spells, Tr("Placed Indicator"), nil, siLeftX - 14, -374, siLeftW + 28, 408)
-        W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -410, siRightW + 28, 286)
-        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -704, siRightW + 28, 194)
+        W.ControlCard(spells, Tr("Frame Effect"), nil, siRightX - 14, -410, siRightW + 28, 360)
+        W.ControlCard(spells, Tr("Utilities"), nil, siRightX - 14, -782, siRightW + 28, 194)
     end
     local function SpellIndicatorRuntime()
         local gf = GF()
@@ -859,11 +914,10 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         end
         return count
     end
-    local function AddCustomBuff(kind, specKey, rawValue)
-        local spellIDs = CustomBuffSpellIDs(rawValue)
+    local function AddCustomBuffResolved(kind, specKey, spellIDs)
         local spellID = spellIDs and spellIDs[1] or nil
         if not spellID then
-            if M.ShowStatusFeedback then M.ShowStatusFeedback(Tr("Enter valid buff Spell IDs."), "error", 3) end
+            if M.ShowStatusFeedback then M.ShowStatusFeedback(Tr("Enter a valid buff Spell ID, link, or name."), "error", 3) end
             return false
         end
         if not specKey then
@@ -911,6 +965,46 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         RefreshPage()
         return true
     end
+    local function ShowCustomBuffAuraIDSuggestion(kind, specKey, spellIDs, suggestedID, spellName)
+        if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then return false end
+        M.InstallStaticPopup("MSUF2_GF_SPELL_CUSTOM_BUFF_AURA_ID", {
+            text = "%s",
+            button1 = Tr("Use both IDs"),
+            button2 = Tr("Entered ID only"),
+            hideOnEscape = false,
+            OnAccept = function(_, data)
+                if type(data) ~= "table" or type(data.add) ~= "function" then return end
+                local combined, seen = {}, {}
+                for i = 1, #(data.spellIDs or {}) do AddCustomBuffSpellID(combined, seen, data.spellIDs[i]) end
+                AddCustomBuffSpellID(combined, seen, data.suggestedID)
+                data.add(data.kind, data.specKey, combined)
+            end,
+            OnCancel = function(_, data, reason)
+                if reason == "clicked" and type(data) == "table" and type(data.add) == "function" then
+                    data.add(data.kind, data.specKey, data.spellIDs)
+                end
+            end,
+        })
+        local message = M.Format(
+            "%s is active on you with Aura ID %d. Your entered ID is %d. Track both IDs?",
+            tostring(spellName or Tr("This buff")), tonumber(suggestedID) or 0, tonumber(spellIDs and spellIDs[1]) or 0)
+        _G.StaticPopup_Show("MSUF2_GF_SPELL_CUSTOM_BUFF_AURA_ID", message, nil, {
+            kind = kind,
+            specKey = specKey,
+            spellIDs = spellIDs,
+            suggestedID = suggestedID,
+            add = AddCustomBuffResolved,
+        })
+        return true
+    end
+    local function AddCustomBuff(kind, specKey, rawValue)
+        local spellIDs = ResolveCustomBuffSpellIDs(rawValue)
+        if not spellIDs then return AddCustomBuffResolved(kind, specKey, nil) end
+        RequestCustomBuffSpellData(spellIDs)
+        local suggestedID, spellName = SuggestedActivePlayerAuraID(spellIDs)
+        if suggestedID and ShowCustomBuffAuraIDSuggestion(kind, specKey, spellIDs, suggestedID, spellName) then return true end
+        return AddCustomBuffResolved(kind, specKey, spellIDs)
+    end
     local function RemoveCustomBuff(kind, specKey, auraName)
         if not (kind and specKey and auraName and auraName ~= "") then return false end
         local cfg = SpellIndicators(kind)
@@ -936,11 +1030,11 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     local function ShowCustomBuffPopup(kind, specKey)
         if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then return false end
         M.InstallStaticPopup("MSUF2_GF_SPELL_CUSTOM_BUFF_ID", {
-            text = Tr("Enter buff Spell IDs"),
+            text = Tr("Enter buff Spell ID, link, or name"),
             button1 = Tr("Add"),
             button2 = _G.CANCEL or Tr("Cancel"),
             hasEditBox = true,
-            maxLetters = 96,
+            maxLetters = 255,
             OnShow = function(self)
                 local edit = self.editBox or self.EditBox
                 if edit then
@@ -1124,7 +1218,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         if self._isAddTile then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(Tr("Add custom buff"), 1, 1, 1)
-            GameTooltip:AddLine(Tr("Tracks a buff Spell ID through native AuraSlot filters."), 0.75, 0.78, 0.86)
+            GameTooltip:AddLine(Tr("Accepts a buff Spell ID, spell link, or spell name and tracks exact Aura IDs through native AuraSlot filters."), 0.75, 0.78, 0.86)
             GameTooltip:AddLine(M.Format("%d / %d", tonumber(self._customCount) or 0, CUSTOM_BUFF_LIMIT), 0.55, 0.70, 0.95)
             GameTooltip:Show()
             self:SetBackdropColor(0.055, 0.075, 0.115, 1)
@@ -1490,7 +1584,9 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
                 frame.color = { c[1] or 1, c[2] or 1, c[3] or 1, 0.8 }
             end
             frame.priority = frame.priority or 5
-        end)
+            frame.strata = frame.strata or "AUTO"
+        end,
+        RefreshSpellIndicatorState)
     local frameColor = W.Color(spells, Tr("Color"))
     M.BindColor(ctx, frameColor,
         function()
@@ -1528,12 +1624,14 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         25, { step = 5, roundStep = true })
     W.MoveWidget(frameAlpha, spells, siRightX, -608, siRightW, "LEFT")
     local frameThickness = BindFrameSlider("Border / Glow Thickness", 1, 8, 1, "thickness", 2, -662)
-    local frameEffectNotice = W.Text(spells, Tr(SPELL_INDICATOR_FRAME_EFFECTS_MESSAGE), siRightX, -688, siRightW, T.colors.dim)
-    if frameEffectNotice and frameEffectNotice.SetWordWrap then frameEffectNotice:SetWordWrap(false) end
-    local placedMissing = BindPlacedToggle("Show when missing", "missing", false, -744)
-    local placedCooldownSwipe = BindPlacedToggle("Show Cooldown Swipe", "showCooldownSwipe", true, -776)
-    local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -808)
-    local placedCooldownSize = BindConfigSlider(PlacedConfig, siRightX, siRightW, "Cooldown Text Size", 6, 40, 1, "cooldownSize", 8, -840)
+    local frameStrata = BindNestedStrataSlider(ctx,
+        W.Slider(spells, Tr("Effect Strata"), 0, (FrameStrataCount or 9) - 1, 1, siRightW),
+        function() return FrameEffectConfig(CurrentScope(), true) end, "strata", "AUTO", "visual")
+    W.MoveWidget(frameStrata, spells, siRightX, -716, siRightW, "LEFT")
+    local placedMissing = BindPlacedToggle("Show when missing", "missing", false, -822)
+    local placedCooldownSwipe = BindPlacedToggle("Show Cooldown Swipe", "showCooldownSwipe", true, -854)
+    local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -886)
+    local placedCooldownSize = BindConfigSlider(PlacedConfig, siRightX, siRightW, "Cooldown Text Size", 6, 40, 1, "cooldownSize", 8, -918)
     RefreshSpellIndicatorState = RefreshSpellIndicatorState(function()
         if SPELL_INDICATORS_121_PTR_DISABLED and SpellIndicators(CurrentScope()).enabled ~= false then
             SpellIndicators(CurrentScope()).enabled = false
@@ -1558,7 +1656,7 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         local placedEnabled = hasSpell and placed and placed.type and placed.type ~= "none"
         local frame = FrameEffectConfig(CurrentScope(), false)
         local frameKind = frame and frame.type or "none"
-        local hasFrame = (not SPELL_INDICATOR_FRAME_EFFECTS_DISABLED) and hasSpell and frameKind ~= "none"
+        local hasFrame = hasSpell and frameKind ~= "none"
         local cdRelevant = placedEnabled and placed.type == "icon"
         local barRelevant = placedEnabled and placed.type == "bar"
         SetOptionEnabled(siEnable, not SPELL_INDICATORS_121_PTR_DISABLED)
@@ -1572,15 +1670,12 @@ local function BuildSpellIndicatorsSection(ctx, b, RefreshPage)
         SetOptionEnabled(placedBarWidth, barRelevant)
         SetManyEnabled(cdRelevant, placedCooldownSwipe, placedCooldown)
         SetOptionEnabled(placedCooldownSize, cdRelevant and placed and placed.showCooldown ~= false)
-        SetOptionEnabled(frameType, false)
-        SetManyEnabled(hasFrame, frameColor, framePriority)
-        SetOptionEnabled(frameAlpha, hasFrame and (frameKind == "healthtint" or frameKind == "pulse"))
-        SetOptionEnabled(frameThickness, hasFrame and (frameKind == "border" or frameKind == "glow"))
+        SetOptionEnabled(frameType, hasSpell)
+        SetManyEnabled(hasFrame, frameColor, framePriority, frameAlpha, frameThickness, frameStrata)
         local badges = {
             OnOffBadge(indicatorsOn, "Enabled", "Disabled"),
         }
         if SPELL_INDICATORS_121_PTR_DISABLED then badges[#badges + 1] = { text = "12.1 PTR", kind = "muted", important = true } end
-        if SPELL_INDICATOR_FRAME_EFFECTS_DISABLED then badges[#badges + 1] = { text = "Effects off", kind = "muted" } end
         badges[#badges + 1] = { text = OptionText(SpellSpecValues, SpellIndicators(CurrentScope()).spec or "auto", "Auto"), kind = indicatorsOn and "info" or "muted" }
         badges[#badges + 1] = { text = hasSpell and tostring(CurrentSpellAura(CurrentScope()) or "") or "No spell", kind = hasSpell and "accent" or "muted" }
         SetSectionBadgesAndStatus(spells, badges)
@@ -1591,7 +1686,7 @@ end
 GP.BuildSpellIndicatorsSection = BuildSpellIndicatorsSection
 
 local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
-    local corners = b:CollapsibleSection("ci", "Corner Indicators", 620, false)
+    local corners = b:CollapsibleSection("ci", "Corner Indicators", 674, false)
     local cornerW = corners._msuf2Width or ctx.width or 720
     local leftX = 30
     local cornerGap = 28
@@ -1600,8 +1695,8 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     local rightX = leftX + leftW + cornerGap
     local rightW = max(260, min(440, cornerInnerW - leftW - cornerGap))
     do
-        W.ControlCardBackdrop(corners, leftX - 14, -38, leftW + 28, 170)
-        W.ControlCardBackdrop(corners, leftX - 14, -218, leftW + 28, 334)
+        W.ControlCardBackdrop(corners, leftX - 14, -38, leftW + 28, 224)
+        W.ControlCardBackdrop(corners, leftX - 14, -272, leftW + 28, 334)
         W.ControlCardBackdrop(corners, rightX - 14, -38, rightW + 28, 526)
     end
     W.LabelAt(corners, "Global", leftX, -42, leftW, "GameFontNormalSmall", T.colors.accent)
@@ -1614,15 +1709,19 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
         function(value) Set(CurrentScope(), "ciAlpha", (tonumber(value) or 100) / 100, "visual") end,
         100, { step = 5, roundStep = true })
     W.MoveWidget(ciAlpha, corners, leftX, -170, leftW, "LEFT")
-    W.LabelAt(corners, "Slot Assignments", leftX, -228, leftW, "GameFontNormalSmall", T.colors.accent)
-    W.Text(corners, "Assign what each corner dot should show. Choosing Custom Spell enables that slot's editor on the right.", leftX, -250, leftW, T.colors.muted)
+    local ciStrata = BindNestedStrataSlider(ctx,
+        W.Slider(corners, Tr("Frame Strata"), 0, (FrameStrataCount or 9) - 1, 1, leftW),
+        function() return Conf(CurrentScope()) end, "ciStrata", "AUTO", "visual")
+    W.MoveWidget(ciStrata, corners, leftX, -224, leftW, "LEFT")
+    W.LabelAt(corners, "Slot Assignments", leftX, -282, leftW, "GameFontNormalSmall", T.colors.accent)
+    W.Text(corners, "Assign what each corner dot should show. Choosing Custom Spell enables that slot's editor on the right.", leftX, -304, leftW, T.colors.muted)
     local slotControls = {}
     local slotPositions = {
-        TL = { x = leftX, y = -304 },
-        TR = { x = leftX + floor(leftW / 2) + 10, y = -304 },
-        BL = { x = leftX, y = -386 },
-        BR = { x = leftX + floor(leftW / 2) + 10, y = -386 },
-        C = { x = leftX + floor(leftW / 4) + 4, y = -468 },
+        TL = { x = leftX, y = -358 },
+        TR = { x = leftX + floor(leftW / 2) + 10, y = -358 },
+        BL = { x = leftX, y = -440 },
+        BR = { x = leftX + floor(leftW / 2) + 10, y = -440 },
+        C = { x = leftX + floor(leftW / 4) + 4, y = -522 },
     }
     local slotW = floor((leftW - 12) / 2)
     for i = 1, #CI_SLOT_VALUES do
@@ -1711,7 +1810,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     W.MoveWidget(customColor, corners, rightX, -458, rightW)
     local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX, -506, rightW, T.colors.dim)
     if customHelp.SetWordWrap then customHelp:SetWordWrap(true) end
-    local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha }, { slotDrop, categoryDrop }, { customSpells, customMode, customFilter, customColor }
+    local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha, ciStrata }, { slotDrop, categoryDrop }, { customSpells, customMode, customFilter, customColor }
     local function RefreshCornerIndicatorState()
         local slot = CurrentCISlot()
         local category = Val(CurrentScope(), "ciSlot" .. slot, CI_SLOT_DEFAULTS[slot] or "none")

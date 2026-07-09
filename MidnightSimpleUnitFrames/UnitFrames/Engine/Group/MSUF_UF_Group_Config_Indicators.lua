@@ -108,7 +108,7 @@ local function CustomCornerColor(custom)
   }
 end
 
-local function CompileCustomCornerSlot(conf, slot, size, alpha, layer)
+local function CompileCustomCornerSlot(conf, slot, size, alpha, layer, strata)
   local custom = type(conf and conf["ciCustom" .. tostring(slot and slot.key or "")]) == "table"
     and conf["ciCustom" .. tostring(slot and slot.key or "")] or nil
   local includeSpellIDs, spellIDs, spellIDSignature = ParseCustomSpellIDs(custom and custom.spells)
@@ -121,6 +121,7 @@ local function CompileCustomCornerSlot(conf, slot, size, alpha, layer)
     display = "Corner " .. tostring(slot.key),
     enabled = true,
     layer = layer,
+    strata = strata,
     onlyOwn = false,
     spellIDs = spellIDs,
     includeSpellIDs = includeSpellIDs,
@@ -151,6 +152,7 @@ function GF.CompileCornerIndicators(conf)
   local size = Num(conf.ciSize, 8)
   local alpha = Alpha(conf.ciAlpha, 1)
   local layer = Layer(conf.ciLayer, 7)
+  local strata = NormalizeFrameStrata(conf.ciStrata, "AUTO")
   local slots, slotMap, aggroSlots, dispelSlots, customSlots = {}, {}, {}, {}, {}
   local hasWork, needsThreat, needsDispel, needsCustom = false, false, false, false
   for i = 1, #CI_SLOT_FIELDS do
@@ -174,7 +176,7 @@ function GF.CompileCornerIndicators(conf)
         needsDispel = true
         dispelSlots[#dispelSlots + 1] = slot
       elseif category == "custom" then
-        local customSlot = CompileCustomCornerSlot(conf, slot, size, alpha, layer)
+        local customSlot = CompileCustomCornerSlot(conf, slot, size, alpha, layer, strata)
         if customSlot then
           hasWork = true
           needsCustom = true
@@ -195,6 +197,7 @@ function GF.CompileCornerIndicators(conf)
     size = size,
     alpha = alpha,
     layer = layer,
+    strata = strata,
     slots = slots,
     aggroSlots = aggroSlots,
     dispelSlots = dispelSlots,
@@ -400,6 +403,7 @@ local function NormalizeFrameEffect(frame)
     priority = Num(frame.priority, 5),
     tintAlpha = Alpha(frame.tintAlpha or frame.alpha, color[4] or color.a or 0.20),
     thickness = Num(frame.thickness, 2),
+    strata = NormalizeFrameStrata(frame.strata, "AUTO"),
   }
 end
 
@@ -409,10 +413,7 @@ local function CompileSpellIndicatorItem(si, specKey, auraName, entry, order, gl
   local idCount = AddSpellIDsForAura(hash, ids, si, specKey, auraName, entry)
   if idCount <= 0 then return nil end
   local placed = NormalizePlaced(entry.placed)
-  -- 12.1 PTR AuraSlot frame effects are disabled for now. The icon slot still
-  -- compiles normally, but saved border/tint/glow settings do not enter preview
-  -- or live runtime until we have a non-secret signal for assigned slots.
-  local frame = nil
+  local frame = NormalizeFrameEffect(entry.frame)
   if placed and placed.type == "none" and not frame then placed = nil end
   if not placed and not frame then return nil end
   local info = TrackableInfo(si, specKey, auraName)

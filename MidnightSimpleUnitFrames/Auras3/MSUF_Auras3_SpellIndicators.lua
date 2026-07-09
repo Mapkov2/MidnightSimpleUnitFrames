@@ -16,6 +16,7 @@ local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local table_concat, table_sort = table.concat, table.sort
 local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
+local hooksecurefunc = _G.hooksecurefunc
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local DEFAULT_SHARED = {
@@ -203,6 +204,7 @@ local function SlotLayoutSignature(slot)
         .. "\030" .. tostring(slot.showStacks) .. "\030" .. tostring(color[1]) .. "\030" .. tostring(color[2])
         .. "\030" .. tostring(color[3]) .. "\030" .. tostring(color[4]) .. "\030" .. tostring(frame and frame.type)
         .. "\030" .. tostring(frame and frame.priority) .. "\030" .. tostring(frame and frame.thickness)
+        .. "\030" .. tostring(frame and frame.tintAlpha) .. "\030" .. tostring(frame and frame.strata)
         .. "\030" .. tostring(effectColor[1]) .. "\030" .. tostring(effectColor[2]) .. "\030" .. tostring(effectColor[3])
         .. "\030" .. tostring(effectColor[4]) .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
@@ -219,10 +221,8 @@ end
 local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata)
     if not (type(unit) == "string" and unit ~= "" and type(item) == "table" and item.enabled == true) then return nil end
     local placed = type(item.placed) == "table" and item.placed or nil
-    -- Live frame effects are temporarily disabled on 12.1 PTR. AuraSlot
-    -- visibility is secret-backed, so effects must not depend on aura button
-    -- show state until there is a non-secret assignment path in this runtime.
-    local frameEffect = nil
+    local frameEffect = type(item.frame) == "table" and item.frame or nil
+    if frameEffect and (frameEffect.type == nil or frameEffect.type == "" or frameEffect.type == "none") then frameEffect = nil end
     if not placed and not frameEffect then return nil end
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(item.includeSpellIDs, "includeSpellIDs")
     if not candidateFilters then return nil end
@@ -353,35 +353,38 @@ local function SpellIndicatorTargetFrame(parentFrame)
     return parentFrame and (parentFrame.hpBar or parentFrame.Health or parentFrame.health or parentFrame)
 end
 
-local function EnsureEffectRoot(parentFrame)
-    if not parentFrame then return nil end
-    local root = parentFrame._msufA3SpellIndicatorEffectRoot
+local function EnsureEffectRoot(button, parentFrame)
+    if not (button and parentFrame) then return nil end
+    local root = button._msufA3SpellIndicatorEffectRoot
     if not root then
-        root = CreateFrame("Frame", nil, parentFrame)
+        -- The AuraSlot button is shown with Blizzard's secret-wrapped native
+        -- assignment state. Parenting the full-frame visual to that button
+        -- makes visibility flow through the frame tree without inspecting a
+        -- secret boolean in addon Lua.
+        root = CreateFrame("Frame", nil, button)
+        root:EnableMouse(false)
         root:SetAllPoints(parentFrame)
-        root:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 24)
-        parentFrame._msufA3SpellIndicatorEffectRoot = root
+        button._msufA3SpellIndicatorEffectRoot = root
     end
-    root:Show()
     return root
 end
 
-local function EnsureTint(parentFrame)
-    local root = EnsureEffectRoot(parentFrame)
+local function EnsureTint(button, parentFrame)
+    local root = EnsureEffectRoot(button, parentFrame)
     if not root then return nil end
-    local tint = parentFrame._msufA3SpellIndicatorHealthTint
+    local tint = button._msufA3SpellIndicatorHealthTint
     if not tint then
         tint = root:CreateTexture(nil, "OVERLAY")
         tint:SetTexture("Interface\\Buttons\\WHITE8X8")
-        parentFrame._msufA3SpellIndicatorHealthTint = tint
+        button._msufA3SpellIndicatorHealthTint = tint
     end
     return tint
 end
 
-local function EnsureEdges(parentFrame)
-    local root = EnsureEffectRoot(parentFrame)
+local function EnsureEdges(button, parentFrame)
+    local root = EnsureEffectRoot(button, parentFrame)
     if not root then return nil end
-    local edges = parentFrame._msufA3SpellIndicatorEdges
+    local edges = button._msufA3SpellIndicatorEdges
     if not edges then
         edges = {}
         for i = 1, 4 do
@@ -389,7 +392,7 @@ local function EnsureEdges(parentFrame)
             tex:SetTexture("Interface\\Buttons\\WHITE8X8")
             edges[i] = tex
         end
-        parentFrame._msufA3SpellIndicatorEdges = edges
+        button._msufA3SpellIndicatorEdges = edges
     end
     return edges
 end
@@ -403,27 +406,106 @@ local function NameFontString(parentFrame)
         or parentFrame._nameFS
 end
 
-local function ClearNameColor(parentFrame)
-    local saved = parentFrame and parentFrame._msufA3SpellIndicatorSavedNameColor
-    if not saved then return end
-    local fs = saved.fs
-    if fs and fs.SetTextColor then
-        fs:SetTextColor(saved.r or 1, saved.g or 1, saved.b or 1, saved.a or 1)
+local function UnregisterNameOverlay(button)
+    local overlay = button and button._msufA3SpellIndicatorNameOverlay
+    local registry = overlay and overlay._msufA3NameRegistry
+    if registry then registry[overlay] = nil end
+    if overlay then
+        overlay._msufA3NameRegistry = nil
+        overlay._msufA3NameSource = nil
+        overlay:Hide()
     end
-    parentFrame._msufA3SpellIndicatorSavedNameColor = nil
+end
+
+local function SyncNameOverlayFont(overlay, source)
+    if not (overlay and source) then return end
+    local path, size, flags = source:GetFont()
+    if path and size then overlay:SetFont(path, size, flags) end
+    if source.GetJustifyH then overlay:SetJustifyH(source:GetJustifyH()) end
+    if source.GetJustifyV then overlay:SetJustifyV(source:GetJustifyV()) end
+    if source.GetShadowColor then overlay:SetShadowColor(source:GetShadowColor()) end
+    if source.GetShadowOffset then overlay:SetShadowOffset(source:GetShadowOffset()) end
+    overlay:ClearAllPoints()
+    overlay:SetAllPoints(source)
+    -- GetText can itself be secret on restricted units. It is forwarded as an
+    -- opaque value only; no comparison or branch is performed on it.
+    overlay:SetText(source:GetText())
+end
+
+local function RegisterNameOverlay(button, parentFrame, root)
+    local source = NameFontString(parentFrame)
+    if not (button and source and root) then return nil end
+    local overlay = button._msufA3SpellIndicatorNameOverlay
+    if not overlay then
+        overlay = root:CreateFontString(nil, "OVERLAY")
+        button._msufA3SpellIndicatorNameOverlay = overlay
+    end
+    if overlay._msufA3NameSource ~= source then
+        UnregisterNameOverlay(button)
+        overlay._msufA3NameSource = source
+        local registry = source._msufA3SpellIndicatorNameOverlays
+        if not registry then
+            registry = {}
+            source._msufA3SpellIndicatorNameOverlays = registry
+        end
+        registry[overlay] = true
+        overlay._msufA3NameRegistry = registry
+        if hooksecurefunc and source._msufA3SpellIndicatorNameHooked ~= true then
+            local function SyncRegisteredNameOverlays()
+                local value = source:GetText()
+                for target in pairs(registry) do target:SetText(value) end
+            end
+            hooksecurefunc(source, "SetText", SyncRegisteredNameOverlays)
+            hooksecurefunc(source, "SetFormattedText", SyncRegisteredNameOverlays)
+            source._msufA3SpellIndicatorNameHooked = true
+        end
+    end
+    SyncNameOverlayFont(overlay, source)
+    return overlay
+end
+
+local function StopPulse(root)
+    local pulse = root and root._msufA3SpellIndicatorPulse
+    if pulse and pulse:IsPlaying() then pulse:Stop() end
+    if root then root:SetAlpha(1) end
+end
+
+local function StartPulse(root)
+    if not root then return end
+    local pulse = root._msufA3SpellIndicatorPulse
+    if not pulse then
+        pulse = root:CreateAnimationGroup()
+        local alpha = pulse:CreateAnimation("Alpha")
+        alpha:SetFromAlpha(0.45)
+        alpha:SetToAlpha(1)
+        alpha:SetDuration(0.7)
+        if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
+        pulse:SetLooping("BOUNCE")
+        root._msufA3SpellIndicatorPulse = pulse
+    end
+    if not pulse:IsPlaying() then pulse:Play() end
+end
+
+local function HideButtonFrameEffect(button)
+    if not button then return end
+    local root = button._msufA3SpellIndicatorEffectRoot
+    if root then
+        StopPulse(root)
+        root:Hide()
+    end
+    UnregisterNameOverlay(button)
 end
 
 function Runtime.HideFrameEffects(parentFrame)
     if not parentFrame then return end
-    local tint = parentFrame._msufA3SpellIndicatorHealthTint
-    if tint then tint:Hide() end
-    local edges = parentFrame._msufA3SpellIndicatorEdges
-    if edges then
-        for i = 1, #edges do
-            if edges[i] then edges[i]:Hide() end
-        end
+    local buttons = parentFrame._msufA3SpellIndicatorEffectButtons
+    if buttons then
+        for button in pairs(buttons) do HideButtonFrameEffect(button) end
     end
-    ClearNameColor(parentFrame)
+    parentFrame._msufA3SpellIndicatorEffectButtons = nil
+    -- Clean up objects created by the pre-native implementation, if a profile
+    -- was hot-reloaded from an older build in the same session.
+    if parentFrame._msufA3SpellIndicatorEffectRoot then parentFrame._msufA3SpellIndicatorEffectRoot:Hide() end
 end
 
 function Runtime.HideMissing(parentFrame)
@@ -441,8 +523,8 @@ function Runtime.HideAll(parentFrame)
     Runtime.HideMissing(parentFrame)
 end
 
-local function LayoutEdges(parentFrame, effect)
-    local edges = EnsureEdges(parentFrame)
+local function LayoutEdges(button, parentFrame, effect)
+    local edges = EnsureEdges(button, parentFrame)
     if not edges then return end
     local color = effect and effect.color or {}
     local r, g, b = Clamp01(color[1], 1), Clamp01(color[2], 1), Clamp01(color[3], 1)
@@ -471,17 +553,101 @@ local function LayoutEdges(parentFrame, effect)
     right:SetWidth(thickness)
     for i = 1, 4 do
         local edge = edges[i]
+        if edge.SetBlendMode then edge:SetBlendMode(effect and (effect.type == "glow" or effect.type == "pulse") and "ADD" or "BLEND") end
         edge:SetVertexColor(r, g, b, a)
         edge:Show()
     end
 end
 
+local function HideEffectRegions(button)
+    local tint = button and button._msufA3SpellIndicatorHealthTint
+    if tint then tint:Hide() end
+    local edges = button and button._msufA3SpellIndicatorEdges
+    if edges then
+        for i = 1, #edges do
+            if edges[i] then edges[i]:Hide() end
+        end
+    end
+    UnregisterNameOverlay(button)
+end
+
+local function ApplyButtonFrameEffect(button, slot, parentFrame)
+    if not (button and slot and parentFrame) then return false end
+    local effect = slot.frameEffect
+    if type(effect) ~= "table" then
+        local buttons = parentFrame._msufA3SpellIndicatorEffectButtons
+        if buttons then buttons[button] = nil end
+        HideButtonFrameEffect(button)
+        return false
+    end
+    local kind = tostring(effect.type or "none"):lower()
+    if kind ~= "healthtint" and kind ~= "border" and kind ~= "glow" and kind ~= "pulse" and kind ~= "namecolor" then
+        local buttons = parentFrame._msufA3SpellIndicatorEffectButtons
+        if buttons then buttons[button] = nil end
+        HideButtonFrameEffect(button)
+        return false
+    end
+
+    local root = EnsureEffectRoot(button, parentFrame)
+    if not root then return false end
+    root:ClearAllPoints()
+    root:SetAllPoints(parentFrame)
+    SyncFrameStrata(root, ResolveFrameStrata(parentFrame, effect.strata or slot.strata))
+    if root.SetFrameLevel then
+        -- Saved priorities use 1 as the strongest effect.
+        local priority = Round(ClampNumber(effect.priority, 5, 1, 10))
+        root:SetFrameLevel((parentFrame:GetFrameLevel() or 0) + 24 + (11 - priority))
+    end
+    StopPulse(root)
+    HideEffectRegions(button)
+
+    local color = effect.color or {}
+    local r = Clamp01(color[1], 1)
+    local g = Clamp01(color[2], 1)
+    local b = Clamp01(color[3], 1)
+    local a = Clamp01(color[4], 1)
+    if kind == "healthtint" then
+        local tint = EnsureTint(button, parentFrame)
+        local target = SpellIndicatorTargetFrame(parentFrame) or parentFrame
+        tint:ClearAllPoints()
+        tint:SetAllPoints(target)
+        if tint.SetBlendMode then tint:SetBlendMode("BLEND") end
+        tint:SetVertexColor(r, g, b, Clamp01(effect.tintAlpha, a > 0 and a or 0.20))
+        tint:Show()
+    elseif kind == "namecolor" then
+        local name = RegisterNameOverlay(button, parentFrame, root)
+        if name then
+            name:SetTextColor(r, g, b, a)
+            name:Show()
+        end
+    else
+        LayoutEdges(button, parentFrame, effect)
+        if kind == "pulse" then StartPulse(root) end
+    end
+
+    parentFrame._msufA3SpellIndicatorEffectButtons = parentFrame._msufA3SpellIndicatorEffectButtons or {}
+    parentFrame._msufA3SpellIndicatorEffectButtons[button] = true
+    root:Show()
+    return true
+end
+
 function Runtime.RefreshFrameEffects(parentFrame)
-    -- 12.1 AuraButton visibility is secret-backed. Reading IsShown() here
-    -- throws "boolean test on a secret boolean"; keep icon slots active and
-    -- leave live frame effects off until we have a non-secret native signal.
-    Runtime.HideFrameEffects(parentFrame)
-    return false
+    -- Visibility is now inherited by per-slot child frames. Refreshing needs no
+    -- aura scan and, critically, never reads AuraSlot:IsShown().
+    return parentFrame ~= nil
+end
+
+function Runtime.ReleaseContainerEffects(container, parentFrame)
+    if not container then return end
+    parentFrame = parentFrame or container._msufA3ParentFrame
+    local buttons = parentFrame and parentFrame._msufA3SpellIndicatorEffectButtons
+    for i = 1, (container.createdButtons or 0) do
+        local button = container[i]
+        if button then
+            HideButtonFrameEffect(button)
+            if buttons then buttons[button] = nil end
+        end
+    end
 end
 
 local function EnsureMissingFrame(parentFrame, slot)
@@ -555,7 +721,10 @@ local function ApplyVisual(button, slot)
         button.Icon = icon
     end
     if slot.hiddenVisual == true then
-        button:SetAlpha(0)
+        -- AuraSlot visibility is secret-backed. Effect-only slots therefore
+        -- keep alpha at one and hide only their icon regions; descendant
+        -- full-frame effects inherit the native secret visibility directly.
+        button:SetAlpha(1)
         button:ClearIcon()
         button:ClearApplicationCount()
         button:ClearDurationCooldown()
@@ -607,12 +776,10 @@ local function PrepareButton(button, slot, parentFrame)
     deps.PrepareAuraButton(button, slot, 1)
     SyncButtonGeometry(button, slot, parentFrame)
     ApplyVisual(button, slot)
+    ApplyButtonFrameEffect(button, slot, parentFrame)
     SyncMissingFrame(parentFrame, slot, button)
     if button.EnableMouse then button:EnableMouse(false) end
     button:SetMouseMotionEnabled(false)
-    if parentFrame._msufA3SpellIndicatorEffectButtons then
-        parentFrame._msufA3SpellIndicatorEffectButtons[button] = nil
-    end
     return true
 end
 
@@ -744,6 +911,7 @@ function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
         current._msufA3LayoutSignature = layoutSignature
         return A3._TraceFinish(traceToken, current)
     end
+    Runtime.ReleaseContainerEffects(current, parentFrame)
     deps.HideContainer(current)
     root[key] = nil
     current = CreateSlots(root, slotRoot, parentFrame)

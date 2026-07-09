@@ -696,6 +696,7 @@ local function CompileGroupVisuals(kind, conf)
     dispelOverlayAlpha = Clamp01(conf.dispelOverlayAlpha, 0.35),
     dispelOverlayTrigger = NormalizeDispelOverlayTrigger(conf.dispelOverlayTrigger),
     dispelOverlayOnHealth = conf.dispelOverlayOnHealth ~= false,
+    dispelOverlayStrata = NormalizeFrameOutlineStrata(conf.dispelOverlayStrata),
     debuffStripeEnabled = conf.debuffStripeEnabled == true,
     debuffStripeEdge = conf.debuffStripeEdge or "BOTTOM",
     debuffStripeHeight = Num(conf.debuffStripeHeight, 3),

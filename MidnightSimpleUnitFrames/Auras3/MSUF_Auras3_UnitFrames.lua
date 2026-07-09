@@ -1026,6 +1026,14 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
     local overlayOnHealth = visual == "overlay" and ((groupMode and overlay.dispelOverlayOnHealth ~= false) or (not groupMode and overlay.onHealth ~= false))
     local target = visual == "overlay" and (overlayOnHealth and "healthFill" or "healthBar") or "frame"
     local cornerCount = cornerSlots and #cornerSlots or nil
+    local strata
+    if visual == "overlay" then
+        strata = groupMode and overlay.dispelOverlayStrata or overlay.strata
+    elseif visual == "corner" then
+        strata = corner and corner.strata
+    else
+        strata = border and border.strata
+    end
     return {
         sensor = true,
         kind = visual == "corner" and "dispelCorner" or (visual == "overlay" and "dispelOverlay" or "dispelBorder"),
@@ -1045,6 +1053,7 @@ local function CompileDispelSensor(unit, frameSpec, groupMode, visual)
         slots = cornerSlots,
         slotSignature = cornerSignature,
         layer = visual == "corner" and (30 + ClampNumber(corner and corner.layer, 7, 0, 30)) or (visual == "overlay" and 2 or 45),
+        strata = NormalizeFrameStrata(strata, "AUTO"),
         trigger = trigger,
     }
 end
@@ -1828,7 +1837,7 @@ end
 SensorLayoutSignature = function(sensor)
     return tostring(sensor.visual) .. "\030" .. tostring(sensor.target)
         .. "\030" .. tostring(sensor.style) .. "\030" .. tostring(sensor.alpha)
-        .. "\030" .. tostring(sensor.thickness) .. "\030" .. tostring(sensor.layer)
+        .. "\030" .. tostring(sensor.thickness) .. "\030" .. tostring(sensor.layer) .. "\030" .. tostring(sensor.strata)
         .. "\030" .. tostring(sensor.size) .. "\030" .. tostring(sensor.slotSignature)
         .. "\030" .. tostring(sensor.trigger) .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
@@ -2319,6 +2328,7 @@ local function LayoutDispelSensorButton(button, sensor, parentFrame, index)
     else
         button:SetAllPoints(target)
     end
+    SyncFrameStrata(button, ResolveFrameStrata(parentFrame, sensor.strata))
     if button.SetFrameLevel then button:SetFrameLevel(DispelSensorFrameLevel(parentFrame, sensor, target)) end
     return true
 end
