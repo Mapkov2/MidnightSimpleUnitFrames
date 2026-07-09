@@ -723,6 +723,8 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         SetDefault(auras, "blizzardContainerY", 0)
         for _, key in ipairs({ "buff", "debuff", "externals" }) do
             if type(auras[key]) ~= "table" then auras[key] = {} end
+            SetDefault(auras[key], "strata", "AUTO")
+            if key == "buff" then SetDefault(auras[key], "trackedStrata", "AUTO") end
             SetDefault(auras[key], "cooldownSwipeReverse", false)
             SetDefault(auras[key], "showDurationBar", false)
             SetDefault(auras[key], "durationBarHeight", 2)

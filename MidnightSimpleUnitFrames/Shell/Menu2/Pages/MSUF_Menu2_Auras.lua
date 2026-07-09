@@ -1994,7 +1994,7 @@ local function BuildUnitAuraPlacementCard(ctx, parent, unit, kind, x, y, width)
         { "Icon Size", rightX, y - 140, 10, 80, 1, rightW, function() return Model.ReadNumber(unit, LaneSizeKey(kind), 26, 1, 128) end, function(v) Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128); ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE") end },
         { "Per Row", rightX, y - 200, 1, 40, 1, rightW, function() return Model.ReadLanePerRow(unit, kind) end, function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end },
         { "Spacing", rightX, y - 260, 0, 12, 1, rightW, function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end, function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end },
-        { "Layer (Z-Order)", rightX, y - 320, 1, 15, 1, rightW, function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end, function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end },
+        { "Layer (Z-Order)", rightX, y - 320, 0, 30, 1, rightW, function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end, function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end },
     }
     M.BuildControlSpecs(sliderSpecs, {
         ["*"] = function(s) return BindSlider(ctx, parent, s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9]) end,

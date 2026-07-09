@@ -66,6 +66,10 @@ local npcTypeReferenceLevel
 local npcTypeReferenceInstanceType
 local npcTypeLieutenantLevel
 
+local IsUnitToken = UF.IsUnitToken or function(unit)
+  return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
+end
+
 -- Shared bar/text primitives for unitframe elements.
 -- Health, power, text, color, and smoothing helpers live here so element files can share the
 -- same secret-value handling and cached mutation rules instead of diverging per unit type.
@@ -538,7 +542,7 @@ local function ExternalFrameWidth(frameName, relativeTo)
 end
 
 local function ClassColor(unit)
-  if issecretvalue(unit) == true then
+  if not IsUnitToken(unit) then
     return 0.12, 0.62, 0.95
   end
   local _, class = UnitClass(unit)
@@ -564,6 +568,9 @@ local function PlainTrue(value)
 end
 
 local function UnitIsNeutralForNPCType(unit)
+  if not IsUnitToken(unit) then
+    return false
+  end
   if UnitSelectionType then
     local selection = SafeNumber(UnitSelectionType(unit))
     if selection ~= nil then
@@ -577,6 +584,9 @@ local function UnitIsNeutralForNPCType(unit)
 end
 
 local function UnitHasMana(unit)
+  if not IsUnitToken(unit) then
+    return false
+  end
   if UnitHasPowerType then
     return PlainTrue(UnitHasPowerType(unit, POWER_TYPE_MANA))
   end
@@ -613,6 +623,9 @@ local function NPCTypeReferenceLevel()
 end
 
 local function NPCEliteKind(unit)
+  if not IsUnitToken(unit) then
+    return nil
+  end
   if UnitIsBossMob and PlainTrue(UnitIsBossMob(unit)) then
     return "npcBoss"
   end
@@ -638,7 +651,7 @@ local function NPCEliteKind(unit)
 end
 
 local function UnitNPCClassificationKind(unit)
-  if issecretvalue(unit) == true or not UnitClassification then
+  if not IsUnitToken(unit) or not UnitClassification then
     return nil
   end
   local classification = UnitClassification(unit)
@@ -655,7 +668,7 @@ local function UnitNPCClassificationKind(unit)
 end
 
 local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
-  if issecretvalue(unit) == true then
+  if not IsUnitToken(unit) then
     return nil
   end
   local health = spec and spec.health or {}
@@ -706,6 +719,9 @@ end
 
 local function ReadUnitBool(api, unit, defaultValue)
   if not api then
+    return defaultValue, false
+  end
+  if not IsUnitToken(unit) then
     return defaultValue, false
   end
   local value = api(unit)
@@ -879,7 +895,7 @@ local function GradientColor(unit, calc, frame)
       return r, g, b, true
     end
   end
-  if UnitHealthPercent and curve then
+  if IsUnitToken(unit) and UnitHealthPercent and curve then
     local color = UnitHealthPercent(unit, true, curve)
     if color and color.GetRGB then
       local r, g, b = color:GetRGB()
@@ -944,7 +960,7 @@ local function HealthColor(frame, unit, hp, maxHP, calc, event)
   local kind = state and state.npcKindKnown and state.npcKind or UnitNPCKind(frame, unit, spec)
   if kind then
     return NPCColor(kind)
-  elseif UnitSelectionColor and issecretvalue(unit) ~= true then
+  elseif UnitSelectionColor and IsUnitToken(unit) then
     local r, g, b = UnitSelectionColor(unit)
     if issecretvalue(r) ~= true and issecretvalue(g) ~= true and issecretvalue(b) ~= true and r ~= nil then
       return r, g, b
@@ -1014,7 +1030,7 @@ local function PowerColor(frame, unit, powerType, token, metaKnown)
   if metaKnown == true then
     tokenKey = token
     powerTypeKey = powerType
-  elseif UnitPowerType then
+  elseif IsUnitToken(unit) and UnitPowerType then
     powerType, token = UnitPowerType(unit)
     tokenKey = issecretvalue(token) ~= true and token or nil
     powerTypeKey = issecretvalue(powerType) ~= true and powerType or nil

@@ -13,7 +13,7 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
-local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, SpellIndicators, QueueSpellIndicators, SpellSpecValues, EffectiveSpellSpec, SpellAuraValues, CurrentSpellAura, CurrentSpellConfig, OptionText = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber SpellIndicators QueueSpellIndicators SpellSpecValues EffectiveSpellSpec SpellAuraValues CurrentSpellAura CurrentSpellConfig OptionText]])
+local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedStrataSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, SpellIndicators, QueueSpellIndicators, SpellSpecValues, EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura, ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig, OptionText, FrameStrataCount = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedStrataSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber SpellIndicators QueueSpellIndicators SpellSpecValues EffectiveSpellSpec SpellAuraValues SetCurrentSpellAura ClearCurrentSpellAura CurrentSpellAura CurrentSpellConfig OptionText FrameStrataCount]])
 AURA_ANCHORS = AURA_ANCHORS or {}
 STATUS_ICON_ANCHORS = STATUS_ICON_ANCHORS or {}
 SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES or {}
@@ -29,6 +29,14 @@ OptionText = OptionText or function(values, value, fallback)
         end
     end
     return fallback or tostring(value or "")
+end
+SetCurrentSpellAura = SetCurrentSpellAura or function(scope, auraName)
+    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
+    M.gfSpellIndicatorSelection[scope] = auraName or ""
+end
+ClearCurrentSpellAura = ClearCurrentSpellAura or function(scope)
+    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
+    M.gfSpellIndicatorSelection[scope] = nil
 end
 local function ThemeColor(key, fallback)
     local colors = T and T.colors
@@ -87,7 +95,7 @@ local function BuildGFAuras(ctx)
         buff = {
             enabledLabel = "Buffs", maxLabel = "Max icons", maxMax = 20,
             anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5,
-            height = 704,
+            height = 770,
         },
         debuff = {
             enabledLabel = "Debuffs", maxLabel = "Max icons", maxMax = 20,
@@ -130,7 +138,7 @@ local function BuildGFAuras(ctx)
     local function BuildTrackedBuffControls(section, sectionW, leftX, rightX, leftW, rightW, def)
         local trackedY = -412
         W.ControlCard(section, "Tracked Buff Icons", nil, leftX - 14, trackedY, leftW + 28, 286)
-        W.ControlCard(section, "Tracked Buff Layout", nil, rightX - 14, trackedY, rightW + 28, 286)
+        W.ControlCard(section, "Tracked Buff Layout", nil, rightX - 14, trackedY, rightW + 28, 340)
         local enable = BindTrackedBool(ctx, W.SwitchAt(section, "Tracked Buff Icons", leftX, trackedY - 34, 210),
             function(scope)
                 local si = SpellIndicators and SpellIndicators(scope)
@@ -154,8 +162,6 @@ local function BuildGFAuras(ctx)
                 local scope = CurrentScope()
                 local si = SpellIndicators and SpellIndicators(scope)
                 if si then si.spec = value or "auto" end
-                M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-                M.gfSpellIndicatorSelection[scope] = nil
                 EnsureTrackedSpellSpec(scope)
                 QueueAuraRefresh(scope, "auras")
                 M.CallIf(RefreshContext, ctx)
@@ -165,8 +171,7 @@ local function BuildGFAuras(ctx)
         M.BindDropdownWidget(ctx, spell,
             function() return CurrentSpellAura and CurrentSpellAura(CurrentScope()) or "" end,
             function(value)
-                M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-                M.gfSpellIndicatorSelection[CurrentScope()] = value or ""
+                SetCurrentSpellAura(CurrentScope(), value or "")
                 M.CallIf(RefreshContext, ctx)
             end)
         local trackSpell = BindTrackedBool(ctx, W.SwitchAt(section, "Track selected spell", leftX, trackedY - 186, 230),
@@ -188,10 +193,12 @@ local function BuildGFAuras(ctx)
             { "dropdown", "Growth", AURA_GROWTH_VALUES, "trackedGrowth", "RIGHTDOWN", "auras", rightX, trackedY - 108, rightW, "LEFT" },
             { "slider", "Max tracked", 0, 20, 1, "trackedMax", 8, "auras", rightX, trackedY - 162, rightW },
             { "slider", "Icon size", 8, 64, 1, "trackedSize", def.size, "auras", rightX, trackedY - 216, rightW },
-            { "slider", "Layer (Z-Order)", 1, 15, 1, "trackedLayer", 9, "auras", rightX, trackedY - 270, rightW },
+            { "slider", "Layer (Z-Order)", 0, 30, 1, "trackedLayer", 9, "auras", rightX, trackedY - 270, rightW },
+            { "strata", "Frame Strata", 0, (FrameStrataCount or 9) - 1, 1, "trackedStrata", "AUTO", "auras", rightX, trackedY - 324, rightW },
         }, {
             dropdown = function(s) local widget = BindNestedDropdown(ctx, W.Dropdown(section, s[2], s[3], s[9]), function() return AuraGroup(CurrentScope(), "buff") end, s[4], s[5], s[6]); W.MoveWidget(widget, section, s[7], s[8], s[9], s[10] or "CENTER"); return widget end,
             slider = function(s) local widget = BindNestedSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), "buff") end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
+            strata = function(s) local widget = BindNestedStrataSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), "buff") end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
         })
         W.Text(section, "Native 12.1 SpellID include filters are used here for HELPFUL auras on friendly Group Frames.", leftX, trackedY - 254, leftW, MUTED)
         return { enable, spec, spell, trackSpell, onlyOwn, unpack(layoutControls) }
@@ -210,7 +217,7 @@ local function BuildGFAuras(ctx)
         local rightW = max(280, min(360, sectionW - rightX - 42))
         do
             W.ControlCardBackdrop(section, leftX - 14, -38, leftW + 28, 42)
-            W.ControlCard(section, "Placement", nil, leftX - 14, -84, leftW + 28, 232)
+            W.ControlCard(section, "Placement", nil, leftX - 14, -84, leftW + 28, 286)
             W.ControlCard(section, "Icon Grid", nil, rightX - 14, -84, rightW + 28, 326)
         end
         local enable = BindAuraLaneEnabled(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44, 190), groupKey)
@@ -220,14 +227,16 @@ local function BuildGFAuras(ctx)
             { "dropdown", "Growth", AURA_GROWTH_VALUES, "growth", def.growth, "auras", leftX, -172, leftW, "LEFT" },
             { "slider", "Offset X", -160, 160, 1, "x", 0, "auras", leftX, -226, leftW },
             { "slider", "Offset Y", -160, 160, 1, "y", 0, "auras", leftX, -280, leftW },
+            { "strata", "Frame Strata", 0, (FrameStrataCount or 9) - 1, 1, "strata", "AUTO", "auras", leftX, -334, leftW },
             { "slider", def.maxLabel, 0, def.maxMax, 1, "max", def.max, "auras", rightX, -118, rightW },
             { "slider", "Icon size", 8, 64, 1, "size", def.size, "auras", rightX, -172, rightW },
             { "slider", "Per row", 1, 20, 1, "perRow", def.perRow, "auras", rightX, -226, rightW },
             { "slider", "Spacing", 0, 12, 1, "spacing", def.spacing, "auras", rightX, -280, rightW },
-            { "slider", "Layer (Z-Order)", 1, 15, 1, "layer", def.layer, "auras", rightX, -334, rightW },
+            { "slider", "Layer (Z-Order)", 0, 30, 1, "layer", def.layer, "auras", rightX, -334, rightW },
         }, {
             dropdown = function(s) local widget = BindNestedDropdown(ctx, W.Dropdown(section, s[2], s[3], s[9]), function() return AuraGroup(CurrentScope(), groupKey) end, s[4], s[5], s[6]); W.MoveWidget(widget, section, s[7], s[8], s[9], s[10] or "CENTER"); return widget end,
             slider = function(s) local widget = BindNestedSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
+            strata = function(s) local widget = BindNestedStrataSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
         })
         if groupKey == "debuff" then BuildDebuffPTRNotice(section, leftX, -410, sectionW - 72) end
         local function RefreshAuraGroupState()

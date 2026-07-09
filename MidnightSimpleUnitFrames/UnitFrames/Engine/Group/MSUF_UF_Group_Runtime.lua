@@ -21,11 +21,16 @@ local GetNumGroupMembers = GetNumGroupMembers
 local floor = math.floor
 local tonumber = tonumber
 local type = type
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local eventFrame
 
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
+end
+
+local IsUnitToken = UF and UF.IsUnitToken or function(unit)
+  return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
 end
 
 local function Conf(kind)
@@ -123,6 +128,7 @@ end
 
 local function ApplyFrameDirty(frame, kind, mask, reason)
   if not (frame and kind) then return false end
+  if not IsUnitToken(frame.unit) then return false end
   if not (UF and UF.ApplySpec and GF.CompileSpec) then
     return GF.ApplyButton and GF.ApplyButton(frame, kind, reason)
   end

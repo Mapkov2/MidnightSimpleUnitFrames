@@ -13,6 +13,7 @@ end
 local CreateFrame = CreateFrame
 local tonumber = tonumber
 local type = type
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local Highlight = {}
 MSUF.Highlight = Highlight
@@ -130,10 +131,14 @@ local function EnsureBorder(frame)
   -- PERF: strata/level writes invalidate render batching even when the value
   -- is unchanged; every mouseover lands here, so only write on real change.
   if hb.SetFrameStrata and frame.GetFrameStrata then
-    local strata = frame:GetFrameStrata() or "MEDIUM"
-    if hb._appliedStrata ~= strata then
-      hb._appliedStrata = strata
-      hb:SetFrameStrata(strata)
+    local strata = frame:GetFrameStrata()
+    if issecretvalue(strata) ~= true then
+      strata = strata or "MEDIUM"
+      local cachedStrata = hb._appliedStrata
+      if issecretvalue(cachedStrata) == true or cachedStrata ~= strata then
+        hb._appliedStrata = strata
+        hb:SetFrameStrata(strata)
+      end
     end
   end
   if hb.SetFrameLevel and frame.GetFrameLevel then

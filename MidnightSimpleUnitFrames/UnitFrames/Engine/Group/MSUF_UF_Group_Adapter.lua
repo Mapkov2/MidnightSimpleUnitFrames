@@ -185,6 +185,13 @@ local function SameApplied(frame, kind, unit, spec)
     and appliedHeight[frame] == (spec and spec.height or 0)
 end
 
+local function NotifyGroupRangeUnitIdentity(frame)
+  local update = frame and frame._msufUpdateGroupRangeFade
+  if type(update) == "function" then
+    update(frame, UNIT_CHANGED_REASON, frame.unit)
+  end
+end
+
 function GF.RebindGroupHotRuntime(frame)
   if UF and UF.OptimizeFrameHotpaths then UF.OptimizeFrameHotpaths(frame) end
   return nil
@@ -276,6 +283,7 @@ local function SuspendUnitBinding(frame)
   if visual then
     visual.unit = nil
     visual.unitKey = nil
+    NotifyGroupRangeUnitIdentity(visual)
   end
 end
 
@@ -299,6 +307,7 @@ local function ApplyUnitFrame(frame, kind, unit, reason)
     TrackFrame(visual, unit)
     if reason == "UNIT_CHANGED" or reason == UNIT_CHANGED_REASON then
       if UF.RunLeanIdentity then UF.RunLeanIdentity(visual, UNIT_CHANGED_REASON) end
+      NotifyGroupRangeUnitIdentity(visual)
     end
     return true
   end
@@ -354,6 +363,7 @@ local function OnChildAttributeChanged(self, name, value)
     if kind then appliedKind[visual] = kind end
     TrackFrame(visual, rawUnit)
     if UF.RunLeanIdentity then UF.RunLeanIdentity(visual, UNIT_CHANGED_REASON) end
+    NotifyGroupRangeUnitIdentity(visual)
     return
   end
 
@@ -372,6 +382,7 @@ local function OnChildAttributeChanged(self, name, value)
   appliedUnit[visual] = rawUnit
   if kind then appliedKind[visual] = kind end
   TrackFrame(visual, rawUnit)
+  NotifyGroupRangeUnitIdentity(visual)
 end
 
 local function InstallChildAttrHook(child, kind)
