@@ -1030,7 +1030,6 @@ local function BuildPreview(parent, panel, width, height)
     )
     ApplyPreviewCanvasGradient(canvas, T)
     if canvas.SetClipsChildren then canvas:SetClipsChildren(true) end
-    if box.SetClipsChildren then box:SetClipsChildren(true) end
     canvas:EnableMouse(true)
     canvas:EnableMouseWheel(true)
     if canvas.SetPropagateMouseWheel then canvas:SetPropagateMouseWheel(true) end
