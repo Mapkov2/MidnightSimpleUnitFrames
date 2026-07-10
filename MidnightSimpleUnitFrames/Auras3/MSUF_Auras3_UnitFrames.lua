@@ -110,6 +110,10 @@ local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
 local EMPTY_EVENTS = {}
 local AURA_CONTAINER_ADDON = "Blizzard_AuraContainer"
+-- Blizzard's native maxDuration candidate filter also rejects duration == 0.
+-- Use a practically unreachable finite ceiling so this behaves as an
+-- "exclude permanent" rule without dropping normal long-duration auras.
+local MAX_FINITE_AURA_DURATION = 2147483647
 local MSUF_AURA_SENSOR_EDGE_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\msuf_frame_edge_thin_256x64.tga"
 local AURA_BORDER_OPTIONS = {
     showIcon = false,
@@ -352,6 +356,7 @@ local GROUP_LANE_SPECS = {
         yKey = "buffOffsetY", layerKey = "buffLayer", filterKey = "buffFilter",
         strataKey = "buffStrata",
         blacklistHashKey = "buffBlacklistHash",
+        hidePermanentKey = "buffHidePermanent",
         showTextKey = "buffShowCooldown", showStackKey = "buffShowStacks", swipeKey = "buffShowCooldownSwipe",
         swipeReverseKey = "buffCooldownSwipeReverse", tooltipKey = "buffShowTooltip",
         showDurationBarKey = "buffShowDurationBar", durationBarHeightKey = "buffDurationBarHeight",
@@ -373,6 +378,7 @@ local GROUP_LANE_SPECS = {
         yKey = "trackedBuffOffsetY", layerKey = "trackedBuffLayer", filterKey = "trackedBuffFilter",
         strataKey = "trackedBuffStrata",
         blacklistHashKey = "trackedBuffBlacklistHash", includeHashKey = "trackedBuffIncludeHash",
+        hidePermanentKey = "trackedBuffHidePermanent",
         showTextKey = "trackedBuffShowCooldown", showStackKey = "trackedBuffShowStacks", swipeKey = "trackedBuffShowCooldownSwipe",
         swipeReverseKey = "trackedBuffCooldownSwipeReverse", tooltipKey = "trackedBuffShowTooltip",
         showDurationBarKey = "trackedBuffShowDurationBar", durationBarHeightKey = "trackedBuffDurationBarHeight",
@@ -394,6 +400,7 @@ local GROUP_LANE_SPECS = {
         yKey = "debuffOffsetY", layerKey = "debuffLayer", filterKey = "debuffFilter",
         strataKey = "debuffStrata",
         blacklistHashKey = "debuffBlacklistHash",
+        hidePermanentKey = "debuffHidePermanent",
         showTextKey = "debuffShowCooldown", showStackKey = "debuffShowStacks", swipeKey = "debuffShowCooldownSwipe",
         swipeReverseKey = "debuffCooldownSwipeReverse", tooltipKey = "debuffShowTooltip",
         showDurationBarKey = "debuffShowDurationBar", durationBarHeightKey = "debuffDurationBarHeight",
@@ -415,6 +422,7 @@ local GROUP_LANE_SPECS = {
         yKey = "externalOffsetY", layerKey = "externalLayer", filterKey = "externalFilter",
         strataKey = "externalStrata",
         blacklistHashKey = "externalBlacklistHash",
+        hidePermanentKey = "externalHidePermanent",
         showTextKey = "externalShowCooldown", showStackKey = "externalShowStacks", swipeKey = "externalShowCooldownSwipe",
         swipeReverseKey = "externalCooldownSwipeReverse", tooltipKey = "externalShowTooltip",
         showDurationBarKey = "externalShowDurationBar", durationBarHeightKey = "externalDurationBarHeight",
@@ -786,9 +794,20 @@ local function CandidateFiltersFromIncludeAndExcludeSpellIDs(includeSpellIDs, ex
     return includeFilters, includeSignature
 end
 
+local function AddHidePermanentCandidateFilter(candidateFilters, candidateFilterSignature, hidePermanent)
+    if hidePermanent ~= true then return candidateFilters, candidateFilterSignature end
+    candidateFilters = candidateFilters or {}
+    candidateFilters.maxDuration = MAX_FINITE_AURA_DURATION
+    local part = "maxDuration:" .. tostring(MAX_FINITE_AURA_DURATION)
+    candidateFilterSignature = candidateFilterSignature and (candidateFilterSignature .. ";" .. part) or part
+    return candidateFilters, candidateFilterSignature
+end
+
 local function CandidateFiltersFromBlacklist(blacklist)
     local spells = type(blacklist) == "table" and blacklist.spells or nil
-    return CandidateFiltersFromExcludeSpellIDs(spells)
+    local candidateFilters, candidateFilterSignature = CandidateFiltersFromExcludeSpellIDs(spells)
+    return AddHidePermanentCandidateFilter(candidateFilters, candidateFilterSignature,
+        type(blacklist) == "table" and blacklist.hidePermanent == true)
 end
 
 local function CandidateFiltersFromBlacklistHash(hash)
@@ -1130,6 +1149,8 @@ local function CompileGroupLane(unit, source, kind)
     else
         candidateFilters, candidateFilterSignature = CandidateFiltersFromBlacklistHash(source[spec.blacklistHashKey])
     end
+    candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
+        candidateFilters, candidateFilterSignature, source[spec.hidePermanentKey] == true)
     local size = ClampNumber(source[spec.sizeKey] or source.iconSize, spec.defaultSize, 1, 128)
     local spacing = ClampNumber(source[spec.spacingKey] or source.spacing, 1, 0, 64)
     local perRow = ClampNumber(source[spec.perRowKey] or source.perRow, spec.defaultPerRow, 1, 40)
@@ -1314,6 +1335,8 @@ local function CompileUnitCustomLane(unit, entry, index)
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
     local placed = type(entry.placed) == "table" and entry.placed or {}
     local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
+    candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
+        candidateFilters, candidateFilterSignature, filters.hidePermanent == true)
     local helpful = tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
     local size = ClampNumber(placed.size, 24, 1, 128)
     local spacing = ClampNumber(placed.spacing, 2, 0, 64)
@@ -1379,6 +1402,7 @@ local function CompileUnitCustomLane(unit, entry, index)
             display = entry.name or ("Custom " .. tostring(index)),
             enabled = true,
             includeSpellIDs = includeSpellIDs,
+            hidePermanent = filters.hidePermanent == true,
             nativeFilter = lane.nativeFilter,
             placed = { type = "none", anchor = placed.anchor or "TOPRIGHT", x = 0, y = 0, size = 1 },
             frame = entry.frame,
