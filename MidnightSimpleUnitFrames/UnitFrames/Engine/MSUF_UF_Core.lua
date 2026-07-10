@@ -22,7 +22,7 @@ local UnitIsDead = UnitIsDead
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
-UF.version = "8.1-ouf-direct-event-core"
+UF.version = "8.2-ouf-coalesced-dependent-identity"
 UF.frames = UF.frames or {}
 UF.frameList = UF.frameList or {}
 UF.attachedFrames = UF.attachedFrames or {}
@@ -669,6 +669,43 @@ local function IdentityEventUpdate(frame, event)
   if path then return path(frame, event, unit) end
 end
 
+--- Dependent units can receive PLAYER_*_CHANGED and UNIT_TARGET in the same
+--- event burst. Coalesce those notifications and move their identity work out
+--- of the target-change tick; OnShow and normal unit events remain immediate.
+local function FlushDependentIdentity(frame)
+  if not frame then return end
+  frame._msufDependentIdentityQueued = nil
+  local event = frame._msufDependentIdentityEvent or "MSUF_DEPENDENT_IDENTITY"
+  frame._msufDependentIdentityEvent = nil
+  if UF.RunLeanIdentity then
+    UF.RunLeanIdentity(frame, event)
+  else
+    IdentityEventUpdate(frame, event)
+  end
+end
+
+local function QueueDependentIdentity(frame, event)
+  if not frame then return end
+  frame._msufDependentIdentityEvent = event or "MSUF_DEPENDENT_IDENTITY"
+  if frame._msufDependentIdentityQueued == true then return end
+  frame._msufDependentIdentityQueued = true
+
+  local callback = frame._msufDependentIdentityCallback
+  if not callback then
+    callback = function() FlushDependentIdentity(frame) end
+    frame._msufDependentIdentityCallback = callback
+  end
+
+  local scheduleOnce = _G.MSUF_ScheduleOnce
+  if type(scheduleOnce) == "function" then
+    scheduleOnce(callback, callback)
+  elseif _G.C_Timer and _G.C_Timer.After then
+    _G.C_Timer.After(0, callback)
+  else
+    callback()
+  end
+end
+
 local function FrameNeedsIdentityLifecycle(frame)
   local active = frame and frame._msufActiveElements
   if not active then return false end
@@ -700,11 +737,11 @@ local function AddIdentityLifecycleHandlers(frame)
   elseif unit == "pet" then
     AddEventHandler(frame, "UNIT_PET", IdentityEventUpdate, false)
   elseif unit == "targettarget" then
-    AddEventHandler(frame, "PLAYER_TARGET_CHANGED", IdentityEventUpdate, true)
-    AddEventHandler(frame, "UNIT_TARGET", IdentityEventUpdate, false)
+    AddEventHandler(frame, "PLAYER_TARGET_CHANGED", QueueDependentIdentity, true)
+    AddEventHandler(frame, "UNIT_TARGET", QueueDependentIdentity, false)
   elseif unit == "focustarget" then
-    AddEventHandler(frame, "PLAYER_FOCUS_CHANGED", IdentityEventUpdate, true)
-    AddEventHandler(frame, "UNIT_TARGET", IdentityEventUpdate, false)
+    AddEventHandler(frame, "PLAYER_FOCUS_CHANGED", QueueDependentIdentity, true)
+    AddEventHandler(frame, "UNIT_TARGET", QueueDependentIdentity, false)
   elseif IsBossUnit(unit) then
     AddEventHandler(frame, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", IdentityEventUpdate, true)
   end
