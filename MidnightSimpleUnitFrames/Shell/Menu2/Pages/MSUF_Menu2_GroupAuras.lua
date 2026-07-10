@@ -14,7 +14,7 @@ local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
 local VT = M.ValueTextList
-local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedStrataSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, SpellIndicators, QueueSpellIndicators, SpellSpecValues, EffectiveSpellSpec, SpellAuraValues, SetCurrentSpellAura, ClearCurrentSpellAura, CurrentSpellAura, CurrentSpellConfig, OptionText, FrameStrataCount = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedStrataSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber SpellIndicators QueueSpellIndicators SpellSpecValues EffectiveSpellSpec SpellAuraValues SetCurrentSpellAura ClearCurrentSpellAura CurrentSpellAura CurrentSpellConfig OptionText FrameStrataCount]])
+local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedStrataSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, OnOffBadge, BadgeNumber, OptionText, FrameStrataCount = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedStrataSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus OnOffBadge BadgeNumber OptionText FrameStrataCount]])
 AURA_ANCHORS = AURA_ANCHORS or {}
 STATUS_ICON_ANCHORS = STATUS_ICON_ANCHORS or {}
 SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES or {}
@@ -31,20 +31,43 @@ OptionText = OptionText or function(values, value, fallback)
     end
     return fallback or tostring(value or "")
 end
-SetCurrentSpellAura = SetCurrentSpellAura or function(scope, auraName)
-    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-    M.gfSpellIndicatorSelection[scope] = auraName or ""
-end
-ClearCurrentSpellAura = ClearCurrentSpellAura or function(scope)
-    M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
-    M.gfSpellIndicatorSelection[scope] = nil
-end
 local function ThemeColor(key, fallback)
     local colors = T and T.colors
     return colors and colors[key] or fallback
 end
+local function AuraCatalogToken(value, fallback)
+    local token = tostring(value or ""):lower():gsub("[^%w]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
+    return token ~= "" and token or (fallback or "control")
+end
+local function AuraCatalogPageKey(value, fallback)
+    local token = tostring(value or ""):lower():gsub("[^%w_%-]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
+    return token ~= "" and token or (fallback or "gf_auras")
+end
+local function AuraControlMeta(ctx, path, classification)
+    path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
+    path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
+    local pageKey = AuraCatalogPageKey(ctx and ctx.key or M.activeKey, "gf_auras")
+    local identity = "auras." .. path
+    local meta = {
+        controlId = "menu2." .. pageKey .. "." .. identity,
+        pageKey = pageKey,
+        identityKey = identity,
+        controlPath = "auras/" .. path:gsub("%.", "/"),
+        classification = classification or "setting",
+        ephemeral = classification == "ephemeral" or nil,
+    }
+    if meta.classification == "action" then meta.actionKey = identity end
+    return meta
+end
+local function RegisterAuraControl(ctx, widget, label, kind, path, classification)
+    if not widget or type(M.RegisterSearchWidget) ~= "function" then return widget end
+    local meta = AuraControlMeta(ctx, path, classification)
+    meta.label = label
+    meta.kind = kind
+    M.RegisterSearchWidget(widget, meta)
+    return widget
+end
 local MUTED = ThemeColor("muted", { 0.55, 0.66, 0.82, 0.92 })
-local DIM = ThemeColor("dim", { 0.36, 0.44, 0.58, 0.88 })
 local GF_AURA_WORKSPACE_TOOLS = {
     { value = "layout", text = "Layout" },
     { value = "filters", text = "Filters" },
@@ -114,6 +137,8 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
             SetAuraWorkspaceTool(scope, lane, item.value)
             RebuildGroupAuraPage(ctx)
         end)
+        RegisterAuraControl(ctx, btn, item.text, "button",
+            "group-workspace.lane." .. AuraCatalogToken(lane, "lane") .. ".tool." .. AuraCatalogToken(item.value), "ephemeral")
         buttons[item.value] = btn
     end
     M.TrackRefresh(ctx, function()
@@ -126,15 +151,6 @@ local function BuildAuraWorkspaceTabs(ctx, section, scope, lane, width)
 end
 local function NativeAuraKey(groupKey)
     return groupKey == "buff" and "buffs" or "debuffs"
-end
-local function QueueAuraRefresh(scope, reason)
-    scope = scope or CurrentScope()
-    if QueueSpellIndicators then QueueSpellIndicators(scope) end
-    if QueueGF then QueueGF(scope, reason or "auras") end
-    local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.RequestScope) == "function" then
-        a3.RequestScope(scope, "GROUP_TRACKED_BUFFS_MENU")
-    end
 end
 local function LaneBackendEnabled(scope, groupKey)
     local root = AurasRoot and AurasRoot(scope)
@@ -160,7 +176,8 @@ local function BindAuraLaneEnabled(ctx, widget, groupKey)
             group.enabled = enabled
             if QueueGF then QueueGF(scope, "auras") end
             M.CallIf(RefreshContext, ctx)
-        end)
+        end,
+        AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey, "lane") .. ".enabled"))
     return widget
 end
 local function BuildGFAuras(ctx)
@@ -183,106 +200,6 @@ local function BuildGFAuras(ctx)
             layoutHeight = 590,
         },
     }
-    local function EnsureTrackedSpellSpec(scope)
-        local gf = MSUF and MSUF.GF
-        local si = gf and gf.SpellIndicators
-        local specKey = EffectiveSpellSpec and EffectiveSpellSpec(scope)
-        local cfg = SpellIndicators and SpellIndicators(scope)
-        if si and type(si.EnsureSpecConfig) == "function" and cfg and specKey then
-            si.EnsureSpecConfig(cfg, specKey)
-        end
-        return specKey
-    end
-    local function CurrentTrackedBuffCount(scope)
-        local cfg = SpellIndicators and SpellIndicators(scope)
-        local specKey = EnsureTrackedSpellSpec(scope)
-        local specCfg = cfg and cfg.specs and specKey and cfg.specs[specKey]
-        local count = 0
-        if type(specCfg) == "table" then
-            for _, entry in pairs(specCfg) do
-                if type(entry) == "table" and entry.enabled ~= false then count = count + 1 end
-            end
-        end
-        return count
-    end
-    local function BindTrackedBool(ctx, widget, read, write)
-        M.BindBoolWidget(ctx, widget,
-            function() return read(CurrentScope()) end,
-            function(v)
-                write(CurrentScope(), v and true or false)
-                QueueAuraRefresh(CurrentScope(), "auras")
-                M.CallIf(RefreshContext, ctx)
-            end)
-        return widget
-    end
-    local function BuildTrackedBuffControls(section, sectionW, leftX, rightX, leftW, rightW, def)
-        local trackedY = -412
-        W.ControlCard(section, "Tracked Buff Icons", nil, leftX - 14, trackedY, leftW + 28, 286)
-        W.ControlCard(section, "Tracked Buff Layout", nil, rightX - 14, trackedY, rightW + 28, 340)
-        local enable = BindTrackedBool(ctx, W.SwitchAt(section, "Tracked Buff Icons", leftX, trackedY - 34, 210),
-            function(scope)
-                local si = SpellIndicators and SpellIndicators(scope)
-                local buff = AuraGroup(scope, "buff")
-                if buff.trackedEnabled ~= nil then return buff.trackedEnabled == true end
-                return si and si.enabled == true or false
-            end,
-            function(scope, value)
-                local si = SpellIndicators and SpellIndicators(scope)
-                if si then si.enabled = value end
-                AuraGroup(scope, "buff").trackedEnabled = value
-            end)
-        local spec = W.Dropdown(section, "Spec", function() return SpellSpecValues and SpellSpecValues() or VT("auto", "Auto-Detect") end, leftW)
-        W.MoveWidget(spec, section, leftX, trackedY - 88, leftW, "LEFT")
-        M.BindDropdownWidget(ctx, spec,
-            function()
-                local si = SpellIndicators and SpellIndicators(CurrentScope())
-                return si and si.spec or "auto"
-            end,
-            function(value)
-                local scope = CurrentScope()
-                local si = SpellIndicators and SpellIndicators(scope)
-                if si then si.spec = value or "auto" end
-                EnsureTrackedSpellSpec(scope)
-                QueueAuraRefresh(scope, "auras")
-                M.CallIf(RefreshContext, ctx)
-            end)
-        local spell = W.Dropdown(section, "Spell", function() return SpellAuraValues and SpellAuraValues(CurrentScope()) or VT("", "No spells for current spec") end, leftW)
-        W.MoveWidget(spell, section, leftX, trackedY - 142, leftW, "LEFT")
-        M.BindDropdownWidget(ctx, spell,
-            function() return CurrentSpellAura and CurrentSpellAura(CurrentScope()) or "" end,
-            function(value)
-                SetCurrentSpellAura(CurrentScope(), value or "")
-                M.CallIf(RefreshContext, ctx)
-            end)
-        local trackSpell = BindTrackedBool(ctx, W.SwitchAt(section, "Track selected spell", leftX, trackedY - 186, 230),
-            function(scope)
-                EnsureTrackedSpellSpec(scope)
-                local cfg = CurrentSpellConfig and CurrentSpellConfig(scope, false)
-                return cfg and cfg.enabled ~= false or false
-            end,
-            function(scope, value)
-                EnsureTrackedSpellSpec(scope)
-                local cfg = CurrentSpellConfig and CurrentSpellConfig(scope, value == true)
-                if cfg then cfg.enabled = value end
-            end)
-        local onlyOwn = BindTrackedBool(ctx, W.SwitchAt(section, "Only my casts", leftX, trackedY - 220, 210),
-            function(scope) return AuraGroup(scope, "buff").trackedOnlyOwn ~= false end,
-            function(scope, value) AuraGroup(scope, "buff").trackedOnlyOwn = value end)
-        local layoutControls = M.BuildControlSpecs({
-            { "dropdown", "Anchor", AURA_POSITION_ANCHORS, "trackedAnchor", "TOPLEFT", "auras", rightX, trackedY - 54, rightW, "LEFT" },
-            { "dropdown", "Growth", AURA_GROWTH_VALUES, "trackedGrowth", "RIGHTDOWN", "auras", rightX, trackedY - 108, rightW, "LEFT" },
-            { "slider", "Max tracked", 0, 20, 1, "trackedMax", 8, "auras", rightX, trackedY - 162, rightW },
-            { "slider", "Icon size", 8, 64, 1, "trackedSize", def.size, "auras", rightX, trackedY - 216, rightW },
-            { "slider", "Layer (Z-Order)", 0, 30, 1, "trackedLayer", 9, "auras", rightX, trackedY - 270, rightW },
-            { "strata", "Frame Strata", 0, (FrameStrataCount or 9) - 1, 1, "trackedStrata", "AUTO", "auras", rightX, trackedY - 324, rightW },
-        }, {
-            dropdown = function(s) local widget = BindNestedDropdown(ctx, W.Dropdown(section, s[2], s[3], s[9]), function() return AuraGroup(CurrentScope(), "buff") end, s[4], s[5], s[6]); W.MoveWidget(widget, section, s[7], s[8], s[9], s[10] or "CENTER"); return widget end,
-            slider = function(s) local widget = BindNestedSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), "buff") end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
-            strata = function(s) local widget = BindNestedStrataSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), "buff") end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
-        })
-        W.Text(section, "Native 12.1 SpellID include filters are used here for HELPFUL auras on friendly Group Frames.", leftX, trackedY - 254, leftW, MUTED)
-        return { enable, spec, spell, trackSpell, onlyOwn, unpack(layoutControls) }
-    end
     local function BuildDebuffPTRNotice(section, leftX, y, width)
         W.ControlCard(section, "Tracked Debuff IDs", nil, leftX - 14, y, width + 28, 76)
         W.Text(section, "PTR 12.1 does not apply exact SpellID include/exclude identity filters to HARMFUL auras on friendly units. Use normal Debuffs/dispels here; native tracked debuff icons would over-match.", leftX, y - 36, width, MUTED)
@@ -319,9 +236,12 @@ local function BuildGFAuras(ctx)
                 { "slider", "Spacing", 0, 12, 1, "spacing", def.spacing, "auras", rightX, -280 + contentY, rightW },
                 { "slider", "Layer (Z-Order)", 0, 30, 1, "layer", def.layer, "auras", rightX, -334 + contentY, rightW },
             }, {
-                dropdown = function(s) local widget = BindNestedDropdown(ctx, W.Dropdown(section, s[2], s[3], s[9]), function() return AuraGroup(CurrentScope(), groupKey) end, s[4], s[5], s[6]); W.MoveWidget(widget, section, s[7], s[8], s[9], s[10] or "CENTER"); return widget end,
-                slider = function(s) local widget = BindNestedSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
-                strata = function(s) local widget = BindNestedStrataSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8]); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
+                dropdown = function(s) local widget = BindNestedDropdown(ctx, W.Dropdown(section, s[2], s[3], s[9]), function() return AuraGroup(CurrentScope(), groupKey) end, s[4], s[5], s[6],
+                    AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey) .. ".layout." .. AuraCatalogToken(s[4]))); W.MoveWidget(widget, section, s[7], s[8], s[9], s[10] or "CENTER"); return widget end,
+                slider = function(s) local widget = BindNestedSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8],
+                    AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey) .. ".layout." .. AuraCatalogToken(s[6]))); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
+                strata = function(s) local widget = BindNestedStrataSlider(ctx, W.Slider(section, s[2], s[3], s[4], s[5], s[11]), function() return AuraGroup(CurrentScope(), groupKey) end, s[6], s[7], s[8],
+                    AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey) .. ".layout." .. AuraCatalogToken(s[6]))); W.MoveWidget(widget, section, s[9], s[10], s[11], s[12] or "CENTER"); return widget end,
             })
             if groupKey == "debuff" then BuildDebuffPTRNotice(section, leftX, -410 + contentY, sectionW - 72) end
         elseif type(M.BuildAuras3GroupLaneWorkspace) == "function" then

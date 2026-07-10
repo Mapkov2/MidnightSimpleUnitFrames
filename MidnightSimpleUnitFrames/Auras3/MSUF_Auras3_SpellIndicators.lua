@@ -18,6 +18,7 @@ local math_floor, math_min, math_max = math.floor, math.min, math.max
 local CreateFrame = _G.CreateFrame
 local hooksecurefunc = _G.hooksecurefunc
 local issecretvalue = _G.issecretvalue or function(_) return false end
+local MAX_FINITE_AURA_DURATION = 2147483647
 
 local DEFAULT_SHARED = {
     cooldownTextSize = 8,
@@ -164,6 +165,15 @@ local function CandidateFiltersFromSpellIDs(spellIDs, fieldName)
     return { [fieldName] = out }, fieldName .. ":" .. table_concat(parts, ",")
 end
 
+local function AddHidePermanentCandidateFilter(candidateFilters, candidateFilterSignature, hidePermanent)
+    if hidePermanent ~= true then return candidateFilters, candidateFilterSignature end
+    candidateFilters = candidateFilters or {}
+    candidateFilters.maxDuration = MAX_FINITE_AURA_DURATION
+    local part = "maxDuration:" .. tostring(MAX_FINITE_AURA_DURATION)
+    candidateFilterSignature = candidateFilterSignature and (candidateFilterSignature .. ";" .. part) or part
+    return candidateFilters, candidateFilterSignature
+end
+
 local SPELL_INDICATOR_ANCHORS = {
     TOPLEFT = true, TOP = true, TOPRIGHT = true,
     LEFT = true, CENTER = true, RIGHT = true,
@@ -226,6 +236,8 @@ local function CompileSlot(unit, item, index, fallbackLayer, fallbackStrata)
     if not placed and not frameEffect then return nil end
     local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(item.includeSpellIDs, "includeSpellIDs")
     if not candidateFilters then return nil end
+    candidateFilters, candidateFilterSignature = AddHidePermanentCandidateFilter(
+        candidateFilters, candidateFilterSignature, item.hidePermanent == true)
 
     local visual = tostring(placed and placed.type or "none"):lower()
     if visual ~= "icon" and visual ~= "square" and visual ~= "bar" and visual ~= "number" and visual ~= "none" then

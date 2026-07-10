@@ -1609,6 +1609,7 @@ local function NewCustomContainer(index)
         spellIDs = "",
         filters = {
             enabled = true,
+            hidePermanent = false,
             onlyMine = false,
             raid = false,
             raidInCombat = false,
@@ -2167,6 +2168,23 @@ function Model.AddBlacklistSpell(scope, value, kind)
     return changed
 end
 
+function Model.ReadBlacklistHidePermanent(scope, kind)
+    local list = EnsureBlacklist(scope, false, kind)
+    return type(list) == "table" and list.hidePermanent == true
+end
+
+function Model.WriteBlacklistHidePermanent(scope, kind, value)
+    local nextValue = value == true
+    local changed = false
+    ForEachFrameBlacklist(scope, true, kind, function(list)
+        if type(list) == "table" and list.hidePermanent ~= nextValue then
+            list.hidePermanent = nextValue
+            changed = true
+        end
+    end)
+    return changed
+end
+
 function Model.RemoveBlacklistSpell(scope, value, kind)
     local raw = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
     local spellID = SpellIDFromInput(raw)
@@ -2430,6 +2448,31 @@ function Model.GroupBlacklistSummary(scope, groupKey)
     table_sort(out)
     if #out == 0 then return "No blacklisted spells." end
     return table.concat(out, "\n")
+end
+
+function Model.ReadGroupBlacklistHidePermanent(scope, groupKey)
+    local kind = GroupScopeKinds(scope)
+    local group = GroupAuraGroup(kind, groupKey)
+    local blacklist = type(group.blacklist) == "table" and group.blacklist or nil
+    return blacklist and blacklist.hidePermanent == true or false
+end
+
+function Model.WriteGroupBlacklistHidePermanent(scope, groupKey, value)
+    local nextValue = value == true
+    local changed = false
+    local a, b = GroupScopeKinds(scope)
+    local function Write(kind)
+        local group = GroupAuraGroup(kind, groupKey)
+        if type(group.blacklist) ~= "table" then group.blacklist = {} end
+        if group.blacklist.hidePermanent ~= nextValue then
+            group.blacklist.hidePermanent = nextValue
+            changed = true
+        end
+    end
+    Write(a)
+    if b then Write(b) end
+    if changed then InvalidateGroupBlacklist(scope, groupKey) end
+    return changed
 end
 
 function Model.GroupBlacklistEntries(scope, groupKey)
