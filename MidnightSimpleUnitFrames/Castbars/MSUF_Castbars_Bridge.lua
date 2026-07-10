@@ -58,10 +58,6 @@ local function ShouldUseBlizzard(unit)
     return unit == "player" and GetBackend(unit) == "BLIZZARD"
 end
 
-local function ShouldHide(unit)
-    return GetBackend(unit) == "HIDE"
-end
-
 local IsCastbarEnabledForUnit = _G.MSUF_IsCastbarEnabledForUnit
 if type(IsCastbarEnabledForUnit) ~= "function" then
     IsCastbarEnabledForUnit = function(unit)

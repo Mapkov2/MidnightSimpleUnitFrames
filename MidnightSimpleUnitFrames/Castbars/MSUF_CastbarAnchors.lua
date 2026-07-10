@@ -153,14 +153,6 @@ local function SetHeight(frame, height)
     end
 end
 
-local function SetAlpha(frame, alpha)
-    if _G.MSUF_SetAlphaIfChanged then
-        _G.MSUF_SetAlphaIfChanged(frame, alpha)
-    else
-        frame:SetAlpha(alpha)
-    end
-end
-
 ------------------------------------------------------------------------
 -- Frame lookups
 ------------------------------------------------------------------------

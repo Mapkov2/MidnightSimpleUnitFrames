@@ -803,10 +803,53 @@ local function RefreshTargetFocusImmediate(frame)
     return false
 end
 
+local function FlushTargetFocusChanged(frame)
+    if not frame then return end
+    frame._msufTargetFocusRefreshQueued = nil
+    local token = frame._msufTargetFocusRefreshToken
+    frame._msufTargetFocusRefreshToken = nil
+    if token == nil
+        or token ~= frame._msufCastToken
+        or frame._msufDriverBackendEnabled ~= true then
+        return
+    end
+    RefreshTargetFocusImmediate(frame)
+end
+
+local function CancelTargetFocusRefresh(frame)
+    if frame then
+        frame._msufTargetFocusRefreshToken = nil
+    end
+end
+
 local function ScheduleTargetFocusChanged(frame)
     if not frame then return end
     InvalidateTargetFocusState(frame)
-    RefreshTargetFocusImmediate(frame)
+    frame._msufTargetFocusRefreshToken = frame._msufCastToken
+
+    -- Never leave the previous unit's cast visible while the new target/focus
+    -- is resolved on the next frame.
+    SetSafetyOnUpdate(frame, false)
+    if not CastbarAlreadyIdle(frame) then
+        StopDriverFrame(frame, "UNIT_CHANGED", false)
+    end
+
+    if frame._msufTargetFocusRefreshQueued == true then return end
+    frame._msufTargetFocusRefreshQueued = true
+    local callback = frame._msufTargetFocusRefreshCallback
+    if not callback then
+        callback = function() FlushTargetFocusChanged(frame) end
+        frame._msufTargetFocusRefreshCallback = callback
+    end
+
+    local scheduleOnce = _G.MSUF_ScheduleOnce
+    if type(scheduleOnce) == "function" then
+        scheduleOnce(callback, callback)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, callback)
+    else
+        callback()
+    end
 end
 
 local function ScheduleStopConfirmation(frame, castType)
@@ -909,6 +952,12 @@ local function HandleDriverEvent(frame, event, eventUnit)
         return
     end
 
+    if (event == "PLAYER_TARGET_CHANGED" and frame.unit == "target")
+        or (event == "PLAYER_FOCUS_CHANGED" and frame.unit == "focus") then
+        ScheduleTargetFocusChanged(frame)
+        return
+    end
+
     if event == "UNIT_HEALTH" then
         HandleUnitDeathEvent(frame)
         return
@@ -941,6 +990,7 @@ local function HandleDriverEvent(frame, event, eventUnit)
     if event == "UNIT_SPELLCAST_DELAYED"
         or event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
         or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        CancelTargetFocusRefresh(frame)
         if event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
             and (frame._msufStopTimer1 or frame._msufStopTimer2 or frame._msufStopTimer3) then
             ClearStopExpectation(frame)
@@ -951,24 +1001,28 @@ local function HandleDriverEvent(frame, event, eventUnit)
     end
 
     if event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_EMPOWER_STOP" then
+        CancelTargetFocusRefresh(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         ScheduleStopConfirmation(frame, "CAST")
         return
     end
 
     if event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+        CancelTargetFocusRefresh(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         ScheduleStopConfirmation(frame, "CHANNEL")
         return
     end
 
     if event == "UNIT_SPELLCAST_FAILED" then
+        CancelTargetFocusRefresh(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         ScheduleStopConfirmation(frame, "CAST")
         return
     end
 
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
+        CancelTargetFocusRefresh(frame)
         if frame.unit ~= "player" then
             RefreshFromEngine(frame)
             return
@@ -1004,16 +1058,13 @@ local function HandleDriverEvent(frame, event, eventUnit)
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
         if eventUnit ~= frame.unit then return end
+        CancelTargetFocusRefresh(frame)
         ClearStopExpectation(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         frame:SetInterrupted()
         return
     end
 
-    if (event == "PLAYER_TARGET_CHANGED" and frame.unit == "target")
-        or (event == "PLAYER_FOCUS_CHANGED" and frame.unit == "focus") then
-        ScheduleTargetFocusChanged(frame)
-    end
 end
 
 local function BuildCastbarFrameElements(frame)

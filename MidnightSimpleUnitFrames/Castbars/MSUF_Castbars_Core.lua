@@ -23,18 +23,6 @@ local math_max = math.max
 local lsm = (MSUF and MSUF.LSM) or _G.MSUF_LSM or (_G.LibStub and _G.LibStub("LibSharedMedia-3.0", true))
 local fontList = _G.MSUF_FONT_LIST
 
-local function IsOptionEnabled(db, key, defaultValue)
-    local utilEnabled = MSUF and MSUF.Util and MSUF.Util.Enabled
-    if type(utilEnabled) == "function" then
-        return utilEnabled(nil, db, key, defaultValue)
-    end
-
-    if type(db) ~= "table" then return defaultValue ~= false end
-    local value = db[key]
-    if value == nil then return defaultValue ~= false end
-    return value ~= false
-end
-
 local function GetLSM()
     local resolved = (MSUF and MSUF.LSM) or _G.MSUF_LSM or lsm
     if resolved then lsm = resolved end
@@ -358,17 +346,6 @@ local function GetCastbarBackgroundTexture()
     return texture
 end
 ExportPublic("MSUF_GetCastbarBackgroundTexture", GetCastbarBackgroundTexture)
-
-local function IsCastTimeEnabledForFrame(frame)
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    if not (frame and frame.unit and general) then return true end
-
-    local unit = frame.unit
-    local showTimeKey = (unit == "player" and "showPlayerCastTime")
-        or (unit == "target" and "showTargetCastTime")
-        or (unit == "focus" and "showFocusCastTime")
-    return (not showTimeKey) and true or IsOptionEnabled(general, showTimeKey, true)
-end
 
 local function GetCastbarReverseFill(isChanneled)
     EnsureDB()
