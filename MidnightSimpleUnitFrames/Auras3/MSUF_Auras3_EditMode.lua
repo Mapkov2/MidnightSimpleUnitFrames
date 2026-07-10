@@ -85,6 +85,9 @@ local GROUPS = {
         defaultAnchor = "TOPLEFT",
         defaultLayer = 6,
     },
+    custom1 = { customIndex = 1, label = "Custom 1", texture = "Interface\\Icons\\INV_Misc_QuestionMark", color = { 0.45, 0.72, 1.00, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
+    custom2 = { customIndex = 2, label = "Custom 2", texture = "Interface\\Icons\\INV_Misc_QuestionMark", color = { 0.70, 0.48, 1.00, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
+    custom3 = { customIndex = 3, label = "Custom 3", texture = "Interface\\Icons\\INV_Misc_QuestionMark", color = { 1.00, 0.58, 0.28, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
 }
 
 local LANE_STYLE_KEYS = {
@@ -228,6 +231,12 @@ local function NormalizeKind(kind)
     return "buff"
 end
 
+local function CustomItem(unit, index, create)
+    local model = A3 and A3.MenuModel
+    if not (model and type(model.CustomContainer) == "function") then return nil end
+    return model.CustomContainer(unit, index, create == true)
+end
+
 local function UnitLabel(unit)
     if unit == "player" then return "Player" end
     if unit == "target" then return "Target" end
@@ -259,6 +268,15 @@ local function UnitEnabled(auras, unit)
     if unit == "target" then return auras.showTarget == true end
     if unit == "focus" then return auras.showFocus == true end
     if BOSS_UNITS[unit] then return auras.showBoss == true end
+    return false
+end
+
+local function UnitHasCustomPreview(unit)
+    for index = 1, 3 do
+        local item = CustomItem and CustomItem(unit, index, false)
+        local placed = item and item.placed
+        if item and item.enabled == true and (tonumber(placed and placed.max) or 8) > 0 then return true end
+    end
     return false
 end
 
@@ -398,6 +416,27 @@ local function ReadLaneCooldownTextAnchor(shared, layoutShared, kind)
 end
 
 local function ReadTextConfig(unit, kind)
+    kind = NormalizeKind(kind)
+    local customSpec = GROUPS[kind]
+    if customSpec and customSpec.customIndex then
+        local item = CustomItem(unit, customSpec.customIndex, false)
+        local placed = item and item.placed or {}
+        return {
+            stackSize = Clamp(placed.stackSize, 14, 6, 40),
+            stackX = Clamp(placed.stackX, 0, -2000, 2000),
+            stackY = Clamp(placed.stackY, 0, -2000, 2000),
+            cooldownSize = Clamp(placed.cooldownSize, 14, 6, 40),
+            cooldownX = Clamp(placed.cooldownX, 0, -2000, 2000),
+            cooldownY = Clamp(placed.cooldownY, 0, -2000, 2000),
+            showDurationBar = placed.showDurationBar == true,
+            durationBarHeight = Clamp(placed.durationBarHeight, 2, 1, 16),
+            durationBarDisplay = placed.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY",
+            durationBarPosition = placed.durationBarPosition == "TOP" and "TOP" or "BOTTOM",
+            durationBarDirection = placed.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING",
+            stackAnchor = placed.stackAnchor or "BOTTOMRIGHT",
+            cooldownAnchor = placed.cooldownAnchor or "CENTER",
+        }
+    end
     local auras, shared = EnsureDB()
     local layout, pu = GetLayout(auras, unit, false)
     local ls = GetSharedLayout(auras, unit)
@@ -425,6 +464,25 @@ end
 local function ReadGroupConfig(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
+    if spec and spec.customIndex then
+        local item = CustomItem(unit, spec.customIndex, false)
+        local placed = item and item.placed or {}
+        local auraType = item and item.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
+        return {
+            x = Round(placed.x or 0),
+            y = Round(placed.y or 0),
+            anchor = placed.anchor or spec.defaultAnchor,
+            layer = Clamp(item and item.layer, spec.defaultLayer, 0, 30),
+            size = Clamp(placed.size, 24, 1, 128),
+            spacing = Clamp(placed.spacing, 2, 0, 64),
+            perRow = Clamp(placed.perRow, 4, 1, 40),
+            max = Clamp(placed.max, 8, 0, 40),
+            growth = placed.growth or "LEFTDOWN",
+            rowWrap = "DOWN",
+            show = item and item.enabled == true or false,
+            texture = auraType == "DEBUFF" and "Interface\\Icons\\Spell_Shadow_ShadowWordPain" or "Interface\\Icons\\Spell_Holy_WordFortitude",
+        }
+    end
     local auras, shared = EnsureDB()
     local layout = GetLayout(auras, unit, false)
     local ls = GetSharedLayout(auras, unit)
@@ -528,6 +586,10 @@ local function ButtonAnchor(xSign, ySign)
 end
 
 local function GrowthParts(growth, rowWrap)
+    if growth == "LEFTUP" then return -1, 1, false, "BOTTOMRIGHT" end
+    if growth == "LEFTDOWN" then return -1, -1, false, "TOPRIGHT" end
+    if growth == "RIGHTUP" then return 1, 1, false, "BOTTOMLEFT" end
+    if growth == "RIGHTDOWN" then return 1, -1, false, "TOPLEFT" end
     if growth ~= "LEFT" and growth ~= "UP" and growth ~= "DOWN" then growth = "RIGHT" end
     if rowWrap ~= "UP" then rowWrap = "DOWN" end
     local xSign = growth == "LEFT" and -1 or 1
@@ -604,6 +666,14 @@ end
 local function WriteOffset(auras, unit, kind, x, y)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
+    if spec and spec.customIndex then
+        local item = CustomItem(unit, spec.customIndex, true)
+        if not item then return end
+        item.placed = type(item.placed) == "table" and item.placed or {}
+        item.placed.x = Round(x)
+        item.placed.y = Round(y)
+        return
+    end
     local layout = GetLayout(auras, unit, true)
     if not layout then return end
     layout[spec.xKey] = Round(x)
@@ -616,6 +686,7 @@ end
 local function PromoteRuntimeLayout(unit, kind)
     kind = NormalizeKind(kind or rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
     local spec = GROUPS[kind]
+    if spec and spec.customIndex then return end
     local auras, shared = EnsureDB()
     local layout = GetLayout(auras, unit, true)
     if not layout or not shared then return end
@@ -763,6 +834,27 @@ local BeginAuraGroupDrag
 
 local function OpenAuraGroupPopup(group)
     if not (group and IsEditModeActive() and not IsConfigBlocked()) then return false end
+    local kind = group._msufA3MoverKind
+    if type(kind) == "string" and kind:match("^custom[1-3]$") then
+        local menu = MSUF and MSUF.MSUF2
+        local unit = group._msufA3Unit
+        local scope = BOSS_UNITS[unit] and "boss" or unit
+        if menu then
+            menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
+            menu.unitAuraTabSelection[scope] = kind
+            if type(menu.SelectPage) == "function" then
+                ExportPublic("MSUF_EM2_MenuFocusRequest", {
+                    pageKey = "uf_" .. tostring(scope),
+                    sectionId = "auras",
+                    component = kind,
+                    source = "edit-mode-custom-aura",
+                    explicit = true,
+                })
+                menu.SelectPage("uf_" .. tostring(scope))
+                return true
+            end
+        end
+    end
     if type(_G.MSUF_OpenAuras3PositionPopup) ~= "function" then return false end
     ExportPublic("MSUF_EM2_ActiveAuraGroup", group._msufA3MoverKind)
     ExportPublic("MSUF_EM2_ActiveAuraUnit", group._msufA3Unit)
@@ -1484,6 +1576,50 @@ local function CreateGroup(unit, kind)
     return group
 end
 
+local function ApplyEditModeCustomEffect(group, frame, item)
+    local effect = item and item.frame
+    local kind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
+    local root = group and group._msufA3CustomEffectPreview
+    if kind == "none" or kind == "namecolor" then
+        if root then root:Hide() end
+        return
+    end
+    if not root then
+        root = CreateFrame("Frame", nil, group)
+        root:EnableMouse(false)
+        root.tint = root:CreateTexture(nil, "OVERLAY")
+        root.tint:SetTexture(W8)
+        root.edges = {}
+        for i = 1, 4 do
+            root.edges[i] = root:CreateTexture(nil, "OVERLAY")
+            root.edges[i]:SetTexture(W8)
+        end
+        group._msufA3CustomEffectPreview = root
+    end
+    root:ClearAllPoints()
+    root:SetAllPoints(frame)
+    if root.SetFrameLevel then root:SetFrameLevel((group:GetFrameLevel() or 900) + 24 + (11 - Clamp(effect.priority, 5, 1, 10))) end
+    root.tint:Hide()
+    for i = 1, 4 do root.edges[i]:Hide() end
+    local color = effect.color or {}
+    local r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 0.8
+    if kind == "healthtint" then
+        root.tint:ClearAllPoints()
+        root.tint:SetAllPoints(frame.hpBar or frame.Health or frame)
+        root.tint:SetVertexColor(r, g, b, tonumber(effect.tintAlpha) or a)
+        root.tint:Show()
+    elseif kind == "border" or kind == "glow" or kind == "pulse" then
+        local thickness = Clamp(effect.thickness, kind == "glow" and 3 or 2, 1, 16)
+        local top, bottom, left, right = root.edges[1], root.edges[2], root.edges[3], root.edges[4]
+        top:ClearAllPoints(); top:SetPoint("TOPLEFT", frame, "TOPLEFT", -thickness, thickness); top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", thickness, thickness); top:SetHeight(thickness)
+        bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -thickness, -thickness); bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", thickness, -thickness); bottom:SetHeight(thickness)
+        left:ClearAllPoints(); left:SetPoint("TOPLEFT", top, "BOTTOMLEFT"); left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT"); left:SetWidth(thickness)
+        right:ClearAllPoints(); right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT"); right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT"); right:SetWidth(thickness)
+        for i = 1, 4 do root.edges[i]:SetVertexColor(r, g, b, kind == "glow" and math_min(1, a * 0.85) or a); root.edges[i]:Show() end
+    end
+    root:Show()
+end
+
 local function FrameRefreshSignature(frame)
     if not frame then return "noframe" end
     local l = frame.GetLeft and frame:GetLeft() or 0
@@ -1549,7 +1685,7 @@ function EM.RefreshUnit(unit)
     end
 
     local auras, shared = EnsureDB()
-    if not shared or shared.showInEditMode == false or not UnitEnabled(auras, unit) then
+    if not shared or shared.showInEditMode == false or (not UnitEnabled(auras, unit) and not UnitHasCustomPreview(unit)) then
         EM.HideUnit(unit)
         return
     end
@@ -1613,7 +1749,7 @@ function EM.RefreshUnit(unit)
                     local col, row = IconGridCoord(i, perRow, vertical)
                     local body = group.Body or group
                     icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)
-                    if icon.Icon then icon.Icon:SetTexture(spec.texture) end
+                    if icon.Icon then icon.Icon:SetTexture(cfg.texture or spec.texture) end
                     if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
                     if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end
                     ApplyPreviewIconText(icon, unit, textCfg)
@@ -1629,6 +1765,7 @@ function EM.RefreshUnit(unit)
             end
 
             ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg)
+            if spec.customIndex then ApplyEditModeCustomEffect(group, frame, CustomItem(unit, spec.customIndex, false)) end
             group:Show()
             if group.Raise then group:Raise() end
         end

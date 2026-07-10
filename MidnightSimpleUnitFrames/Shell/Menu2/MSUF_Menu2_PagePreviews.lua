@@ -167,7 +167,6 @@ local function ResetStatusIndicatorTestModeOnMenuExit()
     if type(M.RequestUnitApply) ~= "function" then return true end
     for i = 1, #unitsToApply do
         M.RequestUnitApply(unitsToApply[i], "MSUF2_STATUS_TEST_MENU_EXIT", {
-            notify = false,
             preview = false,
         })
     end

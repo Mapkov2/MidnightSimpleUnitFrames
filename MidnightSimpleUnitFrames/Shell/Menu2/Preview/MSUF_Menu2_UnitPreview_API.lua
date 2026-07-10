@@ -47,7 +47,8 @@ local function BoxOwnerInactive(box)
 end
 local function RequestRefreshForBox(box, reason)
     if not box or not box:IsShown() then
-        if UninstallPreviewHooks then UninstallPreviewHooks() end
+        if Preview.active == box then Preview.active = nil end
+        if UninstallPreviewHooks and not Preview.active then UninstallPreviewHooks() end
         return
     end
     if box.IsVisible and not box:IsVisible() then return end
@@ -65,8 +66,26 @@ local function RequestRefreshForBox(box, reason)
     end
     if PreviewInCombat() then
         CancelQueuedRefresh(box)
+        box._refreshAfterCombatReason = reason or box._refreshAfterCombatReason or "PLAYER_REGEN_ENABLED"
+        Preview.active = box
+        local retry = Preview._combatRefreshFrame
+        if not retry and CreateFrame then
+            retry = CreateFrame("Frame")
+            Preview._combatRefreshFrame = retry
+            retry:SetScript("OnEvent", function(self, event)
+                if event ~= "PLAYER_REGEN_ENABLED" then return end
+                self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+                local pending = Preview.active
+                local pendingReason = pending and pending._refreshAfterCombatReason
+                if pending then pending._refreshAfterCombatReason = nil end
+                if pending and pendingReason then RequestRefreshForBox(pending, pendingReason) end
+            end)
+        end
+        if retry and retry.RegisterEvent then retry:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return
     end
+    Preview.active = box
+    box._refreshAfterCombatReason = nil
     if InstallPreviewHooks then InstallPreviewHooks() end
     local refresh = Preview.Refresh
     if type(refresh) ~= "function" then return end
@@ -86,8 +105,18 @@ local function RequestRefreshForBox(box, reason)
         local refreshReason = box._refreshReason
         box._refreshReason = nil
         box._refreshQueued = nil
+        if PreviewInCombat() then
+            RequestRefreshForBox(box, refreshReason or "PLAYER_REGEN_ENABLED")
+            return
+        end
+        if BoxOwnerInactive(box) then return end
+        local hostShown = box._msuf2UnitPageHostShown
+        if not box._msuf2PinnedFloating and type(hostShown) == "function" and not hostShown() then return end
         local queuedRefresh = Preview.Refresh
-        if type(queuedRefresh) == "function" and box:IsShown() and (not box.IsVisible or box:IsVisible()) then queuedRefresh(box, refreshReason) end
+        if type(queuedRefresh) == "function" and box:IsShown() and (not box.IsVisible or box:IsVisible()) then
+            Preview.active = box
+            queuedRefresh(box, refreshReason)
+        end
     end
     local delay = PreviewRefreshDelay(reason)
     if C_Timer and C_Timer.After then
@@ -103,7 +132,6 @@ function Preview.RequestRefreshForBox(box, reason)
     RequestRefreshForBox(box, reason)
 end
 ExportPublic("MSUF_UFPreview_RequestRefresh", function(reason)
-    if PreviewInCombat() then return end
     Preview.RequestRefresh(reason)
 end)
 ExportPublic("MSUF_UFPreview_SetStatusPreviewMode", function(mode)

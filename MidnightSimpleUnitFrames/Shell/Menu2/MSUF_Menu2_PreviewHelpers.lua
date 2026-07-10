@@ -907,7 +907,7 @@ function H.BuildZoomBar(box, surface, opts)
     if zoomBar.SetFrameLevel then zoomBar:SetFrameLevel((surface.GetFrameLevel and surface:GetFrameLevel() or 0) + 80) end
     zoomBar:EnableMouse(true)
     zoomBar:EnableMouseWheel(true)
-    if zoomBar.SetPropagateMouseWheel then zoomBar:SetPropagateMouseWheel(false) end
+    if zoomBar.SetPropagateMouseWheel then zoomBar:SetPropagateMouseWheel(true) end
     box[prefix .. "zoomBar"] = zoomBar
     local function AddZoomButton(field, text, width, tooltip, onClick, relativeTo, offset)
         local btn = createButton(zoomBar, text, width, tooltip, onClick)
@@ -954,16 +954,22 @@ function H.BuildZoomBar(box, surface, opts)
     end, zoomIn)
     local function ZoomWheel(self, delta)
         local dir = (delta or 0) > 0 and 1 or -1
+        -- Route the event explicitly. Toggling propagation from inside the
+        -- wheel handler is timing-dependent in WoW and could swallow the first
+        -- normal wheel tick after preview zooming.
+        if self.SetPropagateMouseWheel then self:SetPropagateMouseWheel(false) end
         if IsControlKeyDown and IsControlKeyDown() then
-            if self.SetPropagateMouseWheel then self:SetPropagateMouseWheel(false) end
             stepZoom(box, dir)
-        elseif self.SetPropagateMouseWheel then
-            self:SetPropagateMouseWheel(true)
+        else
+            local menu = opts.M or M
+            local main = menu and menu.scrollFrame
+            local handler = main and main.GetScript and main:GetScript("OnMouseWheel")
+            if type(handler) == "function" then handler(main, delta) end
         end
     end
     if opts.wheelField then box[opts.wheelField] = ZoomWheel end
     surface:SetScript("OnMouseWheel", ZoomWheel)
-    zoomBar:SetScript("OnMouseWheel", function(_, delta) stepZoom(box, (delta or 0) > 0 and 1 or -1) end)
+    zoomBar:SetScript("OnMouseWheel", ZoomWheel)
     if surface.RegisterForDrag then surface:RegisterForDrag("LeftButton") end
     surface:SetScript("OnMouseDown", function(self, button) startPan(self, box, button) end)
     surface:SetScript("OnMouseUp", stopPan)

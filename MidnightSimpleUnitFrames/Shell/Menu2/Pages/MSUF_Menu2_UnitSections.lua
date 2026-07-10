@@ -747,7 +747,6 @@ local function BuildInlineText(ctx, builder, unit)
         RequestUnitRuntimeApply("target", reason, inlineApplyFlags)
         RequestUnitRuntimeApply("targettarget", reason, inlineApplyFlags, forceToT == true)
         Call("MSUF_UpdateTargetToTInlineNow")
-        Call("MSUF_UFPreview_RequestRefresh", reason)
         if not skipRefresh and RefreshInlineControlState then RefreshInlineControlState() end
     end
     local show = W.Toggle(sec, "Show Target of Target text inline")
@@ -1117,18 +1116,9 @@ local function BuildUnitPage(info)
             end,
         })
         if UNIT_AURAS_MENU_UNITS[info.unit] and type(M.BuildAuras3UnitSection) == "function" then
-            if UP.BuildSectionLazy then
-                UP.BuildSectionLazy(ctx, builder, info.unit, {
-                    id = "auras3",
-                    title = "Auras",
-                    height = 622,
-                    build = function(lazyCtx, lazyBuilder, lazyUnit)
-                        return M.BuildAuras3UnitSection(lazyCtx, lazyBuilder, lazyUnit)
-                    end,
-                })
-            else
-                M.BuildAuras3UnitSection(ctx, builder, info.unit)
-            end
+            -- This workspace owns nested Buff/Debuff/Custom sections and previews;
+            -- the lazy one-section proxy would stack those sections into one body.
+            M.BuildAuras3UnitSection(ctx, builder, info.unit)
         end
         if UP.BuildRegisteredSections then UP.BuildRegisteredSections(ctx, builder, info.unit, "after_auras") end
         if info.unit == "target" then
@@ -1145,6 +1135,7 @@ local function BuildUnitPage(info)
         M.TrackRefresh(ctx, function()
             ApplyUnitFrameEnabledGate(ctx, info.unit)
         end)
+        if builder.RelayoutCollapsibles then builder:RelayoutCollapsibles() end
         ctx:SetContentHeight(math.abs(builder.y) + 42)
     end
 end
@@ -1152,6 +1143,6 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 22,
+        version = 23,
     })
 end

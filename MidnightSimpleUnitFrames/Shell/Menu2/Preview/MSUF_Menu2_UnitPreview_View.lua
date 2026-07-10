@@ -182,6 +182,7 @@ end
 local function ApplyCastbarRuntimeForKey(key)
     if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
         _G.MSUF_ApplyCastbarUnitAndSync(key)
+        return
     elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
         _G.MSUF_ApplyCastbarVisualsForUnit(key)
     elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
@@ -347,7 +348,8 @@ OpenPreviewHandleSettings = function(handle, source)
     end
     if section == "auras3" then
         local unit = box and box.key or "player"
-        local lane = handle._key == "auraDebuffs" and "debuff" or "buff"
+        local lane = fields.auraPreviewKind
+        if lane ~= "debuff" and lane ~= "custom1" and lane ~= "custom2" and lane ~= "custom3" then lane = "buff" end
         if menu then
             menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
             menu.unitAuraTabSelection[unit] = lane
@@ -359,7 +361,7 @@ OpenPreviewHandleSettings = function(handle, source)
                 component = handle._key,
                 lane = lane,
                 pageKey = pageKey,
-                sectionId = "auras3",
+                sectionId = "auras",
                 source = "unit-preview-" .. tostring(source or "settings"),
                 explicit = true,
                 changedAt = GetTime and GetTime() or 0,
@@ -1028,6 +1030,7 @@ local function BuildPreview(parent, panel, width, height)
     )
     ApplyPreviewCanvasGradient(canvas, T)
     if canvas.SetClipsChildren then canvas:SetClipsChildren(true) end
+    if box.SetClipsChildren then box:SetClipsChildren(true) end
     canvas:EnableMouse(true)
     canvas:EnableMouseWheel(true)
     if canvas.SetPropagateMouseWheel then canvas:SetPropagateMouseWheel(true) end

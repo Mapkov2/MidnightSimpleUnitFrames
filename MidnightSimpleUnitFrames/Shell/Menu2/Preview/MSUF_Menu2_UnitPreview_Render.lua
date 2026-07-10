@@ -604,6 +604,7 @@ function Preview.Refresh(box, reason)
     if classPowerOn and PreviewLayerWanted(box, "classPower") then wideW = max(wideW, box._runtimeClassPowerW or w) end
     if detachedPowerInUnitPreview and PreviewLayerWanted(box, "power") then wideW = max(wideW, box._runtimeDetachedPowerW) end
     local minX, maxX, minY, maxY = 0, w, 0, h
+    box._statusFootprintVisible = nil
     do
         local rawBaseTextSize = tonumber(g.fontSize) or 14
         local rawNameSize = tonumber(conf.nameFontSize) or tonumber(g.nameFontSize) or rawBaseTextSize
@@ -676,6 +677,7 @@ function Preview.Refresh(box, reason)
                     show = show and (spec.id == selected)
                 end
                 if show then
+                    box._statusFootprintVisible = true
                     local rawSize = tonumber(statusCfg and statusCfg.size) or tonumber(conf[spec.size]) or tonumber(g[spec.size])
                     if rawSize == nil then
                         if spec.id == "level" then
@@ -766,7 +768,7 @@ function Preview.Refresh(box, reason)
     local auraPreviewState = Auras and Auras.BuildState and Auras.BuildState(key, w, h, runtimeSpec)
     local auraFootprintState = PreviewLayerWanted(box, "auras") and auraPreviewState or nil
     if auraFootprintState and Auras.ExpandFootprint then minX, maxX, minY, maxY = Auras.ExpandFootprint(auraFootprintState, minX, maxX, minY, maxY) end
-    if (classPowerOn and PreviewLayerWanted(box, "classPower")) or (detachedPowerInUnitPreview and PreviewLayerWanted(box, "power")) or castPreviewVisible or auraFootprintState then
+    if (classPowerOn and PreviewLayerWanted(box, "classPower")) or (detachedPowerInUnitPreview and PreviewLayerWanted(box, "power")) or castPreviewVisible or auraFootprintState or box._statusFootprintVisible then
         minX, maxX = minX - 18, maxX + 18
         minY, maxY = minY - 18, maxY + 18
     end
@@ -774,7 +776,10 @@ function Preview.Refresh(box, reason)
     local centerY = ((minY + maxY) * 0.5) - (h * 0.5)
     local runtimeScale = R.RuntimeVisualScaleForPreviewKey(key)
     local autoScale = min(1.0, (cw - 60) / max(max(wideW, maxX - minX) * runtimeScale, 1), (ch - 42) / max(max(h, maxY - minY) * runtimeScale, 1))
-    if autoScale < R.ZOOM_MIN then autoScale = R.ZOOM_MIN end
+    -- Fit mode must fit the complete configured footprint. Manual zoom keeps
+    -- its usability floor, but forcing that same floor here clips status icons
+    -- with large offsets instead of showing the true layout.
+    if autoScale < 0.05 then autoScale = 0.05 end
     local manualZoom = tonumber(box._manualZoom)
     local frozenScale = tonumber(box._dragFrozenScale)
     local previewScale = manualZoom and R.ClampPreviewZoom(manualZoom) or (frozenScale and R.ClampPreviewZoom(frozenScale) or autoScale)

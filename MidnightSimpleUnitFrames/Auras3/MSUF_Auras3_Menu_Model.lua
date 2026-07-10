@@ -484,9 +484,6 @@ local DEFAULT_SHARED = {
             exclusive = "none",
         },
     },
-    blacklist = {
-        spells = {},
-    },
 }
 
 local DEFAULT_GENERAL = {
@@ -1078,6 +1075,13 @@ function Model.EnsureDB()
     Default(auras, "showBoss", true)
     if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
     if type(shared) ~= "table" then shared = {}; auras.shared = shared end
+    if type(auras.customDisplays) ~= "table" then auras.customDisplays = {} end
+    if type(auras.customDisplays.shared) ~= "table" then auras.customDisplays.shared = { items = {} } end
+    if type(auras.customDisplays.shared.items) ~= "table" then auras.customDisplays.shared.items = {} end
+    if type(auras.customDisplays.perUnit) ~= "table" then auras.customDisplays.perUnit = {} end
+    if type(auras.customDisplays.serial) ~= "number" then auras.customDisplays.serial = 0 end
+    if type(auras.customContainers) ~= "table" then auras.customContainers = {} end
+    if type(auras.customContainers.perUnit) ~= "table" then auras.customContainers.perUnit = {} end
     DefaultsInto(shared, DEFAULT_SHARED)
     if shared._msufA3_debuffTypeBorderModeMigrated_v1 ~= true then
         shared.debuffTypeBorderMode = shared.useDebuffTypeBorders == true and "SYMBOL" or NormalizeDebuffTypeBorderMode(shared.debuffTypeBorderMode, "OFF")
@@ -1498,6 +1502,280 @@ function Model.ReadLaneLayer(unit, kind)
     return Model.ReadNumber(unit, spec and spec.layerKey or "buffLayer", spec and spec.defaultLayer or 5, 0, 30)
 end
 
+local function CustomDisplayRoot()
+    local auras = Model.EnsureDB()
+    return auras and auras.customDisplays
+end
+
+local function CustomDisplayScope(scope, create)
+    local root = CustomDisplayRoot()
+    if not root then return nil end
+    scope = NormalizeScope(scope)
+    if scope == "shared" then return root.shared end
+    local record = root.perUnit[scope]
+    if create and type(record) ~= "table" then
+        record = { override = false, items = {} }
+        root.perUnit[scope] = record
+    end
+    return record
+end
+
+function Model.UseSharedCustomDisplays(scope)
+    scope = NormalizeScope(scope)
+    if scope == "shared" then return false end
+    local record = CustomDisplayScope(scope, false)
+    return not (record and record.override == true)
+end
+
+function Model.SetUseSharedCustomDisplays(scope, useShared)
+    scope = NormalizeScope(scope)
+    if scope == "shared" then return end
+    local root = CustomDisplayRoot()
+    local record = CustomDisplayScope(scope, true)
+    if not (root and record) then return end
+    if useShared then
+        record.override = false
+    elseif record.override ~= true then
+        record.items = DeepCopy(root.shared.items or {})
+        record.override = true
+    end
+end
+
+function Model.CustomDisplayItems(scope, editable)
+    scope = NormalizeScope(scope)
+    local root = CustomDisplayRoot()
+    if not root then return {} end
+    if scope == "shared" then return root.shared.items end
+    local record = CustomDisplayScope(scope, editable == true)
+    if editable == true and record and record.override ~= true then
+        record.items = DeepCopy(root.shared.items or {})
+        record.override = true
+    end
+    if record and record.override == true and type(record.items) == "table" then return record.items end
+    return root.shared.items
+end
+
+function Model.AddCustomDisplay(scope)
+    local root = CustomDisplayRoot()
+    if not root then return nil end
+    local items = Model.CustomDisplayItems(scope, true)
+    root.serial = (tonumber(root.serial) or 0) + 1
+    local item = {
+        id = root.serial,
+        name = "Custom Aura " .. tostring(#items + 1),
+        enabled = true,
+        auraType = "BUFF",
+        spellIDs = "",
+        onlyOwn = false,
+        layer = 9,
+        strata = "AUTO",
+        placed = {
+            type = "icon", anchor = "TOPRIGHT", x = 0, y = 0,
+            size = 24, barWidth = 54, showCooldown = true,
+            showCooldownSwipe = true, showStacks = true,
+        },
+        frame = { type = "none", color = { 0.69, 0.50, 0.88, 0.80 }, priority = 5, thickness = 2, strata = "AUTO" },
+    }
+    items[#items + 1] = item
+    return item
+end
+
+function Model.RemoveCustomDisplay(scope, id)
+    local items = Model.CustomDisplayItems(scope, true)
+    for i = #items, 1, -1 do
+        if items[i] == id or tostring(items[i] and items[i].id) == tostring(id) then
+            table.remove(items, i)
+            return true
+        end
+    end
+    return false
+end
+
+function Model.CustomDisplayByID(scope, id, editable)
+    local items = Model.CustomDisplayItems(scope, editable == true)
+    for i = 1, #items do
+        if tostring(items[i] and items[i].id) == tostring(id) then return items[i], i end
+    end
+    return items[1], 1
+end
+
+local CUSTOM_CONTAINER_MAX = 3
+
+local function NewCustomContainer(index)
+    return {
+        enabled = false,
+        name = "Custom " .. tostring(index),
+        auraType = "BUFF",
+        spellIDs = "",
+        filters = {
+            enabled = true,
+            onlyMine = false,
+            raid = false,
+            raidInCombat = false,
+            includeNameplateOnly = false,
+            cancelable = false,
+            notCancelable = false,
+            includeDispellable = false,
+            crowdControl = false,
+            externalDefensive = false,
+            bigDefensive = false,
+            exclusive = "none",
+        },
+        placed = {
+            type = "icon", anchor = "TOPRIGHT", growth = "LEFTDOWN",
+            x = 0, y = 0, size = 24, barWidth = 54,
+            max = 8, perRow = 4, spacing = 2,
+            showCooldown = true, showCooldownSwipe = true, showStacks = true,
+        },
+        layer = 9,
+        strata = "AUTO",
+        frame = {
+            type = "none", color = { 0.69, 0.50, 0.88, 0.80 },
+            priority = 5, thickness = 2, strata = "AUTO",
+        },
+    }
+end
+
+local function UpgradeLegacyCustomContainer(dst, legacy, index)
+    if type(dst) ~= "table" or type(legacy) ~= "table" then return dst end
+    dst.enabled = legacy.enabled ~= false
+    dst.name = legacy.name or dst.name
+    dst.auraType = legacy.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
+    dst.spellIDs = legacy.spellIDs or legacy.includeSpellIDs or ""
+    dst.layer = legacy.layer or dst.layer
+    dst.strata = legacy.strata or dst.strata
+    if type(legacy.placed) == "table" then
+        for key, value in pairs(legacy.placed) do dst.placed[key] = DeepCopy(value) end
+    end
+    if type(legacy.frame) == "table" then dst.frame = DeepCopy(legacy.frame) end
+    if legacy.onlyOwn == true then dst.filters.onlyMine = true end
+    dst._migratedFromCustomDisplay = legacy.id or index
+    return dst
+end
+
+local function EnsureUnitCustomContainers(unit, create)
+    unit = NormalizeScope(unit)
+    if unit == "shared" then unit = "player" end
+    local root = Model.EnsureDB().customContainers
+    local record = root.perUnit[unit]
+    if type(record) ~= "table" and create then
+        record = { items = {} }
+        root.perUnit[unit] = record
+    end
+    if type(record) ~= "table" then return nil end
+    if type(record.items) ~= "table" then record.items = {} end
+    if record._msufA3CustomContainersMigrated_v1 ~= true then
+        local oldRoot = Model.EnsureDB().customDisplays
+        local oldRecord = oldRoot and oldRoot.perUnit and oldRoot.perUnit[unit]
+        local oldItems = oldRecord and oldRecord.override == true and oldRecord.items
+            or (oldRoot and oldRoot.shared and oldRoot.shared.items)
+        if type(oldItems) == "table" then
+            for i = 1, math.min(CUSTOM_CONTAINER_MAX, #oldItems) do
+                if type(record.items[i]) ~= "table" then
+                    record.items[i] = UpgradeLegacyCustomContainer(NewCustomContainer(i), oldItems[i], i)
+                end
+            end
+        end
+        record._msufA3CustomContainersMigrated_v1 = true
+    end
+    return record
+end
+
+function Model.CustomContainerMax()
+    return CUSTOM_CONTAINER_MAX
+end
+
+function Model.CustomContainer(unit, index, create)
+    index = math_floor(ClampNumber(index, 1, 1, CUSTOM_CONTAINER_MAX))
+    local record = EnsureUnitCustomContainers(unit, create == true)
+    if not record then return nil end
+    local item = record.items[index]
+    if type(item) ~= "table" and create == true then
+        item = NewCustomContainer(index)
+        record.items[index] = item
+    end
+    return item
+end
+
+function Model.CustomContainers(unit, create)
+    local record = EnsureUnitCustomContainers(unit, create == true)
+    return record and record.items or {}
+end
+
+function Model.ResetCustomContainer(unit, index)
+    local record = EnsureUnitCustomContainers(unit, true)
+    index = math_floor(ClampNumber(index, 1, 1, CUSTOM_CONTAINER_MAX))
+    record.items[index] = NewCustomContainer(index)
+    return record.items[index]
+end
+
+local function CustomContainerSpellSet(item)
+    local set = {}
+    local raw = item and item.spellIDs
+    if type(raw) == "string" then
+        for token in raw:gmatch("%d+") do
+            local spellID = tonumber(token)
+            if spellID and spellID > 0 then set[math_floor(spellID)] = true end
+        end
+    elseif type(raw) == "table" then
+        for key, enabled in pairs(raw) do
+            local spellID = tonumber((type(enabled) == "number" or type(enabled) == "string") and enabled or key)
+            if enabled ~= false and spellID and spellID > 0 then set[math_floor(spellID)] = true end
+        end
+    end
+    return set
+end
+
+local function WriteCustomContainerSpellSet(item, set)
+    local ids = {}
+    for spellID, enabled in pairs(set or {}) do
+        if enabled == true then ids[#ids + 1] = tonumber(spellID) end
+    end
+    table_sort(ids)
+    for i = 1, #ids do ids[i] = tostring(ids[i]) end
+    item.spellIDs = table.concat(ids, ", ")
+end
+
+function Model.AddCustomContainerSpell(unit, index, value)
+    local spellID = SpellIDFromInput(value)
+    local item = Model.CustomContainer(unit, index, true)
+    if not (spellID and item) then return false end
+    local set = CustomContainerSpellSet(item)
+    if set[spellID] ~= true then
+        local count = 0
+        for _, enabled in pairs(set) do if enabled == true then count = count + 1 end end
+        if count >= 40 then return false end
+    end
+    set[spellID] = true
+    WriteCustomContainerSpellSet(item, set)
+    return true
+end
+
+function Model.RemoveCustomContainerSpell(unit, index, value)
+    local spellID = SpellIDFromInput(value)
+    local item = Model.CustomContainer(unit, index, true)
+    if not (spellID and item) then return false end
+    local set = CustomContainerSpellSet(item)
+    set[spellID] = nil
+    WriteCustomContainerSpellSet(item, set)
+    return true
+end
+
+function Model.CustomContainerSpellEntries(unit, index)
+    local item = Model.CustomContainer(unit, index, false)
+    local out = {}
+    for spellID in pairs(CustomContainerSpellSet(item)) do
+        local id, name, icon = SpellInfo(spellID)
+        id = id or spellID
+        out[#out + 1] = {
+            value = tostring(id), spellID = id, icon = icon,
+            text = (type(name) == "string" and name ~= "" and name or "Spell") .. " (#" .. tostring(id) .. ")",
+        }
+    end
+    table_sort(out, function(a, b) return tostring(a.text) < tostring(b.text) end)
+    return out
+end
+
 function Model.WriteLaneLayer(unit, kind, value)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
@@ -1835,74 +2113,73 @@ end
 
 --- Blacklists remain saved in human-editable form. The 12.1 native runtime does
 --- not rebuild blacklist tables during aura display updates.
-local function EnsureBlacklist(scope, create)
-    local auras, shared = Model.EnsureDB()
-    scope = NormalizeScope(scope)
-    if scope == "shared" then
-        if type(shared.blacklist) ~= "table" then shared.blacklist = { spells = {} } end
-        if type(shared.blacklist.spells) ~= "table" then shared.blacklist.spells = {} end
-        return shared.blacklist
+local function BlacklistLane(root, kind, create)
+    if type(root) ~= "table" then return nil end
+    if kind ~= "buff" and kind ~= "debuff" then
+        if type(root.spells) ~= "table" and create then root.spells = {} end
+        return root
     end
-    local pu = PerUnit(auras, scope, create)
-    if not pu then return shared.blacklist end
-    if create then
-        pu.overrideBlacklist = true
-        if type(pu.blacklist) ~= "table" then pu.blacklist = { spells = {} } end
-        if type(pu.blacklist.spells) ~= "table" then pu.blacklist.spells = {} end
-        return pu.blacklist
+    local key = kind == "buff" and "buffs" or "debuffs"
+    if type(root[key]) ~= "table" and create then
+        root[key] = { spells = DeepCopy(type(root.spells) == "table" and root.spells or {}) }
     end
-    if pu.overrideBlacklist == true and type(pu.blacklist) == "table" then
-        if type(pu.blacklist.spells) ~= "table" then pu.blacklist.spells = {} end
-        return pu.blacklist
-    end
-    return shared.blacklist
+    local lane = root[key]
+    if type(lane) == "table" and type(lane.spells) ~= "table" and create then lane.spells = {} end
+    return lane
 end
 
-function Model.UseSharedBlacklist(scope)
-    scope = NormalizeScope(scope)
-    if scope == "shared" then return true end
+local function EnsureRuntimeBlacklist(auras, runtimeUnit, create, kind)
+    local pu = PerUnit(auras, runtimeUnit, true)
+    if not pu then return nil end
+    pu.overrideBlacklist = true -- retained only for old profile/import compatibility
+    if type(pu.blacklist) ~= "table" then pu.blacklist = { spells = {} } end
+    if type(pu.blacklist.spells) ~= "table" then pu.blacklist.spells = {} end
+    return BlacklistLane(pu.blacklist, kind, create) or BlacklistLane(pu.blacklist, kind, true)
+end
+
+local function EnsureBlacklist(scope, create, kind)
     local auras = Model.EnsureDB()
-    local pu = PerUnit(auras, scope, false)
-    return not (pu and pu.overrideBlacklist == true)
+    scope = NormalizeScope(scope)
+    if scope == "shared" then return nil end
+    return EnsureRuntimeBlacklist(auras, RuntimeUnit(scope), create, kind)
 end
 
-function Model.SetUseSharedBlacklist(scope, useShared)
+local function ForEachFrameBlacklist(scope, create, kind, callback)
     scope = NormalizeScope(scope)
-    if scope == "shared" then return end
+    if scope == "shared" or type(callback) ~= "function" then return end
+    local auras = Model.EnsureDB()
     EachRuntimeUnit(scope, function(runtimeUnit)
-        local pu = PerUnit(Model.EnsureDB(), runtimeUnit, true)
-        if not pu then return end
-        if useShared then
-            pu.overrideBlacklist = false
-        else
-            EnsureBlacklist(runtimeUnit, true)
-            pu.overrideBlacklist = true
+        callback(EnsureRuntimeBlacklist(auras, runtimeUnit, create, kind))
+    end)
+end
+
+function Model.AddBlacklistSpell(scope, value, kind)
+    local spellID = SpellIDFromInput(value)
+    if not spellID then return false end
+    value = tostring(spellID)
+    local changed = false
+    ForEachFrameBlacklist(scope, true, kind, function(list)
+        if type(list) == "table" and type(list.spells) == "table" then
+            if list.spells[value] ~= true then changed = true end
+            list.spells[value] = true
+        end
+    end)
+    return changed
+end
+
+function Model.RemoveBlacklistSpell(scope, value, kind)
+    local raw = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local spellID = SpellIDFromInput(raw)
+    ForEachFrameBlacklist(scope, true, kind, function(list)
+        if type(list) == "table" and type(list.spells) == "table" then
+            if spellID then list.spells[tostring(spellID)] = nil end
+            if raw ~= "" then list.spells[raw] = nil end
         end
     end)
 end
 
-function Model.AddBlacklistSpell(scope, value)
-    local spellID = SpellIDFromInput(value)
-    if not spellID then return false end
-    value = tostring(spellID)
-    local list = EnsureBlacklist(scope, true)
-    if type(list) ~= "table" then return false end
-    list.spells[value] = true
-    return true
-end
-
-function Model.RemoveBlacklistSpell(scope, value)
-    local raw = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    local spellID = SpellIDFromInput(raw)
-    local list = EnsureBlacklist(scope, true)
-    if type(list) == "table" and type(list.spells) == "table" then
-        if spellID then list.spells[tostring(spellID)] = nil end
-        if raw ~= "" then list.spells[raw] = nil end
-    end
-end
-
-function Model.BlacklistSummary(scope)
-    local list = EnsureBlacklist(scope, false)
+function Model.BlacklistSummary(scope, kind)
+    local list = EnsureBlacklist(scope, false, kind)
     local spells = type(list) == "table" and list.spells
     if type(spells) ~= "table" then return "No blacklisted spells." end
     local out = {}
@@ -1917,8 +2194,8 @@ function Model.BlacklistSummary(scope)
     return table.concat(out, "\n")
 end
 
-function Model.BlacklistEntries(scope)
-    local list = EnsureBlacklist(scope, false)
+function Model.BlacklistEntries(scope, kind)
+    local list = EnsureBlacklist(scope, false, kind)
     local spells = type(list) == "table" and list.spells
     local out = {}
     if type(spells) ~= "table" then return out end
@@ -1955,17 +2232,17 @@ local function CountBlacklistSpells(spells)
     return count
 end
 
-function Model.ClearBlacklistSpells(scope)
-    local effective = EnsureBlacklist(scope, false)
+function Model.ClearBlacklistSpells(scope, kind)
+    local effective = EnsureBlacklist(scope, false, kind)
     local count = CountBlacklistSpells(type(effective) == "table" and effective.spells or nil)
-    local list = EnsureBlacklist(scope, true)
-    if type(list) ~= "table" then return 0 end
-    list.spells = {}
+    ForEachFrameBlacklist(scope, true, kind, function(list)
+        if type(list) == "table" then list.spells = {} end
+    end)
     return count
 end
 
-function Model.BlacklistPreparedCount(scope)
-    local list = EnsureBlacklist(scope, false)
+function Model.BlacklistPreparedCount(scope, kind)
+    local list = EnsureBlacklist(scope, false, kind)
     local spells = type(list) == "table" and list.spells
     if type(spells) ~= "table" then return 0 end
     local count = 0
@@ -2040,16 +2317,16 @@ function Model.BlacklistSpellValues(presetKey)
     return values
 end
 
-function Model.AddBlacklistPresetSpell(scope, spellID)
-    return Model.AddBlacklistSpell(scope, spellID)
+function Model.AddBlacklistPresetSpell(scope, spellID, kind)
+    return Model.AddBlacklistSpell(scope, spellID, kind)
 end
 
-function Model.AddBlacklistPresetGroup(scope, presetKey)
+function Model.AddBlacklistPresetGroup(scope, presetKey, kind)
     local values = Model.BlacklistSpellValues(presetKey)
     local count = 0
     for i = 1, #values do
         local item = values[i]
-        if item and item.value and Model.AddBlacklistSpell(scope, item.value) then
+        if item and item.value and Model.AddBlacklistSpell(scope, item.value, kind) then
             count = count + 1
         end
     end
