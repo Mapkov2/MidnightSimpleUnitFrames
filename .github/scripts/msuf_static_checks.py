@@ -2,8 +2,8 @@
 """Minimal static checks for MidnightSimpleUnitFrames.
 
 This intentionally stays small: Lua syntax, load-manifest reachability, and the
-kernel/castbar refactor contracts that protect the shared scheduler/event bus
-and de-minified castbar files.
+runtime ownership contracts that protect the shared scheduler/event bus,
+castbar refresh pipeline, and group-frame refresh pipeline.
 """
 
 from __future__ import annotations
@@ -18,7 +18,26 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ADDON_ROOT = REPO_ROOT / "MidnightSimpleUnitFrames"
 TOC = ADDON_ROOT / "MidnightSimpleUnitFrames.toc"
+LOCALE_ADDON_ROOT = REPO_ROOT / "MidnightSimpleUnitFrames_Locales"
+LOCALE_TOC = LOCALE_ADDON_ROOT / "MidnightSimpleUnitFrames_Locales.toc"
+SUPPORTED_LOCALES = {
+    "enUS", "enGB", "deDE", "esES", "esMX", "frFR",
+    "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW",
+}
+ENGLISH_LOCALES = {"enUS", "enGB"}
+NON_ENGLISH_LOCALES = SUPPORTED_LOCALES - ENGLISH_LOCALES
 SKIP_DIRS = {"scripts", "docs"}
+INTENTIONALLY_UNLOADED_LUA = {
+    # Developer-only diagnostic tools. They are kept in source but excluded
+    # from release loading so normal users pay no startup/runtime cost.
+    "Features/Diagnostics/MSUF_ClickCoreProfiler.lua",
+    "Features/Diagnostics/MSUF_Feature_ClickProbe.lua",
+    "Features/Diagnostics/MSUF_Feature_DebugPosition.lua",
+    "UnitFrames/Engine/Group/MSUF_UF_Group_Profiler.lua",
+    "UnitFrames/Engine/MSUF_UF_PreviewDiagnostics.lua",
+    # Superseded by the Borders/RoundedFrames highlight implementations.
+    "UnitFrames/Engine/Elements/MSUF_UF_Highlight.lua",
+}
 
 
 class CheckError(RuntimeError):
@@ -51,8 +70,7 @@ def normalize_ref(value: str) -> str:
 
 def resolve_ref(owner: Path, value: str) -> Path:
     value = normalize_ref(value)
-    base = ADDON_ROOT if owner == TOC else owner.parent
-    return (base / value).resolve()
+    return (owner.parent / value).resolve()
 
 
 def parse_load_refs() -> tuple[set[str], list[str]]:
@@ -64,20 +82,21 @@ def parse_load_refs() -> tuple[set[str], list[str]]:
     xml_queue: list[Path] = []
     seen_xml: set[Path] = set()
 
-    for line_no, line in enumerate(read(TOC).splitlines(), 1):
-        item = line.strip()
-        if not item or item.startswith("#") or item.startswith("##"):
-            continue
-        if not re.search(r"\.(lua|xml)$", item, re.IGNORECASE):
-            continue
-        path = resolve_ref(TOC, item)
-        if not path.exists():
-            missing.append(f"MidnightSimpleUnitFrames.toc:{line_no}: {normalize_ref(item)}")
-            continue
-        if path.suffix.lower() == ".lua":
-            loaded_lua.add(rel(path))
-        elif path.suffix.lower() == ".xml":
-            xml_queue.append(path)
+    for toc in [TOC, LOCALE_TOC]:
+        for line_no, line in enumerate(read(toc).splitlines(), 1):
+            item = line.strip()
+            if not item or item.startswith("#") or item.startswith("##"):
+                continue
+            if not re.search(r"\.(lua|xml)$", item, re.IGNORECASE):
+                continue
+            path = resolve_ref(toc, item)
+            if not path.exists():
+                missing.append(f"{toc.name}:{line_no}: {normalize_ref(item)}")
+                continue
+            if path.suffix.lower() == ".lua":
+                loaded_lua.add(rel(path))
+            elif path.suffix.lower() == ".xml":
+                xml_queue.append(path)
 
     file_attr = re.compile(r'\bfile\s*=\s*"([^"]+\.(?:lua|xml))"', re.IGNORECASE)
     while xml_queue:
@@ -97,6 +116,56 @@ def parse_load_refs() -> tuple[set[str], list[str]]:
                     xml_queue.append(child)
 
     return loaded_lua, missing
+
+
+def check_locale_addon_contracts() -> None:
+    if not LOCALE_TOC.exists():
+        raise CheckError(f"missing locale TOC: {LOCALE_TOC}")
+    legacy_locale_addons = sorted(REPO_ROOT.glob("MidnightSimpleUnitFrames_Locale_*"))
+    if legacy_locale_addons:
+        names = ", ".join(path.name for path in legacy_locale_addons)
+        raise CheckError(f"legacy per-locale addons must be removed: {names}")
+
+    main_toc = read(TOC)
+    companion_toc = read(LOCALE_TOC)
+    locale_core = read(ADDON_ROOT / "Locales" / "MSUF_Localization.lua")
+    require(
+        locale_core,
+        'local localeAddon = "MidnightSimpleUnitFrames_Locales"',
+        "consolidated locale addon name",
+    )
+    require(
+        locale_core,
+        'if MSUF.LOCALE ~= "enUS" and MSUF.LOCALE ~= "enGB" then',
+        "non-English LoadOnDemand condition",
+    )
+    require(locale_core, "loadAddOn(localeAddon)", "non-English locale LoadAddOn")
+    require(companion_toc, "## LoadOnDemand: 1", "locale companion LoadOnDemand")
+    require(companion_toc, "## X-MSUF-Locales:", "locale companion metadata")
+
+    for locale in sorted(SUPPORTED_LOCALES):
+        locale_ref = f"Locales\\{locale}.lua"
+        locale_source = read(ADDON_ROOT / "Locales" / f"{locale}.lua")
+        require(
+            locale_source,
+            f'if not MSUF or MSUF.LOCALE ~= "{locale}" then return end',
+            f"{locale} active-pack guard",
+        )
+        if locale in ENGLISH_LOCALES:
+            require(main_toc, locale_ref, f"main TOC {locale} source")
+            if locale_ref in companion_toc:
+                raise CheckError(f"English locale must not load from companion: {locale}")
+        else:
+            companion_ref = f"..\\MidnightSimpleUnitFrames\\{locale_ref}"
+            require(companion_toc, companion_ref, f"locale companion {locale} source")
+            if locale_ref in main_toc:
+                raise CheckError(f"main TOC must not eagerly load locale pack {locale}")
+
+    companion_refs = set(re.findall(r"Locales\\([A-Za-z]{4})\.lua", companion_toc))
+    if companion_refs != NON_ENGLISH_LOCALES:
+        missing = sorted(NON_ENGLISH_LOCALES - companion_refs)
+        extra = sorted(companion_refs - NON_ENGLISH_LOCALES)
+        raise CheckError(f"locale companion mismatch; missing={missing}, extra={extra}")
 
 
 def check_luac(lua_files: list[Path]) -> None:
@@ -119,7 +188,11 @@ def check_load_reachability(lua_files: list[Path]) -> None:
         raise CheckError("missing load references:\n" + "\n".join(missing[:30]))
 
     production_lua = {rel(path) for path in lua_files}
-    unreachable = sorted(production_lua - loaded_lua)
+    stale_allowlist = sorted(INTENTIONALLY_UNLOADED_LUA - production_lua)
+    if stale_allowlist:
+        raise CheckError("stale intentionally-unloaded Lua entries:\n" + "\n".join(stale_allowlist))
+
+    unreachable = sorted(production_lua - loaded_lua - INTENTIONALLY_UNLOADED_LUA)
     if unreachable:
         raise CheckError("Lua files not reachable from TOC/XML:\n" + "\n".join(unreachable[:30]))
 
@@ -127,6 +200,12 @@ def check_load_reachability(lua_files: list[Path]) -> None:
 def require(text: str, needle: str, label: str) -> None:
     if needle not in text:
         raise CheckError(f"{label}: missing `{needle}`")
+
+
+def require_count(text: str, needle: str, expected: int, label: str) -> None:
+    actual = text.count(needle)
+    if actual != expected:
+        raise CheckError(f"{label}: expected {expected} `{needle}`, found {actual}")
 
 
 def check_kernel_castbar_contracts() -> None:
@@ -137,10 +216,13 @@ def check_kernel_castbar_contracts() -> None:
     empower = read(ADDON_ROOT / "Castbars" / "MSUF_CastbarEmpower.lua")
     player = read(ADDON_ROOT / "Castbars" / "MSUF_PlayerCastbarRuntime.lua")
     utils = read(ADDON_ROOT / "Castbars" / "MSUF_CastbarUtils.lua")
+    style = read(ADDON_ROOT / "Castbars" / "MSUF_CastbarStyle.lua")
     core = read(ADDON_ROOT / "Castbars" / "MSUF_Castbars_Core.lua")
+    visuals = read(ADDON_ROOT / "Castbars" / "MSUF_CastbarVisuals.lua")
     previews = read(ADDON_ROOT / "Castbars" / "MSUF_CastbarPreviews.lua")
     focus_kick = read(ADDON_ROOT / "Castbars" / "MSUF_FocusKickIcon.lua")
     manager = read(ADDON_ROOT / "Castbars" / "MSUF_Castbars.lua")
+    font_runtime = read(ADDON_ROOT / "Runtime" / "MSUF_FontRuntime.lua")
 
     require(util, 'ExportPublic("MSUF_SafeCall"', "SafeCall export")
     require(scheduler, "SafeCall(cb)", "Scheduler protected callback")
@@ -154,6 +236,7 @@ def check_kernel_castbar_contracts() -> None:
         + "\n" + player
         + "\n" + utils
         + "\n" + core
+        + "\n" + visuals
         + "\n" + previews
         + "\n" + focus_kick
         + "\n" + manager,
@@ -167,7 +250,9 @@ def check_kernel_castbar_contracts() -> None:
         (empower, "MSUF_CastbarEmpower.lua"),
         (player, "MSUF_PlayerCastbarRuntime.lua"),
         (utils, "MSUF_CastbarUtils.lua"),
+        (style, "MSUF_CastbarStyle.lua"),
         (core, "MSUF_Castbars_Core.lua"),
+        (visuals, "MSUF_CastbarVisuals.lua"),
         (previews, "MSUF_CastbarPreviews.lua"),
         (focus_kick, "MSUF_FocusKickIcon.lua"),
         (manager, "MSUF_Castbars.lua"),
@@ -245,12 +330,60 @@ def check_kernel_castbar_contracts() -> None:
     ]:
         require(manager, needle, "Castbar manager readable contract")
 
+    castbar_refresh_sources = "\n".join([core, visuals, manager, font_runtime])
+    for export_name in [
+        "MSUF_UpdateCastbarVisuals",
+        "MSUF_UpdateCastbarVisuals_Immediate",
+        "MSUF_UpdateCastbarTextures",
+        "MSUF_UpdateCastbarTextures_Immediate",
+    ]:
+        require_count(
+            castbar_refresh_sources,
+            f'ExportPublic("{export_name}",',
+            1,
+            f"single castbar refresh owner for {export_name}",
+        )
+    require(core, 'ExportPublic("MSUF_ApplyAllCastbarsAndSync"', "bulk castbar apply owner")
+    require_count(
+        "\n".join([core, style]),
+        'ExportPublic("MSUF_UpdateCastbarFillDirection",',
+        1,
+        "single castbar fill-direction owner",
+    )
+    require(style, 'ExportPublic("MSUF_UpdateCastbarFillDirection",', "castbar fill-direction owner")
+    require_count(
+        "\n".join([core, utils]),
+        'ExportPublic("MSUF_GetCastbarReverseFillForFrame",',
+        1,
+        "single castbar reverse-fill owner",
+    )
+    require(utils, 'ExportPublic("MSUF_GetCastbarReverseFillForFrame",', "castbar reverse-fill owner")
+
+
+def check_group_refresh_contracts() -> None:
+    runtime = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Group" / "MSUF_UF_Group_Runtime.lua")
+    em2 = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Group" / "MSUF_UF_Group_EM2.lua")
+    targeted = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Group" / "MSUF_UF_Group_TargetedSpells.lua")
+
+    require(runtime, "local dirtyApplyMaskCache = {}", "group dirty-mask cache")
+    require(runtime, "local function ApplyRefreshFrame", "stable group refresh callback")
+    require(runtime, "function GF.RegisterRuntimeObserver", "group runtime observer API")
+    require(runtime, "local function RefreshVisualsNow", "single internal group visual owner")
+    require_count(runtime, "function GF.RefreshVisuals(", 1, "single public group visual owner")
+    require_count(runtime, "function GF.RebuildAll(", 1, "single public group rebuild owner")
+    for source, label in [(em2, "group Edit Mode"), (targeted, "targeted spells")]:
+        if "GF.RefreshVisuals = function" in source or "GF.RebuildAll = function" in source:
+            raise CheckError(f"{label} must observe, not replace, group runtime functions")
+        require(source, "RegisterRuntimeObserver", f"{label} observer registration")
+
 
 def main() -> int:
     lua_files = all_lua_files()
     check_luac(lua_files)
+    check_locale_addon_contracts()
     check_load_reachability(lua_files)
     check_kernel_castbar_contracts()
+    check_group_refresh_contracts()
     print(f"MSUF static checks: ok ({len(lua_files)} Lua files)")
     return 0
 
