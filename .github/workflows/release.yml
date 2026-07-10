@@ -363,6 +363,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
 
           Copy-Item -LiteralPath "MidnightSimpleUnitFrames" -Destination $stagePath -Recurse -Force
+          $localeAddonSource = "MidnightSimpleUnitFrames_Locales"
+          if (-not (Test-Path -LiteralPath $localeAddonSource -PathType Container)) {
+            throw "Missing MSUF locale addon: $localeAddonSource"
+          }
+          Copy-Item -LiteralPath $localeAddonSource -Destination $stagePath -Recurse -Force
 
           foreach ($relativePath in @(
             "MidnightSimpleUnitFrames/.codex-remote-attachments",
@@ -381,13 +386,18 @@ jobs:
               Remove-Item -LiteralPath $_.FullName -Recurse -Force
             }
 
-          $tocPath = Join-Path $stagePath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
-          $tocContent = Get-Content -LiteralPath $tocPath -Raw
-          if ($tocContent -notmatch '(?m)^## Version:') {
-            throw "No TOC version line found in $tocPath."
+          $tocPaths = @(Get-ChildItem -LiteralPath $stagePath -Filter "*.toc" -File -Recurse)
+          if ($tocPaths.Count -ne 2) {
+            throw "Expected the main and locale TOCs, found $($tocPaths.Count)."
           }
-          $tocContent = [regex]::Replace($tocContent, '(?m)^## Version:.*$', "## Version: $releaseVersion", 1)
-          [System.IO.File]::WriteAllText($tocPath, $tocContent, [System.Text.UTF8Encoding]::new($false))
+          foreach ($tocPath in $tocPaths) {
+            $tocContent = Get-Content -LiteralPath $tocPath.FullName -Raw
+            if ($tocContent -notmatch '(?m)^## Version:') {
+              throw "No TOC version line found in $($tocPath.FullName)."
+            }
+            $tocContent = [regex]::Replace($tocContent, '(?m)^## Version:.*$', "## Version: $releaseVersion", 1)
+            [System.IO.File]::WriteAllText($tocPath.FullName, $tocContent, [System.Text.UTF8Encoding]::new($false))
+          }
 
           $fileVersion = $releaseVersion -replace '[\\/:*?"<>|]', '-'
           $zipPath = Join-Path $outputDir "MidnightSimpleUnitFrames$fileVersion.zip"
@@ -411,7 +421,7 @@ jobs:
             $zip.Dispose()
           }
 
-          Write-Host "Created $zipPath with TOC version $releaseVersion."
+          Write-Host "Created $zipPath with $($tocPaths.Count) TOCs at version $releaseVersion."
 
       - name: Write GitHub release notes
         shell: pwsh

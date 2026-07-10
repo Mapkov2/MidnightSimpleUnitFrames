@@ -3,6 +3,7 @@ enable-nolib-creation: no
 
 move-folders:
   MidnightSimpleUnitFrames/MidnightSimpleUnitFrames: MidnightSimpleUnitFrames
+  MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Locales: MidnightSimpleUnitFrames_Locales
 
 ignore:
   - .github

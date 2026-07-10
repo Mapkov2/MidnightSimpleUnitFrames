@@ -1,0 +1,17 @@
+## Interface: 120100
+## Title: Midnight Simple Unit Frames - Locales
+## Notes: LoadOnDemand non-English language data for Midnight Simple Unit Frames.
+## Author: Mapko
+## Version: 6.0-beta9
+## LoadOnDemand: 1
+## X-MSUF-Locales: deDE, esES, esMX, frFR, itIT, koKR, ptBR, ruRU, zhCN, zhTW
+..\MidnightSimpleUnitFrames\Locales\deDE.lua
+..\MidnightSimpleUnitFrames\Locales\esES.lua
+..\MidnightSimpleUnitFrames\Locales\esMX.lua
+..\MidnightSimpleUnitFrames\Locales\frFR.lua
+..\MidnightSimpleUnitFrames\Locales\itIT.lua
+..\MidnightSimpleUnitFrames\Locales\koKR.lua
+..\MidnightSimpleUnitFrames\Locales\ptBR.lua
+..\MidnightSimpleUnitFrames\Locales\ruRU.lua
+..\MidnightSimpleUnitFrames\Locales\zhCN.lua
+..\MidnightSimpleUnitFrames\Locales\zhTW.lua

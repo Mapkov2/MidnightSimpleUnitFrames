@@ -463,6 +463,11 @@ $perfyAddonSource = Join-Path $perfyRoot "AddOn"
 
 Write-Host "Copying $AddonName to staging folder $stagedAddon"
 Copy-Item -LiteralPath $addonSource -Destination $stageRoot -Recurse -Force
+$localeAddonSource = Join-Path $script:RepoRoot "${AddonName}_Locales"
+if (-not (Test-Path -LiteralPath $localeAddonSource -PathType Container)) {
+  throw "Missing MSUF locale addon: $localeAddonSource"
+}
+Copy-Item -LiteralPath $localeAddonSource -Destination $stageRoot -Recurse -Force
 
 foreach ($relativePath in @("docs", "scripts", "MSUF_PerfyHook.lua", ".gitignore")) {
   $fullPath = Join-Path $stagedAddon $relativePath
@@ -535,6 +540,9 @@ try {
   }
   if (-not ($entries -contains "$AddonName/$AddonName.toc")) {
     throw "Package verification failed: $AddonName/$AddonName.toc is missing."
+  }
+  if (-not ($entries -contains "${AddonName}_Locales/${AddonName}_Locales.toc")) {
+    throw "Package verification failed: ${AddonName}_Locales/${AddonName}_Locales.toc is missing."
   }
 } finally {
   $zip.Dispose()
