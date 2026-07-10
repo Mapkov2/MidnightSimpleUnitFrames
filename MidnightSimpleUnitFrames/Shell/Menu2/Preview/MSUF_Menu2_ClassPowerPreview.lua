@@ -893,10 +893,18 @@ local function UpdateMeterFill(frame, fraction)
 end
 local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth)
     local shape = CP_SHAPES[NormalizeClassShape(bars and bars.classPowerShape)]
+    local widthMode = bars and bars.classPowerWidthMode or "player"
+    local cdmFrames = _G.MSUF_CP_CONST and _G.MSUF_CP_CONST.CDM_FRAMES
     local width
-    if shape and bars and bars.classPowerWidthMode == "auto_pips" then
+    if shape and widthMode == "auto_pips" then
         width = AutoFitPips(segCount, height, bars.classPowerGap)
-    elseif bars and bars.classPowerWidthMode == "custom" then
+    elseif cdmFrames and cdmFrames[widthMode] then
+        local frameName = cdmFrames[widthMode]
+        local source = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(frameName)) or _G[frameName]
+        local scaleWidth = _G.MSUF_CDM_GetScaledWidth
+        width = source and source.IsShown and source:IsShown() and type(scaleWidth) == "function" and scaleWidth(source, _G.MSUF_ClassPowerContainer)
+        if not width then width = (tonumber(frameW) or 275) - 4 end
+    elseif widthMode == "custom" then
         width = tonumber(bars.classPowerWidth)
     else
         width = (tonumber(frameW) or 275) - 4
