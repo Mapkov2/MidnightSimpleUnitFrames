@@ -1507,7 +1507,17 @@ local function BuildBars(ctx)
     local realtimePower = W.Toggle(power, "Realtime power text")
     M.BindBoolWidget(ctx, realtimePower,
         function() return ReadB("realtimePowerText", true) ~= false end,
-        function(v) SetB("realtimePowerText", v and true or false, "MSUF2_BARS_REALTIME_POWER", { preview = true }) end)
+        function(v)
+            v = v and true or false
+            local bars = Bars()
+            if bars.realtimePowerText == v then return end
+            bars.realtimePowerText = v
+            -- Recompile Player and rebind both Power and PowerText events.
+            -- A generic Bars layout refresh leaves this event option dead.
+            M.RequestUnitApply("player", "MSUF2_BARS_REALTIME_POWER", {
+                preview = true, power = true, text = true,
+            })
+        end)
     M.BindGateGroup(ctx, nil, {
         { controls = smoothPower, on = function() return CurrentPowerBarScopeUnit() ~= nil end },
         { controls = realtimePower, on = SharedBarsControlsActive },

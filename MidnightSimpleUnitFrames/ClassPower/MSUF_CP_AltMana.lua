@@ -31,6 +31,8 @@ builders.ALT_MANA = function(E)
     local UnitPower = E.UnitPower
     local UnitPowerMax = E.UnitPowerMax
     local Enum = E.Enum
+    local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
+    local SMOOTH_INTERP = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
     local tonumber = E.tonumber or tonumber
     local CreateFrame = E.CreateFrame
     local ResolveClassPowerColor = E.ResolveClassPowerColor
@@ -129,18 +131,19 @@ builders.ALT_MANA = function(E)
 
         local cur = UnitPower("player", PT.Mana)
         local mx  = UnitPowerMax("player", PT.Mana)
-        if cur == nil then cur = 0 end
-        if mx  == nil then mx  = 100 end
+        local curSecret = not NotSecret(cur)
+        local maxSecret = not NotSecret(mx)
+        if not curSecret and cur == nil then cur = 0 end
+        if not maxSecret and mx == nil then mx = 100 end
 
-        local smoothOn = _cpDB.smooth
-        local interp = smoothOn and Enum and Enum.StatusBarInterpolation
-            and Enum.StatusBarInterpolation.ExponentialEaseOut or nil
-        if interp then
-            AM.bar:SetMinMaxValues(0, mx, interp)
-            AM.bar:SetValue(cur, interp)
-        else
-            AM.bar:SetMinMaxValues(0, mx)
-            AM.bar:SetValue(cur)
+        local interp = _cpDB.altManaSmooth and SMOOTH_INTERP or nil
+        if maxSecret or AM._maxValue ~= mx then
+            if interp then AM.bar:SetMinMaxValues(0, mx, interp) else AM.bar:SetMinMaxValues(0, mx) end
+            if maxSecret then AM._maxValue = nil else AM._maxValue = mx end
+        end
+        if curSecret or AM._currentValue ~= cur then
+            if interp then AM.bar:SetValue(cur, interp) else AM.bar:SetValue(cur) end
+            if curSecret then AM._currentValue = nil else AM._currentValue = cur end
         end
     end
 

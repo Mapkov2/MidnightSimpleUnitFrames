@@ -137,7 +137,11 @@ local function _Iter_ApplyAllBarTex(f)
     if f._msufPowerBarDetached and S.texDPB then
         pbTex = S.texDPB
     end
-    _ApplyTexCached(f.targetPowerBar, pbTex)
+    -- ROUND/CRYSTAL/ORB use fixed fill art owned by the Power element. A global
+    -- statusbar refresh must not replace that art with the rectangular bar media.
+    if not (f.targetPowerBar and f.targetPowerBar._msufPowerShapeActive == true) then
+        _ApplyTexCached(f.targetPowerBar, pbTex)
+    end
 end
 
 --- Immediate refresh path used by the deferred wrapper and direct callers. Keep

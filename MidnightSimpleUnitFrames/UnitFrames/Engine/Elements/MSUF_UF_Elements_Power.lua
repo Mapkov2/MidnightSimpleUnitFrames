@@ -16,6 +16,10 @@ local ResolvePowerColor = C and C.PowerColor
 local WHITE = C and C.WHITE or "Interface\\Buttons\\WHITE8X8"
 local SCALE_100 = C and C.SCALE_100
 local SetBarSmoothing = C and C.SetBarSmoothing
+local SnapBarInterpolation = C and C.SnapBarInterpolation
+local ApplyBackgrounds = C and C.ApplyBackgrounds
+local ApplyBarGradient = C and C.ApplyBarGradient
+local HideBarGradient = C and C.HideBarGradient
 local tonumber = tonumber
 local tostring = tostring
 local type = type
@@ -24,7 +28,11 @@ local math_max = math.max
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local Power = {}
-local EVENTS = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" }
+local POWER_EVENTS = C and C.POWER_EVENTS
+  or { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
+local POWER_EVENTS_FAST = {
+  "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE",
+}
 local POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
 local DETACHED_SHAPE_TEXTURES = {
   ROUND = {
@@ -44,15 +52,6 @@ local DETACHED_SHAPE_TEXTURES = {
     vertical = true,
   },
 }
-local IDENTITY_EVENTS = {
-  MSUF_UNIT_IDENTITY = true,
-  MSUF_UNIT_IDENTITY_FAST = true,
-  MSUF_UNIT_IDENTITY_SOFT = true,
-  MSUF_UNIT_IDENTITY_SOFT_FAST = true,
-  MSUF_GF_UNIT_IDENTITY = true,
-  MSUF_GF_UNIT_STRUCTURE = true,
-}
-
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
 end
@@ -61,27 +60,17 @@ local function IsSecret(value)
   return issecretvalue(value) == true
 end
 
-local function ClearPowerValueCaches(bar)
-  if not bar then return end
-  bar._msufPowerValue = nil
-  bar._msufPowerValueUnit = nil
-  bar._msufPowerMax = nil
-  bar._msufPowerMaxUnit = nil
-  bar._msufPowerMaxReady = nil
-end
-
-local function SetPowerBarValue(bar, value, secret)
-  if secret then
-    bar:SetValue(value)
-    bar._msufInterpolating = nil
-    return
-  end
-  local interp = bar._msufSmoothInterp
+local function SetPowerBarValue(bar, value, animate)
+  -- 12.x StatusBar:SetValue accepts restricted/secret values together with a
+  -- NeverSecret interpolation enum. Keep the payload entirely C-side so smooth
+  -- fill works in combat without inspecting or copying the protected number.
+  local interp = animate == true and bar._msufSmoothInterp or nil
   if interp then
     bar:SetValue(value, interp)
     bar._msufInterpolating = true
   else
     bar:SetValue(value)
+    bar._msufInterpolating = nil
   end
 end
 
@@ -111,7 +100,7 @@ local function ResolveDynamicPowerColor(frame, unit, powerType, token, metaKnown
   return c and c.r or 0.2, c and c.g or 0.45, c and c.b or 1
 end
 
-local function ReadPowerTypeCached(frame, bar, unit, force)
+local function ReadPowerTypeCached(bar, unit, force)
   if not UnitPowerType then return nil, nil end
   if force ~= true and bar and bar._msufPowerTypeKnown == true and bar._msufPowerTypeUnit == unit then
     return bar._msufPowerType, bar._msufPowerToken
@@ -146,14 +135,132 @@ local function BarShown(bar)
   return true
 end
 
+local function PowerEventMatchesToken(bar, event, eventPowerToken)
+  if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" then return true end
+  if type(eventPowerToken) ~= "string" or eventPowerToken == "" then return true end
+  if bar._msufPowerTypeKnown ~= true or bar._msufPowerToken == nil then return true end
+  return bar._msufPowerToken == eventPowerToken
+end
+
 local function SetShown(frame, shown)
   local bar = frame and frame.targetPowerBar
   if not bar then return end
-  if bar._msufShown == shown then return end
-  bar._msufShown = shown
-  if shown then bar:Show() else bar:Hide() end
+  if bar._msufShown ~= shown then
+    bar._msufShown = shown
+    if shown then bar:Show() else bar:Hide() end
+  end
   local bg = frame.powerBarBG
   if bg then if shown then bg:Show() else bg:Hide() end end
+end
+
+local function SetRegionShown(region, shown)
+  if not region or region._msufShown == shown then return end
+  region._msufShown = shown
+  if shown then region:Show() else region:Hide() end
+end
+
+local function HidePowerBorderEdges(bar)
+  local edges = bar and bar.MSUFPowerBorderEdges
+  if edges then
+    for i = 1, 4 do SetRegionShown(edges[i], false) end
+  end
+  if bar and bar.MSUFPowerBorderHost then
+    SetRegionShown(bar.MSUFPowerBorderHost, false)
+  end
+end
+
+local function HidePowerBorder(bar)
+  HidePowerBorderEdges(bar)
+  if bar and bar._msufDetachedShapeEdge then
+    SetRegionShown(bar._msufDetachedShapeEdge, false)
+  end
+end
+
+local function EnsurePowerBorder(bar)
+  if not bar then return nil end
+  local parent = bar.GetParent and bar:GetParent()
+  if not parent then return nil end
+  local host = bar.MSUFPowerBorderHost
+  if not host then
+    host = CreateFrame("Frame", nil, parent)
+    if host.EnableMouse then host:EnableMouse(false) end
+    bar.MSUFPowerBorderHost = host
+  elseif host.GetParent and host:GetParent() ~= parent then
+    host:SetParent(parent)
+  end
+  local edges = bar.MSUFPowerBorderEdges
+  if edges and edges._host == host then return edges, host end
+  edges = {}
+  for i = 1, 4 do
+    local edge = host:CreateTexture(nil, "OVERLAY", nil, 6)
+    edge:SetColorTexture(0, 0, 0, 1)
+    edges[i] = edge
+  end
+  edges._host = host
+  bar.MSUFPowerBorderEdges = edges
+  bar._msufPowerBorderThickness = nil
+  bar._msufPowerBorderR, bar._msufPowerBorderG, bar._msufPowerBorderB, bar._msufPowerBorderA = nil, nil, nil, nil
+  return edges, host
+end
+
+local function ApplyPowerBorder(bar, power)
+  if not bar then return end
+  if bar._msufPowerShapeActive == true then
+    HidePowerBorderEdges(bar)
+    return
+  end
+  if bar._msufDetachedShapeEdge then SetRegionShown(bar._msufDetachedShapeEdge, false) end
+  local detached = power and power.detached == true
+  local rawThickness = detached and power.detachedOutline or power and power.borderThickness
+  local thickness = math_floor((tonumber(rawThickness) or 0) + 0.5)
+  if thickness <= 0 or (not detached and not (power and power.borderEnabled == true)) then
+    HidePowerBorderEdges(bar)
+    return
+  end
+  if thickness > 8 then thickness = 8 end
+
+  local edges, host = EnsurePowerBorder(bar)
+  if not edges then return end
+  if host.SetFrameLevel and bar.GetFrameLevel then
+    local level = (bar:GetFrameLevel() or 1) + 2
+    if host._msufPowerBorderLevel ~= level then
+      host:SetFrameLevel(level)
+      host._msufPowerBorderLevel = level
+    end
+  end
+  SetRegionShown(host, true)
+
+  local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
+  if bar._msufPowerBorderThickness ~= thickness then
+    host:ClearAllPoints()
+    host:SetPoint("TOPLEFT", bar, "TOPLEFT", -thickness, thickness)
+    host:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", thickness, -thickness)
+    top:ClearAllPoints()
+    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+    top:SetHeight(thickness)
+    bottom:ClearAllPoints()
+    bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+    bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+    bottom:SetHeight(thickness)
+    left:ClearAllPoints()
+    left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+    left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+    left:SetWidth(thickness)
+    right:ClearAllPoints()
+    right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+    right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+    right:SetWidth(thickness)
+    bar._msufPowerBorderThickness = thickness
+  end
+
+  local r, g, b, a = power.borderR or 0, power.borderG or 0, power.borderB or 0, power.borderA or 1
+  if bar._msufPowerBorderR ~= r or bar._msufPowerBorderG ~= g
+    or bar._msufPowerBorderB ~= b or bar._msufPowerBorderA ~= a then
+    for i = 1, 4 do edges[i]:SetColorTexture(r, g, b, a) end
+    bar._msufPowerBorderR, bar._msufPowerBorderG, bar._msufPowerBorderB, bar._msufPowerBorderA = r, g, b, a
+  end
+  for i = 1, 4 do SetRegionShown(edges[i], true) end
 end
 
 local function ShapeOutlineAlpha(value)
@@ -216,7 +323,8 @@ end
 
 local function ResolveDetachedAnchor(power)
   local anchor = _G.MSUF_ClassPowerContainer
-  if power.detachedAnchorClass == true and anchor and anchor.GetWidth and anchor:GetWidth() > 1 then
+  if power.detachedAnchorClass == true and anchor and anchor.GetWidth and anchor:GetWidth() > 1
+    and (not anchor.IsShown or anchor:IsShown()) then
     return anchor, "TOP", "BOTTOM"
   end
   return nil, "TOP", "BOTTOM"
@@ -228,6 +336,7 @@ local function ApplyShapeMedia(frame, power, texture)
   local shape = NormalizeShape(power and power.shape)
   local media = DETACHED_SHAPE_TEXTURES[shape]
   if media then
+    bar._msufPowerShapeActive = true
     if bar.SetOrientation then
       local orientation = media.vertical and "VERTICAL" or "HORIZONTAL"
       if bar._msufPowerOrientation ~= orientation then
@@ -235,45 +344,41 @@ local function ApplyShapeMedia(frame, power, texture)
         bar._msufPowerOrientation = orientation
       end
     end
-    local bg = frame.powerBarBG
-    if bg then
-      if bg._msufTexture ~= media.bg then
-        bg:SetTexture(media.bg)
-        bg._msufTexture = media.bg
-      end
-      local ba = power.backgroundAlpha or frame.MSUFSpec and frame.MSUFSpec.backgroundAlpha or 0.72
-      if bg._msufMode ~= "shape" or bg._msufA ~= ba then
-        bg:SetVertexColor(1, 1, 1, ba)
-        bg._msufMode = "shape"
-        bg._msufA = ba
-      end
-    end
     local edge = bar._msufDetachedShapeEdge
     if not edge then
       edge = bar:CreateTexture(nil, "OVERLAY", nil, 1)
       bar._msufDetachedShapeEdge = edge
     end
-    edge:ClearAllPoints()
-    edge:SetAllPoints(bar)
+    if edge._msufPowerShapeAnchor ~= bar then
+      edge:ClearAllPoints()
+      edge:SetAllPoints(bar)
+      edge._msufPowerShapeAnchor = bar
+    end
     if edge._msufTexture ~= media.edge then
       edge:SetTexture(media.edge)
       edge._msufTexture = media.edge
     end
     local alpha = ShapeOutlineAlpha(power.detachedOutline)
+    local r, g, b, a = power.borderR or 0, power.borderG or 0, power.borderB or 0, power.borderA or 1
+    if edge._msufR ~= r or edge._msufG ~= g or edge._msufB ~= b or edge._msufA ~= a then
+      edge:SetVertexColor(r, g, b, a)
+      edge._msufR, edge._msufG, edge._msufB, edge._msufA = r, g, b, a
+    end
     if edge._msufAlpha ~= alpha then
       edge:SetAlpha(alpha)
       edge._msufAlpha = alpha
     end
-    if alpha > 0 then edge:Show() else edge:Hide() end
+    SetRegionShown(edge, alpha > 0)
     return media.fill
   end
 
+  bar._msufPowerShapeActive = nil
   if bar.SetOrientation and bar._msufPowerOrientation ~= "HORIZONTAL" then
     bar:SetOrientation("HORIZONTAL")
     bar._msufPowerOrientation = "HORIZONTAL"
   end
   local edge = bar._msufDetachedShapeEdge
-  if edge then edge:Hide() end
+  if edge then SetRegionShown(edge, false) end
   return texture or WHITE
 end
 
@@ -281,18 +386,27 @@ local function ApplyBackgroundMedia(frame, power)
   local bg = frame and frame.powerBarBG
   if not bg then return end
   local texture = power and power.backgroundTexture
-  local ba = power and power.backgroundAlpha or frame.MSUFSpec and frame.MSUFSpec.backgroundAlpha or 0.72
+  local background = power and power.background or nil
+  local r = background and background.r or 0
+  local g = background and background.g or 0
+  local b = background and background.b or 0
+  local ba = background and background.a or power and power.backgroundAlpha
+    or frame.MSUFSpec and frame.MSUFSpec.backgroundAlpha or 0.72
   local media = power and power.detached == true and DETACHED_SHAPE_TEXTURES[NormalizeShape(power.shape)]
   if media then
     if bg._msufTexture ~= media.bg then
       bg:SetTexture(media.bg)
       bg._msufTexture = media.bg
     end
-    if bg._msufMode ~= "shape" or bg._msufA ~= ba then
-      bg:SetVertexColor(1, 1, 1, ba)
+    if bg._msufMode ~= "shape" or bg._msufR ~= r or bg._msufG ~= g or bg._msufB ~= b or bg._msufA ~= ba then
+      bg:SetVertexColor(r, g, b, ba)
       bg._msufMode = "shape"
+      bg._msufR, bg._msufG, bg._msufB = r, g, b
       bg._msufA = ba
     end
+    bg._msufBgTexture = media.bg
+    bg._msufBgColorTexture = nil
+    bg._msufBgR, bg._msufBgG, bg._msufBgB, bg._msufBgA = r, g, b, ba
     return
   end
   if type(texture) == "string" and texture ~= "" then
@@ -300,22 +414,36 @@ local function ApplyBackgroundMedia(frame, power)
       bg:SetTexture(texture)
       bg._msufTexture = texture
     end
-    if bg._msufMode ~= "texture" or bg._msufA ~= ba then
-      bg:SetVertexColor(0, 0, 0, ba)
+    if bg._msufMode ~= "texture" or bg._msufR ~= r or bg._msufG ~= g or bg._msufB ~= b or bg._msufA ~= ba then
+      bg:SetVertexColor(r, g, b, ba)
       bg._msufMode = "texture"
+      bg._msufR, bg._msufG, bg._msufB = r, g, b
       bg._msufA = ba
     end
-  elseif bg._msufMode ~= "solid" or bg._msufA ~= ba then
-    bg:SetColorTexture(0, 0, 0, ba)
+    bg._msufBgTexture = texture
+    bg._msufBgColorTexture = nil
+    bg._msufBgR, bg._msufBgG, bg._msufBgB, bg._msufBgA = r, g, b, ba
+  elseif bg._msufMode ~= "solid" or bg._msufR ~= r or bg._msufG ~= g or bg._msufB ~= b or bg._msufA ~= ba then
+    bg:SetColorTexture(r, g, b, ba)
     bg._msufTexture = nil
     bg._msufMode = "solid"
+    bg._msufR, bg._msufG, bg._msufB = r, g, b
     bg._msufA = ba
+    bg._msufBgTexture = nil
+    bg._msufBgColorTexture = true
+    bg._msufBgR, bg._msufBgG, bg._msufBgB, bg._msufBgA = r, g, b, ba
   end
+end
+
+local function SetPowerFrameLevel(bar, level)
+  if not (bar and bar.SetFrameLevel) or bar._msufPowerFrameLevel == level then return end
+  bar:SetFrameLevel(level)
+  bar._msufPowerFrameLevel = level
 end
 
 local function LayoutDetached(frame, bar, power, defaultHeight)
   local shape = NormalizeShape(power.shape)
-  local size = shape ~= "BAR" and RoundPositive(power.orbSize, power.detachedHeight or defaultHeight or 6) or nil
+  local size = shape == "ORB" and RoundPositive(power.orbSize, power.detachedHeight or defaultHeight or 6) or nil
   local width = size or ResolveDetachedWidth(frame, power)
   local height = size or RoundPositive(power.detachedHeight, defaultHeight or 6)
   local x = math_floor(Number(power.detachedX, 0) + 0.5)
@@ -331,10 +459,7 @@ local function LayoutDetached(frame, bar, power, defaultHeight)
   end
   if bar.SetFrameLevel and frame.GetFrameLevel then
     local level = (frame:GetFrameLevel() or 1) + RoundNonNegative(power.detachedLevel, 6)
-    if bar._msufDetachedLevel ~= level then
-      bar:SetFrameLevel(level)
-      bar._msufDetachedLevel = level
-    end
+    SetPowerFrameLevel(bar, level)
   end
   bar._msufDetached = true
 end
@@ -352,7 +477,7 @@ local function SetColor(frame, force)
     local powerType, token
     local metaKnown = false
     if mode ~= "class" and UnitPowerType then
-      powerType, token = ReadPowerTypeCached(frame, bar, frame.unit, true)
+      powerType, token = ReadPowerTypeCached(bar, frame.unit, true)
       metaKnown = powerType ~= nil or token ~= nil
     end
     r, g, b = ResolveDynamicPowerColor(frame, frame.unit, powerType, token, metaKnown)
@@ -369,12 +494,21 @@ function Power.IsEnabled(frame, spec)
   return power and power.enabled == true
 end
 
-function Power.GetEvents()
-  return EVENTS
+function Power.GetEvents(frame, spec)
+  local power = spec and spec.power
+  -- Player power is driven by Blizzard's high-frequency event instead of also
+  -- subscribing the bar to UNIT_POWER_UPDATE and doing duplicate value work.
+  if (frame and frame.unit == "player") or (power and power.frequent == true) then
+    return POWER_EVENTS_FAST
+  end
+  return POWER_EVENTS
 end
 
 function Power.Disable(frame)
   SetShown(frame, false)
+  HidePowerBorder(frame and frame.targetPowerBar)
+  if HideBarGradient and frame then HideBarGradient(frame.powerGradients) end
+  if frame then frame._msufPowerBarDetached = nil end
 end
 
 function Power.Create(frame, spec)
@@ -404,10 +538,13 @@ function Power.Apply(frame, spec)
 
   local power = spec and spec.power or {}
   local h = tonumber(power.height) or 3
+  frame._msufPowerBarDetached = power.detached == true and true or nil
   if power.detached == true then
     LayoutDetached(frame, bar, power, h)
   else
     bar._msufDetached = nil
+    local inlineLevel = frame.GetFrameLevel and ((frame:GetFrameLevel() or 1) + 1) or nil
+    if inlineLevel then SetPowerFrameLevel(bar, inlineLevel) end
     bar:ClearAllPoints()
     if power.embed == false then
       bar:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -1)
@@ -433,7 +570,17 @@ function Power.Apply(frame, spec)
     bar:SetStatusBarTexture(texture)
     bar._msufTexture = texture
   end
-  ApplyBackgroundMedia(frame, power)
+  if bar._msufPowerShapeActive == true then
+    ApplyBackgroundMedia(frame, power)
+    if HideBarGradient then HideBarGradient(frame.powerGradients) end
+  else
+    if ApplyBackgrounds then
+      ApplyBackgrounds(frame, false, true)
+    else
+      ApplyBackgroundMedia(frame, power)
+    end
+    if ApplyBarGradient then ApplyBarGradient(frame, bar, power.barGradient, "powerGradients") end
+  end
   if bar.SetReverseFill then
     local reverse = power.reverse == true
     if bar._msufReverseFill ~= reverse then
@@ -454,32 +601,42 @@ function Power.Apply(frame, spec)
   bar._msufPowerTypeUnit = nil
   if SetBarSmoothing then SetBarSmoothing(bar, power.smooth == true) end
   SetColor(frame, true)
-  SetShown(frame, power.enabled == true)
+  local enabled = power.enabled == true
+  SetShown(frame, enabled)
+  if enabled then
+    ApplyPowerBorder(bar, power)
+  else
+    HidePowerBorder(bar)
+    if HideBarGradient then HideBarGradient(frame.powerGradients) end
+  end
 end
 
-local function UpdatePercent(frame, event, unit)
+local function UpdatePercent(frame, event, unit, animate)
   if not (UnitPowerPercent and UnitPowerType and SCALE_100) then return false end
   local bar = frame.targetPowerBar
-  local power = SpecPower(frame)
-  local mode = power and power.mode
-  local forceType = event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" and mode ~= "power"
-  local powerType, token = ReadPowerTypeCached(frame, bar, unit, forceType)
+  local forceType = false
+  if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" then
+    local power = SpecPower(frame)
+    forceType = not power or power.mode ~= "power"
+  end
+  local powerType, token = ReadPowerTypeCached(bar, unit, forceType)
   local pct = UnitPowerPercent(unit, powerType or 0, true, SCALE_100)
   local secret = IsSecret(pct)
   if not secret and pct == nil then pct = 0 end
   if not secret and not IsFiniteNumber(pct) then pct = 0 end
-  local cachedMinMax = bar._msufMinMax
-  if IsSecret(cachedMinMax) or cachedMinMax ~= 100 then
+  if bar._msufMinMax ~= 100 then
     bar:SetMinMaxValues(0, 100)
     bar._msufMinMax = 100
   end
   local cachedPct = bar._msufPowerPercentValue
-  local cachedPctSecret = IsSecret(cachedPct)
-  if secret or cachedPctSecret or cachedPct ~= pct then
-    SetPowerBarValue(bar, pct, secret)
-    bar._msufPowerPercentValue = secret and nil or pct
+  if secret or cachedPct ~= pct then
+    SetPowerBarValue(bar, pct, animate)
+    if secret then
+      bar._msufPowerPercentValue = nil
+    else
+      bar._msufPowerPercentValue = pct
+    end
   end
-  ClearPowerValueCaches(bar)
   local rt = frame._msufTextRuntime
   if rt and rt.powerNeedsPercent == true and not secret then
     rt._dispatchPowerPercent = pct
@@ -491,10 +648,10 @@ local function UpdatePercent(frame, event, unit)
   return true, pct, powerType, token
 end
 
-local function UpdateAbsolute(frame, unit)
+local function UpdateAbsolute(frame, unit, animate)
   local powerType, token
   local bar = frame.targetPowerBar
-  powerType, token = ReadPowerTypeCached(frame, bar, unit, true)
+  powerType, token = ReadPowerTypeCached(bar, unit, true)
   local value = powerType ~= nil and UnitPower(unit, powerType) or UnitPower(unit)
   local valueSecret = IsSecret(value)
   local maxValue = powerType ~= nil and UnitPowerMax(unit, powerType) or UnitPowerMax(unit)
@@ -508,35 +665,51 @@ local function UpdateAbsolute(frame, unit)
     if not IsFiniteNumber(maxValue) or maxValue <= 0 then maxValue = 1 end
   end
   local cachedMinMax = bar._msufMinMax
-  local cachedMinMaxSecret = IsSecret(cachedMinMax)
-  if maxSecret or cachedMinMaxSecret or cachedMinMax ~= maxValue then
+  if maxSecret or cachedMinMax ~= maxValue then
     bar:SetMinMaxValues(0, maxValue)
-    bar._msufMinMax = maxSecret and nil or maxValue
+    if maxSecret then
+      bar._msufMinMax = nil
+    else
+      bar._msufMinMax = maxValue
+    end
   end
   local cachedValue = bar._msufPowerValue
-  local cachedValueSecret = IsSecret(cachedValue)
-  if valueSecret or cachedValueSecret or cachedValue ~= value or bar._msufPowerValueUnit ~= unit then
-    SetPowerBarValue(bar, value, valueSecret)
+  if valueSecret or cachedValue ~= value or bar._msufPowerValueUnit ~= unit then
+    SetPowerBarValue(bar, value, animate)
   end
-  bar._msufPowerValue = valueSecret and nil or value
-  bar._msufPowerValueUnit = valueSecret and nil or unit
-  bar._msufPowerMax = maxSecret and nil or maxValue
-  bar._msufPowerMaxUnit = maxSecret and nil or unit
-  bar._msufPowerMaxReady = maxSecret and nil or true
+  if valueSecret then
+    bar._msufPowerValue = nil
+    bar._msufPowerValueUnit = nil
+  else
+    bar._msufPowerValue = value
+    bar._msufPowerValueUnit = unit
+  end
+  if maxSecret then
+    bar._msufPowerMax = nil
+    bar._msufPowerMaxUnit = nil
+    bar._msufPowerMaxReady = nil
+  else
+    bar._msufPowerMax = maxValue
+    bar._msufPowerMaxUnit = unit
+    bar._msufPowerMaxReady = true
+  end
   bar._msufPowerPercentValue = nil
   return value, maxValue, powerType, token
 end
 
-function Power.Update(frame, event, unit)
+function Power.Update(frame, event, unit, eventPowerToken)
   unit = unit or frame.unit
   local bar = frame and frame.targetPowerBar
   if not (bar and unit and BarShown(bar)) then return end
-  if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" or IDENTITY_EVENTS[event] == true then
+  if not PowerEventMatchesToken(bar, event, eventPowerToken) then return end
+  local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+  if not animate then
+    if SnapBarInterpolation then SnapBarInterpolation(bar) end
     SetColor(frame)
   end
-  local ok, _, powerType, token = UpdatePercent(frame, event, unit)
+  local ok, _, powerType, token = UpdatePercent(frame, event, unit, animate)
   if ok then return nil, nil, powerType, token, event == "UNIT_DISPLAYPOWER" end
-  local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, unit)
+  local value, maxValue, absoluteType, absoluteToken = UpdateAbsolute(frame, unit, animate)
   return value, maxValue, absoluteType, absoluteToken, event == "UNIT_DISPLAYPOWER"
 end
 
