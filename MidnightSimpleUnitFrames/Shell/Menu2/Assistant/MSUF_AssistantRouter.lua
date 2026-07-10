@@ -890,7 +890,7 @@ function R.UnsupportedAuraReply(text)    local norm = R.Normalize(text)
         kind = "unsupported",
         status = "info",
         summary = "Aura option fallback.",
-        text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown text, stack text, duration bars, live filter tokens, quick presets, private aura options, and group aura copy when those options exist in MSUF. Saved exact SpellID blacklist data can be listed, but it is read-only while the native 12.1 backend is active. Aura areas I can't match will stay as they are.",
+        text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown text, stack text, duration bars, live filter tokens, quick presets, custom UnitFrame auras, and group aura copy when those options exist in MSUF. Saved exact SpellID blacklist data can be listed, but it is read-only while the native 12.1 backend is active. Aura areas I can't match will stay as they are.",
     }
 end
 

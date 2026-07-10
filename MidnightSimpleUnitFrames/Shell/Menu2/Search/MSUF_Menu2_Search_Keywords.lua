@@ -31,6 +31,7 @@ Data.KEYWORDS = {
     auras3 = "aura style styling basics text stack stacks cooldown timer cooldown text stack count font size anchor offset group frame buffs debuffs cooldown swipe",
     auras3_buffs = "buff buffs aura style styling basics text stack stacks cooldown timer cooldown text stack count font size group frame buff settings",
     auras3_debuffs = "debuff debuffs aura style styling basics text stack stacks cooldown timer cooldown text stack count font size group frame debuff settings",
+    auras3_custom = "custom aura custom auras unitframe spell id spellid tracked aura exact aura custom icon square bar number full frame effect health tint border glow pulse name overlay frame strata priority",
     auras3_rendering = "aura style styling basics text stack stacks cooldown timer cooldown text stack count font size anchor offset group frame buffs debuffs cooldown swipe",
     auras3_filters = "aura filters blacklist blacklisting filter rules custom filters unit aura blacklist spell id ignore list group frame category blacklist declassified aura categories base filter raid helpful all mine only player dispellable stealable own buffs own debuffs category hiding",
     auras3_styling = "aura style styling basics text stack stacks cooldown timer cooldown text stack count font size anchor offset group frame buffs debuffs cooldown swipe",

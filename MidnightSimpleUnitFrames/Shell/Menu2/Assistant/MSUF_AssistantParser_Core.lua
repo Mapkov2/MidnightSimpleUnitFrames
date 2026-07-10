@@ -996,6 +996,7 @@ local PAGE_TEXT_TARGETS = {
     { page = "auras3_filters", label = "Aura Filters", terms = { "aura filters", "aura filter", "filters", "blacklist", "aura blacklist", "blocked auras" } },
     { page = "auras3_styling", label = "Aura Style", terms = { "aura style", "aura styling", "aura cooldown text", "aura borders" } },
     { page = "auras3_debuffs", label = "Aura Debuffs", terms = { "debuff", "debuffs", "debuff settings", "debuff style" } },
+    { page = "auras3_custom", label = "Custom Auras", terms = { "custom aura", "custom auras", "tracked aura", "spell id aura", "full frame aura", "aura glow" } },
     { page = "auras3_buffs", label = "Aura Buffs", terms = { "buff", "buffs", "buff settings", "buff style" } },
     { page = "auras3", label = "Auras", terms = { "aura", "auras", "auren", "aura settings", "auren einstellungen" } },
 
@@ -1432,7 +1433,7 @@ end
 local function FrameTypeForPage(page)
     if page == "profiles" then return "profiles" end
     if page == "opt_castbar" then return "castbar" end
-    if page == "auras3" or page == "auras3_buffs" or page == "auras3_debuffs" or page == "auras3_rendering" or page == "auras3_styling" or page == "auras3_filters" then return "aura" end
+    if page == "auras3" or page == "auras3_buffs" or page == "auras3_debuffs" or page == "auras3_custom" or page == "auras3_rendering" or page == "auras3_styling" or page == "auras3_filters" then return "aura" end
     if page == "gf_layout" or page == "gf_auras" or page == "gf_indicators" then return "group" end
     if page == "opt_colors" then return "colors" end
     if page == "opt_fonts" then return "fonts" end

@@ -170,6 +170,7 @@ opt_fonts 0 1
 auras3 3 1
 auras3_buffs 3 1
 auras3_debuffs 3 1
+auras3_custom 3 1
 auras3_styling 3 1
 auras3_filters 3 1
 opt_castbar 2 1
@@ -188,7 +189,7 @@ profiles 5 2
 T.navIconColors = NavIconColors [[
 home=0.150,0.380,0.780
 uf_player uf_target uf_targettarget uf_focustarget uf_focus uf_boss uf_pet=0.150,0.380,0.780
-opt_bars opt_fonts auras3 auras3_buffs auras3_debuffs auras3_styling auras3_filters opt_castbar opt_misc opt_colors=0.88,0.74,0.36
+opt_bars opt_fonts auras3 auras3_buffs auras3_debuffs auras3_custom auras3_styling auras3_filters opt_castbar opt_misc opt_colors=0.88,0.74,0.36
 classpower=0.35,0.82,0.50
 gameplay=0.72,0.50,0.92
 groupframes gf_layout gf_bars gf_auras gf_indicators=0.520,0.610,0.720

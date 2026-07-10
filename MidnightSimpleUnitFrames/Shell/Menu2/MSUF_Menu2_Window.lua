@@ -786,6 +786,11 @@ local function ApplyContextContentHeight(entry, wrapper, height)
     SetFrameHeightIfChanged(wrapper, height)
     if not entry.hiddenBuild and M.scrollChild then
         SetFrameHeightIfChanged(M.scrollChild, height)
+        if M.scrollFrame then
+            M.scrollFrame._msuf2MaxScroll = nil
+            M.scrollFrame._msuf2SmoothScrollTarget = nil
+            if M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
+        end
     end
 end
 local function CreateContext(key, wrapper, entry)
@@ -813,15 +818,6 @@ local function CreateContext(key, wrapper, entry)
     return ctx
 end
 local SECONDARY_NAV_GROUPS = {
-    auras = {
-        title = "Auras",
-        mode = "tabs",
-        primary = "auras3_styling",
-        tabs = {
-            { key = "auras3_styling", label = "Style", width = 56 },
-            { key = "auras3_filters", label = "Filters", width = 66 },
-        },
-    },
 }
 local SECONDARY_NAV_BY_KEY = {}
 for _, group in pairs(SECONDARY_NAV_GROUPS) do
@@ -958,11 +954,11 @@ local function BuildPageEntry(key, hidden)
     local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
     local buildStarted = profiling and M.ProfileStart() or nil
     if spec and type(spec.build) == "function" then
+        entry._msuf2PendingContentHeight = nil
         entry._msuf2Building = true
         ctx._msuf2Building = true
         ctx._msuf2DeferContentHeight = true
         local result = spec.build(ctx)
-        ctx._msuf2DeferContentHeight = nil
         ctx._msuf2Building = nil
         entry._msuf2Building = nil
         local builders = ctx._msuf2PageBuilders
@@ -974,15 +970,28 @@ local function BuildPageEntry(key, hidden)
                     builder:RelayoutCollapsibles()
                 end
             end
+            -- Nested builders can resize their owning collapsible while they
+            -- relayout. Reflow the page-level builder once more afterwards so
+            -- its final cursor, not an earlier nested height, owns the page.
+            for i = 1, #builders do
+                local builder = builders[i]
+                if builder and builder.ctx == ctx and builder.RelayoutCollapsibles then
+                    builder:RelayoutCollapsibles()
+                end
+            end
         end
-        ctx:SetContentHeight(tonumber(result) or entry._msuf2PendingContentHeight or entry.height or CONTENT_H)
+        local finalHeight = tonumber(result) or entry._msuf2PendingContentHeight or entry.height or CONTENT_H
+        ctx._msuf2DeferContentHeight = nil
         entry._msuf2PendingContentHeight = nil
+        ctx:SetContentHeight(finalHeight)
     else
+        entry._msuf2PendingContentHeight = nil
         ctx._msuf2DeferContentHeight = true
         BuildPlaceholderPage(ctx, key)
+        local finalHeight = entry._msuf2PendingContentHeight or entry.height or CONTENT_H
         ctx._msuf2DeferContentHeight = nil
-        ctx:SetContentHeight(entry._msuf2PendingContentHeight or entry.height or CONTENT_H)
         entry._msuf2PendingContentHeight = nil
+        ctx:SetContentHeight(finalHeight)
     end
     if profiling then M.ProfileStop("pageBuild", tostring(key) .. (hidden and ":hidden" or ""), buildStarted) end
     M._msuf2SearchBuildKey = prevBuildKey

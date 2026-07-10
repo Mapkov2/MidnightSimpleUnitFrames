@@ -149,6 +149,7 @@ local PAGE_FRAME_TYPES = {
     auras3 = { aura = true },
     auras3_buffs = { aura = true },
     auras3_debuffs = { aura = true },
+    auras3_custom = { aura = true },
     auras3_styling = { aura = true },
     auras3_filters = { aura = true },
 }
@@ -229,6 +230,7 @@ local PAGE_LABEL_OVERRIDES = {
     auras3 = "Auras",
     auras3_buffs = "Aura Buffs",
     auras3_debuffs = "Aura Debuffs",
+    auras3_custom = "Custom Auras",
     auras3_filters = "Aura Filters",
     auras3_styling = "Aura Style",
 
@@ -1079,11 +1081,12 @@ local PAGE_HELP = {
         },
         actions = { "Export Current Profile", "Copy Wago Profiles Link", "Import Profile" },
     },
-    auras3 = { title = "Auras help", lines = { "You can change Aura and Group Aura options such as visibility, icon size, caps/count, per-row layout, growth, X/Y offsets, layer, cooldown text, stack text, duration bars, live filters, and quick presets. Saved exact hidden-aura lists are read-only in the native 12.1 backend.", "Examples: cap player buffs at 2; set target buff icon size to 30; put raid duration bars on top." }, actions = { "Open Auras", "Open Aura Filters" } },
+    auras3 = { title = "Auras help", lines = { "Aura content lives on the frame it affects. Open a UnitFrame > Auras for Buffs, Debuffs, and Custom 1–3; use Group Frames > Auras for Party/Raid filters, lists, and layout.", "Scope-aware cooldown, stack, duration-bar, and icon styling remains under Appearance > Auras with Shared and per-frame overrides." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
     auras3_styling = { title = "Aura Style help", lines = { "You can change aura basics, borders, cooldown text, stack text, duration bars, and related rendering details. Aura timer, stack, highlight, and pandemic colors live in Colors > Auras.", "Examples: set aura cooldown text size to 14; move target buff stack text right 3; set target duration bar fill mode to elapsed." }, actions = { "Open Aura Style", "Open Colors" } },
-    auras3_buffs = { title = "Aura Buffs help", lines = { "You can change buff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, stack text, cooldown text, duration bars, and filters.", "Examples: set player buff max to 8; cap player buffs at 2; set party buff duration bar height to 3." }, actions = { "Open Aura Buffs" } },
-    auras3_debuffs = { title = "Aura Debuffs help", lines = { "You can change debuff options for unit and group frames, including icon size, max/cap, layout, X/Y offsets, layer, cooldown text, duration bars, and debuff filters.", "Examples: set focus debuff icon size to 28; limit raid debuffs to 4; put target debuff duration bar on top." }, actions = { "Open Aura Debuffs" } },
-    auras3_filters = { title = "Aura Filters help", lines = { "You can change live Aura filter toggles/tokens and quick presets, and you can list saved legacy hidden-aura entries or group category data. Exact SpellID/category blacklist edits are read-only in the native 12.1 backend.", "Examples: set target debuff dispellable filter on; show hidden raid buff categories; apply performance aura preset; copy raid auras to party." }, actions = { "Open Aura Filters" } },
+    auras3_buffs = { title = "Aura Buffs help", lines = { "Open the affected UnitFrame > Auras > Buffs for its icon layout, Blizzard filters, SpellID blacklist, and preview.", "Party/Raid content lives in Group Frames > Auras; scope-aware styling remains under Appearance > Auras." }, actions = { "Open Target", "Open Player", "Open Group Auras" } },
+    auras3_debuffs = { title = "Aura Debuffs help", lines = { "Open the affected UnitFrame > Auras > Debuffs for dispellable rules, blacklist, layout, and preview.", "Party/Raid content lives in Group Frames > Auras; scope-aware styling remains under Appearance > Auras." }, actions = { "Open Target", "Open Focus", "Open Group Auras" } },
+    auras3_custom = { title = "Custom Auras help", lines = { "Every supported UnitFrame has Custom 1, Custom 2, and Custom 3 under its Auras section.", "Each is an independent native whitelist container with Blizzard filters, preview, layout, Strata, icon appearance, and a Secret-safe Full-Frame effect." }, actions = { "Open Target", "Open Player", "Open Boss Frames" } },
+    auras3_filters = { title = "Aura Filter help", lines = { "There is no standalone Aura Filters page anymore. Filters and Black-/Whitelists live directly beside the Buff, Debuff, or Custom container they affect.", "Open a UnitFrame > Auras, or Group Frames > Auras for Party/Raid." }, actions = { "Open Target", "Open Group Auras" } },
     gf_layout = { title = "Group Layout help", lines = { "You can change group frame layout, spacing, growth, anchoring, reverse health fill, scaling breakpoints, party/raid/mythic raid options, Blizzard fallback behavior, and visibility options.", "Examples: 'set raid scale for 20 players to 80', 'make raid frames fill backwards', 'move raid frame closer to player', 'set party growth direction to down', or 'show Blizzard party frames when Party is disabled'." }, actions = { "Open Group Layout" } },
     gf_bars = {
         title = "Group Health & Text help",
@@ -1101,7 +1104,7 @@ local PAGE_HELP = {
         },
         actions = { "Open Group Status & Indicators" },
     },
-    gf_auras = { title = "Group Auras help", lines = { "You can change Party, Raid, and Mythic Raid aura visibility, icon size, caps/count, layout, X/Y offsets, layer, Spell Indicators, live filters, private aura options, and group aura copy behavior. Saved group category blacklist data is read-only in the native 12.1 backend.", "Examples: set raid buff icon size to 24; cap party buffs at 4; move party spell indicator right; copy raid auras to party." }, actions = { "Open Group Auras", "Open Aura Filters" } },
+    gf_auras = { title = "Group Auras help", lines = { "Party, Raid, and Mythic Raid Buff/Debuff content is configured here: visibility, layout, preview, native filters, and category/SpellID blacklists.", "Spell Indicators remain here; cooldown, stack, and duration-bar styling is scope-aware under Appearance > Auras." }, actions = { "Open Group Auras" } },
     classpower = { title = "Class Resources help", lines = { "You can change class resource mode, size, position, colors, and gameplay-specific class resource options available in MSUF." }, actions = { "Open Class Resources" } },
     gameplay = { title = "Gameplay help", lines = { "You can change gameplay features such as combat timer, sounds, totem/statue frame behavior, and related options." }, actions = { "Open Gameplay" } },
 }
@@ -1656,7 +1659,7 @@ local function DirectHelpAnswer(query, opts)
         and HasConceptHelpIntent(norm)
     then
         return {
-            text = "Auras, buffs, and debuffs help\nAuras are buffs and debuffs shown on unit or group frames. Buffs are usually helpful effects; debuffs are usually harmful effects. MSUF can change aura visibility, icon size, caps/count, layout, X/Y offsets, layer, cooldown text, stack text, live filters, dispellable-debuff behavior, private aura options, and group aura copy. Saved exact blacklist/category data is read-only in the native 12.1 backend.\nExamples: open auras; cap player buffs at 2; set target buff icon size to 30; set raid debuff layer to 7.\nYou can ask: Open Auras | Open Aura Filters | Open Group Auras",
+            text = "Auras, buffs, and debuffs help\nAura content lives directly on the frame it affects. Open Player, Target, Focus, or Boss Frames > Auras for Buffs, Debuffs, and Custom 1–3. Party/Raid filters and lists live in Group Frames > Auras. Scope-aware cooldown, stack, duration-bar, and icon styling remains under Appearance > Auras.\nExamples: open target; set target buff icon size to 30; show only dispellable raid debuffs; configure target Custom 1.\nYou can ask: Open Target | Open Player | Open Boss Frames | Open Group Auras | Open Aura Style",
             status = "applied",
             summary = "Assistant auras help",
         }

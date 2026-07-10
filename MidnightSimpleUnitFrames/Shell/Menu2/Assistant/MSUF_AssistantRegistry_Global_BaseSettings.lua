@@ -232,7 +232,6 @@ function A.GlobalRegistry.RegisterBaseSettings(ctx)
         set = function(value) GeneralDB().menuLocale = tostring(value or "auto") end,
         apply = function()
             local value = GeneralDB().menuLocale or "auto"
-            ApplyGeneral("MSUF_ASSISTANT_LOCALE", { preview = false, applyAll = false })
             if Menu and type(Menu.ApplyLocaleSelection) == "function" then Menu.ApplyLocaleSelection(value) end
             if Menu and type(Menu.InvalidatePage) == "function" then Menu.InvalidatePage() end
             if Menu and type(Menu.SelectPage) == "function" then Menu.SelectPage("opt_misc") end

@@ -2377,6 +2377,7 @@ local PENDING_PAGE_LABEL_OVERRIDES = {
     auras3 = "Auras",
     auras3_buffs = "Aura Buffs",
     auras3_debuffs = "Aura Debuffs",
+    auras3_custom = "Custom Auras",
     auras3_filters = "Aura Filters",
     auras3_styling = "Aura Style",
     uf_player = "Player",
@@ -2484,7 +2485,13 @@ local function PendingSettingPage(setting)
     if frameType == "gameplay" then return "gameplay" end
     if frameType == "modules" then return "modules" end
     if frameType == "groupAura" then return "gf_auras" end
-    if frameType == "aura" then return "auras3_styling" end
+    if frameType == "aura" then
+        local unit = tostring(setting and setting.unit or "target"):lower()
+        if unit == "party" or unit == "raid" or unit == "mythicraid" or unit:match("^gf_") then return "gf_auras" end
+        if unit:match("^boss") then return "uf_boss" end
+        if unit == "player" or unit == "target" or unit == "focus" then return "uf_" .. unit end
+        return "uf_target"
+    end
     local category = NormalizeReply(setting.category or "")
     if category:find("castbar", 1, true) or category:find("cast bar", 1, true) then return "opt_castbar" end
     if category:find("font", 1, true) then return "opt_fonts" end

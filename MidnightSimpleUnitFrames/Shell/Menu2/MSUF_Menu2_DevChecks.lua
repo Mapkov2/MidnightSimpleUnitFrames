@@ -93,23 +93,17 @@ local function CheckThemeColors(issues)
     end
 end
 
-local function CheckApplyServiceGlobals(issues)
+local function CheckApplyService(issues)
     local Apply = M.ApplyService
     if type(Apply) ~= "table" then
         Report(issues, "error", "M.ApplyService missing")
         return
     end
-    local lists = { PROFILE_APPLY_GLOBALS = Apply.PROFILE_APPLY_GLOBALS, RESTORE_GLOBALS = Apply.RESTORE_GLOBALS }
-    for listName, list in pairs(lists) do
-        if type(list) == "table" then
-            for i = 1, #list do
-                local name = list[i]
-                if type(_G[name]) ~= "function" then
-                    Report(issues, "error", ("%s: '%s' does not resolve to a global function (renamed?)"):format(listName, tostring(name)))
-                end
-            end
-        else
-            Report(issues, "warn", listName .. " is not a table")
+    local required = { "Flush", "RequestUnit", "RequestGeneral", "RequestGroup", "RequestAuras", "RequestClassPower" }
+    for i = 1, #required do
+        local name = required[i]
+        if type(Apply[name]) ~= "function" then
+            Report(issues, "error", "ApplyService." .. name .. " is missing")
         end
     end
 end
@@ -137,7 +131,7 @@ local function RunChecks()
     local issues = {}
     CheckNavigation(issues)
     CheckThemeColors(issues)
-    CheckApplyServiceGlobals(issues)
+    CheckApplyService(issues)
     CheckMotionTokens(issues)
     local errors, warns = 0, 0
     for i = 1, #issues do

@@ -172,9 +172,9 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I show only my HoTs or buffs on party frames?",
-                a = "Open Auras > Filters for group-frame aura filters, then use Group Frames > Auras for placement.",
-                p = "auras3_filters",
-                t = "Opens: Auras > Filters",
+                a = "Open Group Frames > Auras > Buffs, then configure the native Player/Only Mine filter and placement there.",
+                p = "gf_auras",
+                t = "Opens: Group Frames > Auras",
                 x = "Buffs own buffs only mine HoTs healer buffs group frames",
                 k = SearchKeywordList(
                     "show only my buffs party|only my hots|only my HoTs|track my hots|track my heals|show my rejuv",
@@ -184,10 +184,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I make my own buffs or debuffs bigger?",
-                a = "Open Auras > Style for text and cooldowns. Icon size and placement live on the relevant unit" ..
-                    " page > Auras or Group Frames > Auras.",
-                p = "auras3_styling",
-                t = "Opens: Auras > Style",
+                a = "Open the affected UnitFrame > Auras for icon size, placement, and filters. Use Appearance >" ..
+                    " Auras for scope-aware text and cooldown styling.",
+                p = "uf_target",
+                t = "Opens: Target > Auras",
                 x = "Auras icon size own buffs own debuffs custom buffs custom debuffs group buffs debuffs",
                 k = SearchKeywordList(
                     "make my buffs bigger|make own buffs bigger|make my debuffs bigger|bigger own buffs",
@@ -212,10 +212,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I add a specific boss debuff to the blacklist?",
-                a = "Open Auras > Filters for unit spell-ID blacklists and group category blacklists. Group aura" ..
-                    " placement stays in Group Frames > Auras.",
-                p = "auras3_filters",
-                t = "Opens: Auras > Filters",
+                a = "Open Boss Frames > Auras > Debuffs. SpellID blacklist entries, Blizzard filters, placement," ..
+                    " and preview live together there; styling remains under Appearance > Auras.",
+                p = "uf_boss",
+                t = "Opens: Boss Frames > Auras",
                 x = "Filters Blacklist buffs debuffs boss debuffs spell id raid debuffs",
                 k = SearchKeywordList(
                     "boss debuff missing|boss debuffs not showing|raid debuff missing|add boss debuff|add spell id",
@@ -225,7 +225,7 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "How do I show only dispellable debuffs?", "Open Auras > Filters for unit-frame and group-frame Debuff filtering. Party/Raid status indicators stay in Group Frames > Status & Indicators.", "auras3_filters", "Opens: Auras > Filters", "Filters Status Indicators dispel magic curse poison disease debuffs debuff type border group frames", SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_UNIT_AURA_DISPEL_KEYWORDS, "only dispellable debuffs|dispellable debuffs|dispel debuffs|magic debuff|curse debuff|poison debuff|disease debuff|debuff type border|debuff color border|show dispels|healer dispels"), 260, },
+            { "How do I show only dispellable debuffs?", "Open the affected UnitFrame > Auras > Debuffs and enable the native Dispellable rule. For Party/Raid use Group Frames > Auras > Debuffs.", "uf_target", "Opens: Target > Auras", "Filters Status Indicators dispel magic curse poison disease debuffs debuff type border group frames", SearchKeywordList(SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_UNIT_AURA_DISPEL_KEYWORDS, "only dispellable debuffs|dispellable debuffs|dispel debuffs|magic debuff|curse debuff|poison debuff|disease debuff|debuff type border|debuff color border|show dispels|healer dispels"), 260, },
         },
         {
             {

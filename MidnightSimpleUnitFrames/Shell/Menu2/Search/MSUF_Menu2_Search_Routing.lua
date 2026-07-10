@@ -557,7 +557,7 @@ local SEARCH_UNIT_BY_PAGE = {
     uf_boss = "boss",
 }
 
-local SEARCH_AURA_ROUTE_PAGES = KeySetFromWords "auras3 auras3_buffs auras3_debuffs auras3_rendering auras3_styling"
+local SEARCH_AURA_ROUTE_PAGES = KeySetFromWords "auras3 auras3_buffs auras3_debuffs auras3_custom auras3_rendering auras3_styling"
 
 local SEARCH_ROUTE_SECTION_ROWS = {
     unit = [[
@@ -650,6 +650,12 @@ classpower_alt_mana=alternative mana|alt mana|mana bar
 Filter Rules=filters|inclusive filter|exclusive filter|only mine|own buffs|own debuffs|dispellable|stealable|buff filter|debuff filter
 Blacklist=blacklist|ignore list|spell id|blacklist presets
 Group Frame Filters=inclusive filter|exclusive filter|base filter|category blacklist|declassified
+]],
+    auras3_custom = [[
+Displays=custom aura|custom display|new display|tracked aura|unitframe aura
+Detection=spell id|spellid|exact spell|only mine|buff type|debuff type
+Icon & Placement=icon|square|bar|number|hidden sensor|anchor|offset|layer|strata
+Full-Frame Effect=full frame|health tint|border|glow|pulse|name overlay|effect strata|priority
 ]],
     auras3_default = [[
 Aura Type=buffs|debuffs|buff|debuff|back|style

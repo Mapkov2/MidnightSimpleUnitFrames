@@ -44,7 +44,6 @@ function A.RegistryCoreBuilders.BuildBarApplyHelpers(ctx)
                 preview = true,
                 applyAll = false,
                 notify = false,
-                bars = true,
                 barGradients = true,
                 barsScope = scope,
             })
@@ -53,7 +52,6 @@ function A.RegistryCoreBuilders.BuildBarApplyHelpers(ctx)
             preview = true,
             applyAll = false,
             notify = false,
-            bars = true,
             barGradients = true,
             barsScope = scope,
         })

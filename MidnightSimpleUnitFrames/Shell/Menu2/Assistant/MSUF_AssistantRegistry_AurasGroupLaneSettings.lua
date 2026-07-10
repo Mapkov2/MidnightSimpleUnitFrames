@@ -633,7 +633,6 @@ function A.AurasRegistry.RegisterGroupAuraLaneSettings(ctx)
             RegisterGroupAuraRootSettings(GroupAuraRootSettings, scope)
         end
 
-        RegisterGroupPrivateAuraSettings(scope)
 
         if scope ~= "mythicraid"
             and Registry and type(Registry.RegisterSetting) == "function"

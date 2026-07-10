@@ -176,18 +176,22 @@ local function BarScopeGet(key, default)
     local scope = CurrentBarsScope()
     return ScopeRead(scope, BarsFlagForKey(scope, key), G(), key, default)
 end
-local function BarScopeSet(key, value, reason)
+local function BarScopeSet(key, value, reason, suppressApply)
     local scope = CurrentBarsScope()
     ScopeWrite(scope, BarsFlagForKey(scope, key), G(), key, value)
-    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
+    if suppressApply ~= true then
+        M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
+    end
 end
 local function BarScopeGetBars(key, default)
     return ScopeRead(CurrentBarsScope(), "hlOverride", Bars(), key, default)
 end
-local function BarScopeSetBars(key, value, reason)
+local function BarScopeSetBars(key, value, reason, suppressApply)
     local scope = CurrentBarsScope()
     ScopeWrite(scope, "hlOverride", Bars(), key, value)
-    M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
+    if suppressApply ~= true then
+        M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
+    end
 end
 local function NormalizeFontKey(key)
     local fn = _G.MSUF_NormalizeFontKey or (MSUF and MSUF.MSUF_NormalizeFontKey)

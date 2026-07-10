@@ -895,6 +895,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
         end)
     end
 
+    if type(A.AddLoginGreeting) == "function" then A.AddLoginGreeting() end
     RenderHistory(ui)
     return ui
 end

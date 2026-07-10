@@ -594,19 +594,33 @@ function W.PageBuilder(ctx)
             entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
             local motionSerial = entry._msuf2MotionSerial
             if nextOpen then
+                local function SettleOpenedLayout()
+                    if entry._msuf2MotionSerial ~= motionSerial or not entry.open or entry._msuf2Closing then return end
+                    -- Large nested sections (notably the Aura workspace) can
+                    -- finish their child geometry only after becoming visible.
+                    -- Reflow the root once that geometry has settled so the
+                    -- ScrollFrame receives the expanded height immediately.
+                    if type(entry._msuf2SettleContentLayout) == "function" then
+                        entry._msuf2SettleContentLayout()
+                    end
+                    self:RelayoutCollapsibles()
+                end
                 entry.open = true
                 entry._msuf2MotionActive = true
                 if body.SetAlpha then body:SetAlpha(0) end
                 self:RelayoutCollapsibles()
+                if C_Timer and C_Timer.After then C_Timer.After(0, SettleOpenedLayout) end
                 if T.PlayMotion then
                     T.PlayMotion(body, "accordionIn", { fromAlpha = 0, onFinished = function()
                         if entry._msuf2MotionSerial ~= motionSerial then return end
                         entry._msuf2MotionActive = nil
                         if body.SetAlpha then body:SetAlpha(1) end
+                        SettleOpenedLayout()
                     end })
                 else
                     entry._msuf2MotionActive = nil
                     if body.SetAlpha then body:SetAlpha(1) end
+                    SettleOpenedLayout()
                 end
                 return
             end
@@ -2053,6 +2067,41 @@ local function InstallPinnedPreviewUpdater(scroll)
         end)
     end
 end
+
+local function EnsurePinnedPreviewOverlayHost(scroll, scrollParent)
+    if not scroll then return nil end
+    local parent = scrollParent or (scroll.GetParent and scroll:GetParent()) or scroll
+    local host = scroll._msuf2PinnedPreviewOverlayHost
+    local layoutChanged = false
+    if not host then
+        host = CreateFrame("Frame", nil, parent)
+        scroll._msuf2PinnedPreviewOverlayHost = host
+        if host.EnableMouse then host:EnableMouse(false) end
+        layoutChanged = true
+    elseif host.SetParent and host:GetParent() ~= parent then
+        host:SetParent(parent)
+        layoutChanged = true
+    end
+    if host._msuf2PinnedPreviewAnchor ~= scroll then
+        host._msuf2PinnedPreviewAnchor = scroll
+        layoutChanged = true
+    end
+    if layoutChanged then
+        host:ClearAllPoints()
+        host:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0)
+        host:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", 0, 0)
+    end
+    -- A pinned preview is deliberately reparented out of the ScrollFrame so it
+    -- stays fixed. Give that floating branch its own viewport, otherwise wide
+    -- preview children (especially status icons) can escape the menu window.
+    if host.SetClipsChildren then host:SetClipsChildren(true) end
+    local baseLevel = (parent and parent.GetFrameLevel and parent:GetFrameLevel()) or 1
+    local wantedLevel = baseLevel + 72
+    if host.SetFrameLevel and (not host.GetFrameLevel or host:GetFrameLevel() ~= wantedLevel) then host:SetFrameLevel(wantedLevel) end
+    host:Show()
+    return host
+end
+
 function M.RefreshPinnedPreviews(scroll)
     local list = M._pinnedPreviews
     if type(list) ~= "table" or #list == 0 then return end
@@ -2127,6 +2176,7 @@ function W.AttachPinnedPreview(body, box, opts)
     local pageKey = opts.pageKey or box._msufGFNativePreviewPageKey
     local pageWrapper = opts.wrapper or box._msufGFNativePreviewWrapper
     local scrollParent = scroll:GetParent()
+    local overlayHost = EnsurePinnedPreviewOverlayHost(scroll, scrollParent)
     local originalParent = opts.restoreParent or body or box:GetParent()
     local point, relTo, relPoint, xOfs, yOfs = box:GetPoint(1)
     if type(opts.restorePoint) == "table" then
@@ -2238,8 +2288,14 @@ function W.AttachPinnedPreview(body, box, opts)
     end
     local function EnsurePinnedScrim()
         if record and record.scrim then return record.scrim end
-        local scrim = CreateFrame("Frame", nil, scrollParent or scroll, "BackdropTemplate")
-        scrim:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        local scrim = box._msuf2PinnedPreviewScrim
+        if not scrim then
+            scrim = CreateFrame("Frame", nil, overlayHost or scrollParent or scroll, "BackdropTemplate")
+            scrim:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            box._msuf2PinnedPreviewScrim = scrim
+        elseif scrim.SetParent then
+            scrim:SetParent(overlayHost or scrollParent or scroll)
+        end
         scrim:Hide()
         if record then record.scrim = scrim end
         return scrim
@@ -2347,18 +2403,23 @@ function W.AttachPinnedPreview(body, box, opts)
                 box._msuf2PinnedFloating = true
                 scroll._msuf2PinnedPreviewActiveRecord = record
                 --- Float as a pure overlay - scroll frame is never moved
-                local level = ((scrollParent and scrollParent.GetFrameLevel and scrollParent:GetFrameLevel()) or 1)
-                    + (opts.frameLevelOffset or 80)
-                box:SetParent(scrollParent or scroll)
+                overlayHost = EnsurePinnedPreviewOverlayHost(scroll, scrollParent) or overlayHost
+                local hostLevel = ((overlayHost and overlayHost.GetFrameLevel and overlayHost:GetFrameLevel()) or 1)
+                local level = hostLevel + max(2, (tonumber(opts.frameLevelOffset) or 80) - 72)
+                box:SetParent(overlayHost or scrollParent or scroll)
                 box:ClearAllPoints()
-                box:SetPoint("TOPLEFT", scroll, "TOPLEFT", opts.left or 14, opts.top or -8)
-                box:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", -(opts.right or 14), opts.top or -8)
+                box:SetPoint("TOPLEFT", overlayHost or scroll, "TOPLEFT", opts.left or 14, opts.top or -8)
+                box:SetPoint("TOPRIGHT", overlayHost or scroll, "TOPRIGHT", -(opts.right or 14), opts.top or -8)
+                if box.SetClipsChildren then box:SetClipsChildren(true) end
                 if box.SetFrameLevel then box:SetFrameLevel(level) end
                 ApplyPinnedPresentation(true, level)
                 if box.RequestRefresh then box:RequestRefresh("PINNED_PREVIEW_LAYOUT") end
                 if placeholder then placeholder:Show() end
             end
-            if pinned then LayoutPinnedScrim(((scrollParent and scrollParent.GetFrameLevel and scrollParent:GetFrameLevel()) or 1) + (opts.frameLevelOffset or 80)) end
+            if pinned then
+                overlayHost = EnsurePinnedPreviewOverlayHost(scroll, scrollParent) or overlayHost
+                LayoutPinnedScrim((box.GetFrameLevel and box:GetFrameLevel()) or originalFrameLevel)
+            end
         else
             Restore()
         end
@@ -2406,6 +2467,11 @@ function W.AttachPinnedPreview(body, box, opts)
         box:HookScript("OnSizeChanged", QueuePinnedStateRefresh)
     end
     C_Timer.After(0, ApplyPinnedState)
+    -- Restored scroll positions can be applied one frame after the page body.
+    -- Re-evaluate once geometry is final even when no wheel event fires.
+    C_Timer.After(0.05, function()
+        if box._msuf2PinnedPreviewRecord == record then ApplyPinnedState() end
+    end)
     RefreshButton()
     return record
 end
@@ -2623,9 +2689,19 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     end)
     slider:HookScript("OnHide", StopSliderInteraction)
     slider:EnableMouseWheel(true)
-    slider:SetScript("OnMouseWheel", function(_, delta)
+    if slider.SetPropagateMouseWheel then slider:SetPropagateMouseWheel(true) end
+    slider:SetScript("OnMouseWheel", function(self, delta)
         if not delta or delta == 0 then return end
-        StepBy(delta > 0 and 1 or -1)
+        if IsShiftKeyDown and IsShiftKeyDown() then
+            if self.SetPropagateMouseWheel then self:SetPropagateMouseWheel(false) end
+            StepBy(delta > 0 and 1 or -1)
+        elseif self.SetPropagateMouseWheel then
+            self:SetPropagateMouseWheel(true)
+        else
+            local scroll = M.scrollFrame
+            local handler = scroll and scroll.GetScript and scroll:GetScript("OnMouseWheel")
+            if type(handler) == "function" then handler(scroll, delta) end
+        end
     end)
     minus:SetScript("OnClick", function() StepBy(-1) end)
     plus:SetScript("OnClick", function() StepBy(1) end)
