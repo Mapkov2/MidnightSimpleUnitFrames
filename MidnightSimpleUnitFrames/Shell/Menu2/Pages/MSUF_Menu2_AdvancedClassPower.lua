@@ -29,6 +29,7 @@ local APPLY_CLASSPOWER_GENERAL = { preview = true, applyAll = false, classpower 
 local APPLY_CLASSPOWER_TEXT_GENERAL = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
 local CLASSPOWER_FULL = { full = true, cdm = true }
 local CLASSPOWER_VISUALS = { visuals = true }
+local CLASSPOWER_SMOOTH = { visuals = true, events = true }
 local CLASSPOWER_TEXT = { fonts = true, text = true }
 local CLASSPOWER_QUICK_RUNTIME = { full = true, cdm = true, playerHP = true, anchor = true, syncNow = false }
 local CLASSPOWER_QUICK_FLAGS = { unit = "player", preview = true, applyAll = false, power = true, classpower = true, classpowerApplied = true }
@@ -47,6 +48,9 @@ local function ApplyClassPower()
 end
 local function ApplyClassPowerVisuals()
     ApplyClassPowerRuntime("MSUF2_CLASSPOWER_VISUALS", CLASSPOWER_VISUALS, APPLY_CLASSPOWER_GENERAL)
+end
+local function ApplyClassPowerSmoothing()
+    ApplyClassPowerRuntime("MSUF2_CLASSPOWER_SMOOTH", CLASSPOWER_SMOOTH, APPLY_CLASSPOWER_GENERAL)
 end
 local function ApplyClassPowerText()
     ApplyClassPowerRuntime("MSUF2_CLASSPOWER_TEXT", CLASSPOWER_TEXT, APPLY_CLASSPOWER_TEXT_GENERAL)
@@ -273,6 +277,12 @@ end
 local function ApplyDetachedPowerBar()
     ApplyClassPowerPage("MSUF2_DETACHED_POWER_BAR", APPLY_DETACHED_POWER, CP_APPLY_DETACHED_POWER)
 end
+local function ApplyDetachedPlayerPowerSmoothing()
+    RefreshClassPowerInlinePreview()
+    M.RequestUnitApply("player", "MSUF2_CLASSPOWER_PLAYER_POWER_SMOOTH", {
+        preview = true, applyAll = false, power = true, classpowerApplied = true,
+    })
+end
 local function ApplyDetachedPowerText()
     local db = M.EnsureDB()
     if db and db.player then
@@ -359,10 +369,11 @@ local QUICK_FALLBACK_Y_FRAC = 0.60
 local QUICK_BARS_KEYS = M.WordList [[
 showClassPower classPowerShape classPowerShapeAlign classPowerShowText classPowerAnchorToCooldown classPowerWidthMode showEleMaelstrom showEbonMight showChargedComboPoints
 runeShowTime runeShowTimeText classPowerOffsetX classPowerOffsetY classPowerOutline detachedPowerBarWidthMode
+smoothPowerBar realtimePowerText classPowerSmoothFill altManaSmoothFill
 ]]
 local QUICK_PLAYER_KEYS = M.WordList [[
 showPowerBar powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY
-detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower
+detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower powerSmoothFill
 ]]
 local quickSetupUndoSnapshot
 local quickSetupFirstRunChecked = false
@@ -481,6 +492,10 @@ local function QuickApplyPhase1(offsets)
         showClassPower = true, classPowerShowText = true, classPowerWidthMode = "cooldown", detachedPowerBarWidthMode = "cooldown",
         showEleMaelstrom = true, showEbonMight = true, showChargedComboPoints = true, runeShowTime = true, runeShowTimeText = true,
         classPowerOutline = 1,
+        -- One-click always opts the managed Player power bar into native smooth
+        -- interpolation and the high-frequency player power event contract.
+        smoothPowerBar = true, realtimePowerText = true,
+        classPowerSmoothFill = true, altManaSmoothFill = true,
     })
     QuickAssignOffsets(bars, offsets, { classPowerAnchorToCooldown = "anchorCPtoCDM" }, true)
     QuickAssignOffsets(bars, offsets, { classPowerOffsetX = "cpOffsetX", classPowerOffsetY = "cpOffsetY" })
@@ -495,6 +510,7 @@ local function QuickApplyPhase1(offsets)
         detachedPowerBarOffsetY = -4,
         detachedPowerBarHeight = tonumber(player.detachedPowerBarHeight) or 6,
         detachedPowerBarFrameLevelOffset = tonumber(player.detachedPowerBarFrameLevelOffset) or 6,
+        powerSmoothFill = true,
     })
 end
 local function QuickRefreshAll(reason)
@@ -824,8 +840,9 @@ local function BuildClassPower(ctx)
         { "ebon", "toggle", "Show Ebon Might timer (Aug)", "showEbonMight", true },
         { "shadow", "toggle", "Show Insanity bar (Shadow)", "showShadowMana", false },
         { "prediction", "toggle", "Show resource prediction", "classPowerShowPrediction", true },
+        { "smooth", "toggle", "Smooth fill", "classPowerSmoothFill", true, ApplyClassPowerSmoothing },
     })
-    AddNamedControls(cpControls, cpBehavior, "anchor charged text rune reverse ele ebon shadow prediction")
+    AddNamedControls(cpControls, cpBehavior, "anchor charged text rune reverse ele ebon shadow prediction smooth")
     local behaviorRightX = min(max(380, floor((ctx.width or 900) * 0.45)), max(320, (ctx.width or 900) - 420))
     local behaviorW = behavior._msuf2Width or ctx.width or 900
     local behaviorLeftW = max(280, behaviorRightX - 42)
@@ -833,7 +850,8 @@ local function BuildClassPower(ctx)
     W.ControlCardBackdrop(behavior, 14, -38, behaviorLeftW, 154)
     W.ControlCardBackdrop(behavior, behaviorRightX - 14, -38, behaviorRightW + 14, 154)
     PlaceColumn(behavior, 14, -38, 32, nil, nil, cpBehavior.anchor, cpBehavior.charged, cpBehavior.text, cpBehavior.rune, cpBehavior.reverse)
-    PlaceColumn(behavior, behaviorRightX, -38, 32, nil, nil, cpBehavior.ele, cpBehavior.ebon, cpBehavior.shadow, cpBehavior.prediction)
+    PlaceColumn(behavior, behaviorRightX, -38, 32, nil, nil, cpBehavior.ele, cpBehavior.ebon, cpBehavior.shadow, cpBehavior.prediction, cpBehavior.smooth)
+    AddTooltip(cpBehavior.smooth, "Class Resource Smooth Fill", "Uses Blizzard's native StatusBar interpolation for power-driven Class Resource fills. Rune, Essence recharge, and timer bars keep their dedicated runtime animation.")
     local visual = b:CollapsibleSection("classpower_visuals", "Class Resource Style", 430, false)
     local styleWidth = visual._msuf2Width or ctx.width or 900
     local styleInnerW = max(320, styleWidth - 64)
@@ -897,6 +915,7 @@ local function BuildClassPower(ctx)
     local dpbTwoColumn = (not dpbCompact) and dpbCardW >= 620
     local dpbRightX = dpbTwoColumn and (32 + dpbControlW + 28) or 32
     local dpbSecondColY = dpbTwoColumn and -154 or -520
+    local dpbLeftColY = dpbTwoColumn and -154 or -188
     local dpbTextSecondColY = dpbTwoColumn and -154 or -446
     local dpbTabFrames = {}
     local dpbLayout, dpbTextures, dpbText = M.UnitSectionsShared.MakeTabFrames(dpb, -88, dpbWidth, dpbTabFrames, "layout", "textures", "text")
@@ -925,6 +944,10 @@ local function BuildClassPower(ctx)
             ApplyDetachedPowerBar()
             RefreshClassPowerControls()
         end)
+    local dpbSmoothX = dpbTwoColumn and dpbRightX or 32
+    local dpbSmoothY = dpbTwoColumn and -104 or -138
+    local dpbSmooth = SwitchAt(ctx, dpbLayout, "Smooth fill", dpbSmoothX, dpbSmoothY, dpbControlW,
+        Player, "powerSmoothFill", true, ApplyDetachedPlayerPowerSmoothing)
     local dpbModeField = BuildBoundControls(dpbLayout, Bars, ApplyDetachedPowerBar, {
         { "mode", "nilDefaultDropdown", "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs"), 260, "detachedPowerBarWidthMode", "manual" },
     })
@@ -942,6 +965,7 @@ local function BuildClassPower(ctx)
     AddTooltip(dpbFields.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(dpbFields.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
     AddTooltip(dpbFields.shape, "Player Power Shape", "FOLLOW_CLASS resolves from Class Resource shape: Bar -> Bar, Circle -> Round, Diamond/Hex -> Crystal. Orb is a single bottom-to-top filled mana/power sphere.")
+    AddTooltip(dpbSmooth, "Player Power Smooth Fill", "Applies to this Player power StatusBar even while its layout is managed by Class Resources. Interpolation runs in Blizzard's C-side StatusBar implementation with frequent Player power updates.")
     W.ControlCard(dpbText, "Power Text", "Text shown on the detached Player power bar managed here.", 14, -38, dpbCardW, dpbTwoColumn and 560 or 790)
     local dpbTextFields = BuildBoundControls(dpbText, Player, ApplyDetachedPowerText, {
         { "onBar", "detachedTextOnBar", "Power text on bar", "detachedPowerBarTextOnBar", false },
@@ -1007,7 +1031,7 @@ local function BuildClassPower(ctx)
         { "outline", "slider", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline },
     })
     AddTooltip(dpbTextureFields.outline, "Power Bar Outline", "Controls only the detached Player power outline managed here. Bar uses an outside border; shapes use their fixed edge texture. 0 disables only the outline.")
-    PlaceColumn(dpbLayout, 32, -154, 54, dpbControlW, "LEFT", dpbFields.anchor, dpbFields.sync, dpbModeField.mode, dpbFields.shape, dpbFields.orbSize, dpbFields.height)
+    PlaceColumn(dpbLayout, 32, dpbLeftColY, 54, dpbControlW, "LEFT", dpbFields.anchor, dpbFields.sync, dpbModeField.mode, dpbFields.shape, dpbFields.orbSize, dpbFields.height)
     PlaceColumn(dpbLayout, dpbRightX, dpbSecondColY, 54, dpbControlW, "LEFT", dpbFields.x, dpbFields.y, dpbFields.layer)
     PlaceColumn(dpbTextures, 32, -104, 54, dpbControlW, "LEFT", dpbTextureFields.fg, dpbTextureFields.bg, dpbTextureFields.outline)
     PlaceColumn(dpbText, 32, -104, 54, dpbControlW, "LEFT", dpbTextFields.onBar, dpbTextFields.preset, dpbTextFields.right)
@@ -1021,6 +1045,7 @@ local function BuildClassPower(ctx)
     AddControls(dpbControls, dpbModeField.mode)
     AddNamedControls(dpbControls, dpbTextureFields, "fg bg outline")
     AddNamedControls(dpbPlayerControls, dpbFields, "anchor sync x y height layer")
+    AddControls(dpbPlayerControls, dpbSmooth)
     AddNamedControls(dpbPlayerControls, dpbTextFields, "onBar preset")
     AddNamedControls(dpbTextControls, dpbTextFields, "right left center sep size x y layer")
     AddControls(dpbTextControls, dpbTextHideRight, dpbTextHideLeft, dpbTextHideCenter)
@@ -1122,12 +1147,15 @@ local function BuildClassPower(ctx)
     local altManaControlW = min(360, altManaCardW - 64)
     W.ControlCard(altMana, "Alternative Mana", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, altManaCardW, 234)
     local altManaToggle = SwitchAt(ctx, altMana, "Show mana bar (dual resource)", 32, -98, altManaControlW, Bars, "showAltMana", false, ApplyClassPower)
+    local altManaSmooth = SwitchAt(ctx, altMana, "Smooth fill", 32, -132, altManaControlW, Bars, "altManaSmoothFill", true, ApplyClassPowerSmoothing)
     local altManaFields = BuildBoundControls(altMana, Bars, ApplyClassPower, {
         { "height", "slider", "Height", 2, 30, 1, 300, "altManaHeight", 4 },
         { "y", "slider", "Y offset", -50, 50, 1, 300, "altManaOffsetY", -2 },
     })
-    PlaceColumn(altMana, 32, -138, 54, altManaControlW, "LEFT", altManaFields.height, altManaFields.y)
+    PlaceColumn(altMana, 32, -174, 54, altManaControlW, "LEFT", altManaFields.height, altManaFields.y)
     AddNamedControls(altManaControls, altManaFields, "height y")
+    AddControls(altManaControls, altManaSmooth)
+    AddTooltip(altManaSmooth, "Alternative Mana Smooth Fill", "Uses native C-side StatusBar interpolation and UNIT_POWER_FREQUENT updates for the Alternative Mana bar.")
     RefreshClassPowerControls = RefreshClassPowerControls(function()
         local bars = Bars()
         local cpOn = BoolValue(bars, "showClassPower", true)
@@ -1191,4 +1219,4 @@ local function BuildClassPower(ctx)
     MaybeOfferQuickSetup()
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 15 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 17 })

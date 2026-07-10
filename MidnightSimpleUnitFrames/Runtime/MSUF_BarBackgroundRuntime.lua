@@ -235,6 +235,15 @@ _MSUF_GetBgKeys("HP")
 _MSUF_GetBgKeys("Power")
 _MSUF_GetBgKeys("Frame")
 
+local function _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca)
+    if not t then return end
+    local k = _MSUF_GetBgKeys(prefix)
+    if frame[k.r] ~= cr or frame[k.g] ~= cg or frame[k.b] ~= cb or frame[k.a] ~= ca then
+        t:SetVertexColor(cr, cg, cb, ca)
+        frame[k.r], frame[k.g], frame[k.b], frame[k.a] = cr, cg, cb, ca
+    end
+end
+
 local function _MSUF_ApplyBgToTexture(frame, tex, t, prefix, cr, cg, cb, ca)
     if not t or not tex then return end
     local k = _MSUF_GetBgKeys(prefix)
@@ -242,10 +251,7 @@ local function _MSUF_ApplyBgToTexture(frame, tex, t, prefix, cr, cg, cb, ca)
         t:SetTexture(tex)
         frame[k.tex] = tex
     end
-    if frame[k.r] ~= cr or frame[k.g] ~= cg or frame[k.b] ~= cb or frame[k.a] ~= ca then
-        t:SetVertexColor(cr, cg, cb, ca)
-        frame[k.r], frame[k.g], frame[k.b], frame[k.a] = cr, cg, cb, ca
-    end
+    _MSUF_ApplyBgColor(frame, t, prefix, cr, cg, cb, ca)
 end
 
 MSUF.Bars._MatchHPColor = function(frame, gen, cache, defR, defG, defB)
@@ -398,9 +404,18 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
         pr, pg, pb = MSUF.Bars._MatchHPColor(frame, gen, cache, pr, pg, pb)
     end
 
-    _MSUF_ApplyBgToTexture(frame, powerTex, frame.powerBarBG, "Power", pr, pg, pb, pa)
+    local shapedPower = frame.targetPowerBar and frame.targetPowerBar._msufPowerShapeActive == true
+    if shapedPower then
+        -- Shape backgrounds are fixed media owned by the Power element. Refresh
+        -- only their tint; replacing the texture turns the shape back into a bar.
+        _MSUF_ApplyBgColor(frame, frame.powerBarBG, "Power", pr, pg, pb, pa)
+    else
+        _MSUF_ApplyBgToTexture(frame, powerTex, frame.powerBarBG, "Power", pr, pg, pb, pa)
+    end
 
-    if frame._msufPowerBarDetached and frame.powerBarBG then
+    if shapedPower then
+        frame._msufDPBBgTexOverride = nil
+    elseif frame._msufPowerBarDetached and frame.powerBarBG then
         local dpbBgTex = _DPB.ResolveBg()
         if not dpbBgTex then
             dpbBgTex = _DPB.ResolveFg()

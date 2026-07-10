@@ -374,13 +374,19 @@ local function SmoothPowerGet()
 end
 local function SmoothPowerSet(enabled, reason)
     enabled = enabled and true or false
+    reason = reason or "MSUF2_BARS_SMOOTH_POWER"
     local key = CurrentPowerBarScopeUnit()
     if key then
         Unit(key).powerSmoothFill = enabled
-        M.RequestUnitApply(key, reason or "MSUF2_BARS_SMOOTH_POWER", { preview = true, power = true })
+        M.RequestUnitApply(key, reason, { preview = true, power = true })
         return
     end
-    SetB("smoothPowerBar", enabled, reason or "MSUF2_BARS_SMOOTH_POWER", { preview = true })
+    local bars = Bars()
+    if bars.smoothPowerBar == enabled then return end
+    bars.smoothPowerBar = enabled
+    -- Shared smooth power is a Player fallback. A targeted Player apply is
+    -- required to recompile the spec and update StatusBar interpolation live.
+    M.RequestUnitApply("player", reason, { preview = true, power = true })
 end
 local NormalizeHpMode = M.NormalizeHpMode
 local NormalizePowerMode = M.NormalizePowerMode

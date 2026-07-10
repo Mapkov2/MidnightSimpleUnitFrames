@@ -134,6 +134,12 @@ function A.ClassPowerRegistry.RegisterDisplaySettings(ctx)
             "disable class resources prediction",
         },
     })
+    RegisterBarsBoolean("classPowerSmoothFill", "smoothFill", "Class Resource Smooth Fill", true, ClassPowerAliases(
+        "smooth fill", "smooth resource fill", "smooth class resource", "smooth class power"
+    ), {
+        reason = "MSUF_ASSISTANT_CLASSPOWER_SMOOTH_FILL",
+        description = "Uses native StatusBar interpolation for value-driven Class Resource fills.",
+    })
 
     RegisterBarsBoolean("classPowerColorByType", "colorByType", "Class Resource Color by Type", true, ClassPowerAliases("color by type", "resource type colors", "class resource class colors"), {
         reason = "MSUF_ASSISTANT_CLASSPOWER_COLOR_TYPE",

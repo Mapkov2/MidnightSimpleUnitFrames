@@ -2530,6 +2530,12 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.smoothPowerBar == nil then
         MSUF_DB.bars.smoothPowerBar = true
     end
+    if MSUF_DB.bars.classPowerSmoothFill == nil then
+        MSUF_DB.bars.classPowerSmoothFill = MSUF_DB.bars.smoothPowerBar ~= false
+    end
+    if MSUF_DB.bars.altManaSmoothFill == nil then
+        MSUF_DB.bars.altManaSmoothFill = MSUF_DB.bars.smoothPowerBar ~= false
+    end
     if MSUF_DB.bars.classPowerComboPointColorMode == nil then
         MSUF_DB.bars.classPowerComboPointColorMode = "default"
     end

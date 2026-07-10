@@ -377,6 +377,61 @@ def check_group_refresh_contracts() -> None:
         require(source, "RegisterRuntimeObserver", f"{label} observer registration")
 
 
+def check_powerbar_contracts() -> None:
+    power = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Elements" / "MSUF_UF_Elements_Power.lua")
+    metadata = read(ADDON_ROOT / "UnitFrames" / "Engine" / "MSUF_UF_Metadata.lua")
+    textures = read(ADDON_ROOT / "Runtime" / "MSUF_TextureRuntime.lua")
+    backgrounds = read(ADDON_ROOT / "Runtime" / "MSUF_BarBackgroundRuntime.lua")
+
+    for needle in [
+        "bar:SetValue(value, interp)",
+        "bar.MSUFPowerBorderHost",
+        "ApplyPowerBorder(bar, power)",
+        "frame._msufPowerBarDetached = power.detached == true and true or nil",
+        "return POWER_EVENTS_FAST",
+        "PowerEventMatchesToken(bar, event, eventPowerToken)",
+    ]:
+        require(power, needle, "Powerbar native runtime contract")
+    for reason in ["MSUF2_POWER_DETACHED_SHAPE", "MSUF2_POWER_DETACHED_ORB_SIZE"]:
+        require(metadata, reason, "Powerbar targeted refresh reason")
+    require(textures, "_msufPowerShapeActive == true", "Power shape foreground ownership")
+    require(backgrounds, "local shapedPower =", "Power shape background ownership")
+    require(backgrounds, "_MSUF_ApplyBgColor(frame, frame.powerBarBG", "Power shape tint-only refresh")
+
+
+def check_classpower_smoothing_contracts() -> None:
+    controller = read(ADDON_ROOT / "ClassPower" / "MSUF_CP_Controller.lua")
+    modes = read(ADDON_ROOT / "ClassPower" / "MSUF_CP_Modes.lua")
+    alt_mana = read(ADDON_ROOT / "ClassPower" / "MSUF_CP_AltMana.lua")
+    defaults = read(ADDON_ROOT / "State" / "MSUF_Defaults.lua")
+    page = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_AdvancedClassPower.lua")
+    global_page = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_Global.lua")
+    bars_page = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_GlobalBars.lua")
+
+    for needle in [
+        "visual.smoothInterp = _cpDB.classSmooth and SMOOTH_INTERP or nil",
+        'CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", wantPower and not wantFrequentPower, "player")',
+        'CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", wantFrequentPower, "player")',
+    ]:
+        require(controller, needle, "ClassPower native smoothing/event contract")
+    require(modes, "bar:SetValue(value, smoothInterp)", "ClassPower C-side interpolation")
+    require(modes, "CP_SetPowerValue(bar, rawCur, smoothInterp)", "ClassPower secret-value C-side path")
+    require(alt_mana, "local SMOOTH_INTERP =", "Alternative Mana cached interpolation enum")
+    require(alt_mana, "if maxSecret then AM._maxValue = nil", "Alternative Mana secret max cache guard")
+    require(alt_mana, "if curSecret then AM._currentValue = nil", "Alternative Mana secret value cache guard")
+    for key in ["classPowerSmoothFill", "altManaSmoothFill"]:
+        require(defaults, key, f"ClassPower default {key}")
+        require(page, key, f"ClassPower menu control {key}")
+    require(page, '"powerSmoothFill"', "Class Resources managed Player power smoothing control")
+    require(page, 'local dpbSmooth = SwitchAt(', "Visible managed Player power smoothing switch")
+    require(page, "powerSmoothFill = true", "ClassPower one-click Player smoothing")
+    require(page, "realtimePowerText = true", "ClassPower one-click frequent Player power updates")
+    require(global_page, 'M.RequestUnitApply("player", reason, { preview = true, power = true })',
+            "Shared smooth power live Player apply")
+    require(bars_page, 'M.RequestUnitApply("player", "MSUF2_BARS_REALTIME_POWER", {',
+            "Realtime power text live Player apply")
+
+
 def main() -> int:
     lua_files = all_lua_files()
     check_luac(lua_files)
@@ -384,6 +439,8 @@ def main() -> int:
     check_load_reachability(lua_files)
     check_kernel_castbar_contracts()
     check_group_refresh_contracts()
+    check_powerbar_contracts()
+    check_classpower_smoothing_contracts()
     print(f"MSUF static checks: ok ({len(lua_files)} Lua files)")
     return 0
 

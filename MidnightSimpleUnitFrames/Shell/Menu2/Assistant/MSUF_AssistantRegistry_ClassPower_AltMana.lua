@@ -27,6 +27,14 @@ function A.ClassPowerRegistry.RegisterAltManaSettings(ctx)
         frameType = "altMana",
         reason = "MSUF_ASSISTANT_ALT_MANA",
     })
+    RegisterBarsBoolean("altManaSmoothFill", "smoothFill", "Alternative Mana Smooth Fill", true, {
+        "alternative mana smooth fill", "alt mana smooth fill", "smooth alternative mana", "smooth alt mana",
+    }, {
+        category = "Global / Class Resources / Alternative Mana",
+        frameType = "altMana",
+        reason = "MSUF_ASSISTANT_ALT_MANA_SMOOTH_FILL",
+        description = "Uses native StatusBar interpolation and frequent power events for Alternative Mana.",
+    })
     RegisterBarsNumber("altManaHeight", "height", "Alternative Mana Height", 4, 2, 30, {
         "alternative mana height", "alt mana height", "secondary mana height", "dual resource mana height",
     }, {

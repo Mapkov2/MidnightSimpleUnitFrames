@@ -45,6 +45,16 @@ local function CP_StampStatusBarColor(bar, r, g, b, a)
     end
 end
 
+--- Native StatusBar interpolation keeps secret power values inside Blizzard's
+--- C implementation and avoids Lua-side animation state or OnUpdate work.
+local function CP_SetPowerValue(bar, value, smoothInterp)
+    if smoothInterp then
+        bar:SetValue(value, smoothInterp)
+    else
+        bar:SetValue(value)
+    end
+end
+
 local function CP_StampVertexColor(tex, r, g, b, a)
     if not tex then return end
     a = a or 1
@@ -232,12 +242,23 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         if maxPower <= 0 then return end
         local cur = UnitPower("player", powerType)
         if not NotSecret(cur) then
-            for i = 1, maxPower do local bar = CP.bars[i]; if bar then bar:SetValue(1) end end
+            local visual = CP_GetVisual(E)
+            local smoothInterp = visual and visual.smoothInterp
+            local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
+            for i = 1, maxPower do
+                local bar = CP.bars[i]
+                if bar then
+                    CP_StampMinMax(bar, i - 1, i)
+                    CP_SetPowerValue(bar, cur, smoothInterp)
+                    CP_StampAlpha(bar, filledAlpha)
+                end
+            end
             if CP.text then CP_StampShown(CP.text, false) end
             return
         end
         cur = tonumber(cur) or 0
         local visual = CP_GetVisual(E)
+        local smoothInterp = visual and visual.smoothInterp
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
         local chargedMap = E.GetChargedMap()
         local showCharged = visual and visual.showCharged == true and powerType == PT.ComboPoints
@@ -251,7 +272,8 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
             local bar = CP.bars[i]
             if bar then
                 local isFilled = (i <= cur)
-                bar:SetValue(isFilled and 1 or 0)
+                CP_StampMinMax(bar, 0, 1)
+                CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
                 CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
                 local isCharged = showCharged and chargedMap and chargedMap[i]
                 if isCharged then
@@ -322,16 +344,33 @@ _G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
     local function Update(powerType, maxPower)
         if maxPower <= 0 then return end
         local rawCur = UnitPower("player", powerType, true)
+        local mod = UnitPowerDisplayMod and UnitPowerDisplayMod(powerType) or 1
+        local modSafe = NotSecret(mod) and mod ~= nil and mod > 0
         if not NotSecret(rawCur) then
-            for i = 1, maxPower do local bar = CP.bars[i]; if bar then bar:SetValue(1) end end
+            local visual = CP_GetVisual(E)
+            local smoothInterp = visual and visual.smoothInterp
+            local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
+            for i = 1, maxPower do
+                local bar = CP.bars[i]
+                if bar then
+                    if modSafe then
+                        CP_StampMinMax(bar, (i - 1) * mod, i * mod)
+                        CP_SetPowerValue(bar, rawCur, smoothInterp)
+                    else
+                        CP_StampMinMax(bar, 0, 1)
+                        CP_SetPowerValue(bar, 1, smoothInterp)
+                    end
+                    CP_StampAlpha(bar, filledAlpha)
+                end
+            end
             if CP.text then CP_StampShown(CP.text, false) end
             return
         end
         rawCur = tonumber(rawCur) or 0
-        local mod = UnitPowerDisplayMod and UnitPowerDisplayMod(powerType) or 1
-        if not NotSecret(mod) or mod == nil or mod <= 0 then mod = 100 end
+        if not modSafe then mod = 100 end
         local fractional = rawCur / mod
         local visual = CP_GetVisual(E)
+        local smoothInterp = visual and visual.smoothInterp
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
         local bgA = visual and visual.bgAlpha or 0.3
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
@@ -342,9 +381,10 @@ _G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
         for i = 1, maxPower do
             local bar = CP.bars[i]
             if bar then
-                if i <= fullBars then bar:SetValue(1); CP_StampAlpha(bar, filledAlpha)
-                elseif i == fullBars + 1 and partial > 0.001 then bar:SetValue(partial); CP_StampAlpha(bar, filledAlpha)
-                else bar:SetValue(0); CP_StampAlpha(bar, emptyAlpha) end
+                CP_StampMinMax(bar, 0, 1)
+                if i <= fullBars then CP_SetPowerValue(bar, 1, smoothInterp); CP_StampAlpha(bar, filledAlpha)
+                elseif i == fullBars + 1 and partial > 0.001 then CP_SetPowerValue(bar, partial, smoothInterp); CP_StampAlpha(bar, filledAlpha)
+                else CP_SetPowerValue(bar, 0, smoothInterp); CP_StampAlpha(bar, emptyAlpha) end
                 if bar._msufCPVisualVersion ~= visualVersion then
                     CP_StampStatusBarColor(bar, baseR, baseG, baseB, 1)
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
@@ -669,6 +709,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
     local function UpdateSegmented(powerType, maxPower)
         if maxPower <= 0 then return end
         local visual = CP_GetVisual(E)
+        local smoothInterp = visual and visual.smoothInterp
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
         local bgA = visual and visual.bgAlpha or 0.3
         local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
@@ -680,7 +721,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                 local bar = CP.bars[i]
                 if bar then
                     CP_StampMinMax(bar, i - 1, i)
-                    bar:SetValue(rawCur)
+                    CP_SetPowerValue(bar, rawCur, smoothInterp)
                     CP_StampAlpha(bar, filledAlpha)
                     CP_StampStatusBarColor(bar, baseR, baseG, baseB, 1)
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
@@ -748,7 +789,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                 if bar then
                     local isFilled = (i <= cur)
                     CP_StampMinMax(bar, 0, 1)
-                    bar:SetValue(isFilled and 1 or 0)
+                    CP_SetPowerValue(bar, isFilled and 1 or 0, smoothInterp)
                     CP_StampAlpha(bar, isFilled and filledAlpha or emptyAlpha)
                     if mwAbove5 and isFilled and i > CPK.THRESH.MW_SPEND then CP_StampStatusBarColor(bar, abR,abG,abB,1) else CP_StampStatusBarColor(bar, baseR,baseG,baseB,1) end
                     CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
@@ -801,6 +842,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
         end
         if cur > 1 then cur = 1 end
         local visual = CP_GetVisual(E)
+        local smoothInterp = visual and visual.smoothInterp
         local colorByType = not visual or visual.colorByType ~= false
         local r, g, bl
         if colorByType then r, g, bl = ResolveDHColor(inMeta) else r, g, bl = 1,1,1 end
@@ -810,7 +852,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
         local bar = CP.bars[1]
         if bar then
             CP_StampMinMax(bar, 0, 1)
-            bar:SetValue(cur)
+            CP_SetPowerValue(bar, cur, smoothInterp)
             CP_StampAlpha(bar, cur > 0.01 and filledAlpha or emptyAlpha)
             CP_StampStatusBarColor(bar, r, g, bl, 1)
             CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
@@ -999,15 +1041,16 @@ _G.MSUF_CP_MODE_BUILDERS.CONTINUOUS = function(E)
             CP_StampMinMax(bar, 0, rawMx)
             mx = nil
         end
+        local visual = CP_GetVisual(E)
+        local smoothInterp = visual and visual.smoothInterp
         if curSafe then
             cur = tonumber(rawCur) or 0
-            bar:SetValue(cur)
+            CP_SetPowerValue(bar, cur, smoothInterp)
         else
-            bar:SetValue(rawCur)
+            CP_SetPowerValue(bar, rawCur, smoothInterp)
             cur = nil
         end
 
-        local visual = CP_GetVisual(E)
         CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
         CP_StampShown(bar, true)
 

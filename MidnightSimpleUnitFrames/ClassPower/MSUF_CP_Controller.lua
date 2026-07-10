@@ -79,6 +79,8 @@ local InCombatLockdown = InCombatLockdown
 local GetTime = GetTime
 local C_Timer = C_Timer
 local GetPowerRegenForPowerType = GetPowerRegenForPowerType
+local StatusBarInterpolation = Enum and Enum.StatusBarInterpolation
+local SMOOTH_INTERP = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
 
 --- Aura API (player-only class resources; unitframe aura display is native 12.1)
 local C_UnitAuras = C_UnitAuras
@@ -100,7 +102,8 @@ local _cpDB = {
     colorByType    = true,   showCharged    = true,
     bgAlpha        = 0.3,    showPrediction = true,
     showText       = true,   fontSize       = 14,
-    smooth         = true,   colorOverrides = nil,
+    classSmooth    = true,   altManaSmooth = true,
+    colorOverrides = nil,
     bgColorOverrides = nil,  bars = nil, general = nil,
     comboPointColorMode = "default",
 }
@@ -119,7 +122,8 @@ local function _CP_RefreshConfig()
     _cpDB.showPrediction    = (b.classPowerShowPrediction ~= false)
     _cpDB.showText          = (b.classPowerShowText ~= false)
     _cpDB.fontSize          = tonumber(b.classPowerFontSize) or 14
-    _cpDB.smooth            = (b.smoothPowerBar ~= false)
+    _cpDB.classSmooth       = (b.classPowerSmoothFill ~= false)
+    _cpDB.altManaSmooth     = (b.altManaSmoothFill ~= false)
     _cpDB.colorOverrides    = (type(g.classPowerColorOverrides) == "table") and g.classPowerColorOverrides or nil
     _cpDB.bgColorOverrides  = (type(g.classPowerBgColorOverrides) == "table") and g.classPowerBgColorOverrides or nil
     _cpDB.comboPointColorMode = cpMode
@@ -392,6 +396,7 @@ local function EnsureDefaults()
     if b.classPowerOffsetY    == nil then b.classPowerOffsetY    = 0     end
     if b.classPowerFrameLevelOffset == nil then b.classPowerFrameLevelOffset = 5 end
     if b.smoothPowerBar       == nil then b.smoothPowerBar       = false end
+    if b.classPowerSmoothFill == nil then b.classPowerSmoothFill = (b.smoothPowerBar ~= false) end
     if b.showChargedComboPoints == nil then b.showChargedComboPoints = true end
     if b.classPowerComboPointColorMode == nil then b.classPowerComboPointColorMode = "default" end
     if b.classPowerShowText    == nil then b.classPowerShowText    = false end
@@ -410,6 +415,7 @@ local function EnsureDefaults()
     if b.altManaColorR        == nil then b.altManaColorR        = 0.0   end
     if b.altManaColorG        == nil then b.altManaColorG        = 0.0   end
     if b.altManaColorB        == nil then b.altManaColorB        = 0.8   end
+    if b.altManaSmoothFill    == nil then b.altManaSmoothFill    = (b.smoothPowerBar ~= false) end
 
     --- Class Resources-owned second Player HP bar (off by default)
     if b.playerHPBarEnabled     == nil then b.playerHPBarEnabled     = false end
@@ -1099,6 +1105,7 @@ local function CP_CompileVisual(powerType, renderMode, maxP)
     visual.showText = _cpDB.showText == true
     visual.showPrediction = _cpDB.showPrediction ~= false
     visual.showCharged = _cpDB.showCharged ~= false
+    visual.smoothInterp = _cpDB.classSmooth and SMOOTH_INTERP or nil
     visual.filledAlpha = _filledAlpha
     visual.emptyAlpha = _emptyAlpha
     visual.bgAlpha = _cpDB.bgAlpha or 0.3
@@ -2229,6 +2236,13 @@ local function CP_ShouldUseMaxPowerEvent()
     return CP.visible and profile and profile.maxPower == true or false
 end
 
+local function CP_ShouldUseFrequentPowerEvents()
+    if AM.visible then return true end
+    if not CP.visible then return false end
+    local mode = CP.renderMode
+    return mode == CPK.MODE.CONTINUOUS or mode == CPK.MODE.FRACTIONAL
+end
+
 CP_ShouldUseLiteBindings = function()
     local g = _cpDB.general
     if g and g.perfLiteClassPowerEvents == false then
@@ -2303,8 +2317,9 @@ CP_RefreshEventBindings = function()
     local wantRegen = _autoHideActive and CP.visible
     local wantDeadAlive = (CP.visible and profile.deadAlive == true) or PHP.visible
 
-    CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", wantPower, "player")
-    CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", false, "player")
+    local wantFrequentPower = wantPower and CP_ShouldUseFrequentPowerEvents()
+    CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", wantPower and not wantFrequentPower, "player")
+    CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", wantFrequentPower, "player")
     CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", wantMaxPower, "player")
     CP_SetEventBound(eventFrame, "UNIT_DISPLAYPOWER", wantDisplayPower, "player")
     CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", wantPointCharge, "player")
@@ -2770,13 +2785,9 @@ do
     end
 end
 
---- Smooth Power Bar Mode
---- The actual smooth bar logic lives in MSUF_UnitframeCore.lua (DIRECT_APPLY)
---- and MidnightSimpleUnitFrames.lua (_MSUF_Bars_SyncPower).
---- When enabled, those paths use raw UnitPower/UnitPowerMax + ExponentialEaseOut
---- on BOTH SetMinMaxValues AND SetValue - identical to MidnightRogueBars.
---- Secret-safe: nil-guarded, no arithmetic on return values.
---- This section only provides the public toggle API for the options panel.
+--- Smooth Player Power compatibility entry point.
+--- UFCore owns the actual StatusBar interpolation. Class Resources only owns
+--- the detached Player bar's layout and exposes the same per-player setting.
 CP.SmoothPowerBarApply = function()
     --- Refresh the cached flags in UFCore's DIRECT_APPLY hot path.
     if _G.MSUF_UFCore_RefreshSettingsCache then
