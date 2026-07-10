@@ -20,22 +20,31 @@ local UnitDB = C.UnitDB
 local ClampNumber = C.ClampNumber
 local CallGlobal = C.CallGlobal
 local ApplyUnit = C.ApplyUnit
+local MAX_SETTING_ALIASES = tonumber(C.MAX_SETTING_ALIASES) or 32
 
 if type(Registry) ~= "table" or type(UnitDB) ~= "function" then return end
 if type(ClampNumber) ~= "function" or type(ApplyUnit) ~= "function" then return end
 
+local function AppendAlias(out, value)
+    if #out >= MAX_SETTING_ALIASES then return false end
+    out[#out + 1] = value
+    return #out < MAX_SETTING_ALIASES
+end
+
 local function AddAliasesForUnit(out, unit, noun, nounDE)
+    if #out >= MAX_SETTING_ALIASES then return false end
     local aliases = UNIT_ALIASES[unit] or { unit }
     for i = 1, #aliases do
         local u = aliases[i]
-        out[#out + 1] = u .. " " .. noun
-        out[#out + 1] = noun .. " " .. u
+        if not AppendAlias(out, u .. " " .. noun) then return false end
+        if not AppendAlias(out, noun .. " " .. u) then return false end
         if nounDE then
-            out[#out + 1] = u .. " " .. nounDE
-            out[#out + 1] = nounDE .. " " .. u
-            out[#out + 1] = nounDE .. " vom " .. u
+            if not AppendAlias(out, u .. " " .. nounDE) then return false end
+            if not AppendAlias(out, nounDE .. " " .. u) then return false end
+            if not AppendAlias(out, nounDE .. " vom " .. u) then return false end
         end
     end
+    return true
 end
 
 local function RegisterUnitBoolean(unit, attr, dbKey, label, defaultValue, aliases, opts)

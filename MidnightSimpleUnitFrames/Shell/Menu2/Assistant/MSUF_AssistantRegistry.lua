@@ -15,4 +15,4 @@ M.Assistant = A
 A.Registry = A.Registry or { settings = {}, settingsByKey = {}, actions = {}, actionsByKey = {}, todos = {} }
 A.Workflow = A.Workflow or {}
 
--- The explicit registry domain load list lives in MSUF_AssistantRegistry_Manifest.lua.
+-- The explicit registry domain load order lives in MSUF_Menu2_AssistantRuntime.xml.

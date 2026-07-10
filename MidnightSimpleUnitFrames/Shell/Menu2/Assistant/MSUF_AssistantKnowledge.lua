@@ -20,10 +20,11 @@ local K = A.Knowledge or {}
 A.Knowledge = K
 
 local MAX_RESULTS = 6
-local INDEX_VERSION = 7
+local INDEX_VERSION = 8
 local SEARCH_CACHE_LIMIT = 32
 local SEARCH_TEXT_LIMIT = 360
-local KNOWLEDGE_ALIAS_LIMIT = 24
+local KNOWLEDGE_COMBINED_ALIAS_LIMIT = 2
+local KNOWLEDGE_VALUE_ALIAS_LIMIT = 4
 local DISCORD_INVITE = "https://discord.gg/2Gf9b2Wprz"
 
 local function Trim(text)
@@ -52,51 +53,6 @@ local function Normalize(text)
     text = text:gsub("health%s+bar", "healthbar")
     text = text:gsub("unit%s+frames", "unitframes")
     return text
-end
-
-local function AddUnique(list, seen, value)
-    value = Trim(value)
-    if value == "" then return end
-    local norm = Normalize(value)
-    if norm == "" or seen[norm] then return end
-    seen[norm] = true
-    list[#list + 1] = value
-end
-
-local function AddSearchSnippet(list, seen, value)
-    value = Trim(value)
-    if value == "" then return end
-    if #value > SEARCH_TEXT_LIMIT then value = value:sub(1, SEARCH_TEXT_LIMIT) end
-    AddUnique(list, seen, value)
-end
-
-local function AddMany(list, seen, values, limit)
-    if type(values) == "string" then
-        if values:find("|", 1, true) then
-            local count = 0
-            for value in values:gmatch("[^|]+") do
-                count = count + 1
-                if not limit or count <= limit then AddUnique(list, seen, value) end
-                if limit and count >= limit then break end
-            end
-        else
-            AddUnique(list, seen, values)
-        end
-        return
-    end
-    if type(values) ~= "table" then return end
-    local max = limit and math.min(#values, limit) or #values
-    for i = 1, max do AddUnique(list, seen, values[i]) end
-end
-
-local function AddMapKeys(list, seen, values, limit)
-    if type(values) ~= "table" then return end
-    local count = 0
-    for key in pairs(values) do
-        count = count + 1
-        if not limit or count <= limit then AddUnique(list, seen, key) end
-        if limit and count >= limit then break end
-    end
 end
 
 local function SplitTokens(text)
@@ -418,58 +374,98 @@ local function FaqEnvironment()
     return env
 end
 
+local function AddIndexText(textParts, textSeen, value, limit, alreadyNormalized)
+    value = tostring(value or "")
+    if value == "" then return nil end
+    if limit and #value > limit then value = value:sub(1, limit) end
+    local norm = alreadyNormalized and value or Normalize(value)
+    if norm == "" then return nil end
+    if not textSeen[norm] then
+        textSeen[norm] = true
+        textParts[#textParts + 1] = norm
+    end
+    return norm
+end
+
+local function AddIndexTextMany(textParts, textSeen, values)
+    if type(values) == "string" then
+        if values:find("|", 1, true) then
+            for value in values:gmatch("[^|]+") do AddIndexText(textParts, textSeen, value) end
+        else
+            AddIndexText(textParts, textSeen, values)
+        end
+    elseif type(values) == "table" then
+        for i = 1, #values do AddIndexText(textParts, textSeen, values[i]) end
+    end
+end
+
+local function AddIndexAliasNorm(item, textParts, textSeen, aliasSeen, value)
+    local norm = Normalize(value)
+    if norm == "" or aliasSeen[norm] then return false end
+    aliasSeen[norm] = true
+    item.aliasNorms[#item.aliasNorms + 1] = norm
+    AddIndexText(textParts, textSeen, norm, nil, true)
+    return true
+end
+
 local function AddIndexItem(index, item)
     local label = Trim(item.label)
     if label == "" then label = DisplayFallbackLabel(item.key or item.kind, "") end
     item.label = Trim(label)
     if item.label == "" then return end
     item.aliases = type(item.aliases) == "table" and item.aliases or {}
-    local textParts, seen = {}, {}
-    AddUnique(textParts, seen, item.key)
-    AddUnique(textParts, seen, item.label)
-    AddUnique(textParts, seen, item.category)
-    AddUnique(textParts, seen, item.pageLabel)
-    AddSearchSnippet(textParts, seen, item.description)
-    AddSearchSnippet(textParts, seen, item.answer)
-    AddUnique(textParts, seen, item.target)
-    AddUnique(textParts, seen, item.controlType)
-    AddMany(textParts, seen, item.aliases, KNOWLEDGE_ALIAS_LIMIT)
-    AddMany(textParts, seen, item.exactAliases, KNOWLEDGE_ALIAS_LIMIT)
-    AddMapKeys(textParts, seen, item.valueAliases, KNOWLEDGE_ALIAS_LIMIT)
-    AddMapKeys(textParts, seen, item.booleanAliases, KNOWLEDGE_ALIAS_LIMIT)
-    AddMany(textParts, seen, item.keywords)
-    item.haystack = Normalize(table.concat(textParts, " "))
-    item.keyNorm = Normalize(item.key)
-    item.labelNorm = Normalize(item.label)
+    local textParts, textSeen = {}, {}
+    item.keyNorm = AddIndexText(textParts, textSeen, item.key)
+    item.labelNorm = AddIndexText(textParts, textSeen, item.label)
+    AddIndexText(textParts, textSeen, item.category)
+    AddIndexText(textParts, textSeen, item.pageLabel)
+    AddIndexText(textParts, textSeen, item.description, SEARCH_TEXT_LIMIT)
+    AddIndexText(textParts, textSeen, item.answer, SEARCH_TEXT_LIMIT)
+    AddIndexText(textParts, textSeen, item.target)
+    AddIndexText(textParts, textSeen, item.controlType)
+
     item.aliasNorms = {}
-    local aliasSeen = {}
-    local function addAliasNorm(value)
-        local aliasNorm = Normalize(value)
-        if aliasNorm ~= "" and not aliasSeen[aliasNorm] then
-            aliasSeen[aliasNorm] = true
-            item.aliasNorms[#item.aliasNorms + 1] = aliasNorm
+    local aliasSeen, combinedCount = {}, 0
+    local exactAliases = type(item.exactAliases) == "table" and item.exactAliases or {}
+    -- Exact one-word aliases are rare and semantically important because the
+    -- normal alias matcher deliberately requires at least two tokens.
+    for i = 1, #exactAliases do
+        local raw = tostring(exactAliases[i] or "")
+        if raw ~= "" and not raw:find("%s")
+            and AddIndexAliasNorm(item, textParts, textSeen, aliasSeen, raw) then
+            combinedCount = combinedCount + 1
         end
     end
-    local aliasCount = math.min(#item.aliases, KNOWLEDGE_ALIAS_LIMIT)
-    for i = 1, aliasCount do addAliasNorm(item.aliases[i]) end
-    local exactAliases = type(item.exactAliases) == "table" and item.exactAliases or {}
-    local exactCount = math.min(#exactAliases, KNOWLEDGE_ALIAS_LIMIT)
-    for i = 1, exactCount do addAliasNorm(exactAliases[i]) end
+    for i = 1, #item.aliases do
+        if combinedCount >= KNOWLEDGE_COMBINED_ALIAS_LIMIT then break end
+        if AddIndexAliasNorm(item, textParts, textSeen, aliasSeen, item.aliases[i]) then
+            combinedCount = combinedCount + 1
+        end
+    end
+    if combinedCount < KNOWLEDGE_COMBINED_ALIAS_LIMIT then
+        for i = 1, #exactAliases do
+            if combinedCount >= KNOWLEDGE_COMBINED_ALIAS_LIMIT then break end
+            if AddIndexAliasNorm(item, textParts, textSeen, aliasSeen, exactAliases[i]) then
+                combinedCount = combinedCount + 1
+            end
+        end
+    end
     local valueAliases = type(item.valueAliases) == "table" and item.valueAliases or {}
     local valueCount = 0
     for key in pairs(valueAliases) do
         valueCount = valueCount + 1
-        if valueCount > KNOWLEDGE_ALIAS_LIMIT then break end
-        addAliasNorm(key)
+        if valueCount > KNOWLEDGE_VALUE_ALIAS_LIMIT then break end
+        AddIndexAliasNorm(item, textParts, textSeen, aliasSeen, key)
     end
     local booleanAliases = type(item.booleanAliases) == "table" and item.booleanAliases or {}
     local boolCount = 0
     for key in pairs(booleanAliases) do
         boolCount = boolCount + 1
-        if boolCount > KNOWLEDGE_ALIAS_LIMIT then break end
-        addAliasNorm(key)
+        if boolCount > KNOWLEDGE_VALUE_ALIAS_LIMIT then break end
+        AddIndexAliasNorm(item, textParts, textSeen, aliasSeen, key)
     end
-    item.tokens = SplitTokens(item.haystack)
+    AddIndexTextMany(textParts, textSeen, item.keywords)
+    item.haystack = table.concat(textParts, " ")
     index.items[#index.items + 1] = item
 end
 
@@ -543,7 +539,6 @@ local function BuildIndex()
                         if key == nav.key then aliases[#aliases + 1] = alias end
                     end
                 end
-                AddMany(aliases, {}, Data.KEYWORDS and Data.KEYWORDS[nav.key])
                 AddIndexItem(index, {
                     kind = "page",
                     key = nav.key,
@@ -705,6 +700,11 @@ local UNIT_QUERY_UNITS = {
     targettarget = true, focustarget = true,
 }
 
+local FOCUS_KICK_FEATURE_TERMS = {
+    "focus kick tracker", "focus kick icon", "focus interrupt tracker", "focus interrupt icon",
+    "fokus kick tracker", "fokus kick anzeige", "fokus interrupt tracker", "fokus interrupt anzeige",
+}
+
 local function QueryStartsWithScope(norm, term)
     norm = tostring(norm or "")
     term = Normalize(term)
@@ -714,6 +714,9 @@ end
 local function RequestedSearchUnit(queryNorm, exactNorm)
     local exact = Normalize(exactNorm or "")
     local norm = Normalize(queryNorm or "")
+    -- "Focus" is part of this feature's proper name, not a request to search
+    -- every setting owned by the Focus unit-frame page.
+    if ContainsAny(exact, FOCUS_KICK_FEATURE_TERMS) or ContainsAny(norm, FOCUS_KICK_FEATURE_TERMS) then return nil end
     for i = 1, #QUERY_SCOPE_ORDER do
         local info = QUERY_SCOPE_ORDER[i]
         for j = 1, #(info.terms or {}) do
@@ -912,6 +915,9 @@ function K.Search(query, limit, opts)
     local startedMs = _G.debugprofilestop and _G.debugprofilestop() or nil
     opts = opts or {}
     local index = K.EnsureIndexIfSafe()
+    -- Contract: a result array means the index was ready; nil means the index
+    -- is still cold and its cooperative background build has been requested.
+    -- Callers must not treat the cold sentinel as an empty search result.
     if not index then return nil end
     local pageKey = opts.ignoreCurrentPage and "home" or CurrentPageKey()
     local intent = QueryIntent(query)
@@ -1216,7 +1222,7 @@ local function PageHelp(page, titleOverride)
     end
     local action = ActionLine(spec.actions)
     if action then lines[#lines + 1] = action end
-    return { text = JoinLines(lines), status = "applied", summary = "Assistant page help" }
+    return { text = JoinLines(lines), status = "info", summary = "Assistant page help" }
 end
 
 local WHAT_CAN_PAGE_HELP_INTENTS = {
@@ -1332,7 +1338,7 @@ local function CapabilityHelp(german)
         "I can answer WoW questions near UI setup. For current class, talent, or patch guides I point to current external guides because MSUF runs offline.",
         "You can ask: Open Player | Open Cast Bars | Profile Help | What can I change here?",
     }
-    return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant capabilities" }
+    return { text = table.concat(lines, "\n"), status = "info", summary = "Assistant capabilities" }
 end
 K.CapabilityHelp = CapabilityHelp
 
@@ -1495,7 +1501,7 @@ local function ChangelogAnswer(query)
     end
     if #sections > visibleSections then lines[#lines + 1] = "... " .. tostring(#sections - visibleSections) .. " more sections in the Dashboard changelog." end
     lines[#lines + 1] = "You can ask: Open Changelog | Search release notes"
-    return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant changelog answer" }
+    return { text = table.concat(lines, "\n"), status = "info", summary = "Assistant changelog answer" }
 end
 
 local KNOWLEDGE_INTENT_TERMS = {
@@ -2215,17 +2221,31 @@ local function ActionableHint(item)
     return ActionLine(actions)
 end
 
+-- Knowledge is read-only. Keep this normalization at the public boundary so
+-- every existing and future direct-help branch has the same truthful status,
+-- including branches that still construct their internal table as "applied".
+local function AsReadOnlyKnowledgeResult(result)
+    if type(result) ~= "table" then return result end
+    if result.status == "applied" then result.status = "info" end
+    if result.result == "applied" then result.result = "info" end
+    return result
+end
+
 function K.Answer(query, opts)
     opts = opts or {}
     if opts.forceSearch ~= true then
         local changelog = ChangelogAnswer(query)
-        if changelog then return changelog end
+        if changelog then return AsReadOnlyKnowledgeResult(changelog) end
 
         local direct = DirectHelpAnswer(query, opts)
-        if direct then return RememberKnowledgeHelpContext(direct) end
+        if direct then return AsReadOnlyKnowledgeResult(RememberKnowledgeHelpContext(direct)) end
     end
 
     local results = K.Search(query, MAX_RESULTS, opts)
+    -- Search deliberately returns nil while the index is cold. Propagate that
+    -- sentinel so the router/deferred job path can continue safely instead of
+    -- indexing a nil value or claiming that no match exists.
+    if type(results) ~= "table" then return nil end
     if #results == 0 then return nil end
     local intent = opts.forceSearch == true and "location" or QueryIntent(query)
     local topResult = results[1]
@@ -2238,7 +2258,7 @@ function K.Answer(query, opts)
         if openText then lines[#lines + 1] = openText end
         local action = ActionableHint(top)
         if action then lines[#lines + 1] = action end
-        return RememberKnowledgeHelpContext({ text = table.concat(lines, "\n"), status = "applied", summary = "Assistant FAQ answer" })
+        return AsReadOnlyKnowledgeResult(RememberKnowledgeHelpContext({ text = table.concat(lines, "\n"), status = "info", summary = "Assistant FAQ answer" }))
     end
 
     if intent == "location" then
@@ -2250,7 +2270,7 @@ function K.Answer(query, opts)
         if example then lines[#lines + 1] = example end
         local action = ActionableHint(top)
         if action then lines[#lines + 1] = action end
-        return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant search result", searchResults = ResultFollowups(results, 4) }
+        return { text = table.concat(lines, "\n"), status = "info", summary = "Assistant search result", searchResults = ResultFollowups(results, 4) }
     end
 
     if top.kind == "faq" and top.answer and top.answer ~= "" and (intent == "help" or (topResult.score or 0) > 650) then
@@ -2260,7 +2280,7 @@ function K.Answer(query, opts)
         if openText then lines[#lines + 1] = openText end
         local action = ActionableHint(top)
         if action then lines[#lines + 1] = action end
-        return RememberKnowledgeHelpContext({ text = table.concat(lines, "\n"), status = "applied", summary = "Assistant FAQ answer" })
+        return AsReadOnlyKnowledgeResult(RememberKnowledgeHelpContext({ text = table.concat(lines, "\n"), status = "info", summary = "Assistant FAQ answer" }))
     end
 
     local lines = { "I found these MSUF matches:" }
@@ -2270,7 +2290,7 @@ function K.Answer(query, opts)
     if example then lines[#lines + 1] = example end
     local action = ActionableHint(top)
     if action then lines[#lines + 1] = action end
-    return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant knowledge result", searchResults = ResultFollowups(results, 5) }
+    return { text = table.concat(lines, "\n"), status = "info", summary = "Assistant knowledge result", searchResults = ResultFollowups(results, 5) }
 end
 
 local NO_MATCH_SEARCH_SIGNAL_TERMS = {

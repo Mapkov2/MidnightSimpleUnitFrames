@@ -25,6 +25,13 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
     local ApplyGroup = ctx.ApplyGroup
     local AURA_RELATIVE_SIZE_NOUNS = ctx.AURA_RELATIVE_SIZE_NOUNS or {}
     local ARef = ctx.A or A
+    local MAX_SETTING_ALIASES = tonumber(A.RegistryCore and A.RegistryCore.MAX_SETTING_ALIASES) or 32
+
+    local function AppendAlias(out, value)
+        if #out >= MAX_SETTING_ALIASES then return false end
+        out[#out + 1] = value
+        return #out < MAX_SETTING_ALIASES
+    end
 
     if not (Registry and type(Registry.RegisterSetting) == "function") then return nil end
     if type(AddAliasesForUnit) ~= "function" then return nil end
@@ -34,60 +41,68 @@ function A.AurasRegistry.BuildGroupAuraLaneCore(ctx)
     if type(ApplyGroup) ~= "function" then return nil end
 
     local function AddGFAuraAliases(out, scope, lane, noun)
+        if #out >= MAX_SETTING_ALIASES then return false end
         local laneWord = lane == "buff" and "buff" or "debuff"
         local lanePlural = lane == "buff" and "buffs" or "debuffs"
-        AddAliasesForUnit(out, scope, laneWord .. " " .. noun)
-        AddAliasesForUnit(out, scope, lanePlural .. " " .. noun)
-        AddAliasesForUnit(out, scope, "aura " .. laneWord .. " " .. noun)
-        AddAliasesForUnit(out, scope, "aura " .. lanePlural .. " " .. noun)
+        if not AddAliasesForUnit(out, scope, laneWord .. " " .. noun) then return false end
+        if not AddAliasesForUnit(out, scope, lanePlural .. " " .. noun) then return false end
+        if not AddAliasesForUnit(out, scope, "aura " .. laneWord .. " " .. noun) then return false end
+        return AddAliasesForUnit(out, scope, "aura " .. lanePlural .. " " .. noun)
     end
 
     local function AddGFAuraStrictAliases(out, scope, lane, noun)
+        if #out >= MAX_SETTING_ALIASES then return false end
         local laneWord = lane == "buff" and "buff" or "debuff"
         local lanePlural = lane == "buff" and "buffs" or "debuffs"
         local aliases = UNIT_ALIASES[scope] or { scope }
         for i = 1, #aliases do
             local s = aliases[i]
             if s ~= "group" and s ~= "group frames" and s ~= "gruppenframes" and s ~= "gruppe" then
-                out[#out + 1] = s .. " " .. laneWord .. " " .. noun
-                out[#out + 1] = s .. " " .. lanePlural .. " " .. noun
-                out[#out + 1] = laneWord .. " " .. noun .. " " .. s
-                out[#out + 1] = lanePlural .. " " .. noun .. " " .. s
-                out[#out + 1] = s .. " aura " .. laneWord .. " " .. noun
-                out[#out + 1] = s .. " aura " .. lanePlural .. " " .. noun
+                if not AppendAlias(out, s .. " " .. laneWord .. " " .. noun) then return false end
+                if not AppendAlias(out, s .. " " .. lanePlural .. " " .. noun) then return false end
+                if not AppendAlias(out, laneWord .. " " .. noun .. " " .. s) then return false end
+                if not AppendAlias(out, lanePlural .. " " .. noun .. " " .. s) then return false end
+                if not AppendAlias(out, s .. " aura " .. laneWord .. " " .. noun) then return false end
+                if not AppendAlias(out, s .. " aura " .. lanePlural .. " " .. noun) then return false end
             end
         end
+        return true
     end
 
     local function AddGFAuraRelativeSizeAliases(out, scope, lane)
         for i = 1, #AURA_RELATIVE_SIZE_NOUNS do
-            AddGFAuraStrictAliases(out, scope, lane, AURA_RELATIVE_SIZE_NOUNS[i])
+            if not AddGFAuraStrictAliases(out, scope, lane, AURA_RELATIVE_SIZE_NOUNS[i]) then return false end
         end
+        return true
     end
 
     ARef._AssistantAddGFAuraAllLaneAlias = ARef._AssistantAddGFAuraAllLaneAlias or function(out, scope, noun)
+        if #out >= MAX_SETTING_ALIASES then return false end
         local aliases = UNIT_ALIASES[scope] or { scope }
         for i = 1, #aliases do
             local s = aliases[i]
             if s ~= "group" and s ~= "group frames" and s ~= "gruppenframes" and s ~= "gruppe" then
-                out[#out + 1] = s .. " aura " .. noun
-                out[#out + 1] = s .. " auras " .. noun
-                out[#out + 1] = "aura " .. noun .. " " .. s
-                out[#out + 1] = "auras " .. noun .. " " .. s
+                if not AppendAlias(out, s .. " aura " .. noun) then return false end
+                if not AppendAlias(out, s .. " auras " .. noun) then return false end
+                if not AppendAlias(out, "aura " .. noun .. " " .. s) then return false end
+                if not AppendAlias(out, "auras " .. noun .. " " .. s) then return false end
             end
         end
+        return true
     end
 
     ARef._AssistantAddGFAuraAllLaneAliases = ARef._AssistantAddGFAuraAllLaneAliases or function(out, scope, nouns)
         for i = 1, #(nouns or {}) do
-            ARef._AssistantAddGFAuraAllLaneAlias(out, scope, nouns[i])
+            if not ARef._AssistantAddGFAuraAllLaneAlias(out, scope, nouns[i]) then return false end
         end
+        return true
     end
 
     ARef._AssistantAddGFAuraAllLaneRelativeSizeAliases = ARef._AssistantAddGFAuraAllLaneRelativeSizeAliases or function(out, scope)
         for i = 1, #AURA_RELATIVE_SIZE_NOUNS do
-            ARef._AssistantAddGFAuraAllLaneAlias(out, scope, AURA_RELATIVE_SIZE_NOUNS[i])
+            if not ARef._AssistantAddGFAuraAllLaneAlias(out, scope, AURA_RELATIVE_SIZE_NOUNS[i]) then return false end
         end
+        return true
     end
 
     local function RegisterGFAuraBoolean(scope, lane, attr, key, label, defaultValue, aliases)

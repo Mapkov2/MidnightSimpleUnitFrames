@@ -1455,6 +1455,268 @@ local function UnitPageKey(unit)
     return nil
 end
 
+-- Classify prompts that describe a problem, request information, or ask for a
+-- subjective recommendation before any registry matcher is allowed to build a
+-- write plan. This guard is deliberately parser-owned: Submit's low-latency
+-- mutation path calls parser helpers directly and therefore cannot rely on the
+-- conversational router having run first.
+local NON_MUTATING_PROBLEM_TERMS = {
+    "gone", "missing", "failed", "failing", "fails", "failure", "error", "errors", "stuck", "broken",
+    "filtered out", "filtered", "blacklisted", "blocked", "disappeared", "vanished", "not shown", "not showing",
+    "not displayed", "not appearing", "does not show", "doesnt show", "cannot see",
+    "cant see", "not visible", "invisible", "hidden", "not working", "does not work", "doesnt work",
+    "wrong place", "wrong position", "too faded", "too transparent", "too small",
+    "too far apart", "too busy", "hard to see", "hard to read",
+    "weg", "fehlt", "fehlen", "fehlende", "fehlender", "fehlendes", "fehlenden", "fehlgeschlagen",
+    "verschwunden", "nicht angezeigt", "wird nicht angezeigt",
+    "werden nicht angezeigt", "nicht sichtbar", "unsichtbar", "versteckt", "ausgeblendet",
+    "geht nicht", "funktioniert nicht", "kaputt",
+}
+
+local EXPLICIT_MUTATION_PREFIXES = {
+    "set", "change", "make", "adjust", "use", "apply", "turn", "enable", "disable", "show", "hide", "move", "nudge",
+    "shift", "increase", "decrease", "raise", "lower", "reset", "restore", "recover",
+    "open", "close", "copy", "create", "delete", "remove", "add", "clear", "toggle",
+    "setze", "stelle", "mache", "aendere", "verwende", "nutze", "aktiviere", "aktivieren", "deaktiviere", "deaktivieren",
+    "einschalten", "ausschalten", "zeige", "anzeigen", "verstecke", "verstecken",
+    "einblenden", "ausblenden", "verschiebe", "verschieben", "erhoehe", "senke",
+    "zuruecksetzen", "wiederherstellen",
+}
+
+local INFORMATION_PREFIXES = {
+    "list", "list all", "what", "what are", "what is", "what can", "which", "where",
+    "how", "explain", "describe", "tell me", "show me", "help me find", "help me locate",
+    "i need", "i want", "i am looking for", "im looking for", "i am trying to find",
+    "im trying to find", "zeige mir", "liste", "welche", "welcher", "welches", "wo",
+    "wie", "erklaere", "beschreibe", "ich suche", "ich brauche",
+}
+
+local INFORMATION_TARGET_TERMS = {
+    "option", "options", "setting", "settings", "choice", "choices", "value", "values",
+    "available", "supported", "controls", "colors", "colours", "farben", "optionen",
+    "einstellungen", "werte", "auswahl",
+}
+
+local CAPABILITY_QUESTION_PREFIXES = {
+    "can i", "could i", "is there a way to", "kann ich", "koennte ich", "gibt es eine moeglichkeit",
+}
+
+local PROCEDURAL_QUESTION_PREFIXES = {
+    "how do i", "how can i", "how to", "wie kann ich", "wie mache ich", "wie stelle ich",
+    "where can i", "where do i", "where is", "wo kann ich", "wo finde ich", "wo ist",
+}
+
+-- These forms ask for information or diagnosis even when they contain words
+-- that are also valid setting aliases (for example, "buffs", "hidden", or
+-- "filtering"). They must be classified before the immediate mutation path
+-- is allowed to build a write plan. Location words stay separate from causal
+-- words: "where/wo" means navigation, while "why/warum" means diagnosis.
+local READ_ONLY_QUESTION_PREFIXES = {
+    "what", "which", "where", "how", "why",
+    "was", "welche", "welcher", "welches", "wo", "wie", "warum", "wieso", "weshalb", "wofuer",
+}
+
+local READ_ONLY_LOOKUP_PREFIXES = {
+    "explain", "describe", "list", "current", "status", "tell me",
+    "erklaere", "beschreibe", "liste", "aktuell", "aktueller", "aktuelle", "aktuelles", "status",
+}
+
+local EMBEDDED_QUESTION_PHRASES = {
+    "what is", "what are", "what does", "what did", "what can", "what depends", "what affects",
+    "which is", "which are", "where is", "where are", "how is", "how are", "how does", "why is", "why are",
+    "was ist", "was sind", "welche sind", "welcher ist", "welches ist", "wo ist", "wo sind",
+    "wie ist", "wie sind", "warum ist", "warum sind", "wieso ist", "wieso sind",
+}
+
+local CAUSAL_QUESTION_PREFIXES = {
+    "why", "warum", "wieso", "weshalb", "wofuer",
+}
+
+local CAPABILITY_ACTION_TERMS = {
+    "turn on", "turn off", "enable", "disable", "show", "hide", "display", "make", "change",
+    "set", "move", "detach", "attach", "anchor", "reduce", "increase", "decrease", "reset",
+    "delete", "import", "export", "copy", "unlock", "lock",
+    "einschalten", "ausschalten", "aktivieren", "deaktivieren", "anzeigen", "verstecken",
+    "aendern", "setzen", "verschieben", "abkoppeln", "ankoppeln", "zuruecksetzen", "loeschen",
+}
+
+local SUBJECTIVE_SETTING_TERMS = {
+    "useless", "unimportant", "important", "irrelevant", "best", "optimal", "automatically",
+    "less noisy", "too noisy", "noisy", "less cluttered", "cluttered", "declutter",
+    "clean up", "cleaner", "spam", "unwichtig", "wichtig", "nutzlos", "automatisch",
+}
+
+local SUBJECTIVE_SETTING_AREAS = {
+    "aura", "auras", "buff", "buffs", "debuff", "debuffs", "frame", "frames",
+    "unitframe", "unitframes", "ui", "interface", "icon", "icons",
+    "auren", "rahmen", "oberflaeche", "symbol", "symbole",
+}
+
+local SUBJECTIVE_ACTION_TERMS = {
+    "hide", "show", "make", "set", "change", "filter", "only", "remove", "reduce",
+    "verstecken", "anzeigen", "aendern", "filtern", "nur", "entfernen", "reduzieren",
+}
+
+local REPAIR_PROBLEM_TERMS = {
+    "fix", "repair", "please fix", "please repair",
+    "repariere", "reparieren", "bitte repariere", "beheben", "bitte beheben",
+}
+
+local function HasAnyExactPhrase(text, phrases)
+    for i = 1, #(phrases or {}) do
+        if HasPhrase(text, phrases[i]) then return true end
+    end
+    return false
+end
+
+local function StartsWithAnyPhrase(text, phrases)
+    text = Normalize(text)
+    for i = 1, #(phrases or {}) do
+        local phrase = Normalize(phrases[i])
+        if text == phrase or text:sub(1, #phrase + 1) == phrase .. " " then return true end
+    end
+    return false
+end
+
+local function NonMutatingIntent(text)
+    local normalized = Normalize(text)
+    if normalized == "" then return nil end
+    local actionable = ActionableText(normalized)
+    local explicitMutation = StartsWithAnyPhrase(actionable, EXPLICIT_MUTATION_PREFIXES)
+    local questionPrefix = StartsWithAnyPhrase(actionable, READ_ONLY_QUESTION_PREFIXES)
+    local lookupPrefix = StartsWithAnyPhrase(actionable, READ_ONLY_LOOKUP_PREFIXES)
+    local embeddedQuestion = HasAnyExactPhrase(normalized, EMBEDDED_QUESTION_PHRASES)
+    local presentationLookup = StartsWithAnyPhrase(actionable, { "show me", "zeige mir" })
+        and (HasAnyExactPhrase(actionable, INFORMATION_TARGET_TERMS)
+            or HasAnyExactPhrase(actionable, { "where", "location", "wo", "seite", "page" }))
+
+    -- Subjective labels describe a desired policy, not one concrete toggle.
+    -- This intentionally wins over an imperative prefix ("hide useless buffs").
+    if HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_TERMS)
+        and HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_AREAS)
+        and HasAnyExactPhrase(actionable, SUBJECTIVE_ACTION_TERMS)
+    then
+        return "subjective"
+    end
+
+    -- A repair request that names only a UI area still lacks one concrete
+    -- setting/value. Diagnose it first instead of guessing an enable/reset.
+    -- Specific workflows such as "fix profile mappings" do not name one of
+    -- these visual areas and continue to their explicit action parser.
+    if HasAnyExactPhrase(normalized, REPAIR_PROBLEM_TERMS)
+        and HasAnyExactPhrase(normalized, SUBJECTIVE_SETTING_AREAS)
+    then
+        return "problem"
+    end
+
+    -- Fail closed for questions and read-only inspection requests. A genuine
+    -- imperative still wins ("set hp text to current", "copy current
+    -- profile"), while language wrappers such as "answer in German what is
+    -- aura filtering" are caught by the embedded question phrase.
+    if (not explicitMutation or presentationLookup)
+        and (questionPrefix or lookupPrefix or embeddedQuestion or presentationLookup)
+    then
+        if StartsWithAnyPhrase(actionable, CAUSAL_QUESTION_PREFIXES)
+            or HasAnyExactPhrase(normalized, { "why is", "why are", "warum ist", "warum sind", "wieso ist", "wieso sind" })
+            or HasAnyExactPhrase(normalized, NON_MUTATING_PROBLEM_TERMS)
+        then
+            return "problem"
+        end
+        if StartsWithAnyPhrase(actionable, PROCEDURAL_QUESTION_PREFIXES)
+            or StartsWithAnyPhrase(actionable, CAPABILITY_QUESTION_PREFIXES)
+            or StartsWithAnyPhrase(actionable, { "how", "wie" })
+        then
+            return "capability"
+        end
+        return "lookup"
+    end
+
+    if StartsWithAnyPhrase(normalized, CAPABILITY_QUESTION_PREFIXES)
+        and HasAnyExactPhrase(normalized, CAPABILITY_ACTION_TERMS)
+    then
+        return "capability"
+    end
+
+    if StartsWithAnyPhrase(normalized, PROCEDURAL_QUESTION_PREFIXES)
+        and HasAnyExactPhrase(normalized, CAPABILITY_ACTION_TERMS)
+    then
+        return "capability"
+    end
+
+    if HasAnyExactPhrase(normalized, INFORMATION_TARGET_TERMS)
+        and StartsWithAnyPhrase(normalized, INFORMATION_PREFIXES)
+        and not explicitMutation
+    then
+        return "lookup"
+    end
+
+    if HasAnyExactPhrase(normalized, NON_MUTATING_PROBLEM_TERMS)
+        and not explicitMutation
+    then
+        return "problem"
+    end
+    return nil
+end
+
+local function NonMutatingIntentAnswer(text)
+    local intent = NonMutatingIntent(text)
+    if not intent then return nil end
+    local normalized = Normalize(text)
+    if intent == "subjective" then
+        if not HasAnyExactPhrase(normalized, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "auren" }) then
+            local area = HasAnyExactPhrase(normalized, { "raid" }) and "raid frames"
+                or (HasAnyExactPhrase(normalized, { "party" }) and "party frames" or "that UI area")
+            return {
+                kind = "answer",
+                status = "info",
+                text = "Frame readability planning\nI did not change " .. area .. " from a subjective request. Name the exact source of clutter, such as aura count, text density, indicators, spacing, or opacity, and I can adjust that concrete control without guessing.",
+                summary = "Keeps a subjective frame-readability request read-only until the user chooses a concrete control.",
+            }
+        end
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Aura filter planning\nI will not guess which buffs or debuffs are useless or important, because that depends on class, content, and preference. Open Aura Filters to inspect the available live filters, or name an exact filter and scope. I did not change any aura visibility setting.",
+            summary = "Keeps a subjective aura request read-only until the user chooses a concrete filter.",
+        }
+    end
+    if intent == "lookup" or intent == "capability" then
+        local markerQuestion = HasAnyExactPhrase(normalized, {
+            "raid marker", "target marker", "moon", "skull", "star", "circle", "diamond",
+            "triangle", "square", "cross",
+        })
+        local title = markerQuestion and "Raid Marker setting location"
+            or (HasAnyExactPhrase(normalized, { "castbar", "cast bar" })
+            and HasAnyExactPhrase(normalized, { "interrupt", "kick" })
+            and HasAnyExactPhrase(normalized, { "color", "colors", "colour", "colours" })
+            and "Cast Bar interrupt color help"
+            or "MSUF option help")
+        return {
+            kind = "answer",
+            status = "info",
+            text = title .. "\nI treated that as a request to list or explain options, not as a value to write. I did not change a setting. Ask me to open the relevant page, or use an explicit command with a supported value when you want a change.",
+            summary = "Keeps an option-list request read-only.",
+        }
+    end
+
+    local title = "MSUF visibility troubleshooting"
+    if HasAnyExactPhrase(normalized, { "totem", "totems", "statue frame" }) then
+        title = "Totem Frame visibility help"
+    elseif HasAnyExactPhrase(normalized, { "crosshair", "fadenkreuz" }) then
+        title = "Combat Crosshair visibility help"
+    elseif HasAnyExactPhrase(normalized, { "buff", "buffs", "debuff", "debuffs", "aura", "auras", "auren" }) then
+        title = "Aura visibility troubleshooting"
+    elseif HasAnyExactPhrase(normalized, { "party", "raid", "boss", "frame", "frames", "rahmen" }) then
+        title = "Frame visibility troubleshooting"
+    end
+    return {
+        kind = "answer",
+        status = "info",
+        text = title .. "\nI treated that as a problem report, not permission to enable, disable, or reset anything. I did not change a setting. Ask me to diagnose the named area, or give an explicit command after you choose the intended fix.",
+        summary = "Keeps a natural problem report read-only.",
+    }
+end
+
 P.Trim = Trim
 P.Normalize = Normalize
 P.ActionableText = ActionableText
@@ -1493,3 +1755,5 @@ P.DetectAttribute = DetectAttribute
 P.PageForText = PageForText
 P.FrameTypeForPage = FrameTypeForPage
 P.UnitPageKey = UnitPageKey
+P.NonMutatingIntent = NonMutatingIntent
+P.NonMutatingIntentAnswer = NonMutatingIntentAnswer

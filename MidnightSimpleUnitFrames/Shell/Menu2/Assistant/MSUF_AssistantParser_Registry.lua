@@ -155,7 +155,9 @@ end
 
 local ROOT_FRAME_ENABLED_DETAIL_TERMS = {
     "indicator", "indicators", "status icon", "status icons", "status indicator", "status indicators",
-    "icon", "icons", "symbol", "symbols", "portrait", "portraits", "power bar", "mana bar",
+    "icon", "icons", "marker", "markers", "raid marker", "target marker", "symbol", "symbols",
+    "star", "circle", "diamond", "triangle", "moon", "square", "cross", "skull",
+    "portrait", "portraits", "power bar", "mana bar",
     "health bar", "hp bar", "castbar", "cast bar", "name", "names", "text", "border", "outline",
     "alpha", "opacity", "range fade", "offline", "solo", "sort", "sorting", "role", "scale", "scaling",
 }
@@ -505,7 +507,13 @@ function P.ScoreSettingCandidates(candidates, features)
     features = type(features) == "table" and features or {}
     local ctx = features.context
     if type(ctx) ~= "table" and A.ConversationContext then ctx = A.ConversationContext() end
-    local subject = type(ctx) == "table" and ctx.subject or {}
+    -- Context may break an otherwise real tie, but it must decay. Keeping an
+    -- old unit/category bonus indefinitely lets a new, unrelated sentence be
+    -- pulled back into a frame discussed many turns ago. Continuation parsing
+    -- uses the same three-turn horizon.
+    local ageTurns = type(ctx) == "table" and tonumber(ctx.ageTurns) or nil
+    local contextFresh = ageTurns == nil or (ageTurns >= 0 and ageTurns <= 3)
+    local subject = contextFresh and type(ctx) == "table" and ctx.subject or {}
     local subjectUnit = subject and subject.unit
     local subjectCategory = subject and subject.category
     local subjectTextArea = subject and subject.textArea
@@ -3176,7 +3184,7 @@ function P.ParseCastbarPositionRegistryShortcut(text)
         or (naturalPlacement and ContainsAny(text, RegistryPhrases[203]))
     then
         field = "TimePosition"
-        label = "Cast Bar rime Position"
+        label = "Cast Bar Time Position"
     else
         return nil
     end
@@ -3925,6 +3933,26 @@ P.ParseGroupOfflineDelayShortcut = function(text)
     return P.GroupShortcutResponse(text, changes, concrete, "Group frame offline delay", "Changes Group Frame offline-member hiding options.")
 end
 
+function P.ParseCastbarFillDirectionRegistryShortcut(text)
+    local value
+    if ContainsAny(text, RegistryPhrases[312]) then
+        value = "LTR"
+    elseif ContainsAny(text, RegistryPhrases[313]) or ContainsAny(text, RegistryPhrases[314]) then
+        value = "RTL"
+    elseif ContainsAny(text, RegistryPhrases[315]) then
+        value = "LTR"
+    end
+    if value == nil then return nil end
+    local setting = Registry and Registry:GetSetting("general.castbarFillDirection")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) } },
+        label = setting.label or "Cast Bar Fill Direction",
+        summary = "Changes the Cast Bar fill direction.",
+    }
+end
+
 P.ParseMiscRegistryShortcut = function(text, raw)
     if ContainsAny(text, RegistryPhrases[304]) then return nil end
     if ContainsAny(text, RegistryPhrases[305]) and not ContainsAny(text, RegistryPhrases[306]) then return nil end
@@ -3972,6 +4000,8 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if groupNumber then return groupNumber end
     local detachedPower = P.ParseDetachedPowerBarRegistryShortcut and P.ParseDetachedPowerBarRegistryShortcut(text, raw)
     if detachedPower then return detachedPower end
+    local castbarFill = P.ParseCastbarFillDirectionRegistryShortcut(text)
+    if castbarFill then return castbarFill end
     local key
     local forcedValue
     if ContainsAny(text, RegistryPhrases[307]) then

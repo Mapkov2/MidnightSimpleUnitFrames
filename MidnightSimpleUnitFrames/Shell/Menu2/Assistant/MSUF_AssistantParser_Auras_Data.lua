@@ -288,7 +288,8 @@ Data.AURAS_PARSER = {
         "no filter", "clear filter", "clear filters", "remove filter", "remove filters",
     },
         [183] = {
-        "max", "maximum", "size", "per row", "spacing", "layer", "x", "y", "anchor", "growth",
+        "max", "maximum", "size", "bigger", "larger", "smaller", "icon", "icons",
+        "per row", "spacing", "layer", "x", "y", "anchor", "growth",
         "cooldown", "timer", "stack", "duration", "swipe", "dispel type border", "debuff type border",
         "stripe", "debuff stripe",
         "turn on", "turn off", "enable", "disable",

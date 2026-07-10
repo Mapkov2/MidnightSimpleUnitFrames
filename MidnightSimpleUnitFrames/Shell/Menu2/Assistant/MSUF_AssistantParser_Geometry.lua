@@ -246,16 +246,23 @@ local function ParsePortraitDetailShortcut(text)
     if ContainsAny(text, GeometryPhrases[6]) then return nil end
     if ContainsAny(text, GeometryPhrases[7]) then return nil end
     if ContainsAny(text, GeometryPhrases[8]) and DetectDirection(text, {}) then return nil end
+    local hasX = ContainsAny(text, GeometryPhrases[9]) or HasPhrase(text, "x")
+    local hasY = ContainsAny(text, GeometryPhrases[10]) or HasPhrase(text, "y")
+    if hasX and hasY then
+        local numberCount = 0
+        for _ in Normalize(text):gmatch("[-+]?%d+%.?%d*") do numberCount = numberCount + 1 end
+        if numberCount >= 2 then return nil end
+    end
 
     local attr
     local value
     local relativeDelta
     local direction
 
-    if ContainsAny(text, GeometryPhrases[9]) or HasPhrase(text, "x") then
+    if hasX then
         attr = "portraitOffsetX"
         value = FirstNumber(text)
-    elseif ContainsAny(text, GeometryPhrases[10]) or HasPhrase(text, "y") then
+    elseif hasY then
         attr = "portraitOffsetY"
         value = FirstNumber(text)
     elseif ContainsAny(text, GeometryPhrases[11]) then
@@ -611,6 +618,17 @@ end
 function OM.ParseUnitFrameRootMove(text)
     if ContainsAny(text, OM.unitRootFrameDetailTerms) then return nil end
     if not ContainsAny(text, GeometryPhrases[40]) then return nil end
+
+    local horizontalDirection = HasPhrase(text, "left") or HasPhrase(text, "right")
+    local verticalDirection = HasPhrase(text, "up") or HasPhrase(text, "down")
+    if horizontalDirection and verticalDirection then
+        local numberCount = 0
+        for _ in Normalize(text):gmatch("[-+]?%d+%.?%d*") do numberCount = numberCount + 1 end
+        -- Let DirectionPairs in the compound parser preserve both directional
+        -- amounts. The single-axis shortcut below intentionally handles only
+        -- one direction and would otherwise discard the second movement.
+        if numberCount >= 2 then return nil end
+    end
 
     local units = OM.UnitRootFrameMoveScopes(text)
     if #units == 0 then return nil end
@@ -1923,10 +1941,16 @@ function P.ParseFrameSizeExactShortcut(text)
     if ContainsAny(text, P.FRAME_RESIZE_DETAIL_BLOCKERS) then return nil end
     if ContainsAny(text, GeometryPhrases[115]) then return nil end
     if ContainsAny(text, GeometryPhrases[116]) then return nil end
+    local hasWidth = ContainsAny(text, GeometryPhrases[117])
+    local hasHeight = ContainsAny(text, GeometryPhrases[118])
+    -- Multi-axis commands belong to the compound parser, which preserves the
+    -- number beside each axis. Taking this single-axis shortcut would use the
+    -- final number for Width and silently drop Height.
+    if hasWidth and hasHeight then return nil end
     local dimension
-    if ContainsAny(text, GeometryPhrases[117]) then
+    if hasWidth then
         dimension = "width"
-    elseif ContainsAny(text, GeometryPhrases[118]) then
+    elseif hasHeight then
         dimension = "height"
     else
         return nil
@@ -1965,6 +1989,13 @@ function P.ParseFrameSizeExactShortcut(text)
         end
     end
     if not targets or #targets == 0 then return nil end
+    if #targets > 1 then
+        local numberCount = 0
+        for _ in Normalize(text):gmatch("[-+]?%d+%.?%d*") do numberCount = numberCount + 1 end
+        -- Multiple targets with multiple values are target/value pairs, not a
+        -- bulk write of the first number to every frame.
+        if numberCount >= #targets then return nil end
+    end
 
     local changes = {}
     for i = 1, #targets do

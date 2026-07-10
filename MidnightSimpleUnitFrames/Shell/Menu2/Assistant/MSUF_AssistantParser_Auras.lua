@@ -1592,9 +1592,18 @@ local function UnitAuraFilterHasIntent(text)
         return false
     end
     if ContainsAny(text, AurasPhrases[160]) then return false end
-    if ContainsAny(text, AurasPhrases[161]) then return true end
-    if ContainsAny(text, AurasPhrases[162]) then return true end
-    return ContainsAny(text, AurasPhrases[163])
+    local auraSubject = ContainsAny(text, {
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "auren",
+    })
+    local explicitFilterWord = ContainsAny(text, {
+        "filter", "filters", "filtering", "filtern", "filtere",
+    })
+    local concreteFilterValue = ContainsAny(text, AurasPhrases[153])
+        or ContainsAny(text, AurasPhrases[163])
+    if ContainsAny(text, AurasPhrases[161]) or ContainsAny(text, AurasPhrases[162]) then
+        return auraSubject or explicitFilterWord or concreteFilterValue
+    end
+    return concreteFilterValue
 end
 
 local function HasNativeGroupAuraRootIntent(text)
@@ -1734,6 +1743,10 @@ end
 local function ParseUnitAuraLiveFilterShortcut(text)
     if not UnitAuraFilterHasIntent(text) then return nil end
     if ContainsAny(text, AurasPhrases[184]) then return nil end
+    local explicitFilterIntent = ContainsAny(text, AurasPhrases[182])
+    if not explicitFilterIntent and ContainsAny(text, AurasPhrases[183]) then
+        return nil
+    end
     if ContainsAny(text, AurasPhrases[185])
         and not ContainsAny(text, AurasPhrases[186])
     then

@@ -55,7 +55,6 @@ Registry:RegisterAction({
     type = "reset",
     combatSafe = false,
     confirmRequired = true,
-    captureProfileSnapshot = true,
     run = function()
         return A.Workflow.StageFactoryReset()
     end,

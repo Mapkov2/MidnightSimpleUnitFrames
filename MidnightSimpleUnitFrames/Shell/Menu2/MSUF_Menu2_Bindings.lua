@@ -1233,9 +1233,6 @@ end
 function M.PageHasReset(pageKey)
     return PAGE_RESET_INFO[pageKey or ""] ~= nil
 end
-function M.GetPageResetInfo(pageKey)
-    return PAGE_RESET_INFO[pageKey or ""]
-end
 function M.BuildPageResetWarning(pageKey)
     local info = PAGE_RESET_INFO[pageKey or ""]
     if not info then return nil end
@@ -1382,14 +1379,24 @@ local function MarkCommandSearchDirty()
         SafeInvoke(M.Search.MarkIndexDirty)
     end
 end
+-- metadata is optional and backward-compatible.  Stable controlId/identityKey
+-- and settingKey/actionKey/navigationKey values flow into both the executable
+-- command and the canonical runtime-control catalog.
 local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
     if not widget then return end
-    opts = opts or {}
+    opts = type(opts) == "table" and opts or {}
     local minValue, maxValue
     if kind == "slider" and widget.GetMinMaxValues then minValue, maxValue = widget:GetMinMaxValues() end
-    widget._msuf2CommandAction = {
+    local command = {
         kind = kind,
         ctxKey = ctx and ctx.key,
+        controlId = opts.controlId or widget._msuf2ControlId,
+        identityKey = opts.identityKey,
+        controlPath = opts.controlPath,
+        settingKey = opts.settingKey,
+        actionKey = opts.actionKey,
+        navigationKey = opts.navigationKey,
+        classification = opts.classification,
         get = getValue,
         set = setValue,
         values = opts.values or widget.values,
@@ -1413,6 +1420,23 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
             return BlockCombatAndRefresh(ctx)
         end,
     }
+    widget._msuf2CommandAction = command
+    if type(M.RegisterRuntimeControl) == "function" then
+        pcall(M.RegisterRuntimeControl, widget, {
+            controlId = command.controlId,
+            pageKey = ctx and ctx.key,
+            kind = kind,
+            label = opts.label or widget._msuf2SearchText or widget._msuf2SearchTitle,
+            identityLabel = widget._msuf2SearchText or widget._msuf2SearchTitle or opts.label,
+            identityKey = command.identityKey,
+            controlPath = command.controlPath,
+            settingKey = command.settingKey,
+            actionKey = command.actionKey,
+            navigationKey = command.navigationKey,
+            classification = command.classification,
+            command = command,
+        }, "binding")
+    end
     MarkCommandSearchDirty()
 end
 local function AddRefreshCall(ctx, fn, a, b) if type(fn) == "function" then return M.AddRefresher(ctx, function() return fn(a, b) end) end end
@@ -1432,9 +1456,9 @@ local function RefreshSlider(slider, getValue)
 end
 local function RefreshValueControl(control, getValue) control:SetValue(getValue()) end
 local function RefreshTextInput(editBox, getValue) if not editBox:HasFocus() then editBox:SetText(tostring(getValue() or "")) end end
-function M.BindToggle(ctx, widget, getValue, setValue)
+function M.BindToggle(ctx, widget, getValue, setValue, metadata)
     if not widget then return end
-    AttachCommandAction(ctx, widget, "toggle", getValue, setValue)
+    AttachCommandAction(ctx, widget, "toggle", getValue, setValue, metadata)
     local function SyncFromValue(self)
         local value = getValue() and true or false
         self:SetChecked(value)
@@ -1454,15 +1478,9 @@ function M.BindToggle(ctx, widget, getValue, setValue)
     end)
     AddRefreshCall(ctx, SyncFromValue, widget)
 end
-function M.BindSlider(ctx, slider, getValue, setValue)
+function M.BindSlider(ctx, slider, getValue, setValue, metadata)
     if not slider then return end
-    local minValue, maxValue
-    if slider.GetMinMaxValues then minValue, maxValue = slider:GetMinMaxValues() end
-    AttachCommandAction(ctx, slider, "slider", getValue, setValue, {
-        min = minValue,
-        max = maxValue,
-        step = slider._msuf2Step,
-    })
+    AttachCommandAction(ctx, slider, "slider", getValue, setValue, metadata)
     local function BeginSliderHistory(self)
         if BlockCombatAndRefresh(ctx) then return end
         if self._msuf2Refreshing or self._msuf2HistoryTransaction then return end
@@ -1492,9 +1510,9 @@ function M.BindSlider(ctx, slider, getValue, setValue)
     end)
     AddRefreshCall(ctx, RefreshSlider, slider, getValue)
 end
-function M.BindSegment(ctx, segment, getValue, setValue)
+function M.BindSegment(ctx, segment, getValue, setValue, metadata)
     if not segment then return end
-    AttachCommandAction(ctx, segment, "segment", getValue, setValue, { values = segment.values })
+    AttachCommandAction(ctx, segment, "segment", getValue, setValue, metadata)
     for i = 1, #(segment.buttons or {}) do
         local btn = segment.buttons[i]
         btn:SetScript("OnClick", function(self)
@@ -1511,9 +1529,9 @@ function M.BindSegment(ctx, segment, getValue, setValue)
     end
     AddRefreshCall(ctx, RefreshValueControl, segment, getValue)
 end
-function M.BindDropdown(ctx, dropdown, getValue, setValue)
+function M.BindDropdown(ctx, dropdown, getValue, setValue, metadata)
     if not dropdown then return end
-    AttachCommandAction(ctx, dropdown, "dropdown", getValue, setValue, { values = dropdown.values })
+    AttachCommandAction(ctx, dropdown, "dropdown", getValue, setValue, metadata)
     dropdown:SetOnValueChanged(function(value)
         if BlockCombatAndRefresh(ctx) then
             if type(getValue) == "function" then dropdown:SetValue(getValue()) end
@@ -1534,9 +1552,13 @@ function M.BindDropdown(ctx, dropdown, getValue, setValue)
     end)
     AddRefreshCall(ctx, RefreshValueControl, dropdown, getValue)
 end
-function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur)
+function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur, metadata)
     if not editBox then return end
-    AttachCommandAction(ctx, editBox, "textinput", getValue, setValue)
+    if type(commitOnBlur) == "table" and metadata == nil then
+        metadata = commitOnBlur
+        commitOnBlur = metadata.commitOnBlur
+    end
+    AttachCommandAction(ctx, editBox, "textinput", getValue, setValue, metadata)
     editBox._msuf2CommitOnBlur = commitOnBlur and true or false
     editBox:SetOnValueCommitted(function(value)
         if BlockCombatAndRefresh(ctx) then return end
@@ -1547,9 +1569,9 @@ function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur)
     end)
     AddRefreshCall(ctx, RefreshTextInput, editBox, getValue)
 end
-function M.BindColor(ctx, colorButton, getRGB, setRGB)
+function M.BindColor(ctx, colorButton, getRGB, setRGB, metadata)
     if not colorButton then return end
-    AttachCommandAction(ctx, colorButton, "color", getRGB, setRGB)
+    AttachCommandAction(ctx, colorButton, "color", getRGB, setRGB, metadata)
     local function BeginColorHistory(self)
         if BlockCombatAndRefresh(ctx) then return end
         if self._msuf2ColorHistoryTransaction then return end

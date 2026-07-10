@@ -14,6 +14,7 @@
 --   /msufcoverage smoke          in-game acceptance checklist
 --   /msufcoverage smoke pass <id>|fail <id> <note>|block <id> <note>|reset
 --   /msufcoverage gate           summary gate for smoke + manifest + coverage
+--   /msufcoverage perf|perf reset  interactive latency/profiler report
 --
 -- The audit only reads; it never mutates the DB or the registry.
 local addonName, MSUF = ...
@@ -482,84 +483,131 @@ local function BuildGeneratedReport(scopeArg)
     return table.concat(lines, "\n")
 end
 
+local function Percentile(sorted, fraction)
+    if type(sorted) ~= "table" or #sorted == 0 then return 0 end
+    local index = math.ceil(#sorted * (tonumber(fraction) or 1))
+    if index < 1 then index = 1 elseif index > #sorted then index = #sorted end
+    return tonumber(sorted[index]) or 0
+end
+
+local function BuildPerformanceReport()
+    local trace = type(A.GetPerfTrace) == "function" and A.GetPerfTrace(80) or {}
+    local samples = {}
+    for i = 1, #trace do
+        local sample = trace[i]
+        local label = tostring(sample and sample.label or "")
+        if label:find("^assistant%.submit") and label ~= "assistant.submit.deferred" then
+            samples[#samples + 1] = tonumber(sample.ms) or 0
+        end
+    end
+    table.sort(samples)
+    local total = 0
+    for i = 1, #samples do total = total + samples[i] end
+    local average = #samples > 0 and total / #samples or 0
+    local p50 = Percentile(samples, 0.50)
+    local p95 = Percentile(samples, 0.95)
+    local maximum = #samples > 0 and samples[#samples] or 0
+    local enoughSamples = #samples >= 10
+    local latencyPass = enoughSamples and p95 <= 50 and maximum <= 150
+
+    local frame = M and M.frame
+    local menuShown = frame and type(frame.IsShown) == "function" and frame:IsShown() == true
+    local inCombat = ((_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
+    local runtimeName = type(A.GetRuntimeAddonName) == "function"
+        and A.GetRuntimeAddonName() or "MidnightSimpleUnitFrames_Assistant"
+    local profiler = _G.C_AddOnProfiler
+    local metric = _G.Enum and _G.Enum.AddOnProfilerMetric
+    local profilerReady = profiler and metric and type(profiler.GetAddOnMetric) == "function"
+        and (type(profiler.IsEnabled) ~= "function" or profiler.IsEnabled() == true)
+    local function ProfilerValue(name)
+        if not profilerReady or metric[name] == nil then return nil end
+        local ok, value = pcall(profiler.GetAddOnMetric, runtimeName, metric[name])
+        return ok and tonumber(value) or nil
+    end
+    local recent = ProfilerValue("RecentAverageTime")
+    local last = ProfilerValue("LastTime")
+    local session = ProfilerValue("SessionAverageTime")
+    local peak = ProfilerValue("PeakTime")
+    local over1 = ProfilerValue("CountTimeOver1Ms")
+    local over5 = ProfilerValue("CountTimeOver5Ms")
+
+    local lines = {
+        ("MSUF Assistant Performance - %s"):format(date("%Y-%m-%d %H:%M:%S")),
+        ("runtime addon: %s; menu shown: %s; combat: %s")
+            :format(runtimeName, menuShown and "yes" or "no", inCombat and "yes" or "no"),
+        ("interactive samples: %d; avg %.2f ms; p50 %.2f ms; p95 %.2f ms; max %.2f ms")
+            :format(#samples, average, p50, p95, maximum),
+        ("interactive SLO: %s (requires >=10 samples, p95 <=50 ms, max <=150 ms)")
+            :format(latencyPass and "PASS" or "NOT PROVEN"),
+    }
+    if profilerReady then
+        lines[#lines + 1] = ("Blizzard profiler (ms/tick): recent %.4f; last %.4f; session %.4f; peak %.4f")
+            :format(recent or 0, last or 0, session or 0, peak or 0)
+        lines[#lines + 1] = ("ticks over budget: >1 ms %.0f; >5 ms %.0f")
+            :format(over1 or 0, over5 or 0)
+    else
+        lines[#lines + 1] = "Blizzard profiler: unavailable in this client/session."
+    end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "For an uncontaminated zero-idle measurement, close MSUF, wait 10 seconds, then run the /dump command from the idle_profiler_zero acceptance case."
+    lines[#lines + 1] = "Blizzard upstream/live source: AddOnProfiler GetAddOnMetric returns milliseconds; RecentAverageTime covers the last 60 ticks."
+    return table.concat(lines, "\n")
+end
+
+local function SmokeCase(id, phase, setup, command, expect)
+    return { id = id, phase = phase, setup = setup, command = command, expect = expect }
+end
+
+-- Human-only evidence that cannot be proven by the headless release suite.
+-- Parser permutations stay in AssistantTraining; this list exercises the real
+-- WoW loader, rendered controls, combat lifecycle, and visible multi-turn UI.
 local ACCEPTANCE_SMOKE_CASES = {
-    {
-        id = "p0_1_relative_noop_nudge",
-        phase = "0.1",
-        setup = "Set Target of Target Name Text Anchor to RIGHT first.",
-        command = "move target of target name more to the right",
-        expect = "Changes Target of Target Name X Offset; does not answer Already set. Undo reverts it.",
-    },
-    {
-        id = "p0_1_anchor_still_sets",
-        phase = "0.1",
-        setup = "Set Target of Target Name Text Anchor to anything except RIGHT first.",
-        command = "move target of target name to the right",
-        expect = "Sets the anchor enum to RIGHT; no relative nudge.",
-    },
-    {
-        id = "p0_1_explicit_set_still_noop",
-        phase = "0.1",
-        setup = "Set Target Name Anchor to RIGHT first.",
-        command = "set target name anchor to right",
-        expect = "Answers Already set; no relative nudge.",
-    },
-    {
-        id = "p0_1_frame_move_unchanged",
-        phase = "0.1",
-        setup = "No special setup.",
-        command = "move target frame up",
-        expect = "Changes Target Y Position through the existing frame-move path.",
-    },
-    {
-        id = "p0_2_target_leader_continuation",
-        phase = "0.2",
-        setup = "Run: enable target leader icon.",
-        command = "now move target leader up",
-        expect = "Changes Target Leader / Assist Y Offset, not Target Y Position. Undo reverts it.",
-    },
-    {
-        id = "p0_2_stale_hp_context_falls_through",
-        phase = "0.2",
-        setup = "Run: set target hp bar opacity to 80%.",
-        command = "now move target leader up",
-        expect = "Does not use HP opacity context; falls through to the normal parser behavior.",
-    },
-    {
-        id = "p0_2_no_prior_turn",
-        phase = "0.2",
-        setup = "Reload UI or clear Assistant context/history first.",
-        command = "move target frame up",
-        expect = "Existing frame move behavior; no continuation context required.",
-    },
-    {
-        id = "p1_2_target_name_context_score",
-        phase = "1.2",
-        setup = "Talk about Target Name Text first, for example set target name anchor to TOP.",
-        command = "move target name up",
-        expect = "Changes Target Name Y Offset, not Target Y Position.",
-    },
-    {
-        id = "p1_3_ambiguous_ordinal",
-        phase = "1.3",
-        setup = "Trigger any Assistant ambiguity list with numbered choices.",
-        command = "the second one",
-        expect = "Resolves against the pending candidate list instead of doing a fresh broad parse.",
-    },
-    {
-        id = "p2_2_generated_review",
-        phase = "2b",
-        setup = "Run /msufcoverage generated all.",
-        command = "/msufcoverage generated all",
-        expect = "Copyable generated-fallback report opens for alias curation.",
-    },
-    {
-        id = "p2_3_manifest_dump",
-        phase = "2c",
-        setup = "Use a freshly seeded profile/character DB.",
-        command = "/msufcoverage manifest",
-        expect = "Copyable Manifest.defaults block opens and MSUF_GlobalDB.assistantAutoCoverageManifest.text is populated.",
-    },
+    SmokeCase("lod_explicit_start", "M5", "Reload UI; do not press Start Assistant yet.",
+        "/dump C_AddOns.IsAddOnLoaded(\"MidnightSimpleUnitFrames_Assistant\")",
+        "False before and after merely opening MSUF; true only after Start Assistant is clicked, then the chat card appears."),
+    SmokeCase("lod_cold_load_latency", "M5", "Reload UI, open the MSUF Dashboard, but do not press Start Assistant.",
+        "/run local r,ok,why=C_AddOnProfiler.MeasureCall(MSUF_NS.Assistant.EnsureRuntimeLoaded,\"acceptance-cold-load\"); print((\"Assistant cold load %.2f ms\"):format(r.elapsedMilliseconds),ok,why)",
+        "The runtime loads successfully on the first explicit Dashboard use; record the exact cold-load value. Target <=250 ms on the reference client; above 250 ms is a failed performance acceptance case."),
+    SmokeCase("interactive_latency", "M5", "Start the Assistant, run /msufcoverage perf reset, then submit ten normal read-only questions one at a time.",
+        "Ask: what is target frame width; where is raid ready check; what depends on target buffs; why is player power text hidden; how do profiles work; explain class resource width mode; where can I change castbar texture; why are party frames missing; what are your limits; answer in German what is aura filtering. Then run /msufcoverage perf.",
+        "At least 10 user-response samples; interactive SLO PASS with p95 <=50 ms and max <=150 ms. Answers remain correct and no setting changes."),
+    SmokeCase("idle_profiler_zero", "M5", "After starting the Assistant once, close the MSUF menu, stay out of combat, and wait 10 seconds without reopening it.",
+        "/dump C_AddOnProfiler.GetAddOnMetric(\"MidnightSimpleUnitFrames_Assistant\",Enum.AddOnProfilerMetric.RecentAverageTime), C_AddOnProfiler.GetAddOnMetric(\"MidnightSimpleUnitFrames_Assistant\",Enum.AddOnProfilerMetric.LastTime)",
+        "Both values are exactly 0 after the idle window. The /dump runs outside Assistant code and therefore does not contaminate the measured tick."),
+    SmokeCase("catalog_all_pages", "M1", "Visit every MSUF page/sub-tab once after starting the Assistant.",
+        "/run local r=MSUF_NS.MSUF2.GetRuntimeControlCoverageReport(); print(r.total,r.byClassification.unknown,r.collisions,r.unstableIds)",
+        "All rendered interactive controls have stable identities: unknown=0, collisions=0, unstableIds=0."),
+    SmokeCase("graph_read_only", "M3", "Note the current Target Buffs state first.",
+        "what depends on target buffs",
+        "Lists downstream relationships and inspected state; Target Buffs and every other setting remain unchanged."),
+    SmokeCase("graph_diagnose", "M3", "Disable Target Buffs, but keep the Target frame enabled.",
+        "why is target buffs disabled",
+        "Explains the current blocker/relationship without silently enabling anything."),
+    SmokeCase("german_multiturn", "M4", "Start a fresh Assistant conversation.",
+        "wie kann ich den spieler namen ausblenden; then: open it; then: warum",
+        "All three answers stay German, open the correct page, and the informational turns do not change Player Name."),
+    SmokeCase("explicit_english_switch", "M4", "Continue after the German multi-turn case.",
+        "answer in English what are your limits",
+        "The response switches to English and remains honest about local/offline MSUF scope."),
+    SmokeCase("combat_zero_work", "M5", "Start a visible answer/typewriter, then enter combat immediately.",
+        "Enter combat, wait five seconds, leave combat without reopening MSUF.",
+        "Menu closes; no answer, history entry, timer animation, queue flush, or Assistant output occurs during/after combat."),
+    SmokeCase("menu_reopen_resume", "M5", "Prepare one queued safe change, enter combat, then leave combat.",
+        "Reopen the MSUF menu once after combat.",
+        "Queued work resumes only on that explicit reopen, in FIFO order, and executes exactly once."),
+    SmokeCase("atomic_undo_redo", "M0", "Record Player width/height and Target width first.",
+        "set player width 300 height 45 and target width 250; then: undo; then: redo",
+        "The batch applies atomically; undo restores all old values; redo reapplies all values."),
+    SmokeCase("problem_report_safe", "M0", "Disable Target Buffs.",
+        "my target buffs are missing; then: explain option 1; then: cancel",
+        "Diagnosis and explanation are read-only; cancellation leaves Target Buffs disabled."),
+    SmokeCase("profile_question_safe", "M0", "Use any non-default active profile.",
+        "my profiles are broken; then: why; then: cancel",
+        "Shows diagnostic evidence and a review choice without resetting, copying, switching, or overwriting a profile."),
+    SmokeCase("control_action", "M1", "Open Dashboard > Display & Recovery.",
+        "explain Copy Support Link; then: run it",
+        "Explains the real button/action first, then runs that exact action after the explicit command."),
 }
 
 local function SmokeStore()
@@ -567,7 +615,7 @@ local function SmokeStore()
     if type(gdb) ~= "table" then return nil end
     gdb.assistantAcceptance = gdb.assistantAcceptance or {}
     local store = gdb.assistantAcceptance
-    store.version = 1
+    store.version = 3
     store.updated = date("%Y-%m-%d %H:%M:%S")
     store.cases = type(store.cases) == "table" and store.cases or {}
     return store
@@ -690,8 +738,16 @@ local function BuildAcceptanceGate()
     local shippedCount = ShippedManifestCount()
     local manifestOk = exportOk or shippedCount > 0
     local coverageOk = type(coverage) == "table" and (tonumber(coverage.settings) or 0) > 0 and type(coverage.scopes) == "table"
+    local catalog = type(M.GetRuntimeControlCoverageReport) == "function" and M.GetRuntimeControlCoverageReport() or nil
+    local catalogOk = type(catalog) == "table" and (tonumber(catalog.total) or 0) > 0 and catalog.catalogComplete == true
+    local graph, graphError
+    if type(A.GetSettingDependencyGraphCoverageReport) == "function" then
+        graph, graphError = A.GetSettingDependencyGraphCoverageReport()
+    end
+    local graphOk = type(graph) == "table" and (tonumber(graph.coveragePercent) or 0) >= 70
+        and type(graph.unresolved) == "table" and #graph.unresolved == 0
     local smokeOk = counts.pass == #ACCEPTANCE_SMOKE_CASES and counts.fail == 0 and counts.block == 0 and counts.pending == 0
-    local complete = smokeOk and manifestOk and coverageOk
+    local complete = smokeOk and manifestOk and coverageOk and catalogOk and graphOk
     local notes = {}
     if not smokeOk then
         notes[#notes + 1] = ("Smoke incomplete: %d pass, %d fail, %d blocked, %d pending. Record via /msufcoverage smoke pass|fail|block <id>."):format(counts.pass, counts.fail, counts.block, counts.pending)
@@ -701,6 +757,12 @@ local function BuildAcceptanceGate()
     end
     if not coverageOk then
         notes[#notes + 1] = "Coverage summary missing. Run /msufcoverage after /msufcoverage fill."
+    end
+    if not catalogOk then
+        notes[#notes + 1] = "Runtime control catalog incomplete. Visit every page/sub-tab, then require unknown=0, collisions=0, and unstableIds=0."
+    end
+    if not graphOk then
+        notes[#notes + 1] = "Setting relationship graph needs at least 70% connected-setting coverage and zero unresolved endpoints; open MSUF before running the gate. " .. tostring(graphError or "")
     end
     return {
         time = date("%Y-%m-%d %H:%M:%S"),
@@ -724,6 +786,19 @@ local function BuildAcceptanceGate()
             generated = type(coverage) == "table" and (tonumber(coverage.generated) or 0) or 0,
             time = type(coverage) == "table" and coverage.time or nil,
         },
+        controls = {
+            available = catalogOk,
+            total = type(catalog) == "table" and (tonumber(catalog.total) or 0) or 0,
+            unknown = type(catalog) == "table" and (tonumber(catalog.byClassification and catalog.byClassification.unknown) or 0) or 0,
+            collisions = type(catalog) == "table" and (tonumber(catalog.collisions) or 0) or 0,
+            unstable = type(catalog) == "table" and (tonumber(catalog.unstableIds) or 0) or 0,
+        },
+        graph = {
+            available = graphOk,
+            settings = type(graph) == "table" and (tonumber(graph.settings) or 0) or 0,
+            edges = type(graph) == "table" and (tonumber(graph.edges) or 0) or 0,
+            coveragePercent = type(graph) == "table" and (tonumber(graph.coveragePercent) or 0) or 0,
+        },
         notes = notes,
     }
 end
@@ -746,6 +821,10 @@ local function BuildAcceptanceGateReport()
             :format(gate.manifest.available and "present" or "missing", gate.manifest.total, gate.manifest.shipped or 0, gate.manifest.time and (", " .. gate.manifest.time) or ""),
         ("coverage: %s (%d registry settings, %d generated fallback(s)%s)")
             :format(gate.coverage.available and "present" or "missing", gate.coverage.settings, gate.coverage.generated, gate.coverage.time and (", " .. gate.coverage.time) or ""),
+        ("controls: %s (%d rendered, %d unknown, %d collisions, %d unstable)")
+            :format(gate.controls.available and "complete" or "incomplete", gate.controls.total, gate.controls.unknown, gate.controls.collisions, gate.controls.unstable),
+        ("relationships: %s (%d settings, %d edges, %.2f%% connected)")
+            :format(gate.graph.available and "ready" or "incomplete", gate.graph.settings, gate.graph.edges, gate.graph.coveragePercent),
         "",
     }
     if #gate.notes > 0 then
@@ -765,10 +844,20 @@ Audit.BuildAcceptanceGate = BuildAcceptanceGate
 Audit.StoreAcceptanceGate = StoreAcceptanceGate
 Audit.BuildAcceptanceGateReport = BuildAcceptanceGateReport
 Audit.BuildGeneratedReport = BuildGeneratedReport
+Audit.BuildPerformanceReport = BuildPerformanceReport
 
 local function RunCommand(msg)
     local rawMsg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
     msg = rawMsg:lower()
+    if msg == "perf reset" or msg == "performance reset" then
+        if type(A.ClearPerfTrace) == "function" then A.ClearPerfTrace() end
+        print("|cffffd700MSUF:|r Assistant performance samples reset.")
+        return
+    end
+    if msg == "perf" or msg == "performance" or msg == "performance report" then
+        ShowReport("MSUF Assistant Performance", BuildPerformanceReport())
+        return
+    end
     if msg == "gate" or msg == "acceptance gate" or msg == "status gate" then
         local text, gate = BuildAcceptanceGateReport()
         ShowReport("MSUF Assistant Acceptance Gate", text)

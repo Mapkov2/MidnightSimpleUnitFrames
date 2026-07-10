@@ -792,25 +792,27 @@ local function BuildCardControl(ctx, card, row, x, y, width)
     local widget
     if kind == "toggle" then
         widget = W.ToggleAt(card, CardResolve(row.label), x, y, width)
-        M.BindBoolWidget(ctx, widget, row.get, row.set)
+        M.BindBoolWidget(ctx, widget, row.get, row.set, row)
         return widget
     elseif kind == "color" then
         widget = W.Color(card, CardResolve(row.label))
         W.MoveWidget(widget, card, x, y)
-        M.BindColor(ctx, widget, row.get, row.set)
+        M.BindColor(ctx, widget, row.get, row.set, row)
         return widget
     elseif kind == "slider" then
         widget = W.Slider(card, CardResolve(row.label), row.min or 0, row.max or 100, row.step or 1, row.width or width)
         if row.format and widget.SetValueFormatter then widget:SetValueFormatter(row.format) end
-        M.BindNumberWidget(ctx, widget, row.get, row.set, row.default, {
-            step = row.step or 1, roundStep = row.roundStep ~= false,
-        })
+        local metadata = {}
+        for key, value in pairs(row) do metadata[key] = value end
+        metadata.step = row.step or 1
+        metadata.roundStep = row.roundStep ~= false
+        M.BindNumberWidget(ctx, widget, row.get, row.set, row.default, metadata)
     elseif kind == "segment" then
         widget = W.Segment(card, CardResolve(row.label), CardResolve(row.values), row.width or width)
-        M.BindSegment(ctx, widget, row.get, row.set)
+        M.BindSegment(ctx, widget, row.get, row.set, row)
     elseif kind == "dropdown" then
         widget = W.Dropdown(card, CardResolve(row.label), CardResolve(row.values), row.width or width)
-        M.BindDropdownWidget(ctx, widget, row.get, row.set)
+        M.BindDropdownWidget(ctx, widget, row.get, row.set, row)
     else
         return nil
     end
@@ -827,7 +829,7 @@ end
 ---
 --- spec = {
 ---   title, subtitle, x, y, width, height?, firstRowY?, rowGap?, contentX?,
----   rows = { { kind, label, get, set, values?/min/max/step?, width?, id?, gate?, height? }, ... },
+---   rows = { { kind, label, get, set, values?/min/max/step?, width?, id?, controlId?, settingKey?, gate?, height? }, ... },
 --- }
 --- Returns { card = <frame>, controls = <id -> widget>, gate = <fn or nil> }.
 function W.BuildCard(ctx, parent, spec)
@@ -980,24 +982,6 @@ end
 function W.TopButton(parent, label, width, height, style, active)
     local btn = StyleTopButton(T.Button(parent, label, width, height), style)
     if active ~= nil and btn.SetActive then btn:SetActive(active) end
-    return btn
-end
-function W.CreatePageResetButton(ctx, parent, anchor, opts)
-    opts = opts or {}
-    local key = ctx and ctx.key
-    if not (M.PageHasReset and M.PageHasReset(key)) then return nil end
-    local label = opts.text or "Reset All"
-    local btn = StyleTopDangerButton(T.Button(parent, label, opts.width or 88, opts.height or 24))
-    btn._msuf2SkipHistoryCheckpoint = true
-    if anchor then
-        btn:SetPoint("RIGHT", anchor, "LEFT", -(opts.gap or 8), opts.offsetY or 0)
-    else
-        btn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", opts.x or -14, opts.y or -14)
-    end
-    btn:SetScript("OnClick", function()
-        if M.ShowPageResetConfirm then M.ShowPageResetConfirm(key) end
-    end)
-    RegisterSearchObject(btn, label, "button")
     return btn
 end
 function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
@@ -1299,11 +1283,6 @@ local TOGGLE_LABEL_HOOKS = {
         RefreshToggleControl(btn)
     end,
 }
-local CORE_SHADOW = (T and T.colors and T.colors.coreShadow) or { 0.006, 0.016, 0.032, 1.00 }
-local CORE_SURFACE = (T and T.colors and T.colors.coreSurface) or { 0.014, 0.038, 0.072, 1.00 }
-local CORE_RAISED = (T and T.colors and T.colors.coreRaised) or { 0.026, 0.070, 0.110, 1.00 }
-local CORE_RIM = (T and T.colors and T.colors.coreRim) or { 0.043, 0.096, 0.150, 1.00 }
-local CORE_BLUE = (T and T.colors and T.colors.coreBlue) or { 0.060, 0.250, 0.390, 1.00 }
 local SWITCH_BG_ON = { 0.020, 0.090, 0.135, 0.96 }
 local SWITCH_BG_OFF = { 0.014, 0.022, 0.048, 0.96 }
 local SWITCH_EDGE_ON = { 0.160, 0.560, 0.760, 0.86 }
@@ -1932,13 +1911,24 @@ function W.SetControlGateEnabled(control, gateKey, enabled)
     if not control then return end
     gateKey = tostring(gateKey or "default")
     control._msuf2DisableGates = control._msuf2DisableGates or {}
-    control._msuf2DisableGates[gateKey] = not (enabled and true or false)
+    local disabled = not (enabled and true or false)
+    if control._msuf2DisableGates[gateKey] == disabled then return end
+    control._msuf2DisableGates[gateKey] = disabled
     if control._msuf2DesiredEnabled == nil then
         local current = true
         if control.IsEnabled then current = control:IsEnabled() and true or false end
         control._msuf2DesiredEnabled = current
     end
     ApplyControlEnabled(control)
+end
+function W.ClearControlGate(control, gateKey, deferApply)
+    local gates = control and control._msuf2DisableGates
+    if type(gates) ~= "table" then return false end
+    gateKey = tostring(gateKey or "default")
+    if gates[gateKey] == nil then return false end
+    gates[gateKey] = nil
+    if deferApply ~= true then ApplyControlEnabled(control) end
+    return true
 end
 function W.SetControlsEnabled(controls, enabled)
     for i = 1, #(controls or {}) do
@@ -2316,14 +2306,19 @@ function W.AttachPinnedPreview(body, box, opts)
         if box.RequestRefresh then box:RequestRefresh("PINNED_PREVIEW_RESTORE") end
         restoring = false
     end
-    local function BodyVisible()
-        --- IsVisible checks the full ancestor chain; IsShown only checks the frame itself
+    local function BodyOwned()
         if pageKey and M.activeKey and M.activeKey ~= pageKey then return false end
         if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
         if pageWrapper and pageWrapper.IsShown and not pageWrapper:IsShown() then return false end
+        if body.IsShown and not body:IsShown() then return false end
+        if scroll.IsShown and not scroll:IsShown() then return false end
+        return true
+    end
+    local function BodyVisible()
+        if not BodyOwned() then return false end
+        --- Effective visibility is only needed once final scroll geometry is used.
         if pageWrapper and pageWrapper.IsVisible and not pageWrapper:IsVisible() then return false end
-        return (not body.IsVisible or body:IsVisible())
-            and (not scroll.IsShown or scroll:IsShown())
+        return not body.IsVisible or body:IsVisible()
     end
     local function OriginalSlotTop()
         local slot = EnsureRestoreSlot()
@@ -2352,9 +2347,17 @@ function W.AttachPinnedPreview(body, box, opts)
         if restoring then return end
         if box._msuf2PinnedPreviewRecord and box._msuf2PinnedPreviewRecord ~= record then return end
         applyingPinnedState = true
-        if not BodyVisible() then
+        if not BodyOwned() then
             Restore()
             if pageKey and box.Hide then box:Hide() end
+            RefreshButton()
+            applyingPinnedState = false
+            return
+        end
+        -- IsVisible updates one frame after Show/ancestor changes. While the
+        -- page still owns the preview, keep its render lifecycle intact and
+        -- wait for settled geometry before deciding whether it should float.
+        if not BodyVisible() then
             RefreshButton()
             applyingPinnedState = false
             return

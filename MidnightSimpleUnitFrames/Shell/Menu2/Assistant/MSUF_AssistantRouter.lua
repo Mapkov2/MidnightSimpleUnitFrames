@@ -153,6 +153,44 @@ function R.Normalize(text)    if A.Normalize then return A.Normalize(text) end
     return R.Trim(text)
 end
 
+function R.StripResponseLanguageDirective(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return norm end
+    local data = MSUF.AssistantDialogLocaleData
+    local directives = data and data.explicitLanguage
+    if type(directives) ~= "table" then
+        -- The isolated Lua audits load Router without the later DialogLocale
+        -- data file. Keep only the structural fallback here; the game runtime
+        -- consumes the complete phrase set from AssistantDialogLocaleData.
+        directives = {
+            de = { "answer in german", "in german", "antworte auf deutsch", "auf deutsch" },
+            en = { "answer in english", "in english", "antworte auf englisch", "auf englisch" },
+        }
+    end
+
+    local candidate = norm:gsub("^please%s+", "")
+    local bestPrefix, bestSuffix = 0, 0
+    for _, language in ipairs({ "de", "en" }) do
+        for _, phrase in ipairs(directives[language] or {}) do
+            phrase = R.Normalize(phrase)
+            if phrase ~= "" then
+                if candidate == phrase then return "" end
+                if candidate:sub(1, #phrase + 1) == phrase .. " " and #phrase > bestPrefix then bestPrefix = #phrase end
+                local suffixDirective = phrase:match("^answer%s+") or phrase:match("^reply%s+")
+                    or phrase:match("^please%s+") or phrase:match("^speak%s+")
+                    or phrase:match("^antworte%s+") or phrase:match("^antwort%s+")
+                    or phrase:match("^bitte%s+") or phrase:match("^sprich%s+")
+                if suffixDirective and candidate:sub(-#phrase - 1) == " " .. phrase and #phrase > bestSuffix then
+                    bestSuffix = #phrase
+                end
+            end
+        end
+    end
+    if bestPrefix > 0 then candidate = R.Trim(candidate:sub(bestPrefix + 1)) end
+    if bestSuffix > 0 then candidate = R.Trim(candidate:sub(1, #candidate - bestSuffix - 1)) end
+    return candidate
+end
+
 function R.MaybeYield()    if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
 end
 
@@ -345,6 +383,71 @@ function R.StartsWithMutationCommand(text)    local norm = R.Normalize(text)
         if norm == term or norm:sub(1, #term + 1) == term .. " " then return true end
     end
     return false
+end
+
+R.UNMISTAKABLE_BOOLEAN_COMMANDS = {
+    enable = true, disable = true, show = true, hide = true,
+    aktivieren = true, deaktivieren = true, anzeigen = true, verstecken = true,
+    einblenden = true, ausblenden = true,
+}
+R.UNMISTAKABLE_RELATIVE_COMMANDS = {
+    increase = true, decrease = true, raise = true, lower = true, move = true, nudge = true, shift = true,
+    erhoehe = true, senke = true, verschiebe = true,
+}
+R.UNMISTAKABLE_VALUE_COMMANDS = {
+    set = true, change = true, make = true, setze = true, stelle = true, aendere = true,
+}
+
+function R.HasUnmistakableMutationRequest(text)
+    local norm = R.Normalize(text)
+    norm = norm:gsub("^please%s+", ""):gsub("^bitte%s+", "")
+    norm = norm:gsub("^can%s+you%s+", ""):gsub("^could%s+you%s+", ""):gsub("^would%s+you%s+", "")
+    norm = norm:gsub("^kannst%s+du%s+", ""):gsub("^koenntest%s+du%s+", "")
+    if norm == "" then return false end
+    if norm:match("^show%s+me%s+") or norm:match("^zeige%s+mir%s+")
+        or R.LooksLikeKnowledgeQuestionPrefix(norm)
+        or R.ContainsAny(norm, { "where", "which setting", "which option", "current value", "explain", "wo", "welche einstellung", "erklaere" })
+    then
+        return false
+    end
+
+    if norm:match("^turn%s+on%s+") or norm:match("^turn%s+off%s+") then return true end
+    local firstWord = norm:match("^(%S+)")
+    if R.UNMISTAKABLE_BOOLEAN_COMMANDS[firstWord] and norm:find(" ", 1, true) then return true end
+    if R.UNMISTAKABLE_RELATIVE_COMMANDS[firstWord] then
+        return norm:match("%d") ~= nil or R.ContainsAny(norm, {
+            "left", "right", "up", "down", "more", "less", "links", "rechts", "hoch", "runter", "mehr", "weniger",
+        })
+    end
+    if not R.UNMISTAKABLE_VALUE_COMMANDS[firstWord] then return false end
+    return norm:match("%d") ~= nil
+        or norm:find(" to ", 1, true) ~= nil
+        or norm:find(" auf ", 1, true) ~= nil
+        or norm:find(" = ", 1, true) ~= nil
+        or R.ContainsAny(norm, R.COLOR_TERMS)
+        or R.ContainsAny(norm, { "on", "off", "enabled", "disabled", "an", "aus", "aktiv", "inaktiv" })
+end
+
+function A.RouterIsFailClosedReadOnlyRequest(text)
+    local norm = R.StripResponseLanguageDirective(text)
+    if norm == "" then return true end
+    if R.HasUnmistakableMutationRequest(norm) then return false end
+
+    local parser = A.Parser
+    if parser and type(parser.NonMutatingIntent) == "function" and parser.NonMutatingIntent(norm) then return true end
+    if norm:match("^show%s+me%s+") or norm:match("^zeige%s+mir%s+") then return true end
+    if R.LooksLikeKnowledgeQuestionPrefix(norm)
+        or R.LooksLikeKnowledgeRequest(norm)
+        or R.LooksLikeDirectDefinitionQuestion(norm)
+        or (type(R.IsExplicitReadOnlyDiagnosticCommand) == "function" and R.IsExplicitReadOnlyDiagnosticCommand(norm))
+    then
+        return true
+    end
+    return R.ContainsAny(norm, {
+        "missing", "hidden", "not showing", "not visible", "broken", "disabled", "does not work", "doesn't work",
+        "fehlt", "fehlend", "versteckt", "nicht sichtbar", "kaputt", "deaktiviert", "funktioniert nicht",
+        "current value", "current setting", "list settings", "list options", "related settings", "related options",
+    })
 end
 
 function R.LooksLikeKnowledgeRequest(text)    local norm = R.Normalize(text)
@@ -648,6 +751,37 @@ function A.RouterLimitsReply()
     }
 end
 
+-- Exact Assistant-meta questions must be handled before registry setting
+-- discovery. Words such as "limit" and "cap" are also valid setting terms;
+-- without this narrow priority lane, "what are your limits" can be answered
+-- with unrelated aura-cap sliders instead of the Assistant's real boundaries.
+R.ASSISTANT_LIMIT_QUESTIONS = R.ASSISTANT_LIMIT_QUESTIONS or {
+    ["what are your limits"] = true,
+    ["what are your limitations"] = true,
+    ["assistant limits"] = true,
+    ["assistant limitations"] = true,
+    ["what cant you do"] = true,
+    ["what can't you do"] = true,
+    ["what can you not do"] = true,
+    ["what do you not do"] = true,
+    ["can you do everything"] = true,
+    ["are you online"] = true,
+    ["do you use internet"] = true,
+    ["do you browse"] = true,
+    ["was kannst du nicht"] = true,
+    ["was kannst du nicht machen"] = true,
+    ["wo sind deine grenzen"] = true,
+    ["was sind deine grenzen"] = true,
+    ["bist du online"] = true,
+    ["hast du internet"] = true,
+}
+
+function R.TryEarlyAssistantMetaConversationReply(text)
+    local norm = R.Normalize(text)
+    if R.ASSISTANT_LIMIT_QUESTIONS[norm] then return A.RouterLimitsReply() end
+    return nil
+end
+
 function R.TroubleshootingReply()    return {
         text = "Troubleshooting help\nI can run local MSUF checks, inspect common visibility problems, build support text, and open recovery tools. Start with 'run checks' or name the broken area, for example: why is target cast bar hidden; why are party frames hidden; why are target buffs hidden.\nYou can ask: Run Checks | Assistant Support Text | Open Display & Recovery",
         status = "info",
@@ -848,6 +982,16 @@ function A.TryImmediateConversationReply(text)
     local norm = R.Normalize(text)
     if norm == "" then return nil end
     if A.RouterHasBlockingPendingAssistantState and A.RouterHasBlockingPendingAssistantState() then return nil end
+    if norm:match("^wo%s+") or norm:match("^wie%s+kann%s+ich%s+")
+        or norm:match("^welche%s+einstellung%s+") or norm:match("^welche%s+option%s+")
+    then
+        -- German setting-location forms have a dedicated compact route. Do
+        -- not spend time testing every small-talk phrase first.
+        return nil
+    end
+    local mayBePageHelp = norm:find("page", 1, true) or R.HasNormalizedPhrase(norm, "here")
+    local pageHelp = mayBePageHelp and R.TryPageHelpShortcut and R.TryPageHelpShortcut(text, A.HandleCommandInput)
+    if pageHelp then return pageHelp end
     if R.IMMEDIATE_SHORT_CONVERSATION[norm] then
         return R.HumanConversationReply(text)
     end
@@ -870,6 +1014,18 @@ function A.TryImmediateConversationReply(text)
         if visualHelp then
             visualHelp.status = "info"
             visualHelp.result = "info"
+            if R.LooksLikeRegistrySettingLocationQuestion(norm)
+                and R.CompactRegistrySettingSearchEntries
+                and A.RouterTryRegistrySettingLocationShortcut
+            then
+                local subject = R.RegistryLocationSubject(norm)
+                local compact = subject ~= "" and R.CompactRegistrySettingSearchEntries(subject, 1) or nil
+                local compactLabel = compact and compact[1] and compact[1].item and R.Normalize(compact[1].item.label) or ""
+                if compactLabel ~= "" and not R.Normalize(visualHelp.text):find(compactLabel, 1, true) then
+                    local location = A.RouterTryRegistrySettingLocationShortcut(norm, nil, compact)
+                    if location then return location end
+                end
+            end
             return visualHelp
         end
     end
@@ -894,10 +1050,11 @@ function R.UnsupportedAuraReply(text)    local norm = R.Normalize(text)
     }
 end
 
-R.NATURAL_PROBLEM_TERMS = {    "gone", "missing", "disappeared", "vanished", "lost", "not shown", "not showing",
+R.NATURAL_PROBLEM_TERMS = {    "gone", "missing", "failed", "failing", "fails", "failure", "error", "errors", "stuck", "broken",
+    "filtered out", "filtered", "blacklisted", "blocked", "disappeared", "vanished", "lost", "not shown", "not showing",
     "not displayed", "not appearing", "does not show", "doesn't show", "cannot see", "can't see", "cant see", "hidden",
     "fix", "repair",
-    "weg", "fehlt", "verschwunden", "nicht angezeigt", "wird nicht angezeigt",
+    "weg", "fehlt", "fehlen", "fehlende", "fehlender", "fehlendes", "fehlenden", "fehlgeschlagen", "verschwunden", "nicht angezeigt", "wird nicht angezeigt",
     "werden nicht angezeigt", "unsichtbar", "nicht sichtbar", "versteckt", "ausgeblendet",
 }
 
@@ -928,8 +1085,8 @@ function R.TryNaturalProblemShortcut(text, coreHandler)    local norm = R.Normal
     if norm == "" or not R.HasNaturalProblemTerm(norm) then return nil end
 
     if type(coreHandler) == "function" and R.ContainsAny(norm, R.NATURAL_PROFILE_PROBLEM_TERMS) then
-        local result = coreHandler("profile missing")
-        if result and not (type(result) == "table" and result.kind == "unknown") then return result end
+        local result = coreHandler("diagnose profile status")
+        if result and not (type(result) == "table" and result.kind == "unknown") then return R.AsReadOnlyProblemDiagnostic(result) end
     end
 
     if R.ContainsAny(norm, R.NATURAL_GENERIC_PROBLEM_TOPICS)
@@ -972,163 +1129,6 @@ R.READABILITY_MENU_TERMS = {    "menu", "dashboard", "options", "config", "assis
 R.READABILITY_FRAME_TERMS = {    "frame", "frames", "unit frame", "unit frames", "unitframe", "unitframes",
     "player", "target", "focus", "boss", "spieler", "ziel", "fokus",
 }
-
-function R.ReadabilityReply(title, body, examples, actions, clarification)    A.lastAssistantHelpContext = {
-        kind = "readability",
-        title = tostring(title or "Readability help"),
-        examples = tostring(examples or "set player width to 300; set target cast bar height to 24."),
-        actions = tostring(actions or "Open Dashboard Scaling | Open Fonts"),
-        clarification = clarification,
-    }
-    return {
-        text = tostring(title or "Readability help") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "set player width to 300; set target cast bar height to 24.") .. "\nYou can ask: " .. tostring(actions or "Open Dashboard Scaling | Open Fonts"),
-        status = "info",
-        summary = "Assistant readability help",
-    }
-end
-
-R.HELP_CONTEXT_NEXT_TERMS = {    "what should i change first", "what should i do first", "where should i start",
-    "what next", "what now", "next step", "next steps", "recommend a first change",
-    "recommend first change", "what would you change first",
-}
-
-R.HELP_CONTEXT_EXAMPLE_TERMS = {    "show examples", "examples", "example", "give examples", "show me examples",
-    "what can i say", "what should i type",
-}
-
-R.HELP_CONTEXT_OPEN_TERMS = {    "open it", "open that", "open this", "show it", "show that", "show this",
-    "take me there", "go there", "open the page", "open that page",
-}
-
-R.HELP_CONTEXT_LOCATION_TERMS = {
-    "where is it", "where is that", "where is this", "where are they", "where are those",
-    "where do i change it", "where do i change that", "where do i change this", "where do i change them", "where do i change those",
-    "where can i change it", "where can i change that", "where can i change this", "where can i change them", "where can i change those",
-    "where do i configure it", "where do i configure that", "where do i configure this", "where do i configure them", "where do i configure those",
-    "where can i configure it", "where can i configure that", "where can i configure this", "where can i configure them", "where can i configure those",
-    "where do i find it", "where do i find that", "where do i find this", "where do i find them", "where do i find those",
-    "where can i find it", "where can i find that", "where can i find this", "where can i find them", "where can i find those",
-    "which page is it on", "which page is that on", "which page is this on", "which page are they on", "which page are those on",
-    "what page is it on", "what page is that on", "what page is this on", "what page are they on", "what page are those on",
-    "what menu is it in", "what menu is that in", "what menu is this in", "what menu are they in", "what menu are those in",
-}
-
-R.HELP_CONTEXT_PRONOUN_VISIBILITY_TERMS = {
-    "show it", "show that", "show this", "show them", "show those",
-    "hide it", "hide that", "hide this", "hide them", "hide those",
-    "enable it", "enable that", "enable this", "enable them", "enable those",
-    "disable it", "disable that", "disable this", "disable them", "disable those",
-    "toggle it", "toggle that", "toggle this", "toggle them", "toggle those",
-    "turn it on", "turn that on", "turn this on", "turn them on", "turn those on",
-    "turn it off", "turn that off", "turn this off", "turn them off", "turn those off",
-    "switch it on", "switch that on", "switch this on", "switch them on", "switch those on",
-    "switch it off", "switch that off", "switch this off", "switch them off", "switch those off",
-}
-
-R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS = {    "make it", "make that", "make this", "change it", "change that", "change this",
-    "set it", "set that", "set this", "move it", "move that", "move this",
-    "make them", "make those", "change them", "change those",
-    "set them", "set those", "move them", "move those",
-}
-
-R.HELP_CONTEXT_PRONOUN_TERMS = { "it", "that", "this", "them", "those" }
-
-function R.LooksLikeHelpContextFollowup(norm)    return R.ContainsAny(norm, R.HELP_CONTEXT_OPEN_TERMS)
-        or (R.ContainsAny(norm, R.HELP_CONTEXT_LOCATION_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS))
-        or R.ContainsAny(norm, R.HELP_CONTEXT_EXAMPLE_TERMS)
-        or R.ContainsAny(norm, R.HELP_CONTEXT_NEXT_TERMS)
-        or (R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_VISIBILITY_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS))
-        or (R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS))
-end
-
-function R.ClearStaleHelpContextForInput(text)    if type(A.lastAssistantHelpContext) ~= "table" then return end
-    local norm = R.Normalize(text)
-    if norm == "" or R.LooksLikeHelpContextFollowup(norm) then return end
-    A.lastAssistantHelpContext = nil
-end
-
-function R.FirstOpenActionCommand(actions)    local first = tostring(actions or ""):match("([^|]+)")
-    first = R.Trim(first or "")
-    if first == "" then return nil end
-    local label = first:match("^[Oo]pen%s+(.+)$")
-    if not label or R.Trim(label) == "" then return nil end
-    return "open " .. R.Trim(label)
-end
-
-function R.TryHelpContextFollowup(text, coreHandler)    local ctx = type(A.lastAssistantHelpContext) == "table" and A.lastAssistantHelpContext or nil
-    if not ctx or (ctx.kind ~= "readability" and ctx.kind ~= "knowledge") then return nil end
-
-    local norm = R.Normalize(text)
-    if norm == "" then return nil end
-
-    if R.ContainsAny(norm, R.HELP_CONTEXT_LOCATION_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS) then
-        local command = R.FirstOpenActionCommand(ctx.actions)
-        local label = command and R.Trim(command:gsub("^open%s+", "")) or ""
-        local location = label ~= "" and ("This topic is handled from " .. label .. ".") or ("Use the action list for this help topic: " .. tostring(ctx.actions))
-        return {
-            text = tostring(ctx.title) .. "\n" .. location .. "\nExamples: " .. tostring(ctx.examples) .. "\nYou can ask: " .. tostring(ctx.actions),
-            status = "info",
-            summary = "Assistant help location",
-        }
-    end
-
-    if R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_VISIBILITY_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS) then
-        local clarification = tostring(ctx.clarification or "Name the exact MSUF area before I change it, so I do not guess wrong.")
-        return {
-            text = tostring(ctx.title) .. "\n" .. clarification .. "\nExamples: " .. tostring(ctx.examples),
-            status = "info",
-            summary = "Assistant help clarification",
-        }
-    end
-
-    if R.ContainsAny(norm, R.HELP_CONTEXT_OPEN_TERMS) then
-        local command = R.FirstOpenActionCommand(ctx.actions)
-        if command and type(coreHandler) == "function" then
-            local result = coreHandler(command)
-            if result and not (type(result) == "table" and result.kind == "unknown") then
-                if type(result) == "table" and R.Trim(result.text or "") == "" then
-                    local label = R.Trim(command:gsub("^open%s+", ""))
-                    result.text = label ~= "" and ("Opened " .. label .. ".") or "Opened the matching MSUF page."
-                    result.status = result.status or "applied"
-                end
-                return result
-            end
-        end
-        return {
-            text = tostring(ctx.title) .. "\nUse the matching action from this help topic: " .. tostring(ctx.actions),
-            status = "info",
-            summary = "Assistant help follow-up",
-        }
-    end
-
-    if R.ContainsAny(norm, R.HELP_CONTEXT_EXAMPLE_TERMS) then
-        return {
-            text = tostring(ctx.title) .. "\nExamples: " .. tostring(ctx.examples),
-            status = "info",
-            summary = "Assistant help examples",
-        }
-    end
-
-    if R.ContainsAny(norm, R.HELP_CONTEXT_NEXT_TERMS) then
-        local nextStep = tostring(ctx.nextStep or "Start with the least destructive visible setting: open the matching page, adjust size or text first, then tune spacing, filters, or colors only if it is still hard to read.")
-        return {
-            text = tostring(ctx.title) .. "\n" .. nextStep .. "\nExamples: " .. tostring(ctx.examples) .. "\nYou can ask: " .. tostring(ctx.actions),
-            status = "info",
-            summary = "Assistant help next step",
-        }
-    end
-
-    if R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_CHANGE_TERMS) and R.ContainsAny(norm, R.HELP_CONTEXT_PRONOUN_TERMS) then
-        local clarification = tostring(ctx.clarification or "Name the exact MSUF area before I change it, so I do not guess wrong.")
-        return {
-            text = tostring(ctx.title) .. "\n" .. clarification .. "\nExamples: " .. tostring(ctx.examples),
-            status = "info",
-            summary = "Assistant help clarification",
-        }
-    end
-
-    return nil
-end
 
 function R.TryReadabilityShortcut(text)    local norm = R.Normalize(text)
     if norm == "" or not R.ContainsAny(norm, R.READABILITY_PROBLEM_TERMS) then return nil end
@@ -1624,8 +1624,6 @@ A.RouterTryEditModeProblemShortcut = function(text, coreHandler)
     if not mentionsEditMode then return nil end
     local hasProblem = R.ContainsAny(norm, terms.problem) or R.ContainsAny(norm, R.VISIBILITY_PROBLEM_TERMS)
     local asksHowToMove = R.ContainsAny(norm, { "how do i move frames", "how can i move frames", "move frames mode" })
-    if not hasProblem and not asksHowToMove then return nil end
-
     local asksExitStatus = R.ContainsAny(norm, {
         "why can't i exit edit mode", "why cant i exit edit mode", "why can not i exit edit mode",
         "why can't leave edit mode", "why cant leave edit mode", "why can not leave edit mode",
@@ -1636,16 +1634,18 @@ A.RouterTryEditModeProblemShortcut = function(text, coreHandler)
     local asksStatus = asksExitStatus or R.ContainsAny(norm, {
         "edit mode status", "am i in edit mode", "is edit mode on", "is edit mode active",
     })
+    if not hasProblem and not asksHowToMove and not asksStatus then return nil end
+
     if asksStatus then
         if type(coreHandler) == "function" then
             local result = coreHandler(asksExitStatus and "why cant i exit edit mode" or "edit mode status")
-            if result and not (type(result) == "table" and result.kind == "unknown") then return result end
+            if result and not (type(result) == "table" and result.kind == "unknown") then return R.AsReadOnlyResult(result) end
         end
         local workflow = A.Workflow and A.Workflow.EditMode
         if workflow and type(workflow.StatusText) == "function" then
             return {
                 text = workflow.StatusText(asksExitStatus and "why_exit" or nil),
-                status = "applied",
+                status = "info",
                 summary = "Assistant Edit Mode status",
             }
         end
@@ -1653,7 +1653,7 @@ A.RouterTryEditModeProblemShortcut = function(text, coreHandler)
 
     if R.ContainsAny(norm, terms.anchorPicker) and type(coreHandler) == "function" then
         local result = coreHandler("open edit mode anchor picker")
-        if result and not (type(result) == "table" and result.kind == "unknown") then return result end
+        if result and not (type(result) == "table" and result.kind == "unknown") then return R.AsNavigationResult(result) end
     end
 
     if R.ContainsAny(norm, terms.preview) and type(coreHandler) == "function" then
@@ -1700,7 +1700,10 @@ A.RouterTryEditModeProblemShortcut = function(text, coreHandler)
 end
 
 A.RouterProfileProblemTerms = A.RouterProfileProblemTerms or {
-    profile = { "profile", "profiles", "profile string", "import string", "export string" },
+    profile = {
+        "profile", "profiles", "profile string", "import string", "export string",
+        "profil", "profilstring", "profil string", "importzeichenfolge", "exportzeichenfolge",
+    },
     import = {
         "profile import", "import profile", "import a profile", "import string",
         "profile string", "invalid profile", "invalid import", "invalid string",
@@ -1721,8 +1724,11 @@ A.RouterProfileProblemTerms = A.RouterProfileProblemTerms or {
         "profile hub", "community profiles",
     },
     copy = {
-        "copy my profile", "copy current profile", "copy my current profile",
-        "duplicate profile", "backup current profile",
+        "copy profile", "copy a profile", "profile copy", "copy my profile",
+        "copy current profile", "copy my current profile", "duplicate profile",
+        "backup current profile", "profil kopieren", "profil duplizieren",
+        "kopiere profil", "kopiere mein profil", "kopiere ich mein profil",
+        "kopiere aktuelles profil", "dupliziere ich mein profil",
     },
     reset = {
         "reset profile", "reset my profile", "reset active profile", "reset current profile",
@@ -1857,7 +1863,25 @@ A.RouterTryProfileProblemShortcut = function(text, coreHandler)
         return reply
     end
 
-    if R.ContainsAny(norm, terms.copy) and not R.ContainsAny(norm, { " to ", " as ", " called ", " named " }) then
+    -- A procedural "how to copy profile" contains the token " to ", but it
+    -- does not name a destination. Keep capability/procedural questions on the
+    -- explanatory route even when they mention a hypothetical destination;
+    -- only imperative copy commands may fall through to the mutating flow.
+    local asksCopyHelp = asksProfileInfo
+        or norm:match("^how%s+to%s+") ~= nil
+        or norm:match("^how%s+do%s+i%s+") ~= nil
+        or norm:match("^how%s+can%s+i%s+") ~= nil
+        or norm:match("^could%s+i%s+") ~= nil
+        or norm:match("^is%s+there%s+a%s+way%s+to%s+") ~= nil
+        or norm:match("^wie%s+") ~= nil
+        or norm:match("^kann%s+ich%s+") ~= nil
+        or norm:match("^koennte%s+ich%s+") ~= nil
+        or norm:match("^wo%s+") ~= nil
+    local namesCopyDestination = R.ContainsAny(norm, {
+        " to ", " as ", " called ", " named ",
+        " nach ", " als ", " namens ",
+    })
+    if R.ContainsAny(norm, terms.copy) and (asksCopyHelp or not namesCopyDestination) then
         return A.RouterProfileReply(
             "Profile copy help",
             "Copying the current profile needs a destination profile name, so I do not guess it. Name the backup you want me to create.",
@@ -1885,8 +1909,11 @@ A.RouterTryProfileProblemShortcut = function(text, coreHandler)
     end
 
     if R.HasNaturalProblemTerm(norm) and type(coreHandler) == "function" then
-        local result = coreHandler("profile missing")
-        if result and not (type(result) == "table" and result.kind == "unknown") then return result end
+        -- The broad problem phrase is deliberately non-mutating. Use the
+        -- explicit diagnostic command so the reply can expose a safe repair
+        -- choice instead of feeding the vague phrase back into the parser.
+        local result = coreHandler("diagnose profile status")
+        if result and not (type(result) == "table" and result.kind == "unknown") then return R.AsReadOnlyProblemDiagnostic(result) end
     end
 
     return nil
@@ -1953,7 +1980,14 @@ function R.AsksSettingLocation(norm)
         or norm:match("^how%s+can%s+i") ~= nil
         or norm:match("^can%s+i") ~= nil
         or norm:match("^is%s+there%s+a%s+way") ~= nil
-        or R.ContainsAny(norm, { "help me find", "help me locate", "tell me where", "looking for", "show me", "options", "list options", "setting controls", "option controls" })
+        or norm:match("^wo%s+") ~= nil
+        or norm:match("^wie%s+kann%s+ich") ~= nil
+        or norm:match("^welche%s+einstellung") ~= nil
+        or norm:match("^welche%s+option") ~= nil
+        or R.ContainsAny(norm, {
+            "help me find", "help me locate", "tell me where", "looking for", "show me", "options", "list options", "setting controls", "option controls",
+            "zeige mir", "hilf mir finden", "einstellung steuert", "option steuert",
+        })
 end
 
 function R.IsDisplayOnlySettingsRequest(norm)
@@ -1996,8 +2030,8 @@ end
 function R.VisualSettingReply(title, body, examples, actions)
     return {
         text = tostring(title or "Visual setting location") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "open colors; open bars.") .. "\nYou can ask: " .. tostring(actions or "Open Colors | Open Bars"),
-        status = "applied",
-        result = "applied",
+        status = "info",
+        result = "info",
         summary = "Assistant visual setting help",
     }
 end
@@ -2294,8 +2328,8 @@ R.UNIT_FRAME_MOVEMENT_EXCLUDED_TOPICS = {
 function R.MovementSettingReply(title, body, examples, actions, status)
     return {
         text = tostring(title or "Frame position setting location") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "enter MSUF edit mode; open player; move player frame down 10.") .. "\nYou can ask: " .. tostring(actions or "Enter Edit Mode | Open Player | Open Target"),
-        status = status or "applied",
-        result = status or "applied",
+        status = status or "info",
+        result = status or "info",
         summary = "Assistant frame movement help",
     }
 end
@@ -2595,7 +2629,7 @@ A.RouterAuraDetailReply = function(title, body, examples, actions, status)
         text = tostring(title or "Aura help") .. "\n" .. tostring(body or ""),
         summary = "Assistant aura help",
     }
-    reply.status = status or "applied"
+    reply.status = status or "info"
     reply.result = reply.status
     return reply
 end
@@ -2682,7 +2716,7 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
             "That sounds like one specific " .. laneLabel:lower() .. " icon, not the whole " .. scopeLabel .. " " .. lanePlural .. " lane. Exact SpellID hiding is read-only in the native 12.1 backend, so use Aura Filters for live filter changes. I will not hide all " .. scopeLabel .. " " .. lanePlural .. " for one icon name.",
             "open aura filters; set " .. scope .. " " .. lane:lower() .. " raid filter on; where can I adjust " .. scope .. " " .. lane:lower() .. " filters.",
             "Open Aura Filters | Check " .. scopeLabel .. " " .. laneLabel,
-            asksLocation and "applied" or "info"
+            "info"
         )
     end
 
@@ -2699,7 +2733,7 @@ A.RouterTryAuraDetailSettingShortcut = function(norm, coreHandler)
                 scopeLabel .. " aura " .. settingLabel .. " has separate Buff and Debuff controls. Tell me which lane so I do not change the wrong group aura text setting.",
                 "make " .. scope .. " buff " .. textName .. " size bigger; make " .. scope .. " debuff " .. textName .. " size bigger; turn off " .. scope .. " debuff " .. textName .. ".",
                 "Open Group Auras | " .. scopeLabel .. " Buff " .. settingLabel .. " | " .. scopeLabel .. " Debuff " .. settingLabel,
-                asksLocation and "applied" or "ambiguous"
+                asksLocation and "info" or "ambiguous"
             )
         end
         local command
@@ -2856,8 +2890,8 @@ A.RouterTryAuraSettingShortcut = function(norm, coreHandler)
             "open aura filters; set aura editing scope to " .. scope .. "; set aura filter lane to " .. lane:lower() .. "s; set " .. scope .. " " .. lane:lower() .. " raid filter on.",
             "Open Aura Filters | Check " .. scopeLabel .. " " .. laneLabel
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         reply.searchResults = R.PageFollowupResults("auras3_filters", "Aura Filters", scopeLabel .. " " .. laneLabel .. " filtering lives in Aura Filters.")
         return reply
     end
@@ -2872,10 +2906,17 @@ A.RouterTryAuraSettingShortcut = function(norm, coreHandler)
         if kind == "layout" then
             body = page .. " help: " .. scopeLabel .. " " .. lanePlural .. " layout lives on " .. page .. ". Open " .. page .. " and use anchor, growth, X/Y offset, icon size, and per-row controls for that lane."
         end
-        if displayOnly then
-            if type(coreHandler) == "function" then coreHandler("open " .. page:lower()) end
-            body = "Done. Opened " .. page .. ".\n" .. body
+        local navigationResult
+        if displayOnly and type(coreHandler) == "function" then
+            local opened = coreHandler("open " .. page:lower())
+            if opened and not A.RouterIsUnknownResult(opened) then
+                navigationResult = R.AsNavigationResult(opened)
+                if (navigationResult.status or navigationResult.result) == "navigated" then
+                    body = "Done. Opened " .. page .. ".\n" .. body
+                end
+            end
         end
+        local didNavigate = navigationResult and (navigationResult.status or navigationResult.result) == "navigated"
         local verb = wantsOff and "turn off " or (wantsOn and "turn on " or "turn off ")
         local example = kind == "visibility" and (verb .. scope .. " " .. lane .. " visibility")
             or ("set " .. scope .. " " .. lane .. " icon size to 30")
@@ -2885,8 +2926,8 @@ A.RouterTryAuraSettingShortcut = function(norm, coreHandler)
             example .. "; open " .. page:lower() .. "; check " .. scope .. " " .. lanePlural:lower() .. ".",
             "Open " .. page .. " | " .. example
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = didNavigate and "navigated" or "info"
+        reply.result = reply.status
         reply.searchResults = R.SettingFollowupResultsByQuery(settingLabel, settingLabel)
         return reply
     end
@@ -2946,8 +2987,8 @@ A.RouterTryGroupNaturalSettingShortcut = function(norm, coreHandler)
             "open group health and text; set " .. scope .. " " .. commandNoun .. " to 12; turn on " .. scope .. " names.",
             "Open Group Health & Text | set " .. scope .. " " .. commandNoun .. " to 12"
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         reply.searchResults = R.SettingFollowupResultsByQuery(scopeLabel .. " " .. textLabel, scopeLabel .. " " .. textLabel)
             or R.PageFollowupResults("gf_bars", "Group Health & Text", scopeLabel .. " text controls live in Group Health & Text.")
         return reply
@@ -2961,8 +3002,8 @@ A.RouterTryGroupNaturalSettingShortcut = function(norm, coreHandler)
             verb .. scope .. " click casting; open group layout; check " .. scope .. " frames.",
             "Open Group Layout | " .. verb .. scope .. " click casting"
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         reply.searchResults = R.SettingFollowupResultsByQuery(scopeLabel .. " Click Casting", scopeLabel .. " Click Casting")
             or R.PageFollowupResults("gf_layout", "Group Layout", scopeLabel .. " Click Casting lives in Group Layout.")
         return reply
@@ -2975,8 +3016,8 @@ A.RouterTryGroupNaturalSettingShortcut = function(norm, coreHandler)
             "set " .. scope .. " max columns to 5; set " .. scope .. " units per column to 5; open group layout.",
             "Open Group Layout | set " .. scope .. " max columns to 5"
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         reply.searchResults = R.SettingFollowupResultsByQuery(scopeLabel .. " Max Columns", scopeLabel .. " Max Columns")
             or R.PageFollowupResults("gf_layout", "Group Layout", scopeLabel .. " column controls live in Group Layout.")
         return reply
@@ -2989,8 +3030,8 @@ A.RouterTryGroupNaturalSettingShortcut = function(norm, coreHandler)
             "open group layout; set " .. scope .. " spacing to 2; make " .. scope .. " frames closer together.",
             "Open Group Layout | set " .. scope .. " spacing to 2"
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         reply.searchResults = R.SettingFollowupResultsByQuery(scopeLabel .. " Spacing", scopeLabel .. " Spacing")
             or R.PageFollowupResults("gf_layout", "Group Layout", scopeLabel .. " spacing controls live in Group Layout.")
         return reply
@@ -3004,8 +3045,8 @@ A.RouterTryGroupNaturalSettingShortcut = function(norm, coreHandler)
             "set " .. scope .. " " .. dimension:lower() .. " to 140; increase " .. scope .. " " .. dimension:lower() .. "; open group layout.",
             "Open Group Layout | set " .. scope .. " " .. dimension:lower() .. " to 140"
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         return reply
     end
 
@@ -3363,6 +3404,7 @@ end
 
 function R.AuraFilterOverviewReply(norm)
     local lines = {}
+    local examples = "hide spell 12345; what active target debuff filters do I have; explain party buff filters; what is a good filter for raid."
     lines[#lines + 1] = "Aura filters, in normal words"
     lines[#lines + 1] = "Filters do not move icons or resize them. They decide which Buff or Debuff icons are allowed to show."
     lines[#lines + 1] = "Common choices:"
@@ -3374,7 +3416,15 @@ function R.AuraFilterOverviewReply(norm)
     lines[#lines + 1] = "- BigDefensive / ExternalDefensive and their Player variants: defensive cooldown tracking."
     lines[#lines + 1] = "- CROWD_CONTROL: CC effects, usually more useful in PvP or control-heavy situations."
     lines[#lines + 1] = "To read the exact active state I need the frame and lane, for example Target Debuffs, Player Buffs, Raid Debuffs, or Party Buffs."
-    lines[#lines + 1] = "Examples: what active target debuff filters do I have; explain party buff filters; what is a good filter for raid."
+    lines[#lines + 1] = "Examples: " .. examples
+    A.lastAssistantHelpContext = {
+        kind = "knowledge",
+        title = "Aura filters, in normal words",
+        examples = examples,
+        actions = "Open Aura Filters",
+        clarification = "Name the exact frame and Buff or Debuff lane before I change a live filter, so I do not guess wrong.",
+        nextStep = "Open Aura Filters to inspect the lists, or name a frame and lane before applying a live filter.",
+    }
     return {
         kind = "answer",
         status = "info",
@@ -3574,8 +3624,8 @@ A.RouterTryAuraProblemShortcut = function(text, coreHandler)
             "open aura style; set target buff cooldown text size to 14; show target buff stack text.",
             "Open Aura Style | Open Auras | Open Aura Filters"
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         return reply
     end
 
@@ -3685,7 +3735,7 @@ function A.RouterTryUnsupportedUnitCastbarShortcut(text, coreHandler)
         "open " .. unitLabel:lower() .. "; open cast bars; show " .. fallbackUnitLabel:lower() .. " cast bar; set " .. fallbackUnitLabel:lower() .. " cast bar height to 24.",
         "Open " .. unitLabel .. " | Open Cast Bars | show " .. fallbackUnitLabel:lower() .. " cast bar"
     )
-    reply.status = asksLocation and "applied" or "info"
+    reply.status = "info"
     reply.result = reply.status
     return reply
 end
@@ -3734,8 +3784,8 @@ A.RouterTryCastbarSpecialSettingShortcut = function(norm, coreHandler)
             "open cast bars; " .. command .. "; reset focus kick position.",
             "Open Cast Bars | " .. command
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         reply.searchResults = R.SettingFollowupResultsByQuery(settingLabel, settingLabel)
             or R.PageFollowupResults("opt_castbar", "Cast Bars", "Focus Kick Tracker controls live in Cast Bars.")
         return reply
@@ -3752,8 +3802,8 @@ A.RouterTryCastbarSpecialSettingShortcut = function(norm, coreHandler)
             "open cast bars; open colors; " .. command .. ".",
             "Open Cast Bars | Open Colors | " .. command
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         reply.searchResults = R.SettingFollowupResultsByQuery(settingLabel, settingLabel)
             or R.PageFollowupResults("opt_castbar", "Cast Bars", "Cast bar interrupt color controls live in Cast Bars and Colors.")
         return reply
@@ -3795,8 +3845,8 @@ A.RouterTryCastbarSettingShortcut = function(norm, coreHandler)
         example .. "; open cast bars; check " .. unit .. " cast bar.",
         "Open Cast Bars | " .. example
     )
-    reply.status = "applied"
-    reply.result = "applied"
+    reply.status = "info"
+    reply.result = "info"
     if key == "position" then
         reply.searchResults = R.PageFollowupResults("opt_castbar", "Cast Bars", unitLabel .. " cast bar position is controlled by Cast Bars placement settings and MSUF Edit Mode.")
     else
@@ -3879,7 +3929,7 @@ A.RouterTryCastbarProblemShortcut = function(text, coreHandler)
         unitLabel = unitLabel or (unit == "player" and "Player" or unit == "focus" and "Focus" or unit == "boss" and "Boss" or "Target")
         if type(coreHandler) == "function" then
             local result = coreHandler("diagnose " .. unit .. " castbar")
-            if result and not A.RouterIsUnknownResult(result) then return result end
+            if result and not A.RouterIsUnknownResult(result) then return R.AsReadOnlyResult(result) end
         end
         return A.RouterCastbarProblemReply(
             unitLabel .. " cast bar visibility help",
@@ -4064,8 +4114,8 @@ A.RouterTryTextPowerSettingShortcut = function(norm, coreHandler)
             "open " .. unit .. "; detach " .. unit .. " power bar; move " .. unit .. " power bar down 8.",
             "Open " .. unitLabel .. " | detach " .. unit .. " power bar"
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         reply.searchResults = R.PowerBarSettingFollowupResults(unit, settingLabel, norm)
         return reply
     end
@@ -4082,8 +4132,8 @@ A.RouterTryTextPowerSettingShortcut = function(norm, coreHandler)
             "open " .. unit .. "; set " .. unit .. " name text size to 14; set " .. unit .. " hp text size to 14.",
             "Open " .. unitLabel .. " | set " .. unit .. " name text size to 14"
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         reply.searchResults = R.TextPowerSettingFollowupResults(unit, unitLabel, textKind, settingLabel)
         return reply
     end
@@ -4093,8 +4143,8 @@ A.RouterTryTextPowerSettingShortcut = function(norm, coreHandler)
         "open " .. unit .. "; " .. ((R.WantsVisibilityOn(norm) and not R.WantsVisibilityOff(norm)) and "turn on " or "turn off ") .. unit .. " " .. commandNoun .. "; set " .. unit .. " " .. commandNoun .. " size to 14.",
         "Open " .. unitLabel .. " | " .. ((R.WantsVisibilityOn(norm) and not R.WantsVisibilityOff(norm)) and "turn on " or "turn off ") .. unit .. " " .. commandNoun
     )
-    reply.status = "applied"
-    reply.result = "applied"
+    reply.status = "info"
+    reply.result = "info"
     if not R.ContainsAny(norm, { "format", "percent", "percentage", "current", "current max", "value" }) then
         reply.searchResults = R.TextPowerSettingFollowupResults(unit, unitLabel, textKind, settingLabel)
     else
@@ -4392,8 +4442,8 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
             "open group status and indicators; set " .. groupScope .. " ready check size to 18; set " .. groupScope .. " ready check anchor top right.",
             "Open Group Status & Indicators | set " .. groupScope .. " ready check size to 18"
         )
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         return reply
     end
 
@@ -4458,8 +4508,8 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
                 "Open Group Status & Indicators | Open Player | Open Target"
             )
         end
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         return reply
     end
     if settingNoun and asksIndicatorLayoutLocation and not wantsOff and not wantsOn then
@@ -4490,8 +4540,8 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
                 "Open Group Status & Indicators | Open Player | Open Target"
             )
         end
-        reply.status = "applied"
-        reply.result = "applied"
+        reply.status = "info"
+        reply.result = "info"
         return reply
     end
     if settingNoun and (asksLocation or wantsOff or wantsOn) then
@@ -4507,8 +4557,8 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
                     "open group status and indicators; show raid ready check icon; set raid ready check size to 18.",
                     "Open Group Status & Indicators | show raid ready check icon"
                 )
-                reply.status = "applied"
-                reply.result = "applied"
+                reply.status = "info"
+                reply.result = "info"
                 return reply
             end
             if asksLocation and not (wantsOff or wantsOn) then return nil end
@@ -4521,8 +4571,8 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
                     verb .. scope .. " " .. settingNoun .. "; open group status and indicators; set " .. scope .. " " .. settingNoun .. " size to 18.",
                     "Open Group Status & Indicators | " .. verb .. scope .. " " .. settingNoun
                 )
-                reply.status = "applied"
-                reply.result = "applied"
+                reply.status = "info"
+                reply.result = "info"
                 local queryLabel = (groupLabel or scope) .. " " .. settingLabel
                 reply.searchResults = R.SettingFollowupResultsByQuery(queryLabel, queryLabel)
                 return reply
@@ -4543,8 +4593,8 @@ A.RouterTryIndicatorProblemShortcut = function(text, coreHandler)
                     verb .. unit .. " " .. settingNoun .. "; open " .. unit .. "; set " .. unit .. " " .. settingNoun .. " size to 18.",
                     "Open " .. page .. " | " .. verb .. unit .. " " .. settingNoun
                 )
-                reply.status = "applied"
-                reply.result = "applied"
+                reply.status = "info"
+                reply.result = "info"
                 reply.searchResults = R.SettingFollowupResultsByQuery(page .. " " .. settingLabel, page .. " " .. settingLabel)
                 return reply
             end
@@ -4674,11 +4724,19 @@ A.RouterTryClassResourceSettingShortcut = function(norm, coreHandler)
     local isCapabilityQuestion = norm:match("^can%s+i%s+") ~= nil
         or norm:match("^is%s+there%s+a%s+way%s+") ~= nil
     local body
+    local didNavigate = false
     if isCapabilityQuestion then
         body = "Class Resources help: " .. settingLabel .. " lives on Class Resources. Open Class Resources when you want to inspect it, or ask for an exact change when you want me to apply it."
     else
-        if type(coreHandler) == "function" then coreHandler("open class resources") end
-        body = "Done. Opened Class Resources.\nClass Resources help: " .. settingLabel .. " lives on Class Resources. Open Class Resources and use visibility, width, height, anchor, X/Y offset, color, and preview controls for the resource your class uses."
+        if type(coreHandler) == "function" then
+            local opened = coreHandler("open class resources")
+            if opened and not A.RouterIsUnknownResult(opened) then
+                opened = R.AsNavigationResult(opened)
+                didNavigate = (opened.status or opened.result) == "navigated"
+            end
+        end
+        body = (didNavigate and "Done. Opened Class Resources.\n" or "")
+            .. "Class Resources help: " .. settingLabel .. " lives on Class Resources. Open Class Resources and use visibility, width, height, anchor, X/Y offset, color, and preview controls for the resource your class uses."
     end
     local reply = A.RouterClassResourceProblemReply(
         settingLabel .. " setting location",
@@ -4686,8 +4744,8 @@ A.RouterTryClassResourceSettingShortcut = function(norm, coreHandler)
         "open class resources; turn off class resources; move class resources down 5; set class resource width to 120.",
         "Open Class Resources | turn off " .. noun
     )
-    reply.status = "applied"
-    reply.result = "applied"
+    reply.status = didNavigate and "navigated" or "info"
+    reply.result = reply.status
     reply.searchResults = R.ClassResourceSettingFollowupResults(settingLabel)
     return reply
 end
@@ -4801,8 +4859,8 @@ A.RouterTryGameplaySettingShortcut = function(norm, isCombatTimer, isCrosshair, 
         "open gameplay; turn off " .. noun .. "; move " .. noun .. " down 8; set " .. noun .. " size to 40.",
         "Open Gameplay | turn off " .. noun
     )
-    reply.status = "applied"
-    reply.result = "applied"
+    reply.status = "info"
+    reply.result = "info"
     reply.searchResults = R.GameplaySettingFollowupResults(settingLabel)
     return reply
 end
@@ -4924,7 +4982,11 @@ function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHan
     elseif R.ContainsAny(norm, R.VISIBILITY_AURA_TERMS) then
         local scope = R.VisibilityAuraScopeForText(group, unit)
         if scope then
-            query = "why are " .. scope .. " " .. R.VisibilityAuraLaneForText(norm) .. " hidden"
+            -- Use the explicit diagnostic action lane. The natural phrase
+            -- "why are ... hidden" can also look like a boolean-off request
+            -- to low-level alias matching; wrapping that result as `info`
+            -- would hide a real write behind a read-only status.
+            query = "diagnose " .. scope .. " " .. R.VisibilityAuraLaneForText(norm)
         end
     elseif R.ContainsAny(norm, R.VISIBILITY_CASTBAR_TERMS) then
         local castbarUnit = R.VisibilityCastbarUnitForText(unit)
@@ -4943,7 +5005,10 @@ function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHan
 
     if not query then
         if group then
-            query = "why are " .. group .. " frames hidden"
+            -- Keep problem reports on the explicit read-only diagnostic action;
+            -- the natural "... frames hidden" phrase overlaps the frame's
+            -- boolean visibility alias and can otherwise perform an off-write.
+            query = "diagnose " .. group .. " frames"
         elseif unit then
             query = "diagnose " .. unit .. " frame"
         end
@@ -4954,7 +5019,7 @@ function R.TryVisibilityDiagnosticShortcut(text, coreHandler)    if type(coreHan
     local result = coreHandler(query)
     if result and not (type(result) == "table" and result.kind == "unknown") then
         result.summary = result.summary or "Matched by a visibility diagnostic shortcut."
-        return result
+        return R.AsReadOnlyResult(result)
     end
     return nil
 end
@@ -5064,8 +5129,17 @@ end
 
 function A.RouterClearPendingChoicesForRoute()
     A.pendingChoices = nil
+    -- The runtime keeps a rehydratable mirror for natural candidate replies.
+    -- Clearing only pendingChoices lets HandlePending resurrect the old fixes
+    -- after the Router already recognized a new problem/topic.
+    if A.RuntimePrivate and type(A.RuntimePrivate.ClearPendingCandidates) == "function" then
+        A.RuntimePrivate.ClearPendingCandidates()
+    end
     local ctx = A.GetContext and A.GetContext()
-    if type(ctx) == "table" then ctx.pendingChoices = nil end
+    if type(ctx) == "table" then
+        ctx.pendingChoices = nil
+        ctx.pendingCandidates = nil
+    end
 end
 
 function A.RouterClearPendingResultsForRoute()
@@ -5725,8 +5799,8 @@ A.RouterTryAssistantUsabilityProblemShortcut = function(text, coreHandler)
         if R.ContainsAny(norm, { "german", "deutsch" }) then
             return A.RouterAssistantUsabilityReply(
                 "Assistant language help",
-                "The Assistant should answer in English for this build. Menu Language controls MSUF menu labels, while Assistant response wording is handled by the Assistant itself. If an answer appears in German, capture the exact prompt so it can be fixed.",
-                "set menu language to English; assistant support text; report assistant bug.",
+                "The Assistant supports deterministic English and German response presentation. Ask 'answer in German ...' or 'answer in English ...' to switch the conversation language; canonical MSUF setting, page, and button names stay unchanged. Menu Language separately controls MSUF menu labels.",
+                "answer in German what are your limits; answer in English what are your limits; set menu language to German.",
                 "Open Miscellaneous | Assistant Support Text | Report Bug"
             )
         end
@@ -5936,126 +6010,6 @@ A.RouterSafePlanningTerms = A.RouterSafePlanningTerms or {
         "prioritize focus", "make boss important", "prioritize boss",
     },
 }
-
-A.RouterSafePlanningReply = function(title, body, examples, actions)
-    A.RouterClearPendingResultsForRoute()
-    A.lastAssistantPlanningContext = {
-        title = tostring(title or "Safe planning guidance"),
-        examples = tostring(examples or "guided setup; run checks; open player."),
-        actions = tostring(actions or "Guided Setup | Run Checks | Open Player"),
-    }
-    return {
-        text = tostring(title or "Safe planning guidance") .. "\n" .. tostring(body or "") .. "\nExamples: " .. tostring(examples or "guided setup; run checks; open player.") .. "\nYou can ask: " .. tostring(actions or "Guided Setup | Run Checks | Open Player"),
-        status = "info",
-        summary = "Assistant safe planning guidance",
-    }
-end
-
-A.RouterSafePlanningFollowupTerms = A.RouterSafePlanningFollowupTerms or {
-    examples = {
-        "examples", "example", "show examples", "show me examples",
-        "give examples", "what should i type", "what can i type",
-        "what can i say", "show commands", "show me commands",
-    },
-    open = {
-        "open it", "open that", "open this", "open the page",
-        "open first page", "open the first page", "open first page from checklist",
-        "take me there", "go there", "show it", "show that", "show this",
-    },
-    details = {
-        "explain more", "tell me more", "more details", "details",
-        "why", "why this", "why that", "explain it", "explain that",
-        "can you explain that", "can you explain more",
-    },
-    safe = {
-        "which one is safer", "what is safest", "what is safer",
-        "safer please", "yes but safer", "safe option", "safe step",
-    },
-    apply = {
-        "do it", "do that", "run it", "run that", "apply it", "apply that",
-        "make it happen", "ok do first step", "do first safe step",
-        "do the first safe step", "apply first example", "apply the first example",
-        "apply first checklist item", "use first example", "use the first example",
-    },
-}
-
-A.RouterTrySafePlanningFollowup = function(text, coreHandler)
-    local ctx = type(A.lastAssistantPlanningContext) == "table" and A.lastAssistantPlanningContext or nil
-    if not ctx then return nil end
-    local norm = R.Normalize(text)
-    if norm == "" then return nil end
-    if R.ContainsAny(norm, R.CORRECTION_UNDO_TERMS) or R.ContainsAny(norm, R.CORRECTION_REDO_TERMS) then return nil end
-    if R.ContainsAny(norm, {
-        "why did that fail", "why did it fail", "why did this fail",
-        "that did not work", "that didnt work", "that didn't work",
-        "it did not work", "it didnt work", "it didn't work",
-        "still broken", "still not working", "not fixed",
-    }) then
-        return nil
-    end
-    if (R.HasNaturalProblemTerm(norm) or R.ContainsAny(norm, R.VISIBILITY_PROBLEM_TERMS))
-        and R.ContainsAny(norm, R.EXPLICIT_DOMAIN_TERMS)
-    then
-        return nil
-    end
-    if (norm:match("^why%s+is%s+") or norm:match("^why%s+are%s+") or norm:match("^why%s+cant%s+") or norm:match("^why%s+can't%s+"))
-        and R.ContainsAny(norm, R.EXPLICIT_DOMAIN_TERMS)
-    then
-        return nil
-    end
-    local terms = A.RouterSafePlanningFollowupTerms
-    local title = tostring(ctx.title or "Safe planning guidance")
-    local examples = tostring(ctx.examples or "guided setup; run checks; open player.")
-    local actions = tostring(ctx.actions or "Guided Setup | Run Checks | Open Player")
-
-    if R.ContainsAny(norm, terms.apply) then
-        return {
-            text = title .. "\nI will not apply a planning suggestion from a vague follow-up. Type one exact example command when you want a change, or ask me to open the page first.\nExamples: " .. examples,
-            status = "info",
-            summary = "Assistant planning guarded apply",
-        }
-    end
-
-    if R.ContainsAny(norm, terms.examples) then
-        return {
-            text = title .. "\nExamples: " .. examples,
-            status = "info",
-            summary = "Assistant planning examples",
-        }
-    end
-
-    if R.ContainsAny(norm, terms.open) then
-        local command = R.FirstOpenActionCommand(actions)
-        if command and type(coreHandler) == "function" then
-            local result = coreHandler(command)
-            if result and not A.RouterIsUnknownResult(result) then return result end
-        end
-        return {
-            text = title .. "\nOpen one of these pages or actions: " .. actions,
-            status = "info",
-            summary = "Assistant planning navigation",
-        }
-    end
-
-    if R.ContainsAny(norm, terms.safe) then
-        return A.RouterSafePlanningReply(
-            title,
-            "The safest next step is navigation or inspection, not applying a vague change. Open the relevant page first, review the current option, then use one exact example command if you want a change.",
-            examples,
-            actions
-        )
-    end
-
-    if R.ContainsAny(norm, terms.details) then
-        return {
-            text = title .. "\nUse the examples when you want a concrete change, or open the relevant page first if you want to inspect settings safely.\nExamples: " .. examples .. "\nYou can ask: " .. actions,
-            status = "info",
-            summary = "Assistant planning details",
-        }
-    end
-
-    return nil
-end
 
 A.RouterTrySafePlanningShortcut = function(text, coreHandler)
     local norm = R.Normalize(text)
@@ -6750,25 +6704,19 @@ function R.RecoveryGuidanceReply()    return {
     }
 end
 
-function R.ContextlessGuidanceReply()    return {
-        text = "I need a little more MSUF context before I choose or open something. Name the area, page, setting, or result number you mean.\nUseful next prompts: Guided Setup | Run Checks | Open Auras | Open Cast Bars | explain result 1 | why are target buffs hidden",
-        status = "info",
-        summary = "Assistant context guidance",
-    }
+function R.IsCurrentPageHelpRequest(text)
+    local norm = R.Normalize(text)
+    if norm == "" then return false end
+    return R.ContainsAny(norm, { "here", "this page", "current page", "page help" }) and R.ContainsAny(norm, {
+        "help", "commands", "what can", "what settings", "explain",
+        "how can", "how do", "how to", "where can", "where do",
+    })
 end
 
 function R.TryPageHelpShortcut(text, coreHandler)    if type(coreHandler) ~= "function" then return nil end
-    local norm = R.Normalize(text)
-    if norm == "" then return nil end
-    if not R.ContainsAny(norm, { "here", "this page", "current page", "page help" }) then return nil end
-    if not R.ContainsAny(norm, {
-        "help", "commands", "what can", "what settings", "explain",
-        "how can", "how do", "how to", "where can", "where do",
-    }) then
-        return nil
-    end
+    if not R.IsCurrentPageHelpRequest(text) then return nil end
     local result = coreHandler(text)
-    if result and not A.RouterIsUnknownResult(result) then return result end
+    if result and not A.RouterIsUnknownResult(result) then return R.AsReadOnlyResult(result) end
     return nil
 end
 
@@ -6822,8 +6770,7 @@ function R.TryPageLocationShortcut(text, coreHandler)    if type(coreHandler) ~=
     if not label then return nil end
     local result = coreHandler("open " .. label)
     if result and not A.RouterIsUnknownResult(result) then
-        result.status = result.status or result.result or "applied"
-        return result
+        return R.AsNavigationResult(result)
     end
     return nil
 end
@@ -6967,6 +6914,12 @@ function R.RegistryLocationSubject(norm)
         "where do i display ", "where can i display ",
         "where do i turn on ", "where can i turn on ", "where do i turn off ", "where can i turn off ",
         "where do i enable ", "where can i enable ", "where do i disable ", "where can i disable ",
+        "how do i change ", "how can i change ", "how do i set ", "how can i set ",
+        "how do i configure ", "how can i configure ", "how do i adjust ", "how can i adjust ",
+        "how do i show ", "how can i show ", "how do i hide ", "how can i hide ",
+        "how do i display ", "how can i display ",
+        "how do i turn on ", "how can i turn on ", "how do i turn off ", "how can i turn off ",
+        "how do i enable ", "how can i enable ", "how do i disable ", "how can i disable ",
         "can i turn on ", "can i turn off ", "can i enable ", "can i disable ",
         "can i show ", "can i hide ", "can i display ",
         "is there a way to turn on ", "is there a way to turn off ",
@@ -6974,6 +6927,8 @@ function R.RegistryLocationSubject(norm)
         "is there a way to show ", "is there a way to hide ", "is there a way to display ",
         "where do i find ", "where can i find ", "where is the ", "where is ",
         "which page has ", "what page has ", "which menu has ", "what menu has ",
+        "wo kann ich ", "wo finde ich ", "wo ist ", "wo sind ",
+        "wie kann ich ", "wie aendere ich ", "welche einstellung steuert ", "welche option steuert ",
     }
     for i = 1, #prefixes do
         local prefix = prefixes[i]
@@ -6982,7 +6937,10 @@ function R.RegistryLocationSubject(norm)
             break
         end
     end
-    norm = norm:gsub("^the%s+", "")
+    norm = norm:gsub("^the%s+", ""):gsub("^die%s+", ""):gsub("^der%s+", ""):gsub("^das%s+", "")
+    norm = norm:gsub("%s+ausblenden$", ""):gsub("%s+einblenden$", "")
+        :gsub("%s+aendern$", ""):gsub("%s+einstellen$", ""):gsub("%s+konfigurieren$", "")
+        :gsub("%s+finden$", "")
     return R.Trim(norm)
 end
 
@@ -7018,6 +6976,8 @@ function R.LooksLikeRegistrySettingLocationQuestion(text)
         "which page has", "what page has", "which menu has", "what menu has",
         "where is the setting", "where is the option", "where is",
         "where do i find", "where can i find",
+        "wo kann ich", "wo finde ich", "wo ist", "wo sind",
+        "wie kann ich", "wie aendere ich", "welche einstellung", "welche option",
     }) then
         return true
     end
@@ -7485,6 +7445,15 @@ local GROUP_LAYOUT_FALLBACK_ATTRS = {
     anchorPoint = true,
 }
 
+R.FALLBACK_PAGE_BY_FRAME_TYPE = {
+    modules = "modules",
+    classPower = "classpower", classPowerPlayerHP = "classpower", altMana = "classpower", detachedPowerBar = "classpower",
+    bars = "bars", globalBars = "bars",
+    fonts = "fonts", colors = "colors",
+    gameplay = "gameplay", combatState = "gameplay", combatCrosshair = "gameplay", combatTimer = "gameplay", playerTotems = "gameplay",
+    dashboard = "home",
+}
+
 function R.FallbackPageForSetting(setting)
     if type(setting) ~= "table" then return nil end
     local unit = tostring(setting.unit or "")
@@ -7500,6 +7469,7 @@ function R.FallbackPageForSetting(setting)
         focustarget = "uf_focustarget",
     }
     if unitPages[unit] then return unitPages[unit] end
+    if R.FALLBACK_PAGE_BY_FRAME_TYPE[frameType] then return R.FALLBACK_PAGE_BY_FRAME_TYPE[frameType] end
     if unit == "party" or unit == "raid" or unit == "mythicraid" then
         if frameType == "aura" then return "gf_auras" end
         local attr = tostring(setting.attribute or "")
@@ -7672,7 +7642,112 @@ function R.LooksLikeTargetTargetInlineNameRequest(norm)
     return true
 end
 
+R.COMPACT_SETTING_STOP_WORDS = {
+    ["the"] = true, ["a"] = true, ["an"] = true,
+    ["frame"] = true, ["frames"] = true, ["setting"] = true, ["settings"] = true,
+    ["option"] = true, ["options"] = true, ["control"] = true, ["controls"] = true,
+}
+R.COMPACT_SETTING_WORDS = {
+    breite = "width", hoehe = "height", groesse = "size", textur = "texture",
+    spieler = "player", ziel = "target", gruppe = "group", bereit = "ready",
+}
+
+function R.CompactRegistrySettingTokens(text)
+    local norm = tostring(text or ""):lower():gsub("[^%w]+", " "):gsub("%s+", " ")
+    norm = R.Trim(norm):gsub("cast bar", "castbar")
+    local words, set = {}, {}
+    for word in norm:gmatch("%S+") do
+        word = R.COMPACT_SETTING_WORDS[word] or word
+        if not R.COMPACT_SETTING_STOP_WORDS[word] and not set[word] then
+            set[word] = true
+            words[#words + 1] = word
+        end
+    end
+    return words, set
+end
+
+function R.CompactRegistrySettingLabel(text)
+    return R.Trim(tostring(text or ""):lower():gsub("[^%w]+", " "):gsub("%s+", " ")):gsub("cast bar", "castbar")
+end
+
+function R.CompactRegistrySettingSearchEntries(text, limit)
+    local queryWords = R.CompactRegistrySettingTokens(text)
+    if #queryWords < 2 then return nil end
+    local registry = A.Registry
+    local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
+    if type(settings) ~= "table" then return nil end
+
+    local matches = {}
+    local queryJoined = table.concat(queryWords, " ")
+    for i = 1, #settings do
+        local setting = settings[i]
+        local candidateText = R.CompactRegistrySettingLabel(setting and setting.label or "")
+        local paddedCandidate = " " .. candidateText .. " "
+        local all = candidateText ~= ""
+        for j = 1, #queryWords do
+            if not paddedCandidate:find(" " .. queryWords[j] .. " ", 1, true) then all = false; break end
+        end
+        if all then
+            local candidateCount = 0
+            for _ in candidateText:gmatch("%S+") do candidateCount = candidateCount + 1 end
+            local extra = candidateCount - #queryWords
+            local score = 1000 + (#queryWords * 100) - (extra * 20)
+            if candidateText == queryJoined then score = score + 3000 end
+            local page = R.FallbackPageForSetting(setting)
+            local pageLabel = page and A.DisplayPageLabel and A.DisplayPageLabel(page, setting.category or "MSUF page")
+                or tostring(setting.category or "MSUF page")
+            matches[#matches + 1] = {
+                score = score,
+                rawScore = score,
+                item = {
+                    kind = "setting",
+                    key = setting.key,
+                    settingKey = setting.key,
+                    setting = setting,
+                    label = setting.label,
+                    page = page,
+                    pageLabel = pageLabel,
+                    category = setting.category,
+                    unit = setting.unit,
+                    controlType = setting.type,
+                    canOpen = page ~= nil,
+                    canExplain = true,
+                },
+            }
+        end
+    end
+    if #matches == 0 then return nil end
+    table.sort(matches, function(a, b)
+        if a.score ~= b.score then return a.score > b.score end
+        return tostring(a.item and a.item.label or "") < tostring(b.item and b.item.label or "")
+    end)
+    while #matches > (tonumber(limit) or 16) do matches[#matches] = nil end
+    return matches
+end
+
+function R.TryCompactExplicitSettingSearch(text)
+    local norm = R.Normalize(text)
+    local subject = norm:match("^search%s+(.+)$") or norm:match("^find%s+(.+)$")
+        or norm:match("^suche%s+(.+)$") or norm:match("^finde%s+(.+)$")
+    if not subject or subject == "" then return nil end
+    local entries = R.CompactRegistrySettingSearchEntries(subject, 5)
+    if not entries then return nil end
+    local visible = math.min(3, #entries)
+    local lines = { visible == 1 and "I found this in MSUF:" or "I found these MSUF matches:" }
+    for i = 1, visible do lines[#lines + 1] = R.RegistryLocationLine(i, entries[i].item) end
+    lines[#lines + 1] = "You can ask me to open a page, explain a result, or change an option directly."
+    return {
+        text = table.concat(lines, "\n"),
+        status = "info",
+        result = "info",
+        summary = "Assistant compact registry search",
+        searchResults = R.RegistryLocationResultFollowups(entries, visible),
+    }
+end
+
 function R.RegistrySettingSearchEntries(text, norm, limit)
+    local compact = R.CompactRegistrySettingSearchEntries(text, limit)
+    if compact then return compact end
     if not (A.Knowledge and type(A.Knowledge.Search) == "function") then return nil end
     local results = A.Knowledge.Search(text, tonumber(limit) or 16, { kind = "setting", ignoreCurrentPage = true }) or {}
     if #results == 0 then return nil end
@@ -8360,11 +8435,11 @@ function A.RouterTryDependentTargetTroubleshootingShortcut(text, coreHandler)
     }
 end
 
-function A.RouterTryRegistrySettingExplainShortcut(text, coreHandler)
+function A.RouterTryRegistrySettingExplainShortcut(text, coreHandler, precomputedEntries)
     local norm = R.Normalize(text)
     if not R.LooksLikeRegistrySettingExplainQuestion(norm) then return nil end
     local subject = R.RegistryExplainSubject(norm)
-    local entries = R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16)
+    local entries = precomputedEntries or R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16)
     if not entries or #entries == 0 then return nil end
 
     local top = entries[1]
@@ -8410,8 +8485,8 @@ function A.RouterTryRegistrySettingExplainShortcut(text, coreHandler)
 
     return {
         text = table.concat(lines, "\n"),
-        status = "applied",
-        result = "applied",
+        status = "info",
+        result = "info",
         summary = "Assistant registry setting explanation",
         searchResults = R.RegistryLocationResultFollowups(close, #close),
     }
@@ -8571,11 +8646,11 @@ function A.RouterTryRegistrySettingTroubleshootingShortcut(text, coreHandler)
     }
 end
 
-function A.RouterTryRegistrySettingLocationShortcut(text, coreHandler)
+function A.RouterTryRegistrySettingLocationShortcut(text, coreHandler, precomputedEntries)
     local norm = R.Normalize(text)
     if not R.LooksLikeRegistrySettingLocationQuestion(norm) then return nil end
     local subject = R.RegistryLocationSubject(norm)
-    local entries = R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16)
+    local entries = precomputedEntries or R.RegistrySettingSearchEntries(subject ~= "" and subject or text, norm, 16)
     if not entries or #entries == 0 then return nil end
 
     local top = entries[1]
@@ -8614,8 +8689,8 @@ function A.RouterTryRegistrySettingLocationShortcut(text, coreHandler)
 
     return {
         text = table.concat(lines, "\n"),
-        status = "applied",
-        result = "applied",
+        status = "info",
+        result = "info",
         summary = "Assistant registry setting location",
         searchResults = R.RegistryLocationResultFollowups(close, #close),
     }
@@ -8837,6 +8912,8 @@ function R.ContextualVariants(text)    if R.ShouldSkipContext(text) then return 
     elseif M.activeKey == "opt_castbar" then
         local noun = R.StripLeadingCommand(text)
         local relativeVerb = R.LeadingRelativeCommand(text)
+        if norm == "show timer" or norm == "enable timer" then R.AddUnique(variants, "show target cast time text") end
+        if norm == "hide timer" or norm == "disable timer" then R.AddUnique(variants, "hide target cast time text") end
         R.AddBooleanContextVariants(variants, "castbar", text)
         R.AddUnique(variants, "castbar " .. text)
         R.AddUnique(variants, "set castbar " .. text)
@@ -8887,6 +8964,11 @@ function R.ContextualVariants(text)    if R.ShouldSkipContext(text) then return 
     return #variants > 0 and variants or nil
 end
 
+function A.RouterShouldPreferPageContext(text)
+    if not R.CurrentPageContext() or R.ShouldSkipContext(text) then return false end
+    return R.ContextualVariants(text) ~= nil
+end
+
 function R.TryContext(text, coreHandler)    if type(coreHandler) ~= "function" then return nil end
     local variants = R.ContextualVariants(text)
     if not variants then return nil end
@@ -8898,8 +8980,13 @@ function R.TryContext(text, coreHandler)    if type(coreHandler) ~= "function" t
         local result = coreHandler(variants[i])
         if result and not A.RouterIsUnknownResult(result) then
             if not A.RouterIsAmbiguousResult(result) then
-                if result.summary == nil or result.summary == "" or result.summary == "MSUF options change." then
-                    result.summary = "Current-page context: " .. R.CurrentPageSummaryLabel()
+                local contextSummary = "Current-page context: " .. R.CurrentPageSummaryLabel()
+                local priorSummary = tostring(result.summary or "")
+                if not priorSummary:find("Current-page context:", 1, true) then
+                    if priorSummary ~= "" and priorSummary ~= "MSUF options change." and priorSummary ~= "Changes the matched option." then
+                        contextSummary = contextSummary .. " - " .. priorSummary
+                    end
+                    result.summary = contextSummary
                 end
                 return result
             end
@@ -9068,7 +9155,10 @@ end
 function A.RouteInput(text, coreHandler)
     text = R.Trim(text)
     if text == "" then return nil end
+    local routedText = R.StripResponseLanguageDirective(text)
+    if routedText ~= "" then text = routedText end
     R.ClearStaleHelpContextForInput(text)
+    R.ClearStalePlanningContextForInput(text)
 
     local hasCore = type(coreHandler) == "function"
     local coreCache = {}
@@ -9077,6 +9167,12 @@ function A.RouteInput(text, coreHandler)
         value = R.Trim(value)
         if coreCache[value] == nil then
             local result = coreHandler(value)
+            if result and result._readOnlyGuard == true then result = nil end
+            if result and R.IsExplicitNavigationCommand(value) then
+                result = R.AsNavigationResult(result)
+            elseif result and R.IsExplicitReadOnlyDiagnosticCommand(value) then
+                result = R.AsReadOnlyResult(result)
+            end
             coreCache[value] = result or false
         end
         return coreCache[value] ~= false and coreCache[value] or nil
@@ -9096,19 +9192,30 @@ function A.RouteInput(text, coreHandler)
         pendingResultReply = false
     end
     local explicitSearchRequest = A.RouterLooksLikeExplicitSearchRequest(text)
+    local parserIntent = A.Parser and type(A.Parser.NonMutatingIntent) == "function"
+        and A.Parser.NonMutatingIntent(text) or nil
     if hasPendingChoices
         and not pendingResultReply
         and not A.RouterHasPendingConfirmationOrFlow()
-        and A.RouterLooksLikePendingChoiceTopicSwitch(text)
+        and ((parserIntent == "problem" and not A.RouterLooksLikePendingChoiceFollowup(text))
+            or A.RouterLooksLikePendingChoiceTopicSwitch(text))
     then
         A.RouterClearPendingChoicesForRoute()
         hasPendingState = A.RouterHasPendingAssistantState()
         hasBlockingPendingState = A.RouterHasBlockingPendingAssistantState()
         hasPendingChoices = A.RouterHasPendingChoices()
     end
+    if explicitSearchRequest and not hasBlockingPendingState and not pendingResultReply then
+        local compactSearch = R.TryCompactExplicitSettingSearch(text)
+        if compactSearch then return compactSearch end
+    end
+    if not hasPendingState and not pendingResultReply then
+        local contextlessReference = R.TryContextlessReferenceClarification(text)
+        if contextlessReference then return contextlessReference end
+    end
     if R.IsExactGenericDiagnosticRequest(text) and not pendingResultReply then
         local diagnosticResult = Core(text)
-        if diagnosticResult then return diagnosticResult end
+        if diagnosticResult then return R.AsReadOnlyResult(diagnosticResult) end
     end
     if not hasPendingState and not pendingResultReply and R.IsStandaloneCancelReply(text) then
         return {
@@ -9119,8 +9226,32 @@ function A.RouteInput(text, coreHandler)
     end
 
     if not hasBlockingPendingState and not pendingResultReply then
+        local metaConversation = R.TryEarlyAssistantMetaConversationReply(text)
+        if metaConversation then return metaConversation end
+    end
+
+    if not hasBlockingPendingState and not pendingResultReply then
         local earlyPageHelpResult = R.TryPageHelpShortcut(text, Core)
         if earlyPageHelpResult then return earlyPageHelpResult end
+
+        local normForGermanLocation = R.Normalize(text)
+        local germanLocation = normForGermanLocation:match("^wo%s+")
+            or normForGermanLocation:match("^wie%s+kann%s+ich%s+")
+            or normForGermanLocation:match("^welche%s+einstellung%s+")
+            or normForGermanLocation:match("^welche%s+option%s+")
+        if germanLocation and R.LooksLikeRegistrySettingLocationQuestion(text) then
+            local subject = R.RegistryLocationSubject(text)
+            local entries = subject ~= "" and R.CompactRegistrySettingSearchEntries(subject, 3) or nil
+            if entries then
+                local location = A.RouterTryRegistrySettingLocationShortcut and A.RouterTryRegistrySettingLocationShortcut(text, Core, entries)
+                if location then return location end
+            end
+        end
+
+        -- A named tracker is more specific than its surrounding cast bar. This
+        -- explanatory route must win before broad cast-bar troubleshooting.
+        local earlySignalProblemResult = R.TrySignalProblemShortcut(text)
+        if earlySignalProblemResult then return earlySignalProblemResult end
 
         local earlyLastChangeSettingFollowupResult = R.TryLastChangeSettingFollowup and R.TryLastChangeSettingFollowup(text)
         if earlyLastChangeSettingFollowupResult then return earlyLastChangeSettingFollowupResult end
@@ -9130,6 +9261,16 @@ function A.RouteInput(text, coreHandler)
 
         local earlyRegistrySettingCurrentValueResult = A.RouterTryRegistrySettingCurrentValueShortcut and A.RouterTryRegistrySettingCurrentValueShortcut(text, Core)
         if earlyRegistrySettingCurrentValueResult then return earlyRegistrySettingCurrentValueResult end
+
+        local earlySettingGraphResult = A.RouterTrySettingGraphShortcut and A.RouterTrySettingGraphShortcut(text)
+        if earlySettingGraphResult then return earlySettingGraphResult end
+
+        local compactExplainSubject = R.LooksLikeRegistrySettingExplainQuestion(text) and R.RegistryExplainSubject(text) or ""
+        local compactExplainEntries = compactExplainSubject ~= "" and R.CompactRegistrySettingSearchEntries(compactExplainSubject, 3) or nil
+        if compactExplainEntries then
+            local compactExplainResult = A.RouterTryRegistrySettingExplainShortcut and A.RouterTryRegistrySettingExplainShortcut(text, Core, compactExplainEntries)
+            if compactExplainResult then return compactExplainResult end
+        end
     end
 
     if not hasBlockingPendingState and not pendingResultReply

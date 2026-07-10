@@ -106,12 +106,15 @@ function A.EditModeRegistry.BuildSharedHelpers(ctx)
     end
 
     local function ScheduleEditModeSync(includePreviewForce)
-        if InCombat() then return false end
-        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-            _G.C_Timer.After(0.1, function()
-                if InCombat() then return end
+        if InCombat() or A._menuRuntimeActive == false then return false end
+        if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
+            local timer
+            timer = _G.C_Timer.NewTimer(0.1, function()
+                if type(A.UntrackMenuRuntimeTimer) == "function" then A.UntrackMenuRuntimeTimer("assistant.edit_mode.sync", timer) end
+                if InCombat() or A._menuRuntimeActive == false then return end
                 SyncEditModeMovers(includePreviewForce)
             end)
+            if type(A.TrackMenuRuntimeTimer) == "function" then A.TrackMenuRuntimeTimer("assistant.edit_mode.sync", timer) end
         else
             SyncEditModeMovers(includePreviewForce)
         end

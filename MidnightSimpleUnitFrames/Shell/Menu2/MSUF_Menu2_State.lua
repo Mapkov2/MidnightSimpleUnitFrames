@@ -12,7 +12,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
 end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local MENU_STATE_VERSION = 3
+local MENU_STATE_VERSION = 4
 local MENU_STATE_TABLE_FIELDS = M.WordList [[
     accordionState previewPinState navHeaderState unitTextTabSelection unitTextSlotSelection
     unitStatusSelection unitStatusTabSelection gfTextTabSelection gfTextSlotSelection
@@ -20,7 +20,6 @@ local MENU_STATE_TABLE_FIELDS = M.WordList [[
     collapseHintClickState
 ]]
 local MENU_STATE_SCALAR_DEFAULTS = {
-    lastPage = "home",
     gfScope = "party",
     auraScope = "shared",
     auraStyleTab = "overview",
@@ -59,13 +58,18 @@ local function CopyMissingStateValues(dst, src)
 end
 local function MigrateMenuState(state, oldVersion)
     oldVersion = tonumber(oldVersion) or 0
-    if oldVersion >= 2 then return end
-    local accordion = type(state) == "table" and state.accordionState
-    if type(accordion) ~= "table" then return end
-    for key in pairs(accordion) do
-        local textKey = type(key) == "string" and (key == "gf_bars:text" or key:match("^uf_[^:]+:text$"))
-        if textKey then accordion[key] = nil end
+    if type(state) ~= "table" then return end
+    if oldVersion < 2 then
+        local accordion = state.accordionState
+        if type(accordion) == "table" then
+            for key in pairs(accordion) do
+                local textKey = type(key) == "string" and (key == "gf_bars:text" or key:match("^uf_[^:]+:text$"))
+                if textKey then accordion[key] = nil end
+            end
+        end
     end
+    -- The last selected menu page is intentionally session-only.
+    if oldVersion < 4 then state.lastPage = nil end
 end
 local function EnsurePersistentMenuState()
     ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})

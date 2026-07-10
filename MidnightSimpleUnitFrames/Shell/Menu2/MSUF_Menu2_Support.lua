@@ -435,8 +435,6 @@ end
 function M.Pick(source, names) return PickValues(source, names) end
 function M.PickDefaults(source, names) return PickValues(source, names, nil, true) end
 function M.PickFallbacks(source, fallbacks, names) return PickValues(source, names, fallbacks or {}) end
-function M.PickTable(source, names, target) return PickTableValues(target, source, names) end
-function M.PickDefaultTable(source, names, target) return PickTableValues(target, source, names, nil, true) end
 function M.PickFallbackTable(source, fallbacks, names, target) return PickTableValues(target, source, names, fallbacks or {}) end
 function M.Assign(target, values)
     if type(target) ~= "table" or type(values) ~= "table" then return target end
@@ -474,57 +472,56 @@ end
 -- Shared Page binder helpers.
 -- These keep page files focused on "which control exists" instead of repeating the
 -- same create/place/bind ceremony. Callers still supply the exact get/set closures,
--- so no page-specific state or apply behavior is hidden here.
-function M.BindBoolWidget(ctx, widget, getValue, setValue)
+-- so no page-specific state or apply behavior is hidden here.  The optional final
+-- metadata table accepts controlId/identityKey/settingKey (and the corresponding
+-- action/navigation fields) for incremental runtime-catalog migration.
+function M.BindBoolWidget(ctx, widget, getValue, setValue, metadata)
     M.BindToggle(ctx, widget,
         function() return getValue() and true or false end,
-        function(v) setValue(v and true or false) end)
+        function(v) setValue(v and true or false) end,
+        metadata)
     return widget
 end
 function M.BindNumberWidget(ctx, widget, getValue, setValue, fallback, opts)
-    opts = opts or {}
+    opts = type(opts) == "table" and opts or {}
     M.BindSlider(ctx, widget,
         function() return tonumber(getValue()) or fallback or 0 end,
         function(v)
             v = tonumber(v) or fallback or 0
             if opts.roundStep and (opts.step or 1) >= 1 then v = floor(v + 0.5) end
             setValue(v)
-        end)
+        end,
+        opts)
     return widget
 end
-function M.BindDropdownWidget(ctx, widget, getValue, setValue)
-    M.BindDropdown(ctx, widget, getValue, setValue)
+function M.BindDropdownWidget(ctx, widget, getValue, setValue, metadata)
+    M.BindDropdown(ctx, widget, getValue, setValue, metadata)
     return widget
 end
-function M.BindSwitchAt(ctx, parent, label, x, y, width, getValue, setValue)
-    return M.BindBoolWidget(ctx, M.Widgets.SwitchAt(parent, label, x, y, width or 180), getValue, setValue)
+function M.BindSwitchAt(ctx, parent, label, x, y, width, getValue, setValue, metadata)
+    return M.BindBoolWidget(ctx, M.Widgets.SwitchAt(parent, label, x, y, width or 180), getValue, setValue, metadata)
 end
-function M.BindToggleAt(ctx, parent, label, x, y, width, getValue, setValue)
-    return M.BindBoolWidget(ctx, M.Widgets.ToggleAt(parent, label, x, y, width or 180), getValue, setValue)
+function M.BindToggleAt(ctx, parent, label, x, y, width, getValue, setValue, metadata)
+    return M.BindBoolWidget(ctx, M.Widgets.ToggleAt(parent, label, x, y, width or 180), getValue, setValue, metadata)
 end
 function M.BindSliderAt(ctx, parent, label, x, y, minVal, maxVal, step, width, getValue, setValue, opts)
     local widget = M.Widgets.Slider(parent, label, minVal, maxVal, step, width)
     M.Widgets.MoveWidget(widget, parent, x, y, width)
     return M.BindNumberWidget(ctx, widget, getValue, setValue, opts and opts.fallback, opts)
 end
-function M.BindDropdownAt(ctx, parent, label, x, y, values, width, getValue, setValue)
+function M.BindDropdownAt(ctx, parent, label, x, y, values, width, getValue, setValue, metadata)
     local widget = M.Widgets.Dropdown(parent, label, values, width)
     M.Widgets.MoveWidget(widget, parent, x, y, width)
-    return M.BindDropdownWidget(ctx, widget, getValue, setValue)
+    return M.BindDropdownWidget(ctx, widget, getValue, setValue, metadata)
 end
-function M.BindTextInputAt(ctx, parent, label, x, y, width, getValue, setValue, commitOnBlur)
+function M.BindTextInputAt(ctx, parent, label, x, y, width, getValue, setValue, commitOnBlur, metadata)
     local widget = M.Widgets.TextInput(parent, label, width)
     M.Widgets.MoveWidget(widget, parent, x, y, width)
     M.BindTextInput(ctx, widget,
         function() return getValue() or "" end,
         function(v) setValue(v or "") end,
-        commitOnBlur)
-    return widget
-end
-function M.BindColorAt(ctx, parent, label, x, y, getRGB, setRGB)
-    local widget = M.Widgets.Color(parent, label)
-    M.Widgets.MoveWidget(widget, parent, x, y)
-    M.BindColor(ctx, widget, getRGB, setRGB)
+        commitOnBlur,
+        metadata)
     return widget
 end
 function M.CallIf(fn, ...)
@@ -961,35 +958,6 @@ function M.ToggleMSUFEditMode(unitKey, opts)
     opts = opts or {}
     local status = M.EditModeLifecycleStatus(opts.includeBlizzard)
     return M.SetMSUFEditModeActive(not status.active, unitKey, opts)
-end
-function M.WireEditModeButton(ctx, button, opts)
-    if not button then return nil end
-    opts = opts or {}
-    local function Refresh()
-        local active = M.IsMSUFEditModeActive(opts.includeBlizzard)
-        if button.SetText then button:SetText(active and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
-        if button.SetActive then button:SetActive(false) end
-        if button.SetEnabled then button:SetEnabled(active or not M.IsEditModeCombatLocked(opts.includeBlizzard)) end
-    end
-    button:SetScript("OnClick", function()
-        if opts.blockConfig and type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then
-            Refresh()
-            return
-        end
-        local active = M.IsMSUFEditModeActive(opts.includeBlizzard)
-        if (not active) and M.IsEditModeCombatLocked(opts.includeBlizzard) then
-            if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
-            Refresh()
-            return
-        end
-        local unit = type(opts.unit) == "function" and opts.unit() or opts.unit
-        local nextActive = not active
-        M.ToggleMSUFEditMode(unit, { includeBlizzard = opts.includeBlizzard, source = opts.source or "msuf2_menu" })
-        if opts.defer then C_Timer.After(0, Refresh) else Refresh() end
-        if type(opts.afterClick) == "function" then opts.afterClick(nextActive, active) end
-    end)
-    M.TrackRefresh(ctx, Refresh)
-    return Refresh
 end
 function M.TrackRefresh(ctx, refresh)
     if type(refresh) ~= "function" then return nil end

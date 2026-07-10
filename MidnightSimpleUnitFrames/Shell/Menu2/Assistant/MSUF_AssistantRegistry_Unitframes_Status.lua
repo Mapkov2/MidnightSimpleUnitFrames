@@ -48,6 +48,39 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
     local function StatusIconStyleLabel(spec)
         return tostring(spec and spec.label or "Status Indicator") .. (IsRoleStatusSpec(spec) and " Role Icon Style" or " Indicator Icon Set")
     end
+    local function StatusAliasRoots(spec)
+        local roots, seen = {}, {}
+        for i = 1, #(spec and spec.aliases or {}) do
+            local root = tostring(spec.aliases[i] or "")
+            root = root:gsub("%s+icons?$", ""):gsub("%s+indicators?$", ""):gsub("%s+symbols?$", "")
+            root = root:gsub("^%s+", ""):gsub("%s+$", "")
+            if root ~= "" and not seen[root] then
+                seen[root] = true
+                roots[#roots + 1] = root
+            end
+        end
+        return roots
+    end
+    local function CanonicalStatusAliases(spec, suffixes, includeOriginal)
+        local out, seen = {}, {}
+        local function add(value)
+            value = tostring(value or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+            if value ~= "" and not seen[value] and #out < 16 then
+                seen[value] = true
+                out[#out + 1] = value
+            end
+        end
+        local roots = StatusAliasRoots(spec)
+        for i = 1, #roots do
+            for j = 1, #(suffixes or {}) do add(roots[i] .. " " .. suffixes[j]) end
+        end
+        if includeOriginal then
+            for i = 1, #(spec and spec.aliases or {}) do
+                for j = 1, #(suffixes or {}) do add(tostring(spec.aliases[i]) .. " " .. suffixes[j]) end
+            end
+        end
+        return out
+    end
 
     for s = 1, #STATUS_CONTROL_SPECS do
         local spec = STATUS_CONTROL_SPECS[s]
@@ -63,6 +96,35 @@ function A.UnitframesRegistry.RegisterStatusIconSettings(ctx, unit)
                 text = true,
                 description = spec.description or ("Status icon visibility for " .. spec.label .. "."),
             }))
+
+            if type(spec.iconStyle) == "string" and spec.iconStyle ~= "" then
+                -- Keep the natural, value-bearing phrase before unit
+                -- permutations. Registry aliases are intentionally bounded;
+                -- filling the list with "leader icon icon style" variants
+                -- used to discard every useful "icon pack" prefix.
+                aliases = CanonicalStatusAliases(spec, {
+                    "icon pack", "icon style", "icon design", "indicator style", "role icon style",
+                })
+                -- Status icon packs are extensible at runtime through
+                -- MSUF_RegisterStatusIconPack. A closed enum would reject a
+                -- valid SharedMedia/custom pack that was registered after
+                -- this file loaded, so retain a string setting and let the
+                -- specialized parser normalize the built-in aliases.
+                RegisterUnitString(unit, spec.iconStyle, spec.iconStyle, StatusIconStyleLabel(spec),
+                    spec.defaultIconStyle or "BLIZZARD", aliases, StatusIconOpts(spec, {
+                        description = "Icon pack for this status indicator. Built-ins include "
+                            .. table.concat(STATUS_ICON_PACK_FALLBACK_VALUES, ", ")
+                            .. "; registered extension pack keys are accepted too.",
+                    }))
+            end
+
+            if type(spec.customIcon) == "string" and spec.customIcon ~= "" then
+                aliases = CanonicalStatusAliases(spec, {
+                    "custom icon", "specific icon", "icon asset", "override icon",
+                }, true)
+                RegisterUnitString(unit, spec.customIcon, spec.customIcon, spec.label .. " Custom Icon", "", aliases,
+                    StatusIconOpts(spec, { keySuffix = spec.customIcon }))
+            end
 
             if spec.symbol then
                 aliases = {}

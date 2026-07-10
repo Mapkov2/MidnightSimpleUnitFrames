@@ -1198,6 +1198,7 @@ local function ParseProfile(text, raw)
     end
 
     if ContainsAny(text, ProfileData.PROFILE_RESET_TERMS)
+        and not ContainsAny(text, ProfileData.PROFILE_COPY_TERMS)
         and not HasProfileReadOnlyQueryIntent(text)
     then
         local name = RawAfterPrefix(rawText, ProfileData.PROFILE_RESET_PREFIXES)

@@ -780,6 +780,7 @@ end
 
 local function ClearSearchRegistryPage(pageKey)
     if not pageKey then return end
+    if type(M.ClearRuntimeControlsForPage) == "function" then pcall(M.ClearRuntimeControlsForPage, pageKey) end
     local ids = SEARCH_STATE.registryByPage[pageKey]
     if ids then
         for i = 1, #ids do
@@ -833,7 +834,8 @@ function M.RegisterSearchWidget(widget, meta)
     local pageKey = meta.pageKey or M._msuf2SearchBuildKey or M.activeKey
     if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
 
-    local label = DisplaySearchText(meta.label or meta.title or meta.text or widget._msuf2SearchText or widget._msuf2SearchTitle)
+    local rawLabel = meta.label or meta.title or meta.text or widget._msuf2SearchText or widget._msuf2SearchTitle
+    local label = DisplaySearchText(rawLabel)
     if not IsSearchableDisplayText(label) then return end
     local kind = meta.kind or widget._msuf2ControlKind or "control"
     local anchor = meta.anchor or widget._msuf2Title or widget._msuf2Label or widget
@@ -841,8 +843,44 @@ function M.RegisterSearchWidget(widget, meta)
     local command = meta.command or widget._msuf2CommandAction
     local keywords = meta.keywords
     local help = meta.help or meta.description
+    local catalogId
+    if type(M.RegisterRuntimeControl) == "function" then
+        local ok, result = pcall(M.RegisterRuntimeControl, widget, {
+            controlId = meta.controlId,
+            identityKey = meta.identityKey,
+            controlPath = meta.controlPath,
+            pageKey = pageKey,
+            kind = kind,
+            label = label,
+            identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel,
+            settingKey = meta.settingKey,
+            actionKey = meta.actionKey,
+            navigationKey = meta.navigationKey,
+            classification = meta.classification or meta.controlType,
+            ephemeral = meta.ephemeral,
+            help = help,
+            command = command,
+        }, "search")
+        if ok then catalogId = result end
+    end
 
     local id = widget._msuf2SearchRegistryId
+    local previousPageKey = widget._msuf2SearchRegistryPage
+    if id and previousPageKey and previousPageKey ~= pageKey then
+        SEARCH_STATE.registry[id] = nil
+        SEARCH_STATE.registryRecords[id] = nil
+        local previousPageIds = SEARCH_STATE.registryByPage[previousPageKey]
+        if previousPageIds then
+            for i = #previousPageIds, 1, -1 do
+                if previousPageIds[i] == id then table.remove(previousPageIds, i) end
+            end
+            if #previousPageIds == 0 then SEARCH_STATE.registryByPage[previousPageKey] = nil end
+        end
+        widget._msuf2SearchRegistryId = nil
+        widget._msuf2SearchRegistryPage = nil
+        id = nil
+        MarkSearchIndexDirty()
+    end
     if not id or widget._msuf2SearchRegistryPage ~= pageKey or not SEARCH_STATE.registry[id] then
         SEARCH_STATE.registrySerial = SEARCH_STATE.registrySerial + 1
         id = pageKey .. ":" .. tostring(SEARCH_STATE.registrySerial)
@@ -860,6 +898,15 @@ function M.RegisterSearchWidget(widget, meta)
         and previous.kind == kind
         and previous.anchor == anchor
         and previous.command == command
+        and previous.controlId == catalogId
+        and previous.identityLabel == (meta.identityLabel or widget._msuf2SearchText or rawLabel)
+        and previous.identityKey == meta.identityKey
+        and previous.controlPath == meta.controlPath
+        and previous.classification == (meta.classification or meta.controlType)
+        and previous.ephemeral == meta.ephemeral
+        and previous.settingKey == meta.settingKey
+        and previous.actionKey == meta.actionKey
+        and previous.navigationKey == meta.navigationKey
         and previous.keywords == keywords
         and previous.help == help
         and previous._rawValues == rawValues
@@ -877,6 +924,15 @@ function M.RegisterSearchWidget(widget, meta)
         anchor = anchor,
         values = CopyStaticSearchValues(rawValues),
         command = command,
+        controlId = catalogId,
+        identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel,
+        identityKey = meta.identityKey,
+        controlPath = meta.controlPath,
+        classification = meta.classification or meta.controlType,
+        ephemeral = meta.ephemeral,
+        settingKey = meta.settingKey,
+        actionKey = meta.actionKey,
+        navigationKey = meta.navigationKey,
         keywords = keywords,
         help = help,
         _rawValues = rawValues,
@@ -1017,6 +1073,24 @@ BuildRegistrySearchRecord = function(entry)
         if command then
             rec.command = command
             rec.widget = widget
+            if widget and type(M.RegisterRuntimeControl) == "function" then
+                local ok, controlId = pcall(M.RegisterRuntimeControl, widget, {
+                    pageKey = entry.pageKey,
+                    kind = entry.kind,
+                    label = entry.label,
+                    identityLabel = entry.identityLabel,
+                    identityKey = entry.identityKey,
+                    controlPath = entry.controlPath,
+                    classification = entry.classification,
+                    ephemeral = entry.ephemeral,
+                    settingKey = entry.settingKey,
+                    actionKey = entry.actionKey,
+                    navigationKey = entry.navigationKey,
+                    help = entry.help,
+                    command = command,
+                }, "search-command")
+                if ok and controlId then entry.controlId = controlId end
+            end
         end
     end
     return rec
@@ -1543,15 +1617,21 @@ local function SubmitAssistantSearchQuery(query)
     query = TrimText(query)
     if query == "" then return false end
     local A = (MSUF and MSUF.Assistant) or M.Assistant
-    if not (A and (type(A.SubmitDeferred) == "function" or type(A.Submit) == "function")) then return false end
+    if not A then return false end
+    local result
+    if type(A.SubmitExplicitQuery) == "function" then
+        local submitted
+        submitted, result = A.SubmitExplicitQuery(query, "assistant-search")
+        if not submitted then return false end
+    elseif type(A.SubmitDeferred) == "function" then
+        result = A.SubmitDeferred(query)
+    elseif type(A.Submit) == "function" then
+        result = A.Submit(query)
+    else
+        return false
+    end
     if type(M.SelectPage) == "function" and M.activeKey ~= "home" then
         M.SelectPage("home")
-    end
-    local result
-    if type(A.SubmitDeferred) == "function" then
-        result = A.SubmitDeferred(query)
-    else
-        result = A.Submit(query)
     end
     if result and result.status == "combat" then return true end
     if type(A.RequestRefreshUI) == "function" then

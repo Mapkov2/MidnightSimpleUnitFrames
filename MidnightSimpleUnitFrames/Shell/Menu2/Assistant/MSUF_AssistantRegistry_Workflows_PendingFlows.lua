@@ -99,6 +99,26 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
         return raw
     end
 
+    local function OriginalDestination(text, kind)
+        local cleaned = CleanPendingProfileDestination(text, kind)
+        local history = type(A.GetHistory) == "function" and A.GetHistory() or nil
+        if type(history) ~= "table" then return cleaned end
+        for i = #history, 1, -1 do
+            local item = history[i]
+            if type(item) == "table" and item.role == "user" then
+                local original = CleanPendingProfileDestination(item.text, kind)
+                if original:lower() == cleaned:lower() then return original end
+                break
+            end
+        end
+        return cleaned
+    end
+
+    local function DisplayProfileName(name)
+        local display = A.DisplayProfileName
+        return type(display) == "function" and display(name) or Trim(name)
+    end
+
     function A.HandlePendingFlow(text)
         local flow = A.Workflow.PendingFlow()
         if type(flow) ~= "table" then return nil end
@@ -107,7 +127,8 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
             return { text = message, status = ok and "applied" or "failed" }
         end
         if flow.kind == "profileCopyDestination" then
-            local dest = CleanPendingProfileDestination(text, flow.kind)
+            local source = DisplayProfileName(flow.source)
+            local dest = OriginalDestination(text, flow.kind)
             if dest == "" then return { text = "What should the destination profile be called? Example: 'call it Raid Backup'. Say 'cancel' or 'never mind' to stop.", status = "confirmation_needed" } end
             A.ClearPendingFlow()
             local action = Registry:GetAction("copy_profile_from_to")
@@ -115,9 +136,9 @@ function A.Workflow.RegisterPendingFlowHandlers(ctx)
             return A.ExecutePlan({
                 kind = "action",
                 action = action,
-                args = { source = flow.source, name = dest },
+                args = { source = source, name = dest },
                 confirmRequired = true,
-                label = "Copy profile " .. tostring(flow.source) .. " to " .. tostring(dest),
+                label = "Copy profile " .. tostring(source) .. " to " .. tostring(dest),
                 summary = "Copies one named profile to a new destination profile.",
             })
         end

@@ -20,6 +20,10 @@ function A.Workflow.RegisterProfileWorkflowActions(ctx)
         text = tostring(text or "")
         return (text:gsub("^%s+", ""):gsub("%s+$", ""))
     end
+    local function DisplayProfileName(name)
+        local display = A.DisplayProfileName
+        return type(display) == "function" and display(name) or Trim(name)
+    end
 
     if not (Registry and type(Registry.RegisterAction) == "function") then return end
 
@@ -29,8 +33,6 @@ function A.Workflow.RegisterProfileWorkflowActions(ctx)
         type = "profile",
         combatSafe = false,
         confirmRequired = true,
-        captureSnapshot = true,
-        captureProfileSnapshot = true,
         lifecycle = { workflow = "profileCopy", canStart = true, canConfirmApply = true, canCancel = true, canReportStatus = true },
         run = function(args)
             local source = Trim(args and args.source or "")
@@ -61,6 +63,7 @@ function A.Workflow.RegisterProfileWorkflowActions(ctx)
         run = function(args)
             local source = Trim(args and args.source or "")
             if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
+            source = DisplayProfileName(source)
             A.StartPendingFlow("profileCopyDestination", { source = source, label = "Profile copy" })
             return true, "What do you want me to call the copy of profile " .. tostring(source) .. "? For example: 'call it Raid Backup'. Say 'cancel' or 'never mind' to stop."
         end,
@@ -72,8 +75,6 @@ function A.Workflow.RegisterProfileWorkflowActions(ctx)
         type = "profile",
         combatSafe = false,
         confirmRequired = true,
-        captureSnapshot = true,
-        captureProfileSnapshot = true,
         lifecycle = { workflow = "profileRename", canStart = true, canConfirmApply = true, canCancel = true, canReportStatus = true },
         run = function(args)
             local source = Trim(args and args.source or "")
