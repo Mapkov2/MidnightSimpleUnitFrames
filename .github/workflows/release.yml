@@ -363,6 +363,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
 
           Copy-Item -LiteralPath "MidnightSimpleUnitFrames" -Destination $stagePath -Recurse -Force
+          $assistantAddonSource = "MidnightSimpleUnitFrames_Assistant"
+          if (-not (Test-Path -LiteralPath $assistantAddonSource -PathType Container)) {
+            throw "Missing MSUF Assistant addon: $assistantAddonSource"
+          }
+          Copy-Item -LiteralPath $assistantAddonSource -Destination $stagePath -Recurse -Force
           $localeAddonSource = "MidnightSimpleUnitFrames_Locales"
           if (-not (Test-Path -LiteralPath $localeAddonSource -PathType Container)) {
             throw "Missing MSUF locale addon: $localeAddonSource"
@@ -373,6 +378,7 @@ jobs:
             "MidnightSimpleUnitFrames/.codex-remote-attachments",
             "MidnightSimpleUnitFrames/docs",
             "MidnightSimpleUnitFrames/scripts",
+            "MidnightSimpleUnitFrames/tools",
             "MidnightSimpleUnitFrames/MSUF_PerfyHook.lua"
           )) {
             $fullPath = Join-Path $stagePath $relativePath
@@ -386,9 +392,16 @@ jobs:
               Remove-Item -LiteralPath $_.FullName -Recurse -Force
             }
 
+          foreach ($localDirectoryName in @("graphify-out", "__pycache__", "_local_workflows")) {
+            Get-ChildItem -LiteralPath $stagePath -Directory -Force -Recurse -Filter $localDirectoryName |
+              ForEach-Object {
+                Remove-Item -LiteralPath $_.FullName -Recurse -Force
+              }
+          }
+
           $tocPaths = @(Get-ChildItem -LiteralPath $stagePath -Filter "*.toc" -File -Recurse)
-          if ($tocPaths.Count -ne 2) {
-            throw "Expected the main and locale TOCs, found $($tocPaths.Count)."
+          if ($tocPaths.Count -ne 3) {
+            throw "Expected the main, Assistant, and locale TOCs, found $($tocPaths.Count)."
           }
           foreach ($tocPath in $tocPaths) {
             $tocContent = Get-Content -LiteralPath $tocPath.FullName -Raw
@@ -411,8 +424,19 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zipPath))
           try {
+            $entries = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
+            foreach ($requiredEntry in @(
+              "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc",
+              "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant.toc",
+              "MidnightSimpleUnitFrames_Locales/MidnightSimpleUnitFrames_Locales.toc",
+              "MidnightSimpleUnitFrames/Shell/Menu2/MSUF_Menu2_AssistantRuntime.xml"
+            )) {
+              if ($entries -notcontains $requiredEntry) {
+                throw "Release zip is missing required path: $requiredEntry"
+              }
+            }
             $badEntry = $zip.Entries | Where-Object {
-              $_.FullName -match '(^|/)\.codex-remote-attachments/|(^|/)docs/|(^|/)scripts/|(^|/)tools/|(^|/)_local_workflows/'
+              $_.FullName -match '(^|/)(?:\.codex-remote-attachments|docs|scripts|tools|_local_workflows|graphify-out|__pycache__)(?:/|$)'
             } | Select-Object -First 1
             if ($badEntry) {
               throw "Release zip contains local-only path: $($badEntry.FullName)"

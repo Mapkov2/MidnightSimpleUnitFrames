@@ -1,5 +1,6 @@
 param(
   [string]$AddonName = "MidnightSimpleUnitFrames",
+  [string]$SourceRoot = "",
   [string]$PerfyRef = "main",
   [string]$PerfyZip = "",
   [string]$PerfySource = "",
@@ -416,15 +417,25 @@ function Invoke-PerfyInstrumentation {
   }
 }
 
-$script:RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
+$script:ScriptRepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
+$script:RepoRoot = if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
+  $script:ScriptRepoRoot
+} else {
+  [System.IO.Path]::GetFullPath($SourceRoot)
+}
 $addonSource = Join-RepoPath $AddonName
 $tocSource = Join-Path $addonSource "$AddonName.toc"
+$assistantAddonSource = Join-RepoPath "${AddonName}_Assistant"
+$assistantTocSource = Join-Path $assistantAddonSource "${AddonName}_Assistant.toc"
 
 if (-not (Test-Path -LiteralPath $addonSource)) {
   throw "Addon folder not found: $addonSource"
 }
 if (-not (Test-Path -LiteralPath $tocSource)) {
   throw "Addon TOC not found: $tocSource"
+}
+if (-not (Test-Path -LiteralPath $assistantTocSource)) {
+  throw "Assistant addon TOC not found: $assistantTocSource"
 }
 
 $resolvedLls = Resolve-Executable $LuaLanguageServer
@@ -463,17 +474,33 @@ $perfyAddonSource = Join-Path $perfyRoot "AddOn"
 
 Write-Host "Copying $AddonName to staging folder $stagedAddon"
 Copy-Item -LiteralPath $addonSource -Destination $stageRoot -Recurse -Force
+Copy-Item -LiteralPath $assistantAddonSource -Destination $stageRoot -Recurse -Force
 $localeAddonSource = Join-Path $script:RepoRoot "${AddonName}_Locales"
 if (-not (Test-Path -LiteralPath $localeAddonSource -PathType Container)) {
   throw "Missing MSUF locale addon: $localeAddonSource"
 }
 Copy-Item -LiteralPath $localeAddonSource -Destination $stageRoot -Recurse -Force
 
-foreach ($relativePath in @("docs", "scripts", "MSUF_PerfyHook.lua", ".gitignore")) {
+foreach ($relativePath in @("docs", "scripts", "tools", "MSUF_PerfyHook.lua", ".gitignore")) {
   $fullPath = Join-Path $stagedAddon $relativePath
   if (Test-Path -LiteralPath $fullPath) {
     Remove-Item -LiteralPath $fullPath -Recurse -Force
   }
+}
+
+foreach ($localDirectoryName in @(
+  ".codex-remote-attachments",
+  "docs",
+  "scripts",
+  "tools",
+  "_local_workflows",
+  "graphify-out",
+  "__pycache__"
+)) {
+  Get-ChildItem -LiteralPath $stagedAddon -Directory -Force -Recurse -Filter $localDirectoryName |
+    ForEach-Object {
+      Remove-Item -LiteralPath $_.FullName -Recurse -Force
+    }
 }
 
 $perfyAddonTarget = Join-Path $stageRoot "!!!Perfy"
@@ -483,7 +510,8 @@ Set-PerfyInterfaceVersion -PerfyAddonDir $perfyAddonTarget -InterfaceVersion "12
 Add-MSUFPerfyFpsSampler -PerfyAddonDir $perfyAddonTarget
 
 Write-Host "Instrumenting TOC/XML reachable Lua files with Perfy"
-Invoke-PerfyInstrumentation -LuaLanguageServer $resolvedLls -LuaLanguageServerRoot $resolvedLlsRoot -PerfyMain $perfyMain -InputFiles @($stagedToc)
+$stagedAssistantToc = Join-Path $stageRoot "${AddonName}_Assistant/${AddonName}_Assistant.toc"
+Invoke-PerfyInstrumentation -LuaLanguageServer $resolvedLls -LuaLanguageServerRoot $resolvedLlsRoot -PerfyMain $perfyMain -InputFiles @($stagedToc, $stagedAssistantToc)
 
 $allLuaFiles = @(Get-ChildItem -LiteralPath $stagedAddon -Filter "*.lua" -Recurse -File | Sort-Object FullName)
 if ($InstrumentAllLua) {
@@ -499,6 +527,12 @@ if ($InstrumentAllLua) {
     Write-Host "All Lua files were already reached from TOC/XML."
   }
 }
+
+Get-ChildItem -LiteralPath $stagedAddon -Recurse -File -Force |
+  Where-Object { $_.Name -eq "luac.out" -or $_.Extension -in @(".pyc", ".pyo") } |
+  ForEach-Object {
+    Remove-Item -LiteralPath $_.FullName -Force
+  }
 
 $notInstrumented = @($allLuaFiles | Where-Object { -not (Test-PerfyInstrumentedFile $_.FullName) })
 if ($InstrumentAllLua -and $notInstrumented.Count -gt 0) {
@@ -543,6 +577,16 @@ try {
   }
   if (-not ($entries -contains "${AddonName}_Locales/${AddonName}_Locales.toc")) {
     throw "Package verification failed: ${AddonName}_Locales/${AddonName}_Locales.toc is missing."
+  }
+  if (-not ($entries -contains "${AddonName}_Assistant/${AddonName}_Assistant.toc")) {
+    throw "Package verification failed: ${AddonName}_Assistant/${AddonName}_Assistant.toc is missing."
+  }
+  $badEntry = $entries | Where-Object {
+    ($_ -match '(^|/)(?:\.codex-remote-attachments|docs|scripts|tools|_local_workflows|graphify-out|__pycache__)(?:/|$)') -or
+    ($_ -match '(?i)(^|/)(?:luac\.out|[^/]+\.py[co])$')
+  } | Select-Object -First 1
+  if ($badEntry) {
+    throw "Package verification failed: local-only path is present: $badEntry"
   }
 } finally {
   $zip.Dispose()
