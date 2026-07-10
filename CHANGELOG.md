@@ -23,6 +23,7 @@
 ### Runtime, Castbars, And Previews
 - Target and Focus castbars clear stale casts before the replacement update is queued, preventing the old unit's cast from remaining visible during a swap.
 - Target-of-target and focus-target identity work is coalesced after target-change event bursts.
+- Player portraits now force a native refresh when entering or leaving a vehicle, even though the player GUID itself does not change.
 - Pinned menu previews use a simpler canvas host, and group/unit aura controls retain their scroll position during workspace rebuilds.
 
 ### What To Test First
