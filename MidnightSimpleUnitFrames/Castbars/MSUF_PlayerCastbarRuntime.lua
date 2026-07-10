@@ -14,12 +14,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-local function ProfBegin(name)
-    if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-        return MSUF.ProfBegin(name)
-    end
-end
-
 local function ProfEnd(name, token)
     if token and MSUF and MSUF.ProfEnd then
         MSUF.ProfEnd(name, token)
@@ -39,7 +33,6 @@ local tonumber = tonumber
 local tostring = tostring
 local select = select
 local math_max = math.max
-local math_abs = math.abs
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local ACTIVE_DURATION_OPTIONS = {

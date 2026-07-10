@@ -370,19 +370,6 @@ end
 
 ExportPublic("MSUF_BumpCastbarStyleRev", BumpCastbarStyleRev)
 
-local function ApplyStyleRevision(frame, force)
-    if not frame then return end
-
-    local refresher = _G.MSUF_RefreshCastbarStyleCache
-    if type(refresher) ~= "function" then return end
-
-    local revision = _G.MSUF__castbarStyleGlobalRev or 1
-    if force or frame._msufCastbarStyleRev ~= revision then
-        refresher(frame)
-        frame._msufCastbarStyleRev = revision
-    end
-end
-
 local function BumpCastTimeRev()
     ExportPublic("MSUF__castTimeGlobalRev", (_G.MSUF__castTimeGlobalRev or 1) + 1)
     castTimeRev = _G.MSUF__castTimeGlobalRev
