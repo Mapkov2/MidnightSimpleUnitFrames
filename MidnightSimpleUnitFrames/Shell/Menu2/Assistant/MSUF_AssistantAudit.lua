@@ -563,13 +563,10 @@ end
 -- Parser permutations stay in AssistantTraining; this list exercises the real
 -- WoW loader, rendered controls, combat lifecycle, and visible multi-turn UI.
 local ACCEPTANCE_SMOKE_CASES = {
-    SmokeCase("lod_explicit_start", "M5", "Reload UI; do not press Start Assistant yet.",
+    SmokeCase("lod_dashboard_autoload", "M5", "Reload UI, then open the MSUF Dashboard.",
         "/dump C_AddOns.IsAddOnLoaded(\"MidnightSimpleUnitFrames_Assistant\")",
-        "False before and after merely opening MSUF; true only after Start Assistant is clicked, then the chat card appears."),
-    SmokeCase("lod_cold_load_latency", "M5", "Reload UI, open the MSUF Dashboard, but do not press Start Assistant.",
-        "/run local r,ok,why=C_AddOnProfiler.MeasureCall(MSUF_NS.Assistant.EnsureRuntimeLoaded,\"acceptance-cold-load\"); print((\"Assistant cold load %.2f ms\"):format(r.elapsedMilliseconds),ok,why)",
-        "The runtime loads successfully on the first explicit Dashboard use; record the exact cold-load value. Target <=250 ms on the reference client; above 250 ms is a failed performance acceptance case."),
-    SmokeCase("interactive_latency", "M5", "Start the Assistant, run /msufcoverage perf reset, then submit ten normal read-only questions one at a time.",
+        "False before opening MSUF; true immediately after the Dashboard opens, with the normal chat card shown and no Start Assistant button."),
+    SmokeCase("interactive_latency", "M5", "Open the MSUF Dashboard, run /msufcoverage perf reset, then submit ten normal read-only questions one at a time.",
         "Ask: what is target frame width; where is raid ready check; what depends on target buffs; why is player power text hidden; how do profiles work; explain class resource width mode; where can I change castbar texture; why are party frames missing; what are your limits; answer in German what is aura filtering. Then run /msufcoverage perf.",
         "At least 10 user-response samples; interactive SLO PASS with p95 <=50 ms and max <=150 ms. Answers remain correct and no setting changes."),
     SmokeCase("idle_profiler_zero", "M5", "After starting the Assistant once, close the MSUF menu, stay out of combat, and wait 10 seconds without reopening it.",
