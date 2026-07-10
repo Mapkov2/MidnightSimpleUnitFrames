@@ -370,22 +370,6 @@ end
 
 ExportPublic("MSUF_BumpCastbarStyleRev", BumpCastbarStyleRev)
 
-local function InstallStyleRevisionHook()
-    if _G.MSUF__castbarStyleHooked then return end
-
-    local updateVisuals = _G.MSUF_UpdateCastbarVisuals
-    if type(updateVisuals) ~= "function" then return end
-
-    ExportPublic("MSUF__castbarStyleHooked", true)
-    ExportPublic("MSUF_UpdateCastbarVisuals", function(...)
-        _G.MSUF_BumpCastbarStyleRev()
-        return updateVisuals(...)
-    end)
-end
-
-InstallStyleRevisionHook()
-AfterZero(InstallStyleRevisionHook)
-
 local function ApplyStyleRevision(frame, force)
     if not frame then return end
 
@@ -466,26 +450,6 @@ end
 ExportPublic("MSUF_IsCastTimeEnabled", function(frame)
     return IsCastTimeEnabled(frame, false)
 end)
-
-local function InstallCastTimeRevisionHook()
-    if not _G.MSUF_UpdateCastbarVisuals or _G.__MSUF_CastTimeRevHooked then return end
-
-    _G.__MSUF_CastTimeRevHooked = true
-    local updateVisuals = _G.MSUF_UpdateCastbarVisuals
-    ExportPublic("MSUF_UpdateCastbarVisuals", function(...)
-        _G.MSUF_BumpCastTimeRev()
-        local result = updateVisuals(...)
-        if type(_G.MSUF_ReanchorPlayerCastBar) == "function" then
-            _G.MSUF_ReanchorPlayerCastBar()
-        end
-        if _G.MSUF_ApplyCastbarOutlineToAll then
-            _G.MSUF_ApplyCastbarOutlineToAll(false)
-        end
-        return result
-    end)
-end
-
-InstallCastTimeRevisionHook()
 
 local oldManager = _G.MSUF_CastbarManager
 if oldManager then

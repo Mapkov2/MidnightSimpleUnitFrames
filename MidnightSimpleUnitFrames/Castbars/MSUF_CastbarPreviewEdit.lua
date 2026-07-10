@@ -90,23 +90,27 @@ end
 local function ApplyUnitAndSync(unit)
     if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
         _G.MSUF_ApplyCastbarUnitAndSync(unit)
-    else
-        local config = UNIT_CONFIG[unit]
-        local reanchor = config and config.reanchor and _G[config.reanchor]
+        return
+    end
 
-        if type(reanchor) == "function" then
-            reanchor()
-        end
+    local config = UNIT_CONFIG[unit]
+    local reanchor = config and config.reanchor and _G[config.reanchor]
 
-        if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-            _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        elseif type(MSUF_UpdateCastbarVisuals) == "function" then
-            MSUF_UpdateCastbarVisuals(unit)
-        end
+    if type(reanchor) == "function" then
+        reanchor()
+    end
 
-        if unit == "boss" and not InCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-            _G.MSUF_UpdateBossCastbarPreview()
-        end
+    local refreshed = false
+    if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+        refreshed = true
+    elseif type(MSUF_UpdateCastbarVisuals) == "function" then
+        MSUF_UpdateCastbarVisuals(unit)
+        refreshed = true
+    end
+
+    if not refreshed and unit == "boss" and not InCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+        _G.MSUF_UpdateBossCastbarPreview()
     end
 
     if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then

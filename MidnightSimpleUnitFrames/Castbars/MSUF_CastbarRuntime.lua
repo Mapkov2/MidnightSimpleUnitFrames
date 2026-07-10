@@ -43,7 +43,7 @@ local REASON_STOPPED = "STOPPED"
 local REASON_HARDHIDE = "HARDHIDE"
 
 local EMPTY_OPTIONS = {}
-local STOP_TIMERS = { "hideTimer", "succeededTimer", "timer" }
+local STOP_TIMERS = { "hideTimer", "succeededTimer" }
 
 local function DisableFrameOnUpdate(frame)
     if not frame or not frame.SetScript then return end

@@ -189,24 +189,14 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
     end
 
     if type(_G.MSUF_RefreshCastbarFrame) == "function" then
-        _G.MSUF_RefreshCastbarFrame(preview)
+        _G.MSUF_RefreshCastbarFrame(preview, "boss", general)
+        if type(_G.MSUF_ApplyCastbarSparkVisual) == "function" then
+            _G.MSUF_ApplyCastbarSparkVisual(preview, general)
+        end
     elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
         _G.MSUF_ApplyCastbarVisualsForUnit("boss")
     elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
         _G.MSUF_UpdateCastbarVisuals("boss")
-    end
-
-    if type(_G.MSUF_ApplyBossCastbarTextsLayout) == "function" then
-        _G.MSUF_ApplyBossCastbarTextsLayout(preview, {
-            baselineTimeX = -2,
-            baselineTimeY = 0,
-            textOffsetX = tonumber(general.bossCastTextOffsetX) or 0,
-            textOffsetY = tonumber(general.bossCastTextOffsetY) or 0,
-            timeOffsetX = tonumber(general.bossCastTimeOffsetX) or -2,
-            timeOffsetY = tonumber(general.bossCastTimeOffsetY) or 0,
-            showName = general.showBossCastName ~= false,
-            showTime = general.showBossCastTime ~= false,
-        })
     end
 
     if preview.statusBar then

@@ -876,15 +876,6 @@ local function BuildCastbars(ctx)
     end
     local function ShakeCastPreview(strength) if castPreview and castPreview.PlayShake then castPreview:PlayShake(strength, false) end end
     local function ShowEmpoweredPreview() M.SetCastbarPreviewType("empowered", 0.62) end
-    local castbarOutlineQueued = false
-    local function RequestCastbarOutlineApply()
-        if castbarOutlineQueued then return end
-        castbarOutlineQueued = true
-        ScheduleCastbarPageWork("MSUF2_CASTBAR_OUTLINE_APPLY", CASTBAR_PAGE_WORK_DELAY, function()
-            castbarOutlineQueued = false
-            Call("MSUF_ApplyCastbarOutlineToAll", true)
-        end)
-    end
     local function MoveToggle(toggle, parent, x, y, labelWidth)
         W.MoveWidget(toggle, parent, x, y)
         if toggle and toggle._msuf2Label and toggle._msuf2Label.SetWidth then toggle._msuf2Label:SetWidth(max(40, tonumber(labelWidth) or 260)) end
@@ -984,7 +975,7 @@ local function BuildCastbars(ctx)
                 local v = ReadG("castbarBackgroundTexture", nil)
                 return (type(v) == "string" and v ~= "") and v or ReadG("castbarTexture", "Blizzard")
             end } },
-        { "slider", "Outline thickness", texRightX, -42, 320, 0, 6, 1, "castbarOutlineThickness", 1, "MSUF2_CASTBAR_OUTLINE", function(reason, value, applyQueued) RequestCastbarOutlineApply(); ApplyTexturesAndPreview(reason, value, applyQueued) end },
+        { "slider", "Outline thickness", texRightX, -42, 320, 0, 6, 1, "castbarOutlineThickness", 1, "MSUF2_CASTBAR_OUTLINE", ApplyTexturesAndPreview },
         { "toggle", "Show castbar glow effect", texRightX, -96, 360, "castbarShowGlow", false, "MSUF2_CASTBAR_GLOW", ApplyTexturesAndPreview },
         { "toggle", "Show latency indicator", texRightX, -120, 360, "castbarShowLatency", true, "MSUF2_CASTBAR_LATENCY", ApplyTexturesAndPreview },
         { "toggle", "Show spark (leading edge highlight)", texRightX, -144, 360, "castbarShowSpark", false, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview },

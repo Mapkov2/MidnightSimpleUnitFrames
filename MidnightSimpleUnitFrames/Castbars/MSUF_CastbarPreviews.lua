@@ -185,16 +185,6 @@ local function CreateFocusCastbarPreview()
     return CreatePreview("focus")
 end
 
-local function TimeOffsetKeys(unit)
-    if unit == "player" then
-        return "castbarPlayerTimeOffsetX", "castbarPlayerTimeOffsetY"
-    end
-    if unit == "target" then
-        return "castbarTargetTimeOffsetX", "castbarTargetTimeOffsetY"
-    end
-    return "castbarFocusTimeOffsetX", "castbarFocusTimeOffsetY"
-end
-
 local function SourceCastbarForUnit(unit)
     if unit == "player" then return _G.MSUF_PlayerCastbar end
     if unit == "target" then return _G.MSUF_TargetCastbar end
@@ -212,18 +202,6 @@ local function PositionPreview(unit, frame)
         _G.MSUF_ApplyPlayerCastbarSizeAndLayout(frame, general, width, height)
     else
         frame:SetSize(width or 250, height or 18)
-    end
-
-    local timeOffsetXKey, timeOffsetYKey = TimeOffsetKeys(unit)
-    local timeOffsetX = tonumber(general[timeOffsetXKey]) or tonumber(general.castbarPlayerTimeOffsetX) or -2
-    local timeOffsetY = tonumber(general[timeOffsetYKey]) or tonumber(general.castbarPlayerTimeOffsetY) or 0
-    if frame.timeText and frame.statusBar then
-        frame.timeText:ClearAllPoints()
-        frame.timeText:SetPoint("RIGHT", frame.statusBar, "RIGHT", timeOffsetX, timeOffsetY)
-    end
-
-    if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-        _G.MSUF_ApplyCastbarTimeTextLayout(frame, unit)
     end
 
     local parent = general[config.detached] and UIParent or CoreFrame(unit)

@@ -42,6 +42,13 @@ local math_max = math.max
 local math_abs = math.abs
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
+local ACTIVE_DURATION_OPTIONS = {
+    skipColor = true,
+    skipRegister = true,
+    skipTimeText = true,
+    skipShow = true,
+}
+
 local function DisableFrameOnUpdate(frame)
     if not frame or not frame.SetScript then return end
     frame:SetScript("OnUpdate", nil)
@@ -514,6 +521,13 @@ local function PlainBoolean(value)
     return value == true
 end
 
+local function InvalidatePlayerInterruptHide(frame)
+    if not frame or frame._msufPlayerInterruptHideToken == nil then return end
+    frame._msufHideToken = (frame._msufHideToken or 0) + 1
+    frame._msufPlayerInterruptHideToken = nil
+    frame._msufPlayerInterruptHideDeadline = nil
+end
+
 local function ApplyActiveCast(
     frame,
     unit,
@@ -531,6 +545,7 @@ local function ApplyActiveCast(
 )
     local isChannel = castType == "CHANNEL"
 
+    InvalidatePlayerInterruptHide(frame)
     frame.interruptFeedbackEndTime = nil
     frame.interrupted = nil
     frame.MSUF_castActive = true
@@ -560,12 +575,7 @@ local function ApplyActiveCast(
         state.endTimeMS = endMS
         state.durationObj = durationObj
         state.reverseFill = reverseFill
-        timerDriven = _G.MSUF_Castbar_ApplyActiveDuration(frame, state, {
-            skipColor = true,
-            skipRegister = true,
-            skipTimeText = true,
-            skipShow = true,
-        }) and true or false
+        timerDriven = _G.MSUF_Castbar_ApplyActiveDuration(frame, state, ACTIVE_DURATION_OPTIONS) and true or false
     else
         frame.MSUF_durationObj = nil
         frame.MSUF_isChanneled = isChannel
@@ -757,15 +767,24 @@ local function ScheduleSoftResync(frame)
 
     local token = (frame._msufSoftResyncToken or 0) + 1
     frame._msufSoftResyncToken = token
-    C_Timer.After(0, function()
-        if not frame or frame._msufSoftResyncToken ~= token then return end
-        if frame.isEmpower or frame.MSUF_testMode then return end
-        CastPlayerCastbar(frame)
-    end)
+    frame._msufSoftResyncScheduledToken = token
+    if not frame._msufSoftResyncCB then
+        frame._msufSoftResyncCB = function()
+            frame._msufSoftResyncPending = nil
+            local scheduledToken = frame._msufSoftResyncScheduledToken
+            frame._msufSoftResyncScheduledToken = nil
+            if frame._msufSoftResyncToken ~= scheduledToken then return end
+            if frame.isEmpower or frame.MSUF_testMode then return end
+            CastPlayerCastbar(frame)
+        end
+    end
+    if not frame._msufSoftResyncPending then
+        frame._msufSoftResyncPending = true
+        C_Timer.After(0, frame._msufSoftResyncCB)
+    end
 end
 
-local function HideIfNoLongerCasting(owner)
-    local frame = owner and owner.msuCastbarFrame
+local function HidePlayerFrameIfNoLongerCasting(frame)
     if not frame or not frame.unit then return end
     if frame.MSUF_testMode then return end
 
@@ -792,12 +811,42 @@ local function HideIfNoLongerCasting(owner)
     frame:Hide()
 end
 
+local function HideIfNoLongerCasting(owner)
+    HidePlayerFrameIfNoLongerCasting(owner and owner.msuCastbarFrame)
+end
+
+local function EnsureInterruptHideCallback(frame)
+    if frame._msufPlayerInterruptHideCB then return end
+    frame._msufPlayerInterruptHideCB = function()
+        local token = frame._msufPlayerInterruptHideToken
+        local deadline = frame._msufPlayerInterruptHideDeadline
+        if frame._msufHideToken ~= token then
+            frame._msufPlayerInterruptHidePending = nil
+            frame._msufPlayerInterruptHideToken = nil
+            frame._msufPlayerInterruptHideDeadline = nil
+            return
+        end
+
+        local now = _G.GetTime()
+        if deadline and deadline > now then
+            C_Timer.After(deadline - now, frame._msufPlayerInterruptHideCB)
+            return
+        end
+
+        frame._msufPlayerInterruptHidePending = nil
+        frame._msufPlayerInterruptHideToken = nil
+        frame._msufPlayerInterruptHideDeadline = nil
+        HidePlayerFrameIfNoLongerCasting(frame)
+    end
+end
+
 local function ShowInterruptFeedback(frame, label)
     if not frame or not frame.statusBar then return end
 
     EnsureDBLazy()
     local playerDB = (_G.MSUF_DB and _G.MSUF_DB.player) or {}
     if playerDB.showInterrupt == false then
+        InvalidatePlayerInterruptHide(frame)
         DisableFrameOnUpdate(frame)
         frame.interruptFeedbackEndTime = nil
         if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
@@ -842,15 +891,17 @@ local function ShowInterruptFeedback(frame, label)
     if duration < 0 then duration = 0 end
 
     frame._msufHideToken = (frame._msufHideToken or 0) + 1
-    local token = frame._msufHideToken
-    C_Timer.After(duration, function()
-        if frame and frame._msufHideToken == token then
-            HideIfNoLongerCasting({ msuCastbarFrame = frame })
-        end
-    end)
+    frame._msufPlayerInterruptHideToken = frame._msufHideToken
+    frame._msufPlayerInterruptHideDeadline = _G.GetTime() + duration
+    EnsureInterruptHideCallback(frame)
+    if not frame._msufPlayerInterruptHidePending then
+        frame._msufPlayerInterruptHidePending = true
+        C_Timer.After(duration, frame._msufPlayerInterruptHideCB)
+    end
 end
 
 local function DisablePlayerCastbar(frame)
+    InvalidatePlayerInterruptHide(frame)
     DisableFrameOnUpdate(frame)
     if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
     frame.interruptFeedbackEndTime = nil

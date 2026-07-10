@@ -18,7 +18,6 @@ local type = type
 local tonumber = tonumber
 local tostring = tostring
 local pairs = pairs
-local math_floor = math.floor
 local math_max = math.max
 
 local lsm = (MSUF and MSUF.LSM) or _G.MSUF_LSM or (_G.LibStub and _G.LibStub("LibSharedMedia-3.0", true))
@@ -50,12 +49,6 @@ local function IsKnownAsset(path)
         return false
     end
     return true
-end
-
-local function CastbarFrameInset(general)
-    local thickness = tonumber(general and general.castbarOutlineThickness)
-    if thickness == nil then thickness = 1 end
-    return thickness > 0 and 1 or 0
 end
 
 local function ResolveFontPath(path, size, flags)
@@ -170,25 +163,25 @@ local function ApplyCastbarUnitAndSync(unit)
     if not _G.MSUF_DB then _G.MSUF_EnsureDB() end
 
     if IsBossCastbarUnit(unit) then
-        if _G.MSUF_ApplyBossCastbarPositionSetting then _G.MSUF_ApplyBossCastbarPositionSetting() end
-        if _G.MSUF_ApplyBossCastbarTimeSetting then _G.MSUF_ApplyBossCastbarTimeSetting() end
+        if _G.MSUF_ApplyBossCastbarPositionSetting then
+            _G.MSUF_ApplyBossCastbarPositionSetting(nil, true, true)
+        end
         if ApplyCastbarVisualsForUnit then
             ApplyCastbarVisualsForUnit("boss")
         elseif _G.MSUF_UpdateCastbarVisuals then
             _G.MSUF_UpdateCastbarVisuals("boss")
         end
-        if not IsInCombat() and _G.MSUF_UpdateBossCastbarPreview then _G.MSUF_UpdateBossCastbarPreview() end
-        if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then _G.MSUF_PositionCastbarPreviewUnit("boss") end
+        if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo("boss") end
         if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup("boss") end
         return
     end
 
-    if unit == "player" and type(_G.MSUF_ReanchorPlayerCastBar) == "function" then
-        _G.MSUF_ReanchorPlayerCastBar()
-    elseif unit == "target" and type(_G.MSUF_ReanchorTargetCastBar) == "function" then
-        _G.MSUF_ReanchorTargetCastBar()
-    elseif unit == "focus" and type(_G.MSUF_ReanchorFocusCastBar) == "function" then
-        _G.MSUF_ReanchorFocusCastBar()
+    if unit == "player" and type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then
+        _G.MSUF_ReanchorPlayerCastBarBase()
+    elseif unit == "target" and type(_G.MSUF_ReanchorTargetCastBarBase) == "function" then
+        _G.MSUF_ReanchorTargetCastBarBase()
+    elseif unit == "focus" and type(_G.MSUF_ReanchorFocusCastBarBase) == "function" then
+        _G.MSUF_ReanchorFocusCastBarBase()
     end
 
     if ApplyCastbarVisualsForUnit then
@@ -196,7 +189,6 @@ local function ApplyCastbarUnitAndSync(unit)
     elseif _G.MSUF_UpdateCastbarVisuals then
         _G.MSUF_UpdateCastbarVisuals(unit)
     end
-    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then _G.MSUF_PositionCastbarPreviewUnit(unit) end
     if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo(unit) end
     if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup(unit) end
 end
@@ -469,15 +461,6 @@ local function RefreshCastbarStyleCache(frame)
 end
 ExportPublic("MSUF_RefreshCastbarStyleCache", RefreshCastbarStyleCache)
 
-local function GetCastbarReverseFillForFrame(frame, isChanneled)
-    RefreshCastbarStyleCache(frame)
-    if frame then
-        return (isChanneled and frame.MSUF_cachedReverseFillChanneled or frame.MSUF_cachedReverseFillNormal) == true
-    end
-    return GetCastbarReverseFill(isChanneled) and true or false
-end
-ExportPublic("MSUF_GetCastbarReverseFillForFrame", GetCastbarReverseFillForFrame)
-
 local function ForEachCastbarFrame(callback)
     callback(_G.MSUF_PlayerCastbar)
     callback(_G.MSUF_TargetCastbar)
@@ -527,40 +510,7 @@ local function UpdateCastbarTextures()
     end
 end
 ExportPublic("MSUF_UpdateCastbarTextures", UpdateCastbarTextures)
-
-local function UpdateCastbarFillDirection()
-    BumpCastbarStyleRevision()
-
-    local function FrameStateIsChanneledOrEmpowered(frame)
-        if not (frame and frame.unit) then return false end
-        local buildState = _G.MSUF_BuildCastState
-        if type(buildState) ~= "function" then
-            return _G.UnitChannelInfo and _G.UnitChannelInfo(frame.unit) and true or false
-        end
-        local state = buildState(frame.unit, frame)
-        return state and (state.castType == "CHANNEL" or state.castType == "EMPOWER") or false
-    end
-
-    local function ApplyFillDirectionForFrame(frame)
-        if not (frame and frame.statusBar and frame.statusBar.SetReverseFill) then return end
-
-        local isChanneled = false
-        if frame.isEmpower then
-            isChanneled = true
-        elseif frame.MSUF_isChanneled then
-            isChanneled = true
-        elseif frame.unit and (frame.unit == "player" or frame.unit == "target" or frame.unit == "focus") then
-            isChanneled = FrameStateIsChanneledOrEmpowered(frame)
-        end
-
-        RefreshCastbarStyleCache(frame)
-        local reverseFill = GetCastbarReverseFillForFrame(frame, isChanneled)
-        frame.statusBar:SetReverseFill(reverseFill and true or false)
-    end
-
-    ForEachCastbarFrame(ApplyFillDirectionForFrame)
-end
-ExportPublic("MSUF_UpdateCastbarFillDirection", UpdateCastbarFillDirection)
+ExportPublic("MSUF_UpdateCastbarTextures_Immediate", UpdateCastbarTextures)
 
 local resolvedStatusbarTextureCache = {}
 
@@ -656,25 +606,6 @@ local function GetBarBackgroundTexture()
 end
 ExportPublic("MSUF_GetBarBackgroundTexture", GetBarBackgroundTexture)
 
-local function ApplyFont(fontString, fontPath, fontSize, fontFlags, red, green, blue, alpha)
-    fontSize = tonumber(fontSize) or 12
-    if fontSize <= 0 then fontSize = 12 end
-    if fontSize < 6 then fontSize = 6 elseif fontSize > 128 then fontSize = 128 end
-    if fontPath and fontString.SetFont then
-        pcall(fontString.SetFont, fontString, fontPath, fontSize, fontFlags)
-    end
-    fontString:SetTextColor(red, green, blue, alpha)
-end
-
-local function ApplyShadow(fontString, enabled, alpha, offsetX, offsetY)
-    if enabled then
-        fontString:SetShadowColor(0, 0, 0, alpha)
-        fontString:SetShadowOffset(offsetX, offsetY)
-    else
-        fontString:SetShadowOffset(0, 0)
-    end
-end
-
 local function ApplySparkLayout(frame, statusBar, general, height)
     local enabled = general and general.castbarShowSpark == true
     local spark = frame.spark
@@ -702,25 +633,28 @@ local function ApplySparkLayout(frame, statusBar, general, height)
     end
 end
 
-local function ApplyCastbarVisualFrame(frame, context)
+local function ApplyCastbarSparkVisual(frame, general)
+    if not (frame and frame.statusBar) then return end
+    general = general or EnsureDB().general or {}
+    local height = (frame.GetHeight and frame:GetHeight()) or frame.statusBar:GetHeight() or 18
+    ApplySparkLayout(frame, frame.statusBar, general, height)
+end
+ExportPublic("MSUF_ApplyCastbarSparkVisual", ApplyCastbarSparkVisual)
+
+local function ApplyCastbarBaseGeometry(frame, general, forcedUnit)
     if not frame or not frame.statusBar then return end
 
     local statusBar = frame.statusBar
-    local icon = frame.icon
-        or frame.Icon
-        or (frame.IconFrame and (frame.IconFrame.Icon or frame.IconFrame.icon))
-        or frame.iconTexture
-        or frame.IconTexture
     local width = frame:GetWidth() or statusBar:GetWidth() or 250
     local height = frame:GetHeight() or statusBar:GetHeight() or 18
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    general = general or EnsureDB().general or {}
     local unit, prefix
     local widthSourceLocked = false
 
-    if general then
+    do
         local globalWidth = tonumber(general.castbarGlobalWidth)
         local globalHeight = tonumber(general.castbarGlobalHeight)
-        unit = GetCastbarUnitFromFrame(frame)
+        unit = forcedUnit or GetCastbarUnitFromFrame(frame)
         local normalizer = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
         local widthSourceKey = _G.MSUF_GetCastbarWidthSourceKey and _G.MSUF_GetCastbarWidthSourceKey(unit)
         if widthSourceKey then
@@ -732,290 +666,172 @@ local function ApplyCastbarVisualFrame(frame, context)
             end
         end
 
-        if globalWidth and globalWidth > 0 and not widthSourceLocked then width = globalWidth; frame:SetWidth(width) end
-        if globalHeight and globalHeight > 0 then height = globalHeight; frame:SetHeight(globalHeight) end
+        if globalWidth and globalWidth > 0 and not widthSourceLocked then width = globalWidth end
+        if globalHeight and globalHeight > 0 then height = globalHeight end
         prefix = unit and GetCastbarPrefix(unit) or nil
         if prefix then
             local unitWidth = tonumber(general[prefix .. "BarWidth"])
             local unitHeight = tonumber(general[prefix .. "BarHeight"])
-            if unitWidth and unitWidth > 0 and not widthSourceLocked then width = unitWidth; frame:SetWidth(width) end
-            if unitHeight and unitHeight > 0 then height = unitHeight; frame:SetHeight(unitHeight) end
+            if unitWidth and unitWidth > 0 and not widthSourceLocked then width = unitWidth end
+            if unitHeight and unitHeight > 0 then height = unitHeight end
         end
     end
 
-    local showIcon = context.showIcon
-    local iconOffsetX = context.iconOffsetX
-    local iconOffsetY = context.iconOffsetY
-    local iconSize = height
-    if general then
-        if prefix then
-            local value = general[prefix .. "ShowIcon"]
-            if value ~= nil then showIcon = value ~= false end
-            value = general[prefix .. "IconOffsetX"]
-            if value ~= nil then iconOffsetX = tonumber(value) or 0 end
-            value = general[prefix .. "IconOffsetY"]
-            if value ~= nil then iconOffsetY = tonumber(value) or 0 end
-            value = general[prefix .. "IconSize"]
-            if value ~= nil then
-                iconSize = tonumber(value) or iconSize
-            else
-                local globalIconSize = tonumber(general.castbarIconSize) or 0
-                if globalIconSize and globalIconSize > 0 then iconSize = globalIconSize end
-            end
-        else
-            local globalIconSize = tonumber(general.castbarIconSize) or 0
-            if globalIconSize and globalIconSize > 0 then iconSize = globalIconSize end
-        end
-    end
-    if iconSize < 6 then iconSize = 6 elseif iconSize > 128 then iconSize = 128 end
+    if frame:GetWidth() ~= width then frame:SetWidth(width) end
+    if frame:GetHeight() ~= height then frame:SetHeight(height) end
 
-    local isPlayerFrame = frame == _G.MSUF_PlayerCastbar or frame == _G.MSUF_PlayerCastbarPreview
-    local hasDetachedIconOffset = iconOffsetX ~= 0
-    local backgroundBar = frame.backgroundBar
-    if isPlayerFrame and type(_G.MSUF_ApplyPlayerCastbarIconLayout) == "function" then
-        _G.MSUF_ApplyPlayerCastbarIconLayout(frame, general, -1, 1)
-        if backgroundBar and frame.statusBar then
-            backgroundBar:ClearAllPoints()
-            backgroundBar:SetAllPoints(frame.statusBar)
-        end
-    else
-        if icon and statusBar and icon.GetParent and icon.SetParent then
-            local parent = hasDetachedIconOffset and statusBar or frame
-            if icon:GetParent() ~= parent then icon:SetParent(parent) end
-        end
-        if icon then
-            icon:SetShown(showIcon)
-            icon:ClearAllPoints()
-            icon:SetPoint("LEFT", frame, "LEFT", iconOffsetX, iconOffsetY)
-            icon:SetSize(iconSize, iconSize)
-            if icon.SetDrawLayer then icon:SetDrawLayer("OVERLAY", 7) end
-        end
-
-        local frameInset = CastbarFrameInset(general)
-        statusBar:ClearAllPoints()
-        if showIcon and icon and not hasDetachedIconOffset then
-            statusBar:SetPoint("LEFT", frame, "LEFT", iconSize + 1, 0)
-            statusBar:SetWidth(math_max(1, width - (iconSize + 1) - frameInset))
-        else
-            statusBar:SetPoint("LEFT", frame, "LEFT", frameInset, 0)
-            statusBar:SetWidth(math_max(1, width - (frameInset * 2)))
-        end
-        statusBar:SetHeight(math_max(1, height - (frameInset * 2)))
-        if backgroundBar then
-            backgroundBar:ClearAllPoints()
-            backgroundBar:SetAllPoints(statusBar)
-        end
-    end
-
-    ApplySparkLayout(frame, statusBar, general, height)
-    if _G.MSUF_KickReady_ApplyLayout then _G.MSUF_KickReady_ApplyLayout(frame) end
-
-    local showSpellName = context.showSpellName
-    local spellFontSize = context.spellFontSize
-    local textOffsetX, textOffsetY = 0, 0
-    local timeFontSize = spellFontSize
-    local timeOffsetX, timeOffsetY = -2, 0
-
-    if prefix then
-        local value = general[prefix .. "ShowSpellName"]
-        if value ~= nil then showSpellName = value ~= false end
-        textOffsetX = tonumber(general[prefix .. "TextOffsetX"]) or 0
-        textOffsetY = tonumber(general[prefix .. "TextOffsetY"]) or 0
-        timeOffsetX = tonumber(general[prefix .. "TimeOffsetX"]) or tonumber(general.castbarPlayerTimeOffsetX) or -2
-        timeOffsetY = tonumber(general[prefix .. "TimeOffsetY"]) or tonumber(general.castbarPlayerTimeOffsetY) or 0
-        local unitSpellSize = tonumber(general[prefix .. "SpellNameFontSize"]) or 0
-        if unitSpellSize and unitSpellSize > 0 then spellFontSize = unitSpellSize end
-        local unitTimeSize = tonumber(general[prefix .. "TimeFontSize"]) or 0
-        if unitTimeSize and unitTimeSize > 0 then timeFontSize = unitTimeSize else timeFontSize = spellFontSize end
-    elseif IsBossCastbarUnit(unit) then
-        timeOffsetX = -2 + (tonumber(general.bossCastTimeOffsetX) or 0)
-        timeOffsetY = tonumber(general.bossCastTimeOffsetY) or 0
-        local bossTimeSize = tonumber(general.bossCastTimeFontSize) or 0
-        if bossTimeSize and bossTimeSize > 0 then timeFontSize = bossTimeSize end
-    end
-
-    local castTimeEnabled = IsCastTimeEnabledForFrame(frame)
-    if type(_G.MSUF_IsCastTimeEnabled) == "function" then castTimeEnabled = _G.MSUF_IsCastTimeEnabled(frame) end
-
-    local castText = frame.castText or frame.Text or frame.text
-    if castText then
-        castText:SetShown(showSpellName)
-        ApplyFont(castText, context.fontPath, spellFontSize, context.fontFlags, context.textR, context.textG, context.textB, context.textAlpha)
-        if castText.SetMaxLines then castText:SetMaxLines(1) end
-        if castText.SetWordWrap then castText:SetWordWrap(false) end
-        if castText.SetNonSpaceWrap then castText:SetNonSpaceWrap(false) end
-        if castText.SetPoint then
-            castText:ClearAllPoints()
-            castText:SetPoint("LEFT", statusBar, "LEFT", 2 + textOffsetX, textOffsetY)
-        end
-
-        local _, _, reservedSpace
-        if type(_G.MSUF_GetCastbarSpellNameShorteningConfig) == "function" then
-            _, _, reservedSpace = _G.MSUF_GetCastbarSpellNameShorteningConfig(frame)
-        end
-        local barWidth = (statusBar.GetWidth and statusBar:GetWidth()) or (frame.GetWidth and frame:GetWidth()) or 250
-        if barWidth < 20 then barWidth = 20 end
-
-        local timeWidth = 0
-        if castTimeEnabled and frame.timeText then
-            local size = tonumber(timeFontSize) or 12
-            if size < 6 then size = 6 elseif size > 128 then size = 128 end
-            local format = frame._msufCastTimeFormat
-            timeWidth = math_floor(size * ((format == "CURRENT" or not format) and 3.2 or 6.8) + 8.5)
-            local maxWidth = math_floor(barWidth * 0.45 + 0.5)
-            if timeWidth > maxWidth then timeWidth = maxWidth end
-        end
-
-        local reserved = tonumber(reservedSpace) or 0
-        local textWidth = math_floor(barWidth - timeWidth - reserved - (6 + (tonumber(textOffsetX) or 0)) + 0.5)
-        if textWidth < 20 then textWidth = 20 end
-        if castText.SetWidth and castText._msufCastbarTextWidth ~= textWidth then
-            castText:SetWidth(textWidth)
-            castText._msufCastbarTextWidth = textWidth
-        end
-        if type(_G.MSUF_RefreshCastbarSpellNameText) == "function" then _G.MSUF_RefreshCastbarSpellNameText(frame) end
-        ApplyShadow(castText, context.shadowEnabled, context.shadowAlpha, context.shadowX, context.shadowY)
-    end
-
-    local timeText = frame.timeText
-    if timeText and castTimeEnabled then
-        ApplyFont(timeText, context.fontPath, timeFontSize or context.spellFontSize, context.fontFlags, context.textR, context.textG, context.textB, context.textAlpha)
-        if timeText.SetPoint then
-            timeText:ClearAllPoints()
-            timeText:SetPoint("RIGHT", statusBar, "RIGHT", timeOffsetX, timeOffsetY)
-        end
-        ApplyShadow(timeText, context.shadowEnabled, context.shadowAlpha, context.shadowX, context.shadowY)
-    end
+    return general, height
 end
 
-local function BuildCastbarVisualContext()
-    BumpCastbarStyleRevision()
-    local db = EnsureDB()
-    local general = db.general or {}
-
-    local showIcon = IsOptionEnabled(general, "castbarShowIcon", true)
-    local showSpellName = IsOptionEnabled(general, "castbarShowSpellName", true)
-    local spellFontSize = tonumber(general.castbarSpellNameFontSize) or 0
-    local iconOffsetX = tonumber(general.castbarIconOffsetX) or 0
-
-    local fontPath = GetFontPath()
-    local fontFlags = GetGlobalFontFlags()
-    local textR, textG, textB = 1, 1, 1
-    if type(_G.MSUF_GetCastbarTextColor) == "function" then
-        textR, textG, textB = _G.MSUF_GetCastbarTextColor()
-    elseif MSUF and type(MSUF.MSUF_GetConfiguredFontColor) == "function" then
-        textR, textG, textB = MSUF.MSUF_GetConfiguredFontColor()
-    else
-        local colorKey = tostring(general.fontColor or "white"):lower()
-        local color = (_G.MSUF_FONT_COLORS and (_G.MSUF_FONT_COLORS[colorKey] or _G.MSUF_FONT_COLORS.white)) or { 1, 1, 1 }
-        textR, textG, textB = color[1], color[2], color[3]
-    end
-
-    local shadowEnabled = general.textBackdrop ~= false
-    local textAlpha = tonumber(general.fontTextAlpha) or 1
-    if textAlpha < 0.7 then textAlpha = 0.7 elseif textAlpha > 1 then textAlpha = 1 end
-
-    local shadowAlpha, shadowX, shadowY = 1, 1, -1
-    local shadowStrength = tostring(general.fontShadowStrength or "NORMAL"):upper()
-    if shadowStrength == "SOFT" then
-        shadowAlpha, shadowX, shadowY = 0.55, 1, -1
-    elseif shadowStrength == "DEEP" then
-        shadowAlpha, shadowX, shadowY = 1, 2, -2
-    end
-
-    local baseFontSize = tonumber(general.fontSize) or 14
-    if baseFontSize <= 0 then baseFontSize = 14 end
-    local effectiveSpellFontSize = spellFontSize > 0 and spellFontSize or baseFontSize
-
-    return {
-        showIcon = showIcon,
-        showSpellName = showSpellName,
-        iconOffsetX = iconOffsetX,
-        iconOffsetY = textAlpha, -- Preserve current runtime behavior from the legacy compact block.
-        fontPath = fontPath,
-        fontFlags = fontFlags,
-        textR = textR,
-        textG = textG,
-        textB = textB,
-        textAlpha = textAlpha,
-        shadowEnabled = shadowEnabled,
-        shadowAlpha = shadowAlpha,
-        shadowX = shadowX,
-        shadowY = shadowY,
-        spellFontSize = effectiveSpellFontSize,
-    }
-end
-
-local function UpdateCastbarVisuals(unit)
-    unit = NormalizeCastbarUnit(unit)
-    if unit and ApplyCastbarVisualsForUnit then
-        return ApplyCastbarVisualsForUnit(unit)
-    end
-
-    local context = BuildCastbarVisualContext()
-    ApplyCastbarVisualFrame(_G.MSUF_PlayerCastbar, context)
-    ApplyCastbarVisualFrame(_G.MSUF_TargetCastbar, context)
-    ApplyCastbarVisualFrame(_G.MSUF_FocusCastbar, context)
-
-    if not IsInCombat() then
-        ApplyCastbarVisualFrame(_G.MSUF_PlayerCastbarPreview, context)
-        ApplyCastbarVisualFrame(_G.MSUF_TargetCastbarPreview, context)
-        ApplyCastbarVisualFrame(_G.MSUF_FocusCastbarPreview, context)
-        if _G.MSUF_BossCastbarPreview then ApplyCastbarVisualFrame(_G.MSUF_BossCastbarPreview, context) end
-    end
-
-    if not IsInCombat()
-        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
-        and not _G.MSUF_BossPreviewRefreshLock then
-        ExportPublic("MSUF_BossPreviewRefreshLock", true)
-        _G.MSUF_UpdateBossCastbarPreview()
-        if _G.MSUF_SetupBossCastbarPreviewEditMode then _G.MSUF_SetupBossCastbarPreviewEditMode() end
-        ExportPublic("MSUF_BossPreviewRefreshLock", false)
-    end
-
-    local maxBossFrames = _G.MSUF_MAX_BOSS_FRAMES or 5
-    for index = 1, maxBossFrames do
-        local frame = _G["MSUF_boss" .. index .. "CastBar"]
-        if frame then ApplyCastbarVisualFrame(frame, context) end
-    end
-end
-ExportPublic("MSUF_UpdateCastbarVisuals", UpdateCastbarVisuals)
-
-local function ApplyCastbarVisualFrameCold(frame, context)
-    if not frame then return false end
-    ApplyCastbarVisualFrame(frame, context)
+local function ApplyCastbarVisualFrameCold(frame, general, forcedUnit)
+    if not (frame and frame.statusBar) then return false end
+    general = ApplyCastbarBaseGeometry(frame, general, forcedUnit)
     if type(_G.MSUF_RefreshCastbarFrame) == "function" then
-        _G.MSUF_RefreshCastbarFrame(frame)
+        _G.MSUF_RefreshCastbarFrame(frame, forcedUnit, general)
+    end
+    ApplyCastbarSparkVisual(frame, general)
+    if _G.MSUF__castbarStyleGlobalRev then
+        frame._msufCastbarStyleRev = _G.MSUF__castbarStyleGlobalRev
     end
     return true
 end
 
-ApplyCastbarVisualsForUnit = function(unit)
+local function MaxBossFrames()
+    local count = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+    if count < 1 or count > 12 then return 5 end
+    return count
+end
+
+local function BumpCastbarVisualRevisions()
+    BumpCastbarStyleRevision()
+
+    local bumpStyle = _G.MSUF_BumpCastbarStyleRev
+    if type(bumpStyle) == "function" then bumpStyle() end
+
+    local bumpTime = _G.MSUF_BumpCastTimeRev
+    if type(bumpTime) == "function" then bumpTime() end
+end
+
+local function ApplyBossRuntimeVisuals(general)
+    local did = false
+    local bossCastbars = _G.MSUF_BossCastbars
+    for index = 1, MaxBossFrames() do
+        local frame = (bossCastbars and bossCastbars[index])
+            or _G["MSUF_BossCastbar" .. index]
+            or _G["MSUF_boss" .. index .. "CastBar"]
+        did = ApplyCastbarVisualFrameCold(frame, general, "boss") or did
+    end
+    return did
+end
+
+local function ApplyExistingBossPreviewVisuals(general)
+    local did = ApplyCastbarVisualFrameCold(
+        _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1,
+        general,
+        "boss"
+    )
+    for index = 2, MaxBossFrames() do
+        did = ApplyCastbarVisualFrameCold(_G["MSUF_BossCastbarPreview" .. index], general, "boss") or did
+    end
+    return did
+end
+
+local function RefreshBossPreviews(general)
+    if IsInCombat() then return false end
+
+    local updatePreview = _G.MSUF_UpdateBossCastbarPreview
+    if type(updatePreview) == "function" and not _G.MSUF_BossPreviewRefreshLock then
+        ExportPublic("MSUF_BossPreviewRefreshLock", true)
+        updatePreview()
+        local setupEditMode = _G.MSUF_SetupBossCastbarPreviewEditMode
+        if type(setupEditMode) == "function" then setupEditMode() end
+        ExportPublic("MSUF_BossPreviewRefreshLock", false)
+        return true
+    end
+
+    return ApplyExistingBossPreviewVisuals(general)
+end
+
+ApplyCastbarVisualsForUnit = function(unit, revisionsReady, general)
     unit = IsBossCastbarUnit(unit) and "boss" or tostring(unit or "")
-    local context = BuildCastbarVisualContext()
+    if not revisionsReady then BumpCastbarVisualRevisions() end
+    general = general or EnsureDB().general or {}
     local did = false
     if unit == "player" then
-        did = ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbar, context) or did
-        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbarPreview, context) or did end
+        did = ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbar, general, unit) or did
+        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbarPreview, general, unit) or did end
     elseif unit == "target" then
-        did = ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, context) or did
-        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbarPreview, context) or did end
+        did = ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, general, unit) or did
+        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbarPreview, general, unit) or did end
     elseif unit == "focus" then
-        did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, context) or did
-        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbarPreview, context) or did end
+        did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, general, unit) or did
+        if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbarPreview, general, unit) or did end
     elseif unit == "boss" then
-        local maxBossFrames = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
-        if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
-        for index = 1, maxBossFrames do
-            did = ApplyCastbarVisualFrameCold(_G["MSUF_boss" .. index .. "CastBar"], context) or did
-        end
-        if not IsInCombat() then
-            did = ApplyCastbarVisualFrameCold(_G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1, context) or did
-        end
+        did = ApplyBossRuntimeVisuals(general) or did
+        did = RefreshBossPreviews(general) or did
     end
     return did
 end
 ExportPublic("MSUF_ApplyCastbarVisualsForUnit", ApplyCastbarVisualsForUnit)
+
+local function ApplyAllCastbarVisuals(general)
+    ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbar, general, "player")
+    ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar, general, "target")
+    ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, general, "focus")
+
+    if not IsInCombat() then
+        ApplyCastbarVisualFrameCold(_G.MSUF_PlayerCastbarPreview, general, "player")
+        ApplyCastbarVisualFrameCold(_G.MSUF_TargetCastbarPreview, general, "target")
+        ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbarPreview, general, "focus")
+    end
+
+    ApplyBossRuntimeVisuals(general)
+    RefreshBossPreviews(general)
+end
+
+local function UpdateCastbarVisuals(unit)
+    unit = NormalizeCastbarUnit(unit)
+    BumpCastbarVisualRevisions()
+    local general = EnsureDB().general or {}
+    if unit then
+        if unit == "player" and type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then
+            _G.MSUF_ReanchorPlayerCastBarBase()
+        end
+        return ApplyCastbarVisualsForUnit(unit, true, general)
+    end
+
+    if type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then
+        _G.MSUF_ReanchorPlayerCastBarBase()
+    end
+
+    ApplyAllCastbarVisuals(general)
+end
+ExportPublic("MSUF_UpdateCastbarVisuals", UpdateCastbarVisuals)
+ExportPublic("MSUF_UpdateCastbarVisuals_Immediate", UpdateCastbarVisuals)
+
+local CASTBAR_SYNC_UNITS = { "player", "target", "focus", "boss" }
+
+local function ApplyAllCastbarsAndSync()
+    local general = EnsureDB().general or {}
+    if type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then _G.MSUF_ReanchorPlayerCastBarBase() end
+    if type(_G.MSUF_ReanchorTargetCastBarBase) == "function" then _G.MSUF_ReanchorTargetCastBarBase() end
+    if type(_G.MSUF_ReanchorFocusCastBarBase) == "function" then _G.MSUF_ReanchorFocusCastBarBase() end
+    if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+        _G.MSUF_ApplyBossCastbarPositionSetting(nil, true, true)
+    end
+
+    BumpCastbarVisualRevisions()
+    ApplyAllCastbarVisuals(general)
+
+    local updateEditInfo = _G.MSUF_UpdateCastbarEditInfo
+    local syncPopup = _G.MSUF_SyncCastbarPositionPopup
+    for index = 1, #CASTBAR_SYNC_UNITS do
+        local unitKey = CASTBAR_SYNC_UNITS[index]
+        if type(updateEditInfo) == "function" then updateEditInfo(unitKey) end
+        if type(syncPopup) == "function" then syncPopup(unitKey) end
+    end
+end
+ExportPublic("MSUF_ApplyAllCastbarsAndSync", ApplyAllCastbarsAndSync)
 
 do
     local UF = MSUF and MSUF.UF

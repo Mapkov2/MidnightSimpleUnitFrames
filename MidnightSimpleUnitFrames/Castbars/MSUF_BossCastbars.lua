@@ -40,23 +40,6 @@ local function EnsureDB()
     end
 end
 
-local function CastbarFrameInset(general)
-    local thickness = tonumber(general and general.castbarOutlineThickness)
-    if thickness == nil then thickness = 1 end
-    return thickness > 0 and 1 or 0
-end
-
-local function KeyPart(value)
-    if value == nil then
-        return ""
-    end
-    return tostring(value)
-end
-
-local function BoolKey(value)
-    return value and "1" or "0"
-end
-
 local function InCombat()
     return _G.MSUF_InCombat == true
         or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
@@ -137,117 +120,21 @@ local function ApplyBossCastbarLayout(frame)
     EnsureDB()
 
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-    local height = frame:GetHeight() or 18
-    if height < 12 then
-        height = 12
+    local refreshFrame = _G.MSUF_RefreshCastbarFrame
+    if type(refreshFrame) == "function" then
+        refreshFrame(frame, "boss", general)
+    elseif type(_G.MSUF_ApplyCastbarDetailLayout) == "function" then
+        _G.MSUF_ApplyCastbarDetailLayout(frame, "boss", general)
     end
-
-    local showIcon = (general.showBossCastIcon == nil)
-        and (general.castbarShowIcon ~= false)
-        or (general.showBossCastIcon ~= false)
-
-    local iconOffsetX = tonumber(general.bossCastIconOffsetX) or tonumber(general.castbarIconOffsetX) or 0
-    local iconOffsetY = tonumber(general.bossCastIconOffsetY) or tonumber(general.castbarIconOffsetY) or 0
-    local iconSize = tonumber(general.bossCastIconSize) or tonumber(general.castbarIconSize) or height
-
-    if iconSize < 6 then
-        iconSize = 6
-    elseif iconSize > 128 then
-        iconSize = 128
-    end
-
-    local frameInset = CastbarFrameInset(general)
-    local coreLayoutKey = KeyPart(height) .. "|"
-        .. BoolKey(frame.icon ~= nil) .. "|"
-        .. BoolKey(showIcon) .. "|"
-        .. KeyPart(iconOffsetX) .. "|"
-        .. KeyPart(iconOffsetY) .. "|"
-        .. KeyPart(iconSize) .. "|"
-        .. KeyPart(frameInset)
-    if frame._msufBossCastbarCoreLayoutKey ~= coreLayoutKey then
-        frame._msufBossCastbarCoreLayoutKey = coreLayoutKey
-
-        if frame.icon then
-            local iconParent = ((iconOffsetX ~= 0 or iconOffsetY ~= 0) and frame.statusBar) or frame
-
-            if frame.icon.SetParent and frame.icon:GetParent() ~= iconParent then
-                frame.icon:SetParent(iconParent)
-            end
-
-            frame.icon:ClearAllPoints()
-            frame.icon:SetPoint("LEFT", frame, "LEFT", iconOffsetX, iconOffsetY)
-            frame.icon:SetSize(iconSize, iconSize)
-            frame.icon:SetShown(showIcon)
-        end
-
-        frame.statusBar:ClearAllPoints()
-        if showIcon and frame.icon and iconOffsetX == 0 and iconOffsetY == 0 then
-            frame.statusBar:SetPoint("LEFT", frame, "LEFT", iconSize + 1, 0)
-        else
-            frame.statusBar:SetPoint("LEFT", frame, "LEFT", frameInset, 0)
-        end
-
-        frame.statusBar:SetPoint("TOP", frame, "TOP", 0, -frameInset)
-        frame.statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, frameInset)
-        frame.statusBar:SetPoint("RIGHT", frame, "RIGHT", -frameInset, 0)
-
-        if frame.backgroundBar then
-            frame.backgroundBar:ClearAllPoints()
-            frame.backgroundBar:SetAllPoints(frame.statusBar)
-        end
-    end
-
-    if type(_G.MSUF_ApplyBossCastbarTextsLayout) == "function" then
-        local nameFontSize = tonumber(general.bossCastSpellNameFontSize)
-            or tonumber(general.castbarSpellNameFontSize)
-            or tonumber(general.fontSize)
-            or 14
-        if nameFontSize <= 0 then
-            nameFontSize = (tonumber(general.fontSize) and tonumber(general.fontSize) > 0 and tonumber(general.fontSize)) or 14
-        end
-        if nameFontSize < 6 then nameFontSize = 6 elseif nameFontSize > 128 then nameFontSize = 128 end
-        local timeFontSize = tonumber(general.bossCastTimeFontSize) or nameFontSize
-        if timeFontSize <= 0 then timeFontSize = nameFontSize end
-        if timeFontSize < 6 then timeFontSize = 6 elseif timeFontSize > 128 then timeFontSize = 128 end
-
-        local textLayoutKey = KeyPart(tonumber(general.bossCastTextOffsetX) or 0) .. "|"
-            .. KeyPart(tonumber(general.bossCastTextOffsetY) or 0) .. "|"
-            .. KeyPart(tonumber(general.bossCastTimeOffsetX) or -2) .. "|"
-            .. KeyPart(tonumber(general.bossCastTimeOffsetY) or 0) .. "|"
-            .. BoolKey(general.showBossCastName ~= false) .. "|"
-            .. BoolKey(general.showBossCastTime ~= false) .. "|"
-            .. KeyPart(nameFontSize) .. "|"
-            .. KeyPart(timeFontSize)
-        if frame._msufBossCastbarTextLayoutKey ~= textLayoutKey then
-            frame._msufBossCastbarTextLayoutKey = textLayoutKey
-            _G.MSUF_ApplyBossCastbarTextsLayout(frame, {
-            baselineTimeX = -2,
-            baselineTimeY = 0,
-            textOffsetX = tonumber(general.bossCastTextOffsetX) or 0,
-            textOffsetY = tonumber(general.bossCastTextOffsetY) or 0,
-            timeOffsetX = tonumber(general.bossCastTimeOffsetX) or -2,
-            timeOffsetY = tonumber(general.bossCastTimeOffsetY) or 0,
-            showName = general.showBossCastName ~= false,
-            showTime = general.showBossCastTime ~= false,
-            nameFontSize = nameFontSize,
-            timeFontSize = timeFontSize,
-            })
-        end
-    end
-
-    if type(_G.MSUF_ApplyCastbarOutline) == "function" then
-        _G.MSUF_ApplyCastbarOutline(frame, false)
-    end
-
-    if type(_G.MSUF_ApplyCastbarDetailLayout) == "function" then
-        _G.MSUF_ApplyCastbarDetailLayout(frame, "boss")
+    if type(_G.MSUF_ApplyCastbarSparkVisual) == "function" then
+        _G.MSUF_ApplyCastbarSparkVisual(frame, general)
     end
 end
 
 --- Anchor/size pass for one boss castbar. This can be called from settings,
 --- login, encounter events, and preview sync, so it only mutates when values
 --- actually changed.
-local function UpdateBossCastbarAnchor(frame, forceLayout)
+local function UpdateBossCastbarAnchorBase(frame)
     if not frame then
         return false
     end
@@ -305,10 +192,12 @@ local function UpdateBossCastbarAnchor(frame, forceLayout)
         end
     end
 
-    if changed or forceLayout then
-        ApplyBossCastbarLayout(frame)
-    end
+    return changed
+end
 
+local function UpdateBossCastbarAnchor(frame, forceLayout)
+    local changed = UpdateBossCastbarAnchorBase(frame)
+    if changed or forceLayout then ApplyBossCastbarLayout(frame) end
     return changed
 end
 
@@ -382,6 +271,7 @@ local function EnsureBossCastbar(index)
     frame:SetFrameLevel(50 + index)
     frame.ApplyLayout = ApplyBossCastbarLayout
     frame.UpdateAnchor = UpdateBossCastbarAnchor
+    frame.UpdateAnchorBase = UpdateBossCastbarAnchorBase
 
     if not frame._msufBossHooked then
         frame._msufBossHooked = true
@@ -447,7 +337,7 @@ local function RefreshBossPreviewIfAllowed()
     end
 end
 
-local function ApplyBossCastbarTimeSetting()
+local function ApplyBossCastbarTimeSetting(skipPreviewRefresh)
     EnsureDB()
 
     local general = _G.MSUF_DB and _G.MSUF_DB.general
@@ -468,10 +358,10 @@ local function ApplyBossCastbarTimeSetting()
         end
     end
 
-    RefreshBossPreviewIfAllowed()
+    if not skipPreviewRefresh then RefreshBossPreviewIfAllowed() end
 end
 
-local function ApplyBossCastbarPositionSetting(forceLayout)
+local function ApplyBossCastbarPositionSetting(forceLayout, skipPreviewRefresh, geometryOnly)
     local bossCastbars = _G.MSUF_BossCastbars or EnsureBossCastbars()
     if not bossCastbars then
         return
@@ -480,11 +370,15 @@ local function ApplyBossCastbarPositionSetting(forceLayout)
     for index = 1, #bossCastbars do
         local frame = bossCastbars[index]
         if frame then
-            frame:UpdateAnchor(forceLayout ~= false)
+            if geometryOnly and frame.UpdateAnchorBase then
+                frame:UpdateAnchorBase()
+            else
+                frame:UpdateAnchor(forceLayout ~= false)
+            end
         end
     end
 
-    RefreshBossPreviewIfAllowed()
+    if not skipPreviewRefresh then RefreshBossPreviewIfAllowed() end
 end
 
 --- Public menu/profile entry. Keep backend flags, event subscriptions, live
@@ -515,7 +409,7 @@ local function SetBossCastbarsEnabled(enabled)
             SetBossEventsRegistered(frame, enabled)
 
             if enabled then
-                frame:UpdateAnchor(true)
+                if frame.UpdateAnchorBase then frame:UpdateAnchorBase() else frame:UpdateAnchor(true) end
                 if UnitExists(frame.unit) and frame.Cast then
                     frame:Cast()
                 end
@@ -525,13 +419,16 @@ local function SetBossCastbarsEnabled(enabled)
         end
     end
 
+    local refreshed
     if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
         _G.MSUF_ApplyCastbarVisualsForUnit("boss")
+        refreshed = true
     elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
         _G.MSUF_UpdateCastbarVisuals("boss")
+        refreshed = true
     end
 
-    RefreshBossPreviewIfAllowed()
+    if not refreshed then RefreshBossPreviewIfAllowed() end
 end
 
 local function ApplyBossCastbarsEnabled()

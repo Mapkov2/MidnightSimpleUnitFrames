@@ -382,7 +382,7 @@ function Style:ApplyBossCastbarTextsLayout(frame, options)
         local size = tonumber(options.nameFontSize) or 12
         if size <= 0 then size = 12 end
         if size < 6 then size = 6 elseif size > 128 then size = 128 end
-        pcall(frame.castText.SetFont, frame.castText, fontPath, size, fontFlags)
+        if fontPath then frame.castText:SetFont(fontPath, size, fontFlags) end
     end
 
     if tonumber(options.timeFontSize) then
@@ -390,7 +390,7 @@ function Style:ApplyBossCastbarTextsLayout(frame, options)
         local size = tonumber(options.timeFontSize) or 12
         if size <= 0 then size = 12 end
         if size < 6 then size = 6 elseif size > 128 then size = 128 end
-        pcall(frame.timeText.SetFont, frame.timeText, fontPath, size, fontFlags)
+        if fontPath then frame.timeText:SetFont(fontPath, size, fontFlags) end
     end
 
     if type(_G.MSUF_ApplyCastbarDetailTextLayout) == "function" then

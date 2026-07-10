@@ -758,12 +758,6 @@ local CASTBAR_TEST_FUNCS = {
     "MSUF_SetFocusCastbarTestMode",
     "MSUF_SetBossCastbarTestMode",
 }
-local CASTBAR_REFRESH_FUNCS = {
-    "MSUF_UpdateCastbarVisuals",
-    "MSUF_UpdatePlayerCastbarPreview",
-    "MSUF_UpdateTargetCastbarPreview",
-    "MSUF_UpdateFocusCastbarPreview",
-}
 local previewMoverSyncQueued = false
 local previewReforceQueued = false
 
@@ -1135,12 +1129,12 @@ local function MSUF_SyncCastbarEditModeWithUnitEdit()
         _G.MSUF_HideAllCastbarPreviews()
     end
 
-    for _, name in ipairs(CASTBAR_REFRESH_FUNCS) do
-        local fn = _G[name]
-        if type(fn) == "function" then fn() end
-    end
-    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
-        and _G.MSUF_UpdateBossCastbarPreview
+    if type(_G.MSUF_UpdatePlayerCastbarPreview) == "function" then
+        _G.MSUF_UpdatePlayerCastbarPreview()
+    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+        _G.MSUF_UpdateCastbarVisuals()
+    elseif not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
     then
         _G.MSUF_UpdateBossCastbarPreview()
     end
@@ -1205,21 +1199,22 @@ local MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or 
         end
     end
 
-    --- Re-anchor
-    local reanchorFns = {
-        player = "MSUF_ReanchorPlayerCastBar",
-        target = "MSUF_ReanchorTargetCastBar",
-        focus  = "MSUF_ReanchorFocusCastBar",
-        boss   = "MSUF_ApplyBossCastbarPositionSetting",
-    }
-    local ra = reanchorFns[unit]
-    if ra and type(_G[ra]) == "function" then _G[ra]() end
     if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
         _G.MSUF_ApplyCastbarUnitAndSync(unit)
-    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-    elseif _G.MSUF_UpdateCastbarVisuals then
-        _G.MSUF_UpdateCastbarVisuals(unit)
+    else
+        local reanchorFns = {
+            player = "MSUF_ReanchorPlayerCastBar",
+            target = "MSUF_ReanchorTargetCastBar",
+            focus  = "MSUF_ReanchorFocusCastBar",
+            boss   = "MSUF_ApplyBossCastbarPositionSetting",
+        }
+        local ra = reanchorFns[unit]
+        if ra and type(_G[ra]) == "function" then _G[ra]() end
+        if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+            _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+        elseif _G.MSUF_UpdateCastbarVisuals then
+            _G.MSUF_UpdateCastbarVisuals(unit)
+        end
     end
     RefreshUFPreview("EM2_CASTBAR_ANCHOR_TOGGLE", unit)
 end
