@@ -434,12 +434,11 @@ def check_classpower_smoothing_contracts() -> None:
 
 def check_portrait_refresh_contracts() -> None:
     portrait = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Elements" / "MSUF_UF_Elements_Portrait.lua")
+    visuals = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Elements" / "MSUF_UF_Visuals_Common.lua")
 
-    require(
-        portrait,
-        "UNIT_ENTERED_VEHICLE = true,\n  UNIT_EXITED_VEHICLE = true,\n  MSUF_UNIT_IDENTITY_VISUAL = true",
-        "Portrait vehicle events must use the forced-refresh path",
-    )
+    vehicle_contract = "UNIT_ENTERED_VEHICLE = true,\n  UNIT_EXITED_VEHICLE = true,\n  MSUF_UNIT_IDENTITY_VISUAL = true"
+    require(portrait, vehicle_contract, "Portrait fallback vehicle refresh events")
+    require(visuals, vehicle_contract, "Portrait shared vehicle refresh events")
     require(
         portrait,
         "if forceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then",
