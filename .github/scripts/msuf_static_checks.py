@@ -432,6 +432,27 @@ def check_classpower_smoothing_contracts() -> None:
             "Realtime power text live Player apply")
 
 
+def check_portrait_refresh_contracts() -> None:
+    portrait = read(ADDON_ROOT / "UnitFrames" / "Engine" / "Elements" / "MSUF_UF_Elements_Portrait.lua")
+
+    require(
+        portrait,
+        "UNIT_ENTERED_VEHICLE = true,\n  UNIT_EXITED_VEHICLE = true,\n  MSUF_UNIT_IDENTITY_VISUAL = true",
+        "Portrait vehicle events must use the forced-refresh path",
+    )
+    require(
+        portrait,
+        "if forceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then",
+        "Portrait forced-refresh cache bypass",
+    )
+    require_count(
+        portrait,
+        "ApplyUnitPortrait(texture, unit, frame, p, force)",
+        2,
+        "Portrait force must reach both queued and direct update paths",
+    )
+
+
 def main() -> int:
     lua_files = all_lua_files()
     check_luac(lua_files)
@@ -441,6 +462,7 @@ def main() -> int:
     check_group_refresh_contracts()
     check_powerbar_contracts()
     check_classpower_smoothing_contracts()
+    check_portrait_refresh_contracts()
     print(f"MSUF static checks: ok ({len(lua_files)} Lua files)")
     return 0
 

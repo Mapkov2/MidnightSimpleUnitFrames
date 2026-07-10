@@ -44,6 +44,8 @@ local QUEUED_2D_PORTRAIT_EVENTS = V.QUEUED_2D_PORTRAIT_EVENTS or {
   UNIT_PORTRAIT_UPDATE = true,
   UNIT_MODEL_CHANGED = true,
   UNIT_CONNECTION = true,
+  UNIT_ENTERED_VEHICLE = true,
+  UNIT_EXITED_VEHICLE = true,
   MSUF_UNIT_IDENTITY_VISUAL = true,
   MSUF_UNIT_IDENTITY_SOFT = true,
   MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
@@ -774,11 +776,10 @@ function Portrait.Update(frame, event, unit)
         frame._msufPortraitForceRefresh = nil
       end
     else
+      local force = frame._msufPortraitForceRefresh == true
       frame._msufPortraitNeedsVisibleRefresh = nil
-      if frame._msufPortraitForceRefresh == true then
-        frame._msufPortraitForceRefresh = nil
-      end
-      ApplyUnitPortrait(texture, unit, frame, p)
+      frame._msufPortraitForceRefresh = nil
+      ApplyUnitPortrait(texture, unit, frame, p, force)
     end
   end
   if PortraitBorderNeedsUpdate(event, p) then
