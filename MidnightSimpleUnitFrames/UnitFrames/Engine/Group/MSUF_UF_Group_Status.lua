@@ -17,22 +17,8 @@ MSUF.GF = GF
 if not (UF and UF.RegisterElement) then return end
 
 local CreateFrame = _G.CreateFrame
-local InCombatLockdown = _G.InCombatLockdown
-local C_Timer = _G.C_Timer
 local next = next
 local type = type
-
-local function ProfBegin(name)
-  if MSUF and MSUF._profEnabled == true and MSUF.ProfBegin then
-    return MSUF.ProfBegin(name)
-  end
-end
-
-local function ProfEnd(name, token)
-  if token and MSUF and MSUF.ProfEnd then
-    MSUF.ProfEnd(name, token)
-  end
-end
 
 local STATUS_EVENT_KIND = {
   RAID_TARGET_UPDATE = 1,
@@ -234,53 +220,6 @@ local function StatusTextConnectionKey(frame, cfg)
   return key
 end
 
-local function StatusTextPollKey(frame, cfg)
-  local unit = frame and frame.unit
-  if not IsUnitToken(unit) then return nil end
-  local state = frame and frame._msufUnitState
-  local stateReady = state and state.ready == true
-    and state.unit == unit
-  local stateFresh = stateReady
-    and frame._msufDispatchActive == true
-    and state.dispatchToken == frame._msufDispatchToken
-  local connection = 0
-  local flags = 0
-  if cfg.showDead == true then
-    if stateFresh and state.connectedKnown == true then
-      if state.connected == false then connection = 1 end
-    else
-      local connected, known = ReadConnectedCached(frame, unit)
-      if known ~= true then return nil end
-      if connected == false then connection = 1 end
-    end
-  end
-  if cfg.showGhost == true and UnitIsGhost then
-    local ghost = UnitIsGhost(unit)
-    if issecretvalue(ghost) == true then return nil end
-    if ghost == true or ghost == 1 then flags = flags + 2 end
-  end
-  if cfg.showDead == true then
-    if stateFresh and state.deadKnown == true then
-      if state.dead == true then flags = flags + 4 end
-    else
-      local dead, known = ReadDeadCached(frame, unit)
-      if known ~= true then return nil end
-      if dead == true then flags = flags + 4 end
-    end
-  end
-  if cfg.showAFK == true and UnitIsAFK then
-    local afk = UnitIsAFK(unit)
-    if issecretvalue(afk) == true then return nil end
-    if afk == true or afk == 1 then flags = flags + 8 end
-  end
-  if cfg.showDND == true and UnitIsDND then
-    local dnd = UnitIsDND(unit)
-    if issecretvalue(dnd) == true then return nil end
-    if dnd == true or dnd == 1 then flags = flags + 16 end
-  end
-  return connection + (flags * 32)
-end
-
 --- Status text can be expensive because it combines connection, dead, ghost,
 --- AFK, and DND flags. Build compact keys and skip repainting unchanged text.
 local function StatusTextChanged(frame, status, event, seedHP)
@@ -298,9 +237,6 @@ local function StatusTextChanged(frame, status, event, seedHP)
   elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
     storeKey = "_msufGFStatusTextFlagsKey"
     key = StatusTextFlagsKey(frame, cfg)
-  elseif event == "MSUF_GF_STATUS_POLL" then
-    storeKey = "_msufGFStatusTextPollKey"
-    key = StatusTextPollKey(frame, cfg)
   else
     return true
   end
@@ -346,7 +282,6 @@ local function RunStatusApply(frame, status, event)
     frame._msufGFStatusTextConnectionKey = nil
     frame._msufGFStatusTextFlagsKey = nil
     frame._msufGFStatusTextHealthKey = nil
-    frame._msufGFStatusTextPollKey = nil
     UpdateStatusText(frame, status, event)
   end
   if status.runtimePVP == true and UpdatePVP then
@@ -566,129 +501,6 @@ local function SetUnitlessRegistration(frame, status)
   end
 end
 
-local STATUS_POLL_INTERVAL = 0.5
-local statusPollDriver
-local statusPollTicker
-local statusPollFrames = {}
-local statusPollIndex = {}
-local statusPollCount = 0
-
-local function StatusPollCombatBlocked()
-  return InCombatLockdown and InCombatLockdown()
-end
-
-local function RunStatusPollFrame(frame)
-  local live = GF and GF.frames
-  if not (frame and (not live or live[frame] == true)) then
-    return
-  end
-  if frame.IsShown and not frame:IsShown() then
-    return
-  end
-  local active = frame._msufActiveElements
-  if not (active and active.GroupStatusRuntime == true) then
-    return
-  end
-  local status = frame._msufGFStatusRuntimeStatus
-  if not (status and status.runtimeStatusText == true) then
-    return
-  end
-  RunStatusText(frame, status, "MSUF_GF_STATUS_POLL")
-  local gone = frame._msufUpdateGroupVisualsGoneState
-  if gone then
-    gone(frame, "MSUF_GF_STATUS_POLL", frame.unit)
-  end
-end
-
-local function RunStatusPollFrames()
-  local profName = "group:statusPoll"
-  local profToken = ProfBegin(profName)
-  if StatusPollCombatBlocked() then
-    ProfEnd(profName, profToken)
-    return
-  end
-  for i = 1, #statusPollFrames do
-    RunStatusPollFrame(statusPollFrames[i])
-  end
-  ProfEnd(profName, profToken)
-end
-
---- PERF: the poll cadence runs on a C_Timer ticker instead of a per-frame
---- OnUpdate accumulator. The old driver ticked every render frame just to
---- count up to 0.5s; the ticker wakes exactly twice per second and is
---- cancelled entirely while in combat (regen events restart it).
-local function RefreshStatusPollDriver()
-  if statusPollCount > 0 and not StatusPollCombatBlocked() then
-    if statusPollTicker then
-      return
-    end
-    if C_Timer and C_Timer.NewTicker then
-      statusPollTicker = C_Timer.NewTicker(STATUS_POLL_INTERVAL, RunStatusPollFrames)
-    end
-  elseif statusPollTicker then
-    statusPollTicker:Cancel()
-    statusPollTicker = nil
-  end
-end
-
-local function EnsureStatusPollDriver()
-  if statusPollDriver or not CreateFrame then
-    return statusPollDriver
-  end
-  statusPollDriver = CreateFrame("Frame")
-  statusPollDriver:Hide()
-  statusPollDriver:RegisterEvent("PLAYER_REGEN_DISABLED")
-  statusPollDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
-  statusPollDriver:SetScript("OnEvent", function(_, event)
-    RefreshStatusPollDriver()
-    if event == "PLAYER_REGEN_ENABLED" and statusPollCount > 0 then
-      RunStatusPollFrames()
-    end
-  end)
-  return statusPollDriver
-end
-
-local function AddStatusPollFrame(frame)
-  if not frame or statusPollIndex[frame] then
-    return
-  end
-  EnsureStatusPollDriver()
-  local n = #statusPollFrames + 1
-  statusPollFrames[n] = frame
-  statusPollIndex[frame] = n
-  statusPollCount = statusPollCount + 1
-  RefreshStatusPollDriver()
-end
-
-local function RemoveStatusPollFrame(frame)
-  local i = frame and statusPollIndex[frame]
-  if not i then
-    return
-  end
-  local last = #statusPollFrames
-  local tail = statusPollFrames[last]
-  statusPollFrames[i] = tail
-  statusPollFrames[last] = nil
-  statusPollIndex[frame] = nil
-  if tail and tail ~= frame then
-    statusPollIndex[tail] = i
-  end
-  statusPollCount = statusPollCount - 1
-  RefreshStatusPollDriver()
-end
-
-local function SetStatusPollRegistration(frame, status)
-  local cfg = status and status.statusText
-  local want = status and status.runtimeStatusText == true
-    and cfg and cfg.enabled == true
-    and (cfg.showDead == true or cfg.showGhost == true)
-  if want then
-    AddStatusPollFrame(frame)
-  else
-    RemoveStatusPollFrame(frame)
-  end
-end
-
 local GroupStatusRuntime = {}
 
 function GroupStatusRuntime.IsEnabled(frame, spec)
@@ -726,16 +538,13 @@ function GroupStatusRuntime.Apply(frame)
   end
   if not status then
     ClearUnitlessRegistration(frame)
-    RemoveStatusPollFrame(frame)
     return
   end
   if not StatusRuntimeReady(status) then
     ClearUnitlessRegistration(frame)
-    RemoveStatusPollFrame(frame)
     return
   end
   SetUnitlessRegistration(frame, status)
-  SetStatusPollRegistration(frame, status)
   local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
   if frame then
     frame._msufGFStatusRuntimeStatus = status
@@ -748,7 +557,6 @@ end
 function GroupStatusRuntime.Disable(frame)
   if frame then
     ClearUnitlessRegistration(frame)
-    RemoveStatusPollFrame(frame)
     frame._msufUpdateGroupStatusState = nil
     frame._msufGFStatusRuntimeStatus = nil
     frame._msufGFStatusRuntimeDispatch = nil

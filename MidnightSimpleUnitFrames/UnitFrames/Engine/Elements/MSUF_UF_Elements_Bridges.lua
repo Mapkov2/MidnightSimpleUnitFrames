@@ -51,17 +51,21 @@ end
 local function QueueCastbarRefresh(unit)
   unit = CastbarUnit(unit)
   Queue(function()
+    local refreshed = false
     if unit and type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
       _G.MSUF_ApplyCastbarUnitAndSync(unit)
+      refreshed = true
     elseif unit and type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
       _G.MSUF_ApplyCastbarVisualsForUnit(unit)
+      refreshed = true
     elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
       _G.MSUF_UpdateCastbarVisuals(unit)
+      refreshed = true
     end
     if (not unit or unit == "player") and type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
       _G.MSUF_ApplyPlayerChannelTickMarkers()
     end
-    if (not unit or unit == "boss") and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    if not refreshed and (not unit or unit == "boss") and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
       _G.MSUF_UpdateBossCastbarPreview()
     end
   end, "_msufCastbarRefreshQueued_" .. tostring(unit or "all"))

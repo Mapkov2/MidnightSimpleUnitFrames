@@ -91,8 +91,8 @@ local function ApplyFontChecked(fs, requested, size, flags)
   size = tonumber(size) or 12
   if size <= 0 then size = 12 end
   if size < 6 then size = 6 elseif size > 128 then size = 128 end
-  local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
-  return ok and applied ~= false and FontApplied(fs, requested)
+  local applied = fs:SetFont(requested, size, flags)
+  return applied ~= false and FontApplied(fs, requested)
 end
 
 local function SetFont(fs, spec, size)

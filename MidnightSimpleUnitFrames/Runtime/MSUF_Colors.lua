@@ -134,6 +134,9 @@ end
 local function _RefreshUnitFrameColors()
     if _ProfiledCall("UF.RefreshColors", _G.MSUF_RefreshAllFrameColors) then return true end
     if _ProfiledCall("UF.RefreshColors", MSUF and MSUF.UF and MSUF.UF.RefreshColors) then return true end
+    -- Legacy-only fallback: without UF.RefreshColors there is no Config.serial
+    -- advance to invalidate the lazy settings cache for us.
+    _ProfiledCall("UF.RefreshSettingsCache", _G.MSUF_UFCore_RefreshSettingsCache, "COLOR_CHANGE")
     local did = _ProfiledCall("UF.RefreshIdentityColors", _G.MSUF_RefreshAllIdentityColors)
     did = _ProfiledCall("UF.RefreshPowerTextColors", _G.MSUF_RefreshAllPowerTextColors) or did
     return did
@@ -173,9 +176,8 @@ local function _PushVisualUpdates_Flush()
     ---
     --- Same defense-in-depth pattern as _gfRosterFlush.
     ExportPublic("MSUF_ColorStyleRevision", (_G.MSUF_ColorStyleRevision or 0) + 1)
-    --- Invalidate settings cache so color tint fields (powerBgTint, barBgTint,
-    --- aggro/dispel/purge, etc.) are re-read from DB before frames refresh.
-    _ProfiledCall("UF.RefreshSettingsCache", _G.MSUF_UFCore_RefreshSettingsCache, "COLOR_CHANGE")
+    --- UF.RefreshColors advances Config.serial before elements read color
+    --- settings, so the lazy settings cache is rebuilt once on first use.
     local colorsAlreadyRefreshed = _RefreshUnitFrameColors()
     _ProfiledCall("BarBackgroundVisuals", _RefreshAllBarBackgroundVisuals, colorsAlreadyRefreshed)
     _ProfiledCall("CastbarVisuals", _G.MSUF_UpdateCastbarVisuals)
@@ -217,8 +219,9 @@ local function _PushCastbarVisuals_Flush()
         return DeferVisualFlushUntilCombatEnds("castbar")
     end
     local flushStarted = _ProfileStart()
-    _ProfiledCall("CastbarVisuals", _G.MSUF_UpdateCastbarVisuals)
-    _ProfiledCall("BossCastbarPreview", _G.MSUF_UpdateBossCastbarPreview)
+    if not _ProfiledCall("CastbarVisuals", _G.MSUF_UpdateCastbarVisuals) then
+        _ProfiledCall("BossCastbarPreview", _G.MSUF_UpdateBossCastbarPreview)
+    end
     _ProfiledCall("UnitPreview.RequestRefresh", _G.MSUF_UFPreview_RequestRefresh, "MSUF_CASTBAR_COLOR_CHANGE")
     _castbarPushPending = false
     _ProfileStop("CastbarFlush", flushStarted)

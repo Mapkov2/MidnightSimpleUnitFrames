@@ -18,8 +18,8 @@ local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local RegisterUnitWatch = RegisterUnitWatch
 local UnregisterUnitWatch = UnregisterUnitWatch
+local RegisterStateDriver = RegisterStateDriver
 local UIParent = UIParent
-local PetBattleFrameHider = PetBattleFrameHider
 local Mixin = Mixin
 local PingableType_UnitFrameMixin = PingableType_UnitFrameMixin
 local UnitExists = UnitExists
@@ -37,8 +37,29 @@ local function InCombat()
   return InCombatLockdown and InCombatLockdown()
 end
 
+local function EnsurePetBattleFrameHider()
+  local hider = MSUF._petBattleFrameHider or _G.MSUF_PetBattleFrameHider
+  if hider then
+    MSUF._petBattleFrameHider = hider
+    return hider
+  end
+  if InCombat() then return nil end
+
+  hider = CreateFrame("Frame", "MSUF_PetBattleFrameHider", UIParent, "SecureHandlerStateTemplate")
+  hider:SetAllPoints(UIParent)
+  hider:SetFrameStrata("LOW")
+  if RegisterStateDriver then
+    RegisterStateDriver(hider, "visibility", "[petbattle] hide; show")
+  end
+  MSUF._petBattleFrameHider = hider
+  return hider
+end
+
 local function ResolvePetBattleFrameHider()
-  return PetBattleFrameHider or UIParent
+  -- Never parent MSUF frames to a foreign hider. Its geometry and lifecycle are
+  -- outside our control and can change while zoning. One full-screen secure
+  -- parent preserves pet-battle visibility for every child at constant cost.
+  return EnsurePetBattleFrameHider() or UIParent
 end
 
 UF.GetPetBattleFrameHider = ResolvePetBattleFrameHider
@@ -146,6 +167,29 @@ local function MarkPending(unit)
   if UF.Config then UF.Config.dirty = true end
 end
 
+local function InvalidateFramePositionCache(frame)
+  local layout = LayoutFrame(frame)
+  if not layout then return end
+  layout._msufPoint = nil
+  layout._msufAnchor = nil
+  layout._msufRelativePoint = nil
+  layout._msufX = nil
+  layout._msufY = nil
+end
+
+local function InvalidatePositionCache(unit)
+  if unit then
+    local units = UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
+    if units then
+      for i = 1, #units do InvalidateFramePositionCache(UF.frames and UF.frames[units[i]]) end
+    elseif UF.frames then
+      InvalidateFramePositionCache(UF.frames[unit])
+    end
+    return
+  end
+  for i = 1, #UF.frameList do InvalidateFramePositionCache(UF.frameList[i]) end
+end
+
 local function DeferApply(unit)
   MarkPending(unit)
   Factory.EnsureDeferredDriver()
@@ -216,6 +260,11 @@ local function ApplyPosition(frame, spec)
     and ShouldCacheScreenPosition(spec, requestedAnchor)
     and type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
     _G.MSUF_CacheUnitFrameScreenPosition(layout, key, frame.unit, point)
+  end
+  if not missingAnchorName then
+    frame._msufHardLockedToUIParent = nil
+    frame._msufHardLockPoint = nil
+    frame._msufLoadedFromScreenCache = nil
   end
   return true
 end
@@ -467,7 +516,7 @@ local function SpawnFrame(unit)
   return frame
 end
 
-local function ApplyFrame(frame, spec)
+local function ApplyFrame(frame, spec, applyMask)
   if not (frame and spec) then return false end
   if InCombat() then return DeferApply(frame.unit) end
 
@@ -487,7 +536,7 @@ local function ApplyFrame(frame, spec)
     return false
   end
 
-  UF.ApplySpec(frame, spec, "MSUF_APPLY", true)
+  UF.ApplySpec(frame, spec, "MSUF_APPLY", applyMask == nil and true or applyMask)
 
   if frame._msufVisibilityManaged ~= true and frame._msufUnitWatched ~= true then
     if frame.Enable then
@@ -503,7 +552,7 @@ local function ApplyFrame(frame, spec)
   return true
 end
 
-local function ApplyOne(unit, config)
+local function ApplyOne(unit, config, applyMask)
   if not (UF.IsManagedUnit and UF.IsManagedUnit(unit)) then return false end
   if UF.ShouldUseMSUFUnitFrame and UF.ShouldUseMSUFUnitFrame(unit) == false then
     local frame = UF.frames[unit]
@@ -516,16 +565,16 @@ local function ApplyOne(unit, config)
   end
   local frame = UF.frames[unit] or SpawnFrame(unit)
   if not frame then return false end
-  return ApplyFrame(frame, config.GetSpec(unit))
+  return ApplyFrame(frame, config.GetSpec(unit), applyMask)
 end
 
-function Factory.SpawnAll()
+function Factory.SpawnAll(applyMask)
   if InCombat() then return DeferApply(nil) end
   local config = ResolveConfig(true)
   if not config then return false end
   if UF.DisableBlizzardFrames then UF.DisableBlizzardFrames() end
   for i = 1, #UF.unitOrder do
-    ApplyOne(UF.unitOrder[i], config)
+    ApplyOne(UF.unitOrder[i], config, applyMask)
   end
   UF.spawned = true
   UF.initialized = true
@@ -533,23 +582,52 @@ function Factory.SpawnAll()
   return true
 end
 
-function Factory.Apply(unit)
+function Factory.Apply(unit, applyMask)
   if InCombat() then return DeferApply(unit) end
-  if not UF.spawned and not unit then return Factory.SpawnAll() end
+  if not UF.spawned and not unit then return Factory.SpawnAll(applyMask) end
   local config = ResolveConfig(unit == nil)
   if not config then return false end
 
   local units = unit and UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
   if unit and not units then return false end
   if units then
-    for i = 1, #units do ApplyOne(units[i], config) end
+    for i = 1, #units do ApplyOne(units[i], config, applyMask) end
   else
-    for i = 1, #UF.unitOrder do ApplyOne(UF.unitOrder[i], config) end
+    for i = 1, #UF.unitOrder do ApplyOne(UF.unitOrder[i], config, applyMask) end
     UF.spawned = true
     UF.initialized = true
   end
 
   if UF.FlushDeferredRefreshes then UF.FlushDeferredRefreshes() end
+  return true
+end
+
+function Factory.ForceReanchor(unit)
+  -- This is deliberately separate from ApplyPosition's hot comparison path.
+  -- Zoning/recovery callers invalidate once; normal config applies stay O(1)
+  -- and avoid querying live protected-frame anchors.
+  InvalidatePositionCache(unit)
+  if InCombat() then return DeferApply(unit) end
+  if not UF.spawned then return Factory.SpawnAll() end
+
+  local config = ResolveConfig(unit == nil)
+  if not config then return false end
+  local units = unit and UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
+  if unit and not units then return false end
+  if units then
+    for i = 1, #units do
+      local frame = UF.frames[units[i]]
+      local spec = frame and config.GetSpec(units[i])
+      if spec then ApplyPosition(frame, spec) end
+    end
+  else
+    for i = 1, #UF.unitOrder do
+      local managedUnit = UF.unitOrder[i]
+      local frame = UF.frames[managedUnit]
+      local spec = frame and config.GetSpec(managedUnit)
+      if spec then ApplyPosition(frame, spec) end
+    end
+  end
   return true
 end
 
@@ -615,12 +693,17 @@ local function HasLateAnchorConfig()
   return false
 end
 
-local function FlushLateAnchorReanchor()
+local function FlushLateAnchorReanchor(forcePosition)
   if InCombat() then
+    if forcePosition then InvalidatePositionCache(nil) end
     if UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
     return false
   end
-  Factory.Apply()
+  if forcePosition then
+    Factory.ForceReanchor()
+  else
+    Factory.Apply()
+  end
   if type(_G.MSUF_ClassPower_Apply) == "function" then
     _G.MSUF_ClassPower_Apply({ anchor = true, cdm = true, syncNow = false })
   elseif type(_G.MSUF_ClassPower_Refresh) == "function" then
@@ -629,38 +712,40 @@ local function FlushLateAnchorReanchor()
   return true
 end
 
-local function ScheduleLateAnchorReanchor()
+local function ScheduleLateAnchorReanchor(forcePosition)
   if InCombat() then
+    if forcePosition then InvalidatePositionCache(nil) end
     if UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
     return false
   end
   local state = _G.MSUF_LateAnchorReanchorState
   if type(state) ~= "table" then
-    state = { pending = false }
+    state = { pending = false, forcePosition = false }
     ExportPublic("MSUF_LateAnchorReanchorState", state)
   end
+  if forcePosition then state.forcePosition = true end
   if state.pending then return false end
   state.pending = true
   if _G.C_Timer and _G.C_Timer.After then
     _G.C_Timer.After(0, function()
       if not state.pending then return end
       state.pending = false
-      FlushLateAnchorReanchor()
+      local force = state.forcePosition == true
+      state.forcePosition = false
+      FlushLateAnchorReanchor(force)
     end)
   else
     state.pending = false
-    FlushLateAnchorReanchor()
+    local force = state.forcePosition == true
+    state.forcePosition = false
+    FlushLateAnchorReanchor(force)
   end
   return true
 end
 
 ExportPublic("MSUF_ScheduleLateAnchorReanchor", ScheduleLateAnchorReanchor)
 ExportPublic("MSUF_ForceReanchorAllUnitFrames_Once", function()
-  if InCombat() then
-    if UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
-    return false
-  end
-  return Factory.Apply()
+  return Factory.ForceReanchor()
 end)
 
 do
@@ -671,7 +756,14 @@ do
   lateAnchorEvents:RegisterEvent("ADDON_LOADED")
   lateAnchorEvents:SetScript("OnEvent", function(_, event, addon)
     if event == "ADDON_LOADED" and addon ~= "Blizzard_EditMode" and addon ~= "Blizzard_CooldownViewer" then return end
-    if HasLateAnchorConfig() then ScheduleLateAnchorReanchor() end
+    if event == "PLAYER_ENTERING_WORLD" then
+      -- Blizzard finalizes UIParent and secure layout state on this event. Run
+      -- one cold-path forced SetPoint on the next frame so stale geometry cannot
+      -- survive an instance transition even when the saved anchor is GLOBAL.
+      ScheduleLateAnchorReanchor(true)
+    elseif HasLateAnchorConfig() then
+      ScheduleLateAnchorReanchor()
+    end
   end)
 end
 

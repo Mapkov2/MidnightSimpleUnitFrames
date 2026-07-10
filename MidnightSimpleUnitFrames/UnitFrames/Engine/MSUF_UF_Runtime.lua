@@ -74,13 +74,19 @@ function UF.RefreshElements(unit, names, reason)
   if type(applyElement) ~= "function" then return false end
 
   local config = UF.Config
-  if not unit and config and type(config.Refresh) == "function" then
-    config.Refresh()
+  local refreshedAll = false
+  if config then
+    if not unit and type(config.Refresh) == "function" then
+      config.Refresh()
+      refreshedAll = true
+    end
   end
 
   local function specFor(frame)
     if not frame then return nil end
-    if config and type(config.RefreshUnit) == "function" then
+    if refreshedAll and config and type(config.GetSpec) == "function" then
+      return config.GetSpec(frame.unit)
+    elseif config and type(config.RefreshUnit) == "function" then
       return config.RefreshUnit(frame.unit)
     elseif config and type(config.GetSpec) == "function" then
       return config.GetSpec(frame.unit)
@@ -319,7 +325,7 @@ local function RefreshConfigForApply(unit)
   return false
 end
 
-function UF.NotifyConfigChanged(unit, applyNow, forceUpdate)
+function UF.NotifyConfigChanged(unit, applyNow, forceUpdate, _, applyMask)
   if InCombat() then
     UF.MarkDirty(unit)
     if UF.Config then UF.Config.dirty = true end
@@ -328,8 +334,10 @@ function UF.NotifyConfigChanged(unit, applyNow, forceUpdate)
     return false
   end
   if applyNow ~= false then
-    RefreshConfigForApply(unit)
-    local ok = UF.Apply(unit) and true or false
+    -- Factory.Apply(nil) already performs the one required Config.Refresh().
+    -- Scoped applies do not, so retain their per-unit RefreshUnit pass here.
+    if unit ~= nil then RefreshConfigForApply(unit) end
+    local ok = UF.Apply(unit, applyMask) and true or false
     if ConfigTouchesDependentUnits(unit) then RunDependentUnits() end
     return ok
   elseif forceUpdate ~= false then

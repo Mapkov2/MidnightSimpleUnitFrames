@@ -55,24 +55,23 @@ local function NormalizeFontScopeKey(key)
     return key
 end
 
-local function FrameMatchesFontScope(frame, scope)
-    if not scope then return true end
-    if not frame then return false end
-    local key = frame.msufConfigKey
-    if (not key) and frame.unit and MSUF and MSUF.UF and MSUF.UF.ConfigKeyForUnit then
-        key = MSUF.UF.ConfigKeyForUnit(frame.unit)
-    end
-    return NormalizeFontScopeKey(key or frame.unit) == scope
-end
-
 local function CastbarUnitForFontScope(scope)
     if scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then return scope end
     return nil
 end
 
 local CASTBAR_FONT_UNITS = { "player", "target", "focus", "boss" }
+local UNITFRAME_FONT_ELEMENTS = {
+    "Text", "NameText", "HealthText", "PowerText", "InlineToT", "StatusIndicators",
+}
 
 local function ApplyAllCastbarFontFollowers()
+    local updateVisuals = _G.MSUF_UpdateCastbarVisuals_Immediate or _G.MSUF_UpdateCastbarVisuals
+    if type(updateVisuals) == "function" then
+        updateVisuals()
+        return true
+    end
+
     local applyUnit = _G.MSUF_ApplyCastbarVisualsForUnit
     if type(applyUnit) == "function" then
         for i = 1, #CASTBAR_FONT_UNITS do
@@ -80,39 +79,31 @@ local function ApplyAllCastbarFontFollowers()
         end
         return true
     end
-    if _G.MSUF_UpdateCastbarVisuals_Immediate then
-        _G.MSUF_UpdateCastbarVisuals_Immediate()
-        return true
-    end
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals()
-        return true
-    end
     return false
 end
 
-local function ApplyScopedFontFollowers(scope)
+local function ApplyScopedFontFollowers(scope, skipCastbars, skipClassPower, skipAuras)
     if scope then
         local castbarUnit = CastbarUnitForFontScope(scope)
-        if castbarUnit and type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
+        if skipCastbars ~= true and castbarUnit and type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
             _G.MSUF_ApplyCastbarVisualsForUnit(castbarUnit)
-        elseif castbarUnit and type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+        elseif skipCastbars ~= true and castbarUnit and type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
             _G.MSUF_ApplyCastbarUnitAndSync(castbarUnit)
         end
         local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.ApplyFontsFromGlobal) == "function" then
+        if skipAuras ~= true and a3 and type(a3.ApplyFontsFromGlobal) == "function" then
             a3.ApplyFontsFromGlobal(scope, "FONT_RUNTIME_SCOPE")
         end
-        if scope == "player" and type(_G.MSUF_ClassPower_Apply) == "function" then
+        if skipClassPower ~= true and scope == "player" and type(_G.MSUF_ClassPower_Apply) == "function" then
             _G.MSUF_ClassPower_Apply({ fonts = true, playerHP = true })
         end
         return
     end
 
-    ApplyAllCastbarFontFollowers()
+    if skipCastbars ~= true then ApplyAllCastbarFontFollowers() end
     local a3 = MSUF and MSUF.MSUF_Auras3
-    if a3 and type(a3.ApplyFontsFromGlobal) == "function" then a3.ApplyFontsFromGlobal() end
-    if _G.MSUF_ClassPower_ApplyFonts then _G.MSUF_ClassPower_ApplyFonts() end
+    if skipAuras ~= true and a3 and type(a3.ApplyFontsFromGlobal) == "function" then a3.ApplyFontsFromGlobal() end
+    if skipClassPower ~= true and _G.MSUF_ClassPower_ApplyFonts then _G.MSUF_ClassPower_ApplyFonts() end
 end
 
 --- Font changes affect many elements. Defer the UF dirty commit so global font
@@ -406,7 +397,7 @@ local function _MSUF_ApplyFontsToFrame(f)
     if _origCPT ~= nil then S.colorPowerByType = _origCPT end
 end
 
-local function UpdateAllFonts(onlyKey)
+local function UpdateAllFonts(onlyKey, skipUnitFrames, skipCastbars, skipClassPower, skipAuras)
     local castbars = MSUF and MSUF.Castbars
     local getFontPath = castbars and castbars._GetFontPath or _G.MSUF_GetFontPath
     local getFontFlags = castbars and castbars._GetFontFlags or _G.MSUF_GetFontFlags
@@ -464,33 +455,34 @@ local function UpdateAllFonts(onlyKey)
     _fontState.UpdateNameColor = nil
 
     _fontApplyFailed = false
-    ForEachUnitFrame(_MSUF_ApplyFontsToFrame)
+    local ready
+    local unitFramesApplied = false
+    if skipUnitFrames ~= true then
+        ready = _ConfiguredFontReady()
+        local UF = MSUF and MSUF.UF
+        if ready and UF and type(UF.RefreshElements) == "function" then
+            unitFramesApplied = UF.RefreshElements(onlyKey, UNITFRAME_FONT_ELEMENTS, "FONT_RUNTIME") ~= false
+        elseif ready and type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
+            _G.MSUF_ForceTextLayoutForUnitKey(onlyKey)
+            unitFramesApplied = true
+        end
+        if not unitFramesApplied then ForEachUnitFrame(_MSUF_ApplyFontsToFrame) end
+    end
 
-    ApplyScopedFontFollowers(onlyKey)
+    ApplyScopedFontFollowers(onlyKey, skipCastbars, skipClassPower, skipAuras)
     if not onlyKey then
         if MSUF and MSUF.MSUF_ApplyGameplayFontFromGlobal then MSUF.MSUF_ApplyGameplayFontFromGlobal() end
         if type(_G.MSCB_ApplyFontsFromMSUF) == "function" then _G.MSCB_ApplyFontsFromMSUF() end
     end
+    if skipUnitFrames == true then return end
     -- Re-resolve every spec's font and re-run the text layout so width-dependent
     -- anchors recompute for the fonts now applied -- but only once the configured
     -- font is loaded + measurable. On a cold start it isn't yet, so reschedule via
     -- the existing scheduler and try again; this is what fixes the first-login
     -- misposition, driven by the font actually being ready rather than a guess.
-    local ready = (not _fontApplyFailed) and _ConfiguredFontReady()
+    ready = (not _fontApplyFailed) and ready
     if ready then
         _fontRelayoutRetries = 0
-        local force = _G.MSUF_ForceTextLayoutForUnitKey
-        if type(force) == "function" then
-            ForEachUnitFrame(function(f)
-                if f and FrameMatchesFontScope(f, onlyKey) then force(f.unit or f.msufConfigKey) end
-            end)
-        elseif MSUF and MSUF.UF then
-            if MSUF.UF.UpdateRuntime then
-                MSUF.UF.UpdateRuntime(onlyKey, "FONT_RUNTIME")
-            elseif MSUF.UF.ForceUpdate then
-                MSUF.UF.ForceUpdate(onlyKey)
-            end
-        end
     elseif _fontRelayoutRetries < MSUF_FONT_RELAYOUT_MAX_RETRIES then
         _fontRelayoutRetries = _fontRelayoutRetries + 1
         if _G.MSUF_ScheduleOnce then
@@ -513,24 +505,6 @@ local function UpdateAllFonts(onlyKey)
 end
 
 Export("MSUF_UpdateAllFonts", UpdateAllFonts, "UpdateAllFonts")
-
-if type(_G.MSUF_UpdateCastbarVisuals) == "function" and not _G.MSUF_UpdateCastbarVisuals_Immediate then
-    ExportPublic("MSUF_UpdateCastbarVisuals_Immediate", _G.MSUF_UpdateCastbarVisuals)
-    ExportPublic("MSUF_UpdateCastbarVisuals", function()
-        local st = _G.MSUF_ApplyCommitState
-        if st then st.castbars = true end
-        ScheduleApplyCommit()
-    end)
-end
-
-if type(_G.MSUF_UpdateCastbarTextures) == "function" and not _G.MSUF_UpdateCastbarTextures_Immediate then
-    ExportPublic("MSUF_UpdateCastbarTextures_Immediate", _G.MSUF_UpdateCastbarTextures)
-    ExportPublic("MSUF_UpdateCastbarTextures", function()
-        local st = _G.MSUF_ApplyCommitState
-        if st then st.castbars = true end
-        ScheduleApplyCommit()
-    end)
-end
 
 if not _G.MSUF_UpdateAllFonts_Immediate then
     ExportPublic("MSUF_UpdateAllFonts_Immediate", _G.MSUF_UpdateAllFonts)

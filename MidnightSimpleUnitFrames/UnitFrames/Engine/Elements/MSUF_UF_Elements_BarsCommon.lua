@@ -490,11 +490,11 @@ local function GradientGroupKinds(scope)
   return nil
 end
 
-local function UpdateAllBarGradients(unit)
+local function UpdateAllBarGradients(unit, skipUnitFrames)
   local refreshed = false
   local kindA, kindB = GradientGroupKinds(unit)
   local unitScope = NormalizeGradientScope(unit)
-  if UF and type(UF.RefreshElements) == "function" then
+  if skipUnitFrames ~= true and UF and type(UF.RefreshElements) == "function" then
     if not kindA then
       refreshed = UF.RefreshElements(unitScope, BAR_GRADIENT_ELEMENTS, "MSUF2_GRADIENT") or refreshed
     end

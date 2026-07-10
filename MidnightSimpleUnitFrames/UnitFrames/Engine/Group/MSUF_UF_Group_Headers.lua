@@ -1003,5 +1003,5 @@ function GF.SetupHeader(key, kind)
   if GF.ScheduleScan and needsChildScan then
     GF.ScheduleScan(key, kind)
   end
-  return header
+  return header, needsChildScan
 end
