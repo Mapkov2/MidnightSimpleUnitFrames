@@ -1,5 +1,37 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta10 - 2026-07-10
+
+### Unit Frame Auras - Blacklists And Whitelists
+- Buff and Debuff blacklists are frame-specific: add exact SpellIDs manually or from a preset, review the prepared entries, and click an entry to remove it.
+- Custom Aura containers use their own exact SpellID whitelist, so only the spells you add enter that custom container.
+- Blacklists and Custom-Aura whitelists stay local to the selected Unit Frame even when its normal Blizzard filter tokens inherit the Shared configuration.
+- Aura setting changes now recompile the affected Unit Frame and refresh its preview immediately; configured aura-lane offsets are also preserved in the preview.
+
+### Group Frame Auras - Blacklists And Whitelists
+- Party, Raid, and Mythic Raid aura lanes now use focused Layout, Filters, and Blacklist workspaces.
+- Group Buff and Debuff lanes support category blacklists plus exact SpellID blacklists; add individual spells or complete preset groups, see the active list with icons, and click an entry to remove it.
+- Native Blizzard filter tokens remain available per group lane. Tracked helpful auras use exact SpellID include filters where Blizzard supports them.
+- Private-aura controls were removed from the group-aura UI and Assistant because they are no longer part of the supported group-frame configuration.
+
+### Power Bars And Class Resources
+- Player Power, Class Resources, and Alternative Mana gain independently configurable native smooth fill using Blizzard StatusBar interpolation.
+- Player Power uses frequent power events for responsive updates, while restricted values remain in Blizzard's native StatusBar path.
+- Detached Player Power can use Bar, Round, Crystal, or Orb shapes with configurable borders; texture, background, gradient, and tint updates preserve the selected shape.
+- Class Resource previews now match live cooldown-based width modes.
+
+### Runtime, Castbars, And Previews
+- Target and Focus castbars clear stale casts before the replacement update is queued, preventing the old unit's cast from remaining visible during a swap.
+- Target-of-target and focus-target identity work is coalesced after target-change event bursts.
+- Pinned menu previews use a simpler canvas host, and group/unit aura controls retain their scroll position during workspace rebuilds.
+
+### What To Test First
+- Unit-frame Buff and Debuff blacklists: manual SpellIDs, preset additions, removals, Shared-filter inheritance, and preview updates.
+- Custom Unit Aura whitelist containers with exact SpellIDs and native filter toggles.
+- Party, Raid, and Mythic Raid Buff/Debuff blacklists: category switches, exact SpellIDs, presets, and the active entry list.
+- Detached Player Power shapes, borders, colors, smooth fill, and texture changes; Class Resource and Alternative Mana smooth fill.
+- Rapid target/focus changes, target-of-target/focus-target updates, and pinned menu previews.
+
 ## 6.0-Beta9 - 2026-07-09
 
 ### Runtime Fixes
