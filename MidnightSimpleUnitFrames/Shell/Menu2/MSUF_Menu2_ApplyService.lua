@@ -68,6 +68,7 @@ Apply.pendingGroupReason = pendingGroupReason
 local debugprofilestop = _G.debugprofilestop
 local APPLY_FLUSH_DELAY = 0.04
 local UNIT_KEYS = KeySet("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
+local UNIT_AURA_SCOPES = KeySet("player", "target", "focus", "boss")
 local CASTBAR_UNITS = KeySet("player", "target", "focus", "boss")
 
 local function WipeTable(t)
@@ -1523,7 +1524,23 @@ function Apply.RequestCastbars(reason, source, unit)
 end
 
 function Apply.RequestAuras(scope, reason, opts)
-    QueueAuraScope(scope or "shared", reason or "MSUF2_AURAS", opts and opts.visuals == true)
+    scope = NormalizeApplyScope(scope) or "shared"
+    reason = reason or "MSUF2_AURAS"
+
+    -- UnitFrame aura layout is part of the compiled UF spec. Reapplying Auras3
+    -- directly leaves that spec stale, so the live frame and its preview keep
+    -- rendering the previous values. Route unit scopes through the targeted UF
+    -- element refresh; it recompiles only this unit and reapplies only Auras.
+    -- Shared/group scopes still use the native Auras3 batch path below.
+    if UNIT_AURA_SCOPES[scope] == true then
+        return Apply.RequestUnit(scope, reason, {
+            notify = false,
+            auras = true,
+            preview = not (opts and opts.preview == false),
+        })
+    end
+
+    QueueAuraScope(scope, reason, opts and opts.visuals == true)
     return Apply.QueueFlush()
 end
 
