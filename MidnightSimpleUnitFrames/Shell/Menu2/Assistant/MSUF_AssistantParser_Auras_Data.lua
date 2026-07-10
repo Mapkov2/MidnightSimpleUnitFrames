@@ -61,7 +61,7 @@ Data.AURAS_PARSER = {
         [22] = { "bigger", "larger", "grow", "increase", "raise", "more", "groesser", "mehr" },
         [23] = { "smaller", "shrink", "decrease", "lower", "less", "kleiner", "weniger" },
         [24] = { "aura", "auras", "auren", "buff", "buffs", "debuff", "debuffs" },
-        [25] = { "copy", "preset", "blacklist", "category", "private aura", "private auras" },
+        [25] = { "copy", "preset", "blacklist", "category" },
         [26] = {
         "shared", "shared aura", "shared auras", "global", "all aura", "all auras",
         "player aura", "player auras", "player buff", "player buffs", "player debuff", "player debuffs",
@@ -132,17 +132,6 @@ Data.AURAS_PARSER = {
         [74] = { "debuff", "debuffs" },
         [75] = { "buff", "buffs" },
         [76] = { "shared", "global", "shared aura", "shared auras" },
-        [77] = { "private aura", "private auras" },
-        [78] = { "native", "blizzard", "copy", "blacklist", "whitelist", "spell id", "spellid" },
-        [79] = { "private aura countdown", "private aura timer", "private aura cooldown text" },
-        [80] = { "private aura numbers", "private aura number text", "private aura stacks", "private aura stack text" },
-        [81] = { "private aura max", "private aura count", "private aura limit", "private aura icons max" },
-        [82] = { "private aura size", "private aura icon size", "private aura icons size" },
-        [83] = { "private aura x offset", "private aura horizontal offset", "private aura x" },
-        [84] = { "private aura y offset", "private aura vertical offset", "private aura y" },
-        [85] = { "private aura spacing", "private aura gap", "private aura icon spacing" },
-        [86] = { "private aura growth", "private aura grow", "private auras grow", "private aura grow direction", "private aura direction" },
-        [87] = { "private aura anchor", "private aura position", "private aura corner" },
         [88] = { "party buff", "party buffs", "party debuff", "party debuffs", "raid buff", "raid buffs", "raid debuff", "raid debuffs", "mythic raid buff", "mythic raid buffs", "mythicraid buff", "mythicraid buffs", "mythic raid debuff", "mythic raid debuffs", "mythicraid debuff", "mythicraid debuffs" },
         [89] = {
         "filter", "filters", "only", "show only", "private", "native", "blizzard", "blacklist", "whitelist",
@@ -271,7 +260,6 @@ Data.AURAS_PARSER = {
         [166] = {
         "aura", "auras", "buff", "buffs", "debuff", "debuffs",
         "dispel", "dispels", "dispellable", "external", "externals",
-        "private aura", "private auras",
     },
         [167] = {
         "all group auras", "all group aura", "all group buffs", "all group debuffs",
@@ -347,7 +335,6 @@ Data.AURAS_PARSER = {
         "sort auras by duration", "aura duration sort",
         "dynamic aura scale", "dynamic icon scale", "native aura", "native auras",
         "native group aura", "native group auras", "blizzard aura", "blizzard auras",
-        "native group private auras", "blizzard group private auras", "native private auras",
     },
         [213] = { "prefer player auras", "prefer my auras" },
         [214] = { "dynamic aura scale", "dynamic icon scale" },
@@ -358,7 +345,6 @@ Data.AURAS_PARSER = {
         [219] = { "native group aura debuffs", "blizzard group aura debuffs", "native debuffs", "native aura debuffs" },
         [220] = { "native group aura dispels", "blizzard group aura dispels", "native dispel auras", "native dispels", "dispellable auras" },
         [221] = { "native group aura externals", "blizzard group aura externals", "native external auras", "native externals", "external auras" },
-        [222] = { "native group private auras", "blizzard group private auras", "native private auras", "native private aura icons" },
         [223] = { "all group auras", "all group aura", "group aura system", "group auras enabled", "native group auras", "native group aura" },
         [224] = { "all group", "all group auras", "every group", "group aura system", "group auras" },
         [225] = { "buff", "buffs" },
@@ -374,8 +360,7 @@ Data.AURAS_PARSER = {
         [230] = {
         "all group auras", "all group aura", "group aura system", "group auras enabled",
         "aura tooltip", "aura tooltips", "prefer player auras", "prefer my auras",
-        "dynamic aura scale", "dynamic icon scale", "native group", "native private",
-        "private aura", "private auras",
+        "dynamic aura scale", "dynamic icon scale", "native group",
     },
         [231] = {
         "aura system", "group aura system", "native aura", "native auras", "native group aura", "native group auras",

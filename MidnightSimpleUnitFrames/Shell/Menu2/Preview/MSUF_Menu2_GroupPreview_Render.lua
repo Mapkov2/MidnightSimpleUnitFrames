@@ -92,6 +92,8 @@ function Render.Install(box, ctx, deps)
         if minValue ~= nil and v < minValue then v = minValue end
         return v
     end
+    local ApplyFrameBorder = deps.ApplyFrameBorder or F.Noop
+    local ApplyBoundsGuide = deps.ApplyBoundsGuide or F.Noop
     local ConfigToOffset = deps.ConfigToOffset or function(value, scale) return Round((tonumber(value) or 0) * (tonumber(scale) or 1)) end
     local ResolvePreviewStatusbarTexture = deps.ResolveStatusbarTexture or function() return WHITE8X8 end
     box._msufGFRenderState = {
@@ -585,8 +587,10 @@ function Render.Install(box, ctx, deps)
         end
         if ApplyRounded(mock, conf, powerH > 0, outlineEdge) then
             H.SetOutlineShown(mock, false)
+            ApplyFrameBorder(self, nil, previewScale)
         else
-            H.LayoutOutline(mock, outlineEdge)
+            H.SetOutlineShown(mock, false)
+            ApplyFrameBorder(self, runtimeBorder, previewScale)
         end
         local textBaseLevel = ((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + (Layers.TEXT_BASE_OFFSET or 10)
         if mock._nameTextLayer then
@@ -781,10 +785,8 @@ function Render.Install(box, ctx, deps)
             -pad4 + ConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale),
             ConfigToOffset(1 + (runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset)), previewScale),
             "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerRightMode, powerRightHidePercent))
-        self._bounds:ClearAllPoints()
         local boundsEdge = max(1, outlineEdge)
-        self._bounds:SetPoint("TOPLEFT", mock, "TOPLEFT", -boundsEdge, boundsEdge)
-        self._bounds:SetSize(mockW + boundsEdge * 2, mockH + boundsEdge * 2)
+        ApplyBoundsGuide(self, boundsEdge)
         if self._bounds.SetFrameLevel and mock.GetFrameLevel then self._bounds:SetFrameLevel((mock:GetFrameLevel() or 1) + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
         self._bounds:SetShown(LayerOn("bounds"))
         local function LayoutHandle(handle, anchor, x, y, defaultAnchor)
@@ -1135,13 +1137,6 @@ function Render.Install(box, ctx, deps)
         local function TargetedGrow(grow)
             if grow == "LEFT" or grow == "UP" or grow == "DOWN" or grow == "CENTER" then return grow end
             return "RIGHT"
-        end
-        local function TargetedNumber(key, fallback, minValue, maxValue)
-            local value = tonumber(conf[key])
-            if value == nil then value = fallback or 0 end
-            if minValue ~= nil and value < minValue then value = minValue end
-            if maxValue ~= nil and value > maxValue then value = maxValue end
-            return value
         end
         local function LayoutTargetedSpells()
             if not targetedHandle then return end

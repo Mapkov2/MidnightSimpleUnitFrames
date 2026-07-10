@@ -20,7 +20,6 @@ local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = TEX_W8, color = function() return 1, 1, 1, 0.95 end }
-local AURA_MENU_APPLY_DELAY = 0.04
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 local tonumber, tostring, type, ipairs, pairs = tonumber, tostring, type, ipairs, pairs
 local table_concat = table.concat
@@ -141,12 +140,34 @@ local function Card(parent, title, subtitle, x, y, width, height)
     if card and T.ApplyBackdrop then T.ApplyBackdrop(card, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
     return card
 end
+local auraScrollRestoreSerial = 0
+local function RestoreAuraPageScroll(offset, key, serial)
+    if key and M.activeKey ~= key then return end
+    if serial and serial ~= auraScrollRestoreSerial then return end
+    local scroll = M.scrollFrame
+    if not (scroll and scroll.SetVerticalScroll) then return end
+    local range = scroll.GetVerticalScrollRange and scroll:GetVerticalScrollRange() or offset
+    local value = min(max(tonumber(offset) or 0, 0), max(tonumber(range) or 0, 0))
+    scroll:SetVerticalScroll(value)
+    if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(scroll) end
+end
 local function Rebuild(ctx)
     local key = (ctx and ctx.key) or M.activeKey or "auras3"
     if M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
+        local scrollOffset = M.scrollFrame and M.scrollFrame.GetVerticalScroll and M.scrollFrame:GetVerticalScroll() or 0
+        auraScrollRestoreSerial = auraScrollRestoreSerial + 1
+        local restoreSerial = auraScrollRestoreSerial
         M.InvalidatePage(key)
         M.activeKey = nil
         M.SelectPage(key)
+        RestoreAuraPageScroll(scrollOffset, key, restoreSerial)
+        -- Nested aura workspaces and pinned previews settle their final height
+        -- after the page is selected. Reapply the same viewport once that
+        -- layout has completed instead of leaving SelectPage's reset at zero.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function() RestoreAuraPageScroll(scrollOffset, key, restoreSerial) end)
+            C_Timer.After(0.05, function() RestoreAuraPageScroll(scrollOffset, key, restoreSerial) end)
+        end
     elseif M.RequestRefresh then
         M.RequestRefresh(ctx, "auras-rebuild-fallback")
     elseif M.Refresh then
@@ -171,13 +192,6 @@ local function OpenAuraColors()
         _G.MSUF_EM2_MenuFocusRequest = nil
     end
 end
-local pendingAuraUnits = {}
-local pendingAuraReasons = {}
-local pendingAuraGlobal
-local pendingAuraGlobalReason
-local pendingAuraRefreshCtx
-local pendingAuraRefreshReason
-local auraApplyQueued = false
 local function RequestAuraRuntime(scope, reason)
     local apply = M.ApplyService or _G.MSUF_Menu2_ApplyService
     if apply and type(apply.RequestAuras) == "function" then
@@ -185,31 +199,6 @@ local function RequestAuraRuntime(scope, reason)
     end
     Model.Apply(scope or "shared", reason or "AURAS3_MENU2_BATCH")
     return true
-end
-local function AurasProfileStart()
-    return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
-end
-local function AurasProfileStop(key, started, extraCount)
-    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then
-        M.ProfileStop("aurasPage", key, started, extraCount)
-    end
-end
-local auraMenuWorkPending = {}
-local function ScheduleAuraMenuWork(key, delay, fn)
-    if type(fn) ~= "function" then return end
-    key = key or fn
-    if auraMenuWorkPending[key] then return end
-    auraMenuWorkPending[key] = fn
-    local function Run()
-        local cb = auraMenuWorkPending[key]
-        auraMenuWorkPending[key] = nil
-        if type(cb) == "function" then cb() end
-    end
-    if C_Timer and C_Timer.After then
-        C_Timer.After(delay or AURA_MENU_APPLY_DELAY, Run)
-    else
-        Run()
-    end
 end
 local function AurasMenuCombatLocked()
     if type(M.IsConfigCombatLocked) == "function" then return M.IsConfigCombatLocked() and true or false end
@@ -246,56 +235,42 @@ local function QueueAurasPageRefresh(ctx, reason)
         M.Refresh(ctx)
     end
 end
-local function FlushAuraApply()
-    auraApplyQueued = false
-    local units, reasons = pendingAuraUnits, pendingAuraReasons
-    local global, globalReason = pendingAuraGlobal, pendingAuraGlobalReason
-    local refreshCtx, refreshReason = pendingAuraRefreshCtx, pendingAuraRefreshReason
-    pendingAuraUnits, pendingAuraReasons = {}, {}
-    pendingAuraGlobal, pendingAuraGlobalReason = nil, nil
-    pendingAuraRefreshCtx, pendingAuraRefreshReason = nil, nil
-
-    local started = AurasProfileStart()
-    local count = 0
-    if global then
-        RequestAuraRuntime("shared", globalReason or "AURAS3_MENU2_BATCH")
-        count = 1
-    else
-        for unit in pairs(units) do
-            RequestAuraRuntime(unit, reasons[unit] or "AURAS3_MENU2_BATCH")
-            count = count + 1
-        end
+local auraPageRefreshQueued = false
+local pendingAuraPageRefreshCtx
+local pendingAuraPageRefreshReason
+local function QueueAuraPageControlRefresh(ctx, reason)
+    pendingAuraPageRefreshCtx = ctx or pendingAuraPageRefreshCtx
+    pendingAuraPageRefreshReason = reason or pendingAuraPageRefreshReason
+    if auraPageRefreshQueued then return end
+    auraPageRefreshQueued = true
+    local function Flush()
+        auraPageRefreshQueued = false
+        local refreshCtx, refreshReason = pendingAuraPageRefreshCtx, pendingAuraPageRefreshReason
+        pendingAuraPageRefreshCtx, pendingAuraPageRefreshReason = nil, nil
+        if not AurasMenuCombatLocked() then QueueAurasPageRefresh(refreshCtx, refreshReason or "auras-apply") end
     end
-    AurasProfileStop("FlushAuraApply", started, count)
-
-    if (refreshCtx or refreshReason) and not AurasMenuCombatLocked() then
-        QueueAurasPageRefresh(refreshCtx, refreshReason or "auras-apply")
-    end
-end
-local function QueueAuraApply(ctx, unit, reason, refresh)
-    reason = reason or "AURAS3_MENU2"
-    unit = unit or "shared"
-    if unit == "shared" then
-        pendingAuraGlobal = true
-        pendingAuraGlobalReason = reason
-        pendingAuraUnits, pendingAuraReasons = {}, {}
-    elseif not pendingAuraGlobal then
-        pendingAuraUnits[unit] = true
-        pendingAuraReasons[unit] = reason
-    end
-    if refresh then
-        pendingAuraRefreshCtx = ctx or pendingAuraRefreshCtx
-        pendingAuraRefreshReason = reason
-    end
-    if auraApplyQueued then return end
-    auraApplyQueued = true
-    ScheduleAuraMenuWork("MSUF2_AURAS_PAGE_APPLY", AURA_MENU_APPLY_DELAY, FlushAuraApply)
+    if C_Timer and C_Timer.After then C_Timer.After(0, Flush) else Flush() end
 end
 local function ApplyUnit(ctx, unit, reason, refresh)
-    QueueAuraApply(ctx, unit, reason or "AURAS3_MENU2", refresh == true)
+    reason = reason or "AURAS3_MENU2"
+    RequestAuraRuntime(unit or "shared", reason)
+    if refresh == true then QueueAuraPageControlRefresh(ctx, reason) end
 end
 local BindSwitch, BindToggle, BindSlider = M.BindSwitchAt, M.BindToggleAt, M.BindSliderAt
 local BindDropdown, BindTextInput = M.BindDropdownAt, M.BindTextInputAt
+local UNIT_AURA_WORKSPACE_TAB_STYLE = {
+    bg = { 0.012, 0.025, 0.052, 0.90 },
+    border = { 0.070, 0.130, 0.235, 0.52 },
+    textColor = { 0.78, 0.86, 0.97, 0.96 },
+    hoverBg = { 0.024, 0.052, 0.100, 0.96 },
+    hoverBorder = { 0.120, 0.245, 0.455, 0.78 },
+    activeBg = { 0.032, 0.090, 0.205, 0.97 },
+    activeBorder = { 0.150, 0.385, 0.760, 0.92 },
+    activeTextColor = { 0.94, 0.98, 1.00, 1.00 },
+}
+local function UnitAuraWorkspaceTabButton(parent, item, width)
+    return W.TopButton(parent, item.text, width, 24, UNIT_AURA_WORKSPACE_TAB_STYLE)
+end
 local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setValue, gap, buttonFactory)
     gap = gap or 6
     local count = #values
@@ -305,7 +280,10 @@ local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setVa
         local item = values[i]
         local btn = (buttonFactory and buttonFactory(parent, item, bw)) or ActionButton(parent, item.text, bw)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (i - 1) * (bw + gap), y)
-        btn:SetScript("OnClick", function() setValue(item.value) end)
+        btn:SetScript("OnClick", function()
+            if item.value == getValue() then return end
+            setValue(item.value)
+        end)
         buttons[i] = btn
         if item.value ~= nil then buttons[item.value] = btn end
     end
@@ -1907,30 +1885,47 @@ local function CategoryLabel(cat)
     if cat and cat.key == "RAID_BUFFS" then return "Raid / Mythic Buffs" end
     return (cat and cat.label) or (cat and cat.key) or ""
 end
-local function BuildGroupFilters(ctx, b, scope, fixedLane)
+local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
+    opts = opts or {}
     local laneKey = fixedLane == "debuff" and "debuff" or (fixedLane == "buff" and "buff" or CurrentLane("auraFilterLane", "buff"))
-    local section = b:CollapsibleSection("group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", 930, false)
+    local embedded = opts.parent ~= nil
+    local tool = embedded and tostring(opts.tool or "") or ""
+    local showFilter = tool ~= "blacklist"
+    local showBlacklist = tool ~= "filters"
+    local af = AuraFilter()
+    local meta = af and af.DECLASSIFIED_META
+    if type(meta) ~= "table" then meta = {} end
+    local half = ceil(#meta / 2)
+    local categoryHeight = max(324, 148 + half * 30)
+    local originY = embedded and (tonumber(opts.originY) or -400) or 0
+    local blacklistY = showFilter and (originY - 304) or (originY - 42)
+    local directY = blacklistY - categoryHeight - 24
+    local standaloneHeight = max(930, abs(directY) + 324)
+    local section = opts.parent or b:CollapsibleSection("group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", standaloneHeight, false)
     local w = section._msuf2Width or b.width or 720
     local lane = laneKey
     local laneText = lane == "buff" and "Buff" or "Debuff"
     local filterW = w - 48
-    local filter = Card(section, "Native " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, -42, filterW, 234)
-    W.LabelAt(filter, fixedLane and (laneText .. " Content") or "Filter Type", 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
-    if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
-    local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
-    BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
-    W.Text(filter, "Category blacklists below are expanded into SpellID candidate filters for the selected lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
-    local blacklist = Card(section, "Category Blacklist", "SpellID category filters for " .. ScopeLabel(scope) .. ".", 24, -304, w - 48, 324)
+    if embedded and tool == "" then
+        W.DividerAt(section, originY - 4, 16, 16)
+        W.LabelAt(section, "Blizzard Filters & Lists", 24, originY - 24, w - 48, "GameFontNormal", T.colors.accent)
+    end
+    if showFilter then
+        local filter = Card(section, "Native " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, originY - 42, filterW, 234)
+        W.LabelAt(filter, fixedLane and (laneText .. " Content") or "Filter Type", 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
+        if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
+        local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
+        BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
+        W.Text(filter, "Choose the native Blizzard AuraContainer filter for this lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
+    end
+    if not showBlacklist then return end
+    local blacklist = Card(section, "Category Blacklist", "SpellID category filters for " .. ScopeLabel(scope) .. ".", 24, blacklistY, w - 48, categoryHeight)
     W.LabelAt(blacklist, "Active", 16, -50, 70, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(blacklist, lane == "buff" and "Buff category blacklist" or "Debuff category blacklist", 86, -50, 260, "GameFontHighlightSmall", T.colors.text)
     W.Text(blacklist, NATIVE_EXACT_AURA_FILTERS_TEXT, 16, -72, w - 96, T.colors.muted)
-    local af = AuraFilter()
-    local meta = af and af.DECLASSIFIED_META
-    if not (type(meta) == "table" and #meta > 0) then
+    if #meta == 0 then
         W.Text(blacklist, "No public aura category data is loaded.", 16, -96, w - 96, T.colors.muted)
-        meta = {}
     end
-    local half = ceil(#meta / 2)
     local catColW = max(230, floor((w - 104) / 2))
     local x2 = 16 + catColW + 24
     local startY = -120
@@ -1946,13 +1941,14 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane)
         if cat.tooltip then AddTooltip(toggle, CategoryLabel(cat), cat.tooltip) end
         categoryControls[#categoryControls + 1] = toggle
     end
-    local direct = Card(section, "Exact SpellID Blacklist", "Frame-specific exclusions for this Group Frame lane.", 24, -652, w - 48, 222)
+    local direct = Card(section, "Exact SpellID Blacklist", "Frame-specific exclusions for this Group Frame lane.", 24, directY, w - 48, 300)
     local directInputValue = ""
-    local directInput = BindTextInput(ctx, direct, "Spell ID, spell link, or spell name", 16, -72, min(420, w - 300),
+    local directInputW = max(260, floor((w - 96) * 0.46))
+    local directInput = BindTextInput(ctx, direct, "Spell ID, spell link, or spell name", 16, -72, directInputW,
         function() return directInputValue end,
         function(value) directInputValue = value or "" end)
     local directAdd = ActionButton(direct, "Add", 90)
-    directAdd:SetPoint("TOPLEFT", direct, "TOPLEFT", min(460, w - 252), -90)
+    directAdd:SetPoint("TOPLEFT", direct, "TOPLEFT", 26 + directInputW, -90)
     directAdd:SetScript("OnClick", function()
         local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
         if Model.AddGroupBlacklistSpell(scope, lane, value) then
@@ -1971,12 +1967,102 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane)
             Rebuild(ctx)
         end
     end)
-    local directSummary = W.Text(direct, "", 16, -132, w - 80, T.colors.muted)
+    local presetW = max(150, floor((w - 96) * 0.22))
+    local spellW = max(210, floor((w - 96) * 0.30))
+    local function CurrentPreset()
+        local key = M.auraBlacklistPreset or "RAID_BUFFS"
+        local values = Model.BlacklistPresetValues()
+        for i = 1, #values do if values[i].value == key then return key end end
+        return values[1] and values[1].value or "RAID_BUFFS"
+    end
+    local preset = W.Dropdown(direct, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
+    W.MoveWidget(preset, direct, 16, -126, presetW)
+    M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value)
+        M.auraBlacklistPreset = value
+        M.auraBlacklistSpell = nil
+        QueueAurasPageRefresh(ctx, "group-aura-blacklist-preset")
+    end)
+    local spell = W.Dropdown(direct, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
+    W.MoveWidget(spell, direct, 26 + presetW, -126, spellW)
+    M.BindDropdownWidget(ctx, spell,
+        function()
+            local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
+            for i = 1, #values do if values[i].value == selected then return selected end end
+            return values[1] and values[1].value or nil
+        end,
+        function(value) M.auraBlacklistSpell = value end)
+    local addSpell = ActionButton(direct, "Add spell", 96)
+    addSpell:SetPoint("TOPLEFT", direct, "TOPLEFT", 36 + presetW + spellW, -148)
+    addSpell:SetScript("OnClick", function()
+        local values = Model.BlacklistSpellValues(CurrentPreset())
+        local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
+        if Model.AddGroupBlacklistSpell(scope, lane, spellID) then
+            QueueGroupScope(scope, "visual")
+            Rebuild(ctx)
+        end
+    end)
+    local addSet = ActionButton(direct, "Add set", 88)
+    addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
+    addSet:SetScript("OnClick", function()
+        if Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset()) > 0 then
+            QueueGroupScope(scope, "visual")
+            Rebuild(ctx)
+        end
+    end)
+    local prepared = W.Text(direct, "", 16, -210, w - 80, T.colors.accent)
+    local empty = W.Text(direct, "No blacklisted spells. Add one above or use a preset.", 16, -246, w - 80, T.colors.muted)
+    local listScroll = CreateFrame("ScrollFrame", nil, direct, "UIPanelScrollFrameTemplate")
+    listScroll:SetPoint("TOPLEFT", direct, "TOPLEFT", 16, -236)
+    listScroll:SetSize(w - 108, 48)
+    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
+    local listChild = CreateFrame("Frame", nil, listScroll)
+    listChild:SetSize(w - 130, 48)
+    listScroll:SetScrollChild(listChild)
+    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
+    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 28) end)
+    local rows = {}
+    local function EnsureRow(index)
+        local row = rows[index]
+        if row then return row end
+        row = CreateFrame("Button", nil, listChild)
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((index - 1) * 22))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((index - 1) * 22))
+        row:SetHeight(20)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
+        row.icon:SetSize(17, 17)
+        row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+        row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+        row:SetScript("OnClick", function(self)
+            if self._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, self._spellID) then
+                QueueGroupScope(scope, "visual")
+                Rebuild(ctx)
+            end
+        end)
+        rows[index] = row
+        return row
+    end
     M.TrackRefresh(ctx, function()
         W.SetControlsEnabled(categoryControls, NATIVE_EXACT_AURA_FILTERS_ENABLED)
-        W.SetControlsEnabled({ directInput, directAdd, directRemove }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
-        local summary = Model.GroupBlacklistSummary(scope, lane)
-        directSummary:SetText(summary == "" and "No exact SpellID exclusions." or summary)
+        W.SetControlsEnabled({ directInput, directAdd, directRemove, preset, spell, addSpell, addSet }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
+        local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
+        prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
+        empty:SetShown(#entries == 0)
+        listScroll:SetShown(#entries > 0)
+        listChild:SetHeight(max(48, #entries * 22))
+        for i = 1, max(#rows, #entries) do
+            local row, entry = rows[i], entries[i]
+            if entry then
+                row = EnsureRow(i)
+                row._spellID = entry.value
+                row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                row.text:SetText(entry.text or entry.value)
+                row:Show()
+            elseif row then
+                row._spellID = nil
+                row:Hide()
+            end
+        end
     end)
 end
 local function BuildAuraFiltersPage(ctx)
@@ -2309,11 +2395,11 @@ local function BuildUnitAuraOwnership(ctx, b, unit)
     W.Text(section, Independent() and "Custom Blizzard filters active. Lists are always frame-specific." or "Blizzard filters inherited. Blacklists and Custom whitelists remain frame-specific.", 24, -70, w - 48, T.colors.muted)
 end
 
-function M.BuildAuras3GroupLaneWorkspace(ctx, b, scope, lane)
+function M.BuildAuras3GroupLaneWorkspace(ctx, b, scope, lane, opts)
     lane = lane == "debuff" and "debuff" or "buff"
     SetCurrentLane("auraStyleGFLane", lane)
     SetCurrentLane("auraFilterLane", lane)
-    BuildGroupFilters(ctx, b, scope, lane)
+    BuildGroupFilters(ctx, b, scope, lane, opts)
 end
 
 local function CreateNestedAuraBuilder(ctx, parentBuilder, body)
@@ -2363,12 +2449,12 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local _, tabButtons = BuildActionTabs(ctx, top, UNIT_AURA_WORKSPACE_TABS, 88, -16, max(430, sectionW - 112), CurrentTab, function(value)
         M.unitAuraTabSelection[unit] = value
         Rebuild(ctx)
-    end, 6)
+    end, 6, UnitAuraWorkspaceTabButton)
     W.LabelAt(top, "Edit", 16, -58, 68, "GameFontNormalSmall", T.colors.accent)
     local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or UNIT_AURA_CUSTOM_TOOLS
     local _, toolButtons = BuildActionTabs(ctx, top, tools, 88, -52, max(430, sectionW - 112),
         function() return CurrentUnitAuraTool(unit, currentTab) end,
-        function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end, 6)
+        function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end, 6, UnitAuraWorkspaceTabButton)
     local workspaceHint = W.Text(top, "Icon text, cooldowns and borders: Appearance > Auras.", 16, -84, sectionW - 32, T.colors.muted)
     M.TrackRefresh(ctx, function()
         for _, item in ipairs(UNIT_AURA_WORKSPACE_TABS) do W.SetControlEnabled(tabButtons[item.value], true) end

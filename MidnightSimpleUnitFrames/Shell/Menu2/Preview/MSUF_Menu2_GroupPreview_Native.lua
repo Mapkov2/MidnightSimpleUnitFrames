@@ -1025,6 +1025,8 @@ local NativeDeps = {
     ConfigToOffset = ConfigToOffset,
     AuraGrowth = AuraGrowth,
     ApplyRounded = ApplyRounded,
+    ApplyFrameBorder = MSUF.UFPreviewCore and MSUF.UFPreviewCore.ApplyFrameBorder,
+    ApplyBoundsGuide = MSUF.UFPreviewCore and MSUF.UFPreviewCore.ApplyBoundsGuide,
     BaseEdgeColor = BaseEdgeColor,
     LayoutOutline = LayoutOutline,
     ClampLayer = ClampLayer,
@@ -1179,6 +1181,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         if stage._msufGFPreviewPanning then R.StopPan(stage) end
     end)
     box._mock = mock
+    box.mock, mock.bounds = mock, bounds
     mock._health = CreateFrame("StatusBar", nil, mock)
     mock._health:SetMinMaxValues(0, 1)
     mock._health:SetValue(0.72)

@@ -1106,6 +1106,10 @@ local function BuildPreview(parent, panel, width, height)
                 owner._zoomPanX, owner._zoomPanY = 0, 0
             end
             for j = 1, #owner.layerButtons do owner.layerButtons[j]:refresh() end
+            -- Visibility is local preview state and does not need a full render.
+            -- Apply it immediately; the queued refresh only recomputes footprint
+            -- and fit geometry for layers such as Auras, Cast and Class Power.
+            if PreviewCore.ApplyLayerVisibility then PreviewCore.ApplyLayerVisibility(owner) end
             RequestPreviewLayoutRefresh(owner, "UNIT_PREVIEW_LAYER")
             RefreshHandleSelectionVisuals(owner)
         end,

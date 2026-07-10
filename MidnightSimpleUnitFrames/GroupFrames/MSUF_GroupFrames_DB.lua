@@ -461,14 +461,6 @@ local PARTY_DEFAULTS = {
     aurasEnabled      = true,
     auraMaxIcons      = 4,
     auraIconSize      = 20,
-    --- Private Auras
-    privateAurasEnabled    = true,
-    privateAuraMax         = 4,
-    privateAuraSize        = 20,
-    privateAuraAnchor      = "TOPRIGHT",
-    privateAuraX           = 0,
-    privateAuraY           = 0,
-    privateAuraCountdown   = true,
     --- Corner Indicators
     ciEnabled         = true,
     ciSize            = 8,
@@ -1062,7 +1054,6 @@ local GF_BLIZZARD_AURA_TYPE_DEFAULTS = {
     debuffs = true,
     dispels = true,
     externals = true,
-    privateAuras = true,
 }
 
 local function NormalizeAuraRenderer(conf)
@@ -1148,7 +1139,7 @@ function GF.EnsureDB()
     MigrateGroupPositionToGridCenter(db.gf_party, "party")
     MigrateGroupPositionToGridCenter(db.gf_raid, "raid")
     MigrateGroupPositionToGridCenter(db.gf_mythicraid, "mythicraid")
-    --- Migrate flat aura/private-aura keys - nested tables
+    --- Migrate flat aura keys to nested tables
     if GF.MigrateAuraConfig then
         GF.MigrateAuraConfig(db.gf_party, false)
         GF.MigrateAuraConfig(db.gf_raid, true)

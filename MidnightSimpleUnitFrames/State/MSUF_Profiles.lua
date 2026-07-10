@@ -2580,7 +2580,6 @@ local MSUF_GF_BLIZZARD_TYPE_DEFAULTS = {
     debuffs = true,
     dispels = true,
     externals = true,
-    privateAuras = true,
 }
 
 local function MSUF_ProfileIO_EnsureBlizzardAuraPositionDefaults(auras)

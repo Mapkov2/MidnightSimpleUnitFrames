@@ -1790,16 +1790,6 @@ local function CancelQueuedEditRefresh()
     editRefreshSerial = editRefreshSerial + 1
 end
 
-local function RefreshEditModeAuras()
-    CancelQueuedEditRefresh()
-    if IsConfigBlocked() then return end
-    if IsEditModeActive() then
-        EM.RefreshAll()
-    else
-        EM.HideAll()
-    end
-end
-
 local function RequestEditModeAurasRefresh(delay)
     CancelQueuedEditRefresh()
     if IsConfigBlocked() then return end
