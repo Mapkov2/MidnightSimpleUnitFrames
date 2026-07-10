@@ -5473,8 +5473,9 @@ function A.Parse(text, ctxOverride)
             return copySelectorPriorityParsed
         end
     end
-    local nameAnchorPriorityParsed = A._ParseNameTextAnchorShortcut
-        and A._ParseNameTextAnchorShortcut(normalized)
+    local nameAnchorPriorityParsed = (A._ParseNameTextAnchorShortcut and A._ParseNameTextAnchorShortcut(normalized))
+        or (A._ParseNameTextVerticalPlacementShortcut and A._ParseNameTextVerticalPlacementShortcut(normalized))
+        or (A._ParseNameTextOffsetShortcut and A._ParseNameTextOffsetShortcut(normalized))
     if nameAnchorPriorityParsed then
         nameAnchorPriorityParsed.raw = raw
         nameAnchorPriorityParsed.normalized = normalized
