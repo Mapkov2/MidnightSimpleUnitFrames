@@ -115,9 +115,10 @@ local function ParseClassPowerPreviewAnimationAliasArgs(text)
 end
 
 local function RefreshClassPowerPreview()
-    if type(CallGlobal) == "function" then CallGlobal("MSUF_UFPreview_RequestRefresh", "MSUF_ASSISTANT_CLASSPOWER_PREVIEW") end
     if M and type(M.RequestGeneralApply) == "function" then
         M.RequestGeneralApply("MSUF_ASSISTANT_CLASSPOWER_PREVIEW", { preview = true, applyAll = false, notify = false })
+    elseif type(CallGlobal) == "function" then
+        CallGlobal("MSUF_UFPreview_RequestRefresh", "MSUF_ASSISTANT_CLASSPOWER_PREVIEW")
     end
     local preview = M and M._msuf2ClassPowerInlinePreview
     if preview and type(preview.Refresh) == "function" then preview:Refresh() end

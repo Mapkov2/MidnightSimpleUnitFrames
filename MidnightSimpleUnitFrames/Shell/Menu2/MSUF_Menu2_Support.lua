@@ -1612,19 +1612,18 @@ UpdateGlobalScaleEvents = function()
 end
 local startupScaleApplyQueued
 local startupScaleNeedsGlobalCVar
+local function FlushStartupScaleApply()
+    local needsGlobalCVar = startupScaleNeedsGlobalCVar
+    startupScaleApplyQueued = nil
+    startupScaleNeedsGlobalCVar = nil
+    ApplySavedScaleState(needsGlobalCVar)
+end
 local function QueueStartupScaleApply(applyGlobalCVar)
     startupScaleNeedsGlobalCVar = startupScaleNeedsGlobalCVar or applyGlobalCVar == true
     if startupScaleApplyQueued then return end
     startupScaleApplyQueued = true
-    local function flush()
-        local needsGlobalCVar = startupScaleNeedsGlobalCVar
-        startupScaleApplyQueued = nil
-        startupScaleNeedsGlobalCVar = nil
-        ApplySavedScaleState(needsGlobalCVar)
-    end
-    _G.C_Timer.After(0, flush)
+    _G.C_Timer.After(0, FlushStartupScaleApply)
 end
-QueueStartupScaleApply(true)
 local startupScaleEvents = _G.CreateFrame("Frame")
 startupScaleEvents:RegisterEvent("PLAYER_LOGIN")
 startupScaleEvents:RegisterEvent("PLAYER_ENTERING_WORLD")

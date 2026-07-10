@@ -34,31 +34,43 @@ function A.GlobalRegistry.RegisterCastbarColorSettings(ctx)
     if type(SetTableRGB) ~= "function" or type(ApiRGB) ~= "function" or type(ApiSetRGB) ~= "function" then return end
     if type(RegisterGeneralBoolean) ~= "function" or type(RegisterGeneralEnum) ~= "function" then return end
 
-    for _, row in ipairs(COLOR_CASTBAR_ROWS) do
-        ColorSetting("general." .. row.key .. "Color", row.label, row.aliases, function()
-            return ApiRGB(row.get, row.dr, row.dg, row.db, function() return GeneralRGB(row.key, row.dr, row.dg, row.db) end)
+    local function RegisterApiCastbarColor(key, label, aliases, getName, setName, fallbackPrefix, dr, dg, db, attribute, alpha)
+        local apiOwnsRefresh = false
+        ColorSetting(key, label, aliases, function()
+            return ApiRGB(getName, dr, dg, db, function() return GeneralRGB(fallbackPrefix, dr, dg, db) end)
         end, function(r, g, b)
-            local fallbackPrefix = row.key
-            if row.key == "castbarFont" then fallbackPrefix = "castbarFont" end
-            if not ApiSetRGB(row.set, r, g, b) then SetGeneralRGB(fallbackPrefix, r, g, b) end
-        end, { category = "Colors / Cast Bar", attribute = row.key .. "Color", defaultR = row.dr, defaultG = row.dg, defaultB = row.db, apply = ApplyCastbarColors })
+            apiOwnsRefresh = ApiSetRGB(setName, r, g, b, alpha) == true
+            if not apiOwnsRefresh then SetGeneralRGB(fallbackPrefix, r, g, b) end
+        end, {
+            category = "Colors / Cast Bar",
+            attribute = attribute,
+            defaultR = dr,
+            defaultG = dg,
+            defaultB = db,
+            apply = function()
+                if apiOwnsRefresh then
+                    apiOwnsRefresh = false
+                    return true
+                end
+                if type(ApplyCastbarColors) == "function" then return ApplyCastbarColors() end
+                return false
+            end,
+        })
     end
 
-    ColorSetting("general.castbarBorderColor", "Castbar Border Color", {
-        "castbar border color", "cast bar border color", "castbar outline color",
-    }, function()
-        return ApiRGB("GetCastbarBorderColor", 0, 0, 0, function() return GeneralRGB("castbarBorder", 0, 0, 0) end)
-    end, function(r, g, b)
-        if not ApiSetRGB("SetCastbarBorderColor", r, g, b, 1) then SetGeneralRGB("castbarBorder", r, g, b) end
-    end, { category = "Colors / Cast Bar", attribute = "castbarBorderColor", defaultR = 0, defaultG = 0, defaultB = 0, apply = ApplyCastbarColors })
+    for _, row in ipairs(COLOR_CASTBAR_ROWS) do
+        RegisterApiCastbarColor(
+            "general." .. row.key .. "Color", row.label, row.aliases,
+            row.get, row.set, row.key, row.dr, row.dg, row.db, row.key .. "Color")
+    end
 
-    ColorSetting("general.castbarBackgroundColor", "Castbar Background Color", {
+    RegisterApiCastbarColor("general.castbarBorderColor", "Castbar Border Color", {
+        "castbar border color", "cast bar border color", "castbar outline color",
+    }, "GetCastbarBorderColor", "SetCastbarBorderColor", "castbarBorder", 0, 0, 0, "castbarBorderColor", 1)
+
+    RegisterApiCastbarColor("general.castbarBackgroundColor", "Castbar Background Color", {
         "castbar background color", "cast bar background color", "castbar bg color",
-    }, function()
-        return ApiRGB("GetCastbarBackgroundColor", 0.10, 0.10, 0.10, function() return GeneralRGB("castbarBg", 0.10, 0.10, 0.10) end)
-    end, function(r, g, b)
-        if not ApiSetRGB("SetCastbarBackgroundColor", r, g, b, 0.85) then SetGeneralRGB("castbarBg", r, g, b) end
-    end, { category = "Colors / Cast Bar", attribute = "castbarBackgroundColor", defaultR = 0.10, defaultG = 0.10, defaultB = 0.10, apply = ApplyCastbarColors })
+    }, "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", "castbarBg", 0.10, 0.10, 0.10, "castbarBackgroundColor", 0.85)
 
     RegisterGeneralBoolean("playerCastbarOverrideEnabled", "playerCastbarOverride", "Player Castbar Color Override", true, {
         "player castbar color override", "player castbar override", "player cast color override",
@@ -72,13 +84,9 @@ function A.GlobalRegistry.RegisterCastbarColorSettings(ctx)
         reason = "MSUF_ASSISTANT_PLAYER_CASTBAR_OVERRIDE_MODE",
         valueAliases = { class = "CLASS", classcolor = "CLASS", custom = "CUSTOM", color = "CUSTOM", manual = "CUSTOM" },
     })
-    ColorSetting("general.playerCastbarOverrideColor", "Player Castbar Override Color", {
+    RegisterApiCastbarColor("general.playerCastbarOverrideColor", "Player Castbar Override Color", {
         "player castbar override color", "player castbar custom color", "player cast custom color",
-    }, function()
-        return ApiRGB("GetPlayerCastbarOverrideColor", 0, 0.6, 1, function() return GeneralRGB("playerCastbarOverride", 0, 0.6, 1) end)
-    end, function(r, g, b)
-        if not ApiSetRGB("SetPlayerCastbarOverrideColor", r, g, b) then SetGeneralRGB("playerCastbarOverride", r, g, b) end
-    end, { category = "Colors / Cast Bar", attribute = "playerCastbarOverrideColor", defaultR = 0, defaultG = 0.6, defaultB = 1, apply = ApplyCastbarColors })
+    }, "GetPlayerCastbarOverrideColor", "SetPlayerCastbarOverrideColor", "playerCastbarOverride", 0, 0.6, 1, "playerCastbarOverrideColor")
 
     ColorSetting("general.kickReadyColor", "Kick Ready Color", {
         "kick ready color", "interrupt ready color", "ready kick color",

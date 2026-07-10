@@ -155,7 +155,6 @@ function A.AurasRegistry.RegisterGroupAuraRootSettings(ctx, scope)
         { key = "debuffs", attr = "NativeDebuffs", label = "Native Debuffs", words = { "native group aura debuffs", "blizzard group aura debuffs", "native debuffs" }, typeWords = { "debuffs", "aura debuffs", "group aura debuffs" } },
         { key = "dispels", attr = "NativeDispels", label = "Native Dispel Auras", words = { "native group aura dispels", "blizzard group aura dispels", "native dispel auras" }, typeWords = { "dispels", "dispel auras", "dispellable auras" } },
         { key = "externals", attr = "NativeExternals", label = "Native External Auras", words = { "native group aura externals", "blizzard group aura externals", "native external auras" }, typeWords = { "externals", "external auras" } },
-        { key = "privateAuras", attr = "NativePrivateAuras", label = "Native Private Auras", words = { "native group private auras", "blizzard group private auras", "native private auras" }, typeWords = { "private auras", "private aura icons" } },
     }) do
         rootAliases = {}
         AddNativeTypeAliasesForUnit(rootAliases, scope, AddAliasesForUnit, UNIT_LABELS, spec.words, spec.typeWords)

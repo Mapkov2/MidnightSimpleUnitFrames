@@ -28,7 +28,11 @@ function A.RegistryCoreBuilders.BuildVisualApplyHelpers(ctx)
 
     local function PushVisualUpdates()
         local api = MSUFRef and MSUFRef._colorsAPI
-        if api and type(api.PushVisualUpdates) == "function" then api.PushVisualUpdates() end
+        if api and type(api.PushVisualUpdates) == "function" then
+            api.PushVisualUpdates()
+            return true
+        end
+        return false
     end
 
     local function RequestVisuals(reason)
@@ -36,8 +40,7 @@ function A.RegistryCoreBuilders.BuildVisualApplyHelpers(ctx)
         if ApplyService and type(ApplyService.RequestVisuals) == "function" then
             return ApplyService.RequestVisuals(reason)
         end
-        PushVisualUpdates()
-        return ApplyGeneral(reason or "MSUF_ASSISTANT_VISUALS", { preview = true, applyAll = false, fonts = true, bars = true })
+        return ApplyGeneral(reason or "MSUF_ASSISTANT_VISUALS", { preview = true, applyAll = false, fonts = true })
     end
 
     local function RequestColors(reason, scope)
@@ -45,12 +48,8 @@ function A.RegistryCoreBuilders.BuildVisualApplyHelpers(ctx)
         if ApplyService and type(ApplyService.RequestColors) == "function" then
             return ApplyService.RequestColors(reason, scope)
         end
-        if scope == "player" then
-            CallGlobal("MSUF_RefreshAllFrameColors", "player")
-            return ApplyGeneral(reason or "MSUF_ASSISTANT_COLORS", { preview = true, applyAll = false, colors = true, colorScope = scope })
-        end
-        PushVisualUpdates()
-        return ApplyGeneral(reason or "MSUF_ASSISTANT_COLORS", { preview = true, applyAll = false, fonts = true, bars = true, colors = true })
+        if not scope and PushVisualUpdates() then return true end
+        return ApplyGeneral(reason or "MSUF_ASSISTANT_COLORS", { preview = true, applyAll = false, colors = true, colorScope = scope })
     end
 
     local function RequestFonts(reason, scope)
@@ -92,8 +91,7 @@ function A.RegistryCoreBuilders.BuildVisualApplyHelpers(ctx)
         if unit then
             return RequestCastbars(reason, unit)
         end
-        RequestCastbars(reason, unit)
-        CallGlobal("MSUF_KickReady_RefreshAll")
+        return RequestCastbars(reason, unit)
     end
 
     local function ApplyGameplayColors(reason)
@@ -102,11 +100,11 @@ function A.RegistryCoreBuilders.BuildVisualApplyHelpers(ctx)
 
     local function ApplyClassPowerColors(reason)
         reason = reason or "MSUF_ASSISTANT_CLASS_POWER_COLORS"
-        RequestColors(reason, "player")
         local ApplyService = CurrentApplyService()
         if ApplyService and type(ApplyService.RequestClassPower) == "function" then
             return ApplyService.RequestClassPower(reason, { colors = true, playerHP = true }, { preview = true, applyAll = false, colors = true, colorScope = "player" })
         end
+        RequestColors(reason, "player")
         CallGlobal("MSUF_ClassPower_InvalidateColors")
     end
 
@@ -127,9 +125,13 @@ function A.RegistryCoreBuilders.BuildVisualApplyHelpers(ctx)
     end
 
     local function ApplyPortraitColors(reason)
-        RequestColors(reason or "MSUF_ASSISTANT_PORTRAIT_COLORS")
-        CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason or "MSUF_ASSISTANT_PORTRAIT_COLORS")
-        CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "MSUF_ASSISTANT_PORTRAIT_COLORS")
+        reason = reason or "MSUF_ASSISTANT_PORTRAIT_COLORS"
+        local ApplyService = CurrentApplyService()
+        if ApplyService and type(ApplyService.RequestGeneral) == "function" then
+            return ApplyService.RequestGeneral(reason, { preview = true, applyAll = true, colors = true })
+        end
+        CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
+        return CallGlobal("MSUF_UFPreview_RequestRefresh", reason)
     end
 
     local function ApplyFonts(reason, scope)

@@ -3659,7 +3659,7 @@ if not P.InitUnsupportedAuraCommand then
                         kind = "unsupported",
                         status = "info",
                         summary = "Explains native group aura blacklist limitation.",
-                        text = "Group aura exact spell/category blacklist data is legacy read-only in the native 12.1 backend, so I will not edit it as if it could affect live aura display. I can change live group aura filter tokens instead, such as All, Raid, or Dispellable, plus icon size, count, spacing, growth, layer, cooldown text, stack text, duration bars, and private aura options.",
+                        text = "Group aura exact spell/category blacklist data is legacy read-only in the native 12.1 backend, so I will not edit it as if it could affect live aura display. I can change live group aura filter tokens instead, such as All, Raid, or Dispellable, plus icon size, count, spacing, growth, layer, cooldown text, stack text, and duration bars.",
                     }
                 end
                 local unitBlacklistScope = ContainsAny(text, P.AURA_UNIT_BLACKLIST_SCOPE_TERMS)
@@ -3690,7 +3690,7 @@ if not P.InitUnsupportedAuraCommand then
                     kind = "unsupported",
                     status = "info",
                     summary = "Aura option fallback.",
-                    text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown text, stack text, duration bars, live filter tokens, quick presets, private aura options, and group aura copy when those options exist in MSUF. Saved exact SpellID blacklist data can be listed, but it is read-only while the native 12.1 backend is active. Aura areas I can't match will stay as they are.",
+                    text = "I don't see an MSUF aura option for that request yet. I can change aura icon size, caps/count, X/Y offsets, spacing, growth, layer, cooldown text, stack text, duration bars, live filter tokens, quick presets, custom UnitFrame auras, and group aura copy when those options exist in MSUF. Saved exact SpellID blacklist data can be listed, but it is read-only while the native 12.1 backend is active. Aura areas I can't match will stay as they are.",
                 }
             end
         end
@@ -5137,6 +5137,10 @@ function A.ParseSimpleChange(text, ctxOverride)
 end
 
 function A.Parse(text, ctxOverride)
+    local autoCoverage = A.AutoCoverage
+    if autoCoverage and type(autoCoverage.EnsureFilled) == "function" then
+        autoCoverage.EnsureFilled()
+    end
     local raw = Trim(text)
     local normalized = Normalize(raw)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})

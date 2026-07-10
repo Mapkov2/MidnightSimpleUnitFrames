@@ -331,7 +331,6 @@ local HISTORY_PAGE_RESET_FEATURES = {
 local HISTORY_CLASSPOWER_RUNTIME = { full = true, cdm = true }
 local HISTORY_CLASSPOWER_FLAGS = { preview = true, applyAll = false, classpower = true, classpowerApplied = true }
 local COLOR_CLASSPOWER_RUNTIME = { colors = true, playerHP = true }
-local COLOR_CLASSPOWER_FLAGS = { preview = true, applyAll = false, colors = true, colorScope = "player" }
 local function HistoryUnitFromSource(source)
     if type(source) ~= "string" then return nil end
     local unit = source:match("^unit:([^:]+):")
@@ -390,27 +389,11 @@ local function ApplyScopedHistoryRestore(reason, source)
         local opts = {
             history = false,
             preview = true,
-            text = true,
             power = true,
-            fonts = true,
-            alpha = true,
             castbar = true,
             auras = true,
         }
-        local ok = M.RequestUnitApply(unit, applyReason, opts) ~= false
-        if ApplyService.RequestGeneral then
-            ApplyService.RequestGeneral(applyReason, {
-                applyAll = false,
-                notify = false,
-                preview = false,
-                bars = true,
-                barsScope = unit,
-                colors = true,
-                colorScope = unit,
-            })
-            ok = true
-        end
-        return ok
+        return M.RequestUnitApply(unit, applyReason, opts) ~= false
     end
     local feature = HistoryFeatureFromSource(source)
     if feature then return ApplyScopedFeatureRuntime(feature, applyReason) end
@@ -499,12 +482,16 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
         end
     end
     RequestHistoryAurasRuntime(reason or "MSUF2_HISTORY_AURAS")
-    if ApplyService.ApplyProfileFanout then
-        ApplyService.ApplyProfileFanout("MSUF2_PROFILE_APPLY")
+    if ApplyService.RequestClassPower then
+        ApplyService.RequestClassPower("MSUF2_HISTORY_CLASSPOWER", { full = true, cdm = true }, {
+            preview = false,
+            applyAll = false,
+            classpower = true,
+        })
     end
     RequestHistoryGroupRuntime(reason or "MSUF2_HISTORY_GROUP")
     FlushApplyServiceNow()
-    M.CallIf(M.ApplyLocaleSelection)
+    M.CallIf(M.ApplyLocaleSelection, M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     M.CallIf(M.MarkMenuDataDirty, reason or "history")
     RebuildActivePage()
     return true
@@ -734,7 +721,10 @@ function M.SetGeneralValue(key, value, reason, opts)
     local g = M.GetGeneralDB()
     if g[key] == value then return false end
     g[key] = value
-    if key == "menuLocale" and M.ApplyLocaleSelection then SafeInvoke(M.ApplyLocaleSelection, value) end
+    if key == "menuLocale" then
+        if M.ApplyLocaleSelection then SafeInvoke(M.ApplyLocaleSelection, value) end
+        if opts and opts.noRuntime == true then return true end
+    end
     M.RequestGeneralApply(reason or ("MSUF2_" .. tostring(key)), opts)
     return true
 end
@@ -767,6 +757,7 @@ local PAGE_RESET_INFO = {
     auras3 = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
     auras3_buffs = ResetInfo("Aura Buffs", "auras", "Buff basics, cooldown and stack styling"),
     auras3_debuffs = ResetInfo("Aura Debuffs", "auras", "Debuff basics, cooldown and stack styling"),
+    auras3_custom = ResetInfo("Custom Auras", "auras", "named UnitFrame SpellID displays, icon placement and Full-Frame effects"),
     auras3_rendering = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
     auras3_filters = ResetInfo("Aura Filters", "auras", "scope-aware Buff and Debuff filters and blacklists"),
     auras3_styling = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
@@ -1047,7 +1038,7 @@ local PAGE_RESET_HANDLERS = {
     modules = ResetModulesPage,
 }
 local function FinishPageResetApply(pageKey)
-    M.CallIf(M.ApplyLocaleSelection)
+    M.CallIf(M.ApplyLocaleSelection, M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     if M.ApplyMenuFrameScale and M.frame then SafeInvoke(M.ApplyMenuFrameScale, M.frame) end
     if pageKey and M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
         M.InvalidatePage(pageKey)
@@ -1122,14 +1113,10 @@ local function ApplyDomainPageResetRuntime(info, reason)
         end
         did = ApplyAurasPageResetRuntime(reason, true) or did
         if ApplyService.RequestClassPower then
-            ApplyService.RequestClassPower(reason or "MSUF2_RESET_COLORS", COLOR_CLASSPOWER_RUNTIME, COLOR_CLASSPOWER_FLAGS)
+            ApplyService.RequestClassPower(reason or "MSUF2_RESET_COLORS", COLOR_CLASSPOWER_RUNTIME)
             did = true
         else
             did = CallGlobal("MSUF_ClassPower_InvalidateColors") or did
-        end
-        if ApplyService.RequestGroup then
-            ApplyService.RequestGroup("group", "visual", reason or "MSUF2_RESET_COLORS")
-            did = true
         end
         return did
     end
@@ -1143,18 +1130,7 @@ local function ApplyAfterPageReset(pageKey, info)
     local reason = "MSUF2_RESET_" .. tostring(pageKey or "PAGE")
     if info and info.kind == "unit" and info.unit then
         if M.RequestUnitApply then
-            M.RequestUnitApply(info.unit, reason, { history = false, preview = true, text = true, power = true, fonts = true, alpha = true, castbar = true, auras = true })
-        end
-        if ApplyService.RequestGeneral then
-            ApplyService.RequestGeneral(reason, {
-                applyAll = false,
-                notify = false,
-                preview = false,
-                bars = true,
-                barsScope = info.unit,
-                colors = true,
-                colorScope = info.unit,
-            })
+            M.RequestUnitApply(info.unit, reason, { history = false, preview = true, power = true, castbar = true, auras = true })
         end
         FinishPageResetApply(pageKey)
         return
@@ -1216,9 +1192,6 @@ local function ApplyAfterPageReset(pageKey, info)
         end
     end
     if info and info.kind == "modules" then CallGlobal("MSUF_ApplyModules") end
-    if ApplyService.ApplyRestoreFanout then
-        ApplyService.ApplyRestoreFanout("MSUF2_RESTORE")
-    end
     FlushApplyServiceNow()
     FinishPageResetApply(pageKey)
 end

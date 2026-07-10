@@ -12,9 +12,9 @@
 -- floor, not the ceiling: /msufcoverage stubs <scope> still produces proper
 -- stubs when a key deserves curated aliases and a precise apply.
 --
--- Runs once at PLAYER_LOGIN (DB seeded, all domains registered) and again on
--- demand via /msufcoverage fill (e.g. after a profile import materializes new
--- keys). Re-running is idempotent.
+-- Filled lazily on the first assistant parse (DB seeded, all domains
+-- registered) and again on demand via /msufcoverage fill (e.g. after a profile
+-- import materializes new keys). Re-running is idempotent.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 
@@ -740,20 +740,17 @@ function Auto.Fill()
     for scope in pairs(GROUP_SCOPES) do FillManifestScope(scope) end
     for scope in pairs(FLAT_SCOPES) do FillManifestScope(scope) end
     Auto.lastFillCount = added
+    Auto._fillComplete = true
     if type(A.RecordSlowPerfSample) == "function" then
         A.RecordSlowPerfSample("assistant.autocoverage.fill", startedMs, tostring(added), 25)
     end
     return added
 end
 
-local eventFrame = CreateFrame("Frame")
-eventFrame:RegisterEvent("PLAYER_LOGIN")
-eventFrame:SetScript("OnEvent", function(self)
-    self:UnregisterEvent("PLAYER_LOGIN")
-    -- Defer one frame so any login-time default seeding finishes first.
-    if _G.C_Timer and _G.C_Timer.After then
-        _G.C_Timer.After(0, function() Auto.Fill() end)
-    else
-        Auto.Fill()
-    end
-end)
+--- Avoid building generated aliases for players who never use the assistant.
+--- Failed early attempts are not latched, so a caller can retry after the
+--- registry/audit modules become available.
+function Auto.EnsureFilled()
+    if Auto._fillComplete == true then return 0 end
+    return Auto.Fill()
+end

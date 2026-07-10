@@ -486,11 +486,6 @@ local function BuildCastbar(ctx, builder, unit)
         if math.abs(value - floor(value + 0.5)) < 0.001 then value = floor(value + 0.5) end
         SetGeneralValue(key, value, reason)
     end
-    local function ReapplyCastbarSize(reason)
-        Call("MSUF_UpdateCastbarWidthSourceSync", GetGeneral(), unit)
-        Call("MSUF_ApplyCastbarUnitAndSync", unit)
-        Call("MSUF_UFPreview_RequestRefresh", reason or "MSUF2_CASTBAR_SIZE")
-    end
     local function BindDetailDropdown(parent, list, label, x, y, width, values, key, defaultValue, reason)
         local control = W.Dropdown(parent, label, values, width)
         W.MoveWidget(control, parent, x, y, width)
@@ -657,7 +652,6 @@ local function BuildCastbar(ctx, builder, unit)
             if not key then return end
             local nextValue = NormalizeWidthSource(v)
             SetGeneralValue(key, nextValue, "MSUF2_CASTBAR_WIDTH_MODE")
-            ReapplyCastbarSize("MSUF2_CASTBAR_WIDTH_MODE")
             RefreshCastbarEnabled()
         end)
     local widthKey = CastbarWidthKey()
@@ -671,7 +665,6 @@ local function BuildCastbar(ctx, builder, unit)
         function(v)
             if not widthKey then return end
             SetGeneralNumber(widthKey, v, "MSUF2_CASTBAR_WIDTH")
-            ReapplyCastbarSize("MSUF2_CASTBAR_WIDTH")
         end,
         unit == "boss" and 176 or (unit == "focus" and 175 or 272), { step = 1, roundStep = true })
     local height = W.Slider(sizeCard, "Height", 6, 80, 1, sizeControlWRight)
@@ -683,7 +676,6 @@ local function BuildCastbar(ctx, builder, unit)
         function(v)
             if not heightKey then return end
             SetGeneralNumber(heightKey, v, "MSUF2_CASTBAR_HEIGHT")
-            ReapplyCastbarSize("MSUF2_CASTBAR_HEIGHT")
         end,
         unit == "boss" and 12 or 18, { step = 1, roundStep = true })
     local function BindCastbarFeatureToggle(parent, field, reason)

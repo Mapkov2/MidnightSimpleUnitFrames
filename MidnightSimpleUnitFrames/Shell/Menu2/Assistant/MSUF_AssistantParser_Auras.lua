@@ -1379,8 +1379,6 @@ local function ParseAuraDirectSettingShortcut(text, raw)
         if result then return result end
     end
     do
-        local result = ParseGroupPrivateAuraShortcut(text)
-        if result then return result end
     end
     do
         local result = ParseGroupAuraLaneVisibilityDirectShortcut(text)

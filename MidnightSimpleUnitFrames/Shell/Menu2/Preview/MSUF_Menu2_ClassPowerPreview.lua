@@ -448,27 +448,18 @@ local function CallApply(handle, reason)
             end
         end
     end
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason or "CLASSPOWER_PREVIEW_MOVE") end
     local applyReason = reason or "MSUF2_CLASSPOWER_PREVIEW_MOVE"
-    if (kind == "power" or kind == "powerText") and type(M.RequestUnitApply) == "function" then
-        M.RequestUnitApply("player", applyReason, {
-            preview = true,
-            power = true,
-            text = kind == "powerText",
-            fonts = kind == "powerText",
-            notify = false,
-            history = false,
-            classpowerApplied = true,
-        })
-    elseif type(M.RequestGeneralApply) == "function" then
-        M.RequestGeneralApply(applyReason, {
+    local previewQueued = false
+    if type(M.RequestGeneralApply) == "function" then
+        previewQueued = M.RequestGeneralApply(applyReason, {
             preview = true,
             applyAll = false,
             notify = false,
             history = false,
-            classpower = true,
-            classpowerApplied = true,
-        })
+        }) ~= false
+    end
+    if not previewQueued and type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+        _G.MSUF_UFPreview_RequestRefresh(reason or "CLASSPOWER_PREVIEW_MOVE")
     end
 end
 local function StoreForHandle(handle)

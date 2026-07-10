@@ -108,13 +108,7 @@ local function BuildMisc(ctx)
         end,
         function(value)
             value = value or "auto"
-            SetG("menuLocale", value, "MSUF2_LOCALE", { preview = false, applyAll = false })
-            M.CallIf(M.ApplyLocaleSelection, value)
-            local function RebuildLocalePages()
-                M.CallIf(M.InvalidatePage)
-                M.CallIf(M.SelectPage, "opt_misc")
-            end
-            C_Timer.After(0, RebuildLocalePages)
+            SetG("menuLocale", value, "MSUF2_LOCALE", { preview = false, applyAll = false, noRuntime = true })
         end)
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end

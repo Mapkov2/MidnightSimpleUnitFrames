@@ -348,7 +348,7 @@ local GF_COPY_CATEGORIES = {
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline useGlobalFontColor fontR fontG fontB]] },
     { key = "range", label = "Range Fade", keys = WL [[rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha]] },
     { key = "indicators", label = "Status & Indicators", keys = GF_INDICATOR_COPY_FIELDS, prefix = WL [[si_ statusIcon indicator]] },
-    { key = "auras", label = "Auras", tables = WL [[auras]] },
+    { key = "auras", label = "Auras · All", description = "Copies the complete Group Aura configuration, including Buff/Debuff filters, exact and category blacklists, layout, cooldown presentation, Strata, and dispel options.", tables = WL [[auras]] },
     { key = "highlight", label = "Highlight & Aggro", keys = WL [[targetIndicator targetR targetG targetB aggroMode]], prefix = WL [[hl dispel]] },
     { key = "dstripe", label = "Debuff Stripe", prefix = WL [[debuffStripe]] },
     { key = "features", label = "Corner/Spell", keys = WL [[ciEnabled ciAlpha]], tables = WL [[spellIndicators]], prefix = WL [[ci]] },

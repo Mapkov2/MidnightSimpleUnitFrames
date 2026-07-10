@@ -218,15 +218,3 @@ function A.RememberAppliedBundle(bundle)
         ctx.lastSubjectTurn = tonumber(ctx.turnSerial or ctx.lastTurnSerial) or ctx.lastSubjectTurn
     end
 end
-
-if type(_G.CreateFrame) == "function" then
-    local loginGreetingFrame = _G.CreateFrame("Frame")
-    if loginGreetingFrame and type(loginGreetingFrame.RegisterEvent) == "function" and type(loginGreetingFrame.SetScript) == "function" then
-        loginGreetingFrame:RegisterEvent("PLAYER_LOGIN")
-        loginGreetingFrame:SetScript("OnEvent", function(self, event)
-            if event ~= "PLAYER_LOGIN" then return end
-            if self and type(self.UnregisterEvent) == "function" then self:UnregisterEvent("PLAYER_LOGIN") end
-            A.AddLoginGreeting()
-        end)
-    end
-end

@@ -132,7 +132,7 @@ local function EnsureProfilePopups()
             if not (data and data.name) then return end
             CallMSUF("MSUF_ResetProfile", data.name)
             ClearProfileHistory()
-            if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_PROFILE_RESET", { preview = true }) end
+            if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_PROFILE_RESET", { preview = true, applyAll = false, notify = false }) end
             if type(data.after) == "function" then data.after() end
             CallMSUF("MSUF_ShowReloadRecommendedPopup", "Profile reset")
         end,
@@ -232,7 +232,7 @@ local function BuildProfiles(ctx)
             return
         end
         if value and value ~= "" and value ~= _G.MSUF_ActiveProfile and CallMSUF("MSUF_SwitchProfile", value) then ClearProfileHistory() end
-        M.RequestGeneralApply("MSUF2_PROFILE_SWITCH", { preview = true })
+        M.RequestGeneralApply("MSUF2_PROFILE_SWITCH", { preview = true, applyAll = false, notify = false })
         RefreshAfterProfileChange(ctx)
     end)
     M.TrackRefresh(ctx, function()
@@ -406,7 +406,7 @@ local function BuildProfiles(ctx)
             end
             if imported ~= true then return false end
             ClearProfileHistory()
-            M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true })
+            M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true, applyAll = false, notify = false })
             RefreshAfterProfileChange(ctx)
             ShowImportReloadPrompt()
             return true
@@ -458,7 +458,7 @@ local function BuildProfiles(ctx)
                 return false
             end
             ClearProfileHistory()
-            M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true })
+            M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true, applyAll = false, notify = false })
             RefreshAfterProfileChange(ctx)
             M.profileImportNewName = ""
             importProfileName:SetText("")
@@ -494,7 +494,7 @@ local function BuildProfiles(ctx)
             ConfirmUUFBestEffortImport(text, function()
                 CallMSUF("MSUF_ImportLegacyFromString", text)
                 ClearProfileHistory()
-                M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true })
+                M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true, applyAll = false, notify = false })
                 RefreshAfterProfileChange(ctx)
                 if M.ShowStatusFeedback then M.ShowStatusFeedback("Legacy profile imported", "ok", 1.7) end
             end)

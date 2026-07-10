@@ -947,7 +947,7 @@ local function BuildDashboardUX(ctx)
                 pendingMsufScale = nil
                 if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scaleValue) end
                 if M.RequestGeneralApply then
-                    M.RequestGeneralApply("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = true, frames = true })
+                    M.RequestGeneralApply("MSUF2_DASH_MSUF_SCALE", { preview = true, applyAll = false, notify = false })
                 end
             end,
         })

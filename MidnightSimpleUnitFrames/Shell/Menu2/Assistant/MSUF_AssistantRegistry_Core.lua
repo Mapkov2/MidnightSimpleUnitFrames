@@ -184,6 +184,7 @@ local PAGE_DISPLAY_LABELS = {
     auras3 = "Auras",
     auras3_buffs = "Aura Buffs",
     auras3_debuffs = "Aura Debuffs",
+    auras3_custom = "Custom Auras",
     auras3_filters = "Aura Filters",
     auras3_styling = "Aura Style",
 

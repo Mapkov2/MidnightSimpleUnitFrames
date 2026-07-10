@@ -198,15 +198,15 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
         },
         {
-            { "Why are my buffs or debuffs missing?", "Open Auras > Filters. Check the active scope, Only Mine, boss/raid filters, dispellable filters, and blacklist entries.", "auras3_filters", "Opens: Auras > Filters", "Aura Filters Blacklist Only my buffs Only my debuffs Show Debuffs Include boss buffs dispellable", SearchKeywordList(SEARCH_UNIT_AURA_DISPEL_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS, "buffs missing|debuffs missing|auras missing|buff not showing|debuff not showing|hide buffs|show debuffs|only my buffs|only my debuffs|boss aura missing|dispellable debuff missing|aura filter"), 180, },
+            { "Why are my buffs or debuffs missing?", "Open the affected UnitFrame > Auras and choose Buffs or Debuffs. Check its frame-specific Blizzard filters, blacklist, enabled state, and icon cap. For Party/Raid use Group Frames > Auras.", "uf_target", "Opens: Target > Auras", "Aura Filters Blacklist Only my buffs Only my debuffs Show Debuffs Include boss buffs dispellable", SearchKeywordList(SEARCH_UNIT_AURA_DISPEL_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS, "buffs missing|debuffs missing|auras missing|buff not showing|debuff not showing|hide buffs|show debuffs|only my buffs|only my debuffs|boss aura missing|dispellable debuff missing|aura filter"), 180, },
         },
         {
             {
                 l = "Why do I have too many buffs or debuffs?",
-                a = "Open the relevant Unit Frame or Group Frames > Auras page to adjust icon size, rows, caps and" ..
-                    " spacing. Use Auras > Filters for filtering.",
-                p = "gf_auras",
-                t = "Opens: Group Frames > Auras",
+                a = "Open the affected UnitFrame > Auras, choose Buffs or Debuffs, then adjust filters, icon size," ..
+                    " rows, caps, and spacing. Party/Raid settings are in Group Frames > Auras.",
+                p = "uf_target",
+                t = "Opens: Target > Auras",
                 x = "Auras Max Buffs Max Debuffs Icon size rows spacing filters style",
                 k = SearchKeywordList(
                     "too many buffs|too many debuffs|too many auras|aura spam|buff spam|debuff spam|max buffs",
@@ -216,8 +216,8 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "How do I turn off player buffs only?",
-                a = "Open Player > Auras, then turn off Buffs for the player frame. Use Auras > Style for text and" ..
-                    " cooldown styling.",
+                a = "Open Player > Auras, then turn off Buffs for the player frame. Scope-aware text and cooldown" ..
+                    " styling remains under Appearance > Auras.",
                 p = "uf_player",
                 t = "Opens: Player > Auras",
                 x = "Player Auras Buffs Debuffs hide player buffs only",
@@ -240,10 +240,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Where do I change aura cooldown text?",
-                a = "Open Auras > Style for cooldown text size, stack text, swipe, and group-frame aura text" ..
-                    " styling. Use Colors > Auras for timer colors, stack color, highlights, and pandemic color.",
+                a = "Open Appearance > Auras for scope-aware cooldown text, stack text, swipe, and duration-bar" ..
+                    " styling. Timer colors remain under Colors > Auras.",
                 p = "auras3_styling",
-                t = "Opens: Auras > Style",
+                t = "Opens: Appearance > Auras",
                 x = "Style Cooldown Timer Text cooldown text size stack count Colors Auras timer colors safe warning urgent pandemic",
                 k = SearchKeywordList(
                     "aura cooldown text|aura cooldown text too small|aura timer too small|buff timer|debuff timer",
@@ -306,10 +306,10 @@ if type(Data.RegisterFAQProvider) == "function" then
             },
             {
                 l = "Why is MSUF lagging or costing FPS?",
-                a = "Reduce expensive aura layouts first: lower visible aura counts, timer text, and filter work in" ..
-                    " Auras > Style and Auras > Filters.",
-                p = "auras3_styling",
-                t = "Opens: Auras > Style",
+                a = "Open the affected UnitFrame > Auras or Group Frames > Auras and reduce visible counts," ..
+                    " timer text, or unnecessary native filter rules.",
+                p = "uf_target",
+                t = "Opens: Target > Auras",
                 x = "Auras performance lag fps cooldown timers filters aura count style",
                 k = SearchKeywordList(
                     "lag|fps|performance|stutter|slow|too much cpu|heavy|optimize|aura performance",
