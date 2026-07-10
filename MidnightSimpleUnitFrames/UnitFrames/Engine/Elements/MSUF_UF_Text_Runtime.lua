@@ -1075,18 +1075,6 @@ local function InlineEnabled(frame, spec)
   return frame and frame.unit == "target" and spec and spec.showName ~= false and inline and inline.enabled == true
 end
 
-local function StrictGroupSpec(frame, spec)
-  return frame
-    and frame._msufIsGroupFrame == true
-    and spec
-    and spec.scope == "group"
-end
-
-local function ElementActive(frame, name)
-  local active = frame and frame._msufActiveElements
-  return active and active[name] == true
-end
-
 local function GFHotHealthPercentNeedsUpdate(rt, pct)
   local pctSecret = issecretvalue(pct) == true
   if pctSecret then

@@ -503,11 +503,6 @@ local function AddRowButton(row, parent, text, width, height, fontSize, onClick,
     return btn
 end
 
-local function AddRowSep(row, parent, height)
-    local sep = MakeSep(parent, height); sep._isSep = true; row[#row + 1] = sep
-    return sep
-end
-
 local function AddAdjustWidget(row, parent, width, height, withStateBg, onMouseWheel, onMouseUp, tip)
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(width, height); f:EnableMouse(true); f:EnableMouseWheel(true)

@@ -16,14 +16,8 @@ end
 --- - Reduce global table lookups in high-frequency event/render paths.
 --- - Secret-safe: localizing function references only (no value comparisons).
 local type, tostring, tonumber, select = type, tostring, tonumber, select
-local pairs, ipairs, next = pairs, ipairs, next
-local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub, string_gsub, string_lower = string.format, string.match, string.sub, string.gsub, string.lower
-local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
-local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
-local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
-local UnitPowerType = UnitPowerType
-local UnitHealthPercent, UnitPowerPercent = UnitHealthPercent, UnitPowerPercent
+local pairs = pairs
+local string_sub, string_gsub, string_lower = string.sub, string.gsub, string.lower
 local InCombatLockdown = InCombatLockdown
 local CreateFrame, GetTime = CreateFrame, GetTime
 

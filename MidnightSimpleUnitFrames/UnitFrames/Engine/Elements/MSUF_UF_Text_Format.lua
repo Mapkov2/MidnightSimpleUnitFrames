@@ -10,11 +10,6 @@ if not Text then return end
 
 local Apply = MSUF.Apply or {}
 local luaType = type
-local CreateFrame = Text.CreateFrame
-local UnitHealth = Text.UnitHealth
-local UnitHealthMax = Text.UnitHealthMax
-local UnitPower = Text.UnitPower
-local UnitPowerMax = Text.UnitPowerMax
 local UnitPowerType = Text.UnitPowerType
 local UnitHealthPercent = Text.UnitHealthPercent
 local UnitPowerPercent = Text.UnitPowerPercent
@@ -27,19 +22,10 @@ local type = Text.type or luaType
 local format = Text.format
 local floor = Text.floor
 local max = Text.max
-local GetTime = Text.GetTime
-local C_Timer = _G.C_Timer
-local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local SCALE_100 = Text.SCALE_100
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
-local wipe = _G.wipe or function(t)
-  for k in pairs(t) do
-    t[k] = nil
-  end
-  return t
-end
 local ApplyText = Apply.Text or function(fs, text)
   if not fs then return end
   if issecretvalue(text) == true then
@@ -56,8 +42,6 @@ local ApplyText = Apply.Text or function(fs, text)
   fs._aText = text
   fs._aTextPlain = true
 end
-local pairs = pairs
-
 local function IsFiniteNumber(value)
   return type(value) == "number" and value == value and (value - value) == 0
 end
@@ -188,17 +172,6 @@ end
 local function NormalizePercentDecimals(decimals)
   decimals = tonumber(decimals) or 0
   return decimals >= 1 and 1 or 0
-end
-
-local function MissingHealthFromValues(cur, maxValue)
-  if nativeSecrets and (issecretvalue(cur) == true or issecretvalue(maxValue) == true) then
-    return nil
-  end
-  if not IsFiniteNumber(cur) or not IsFiniteNumber(maxValue) then
-    return nil
-  end
-  local missing = maxValue - cur
-  return missing > 0 and missing or 0
 end
 
 local MODE_NEEDS = {

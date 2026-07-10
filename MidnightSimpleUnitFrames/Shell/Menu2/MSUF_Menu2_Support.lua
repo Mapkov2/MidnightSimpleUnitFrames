@@ -29,15 +29,6 @@ end
 local function Print(msg)
     if type(print) == "function" then print("|cff00ff00MSUF:|r " .. tostring(msg or "")) end
 end
-local function GetCoreFrame(unitKey)
-    local uf = MSUF and MSUF.UF
-    if uf and type(uf.GetFrame) == "function" then
-        local frame = uf.GetFrame(unitKey)
-        if frame then return frame end
-    end
-    local frames = uf and uf.frames
-    return unitKey and frames and frames[unitKey] or nil
-end
 local function ForEachCoreFrame(fn)
     local uf = MSUF and MSUF.UF
     if uf and type(uf.ForEachFrame) == "function" then
