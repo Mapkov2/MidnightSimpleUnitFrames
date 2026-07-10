@@ -831,7 +831,12 @@ function A._ParseTextSlotDropdownValueShortcut(text)
             textArea = tab,
             textSlot = slot,
         }
-        A._AddTextSlotVisibilityChange(changes, frameType, unitOrScope, tab)
+        -- Choosing slot content must not silently enable a hidden text area.
+        -- Add the visibility write only when the user explicitly asks to
+        -- show/enable it; this matches the multi-slot parser below.
+        if value ~= "NONE" and A._HasTextSlotShowIntent(text) then
+            A._AddTextSlotVisibilityChange(changes, frameType, unitOrScope, tab)
+        end
     end
 
     for i = 1, #groups do
@@ -883,13 +888,13 @@ function A._ParseHPTextOptionShortcut(text)
         unitAttr = "hpTextReverse"
         groupAttr = "healthTextReverse"
         label = "Reverse HP Text"
-        value = DetectBoolean and DetectBoolean(text) or nil
+        if DetectBoolean then value = DetectBoolean(text) end
         if value == nil then value = true end
     elseif ContainsAny(text, GeometryTextPhrases[83]) then
         unitAttr = "healthTextDecimals"
         groupAttr = "healthTextDecimals"
         label = "Health Text Decimals"
-        value = DetectBoolean and DetectBoolean(text) or nil
+        if DetectBoolean then value = DetectBoolean(text) end
         if value == nil then value = true end
     else
         return nil

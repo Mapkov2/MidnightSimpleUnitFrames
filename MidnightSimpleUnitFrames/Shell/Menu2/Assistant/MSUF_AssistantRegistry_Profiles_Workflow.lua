@@ -47,6 +47,16 @@ local function ResolveProfileName(name)
     return nil, "missing"
 end
 
+-- Existing profile names are stored with their user-facing casing.  Keep that
+-- store as the canonical display source instead of reconstructing labels from
+-- the parser's case-insensitive text.
+local function DisplayProfileName(name)
+    name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then return "" end
+    local resolved = ResolveProfileName(name)
+    return type(resolved) == "string" and resolved ~= "" and resolved or name
+end
+
 local function ActiveProfileName()
     local name = tostring(_G.MSUF_ActiveProfile or "Default")
     if name == "" then return "Default" end
@@ -148,10 +158,12 @@ end
 
 Profile.ProfileExists = ProfileExists
 Profile.ResolveProfileName = ResolveProfileName
+Profile.DisplayProfileName = DisplayProfileName
 Profile.ActiveProfileName = ActiveProfileName
 Profile.RequireUUFBestEffortAccepted = RequireUUFBestEffortAccepted
 
 A.ProfileWorkflow = Profile
 A.ResolveProfileName = ResolveProfileName
+A.DisplayProfileName = DisplayProfileName
 A.ProfileExists = ProfileExists
 A.ActiveProfileName = ActiveProfileName

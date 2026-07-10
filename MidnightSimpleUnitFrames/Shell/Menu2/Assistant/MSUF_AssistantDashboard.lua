@@ -228,6 +228,8 @@ local TYPEWRITER_INTERVAL = 0.025
 local TYPEWRITER_MIN_CHARS_PER_TICK = 2
 local TYPEWRITER_MAX_SECONDS = 3.0
 local TYPEWRITER_RECENT_SECONDS = 12
+local TYPEWRITER_TIMER_KEY = "assistant.dashboard.typewriter"
+local BUSY_TIMER_KEY = "assistant.dashboard.busy"
 
 local function InCombat()
     if A.IsCombatLocked and A.IsCombatLocked() then return true end
@@ -242,7 +244,8 @@ local function NowSeconds()
 end
 
 local function AssistantTypewriterAllowed()
-    if not (_G.C_Timer and type(_G.C_Timer.After) == "function") then return false end
+    if not (_G.C_Timer and type(_G.C_Timer.NewTimer) == "function") then return false end
+    if A._menuRuntimeActive == false or InCombat() then return false end
     if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then return false end
     return true
 end
@@ -306,6 +309,12 @@ end
 
 local function FinishAssistantTypewriter(ui, state)
     if not (ui and state) then return end
+    if state.timer and type(state.timer.Cancel) == "function" then state.timer:Cancel() end
+    if type(A.UntrackMenuRuntimeTimer) == "function" then
+        A.UntrackMenuRuntimeTimer(TYPEWRITER_TIMER_KEY, state.timer)
+    end
+    state.timer = nil
+    state.scheduled = nil
     ui._msufAssistantTyped = ui._msufAssistantTyped or {}
     ui._msufAssistantTyped[state.key] = true
     if ui._msufAssistantTypewriter == state then ui._msufAssistantTypewriter = nil end
@@ -318,9 +327,19 @@ local function ScheduleAssistantTypewriter(ui, state)
     if not (ui and state) then return end
     if state.scheduled then return end
     state.scheduled = true
-    _G.C_Timer.After(TYPEWRITER_INTERVAL, function()
+    local timer
+    timer = _G.C_Timer.NewTimer(TYPEWRITER_INTERVAL, function()
+        if type(A.UntrackMenuRuntimeTimer) == "function" then
+            A.UntrackMenuRuntimeTimer(TYPEWRITER_TIMER_KEY, timer)
+        end
+        if state.timer == timer then state.timer = nil end
         state.scheduled = nil
-        if not (A.dashboardUI == ui and ui._msufAssistantTypewriter == state) then return end
+        if InCombat() or A._menuRuntimeActive == false
+            or not (A.dashboardUI == ui and ui._msufAssistantTypewriter == state)
+            or (ui.parent and ui.parent.IsShown and not ui.parent:IsShown())
+        then
+            return
+        end
         state.visible = min(state.fullChars, (tonumber(state.visible) or 0) + state.charsPerTick)
         if state.visible >= state.fullChars then
             FinishAssistantTypewriter(ui, state)
@@ -331,6 +350,13 @@ local function ScheduleAssistantTypewriter(ui, state)
         end
         ScheduleAssistantTypewriter(ui, state)
     end)
+    state.timer = timer
+    if type(A.TrackMenuRuntimeTimer) == "function"
+        and A.TrackMenuRuntimeTimer(TYPEWRITER_TIMER_KEY, timer) == nil
+    then
+        state.timer = nil
+        state.scheduled = nil
+    end
 end
 
 local function ShouldTypeAssistantItem(ui, item, index, newestAssistantIndex)
@@ -392,13 +418,17 @@ local function ScheduleBusyPulse(ui)
     if not (ui and A.IsBusy and A.IsBusy()) then return end
     if InCombat() then return end
     if ui._msufAssistantBusyPulse then return end
+    if not (_G.C_Timer and type(_G.C_Timer.NewTimer) == "function") then return end
     ui._msufAssistantBusyPulse = true
-    local function Pulse()
-        if not (A.IsBusy and A.IsBusy()) or A.dashboardUI ~= ui then
-            ui._msufAssistantBusyPulse = nil
-            return
+    local function Pulse(timer)
+        if type(A.UntrackMenuRuntimeTimer) == "function" then
+            A.UntrackMenuRuntimeTimer(BUSY_TIMER_KEY, timer)
         end
-        if InCombat() then
+        if ui._msufAssistantBusyTimer == timer then ui._msufAssistantBusyTimer = nil end
+        if InCombat() or A._menuRuntimeActive == false
+            or not (A.IsBusy and A.IsBusy()) or A.dashboardUI ~= ui
+            or (ui.parent and ui.parent.IsShown and not ui.parent:IsShown())
+        then
             ui._msufAssistantBusyPulse = nil
             return
         end
@@ -410,9 +440,47 @@ local function ScheduleBusyPulse(ui)
         elseif type(A.RefreshUI) == "function" then
             A.RefreshUI()
         end
-        _G.C_Timer.After(0.25, Pulse)
+        local nextTimer
+        nextTimer = _G.C_Timer.NewTimer(0.25, function() Pulse(nextTimer) end)
+        ui._msufAssistantBusyTimer = nextTimer
+        if type(A.TrackMenuRuntimeTimer) == "function"
+            and A.TrackMenuRuntimeTimer(BUSY_TIMER_KEY, nextTimer) == nil
+        then
+            ui._msufAssistantBusyTimer = nil
+            ui._msufAssistantBusyPulse = nil
+        end
     end
-    _G.C_Timer.After(0.25, Pulse)
+    local timer
+    timer = _G.C_Timer.NewTimer(0.25, function() Pulse(timer) end)
+    ui._msufAssistantBusyTimer = timer
+    if type(A.TrackMenuRuntimeTimer) == "function"
+        and A.TrackMenuRuntimeTimer(BUSY_TIMER_KEY, timer) == nil
+    then
+        ui._msufAssistantBusyTimer = nil
+        ui._msufAssistantBusyPulse = nil
+    end
+end
+
+local function StopAssistantDashboardTimers(ui)
+    if not ui then return end
+    local state = ui._msufAssistantTypewriter
+    if state and state.timer and type(state.timer.Cancel) == "function" then state.timer:Cancel() end
+    if type(A.UntrackMenuRuntimeTimer) == "function" then
+        A.UntrackMenuRuntimeTimer(TYPEWRITER_TIMER_KEY, state and state.timer)
+    end
+    if state then
+        state.timer = nil
+        state.scheduled = nil
+    end
+    if ui._msufAssistantBusyTimer and type(ui._msufAssistantBusyTimer.Cancel) == "function" then
+        ui._msufAssistantBusyTimer:Cancel()
+    end
+    if type(A.UntrackMenuRuntimeTimer) == "function" then
+        A.UntrackMenuRuntimeTimer(BUSY_TIMER_KEY, ui._msufAssistantBusyTimer)
+    end
+    ui._msufAssistantBusyTimer = nil
+    ui._msufAssistantBusyPulse = nil
+    ui._msufAssistantTypewriter = nil
 end
 
 local function RenderHistory(ui)
@@ -830,7 +898,13 @@ function A.BuildDashboardCard(parent, cardW, cardH)
         width = cardW - 44,
         height = conversationH,
     }
+    StopAssistantDashboardTimers(A.dashboardUI)
     A.dashboardUI = ui
+    if parent.HookScript then
+        parent:HookScript("OnHide", function()
+            StopAssistantDashboardTimers(ui)
+        end)
+    end
 
     local function SubmitInput()
         local query = Trim(input:GetText() or "")

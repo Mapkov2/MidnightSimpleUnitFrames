@@ -42,7 +42,6 @@ local PERF_TRACE_LIMIT = 80
 local JOB_BUDGET_MS = 2
 local JOB_MAX_STEPS = 4
 A.JOB_YIELD = A.JOB_YIELD or {}
-if A.allowPerformanceWarmup == nil then A.allowPerformanceWarmup = false end
 if A.jobBudgetMs == nil then A.jobBudgetMs = JOB_BUDGET_MS end
 if A.jobMaxStepsPerFrame == nil then A.jobMaxStepsPerFrame = JOB_MAX_STEPS end
 if A.ContextEngineEnabled == nil then A.ContextEngineEnabled = true end
@@ -68,11 +67,21 @@ local function InCombat()
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
 end
 
+local function MenuRuntimeActive()
+    local frame = M and M.frame
+    if frame and type(frame.IsShown) == "function" then
+        return frame:IsShown() == true and A._menuRuntimeActive ~= false
+    end
+    -- Headless audit harnesses have no Menu2 frame. In the game the Assistant
+    -- runtime is loaded only from an explicit menu action, so the flag is set
+    -- before any asynchronous work can be scheduled.
+    return A._menuRuntimeActive ~= false
+end
+
 function A.IsCombatLocked()
     return InCombat()
 end
 
-local afterCombatFrame
 local afterCombatPending
 local afterCombatOrder
 
@@ -81,7 +90,6 @@ local function ScheduleAfterCombat(key, fn)
         if type(fn) == "function" then fn() end
         return true
     end
-    if type(_G.CreateFrame) ~= "function" then return false end
     afterCombatPending = afterCombatPending or {}
     afterCombatOrder = afterCombatOrder or {}
     key = tostring(key or "MSUF_ASSISTANT_AFTER_COMBAT")
@@ -90,37 +98,27 @@ local function ScheduleAfterCombat(key, fn)
     end
     afterCombatPending[key] = fn or true
 
-    if not afterCombatFrame then
-        afterCombatFrame = _G.CreateFrame("Frame")
-        if afterCombatFrame and type(afterCombatFrame.SetScript) == "function" then
-            afterCombatFrame:SetScript("OnEvent", function(self, event)
-                if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
-                if self and type(self.UnregisterEvent) == "function" then
-                    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-                end
-                local pending = afterCombatPending or {}
-                local order = afterCombatOrder or {}
-                afterCombatPending = {}
-                afterCombatOrder = {}
-                for i = 1, #order do
-                    local callback = pending[order[i]]
-                    if type(callback) == "function" then callback() end
-                end
-                if afterCombatPending and afterCombatOrder and #afterCombatOrder > 0
-                    and self and type(self.RegisterEvent) == "function" then
-                    self:RegisterEvent("PLAYER_REGEN_ENABLED")
-                end
-            end)
-        end
-    end
-    if afterCombatFrame and type(afterCombatFrame.RegisterEvent) == "function" then
-        afterCombatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    end
+    -- Zero-idle contract: never subscribe the Assistant to combat events.
+    -- Pending work resumes only when the MSUF menu is explicitly opened again.
     return true
+end
+
+local function ResumeAfterCombatCallbacks()
+    if InCombat() or not MenuRuntimeActive() then return false end
+    local pending = afterCombatPending or {}
+    local order = afterCombatOrder or {}
+    afterCombatPending = {}
+    afterCombatOrder = {}
+    for i = 1, #order do
+        local callback = pending[order[i]]
+        if type(callback) == "function" then callback() end
+    end
+    return #order > 0
 end
 
 local function ScheduleNextFrame(key, fn)
     if type(fn) ~= "function" then return false end
+    if InCombat() or not MenuRuntimeActive() then return false end
     AP.nextFramePending = AP.nextFramePending or {}
     AP.nextFrameOrder = AP.nextFrameOrder or {}
     local nextFramePending = AP.nextFramePending
@@ -133,7 +131,9 @@ local function ScheduleNextFrame(key, fn)
     if AP.nextFrameQueued then return true end
     AP.nextFrameQueued = true
     local function Run()
+        AP.nextFrameTimer = nil
         AP.nextFrameQueued = false
+        if InCombat() or not MenuRuntimeActive() then return end
         local pending = AP.nextFramePending or {}
         local order = AP.nextFrameOrder or {}
         AP.nextFramePending = {}
@@ -143,8 +143,8 @@ local function ScheduleNextFrame(key, fn)
             if type(cb) == "function" then cb() end
         end
     end
-    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        _G.C_Timer.After(0, Run)
+    if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
+        AP.nextFrameTimer = _G.C_Timer.NewTimer(0, Run)
         return true
     end
     Run()
@@ -204,9 +204,14 @@ function A.GetPerfTrace(limit)
     return out
 end
 
+function A.ClearPerfTrace()
+    A._perfTrace = {}
+    A.lastAssistantPerf = nil
+    A.lastSlowAssistantPerf = nil
+end
+
 local function FriendlyJobLabel(label)
     label = tostring(label or "")
-    if label == "assistant.warmup" then return "preparing answers" end
     if label == "assistant.submit" then return "answering a request" end
     return "Assistant task"
 end
@@ -224,38 +229,8 @@ function A.GetJobSummary()
     return out
 end
 
-local function WarmupReasonLabel(reason)
-    reason = tostring(reason or "")
-    if reason == "menu-hide" then return "waiting until the menu is open" end
-    if reason == "menu-open" then return "waiting until the menu is idle" end
-    if reason == "menu-activity" or reason == "select-page" then return "waiting for menu activity to settle" end
-    if reason == "combat" then return "waiting until combat ends" end
-    if reason:find("^combat:", 1, false) then return "waiting until combat ends" end
-    if reason:find("^busy:", 1, false) then return "waiting until the current request finishes" end
-    if reason:find("^jobs:", 1, false) then return "finishing current Assistant work" end
-    if reason ~= "" then return "warming up" end
-    return "waiting to start"
-end
-
 function A.PerformanceWarmupStatusText()
-    if A._performanceWarmupCompleted == true then
-        return "ready"
-    end
-    if A._performanceWarmupStarted == true then
-        local jobs = A._assistantJobs
-        if type(jobs) == "table" then
-            for i = 1, #jobs do
-                if jobs[i] and jobs[i].label == "assistant.warmup" then
-                    return "getting ready"
-                end
-            end
-        end
-        return "getting ready"
-    end
-    if A._performanceWarmupSuppressed then
-        return WarmupReasonLabel(A._performanceWarmupSuppressed)
-    end
-    return "waiting to start"
+    return "on demand (no background warmup)"
 end
 
 local NO_MATCH_RECENT_LIMIT = 80
@@ -1066,43 +1041,20 @@ function A.NoMatchTelemetryText(limit)
 end
 
 local ScheduleJobPump
-local combatResumeFrame
-
---- Assistant jobs are sliced across frames and paused in combat. The assistant
---- can build large indexes or apply multiple changes, but protected UI work must
---- resume only after PLAYER_REGEN_ENABLED.
-local function EnsureCombatResumeFrame()
-    if combatResumeFrame then return combatResumeFrame end
-    if type(_G.CreateFrame) ~= "function" then return nil end
-    combatResumeFrame = _G.CreateFrame("Frame")
-    if combatResumeFrame and type(combatResumeFrame.SetScript) == "function" then
-        combatResumeFrame:SetScript("OnEvent", function(_, event)
-            if event == "PLAYER_REGEN_ENABLED" and A.ResumeCombatDeferredJobs then
-                A.ResumeCombatDeferredJobs("PLAYER_REGEN_ENABLED")
-            end
-        end)
-    end
-    return combatResumeFrame
-end
 
 local function DeferJobPumpForCombat(reason)
     local jobs = A._assistantJobs
     if type(jobs) ~= "table" or #jobs == 0 then return false end
     A._assistantJobsCombatDeferred = true
     A._assistantJobsCombatReason = tostring(reason or "combat")
-    local frame = EnsureCombatResumeFrame()
-    if frame and type(frame.RegisterEvent) == "function" then
-        frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    end
+    -- Do not register PLAYER_REGEN_ENABLED. The menu closes for combat and
+    -- explicitly resumes pending work on its next out-of-combat OnShow.
     return true
 end
 
 function A.ResumeCombatDeferredJobs(reason)
-    if InCombat() then
+    if InCombat() or not MenuRuntimeActive() then
         return DeferJobPumpForCombat(reason or "combat")
-    end
-    if combatResumeFrame and type(combatResumeFrame.UnregisterEvent) == "function" then
-        combatResumeFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
     end
     A._assistantJobsCombatDeferred = nil
     A._assistantJobsCombatReason = nil
@@ -1119,9 +1071,6 @@ local function ClearCombatDeferredJobsIfIdle()
     if type(jobs) == "table" and #jobs > 0 then return end
     A._assistantJobsCombatDeferred = nil
     A._assistantJobsCombatReason = nil
-    if combatResumeFrame and type(combatResumeFrame.UnregisterEvent) == "function" then
-        combatResumeFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
-    end
 end
 
 local function JobMatches(job, match)
@@ -1173,8 +1122,8 @@ function A.CancelJobs(match, reason)
 end
 
 function ScheduleJobPump()
-    if InCombat() then
-        DeferJobPumpForCombat("schedule")
+    if InCombat() or not MenuRuntimeActive() then
+        DeferJobPumpForCombat(InCombat() and "combat:schedule" or "menu-hidden:schedule")
         return
     end
     if A._assistantJobPumpScheduled then return end
@@ -1188,8 +1137,8 @@ end
 function A._RunJobPump()
     local jobs = A._assistantJobs
     if type(jobs) ~= "table" or #jobs == 0 then return end
-    if InCombat() then
-        DeferJobPumpForCombat("run")
+    if InCombat() or not MenuRuntimeActive() then
+        DeferJobPumpForCombat(InCombat() and "combat:run" or "menu-hidden:run")
         return false
     end
 
@@ -1201,8 +1150,8 @@ function A._RunJobPump()
 
     local stepsRun = 0
     while #jobs > 0 and stepsRun < maxSteps do
-        if InCombat() then
-            DeferJobPumpForCombat("run")
+        if InCombat() or not MenuRuntimeActive() then
+            DeferJobPumpForCombat(InCombat() and "combat:run" or "menu-hidden:run")
             return false
         end
         local job = jobs[1]
@@ -1259,8 +1208,8 @@ function A._RunJobPump()
 
     A.RecordPerfSample("assistant.job.slice", sliceStart, tostring(stepsRun) .. " step(s)")
     if #jobs > 0 then
-        if InCombat() then
-            DeferJobPumpForCombat("slice")
+        if InCombat() or not MenuRuntimeActive() then
+            DeferJobPumpForCombat(InCombat() and "combat:slice" or "menu-hidden:slice")
         else
             ScheduleJobPump()
         end
@@ -1348,15 +1297,88 @@ function A.StartJob(label, steps, callback, opts)
         end
         table.insert(jobs, insertAt, job)
     end
-    if opts.runInCombat == true or not InCombat() then
+    if not InCombat() and MenuRuntimeActive() then
         ScheduleJobPump()
     else
-        DeferJobPumpForCombat("start:" .. job.label)
+        DeferJobPumpForCombat((InCombat() and "combat:start:" or "menu-hidden:start:") .. job.label)
     end
     return job
 end
 
+function A.TrackMenuRuntimeTimer(key, timer)
+    if not timer then return nil end
+    if InCombat() or not MenuRuntimeActive() then
+        if type(timer.Cancel) == "function" then timer:Cancel() end
+        return nil
+    end
+    key = tostring(key or timer)
+    A._menuRuntimeTimers = A._menuRuntimeTimers or {}
+    local previous = A._menuRuntimeTimers[key]
+    if previous and previous ~= timer and type(previous.Cancel) == "function" then previous:Cancel() end
+    A._menuRuntimeTimers[key] = timer
+    return timer
+end
+
+function A.UntrackMenuRuntimeTimer(key, timer)
+    local timers = A._menuRuntimeTimers
+    key = tostring(key or timer)
+    if type(timers) == "table" and (timer == nil or timers[key] == timer) then timers[key] = nil end
+end
+
+local function CancelMenuRuntimeTimers()
+    local timers = A._menuRuntimeTimers
+    if type(timers) == "table" then
+        for _, timer in pairs(timers) do
+            if timer and type(timer.Cancel) == "function" then timer:Cancel() end
+        end
+    end
+    A._menuRuntimeTimers = {}
+end
+
+function A.SetMenuRuntimeActive(active, reason)
+    active = active == true and not InCombat()
+    A._menuRuntimeActive = active and true or false
+    A._menuRuntimeReason = tostring(reason or (active and "menu-show" or "menu-hide"))
+
+    if not active then
+        CancelMenuRuntimeTimers()
+        if AP.nextFrameTimer and type(AP.nextFrameTimer.Cancel) == "function" then
+            AP.nextFrameTimer:Cancel()
+        end
+        AP.nextFrameTimer = nil
+        AP.nextFrameQueued = nil
+        AP.nextFramePending = {}
+        AP.nextFrameOrder = {}
+        A._assistantJobPumpScheduled = nil
+        A._refreshPending = nil
+        return false
+    end
+
+    ResumeAfterCombatCallbacks()
+    A.ResumeCombatDeferredJobs(A._menuRuntimeReason)
+    if type(A.FlushQueue) == "function" and type(A.HasQueuedPlans) == "function" and A.HasQueuedPlans() then
+        ScheduleNextFrame("MSUF_ASSISTANT_QUEUE_MENU_RESUME", function()
+            if not InCombat() and MenuRuntimeActive() then A.FlushQueue() end
+        end)
+    end
+    return true
+end
+
 function A.RequestRefreshUI(reason)
+    -- A staged full reset deliberately leaves all SavedVariables globals nil
+    -- until reload. Rendering Assistant history would call EnsureDB and undo
+    -- that contract by recreating a profile immediately.
+    if A._preserveNilSavedVariablesUntilReload == true
+        and rawget(_G, "MSUF_DB") == nil
+        and rawget(_G, "MSUF_GlobalDB") == nil
+        and rawget(_G, "MSUF_ActiveProfile") == nil
+    then
+        return false
+    end
+    if not MenuRuntimeActive() then
+        A._refreshPending = nil
+        return false
+    end
     A._refreshReason = tostring(reason or A._refreshReason or "assistant")
     if InCombat() then
         A._refreshAfterCombat = true
@@ -5350,7 +5372,7 @@ ExecuteChoice = function(choice)
     return { text = "That option list changed. Start that change again and I'll rebuild the list.", result = "failed" }
 end
 
-local function RunApplies(changedSettings)
+function AP.RunApplies(changedSettings)
     local totalStartedMs = PerfNowMs()
     local applied = {}
     for i = 1, #changedSettings do
@@ -5358,17 +5380,82 @@ local function RunApplies(changedSettings)
         if setting and type(setting.apply) == "function" and not applied[setting.key] then
             applied[setting.key] = true
             local settingStartedMs = PerfNowMs()
-            setting.apply()
+            local ok, err = pcall(setting.apply)
             A.RecordSlowPerfSample("assistant.apply.setting", settingStartedMs, setting.key or setting.label or i, 4)
+            if not ok then
+                A.RecordSlowPerfSample("assistant.apply.total", totalStartedMs, tostring(#changedSettings), 8)
+                return false, "apply", setting.key or setting.label or i, err
+            end
         end
     end
     local apply = (MSUF and MSUF.MSUF2 and MSUF.MSUF2.ApplyService) or _G.MSUF_Menu2_ApplyService
     if apply and type(apply.Flush) == "function" then
         local flushStartedMs = PerfNowMs()
-        apply.Flush()
+        local ok, err = pcall(apply.Flush)
         A.RecordSlowPerfSample("assistant.apply.flush", flushStartedMs, tostring(#changedSettings), 4)
+        if not ok then
+            A.RecordSlowPerfSample("assistant.apply.total", totalStartedMs, tostring(#changedSettings), 8)
+            return false, "flush", "ApplyService.Flush", err
+        end
     end
     A.RecordSlowPerfSample("assistant.apply.total", totalStartedMs, tostring(#changedSettings), 8)
+    return true
+end
+
+function AP.CopyTransactionValue(value)
+    if type(value) ~= "table" then return value end
+    if type(A.DeepCopy) == "function" then return A.DeepCopy(value) end
+    local out = {}
+    for key, child in pairs(value) do out[key] = AP.CopyTransactionValue(child) end
+    return out
+end
+
+function AP.TransactionFailure(plan, phase, target, err, rollbackErrors)
+    rollbackErrors = rollbackErrors or {}
+    A.lastAssistantTransactionError = {
+        phase = tostring(phase or "unknown"),
+        target = tostring(target or ""),
+        error = tostring(err or "unknown error"),
+        rollbackErrors = rollbackErrors,
+        time = type(_G.GetTime) == "function" and _G.GetTime() or nil,
+    }
+    local text
+    local phaseText = tostring(phase or "")
+    if (phaseText:find("preflight", 1, true) or phaseText == "read") and #rollbackErrors == 0 then
+        text = "I could not safely validate that change, so no MSUF value was changed."
+    elseif #rollbackErrors == 0 then
+        text = "I could not safely apply that change, so I restored the previous MSUF values."
+    else
+        text = "I could not safely finish that change. I restored every value I could, but the runtime refresh also reported an error; use /reload before making another change."
+    end
+    return {
+        text = text,
+        result = "failed",
+        summary = plan and plan.summary,
+        transactionPhase = tostring(phase or "unknown"),
+        transactionTarget = tostring(target or ""),
+    }
+end
+
+function AP.RollbackSettingOperations(operations, changedSettings)
+    local errors = {}
+    for i = #operations, 1, -1 do
+        local operation = operations[i]
+        local setting = operation and operation.setting
+        if setting and type(setting.set) == "function" then
+            local ok, err = pcall(setting.set, AP.CopyTransactionValue(operation.oldValue))
+            if not ok then
+                errors[#errors + 1] = "set:" .. tostring(setting.key or setting.label or i) .. ":" .. tostring(err)
+            end
+        end
+    end
+    if #operations > 0 then
+        local ok, phase, target, err = AP.RunApplies(changedSettings or {})
+        if not ok then
+            errors[#errors + 1] = tostring(phase) .. ":" .. tostring(target) .. ":" .. tostring(err)
+        end
+    end
+    return errors
 end
 
 local function NormalizeTextSlot(slot)
@@ -5425,7 +5512,7 @@ local function RememberTextChangeContext(setting, item, value)
     }
 end
 
-local function BuildSerializable(changes)
+function AP.BuildSerializable(changes)
     local out = {}
     for i = 1, #changes do
         local setting = changes[i].setting
@@ -5446,14 +5533,18 @@ local function BuildSerializable(changes)
     return out
 end
 
-local function BuildUnchangedSerializable(changes)
+function AP.BuildUnchangedSerializable(changes)
     local out = {}
     local lastSetting, lastUnit, lastFrameType, lastCategory, lastValue
     for i = 1, #(changes or {}) do
         local item = changes[i]
         local setting = item and item.setting
         if setting then
-            local currentValue = type(setting.get) == "function" and setting.get() or nil
+            local currentValue
+            if type(setting.get) == "function" then
+                local ok, value = pcall(setting.get)
+                if ok then currentValue = value end
+            end
             local targetValue = item.value
             if targetValue == nil then targetValue = currentValue end
             out[#out + 1] = {
@@ -5480,9 +5571,9 @@ local function BuildUnchangedSerializable(changes)
     return out, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue
 end
 
-local function RememberUnchangedChangeContext(plan, changes)
+function AP.RememberUnchangedChangeContext(plan, changes)
     if not (A and type(A.RememberAppliedBundle) == "function") then return end
-    local serializable, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue = BuildUnchangedSerializable(changes)
+    local serializable, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue = AP.BuildUnchangedSerializable(changes)
     if #serializable == 0 then return end
     A.RememberAppliedBundle({
         label = AssistantPlanLabel(plan, "Assistant change"),
@@ -5527,19 +5618,19 @@ end
 local UNDO_FOLLOWUP_HINT = "Next: ask for 'undo' to revert, or describe another follow-up change."
 local LARGE_CHANGE_RELOAD_HINT = "Large visual changes can take a moment to settle; /reload is recommended after checking the result."
 
-local function AppendUndoFollowupHint(text)
+function AP.AppendUndoFollowupHint(text)
     text = tostring(text or "")
     if text:find(UNDO_FOLLOWUP_HINT, 1, true) then return text end
     return text .. "\n" .. UNDO_FOLLOWUP_HINT
 end
 
-local function AppendLargeChangeReloadHint(text)
+function AP.AppendLargeChangeReloadHint(text)
     text = tostring(text or "")
     if text:find(LARGE_CHANGE_RELOAD_HINT, 1, true) then return text end
     return text .. "\n" .. LARGE_CHANGE_RELOAD_HINT
 end
 
-local function ChangedResponse(changedSettings, undoChanges)
+function AP.ChangedResponse(changedSettings, undoChanges)
     local count = #undoChanges
     if count == 1 then
         return "Done. I changed " .. DescribeChange(changedSettings[1], undoChanges[1]) .. "."
@@ -5556,24 +5647,26 @@ local function ChangedResponse(changedSettings, undoChanges)
     return table.concat(lines, "\n")
 end
 
-local function AlreadySetResponse(changes)
+function AP.AlreadySetResponse(changes)
     if type(changes) == "table" and #changes == 1 then
         local setting = changes[1].setting
         if setting and type(setting.get) == "function" then
-            return "Already set. " .. SettingLabel(setting) .. " is already " .. SettingValueLabel(setting, setting.get()) .. "."
+            local ok, value = pcall(setting.get)
+            if ok then return "Already set. " .. SettingLabel(setting) .. " is already " .. SettingValueLabel(setting, value) .. "." end
         end
     end
     return "Already set. MSUF already uses that value."
 end
 
-local function RefreshedAlreadySetResponse(setting)
+function AP.RefreshedAlreadySetResponse(setting)
     if setting and type(setting.get) == "function" then
-        return "Already set. " .. SettingLabel(setting) .. " is already " .. SettingValueLabel(setting, setting.get()) .. ". I refreshed it so the visible UI uses the current value."
+        local ok, value = pcall(setting.get)
+        if ok then return "Already set. " .. SettingLabel(setting) .. " is already " .. SettingValueLabel(setting, value) .. ". I refreshed it so the visible UI uses the current value." end
     end
     return "Already set. I refreshed the related MSUF option so the visible UI uses the current value."
 end
 
-local function BuildChangeBundle(plan, changes, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+function AP.BuildChangeBundle(plan, changes, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
     return {
         label = AssistantPlanLabel(plan, "Assistant change"),
         action = "change",
@@ -5583,25 +5676,8 @@ local function BuildChangeBundle(plan, changes, undoChanges, lastSetting, lastUn
         lastFrameType = lastFrameType,
         lastCategory = lastCategory,
         lastValue = lastValue,
-        serializable = BuildSerializable(changes),
+        serializable = AP.BuildSerializable(changes),
     }
-end
-
-local function PushAndRememberChangeBundle(plan, changes, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
-    local bundle = BuildChangeBundle(plan, changes, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
-    bundle.undoAvailable = A.PushUndo(bundle) == true
-    A.RememberAppliedBundle(bundle)
-    return bundle
-end
-
-local function RefreshChangeBundle(bundle, changes, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
-    if type(bundle) ~= "table" then return end
-    bundle.lastSetting = lastSetting
-    bundle.lastUnit = lastUnit
-    bundle.lastFrameType = lastFrameType
-    bundle.lastCategory = lastCategory
-    bundle.lastValue = lastValue
-    bundle.serializable = BuildSerializable(changes)
 end
 
 function AP.AddContextAxisCandidate(out, seen, attr)
@@ -5752,104 +5828,209 @@ end
 local function ExecuteChanges(plan)
     local changes = plan.changes or {}
     local undoChanges = {}
+    local undoIndexByKey = {}
     local executedChanges = {}
     local changedSettings = {}
+    local responseSettings = {}
     local unchangedApplySettings = {}
     local lastSetting, lastUnit, lastFrameType, lastCategory, lastValue
-    local undoBundle
     local requiresReload
 
+    local function ResolveNewValue(setting, item, oldValue)
+        local newValue = item.value
+        if item.relativeDelta ~= nil then
+            newValue = (tonumber(oldValue) or 0) + (tonumber(item.relativeDelta) or 0)
+        end
+        if setting.type == "number" and A.ClampNumber then
+            newValue = A.ClampNumber(newValue, setting.min, setting.max, setting.step)
+        elseif setting.type == "boolean" then
+            newValue = newValue and true or false
+        end
+        return newValue
+    end
+
+    -- Resolve every target and read every starting value before the first write.
+    -- This keeps malformed multi-setting plans from partially mutating the DB.
+    local prepared = {}
+    local virtualValues = {}
+    local virtualKnown = {}
     for i = 1, #changes do
         local item = changes[i]
-        local setting = item.setting
-        if setting and type(setting.get) == "function" and type(setting.set) == "function" then
-            local oldValue = setting.get()
-            local newValue = item.value
-            if item.relativeDelta ~= nil then
-                newValue = (tonumber(oldValue) or 0) + (tonumber(item.relativeDelta) or 0)
+        local setting = item and item.setting
+        if not (setting and type(setting.get) == "function" and type(setting.set) == "function") then
+            return AP.TransactionFailure(plan, "preflight", setting and (setting.key or setting.label) or i, "setting is not readable and writable")
+        end
+        local oldValue
+        if virtualKnown[setting] then
+            oldValue = AP.CopyTransactionValue(virtualValues[setting])
+        else
+            local ok, value = pcall(setting.get)
+            if not ok then
+                return AP.TransactionFailure(plan, "preflight.read", setting.key or setting.label or i, value)
             end
-            if setting.type == "number" and A.ClampNumber then
-                newValue = A.ClampNumber(newValue, setting.min, setting.max, setting.step)
-            elseif setting.type == "boolean" then
-                newValue = newValue and true or false
+            oldValue = AP.CopyTransactionValue(value)
+        end
+        local newValue = ResolveNewValue(setting, item, oldValue)
+        prepared[#prepared + 1] = {
+            item = item,
+            setting = setting,
+        }
+        virtualKnown[setting] = true
+        virtualValues[setting] = AP.CopyTransactionValue(newValue)
+    end
+
+    local appliedOperations = {}
+    local committed = {}
+    for i = 1, #prepared do
+        local pending = prepared[i]
+        local item = pending.item
+        local setting = pending.setting
+        local readOk, currentValue = pcall(setting.get)
+        if not readOk then
+            local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+            return AP.TransactionFailure(plan, "read", setting.key or setting.label or i, currentValue, rollbackErrors)
+        end
+        local oldValue = AP.CopyTransactionValue(currentValue)
+        local newValue = ResolveNewValue(setting, item, oldValue)
+        if ValuesEqual(setting, oldValue, newValue) then
+            if setting.applyWhenUnchanged == true then unchangedApplySettings[#unchangedApplySettings + 1] = setting end
+        else
+            local setOk, setErr = pcall(setting.set, AP.CopyTransactionValue(newValue))
+            if not setOk then
+                local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                return AP.TransactionFailure(plan, "set", setting.key or setting.label or i, setErr, rollbackErrors)
             end
-            if not ValuesEqual(setting, oldValue, newValue) then
-                setting.set(newValue)
-                local actualNewValue = newValue
-                if setting.verifyAfterSet == true or setting.normalizesValue == true or setting.type == "color" then
-                    actualNewValue = setting.get()
+
+            local operation = { setting = setting, oldValue = oldValue }
+            appliedOperations[#appliedOperations + 1] = operation
+            changedSettings[#changedSettings + 1] = setting
+
+            local verifyOk, actualNewValue = pcall(setting.get)
+            if not verifyOk then
+                local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                return AP.TransactionFailure(plan, "verify.read", setting.key or setting.label or i, actualNewValue, rollbackErrors)
+            end
+            actualNewValue = AP.CopyTransactionValue(actualNewValue)
+            local acceptsNormalization = setting.normalizesValue == true or setting.type == "color"
+            if ValuesEqual(setting, oldValue, actualNewValue) and acceptsNormalization then
+                -- The setter legitimately normalized the requested representation
+                -- back to the value already stored. This is an idempotent success,
+                -- not a failed write and not an undoable mutation.
+                table.remove(appliedOperations)
+                table.remove(changedSettings)
+                if setting.applyWhenUnchanged == true then unchangedApplySettings[#unchangedApplySettings + 1] = setting end
+            else
+                if ValuesEqual(setting, oldValue, actualNewValue) then
+                    local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                    return AP.TransactionFailure(plan, "verify.unchanged", setting.key or setting.label or i, "setter did not change the requested value", rollbackErrors)
                 end
-                if not ValuesEqual(setting, oldValue, actualNewValue) then
-                    local valueLabel = item.valueLabel
-                    if not ValuesEqual(setting, newValue, actualNewValue) then
-                        valueLabel = SettingValueLabel(setting, actualNewValue)
-                    end
-                    undoChanges[#undoChanges + 1] = {
-                        key = setting.key,
-                        oldValue = oldValue,
-                        newValue = actualNewValue,
-                        valueLabel = valueLabel,
-                    }
-                    item.oldValue = oldValue
-                    item.newValue = actualNewValue
-                    item.valueLabel = valueLabel
-                    changedSettings[#changedSettings + 1] = setting
-                    lastSetting = setting.key
-                    lastUnit = setting.unit
-                    lastFrameType = setting.frameType
-                    lastCategory = setting.category
-                    lastValue = actualNewValue
-                    if setting.requiresReload == true then requiresReload = true end
-                    if item.direction then A.SetContextValue("lastDirection", item.direction) end
-                    RememberTextChangeContext(setting, item, actualNewValue)
-                    executedChanges[#executedChanges + 1] = item
-                    if not undoBundle then
-                        undoBundle = PushAndRememberChangeBundle(plan, executedChanges, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
-                    else
-                        RefreshChangeBundle(undoBundle, executedChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
-                        A.RememberAppliedBundle(undoBundle)
-                    end
-                elseif setting.applyWhenUnchanged == true then
-                    unchangedApplySettings[#unchangedApplySettings + 1] = setting
+                if not acceptsNormalization and not ValuesEqual(setting, newValue, actualNewValue) then
+                    local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+                    return AP.TransactionFailure(plan, "verify.value", setting.key or setting.label or i, "stored value differs from requested value", rollbackErrors)
                 end
-            elseif setting.applyWhenUnchanged == true then
-                unchangedApplySettings[#unchangedApplySettings + 1] = setting
+
+                local valueLabel = item.valueLabel
+                if not ValuesEqual(setting, newValue, actualNewValue) then
+                    valueLabel = SettingValueLabel(setting, actualNewValue)
+                end
+                operation.newValue = actualNewValue
+                committed[#committed + 1] = {
+                    item = item,
+                    setting = setting,
+                    oldValue = oldValue,
+                    newValue = actualNewValue,
+                    valueLabel = valueLabel,
+                }
             end
         end
     end
 
-    if #undoChanges == 0 then
+    if #committed == 0 then
         if A.ContextEngineEnabled ~= false then
             local escalated = AP.TryNoOpEscalation(plan, changes)
             if escalated then return escalated end
         end
-        RememberUnchangedChangeContext(plan, changes)
         if #unchangedApplySettings > 0 then
-            RunApplies(unchangedApplySettings)
+            local ok, phase, target, err = AP.RunApplies(unchangedApplySettings)
+            if not ok then return AP.TransactionFailure(plan, phase, target, err) end
+            AP.RememberUnchangedChangeContext(plan, changes)
             local first = unchangedApplySettings[1]
-            return { text = RefreshedAlreadySetResponse(first), result = "applied", summary = plan.summary }
+            return { text = AP.RefreshedAlreadySetResponse(first), result = "unchanged", summary = plan.summary }
         end
-        return { text = AlreadySetResponse(changes), result = "applied", summary = plan.summary }
+        AP.RememberUnchangedChangeContext(plan, changes)
+        return { text = AP.AlreadySetResponse(changes), result = "unchanged", summary = plan.summary }
     end
 
-    if not undoBundle then
-        undoBundle = PushAndRememberChangeBundle(plan, executedChanges, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
-    else
-        RefreshChangeBundle(undoBundle, executedChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
-        A.RememberAppliedBundle(undoBundle)
+    local applyOk, applyPhase, applyTarget, applyErr = AP.RunApplies(changedSettings)
+    if not applyOk then
+        local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+        return AP.TransactionFailure(plan, applyPhase, applyTarget, applyErr, rollbackErrors)
     end
 
-    local text = ChangedResponse(changedSettings, undoChanges)
+    for i = 1, #committed do
+        local record = committed[i]
+        local item = record.item
+        local setting = record.setting
+        item.oldValue = record.oldValue
+        item.newValue = record.newValue
+        item.valueLabel = record.valueLabel
+        local undoKey = setting.key or setting
+        local undoIndex = undoIndexByKey[undoKey]
+        if undoIndex then
+            undoChanges[undoIndex].newValue = record.newValue
+            undoChanges[undoIndex].valueLabel = record.valueLabel
+            responseSettings[undoIndex] = setting
+        else
+            undoChanges[#undoChanges + 1] = {
+                key = setting.key,
+                oldValue = record.oldValue,
+                newValue = record.newValue,
+                valueLabel = record.valueLabel,
+            }
+            undoIndexByKey[undoKey] = #undoChanges
+            responseSettings[#responseSettings + 1] = setting
+        end
+        executedChanges[#executedChanges + 1] = item
+        lastSetting = setting.key
+        lastUnit = setting.unit
+        lastFrameType = setting.frameType
+        lastCategory = setting.category
+        lastValue = record.newValue
+        if setting.requiresReload == true then requiresReload = true end
+    end
+
+    local bundle = AP.BuildChangeBundle(plan, executedChanges, undoChanges, lastSetting, lastUnit, lastFrameType, lastCategory, lastValue)
+    local pushOk, undoAvailable = pcall(A.PushUndo, bundle)
+    if not pushOk then
+        local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+        return AP.TransactionFailure(plan, "commit.undo", lastSetting, undoAvailable, rollbackErrors)
+    end
+    bundle.undoAvailable = undoAvailable == true
+    local rememberOk, rememberErr = pcall(A.RememberAppliedBundle, bundle)
+    if not rememberOk then
+        if bundle.undoAvailable and type(A.undoStack) == "table" and A.undoStack[#A.undoStack] == bundle then
+            table.remove(A.undoStack)
+        end
+        local rollbackErrors = AP.RollbackSettingOperations(appliedOperations, changedSettings)
+        return AP.TransactionFailure(plan, "commit.context", lastSetting, rememberErr, rollbackErrors)
+    end
+
+    for i = 1, #committed do
+        local record = committed[i]
+        if record.item.direction then A.SetContextValue("lastDirection", record.item.direction) end
+        RememberTextChangeContext(record.setting, record.item, record.newValue)
+    end
+
+    local text = AP.ChangedResponse(responseSettings, undoChanges)
     if requiresReload then text = text .. " Reload the UI for this change to fully take effect." end
-    if not requiresReload and #undoChanges >= 6 then text = AppendLargeChangeReloadHint(text) end
-    RunApplies(changedSettings)
-    text = AppendUndoFollowupHint(text)
+    if not requiresReload and #undoChanges >= 6 then text = AP.AppendLargeChangeReloadHint(text) end
+    text = AP.AppendUndoFollowupHint(text)
     return { text = text, result = "applied", summary = plan.summary }
 end
 
 AP.ExecuteChanges = ExecuteChanges
 
-local function ActionResponse(action, plan, message)
+function AP.ActionResponse(action, plan, message)
     message = Trim(message or "")
     if message == "" or message == "Done." then
         return "Done. I ran " .. AssistantPlanLabel(plan, AssistantActionLabel(action, "that MSUF task")) .. "."
@@ -5858,53 +6039,244 @@ local function ActionResponse(action, plan, message)
     return "Done. " .. message
 end
 
+function AP.ReadOnlyActionResponse(action, plan, message)
+    message = Trim(message or "")
+    message = message:gsub("^Done%.%s*", "")
+    if message ~= "" then return message end
+    return AssistantPlanLabel(plan, AssistantActionLabel(action, "MSUF information"))
+end
+
 local function ExecuteAction(plan)
     local action = plan.action
     if not (action and type(action.run) == "function") then
         return { text = "Open the MSUF menu first so I can run that task.", result = "failed", summary = plan.summary }
     end
+    local mutability = tostring(action.mutability or "")
+    if mutability ~= "readOnly" and mutability ~= "navigation"
+        and mutability ~= "ephemeral" and mutability ~= "savedState"
+    then
+        return AP.TransactionFailure(plan, "preflight.action_policy", action.key, "action mutability policy is missing or invalid")
+    end
+    local args = plan.args or {}
+    local adapterName = action.transactionAdapter
+    local adapterMode
+    if adapterName ~= nil then
+        if action.transactionAdapterReady ~= true then
+            return AP.TransactionFailure(plan, "preflight.action_adapter", action.key, "action transaction adapter is not ready")
+        end
+        if type(A.GetActionTransactionAdapterMode) ~= "function" then
+            return AP.TransactionFailure(plan, "preflight.action_adapter", action.key, "action transaction adapter service is unavailable")
+        end
+        adapterMode = A.GetActionTransactionAdapterMode(adapterName, action.key)
+        if adapterMode == nil or (action.transactionAdapterMode ~= nil and action.transactionAdapterMode ~= adapterMode) then
+            return AP.TransactionFailure(plan, "preflight.action_adapter", action.key, "unknown, unsupported, or mismatched action transaction adapter")
+        end
+    elseif action.rollbackStrategy == "transactionAdapter" then
+        return AP.TransactionFailure(plan, "preflight.action_adapter", action.key, "action transaction adapter is missing")
+    end
+
+    local captureAction = adapterMode == "capturedOwnerState" and A.CaptureActionTransaction or nil
+    if adapterMode == "capturedOwnerState"
+        and (type(captureAction) ~= "function" or type(A.RestoreActionTransaction) ~= "function")
+    then
+        return AP.TransactionFailure(plan, "preflight.action_adapter", action.key, "captured owner-state services are unavailable")
+    end
     local before
     local beforeProfile
-    local captureProfile = action.captureProfileSnapshot and A.CaptureProfileSnapshot
-    local captureSnapshot = action.captureSnapshot and not captureProfile and A.CaptureSnapshot
+    local beforeAction
+    local captureProfile = not captureAction and action.captureProfileSnapshot and A.CaptureProfileSnapshot
+    local captureSnapshot = not captureAction and action.captureSnapshot and not captureProfile and A.CaptureSnapshot
     local snapshotStart = PerfNowMs()
-    if captureSnapshot then before = A.CaptureSnapshot() end
-    if captureProfile then beforeProfile = A.CaptureProfileSnapshot(action.key, plan.args or {}) end
+    if not captureAction and action.captureSnapshot == true and type(captureSnapshot) ~= "function" then
+        return AP.TransactionFailure(plan, "preflight.snapshot", action.key, "snapshot service is unavailable")
+    end
+    if not captureAction and action.captureProfileSnapshot == true and type(captureProfile) ~= "function" then
+        return AP.TransactionFailure(plan, "preflight.profile_snapshot", action.key, "profile snapshot service is unavailable")
+    end
+    if captureAction then
+        local snapshotOk, snapshot, snapshotErr = pcall(captureAction, action.key, args, adapterName)
+        if not snapshotOk or type(snapshot) ~= "table" then
+            return AP.TransactionFailure(plan, "preflight.action_owner_snapshot", action.key, snapshotErr or snapshot)
+        end
+        beforeAction = snapshot
+    elseif captureSnapshot then
+        local snapshotOk, snapshot = pcall(captureSnapshot)
+        if not snapshotOk or type(snapshot) ~= "table" then
+            return AP.TransactionFailure(plan, "preflight.snapshot", action.key, snapshot)
+        end
+        before = snapshot
+    end
+    if captureProfile then
+        local snapshotOk, snapshot = pcall(captureProfile, action.key, args)
+        if not snapshotOk or type(snapshot) ~= "table" then
+            return AP.TransactionFailure(plan, "preflight.profile_snapshot", action.key, snapshot)
+        end
+        beforeProfile = snapshot
+    end
     A.RecordPerfSample("assistant.snapshot.before", snapshotStart, action.key)
-    local ok, message = action.run(plan.args or {})
-    if not ok then
-        return { text = message or "I kept that task as it was.", result = "failed", summary = plan.summary }
+
+    local function RollbackAction()
+        local errors = {}
+        if beforeAction then
+            local restored, value, detail = pcall(A.RestoreActionTransaction, beforeAction, "MSUF_ASSISTANT_ACTION_ROLLBACK")
+            if not restored or value ~= true then errors[#errors + 1] = tostring(detail or value or "action owner restore failed") end
+        elseif beforeProfile then
+            if type(A.RestoreProfileSnapshot) ~= "function" then
+                errors[#errors + 1] = "profile restore service is unavailable"
+            else
+                local restored, value = pcall(A.RestoreProfileSnapshot, beforeProfile)
+                if not restored or value ~= true then errors[#errors + 1] = tostring(value or "profile restore failed") end
+                if restored and value == true and type(A.RequestBroadApply) == "function" then
+                    local applyOk, applyErr = pcall(A.RequestBroadApply, "MSUF_ASSISTANT_ACTION_ROLLBACK")
+                    if not applyOk then errors[#errors + 1] = tostring(applyErr) end
+                end
+            end
+        elseif before then
+            if type(A.RestoreSnapshot) ~= "function" then
+                errors[#errors + 1] = "snapshot restore service is unavailable"
+            else
+                local restored, value = pcall(A.RestoreSnapshot, before, "MSUF_ASSISTANT_ACTION_ROLLBACK")
+                if not restored or value ~= true then errors[#errors + 1] = tostring(value or "snapshot restore failed") end
+            end
+        end
+        return errors
+    end
+
+    local preserveNilSavedVariables
+    local ran, ok, message = pcall(function() return action.run(args) end)
+    if not ran or not ok then
+        local rollbackErrors = RollbackAction()
+        if not before and not beforeProfile and not beforeAction then
+            local failureMessage = ran and message or nil
+            A.lastAssistantTransactionError = {
+                phase = "action.run",
+                target = tostring(action.key or ""),
+                error = tostring(ran and message or ok),
+                rollbackUnavailable = true,
+            }
+            return {
+                text = tostring(failureMessage or "I could not complete that MSUF task. I did not record it as applied; verify the current setting before retrying."),
+                result = "failed",
+                summary = plan.summary,
+                transactionPhase = "action.run",
+                transactionTarget = action.key,
+            }
+        end
+        return AP.TransactionFailure(plan, "action.run", action.key, ran and message or ok, rollbackErrors)
+    end
+    if A._preserveNilSavedVariablesUntilReload == true
+        and rawget(_G, "MSUF_DB") == nil
+        and rawget(_G, "MSUF_GlobalDB") == nil
+        and rawget(_G, "MSUF_ActiveProfile") == nil
+    then
+        preserveNilSavedVariables = true
     end
     local undoAvailable = false
-    if before or beforeProfile then
+    local committedUndoBundle
+    local undoStackBeforePush
+    local redoStackBeforePush
+    if before or beforeProfile or beforeAction then
         snapshotStart = PerfNowMs()
-        local after = captureSnapshot and A.CaptureSnapshot() or nil
-        local afterProfile = captureProfile and A.CaptureProfileSnapshot(action.key, plan.args or {}) or nil
+        local after
+        local afterProfile
+        local afterAction
+        if captureAction then
+            local afterOk, snapshot, snapshotErr = pcall(captureAction, action.key, args, adapterName, beforeAction)
+            if not afterOk or type(snapshot) ~= "table" then
+                local rollbackErrors = RollbackAction()
+                return AP.TransactionFailure(plan, "commit.action_owner_snapshot", action.key, snapshotErr or snapshot, rollbackErrors)
+            end
+            afterAction = snapshot
+            if adapterName == "factoryResetAll"
+                and snapshot.state and snapshot.state.globalDB and snapshot.state.globalDB.exists ~= true
+                and snapshot.state.db and snapshot.state.db.exists ~= true
+                and snapshot.state.activeProfile and snapshot.state.activeProfile.exists ~= true
+            then
+                preserveNilSavedVariables = true
+                A._preserveNilSavedVariablesUntilReload = true
+            end
+        elseif captureSnapshot then
+            local afterOk, snapshot = pcall(captureSnapshot)
+            if not afterOk or type(snapshot) ~= "table" then
+                local rollbackErrors = RollbackAction()
+                return AP.TransactionFailure(plan, "commit.snapshot", action.key, snapshot, rollbackErrors)
+            end
+            after = snapshot
+        end
+        if captureProfile then
+            local afterOk, snapshot = pcall(captureProfile, action.key, args)
+            if not afterOk or type(snapshot) ~= "table" then
+                local rollbackErrors = RollbackAction()
+                return AP.TransactionFailure(plan, "commit.profile_snapshot", action.key, snapshot, rollbackErrors)
+            end
+            afterProfile = snapshot
+        end
         A.RecordPerfSample("assistant.snapshot.after", snapshotStart, action.key)
-        undoAvailable = A.PushUndo({
+        local undoBundle = {
             label = AssistantPlanLabel(plan, AssistantActionLabel(action, "Assistant task")),
             action = action.key,
             beforeSnapshot = before,
             afterSnapshot = after,
             beforeProfileSnapshot = beforeProfile,
             afterProfileSnapshot = afterProfile,
-        })
+            beforeActionTransaction = beforeAction,
+            afterActionTransaction = afterAction,
+        }
+        undoStackBeforePush = {}
+        redoStackBeforePush = {}
+        for i = 1, #(A.undoStack or {}) do undoStackBeforePush[i] = A.undoStack[i] end
+        for i = 1, #(A.redoStack or {}) do redoStackBeforePush[i] = A.redoStack[i] end
+        local pushOk, pushed = pcall(A.PushUndo, undoBundle)
+        if not pushOk or pushed ~= true then
+            A.undoStack = undoStackBeforePush or {}
+            A.redoStack = redoStackBeforePush or {}
+            local rollbackErrors = RollbackAction()
+            return AP.TransactionFailure(plan, "commit.undo", action.key, pushOk and "undo bundle was rejected" or pushed, rollbackErrors)
+        end
+        committedUndoBundle = undoBundle
+        undoAvailable = true
     end
-    local text = ActionResponse(action, plan, message)
+    local text = mutability == "readOnly"
+        and AP.ReadOnlyActionResponse(action, plan, message)
+        or AP.ActionResponse(action, plan, message)
     local actionArgs
     if action.key == "copy_unit" or action.key == "copy_group" then
-        actionArgs = CopySerializableActionArgs(plan.args or {})
+        actionArgs = CopySerializableActionArgs(args)
     end
-    A.RememberAppliedBundle({
-        action = action.key,
-        actionLabel = AssistantPlanLabel(plan, AssistantActionLabel(action, "Assistant task")),
-        actionMessage = text,
-        undoAvailable = undoAvailable,
-        actionArgs = actionArgs,
-        serializable = {},
-    })
-    if undoAvailable then text = AppendUndoFollowupHint(text) end
-    return { text = text, result = "applied", summary = plan.summary }
+    local remembered, rememberErr = true, nil
+    if mutability == "savedState" and not preserveNilSavedVariables then
+        remembered, rememberErr = pcall(A.RememberAppliedBundle, {
+            action = action.key,
+            actionLabel = AssistantPlanLabel(plan, AssistantActionLabel(action, "Assistant task")),
+            actionMessage = text,
+            undoAvailable = undoAvailable,
+            actionArgs = actionArgs,
+            serializable = {},
+        })
+    end
+    if not remembered then
+        if committedUndoBundle then
+            A.undoStack = undoStackBeforePush or {}
+            A.redoStack = redoStackBeforePush or {}
+            local rollbackErrors = RollbackAction()
+            return AP.TransactionFailure(plan, "commit.context", action.key, rememberErr, rollbackErrors)
+        end
+        A.lastAssistantTransactionError = {
+            phase = "commit.context",
+            target = tostring(action.key or ""),
+            error = tostring(rememberErr),
+            committed = true,
+        }
+    end
+    if undoAvailable then text = AP.AppendUndoFollowupHint(text) end
+    local resultStatus = mutability == "savedState" and "applied"
+        or (mutability == "navigation" and "navigated" or "info")
+    return {
+        text = text,
+        result = resultStatus,
+        summary = plan.summary,
+        preserveNilSavedVariables = preserveNilSavedVariables == true or nil,
+    }
 end
 
 function A.ShowLargeTextPanel(spec)
@@ -6030,9 +6402,27 @@ local function NormalizePlanResult(result)
     return result
 end
 
+function AP.ReadOnlyGuardResult(text)
+    return {
+        text = "I treated that as a read-only question and kept MSUF unchanged. Ask for the option's location, current value, or explanation; to change it, use a direct command with an explicit value.",
+        result = "info",
+        status = "info",
+        summary = "Assistant read-only safety guard",
+        _readOnlyGuard = true,
+        sourceText = text,
+    }
+end
+
 function A.ExecutePlan(plan, opts)
     opts = opts or {}
     if type(plan) ~= "table" then return NormalizePlanResult({ text = "Which frame, page, or option do you want me to change?", result = "failed" }) end
+    local sourceText = opts.sourceText or plan.sourceText or plan.raw
+    local guarded = sourceText and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+        and A.RouterIsFailClosedReadOnlyRequest(sourceText)
+    local actionMutability = plan.kind == "action" and tostring(plan.action and plan.action.mutability or "") or nil
+    if guarded and (plan.kind == "changes" or (plan.kind == "action" and actionMutability ~= "readOnly" and actionMutability ~= "navigation")) then
+        return NormalizePlanResult(AP.ReadOnlyGuardResult(sourceText))
+    end
     AP.RememberMentionedContext(plan)
     if PlanNeedsConfirmation(plan) and opts.confirmed ~= true then
         A.pendingConfirmation = plan
@@ -6041,7 +6431,7 @@ function A.ExecutePlan(plan, opts)
     end
     if InCombat() and AnyCombatUnsafe(plan) and opts.fromQueue ~= true then
         A.QueuePlan(plan)
-        return NormalizePlanResult({ text = "I will apply this after combat ends: " .. AssistantPlanLabel(plan, "Assistant change") .. ".", result = "queued", summary = plan.summary })
+        return NormalizePlanResult({ text = "I paused this request for combat: " .. AssistantPlanLabel(plan, "Assistant change") .. ". Reopen the MSUF menu after combat to resume it.", result = "queued", summary = plan.summary })
     end
     if plan.kind == "changes" then return NormalizePlanResult(ExecuteChanges(plan)) end
     if plan.kind == "action" then return NormalizePlanResult(ExecuteAction(plan)) end
@@ -6192,8 +6582,6 @@ local function HandlePending(text)
         local flowResult = A.HandlePendingFlow(text)
         if flowResult then return flowResult end
     end
-    local candidateFollowup = AP.PendingCandidateFollowupResult(text)
-    if candidateFollowup then return candidateFollowup end
     if A.pendingConfirmation then
         if LooksLikeUndoRedoCommand(text) then
             A.pendingConfirmation = nil
@@ -6274,6 +6662,19 @@ end
 function A.HandleCommandInput(text)
     local pending = HandlePending(text)
     if pending then return NormalizePlanResult(pending) end
+    local router = A.RouterPrivate
+    local explicitReadOnlyAction = router and (
+        (type(router.IsExplicitReadOnlyDiagnosticCommand) == "function" and router.IsExplicitReadOnlyDiagnosticCommand(text))
+        or (type(router.IsExplicitNavigationCommand) == "function" and router.IsExplicitNavigationCommand(text))
+        or (type(router.IsCurrentPageHelpRequest) == "function" and router.IsCurrentPageHelpRequest(text))
+        or (type(A.RouterHasPendingAssistantState) == "function" and A.RouterHasPendingAssistantState())
+    )
+    if not explicitReadOnlyAction
+        and type(A.RouterIsFailClosedReadOnlyRequest) == "function"
+        and A.RouterIsFailClosedReadOnlyRequest(text)
+    then
+        return NormalizePlanResult(AP.ReadOnlyGuardResult(text))
+    end
 
     local parseStartedMs = PerfNowMs()
     local parsed = A.Parse and A.Parse(text) or nil
@@ -6308,7 +6709,7 @@ function A.HandleCommandInput(text)
     if parsed.kind == "answer" then
         return NormalizePlanResult({ text = parsed.text or "", result = parsed.status or "info", summary = parsed.summary })
     end
-    if parsed.kind == "changes" and parsed.sourceText == nil then parsed.sourceText = NormalizeReply(text) end
+    if (parsed.kind == "changes" or parsed.kind == "action") and parsed.sourceText == nil then parsed.sourceText = NormalizeReply(text) end
     return NormalizePlanResult(A.ExecutePlan(parsed))
 end
 
@@ -6412,10 +6813,6 @@ function A.StopAssistantWork(reason)
     A._assistantJobPumpScheduled = nil
     A._assistantJobsCombatDeferred = nil
     A._assistantJobsCombatReason = nil
-    A._performanceWarmupStarted = nil
-    A._performanceWarmupCompleted = nil
-    A._performanceWarmupSuppressed = reason
-    A._performanceWarmupReason = nil
     A.SetBusy(false)
     return removed
 end
@@ -6639,6 +7036,15 @@ function AP.BatchLine(text)    text = tostring(text or ""):gsub("\r", "")
     return Trim(first)
 end
 
+function AP.IsSuccessfulResultStatus(status)
+    return status == "applied" or status == "changed" or status == "info" or status == "answered"
+        or status == "unchanged" or status == "navigated"
+end
+
+function AP.IsMutationResultStatus(status)
+    return status == "applied" or status == "changed"
+end
+
 AP.NORMAL_INPUT_MAX_CHARS = 20000
 
 function AP.ExtractProfileString(text)    text = tostring(text or "")
@@ -6673,8 +7079,45 @@ function AP.LongInputResult(text)    text = tostring(text or "")
     }
 end
 
-function AP.TrySubmitBatch(text)    local parts = AP.SplitBatchCommands(text)
+function AP.BuildAtomicSettingBatch(parts)
+    if type(parts) ~= "table" or #parts < 2 or type(A.Parse) ~= "function" then return nil end
+    local combined = {}
+    local labels = {}
+    local confirmRequired = false
+    local bulkSafe = true
+    for i = 1, #parts do
+        local parsed = A.Parse(parts[i])
+        if type(parsed) ~= "table" or parsed.kind ~= "changes" or type(parsed.changes) ~= "table" or #parsed.changes == 0 then
+            return nil
+        end
+        confirmRequired = confirmRequired or parsed.confirmRequired == true or AnySettingFlag(parsed, "confirmRequired")
+        bulkSafe = bulkSafe and parsed.bulkSafe == true
+        labels[#labels + 1] = AssistantPlanLabel(parsed, "request " .. tostring(i))
+        for j = 1, #parsed.changes do combined[#combined + 1] = parsed.changes[j] end
+    end
+    return {
+        kind = "changes",
+        changes = combined,
+        confirmRequired = confirmRequired,
+        bulkSafe = bulkSafe,
+        label = table.concat(labels, "; "),
+        summary = "Applies " .. tostring(#parts) .. " setting requests as one atomic Assistant transaction.",
+        sourceText = table.concat(parts, " and "),
+        _atomicBatchCount = #parts,
+    }
+end
+
+function AP.TrySubmitBatch(text, preSplitParts)    local parts = preSplitParts or AP.SplitBatchCommands(text)
     if not parts then return nil end
+    local atomicPlan = AP.BuildAtomicSettingBatch(parts)
+    if atomicPlan then
+        local result = A.ExecutePlan(atomicPlan)
+        if type(result) == "table" and AP.IsSuccessfulResultStatus(result.status or result.result) then
+            result.text = "Done. I handled " .. tostring(#parts) .. " requests in one transaction:\n" .. tostring(result.text or "")
+            result.summary = atomicPlan.summary
+        end
+        return result
+    end
     local lines = {}
     local applied = 0
     for i = 1, #parts do
@@ -6682,23 +7125,27 @@ function AP.TrySubmitBatch(text)    local parts = AP.SplitBatchCommands(text)
         if not result then
             return { text = "I paused at step " .. tostring(i) .. " because I could not match that request.", result = "failed" }
         end
-        if (result.status or result.result) ~= "applied" and (result.status or result.result) ~= "info" then
+        local status = result.status or result.result
+        if not AP.IsSuccessfulResultStatus(status) then
             return result
         end
-        if (result.status or result.result) == "applied" then applied = applied + 1 end
+        if AP.IsMutationResultStatus(status) then applied = applied + 1 end
         lines[#lines + 1] = tostring(i) .. ". " .. AP.BatchLine(result.text)
     end
     local textOut = "Done. I handled " .. tostring(#parts) .. " requests:\n" .. table.concat(lines, "\n")
-    if applied > 0 then textOut = AppendUndoFollowupHint(textOut) end
+    if applied > 0 then textOut = AP.AppendUndoFollowupHint(textOut) end
     return { text = textOut, result = applied > 0 and "applied" or "info", summary = "Handled multiple Assistant requests." }
 end
 
 function AP.RecordAssistantResult(result)    if result and result.text then
+        -- Recording this response would recreate the SavedVariables that a
+        -- confirmed factory reset intentionally left nil until reload.
+        if result.preserveNilSavedVariables == true then return end
         if type(result.searchResults) == "table" and type(A.SetPendingResults) == "function" then
             A.SetPendingResults(result.searchResults)
         end
         A.AddHistory("assistant", result.text, result.status or result.result, result.summary)
-        if (result.status or result.result) == "applied" and type(A.RecordSuccessfulAssistantAction) == "function" and type(A.MaybePowerUserSupportHint) == "function" then
+        if AP.IsMutationResultStatus(result.status or result.result) and type(A.RecordSuccessfulAssistantAction) == "function" and type(A.MaybePowerUserSupportHint) == "function" then
             A.RecordSuccessfulAssistantAction()
             local hint = A.MaybePowerUserSupportHint()
             if hint then A.AddHistory("assistant", hint, "info", "Assistant power-user dashboard links hint") end
@@ -6788,6 +7235,15 @@ function AP.TryImmediateMutationResult(text, opts)
     if type(normalize) ~= "function" then return nil end
     local normalized = normalize(text)
     if normalized == "" then return nil end
+    -- Never let continuation/exact-alias fast paths reinterpret a problem,
+    -- capability question, location lookup, or subjective request as a write.
+    -- The full Router will provide the diagnostic/help response.
+    if (type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text))
+        or (type(parser.NonMutatingIntent) == "function" and parser.NonMutatingIntent(normalized))
+    then
+        return nil
+    end
+    if type(A.RouterShouldPreferPageContext) == "function" and A.RouterShouldPreferPageContext(text) then return nil end
 
     local ctx = A.GetContext and A.GetContext() or {}
     local plan
@@ -6928,14 +7384,22 @@ function AP.SubmitNow(text, opts)    opts = opts or {}
     local immediate = AP.TryImmediateSubmitResult(text, opts)
     if immediate then return immediate end
     if InCombat() then return CombatSubmitResult() end
-    local immediateMutation = AP.TryImmediateMutationResult(text, opts)
-    if immediateMutation then return immediateMutation end
+    -- A complete multi-command sentence must be split before the low-latency
+    -- single-plan path sees it. Otherwise that path can confidently apply the
+    -- first clause and silently discard the remaining commands (for example,
+    -- "turn off target name and turn off focus name").
+    local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
+    local batchParts = not failClosedReadOnly and AP.SplitBatchCommands(text) or nil
+    if not batchParts then
+        local immediateMutation = AP.TryImmediateMutationResult(text, opts)
+        if immediateMutation then return immediateMutation end
+    end
     local startedMs = PerfNowMs()
     if opts.skipUserHistory ~= true then
         A.AddHistory("user", text, "submitted")
     end
     A._skipTurnSerialAdvance = true
-    local result = NormalizePlanResult(AP.LongInputResult(text) or AP.TrySubmitBatch(text) or A.HandleInput(text))
+    local result = NormalizePlanResult(AP.LongInputResult(text) or AP.TrySubmitBatch(text, batchParts) or A.HandleInput(text))
     A._skipTurnSerialAdvance = nil
     AP.RecordAssistantResult(result)
     if type(A.RequestRefreshUI) == "function" then
@@ -6954,7 +7418,8 @@ end
 function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
     local steps = {}
     local startedMs = PerfNowMs()
-    local parts = AP.SplitBatchCommands(text)
+    local failClosedReadOnly = type(A.RouterIsFailClosedReadOnlyRequest) == "function" and A.RouterIsFailClosedReadOnlyRequest(text)
+    local parts = not failClosedReadOnly and AP.SplitBatchCommands(text) or nil
     local finalResult
     local finished = false
 
@@ -6987,19 +7452,20 @@ function AP.BuildDeferredSubmitSteps(text, callback, opts)    opts = opts or {}
                 if not result then
                     result = { text = "I paused at step " .. tostring(partIndex) .. " because I could not match that request.", result = "failed" }
                 end
-                if (result.status or result.result) ~= "applied" and (result.status or result.result) ~= "info" then
+                local status = result.status or result.result
+                if not AP.IsSuccessfulResultStatus(status) then
                     finalResult = result
                     stopped = true
                     return
                 end
-                if (result.status or result.result) == "applied" then applied = applied + 1 end
+                if AP.IsMutationResultStatus(status) then applied = applied + 1 end
                 lines[#lines + 1] = tostring(partIndex) .. ". " .. AP.BatchLine(result.text)
             end)
         end
         steps[#steps + 1] = function()
             if not finalResult then
                 local textOut = "Done. I handled " .. tostring(#parts) .. " requests:\n" .. table.concat(lines, "\n")
-                if applied > 0 then textOut = AppendUndoFollowupHint(textOut) end
+                if applied > 0 then textOut = AP.AppendUndoFollowupHint(textOut) end
                 finalResult = {
                     text = textOut,
                     status = applied > 0 and "applied" or "info",
@@ -7075,88 +7541,6 @@ function A.SubmitDeferred(text, callback)
         return NormalizePlanResult(job.result)
     end
     return NormalizePlanResult({ text = A.GetBusyText(), result = "queued" })
-end
-
-function A.WarmupPerformanceIndexes(reason)
-    reason = tostring(reason or "assistant")
-    if A.allowPerformanceWarmup ~= true and _G.MSUF_ASSISTANT_ALLOW_WARMUP ~= true then
-        A._performanceWarmupSuppressed = reason
-        return false, "disabled"
-    end
-    if A._performanceWarmupStarted then return false end
-    if InCombat() then A._performanceWarmupSuppressed = "combat:" .. reason; return false, "combat" end
-    if A.IsBusy and A.IsBusy() then A._performanceWarmupSuppressed = "busy:" .. reason; return false, "busy" end
-    if type(A._assistantJobs) == "table" and #A._assistantJobs > 0 then A._performanceWarmupSuppressed = "jobs:" .. reason; return false, "jobs" end
-    A._performanceWarmupStarted = true
-    A._performanceWarmupCompleted = nil
-    A._performanceWarmupSuppressed = nil
-    A._performanceWarmupReason = reason
-
-    local steps = {
-        A.CoroutineStep(function()
-            local parser = A.Parser
-            local registry = A.Registry
-            local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
-            if registry and type(registry.BuildFindSettingsIndex) == "function" then
-                registry:BuildFindSettingsIndex()
-            end
-            if parser and settings and type(parser._EnsureRegistryCandidateIndex) == "function" then
-                parser._EnsureRegistryCandidateIndex(settings, false)
-            end
-            if parser and settings and type(parser._EnsureExactColorSettingIndex) == "function" then
-                parser._EnsureExactColorSettingIndex(settings)
-            end
-            if parser and settings and type(parser._EnsureRegistryExactAliasIndex) == "function" then
-                parser._EnsureRegistryExactAliasIndex(settings)
-            end
-        end),
-        A.CoroutineStep(function()
-            local parser = A.Parser
-            local registry = A.Registry
-            local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
-            if parser and settings and type(parser._EnsureRegistryCandidateIndex) == "function" then
-                parser._EnsureRegistryCandidateIndex(settings, true)
-            end
-        end),
-        A.CoroutineStep(function()
-            local parser = A.Parser
-            local registry = A.Registry
-            local actions = registry and type(registry.AllActions) == "function" and registry:AllActions() or nil
-            if parser and actions and type(parser._EnsureExactActionPhraseIndex) == "function" then
-                parser._EnsureExactActionPhraseIndex(actions)
-            end
-            if parser and actions and type(parser._EnsureRegistryActionAliasIndex) == "function" then
-                parser._EnsureRegistryActionAliasIndex(actions)
-            end
-        end),
-        A.CoroutineStep(function()
-            if A.Knowledge and type(A.Knowledge.EnsureIndex) == "function" then
-                A.Knowledge.EnsureIndex()
-            end
-        end),
-    }
-    local warmupBudget = tonumber(A.warmupJobBudgetMs) or 0.75
-    if warmupBudget <= 0 or warmupBudget > 1 then warmupBudget = 0.75 end
-    A.StartJob("assistant.warmup", steps, function()
-        A._performanceWarmupCompleted = true
-    end, {
-        budgetMs = warmupBudget,
-        maxStepsPerFrame = 1,
-        lowPriority = true,
-    })
-    return true, reason
-end
-
-function A.CancelPerformanceWarmup(reason)
-    reason = tostring(reason or "cancelled")
-    local removed = A.CancelJobs and A.CancelJobs("assistant.warmup", reason) or 0
-    if removed > 0 or (A._performanceWarmupStarted == true and A._performanceWarmupCompleted ~= true) then
-        A._performanceWarmupStarted = nil
-        A._performanceWarmupCompleted = nil
-        A._performanceWarmupSuppressed = reason
-        A._performanceWarmupReason = nil
-    end
-    return removed > 0
 end
 
 function A.RegisteredSettingSummary()

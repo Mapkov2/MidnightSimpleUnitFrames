@@ -1442,9 +1442,12 @@ local function ParseGlobalUiScaleFastShortcut(normalized)
 
     local key
     local value
-    if ContainsAny(normalized, P.RootPhrases[210]) then
+    local booleanValue = DetectBoolean(normalized)
+    if ContainsAny(normalized, P.RootPhrases[210])
+        or (booleanValue ~= nil and FirstNumber(normalized) == nil)
+    then
         key = "general.globalUiScaleEnabled"
-        value = DetectBoolean(normalized)
+        value = booleanValue
         if value == nil then return nil end
     else
         key = "general.globalUiScale"
@@ -1732,7 +1735,13 @@ local function LastBarGradientIntent(ctx)
 end
 
 local function ParseLastBarGradientGroupFollowup(normalized, ctx)
-    if not ContainsAny(normalized, P.RootPhrases[241]) then return nil end
+    -- "too" is a continuation only as a trailing reply ("raid too"). In a
+    -- natural problem such as "raid frames are too faded" it is an adjective,
+    -- and must never reuse an unrelated previous gradient change.
+    local continuationIntent = ContainsAny(normalized, { "also", "same", "as well", "auch", "ebenfalls" })
+        or normalized == "too"
+        or normalized:sub(-4) == " too"
+    if not continuationIntent then return nil end
     if not ContainsAny(normalized, P.RootPhrases[242]) then return nil end
     if ContainsAny(normalized, P.RootPhrases[243]) then return nil end
 
@@ -2651,6 +2660,15 @@ local TARGETED_SPELL_TERMS = {
     "enemy targeted spells", "enemy nameplate cast tracker",
 }
 
+-- Targeted Spell Indicators currently expose icon-stack behavior and placement,
+-- but no configurable cooldown text/font/color controls. A broad family alias
+-- must never turn the root feature on when the user named an unsupported child
+-- control; report the capability boundary without mutating an unrelated option.
+A.TARGETED_SPELL_UNSUPPORTED_DETAIL_TERMS = A.TARGETED_SPELL_UNSUPPORTED_DETAIL_TERMS or {
+    "cooldown", "timer", "text", "font", "color", "colors", "colour", "colours",
+    "safe", "warning", "urgent", "threshold", "seconds", "decimal", "decimals",
+}
+
 local function TargetedSpellPartyScope(normalized)
     if not ContainsAny(normalized, TARGETED_SPELL_TERMS) then return false, false end
     local groups = DetectGroups(normalized)
@@ -2692,6 +2710,15 @@ local function ParsePartyTargetedSpellFastShortcut(normalized, raw)
         }
     end
     if not hasParty then return nil end
+
+    if ContainsAny(normalized, A.TARGETED_SPELL_UNSUPPORTED_DETAIL_TERMS) then
+        return {
+            kind = "unsupported",
+            status = "info",
+            text = "Party Targeted Spell Indicators do not expose cooldown text, font, timer-threshold, or timer-color settings. Available controls are enabled state, mode, icon size, maximum icons, layer, anchor, growth, and X/Y offsets; I did not change the root feature.",
+            summary = "Explains unsupported Party Targeted Spell Indicator detail without changing the root option.",
+        }
+    end
 
     local attr
     local label
@@ -3232,6 +3259,29 @@ local function ParseGroupNumberFastShortcut(normalized)
     end
 
     local groups = DetectGroups(normalized)
+    local hasConcreteGroupScope = ContainsAny(normalized, {
+        "party", "party frame", "raid", "raid frame", "mythic raid", "mythicraid", "schlachtzug",
+    })
+    local explicitUnits = DetectUnits(normalized)
+    if #explicitUnits > 0 and not hasConcreteGroupScope then
+        -- Unit-frame "group number in name" is a different setting. An
+        -- explicit Player/Target/etc. scope must not fan out to every group.
+        local unitValue = DetectBoolean(normalized)
+        if unitValue == nil then unitValue = true end
+        local unitChanges = {}
+        for i = 1, #explicitUnits do
+            local setting = A.Registry and A.Registry:GetSetting(tostring(explicitUnits[i]) .. ".showRaidGroupInName")
+            if setting then unitChanges[#unitChanges + 1] = { setting = setting, value = unitValue } end
+        end
+        if #unitChanges == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = unitChanges,
+            label = #unitChanges == 1 and (unitChanges[1].setting.label or "Raid Group Name") or "Raid Group Names",
+            bulkSafe = #unitChanges > 1,
+            summary = "Changes the unit-frame raid-group number shown with the name.",
+        }
+    end
     if #groups == 0 and ContainsAny(normalized, P.RootPhrases[467]) then
         groups = { "party", "raid", "mythicraid" }
     end
@@ -3754,7 +3804,8 @@ local GLOBAL_STATUS_TEXT_STATES = {
 
 local function ParseGlobalStatusTextStateShortcut(text)
     if ContainsAny(text, P.RootPhrases[505]) then return nil end
-    local value = DetectBoolean and DetectBoolean(text) or nil
+    local value
+    if DetectBoolean then value = DetectBoolean(text) end
     if value == nil then return nil end
     for i = 1, #GLOBAL_STATUS_TEXT_STATES do
         local spec = GLOBAL_STATUS_TEXT_STATES[i]
@@ -3779,7 +3830,8 @@ A._ParseGlobalStatusIconsStyleFastShortcut = function(text)
     if ContainsAny(text, P.RootPhrases[507]) then return nil end
     local setting = A.Registry and A.Registry:GetSetting("general.statusIconsUseMidnightStyle")
     if not setting then return nil end
-    local value = DetectBoolean and DetectBoolean(text) or nil
+    local value
+    if DetectBoolean then value = DetectBoolean(text) end
     if value == nil then value = not ContainsAny(text, P.RootPhrases[508]) end
     return {
         kind = "changes",
@@ -3822,7 +3874,8 @@ A._ParseBossTargetHighlightFastShortcut = function(text)
     if ContainsAny(text, P.RootPhrases[512]) then return nil end
     local setting = A.Registry and A.Registry:GetSetting("general.bossTargetHighlightEnabled")
     if not setting then return nil end
-    local value = DetectBoolean and DetectBoolean(text) or nil
+    local value
+    if DetectBoolean then value = DetectBoolean(text) end
     if value == nil then return nil end
     return {
         kind = "changes",
@@ -3968,7 +4021,8 @@ local function ParseClassResourceFillFastShortcut(text)
     if not ContainsAny(text, P.RootPhrases[527]) then return nil end
 
     local value
-    local boolValue = DetectBoolean and DetectBoolean(text) or nil
+    local boolValue
+    if DetectBoolean then boolValue = DetectBoolean(text) end
     if ContainsAny(text, P.RootPhrases[528]) then
         value = false
     elseif ContainsAny(text, P.RootPhrases[529]) then
@@ -4114,7 +4168,9 @@ end
 local UNIT_ROOT_FRAME_DETAIL_BLOCKERS = {
     "name", "names", "text", "hp", "health", "power", "mana", "castbar", "cast bar",
     "buff", "buffs", "debuff", "debuffs", "aura", "auras", "icon", "icons",
-    "indicator", "indicators", "portrait", "range fade", "alpha", "opacity",
+    "indicator", "indicators", "marker", "markers", "raid marker", "target marker",
+    "symbol", "symbols", "star", "circle", "diamond", "triangle", "moon", "square",
+    "cross", "skull", "portrait", "range fade", "alpha", "opacity",
     "width", "height", "size", "anchor", "position", "move", "offset",
     "gradient", "gradients", "bar gradient", "bar gradients", "gradient direction",
     "load condition", "load conditions", "visibility condition", "when", "while",
@@ -4122,10 +4178,52 @@ local UNIT_ROOT_FRAME_DETAIL_BLOCKERS = {
     "resting", "stealth", "housing",
 }
 
+A.UnitRaidMarkerSymbolTerms = A.UnitRaidMarkerSymbolTerms or {
+    "star", "circle", "diamond", "triangle", "moon", "square", "cross", "skull",
+}
+
+A._ParseUnitRaidMarkerVisibilityShortcut = A._ParseUnitRaidMarkerVisibilityShortcut or function(text)
+    local hasNamedMarker = ContainsAny(text, { "raid marker", "raidmarker", "target marker" })
+    local hasWoWSymbol = ContainsAny(text, A.UnitRaidMarkerSymbolTerms)
+        and ContainsAny(text, { "marker", "icon", "symbol", "mark" })
+    if not hasNamedMarker and not hasWoWSymbol then return nil end
+    if ContainsAny(text, {
+        "size", "width", "height", "position", "move", "offset", "anchor", "layer",
+        "style", "preview", "test", "which", "what", "where", "how", "help", "explain",
+    }) then
+        return nil
+    end
+    local value
+    if DetectBoolean then value = DetectBoolean(text) end
+    if value == nil then return nil end
+    local units = DetectUnits and DetectUnits(text) or {}
+    if #units == 0 then return nil end
+
+    local Registry = A.Registry
+    local changes = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        local setting = Registry and Registry.GetSetting and Registry:GetSetting(unit .. ".showRaidMarker")
+        if setting then changes[#changes + 1] = { setting = setting, value = value } end
+    end
+    if #changes == 0 then return nil end
+    local unitLabel = tostring(units[1] or "Unit"):gsub("^%l", string.upper)
+    if A and type(A.DisplayUnitLabel) == "function" then unitLabel = A.DisplayUnitLabel(units[1]) end
+    local label = #changes == 1 and (unitLabel .. " Raid Marker") or "Unit Raid Markers"
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes whether the actual WoW raid-target marker is shown on the requested unit frame.",
+    }
+end
+
 local function UnitRootVisibilityValue(text)
     if ContainsAny(text, P.RootPhrases[545]) then return false end
     if ContainsAny(text, P.RootPhrases[546]) then return true end
-    return DetectBoolean and DetectBoolean(text) or nil
+    if DetectBoolean then return DetectBoolean(text) end
+    return nil
 end
 
 local function UnitRootLabel(unit)
@@ -4239,7 +4337,11 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
     result = ParseProfileStagingState(normalized, raw); if result then return result end
     result = ParseProfile(normalized, raw); if result then return result end
     result = P.ParseBossFramePreviewShortcut and P.ParseBossFramePreviewShortcut(normalized); if result then return result end
+    result = ParseCastbarGlobalDetail(normalized); if result then return result end
     result = P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized); if result then return result end
+    if HasPhrase(normalized, "portrait") or HasPhrase(normalized, "portraits") then
+        result = P.ParseGenericOffsetMove and P.ParseGenericOffsetMove(normalized); if result then return result end
+    end
     result = P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw); if result then return result end
     result = P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw); if result then return result end
     result = P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw); if result then return result end
@@ -5048,12 +5150,114 @@ local function ParseHumanSafetyGuidanceShortcut(normalized)
 end
 A._ParseHumanSafetyGuidanceShortcut = ParseHumanSafetyGuidanceShortcut
 
+function P.ShouldTryEarlyCompound(text)
+    text = tostring(text or "")
+    local numberCount = 0
+    for _ in text:gmatch("[-+]?%d+%.?%d*") do
+        numberCount = numberCount + 1
+        if numberCount >= 2 then return true end
+    end
+    if text:find(" but ", 1, true) then return true end
+
+    local colorCount = 0
+    for _ in text:gmatch("%f[%a]colou?r%f[%A]") do colorCount = colorCount + 1 end
+    for _ in text:gmatch("%f[%a]farbe%f[%A]") do colorCount = colorCount + 1 end
+    if colorCount >= 2 then return true end
+
+    if ContainsAny(text, { "hp text", "health text", "power text", "mana text" }) then
+        local slots = 0
+        if HasPhrase(text, "left") then slots = slots + 1 end
+        if HasPhrase(text, "right") then slots = slots + 1 end
+        if HasPhrase(text, "center") or HasPhrase(text, "centre") or HasPhrase(text, "middle") then slots = slots + 1 end
+        if slots >= 2 then return true end
+        local textValueWords = {
+            current = true, actual = true, max = true, maximum = true,
+            percent = true, percentage = true, deficit = true, missing = true, none = true,
+        }
+        local valueCount = 0
+        for word in text:gmatch("%S+") do
+            if textValueWords[word] then valueCount = valueCount + 1 end
+        end
+        if valueCount >= 2 then
+            local scopeCount = #(DetectUnits(text) or {}) + #(DetectGroups(text) or {})
+            if scopeCount >= 2 then return true end
+        end
+    end
+
+    if ContainsAny(text, { "portrait", "portraet" }) then
+        local details = 0
+        local detailGroups = {
+            { "shape", "form" }, { "size", "groesse" }, { "border", "outline", "rand" },
+            { "background", "hintergrund" }, { "zoom" }, { "render", "2d", "class portrait" },
+        }
+        for i = 1, #detailGroups do
+            if ContainsAny(text, detailGroups[i]) then details = details + 1 end
+        end
+        if details >= 2 then return true end
+    end
+
+    local itemCount = 0
+    local itemGroups = {
+        { "name", "names" }, { "portrait", "portraits" }, { "power bar", "power bars" },
+        { "health bar", "health bars" }, { "castbar", "cast bar" }, { "buff", "buffs" },
+        { "debuff", "debuffs" }, { "border", "outline" }, { "background" },
+    }
+    for i = 1, #itemGroups do
+        if ContainsAny(text, itemGroups[i]) then itemCount = itemCount + 1 end
+    end
+    if itemCount >= 2 and (
+        text:match("^turn%s+off%s+") or text:match("^turn%s+on%s+")
+        or text:match("^disable%s+") or text:match("^enable%s+")
+        or text:match("^hide%s+") or text:match("^show%s+")
+        or text:match("^deaktivieren%s+") or text:match("^aktivieren%s+")
+        or text:match("^verstecken%s+") or text:match("^anzeigen%s+")
+    ) then
+        return true
+    end
+
+    -- ParseCompound accepts adjacent Boolean value pairs without an explicit
+    -- join (for example, "name off portrait on"). Let those proven pairs run
+    -- before a single-detail shortcut can return only the first requested
+    -- change. Requiring two values and two distinct details keeps ordinary
+    -- one-setting prompts off the more expensive compound path.
+    local booleanCount = 0
+    local booleanWords = {
+        on = true, off = true, ["true"] = true, ["false"] = true,
+        enable = true, enabled = true, disable = true, disabled = true,
+        an = true, aus = true, aktivieren = true, deaktivieren = true,
+    }
+    for word in text:gmatch("%S+") do
+        if booleanWords[word] then
+            booleanCount = booleanCount + 1
+            if booleanCount >= 2 then
+                if itemCount >= 2 then return true end
+                local scopeCount = #(DetectUnits(text) or {}) + #(DetectGroups(text) or {})
+                if scopeCount >= 2 then return true end
+            end
+        end
+    end
+
+    if text:find(" and ", 1, true) or text:find(" und ", 1, true) then
+        local hasBoolean = ContainsAny(text, {
+            "on", "off", "true", "false", "enable", "enabled", "disable", "disabled",
+            "show", "hide", "an", "aus", "aktivieren", "deaktivieren", "anzeigen", "verstecken",
+        })
+        if hasBoolean and itemCount >= 2 then return true end
+    end
+    return false
+end
+
 function A.ParseSimpleChange(text, ctxOverride)
     local raw = Trim(text)
     local normalized = Normalize(raw)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return nil end
+    -- ParseSimpleChange is used by the direct mutation fast path. Read-only
+    -- intents must fall through to the Router instead of being returned here,
+    -- so page/location/problem specialists can give their richer answer.
+    if P.NonMutatingIntent and P.NonMutatingIntent(normalized) then return nil end
     local parsed = (A._ParseHumanSafetyGuidanceShortcut and A._ParseHumanSafetyGuidanceShortcut(normalized))
+        or (A._ParseUnitRaidMarkerVisibilityShortcut and A._ParseUnitRaidMarkerVisibilityShortcut(normalized))
         or (A._ParseDispelOverlayOpacityShortcut and A._ParseDispelOverlayOpacityShortcut(normalized))
         or (A._ParseScopedDispelBorderTriggerFastShortcut and A._ParseScopedDispelBorderTriggerFastShortcut(normalized))
         or (A._ParsePowerColorTokenFastShortcut and A._ParsePowerColorTokenFastShortcut(normalized, raw))
@@ -5136,6 +5340,23 @@ function A.ParseSimpleChange(text, ctxOverride)
     return parsed
 end
 
+function P.ReadOnlyQuestionCandidate(parsed)
+    if type(parsed) ~= "table" then return false end
+    if parsed.kind == "answer" then return true end
+    if parsed.kind ~= "action" or type(parsed.action) ~= "table" then return false end
+    local action = parsed.action
+    return action.readOnly == true
+        or action.mutability == "readOnly"
+        or action.mutability == "navigation"
+end
+
+function P.ReadOnlyQuestionContext(ctx)
+    local out = {}
+    for key, value in pairs(type(ctx) == "table" and ctx or {}) do out[key] = value end
+    out._nonMutatingSafeParse = true
+    return out
+end
+
 function A.Parse(text, ctxOverride)
     local autoCoverage = A.AutoCoverage
     if autoCoverage and type(autoCoverage.EnsureFilled) == "function" then
@@ -5145,17 +5366,177 @@ function A.Parse(text, ctxOverride)
     local normalized = Normalize(raw)
     local ctx = type(ctxOverride) == "table" and ctxOverride or (A.GetContext and A.GetContext() or {})
     if normalized == "" then return { kind = "empty" } end
+    local nonMutatingIntent = not ctx._nonMutatingSafeParse
+        and P.NonMutatingIntent and P.NonMutatingIntent(normalized)
+    if nonMutatingIntent then
+        -- Procedural/capability questions must remain read-only, but should
+        -- still get the most specific help available instead of a generic
+        -- safety banner. Scope help is a read-only registry action; Knowledge
+        -- answers are explanatory data only. Neither path applies a setting.
+        if nonMutatingIntent == "problem" and ParseDiagnostic then
+            local diagnostic = ParseDiagnostic(normalized)
+            if diagnostic then
+                diagnostic.raw = raw
+                diagnostic.normalized = normalized
+                return diagnostic
+            end
+        end
+        local scopedHelp = nonMutatingIntent == "capability"
+            and ParseScopedHelp and ParseScopedHelp(normalized)
+        if scopedHelp then
+            scopedHelp.raw = raw
+            scopedHelp.normalized = normalized
+            return scopedHelp
+        end
+        local locationQuestion = normalized:match("^where%s") or normalized:match("^wo%s")
+        if locationQuestion and P.ParseOpen then
+            local openResult = P.ParseOpen(normalized, raw)
+            if openResult then
+                openResult.raw = raw
+                openResult.normalized = normalized
+                return openResult
+            end
+        end
+        -- Preserve specific read-only actions and contextual answers (profile
+        -- summary, blacklist summary, diagnostics, history follow-ups, ...)
+        -- without allowing the same normal parser pass to return a setting
+        -- plan. The marker prevents recursion; mutation candidates are rejected
+        -- and fall through to Knowledge or the generic read-only explanation.
+        local safeCandidate = A.Parse(raw, P.ReadOnlyQuestionContext(ctx))
+        if P.ReadOnlyQuestionCandidate(safeCandidate) then return safeCandidate end
+        if A.Knowledge and type(A.Knowledge.Answer) == "function" then
+            local ok, knowledgeAnswer = pcall(A.Knowledge.Answer, raw, { currentPage = M and M.activeKey })
+            if ok and type(knowledgeAnswer) == "table" then
+                knowledgeAnswer.kind = knowledgeAnswer.kind or "answer"
+                knowledgeAnswer.status = knowledgeAnswer.status == "applied" and "info" or (knowledgeAnswer.status or "info")
+                knowledgeAnswer.raw = raw
+                knowledgeAnswer.normalized = normalized
+                return knowledgeAnswer
+            end
+        end
+        local nonMutatingIntentParsed = P.NonMutatingIntentAnswer and P.NonMutatingIntentAnswer(normalized)
+        if nonMutatingIntentParsed then
+            nonMutatingIntentParsed.raw = raw
+            nonMutatingIntentParsed.normalized = normalized
+            return nonMutatingIntentParsed
+        end
+    end
     local humanSafetyParsed = A._ParseHumanSafetyGuidanceShortcut and A._ParseHumanSafetyGuidanceShortcut(normalized)
     if humanSafetyParsed then
         humanSafetyParsed.raw = raw
         humanSafetyParsed.normalized = normalized
         return humanSafetyParsed
     end
+    local unitRaidMarkerVisibilityParsed = A._ParseUnitRaidMarkerVisibilityShortcut and A._ParseUnitRaidMarkerVisibilityShortcut(normalized)
+    if unitRaidMarkerVisibilityParsed then
+        unitRaidMarkerVisibilityParsed.raw = raw
+        unitRaidMarkerVisibilityParsed.normalized = normalized
+        return unitRaidMarkerVisibilityParsed
+    end
     local continuationPriorityParsed = P.BuildContinuationFollowup and P.BuildContinuationFollowup(normalized, ctx)
     if continuationPriorityParsed then
         continuationPriorityParsed.raw = raw
         continuationPriorityParsed.normalized = normalized
         return continuationPriorityParsed
+    end
+    -- A destructive action alias is more specific than a setting alias with
+    -- the same noun phrase (for example, "reset target aura scope" must reset
+    -- the scope overrides, not set the Aura Editing Scope dropdown to Target).
+    if ContainsAny(normalized, P.RootPhrases[779]) and P.ParseRegistryActionAliasShortcut then
+        local actionText = normalized
+        if HasPhrase(normalized, "restore") then
+            actionText = normalized:gsub("%f[%a]restore%f[%A]", "reset")
+        end
+        local destructiveAction = P.ParseRegistryActionAliasShortcut(actionText, raw)
+        local actionKey = destructiveAction and destructiveAction.action and tostring(destructiveAction.action.key or "") or ""
+        if destructiveAction and (destructiveAction.action.type == "reset" or actionKey:find("^reset[_%.]")) then
+            destructiveAction.raw = raw
+            destructiveAction.normalized = normalized
+            return destructiveAction
+        end
+    end
+    -- Menu selectors change editing context; they must win over an exact
+    -- setting alias for the selected dropdown (for example, "select player
+    -- HP left slot" is not a request to choose an HP text format yet).
+    local menuSelectorPriorityParsed = ParseMenuSelectorState and ParseMenuSelectorState(normalized)
+    if menuSelectorPriorityParsed then
+        menuSelectorPriorityParsed.raw = raw
+        menuSelectorPriorityParsed.normalized = normalized
+        return menuSelectorPriorityParsed
+    end
+    if ContainsAny(normalized, P.RootPhrases[759]) then
+        local copySelectorPriorityParsed = (ParseUnitCopyScopeState and ParseUnitCopyScopeState(normalized))
+            or (ParseGroupCopyScopeState and ParseGroupCopyScopeState(normalized))
+        if copySelectorPriorityParsed then
+            copySelectorPriorityParsed.raw = raw
+            copySelectorPriorityParsed.normalized = normalized
+            return copySelectorPriorityParsed
+        end
+    end
+    local nameAnchorPriorityParsed = A._ParseNameTextAnchorShortcut
+        and A._ParseNameTextAnchorShortcut(normalized)
+    if nameAnchorPriorityParsed then
+        nameAnchorPriorityParsed.raw = raw
+        nameAnchorPriorityParsed.normalized = normalized
+        return nameAnchorPriorityParsed
+    end
+    local humanAnchorPriorityParsed = P.ParseHumanAnchorTarget
+        and P.ParseHumanAnchorTarget(normalized, raw)
+    if humanAnchorPriorityParsed then
+        humanAnchorPriorityParsed.raw = raw
+        humanAnchorPriorityParsed.normalized = normalized
+        return humanAnchorPriorityParsed
+    end
+    local castbarPositionPriorityParsed = P.ParseCastbarPositionRegistryShortcut
+        and P.ParseCastbarPositionRegistryShortcut(normalized)
+    if castbarPositionPriorityParsed then
+        castbarPositionPriorityParsed.raw = raw
+        castbarPositionPriorityParsed.normalized = normalized
+        return castbarPositionPriorityParsed
+    end
+    local castbarFillPriorityParsed = P.ParseCastbarFillDirectionRegistryShortcut
+        and P.ParseCastbarFillDirectionRegistryShortcut(normalized)
+    if castbarFillPriorityParsed then
+        castbarFillPriorityParsed.raw = raw
+        castbarFillPriorityParsed.normalized = normalized
+        return castbarFillPriorityParsed
+    end
+    if normalized:find("group number", 1, true) or normalized:find("subgroup", 1, true) then
+        local groupNumberMovePriorityParsed = P.ParseGenericOffsetMove and P.ParseGenericOffsetMove(normalized)
+        if groupNumberMovePriorityParsed then
+            groupNumberMovePriorityParsed.raw = raw
+            groupNumberMovePriorityParsed.normalized = normalized
+            return groupNumberMovePriorityParsed
+        end
+    end
+    local globalUiScalePriority = A._ParseGlobalUiScaleFastShortcut
+        and A._ParseGlobalUiScaleFastShortcut(normalized)
+    if globalUiScalePriority then
+        globalUiScalePriority.raw = raw
+        globalUiScalePriority.normalized = normalized
+        return globalUiScalePriority
+    end
+    -- Long exact-alias phrases are the most specific statement of intent a
+    -- sentence can carry; resolve them before every topical fast path so a
+    -- broad parent shortcut (including absorb/heal prediction or Aura lane
+    -- visibility) cannot swallow a precisely named child/root option.
+    -- Full-phrase mode requires the whole command minus verb and value to be
+    -- exactly one alias; anything less precise continues through the pipeline.
+    local exactAliasPriorityParsed = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
+    if exactAliasPriorityParsed then
+        exactAliasPriorityParsed.raw = raw
+        exactAliasPriorityParsed.normalized = normalized
+        return exactAliasPriorityParsed
+    end
+    -- Resolve a proven multi-change sentence before any single-setting fast
+    -- path can consume only its first item. ParseCompound internally rejects
+    -- ordinary one-setting commands and uses ParseSimpleChange recursively.
+    local earlyCompoundParsed = P.ShouldTryEarlyCompound(normalized)
+        and P.ParseCompound and P.ParseCompound(normalized, raw, nil)
+    if earlyCompoundParsed then
+        earlyCompoundParsed.raw = raw
+        earlyCompoundParsed.normalized = normalized
+        return earlyCompoundParsed
     end
     local earlyDispelOverlayOpacityParsed = A._ParseDispelOverlayOpacityShortcut and A._ParseDispelOverlayOpacityShortcut(normalized)
     if earlyDispelOverlayOpacityParsed then
@@ -5183,18 +5564,12 @@ function A.Parse(text, ctxOverride)
         earlyPowerColorTokenParsed.normalized = normalized
         return earlyPowerColorTokenParsed
     end
-    -- Long exact-alias phrases are the most specific statement of intent a
-    -- sentence can carry; resolve them before any topical fast path so a
-    -- broad shortcut (opacity, portrait, combat state, ...) cannot swallow a
-    -- precisely named option. Full-phrase mode: the whole command minus verb
-    -- and value must equal exactly one alias; everything else falls through.
-    local exactAliasPriorityParsed = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw, { minTokens = 3, fullPhrase = true })
-    if exactAliasPriorityParsed then
-        exactAliasPriorityParsed.raw = raw
-        exactAliasPriorityParsed.normalized = normalized
-        return exactAliasPriorityParsed
-    end
-    local humanIndicatorMovePriorityParsed = A._ParseHumanIndicatorMoveFastShortcut and A._ParseHumanIndicatorMoveFastShortcut(normalized)
+    -- A complete status-indicator anchor preset ("move ... to the top
+    -- right") is more specific than the generic directional nudge fast path.
+    -- Plain "move ... right" still falls through because the detail parser
+    -- only returns an anchor plan for an explicit anchor/preset intent.
+    local humanIndicatorMovePriorityParsed = (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
+        or (A._ParseHumanIndicatorMoveFastShortcut and A._ParseHumanIndicatorMoveFastShortcut(normalized))
     if humanIndicatorMovePriorityParsed then
         humanIndicatorMovePriorityParsed.raw = raw
         humanIndicatorMovePriorityParsed.normalized = normalized
@@ -5766,9 +6141,19 @@ function A.Parse(text, ctxOverride)
             value = P.RawAfterLastConnector and P.RawAfterLastConnector(raw, { " to ", " as ", " value ", " separator " }) or nil
             value = value or tostring(raw or ""):match("[Tt][Oo]%s+(.+)$")
         elseif ContainsAny(normalized, P.RootPhrases[624]) then
-            setting = A.Registry and A.Registry:GetSetting("targettarget.totInlineSeparator")
-            value = setting and P.EnumValueForText and P.EnumValueForText(setting, normalized) or nil
-            value = value or (P.RawAfterLastConnector and P.RawAfterLastConnector(raw, { " to ", " as ", " value " }) or nil)
+            local separatorSetting = A.Registry and A.Registry:GetSetting("targettarget.totInlineSeparator")
+            local enumValue = separatorSetting and P.EnumValueForText and P.EnumValueForText(separatorSetting, normalized) or nil
+            if enumValue ~= nil then
+                setting = separatorSetting
+                value = enumValue
+            else
+                local customValue = P.RawAfterLastConnector
+                    and P.RawAfterLastConnector(raw, { " to ", " as ", " value " }) or nil
+                if customValue ~= nil and customValue ~= "" then
+                    setting = A.Registry and A.Registry:GetSetting("targettarget.totInlineCustomSeparator")
+                    value = customValue
+                end
+            end
         else
             setting = A.Registry and A.Registry:GetSetting("targettarget.showToTInTargetName")
             value = DetectBoolean(normalized)
@@ -6511,15 +6896,29 @@ function A.Parse(text, ctxOverride)
             end
             summary = "Expands or collapses a menu section."
         elseif ContainsAny(normalized, P.RootPhrases[750]) then
-            actionKey = "open_dashboard_panel"
             args.panel = "scaling"
-            label = "Open scaling tools"
-            summary = "Opens the Dashboard scaling area."
+            if ContainsAny(normalized, P.RootPhrases[737]) or ContainsAny(normalized, P.RootPhrases[738]) then
+                actionKey = "set_dashboard_panel"
+                args.open = ContainsAny(normalized, P.RootPhrases[737]) and false or nil
+                label = args.open == false and "Close scaling tools" or "Toggle scaling tools"
+                summary = "Changes whether the Dashboard scaling area is open."
+            else
+                actionKey = "open_dashboard_panel"
+                label = "Open scaling tools"
+                summary = "Opens the Dashboard scaling area."
+            end
         elseif ContainsAny(normalized, P.RootPhrases[751]) then
-            actionKey = "open_dashboard_panel"
             args.panel = "changelog"
-            label = "Open changelog"
-            summary = "Opens the Dashboard changelog."
+            if ContainsAny(normalized, P.RootPhrases[737]) or ContainsAny(normalized, P.RootPhrases[738]) then
+                actionKey = "set_dashboard_panel"
+                args.open = ContainsAny(normalized, P.RootPhrases[737]) and false or nil
+                label = args.open == false and "Close changelog" or "Toggle changelog"
+                summary = "Changes whether the Dashboard changelog is open."
+            else
+                actionKey = "open_dashboard_panel"
+                label = "Open changelog"
+                summary = "Opens the Dashboard changelog."
+            end
         elseif ContainsAny(normalized, P.RootPhrases[752]) then
             if ContainsAny(normalized, P.RootPhrases[753]) then
                 actionKey = "assistant.diagnostic.editMode.status"
@@ -6553,16 +6952,6 @@ function A.Parse(text, ctxOverride)
                 raw = raw,
                 normalized = normalized,
             }
-        end
-    end
-    if ContainsAny(normalized, P.RootPhrases[759]) then
-        local earlyMenuSelectorParsed = (ParseGroupCopyScopeState and ParseGroupCopyScopeState(normalized))
-            or (ParseUnitCopyScopeState and ParseUnitCopyScopeState(normalized))
-            or (ParseMenuSelectorState and ParseMenuSelectorState(normalized))
-        if earlyMenuSelectorParsed then
-            earlyMenuSelectorParsed.raw = raw
-            earlyMenuSelectorParsed.normalized = normalized
-            return earlyMenuSelectorParsed
         end
     end
     if ContainsAny(normalized, P.RootPhrases[760])
@@ -6632,6 +7021,18 @@ function A.Parse(text, ctxOverride)
         end
     end
     if ContainsAny(normalized, P.RootPhrases[770]) then
+        local diagnosticParsed = ParseDiagnostic and ParseDiagnostic(normalized)
+        if diagnosticParsed then
+            diagnosticParsed.raw = raw
+            diagnosticParsed.normalized = normalized
+            return diagnosticParsed
+        end
+        local supportWorkflowParsed = ParseSupportWorkflow and ParseSupportWorkflow(normalized)
+        if supportWorkflowParsed then
+            supportWorkflowParsed.raw = raw
+            supportWorkflowParsed.normalized = normalized
+            return supportWorkflowParsed
+        end
         local actionKey
         local args = {}
         local label
@@ -6799,6 +7200,13 @@ function A.Parse(text, ctxOverride)
         earlyTextLayerParsed.raw = raw
         earlyTextLayerParsed.normalized = normalized
         return earlyTextLayerParsed
+    end
+    local earlyPairwiseSpacingParsed = P.ParsePairwiseFrameSpacingShortcut
+        and P.ParsePairwiseFrameSpacingShortcut(normalized)
+    if earlyPairwiseSpacingParsed then
+        earlyPairwiseSpacingParsed.raw = raw
+        earlyPairwiseSpacingParsed.normalized = normalized
+        return earlyPairwiseSpacingParsed
     end
     local earlyFrameSizeParsed = P.ParseFrameSizeExactShortcut and P.ParseFrameSizeExactShortcut(normalized)
     if earlyFrameSizeParsed then

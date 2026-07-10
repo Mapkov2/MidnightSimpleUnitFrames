@@ -48,6 +48,8 @@ local W = M.Widgets
 M.pages = M.pages or {}
 M.pageOrder = M.pageOrder or {}
 M.cache = M.cache or {}
+-- Deliberately transient: reloads and new logins start from the Dashboard.
+M.sessionLastPage = nil
 M._msuf2LayoutVersion = M._msuf2LayoutVersion or 0
 local floor = math.floor
 local max = math.max
@@ -65,6 +67,15 @@ local function GetAddonVersion()
     if type(_G.GetAddOnMetadata) == "function" then return _G.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version") end
     return nil
 end
+local function SetCachedText(owner, cacheKey, region, text)
+    if owner[cacheKey] == text then return end
+    owner[cacheKey] = text
+    region:SetText(text)
+end
+local FEEDBACK_COLOR_KEYS = {
+    ok = "ok", success = "ok", warning = "accent2", combat = "accent2",
+    danger = "danger", error = "danger", info = "accent",
+}
 local previewBuild
 local function IsMSUF60PreviewBuild()
     if previewBuild ~= nil then return previewBuild end
@@ -254,15 +265,6 @@ local function CursorPositionInUIParent()
     local x, y = _G.GetCursorPosition()
     return (x or 0) / scale, (y or 0) / scale
 end
-local function CaptureWindowLayout(frame)
-    if not (frame and frame.GetLeft and frame.GetTop and frame.GetWidth and frame.GetHeight) then return nil end
-    return {
-        x = frame:GetLeft() or SNAP_SCREEN_MARGIN,
-        yTop = frame:GetTop() or (((_G.UIParent and _G.UIParent.GetHeight and _G.UIParent:GetHeight()) or DEFAULT_WINDOW_H) - SNAP_SCREEN_MARGIN),
-        w = frame:GetWidth() or WINDOW_W,
-        h = frame:GetHeight() or WINDOW_H,
-    }
-end
 local function CaptureFrameLayout(frame, fallbackW, fallbackH)
     if not (frame and frame.GetLeft and frame.GetTop and frame.GetWidth and frame.GetHeight) then return nil end
     return {
@@ -417,7 +419,7 @@ end
 local function MaximizeSlashMenuWindow(frame)
     if not frame then return false end
     if frame._msuf2WindowState == "maximized" then return RestoreSlashMenuWindow(frame) end
-    frame._msuf2RestoreLayout = CaptureWindowLayout(frame)
+    frame._msuf2RestoreLayout = CaptureFrameLayout(frame)
     frame._msuf2WindowState = "maximized"
     local parent = _G.UIParent
     if not (parent and parent.GetWidth and parent.GetHeight) then return false end
@@ -448,7 +450,7 @@ local function RestoreMinimizedSlashMenu(frame)
     if not frame then frame = M.frame end
     if not frame then return false end
     local start = M.minimizedBar and MinimizedBarTargetLayout(frame, M.minimizedBar) or nil
-    local target = frame._msuf2PreMinimizeLayout or CaptureWindowLayout(frame)
+    local target = frame._msuf2PreMinimizeLayout or CaptureFrameLayout(frame)
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     frame._msuf2Minimized = nil
     ApplyMenuFramePriority(frame)
@@ -497,7 +499,7 @@ end
 local function MinimizeSlashMenuWindow(frame)
     if not frame then return false end
     if not M.minimizedBar then return false end
-    local start = CaptureWindowLayout(frame)
+    local start = CaptureFrameLayout(frame)
     frame._msuf2Minimized = true
     frame._msuf2PreMinimizeLayout = start
     if M.minimizedBar.title and frame.title and frame.title.GetText then M.minimizedBar.title:SetText(frame.title:GetText() or "MSUF Menu") end
@@ -593,7 +595,7 @@ local function ApplySlashMenuSnap(frame)
     local layout = frame and frame._msuf2LastSnapLayout or nil
     if not layout then layout = GetSlashMenuSnapLayout(frame) end
     if not layout then return false end
-    local start = CaptureWindowLayout(frame)
+    local start = CaptureFrameLayout(frame)
     if frame._msuf2WindowState == "maximized" then
         frame._msuf2WindowState = "normal"
         frame._msuf2RestoreLayout = nil
@@ -1100,6 +1102,7 @@ function M.SelectPage(key)
         if M.activeKey == key then M.activeKey = nil end
     end
     if key == M.activeKey and cached then
+        M.sessionLastPage = key
         RememberPrimaryNavPage(key)
         M.CallIf(M.ReleasePinnedPreviews, "SELECT_CACHED", key)
         M.CallIf(M.ReleaseGFNativePreviews, "SELECT_CACHED", key)
@@ -1108,7 +1111,6 @@ function M.SelectPage(key)
         RequestGroupPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
         if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
-        M.CallIf(M.PostponeAssistantPerformanceWarmup, "select-page")
         return true
     end
     local previousKey = M.activeKey
@@ -1125,7 +1127,7 @@ function M.SelectPage(key)
     entry.hiddenBuild = false
     M.activeKey = key
     if not suppressPageHistory then RecordPageNavigation(previousKey, key) end
-    if key ~= "search" then M.SetMenuStateValue("lastPage", key) end
+    M.sessionLastPage = key
     if M.frame then M.frame._msufCurrentKey = key end
     if M.scrollChild then SetFrameHeightIfChanged(M.scrollChild, entry.height or CONTENT_H) end
     if M.scrollFrame then
@@ -1144,7 +1146,6 @@ function M.SelectPage(key)
     RequestBossPagePreviewForKey(key)
     RequestGroupPagePreviewForKey(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
-    M.CallIf(M.PostponeAssistantPerformanceWarmup, "select-page")
     return true
 end
 local function CreateMinimizedBar(frame)
@@ -1181,8 +1182,7 @@ local function CreateMinimizedBar(frame)
     M.minimizedBar = bar
     return bar
 end
-local function BuildWindow()
-    if M.frame then return M.frame end
+local function BuildWindowShell()
     EnsurePersistentMenuState()
     SetWindowMetrics(ReadSavedWindowSize())
     local f = T.Panel(UIParent, "MSUF2_Window", T.colors.glassShell or T.colors.bg, T.colors.border)
@@ -1197,21 +1197,8 @@ local function BuildWindow()
     if f.SetClampedToScreen then f:SetClampedToScreen(true) end
     ApplyWindowResizeBounds(f)
     f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function(self)
-        if self._msuf2BeginWindowDrag then
-            self:_msuf2BeginWindowDrag()
-            return
-        end
-        self:StartMoving()
-    end)
-    f:SetScript("OnDragStop", function(self)
-        if self._msuf2FinishWindowDrag then
-            self:_msuf2FinishWindowDrag(true)
-            return
-        end
-        if self.StopMovingOrSizing then self:StopMovingOrSizing() end
-        ApplySlashMenuSnap(self)
-    end)
+    f:SetScript("OnDragStart", function(self) self:_msuf2BeginWindowDrag() end)
+    f:SetScript("OnDragStop", function(self) self:_msuf2FinishWindowDrag(true) end)
     f:SetScript("OnSizeChanged", function(self)
         if self._msuf2LiveResizing then
             self._msuf2ResizeMetricsDirty = true
@@ -1245,6 +1232,12 @@ local function BuildWindow()
     minimize:SetPoint("TOPRIGHT", maximize, "TOPLEFT", -2, 0)
     minimize:SetScript("OnClick", function() MinimizeSlashMenuWindow(f) end)
     f.minimizeButton = minimize
+    return { frame = f }
+end
+
+-- Drag, snap and resize share transient proxy state but no page/chrome state.
+local function InstallWindowInteractions(state)
+    local f = state.frame
     local function EnsureResizeProxy()
         if f._msuf2ResizeProxy then return f._msuf2ResizeProxy end
         local proxy = CreateFrame("Frame", nil, UIParent)
@@ -1360,7 +1353,7 @@ local function BuildWindow()
     local function BeginResizeProxy(button)
         if button ~= "LeftButton" then return false end
         local cursorX, cursorY = CursorPositionInUIParent()
-        local layout = CaptureWindowLayout(f)
+        local layout = CaptureFrameLayout(f)
         if not (cursorX and layout) then return false end
         f._msuf2LiveResizing = true
         f._msuf2ResizeMetricsDirty = nil
@@ -1437,6 +1430,10 @@ local function BuildWindow()
     f.resizeGrip = grip
     CreateMinimizedBar(f)
     M.CallIf(M.RefreshWindowControls, f)
+end
+
+local function BuildWindowChrome(state)
+    local f = state.frame
     local content = CreateFrame("Frame", nil, f)
     content:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -38)
     content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -14, 14)
@@ -1463,18 +1460,15 @@ local function BuildWindow()
     status:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     status:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
     status:SetHeight(58)
-    local statusTopLine = status:CreateTexture(nil, "ARTWORK", nil, 6)
-    statusTopLine:SetTexture("Interface\\Buttons\\WHITE8X8")
-    statusTopLine:SetHeight(1)
-    statusTopLine:SetPoint("TOPLEFT", status, "TOPLEFT", 0, 0)
-    statusTopLine:SetPoint("TOPRIGHT", status, "TOPRIGHT", 0, 0)
-    statusTopLine:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.25)
-    local statusBottomLine = status:CreateTexture(nil, "ARTWORK", nil, 6)
-    statusBottomLine:SetTexture("Interface\\Buttons\\WHITE8X8")
-    statusBottomLine:SetHeight(1)
-    statusBottomLine:SetPoint("BOTTOMLEFT", status, "BOTTOMLEFT", 14, 0)
-    statusBottomLine:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -14, 0)
-    statusBottomLine:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.16)
+    local function StatusDivider(edge, inset, alpha)
+        local line = status:CreateTexture(nil, "ARTWORK", nil, 6)
+        line:SetHeight(1)
+        line:SetPoint(edge .. "LEFT", status, edge .. "LEFT", inset, 0)
+        line:SetPoint(edge .. "RIGHT", status, edge .. "RIGHT", -inset, 0)
+        line:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], alpha)
+    end
+    StatusDivider("TOP", 0, 0.25)
+    StatusDivider("BOTTOM", 14, 0.16)
     local function StatusText(point, relativeTo, relativePoint, x, y, justify, alpha)
         local fs = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
         fs:SetPoint(point, relativeTo, relativePoint, x, y)
@@ -1495,6 +1489,10 @@ local function BuildWindow()
     status.feedbackText = sbFeedback
     status.text = sbProfile
     f.status = status
+end
+
+local function BuildWindowToolbar(state)
+    local f, status = state.frame, state.frame.status
     local function RunToolbarNewTask()
         if type(M.SelectPage) == "function" then M.SelectPage("home") end
         if type(M.StartNewAssistantTask) == "function" then return M.StartNewAssistantTask() end
@@ -1550,16 +1548,8 @@ local function BuildWindow()
     function M.ShowStatusFeedback(text, kind, seconds)
         if not (f and f.status and f.status.feedbackText and text and text ~= "") then return end
         local feedback = f.status.feedbackText
-        local color = T.colors.muted
-        if kind == "ok" or kind == "success" then
-            color = T.colors.ok or color
-        elseif kind == "warning" or kind == "combat" then
-            color = T.colors.accent2 or color
-        elseif kind == "danger" or kind == "error" then
-            color = T.colors.danger or color
-        elseif kind == "info" then
-            color = T.colors.accent or color
-        end
+        local colorKey = FEEDBACK_COLOR_KEYS[kind]
+        local color = colorKey and T.colors[colorKey] or T.colors.muted
         f.status._msuf2FeedbackSerial = (f.status._msuf2FeedbackSerial or 0) + 1
         local serial = f.status._msuf2FeedbackSerial
         feedback:SetText(M.Tr(tostring(text)))
@@ -1586,45 +1576,29 @@ local function BuildWindow()
         end)
     end
     M.ShowInlineFeedback = M.ShowStatusFeedback
+end
+
+local function InstallWindowStatusRuntime(state)
+    local f, status = state.frame, state.frame.status
+    local sbProfile, sbEdit = status.profileText, status.editText
+    local sbCombat, sbVersion = status.combatText, status.versionText
+    local RefreshToolbarPageReset = M.RefreshToolbarPageReset
     function f:RefreshStatus()
         local profile = tostring(_G.MSUF_ActiveProfile or "Default")
-        local edit = IsEditModeActive() and "On" or "Off"
         local profileText = "|cff4a90d9" .. L_PROFILE .. "|r |cffccd8e8" .. profile .. "|r  |cff3a4a66\194\183|r"
-        if status._msuf2ProfileText ~= profileText then
-            status._msuf2ProfileText = profileText
-            sbProfile:SetText(profileText)
-        end
-        local editText
-        if edit == "On" then
-            editText = "|cff4ade80" .. L_EDIT_ON .. "|r  |cff3a4a66\194\183|r"
-        else
-            editText = "|cff5a6a88" .. L_EDIT_OFF .. "|r  |cff3a4a66\194\183|r"
-        end
-        if status._msuf2EditText ~= editText then
-            status._msuf2EditText = editText
-            sbEdit:SetText(editText)
-        end
-        local combatText
-        if _G.InCombatLockdown and _G.InCombatLockdown() then
-            combatText = "|cffef4444" .. L_IN_COMBAT .. "|r"
-        else
-            combatText = "|cff22c55e" .. L_OUT_OF_COMBAT .. "|r"
-        end
-        if status._msuf2CombatText ~= combatText then
-            status._msuf2CombatText = combatText
-            sbCombat:SetText(combatText)
-        end
-        local ver = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata and _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
-        local versionText
-        if type(ver) == "string" and ver ~= "" then
-            versionText = ver:match("^%d") and ("v" .. ver) or ver
-        else
-            versionText = "v5.0 Beta 1"
-        end
-        if status._msuf2VersionText ~= versionText then
-            status._msuf2VersionText = versionText
-            sbVersion:SetText(versionText)
-        end
+        SetCachedText(status, "_msuf2ProfileText", sbProfile, profileText)
+        local editText = IsEditModeActive()
+            and ("|cff4ade80" .. L_EDIT_ON .. "|r  |cff3a4a66\194\183|r")
+            or ("|cff5a6a88" .. L_EDIT_OFF .. "|r  |cff3a4a66\194\183|r")
+        SetCachedText(status, "_msuf2EditText", sbEdit, editText)
+        local inCombat = _G.InCombatLockdown and _G.InCombatLockdown()
+        local combatText = inCombat and ("|cffef4444" .. L_IN_COMBAT .. "|r")
+            or ("|cff22c55e" .. L_OUT_OF_COMBAT .. "|r")
+        SetCachedText(status, "_msuf2CombatText", sbCombat, combatText)
+        local version = GetAddonVersion()
+        local versionText = type(version) == "string" and version ~= ""
+            and (version:match("^%d") and ("v" .. version) or version) or "v5.0 Beta 1"
+        SetCachedText(status, "_msuf2VersionText", sbVersion, versionText)
         RefreshDashboardEditModeButton()
         RefreshToolbarPageReset()
     end
@@ -1635,76 +1609,15 @@ local function BuildWindow()
         local method = registered and status.RegisterEvent or status.UnregisterEvent
         for i = 1, #STATUS_EVENTS do method(status, STATUS_EVENTS[i]) end
     end
-    local assistantWarmupSerial = 0
-    local assistantWarmupTimer
-    local ASSISTANT_WARMUP_IDLE_DELAY = 2.5
-    local ASSISTANT_AUTO_WARMUP_ENABLED = false
-    local function AssistantAPI()
-        return (MSUF and MSUF.Assistant) or M.Assistant
-    end
-    local function CancelAssistantWarmupTimer()
-        if assistantWarmupTimer and type(assistantWarmupTimer.Cancel) == "function" then
-            assistantWarmupTimer:Cancel()
+    local function SetAssistantMenuRuntimeActive(active, reason)
+        local assistant = (MSUF and MSUF.Assistant) or M.Assistant
+        if not assistant then return false end
+        if type(assistant.SetMenuRuntimeActive) == "function" then
+            return assistant.SetMenuRuntimeActive(active == true, reason)
         end
-        assistantWarmupTimer = nil
-    end
-    local function CancelAssistantPerformanceWarmup(reason)
-        CancelAssistantWarmupTimer()
-        local assistant = AssistantAPI()
-        if assistant and type(assistant.CancelPerformanceWarmup) == "function" then
-            assistant.CancelPerformanceWarmup(reason)
-        end
-    end
-    local function AssistantWarmupBlocked()
-        return (_G.InCombatLockdown and _G.InCombatLockdown())
-            or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
-            or not (f and f.IsShown and f:IsShown())
-    end
-    local function RequestAssistantPerformanceWarmup(serial)
-        if serial ~= assistantWarmupSerial then return end
-        if AssistantWarmupBlocked() then return end
-        local assistant = AssistantAPI()
-        if assistant and type(assistant.WarmupPerformanceIndexes) == "function" then
-            assistant.WarmupPerformanceIndexes("menu-open")
-        end
-    end
-    local function QueueAssistantPerformanceWarmup(reason, delay)
-        if ASSISTANT_AUTO_WARMUP_ENABLED ~= true and _G.MSUF_ASSISTANT_ALLOW_WARMUP ~= true then
-            CancelAssistantPerformanceWarmup(reason or "menu-activity")
-            return false
-        end
-        local assistant = AssistantAPI()
-        if assistant and assistant._performanceWarmupCompleted == true then
-            CancelAssistantWarmupTimer()
-            return true
-        end
-        assistantWarmupSerial = assistantWarmupSerial + 1
-        local warmupSerial = assistantWarmupSerial
-        CancelAssistantPerformanceWarmup(reason or "menu-activity")
-        if AssistantWarmupBlocked() then return false end
-        delay = tonumber(delay) or ASSISTANT_WARMUP_IDLE_DELAY
-        if delay < 0 then delay = 0 end
-        if _G.C_Timer and type(_G.C_Timer.NewTimer) == "function" then
-            assistantWarmupTimer = _G.C_Timer.NewTimer(delay, function()
-                assistantWarmupTimer = nil
-                RequestAssistantPerformanceWarmup(warmupSerial)
-            end)
-        elseif _G.C_Timer and type(_G.C_Timer.After) == "function" then
-            _G.C_Timer.After(delay, function()
-                RequestAssistantPerformanceWarmup(warmupSerial)
-            end)
-        else
-            RequestAssistantPerformanceWarmup(warmupSerial)
-        end
-        return true
-    end
-    function M.PostponeAssistantPerformanceWarmup(reason)
-        if not (f and f.IsShown and f:IsShown()) then
-            assistantWarmupSerial = assistantWarmupSerial + 1
-            CancelAssistantPerformanceWarmup(reason or "menu-hide")
-            return false
-        end
-        return QueueAssistantPerformanceWarmup(reason or "menu-activity", ASSISTANT_WARMUP_IDLE_DELAY)
+        assistant._menuRuntimeActive = active == true and true or false
+        assistant._menuRuntimeReason = tostring(reason or (active and "menu-show" or "menu-hide"))
+        return assistant._menuRuntimeActive
     end
     status:SetScript("OnEvent", function(_, event)
         if not (f and f:IsShown()) then
@@ -1712,8 +1625,7 @@ local function BuildWindow()
             return
         end
         if event == "PLAYER_REGEN_DISABLED" then
-            assistantWarmupSerial = assistantWarmupSerial + 1
-            CancelAssistantPerformanceWarmup("combat")
+            SetAssistantMenuRuntimeActive(false, "combat")
             CancelSearchBackgroundIndex()
             M.CallIf(M.BlockCombatAction)
             M.HideSlashMenuAndMinibar(f)
@@ -1726,11 +1638,20 @@ local function BuildWindow()
         RequestBossPagePreviewForKey(M.activeKey)
         RequestGroupPagePreviewForKey(M.activeKey)
     end)
+    state.SetStatusEventsRegistered = SetStatusEventsRegistered
+    state.SetAssistantMenuRuntimeActive = SetAssistantMenuRuntimeActive
+end
+
+local function InstallWindowLifecycle(state)
+    local f = state.frame
+    local SetStatusEventsRegistered = state.SetStatusEventsRegistered
+    local SetAssistantMenuRuntimeActive = state.SetAssistantMenuRuntimeActive
     f:SetScript("OnShow", function(self)
         if M.BlockCombatAction and M.BlockCombatAction() then
             self:Hide()
             return
         end
+        SetAssistantMenuRuntimeActive(true, "menu-show")
         self._msuf2Closing = nil
         if self.SetAlpha then self:SetAlpha(1) end
         ShowPreviewWarning("menu")
@@ -1746,16 +1667,12 @@ local function BuildWindow()
         RequestBossPagePreviewForKey(M.activeKey)
         RequestGroupPagePreviewForKey(M.activeKey)
         M.CallIf(M.UpdateMenuCombatListener)
-        M.PostponeAssistantPerformanceWarmup("menu-open")
     end)
     f:SetScript("OnHide", function()
-        assistantWarmupSerial = assistantWarmupSerial + 1
+        SetAssistantMenuRuntimeActive(false, "menu-hide")
         if M.StopWindowLayoutAnimation then M.StopWindowLayoutAnimation(f) end
         if f._msuf2CancelWindowInteractions then
             f:_msuf2CancelWindowInteractions()
-        else
-            if f._msuf2FinishWindowDrag then f:_msuf2FinishWindowDrag(false) end
-            if FinishResizeProxy then FinishResizeProxy(false) end
         end
         if f._msuf2Closing then
             f._msuf2WindowState = "normal"
@@ -1763,7 +1680,6 @@ local function BuildWindow()
             f._msuf2PreMinimizeLayout = nil
             f._msuf2Minimized = nil
         end
-        CancelAssistantPerformanceWarmup("menu-hide")
         CancelSearchBackgroundIndex()
         SetStatusEventsRegistered(false)
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
@@ -1778,6 +1694,11 @@ local function BuildWindow()
         M.CallIf(M.UpdateMenuCombatListener)
         f._msuf2Closing = nil
     end)
+end
+
+local function BuildWindowScrollHost(state)
+    local f = state.frame
+    local host, status = f.host, f.status
     local scroll = CreateFrame("ScrollFrame", nil, host)
     scroll:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, 0)
     scroll:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -22, 0)
@@ -1788,6 +1709,18 @@ local function BuildWindow()
     scroll:SetScrollChild(child)
     M.scrollChild = child
     M.CallIf(T.StyleScrollFrame, scroll, host)
+end
+
+local function BuildWindow()
+    if M.frame then return M.frame end
+    local state = BuildWindowShell()
+    InstallWindowInteractions(state)
+    BuildWindowChrome(state)
+    BuildWindowToolbar(state)
+    InstallWindowStatusRuntime(state)
+    InstallWindowLifecycle(state)
+    BuildWindowScrollHost(state)
+    local f = state.frame
     M.frame = f
     return f
 end
@@ -1825,7 +1758,7 @@ function M.Open(pageKey)
     ApplyMenuFrameScale(f)
     ApplyMenuFramePriority(f)
     f:Show()
-    M.SelectPage(pageKey or "home")
+    M.SelectPage(pageKey or M.sessionLastPage or "home")
     return true
 end
 function M.Toggle(pageKey)
@@ -1835,7 +1768,7 @@ function M.Toggle(pageKey)
     end
     local f = BuildWindow()
     if M.minimizedBar and M.minimizedBar.IsShown and M.minimizedBar:IsShown() then
-        M.Open(pageKey or M.activeKey or "home")
+        M.Open(pageKey or M.activeKey)
         return
     end
     if f:IsShown() and (not pageKey or pageKey == M.activeKey) then

@@ -28,8 +28,8 @@ Data.GEOMETRY_PARSER = {
         [5] = { "portrait", "portraits" },
         [6] = { "color", "colour", "farbe", "reset" },
         [7] = {
-        "keep text portrait visible", "keep text and portrait visible", "keep text visible", "keep portrait visible",
-        "exclude text from opacity", "exclude portrait from opacity", "text portrait opacity", "text and portrait opacity",
+        "keep text portrait visible", "keep text and portrait visible", "keep text & portrait visible", "keep text visible", "keep portrait visible",
+        "exclude text from opacity", "exclude portrait from opacity", "text portrait opacity", "text and portrait opacity", "text & portrait opacity",
     },
         [8] = { "move", "nudge", "shift", "verschiebe", "offset" },
         [9] = { "x offset", "offset x", "portrait x", "horizontal offset" },

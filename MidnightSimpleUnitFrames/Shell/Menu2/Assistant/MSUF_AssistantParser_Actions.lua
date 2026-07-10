@@ -368,6 +368,11 @@ local STATUS_ICON_PACK_VALUES = {
     "DEFAULT", "BLIZZARD", "CLASSIC", "MIDNIGHT", "UXPRO", "GLOSSY_ORBS", "DARK_EMBOSS",
     "GLASS_PANELS", "NEON_OUTLINE", "RING_SYMBOLS", "DOTS", "SHAPES", "DIAMONDS", "SQUARES",
 }
+local STATUS_CORNER_PRESET_TERMS = {
+    "top left", "top right", "bottom left", "bottom right",
+    "upper left", "upper right", "lower left", "lower right",
+    "topleft", "topright", "bottomleft", "bottomright",
+}
 
 local function GroupStatusIconForText(text)
     for i = 1, #GROUP_STATUS_ICON_ALIASES do
@@ -903,9 +908,33 @@ local function ParseGroupStatusIconDetail(text)
         end
     end
 
+    if ContainsAny(text, ActionsPhrases[73])
+        and type(iconSpec.style) == "string" and iconSpec.style ~= ""
+    then
+        local setting = Registry and Registry:GetSetting(
+            "gf_" .. tostring(scopes[1] or "") .. "." .. tostring(iconSpec.style))
+        local value = AliasValueForText(text, GROUP_STATUS_ICON_PACK_ALIASES, STATUS_ICON_PACK_VALUES)
+        if value == nil and setting and setting.type == "string" and P.ValueForRegistrySetting then
+            value = P.ValueForRegistrySetting(setting, text, text)
+        end
+        if value ~= nil then
+            local changes = BuildGroupStatusChanges(scopes, iconSpec.style, value)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group " .. tostring(iconSpec.key or "Status") .. " Icon Pack",
+                    bulkSafe = #changes > 1,
+                    summary = "Changes the icon pack for the selected group status indicator without changing its visibility.",
+                }
+            end
+        end
+    end
+
     if anchorIntent and iconSpec.anchor
         and not (ContainsAny(text, ActionsPhrases[74]) and DetectDirection(text)
-            and not ContainsAny(text, ActionsPhrases[75]))
+            and not ContainsAny(text, ActionsPhrases[75])
+            and not ContainsAny(text, STATUS_CORNER_PRESET_TERMS))
     then
         local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[1] or "") .. "." .. tostring(iconSpec.anchor))
         local value = setting and StatusAnchorValueForText(text, GROUP_SPELL_ANCHOR_ALIASES, setting.values or { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" })
@@ -1275,14 +1304,25 @@ local function ParseUnitStatusIndicatorDetail(text)
     local textState = visible ~= nil and UnitStatusTextStateForText(text) or nil
     if textState then
         local changes = {}
-        local stateSetting = Registry and Registry:GetSetting("general.statusIndicators." .. textState.key)
-        if stateSetting then
-            changes[#changes + 1] = { setting = stateSetting, value = visible }
+        local globalStateIntent = ContainsAny(text, {
+            "global", "globally", "all unit frames", "all unitframes",
+            "every unit frame", "every unitframe", "shared",
+        })
+        local stateSpecificToggle = textState.key == "showAFK" or textState.key == "showDND"
+        -- A scoped disable must hide the unit's Dead/Ghost/Offline text
+        -- container, not turn that status off for every frame. Enabling a
+        -- scoped state still needs both the global state and local container,
+        -- while an explicitly global command changes only the shared state.
+        if stateSpecificToggle or visible == true or not unit or globalStateIntent then
+            local stateSetting = Registry and Registry:GetSetting("general.statusIndicators." .. textState.key)
+            if stateSetting then
+                changes[#changes + 1] = { setting = stateSetting, value = visible }
+            end
         end
-        if visible == true and unit then
+        if unit and not globalStateIntent and not stateSpecificToggle then
             local showSetting = Registry and Registry:GetSetting(unit .. ".statusTextEnabled")
             if showSetting then
-                changes[#changes + 1] = { setting = showSetting, value = true }
+                changes[#changes + 1] = { setting = showSetting, value = visible }
             end
         end
         if #changes > 0 then
@@ -1303,20 +1343,59 @@ local function ParseUnitStatusIndicatorDetail(text)
     end
 
     if visible ~= nil and type(spec.show) == "string" and spec.show ~= "" then
-        local setting = Registry and Registry:GetSetting(unit .. "." .. spec.show)
-        if setting then
+        local changes, seen = {}, {}
+        for i = 1, #units do
+            local scopeUnit = tostring(units[i] or "")
+            if scopeUnit ~= "" and not seen[scopeUnit] then
+                seen[scopeUnit] = true
+                local scopeSpec = ResolveUnitStatusSpecForText(scopeUnit, text)
+                local showKey = scopeSpec and scopeSpec.show
+                local setting = type(showKey) == "string" and showKey ~= ""
+                    and Registry and Registry:GetSetting(scopeUnit .. "." .. showKey) or nil
+                if setting then changes[#changes + 1] = { setting = setting, value = visible } end
+            end
+        end
+        if #changes > 0 then
             return {
                 kind = "changes",
-                changes = { { setting = setting, value = visible } },
-                label = UnitDisplayLabel(unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Visibility",
+                changes = changes,
+                label = #changes == 1
+                    and (UnitDisplayLabel(unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Visibility")
+                    or (tostring(spec.label or "Status Indicator") .. " Visibility"),
+                bulkSafe = #changes > 1,
                 summary = "Changes the visibility toggle for one unit-frame status indicator.",
+            }
+        end
+    end
+
+    -- Per-indicator icon packs are enum settings. Keep this distinct from
+    -- general.statusIconsUseMidnightStyle above: "turn on Midnight style"
+    -- toggles the global compatibility switch, while an explicit "icon
+    -- pack/style/design" request selects the pack for the named indicator.
+    if ContainsAny(text, ActionsPhrases[90])
+        and type(spec.iconStyle) == "string" and spec.iconStyle ~= ""
+    then
+        local setting = Registry and Registry:GetSetting(unit .. "." .. spec.iconStyle)
+        local values = setting and setting.values
+            or (A.UnitframeRegistryData and A.UnitframeRegistryData.STATUS_ICON_PACK_FALLBACK_VALUES)
+        local value = AliasValueForText(text, UNIT_STATUS_ICON_PACK_ALIASES, values)
+        if value == nil and setting and setting.type == "string" and P.ValueForRegistrySetting then
+            value = P.ValueForRegistrySetting(setting, text, text)
+        end
+        if setting and value ~= nil then
+            return {
+                kind = "changes",
+                changes = { { setting = setting, value = value } },
+                label = UnitDisplayLabel(unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Icon Pack",
+                summary = "Changes the icon pack for one unit-frame status indicator without changing its visibility.",
             }
         end
     end
 
     if (ContainsAny(text, ActionsPhrases[91]) or StatusAnchorIntent(text))
         and not (ContainsAny(text, ActionsPhrases[92]) and DetectDirection(text)
-            and not ContainsAny(text, ActionsPhrases[93]))
+            and not ContainsAny(text, ActionsPhrases[93])
+            and not ContainsAny(text, STATUS_CORNER_PRESET_TERMS))
         and type(spec.anchor) == "string" and spec.anchor ~= ""
     then
         local setting = Registry and Registry:GetSetting(unit .. "." .. spec.anchor)
@@ -1613,6 +1692,26 @@ local function ParseCustomAnchorClear(text)
 end
 
 local function ParseReset(text)
+    -- Profile names such as "Default" overlap the broad reset vocabulary. A
+    -- copy/duplicate sentence must reach the profile workflow parser instead
+    -- of being converted into a destructive profile reset confirmation.
+    if text:match("^copy%s+")
+        or text:match("^duplicate%s+")
+        or text:match("^clone%s+")
+        or text:match("^dupe%s+")
+        or text:match("^backup%s+")
+        or text:match("^kopiere%s+")
+        or text:match("^dupliziere%s+")
+        or text:match("^sichere%s+")
+    then
+        return nil
+    end
+    -- "Restore my backup profile" is a profile-selection/import workflow,
+    -- not permission to wipe the currently active profile. Let the Profiles
+    -- parser ask for the exact backup name or import string.
+    if ContainsAny(text, { "backup", "backup profile", "profile backup", "last backup" }) then
+        return nil
+    end
     if not ContainsAny(text, ActionsPhrases[109]) then return nil end
     if ContainsAny(text, ActionsPhrases[110]) then
         local action = Registry and Registry:GetAction("factory_reset_all")
@@ -2233,47 +2332,76 @@ local ACTION_EXPLAIN_PREFIXES = {
     "why should i run ", "why would i run ",
 }
 
-local function ActionExplainTargetText(text)
+-- Action labels need a lossless exact-match lane. The general parser
+-- intentionally folds phrases such as "status icons" to "status icon" so
+-- ordinary setting requests match both forms, but that would make two real
+-- action names (Reset Group Status Icon / Icons) indistinguishable here.
+local function NormalizeActionExplainExact(text)
+    text = tostring(text or ""):lower()
+    text = text:gsub("\195\164", "ae"):gsub("\195\182", "oe"):gsub("\195\188", "ue"):gsub("\195\159", "ss")
+    text = text:gsub("[\"'`,;:!?%(%)]", " ")
+    text = text:gsub("[_%.%-]+", " "):gsub("%s+", " ")
+    return Trim(text)
+end
+
+local function ActionExplainTargetText(text, rawText)
     text = Normalize(text)
-    if text == "" then return nil end
+    local exactText = NormalizeActionExplainExact(rawText or text)
+    if text == "" and exactText == "" then return nil end
     for i = 1, #ACTION_EXPLAIN_PREFIXES do
         local prefix = ACTION_EXPLAIN_PREFIXES[i]
+        if exactText:sub(1, #prefix) == prefix then
+            local exactTarget = Trim(exactText:sub(#prefix + 1))
+            exactTarget = exactTarget:gsub("%s+do$", ""):gsub("%s+mean$", ""):gsub("%s+help with$", "")
+            exactTarget = Trim(exactTarget)
+            return Normalize(exactTarget), exactTarget
+        end
         if text:sub(1, #prefix) == prefix then
             local target = Trim(text:sub(#prefix + 1))
             target = target:gsub("%s+do$", ""):gsub("%s+mean$", ""):gsub("%s+help with$", "")
-            return Trim(target)
+            target = Trim(target)
+            return target, NormalizeActionExplainExact(target)
         end
     end
     return nil
 end
 
-local function ActionExplainMatchScore(action, target)
+local function ActionExplainMatchScore(action, target, exactTarget)
     if type(action) ~= "table" or target == "" then return 0 end
     local best = 0
-    local function consider(value)
+    local function consider(value, sourceRank)
+        local exactValue = NormalizeActionExplainExact(value)
         value = Normalize(value)
         if value == "" then return end
-        if value == target then
-            local score = 10000 + #Compact(value)
+        if exactTarget ~= "" and exactValue == exactTarget then
+            -- Preserve the actual public spelling before plural/domain folds.
+            local score = (tonumber(sourceRank) or 1) * 100000 + #Compact(exactValue)
+            if score > best then best = score end
+        elseif value == target then
+            -- An exact public label is the canonical way to name an action.
+            -- Aliases intentionally overlap (for example a dashboard-panel
+            -- setter aliases "Open Recovery Tools"), so they must not tie a
+            -- primary-label match and make an exact explanation ambiguous.
+            local score = (tonumber(sourceRank) or 1) * 10000 + #Compact(value)
             if score > best then best = score end
         elseif HasPhrase(target, value) or HasPhrase(value, target) then
-            local score = #Compact(value)
+            local score = (tonumber(sourceRank) or 1) * 1000 + #Compact(value)
             if score > best then best = score end
         end
     end
-    consider(action.label)
+    consider(action.label, 4)
     if type(A.DisplayActionLabel) == "function" then
-        consider(A.DisplayActionLabel(action))
+        consider(A.DisplayActionLabel(action), 4)
     end
     if action.key ~= nil then
-        consider((tostring(action.key):gsub("[_%.-]+", " ")))
+        consider((tostring(action.key):gsub("[_%.-]+", " ")), 3)
     end
-    for i = 1, #(action.aliases or {}) do consider(action.aliases[i]) end
+    for i = 1, #(action.aliases or {}) do consider(action.aliases[i], 2) end
     return best
 end
 
-function P.ParseRegistryActionExplainShortcut(text)
-    local target = ActionExplainTargetText(text)
+function P.ParseRegistryActionExplainShortcut(text, rawText)
+    local target, exactTarget = ActionExplainTargetText(text, rawText)
     if not target or target == "" then return nil end
     local actions = Registry and Registry:AllActions() or {}
     local bestAction
@@ -2281,7 +2409,7 @@ function P.ParseRegistryActionExplainShortcut(text)
     local bestScore = 0
     for i = 1, #actions do
         local action = actions[i]
-        local score = ActionExplainMatchScore(action, target)
+        local score = ActionExplainMatchScore(action, target, exactTarget or "")
         if score > bestScore then
             bestAction = action
             bestActions = { action }

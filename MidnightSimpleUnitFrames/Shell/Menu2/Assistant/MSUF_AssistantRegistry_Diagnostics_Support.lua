@@ -34,7 +34,6 @@ local function AssistantPerfLabel(label)
     if label == "assistant.submit.deferred" then return "queued request" end
     if label == "assistant.refresh_ui" then return "refreshing the UI" end
     if label == "assistant.job.step" then return "background Assistant work" end
-    if label == "assistant.warmup" then return "preparing answers" end
     return "Assistant work"
 end
 

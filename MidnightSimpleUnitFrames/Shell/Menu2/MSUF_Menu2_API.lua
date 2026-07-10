@@ -14,10 +14,10 @@ end
 
 ExportPublic("MSUF2_Open", function(pageKey) M.Open(pageKey) end)
 ExportPublic("MSUF2_Toggle", function(pageKey) M.Toggle(pageKey) end)
-ExportPublic("MSUF_OpenStandaloneOptionsWindow", function(pageKey) M.Open(pageKey or "home") end)
-ExportPublic("MSUF_ShowStandaloneOptionsWindow", function(pageKey) M.Open(pageKey or "home") end)
+ExportPublic("MSUF_OpenStandaloneOptionsWindow", function(pageKey) M.Open(pageKey) end)
+ExportPublic("MSUF_ShowStandaloneOptionsWindow", function(pageKey) M.Open(pageKey) end)
 ExportPublic("MSUF_HideStandaloneOptionsWindow", function() M.CallIf(M.HideSlashMenuAndMinibar, M.frame) end)
-ExportPublic("MSUF_OpenOptionsMenu", function() M.Open("home") end)
+ExportPublic("MSUF_OpenOptionsMenu", function() M.Open() end)
 ExportPublic("MSUF_OpenPage", function(pageKey) return M.SelectPage(pageKey or "home") end)
 ExportPublic("MSUF_SwitchMirrorPage", function(pageKey) return M.SelectPage(pageKey or "home") end)
 ExportPublic("MSUF_GetCurrentMirrorPage", function() return M.activeKey or "home" end)
@@ -124,10 +124,11 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
         return
     end
     local aliases = M.ALIASES or {}
-    M.Open(aliases[msg] or msg or "home")
+    M.Open(aliases[msg] or (msg ~= "" and msg or nil))
 end
 SLASH_MSUFOPTIONS1 = SLASH_MSUFOPTIONS1 or "/msufoptions"
 SlashCmdList["MSUFOPTIONS"] = SlashCmdList["MSUFOPTIONS"] or function(msg)
     local aliases = M.ALIASES or {}
-    M.Open(aliases[tostring(msg or ""):lower()] or "home")
+    local pageKey = aliases[tostring(msg or ""):lower()]
+    M.Open(pageKey)
 end

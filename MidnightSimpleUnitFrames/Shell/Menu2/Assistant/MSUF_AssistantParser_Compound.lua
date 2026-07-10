@@ -945,6 +945,13 @@ local function FastSettingChange(changes, scope, attr, rawValue)
     if attr == "width" or attr == "height" then
         settingKey = dbScope .. "." .. attr
         value = tonumber(rawValue)
+    elseif attr == "power bar height" then
+        if dbScope == "gf_party" or dbScope == "gf_raid" or dbScope == "gf_mythicraid" then
+            settingKey = dbScope .. ".powerHeight"
+        else
+            settingKey = dbScope .. ".powerBarHeight"
+        end
+        value = tonumber(rawValue)
     elseif attr == "alpha" then
         settingKey = dbScope .. ".hpBarAlpha"
         value = tonumber(rawValue)
@@ -1078,9 +1085,10 @@ local function FastNumericBooleanChain(text)
     local touchedScopes, seenTouchedScopes = {}, {}
     for i = 1, #values do
         local prefix, attr = ExtractAttr(segments[i])
-        if not attr or (attr ~= "width" and attr ~= "height" and attr ~= "alpha") then return nil end
+        if not attr or (attr ~= "width" and attr ~= "height" and attr ~= "alpha" and attr ~= "power bar height") then return nil end
         prefix = StripCommandLead(prefix or "")
-        prefix = Trim(prefix:gsub("^and%s+", ""):gsub("^und%s+", ""))
+        prefix = Trim(prefix:gsub("^and$", ""):gsub("^und$", "")
+            :gsub("^and%s+", ""):gsub("^und%s+", ""))
         if RemoveScopeTerms(prefix) ~= "" then return nil end
         if prefix ~= "" then
             local scopes = ScopeLabels(prefix)
@@ -2014,6 +2022,31 @@ end
 
 local SLOT_WORDS = CompoundData.SLOT_WORDS or {}
 
+local function StripImplicitSlotVisibility(plan)
+    if not (plan and plan.kind == "changes" and type(plan.changes) == "table") then return plan end
+    local hasSlotChange = false
+    for i = 1, #plan.changes do
+        local attr = tostring(plan.changes[i].setting and plan.changes[i].setting.attribute or "")
+        if attr == "hpTextLeft" or attr == "hpTextCenter" or attr == "hpTextRight"
+            or attr == "healthTextLeft" or attr == "healthTextCenter" or attr == "healthTextRight"
+            or attr == "powerTextLeft" or attr == "powerTextCenter" or attr == "powerTextRight"
+        then
+            hasSlotChange = true
+            break
+        end
+    end
+    if not hasSlotChange then return plan end
+    local filtered = {}
+    for i = 1, #plan.changes do
+        local change = plan.changes[i]
+        local attr = tostring(change.setting and change.setting.attribute or "")
+        local implicitEnable = change.value == true and (attr == "hpText" or attr == "powerText")
+        if not implicitEnable then filtered[#filtered + 1] = change end
+    end
+    plan.changes = filtered
+    return plan
+end
+
 local function CleanSlotValue(text)
     text = Trim(text or "")
     text = text:gsub("^to%s+", ""):gsub("^as%s+", ""):gsub("^is%s+", "")
@@ -2037,6 +2070,19 @@ local function SlotValuePairs(text)
     if not ContainsAny(prefix, CompoundData.TEXT_LABEL_TERMS) then prefix = Trim(prefix .. " text") end
     if not HasStarter(prefix) then prefix = "set " .. prefix end
 
+    -- A later slot may begin a new scoped text block ("player ... left
+    -- current target ... right percent"). In that form this same-prefix
+    -- parser would absorb the second scope into the first value and fabricate
+    -- extra changes; RepeatedSlotValueBlocks owns the scoped form instead.
+    for i = 1, #slotIndexes - 1 do
+        local between = {}
+        for j = slotIndexes[i] + 1, slotIndexes[i + 1] - 1 do between[#between + 1] = words[j] end
+        local betweenText = table.concat(between, " ")
+        if #ScopeLabels(betweenText) > 0 and ContainsAny(betweenText, CompoundData.TEXT_LABEL_TERMS) then
+            return nil
+        end
+    end
+
     local commands = {}
     for i = 1, #slotIndexes do
         local slot = words[slotIndexes[i]]
@@ -2047,7 +2093,7 @@ local function SlotValuePairs(text)
         if value == "" then return nil end
         commands[#commands + 1] = Trim(prefix .. " " .. slot .. " to " .. value)
     end
-    return ParseCommands(commands)
+    return StripImplicitSlotVisibility(ParseCommands(commands))
 end
 
 local function SlotWords(text)
@@ -2128,7 +2174,7 @@ local function RepeatedSlotValueBlocks(text)
     end
 
     if blocks < 2 or #commands < 2 then return nil end
-    local plan = ParseCommands(commands)
+    local plan = StripImplicitSlotVisibility(ParseCommands(commands))
     if plan then plan.compoundForce = true end
     return plan
 end
@@ -2494,6 +2540,8 @@ function P.ParseCompound(normalized, raw, normalParsed)
     local numberCount = CountNumbers(text)
     if numberCount >= 2 then
         local numeric = FastNumericBooleanChain(text)
+            or ScopedValueTailPairs(text)
+            or ScopedRelativeValueTailPairs(text)
             or FastAttributeListTrailingNumbers(text)
             or RepeatedAttributeListTrailingNumbers(text)
             or AttributeNumberPairs(text)

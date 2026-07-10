@@ -278,9 +278,13 @@ local function FullPhraseMatch(index, tokens, minTokens)
         if not setting then return nil end
     end
     -- Short phrases on hand-written settings stay with their dedicated flows
-    -- ("global font color" is a workflow); generated settings may claim them
-    -- because nothing else answers for those keys.
-    if not setting.generated and count < 4 then return nil end
+    -- unless the caller explicitly opted into a shorter full-phrase match.
+    -- A.Parse uses three tokens here because an exact three-word control name
+    -- (for example "party buff tooltip") is already more specific than a
+    -- topical parent/lane shortcut. Keep the historical four-token floor for
+    -- callers that do not provide an explicit threshold.
+    local handWrittenMinTokens = tonumber(minTokens) or 4
+    if not setting.generated and count < handWrittenMinTokens then return nil end
     return setting, subject, boolFromVerb
 end
 
@@ -356,6 +360,10 @@ local function AddExactAliasChange(changes, seenKeys, setting, value, relativeDe
 end
 
 function P.ParseRegistryExactAliasShortcut(text, raw, opts)
+    -- The immediate Submit fast path calls this matcher before the Router.
+    -- Never let a problem report, option-list request, or subjective policy
+    -- request become a write merely because one alias appears in the sentence.
+    if type(P.NonMutatingIntent) == "function" and P.NonMutatingIntent(text) then return nil end
     local allSettings = Registry and Registry:AllSettings() or {}
     if #allSettings == 0 then return nil end
 

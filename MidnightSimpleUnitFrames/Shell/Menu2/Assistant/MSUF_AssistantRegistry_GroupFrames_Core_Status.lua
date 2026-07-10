@@ -64,7 +64,7 @@ function A.GroupFramesRegistry.BuildStatusIconCoreContext(ctx)
     local function ResetGroupStatusIcon(scope, spec)
         if not spec then return false end
         local conf = GroupDB(scope)
-        for _, key in ipairs({ spec.size, spec.anchor, spec.x, spec.y, spec.layer, spec.iconStyle }) do
+        for _, key in ipairs({ spec.size, spec.anchor, spec.x, spec.y, spec.layer, spec.iconStyle, spec.customIcon }) do
             if key then conf[key] = nil end
         end
         ApplyGroup(scope, "visual")

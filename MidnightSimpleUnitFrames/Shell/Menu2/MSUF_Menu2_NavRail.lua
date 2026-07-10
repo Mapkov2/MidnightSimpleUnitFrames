@@ -167,13 +167,26 @@ end
 local function AssistantAPI()
     return (MSUF and MSUF.Assistant) or M.Assistant
 end
+local function AssistantRuntimeReady()
+    local A = AssistantAPI()
+    return A and (type(A.SubmitDeferred) == "function" or type(A.Submit) == "function")
+end
 local function SubmitAssistantQuery(query)
     query = TrimText(query)
     if query == "" then return false end
     local A = AssistantAPI()
-    if not (A and type(A.SubmitDeferred) == "function") then return false end
+    if not A then return false end
+    local submitted, result
+    if type(A.SubmitExplicitQuery) == "function" then
+        submitted, result = A.SubmitExplicitQuery(query, "navrail-enter")
+        if not submitted then return false end
+    elseif AssistantRuntimeReady() then
+        local submit = type(A.SubmitDeferred) == "function" and A.SubmitDeferred or A.Submit
+        result = submit(query)
+    else
+        return false
+    end
     if M.activeKey ~= "home" then M.CallIf(M.SelectPage, "home") end
-    local result = A.SubmitDeferred(query)
     if result and result.status == "combat" then return true end
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.navrail")
@@ -537,7 +550,7 @@ local function BuildNavRail(parent)
         if self._msuf2SearchInternal then return end
         local query = TrimText(self:GetText() or "")
         if query ~= "" then HideSearchIntro() end
-        if not AssistantAPI() then ScheduleSearchInputQuery(self, query) end
+        if not AssistantRuntimeReady() then ScheduleSearchInputQuery(self, query) end
     end)
     search:SetScript("OnEnterPressed", function(self)
         HideSearchIntro()
@@ -573,7 +586,7 @@ local function BuildNavRail(parent)
         self._msuf2SearchInternal = nil
         self:ClearFocus()
         BumpSearchInputSerial()
-        if not AssistantAPI() then RunSearchInputQuery("", true) end
+        if not AssistantRuntimeReady() then RunSearchInputQuery("", true) end
     end)
     local clear = CreateFrame("Button", nil, parent)
     clear:SetSize(16, 16)
@@ -588,7 +601,7 @@ local function BuildNavRail(parent)
         search:SetText("")
         search._msuf2SearchInternal = nil
         BumpSearchInputSerial()
-        if not AssistantAPI() then RunSearchInputQuery("", true) end
+        if not AssistantRuntimeReady() then RunSearchInputQuery("", true) end
         clear:Hide()
         search:SetFocus()
     end)

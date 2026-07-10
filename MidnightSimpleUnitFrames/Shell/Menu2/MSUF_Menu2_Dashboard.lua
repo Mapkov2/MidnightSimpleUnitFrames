@@ -20,6 +20,37 @@ local min = math.min
 local CreateFrame = _G.CreateFrame
 local CreateColor = _G.CreateColor
 local MOVED_FRAME_DEFAULTS = { player = { -256, -180 }, target = { 320, -180 }, focus = { -260, -300 }, targettarget = { 220, -300 }, pet = { -275, -250 }, boss = { 360, 230 }, gf_party = { -400, 0 }, gf_raid = { -500, 0 }, gf_mythicraid = { -500, 0 } }
+local function NormalizeControlPath(value)
+    local path = tostring(value or "")
+    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
+    path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    return path
+end
+local function DashboardMeta(semanticPath, classification, exact)
+    local identity = table.concat({ "home", "dashboard", NormalizeControlPath(semanticPath) }, ".")
+    local meta = {
+        controlId = "menu2." .. identity,
+        identityKey = identity,
+        controlPath = identity:gsub("%.", "/"),
+        pageKey = "home",
+        classification = classification or "setting",
+    }
+    if meta.classification == "ephemeral" then meta.ephemeral = true end
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do meta[key] = value end
+    end
+    return meta
+end
+local function RegisterDashboardControl(widget, meta, label, kind, values)
+    if not (widget and type(meta) == "table" and type(M.RegisterSearchWidget) == "function") then return widget end
+    local payload = {}
+    for key, value in pairs(meta) do payload[key] = value end
+    payload.label = label or payload.label
+    payload.kind = kind or payload.kind
+    payload.values = values or payload.values
+    M.RegisterSearchWidget(widget, payload)
+    return widget
+end
 local function GetBundledChangelog()
     -- Changelog data is bundled as static state. The dashboard renders it read-only and should
     -- tolerate older builds where no changelog table exists.
@@ -143,6 +174,9 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     child:SetHeight(max(1, math.abs(y) + 8))
     M.CallIf(T.StyleScrollFrame, scroll, parent)
     local open = M.dashboardChangelogOpen == true
+    RegisterDashboardControl(header, DashboardMeta("changelog.disclosure", "ephemeral", {
+        help = "Shows or hides the bundled MSUF release notes.",
+    }), opts.title or "Changelog", "button")
     local function PaintHeader(isOpen)
         M.CallIf(T.ApplyCollapseVisual, arrow, nil, isOpen)
         if headerBg.SetColorTexture then headerBg:SetColorTexture(0, 0, 0, 0) end
@@ -254,13 +288,14 @@ local function BuildDashboardUX(ctx)
             { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.00 },
             { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.035 })
     end
-    local function Button(parent, text, x, y, w, h, onClick, skin)
+    local function Button(parent, text, x, y, w, h, onClick, skin, semanticPath, classification, exact)
         local btn = T.Button(parent, M.Tr(text or ""), w, h or 24)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
         T.CenterButtonLabel(btn)
         if skin == "primary" and T.SkinPrimaryButton then T.SkinPrimaryButton(btn) end
         if skin == "danger" and T.SkinDangerButton then T.SkinDangerButton(btn) end
         if onClick then btn:SetScript("OnClick", onClick) end
+        RegisterDashboardControl(btn, DashboardMeta(semanticPath, classification or "action", exact), text, "button")
         return btn
     end
     local function Kicker(parent, text, x, y, color)
@@ -285,7 +320,7 @@ local function BuildDashboardUX(ctx)
             bodyColor = { 0.85, 0.85, 0.85 },
         }) or frame
     end
-    local function MakeDashboardActionCard(card, title, tooltip, onClick, showArrow)
+    local function MakeDashboardActionCard(card, title, tooltip, onClick, showArrow, semanticPath, classification, exact)
         if not (card and card.CreateTexture and card.HookScript) then return card end
         card:EnableMouse(true)
         local hover = card:CreateTexture(nil, "BORDER", nil, 4)
@@ -312,6 +347,7 @@ local function BuildDashboardUX(ctx)
         end)
         if onClick then card:SetScript("OnMouseUp", onClick) end
         AddTooltip(card, title, tooltip)
+        RegisterDashboardControl(card, DashboardMeta(semanticPath, classification or "action", exact), title, "card")
         return card
     end
     local function Select(pageKey) M.CallIf(M.SelectPage, pageKey) end
@@ -527,14 +563,14 @@ local function BuildDashboardUX(ctx)
     local checklist = Card(root, "Setup checklist", sideX, checklistTop, sideW, checklistH)
     M.CallIf(T.ApplyNeonEdge, checklist, "status", { variant = "card" })
     W.Text(checklist, "Useful for first-run orientation.", 16, -38, sideW - 32, T.colors.muted)
-    local function Row(i, title, body, state, color, onClick, iconText)
+    local function Row(i, title, body, state, color, onClick, iconText, semanticPath, classification, exact)
         local row = Card(checklist, "", 16, -60 - ((i - 1) * 42), sideW - 32, 36, T.colors.panel2, T.colors.borderSoft)
         Pill(row, iconText or (i < 3 and "OK" or "!"), 10, -14, 28, color or T.colors.ok)
         local label = T.Font(row, "GameFontNormal", M.Tr(title), T.colors.text)
         label:SetPoint("TOPLEFT", row, "TOPLEFT", 48, -6)
         W.Text(row, body, 48, -22, sideW - 132, T.colors.muted)
         Pill(row, state, sideW - 86, -9, 54, color or T.colors.ok)
-        MakeDashboardActionCard(row, title, body, onClick, false)
+        MakeDashboardActionCard(row, title, body, onClick, false, semanticPath, classification, exact)
     end
     local function BuildBugReportCard(x, top, width)
         local bug = M.BugReport
@@ -588,16 +624,16 @@ local function BuildDashboardUX(ctx)
             W.Text(card, "Install BugSack/BugGrabber to let MSUF include the captured Lua error and stacktrace automatically.", 16, -42, width - 32, T.colors.muted)
             local bugSack = Button(card, "BugSack", 16, -92, 86, 22, function()
                 CopyLink("BugSack", links.bugsack or "https://www.curseforge.com/wow/addons/bugsack")
-            end, "primary")
+            end, "primary", "bug_report.install_bugsack")
             AddTooltip(bugSack, "BugSack", "Copies the BugSack addon page link.")
-            Button(card, "Report issue", 112, -92, 104, 22, OpenManualReport)
+            Button(card, "Report issue", 112, -92, 104, 22, OpenManualReport, nil, "bug_report.open_manual")
             return height
         end
         if not hasReport then
             local installText = integration.bugGrabberLoaded and "BugGrabber ready."
                 or (integration.bugSackLoaded and "BugSack ready." or "Bug helper unavailable.")
             W.Text(card, "No MSUF errors detected. " .. installText, 16, -42, width - 32, T.colors.muted)
-            Button(card, "Report issue", 16, -82, 104, 22, OpenManualReport, "primary")
+            Button(card, "Report issue", 16, -82, 104, 22, OpenManualReport, "primary", "bug_report.open_manual")
             return height
         end
         local bodyText = autoReport
@@ -638,6 +674,9 @@ local function BuildDashboardUX(ctx)
             end)
             descBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
             descBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+            RegisterDashboardControl(descBox, DashboardMeta("bug_report.manual_description", "ephemeral", {
+                help = "Optional description added to the generated MSUF bug report.",
+            }), "Bug report description", "editbox")
         end
         local scroll
         local function RefreshReportText()
@@ -660,22 +699,22 @@ local function BuildDashboardUX(ctx)
             end
             M.CallIf(M.ShowStatusFeedback, "Report selected. Press Ctrl+C.", "info", 1.4)
         end
-        local selectBtn = Button(card, "1 Select", 16, actionTop, 96, 22, SelectReport, "primary")
+        local selectBtn = Button(card, "1 Select", 16, actionTop, 96, 22, SelectReport, "primary", "bug_report.select_text", "ephemeral")
         AddTooltip(selectBtn, "Select report", "Selects the full report so it can be copied with Ctrl+C.")
         Pill(card, "2 Ctrl+C", 120, actionTop + 1, 66, T.colors.accent2)
         Button(card, "3 GitHub", width - 102, actionTop, 86, 22, function()
             CopyLink("GitHub Issue", links.github or "https://github.com/Mapkov2/MidnightSimpleUnitFrames/issues/new")
-        end, "primary")
+        end, "primary", "bug_report.copy_github_link")
         Button(card, "Discord", 16, actionTop - 30, 76, 22, function()
             CopyLink("Discord", links.discord or "https://discord.gg/2Gf9b2Wprz")
-        end)
+        end, nil, "bug_report.copy_discord_link")
         Button(card, "Curse", 100, actionTop - 30, 76, 22, function()
             CopyLink("CurseForge", links.curseforge or "https://www.curseforge.com/wow/addons/midnightsimpleunitframes")
-        end)
+        end, nil, "bug_report.copy_curseforge_link")
         Button(card, "Clear", width - 78, actionTop - 30, 62, 22, function()
             if type(bug.Clear) == "function" then bug.Clear() end
             RefreshDashboard()
-        end)
+        end, nil, "bug_report.clear")
         local reportText = type(bug.BuildText) == "function" and bug.BuildText({ includeLoadedAddons = true }) or "Bug report unavailable."
         local reportTop = actionTop - 62
         local reportH = max(82, height + reportTop - 16)
@@ -702,15 +741,22 @@ local function BuildDashboardUX(ctx)
         reportBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         scroll:SetScrollChild(reportBox)
         M.CallIf(T.StyleScrollFrame, scroll, card)
+        RegisterDashboardControl(reportBox, DashboardMeta("bug_report.generated_text", "ephemeral", {
+            help = "Generated technical report text for copying to a support channel.",
+        }), "Generated bug report", "editbox")
         return height
     end
     local movedFrames = HasMovedFramesInEditMode()
-    Row(1, "Profile ready", "Active profile is loaded.", "done", T.colors.ok, function() Select("profiles") end)
-    Row(2, "Pages available", "Use pages to tune frames.", "done", T.colors.ok, function() Select("uf_player") end)
-    Row(3, "Move frames", "Recommended before detail tuning.", movedFrames and "done" or "start", movedFrames and T.colors.ok or T.colors.accent2, ToggleEditMode, movedFrames and "OK" or "!")
+    Row(1, "Profile ready", "Active profile is loaded.", "done", T.colors.ok, function() Select("profiles") end,
+        nil, "checklist.profile", "navigation", { navigationKey = "profiles" })
+    Row(2, "Pages available", "Use pages to tune frames.", "done", T.colors.ok, function() Select("uf_player") end,
+        nil, "checklist.player_page", "navigation", { navigationKey = "uf_player" })
+    Row(3, "Move frames", "Recommended before detail tuning.", movedFrames and "done" or "start", movedFrames and T.colors.ok or T.colors.accent2, ToggleEditMode, movedFrames and "OK" or "!",
+        "checklist.toggle_edit_mode", "action")
     local wagoBackupConfirmed = WagoBackupConfirmed()
-    Row(4, "Wago backup", "Confirm backup before using the Wago MSUF page.", wagoBackupConfirmed and "done" or "start", wagoBackupConfirmed and T.colors.ok or T.colors.accent2, ConfirmWagoBackup, wagoBackupConfirmed and "OK" or "!")
-    local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills)
+    Row(4, "Wago backup", "Confirm backup before using the Wago MSUF page.", wagoBackupConfirmed and "done" or "start", wagoBackupConfirmed and T.colors.ok or T.colors.accent2, ConfirmWagoBackup, wagoBackupConfirmed and "OK" or "!",
+        "checklist.confirm_wago_backup", "action")
+    local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills, semanticPath)
         local head = CreateFrame("Button", nil, parent)
         head:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
         head:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
@@ -737,6 +783,9 @@ local function BuildDashboardUX(ctx)
         head:SetScript("OnLeave", function()
             if hover.SetColorTexture then hover:SetColorTexture(0, 0, 0, 0) end
         end)
+        RegisterDashboardControl(head, DashboardMeta(semanticPath, "ephemeral", {
+            help = "Shows or hides the " .. tostring(title) .. " dashboard section.",
+        }), title, "button")
         return head
     end
     local bugReportTop = checklistTop - checklistH - 10
@@ -752,26 +801,26 @@ local function BuildDashboardUX(ctx)
     local g = M.GetGeneralDB and M.GetGeneralDB() or {}
     DashboardDisclosure(recovery, "Display & recovery", recoveryOpen, "dashboardRecoveryOpen", recoveryW, function(head)
         if recoveryW >= 520 then Pill(head, "Factory reset hidden", recoveryW - 124, -11, 110, T.colors.accent2) end
-    end)
+    end, "display_recovery.disclosure")
     if recoveryOpen then
         W.Text(recovery, "Reset tools, Wago access, and recovery shortcuts live here.", 16, -60, recoveryW - 32, T.colors.muted)
         local resetPositions = Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
             if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then M.ShowStatusFeedback("Reset unavailable", "danger", 1.4) end
-        end, "primary")
+        end, "primary", "display_recovery.reset_positions")
         AddTooltip(resetPositions, "Reset Positions", "Runs /msuf reset for frame positions and visibility.")
         local wagoX, helpX, discordX = 146, 270, 368
         local helpY, factoryY = -94, (recoveryWrap and -126 or -94)
         if recoveryNarrow then helpX, helpY, discordX, factoryY = 16, -126, 114, -158 end
-        Button(recovery, "Wago Profiles", wagoX, -94, 112, 22, CopyWagoLink)
+        Button(recovery, "Wago Profiles", wagoX, -94, 112, 22, CopyWagoLink, nil, "display_recovery.copy_wago_link")
         Button(recovery, "Print Help", helpX, helpY, 86, 22, function()
             if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then _G.SlashCmdList["MIDNIGHTSUF"]("help") end
-        end)
+        end, nil, "display_recovery.print_help")
         Button(recovery, "Discord", discordX, helpY, 80, 22, function()
             if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
-        end)
+        end, nil, "display_recovery.copy_discord_link")
         Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
             M.CallIf(M.StageFactoryReset)
-        end, "danger")
+        end, "danger", "display_recovery.factory_reset_all")
         if recoveryWrap then
             local textX = recoveryNarrow and 160 or 160
             local textY = recoveryNarrow and -160 or -128
@@ -790,7 +839,7 @@ local function BuildDashboardUX(ctx)
         Pill(scaleHead, M.Format("UI %s", uiValue), recoveryW - 250, -11, 64)
         Pill(scaleHead, M.Format("Menu %d%%", Percent(g.slashMenuScale, 1)), recoveryW - 180, -11, 76)
         Pill(scaleHead, M.Format("Frames %d%%", Percent(g.msufUiScale, 1)), recoveryW - 98, -11, 84)
-    end)
+    end, "scaling.disclosure")
     if scalingOpen then
         W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value.", 16, -60, recoveryW - 32, T.colors.muted)
         local pendingGlobalEnabled, pendingGlobalScale, pendingMsufScale, pendingMenuScale
@@ -826,7 +875,7 @@ local function BuildDashboardUX(ctx)
         local function PendingMenuScale()
             return Clamp(pendingMenuScale or AppliedMenuScale(), 0.25, 1.5)
         end
-        local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct)
+        local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct, semanticPath)
             local slider = W.Slider(parent, label, minPct, maxPct, stepPct, width)
             HideSliderValueBox(slider)
             slider:ClearAllPoints()
@@ -838,12 +887,16 @@ local function BuildDashboardUX(ctx)
                 slider._msuf2Title:SetWidth(width)
             end
             EnablePercentWheel(slider, minPct, maxPct, stepPct)
+            RegisterDashboardControl(slider, DashboardMeta(semanticPath, "ephemeral", {
+                help = "Selects a pending scale percentage; use Apply to commit it.",
+            }), label, "slider")
             return slider
         end
         local function BuildSimpleScaleColumn(opts)
             W.Text(scaling, opts.help, opts.x, opts.top - 20, colW, T.colors.muted)
             local status = W.Text(scaling, "", opts.x, opts.top - 40, colW, T.colors.muted)
-            local slider = BuildScaleSlider(scaling, opts.label, opts.x, opts.top, colW, opts.minPct, opts.maxPct, opts.stepPct)
+            local slider = BuildScaleSlider(scaling, opts.label, opts.x, opts.top, colW, opts.minPct, opts.maxPct, opts.stepPct,
+                opts.semanticPath .. ".selected_percent")
             local apply, revert
             local function Refresh()
                 local applied = opts.applied()
@@ -869,16 +922,17 @@ local function BuildDashboardUX(ctx)
             apply = Button(scaling, "Apply", opts.x, opts.top - 100, 72, 20, function()
                 opts.apply(opts.pending())
                 Refresh()
-            end, "primary")
+            end, "primary", opts.semanticPath .. ".apply")
             revert = Button(scaling, "Revert", opts.x + 82, opts.top - 100, 72, 20, function()
                 opts.clear()
                 Refresh()
-            end)
+            end, nil, opts.semanticPath .. ".revert_pending", "ephemeral")
             return Refresh
         end
         W.Text(scaling, "Changes the global WoW UI scale through MSUF presets.", globalX, globalTop - 20, colW, T.colors.muted)
         local globalStatus = W.Text(scaling, "", globalX, globalTop - 40, colW, T.colors.muted)
-        local globalScale = BuildScaleSlider(scaling, "Global UI Scale", globalX, globalTop, colW, 30, 150, 1)
+        local globalScale = BuildScaleSlider(scaling, "Global UI Scale", globalX, globalTop, colW, 30, 150, 1,
+            "scaling.global_ui.selected_percent")
         local globalApply, globalRevert
         local function RefreshGlobalScale()
             local selectedEnabled, selectedScale, appliedEnabled, appliedScale = SelectedGlobalScale()
@@ -918,24 +972,29 @@ local function BuildDashboardUX(ctx)
             if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_DASH_GLOBAL_SCALE", { preview = true, applyAll = false }) end
             RefreshGlobalScale()
         end
-        Button(scaling, "1080p", globalX, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, 768 / 1080, "1080p") end)
-        Button(scaling, "1440p", globalX + 60, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, 768 / 1440, "1440p") end)
-        Button(scaling, "4K", globalX + 120, globalTop - 100, 42, 20, function() ApplyGlobalScale(true, 768 / 2160, "4k") end)
-        Button(scaling, "Pixel", globalX + 170, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, PixelScale(), "pixel") end)
+        Button(scaling, "1080p", globalX, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, 768 / 1080, "1080p") end,
+            nil, "scaling.global_ui.preset.1080p")
+        Button(scaling, "1440p", globalX + 60, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, 768 / 1440, "1440p") end,
+            nil, "scaling.global_ui.preset.1440p")
+        Button(scaling, "4K", globalX + 120, globalTop - 100, 42, 20, function() ApplyGlobalScale(true, 768 / 2160, "4k") end,
+            nil, "scaling.global_ui.preset.4k")
+        Button(scaling, "Pixel", globalX + 170, globalTop - 100, 52, 20, function() ApplyGlobalScale(true, PixelScale(), "pixel") end,
+            nil, "scaling.global_ui.preset.pixel")
         globalApply = Button(scaling, "Apply", globalX, globalTop - 126, 72, 20, function()
             local selectedEnabled, selectedScale = SelectedGlobalScale()
             ApplyGlobalScale(selectedEnabled, selectedScale, selectedEnabled and "custom" or "auto")
-        end, "primary")
+        end, "primary", "scaling.global_ui.apply")
         globalRevert = Button(scaling, "Revert", globalX + 82, globalTop - 126, 72, 20, function()
             pendingGlobalEnabled, pendingGlobalScale = nil, nil
             RefreshGlobalScale()
-        end)
+        end, nil, "scaling.global_ui.revert_pending", "ephemeral")
         Button(scaling, "Off", globalX + 164, globalTop - 126, 52, 20, function()
             pendingGlobalEnabled = false
             RefreshGlobalScale()
-        end)
+        end, nil, "scaling.global_ui.select_off", "ephemeral")
         local RefreshMsufScale = BuildSimpleScaleColumn({
             x = msufX, top = msufTop, label = "MSUF Frame Scale", help = "Changes the actual MSUF unit frames in-game.",
+            semanticPath = "scaling.msuf_frames",
             minPct = 25, maxPct = 150, stepPct = 5,
             applied = AppliedMsufScale,
             pending = PendingMsufScale,
@@ -953,6 +1012,7 @@ local function BuildDashboardUX(ctx)
         })
         local RefreshMenuScale = BuildSimpleScaleColumn({
             x = menuX, top = menuTop, label = "MSUF Menu Scale", help = "Changes only this configuration menu window.",
+            semanticPath = "scaling.menu",
             minPct = 25, maxPct = 150, stepPct = 5,
             applied = AppliedMenuScale,
             pending = PendingMenuScale,
@@ -1045,15 +1105,11 @@ local function BuildDashboardUX(ctx)
             if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink(data.title, data.url) end
         end)
         AddTooltip(btn, data.title, data.tooltip)
-        if type(M.RegisterSearchWidget) == "function" then
-            M.RegisterSearchWidget(btn, {
-                label = data.title,
-                kind = "button",
-                anchor = supportTitle,
-                keywords = { data.tooltip, "How to support MSUF", "support links", data.url },
-                help = data.tooltip,
-            })
-        end
+        RegisterDashboardControl(btn, DashboardMeta("support.link." .. tostring(data.title), "action", {
+            anchor = supportTitle,
+            keywords = { data.tooltip, "How to support MSUF", "support links", data.url },
+            help = data.tooltip,
+        }), data.title, "button")
         if previous then
             btn:SetPoint("LEFT", previous, "RIGHT", 10, 0)
         else
