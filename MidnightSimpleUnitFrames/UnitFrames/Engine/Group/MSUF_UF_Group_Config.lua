@@ -736,8 +736,7 @@ function GF.GetBlizzardAuraTypeFlags(conf)
   return IsBlizzardAuraTypeEnabled(conf, "buffs"),
     IsBlizzardAuraTypeEnabled(conf, "debuffs"),
     IsBlizzardAuraTypeEnabled(conf, "dispels"),
-    IsBlizzardAuraTypeEnabled(conf, "externals"),
-    IsBlizzardAuraTypeEnabled(conf, "privateAuras")
+    IsBlizzardAuraTypeEnabled(conf, "externals")
 end
 
 local NATIVE_AURA_BLACKLIST_HASHES_ENABLED = true
@@ -1003,7 +1002,6 @@ local function CompileCoreAuras(kind, conf)
   local buff = root and type(root.buff) == "table" and root.buff or {}
   local debuff = root and type(root.debuff) == "table" and root.debuff or {}
   local externals = root and type(root.externals) == "table" and root.externals or {}
-  local private = type(conf.privateAuras) == "table" and conf.privateAuras or {}
   local rootEnabled = root == nil or root.enabled ~= false
   local showBuffs = rootEnabled and buff.enabled ~= false
   local showDebuffs = rootEnabled and debuff.enabled ~= false
@@ -1011,9 +1009,6 @@ local function CompileCoreAuras(kind, conf)
   local trackedBuffIncludeHash, trackedBuffCount = BuildTrackedBuffIncludeHash(conf)
   local trackedBuffMax = Num(buff.trackedMax, Num(conf.trackedBuffMax, trackedBuffCount > 0 and trackedBuffCount or 8))
   local trackedBuffsEnabled = false
-  local privateEnabled = private.enabled
-  if privateEnabled == nil then privateEnabled = conf.privateAurasEnabled ~= false end
-  local showPrivate = rootEnabled and privateEnabled ~= false
   local function NormalizeDispelBorderMode(value, legacyEnabled)
     if value == true then return "SYMBOL" end
     if value == false then return "OFF" end
@@ -1052,14 +1047,12 @@ local function CompileCoreAuras(kind, conf)
       debuffs = IsBlizzardAuraTypeEnabled(root or {}, "debuffs"),
       dispels = IsBlizzardAuraTypeEnabled(root or {}, "dispels"),
       externals = IsBlizzardAuraTypeEnabled(root or {}, "externals"),
-      privateAuras = IsBlizzardAuraTypeEnabled(root or {}, "privateAuras"),
       iconSize = Num(root and root.blizzardIconSize, 20),
       organizationType = root and root.blizzardOrganizationType or "default",
       strata = root and root.blizzardContainerStrata or "AUTO",
       frameLevelOffset = Layer(root and root.blizzardContainerFrameLevel, 1),
       showCooldownText = not (root and root.blizzardShowCooldownText == false),
       dispelBorder = root and root.blizzardDispelBorder == true,
-      privateLayerFix = root == nil or root.blizzardPrivateLayerFix ~= false,
     },
     showBuffs = showBuffs,
     showTrackedBuffs = trackedBuffsEnabled == true,
@@ -1084,18 +1077,6 @@ local function CompileCoreAuras(kind, conf)
     debuffShowDispelBorder = debuffDispelBorderMode ~= "OFF",
     debuffShowDispelSymbol = debuffDispelBorderMode == "SYMBOL",
     showStealableBuffs = false,
-    private = {
-      enabled = showPrivate,
-      num = Num(private.max, Num(conf.privateAuraMax, 4)),
-      size = S(private.size, Num(conf.privateAuraSize, 20), 1),
-      spacing = S(private.spacing, 1, 0),
-      anchor = private.anchor or conf.privateAuraAnchor or "TOPRIGHT",
-      growth = private.growth or "RIGHT",
-      x = S(private.x, Num(conf.privateAuraX, 0)),
-      y = S(private.y, Num(conf.privateAuraY, 0)),
-      showCountdown = private.showCountdown ~= false and conf.privateAuraCountdown ~= false,
-      showNumbers = private.showNumbers == true,
-    },
   }
   ApplyAuraLane(out, "buff", "buff", buff, AURA_LANE_DEFAULTS.buff, Num(conf.auraMaxIcons, 4), defaultBuffSize, buffGrowthX, buffGrowthY, S, kind)
   local trackedBuff = {

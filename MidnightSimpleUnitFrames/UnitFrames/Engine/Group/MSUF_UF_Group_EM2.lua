@@ -1134,36 +1134,22 @@ local function InstallHUDToggle()
   end
 end
 
---- Runtime hooks refresh EM2 movers after GF rebuild/refresh paths mutate header
---- anchors. Keep these hooks idempotent; EM2 can load before or after GF runtime.
-local function InstallRuntimeHooks()
+--- Runtime notifications refresh EM2 movers after GF rebuild/refresh paths mutate
+--- header anchors without replacing the runtime's public functions.
+local function OnGroupRuntimeMutation(operation)
+  RefreshEditModePreviewAfterRuntimeChange()
+  if operation == "rebuildAll" and _em2Active and C_Timer then
+    C_Timer.After(0.06, RefreshEditModePreviewAfterRuntimeChange)
+    C_Timer.After(0.25, RefreshEditModePreviewAfterRuntimeChange)
+  end
+end
+
+local function InstallRuntimeObserver()
   local gf = GF()
   if not gf or gf._msufEM2BridgeHooked then return end
+  if type(gf.RegisterRuntimeObserver) ~= "function" then return end
   gf._msufEM2BridgeHooked = true
-
-  local origRefreshVisuals = gf.RefreshVisuals
-  if type(origRefreshVisuals) == "function" then
-    gf.RefreshVisuals = function(...)
-      local ret = origRefreshVisuals(...)
-      RefreshEditModePreviewAfterRuntimeChange()
-      return ret
-    end
-    ExportPublic("MSUF_GF_RefreshVisuals", gf.RefreshVisuals)
-  end
-
-  local origRebuildAll = gf.RebuildAll
-  if type(origRebuildAll) == "function" then
-    gf.RebuildAll = function(...)
-      local ret = origRebuildAll(...)
-      RefreshEditModePreviewAfterRuntimeChange()
-      if _em2Active and C_Timer then
-        C_Timer.After(0.06, RefreshEditModePreviewAfterRuntimeChange)
-        C_Timer.After(0.25, RefreshEditModePreviewAfterRuntimeChange)
-      end
-      return ret
-    end
-    ExportPublic("MSUF_GF_RebuildAll", gf.RebuildAll)
-  end
+  gf.RegisterRuntimeObserver("em2", OnGroupRuntimeMutation)
 end
 
 local combatHookFrame
@@ -1575,7 +1561,7 @@ init:SetScript("OnEvent", function(self)
     RegisterGF()
     InstallStateHooks()
     InstallHUDToggle()
-    InstallRuntimeHooks()
+    InstallRuntimeObserver()
     InstallCombatHooks()
   end)
 end)

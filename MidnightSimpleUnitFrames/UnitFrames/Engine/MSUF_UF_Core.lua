@@ -14,7 +14,6 @@ local next = next
 local tostring = tostring
 local tonumber = tonumber
 local table_remove = table.remove
-local pcall = pcall
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local UnitExists = UnitExists
@@ -620,10 +619,12 @@ local function RegisterFrameEvent(frame, event, unitless)
     return
   end
   local source = DependentSource(frame, event) or frame.unit
-  local ok = pcall(frame.RegisterUnitEvent, frame, event, source)
-  if not ok then
+  if not IsUnitToken(source) then
     frame:RegisterEvent(event)
-  elseif source and source ~= frame.unit then
+    return
+  end
+  frame:RegisterUnitEvent(event, source)
+  if source ~= frame.unit then
     frame._msufFrameUnitEvents = frame._msufFrameUnitEvents or {}
     frame._msufFrameUnitEventTargets = frame._msufFrameUnitEventTargets or {}
     frame._msufFrameUnitEvents[event] = source
@@ -1046,10 +1047,10 @@ function UF.GetFrame(unit)
   return UF.frames[unit]
 end
 
-function UF.Apply(unit)
+function UF.Apply(unit, applyMask)
   local factory = UF.Factory
   if not (factory and factory.Apply) then return false end
-  return factory.Apply(unit)
+  return factory.Apply(unit, applyMask)
 end
 
 function UF.ForceUpdate(unit)

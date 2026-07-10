@@ -58,7 +58,6 @@ local UnitShouldDisplaySpellTargetName = UnitShouldDisplaySpellTargetName
 local floor = math.floor
 local max = math.max
 local pairs = pairs
-local pcall = pcall
 local type = type
 local bitBand = (_G.bit and _G.bit.band) or (_G.bit32 and _G.bit32.band)
 local wipe = wipe or function(t)
@@ -88,6 +87,7 @@ local HOT_EVENTS = {
 }
 
 local CONTROL_EVENTS = {
+  "PLAYER_ENTERING_WORLD",
   "GROUP_ROSTER_UPDATE",
   "PLAYER_ROLES_ASSIGNED",
   "PLAYER_SPECIALIZATION_CHANGED",
@@ -105,6 +105,8 @@ local settings = {
   enabled = false,
   configEnabled = false,
   partyFramesEnabled = false,
+  showSolo = false,
+  showPlayer = true,
   mode = "whenHealing",
   size = 24,
   maxIcons = 3,
@@ -119,7 +121,7 @@ local eventFrame = CreateFrame("Frame")
 local hotRegistered = false
 local controlRegistered = false
 local active = false
-local hooksInstalled = false
+local runtimeObserverInstalled = false
 
 local nameplateUnits = {}
 local trackedCasters = {}
@@ -188,13 +190,11 @@ local function Conf()
   return db and db.gf_party
 end
 
-local function PartyFramesEnabled()
-  local conf = Conf()
+local function PartyFramesEnabled(conf)
   return conf and conf.enabled == true
 end
 
-local function ReadValue(key, fallback)
-  local conf = Conf()
+local function ReadValue(conf, key, fallback)
   local value = conf and conf[key]
   if value == nil then
     return fallback
@@ -216,22 +216,24 @@ local function NormalizeKey(value, allowed, fallback)
 end
 
 local function ReadSettings()
-  settings.configEnabled = ReadValue("targetedSpellsEnabled", false) == true
-  settings.partyFramesEnabled = PartyFramesEnabled()
+  local conf = Conf()
+  settings.configEnabled = ReadValue(conf, "targetedSpellsEnabled", false) == true
+  settings.partyFramesEnabled = PartyFramesEnabled(conf)
+  settings.showSolo = conf and conf.showSolo == true or false
+  settings.showPlayer = not (conf and conf.showPlayer == false)
   settings.enabled = settings.configEnabled == true and settings.partyFramesEnabled == true
-  settings.mode = ReadValue("targetedSpellsMode", "whenHealing")
-  settings.size = ClampInt(ReadValue("targetedSpellsIconSize", 24), 24, 8, 64)
-  settings.maxIcons = ClampInt(ReadValue("targetedSpellsMaxIcons", 3), 3, 1, 5)
-  settings.anchor = NormalizeKey(ReadValue("targetedSpellsAnchor", "CENTER"), ANCHORS, "CENTER")
-  settings.grow = NormalizeKey(ReadValue("targetedSpellsGrow", "CENTER"), GROWS, "CENTER")
-  settings.x = ClampInt(ReadValue("targetedSpellsX", 0), 0, -200, 200)
-  settings.y = ClampInt(ReadValue("targetedSpellsY", 0), 0, -200, 200)
-  settings.layer = ClampInt(ReadValue("targetedSpellsLayer", 10), 10, 0, 30)
+  settings.mode = ReadValue(conf, "targetedSpellsMode", "whenHealing")
+  settings.size = ClampInt(ReadValue(conf, "targetedSpellsIconSize", 24), 24, 8, 64)
+  settings.maxIcons = ClampInt(ReadValue(conf, "targetedSpellsMaxIcons", 3), 3, 1, 5)
+  settings.anchor = NormalizeKey(ReadValue(conf, "targetedSpellsAnchor", "CENTER"), ANCHORS, "CENTER")
+  settings.grow = NormalizeKey(ReadValue(conf, "targetedSpellsGrow", "CENTER"), GROWS, "CENTER")
+  settings.x = ClampInt(ReadValue(conf, "targetedSpellsX", 0), 0, -200, 200)
+  settings.y = ClampInt(ReadValue(conf, "targetedSpellsY", 0), 0, -200, 200)
+  settings.layer = ClampInt(ReadValue(conf, "targetedSpellsLayer", 10), 10, 0, 30)
 end
 
 local function HasInstancedPartyRoster()
-  local conf = Conf()
-  if not (conf and conf.enabled == true) then return false end
+  if settings.partyFramesEnabled ~= true then return false end
   if IsInRaid and IsInRaid() then return false end
   if IsInGroup and IsInGroup() then return true end
 
@@ -245,7 +247,7 @@ local function HasInstancedPartyRoster()
     end
   end
 
-  if not (conf and conf.showSolo == true and conf.showPlayer ~= false) then return false end
+  if not (settings.showSolo == true and settings.showPlayer == true) then return false end
   local playerExists = UnitExists and UnitExists("player")
   return IsSecret(playerExists) == true or playerExists == true
 end
@@ -771,8 +773,8 @@ end
 
 local function ReadPlainRaceToken(unit)
   if not UnitRace then return nil end
-  local ok, _, raceToken = pcall(UnitRace, unit)
-  if ok and IsSecret(raceToken) ~= true and type(raceToken) == "string" then
+  local _, raceToken = UnitRace(unit)
+  if IsSecret(raceToken) ~= true and type(raceToken) == "string" then
     return raceToken
   end
   return nil
@@ -780,8 +782,8 @@ end
 
 local function ReadPlainSex(unit)
   if not UnitSex then return nil end
-  local ok, sex = pcall(UnitSex, unit)
-  if ok and IsSecret(sex) ~= true and type(sex) == "number" then
+  local sex = UnitSex(unit)
+  if IsSecret(sex) ~= true and type(sex) == "number" then
     return sex
   end
   return nil
@@ -1091,47 +1093,25 @@ function TS.HideTest()
   DropCasterState("__MSUF_TS_TEST")
 end
 
-local function InstallHooks()
-  if hooksInstalled then return end
-  hooksInstalled = true
-
-  local originalRefreshVisuals = GF.RefreshVisuals
-  if type(originalRefreshVisuals) == "function" then
-    GF.RefreshVisuals = function(...)
-      local result = originalRefreshVisuals(...)
-      local kind = select(1, ...)
-      local mask = select(2, ...)
-      if (kind == nil or kind == "party") and RefreshMaskAffectsTargetedSpells(mask) then
-        TS.RefreshConfig(false)
-      end
-      return result
+local function OnGroupRuntimeMutation(operation, kind, mask)
+  if operation == "refreshVisuals" then
+    if (kind == nil or kind == "party") and RefreshMaskAffectsTargetedSpells(mask) then
+      TS.RefreshConfig(false)
     end
-    if MSUF.ExportPublic then
-      MSUF.ExportPublic("MSUF_GF_RefreshVisuals", GF.RefreshVisuals)
-    else
-      _G.MSUF_GF_RefreshVisuals = GF.RefreshVisuals
-    end
-  end
-
-  local originalRebuildAll = GF.RebuildAll
-  if type(originalRebuildAll) == "function" then
-    GF.RebuildAll = function(...)
-      local result = originalRebuildAll(...)
-      TS.RefreshConfig(true)
-      return result
-    end
-    if MSUF.ExportPublic then
-      MSUF.ExportPublic("MSUF_GF_RebuildAll", GF.RebuildAll)
-    else
-      _G.MSUF_GF_RebuildAll = GF.RebuildAll
-    end
+  elseif operation == "rebuildAll" then
+    TS.RefreshConfig(true)
   end
 end
 
-eventFrame:RegisterEvent("PLAYER_LOGIN")
-eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+local function InstallRuntimeObserver()
+  if runtimeObserverInstalled then return true end
+  if type(GF.RegisterRuntimeObserver) ~= "function" then return false end
+  runtimeObserverInstalled = GF.RegisterRuntimeObserver("targetedSpells", OnGroupRuntimeMutation) == true
+  return runtimeObserverInstalled
+end
+
 local function TargetedSpellsOnEvent(_, event, unit)
-  if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+  if event == "PLAYER_ENTERING_WORLD" then
     TS.RefreshConfig(true)
     return
   end
@@ -1176,5 +1156,5 @@ local function InitialRefresh()
   TS.RefreshConfig(true)
 end
 
-InstallHooks()
+InstallRuntimeObserver()
 Schedule(0, InitialRefresh)

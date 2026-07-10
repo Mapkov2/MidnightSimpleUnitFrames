@@ -93,12 +93,12 @@ end
 local _iterState = {}
 local PREDICTION_REFRESH_ELEMENTS = { "Prediction" }
 
-local function RefreshPredictionElements(reason, scope)
+local function RefreshPredictionElements(reason, scope, skipUnitFrames)
     local refreshed = false
     local kindA, kindB = GroupKindsForScope(scope)
     local normalized = NormalizeScope(scope)
     local UF = MSUF and MSUF.UF
-    if not kindA and UF and type(UF.RefreshElements) == "function" then
+    if skipUnitFrames ~= true and not kindA and UF and type(UF.RefreshElements) == "function" then
         refreshed = UF.RefreshElements(normalized, PREDICTION_REFRESH_ELEMENTS, reason or "MSUF2_ABSORB_TEXTURE") or refreshed
     end
     local GF = MSUF and MSUF.GF
@@ -142,25 +142,32 @@ end
 
 --- Immediate refresh path used by the deferred wrapper and direct callers. Keep
 --- this frame-iteration-only; it should not normalize profile texture keys.
-local function UpdateAllBarTextures(scope)
+local function UpdateAllBarTextures(scope, skipUnitFrames, skipCastbars)
     local kindA = GroupKindsForScope(scope)
     if kindA then
         RefreshPredictionElements("MSUF2_BAR_TEXTURE", scope)
         return
     end
-    local getBarTexture = _G.MSUF_GetBarTexture
-    if type(getBarTexture) ~= "function" then return end
-    local texHP = getBarTexture()
-    if not texHP then return end
 
-    local dpb = MSUF.Bars and MSUF.Bars._DetachedPowerBarTextures
+    -- Refresh the scoped specs before reading frame.MSUFSpec below. Prediction
+    -- owns the same Health/Power config dependency, so doing it first gives the
+    -- direct texture pass current data without a second deferred full apply.
+    RefreshPredictionElements("MSUF2_BAR_TEXTURE", scope, skipUnitFrames)
 
-    _iterState.texHP = texHP
-    _iterState.texDPB = (dpb and dpb.ResolveFg and dpb.ResolveFg()) or texHP
-    _iterState.applyBg = _G.MSUF_ApplyBarBackgroundVisual
+    if skipUnitFrames ~= true then
+        local getBarTexture = _G.MSUF_GetBarTexture
+        if type(getBarTexture) ~= "function" then return end
+        local texHP = getBarTexture()
+        if not texHP then return end
 
-    ForEachUnitFrame(_Iter_ApplyAllBarTex, scope)
-    RefreshPredictionElements("MSUF2_BAR_TEXTURE", scope)
+        local dpb = MSUF.Bars and MSUF.Bars._DetachedPowerBarTextures
+
+        _iterState.texHP = texHP
+        _iterState.texDPB = (dpb and dpb.ResolveFg and dpb.ResolveFg()) or texHP
+        _iterState.applyBg = _G.MSUF_ApplyBarBackgroundVisual
+
+        ForEachUnitFrame(_Iter_ApplyAllBarTex, scope)
+    end
     if not NormalizeScope(scope) and _G.MSUF_RoundedUF_Active == true then
         local applyRounded = _G.MSUF_RoundedUF_OnApplyAll
         if type(applyRounded) == "function" then
@@ -168,9 +175,9 @@ local function UpdateAllBarTextures(scope)
         end
     end
 
-    if not NormalizeScope(scope) and _G.MSUF_UpdateCastbarTextures_Immediate then
+    if skipCastbars ~= true and not NormalizeScope(scope) and _G.MSUF_UpdateCastbarTextures_Immediate then
         _G.MSUF_UpdateCastbarTextures_Immediate()
-    elseif not NormalizeScope(scope) and type(_G.MSUF_UpdateCastbarTextures) == "function" then
+    elseif skipCastbars ~= true and not NormalizeScope(scope) and type(_G.MSUF_UpdateCastbarTextures) == "function" then
         _G.MSUF_UpdateCastbarTextures()
     end
 end

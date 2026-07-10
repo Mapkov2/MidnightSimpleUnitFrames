@@ -268,8 +268,7 @@ local function ApplyStatusFont(region, font, size, flags)
   size = tonumber(size) or 14
   if size <= 0 then size = 14 end
   if size < 6 then size = 6 elseif size > 128 then size = 128 end
-  local ok, applied = pcall(region.SetFont, region, font, size, flags)
-  return ok and applied ~= false
+  return region:SetFont(font, size, flags) ~= false
 end
 
 local function SetFont(region, spec, size)

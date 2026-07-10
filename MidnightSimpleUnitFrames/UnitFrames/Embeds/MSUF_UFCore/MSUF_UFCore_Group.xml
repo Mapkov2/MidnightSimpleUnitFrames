@@ -14,6 +14,7 @@
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Status.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Indicators.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Runtime.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_TargetedSpells.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Preview.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_EM2.lua"/>
 </Ui>

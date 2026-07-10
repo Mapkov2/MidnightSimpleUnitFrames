@@ -189,6 +189,13 @@ Metadata.defaultApplyMask = BuildNameSet(
   "Health Power Text NameText HealthText PowerText StatusIndicators Prediction " ..
   "Borders LoadConditions RangeFade Auras Castbars ClassPower")
 
+-- ApplyService owns cross-module followers explicitly. Its frame apply uses this
+-- mask so Auras/Castbars/ClassPower are not queued a second time by bridge
+-- elements. Direct Factory/Profile applies keep defaultApplyMask above.
+Metadata.coordinatedApplyMask = BuildNameSet(
+  "Health Power Text NameText HealthText PowerText StatusIndicators Prediction " ..
+  "Borders LoadConditions RangeFade")
+
 Metadata.refreshElementGroups = {
   healthTextBorder = BuildNameList("Health Text NameText HealthText InlineToT Borders"),
   visuals = BuildNameList(

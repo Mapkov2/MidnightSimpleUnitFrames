@@ -315,7 +315,7 @@ local function ApproxNameWidth(fs, maxChars)
   if fs and fs.GetFont and measureFS.SetFont then
     local font, size, flags = fs:GetFont()
     if font and size then
-      pcall(measureFS.SetFont, measureFS, font, size, flags)
+      measureFS:SetFont(font, size, flags)
     end
   end
   measureFS:SetText("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

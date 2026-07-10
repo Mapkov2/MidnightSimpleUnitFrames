@@ -249,12 +249,24 @@ function Health.Update(frame, event, unit)
         SetColor(frame)
       end
     end
+    if event == "UNIT_HEALTH" then
+      local updateGroupStatus = frame._msufUpdateGroupStatusState
+      if updateGroupStatus then
+        updateGroupStatus(frame, event, unit, issecretvalue(pct) ~= true and pct or nil)
+      end
+    end
     return pct, maxValue, percentReady
   end
   local hp, maxHP, absolutePercentReady = UpdateAbsolute(frame, unit)
   if event ~= "UNIT_HEALTH" or IDENTITY_EVENTS[event] == true or RuntimeColorOnHealthEvent(frame, hp) then
     if not ApplyRuntimeColor(frame, event, unit, hp, maxHP) then
       SetColor(frame)
+    end
+  end
+  if event == "UNIT_HEALTH" then
+    local updateGroupStatus = frame._msufUpdateGroupStatusState
+    if updateGroupStatus then
+      updateGroupStatus(frame, event, unit, issecretvalue(hp) ~= true and hp or nil)
     end
   end
   return hp, maxHP, absolutePercentReady

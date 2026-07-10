@@ -21,7 +21,6 @@ local type = type
 local tonumber = tonumber
 local tostring = tostring
 local pairs = pairs
-local pcall = pcall
 local byte, sub = string.byte, string.sub
 local max, abs, floor = math.max, math.abs, math.floor
 local CreateFrame = _G.CreateFrame

@@ -87,10 +87,10 @@ local function MSUF_ProfileIO_RunProtected(label, fn, ...)
     end
     return true, result
 end
-local function MSUF_ProfileIO_RunApplyAllSettings()
+local function MSUF_ProfileIO_RunApplyAllSettings(applyMask)
     local UF = MSUF and MSUF.UF
     if UF and UF.Apply then
-        return MSUF_ProfileIO_RunProtected("UF.Apply", UF.Apply, nil)
+        return MSUF_ProfileIO_RunProtected("UF.Apply", UF.Apply, nil, applyMask)
     end
     return false
 end
@@ -167,6 +167,11 @@ end
 
 local function MSUF_ProfileIO_ApplyCastbarRuntime(reason)
     MSUF_ProfileIO_CallGlobal("MSUF_Castbars_OnSettingsChanged", reason)
+    local applyAll = _G.MSUF_ApplyAllCastbarsAndSync
+    if type(applyAll) == "function" then
+        return MSUF_ProfileIO_RunProtected("MSUF_ApplyAllCastbarsAndSync", applyAll)
+    end
+
     local units = { "player", "target", "focus", "boss" }
     local applied = false
     for i = 1, #units do
@@ -187,7 +192,58 @@ local function MSUF_ProfileIO_ApplyCastbarRuntime(reason)
     return MSUF_ProfileIO_CallGlobal("MSUF_UpdateCastbarVisuals")
 end
 
+--- The coordinated UF apply already owns unit-frame text, while the explicit
+--- class-power/castbar passes below own their fonts. Keep one font-runtime pass
+--- for external consumers and Auras3. Imports refresh their aura payload before
+--- this hook, so they skip the otherwise required profile-switch aura refresh.
+local function MSUF_ProfileIO_ApplyExternalFontFollowers(skipAuras)
+    local applyFonts = _G.MSUF_UpdateAllFonts_Immediate
+    if type(applyFonts) == "function" then
+        return MSUF_ProfileIO_RunProtected(
+            "MSUF_UpdateAllFonts_Immediate",
+            applyFonts,
+            nil,
+            true,
+            true,
+            true,
+            skipAuras == true
+        )
+    end
+
+    if skipAuras == true then return false end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    if a3 and type(a3.ApplyFontsFromGlobal) == "function" then
+        return MSUF_ProfileIO_RunProtected(
+            "Auras3.ApplyFontsFromGlobal",
+            a3.ApplyFontsFromGlobal,
+            nil,
+            "MSUF_PROFILE_FONT_FOLLOWERS"
+        )
+    end
+    if a3 and type(a3.RefreshAll) == "function" then
+        return MSUF_ProfileIO_RunProtected("Auras3.RefreshAll", a3.RefreshAll)
+    end
+    return false
+end
+
 local MSUF_ProfileIO_PostProfileRuntimeApply
+local function MSUF_ProfileIO_CheckLocaleReload()
+    local namespace = _G.MSUF_NS or _G.MSUF
+    if not (namespace and type(namespace.SetLocale) == "function") then return false end
+    local configured = type(namespace.ResolveConfiguredLocale) == "function"
+        and namespace.ResolveConfiguredLocale(_G.MSUF_DB)
+        or (_G.GetLocale and _G.GetLocale())
+    local _, reloadRequired = namespace.SetLocale(configured)
+    if reloadRequired ~= true then return false end
+
+    local menu = namespace.MSUF2 or _G.MSUF2
+    if menu and type(menu.ShowLocaleReloadRequired) == "function" then
+        menu.ShowLocaleReloadRequired()
+    elseif _G.print then
+        _G.print("|cffffd700MSUF:|r Menu language changed with the profile. Reload the UI to apply it.")
+    end
+    return true
+end
 local function MSUF_ProfileIO_InCombatLockdown()
     return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
 end
@@ -221,9 +277,6 @@ local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
     if f and f.RegisterEvent then
         f:RegisterEvent("PLAYER_REGEN_ENABLED")
     end
-    if applyAll == true then
-        MSUF_ProfileIO_RunApplyAllSettings()
-    end
     MSUF_ProfileIO_RunDisableBlizzardFrames()
     MSUF_ProfileIO_RunFrameScaleApply()
     return true
@@ -233,9 +286,6 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     if MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll) then
         return
     end
-    if applyAll == true then
-        MSUF_ProfileIO_RunApplyAllSettings()
-    end
     MSUF_ProfileIO_RunDisableBlizzardFrames()
     MSUF_ProfileIO_RunFrameScaleApply()
 
@@ -244,7 +294,19 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     if core and type(core.InvalidateAllFrameConfigs) == "function" then
         core.InvalidateAllFrameConfigs()
     end
-    MSUF_ProfileIO_CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
+    local UF = MSUF and MSUF.UF
+    local metadata = UF and UF.Metadata
+    local coordinatedApplyMask = metadata and metadata.coordinatedApplyMask
+    if not MSUF_ProfileIO_CallGlobal(
+        "MSUF_UFCore_NotifyConfigChanged",
+        nil,
+        true,
+        true,
+        reason,
+        coordinatedApplyMask
+    ) then
+        MSUF_ProfileIO_RunApplyAllSettings(coordinatedApplyMask)
+    end
     MSUF_ProfileIO_CallGlobal("MSUF_ApplyModules")
     if not MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_Apply", { full = true, cdm = true }) then
         MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_Refresh")
@@ -253,6 +315,8 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     end
     MSUF_ProfileIO_CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
     MSUF_ProfileIO_ApplyCastbarRuntime(reason)
+    MSUF_ProfileIO_ApplyExternalFontFollowers(applyAll == true)
+    MSUF_ProfileIO_CheckLocaleReload()
 end
 --- Compact codec (backward compatible)
 --- New export format (preferred):
@@ -702,11 +766,7 @@ function MSUF_SwitchProfile(name)
         end
     end
     MSUF_ProfileIO_RunEnsureDB()
-    MSUF_ProfileIO_RunApplyAllSettings()
     MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_SWITCH", false)
-    if _G.MSUF_UpdateAllFonts then
-        _G.MSUF_UpdateAllFonts()
-    end
     print("|cff00ff00MSUF:|r Switched to profile '"..name.."'.")
  end
 function MSUF_ResetProfile(name)
@@ -721,11 +781,7 @@ function MSUF_ResetProfile(name)
             _G.MSUF_UFCore_InvalidateSettingsCache()
         end
         MSUF_ProfileIO_RunEnsureDB(true)
-        MSUF_ProfileIO_RunApplyAllSettings()
         MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_RESET", false)
-        if _G.MSUF_UpdateAllFonts then
-            _G.MSUF_UpdateAllFonts()
-        end
     end
     print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
  end

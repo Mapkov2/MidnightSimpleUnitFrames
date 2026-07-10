@@ -19,11 +19,14 @@ local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
 local GetNumGroupMembers = GetNumGroupMembers
 local floor = math.floor
+local pairs = pairs
 local tonumber = tonumber
 local type = type
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local eventFrame
+local runtimeObservers = {}
+local dirtyApplyMaskCache = {}
 
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
@@ -105,17 +108,19 @@ local function SetupWantedHeaders(kind)
   local raidKind = LiveRaidKind()
 
   if scope ~= "raid" and wantParty then
-    local header = GF.SetupHeader and GF.SetupHeader("party", "party")
+    local header, scanned
+    if GF.SetupHeader then header, scanned = GF.SetupHeader("party", "party") end
     if header and header.Show then header:Show() end
-    if GF.ScheduleScan then GF.ScheduleScan("party", "party") end
+    if not scanned and GF.ScheduleScan then GF.ScheduleScan("party", "party") end
   elseif scope ~= "raid" then
     RetireHeader("party")
   end
 
   if scope ~= "party" and wantRaid then
-    local header = GF.SetupHeader and GF.SetupHeader("raid", raidKind)
+    local header, scanned
+    if GF.SetupHeader then header, scanned = GF.SetupHeader("raid", raidKind) end
     if header and header.Show then header:Show() end
-    if GF.ScheduleScan then GF.ScheduleScan("raid", raidKind) end
+    if not scanned and GF.ScheduleScan then GF.ScheduleScan("raid", raidKind) end
   elseif scope ~= "party" then
     RetireHeader("raid")
   end
@@ -126,7 +131,7 @@ local function SetupWantedHeaders(kind)
   return true
 end
 
-local function ApplyFrameDirty(frame, kind, mask, reason)
+local function ApplyFrameDirty(frame, kind, mask, reason, applyMask)
   if not (frame and kind) then return false end
   if not IsUnitToken(frame.unit) then return false end
   if not (UF and UF.ApplySpec and GF.CompileSpec) then
@@ -134,11 +139,16 @@ local function ApplyFrameDirty(frame, kind, mask, reason)
   end
   local spec = GF.CompileSpec(kind, frame, frame.unit)
   if not spec then return false end
-  local applyMask = GF.ApplyMaskForDirtyMask and GF.ApplyMaskForDirtyMask(mask) or Metadata.MASK_RUNTIME
+  applyMask = applyMask or (GF.ApplyMaskForDirtyMask and GF.ApplyMaskForDirtyMask(mask)) or Metadata.MASK_RUNTIME
   if GF.ApplyStructureSpec then
     return GF.ApplyStructureSpec(frame, spec, reason or "MSUF_GF_DIRTY", applyMask) == true
   end
   return UF.ApplySpec(frame, spec, reason or "MSUF_GF_DIRTY", applyMask) == true
+end
+
+local function ApplyRefreshFrame(frame, _, frameKind, kind, mask, applyMask)
+  if kind and kind ~= frameKind then return false end
+  return ApplyFrameDirty(frame, frameKind, mask, "MSUF_GF_REFRESH_VISUALS", applyMask)
 end
 
 local function MaskHas(mask, flag)
@@ -192,6 +202,10 @@ function GF.ApplyMaskForDirtyMask(mask)
   if mask == GF.DIRTY_ALL or mask == GF.DIRTY_CONFIG then return true end
   if type(mask) ~= "number" then return Metadata.MASK_RUNTIME end
   if MaskHas(mask, GF.DIRTY_CONFIG) then return true end
+
+  local cached = dirtyApplyMaskCache[mask]
+  if cached then return cached end
+
   local out = {}
   local did = false
   if MaskHas(mask, GF.DIRTY_VISUAL) then did = AddElementNames(out, Metadata.MASK_VISUAL) or did end
@@ -202,8 +216,33 @@ function GF.ApplyMaskForDirtyMask(mask)
   if MaskHas(mask, GF.DIRTY_GEOMETRY) or MaskHas(mask, GF.DIRTY_LAYOUT) or MaskHas(mask, GF.DIRTY_UNIT_BINDING) then
     did = AddElementNames(out, Metadata.MASK_RUNTIME) or did
   end
-  if not did then return Metadata.MASK_RUNTIME end
+  if not did then
+    dirtyApplyMaskCache[mask] = Metadata.MASK_RUNTIME
+    return Metadata.MASK_RUNTIME
+  end
+  -- UF.ApplySpec only reads element masks. Keep the lazily merged table private
+  -- and reuse it as immutable metadata for every frame and later refresh.
+  dirtyApplyMaskCache[mask] = out
   return out
+end
+
+function GF.RegisterRuntimeObserver(owner, callback)
+  if type(owner) ~= "string" or owner == "" or type(callback) ~= "function" then return false end
+  runtimeObservers[owner] = callback
+  return true
+end
+
+function GF.UnregisterRuntimeObserver(owner)
+  if runtimeObservers[owner] == nil then return false end
+  runtimeObservers[owner] = nil
+  return true
+end
+
+local function NotifyRuntimeObservers(operation, kind, mask, result)
+  for _, callback in pairs(runtimeObservers) do
+    callback(operation, kind, mask, result)
+  end
+  return result
 end
 
 function GF.DeferGroupRuntime(reason, kind, mask)
@@ -257,7 +296,8 @@ end
 function GF.RebuildAll()
   if InCombat() then return GF.DeferGroupRuntime("rebuild") end
   if GF.InvalidateCompiledSpecs then GF.InvalidateCompiledSpecs() end
-  return GF.RefreshHeaderLayout()
+  local result = GF.RefreshHeaderLayout()
+  return NotifyRuntimeObservers("rebuildAll", nil, nil, result)
 end
 
 function GF.Rebuild(kind)
@@ -265,39 +305,40 @@ function GF.Rebuild(kind)
   if InCombat() then return GF.DeferGroupRuntime("rebuild", kind) end
   if GF.InvalidateCompiledSpecs then GF.InvalidateCompiledSpecs(kind) end
   GF.RefreshHeaderLayout(kind)
-  GF.RefreshUnitBindings(kind)
   return GF.RefreshVisuals(kind, GF.DIRTY_ALL)
 end
 
-function GF.RefreshVisuals(kind, mask)
-  if InCombat() then return GF.DeferGroupRuntime("refresh", kind, mask) end
+local function RefreshVisualsNow(kind, mask)
   if GF.InvalidateCompiledSpecs then
     GF.InvalidateCompiledSpecs(kind)
   end
   if not GF.ForEachFrame then return false end
-  local did = false
-  GF.ForEachFrame(function(frame, _, frameKind)
-    if not kind or kind == frameKind then
-      did = ApplyFrameDirty(frame, frameKind, mask, "MSUF_GF_REFRESH_VISUALS") or did
-    end
-  end, true)
-  return did
+  local applyMask = GF.ApplyMaskForDirtyMask(mask)
+  return GF.ForEachFrame(ApplyRefreshFrame, true, kind, mask, applyMask)
+end
+
+local function RefreshAllNow()
+  local layoutResult = GF.RefreshHeaderLayout()
+  local visualResult = RefreshVisualsNow(nil, GF.DIRTY_ALL)
+  return visualResult or layoutResult
+end
+
+function GF.RefreshVisuals(kind, mask)
+  if InCombat() then return GF.DeferGroupRuntime("refresh", kind, mask) end
+  local result = RefreshVisualsNow(kind, mask)
+  return NotifyRuntimeObservers("refreshVisuals", kind, mask, result)
 end
 
 function GF.RefreshAll()
   if InCombat() then return GF.DeferGroupRuntime("refreshAll") end
   GF.RefreshHeaderLayout()
-  GF.RefreshUnitBindings()
   return GF.RefreshVisuals(nil, GF.DIRTY_ALL)
 end
 
 GF.Refresh = GF.RefreshAll
 GF.RefreshGeometry = function(kind) return GF.RefreshHeaderLayout(kind) end
 GF.RefreshOverlays = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_AURAS) end
-GF.RefreshColors = function(kind)
-  if GF.InvalidateCompiledSpecs then GF.InvalidateCompiledSpecs(kind) end
-  return GF.RefreshVisuals(kind, GF.DIRTY_COLOR)
-end
+GF.RefreshColors = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_COLOR) end
 GF.RefreshBorder = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_BORDER) end
 GF.RefreshOutlineGeometry = GF.RefreshBorder
 GF.RefreshFonts = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_FONT) end
@@ -365,7 +406,7 @@ local function FlushDeferred()
   GF._pendingGroupRuntimeKind = nil
   GF._pendingGroupRuntimeMask = nil
   if reason == "refresh" then return GF.RefreshVisuals(kind, mask) end
-  if reason == "roster" then return GF.RefreshUnitBindings(kind) end
+  if reason == "roster" then return GF.RefreshHeaderLayout(kind) end
   if reason == "visibility" then return GF.UpdateGroupVisibility() end
   if reason == "layout" then
     local did = GF.RefreshHeaderLayout(kind)
@@ -376,7 +417,8 @@ local function FlushDeferred()
   end
   if reason == "rebuild" then
     if kind and type(GF.Rebuild) == "function" then return GF.Rebuild(kind) end
-    return GF.RefreshAll()
+    local result = RefreshAllNow()
+    return NotifyRuntimeObservers("rebuildAll", nil, GF.DIRTY_ALL, result)
   end
   if reason == "refreshAll" then return GF.RefreshAll() end
   return GF.RefreshAll()
@@ -399,7 +441,6 @@ local function RuntimeOnEvent(self, event)
       GF.DeferGroupRuntime("roster")
     else
       GF.RefreshHeaderLayout(event)
-      GF.RefreshUnitBindings()
     end
     return
   elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
