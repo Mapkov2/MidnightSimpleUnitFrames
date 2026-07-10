@@ -19,8 +19,8 @@ local data = {
                 {
                     title = "Optional Assistant Runtime",
                     bullets = {
-                        "Moved the local MSUF Assistant into its own load-on-demand companion addon. The parser, setting graph, knowledge data, and indexes now stay unloaded until you deliberately start the Assistant from Menu2.",
-                        "Added a lightweight Menu2 bridge and start state, so normal menu search remains available while the Assistant has zero idle CPU and memory cost outside an active Assistant session.",
+                        "Moved the local MSUF Assistant into its own load-on-demand companion addon. The parser, setting graph, knowledge data, and indexes stay unloaded until the Assistant dashboard is opened from Menu2.",
+                        "Added a lightweight Menu2 bridge, so normal menu search remains available while the Assistant has zero idle CPU and memory cost outside an active Assistant session. Opening the dashboard now loads and shows the Assistant directly, without a separate start button.",
                         "Improved Assistant request routing, undo/redo, queued work, context handling, diagnostics, and the settings registry; added German/English presentation handling for Assistant dialogs.",
                     },
                 },

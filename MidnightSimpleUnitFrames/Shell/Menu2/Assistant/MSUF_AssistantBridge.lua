@@ -2,8 +2,8 @@
 ---
 --- This is the only Assistant Lua file loaded with the core addon. It owns no
 --- frame, event, timer, OnUpdate, hook, parser, registry, or background task.
---- The heavy runtime is loaded only after an explicit Assistant interaction
---- inside the visible MSUF menu and never during combat.
+--- The heavy runtime is loaded as soon as the visible MSUF Dashboard needs its
+--- Assistant card, and never during combat.
 
 local _, MSUF = ...
 MSUF = _G.MSUF_NS or MSUF or {}
@@ -56,10 +56,9 @@ function A.EnsureRuntimeLoaded(reason)
     return false, "runtime_incomplete"
 end
 
---- Load and submit only for a deliberate Assistant interaction (for example,
---- Enter in the navigation search field or an Assistant search shortcut).
---- Merely typing must never call this function: cold text input remains the
---- classic Menu2 search and keeps the LoD runtime fully unloaded.
+--- Load and submit for an Assistant interaction (for example, Enter in the
+--- navigation search field or an Assistant search shortcut). Merely typing
+--- still uses classic Menu2 search until the Assistant dashboard is opened.
 function A.SubmitExplicitQuery(text, reason)
     text = tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if text == "" then return false, nil, "empty" end
@@ -72,11 +71,6 @@ function A.SubmitExplicitQuery(text, reason)
     return true, submit(text)
 end
 
-local function RebuildDashboard()
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
-    if type(M.SelectPage) == "function" then M.SelectPage("home") end
-end
-
 local BridgeBuildDashboardCard
 BridgeBuildDashboardCard = function(parent, cardW, cardH)
     -- A manually preloaded runtime replaces this function. Guard this path in
@@ -86,6 +80,14 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     end
     if not parent then return nil end
 
+    -- The Dashboard is the Assistant's normal entry point. Load its companion
+    -- addon here and render the real card immediately, matching the former
+    -- direct-open behavior without a separate start-button interaction.
+    local loaded, why = A.EnsureRuntimeLoaded("dashboard-open")
+    if loaded and A.BuildDashboardCard ~= BridgeBuildDashboardCard then
+        return A.BuildDashboardCard(parent, cardW, cardH)
+    end
+
     local T, W = M.Theme, M.Widgets
     local title
     if T and type(T.Font) == "function" then
@@ -94,32 +96,12 @@ BridgeBuildDashboardCard = function(parent, cardW, cardH)
     end
     if W and type(W.Text) == "function" then
         W.Text(parent,
-            "The Assistant stays completely unloaded until you start it. This keeps its parser, knowledge graph, and indexes at zero idle CPU outside this menu.",
+            why == "combat"
+                and "The Assistant cannot be loaded during combat. Leave combat, then reopen the Dashboard."
+                or "The Assistant runtime could not be loaded. Reopen the Dashboard after resolving the addon load issue.",
             22, -78, math.max(220, (tonumber(cardW) or 520) - 44), T and T.colors and T.colors.muted)
     end
-
-    local button
-    if T and type(T.Button) == "function" then
-        button = T.Button(parent, "Start Assistant", 148, 28)
-    elseif type(_G.CreateFrame) == "function" then
-        button = _G.CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-        button:SetSize(148, 28)
-        button:SetText("Start Assistant")
-    end
-    if not button then return title end
-    button:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -132)
-    button:SetScript("OnClick", function(self)
-        if self.Disable then self:Disable() end
-        if self.SetText then self:SetText("Loading...") end
-        local ok, why = A.EnsureRuntimeLoaded("dashboard-click")
-        if ok then
-            RebuildDashboard()
-            return
-        end
-        if self.Enable then self:Enable() end
-        if self.SetText then self:SetText(why == "combat" and "Unavailable in combat" or "Start Assistant") end
-    end)
-    return button
+    return title
 end
 
 A.BuildDashboardCard = A.BuildDashboardCard or BridgeBuildDashboardCard
