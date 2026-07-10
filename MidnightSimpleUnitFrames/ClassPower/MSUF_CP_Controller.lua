@@ -66,6 +66,7 @@ local table_sort = table.sort
 local wipe = wipe
 local CreateFrame = CreateFrame
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
+local UnitPartialPower = UnitPartialPower
 local UnitHealth = UnitHealth
 local UnitPowerType = UnitPowerType
 local UnitPowerDisplayMod = UnitPowerDisplayMod
@@ -89,9 +90,22 @@ local C_SpellBook = C_SpellBook
 
 --- Secret-value guard (Midnight/12.1)
 local _issecretvalue = _G.issecretvalue
+local _canaccesstable = _G.canaccesstable
 local function NotSecret(v)
     if _issecretvalue then return _issecretvalue(v) == false end
     return true
+end
+
+local function CanAccessTableValue(value)
+    if NotSecret(value) == false or value == nil or type(value) ~= "table" then return false end
+    if _canaccesstable and _canaccesstable(value) == false then return false end
+    return true
+end
+
+local function CanAccessOptionalTableValue(value)
+    if NotSecret(value) == false then return false end
+    if value == nil then return true end
+    return CanAccessTableValue(value)
 end
 
 --- P0 PERF: Cached DB config (eliminates ~46 MSUF_DB traversals per event)
@@ -526,6 +540,7 @@ local function GetClassPowerType()
     elseif PLAYER_CLASS == "MAGE" then
         local spec = GetSpec and GetSpec()
         if spec == CPK.SPEC.MAGE_ARCANE then return PT.ArcaneCharges, CPK.MODE.SEGMENTED, false end
+        if spec == CPK.SPEC.MAGE_FROST then return "ICICLES", CPK.MODE.AURA_SEGMENTED, true end
 
     elseif PLAYER_CLASS == "MONK" then
         local spec = GetSpec and GetSpec()
@@ -540,9 +555,16 @@ local function GetClassPowerType()
         end
 
     elseif PLAYER_CLASS == "DRUID" then
-        local form = GetShapeshiftFormID and GetShapeshiftFormID()
-        --- Cat Form: Combo Points as class power (Energy is main bar)
-        if form == 1 then return PT.ComboPoints, CPK.MODE.SEGMENTED, false end
+        --- Mirror Blizzard's DruidComboPointBar: Energy as the active primary
+        --- power is the authoritative signal, including Cat-form variants.
+        local primaryPower = UnitPowerType("player")
+        if NotSecret(primaryPower) then
+            if primaryPower == PT.Energy then return PT.ComboPoints, CPK.MODE.SEGMENTED, false end
+        else
+            --- Compatibility fallback when the primary power itself is secret.
+            local form = GetShapeshiftFormID and GetShapeshiftFormID()
+            if form == 1 then return PT.ComboPoints, CPK.MODE.SEGMENTED, false end
+        end
         --- Balance/Boomkin: Astral Power is already the main power bar -> no class power.
         --- Other forms (Bear etc.): main bar shows Rage/Mana -> no secondary resource overlay.
 
@@ -784,7 +806,7 @@ local function RefreshChargedPoints()
     if type(GetUnitChargedPowerPoints) ~= "function" then return end
 
     local indices = GetUnitChargedPowerPoints("player")
-    if type(indices) ~= "table" or #indices == 0 then return end
+    if not CanAccessTableValue(indices) or #indices == 0 then return end
 
     _chargedMap = {}
     for i = 1, #indices do
@@ -927,6 +949,7 @@ function CPAuras.ClearSpell(spellID, auraInstanceID)
 end
 
 function CPAuras.Store(aura)
+    if not CanAccessTableValue(aura) then return false end
     local spellID = CPAuras.AuraSpellID(aura)
     if not (spellID and CPAuras.watched[spellID]) then return false end
 
@@ -960,17 +983,103 @@ function CPAuras.Fetch(spellID)
     local aura
     if type(C_UnitAuras.GetPlayerAuraBySpellID) == "function" then
         aura = C_UnitAuras.GetPlayerAuraBySpellID(spellID)
-    end
-    if not aura and type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
+    elseif type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
         aura = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
     end
-    if aura then CPAuras.Store(aura) end
+    if CanAccessTableValue(aura) then
+        CPAuras.Store(aura)
+    else
+        aura = nil
+    end
     return aura
+end
+
+local function CPAuraFieldEqual(left, right, key)
+    local a = left and left[key]
+    local b = right and right[key]
+    if NotSecret(a) == false or NotSecret(b) == false then return false end
+    return a == b
+end
+
+function CPAuras.SameState(left, right, stateKind)
+    if left == right then return true end
+    if not left or not right then return false end
+    if stateKind == "timer" then
+        return CPAuraFieldEqual(left, right, "expirationTime")
+    end
+    if stateKind == "tip" then
+        return CPAuraFieldEqual(left, right, "applications")
+            and CPAuraFieldEqual(left, right, "expirationTime")
+    end
+    --- Stack resources only render presence/application changes. Aura-instance
+    --- and duration churn must not repaint ten Enhancement segments.
+    return CPAuraFieldEqual(left, right, "applications")
+end
+
+function CPAuras.RefreshSpell(spellID, stateKind)
+    spellID = CPAuras.NormalizeID(spellID)
+    if not spellID then return false end
+
+    local previous = CPAuras.bySpell[spellID]
+    CPAuras.ClearSpell(spellID, previous and CPAuras.AuraInstanceID(previous))
+    local current = CPAuras.Fetch(spellID)
+    return not CPAuras.SameState(previous, current, stateKind)
+end
+
+function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
+    spellID = CPAuras.NormalizeID(spellID)
+    if not spellID then return nil end
+    if powerType == "MAELSTROM_WEAPON" and spellID == CPK.SPELL.MAELSTROM_WEAPON then return "stacks" end
+    if powerType == "TIP_OF_THE_SPEAR" and spellID == TIP.AURA_ID then return "tip" end
+    if powerType == "ICICLES" and CPConst.ICICLES and spellID == CPConst.ICICLES.AURA_ID then return "stacks" end
+    if powerType == "SOUL_FRAGMENTS" then
+        if spellID == CPK.SPELL.VOID_METAMORPHOSIS
+            or spellID == CPK.SPELL.SILENCE_THE_WHISPERS
+            or spellID == CPK.SPELL.DARK_HEART then
+            return "stacks"
+        end
+    end
+    if renderMode == CPK.MODE.TIMER_BAR and spellID == EBON.SPELL_ID then return "timer" end
+    return nil
+end
+
+function CPAuras.RefreshActive(powerType, renderMode)
+    local changed = false
+    local handled = true
+    local function Refresh(spellID, stateKind)
+        if CPAuras.RefreshSpell(spellID, stateKind) then changed = true end
+    end
+
+    if powerType == "MAELSTROM_WEAPON" then
+        Refresh(CPK.SPELL.MAELSTROM_WEAPON, "stacks")
+    elseif powerType == "TIP_OF_THE_SPEAR" then
+        Refresh(TIP.AURA_ID, "tip")
+    elseif powerType == "ICICLES" then
+        Refresh(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
+    elseif powerType == "SOUL_FRAGMENTS" then
+        Refresh(CPK.SPELL.VOID_METAMORPHOSIS, "stacks")
+        Refresh(CPK.SPELL.SILENCE_THE_WHISPERS, "stacks")
+        Refresh(CPK.SPELL.DARK_HEART, "stacks")
+    elseif renderMode == CPK.MODE.TIMER_BAR then
+        Refresh(EBON.SPELL_ID, "timer")
+    elseif powerType == "SOUL_FRAGMENTS_VENG" then
+        --- Vengeance reads the native spell cast count; UNIT_AURA is only a
+        --- value-change signal and does not require any aura-cache queries.
+        changed = true
+    else
+        handled = false
+    end
+
+    if not handled then
+        CPAuras.Rebuild()
+        return true
+    end
+    return changed
 end
 
 function CPAuras.IsExpired(aura)
     local expirationTime = aura and aura.expirationTime
-    if expirationTime == nil or NotSecret(expirationTime) == false then return false end
+    if NotSecret(expirationTime) == false or expirationTime == nil then return false end
     expirationTime = tonumber(expirationTime)
     return expirationTime and expirationTime > 0 and expirationTime <= GetTime()
 end
@@ -990,9 +1099,18 @@ end
 
 function CPAuras.Rebuild()
     CPAuras.ClearAll()
-    CPAuras.ScanUnitAuras()
-    for spellID in pairs(CPAuras.watched) do
-        if not CPAuras.bySpell[spellID] then CPAuras.Fetch(spellID) end
+    local canFetchBySpell = C_UnitAuras and (
+        type(C_UnitAuras.GetPlayerAuraBySpellID) == "function"
+        or type(C_UnitAuras.GetUnitAuraBySpellID) == "function"
+    )
+    if canFetchBySpell then
+        --- Only the small watched set matters to ClassPower. This avoids a
+        --- full helpful-aura scan on secret UNIT_AURA fallback updates.
+        for spellID in pairs(CPAuras.watched) do
+            CPAuras.Fetch(spellID)
+        end
+    else
+        CPAuras.ScanUnitAuras()
     end
 end
 
@@ -1004,25 +1122,48 @@ function CPAuras.FetchByInstanceID(auraInstanceID)
     return C_UnitAuras.GetAuraDataByAuraInstanceID("player", auraInstanceID)
 end
 
+function CPAuras.CanProcessIncrementalUpdate(unitAuraUpdateInfo)
+    if not CanAccessTableValue(unitAuraUpdateInfo) then return false end
+
+    --- Midnight/PTR can mark UNIT_AURA update fields secret. Addon code may
+    --- pass those values to issecretvalue, but it must not branch on them or
+    --- iterate secret tables. Fall back to the small player-aura rebuild.
+    local isFullUpdate = unitAuraUpdateInfo.isFullUpdate
+    if NotSecret(isFullUpdate) == false or isFullUpdate then return false end
+
+    local addedAuras = unitAuraUpdateInfo.addedAuras
+    local updatedAuraInstanceIDs = unitAuraUpdateInfo.updatedAuraInstanceIDs
+    local removedAuraInstanceIDs = unitAuraUpdateInfo.removedAuraInstanceIDs
+    return CanAccessOptionalTableValue(addedAuras)
+        and CanAccessOptionalTableValue(updatedAuraInstanceIDs)
+        and CanAccessOptionalTableValue(removedAuraInstanceIDs)
+end
+
 function CPAuras.ScanUnitAuras()
     if not (C_UnitAuras and type(C_UnitAuras.GetUnitAuras) == "function") then return end
     local auras = C_UnitAuras.GetUnitAuras("player", "HELPFUL")
-    if type(auras) ~= "table" then return end
+    if not CanAccessTableValue(auras) then return end
     for i = 1, #auras do
         CPAuras.Store(auras[i])
     end
 end
 
-function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo)
-    if unitAuraUpdateInfo == nil or unitAuraUpdateInfo.isFullUpdate then
-        CPAuras.Rebuild()
-        return
+function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo, powerType, renderMode)
+    if not CPAuras.CanProcessIncrementalUpdate(unitAuraUpdateInfo) then
+        --- Midnight can hide the incremental payload. Refresh only the aura(s)
+        --- consumed by the active resource instead of querying every class.
+        return CPAuras.RefreshActive(powerType, renderMode)
     end
 
+    local changed = powerType == "SOUL_FRAGMENTS_VENG"
     local addedAuras = unitAuraUpdateInfo.addedAuras
     if addedAuras then
         for i = 1, #addedAuras do
-            CPAuras.Store(addedAuras[i])
+            local aura = addedAuras[i]
+            local spellID = CanAccessTableValue(aura) and CPAuras.AuraSpellID(aura) or nil
+            if CPAuras.Store(aura) and CPAuras.ActiveSpellKind(powerType, renderMode, spellID) then
+                changed = true
+            end
         end
     end
 
@@ -1032,12 +1173,17 @@ function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo)
             local auraInstanceID = CPAuras.NormalizeID(updatedAuraInstanceIDs[i])
             local spellID = auraInstanceID and CPAuras.spellByInstance[auraInstanceID]
             if spellID then
+                local previous = CPAuras.bySpell[spellID]
                 local aura = CPAuras.FetchByInstanceID(auraInstanceID)
-                if aura then
+                local current
+                if CanAccessTableValue(aura) then
                     CPAuras.Store(aura)
+                    current = aura
                 else
                     CPAuras.ClearSpell(spellID, auraInstanceID)
                 end
+                local stateKind = CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
+                if stateKind and not CPAuras.SameState(previous, current, stateKind) then changed = true end
             end
         end
     end
@@ -1047,9 +1193,13 @@ function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo)
         for i = 1, #removedAuraInstanceIDs do
             local auraInstanceID = CPAuras.NormalizeID(removedAuraInstanceIDs[i])
             local spellID = auraInstanceID and CPAuras.spellByInstance[auraInstanceID]
-            if spellID then CPAuras.ClearSpell(spellID, auraInstanceID) end
+            if spellID then
+                CPAuras.ClearSpell(spellID, auraInstanceID)
+                if CPAuras.ActiveSpellKind(powerType, renderMode, spellID) then changed = true end
+            end
         end
     end
+    return changed
 end
 
 CPAuras.AddSpell(CPK.SPELL.MAELSTROM_WEAPON)
@@ -1197,23 +1347,18 @@ local function CP_CheckAutoHide(cur, maxP)
     end
 
     --- Full: hide when all resources are at max
-    if b.classPowerHideWhenFull and cur ~= nil and maxP ~= nil then
-        --- Only check with non-secret values
-        if NotSecret(cur) and cur ~= nil and maxP ~= nil then
-            if cur >= maxP and maxP > 0 then
-                CP.container:SetAlpha(0)
-                return
-            end
+    if b.classPowerHideWhenFull and NotSecret(cur) and NotSecret(maxP) then
+        if cur ~= nil and maxP ~= nil and cur >= maxP and maxP > 0 then
+            CP.container:SetAlpha(0)
+            return
         end
     end
 
     --- Empty: hide when zero resources
-    if b.classPowerHideWhenEmpty and cur ~= nil then
-        if NotSecret(cur) and cur ~= nil then
-            if cur <= 0 then
-                CP.container:SetAlpha(0)
-                return
-            end
+    if b.classPowerHideWhenEmpty and NotSecret(cur) then
+        if cur ~= nil and cur <= 0 then
+            CP.container:SetAlpha(0)
+            return
         end
     end
 
@@ -1259,6 +1404,7 @@ local CP_UpdateValues_TimerBar
 local CP_UpdateValues_Stagger
 local CP_StopEssenceOnUpdates
 local _essenceRuntimeTick
+local _staggerRuntimeTick
 
 do
     local commonEnv = {
@@ -1269,6 +1415,7 @@ do
         PT = PT,
         PLAYER_CLASS = PLAYER_CLASS,
         UnitPower = UnitPower,
+        UnitPartialPower = UnitPartialPower,
         UnitPowerDisplayMod = UnitPowerDisplayMod,
         C_UnitAuras = C_UnitAuras,
         GetTrackedPlayerAura = CPAuras.Get,
@@ -1314,6 +1461,7 @@ do
     commonEnv.STAGGER_CONST = CPConst.STAGGER or {}
     local stagger = CP_CallBuilder(CPModeBuilders.STAGGER, commonEnv)
     if stagger and type(stagger.Update) == "function" then CP_UpdateValues_Stagger = stagger.Update end
+    if stagger and type(stagger.RuntimeTick) == "function" then _staggerRuntimeTick = stagger.RuntimeTick end
 end
 
 --- Phase 7A CP split: pure presentation helpers now live in
@@ -1360,6 +1508,7 @@ local _cpTickActive = false
 local _cpTickFn = nil
 local _cpTickElapsed = 0
 local CP_TICK_INTERVAL = 1 / 30
+local CP_StopCentralTick
 
 local function CP_CentralTickOnUpdate(_, elapsed)
     if not _cpTickFn then return end
@@ -1367,28 +1516,35 @@ local function CP_CentralTickOnUpdate(_, elapsed)
     if _cpTickElapsed < CP_TICK_INTERVAL then return end
     local dt = _cpTickElapsed
     _cpTickElapsed = 0
-    _cpTickFn(dt)
-end
-
-local function CP_StartCentralTick(tickFn)
-    _cpTickFn = tickFn
-    if not _cpTickActive then
-        _cpTickElapsed = 0
-        if not _cpTickFrame then _cpTickFrame = CreateFrame("Frame") end
-        _cpTickFrame:SetOnUpdateMode("RunWhenVisible")
-        _cpTickFrame:SetScript("OnUpdate", CP_CentralTickOnUpdate)
-        _cpTickActive = true
-    elseif _cpTickFn ~= tickFn then
-        --- Mode switch mid-tick: just swap function, no SetScript churn.
+    if _cpTickFn(dt) == false then
+        CP_StopCentralTick()
     end
 end
 
-local function CP_StopCentralTick()
+local function CP_StartCentralTick(tickFn)
+    if type(tickFn) ~= "function" then return end
+    local previousTickFn = _cpTickFn
+    _cpTickFn = tickFn
+    if not _cpTickActive then
+        _cpTickElapsed = 0
+        if not _cpTickFrame then
+            _cpTickFrame = CreateFrame("Frame", nil, UIParent)
+        end
+        _cpTickFrame:SetScript("OnUpdate", CP_CentralTickOnUpdate)
+        _cpTickFrame:Show()
+        _cpTickActive = true
+    elseif previousTickFn ~= tickFn then
+        --- Mode switch mid-tick: swap function and restart its elapsed budget.
+        _cpTickElapsed = 0
+    end
+end
+
+CP_StopCentralTick = function()
     if not _cpTickActive then return end
     _cpTickFn = nil
     _cpTickElapsed = 0
     _cpTickFrame:SetScript("OnUpdate", nil)
-    _cpTickFrame:SetOnUpdateMode("Disabled")
+    _cpTickFrame:Hide()
     _cpTickActive = false
 end
 
@@ -1450,6 +1606,17 @@ local function CP_SyncRuntimeOnUpdates(timerActive)
     --- Not rune mode: stop rune animations.
     if CP.runeOUAAny and CP_StopRuneOnUpdates then
         CP_StopRuneOnUpdates(false)
+    end
+
+    if mode == CPK.MODE.STAGGER then
+        if CP.essenceOUAAny and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
+        if SetTimerBarOnUpdate then SetTimerBarOnUpdate(false) end
+        if timerActive and _staggerRuntimeTick then
+            CP_StartCentralTick(_staggerRuntimeTick)
+        else
+            CP_StopCentralTick()
+        end
+        return
     end
 
     if mode == CPK.MODE.TIMER_BAR then
@@ -1819,7 +1986,10 @@ local function FullRefresh()
                 --- Maelstrom Weapon: max stacks from spell data
                 maxP = 10  --- default
                 local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
-                if spellMax ~= nil and NotSecret(spellMax) and tonumber(spellMax) and tonumber(spellMax) > 0 then maxP = tonumber(spellMax) end
+                if NotSecret(spellMax) and spellMax ~= nil then
+                    local resolvedMax = tonumber(spellMax)
+                    if resolvedMax and resolvedMax > 0 then maxP = resolvedMax end
+                end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6  --- Vengeance: 6 soul fragment segments
             elseif powerType == "WHIRLWIND" then
@@ -1830,6 +2000,8 @@ local function FullRefresh()
                 CP.spExpires = nil
                 CP.spLocalUntil = nil
                 CP.spCachedQ = -1
+            elseif powerType == "ICICLES" then
+                maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
             else
                 maxP = 10
             end
@@ -1854,7 +2026,7 @@ local function FullRefresh()
         CP._pf = playerFrame
         CP._layoutH = cpHeight
         CP.powerType = powerType
-        CP.powerToken = POWER_TYPE_TOKENS[powerType]
+        CP.powerToken = POWER_TYPE_TOKENS[powerType] or (type(powerType) == "string" and powerType or nil)
         CP.renderMode = renderMode
         CP.isAuraPower = isAuraPower
         CP.isVehicle = (UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
@@ -2240,7 +2412,9 @@ local function CP_ShouldUseFrequentPowerEvents()
     if AM.visible then return true end
     if not CP.visible then return false end
     local mode = CP.renderMode
-    return mode == CPK.MODE.CONTINUOUS or mode == CPK.MODE.FRACTIONAL
+    return mode == CPK.MODE.CONTINUOUS
+        or mode == CPK.MODE.FRACTIONAL
+        or (mode == CPK.MODE.SEGMENTED and CP.powerType == PT.Essence)
 end
 
 CP_ShouldUseLiteBindings = function()
@@ -2288,8 +2462,9 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "UNIT_AURA", true, "player")
         CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", true)
         CP_SetEventBound(eventFrame, "UNIT_HEALTH", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", PHP.visible, "player")
-        CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", PHP.visible, "player")
+        local wantMaxHealth = PHP.visible or (CP.visible and CP.renderMode == CPK.MODE.STAGGER)
+        CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", wantMaxHealth, "player")
+        CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", wantMaxHealth, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_START", true, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_STOP", true, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", true, "player")
@@ -2309,7 +2484,7 @@ CP_RefreshEventBindings = function()
     local wantAura = CP.visible and profile.aura == true
     local wantRune = CP.visible and profile.rune == true
     local wantHealth = (CP.visible and profile.health == true) or PHP.visible
-    local wantMaxHealth = PHP.visible
+    local wantMaxHealth = (CP.visible and profile.health == true) or PHP.visible
     local wantPointCharge = CP.visible and profile.pointCharge == true
     local wantWarlockPred = CP.visible and profile.warlockPred == true
     local wantSpellSucceeded = CP.visible and profile.spellSucceeded == true
@@ -2382,8 +2557,15 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     if event == "UNIT_AURA" then
         if arg1 == "player" then
-            CPAuras.ProcessUnitAuraUpdate(arg2)
-            CP_DeferAuraUpdate()
+            --- Stagger uses UNIT_AURA only as a lightweight change signal and
+            --- never reads aura payloads. Avoid rebuilding the aura cache for it.
+            local resourceChanged = true
+            if CP.isAuraPower or CP.renderMode == CPK.MODE.TIMER_BAR then
+                resourceChanged = CPAuras.ProcessUnitAuraUpdate(arg2, CP.powerType, CP.renderMode)
+            end
+            if resourceChanged or CP.renderMode == CPK.MODE.STAGGER then
+                CP_DeferAuraUpdate()
+            end
         end
         return
     end
@@ -2465,15 +2647,20 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
             end
             --- CP stagger: max health = bar max, threshold recalculation
             if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
-                CP_UpdateValues_Stagger(CP.powerType, CP.currentMax)
+                CP_RunActiveUpdate(CP.powerType, CP.currentMax)
             end
         end
         return
     end
 
     if event == "UNIT_MAXHEALTH" or event == "UNIT_MAX_HEALTH_MODIFIERS_CHANGED" then
-        if arg1 == "player" and PHP.visible then
-            CP_PlayerHPUpdate(event)
+        if arg1 == "player" then
+            if PHP.visible then
+                CP_PlayerHPUpdate(event)
+            end
+            if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
+                CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+            end
         end
         return
     end

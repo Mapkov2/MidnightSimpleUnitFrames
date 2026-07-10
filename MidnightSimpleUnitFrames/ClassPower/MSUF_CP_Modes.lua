@@ -82,6 +82,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
     local CPConst = E.CPConst
     local CP = E.CP
     local UnitPower = E.UnitPower
+    local UnitPartialPower = E.UnitPartialPower
     local NotSecret = E.NotSecret
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local GetSpec = E.GetSpec
@@ -93,31 +94,45 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
     local _essRechargeAt = 0
     local _essRate       = 0
     local _essActiveBar  = nil
+    local SetEssenceOnUpdate
+
+    local function SetEssenceValue(bar, value)
+        local visualVersion = CP.visual and CP.visual.version or 0
+        if bar._msufEssenceValue == value and bar._msufEssenceValueVersion == visualVersion then return end
+        bar:SetValue(value)
+        bar._msufEssenceValue = value
+        bar._msufEssenceValueVersion = visualVersion
+    end
 
     --- Essence smooth recharge ? tick logic (called from central controller tick).
     local function EssenceBarOnUpdate(bar)
         local start = bar._essStart
         local rate  = bar._essRate
         if not start or not rate or rate <= 0 then
-            bar:SetValue(0)
-            return
+            SetEssenceValue(bar, 0)
+            return false
         end
         local elapsed = GetTime() - start
         local progress = elapsed * rate
         if progress < 0 then progress = 0 end
         if progress > 1 then progress = 1 end
-        bar:SetValue(progress)
+        SetEssenceValue(bar, progress)
+        return progress < 1
     end
 
     --- Central RuntimeTick: called by controller's single OnUpdate frame.
     local function RuntimeTick(elapsed)
         if _essActiveBar and _essActiveBar._essOUA then
-            EssenceBarOnUpdate(_essActiveBar)
+            if EssenceBarOnUpdate(_essActiveBar) then return true end
+            SetEssenceOnUpdate(_essActiveBar, false)
+            _essActiveBar = nil
+            CP.essenceOUAAny = false
         end
+        return false
     end
 
     --- Flag-only management (no SetScript ? controller owns the tick).
-    local function SetEssenceOnUpdate(bar, on)
+    SetEssenceOnUpdate = function(bar, on)
         if not bar then return end
         if on then
             bar._essOUA = true
@@ -145,7 +160,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         if not NotSecret(cur) then
             for i = 1, maxPower do
                 local bar = CP.bars[i]
-                if bar then bar:SetValue(1) end
+                if bar then SetEssenceValue(bar, 1) end
             end
             if CP.text then CP_StampShown(CP.text, false) end
             StopEssenceOnUpdates()
@@ -153,21 +168,36 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         end
         cur = tonumber(cur) or 0
 
-        if _essPrevCur ~= cur then
-            _essPrevCur = cur
-            if cur < maxPower then
-                _essRechargeAt = GetTime()
-                if GetPowerRegenForPowerType then
-                    local rate = GetPowerRegenForPowerType(powerType)
-                    if rate and NotSecret(rate) then
-                        _essRate = tonumber(rate) or 0
-                    end
-                end
-            else
-                _essRechargeAt = 0
-                _essRate = 0
+        local now = GetTime()
+        if cur < maxPower then
+            local rate
+            if GetPowerRegenForPowerType then
+                local rawRate = GetPowerRegenForPowerType(powerType)
+                if NotSecret(rawRate) then rate = tonumber(rawRate) end
             end
+            --- Blizzard uses 0.2 as the safe Essence fallback (5s recharge).
+            if not rate or rate <= 0 then rate = 0.2 end
+            _essRate = rate
+
+            local partialProgress
+            if UnitPartialPower then
+                local rawPartial = UnitPartialPower("player", powerType)
+                if NotSecret(rawPartial) then
+                    partialProgress = (tonumber(rawPartial) or 0) / 1000
+                    if partialProgress < 0 then partialProgress = 0
+                    elseif partialProgress > 1 then partialProgress = 1 end
+                end
+            end
+            if partialProgress ~= nil then
+                _essRechargeAt = now - (partialProgress / rate)
+            elseif _essPrevCur ~= cur or _essRechargeAt <= 0 then
+                _essRechargeAt = now
+            end
+        else
+            _essRechargeAt = 0
+            _essRate = 0
         end
+        _essPrevCur = cur
 
         local visual = CP_GetVisual(E)
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
@@ -184,15 +214,15 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
             local bar = CP.bars[i]
             if bar then
                 if i <= cur then
-                    bar:SetValue(1)
+                    SetEssenceValue(bar, 1)
                     CP_StampAlpha(bar, filledAlpha)
                     SetEssenceOnUpdate(bar, false)
                 elseif i == rechargingIdx and _essRate > 0 and _essRechargeAt > 0 then
-                    local elapsed = GetTime() - _essRechargeAt
+                    local elapsed = now - _essRechargeAt
                     local progress = elapsed * _essRate
                     if progress < 0 then progress = 0 end
                     if progress > 1 then progress = 1 end
-                    bar:SetValue(progress)
+                    SetEssenceValue(bar, progress)
                     CP_StampAlpha(bar, filledAlpha)
                     bar._essStart = _essRechargeAt
                     bar._essRate  = _essRate
@@ -200,7 +230,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
                     _essActiveBar = bar
                     needOnUpdate = true
                 else
-                    bar:SetValue(0)
+                    SetEssenceValue(bar, 0)
                     CP_StampAlpha(bar, emptyAlpha)
                     SetEssenceOnUpdate(bar, false)
                 end
@@ -496,19 +526,32 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
         elseif bar._runeText then
             ClearRuneText(bar)
         end
+        return not (total and dur >= total)
     end
 
     --- Central RuntimeTick: called by controller's single OnUpdate frame.
     --- Iterates all active rune bars in one pass.
     local function RuntimeTick(elapsed)
         local activeBars = CP.activeRuneBars
-        if not activeBars then return end
-        for i = 1, #activeBars do
+        if not activeBars then return false end
+        local count = #activeBars
+        local activeCount = 0
+        for i = 1, count do
             local bar = activeBars[i]
             if bar and bar._runeOUA == true then
-                RuneBarTick(bar, elapsed)
+                if RuneBarTick(bar, elapsed) then
+                    activeCount = activeCount + 1
+                    activeBars[activeCount] = bar
+                else
+                    bar._runeOUA = false
+                    bar._runeStart = nil
+                    bar._runeTotalDuration = nil
+                end
             end
         end
+        for i = activeCount + 1, count do activeBars[i] = nil end
+        CP.runeOUAAny = activeCount > 0
+        return CP.runeOUAAny
     end
 
     --- Flag-only management (no SetScript ? controller owns the tick).
@@ -716,7 +759,8 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
         local filledAlpha, emptyAlpha = visual and visual.filledAlpha or E.GetFilledAlpha(), visual and visual.emptyAlpha or E.GetEmptyAlpha()
         if powerType == "SOUL_FRAGMENTS_VENG" then
             local rawCur = C_Spell.GetSpellCastCount(CPK.SPELL.SOUL_CLEAVE)
-            if rawCur == nil then rawCur = 0 end
+            local curSafe = NotSecret(rawCur)
+            if curSafe and rawCur == nil then rawCur = 0 end
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
@@ -741,13 +785,14 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                     CP_StampShown(txt, false)
                 end
             end
+            CP_CheckAutoHide(curSafe and tonumber(rawCur) or nil, maxPower)
         else
             local cur = 0
             if powerType == "MAELSTROM_WEAPON" then
                 local info = GetPlayerAura(CPK.SPELL.MAELSTROM_WEAPON)
                 if info then
                     local apps = info.applications
-                    if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
+                    if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
                 end
             elseif powerType == "WHIRLWIND" then
                 cur = WW.GetStacks()
@@ -758,11 +803,12 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                     local info = not useLocal and GetPlayerAura(tipAuraID) or nil
                     if info then
                         local apps = info.applications
-                        if apps ~= nil and NotSecret(apps) then
+                        if NotSecret(apps) and apps ~= nil then
                             cur = tonumber(apps) or 0
                             CP.spStacks = cur
-                            if info.expirationTime ~= nil and NotSecret(info.expirationTime) then
-                                CP.spExpires = tonumber(info.expirationTime)
+                            local expirationTime = info.expirationTime
+                            if NotSecret(expirationTime) and expirationTime ~= nil then
+                                CP.spExpires = tonumber(expirationTime)
                             end
                         else
                             cur = GetTrackedTipStacks()
@@ -777,7 +823,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                     local info = GetPlayerAura(icicleID)
                     if info then
                         local apps = info.applications
-                        if apps ~= nil and NotSecret(apps) then cur = tonumber(apps) or 0 end
+                        if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
                     end
                 end
             end
@@ -817,12 +863,12 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             local whispers = GetPlayerAura(CPK.SPELL.SILENCE_THE_WHISPERS)
             if whispers then
                 local apps = whispers.applications
-                if apps ~= nil and NotSecret(apps) then
+                if NotSecret(apps) and apps ~= nil then
                     displayCur = tonumber(apps) or 0
                     local cost = 1
                     if type(GetCollapsingStarCost) == "function" then
                         local rawCost = GetCollapsingStarCost()
-                        if rawCost ~= nil and NotSecret(rawCost) then cost = tonumber(rawCost) or 1 end
+                        if NotSecret(rawCost) and rawCost ~= nil then cost = tonumber(rawCost) or 1 end
                     end
                     if cost > 0 then cur = displayCur / cost end
                 end
@@ -831,11 +877,11 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             local darkHeart = GetPlayerAura(CPK.SPELL.DARK_HEART)
             if darkHeart then
                 local apps = darkHeart.applications
-                if apps ~= nil and NotSecret(apps) then
+                if NotSecret(apps) and apps ~= nil then
                     displayCur = tonumber(apps) or 0
                     local maxApp = 1
                     local rawMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.DARK_HEART)
-                    if rawMax ~= nil and NotSecret(rawMax) then maxApp = tonumber(rawMax) or 1 end
+                    if NotSecret(rawMax) and rawMax ~= nil then maxApp = tonumber(rawMax) or 1 end
                     if maxApp > 0 then cur = displayCur / maxApp end
                 end
             end
@@ -912,7 +958,7 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
         local aura = GetPlayerAura(EBON.SPELL_ID)
         local expirationTime = aura and aura.expirationTime
         local remaining = 0
-        if expirationTime ~= nil and NotSecret(expirationTime) then
+        if NotSecret(expirationTime) and expirationTime ~= nil then
             remaining = (tonumber(expirationTime) or 0) - GetTime()
         end
         if remaining < 0 then remaining = 0 end
@@ -973,14 +1019,16 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
     --- Central RuntimeTick: called by controller's single OnUpdate frame.
     --- Throttled to ~20fps (0.05s) to avoid unnecessary timer text churn.
     local function RuntimeTick(elapsed)
-        if not CP.visible or CP.renderMode ~= CPK.MODE.TIMER_BAR then return end
+        if not CP.visible or CP.renderMode ~= CPK.MODE.TIMER_BAR then return false end
         _tbElapsed = _tbElapsed + elapsed
-        if _tbElapsed < 0.05 then return end
+        if _tbElapsed < 0.05 then return true end
         _tbElapsed = 0
-        if not Update(CP.powerType, CP.currentMax) then
-            --- Timer expired ? flag cleared; controller will stop tick next sync.
+        local active = Update(CP.powerType, CP.currentMax)
+        if not active then
+            --- Returning false lets the controller stop its central tick now.
             CP.tbOUA = false
         end
+        return active
     end
 
     --- Flag-only management (no SetScript ? controller owns the tick).
@@ -989,10 +1037,11 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
             on = false
         end
         if on then
+            if not CP.tbOUA then _tbElapsed = 0 end
             CP.tbOUA = true
-            _tbElapsed = 0
         else
             CP.tbOUA = false
+            _tbElapsed = 0
         end
     end
 
@@ -1100,6 +1149,7 @@ _G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
     local type = type
     local tonumber = tonumber
     local CP = E.CP
+    local CPK = E.CPK
     local _cpDB = E._cpDB
     local NotSecret = E.NotSecret
     local UnitStagger = E.UnitStagger
@@ -1144,6 +1194,7 @@ _G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
         local curSafe = NotSecret(rawCur)
         local mxSafe = NotSecret(rawMx)
         local cur, mx
+        local active = false
 
         if mxSafe then
             mx = tonumber(rawMx) or 1
@@ -1156,6 +1207,7 @@ _G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
         if curSafe then
             cur = tonumber(rawCur) or 0
             bar:SetValue(cur)
+            active = cur > 0
         else
             bar:SetValue(rawCur)
         end
@@ -1168,7 +1220,7 @@ _G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
             local perc = cur / mx
             local tier
             if perc >= (STAGGER_CONST.RED_TRANSITION or 0.6) then tier = 3
-            elseif perc > (STAGGER_CONST.YELLOW_TRANSITION or 0.3) then tier = 2
+            elseif perc >= (STAGGER_CONST.YELLOW_TRANSITION or 0.3) then tier = 2
             else tier = 1 end
 
             if tier ~= staggerCachedTier then
@@ -1211,9 +1263,16 @@ _G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
         end
 
         CP_CheckAutoHide(cur, mx)
+        return active
+    end
+
+    local function RuntimeTick()
+        if not CP.visible or CP.renderMode ~= CPK.MODE.STAGGER then return false end
+        return Update(CP.powerType, CP.currentMax)
     end
 
     return {
         Update = Update,
+        RuntimeTick = RuntimeTick,
     }
 end

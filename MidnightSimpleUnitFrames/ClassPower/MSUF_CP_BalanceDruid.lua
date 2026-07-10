@@ -68,6 +68,7 @@ do
     _G.__MSUF_CP_Balance_Loaded = true
 
     local UnitClass = UnitClass
+    local UnitPower = UnitPower
     local UnitPowerType = UnitPowerType
     local UnitPowerMax = UnitPowerMax
     local GetTime = GetTime
@@ -83,9 +84,22 @@ do
     local CPConst = _G.MSUF_CP_CONST or {}
 local CPK = CPConst.CPK or { BAL = {}, SPELL = {} }
 local _issecretvalue = _G.issecretvalue
+local _canaccesstable = _G.canaccesstable
 local function NotSecret(v)
     if _issecretvalue then return _issecretvalue(v) == false end
     return true
+end
+
+local function CanAccessTableValue(value)
+    if NotSecret(value) == false or value == nil or type(value) ~= "table" then return false end
+    if _canaccesstable and _canaccesstable(value) == false then return false end
+    return true
+end
+
+local function CanAccessOptionalTableValue(value)
+    if NotSecret(value) == false then return false end
+    if value == nil then return true end
+    return CanAccessTableValue(value)
 end
 
 local LUNAR_POWER = (Enum and Enum.PowerType and Enum.PowerType.LunarPower) or 8
@@ -185,6 +199,7 @@ local function _ClearTrackedAura(spellID, auraInstanceID)
 end
 
 local function _StoreTrackedAura(aura)
+    if not CanAccessTableValue(aura) then return false end
     local spellID = _AuraSpellID(aura)
     if not (spellID and _balAuras.watched[spellID]) then return false end
     local auraInstanceID = _AuraInstanceID(aura)
@@ -200,7 +215,7 @@ local function _FetchTrackedAura(spellID)
     local shared = _G.MSUF_CP_GetTrackedPlayerAura
     if type(shared) == "function" then
         local aura = shared(spellID)
-        if aura then
+        if CanAccessTableValue(aura) then
             _StoreTrackedAura(aura)
             return aura
         end
@@ -211,10 +226,14 @@ local function _FetchTrackedAura(spellID)
     if type(C_UnitAuras.GetPlayerAuraBySpellID) == "function" then
         aura = C_UnitAuras.GetPlayerAuraBySpellID(spellID)
     end
-    if not aura and type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
+    if (not CanAccessTableValue(aura)) and type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
         aura = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
     end
-    if aura then _StoreTrackedAura(aura) end
+    if CanAccessTableValue(aura) then
+        _StoreTrackedAura(aura)
+    else
+        aura = nil
+    end
     return aura
 end
 
@@ -222,8 +241,9 @@ local function _GetTrackedAura(spellID)
     spellID = _AuraID(spellID)
     if not spellID then return nil end
     local aura = _balAuras.bySpell[spellID]
-    if aura and aura.expirationTime ~= nil and NotSecret(aura.expirationTime) then
-        local exp = tonumber(aura.expirationTime)
+    if aura then
+        local expirationTime = aura.expirationTime
+        local exp = NotSecret(expirationTime) and tonumber(expirationTime) or nil
         if exp and exp > 0 and exp <= GetTime() then
             _ClearTrackedAura(spellID, _AuraInstanceID(aura))
             aura = nil
@@ -235,7 +255,7 @@ end
 local function _ScanUnitAuras()
     if not (C_UnitAuras and type(C_UnitAuras.GetUnitAuras) == "function") then return end
     local auras = C_UnitAuras.GetUnitAuras("player", "HELPFUL")
-    if type(auras) ~= "table" then return end
+    if not CanAccessTableValue(auras) then return end
     for i = 1, #auras do _StoreTrackedAura(auras[i]) end
 end
 
@@ -245,14 +265,35 @@ local function _RebuildTrackedAuras()
     for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
         _balAuras.watched[auraID] = true
     end
-    _ScanUnitAuras()
-    for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
-        if not _balAuras.bySpell[auraID] then _FetchTrackedAura(auraID) end
+    local canFetchBySpell = C_UnitAuras and (
+        type(C_UnitAuras.GetPlayerAuraBySpellID) == "function"
+        or type(C_UnitAuras.GetUnitAuraBySpellID) == "function"
+    )
+    if canFetchBySpell then
+        for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
+            _FetchTrackedAura(auraID)
+        end
+    else
+        _ScanUnitAuras()
     end
 end
 
+local function _CanProcessIncrementalAuraUpdate(unitAuraUpdateInfo)
+    if not CanAccessTableValue(unitAuraUpdateInfo) then return false end
+
+    --- Midnight/PTR can secret-wrap both the full-update flag and the aura
+    --- delta tables for tainted addon execution. Re-scan the tracked player
+    --- auras instead of performing any forbidden boolean test or iteration.
+    local isFullUpdate = unitAuraUpdateInfo.isFullUpdate
+    if NotSecret(isFullUpdate) == false or isFullUpdate then return false end
+
+    return CanAccessOptionalTableValue(unitAuraUpdateInfo.addedAuras)
+        and CanAccessOptionalTableValue(unitAuraUpdateInfo.updatedAuraInstanceIDs)
+        and CanAccessOptionalTableValue(unitAuraUpdateInfo.removedAuraInstanceIDs)
+end
+
 local function _ProcessAuraUpdate(unitAuraUpdateInfo)
-    if unitAuraUpdateInfo == nil or unitAuraUpdateInfo.isFullUpdate then
+    if not _CanProcessIncrementalAuraUpdate(unitAuraUpdateInfo) then
         _RebuildTrackedAuras()
         return
     end
@@ -269,7 +310,7 @@ local function _ProcessAuraUpdate(unitAuraUpdateInfo)
             local spellID = auraInstanceID and _balAuras.spellByInstance[auraInstanceID]
             if spellID then
                 local aura = C_UnitAuras.GetAuraDataByAuraInstanceID("player", auraInstanceID)
-                if aura then _StoreTrackedAura(aura) else _ClearTrackedAura(spellID, auraInstanceID) end
+                if CanAccessTableValue(aura) then _StoreTrackedAura(aura) else _ClearTrackedAura(spellID, auraInstanceID) end
             end
         end
     end
@@ -288,8 +329,9 @@ local function _refreshEclipses()
     _solarExp, _lunarExp, _caExp, _incExp = 0, 0, 0, 0
     for auraID, kind in pairs(CPConst.ECLIPSE_AURAS or {}) do
         local aura = _GetTrackedAura(auraID)
-        if aura and aura.expirationTime and NotSecret(aura.expirationTime) then
-            local exp = tonumber(aura.expirationTime)
+        if aura then
+            local expirationTime = aura.expirationTime
+            local exp = NotSecret(expirationTime) and tonumber(expirationTime) or nil
             if exp then
                 if kind == "SOLAR" then _solarExp = exp
                 elseif kind == "LUNAR" then _lunarExp = exp
@@ -367,12 +409,16 @@ local function _updateOverlay()
     end
     if not _predTex then
         local tex = bar:CreateTexture(nil, "ARTWORK", nil, 1)
-        local getBarTex = _G.MSUF_GetBarTexture
-        tex:SetTexture(getBarTex and getBarTex() or "Interface\\Buttons\\WHITE8x8")
         tex:SetVertexColor(1, 1, 1, CPK.BAL.PRED_ALPHA)
         tex:SetHeight(1)
         tex:Hide()
         _predTex = tex
+    end
+    local getBarTex = _G.MSUF_GetBarTexture
+    local texture = getBarTex and getBarTex() or "Interface\\Buttons\\WHITE8x8"
+    if _predTex._msufTexture ~= texture then
+        _predTex:SetTexture(texture)
+        _predTex._msufTexture = texture
     end
     if _predAmt <= 0 or not _castSpell then
         _predTex:Hide()
@@ -384,6 +430,14 @@ local function _updateOverlay()
     if mx <= 0 then mx = 100 end
     local predFrac = _predAmt / mx
     if predFrac > 1 then predFrac = 1 end
+    local rawCur = UnitPower("player", LUNAR_POWER)
+    if NotSecret(rawCur) then
+        local cur = tonumber(rawCur) or 0
+        local remainingFrac = (mx - cur) / mx
+        if remainingFrac < 0 then remainingFrac = 0 end
+        if predFrac > remainingFrac then predFrac = remainingFrac end
+    end
+    if predFrac <= 0 then _predTex:Hide(); return end
     local barW, barH = bar:GetWidth(), bar:GetHeight()
     if barW <= 0 or barH <= 0 then _predTex:Hide(); return end
     local predW = barW * predFrac
