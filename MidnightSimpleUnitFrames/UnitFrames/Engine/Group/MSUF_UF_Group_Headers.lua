@@ -744,37 +744,8 @@ local function ApplySortAttributes(header, state)
   return changed
 end
 
-local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate, SecureHandlerStateTemplate, SecureHandlerEnterLeaveTemplate, PingableUnitFrameTemplate"
-local PING_INIT_VERSION = 6
-local INITIAL_ATTRIBUTE_NAMES = "_onenter,_onleave,refreshUnitChange,_onstate-vehicleui"
-local INITIAL_ONENTER = [[
-local snippet = self:GetAttribute('clickcast_onenter')
-if snippet then
-  self:Run(snippet)
-end
-]]
-local INITIAL_ONLEAVE = [[
-local snippet = self:GetAttribute('clickcast_onleave')
-if snippet then
-  self:Run(snippet)
-end
-]]
-local INITIAL_REFRESH_UNIT_CHANGE = [[
-local unit = self:GetAttribute('unit')
-if unit then
-  RegisterStateDriver(self, 'vehicleui', '[@' .. unit .. ',unithasvehicleui]vehicle; novehicle')
-else
-  UnregisterStateDriver(self, 'vehicleui')
-end
-]]
-local INITIAL_VEHICLE_STATE = [[
-local unit = self:GetAttribute('unit')
-if newstate == 'vehicle' and unit and UnitPlayerOrPetInRaid(unit) and not UnitTargetsVehicleInRaidUI(unit) then
-  self:SetAttribute('toggleForVehicle', false)
-else
-  self:SetAttribute('toggleForVehicle', true)
-end
-]]
+local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
+local SECURE_INIT_VERSION = 7
 
 local function ButtonTemplate()
   if UF and type(UF.GetSecureHeaderUnitButtonTemplate) == "function" then
@@ -871,8 +842,8 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
   local initialHeight = floor((h or 32) + 0.5)
   local sizeChanged = AttrChanged(header, "initial-width", initialWidth)
     or AttrChanged(header, "initial-height", initialHeight)
-  local pingInitChanged = AttrChanged(header, "_msufPingInitVersion", PING_INIT_VERSION)
-  local initCfg = (sizeChanged or pingInitChanged) and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
+  local secureInitChanged = AttrChanged(header, "_msufSecureInitVersion", SECURE_INIT_VERSION)
+  local initCfg = (sizeChanged or secureInitChanged) and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
   local sortState = BuildSortState(key, kind, conf)
   local groupFilter = sortState.sortMethod == "NAMELIST" and nil or (key == "party" and nil or ResolveGroupFilter(conf))
   local shouldHide = header.IsShown and header:IsShown()
@@ -886,7 +857,7 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
       or AttrChanged(header, "unitsPerColumn", upc)
       or AttrChanged(header, "maxColumns", columns)
       or AttrChanged(header, "groupFilter", groupFilter)
-      or pingInitChanged
+      or secureInitChanged
       or SortStateChanged(header, sortState))
 
   if shouldHide then
@@ -898,12 +869,7 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
   changed = SetAttrIfChanged(header, "templateType", "Button") or changed
   changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
   changed = SetAttrIfChanged(header, "initial-height", initialHeight) or changed
-  changed = SetAttrIfChanged(header, "_msufPingInitVersion", PING_INIT_VERSION) or changed
-  changed = SetAttrIfChanged(header, "_initialAttributeNames", INITIAL_ATTRIBUTE_NAMES) or changed
-  changed = SetAttrIfChanged(header, "_initialAttribute-_onenter", INITIAL_ONENTER) or changed
-  changed = SetAttrIfChanged(header, "_initialAttribute-_onleave", INITIAL_ONLEAVE) or changed
-  changed = SetAttrIfChanged(header, "_initialAttribute-refreshUnitChange", INITIAL_REFRESH_UNIT_CHANGE) or changed
-  changed = SetAttrIfChanged(header, "_initialAttribute-_onstate-vehicleui", INITIAL_VEHICLE_STATE) or changed
+  changed = SetAttrIfChanged(header, "_msufSecureInitVersion", SECURE_INIT_VERSION) or changed
   changed = SetAttrIfChanged(header, "oUF-headerType", "group") or changed
   if UF and type(UF.ForEachPingBindingAttribute) == "function" then
     UF.ForEachPingBindingAttribute(function(attribute, key)
