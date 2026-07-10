@@ -322,7 +322,7 @@ function UF.GetSecureUnitButtonTemplate()
 end
 
 function UF.GetSecureHeaderUnitButtonTemplate()
-  return "SecureUnitButtonTemplate, SecureHandlerStateTemplate, SecureHandlerEnterLeaveTemplate, PingableUnitFrameTemplate"
+  return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
 end
 
 function UF.CreateSecureUnitButton(name, parent)
