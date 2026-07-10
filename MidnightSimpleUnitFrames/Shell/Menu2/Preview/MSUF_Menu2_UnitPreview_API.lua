@@ -7,7 +7,7 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     _G[name] = value
     return value
 end
-local Preview = MSUF.MSUF_UFPreview or _G.MSUF_UFPreview
+local Preview = MSUF.UFPreview or MSUF.MSUF_UFPreview or _G.MSUF_UFPreview
 if not Preview then return end
 local M = (MSUF and MSUF.MSUF2) or _G.MSUF2 or {}
 local WordList = M.WordList
@@ -23,7 +23,9 @@ local FAST_REFRESH_REASONS = {
     MENU_TEXT_CLEAR_FOCUS = true,
 }
 local function PreviewRefreshDelay(reason)
-    return FAST_REFRESH_REASONS[tostring(reason or "")] and 0 or UNIT_PREVIEW_REFRESH_DELAY
+    reason = tostring(reason or "")
+    if FAST_REFRESH_REASONS[reason] or reason:find("^MSUF2_") or reason:find("^AURAS3_") then return 0 end
+    return UNIT_PREVIEW_REFRESH_DELAY
 end
 local function PreviewInCombat()
     local fn = Preview._PreviewInCombat
@@ -40,6 +42,10 @@ local function BoxOwnerInactive(box)
     if menu and menu.frame and menu.frame.IsShown and not menu.frame:IsShown() then return true end
     local pageKey = box and (box._msuf2PinnedPreviewPageKey or box._msufGFNativePreviewPageKey)
     if pageKey and menu and menu.activeKey and menu.activeKey ~= pageKey then return true end
+    -- A pinned preview is deliberately reparented out of the page wrapper.
+    -- During that hand-off the wrapper can briefly be non-visible even though
+    -- the floating preview is the active, visible owner.
+    if box and box._msuf2PinnedFloating == true then return false end
     local wrapper = box and (box._msuf2PinnedPreviewWrapper or box._msufGFNativePreviewWrapper)
     if wrapper and wrapper.IsShown and not wrapper:IsShown() then return true end
     if wrapper and wrapper.IsVisible and not wrapper:IsVisible() then return true end
@@ -110,8 +116,8 @@ local function RequestRefreshForBox(box, reason)
             return
         end
         if BoxOwnerInactive(box) then return end
-        local hostShown = box._msuf2UnitPageHostShown
-        if not box._msuf2PinnedFloating and type(hostShown) == "function" and not hostShown() then return end
+        local currentHostShown = box._msuf2UnitPageHostShown
+        if not box._msuf2PinnedFloating and type(currentHostShown) == "function" and not currentHostShown() then return end
         local queuedRefresh = Preview.Refresh
         if type(queuedRefresh) == "function" and box:IsShown() and (not box.IsVisible or box:IsVisible()) then
             Preview.active = box

@@ -1124,109 +1124,6 @@ local function ParseAuraExclusiveFilterShortcut(text)
     return nil
 end
 
-local function ParseGroupPrivateAuraShortcut(text)
-    if not ContainsAny(text, AurasPhrases[77]) then return nil end
-    if ContainsAny(text, AurasPhrases[78]) then return nil end
-
-    local groups = DetectGroups(text)
-    local scopes = {}
-    for i = 1, #groups do
-        local group = groups[i]
-        if group == "party" or group == "raid" or group == "mythicraid" then
-            scopes[#scopes + 1] = group
-        end
-    end
-    if #scopes == 0 then return nil end
-
-    local keySuffix
-    local valueKind
-    local label
-    if ContainsAny(text, AurasPhrases[79]) then
-        keySuffix = "privateAuraCountdown"
-        valueKind = "boolean"
-        label = "Private Aura Countdown"
-    elseif ContainsAny(text, AurasPhrases[80]) then
-        keySuffix = "privateAuras.showNumbers"
-        valueKind = "boolean"
-        label = "Private Aura Numbers"
-    elseif ContainsAny(text, AurasPhrases[81]) then
-        keySuffix = "privateAuraMax"
-        valueKind = "number"
-        label = "Private Aura Max Icons"
-    elseif ContainsAny(text, AurasPhrases[82]) then
-        keySuffix = "privateAuraSize"
-        valueKind = "number"
-        label = "Private Aura Icon Size"
-    elseif ContainsAny(text, AurasPhrases[83]) then
-        keySuffix = "privateAuraX"
-        valueKind = "number"
-        label = "Private Aura X Offset"
-    elseif ContainsAny(text, AurasPhrases[84]) then
-        keySuffix = "privateAuraY"
-        valueKind = "number"
-        label = "Private Aura Y Offset"
-    elseif ContainsAny(text, AurasPhrases[85]) then
-        keySuffix = "privateAuras.spacing"
-        valueKind = "number"
-        label = "Private Aura Spacing"
-    elseif ContainsAny(text, AurasPhrases[86]) then
-        keySuffix = "privateAuras.growth"
-        valueKind = "enum"
-        label = "Private Aura Growth"
-    elseif ContainsAny(text, AurasPhrases[87]) then
-        keySuffix = "privateAuraAnchor"
-        valueKind = "enum"
-        label = "Private Aura Anchor"
-    else
-        keySuffix = "privateAurasEnabled"
-        valueKind = "boolean"
-        label = "Private Auras"
-    end
-
-    local changes = {}
-    local sawSetting = false
-    local sawMissingValue = false
-    for i = 1, #scopes do
-        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[i]) .. "." .. keySuffix)
-        if setting then
-            sawSetting = true
-            local value
-            local relativeDelta
-            if valueKind == "boolean" then
-                value = AuraBooleanValue(text)
-            elseif valueKind == "number" then
-                value = FirstNumber(text)
-                relativeDelta = value == nil and P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text) or nil
-            elseif valueKind == "enum" then
-                value = P.EnumValueForText and P.EnumValueForText(setting, text) or nil
-            end
-            if value ~= nil or relativeDelta ~= nil then
-                changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, label = tostring(setting.label or label) }
-            else
-                sawMissingValue = true
-            end
-        end
-    end
-    if #changes > 0 then
-        return {
-            kind = "changes",
-            changes = changes,
-            bulkSafe = #changes > 1,
-            label = label,
-            summary = "Changes Group Frame private aura options.",
-        }
-    end
-    if sawSetting and sawMissingValue then
-        return {
-            kind = "answer",
-            status = "missing_value",
-            text = "Which value should I use for that private aura option? Example: 'set party private aura y to 0' or 'set raid private aura growth to RIGHT'.",
-            summary = "Asks for a concrete private aura value.",
-        }
-    end
-    return nil
-end
-
 local function ParseGroupAuraLaneVisibilityDirectShortcut(text)
     if not ContainsAny(text, AurasPhrases[88]) then
         return nil
@@ -1377,8 +1274,6 @@ local function ParseAuraDirectSettingShortcut(text, raw)
     do
         local result = ParseAuraExclusiveFilterShortcut(text)
         if result then return result end
-    end
-    do
     end
     do
         local result = ParseGroupAuraLaneVisibilityDirectShortcut(text)
@@ -2094,9 +1989,6 @@ local function ParseGroupAuraRootSettingShortcut(text)
     elseif ContainsAny(text, AurasPhrases[221]) then
         key = "blizzardTypes.externals"
         label = "Native External Auras"
-    elseif ContainsAny(text, AurasPhrases[222]) then
-        key = "blizzardTypes.privateAuras"
-        label = "Native Private Auras"
     elseif ContainsAny(text, AurasPhrases[223]) then
         key = "enabled"
         label = "Group Auras Enabled"

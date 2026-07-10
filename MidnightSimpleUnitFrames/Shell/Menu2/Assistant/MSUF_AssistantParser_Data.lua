@@ -361,7 +361,7 @@ Data.ROOT_PARSER = {
         "frame width", "frame height",
     },
         [165] = {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "private aura", "private auras",
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
         "text", "font", "name", "health text", "hp text", "power text", "mana text",
         "spell indicator", "spell indicators", "color", "colour", "opacity", "alpha",
     },
@@ -381,7 +381,7 @@ Data.ROOT_PARSER = {
         [179] = { "role", "roles", "by role" },
         [180] = { "raid group", "by group", "group" },
         [181] = { "name", "alphabetical", "alpha" },
-        [182] = { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "private aura", "private auras" },
+        [182] = { "aura", "auras", "buff", "buffs", "debuff", "debuffs" },
         [183] = { "role priority order", "role order", "role sorting order" },
         [184] = { "growth", "growth direction", "grow", "grow direction", "frames grow", "frames to grow" },
         [185] = { "sort mode", "sort order", "sortierung", "sortiermodus" },
@@ -404,7 +404,7 @@ Data.ROOT_PARSER = {
         [196] = { "on", "enable", "enabled" },
         [197] = { "scale", "scaling", "skalierung", "skalierungsmodus" },
         [198] = {
-        "aura", "auras", "buff", "buffs", "debuff", "debuffs", "private aura", "private auras",
+        "aura", "auras", "buff", "buffs", "debuff", "debuffs",
         "font", "text", "ui scale", "global ui scale", "wow ui scale", "edit mode", "editmode",
         "class power", "class resource",
     },

@@ -2432,6 +2432,32 @@ function Model.GroupBlacklistSummary(scope, groupKey)
     return table.concat(out, "\n")
 end
 
+function Model.GroupBlacklistEntries(scope, groupKey)
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    local a = GroupScopeKinds(scope)
+    local spells = EnsureGroupBlacklistSpells(a, groupKey, false)
+    local out = {}
+    if type(spells) ~= "table" then return out end
+    for key, enabled in pairs(spells) do
+        if enabled == true then
+            local spellID = SpellIDFromInput(key)
+            local icon
+            if spellID then
+                local _, _, resolvedIcon = SpellInfo(spellID)
+                icon = resolvedIcon
+            end
+            out[#out + 1] = {
+                value = spellID and tostring(spellID) or tostring(key),
+                text = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)"),
+                icon = icon,
+            }
+        end
+    end
+    table_sort(out, function(x, y) return tostring(x.text) < tostring(y.text) end)
+    return out
+end
+
 function Model.AddGroupBlacklistPresetGroup(scope, groupKey, presetKey)
     local values = Model.BlacklistSpellValues(presetKey)
     local count = 0

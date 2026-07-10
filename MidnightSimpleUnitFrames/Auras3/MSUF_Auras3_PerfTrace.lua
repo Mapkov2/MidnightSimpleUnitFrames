@@ -21,10 +21,10 @@ ExportPublic("MSUF_Auras3", A3)
 if A3.__perfTraceLoaded then return end
 A3.__perfTraceLoaded = true
 
-local type, tostring, tonumber, pairs, ipairs = type, tostring, tonumber, pairs, ipairs
+local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local pcall = pcall
 local table_sort, table_concat, table_insert = table.sort, table.concat, table.insert
-local string_format, string_match, string_lower, string_sub = string.format, string.match, string.lower, string.sub
+local string_format, string_lower, string_sub = string.format, string.lower, string.sub
 local math_floor = math.floor
 local print = _G.print
 local C_AddOns = _G.C_AddOns
