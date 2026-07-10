@@ -445,11 +445,15 @@ def check_portrait_refresh_contracts() -> None:
         "if forceRefresh == true or UnitPortraitKeyChanged(texture, unit, frame, p) then",
         "Portrait forced-refresh cache bypass",
     )
-    require_count(
+    require(
+        portrait,
+        "ApplyUnitPortrait(texture, frame.unit, frame, p, force)",
+        "Portrait force must reach the queued update path",
+    )
+    require(
         portrait,
         "ApplyUnitPortrait(texture, unit, frame, p, force)",
-        2,
-        "Portrait force must reach both queued and direct update paths",
+        "Portrait force must reach the direct update path",
     )
 
 
