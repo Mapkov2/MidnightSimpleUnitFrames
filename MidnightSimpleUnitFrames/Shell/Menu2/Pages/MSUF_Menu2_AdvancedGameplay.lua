@@ -12,7 +12,10 @@ local AP = M.AdvancedPage or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
-local Gameplay, MoveWidget, LabelAt, SwitchAt, AddTableControlSpecs = M.Pick(AP, [[Gameplay MoveWidget LabelAt SwitchAt AddTableControlSpecs]])
+local Gameplay, MoveWidget, LabelAt, SwitchAt, AddTableControlSpecs, ControlMeta, RegisterControl = M.Pick(AP, [[Gameplay MoveWidget LabelAt SwitchAt AddTableControlSpecs ControlMeta RegisterControl]])
+local function Meta(path, classification, exact)
+    return ControlMeta("gameplay", "advanced", path, classification, exact)
+end
 local ApplyGameplay = M.ApplyGameplay
 local VT = M.ValueTextList
 local function BuildGameplay(ctx)
@@ -50,14 +53,23 @@ local function BuildGameplay(ctx)
     local crossControls, meleeControls = {}, {}, {}
     local selectedSpellText
     local noSpellWarn
-    local function AddControls(list, section, specs) return AddTableControlSpecs(ctx, list, section, Gameplay, specs, ApplyGameplayUI) end
+    local CONTROL_KEY_INDEX = { toggle = 5, switch = 6, slider = 9, dropdown = 7 }
+    local function AddControls(list, section, specs)
+        for i = 1, #specs do
+            local spec = specs[i]
+            local key = spec[CONTROL_KEY_INDEX[spec[1]]]
+            spec.meta = spec.meta or Meta("setting." .. tostring(key))
+        end
+        return AddTableControlSpecs(ctx, list, section, Gameplay, specs, ApplyGameplayUI)
+    end
     local function AddBackdrops(section, specs) for i = 1, #specs do local s = specs[i]; W.ControlCardBackdrop(section, 14, s[1], s[2], s[3]) end end
-    local function AddTextInput(list, input, getValue, setValue)
-        M.BindTextInput(ctx, input, getValue, function(v) setValue(v); ApplyGameplayUI() end, true)
+    local function AddTextInput(list, input, getValue, setValue, metadata)
+        M.BindTextInput(ctx, input, getValue, function(v) setValue(v); ApplyGameplayUI() end, true, metadata)
         M.AppendValues(list, input)
     end
     local function AddGameplayTextInput(list, input, key, fallback)
-        return AddTextInput(list, input, function() return Gameplay()[key] or fallback end, function(v) Gameplay()[key] = tostring(v or "") end)
+        return AddTextInput(list, input, function() return Gameplay()[key] or fallback end,
+            function(v) Gameplay()[key] = tostring(v or "") end, Meta("setting." .. key))
     end
     local function PaintSpellInput(input, edgeAlpha, withFill, withBorder)
         local accent = T.colors.accent
@@ -97,7 +109,7 @@ local function BuildGameplay(ctx)
     if compactTimer then
         local timerSliderW = SectionControlWidth(timer, 300, 120)
         AddBackdrops(timer, { { -38, timerCardW, 220 }, { -274, timerCardW, 238 } })
-        timerEnable = SwitchAt(ctx, timer, "Combat Timer", 30, -40, min(230, timerSliderW), Gameplay, "enableCombatTimer", false, ApplyGameplayUI)
+        timerEnable = SwitchAt(ctx, timer, "Combat Timer", 30, -40, min(230, timerSliderW), Gameplay, "enableCombatTimer", false, ApplyGameplayUI, Meta("timer.enabled"))
         AddControls(timerControls, timer, {
             { "dropdown", "Anchor", 30, -84, anchorValues, min(220, timerSliderW), "combatTimerAnchor", "none" },
             { "slider", "Timer size", 30, -138, 10, 64, 1, timerSliderW, "combatFontSize", 24 },
@@ -112,7 +124,7 @@ local function BuildGameplay(ctx)
         LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, -492, min(520, timerW - 60), "GameFontDisableSmall", T.colors.muted)
     else
         AddBackdrops(timer, { { -38, timerCardW, 126 }, { -178, timerCardW, 150 } })
-        timerEnable = SwitchAt(ctx, timer, "Combat Timer", timerLeftX, -40, min(230, timerColW), Gameplay, "enableCombatTimer", false, ApplyGameplayUI)
+        timerEnable = SwitchAt(ctx, timer, "Combat Timer", timerLeftX, -40, min(230, timerColW), Gameplay, "enableCombatTimer", false, ApplyGameplayUI, Meta("timer.enabled"))
         AddControls(timerControls, timer, {
             { "dropdown", "Anchor", timerRightX, -40, anchorValues, min(220, timerColW), "combatTimerAnchor", "none" },
             { "slider", "Timer size", timerLeftX, -94, 10, 64, 1, min(270, timerColW), "combatFontSize", 24 },
@@ -136,7 +148,7 @@ local function BuildGameplay(ctx)
     local leaveInput
     if stateStacked then
         AddBackdrops(state, { { -38, stateCardW, 196 }, { -250, stateCardW, 282 } })
-        stateEnable = SwitchAt(ctx, state, "Combat Enter/Leave", 30, -40, min(270, stateControlW), Gameplay, "enableCombatStateText", false, ApplyGameplayUI)
+        stateEnable = SwitchAt(ctx, state, "Combat Enter/Leave", 30, -40, min(270, stateControlW), Gameplay, "enableCombatStateText", false, ApplyGameplayUI, Meta("combat_state.enabled"))
         AddControls(stateControls, state, { { "toggle", "Lock position", 30, -74, "lockCombatState", false } })
         enterInput = MoveWidget(W.TextInput(state, "Enter text", stateControlW), state, 30, -120)
         leaveInput = MoveWidget(W.TextInput(state, "Leave text", stateControlW), state, 30, -174)
@@ -148,7 +160,7 @@ local function BuildGameplay(ctx)
         })
     else
         AddBackdrops(state, { { -38, stateCardW, 136 }, { -144, stateCardW, 154 } })
-        stateEnable = SwitchAt(ctx, state, "Combat Enter/Leave", stateLeftX, -40, min(270, stateColW), Gameplay, "enableCombatStateText", false, ApplyGameplayUI)
+        stateEnable = SwitchAt(ctx, state, "Combat Enter/Leave", stateLeftX, -40, min(270, stateColW), Gameplay, "enableCombatStateText", false, ApplyGameplayUI, Meta("combat_state.enabled"))
         AddControls(stateControls, state, { { "toggle", "Lock position", stateRightX, -40, "lockCombatState", false } })
         enterInput = MoveWidget(W.TextInput(state, "Enter text", min(220, stateColW)), state, stateLeftX, -86)
         leaveInput = MoveWidget(W.TextInput(state, "Leave text", min(220, stateColW)), state, stateRightX, -86)
@@ -180,7 +192,7 @@ local function BuildGameplay(ctx)
         AddBackdrops(classSec, { { -38, classCardW, 520 } })
         LabelAt(classSec, hasTotemFrame and "Totem / Statue frame" or "(Totem/Statue frame is Shaman/Monk-only)", 30, -38, min(360, classW - 60), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", 30, -60, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
-        totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", 30, -92, min(300, classControlW), Gameplay, "enablePlayerTotems", false, ApplyGameplayUI)
+        totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", 30, -92, min(300, classControlW), Gameplay, "enablePlayerTotems", false, ApplyGameplayUI, Meta("totem_frame.enabled"))
         previewBtn = T.Button(classSec, "Preview", min(120, classControlW), 22)
         previewBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 30, -128)
         resetTotemBtn = T.Button(classSec, "Reset TotemFrame layout", min(190, classControlW), 22)
@@ -197,7 +209,7 @@ local function BuildGameplay(ctx)
         AddBackdrops(classSec, { { -38, classCardW, 276 } })
         LabelAt(classSec, hasTotemFrame and "Totem / Statue frame" or "(Totem/Statue frame is Shaman/Monk-only)", classLeftX, -38, min(360, classColW), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", classLeftX, -60, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
-        totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", classLeftX, -92, classColW, Gameplay, "enablePlayerTotems", false, ApplyGameplayUI)
+        totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", classLeftX, -92, classColW, Gameplay, "enablePlayerTotems", false, ApplyGameplayUI, Meta("totem_frame.enabled"))
         previewBtn = T.Button(classSec, "Preview", 120, 22)
         previewBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", classLeftX, -128)
         resetTotemBtn = T.Button(classSec, "Reset TotemFrame layout", 190, 22)
@@ -214,6 +226,7 @@ local function BuildGameplay(ctx)
     previewBtn:SetScript("OnClick", function()
         if MSUF and type(MSUF.MSUF_PlayerTotems_TogglePreview) == "function" then MSUF.MSUF_PlayerTotems_TogglePreview() end
     end)
+    RegisterControl(previewBtn, Meta("totem_frame.preview", "ephemeral"), "Preview", "button")
     resetTotemBtn:SetScript("OnClick", function()
         local g = Gameplay()
         g.playerTotemsIconSize = 24
@@ -224,6 +237,7 @@ local function BuildGameplay(ctx)
         ApplyGameplayUI()
         if M.RequestRefresh then M.RequestRefresh(ctx, "advanced-gameplay-totems-reset") elseif M.Refresh then M.Refresh(ctx) end
     end)
+    RegisterControl(resetTotemBtn, Meta("totem_frame.reset_layout", "action"), "Reset TotemFrame layout", "button")
     local totemActionControls = { previewBtn, resetTotemBtn }
     local crossStacked = GameplayStacked()
     local cross = b:CollapsibleSection("gameplay_crosshair", "Combat Crosshair", crossStacked and 800 or 588, false)
@@ -248,7 +262,7 @@ local function BuildGameplay(ctx)
     if crossStacked then
         spellInputW = min(260, crossControlW)
         AddBackdrops(cross, { { -38, crossCardW, 332 }, { -390, crossCardW, 346 } })
-        crossEnable = SwitchAt(ctx, cross, "Combat Crosshair", 30, -40, min(390, crossControlW), Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI)
+        crossEnable = SwitchAt(ctx, cross, "Combat Crosshair", 30, -40, min(390, crossControlW), Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI, Meta("crosshair.enabled"))
         AddControls(crossControls, cross, { { "toggle", "Crosshair: color by melee range to target (green=in range, red=out)", 30, -74, "enableCombatCrosshairMeleeRangeColor", false } })
         LabelAt(cross, "Uses the spell selected below.", 54, -104, min(420, crossW - 82), "GameFontDisableSmall", T.colors.muted)
         noSpellWarn = LabelAt(cross, "No melee range spell selected - Crosshair will not work.", 54, -126, min(520, crossW - 82), "GameFontNormalSmall", { 1, 0.55, 0.1, 1 })
@@ -271,7 +285,7 @@ local function BuildGameplay(ctx)
     else
         spellInputW = min(260, crossColW)
         AddBackdrops(cross, { { -38, crossCardW, 242 }, { -312, crossCardW, 214 } })
-        crossEnable = SwitchAt(ctx, cross, "Combat Crosshair", crossLeftX, -40, min(390, crossColW), Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI)
+        crossEnable = SwitchAt(ctx, cross, "Combat Crosshair", crossLeftX, -40, min(390, crossColW), Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI, Meta("crosshair.enabled"))
         AddControls(crossControls, cross, { { "toggle", "Crosshair: color by melee range to target (green=in range, red=out)", crossLeftX, -74, "enableCombatCrosshairMeleeRangeColor", false } })
         LabelAt(cross, "Uses the spell selected below.", crossLeftX + 24, -104, min(420, crossColW), "GameFontDisableSmall", T.colors.muted)
         noSpellWarn = LabelAt(cross, "No melee range spell selected - Crosshair will not work.", crossLeftX + 24, -126, min(520, crossCardW - 56), "GameFontNormalSmall", { 1, 0.55, 0.1, 1 })
@@ -313,7 +327,8 @@ local function BuildGameplay(ctx)
             local id = CurrentMeleeSpellID()
             return id > 0 and tostring(id) or ""
         end,
-        function(v) SetMeleeSpellID(v) end)
+        function(v) SetMeleeSpellID(v) end,
+        Meta("crosshair.melee_spell"))
     M.AppendValues(meleeControls, spellInput, classSpellToggle, specSpellToggle)
     local bars = {}
     for i = 1, 4 do

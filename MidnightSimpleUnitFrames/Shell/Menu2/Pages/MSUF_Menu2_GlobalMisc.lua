@@ -11,7 +11,10 @@ local T = M.Theme
 local GP = M.GlobalPage or {}
 local max = math.max
 local min = math.min
-local Call, G, ReadG, SetG, ReadGBool, SetGBool, MenuFontValues, MenuFontKeyGet, MenuFontKeySet = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool MenuFontValues MenuFontKeyGet MenuFontKeySet]])
+local Call, G, ReadG, SetG, ReadGBool, SetGBool, MenuFontValues, MenuFontKeyGet, MenuFontKeySet, ControlMeta = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool MenuFontValues MenuFontKeyGet MenuFontKeySet ControlMeta]])
+local function Meta(path, classification, exact)
+    return ControlMeta("opt_misc", "global", path, classification, exact)
+end
 local VT = M.ValueTextList
 local TOOLTIP_MODES = VT("ALWAYS", "Always", "OOC", "Out of Combat", "MODIFIER", "Modifier Key", "NEVER", "Never")
 local TOOLTIP_MODIFIERS = VT("ALT", "Alt", "CTRL", "Ctrl", "SHIFT", "Shift")
@@ -86,12 +89,13 @@ local function BuildMisc(ctx)
             function(v)
                 SetGBool(key, v, reason, opts or PREVIEW_FALSE)
                 M.CallIf(afterSet, v)
-            end)
+            end,
+            Meta("setting." .. key))
         if x then W.MoveWidget(control, parent, x, y, width, "LEFT") end
         return control
     end
-    local function BindMiscDropdown(parent, label, values, width, x, y, getValue, setValue)
-        local control = M.BindDropdownWidget(ctx, W.Dropdown(parent, label, values, width), getValue, setValue)
+    local function BindMiscDropdown(parent, label, values, width, x, y, getValue, setValue, path)
+        local control = M.BindDropdownWidget(ctx, W.Dropdown(parent, label, values, width), getValue, setValue, Meta(path))
         W.MoveWidget(control, parent, x, y, width, "LEFT")
         return control
     end
@@ -109,7 +113,8 @@ local function BuildMisc(ctx)
         function(value)
             value = value or "auto"
             SetG("menuLocale", value, "MSUF2_LOCALE", { preview = false, applyAll = false, noRuntime = true })
-        end)
+        end,
+        "language.selection")
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
     local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 340, true)
@@ -150,7 +155,8 @@ local function BuildMisc(ctx)
             if menuFontPreview and menuFontPreview.SetText then
                 menuFontPreview:SetText("AaBbCc 12345 - MSUF Menu")
             end
-        end)
+        end,
+        "menu.font")
     menuFontPreview = W.Text(menuBehavior, "AaBbCc 12345 - MSUF Menu", menuFontRightX, -178, menuBehaviorW - menuFontRightX - 30, T.colors.text)
     if menuFontPreview.SetHeight then menuFontPreview:SetHeight(24) end
     if menuFontPreview.SetJustifyV then menuFontPreview:SetJustifyV("MIDDLE") end
@@ -163,7 +169,7 @@ local function BuildMisc(ctx)
             M.CallIf(M.RefreshNavHoverScale)
         end,
         105,
-        { min = 100, max = 150, step = 1, format = "%d%%" })
+        Meta("menu.navigation_hover_scale", "setting", { min = 100, max = 150, step = 1, format = "%d%%" }))
     W.MoveWidget(navHoverScale, menuBehavior, 14, -244, 300, "LEFT")
     local navHoverHelp = W.Text(menuBehavior, "100% keeps every navigation row the same size. Higher values magnify the row under the cursor.", 30, -292, menuBehaviorW - 70, T.colors.muted)
     if navHoverHelp.SetWordWrap then navHoverHelp:SetWordWrap(true) end
@@ -178,10 +184,12 @@ local function BuildMisc(ctx)
     local tooltipRightW = max(220, min(300, tooltipW - tooltipRightX - 36))
     BindMiscDropdown(tooltips, "Tooltip source", VT("GAME", "GameTooltip (addon-compatible)", "MSUF", "MSUF custom panel"), tooltipLeftW, tooltipLeftX, -44,
         function() return ReadTooltipProvider() end,
-        function(v) WriteTooltipSettings(v, ReadTooltipAnchor()) end)
+        function(v) WriteTooltipSettings(v, ReadTooltipAnchor()) end,
+        "tooltips.provider")
     BindMiscDropdown(tooltips, "Tooltip anchor", VT("EXTERNAL", "Addon / Blizzard controlled", "FIXED", "MSUF fixed position", "CURSOR", "MSUF cursor"), tooltipRightW, tooltipRightX, -44,
         function() return ReadTooltipAnchor() end,
-        function(v) WriteTooltipSettings(ReadTooltipProvider(), v) end)
+        function(v) WriteTooltipSettings(ReadTooltipProvider(), v) end,
+        "tooltips.anchor")
     local tooltipModifier
     local function RefreshTooltipControls()
         M.CallIf(W.SetControlEnabled, tooltipModifier, ReadTooltipMode() == "MODIFIER")
@@ -191,10 +199,12 @@ local function BuildMisc(ctx)
         function(v)
             WriteTooltipBehavior(v, ReadTooltipModifier())
             RefreshTooltipControls()
-        end)
+        end,
+        "tooltips.visibility_mode")
     tooltipModifier = BindMiscDropdown(tooltips, "Modifier key", TOOLTIP_MODIFIERS, tooltipRightW, tooltipRightX, -112,
         function() return ReadTooltipModifier() end,
-        function(v) WriteTooltipBehavior(ReadTooltipMode(), v) end)
+        function(v) WriteTooltipBehavior(ReadTooltipMode(), v) end,
+        "tooltips.modifier")
     M.TrackRefresh(ctx, RefreshTooltipControls)
     local tooltipHelp = W.Text(tooltips, "These settings apply to MSUF unit frames and group frames. GameTooltip keeps addon compatibility; MSUF custom panel uses the fixed or cursor position.", tooltipLeftX, -174, tooltipW - 68, T.colors.muted)
     if tooltipHelp.SetWordWrap then tooltipHelp:SetWordWrap(true) end

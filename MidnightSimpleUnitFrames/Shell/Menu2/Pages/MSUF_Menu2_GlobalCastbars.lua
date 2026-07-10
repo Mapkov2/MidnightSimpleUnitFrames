@@ -15,7 +15,10 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local C_Timer = _G.C_Timer
-local Call, G, ReadG, SetG, ReadGBool, SetGBool, TextureValues, SetControlEnabled, SetControlsEnabled, ApplyCastbars = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool TextureValues SetControlEnabled SetControlsEnabled ApplyCastbars]])
+local Call, G, ReadG, SetG, ReadGBool, SetGBool, TextureValues, SetControlEnabled, SetControlsEnabled, ApplyCastbars, ControlMeta, RegisterControl = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool TextureValues SetControlEnabled SetControlsEnabled ApplyCastbars ControlMeta RegisterControl]])
+local function Meta(path, classification, exact)
+    return ControlMeta("opt_castbar", "global", path, classification, exact)
+end
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss"
 local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords "normal channel empowered"
@@ -168,7 +171,7 @@ local function BuildCastbars(ctx)
             if r then tex:SetVertexColor(r, g, b, a or 1) end
             return tex
         end
-        local function PreviewButtonGroup(parent, point, relPoint, x, y, specs, buttonW, gap, extraW, onClick)
+        local function PreviewButtonGroup(parent, point, relPoint, x, y, specs, buttonW, gap, extraW, onClick, semanticPath)
             local buttons = {}
             local box = T.Panel(parent, nil, { 0.020, 0.026, 0.052, 0.94 }, T.colors.borderSoft)
             box:SetSize((#specs * buttonW) + ((#specs - 1) * gap) + (extraW or 12), 34)
@@ -181,6 +184,7 @@ local function BuildCastbars(ctx)
                 btn._msuf2SkipHistoryCheckpoint = true
                 btn:SetPoint("LEFT", box, "LEFT", 6 + ((i - 1) * (buttonW + gap)), 0)
                 btn:SetScript("OnClick", function() onClick(value) end)
+                RegisterControl(btn, Meta(semanticPath .. ".option." .. tostring(value), "ephemeral"), spec.text, "button")
                 buttons[value] = btn
             end
             return buttons, box
@@ -190,13 +194,13 @@ local function BuildCastbars(ctx)
             { key = "target", text = "Target" },
             { key = "focus", text = "Focus" },
             { key = "boss", text = "Boss" },
-        }, 52, 4, 12, M.SetCastbarPreviewUnit)
+        }, 52, 4, 12, M.SetCastbarPreviewUnit, "preview.unit")
         local buttonW, buttonGap, interruptW = 82, 6, 90
         local typeButtons = PreviewButtonGroup(section, "TOPRIGHT", "TOPRIGHT", -(14 + interruptW + 10), -12, {
             { key = "normal", text = "Normal" },
             { key = "channel", text = "Channel" },
             { key = "empowered", text = "Empowered" },
-        }, buttonW, buttonGap, 12, M.SetCastbarPreviewType)
+        }, buttonW, buttonGap, 12, M.SetCastbarPreviewType, "preview.cast_type")
         local interrupt = T.CenterButtonLabel(T.SkinDangerButton(T.Button(section, "Interrupt", interruptW, 24)))
         interrupt._msuf2AllowCombatClick = true
         interrupt._msuf2SkipHistoryCheckpoint = true
@@ -204,6 +208,7 @@ local function BuildCastbars(ctx)
         interrupt:SetScript("OnClick", function()
             M.PlayCastbarPreviewInterrupt()
         end)
+        RegisterControl(interrupt, Meta("preview.interrupt", "ephemeral"), "Interrupt", "button")
         local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
         box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -50)
         box:SetSize(innerW, 62)
@@ -890,13 +895,17 @@ local function BuildCastbars(ctx)
             opts.setValue or function(v)
                 SetGBool(key, v, reason, { castbar = true, preview = true })
                 if afterSet then afterSet(reason, v, true) end
-            end)
+            end,
+            opts.meta)
         return toggle
     end
     local function BindCastSlider(parent, label, x, y, width, minValue, maxValue, step, key, default, reason, afterSet, opts)
         opts = opts or {}
         local slider = W.Slider(parent, label, minValue, maxValue, step, 300)
         W.MoveWidget(slider, parent, x, y, width or 320)
+        local metadata = {}
+        if type(opts.meta) == "table" then for metaKey, value in pairs(opts.meta) do metadata[metaKey] = value end end
+        metadata.step, metadata.roundStep = step, not opts.precise
         M.BindNumberWidget(ctx, slider,
             opts.getValue or function() return tonumber(ReadG(key, default)) or default end,
             opts.setValue or function(v)
@@ -905,7 +914,7 @@ local function BuildCastbars(ctx)
                 SetG(key, nextValue, reason, { castbar = true, preview = true })
                 if afterSet then afterSet(reason, nextValue, true) end
             end,
-            opts.setDefault ~= nil and opts.setDefault or default, { step = step, roundStep = not opts.precise })
+            opts.setDefault ~= nil and opts.setDefault or default, metadata)
         return slider
     end
     local function BindCastDropdown(parent, label, x, y, width, values, key, default, reason, afterSet, opts)
@@ -922,25 +931,28 @@ local function BuildCastbars(ctx)
         end
         local dropdown = W.Dropdown(parent, label, values, width or 260)
         W.MoveWidget(dropdown, parent, x, y, width or 300)
-        M.BindDropdownWidget(ctx, dropdown, getValue, setValue)
+        M.BindDropdownWidget(ctx, dropdown, getValue, setValue, opts.meta)
         return dropdown
     end
     local CAST_SPEC_OPTION_INDEX = { toggle = 10, slider = 13, dropdown = 11 }
-    local function BuildCastControlSpecs(parent, specs)
+    local function BuildCastControlSpecs(parent, specs, semanticPrefix)
         return M.BuildControlSpecs(specs, {
             toggle = function(spec, i)
                 local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[6]
                 local opts = spec[CAST_SPEC_OPTION_INDEX.toggle] or {}
+                opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification)
                 return BindCastToggle(parent, label, x, y, width, key, spec[7], spec[8], opts.afterSet or spec[9], opts), opts.name or key or i
             end,
             slider = function(spec, i)
                 local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[9]
                 local opts = spec[CAST_SPEC_OPTION_INDEX.slider] or {}
+                opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification)
                 return BindCastSlider(parent, label, x, y, width, spec[6], spec[7], spec[8], key, spec[10], spec[11], opts.afterSet or spec[12], opts), opts.name or key or i
             end,
             dropdown = function(spec, i)
                 local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[7]
                 local opts = spec[CAST_SPEC_OPTION_INDEX.dropdown] or {}
+                opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification)
                 return BindCastDropdown(parent, label, x, y, width, spec[6], key, spec[8], spec[9], opts.afterSet or spec[10], opts), opts.name or key or i
             end,
         })
@@ -961,7 +973,7 @@ local function BuildCastbars(ctx)
         { "dropdown", "Castbar fill direction", rightX, -72, 300, VT("RTL", "Right to left (default)", "LTR", "Left to right"), "castbarFillDirection", "RTL", "MSUF2_CASTBAR_FILL_DIRECTION", ApplyAndRefresh },
         { "toggle", "Use opposite fill direction for target", rightX, -126, 360, "castbarOpositeDirectionTarget", false, "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh },
         { "toggle", "Show channel tick lines (5)", rightX, -150, 360, "castbarShowChannelTicks", false, "MSUF2_CASTBAR_TICKS", ApplyAndRefresh },
-    })
+    }, "behavior")
     local textures = b:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
     local texLeftX, texRightX = 14, 392
     local function ApplyTexturesAndPreview(reason, _, applyQueued)
@@ -980,7 +992,7 @@ local function BuildCastbars(ctx)
         { "toggle", "Show latency indicator", texRightX, -120, 360, "castbarShowLatency", true, "MSUF2_CASTBAR_LATENCY", ApplyTexturesAndPreview },
         { "toggle", "Show spark (leading edge highlight)", texRightX, -144, 360, "castbarShowSpark", false, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview },
         { "toggle", "Spark extends beyond bar", texRightX, -168, 360, "castbarSparkOverflow", true, "MSUF2_CASTBAR_SPARK_OVERFLOW", ApplyTexturesAndPreview },
-    })
+    }, "textures")
     local empowered = b:CollapsibleSection("castbar_empowered", "Empowered Casts", 130, false)
     local empoweredLeftX, empoweredRightX = 14, 392
     local syncEmpowered
@@ -992,7 +1004,7 @@ local function BuildCastbars(ctx)
         { "toggle", "Add color to stages (Empowered casts)", empoweredLeftX, -42, 300, "empowerColorStages", true, "MSUF2_CASTBAR_EMPOWER_COLOR", ApplyEmpoweredPreview },
         { "toggle", "Add stage blink (Empowered casts)", empoweredLeftX, -68, 300, "empowerStageBlink", true, "MSUF2_CASTBAR_EMPOWER_BLINK", function(reason, value, applyQueued) ApplyEmpoweredPreview(reason, value, applyQueued); if syncEmpowered then syncEmpowered() end end },
         { "slider", "Stage blink time (sec)", empoweredRightX, -42, 320, 0.05, 1.00, 0.01, "empowerStageBlinkTime", 0.25, "MSUF2_CASTBAR_EMPOWER_TIME", ApplyEmpoweredPreview, { precise = true } },
-    })
+    }, "empowered")
     local blinkControls = { empoweredControls.empowerStageBlinkTime }
     syncEmpowered = function() SetControlsEnabled(blinkControls, ReadGBool("empowerStageBlink", true)) end
     M.TrackRefresh(ctx, syncEmpowered)
@@ -1009,7 +1021,7 @@ local function BuildCastbars(ctx)
             end } },
         { "slider", "Max name length", textRightX, -42, 320, 6, 30, 1, "castbarSpellNameMaxLen", 30, "MSUF2_CASTBAR_NAME_MAX", ApplyAndRefresh },
         { "slider", "Reserved space", textRightX, -96, 320, 0, 30, 1, "castbarSpellNameReservedSpace", 8, "MSUF2_CASTBAR_NAME_RESERVED", ApplyAndRefresh },
-    })
+    }, "name_shortening")
     local nameShorteningControls = { textControls.castbarSpellNameMaxLen, textControls.castbarSpellNameReservedSpace }
     syncNameShortening = function() SetControlsEnabled(nameShorteningControls, NameShorteningEnabled()) end
     M.TrackRefresh(ctx, syncNameShortening)
@@ -1045,7 +1057,7 @@ local function BuildCastbars(ctx)
                 local fn = _G.MSUF_FocusKick_IsPreviewEnabled
                 return type(fn) == "function" and fn() or false
             end,
-            setValue = function(v) Call("MSUF_FocusKick_SetPreviewEnabled", v and true or false) end } },
+            setValue = function(v) Call("MSUF_FocusKick_SetPreviewEnabled", v and true or false) end, classification = "ephemeral" } },
         { "slider", "Width", focusRightX, -74, 320, 16, 128, 1, "focusKickIconWidth", 40, "MSUF2_FOCUS_KICK_WIDTH", ApplyFocusKickOptions, { name = "width" } },
         { "slider", "Height", focusRightX, -128, 320, 16, 128, 1, "focusKickIconHeight", 40, "MSUF2_FOCUS_KICK_HEIGHT", ApplyFocusKickOptions, { name = "height" } },
         { "slider", "Text size", focusRightX, -182, 320, 8, 24, 1, nil, nil, nil, nil, { name = "text",
@@ -1061,7 +1073,7 @@ local function BuildCastbars(ctx)
             end } },
         { "slider", "X offset", focusLeftX, -150, 320, -500, 500, 1, "focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_X", ApplyFocusKickOptions, { name = "x", setDefault = 0 } },
         { "slider", "Y offset", focusLeftX, -204, 320, -500, 500, 1, "focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_Y", ApplyFocusKickOptions, { name = "y" } },
-    })
+    }, "focus_kick")
     local resetFocus = W.Button(focusKick, "Reset Position", 150)
     W.MoveWidget(resetFocus, focusKick, focusLeftX, -258)
     resetFocus:SetScript("OnClick", function()
@@ -1070,6 +1082,7 @@ local function BuildCastbars(ctx)
         ApplyFocusKickOptions()
         if M.RequestRefresh then M.RequestRefresh(ctx, "castbars-focus-kick-reset") elseif M.Refresh then M.Refresh(ctx) end
     end)
+    RegisterControl(resetFocus, Meta("focus_kick.reset_position", "action"), "Reset Position", "button")
     local focusKickControls = { focusControls.preview, focusControls.width, focusControls.height, focusControls.text, focusControls.x, focusControls.y, resetFocus }
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
     M.TrackRefresh(ctx, syncFocusKick)
@@ -1092,14 +1105,14 @@ local function BuildCastbars(ctx)
         { "dropdown", "Indicator style", kickRightX, -88, 300, VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border", "MSUF2_KICK_READY_STYLE", ApplyKickReady },
         { "slider", "Indicator size", kickRightX, -142, 320, 8, 32, 1, "kickReadySize", 16, "MSUF2_KICK_READY_SIZE", ApplyAndRefresh },
         { "toggle", "Auto-size to castbar height", kickRightX, -196, 360, "kickReadyAutoSize", true, "MSUF2_KICK_READY_AUTO", ApplyKickReady },
-    })
+    }, "interrupt_ready")
     local colorHint = W.Text(kick, "Colors: Colors menu > Castbar Colors", kickRightX, -228, 370, T.colors.muted)
     W.LabelAt(kick, "Placement", kickLeftX, -178, 160, "GameFontNormalSmall", T.colors.accent)
     M.Assign(kickControls, BuildCastControlSpecs(kick, {
         { "dropdown", "Anchor", kickLeftX, -196, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
         { "slider", "X offset", kickLeftX, -250, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
         { "slider", "Y offset", kickLeftX, -304, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
-    }))
+    }, "interrupt_ready.placement"))
     local style, size, auto = kickControls.kickReadyStyle, kickControls.kickReadySize, kickControls.kickReadyAutoSize
     local placementControls = { kickControls.kickReadyAnchor, kickControls.kickReadyOffsetX, kickControls.kickReadyOffsetY }
     syncKickReady = function()

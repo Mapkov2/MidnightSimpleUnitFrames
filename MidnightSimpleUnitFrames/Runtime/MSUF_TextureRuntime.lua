@@ -79,14 +79,20 @@ end
 
 --- Profile/menu texture changes can arrive in bursts. Defer the final UF dirty
 --- apply so multiple setters collapse into one engine commit.
+local function ApplyDirtyCommit()
+    local UF = MSUF and MSUF.UF
+    local commit = UF and UF.ApplyDirty
+    if type(commit) == "function" then commit(UF) end
+end
+
 local function ScheduleApplyCommit()
     local UF = MSUF and MSUF.UF
     local commit = UF and UF.ApplyDirty
     if type(commit) ~= "function" then return end
     if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("UF_APPLY_COMMIT", function() commit(UF) end)
+        _G.MSUF_ScheduleOnce("UF_APPLY_COMMIT", ApplyDirtyCommit)
     else
-        _G.C_Timer.After(0, function() commit(UF) end)
+        _G.C_Timer.After(0, ApplyDirtyCommit)
     end
 end
 

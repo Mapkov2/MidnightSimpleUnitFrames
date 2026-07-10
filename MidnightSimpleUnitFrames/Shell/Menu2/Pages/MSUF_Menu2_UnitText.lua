@@ -18,7 +18,7 @@ local SetControlsEnabled = W.SetControlsEnabled
 local floor = math.floor
 local max = math.max
 local VT = M.ValueTextList
-local TEXT_ANCHORS, HP_MODES, POWER_MODES, SEPARATORS, GetConf, GetGeneral, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadStatusBool, SetControlEnabled, ReadText, SetText, IsPlayerPowerManagedByClassResources = M.Pick(UP, [[TEXT_ANCHORS HP_MODES POWER_MODES SEPARATORS GetConf GetGeneral Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadStatusBool SetControlEnabled ReadText SetText IsPlayerPowerManagedByClassResources]])
+local TEXT_ANCHORS, HP_MODES, POWER_MODES, SEPARATORS, GetConf, GetGeneral, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadStatusBool, SetControlEnabled, ReadText, SetText, IsPlayerPowerManagedByClassResources, ControlMeta, RegisterControl = M.Pick(UP, [[TEXT_ANCHORS HP_MODES POWER_MODES SEPARATORS GetConf GetGeneral Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadStatusBool SetControlEnabled ReadText SetText IsPlayerPowerManagedByClassResources ControlMeta RegisterControl]])
 TEXT_ANCHORS = TEXT_ANCHORS or {}
 HP_MODES = HP_MODES or {}
 POWER_MODES = POWER_MODES or {}
@@ -318,6 +318,7 @@ local function BuildText(ctx, builder, unit)
         end,
         x = 20, y = -68,
     })
+    RegisterControl(tabs, ctx, "text.workspace_tab", "Text area", "segment", "ephemeral")
     local nameContent = TextCard(nameTab, "Name text", "Controls whether the unit name is shown on this frame.", leftX, -4, cardW, 116)
     local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
     local showNameText = W.SwitchAt(nameContent, "Show Name", cardW - 62, -24, 0, "HIDDEN")
@@ -326,7 +327,8 @@ local function BuildText(ctx, builder, unit)
         function(v)
             SetBool(unit, "showName", v, "MSUF2_SHOW_NAME_TEXT", { text = true, preview = true })
             RefreshTextControlState()
-        end)
+        end,
+        ControlMeta(ctx, "text.name.show"))
     local namePosition = TextCard(nameTab, "Position", nil, leftX, -136, cardW, 260)
     local nameAnchor = W.Dropdown(namePosition, "Anchor", TEXT_ANCHORS, 210)
     PlaceDropdown(namePosition, nameAnchor, 16, -48, cardW - 32)
@@ -336,7 +338,8 @@ local function BuildText(ctx, builder, unit)
             SetText(unit, "nameTextAnchor", v or "LEFT", "MSUF2_NAME_ANCHOR")
             FocusPreviewText("name", nil, true)
             RefreshTextHeader()
-        end)
+        end,
+        ControlMeta(ctx, "text.name.anchor"))
     local function BindNameOffsetSlider(label, y, key, defaultValue, reason)
         local control = W.Slider(namePosition, label, -300, 300, 1, 260)
         PlaceSlider(namePosition, control, 16, y, cardW - 72)
@@ -347,7 +350,11 @@ local function BuildText(ctx, builder, unit)
                 FocusPreviewText("name", nil, true)
                 RefreshTextHeader()
             end,
-            defaultValue, { step = 1, roundStep = true })
+            defaultValue, (function()
+                local meta = ControlMeta(ctx, "text.name." .. tostring(key))
+                meta.step, meta.roundStep = 1, true
+                return meta
+            end)())
         return control
     end
     local nameX = BindNameOffsetSlider("X Offset", -112, "nameOffsetX", 4, "MSUF2_NAME_X")
@@ -358,7 +365,11 @@ local function BuildText(ctx, builder, unit)
     M.BindNumberWidget(ctx, nameSize,
         function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
         function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, fonts = true, preview = true }) end,
-        12, { step = 1, roundStep = true })
+        12, (function()
+            local meta = ControlMeta(ctx, "text.name.size")
+            meta.step, meta.roundStep = 1, true
+            return meta
+        end)())
     local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
@@ -374,7 +385,8 @@ local function BuildText(ctx, builder, unit)
             function(v)
                 SetBool(unit, cfg.showKey, v, cfg.showReason, { text = true, preview = true })
                 RefreshTextControlState()
-            end)
+            end,
+            ControlMeta(ctx, "text." .. kind .. ".show"))
         local function SlotControl(slot, label, x, y, width)
             local spec = cfg.slots[slot]
             local control = W.Dropdown(content, label, cfg.modes, 260)
@@ -387,7 +399,8 @@ local function BuildText(ctx, builder, unit)
                     SetCurrentSlot(kind, slot)
                     FocusPreviewText(kind, slot, true)
                     RefreshTextHeader()
-                end)
+                end,
+                ControlMeta(ctx, "text." .. kind .. ".slot." .. slot .. ".mode"))
         end
         SlotControl("right", "Right slot", 16, -96, cardW - 32)
         SlotControl("left", "Left slot", 16, -178, halfDropdownW)
@@ -404,7 +417,8 @@ local function BuildText(ctx, builder, unit)
                     SetCurrentSlot(kind, slot)
                     FocusPreviewText(kind, slot, true)
                     RefreshTextHeader()
-                end)
+                end,
+                ControlMeta(ctx, "text." .. kind .. ".slot." .. slot .. ".hide_percent"))
         end
         SlotHidePercentControl("right", "Hide right % sign", 16, -146, cardW - 32)
         SlotHidePercentControl("left", "Hide left % sign", 16, -230, halfDropdownW)
@@ -446,18 +460,21 @@ local function BuildText(ctx, builder, unit)
         end
         controls.separator = W.Dropdown(content, "Delimiter", SEPARATORS, 160)
         PlaceDropdown(content, controls.separator, 16, -266, halfDropdownW)
-        M.BindDropdownWidget(ctx, controls.separator, cfg.separatorGet, function(v) SetText(unit, cfg.separatorKey, v or "", cfg.separatorReason) end)
+        M.BindDropdownWidget(ctx, controls.separator, cfg.separatorGet, function(v) SetText(unit, cfg.separatorKey, v or "", cfg.separatorReason) end,
+            ControlMeta(ctx, "text." .. kind .. ".separator"))
         if cfg.reverseKey then
             controls.reverse = SwitchOrToggle(content, "Reverse order", 28 + halfDropdownW, -288, halfDropdownW)
             M.BindBoolWidget(ctx, controls.reverse,
                 function() return ReadText(unit, cfg.reverseKey, false) == true end,
-                function(v) SetText(unit, cfg.reverseKey, v and true or false, cfg.reverseReason) end)
+                function(v) SetText(unit, cfg.reverseKey, v and true or false, cfg.reverseReason) end,
+                ControlMeta(ctx, "text." .. kind .. ".reverse"))
         end
         if cfg.decimalsKey then
             controls.decimals = SwitchOrToggle(content, "Decimal percent", 28 + halfDropdownW, -316, halfDropdownW)
             M.BindBoolWidget(ctx, controls.decimals,
                 function() return ReadText(unit, cfg.decimalsKey, false) == true end,
-                function(v) SetText(unit, cfg.decimalsKey, v and true or false, cfg.decimalsReason) end)
+                function(v) SetText(unit, cfg.decimalsKey, v and true or false, cfg.decimalsReason) end,
+                ControlMeta(ctx, "text." .. kind .. ".decimals"))
         end
         local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 410)
         local function BindPositionSlider(name, label, y, key, defaultValue, reason, focusSlot, afterSet)
@@ -474,7 +491,11 @@ local function BuildText(ctx, builder, unit)
                     FocusPreviewText(kind, focusSlot and focusSlot() or nil, true)
                     if afterSet then afterSet() end
                 end,
-                defaultValue, { step = 1, roundStep = true })
+                defaultValue, (function()
+                    local meta = ControlMeta(ctx, "text." .. kind .. ".position." .. tostring(name))
+                    meta.step, meta.roundStep = 1, true
+                    return meta
+                end)())
             return control
         end
         BindPositionSlider("x", "X Offset", -64, cfg.xKey, cfg.xDefault, cfg.xReason, nil, RefreshTextHeader)
@@ -487,7 +508,8 @@ local function BuildText(ctx, builder, unit)
                 FocusPreviewText(kind, v and nil or CurrentSlot(kind), true)
                 Call("MSUF_UFPreview_RequestRefresh", cfg.moveReason)
                 if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-move-together") elseif M.Refresh then M.Refresh(ctx) end
-            end)
+            end,
+            ControlMeta(ctx, "text." .. kind .. ".move_together"))
         controls.slot = W.Segment(tab, "Slot", SLOT_VALUES, rightSliderW)
         W.MoveWidget(controls.slot, position, 16, -220, rightW - 32, "LEFT")
         M.BindSegment(ctx, controls.slot,
@@ -496,7 +518,8 @@ local function BuildText(ctx, builder, unit)
                 SetCurrentSlot(kind, v)
                 FocusPreviewText(kind, v, true)
                 if M.RequestRefresh then M.RequestRefresh(ctx, "unit-text-slot") elseif M.Refresh then M.Refresh(ctx) end
-            end)
+            end,
+            ControlMeta(ctx, "text." .. kind .. ".slot_selector", "ephemeral"))
         BindPositionSlider("slotX", "Slot X", -284, function() return SlotOffsetKeys(kind) end, 0, cfg.slotXReason, function() return CurrentSlot(kind) end)
         BindPositionSlider("slotY", "Slot Y", -342, function() local _, yKey = SlotOffsetKeys(kind); return yKey end, 0, cfg.slotYReason, function() return CurrentSlot(kind) end)
         local appearance = TextCard(tab, "Appearance", nil, leftX, -374, cardW, 144)
@@ -505,7 +528,11 @@ local function BuildText(ctx, builder, unit)
         M.BindNumberWidget(ctx, controls.size,
             function() return EffectiveTextSize(cfg.sizeKey, cfg.generalSizeKey) end,
             function(v) SetNumber(unit, cfg.sizeKey, v, cfg.sizeReason, { text = true, fonts = true, preview = true }) end,
-            10, { step = 1, roundStep = true })
+            10, (function()
+                local meta = ControlMeta(ctx, "text." .. kind .. ".size")
+                meta.step, meta.roundStep = 1, true
+                return meta
+            end)())
         return controls
     end
     local hpControls = BuildValueTextTab("hp", hpTab, {
@@ -581,6 +608,7 @@ local function BuildText(ctx, builder, unit)
         powerManagedNotice, powerManagedNoticeButton = notice, button
     end
     if powerManagedNoticeButton then
+        RegisterControl(powerManagedNoticeButton, ctx, "text.power.navigation.class_resources", "Class Resources", "button", "navigation", { navigationKey = "classpower" })
         powerManagedNoticeButton:SetScript("OnClick", function()
             if type(M.SelectPage) == "function" then M.SelectPage("classpower") end
         end)
@@ -595,7 +623,11 @@ local function BuildText(ctx, builder, unit)
                 SetNumber(unit, key, v, reason, { text = true, fonts = true, preview = true })
                 RefreshTextHeader()
             end,
-            defaultValue, { step = 1, roundStep = true })
+            defaultValue, (function()
+                local meta = ControlMeta(ctx, "text.advanced." .. tostring(key))
+                meta.step, meta.roundStep = 1, true
+                return meta
+            end)())
         return control
     end
     local advNameLayer = BindAdvancedLayer("Name layer", -76, "nameTextLayer", 5, "MSUF2_NAME_TEXT_LAYER_ADV")

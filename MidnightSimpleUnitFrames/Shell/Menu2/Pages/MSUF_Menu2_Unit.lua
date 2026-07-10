@@ -86,6 +86,34 @@ local HP_MODES = VTP "PERCENT=Percent|CURRENT=Current|MAX=Max|DEFICIT=Deficit|CU
 local POWER_MODES = VTP "CURRENT=Current|MAX=Max|CURMAX=Current / Max|PERCENT=Percent|CURPERCENT=Current / Percent|CURMAXPERCENT=Current / Max / Percent|NONE=None"
 local BOSS_LAYOUT_OPTIONS = VTP "VERTICAL_DOWN=Vertical (top -> bottom)|VERTICAL_UP=Vertical (bottom -> top)|HORIZONTAL_RIGHT=Horizontal (left -> right)|HORIZONTAL_LEFT=Horizontal (right -> left)"
 local BOSS_LAYOUT_VALID = KSW("VERTICAL_DOWN VERTICAL_UP HORIZONTAL_RIGHT HORIZONTAL_LEFT")
+local function PortableControlToken(value, fallback)
+    local token = tostring(value or ""):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    return token ~= "" and token or (fallback or "control")
+end
+local function UnitControlMeta(ctx, semanticPath, classification)
+    local pageKey = PortableControlToken(ctx and ctx.key or M.activeKey, "uf_unknown")
+    local path = PortableControlToken(semanticPath, "control")
+    local identity = "unit." .. path
+    local meta = {
+        controlId = "menu2." .. pageKey .. ".unit." .. path,
+        pageKey = pageKey,
+        identityKey = identity,
+        controlPath = identity:gsub("%.", "/"),
+        classification = classification or "setting",
+    }
+    if meta.classification == "action" then meta.actionKey = identity end
+    return meta
+end
+local function RegisterUnitControl(widget, ctx, semanticPath, label, kind, classification, extra)
+    if not widget then return widget end
+    local meta = UnitControlMeta(ctx, semanticPath, classification)
+    meta.label, meta.kind = label, kind
+    if type(extra) == "table" then
+        for key, value in pairs(extra) do meta[key] = value end
+    end
+    if type(M.RegisterSearchWidget) == "function" then M.RegisterSearchWidget(widget, meta) end
+    return widget
+end
 local SEPARATORS = VTR [[
 =space
 -=-
@@ -775,6 +803,8 @@ M.Assign(UnitPage, {
     DefaultCopyTarget = DefaultCopyTarget,
     UnitTopLabel = UnitTopLabel,
     UnitTopPillWidth = UnitTopPillWidth,
+    ControlMeta = UnitControlMeta,
+    RegisterControl = RegisterUnitControl,
     NewCopyScopeDefaults = NewCopyScopeDefaults,
     CopyUnitSettings = CopyUnitSettings,
     ToggleEditMode = ToggleEditMode,

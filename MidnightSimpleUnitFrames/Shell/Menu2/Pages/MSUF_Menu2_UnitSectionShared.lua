@@ -18,6 +18,34 @@ local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_NOTICE_BG = { 0.105, 0.082, 0.052, 0.34 }
 local WARNING_NOTICE_TOP = { 0.48, 0.36, 0.20, 0.55 }
 local WARNING_NOTICE_BOTTOM = { 0.28, 0.21, 0.12, 0.48 }
+local function PortableControlToken(value, fallback)
+    local token = tostring(value or ""):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    return token ~= "" and token or (fallback or "control")
+end
+local function SharedControlMeta(opts, suffix, classification)
+    if type(opts) ~= "table" or not opts.controlDomain or not opts.controlPath then return nil end
+    local pageKey = PortableControlToken(opts.controlPageKey or M.activeKey, "unknown")
+    local domain = PortableControlToken(opts.controlDomain, "shared")
+    local path = PortableControlToken(opts.controlPath, "control")
+    local tail = PortableControlToken(suffix, "control")
+    local semantic = domain .. "." .. path .. "." .. tail
+    local meta = {
+        controlId = "menu2." .. pageKey .. "." .. semantic,
+        pageKey = pageKey,
+        identityKey = semantic,
+        controlPath = semantic:gsub("%.", "/"),
+        classification = classification or "ephemeral",
+    }
+    if meta.classification == "action" then meta.actionKey = semantic end
+    return meta
+end
+local function RegisterSharedControl(widget, opts, suffix, label, kind, classification)
+    local meta = SharedControlMeta(opts, suffix, classification)
+    if not (widget and meta and type(M.RegisterSearchWidget) == "function") then return widget end
+    meta.label, meta.kind = label, kind
+    M.RegisterSearchWidget(widget, meta)
+    return widget
+end
 local function IsNameRelativeAnchor(value)
     return value == "NAMERIGHT" or value == "NAMELEFT"
 end
@@ -231,6 +259,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             close:SetSize(20, 20)
             close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -9)
             close:SetScript("OnClick", function() popup:Hide() end)
+            RegisterSharedControl(close, opts, "close", "Close copy popup", "button", "ephemeral")
             local destLabel = T.Font(popup, "GameFontDisableSmall", M.Tr(opts.targetLabel or "Destination"), T.colors.dim)
             destLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.targetLabelY or -40)
             popup._targetBtns = {}
@@ -245,6 +274,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                     if opts.onTargetClick then opts.onTargetClick(key, api, popup) end
                     RefreshTargets()
                 end)
+                RegisterSharedControl(btn, opts, "target." .. tostring(key), "Copy target " .. tostring(label), "button", opts.runLabel and "ephemeral" or "action")
                 popup._targetBtns[key] = btn
             end
             local catLabel = T.Font(popup, "GameFontDisableSmall", M.Tr(opts.categoryLabel or "Copy categories"), T.colors.dim)
@@ -258,6 +288,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                 local cb = W.SwitchAt(popup, cat.label, 16 + col * (opts.categoryColumnWidth or 198), (opts.categoryY or -110) - row * (opts.categoryRowHeight or 28), opts.categoryWidth or 140)
                 cb:SetChecked(scopes[cat.key] == true)
                 cb:SetScript("OnClick", function(self) scopes[cat.key] = self:GetChecked() and true or false end)
+                RegisterSharedControl(cb, opts, "category." .. tostring(cat.key), cat.label, "toggle", "ephemeral")
                 if cat.description and M.AddTooltip then
                     M.AddTooltip(cb, cat.label, cat.description, { hook = true, titleAsLine = true })
                 end
@@ -266,15 +297,18 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             local allBtn = CopyPopupButton(popup, M.Tr("All"), 48, "normal")
             allBtn:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 16, 12)
             allBtn:SetScript("OnClick", function() SetAll(true, opts.allFeedback or "All copy categories selected") end)
+            RegisterSharedControl(allBtn, opts, "categories.all", "All copy categories", "button", "ephemeral")
             local noneBtn = CopyPopupButton(popup, M.Tr("None"), 58, "normal")
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
             noneBtn:SetScript("OnClick", function() SetAll(false, opts.noneFeedback or "Copy categories cleared") end)
+            RegisterSharedControl(noneBtn, opts, "categories.none", "No copy categories", "button", "ephemeral")
             if opts.runLabel then
                 local runBtn = CopyPopupButton(popup, M.Tr(opts.runLabel), opts.runWidth or 128, "action")
                 runBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -14, 11)
                 runBtn:SetScript("OnClick", function()
                     if opts.onRun then opts.onRun(api, popup) end
                 end)
+                RegisterSharedControl(runBtn, opts, "run", opts.runLabel, "button", "action")
                 popup._runBtn = runBtn
             end
         end
@@ -418,6 +452,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     end)
     box:SetScript("OnEscapePressed", function(self) Refresh(); self:ClearFocus() end)
     box:SetScript("OnEditFocusLost", Refresh)
+    RegisterSharedControl(box, opts, "value", opts.label or "Custom Anchor Frame", "textinput", "setting")
     local function SmallButton(after, labelText, widthText, gap, danger)
         local btn = T.Button(parent, labelText, widthText, 22)
         if danger and T.SkinDangerButton then btn = T.SkinDangerButton(btn) end; btn:SetPoint("LEFT", after, "RIGHT", gap, 0)
@@ -433,8 +468,10 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
         end
         overlay:Show()
     end)
+    RegisterSharedControl(pick, opts, "pick", opts.pickLabel or "Pick", "button", "action")
     local clear = SmallButton(pick, opts.clearLabel or "Clear", opts.clearWidth or 50, 4, true)
     clear:SetScript("OnClick", function() if opts.clearValue then opts.clearValue() elseif opts.setValue then opts.setValue("", "clear") end; box:SetText("") end)
+    RegisterSharedControl(clear, opts, "clear", opts.clearLabel or "Clear", "button", "action")
     M.TrackRefresh(ctx, Refresh)
     return { label = label, box = box, pick = pick, clear = clear, Refresh = Refresh }
 end
@@ -558,6 +595,7 @@ function Shared.MakeDragSortRows(parent, defs, opts)
         frame:SetScript("OnLeave", OnLeave)
         frame:SetScript("OnDragStart", OnDragStart)
         frame:SetScript("OnDragStop", OnDragStop)
+        RegisterSharedControl(frame, opts, "row." .. tostring(def.key or i), def.label or tostring(def.key or i), "dragrow", "action")
         local row = { frame = frame, key = def.key or "", slotIndex = i, def = def }
         frame._msuf2DragRow, holder.rows[i] = row, row
     end

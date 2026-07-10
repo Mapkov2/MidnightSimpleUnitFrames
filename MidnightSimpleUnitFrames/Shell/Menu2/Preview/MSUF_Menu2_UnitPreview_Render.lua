@@ -805,12 +805,15 @@ function Preview.Refresh(box, reason)
     local mock = box.mock
     local baseLevel = (canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + 2
     if mock.SetFrameLevel then mock:SetFrameLevel(baseLevel + 4) end
-    if mock.classPower and mock.classPower.SetFrameLevel then mock.classPower:SetFrameLevel(baseLevel + 4 + ClampPreviewLayer(bars.classPowerFrameLevelOffset, 5)) end
-    if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(baseLevel + 4 + ClampPreviewLayer(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6)) end
-    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(baseLevel + (Layers.PORTRAIT_BORDER_OFFSET or 7)) end
-    if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel(baseLevel + 6) end
-    if mock.textFrame and mock.textFrame.SetFrameLevel then mock.textFrame:SetFrameLevel(baseLevel + (Layers.TEXT_BASE_OFFSET or 10)) end
-    local textBase = baseLevel + (Layers.TEXT_BASE_OFFSET or 10)
+    -- Mirror the live hierarchy: the unit frame owns a health StatusBar one
+    -- level above it; text/status and portrait levels are based on that bar.
+    baseLevel = (mock.GetFrameLevel and mock:GetFrameLevel()) or (baseLevel + 4)
+    if mock.classPower and mock.classPower.SetFrameLevel then mock.classPower:SetFrameLevel(baseLevel + ClampPreviewLayer(bars.classPowerFrameLevelOffset, 5)) end
+    if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(baseLevel + ClampPreviewLayer(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6)) end
+    local textBase = (Layers.HealthLevel and Layers.HealthLevel(baseLevel) or (baseLevel + (Layers.HEALTH_OFFSET or 1))) + (Layers.TEXT_BASE_OFFSET or 10)
+    if mock.portrait and mock.portrait.SetFrameLevel then mock.portrait:SetFrameLevel(textBase - (Layers.TEXT_BASE_OFFSET or 10) + (Layers.PORTRAIT_OFFSET or 6)) end
+    if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel(baseLevel + 2) end
+    if mock.textFrame and mock.textFrame.SetFrameLevel then mock.textFrame:SetFrameLevel(textBase) end
     if mock.nameLayer and mock.nameLayer.SetFrameLevel then mock.nameLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.nameLayer or conf.nameTextLayer or g.nameTextLayer, 5)) end
     if mock.hpLayer and mock.hpLayer.SetFrameLevel then mock.hpLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.healthLayer or conf.hpTextLayer or conf.textLayer or g.hpTextLayer or g.textLayer, 5)) end
     if mock.powerLayer and mock.powerLayer.SetFrameLevel then mock.powerLayer:SetFrameLevel(textBase + ClampPreviewLayer(runtimeText and runtimeText.powerLayer or conf.powerTextLayer or g.powerTextLayer, 2)) end

@@ -14,7 +14,10 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local UNIT_SCOPE_KEYS = GP.UNIT_SCOPE_KEYS or {}
-local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentFontScope IsGFScope FontScopeGet FontScopeSet NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts]])
+local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts, ControlMeta = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentFontScope IsGFScope FontScopeGet FontScopeSet NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts ControlMeta]])
+local function Meta(path, classification, exact)
+    return ControlMeta("opt_fonts", "global", path, classification, exact)
+end
 local function RGB(r, g, b, a)
     return { r or 1, g or 1, b or 1, a or 1 }
 end
@@ -287,6 +290,10 @@ local function BuildFonts(ctx)
     end
     GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
+        selectorMeta = Meta("scope.selector", "ephemeral"),
+        selectorOptionMeta = function(value) return Meta("scope.selector.option." .. tostring(value), "ephemeral") end,
+        overrideMeta = Meta("scope.override.enabled"),
+        resetMeta = Meta("scope.overrides.reset", "action"),
         getValue = function() return CurrentFontScope() end,
         setValue = function(v)
             G()._fontScopeKey = NormalizeScopeKey(v)
@@ -357,17 +364,18 @@ local function BuildFonts(ctx)
             if type(_G.MSUF_NormalizeStoredFontKeys) == "function" then _G.MSUF_NormalizeStoredFontKeys() end
             ApplyFonts("MSUF2_FONT_KEY")
             RefreshFontPreview()
-        end)
+        end,
+        Meta("font.family"))
     M.TrackRefresh(ctx, RefreshFontPreview)
     local RefreshScopedFontControls = M.RefreshProxy()
     local text = b:CollapsibleSection("fonts_text_style", "Text Style", 330, true)
-    local function BindTextSegment(label, values, width, getValue, setValue, afterSet)
+    local function BindTextSegment(label, values, width, getValue, setValue, path, afterSet)
         local control = W.Segment(text, label, values, width)
         M.BindSegment(ctx, control, getValue, function(v)
             setValue(v)
             RefreshFontPreview()
             M.CallIf(afterSet)
-        end)
+        end, Meta(path))
         return control
     end
     local outline = W.Segment(text, "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420)
@@ -391,20 +399,25 @@ local function BuildFonts(ctx)
             FontScopeSet("boldText", v == "THICKOUTLINE", "MSUF2_FONT_OUTLINE")
             SetFontAndApply("noOutline", v == "NONE", "MSUF2_FONT_OUTLINE")
             RefreshFontPreview()
-        end)
+        end,
+        Meta("text_style.outline"))
     local sharp = BindTextSegment("Rendering", VT("SMOOTH", "Smooth", "SHARP", "Sharp"), 260,
         function() return FontScopeGet("fontMonochrome", false) and "SHARP" or "SMOOTH" end,
-        function(v) SetFontAndApply("fontMonochrome", v == "SHARP", "MSUF2_FONT_MONOCHROME") end)
+        function(v) SetFontAndApply("fontMonochrome", v == "SHARP", "MSUF2_FONT_MONOCHROME") end,
+        "text_style.rendering")
     local shadow = BindTextSegment("Text shadow", VT("ON", "On", "OFF", "Off"), 260,
         function() return FontScopeGet("textBackdrop", true) and "ON" or "OFF" end,
         function(v) SetFontAndApply("textBackdrop", v == "ON", "MSUF2_FONT_SHADOW") end,
+        "text_style.shadow.enabled",
         function() RefreshScopedFontControls() end)
     local shadowStrength = BindTextSegment("Shadow strength", VT("SOFT", "Soft", "NORMAL", "Normal", "DEEP", "Deep"), 360,
         function() return NormalizeShadowStrength(FontScopeGet("fontShadowStrength", "NORMAL")) end,
-        function(v) SetFontAndApply("fontShadowStrength", NormalizeShadowStrength(v), "MSUF2_FONT_SHADOW_STRENGTH") end)
+        function(v) SetFontAndApply("fontShadowStrength", NormalizeShadowStrength(v), "MSUF2_FONT_SHADOW_STRENGTH") end,
+        "text_style.shadow.strength")
     local opacity = BindTextSegment("Text opacity", VT(1, "100%", 0.85, "85%", 0.70, "70%"), 320,
         function() return NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1)) end,
-        function(v) SetFontAndApply("fontTextAlpha", NormalizeTextAlpha(v), "MSUF2_FONT_TEXT_ALPHA") end)
+        function(v) SetFontAndApply("fontTextAlpha", NormalizeTextAlpha(v), "MSUF2_FONT_TEXT_ALPHA") end,
+        "text_style.opacity")
     local baseline = W.Slider(text, "Baseline", -4, 4, 1, 300)
     baseline:SetValueFormatter(function(v)
         v = NormalizeBaselineOffset(v)
@@ -414,28 +427,31 @@ local function BuildFonts(ctx)
     M.BindNumberWidget(ctx, baseline,
         function() return NormalizeBaselineOffset(FontScopeGet("fontBaselineOffset", 0)) end,
         function(v) SetFontAndApply("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE") end,
-        0, { step = 1, roundStep = true })
-    local function BindFontDropdown(parent, label, values, getValue, setValue, width)
+        0, Meta("text_style.baseline", "setting", { step = 1, roundStep = true }))
+    local function BindFontDropdown(parent, label, values, getValue, setValue, width, path)
         local control = W.Dropdown(parent, label, values, width or 280)
-        M.BindDropdownWidget(ctx, control, getValue, setValue)
+        M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
         return control
     end
     local function BindFontModeDropdown(parent, label, values, key, activeValue, reason)
         return BindFontDropdown(parent, label, values,
             function() return FontScopeGet(key, false) and activeValue or "DEFAULT" end,
-            function(v) SetFontAndApply(key, v == activeValue, reason) end)
+            function(v) SetFontAndApply(key, v == activeValue, reason) end,
+            nil,
+            "colors." .. key)
     end
     local function BuildNameShorteningControls(parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide, getChars, setChars, getNoEllipsis, setNoEllipsis, formatChars)
         local controls = {}
         controls.shorten = W.Toggle(parent, label)
-        M.BindBoolWidget(ctx, controls.shorten, getEnabled, setEnabled)
+        M.BindBoolWidget(ctx, controls.shorten, getEnabled, setEnabled, Meta("name_shortening.enabled"))
         controls.side = W.Segment(parent, "Truncation style", VT("LEFT", "Keep end (last letters)", "RIGHT", "Keep start (first letters)"), 430)
-        M.BindSegment(ctx, controls.side, getSide, setSide)
+        M.BindSegment(ctx, controls.side, getSide, setSide, Meta("name_shortening.style"))
         controls.chars = W.Slider(parent, "Max name length", minChars or 4, 30, 1, 300)
         if formatChars then controls.chars:SetValueFormatter(formatChars) end
-        M.BindNumberWidget(ctx, controls.chars, getChars, setChars, minChars or 4, { step = 1, roundStep = true })
+        M.BindNumberWidget(ctx, controls.chars, getChars, setChars, minChars or 4,
+            Meta("name_shortening.max_length", "setting", { step = 1, roundStep = true }))
         controls.noEllipsis = W.Toggle(parent, "No Ellipsis (truncate without ..)")
-        M.BindBoolWidget(ctx, controls.noEllipsis, getNoEllipsis, setNoEllipsis)
+        M.BindBoolWidget(ctx, controls.noEllipsis, getNoEllipsis, setNoEllipsis, Meta("name_shortening.no_ellipsis"))
         local scopeNoticeY = (parent._msuf2CursorY or noticeFallbackY or -194) - 8
         controls.scopeNotice = W.Text(parent, "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted)
         if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
@@ -454,7 +470,9 @@ local function BuildFonts(ctx)
                 return
             end
             SetFontAndApply("nameClassColor", v == "CLASS", "MSUF2_NAME_CLASS_COLOR")
-        end)
+        end,
+        nil,
+        "colors.player_name")
     local npcColor = BindFontDropdown(colors, "NPC / Boss Name Color", NPCColorValues,
         function()
             if FontScopeGet("nameNpcClassColor", false) then return "CLASS" end
@@ -463,7 +481,9 @@ local function BuildFonts(ctx)
         function(v)
             SetFontAndApply("nameNpcClassColor", v == "CLASS", "MSUF2_NPC_CLASS_COLOR")
             SetFontAndApply("npcNameRed", v == "NPC", "MSUF2_NPC_RED")
-        end)
+        end,
+        nil,
+        "colors.npc_name")
     local healthColor = BindFontModeDropdown(colors, "HP Text Color", HealthColorValues, "colorHealthTextByHealth", "HEALTH", "MSUF2_HP_TEXT_COLOR")
     local powerColor = BindFontModeDropdown(colors, "Power Text Color", PowerColorValues, "colorPowerTextByType", "RESOURCE", "MSUF2_POWER_TEXT_COLOR")
     local scopedFontControls = { outline, sharp, shadow, opacity, baseline, nameColor, healthColor }

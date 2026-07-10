@@ -10,6 +10,7 @@ end
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
+local Layers = UF and UF.Layers or {}
 
 -- Unitframe border overlay element.
 -- Owns highlight, aggro, purge/dispel, and boss-target border layers for unitframes. Runtime
@@ -55,9 +56,9 @@ end
 
 local EDGE_KEYS = { "top", "bottom", "left", "right" }
 local DEFAULT_HIGHLIGHT_PRIORITY = { "dispel", "aggro", "purge", "bossTarget" }
-local BORDER_LEVEL_NORMAL = 35
-local BORDER_LEVEL_DEFAULT = 40
-local BORDER_LEVEL_OVER_NATIVE_DISPEL = 50
+local BORDER_LEVEL_NORMAL = Layers.FRAME_BORDER_NORMAL_OFFSET or 35
+local BORDER_LEVEL_DEFAULT = Layers.FRAME_BORDER_DEFAULT_OFFSET or 40
+local BORDER_LEVEL_OVER_NATIVE_DISPEL = Layers.FRAME_BORDER_OVER_NATIVE_DISPEL_OFFSET or 50
 
 local function EnsureBorderOverlay(parent)
   local overlay = parent.MSUFBorderOverlay

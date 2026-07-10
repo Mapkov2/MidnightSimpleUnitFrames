@@ -8,6 +8,7 @@ local VT = M.ValueTextList
 local floor = math.floor
 local max = math.max
 local PercentValue = M.PercentValue
+local ControlMeta = UP.ControlMeta
 local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet boss"
 local function BuildRangeFade(ctx, builder, unit)
     local ReadBool = UP.ReadBool
@@ -31,18 +32,21 @@ local function BuildRangeFade(ctx, builder, unit)
     local enabled = W.ToggleAt(mainCard, "Enable Range Fade", 16, -54, leftW - 32)
     M.BindBoolWidget(ctx, enabled,
         function() return ReadBool(unit, "rangeFadeEnabled", true) end,
-        function(v) SetBool(unit, "rangeFadeEnabled", v, "MSUF2_RANGE_FADE", { preview = true }) end)
+        function(v) SetBool(unit, "rangeFadeEnabled", v, "MSUF2_RANGE_FADE", { preview = true }) end,
+        ControlMeta(ctx, "range_fade.enabled"))
     local slider = W.Slider(alphaCard, "", 0, 1, 0.05, rightW - 58)
     if slider.SetValueFormatter then slider:SetValueFormatter(PercentValue) end
     M.BindNumberWidget(ctx, slider,
         function() return ReadNumber(unit, "rangeFadeAlpha", 0.4) end,
         function(v) SetNumber(unit, "rangeFadeAlpha", v, "MSUF2_RANGE_FADE_ALPHA", { preview = true }) end,
-        0.4)
+        0.4,
+        ControlMeta(ctx, "range_fade.alpha"))
     W.MoveWidget(slider, alphaCard, 16, -54, rightW - 58, "LEFT")
     local mode = W.Segment(alphaCard, "Affects", VT("frame", "Whole", "health", "HP"), rightW - 32)
     M.BindSegment(ctx, mode,
         function() return GetConf(unit).rangeFadeLayerMode == "health" and "health" or "frame" end,
-        function(v) SetString(unit, "rangeFadeLayerMode", v == "health" and "health" or "frame", "MSUF2_RANGE_FADE_LAYER", { preview = true }) end)
+        function(v) SetString(unit, "rangeFadeLayerMode", v == "health" and "health" or "frame", "MSUF2_RANGE_FADE_LAYER", { preview = true }) end,
+        ControlMeta(ctx, "range_fade.layer_mode"))
     W.MoveWidget(mode, alphaCard, 16, -104, rightW - 32, "LEFT")
     local function RefreshRangeControls()
         local on = ReadBool(unit, "rangeFadeEnabled", true)

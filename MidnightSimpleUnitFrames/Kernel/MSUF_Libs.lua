@@ -944,16 +944,10 @@ RegisterBundledFonts = function()
         if g.barTexture == "MSUF Flat" then
             g.barTexture = "Solid"
             changed = true
-        elseif g.barTexture == "MSUF Smooth" then
-            g.barTexture = "MSUF Smooth"
-            changed = true
         end
 
         if g.castbarTexture == "MSUF Flat" then
             g.castbarTexture = "Solid"
-            changed = true
-        elseif g.castbarTexture == "MSUF Smooth" then
-            g.castbarTexture = "MSUF Smooth"
             changed = true
         end
 
@@ -1047,133 +1041,12 @@ end
 
 ExportPublic("MSUF_EnsureAddonLoaded", MSUF_EnsureAddonLoaded)
 
---- Global UI Scale (combat-safe gate)
---- Fixes: /reload in combat (or any in-combat scale apply) causing ADDON_ACTION_BLOCKED
---- by deferring Global UI scale changes until PLAYER_REGEN_ENABLED.
---- Important: We intentionally wrap MSUF_SetGlobalUiScale in-place so ANY caller becomes
---- combat-safe without needing to edit every callsite (SlashMenu / Options / etc.).
+--- Compatibility hook retained for older callers. The current scale owner in
+--- Menu2_Support is itself combat-safe and creates a PLAYER_REGEN_ENABLED
+--- watcher only while an apply is pending, so a second permanent gate/frame is
+--- unnecessary.
 local function MSUF_InstallGlobalScaleGate()
-    if _G.MSUF_GlobalScaleGateInstalled then return end
-    ExportPublic("MSUF_GlobalScaleGateInstalled", true)
-
-    local function TryWrap()
-        local fn = _G.MSUF_SetGlobalUiScale
-        if type(fn) ~= "function" then
-            return false
-        end
-
-        --- Already wrapped?
-        if _G.MSUF_SetGlobalUiScale_GATED and fn == _G.MSUF_SetGlobalUiScale_GATED then
-            return true
-        end
-
-        --- Preserve raw implementation (first one wins)
-        if type(_G.MSUF_SetGlobalUiScale_RAW) ~= "function" then
-            ExportPublic("MSUF_SetGlobalUiScale_RAW", fn)
-        end
-
-        --- Create/ensure the deferred-apply frame once.
-        if not _G.MSUF_GlobalScaleGateFrame then
-            local gf = CreateFrame("Frame")
-            ExportPublic("MSUF_GlobalScaleGateFrame", gf)
-            gf:RegisterEvent("PLAYER_REGEN_ENABLED")
-            gf:SetScript("OnEvent", function()
-                local args = _G.MSUF_PendingGlobalScaleArgs
-                ExportPublic("MSUF_PendingGlobalScaleArgs", nil)
-
-                if not args then return end
-                if InCombatLockdown and InCombatLockdown() then
-                    --- Still not safe (edge case): keep pending.
-                    ExportPublic("MSUF_PendingGlobalScaleArgs", args)
-                    return
-                end
-
-                local raw = _G.MSUF_SetGlobalUiScale_RAW
-                if type(raw) == "function" then
-                    --- Unpack pending args and apply once after combat.
-                    raw(unpack(args))
-                end
-            end)
-        end
-
-        --- Gate wrapper: defer in combat, else passthrough.
-        local gated = function(...)
-            local scale = select(1, ...)
-            if scale == nil then return end
-
-            if InCombatLockdown and InCombatLockdown() then
-                --- Last-call-wins: overwrite pending args.
-                ExportPublic("MSUF_PendingGlobalScaleArgs", { ... })
-                return
-            end
-
-            local raw = _G.MSUF_SetGlobalUiScale_RAW
-            if type(raw) == "function" then
-                return raw(...)
-            end
-        end
-
-        ExportPublic("MSUF_SetGlobalUiScale_GATED", gated)
-        ExportPublic("MSUF_SetGlobalUiScale", gated)
-        return true
-    end
-
-    --- Install immediately if possible; otherwise retry on common init events.
-    if TryWrap() then return end
-
-    if not _G.MSUF_GlobalScaleInstallFrame then
-        local f = CreateFrame("Frame")
-        ExportPublic("MSUF_GlobalScaleInstallFrame", f)
-        f:RegisterEvent("ADDON_LOADED")
-        f:RegisterEvent("PLAYER_LOGIN")
-        f:RegisterEvent("PLAYER_ENTERING_WORLD")
-        f:SetScript("OnEvent", function()
-            if TryWrap() then
-                f:UnregisterEvent("ADDON_LOADED")
-                f:UnregisterEvent("PLAYER_LOGIN")
-                f:UnregisterEvent("PLAYER_ENTERING_WORLD")
-                f:SetScript("OnEvent", nil)
-            end
-        end)
-    end
+    return type(_G.MSUF_SetGlobalUiScale) == "function"
 end
 
 ExportPublic("MSUF_InstallGlobalScaleGate", MSUF_InstallGlobalScaleGate)
-
---- Ensure gate is installed as early as possible (before any C_Timer.After(0) scale applies fire).
-_G.C_Timer.After(0, function()
-    MSUF_InstallGlobalScaleGate()
-end)
-
---- Auto-load Gameplay LoD addon on login when any gameplay feature is enabled.
---- (Prevents "feature looks enabled but does nothing until you toggle twice" after /reload or relog.)
-do
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_LOGIN")
-    f:SetScript("OnEvent", function()
-        local ensureDB = _G.MSUF_EnsureDB
-        if ensureDB then
-            ensureDB()
-        end
-
-        local g = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil
-        if not g then return end
-
-        local need = false
-        if g.enableCombatTimer == true then need = true end
-        if g.enableCombatStateText == true then need = true end
-        if g.enableCombatCrosshair == true then need = true end
-
-        if need then
-            MSUF_EnsureAddonLoaded("MidnightSimpleUnitFrames_Gameplay")
-
-            --- Apply immediately so event wiring is active without opening the Gameplay menu.
-            local ns2 = _G.MSUF_NS
-            if ns2 and type(ns2.MSUF_RequestGameplayApply) == "function" then
-                ns2.MSUF_RequestGameplayApply()
-            elseif _G.MSUF_RequestGameplayApply then
-                _G.MSUF_RequestGameplayApply()
-            end
-        end
-    end)
-end

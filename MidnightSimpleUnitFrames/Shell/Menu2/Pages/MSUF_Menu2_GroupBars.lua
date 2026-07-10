@@ -17,7 +17,7 @@ local VT = M.ValueTextList
 local DISPEL_OVERLAY_121_PTR_DISABLED = false
 local DISPEL_OVERLAY_121_PTR_MESSAGE = "Uses native 12.1 AuraContainer dispellable debuff detection."
 local SCOPE_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, GF_BAR_MODES, SIMPLE_TEXTURES, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(GP, [[SCOPE_VALUES HEALTH_MODES TEXT_MODES DELIMITER_VALUES ANCHORS GF_BAR_MODES SIMPLE_TEXTURES DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES]])
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeDropdown, ScopeDropdown, ScopeSlider, ScopeColor, BindNestedStrataSlider, FrameStrataCount, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeDropdown ScopeDropdown ScopeSlider ScopeColor BindNestedStrataSlider FrameStrataCount SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText]])
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeDropdown, ScopeDropdown, ScopeSlider, ScopeColor, BindNestedStrataSlider, FrameStrataCount, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeDropdown ScopeDropdown ScopeSlider ScopeColor BindNestedStrataSlider FrameStrataCount SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText ControlMeta RegisterControl]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
 OptionText = OptionText or M.OptionText
@@ -30,7 +30,8 @@ local function ScopeNumberSlider(ctx, parent, label, minValue, maxValue, step, w
     M.BindNumberWidget(ctx, control,
         function() return Num(CurrentScope(), key, default) end,
         function(value) Set(CurrentScope(), key, tonumber(value) or default, mode or "visual") end,
-        default)
+        default,
+        ControlMeta(ctx, "field." .. tostring(key)))
     if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "CENTER") end
     return control
 end
@@ -63,14 +64,15 @@ local function BuildDispelOverlaySection(ctx, b)
         function(value)
             Set(CurrentScope(), "dispelOverlayTrigger", NormalizeGFDispelOverlayTrigger(value), "visual")
             RequestGroupBarsRefresh(ctx, "gf-bars-dispel-trigger")
-        end)
+        end,
+        ControlMeta(ctx, "field.dispelOverlayTrigger"))
     W.MoveWidget(dispelTrigger, dispelCard, 16, -88, min(300, dispelCardW - 32), "LEFT")
     local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -140, min(300, dispelCardW - 32))
     local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -188, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
     local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -232, min(360, dispelCardW - 72))
     local dispelStrata = BindNestedStrataSlider(ctx,
         W.Slider(dispelCard, (M.Tr and M.Tr("Frame Strata")) or "Frame Strata", 0, (FrameStrataCount or 9) - 1, 1, min(360, dispelCardW - 72)),
-        function() return Conf(CurrentScope()) end, "dispelOverlayStrata", "AUTO", "visual")
+        function() return Conf(CurrentScope()) end, "dispelOverlayStrata", "AUTO", "visual", "field.dispelOverlayStrata")
     W.MoveWidget(dispelStrata, dispelCard, 16, -286, min(360, dispelCardW - 72), "LEFT")
     local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha, dispelStrata }
     local function RefreshDispelState()
@@ -132,7 +134,8 @@ local function BuildGFBars(ctx)
             Set(scope, "powerBarEnabled", v and true or false, "geometry")
             if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry") end
             RequestGroupBarsRefresh(ctx, "gf-bars-power-enabled")
-        end)
+        end,
+        ControlMeta(ctx, "field.powerBarEnabled"))
     local powerHeight = W.Slider(powerMainCard, "Power height", 1, 30, 1, powerSliderW)
     M.BindNumberWidget(ctx, powerHeight,
         function() return CurrentPowerHeight(CurrentScope()) end,
@@ -140,7 +143,11 @@ local function BuildGFBars(ctx)
             v = floor(max(1, min(30, tonumber(v) or CurrentPowerHeight(CurrentScope()))) + 0.5)
             Set(CurrentScope(), "powerHeight", v, "geometry")
         end,
-        3, { step = 1, roundStep = true })
+        3, (function()
+            local meta = ControlMeta(ctx, "field.powerHeight")
+            meta.step, meta.roundStep = 1, true
+            return meta
+        end)())
     local smoothFill = BindScopeToggle(ctx, W.ToggleAt(powerMainCard, "Smooth fill", 16, -126, powerLeftW - 32), "powerSmoothFill", false, "visual")
     local powerHint = W.Text(powerMainCard, "Power text modes, delimiter and font size are in Text.", 16, -152, powerLeftW - 32, { 0.60, 0.75, 1.00, 1 })
     if powerHint.SetWordWrap then powerHint:SetWordWrap(true) end
@@ -399,7 +406,7 @@ local function BuildGFBars(ctx)
     end
     local nameTab, hpTab, powerTab, advancedTab =
         M.UnitSectionsShared.MakeTabFrames(text, -118, textW, tabFrames, "name", "hp", "power", "advanced")
-    local _, RefreshTextTabs = W.SegmentTabs(ctx, text, {
+    local textTabs, RefreshTextTabs = W.SegmentTabs(ctx, text, {
         label = "Text area", values = tabValues, width = min(520, textW - 48),
         frames = tabFrames, defaultTab = "name",
         get = CurrentTextTab,
@@ -410,6 +417,7 @@ local function BuildGFBars(ctx)
         end,
         x = 20, y = -68,
     })
+    RegisterControl(textTabs, ctx, "text.workspace_tab", "Text area", "segment", "ephemeral")
     local nameContent = TextCard(nameTab, "Name text", "Controls whether names are shown on group frames.", textLeftX, -4, textCardW, 158)
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
     local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", textCardW - 62, -24, 0, "HIDDEN"), "showName", true, "font")
@@ -427,7 +435,7 @@ local function BuildGFBars(ctx)
         controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
         if cfg.showGet then
             controls.show = W.SwitchAt(content, cfg.showLabel, textCardW - 62, -24, 0, "HIDDEN")
-            M.BindBoolWidget(ctx, controls.show, cfg.showGet, cfg.showSet)
+            M.BindBoolWidget(ctx, controls.show, cfg.showGet, cfg.showSet, ControlMeta(ctx, "text." .. kind .. ".show"))
         else
             controls.show = BindScopeToggle(ctx, W.SwitchAt(content, cfg.showLabel, textCardW - 62, -24, 0, "HIDDEN"), cfg.showKey, cfg.showDefault, "font")
         end
@@ -450,7 +458,8 @@ local function BuildGFBars(ctx)
                     SetCurrentSlot(kind, slot)
                     FocusGFPreviewText(kind, slot, true)
                     RequestGroupBarsRefresh(ctx, "gf-bars-text-hide-percent-symbol")
-                end)
+                end,
+                ControlMeta(ctx, "text." .. kind .. ".slot." .. slot .. ".hide_percent"))
         end
         SlotHidePercentControl("right", "Hide right % sign", 16, -146, textCardW - 32)
         SlotHidePercentControl("left", "Hide left % sign", 16, -230, textHalfDropW)
@@ -477,7 +486,8 @@ local function BuildGFBars(ctx)
                 FocusGFPreviewText(kind, v and nil or CurrentSlot(kind), true)
                 if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
                 RequestGroupBarsRefresh(ctx, "gf-bars-text-move-together")
-            end)
+            end,
+            ControlMeta(ctx, "text." .. kind .. ".move_together"))
         controls.slot = W.Segment(tab, "Slot", SLOT_VALUES, hpSliderW)
         W.MoveWidget(controls.slot, position, 16, -220, textRightW - 32, "LEFT")
         M.BindSegment(ctx, controls.slot,
@@ -486,7 +496,8 @@ local function BuildGFBars(ctx)
                 SetCurrentSlot(kind, v)
                 FocusGFPreviewText(kind, v, true)
                 RequestGroupBarsRefresh(ctx, "gf-bars-text-slot")
-            end)
+            end,
+            ControlMeta(ctx, "text." .. kind .. ".slot_selector", "ephemeral"))
         local function SlotAxis(axis)
             local slider = W.Slider(position, "Slot " .. axis, -100, 100, 1, hpSliderW)
             controls["slot" .. axis] = slider
@@ -501,7 +512,11 @@ local function BuildGFBars(ctx)
                     Set(CurrentScope(), axis == "X" and xKey or yKey, v, "font")
                     FocusGFPreviewText(kind, CurrentSlot(kind), true)
                 end,
-                0, { step = 1, roundStep = true })
+                0, (function()
+                    local meta = ControlMeta(ctx, "text." .. kind .. ".slot_offset." .. axis:lower())
+                    meta.step, meta.roundStep = 1, true
+                    return meta
+                end)())
         end
         SlotAxis("X")
         SlotAxis("Y")
@@ -642,7 +657,8 @@ local function BuildGFBars(ctx)
                 conf[key] = n
                 QueueGF(CurrentScope(), "visual")
             end,
-            default)
+            default,
+            ControlMeta(ctx, "field." .. tostring(key)))
         W.MoveWidget(control, rangeAlphaCard, 16, y, rangeRightWidth - 58, "CENTER")
         return M.BindSliderLiveLabel(ctx, control, function() return Num(CurrentScope(), key, default) end,
             function(value) return AlphaLabel(label, tonumber(value) or default or 0) end, true)
@@ -651,7 +667,8 @@ local function BuildGFBars(ctx)
     local rangeMode = W.Segment(rangeEffectCard, "Affects", VT("frame", "Frame", "health", "HP"), rangeModeW)
     M.BindSegment(ctx, rangeMode,
         function() return Val(CurrentScope(), "rangeFadeLayerMode", "frame") end,
-        function(v) Set(CurrentScope(), "rangeFadeLayerMode", v or "frame", "visual") end)
+        function(v) Set(CurrentScope(), "rangeFadeLayerMode", v or "frame", "visual") end,
+        ControlMeta(ctx, "field.rangeFadeLayerMode"))
     W.MoveWidget(rangeMode, rangeEffectCard, 16, -88, rangeModeW, "LEFT")
     local rangeControls = {
         rangeMode,

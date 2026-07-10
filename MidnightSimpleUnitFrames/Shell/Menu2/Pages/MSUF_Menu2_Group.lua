@@ -37,6 +37,39 @@ local FRAME_STRATA_VALUES = {
 }
 local FRAME_STRATA_COUNT = #FRAME_STRATA_VALUES
 local GROUP_SECTION_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
+local function PortableControlToken(value, fallback)
+    local token = tostring(value or ""):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    return token ~= "" and token or (fallback or "control")
+end
+local function GroupControlMeta(ctx, semanticPath, classification)
+    local pageKey = PortableControlToken(ctx and ctx.key or M.activeKey, "gf_unknown")
+    local pageDomain = pageKey:gsub("^gf_", "")
+    local path = PortableControlToken(semanticPath, "control")
+    local identity = "group." .. pageDomain .. "." .. path
+    local meta = {
+        controlId = "menu2." .. pageKey .. ".group." .. path,
+        pageKey = pageKey,
+        identityKey = identity,
+        controlPath = identity:gsub("%.", "/"),
+        classification = classification or "setting",
+    }
+    if meta.classification == "action" then meta.actionKey = identity end
+    return meta
+end
+local function RegisterGroupControl(widget, ctx, semanticPath, label, kind, classification, extra)
+    if not widget then return widget end
+    local meta = GroupControlMeta(ctx, semanticPath, classification)
+    meta.label, meta.kind = label, kind
+    if type(extra) == "table" then
+        for key, value in pairs(extra) do meta[key] = value end
+    end
+    if type(M.RegisterSearchWidget) == "function" then M.RegisterSearchWidget(widget, meta) end
+    return widget
+end
+local function ResolveGroupControlMeta(ctx, semanticPath, fallbackPath)
+    if type(semanticPath) == "table" then return semanticPath end
+    return GroupControlMeta(ctx, semanticPath or fallbackPath)
+end
 local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, "pvpIcon statusText statusGhostText statusAFKText",
     [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon]], "enabled iconStyle customIcon size anchor x y layer")
 local function NormalizeFrameStrata(value, fallback)
@@ -481,16 +514,6 @@ local GROUP_SCOPE_BUTTON_STYLE = {
     activeBorder = { 0.220, 0.520, 0.960, 0.98 },
     activeTextColor = { 0.96, 0.99, 1.00, 1 },
 }
-local GROUP_RESET_BUTTON_STYLE = {
-    bg = { 0.070, 0.026, 0.034, 0.94 },
-    border = { 0.340, 0.090, 0.110, 0.82 },
-    textColor = { 1.00, 0.82, 0.82, 1 },
-    hoverBg = { 0.090, 0.035, 0.045, 0.96 },
-    hoverBorder = { 0.420, 0.120, 0.140, 0.90 },
-    activeBg = { 0.070, 0.026, 0.034, 0.94 },
-    activeBorder = { 0.340, 0.090, 0.110, 0.82 },
-    activeTextColor = { 1.00, 0.82, 0.82, 1 },
-}
 local function ScopeSection(ctx, builder)
     local pageW = tonumber(builder.width) or 720
     local compactTop = pageW < 940
@@ -506,13 +529,6 @@ local function ScopeSection(ctx, builder)
 
     local function MakeTopButton(parent, text, width, opts, buttonH)
         return W.TopButton(parent, text, width, buttonH or 24, opts or {})
-    end
-    local function AddScopeTooltip(frame, title, text)
-        return M.AddTooltip and M.AddTooltip(frame, title, text, {
-            hook = true,
-            titleAsLine = true,
-            bodyColor = { 0.85, 0.85, 0.85 },
-        }) or frame
     end
     local function SelectScope(kind)
         local previousScope = M.gfScope
@@ -536,6 +552,7 @@ local function ScopeSection(ctx, builder)
         local tab = GROUP_PAGE_TABS[i]
         local tabW = tonumber(tab.width) or 72
         local btn = MakeTopButton(command, M.Tr(tab.label), tabW, GROUP_FLOW_TAB_STYLE)
+        RegisterGroupControl(btn, ctx, "navigation.section." .. tab.key, tab.label, "button", "navigation", { navigationKey = tab.key })
         btn._msuf2SkipHistoryCheckpoint = true
         btn:SetPoint("TOPLEFT", command, "TOPLEFT", tabX, -15)
         if btn.SetActive then btn:SetActive(ctx and ctx.key == tab.key) end
@@ -561,6 +578,7 @@ local function ScopeSection(ctx, builder)
         local info = SCOPE_VALUES[i]
         local width = (info.value == "mythicraid") and 68 or 56
         local btn = MakeTopButton(command, ScopeShortLabel(info.value), width, GROUP_SCOPE_BUTTON_STYLE)
+        RegisterGroupControl(btn, ctx, "scope.select." .. info.value, info.text or ScopeShortLabel(info.value), "button", "ephemeral")
         btn:SetPoint("TOPLEFT", command, "TOPLEFT", scopeX, rowY)
         btn:SetScript("OnClick", function() SelectScope(info.value) end)
         scopeBtns[info.value] = btn
@@ -568,6 +586,9 @@ local function ScopeSection(ctx, builder)
     end
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
     local copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
+        controlDomain = "group",
+        controlPageKey = ctx and ctx.key,
+        controlPath = "copy",
         width = 430,
         height = 334,
         categories = GF_COPY_CATEGORIES,
@@ -592,6 +613,7 @@ local function ScopeSection(ctx, builder)
             popup:Hide()
         end,
     })
+    RegisterGroupControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral")
     copy:SetScript("OnClick", function(self) if copyPopup then copyPopup.Show(self) end end)
     sec:SetScript("OnHide", function() if copyPopup then copyPopup.Hide() end end)
     local function RefreshTop()
@@ -609,39 +631,43 @@ M.Assign(GroupPage, {
     Conf = Conf, Val = Val, Set = Set, Bool = Bool, Num = Num, CurrentScope = CurrentScope,
     GF_COPY_CATEGORIES = GF_COPY_CATEGORIES, NewGFCopyScopes = NewGFCopyScopes, CopyGroupSettings = CopyGroupSettings,
 })
-local function BindScopeToggle(ctx, widget, key, default, mode)
+local function BindScopeToggle(ctx, widget, key, default, mode, semanticPath)
     M.BindBoolWidget(ctx, widget,
         function() return Bool(CurrentScope(), key, default) end,
         function(v)
             Set(CurrentScope(), key, v and true or false, mode or "visual")
             RefreshContext(ctx)
-        end)
+        end,
+        ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key)))
     return widget
 end
-local function BindScopeSlider(ctx, widget, key, default, mode)
+local function BindScopeSlider(ctx, widget, key, default, mode, semanticPath)
+    local metadata = ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key))
+    metadata.step, metadata.roundStep = 1, true
     M.BindNumberWidget(ctx, widget,
         function() return Num(CurrentScope(), key, default) end,
         function(v) Set(CurrentScope(), key, floor((tonumber(v) or default or 0) + 0.5), mode or "visual") end,
-        default, { step = 1, roundStep = true })
+        default, metadata)
     return widget
 end
-local function BindScopeDropdown(ctx, widget, key, default, mode)
+local function BindScopeDropdown(ctx, widget, key, default, mode, semanticPath)
     M.BindDropdownWidget(ctx, widget,
         function() return Val(CurrentScope(), key, default) end,
-        function(v) Set(CurrentScope(), key, v or default, mode or "visual") end)
+        function(v) Set(CurrentScope(), key, v or default, mode or "visual") end,
+        ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key)))
     return widget
 end
-local function ScopeDropdown(ctx, parent, label, values, width, key, default, mode, x, y, placeWidth, justify)
-    local control = BindScopeDropdown(ctx, W.Dropdown(parent, label, values, width), key, default, mode)
+local function ScopeDropdown(ctx, parent, label, values, width, key, default, mode, x, y, placeWidth, justify, semanticPath)
+    local control = BindScopeDropdown(ctx, W.Dropdown(parent, label, values, width), key, default, mode, semanticPath)
     if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "LEFT") end
     return control
 end
-local function ScopeSlider(ctx, parent, label, minValue, maxValue, step, width, key, default, mode, x, y, placeWidth, justify)
-    local control = BindScopeSlider(ctx, W.Slider(parent, label, minValue, maxValue, step, width), key, default, mode)
+local function ScopeSlider(ctx, parent, label, minValue, maxValue, step, width, key, default, mode, x, y, placeWidth, justify, semanticPath)
+    local control = BindScopeSlider(ctx, W.Slider(parent, label, minValue, maxValue, step, width), key, default, mode, semanticPath)
     if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "CENTER") end
     return control
 end
-local function ScopeColor(ctx, parent, label, width, rKey, gKey, bKey, defaults, mode, x, y, placeWidth, justify)
+local function ScopeColor(ctx, parent, label, width, rKey, gKey, bKey, defaults, mode, x, y, placeWidth, justify, semanticPath)
     local control = W.Color(parent, label)
     defaults = defaults or {}
     M.BindColor(ctx, control,
@@ -654,7 +680,8 @@ local function ScopeColor(ctx, parent, label, width, rKey, gKey, bKey, defaults,
             local conf = Conf(CurrentScope())
             conf[rKey], conf[gKey], conf[bKey] = r, g, b
             QueueGF(CurrentScope(), mode or "visual")
-        end)
+        end,
+        ResolveGroupControlMeta(ctx, semanticPath, "color." .. tostring(rKey):gsub("[Rr]$", "")))
     if x then W.MoveWidget(control, parent, x, y, placeWidth or width or 220, justify or "LEFT") end
     return control
 end
@@ -838,6 +865,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             Set(CurrentScope(), "growth", info.value, "geometry")
             RefreshGrowthTiles()
         end)
+        RegisterGroupControl(btn, ctx, "field.growth.option." .. info.value, "Growth: " .. info.text, "button", "action")
         buttons[info.value] = btn
     end
     M.TrackRefresh(ctx, RefreshGrowthTiles)
@@ -914,6 +942,9 @@ local function BuildRoleOrderRows(ctx, section, opts)
     end
     holder = Shared.MakeDragSortRows(section, ROLE_SORT_DEFS, {
         x = x, y = listY, width = rowW, rowHeight = rowH, gap = rowGap,
+        controlDomain = "group",
+        controlPageKey = ctx and ctx.key,
+        controlPath = "sorting.role_priority",
         onReorder = SaveOrder,
         tooltip = function(self, row, tip)
             tip:SetOwner(self, "ANCHOR_RIGHT")
@@ -1137,7 +1168,7 @@ local function CICustomConfig(kind, slot, create)
     if create and type(conf[key]) ~= "table" then conf[key] = { spells = "", mode = "present", filter = "HELPFUL|PLAYER", r = 0.40, g = 1.00, b = 0.40 } end
     return type(conf[key]) == "table" and conf[key] or nil
 end
-local function BindNestedToggle(ctx, widget, getTable, key, default, mode)
+local function BindNestedToggle(ctx, widget, getTable, key, default, mode, semanticPath)
     M.BindBoolWidget(ctx, widget,
         function()
             local tbl = getTable()
@@ -1151,10 +1182,13 @@ local function BindNestedToggle(ctx, widget, getTable, key, default, mode)
             tbl[key] = v and true or false
             QueueGF(CurrentScope(), mode or "visual")
             RefreshContext(ctx)
-        end)
+        end,
+        ResolveGroupControlMeta(ctx, semanticPath, "nested." .. tostring(key)))
     return widget
 end
-local function BindNestedSlider(ctx, widget, getTable, key, default, mode)
+local function BindNestedSlider(ctx, widget, getTable, key, default, mode, semanticPath)
+    local metadata = ResolveGroupControlMeta(ctx, semanticPath, "nested." .. tostring(key))
+    metadata.step, metadata.roundStep = 1, true
     M.BindNumberWidget(ctx, widget,
         function()
             local tbl = getTable()
@@ -1167,10 +1201,10 @@ local function BindNestedSlider(ctx, widget, getTable, key, default, mode)
             tbl[key] = v
             QueueGF(CurrentScope(), mode or "visual")
         end,
-        default, { step = 1, roundStep = true })
+        default, metadata)
     return widget
 end
-local function BindNestedStrataSlider(ctx, widget, getTable, key, default, mode)
+local function BindNestedStrataSlider(ctx, widget, getTable, key, default, mode, semanticPath)
     default = NormalizeFrameStrata(default, "AUTO")
     if widget and widget.SetValueFormatter then widget:SetValueFormatter(function(value) return FrameStrataLabel(value) end) end
     if widget and widget.SetValueParser then widget:SetValueParser(FrameStrataParse) end
@@ -1186,10 +1220,11 @@ local function BindNestedStrataSlider(ctx, widget, getTable, key, default, mode)
             if NormalizeFrameStrata(tbl[key], default) == value and tbl[key] ~= nil then return end
             tbl[key] = value
             QueueGF(CurrentScope(), mode or "visual")
-        end)
+        end,
+        ResolveGroupControlMeta(ctx, semanticPath, "nested." .. tostring(key)))
     return widget
 end
-local function BindNestedDropdown(ctx, widget, getTable, key, default, mode)
+local function BindNestedDropdown(ctx, widget, getTable, key, default, mode, semanticPath)
     M.BindDropdownWidget(ctx, widget,
         function()
             local tbl = getTable()
@@ -1199,7 +1234,8 @@ local function BindNestedDropdown(ctx, widget, getTable, key, default, mode)
             local tbl = getTable()
             tbl[key] = v or default
             QueueGF(CurrentScope(), mode or "visual")
-        end)
+        end,
+        ResolveGroupControlMeta(ctx, semanticPath, "nested." .. tostring(key)))
     return widget
 end
 local SetOptionEnabled = W.SetControlEnabled
@@ -1254,6 +1290,8 @@ M.Assign(GroupPage, {
     DISPEL_OVERLAY_STYLES = DISPEL_OVERLAY_STYLES,
     DEBUFF_STRIPE_EDGES = DEBUFF_STRIPE_EDGES,
     GF = GF,
+    ControlMeta = GroupControlMeta,
+    RegisterControl = RegisterGroupControl,
     RefreshGFPreview = RefreshGFPreview,
     QueueGF = QueueGF,
     QueueGFDirtyMask = QueueGFDirtyMask,

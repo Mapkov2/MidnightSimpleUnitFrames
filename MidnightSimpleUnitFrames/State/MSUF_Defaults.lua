@@ -732,6 +732,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
             SetDefault(auras[key], "durationBarDirection", "REMAINING")
             if type(auras[key].blacklist) ~= "table" then auras[key].blacklist = {} end
             if type(auras[key].blacklist.spells) ~= "table" then auras[key].blacklist.spells = {} end
+            SetDefault(auras[key].blacklist, "hidePermanent", false)
         end
     end
     EnsureUnitAlphaDefaults(db.player)
@@ -825,6 +826,7 @@ local MSUF_DEFAULTS_FACTORY_BOOTSTRAP_ROOTS = {
     gameplay = true,
     general = true,
     _msufProfileSchema = true,
+    _msufProfileNormalizationRevision = true,
 }
 local MSUF_DEFAULTS_FACTORY_BOOTSTRAP_GENERAL_KEYS = {
     fontBaselineOffset = true,
@@ -916,6 +918,11 @@ local function MSUF_Defaults_RepairFactoryNameShortening(db)
     return changed
 end
 local MSUF_DB_LastHeavyRun
+local MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA = 600
+--- Persisted completion marker for the broad default-fill/repair pass below.
+--- Bump this whenever MSUF_EnsureDB_Heavy gains a new mandatory default or
+--- one-shot repair; current profiles can then be repaired exactly once again.
+local MSUF_DEFAULTS_CURRENT_REVISION = 1
 
 --- Root tables are the contract every other module assumes after EnsureDB.
 --- Add new top-level SavedVariables buckets here before modules start reading
@@ -1084,8 +1091,11 @@ local function MSUF_Defaults_MigratePriorityScope(scope, includeTargetFocus)
     scope.dispelOverlayUseHighlightPriority = nil
 end
 
-local function MSUF_Defaults_MigrateDispelPriorityProfile(db)
+local function MSUF_Defaults_MigrateDispelPriorityProfile(db, force)
     if type(db) ~= "table" then return false end
+    if force ~= true and tonumber(db._msufDispelPriorityMigration) == MSUF_DISPEL_PRIORITY_MIGRATION then
+        return false
+    end
     MSUF_Defaults_MigratePriorityScope(db.general, true)
     for _, key in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "boss" }) do
         MSUF_Defaults_MigratePriorityScope(db[key], false)
@@ -3406,17 +3416,61 @@ local function fill(key, defaults)
     if g._msufSharedGlobalFontFamilyMigration_v501 ~= true then
         g._msufSharedGlobalFontFamilyMigration_v501 = true
     end
+    MSUF_DB._msufProfileSchema = MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA
+    MSUF_DB._msufDefaultsRevision = MSUF_DEFAULTS_CURRENT_REVISION
     MSUF_DB_LastHeavyRun = MSUF_DB
  end
+
+local function MSUF_Defaults_IsCurrentProfileDB(db)
+    if type(db) ~= "table"
+        or tonumber(db._msufProfileSchema) ~= MSUF_DEFAULTS_CURRENT_PROFILE_SCHEMA
+        or tonumber(db._msufDefaultsRevision) ~= MSUF_DEFAULTS_CURRENT_REVISION then
+        return false
+    end
+    --- Keep the fast path safe for truncated/malformed SavedVariables. Nested
+    --- value validation belongs to imports (which force EnsureDB), while these
+    --- root tables are the minimum runtime contract for a stored profile.
+    for i = 1, #MSUF_DEFAULTS_ROOT_TABLE_KEYS do
+        if type(db[MSUF_DEFAULTS_ROOT_TABLE_KEYS[i]]) ~= "table" then
+            return false
+        end
+    end
+    local g = db.general
+    if type(g.fontKey) ~= "string" or g.fontKey == ""
+        or g.hardKillBlizzardPlayerFrame == nil
+        or db.shortenNames == nil
+        or db.bars.barBackgroundAlpha == nil
+        or db.gameplay.enableCombatTimer == nil then
+        return false
+    end
+    return true
+end
 
 --- Cheap public guard used by the rest of the addon. Pass force=true only after
 --- changing profile tables or importing data, when the full repair/migration
 --- pass must be allowed to run again on the active MSUF_DB reference.
-local function MSUF_EnsureDB(force)
-    if force ~= true and type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table" and MSUF_DB_LastHeavyRun == MSUF_DB then
-         return MSUF_DB
+--- allowPersistedFastPath is intentionally reserved for profile initialization
+--- and private export copies. Normal profile switches retain the old behavior
+--- of repairing the newly selected table even when its revision is current.
+--- temporaryProfile keeps export materialization from evicting the real active
+--- profile from the session-local last-heavy-run cache.
+local function MSUF_EnsureDB(force, allowPersistedFastPath, temporaryProfile)
+    if force ~= true and type(MSUF_DB) == "table" then
+        if MSUF_DB_LastHeavyRun == MSUF_DB then
+            return MSUF_DB
+        end
+        if allowPersistedFastPath == true and MSUF_Defaults_IsCurrentProfileDB(MSUF_DB) then
+            if temporaryProfile ~= true then
+                MSUF_DB_LastHeavyRun = MSUF_DB
+            end
+            return MSUF_DB
+        end
     end
+    local previousHeavyRun = MSUF_DB_LastHeavyRun
     MSUF_EnsureDB_Heavy()
+    if temporaryProfile == true then
+        MSUF_DB_LastHeavyRun = previousHeavyRun
+    end
     return MSUF_DB
  end
 ExportPublic("MSUF_EnsureDB", MSUF_EnsureDB)

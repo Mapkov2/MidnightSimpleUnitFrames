@@ -53,9 +53,747 @@ local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     SYMBOL = "ui-debuff-border-magic-icon",
 }
 
+-- A refresh first resolves immutable inputs into a scene. Render components then
+-- measure and paint that scene without reaching back through the install closure.
+local function RawTrackedBuffLane(scene, rawBuff)
+    rawBuff = rawBuff or {}
+    local indicators = scene.conf.spellIndicators
+    return {
+        enabled = rawBuff.trackedEnabled == true
+            or (rawBuff.trackedEnabled == nil and indicators and indicators.enabled == true),
+        max = rawBuff.trackedMax or 8,
+        perRow = rawBuff.trackedPerRow or rawBuff.perRow or 4,
+        size = rawBuff.trackedSize or rawBuff.size or 22,
+        spacing = rawBuff.trackedSpacing or rawBuff.spacing or 1,
+        anchor = rawBuff.trackedAnchor or "TOPLEFT",
+        growth = rawBuff.trackedGrowth or "RIGHTDOWN",
+        x = rawBuff.trackedX or 0,
+        y = rawBuff.trackedY or 0,
+        layer = rawBuff.trackedLayer or (indicators and indicators.layer) or 9,
+        strata = rawBuff.trackedStrata or (indicators and indicators.strata) or rawBuff.strata,
+        showCooldownSwipe = rawBuff.trackedShowCooldownSwipe,
+        cooldownSwipeReverse = rawBuff.trackedCooldownSwipeReverse,
+        showCooldown = rawBuff.trackedShowCooldown,
+        showStacks = rawBuff.trackedShowStacks,
+        cooldownSize = rawBuff.trackedCooldownSize,
+        cooldownAnchor = rawBuff.trackedCooldownAnchor,
+        cooldownX = rawBuff.trackedCooldownX,
+        cooldownY = rawBuff.trackedCooldownY,
+        stackSize = rawBuff.trackedStackSize,
+        stackAnchor = rawBuff.trackedStackAnchor,
+        stackX = rawBuff.trackedStackX,
+        stackY = rawBuff.trackedStackY,
+    }
+end
+
+local function SceneStatusAvailable(scene, spec)
+    if scene.runtimeSpec then
+        local cfg = scene.S.RuntimeStatusConfig(scene.runtimeStatus, spec)
+        return cfg and cfg.enabled == true
+    end
+    return scene.S.StatusSpecEnabled(scene.conf, spec)
+end
+
+local function SceneAuraLaneAvailable(scene, cfg, defaultMax)
+    return scene.customRenderer
+        and (scene.runtimeAuras and cfg.enabled == true or cfg.enabled ~= false)
+        and (tonumber(cfg.max) or defaultMax or 0) > 0
+end
+
+local function SceneLayerOn(scene, key)
+    return scene.layerAvailable[key] ~= false and scene.layerVisible[key] ~= false
+end
+
+local function SceneLayerAlpha(scene, key)
+    if scene.layerAvailable[key] == false then return 0 end
+    return scene.soloLayer and scene.soloLayer ~= key and 0.15 or 1
+end
+
+local function AuraPreviewAlpha(cfg)
+    if type(cfg) ~= "table" then return 1 end
+    if cfg.alpha ~= nil then return tonumber(cfg.alpha) or 1 end
+    if cfg.behindBar == true then
+        return math.max(0, math.min(1, (tonumber(cfg.behindBarAlpha) or 85) / 100))
+    end
+    return 1
+end
+
+local function BuildScene(box, reason)
+    local S = box._msufGFRenderState
+    local H, M, MSUF = S.H, S.M, S.MSUF
+    local kind = H.CurrentScope()
+    local conf = H.Conf(kind)
+    local gf = MSUF and MSUF.GF
+    local previewAnimation = MSUF and MSUF.PreviewAnimation
+    local buildFrameState = previewAnimation and previewAnimation.BuildFrameState
+        or _G.MSUF_BuildPreviewAnimationFrameState
+    local animState = box._animationEnabled == true and type(buildFrameState) == "function"
+        and buildFrameState(box, 1, kind, box._msufGFMenuPreviewAnimState or {}, box._animationElapsed)
+    if animState then box._msufGFMenuPreviewAnimState = animState end
+    local runtimeSpec = S.CompiledSpec(kind)
+    local scene = {
+        S = S, box = box, reason = reason, H = H, M = M, MSUF = MSUF,
+        mock = S.mock, kind = kind, label = H.PreviewScopeLabel(kind), conf = conf, gf = gf,
+        previewAnimation = previewAnimation, animState = animState,
+        hpPct = animState and math.max(0.02, math.min(0.98, tonumber(animState.hpPct) or 0.72)) or 0.72,
+        powerPct = animState and math.max(0, math.min(1, tonumber(animState.powerPct) or 0.70)) or 0.70,
+        healPct = animState and math.max(0.01, math.min(0.24, tonumber(animState.healPct) or 0.12)) or 0.12,
+        absorbPct = animState and math.max(0.01, math.min(0.24, tonumber(animState.absorbPct) or 0.08)) or 0.08,
+        runtimeSpec = runtimeSpec,
+        runtimeAuras = runtimeSpec and runtimeSpec.auras,
+        runtimeText = runtimeSpec and runtimeSpec.text or {},
+        runtimePower = runtimeSpec and runtimeSpec.power or {},
+        runtimeHealth = runtimeSpec and runtimeSpec.health or {},
+        runtimeBorder = runtimeSpec and runtimeSpec.border or {},
+        runtimePrediction = runtimeSpec and runtimeSpec.prediction or {},
+        runtimeStatus = runtimeSpec and runtimeSpec.status or {},
+        focus = H.PreviewFocusForPage(S.ctx.key),
+        layerVisible = M.gfPreviewLayerVisible or {},
+        soloLayer = M.gfPreviewSoloLayer,
+        textHandles = box._textHandles or {},
+    }
+    local rawAuras = conf.auras or {}
+    local trackedRaw = RawTrackedBuffLane(scene, rawAuras.buff)
+    scene.rawAuras = rawAuras
+    scene.buffCfg = scene.runtimeAuras
+        and S.CompiledAuraLane(scene.runtimeAuras, "buff", rawAuras.buff or {}) or rawAuras.buff or {}
+    scene.trackedBuffCfg = scene.runtimeAuras
+        and S.CompiledAuraLane(scene.runtimeAuras, "trackedBuff", trackedRaw) or trackedRaw
+    scene.debuffCfg = scene.runtimeAuras
+        and S.CompiledAuraLane(scene.runtimeAuras, "debuff", rawAuras.debuff or {}) or rawAuras.debuff or {}
+    scene.statusSpec = S.CurrentStatusSpec()
+    scene.selectedSpellCfg = S.CurrentSpellConfig(kind)
+    scene.rawSelectedPlaced = scene.selectedSpellCfg and scene.selectedSpellCfg.placed
+    scene.selectedPlaced = S.CurrentSpellPlaced(kind)
+    scene.selectedSpellPlacedEnabled = scene.selectedPlaced
+        and (scene.selectedPlaced.type or "icon") ~= "none"
+    scene.selectedSpellNeedsPlacementPreview = scene.selectedSpellCfg ~= nil and scene.rawSelectedPlaced == nil
+    scene.runtimeSpellIndicators = runtimeSpec and runtimeSpec.spellIndicators
+    scene.runtimeSpellItems = scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.items
+    scene.runtimeSpellPlacedAvailable = false
+    if type(scene.runtimeSpellItems) == "table" then
+        for i = 1, #scene.runtimeSpellItems do
+            local item = scene.runtimeSpellItems[i]
+            local placed = item and item.placed
+            if placed and (placed.type or "icon") ~= "none" then scene.runtimeSpellPlacedAvailable = true end
+            local effect = item and item.frame
+            if effect and effect.type and effect.type ~= "none" then
+                local currentPriority = tonumber(scene.runtimeSpellEffect and scene.runtimeSpellEffect.priority) or 999
+                if not scene.runtimeSpellEffect or (tonumber(effect.priority) or 5) < currentPriority then
+                    scene.runtimeSpellEffect = effect
+                end
+            end
+        end
+    end
+    local statusAvailable = false
+    for i = 1, #S.statusSpecs do
+        local spec = S.statusSpecs[i]
+        if S.StatusSpecInMode(spec, scene.statusSpec) and SceneStatusAvailable(scene, spec) then
+            statusAvailable = true
+            break
+        end
+    end
+    local aurasEnabled, powerTextEnabled
+    if scene.runtimeAuras then
+        scene.customRenderer = scene.buffCfg.enabled == true
+            or scene.trackedBuffCfg.enabled == true or scene.debuffCfg.enabled == true
+        aurasEnabled = scene.customRenderer or scene.runtimeAuras.enabled == true
+    else
+        scene.customRenderer = true
+        aurasEnabled = rawAuras.enabled ~= false
+    end
+    if runtimeSpec then
+        powerTextEnabled = runtimeSpec.showPowerText == true
+    else
+        powerTextEnabled = (gf and gf.IsPowerTextEnabled and gf.IsPowerTextEnabled(kind, conf))
+            or conf.showPowerText == true or conf.showPower == true
+    end
+    local customAuraText = SceneAuraLaneAvailable(scene, scene.buffCfg, 6)
+        or SceneAuraLaneAvailable(scene, scene.trackedBuffCfg, 4)
+        or SceneAuraLaneAvailable(scene, scene.debuffCfg, 6)
+    local textAvailable
+    if runtimeSpec then
+        textAvailable = runtimeSpec.showName == true
+            or runtimeSpec.showHealthText == true or powerTextEnabled == true
+    else
+        textAvailable = conf.showName ~= false or conf.showHPText ~= false or powerTextEnabled == true
+    end
+    local selectedSpellAvailable = conf.spellIndicators and conf.spellIndicators.enabled == true
+        and (scene.selectedSpellPlacedEnabled or scene.selectedSpellNeedsPlacementPreview)
+    scene.layerAvailable = {
+        guides = true, bounds = true,
+        buff = SceneAuraLaneAvailable(scene, scene.buffCfg, 6),
+        trackedBuff = SceneAuraLaneAvailable(scene, scene.trackedBuffCfg, 4),
+        debuff = SceneAuraLaneAvailable(scene, scene.debuffCfg, 6),
+        status = statusAvailable,
+        si = scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.enabled == true
+            and (scene.runtimeSpellPlacedAvailable or scene.runtimeSpellEffect ~= nil)
+            or selectedSpellAvailable or false,
+        targetedSpells = kind == "party" and conf.targetedSpellsEnabled == true,
+        auraText = aurasEnabled and customAuraText,
+        text = textAvailable,
+    }
+    box._layerAvailable = scene.layerAvailable
+    if scene.soloLayer and scene.layerAvailable[scene.soloLayer] == false then
+        M.gfPreviewSoloLayer = nil
+        scene.soloLayer = nil
+    end
+    return scene
+end
+
+local STATUS_TEXTURE_FALLBACKS = {
+    raidMarker = { "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 0, 0.25, 0, 0.25 },
+    readyCheck = { "Interface\\RaidFrame\\ReadyCheck-Ready", 0, 1, 0, 1 },
+    summon = { "Interface\\RaidFrame\\Raid-Icon-SummonPending", 0, 1, 0, 1 },
+    incomingRes = { "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 },
+    pvp = { "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 },
+    phase = { "Interface\\TargetingFrame\\UI-PhasingIcon", 0, 1, 0, 1 },
+}
+
+local function ResolveStatusPreviewTexture(scene, spec, runtimeCfg, iconType, variant)
+    local customIcon = runtimeCfg and runtimeCfg.customIcon
+    if (type(customIcon) ~= "string" or customIcon == "") and spec and spec.customIcon then
+        customIcon = scene.conf[spec.customIcon]
+    end
+    if type(customIcon) == "string" and customIcon ~= "" then return customIcon, 0, 1, 0, 1 end
+    local resolver = _G.MSUF_GetStatusIconTexture or (scene.gf and scene.gf.GetStatusIconTexture)
+    if type(resolver) == "function" then
+        local path, l, r, t, b = resolver("BLIZZARD", iconType, variant,
+            scene.runtimeStatus and scene.runtimeStatus.useMidnight == true)
+        if type(path) == "string" and path ~= "" then return path, l, r, t, b end
+    end
+    local fallback = STATUS_TEXTURE_FALLBACKS[iconType]
+    if fallback then return fallback[1], fallback[2], fallback[3], fallback[4], fallback[5] end
+end
+
+local TEXT_HANDLE_KEYS = {
+    "name", "hpGroup", "hpLeft", "hpCenter", "hpRight",
+    "powerGroup", "powerLeft", "powerCenter", "powerRight",
+}
+local TEXT_LEVEL_SPECS = {
+    { "name", "nameLayer", "nameTextLayer", 5 },
+    { "hpGroup", "healthLayer", "textLayer", 5 },
+    { "hpLeft", "healthLayer", "textLayer", 5 },
+    { "hpCenter", "healthLayer", "textLayer", 5 },
+    { "hpRight", "healthLayer", "textLayer", 5 },
+    { "powerGroup", "powerLayer", "powerTextLayer", 2 },
+    { "powerLeft", "powerLayer", "powerTextLayer", 2 },
+    { "powerCenter", "powerLayer", "powerTextLayer", 2 },
+    { "powerRight", "powerLayer", "powerTextLayer", 2 },
+}
+
+local function PlaceTextHandles(scene)
+    local box, mock, H = scene.box, scene.mock, scene.H
+    local handles = scene.textHandles
+    for i = 1, #TEXT_HANDLE_KEYS do handles[TEXT_HANDLE_KEYS[i]]._previewScale = scene.previewScale end
+    if not H.PlaceHandleAroundRegions(handles.name, mock, { mock._nameFS }, 3) then handles.name:Hide() end
+    local function PlaceGroup(groupKey, prefix, regions)
+        if H.TextMovesTogether(scene.kind, prefix) then
+            handles[prefix .. "Left"]:Hide()
+            handles[prefix .. "Center"]:Hide()
+            handles[prefix .. "Right"]:Hide()
+            if not H.PlaceHandleAroundRegions(handles[groupKey], mock, regions, 3) then handles[groupKey]:Hide() end
+        else
+            handles[groupKey]:Hide()
+            for i = 1, 3 do
+                local key = prefix .. ({ "Left", "Center", "Right" })[i]
+                if not H.PlaceHandleAroundRegions(handles[key], mock, { regions[i] }, 3) then handles[key]:Hide() end
+            end
+        end
+    end
+    PlaceGroup("hpGroup", "hp", { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS })
+    PlaceGroup("powerGroup", "power", { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS })
+    H.ApplyTextFocus(box, mock)
+end
+
+local function PreviewHostStrata(scene)
+    local gf, kind, S = scene.gf, scene.kind, scene.S
+    local live, fallback
+    if gf and type(gf.ForEachFrame) == "function" then
+        gf.ForEachFrame(function(frame, _, frameKind)
+            if not (frame and frame.GetFrameStrata) then return false end
+            local strata = frame:GetFrameStrata()
+            if S.issecretvalue(strata) == true or not strata or strata == "" then return false end
+            strata = S.NormalizeFrameStrata(strata, S.PREVIEW_UNITFRAME_STRATA)
+            fallback = fallback or strata
+            if frameKind == kind or frame._msufGFKind == kind then live = strata; return true end
+            return false
+        end, true)
+    end
+    live = S.NormalizeFrameStrata(live or fallback or S.PREVIEW_UNITFRAME_STRATA, S.PREVIEW_UNITFRAME_STRATA)
+    if live == "AUTO" then live = S.PREVIEW_UNITFRAME_STRATA end
+    local host = scene.mock.GetFrameStrata and scene.mock:GetFrameStrata()
+    if S.issecretvalue(host) == true or not host or host == "" then
+        host = scene.box.GetFrameStrata and scene.box:GetFrameStrata()
+        if S.issecretvalue(host) == true or host == "" then host = nil end
+    end
+    return live, host
+end
+
+local function ApplyHandleStrata(scene, handle, value, live, host)
+    local S = scene.S
+    if handle and handle.SetFrameStrata and host then
+        local current = handle.GetFrameStrata and handle:GetFrameStrata()
+        if S.issecretvalue(current) == true or current ~= host then handle:SetFrameStrata(host) end
+    end
+    local strata = S.NormalizeFrameStrata(value, "AUTO")
+    if strata == "AUTO" then strata = live end
+    local rank, baseRank = S.FrameStrataRank(strata), S.FrameStrataRank(live)
+    if rank == 0 or baseRank == 0 then return 0 end
+    return (rank - baseRank) * PREVIEW_STRATA_LEVEL_STEP
+end
+
+local function FinalizeScene(scene)
+    local S, box, mock = scene.S, scene.box, scene.mock
+    local conf, runtimeText, runtimeStatus = scene.conf, scene.runtimeText, scene.runtimeStatus
+    local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
+    local healthBaseLevel = S.Layers.HealthLevel and S.Layers.HealthLevel(baseLevel)
+        or (baseLevel + (S.Layers.HEALTH_OFFSET or 1))
+    PlaceTextHandles(scene)
+    local liveStrata, hostStrata = PreviewHostStrata(scene)
+    local auraHandles = {
+        { S.buffHandle, scene.buffCfg, 5 },
+        { S.trackedBuffHandle, scene.trackedBuffCfg, 9 },
+        { S.debuffHandle, scene.debuffCfg, 6 },
+    }
+    for i = 1, #auraHandles do
+        local item, handle = auraHandles[i], auraHandles[i][1]
+        if handle then
+            handle:SetFrameLevel(baseLevel
+                + ApplyHandleStrata(scene, handle, item[2].strata, liveStrata, hostStrata)
+                + S.ClampLayer(item[2].layer, item[3]))
+        end
+    end
+    for i = 1, #S.statusHandles do
+        local handle = S.statusHandles[i]
+        local spec = handle and handle._statusSpec
+        if handle then
+            local cfg = S.RuntimeStatusConfig(runtimeStatus, spec)
+            handle:SetFrameLevel(healthBaseLevel + S.ClampLayer(cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7))
+        end
+    end
+    local rawIndicators = conf.spellIndicators or {}
+    local runtimeIndicators = scene.runtimeSpellIndicators or {}
+    local spellLayer = runtimeIndicators.layer ~= nil and runtimeIndicators.layer or rawIndicators.layer
+    local spellStrata = runtimeIndicators.strata ~= nil and runtimeIndicators.strata or rawIndicators.strata
+    local selected = scene.selectedSpellCfg
+    S.spellHandle:SetFrameLevel(baseLevel
+        + ApplyHandleStrata(scene, S.spellHandle, selected and selected.strata or spellStrata, liveStrata, hostStrata)
+        + S.ClampLayer(selected and selected.layer or spellLayer, 9))
+    for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
+        handle:SetFrameLevel(baseLevel
+            + ApplyHandleStrata(scene, handle, handle._msufSpellIndicatorStrata or spellStrata, liveStrata, hostStrata)
+            + S.ClampLayer(handle._msufSpellIndicatorLayer or spellLayer, 9))
+    end
+    if S.targetedHandle then
+        S.targetedHandle:SetFrameLevel(healthBaseLevel + (S.Layers.TARGETED_SPELLS_BASE_OFFSET or 40)
+            + S.ClampLayer(conf.targetedSpellsLayer, 10))
+    end
+    for i = 1, #TEXT_LEVEL_SPECS do
+        local item = TEXT_LEVEL_SPECS[i]
+        scene.textHandles[item[1]]:SetFrameLevel(scene.textBaseLevel
+            + S.ClampLayer(runtimeText[item[2]] or conf[item[3]], item[4]))
+    end
+    local auraKeys = { "buff", "trackedBuff", "debuff" }
+    for i = 1, #auraHandles do
+        local handle, cfg, key = auraHandles[i][1], auraHandles[i][2], auraKeys[i]
+        if handle then
+            handle:SetShown(scene.layerAvailable[key] and SceneLayerOn(scene, key))
+            handle:SetAlpha(SceneLayerAlpha(scene, key) * AuraPreviewAlpha(cfg))
+        end
+    end
+    for i = 1, #S.statusHandles do
+        local handle = S.statusHandles[i]
+        local spec = handle and handle._statusSpec
+        if handle then
+            handle:SetShown(S.StatusSpecInMode(spec, scene.statusSpec)
+                and SceneStatusAvailable(scene, spec) and SceneLayerOn(scene, "status"))
+            handle:SetAlpha(SceneLayerAlpha(scene, "status"))
+        end
+    end
+    local spellVisible = scene.layerAvailable.si and SceneLayerOn(scene, "si")
+    S.spellHandle:SetShown(spellVisible)
+    S.spellHandle:SetAlpha(selected and selected.enabled == false and SceneLayerAlpha(scene, "si") * 0.45
+        or SceneLayerAlpha(scene, "si"))
+    for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
+        handle:SetShown(spellVisible)
+        handle:SetAlpha(SceneLayerAlpha(scene, "si"))
+    end
+    if S.targetedHandle then
+        S.targetedHandle:SetShown(scene.layerAvailable.targetedSpells and SceneLayerOn(scene, "targetedSpells"))
+        S.targetedHandle:SetAlpha(SceneLayerAlpha(scene, "targetedSpells"))
+    end
+    for i = 1, #TEXT_HANDLE_KEYS do scene.textHandles[TEXT_HANDLE_KEYS[i]]:SetAlpha(SceneLayerAlpha(scene, "text")) end
+    for i = 1, #box._layerButtons do
+        local button = box._layerButtons[i]
+        local available = scene.layerAvailable[button._layerKey] ~= false
+        button._layerAvailable = available
+        button:SetPreviewActive(button._sectionKey == scene.focus, SceneLayerOn(scene, button._layerKey),
+            scene.soloLayer == button._layerKey, available)
+    end
+    if box._selectedHandle and box._selectedHandle.IsShown and not box._selectedHandle:IsShown() then S.SelectHandle(nil) end
+    S.RefreshHandleSelection(box)
+end
+
 --- Installs the group preview renderer into the preview host. Native.lua owns
 --- frame creation and input handles; this function owns repeated composition
 --- from compiled group specs, visible layers, zoom state, and selected handles.
+local function RenderAuras(scene)
+    local S, self, mock = scene.S, scene.box, scene.mock
+    local H, gf, kind, conf = scene.H, scene.gf, scene.kind, scene.conf
+    local runtimeAuras = scene.runtimeAuras
+    local buffCfg, trackedBuffCfg, debuffCfg = scene.buffCfg, scene.trackedBuffCfg, scene.debuffCfg
+    local buffHandle, trackedBuffHandle, debuffHandle = S.buffHandle, S.trackedBuffHandle, S.debuffHandle
+    local GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS = S.GF_PREVIEW_ANCHOR_FRAC, S.GF_AURA_MOCK_ICON_IDS
+    local Int, Round, ScaleValue, ConfigToOffset = S.Int, S.Round, S.ScaleValue, S.ConfigToOffset
+    local AuraGrowth, AddIconPool, MockSpellTexture = S.AuraGrowth, S.AddIconPool, S.MockSpellTexture
+    local floor, max, min = S.floor, S.max, S.min
+    local previewScale, previewAnimation = scene.previewScale, scene.previewAnimation
+    local SetPreviewFont = scene.SetPreviewFont
+    local function LayoutHandle(handle, anchor, x, y, defaultAnchor)
+        anchor = anchor or defaultAnchor or "CENTER"
+        if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaultAnchor or "CENTER" end
+        handle._previewScale = previewScale
+        handle._previewWriteScale = previewScale
+        handle:ClearAllPoints()
+        handle:SetPoint(anchor, mock, anchor, ConfigToOffset(x or 0, previewScale), ConfigToOffset(y or 0, previewScale))
+    end
+    local auraDynamicScale = (runtimeAuras and runtimeAuras.dynamicScaleValue) or (gf and gf.GetPreviewDynamicScale and gf.GetPreviewDynamicScale(conf, kind)) or 1
+    local function RuntimeAuraGrowth(growth)
+        if growth == "LEFTUP" then
+            return -1, 1, false, "BOTTOMRIGHT"
+        elseif growth == "LEFTDOWN" then
+            return -1, -1, false, "TOPRIGHT"
+        elseif growth == "RIGHTUP" then
+            return 1, 1, false, "BOTTOMLEFT"
+        elseif growth == "UP" or growth == "UPRIGHT" or growth == "UPLEFT" then
+            return 1, 1, true, "BOTTOMLEFT"
+        elseif growth == "DOWN" or growth == "DOWNRIGHT" or growth == "DOWNLEFT" then
+            return 1, -1, true, "TOPLEFT"
+        end
+        return 1, -1, false, "TOPLEFT"
+    end
+    local function RuntimeAuraAnchor(anchor, fallback)
+        if anchor == "TOPLEFT" or anchor == "TOPRIGHT"
+            or anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT"
+            or anchor == "CENTER" then
+            return anchor
+        end
+        return fallback or "CENTER"
+    end
+    local function RuntimeAuraTextAnchor(anchor, fallback)
+        if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT"
+            or anchor == "LEFT" or anchor == "CENTER" or anchor == "RIGHT"
+            or anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
+            return anchor
+        end
+        return fallback or "CENTER"
+    end
+    local function NormalizeDispelBorderMode(value, legacyEnabled)
+        if value == true then return "SYMBOL" end
+        if value == false then return "OFF" end
+        value = tostring(value or ""):upper()
+        if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
+        if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
+            or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
+            return "SYMBOL"
+        end
+        if value == "OFF" or value == "NONE" or value == "DISABLED" then return legacyEnabled == true and "SYMBOL" or "OFF" end
+        return legacyEnabled == true and "SYMBOL" or "OFF"
+    end
+    local function PlaceAuraPreviewText(fs, relativeTo, anchor, x, y)
+        if not (fs and relativeTo) then return end
+        anchor = RuntimeAuraTextAnchor(anchor, "CENTER")
+        fs:ClearAllPoints()
+        fs:SetPoint(anchor, relativeTo, anchor, x or 0, y or 0)
+        if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
+            fs:SetJustifyH("LEFT")
+        elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
+            fs:SetJustifyH("RIGHT")
+        else
+            fs:SetJustifyH("CENTER")
+        end
+        if fs.SetJustifyV then
+            if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
+                fs:SetJustifyV("TOP")
+            elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
+                fs:SetJustifyV("BOTTOM")
+            else
+                fs:SetJustifyV("MIDDLE")
+            end
+        end
+    end
+    local function LayoutAuraPreviewBorder(border, icon, size, mode)
+        local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
+        if not (border and icon and atlas and border.SetAtlas) then
+            if border then border:Hide() end
+            return
+        end
+        local pad = max(1, floor((tonumber(size) or 24) / 24 + 0.5))
+        border:ClearAllPoints()
+        border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
+        border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
+        border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
+        border:Show()
+    end
+    local function PreviewAuraState(groupKey, index, handle, cfg)
+        if not (self._animationEnabled == true and handle) then return nil end
+        local buildAuraState = previewAnimation and previewAnimation.BuildAuraState or _G.MSUF_BuildPreviewAnimationAuraState
+        if type(buildAuraState) ~= "function" then return nil end
+        handle._previewAuraStates = handle._previewAuraStates or {}
+        local scratch = handle._previewAuraStates[index] or {}
+        handle._previewAuraStates[index] = scratch
+        return buildAuraState(groupKey, index, scratch, {
+            decimalSeconds = cfg and cfg.cooldownDecimalSeconds == true,
+        }, self._animationElapsed)
+    end
+    local function LayoutAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
+        if not (swipe and icon) then return end
+        remainingFrac = max(0.02, min(1, tonumber(remainingFrac) or 0.48))
+        local w = max(1, floor((tonumber(size) or 1) * remainingFrac + 0.5))
+        swipe:ClearAllPoints()
+        swipe:SetWidth(w)
+        swipe:SetHeight(max(1, tonumber(size) or 1))
+        if reverse == true then
+            swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
+            swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+        else
+            swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
+            swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+        end
+    end
+    local function LayoutAuraDurationBar(bar, icon, cfg, size, auraState)
+        if not (bar and icon and cfg and cfg.showDurationBar == true) then
+            if bar then bar:Hide() end
+            return
+        end
+        size = max(1, tonumber(size) or 1)
+        local height = max(1, min(size, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
+        local inset = max(1, floor(size / 32 + 0.5))
+        local frac
+        if cfg.durationBarDirection == "ELAPSED" then
+            frac = auraState and auraState.elapsedFrac or 0.38
+            bar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
+        else
+            frac = auraState and auraState.remainingFrac or 0.62
+            bar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
+        end
+        frac = max(0.02, min(1, tonumber(frac) or 0.62))
+        bar:ClearAllPoints()
+        bar:SetHeight(height)
+        if auraState then
+            bar:SetWidth(max(1, floor(max(1, size - inset * 2) * frac + 0.5)))
+            if cfg.durationBarPosition == "TOP" then
+                bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+            else
+                bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+            end
+        elseif cfg.durationBarPosition == "TOP" then
+            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+            bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+        else
+            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+            bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+        end
+        bar:Show()
+    end
+    local function RuntimeAuraGridShape(count, perRow, verticalGrowth)
+        count = max(Round(count), 1)
+        perRow = max(Round(perRow), 1)
+        if verticalGrowth == true then
+            local rows = min(count, perRow)
+            return math.ceil(count / perRow), rows
+        end
+        local cols = min(count, perRow)
+        return cols, math.ceil(count / perRow)
+    end
+    local function LayoutAuraGroup(handle, groupKey, cfg, defaults)
+        cfg = cfg or {}
+        defaults = defaults or {}
+        local maxIcons = Int(cfg.max, defaults.max or 6, 0, 40)
+        local perRow = Int(cfg.perRow, defaults.perRow or maxIcons, 1, 40)
+        local rawSize = cfg.size or defaults.size or 16
+        local minSize = defaults.minSize or 8
+        local laneScale = cfg._compiled and previewScale or (previewScale * auraDynamicScale)
+        local size = max(minSize, ScaleValue(rawSize, laneScale, minSize))
+        local spacing = max(0, ScaleValue(cfg.spacing or defaults.spacing or 1, previewScale, 0))
+        local anchor = RuntimeAuraAnchor(cfg.anchor, defaults.anchor or "CENTER")
+        if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaults.anchor or "CENTER" end
+        if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = "CENTER" end
+        local textScale = cfg._compiled and previewScale or laneScale
+        local showCooldown = cfg.showCooldown ~= false
+        local showStacks = cfg.showStacks ~= false
+        local showSwipe = cfg.showCooldownSwipe ~= false
+        local barOnly = cfg.showDurationBar == true and (cfg.durationBarDisplay or "BAR_ONLY") == "BAR_ONLY"
+        local cooldownSwipeReverse = cfg.cooldownSwipeReverse == true
+        local cooldownSize = max(6, ScaleValue(cfg.cooldownSize or defaults.cooldownSize or 8, textScale, 6))
+        local stackSize = max(6, ScaleValue(cfg.stackSize or defaults.stackSize or 10, textScale, 6))
+        local cooldownAnchor = RuntimeAuraTextAnchor(cfg.cooldownAnchor, "CENTER")
+        local stackAnchor = RuntimeAuraTextAnchor(cfg.stackAnchor, "BOTTOMRIGHT")
+        local cooldownX = ConfigToOffset(cfg.cooldownX or 0, textScale)
+        local cooldownY = ConfigToOffset(cfg.cooldownY or 0, textScale)
+        local stackX = ConfigToOffset(cfg.stackX or 0, textScale)
+        local stackY = ConfigToOffset(cfg.stackY or 0, textScale)
+        local dispelMode = groupKey == "debuff" and NormalizeDispelBorderMode(cfg.dispelBorderMode, cfg.showDispelBorder == true or cfg.showDispelSymbol == true) or "OFF"
+        local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
+        local gv = AuraGrowth(growth)
+        local anchorTarget = mock
+        local anchorFrac = GF_PREVIEW_ANCHOR_FRAC[anchor] or GF_PREVIEW_ANCHOR_FRAC.CENTER
+        local ids = GF_AURA_MOCK_ICON_IDS[groupKey] or GF_AURA_MOCK_ICON_IDS.debuff
+        local step = size + spacing
+        AddIconPool(handle, maxIcons)
+        handle._previewRects = handle._previewRects or {}
+        local handleW, handleH, originX, originY
+        if gv.centered then
+            local minL, minB, maxR, maxT
+            for i = 1, maxIcons do
+                local left, bottom
+                local totalPrimary = maxIcons * size + max(0, maxIcons - 1) * spacing
+                local halfOfs = totalPrimary * 0.5
+                local col = i - 1
+                if gv.px ~= 0 then
+                    local cx = col * step - halfOfs + size * 0.5
+                    left, bottom = cx - size * 0.5, -size * 0.5
+                else
+                    local cy = -(col * step - halfOfs) - size * 0.5
+                    left, bottom = -size * 0.5, cy - size * 0.5
+                end
+                local right, top = left + size, bottom + size
+                local rect = handle._previewRects[i] or {}
+                rect[1], rect[2], rect.anchor = left, bottom, nil
+                handle._previewRects[i] = rect
+                minL = minL and min(minL, left) or left
+                minB = minB and min(minB, bottom) or bottom
+                maxR = maxR and max(maxR, right) or right
+                maxT = maxT and max(maxT, top) or top
+            end
+            if not minL then minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5 end
+            handleW = max(1, Round(maxR - minL))
+            handleH = max(1, Round(maxT - minB))
+            originX, originY = -minL, -minB
+        else
+            local xSign, ySign, verticalGrowth, initialAnchor = RuntimeAuraGrowth(growth)
+            local cols, rows = RuntimeAuraGridShape(maxIcons, perRow, verticalGrowth)
+            handleW = max(1, Round(cols * size + max(cols - 1, 0) * spacing))
+            handleH = max(1, Round(rows * size + max(rows - 1, 0) * spacing))
+            originX = Round(anchorFrac[1] * handleW)
+            originY = Round(anchorFrac[2] * handleH)
+            for i = 1, maxIcons do
+                local idx = i - 1
+                local col, row
+                if verticalGrowth == true then
+                    row = idx % perRow
+                    col = (idx - row) / perRow
+                else
+                    col = idx % perRow
+                    row = (idx - col) / perRow
+                end
+                local rect = handle._previewRects[i] or {}
+                rect[1], rect[2], rect.anchor = col * step * xSign, row * step * ySign, initialAnchor
+                handle._previewRects[i] = rect
+            end
+        end
+        handle:SetSize(handleW, handleH)
+        handle._previewOriginX = originX
+        handle._previewOriginY = originY
+        handle._previewAnchorFrame = anchorTarget
+        handle._previewScale = previewScale
+        handle._previewWriteScale = cfg._compiled and (previewScale * max(0.0001, auraDynamicScale)) or previewScale
+        handle:ClearAllPoints()
+        if gv.centered then
+            handle:SetPoint(
+                "BOTTOMLEFT",
+                anchorTarget,
+                "CENTER",
+                ConfigToOffset(cfg.x or 0, previewScale) - originX,
+                ConfigToOffset(cfg.y or 0, previewScale) - originY
+            )
+        else
+            handle:SetPoint(
+                anchor,
+                anchorTarget,
+                anchor,
+                ConfigToOffset(cfg.x or 0, previewScale),
+                ConfigToOffset(cfg.y or 0, previewScale)
+            )
+        end
+        for i = 1, maxIcons do
+            local tex = handle._icons and handle._icons[i]
+            local swipe = handle._iconSwipes and handle._iconSwipes[i]
+            local border = handle._iconBorders and handle._iconBorders[i]
+            local stack = handle._iconStacks and handle._iconStacks[i]
+            local timer = handle._iconTimers and handle._iconTimers[i]
+            local durationBar = handle._iconDurationBars and handle._iconDurationBars[i]
+            local rect = handle._previewRects[i]
+            if tex and rect then
+                local auraState = PreviewAuraState(groupKey, i, handle, cfg)
+                tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
+                if tex.SetAlpha then tex:SetAlpha(barOnly and 0 or 1) end
+                tex:SetSize(size, size)
+                tex:ClearAllPoints()
+                if rect.anchor then
+                    tex:SetPoint(rect.anchor, handle, rect.anchor, rect[1], rect[2])
+                else
+                    tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", rect[1] + originX, rect[2] + originY)
+                end
+                if swipe then
+                    if showSwipe and not barOnly then
+                        LayoutAuraPreviewSwipe(swipe, tex, size, auraState and auraState.remainingFrac, cooldownSwipeReverse)
+                        swipe:Show()
+                    else
+                        swipe:Hide()
+                    end
+                end
+                LayoutAuraPreviewBorder(border, tex, size, barOnly and "OFF" or dispelMode)
+                LayoutAuraDurationBar(durationBar, tex, cfg, size, auraState)
+                if stack then
+                    SetPreviewFont(stack, stackSize)
+                    stack:SetTextColor(1, 1, 1, 1)
+                    PlaceAuraPreviewText(stack, tex, stackAnchor, stackX, stackY)
+                    stack:SetText(showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
+                    stack:SetShown(showStacks)
+                end
+                if timer then
+                    SetPreviewFont(timer, cooldownSize)
+                    timer:SetTextColor(1, 1, 1, 1)
+                    PlaceAuraPreviewText(timer, tex, cooldownAnchor, cooldownX, cooldownY)
+                    timer:SetText(showCooldown and (auraState and auraState.text or (i % 2 == 0 and "12" or "")) or "")
+                    timer:SetShown(showCooldown)
+                end
+                tex:Show()
+            end
+        end
+        for i = maxIcons + 1, #(handle._icons or {}) do
+            if handle._icons[i] then handle._icons[i]:Hide() end
+            if handle._iconSwipes and handle._iconSwipes[i] then handle._iconSwipes[i]:Hide() end
+            if handle._iconBorders and handle._iconBorders[i] then handle._iconBorders[i]:Hide() end
+            if handle._iconStacks and handle._iconStacks[i] then handle._iconStacks[i]:Hide() end
+            if handle._iconTimers and handle._iconTimers[i] then handle._iconTimers[i]:Hide() end
+            if handle._iconDurationBars and handle._iconDurationBars[i] then handle._iconDurationBars[i]:Hide() end
+        end
+        return size
+    end
+    LayoutAuraGroup(buffHandle, "buff", buffCfg, {
+        anchor = "BOTTOMRIGHT", growth = "LEFTUP",
+        size = 22, perRow = 4, max = 6, spacing = 1, minSize = 8,
+    })
+    if trackedBuffHandle then
+        LayoutAuraGroup(trackedBuffHandle, "trackedBuff", trackedBuffCfg, {
+            anchor = "TOPLEFT", growth = "RIGHTDOWN",
+            size = 22, perRow = 4, max = 4, spacing = 1, minSize = 8,
+        })
+    end
+    LayoutAuraGroup(debuffHandle, "debuff", debuffCfg, {
+        anchor = "TOPLEFT", growth = "RIGHTDOWN",
+        size = 20, perRow = 3, max = 6, spacing = 1, minSize = 8,
+    })
+    scene.LayoutHandle = LayoutHandle
+    scene.PlaceAuraPreviewText = PlaceAuraPreviewText
+end
+
+Render.Components = { Plan = BuildScene, Auras = RenderAuras, Finalize = FinalizeScene }
+Render.ComponentOrder = { "Plan", "FrameAndText", "Auras", "Indicators", "Finalize" }
+
 function Render.Install(box, ctx, deps)
     if not box then return end
     deps = deps or {}
@@ -105,6 +843,7 @@ function Render.Install(box, ctx, deps)
         M = M,
         MSUF = MSUF,
         T = T,
+        ctx = ctx,
         width = width,
         mock = mock,
         WHITE8X8 = WHITE8X8,
@@ -146,7 +885,12 @@ function Render.Install(box, ctx, deps)
         ClassColor = ClassColor,
         HealthColor = HealthColor,
         AddIconPool = AddIconPool,
+        SelectHandle = SelectHandle,
+        NudgeHandlePosition = NudgeHandlePosition,
+        RefreshHandleSelection = RefreshHandleSelection,
         ScaleValue = ScaleValue,
+        ApplyFrameBorder = ApplyFrameBorder,
+        ApplyBoundsGuide = ApplyBoundsGuide,
         ConfigToOffset = ConfigToOffset,
         ResolvePreviewStatusbarTexture = ResolvePreviewStatusbarTexture,
         DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS,
@@ -166,189 +910,25 @@ function Render.Install(box, ctx, deps)
         end
         local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
         local profileStarted = profiling and M.ProfileStart() or nil
-        local textHandles = self._textHandles or {}
-        local kind = H.CurrentScope()
-        local label = H.PreviewScopeLabel(kind)
-        local conf = H.Conf(kind)
-        local gf = MSUF and MSUF.GF
-        local previewAnimation = MSUF and MSUF.PreviewAnimation
-        local buildFrameState = previewAnimation and previewAnimation.BuildFrameState or _G.MSUF_BuildPreviewAnimationFrameState
-        local animState = self._animationEnabled == true and type(buildFrameState) == "function"
-            and buildFrameState(self, 1, kind, self._msufGFMenuPreviewAnimState or {}, self._animationElapsed)
-        if animState then self._msufGFMenuPreviewAnimState = animState end
-        local hpPct = animState and max(0.02, min(0.98, tonumber(animState.hpPct) or 0.72)) or 0.72
-        local powerPct = animState and max(0, min(1, tonumber(animState.powerPct) or 0.70)) or 0.70
-        local healPct = animState and max(0.01, min(0.24, tonumber(animState.healPct) or 0.12)) or 0.12
-        local absorbPct = animState and max(0.01, min(0.24, tonumber(animState.absorbPct) or 0.08)) or 0.08
-        local runtimeSpec = CompiledSpec(kind)
-        local runtimeAuras = runtimeSpec and runtimeSpec.auras or nil
-        local runtimeText = (runtimeSpec and runtimeSpec.text) or {}
-        local runtimePower = (runtimeSpec and runtimeSpec.power) or {}
-        local runtimeHealth = (runtimeSpec and runtimeSpec.health) or {}
-        local runtimeBorder = (runtimeSpec and runtimeSpec.border) or {}
-        local runtimePrediction = (runtimeSpec and runtimeSpec.prediction) or {}
-        local runtimeStatus = (runtimeSpec and runtimeSpec.status) or {}
-        local function ResolveStatusPreviewTexture(spec, runtimeCfg, iconType, variant)
-            local customIcon = runtimeCfg and runtimeCfg.customIcon
-            if (type(customIcon) ~= "string" or customIcon == "") and spec and spec.customIcon then
-                customIcon = conf[spec.customIcon]
-            end
-            if type(customIcon) == "string" and customIcon ~= "" then return customIcon, 0, 1, 0, 1 end
-            local resolver = _G.MSUF_GetStatusIconTexture or (gf and gf.GetStatusIconTexture)
-            if type(resolver) == "function" then
-                local path, l, r, t, b = resolver("BLIZZARD", iconType, variant, runtimeStatus and runtimeStatus.useMidnight == true)
-                if type(path) == "string" and path ~= "" then return path, l, r, t, b end
-            end
-            if iconType == "raidMarker" then return "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 0, 0.25, 0, 0.25 end
-            if iconType == "readyCheck" then return "Interface\\RaidFrame\\ReadyCheck-Ready", 0, 1, 0, 1 end
-            if iconType == "summon" then return "Interface\\RaidFrame\\Raid-Icon-SummonPending", 0, 1, 0, 1 end
-            if iconType == "incomingRes" then return "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 end
-            if iconType == "pvp" then return "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
-            if iconType == "phase" then return "Interface\\TargetingFrame\\UI-PhasingIcon", 0, 1, 0, 1 end
-            return nil
-        end
-        local focus = H.PreviewFocusForPage(ctx.key)
-        local layerVisible = M.gfPreviewLayerVisible or {}
-        local soloLayer = M.gfPreviewSoloLayer
-        local rawAuras = conf.auras or {}
-        local function RawTrackedBuffLane(rawBuff)
-            rawBuff = rawBuff or {}
-            return {
-                enabled = rawBuff.trackedEnabled == true or (rawBuff.trackedEnabled == nil and conf.spellIndicators and conf.spellIndicators.enabled == true),
-                max = rawBuff.trackedMax or 8,
-                perRow = rawBuff.trackedPerRow or rawBuff.perRow or 4,
-                size = rawBuff.trackedSize or rawBuff.size or 22,
-                spacing = rawBuff.trackedSpacing or rawBuff.spacing or 1,
-                anchor = rawBuff.trackedAnchor or "TOPLEFT",
-                growth = rawBuff.trackedGrowth or "RIGHTDOWN",
-                x = rawBuff.trackedX or 0,
-                y = rawBuff.trackedY or 0,
-                layer = rawBuff.trackedLayer or (conf.spellIndicators and conf.spellIndicators.layer) or 9,
-                strata = rawBuff.trackedStrata or (conf.spellIndicators and conf.spellIndicators.strata) or rawBuff.strata,
-                showCooldownSwipe = rawBuff.trackedShowCooldownSwipe,
-                cooldownSwipeReverse = rawBuff.trackedCooldownSwipeReverse,
-                showCooldown = rawBuff.trackedShowCooldown,
-                showStacks = rawBuff.trackedShowStacks,
-                cooldownSize = rawBuff.trackedCooldownSize,
-                cooldownAnchor = rawBuff.trackedCooldownAnchor,
-                cooldownX = rawBuff.trackedCooldownX,
-                cooldownY = rawBuff.trackedCooldownY,
-                stackSize = rawBuff.trackedStackSize,
-                stackAnchor = rawBuff.trackedStackAnchor,
-                stackX = rawBuff.trackedStackX,
-                stackY = rawBuff.trackedStackY,
-            }
-        end
-        local buffCfg = runtimeAuras and CompiledAuraLane(runtimeAuras, "buff", rawAuras.buff or {}) or (rawAuras.buff or {})
-        local trackedBuffCfg = runtimeAuras and CompiledAuraLane(runtimeAuras, "trackedBuff", RawTrackedBuffLane(rawAuras.buff)) or RawTrackedBuffLane(rawAuras.buff)
-        local debuffCfg = runtimeAuras and CompiledAuraLane(runtimeAuras, "debuff", rawAuras.debuff or {}) or (rawAuras.debuff or {})
-        local statusSpec = CurrentStatusSpec()
-        local selectedSpellCfg = CurrentSpellConfig(kind)
-        local rawSelectedPlaced = selectedSpellCfg and selectedSpellCfg.placed
-        local selectedPlaced = CurrentSpellPlaced(kind)
-        local selectedSpellPlacedEnabled = selectedPlaced and (selectedPlaced.type or "icon") ~= "none"
-        local selectedSpellNeedsPlacementPreview = selectedSpellCfg ~= nil and rawSelectedPlaced == nil
-        local runtimeSpellIndicators = runtimeSpec and runtimeSpec.spellIndicators or nil
-        local runtimeSpellItems = runtimeSpellIndicators and runtimeSpellIndicators.items or nil
-        local runtimeSpellPlacedAvailable = false
-        local runtimeSpellEffect
-        if type(runtimeSpellItems) == "table" then
-            for i = 1, #runtimeSpellItems do
-                local item = runtimeSpellItems[i]
-                local placed = item and item.placed
-                if placed and (placed.type or "icon") ~= "none" then
-                    runtimeSpellPlacedAvailable = true
-                end
-                local effect = item and item.frame
-                if effect and effect.type and effect.type ~= "none" then
-                    local currentPriority = tonumber(runtimeSpellEffect and runtimeSpellEffect.priority) or 999
-                    local nextPriority = tonumber(effect.priority) or 5
-                    if not runtimeSpellEffect or nextPriority < currentPriority then
-                        runtimeSpellEffect = effect
-                    end
-                end
-            end
-        end
-        local function StatusConfigAvailable(spec)
-            if runtimeSpec then
-                local cfg = RuntimeStatusConfig(runtimeStatus, spec)
-                return cfg and cfg.enabled == true
-            end
-            return StatusSpecEnabled(conf, spec)
-        end
-        local statusLayerAvailable = false
-        for i = 1, #statusSpecs do
-            local spec = statusSpecs[i]
-            if StatusSpecInMode(spec, statusSpec) and StatusConfigAvailable(spec) then
-                statusLayerAvailable = true
-                break
-            end
-        end
-        local rawCustomRenderer = true
-        local customRenderer = false
-        local aurasEnabled
-        if runtimeAuras then
-            customRenderer = buffCfg.enabled == true or trackedBuffCfg.enabled == true or debuffCfg.enabled == true
-            aurasEnabled = customRenderer or runtimeAuras.enabled == true
-        else
-            aurasEnabled = rawAuras.enabled ~= false
-            customRenderer = rawCustomRenderer
-        end
-        local powerTextEnabled
-        if runtimeSpec then
-            powerTextEnabled = runtimeSpec.showPowerText == true
-        else
-            powerTextEnabled = (gf and gf.IsPowerTextEnabled and gf.IsPowerTextEnabled(kind, conf)) or (conf.showPowerText == true or conf.showPower == true)
-        end
-        local function AuraLaneAvailable(cfg, defaultMax)
-            return customRenderer
-                and (runtimeAuras and cfg.enabled == true or cfg.enabled ~= false)
-                and (tonumber(cfg.max) or defaultMax or 0) > 0
-        end
-        local customAuraText = AuraLaneAvailable(buffCfg, 6) or AuraLaneAvailable(trackedBuffCfg, 4) or AuraLaneAvailable(debuffCfg, 6)
-        local textAvailable
-        if runtimeSpec then
-            textAvailable = runtimeSpec.showName == true or runtimeSpec.showHealthText == true or powerTextEnabled == true
-        else
-            textAvailable = conf.showName ~= false or conf.showHPText ~= false or powerTextEnabled == true
-        end
-        local selectedSpellAvailable = conf.spellIndicators and conf.spellIndicators.enabled == true and (selectedSpellPlacedEnabled or selectedSpellNeedsPlacementPreview)
-        local layerAvailable = {
-            guides = true,
-            bounds = true,
-            buff = AuraLaneAvailable(buffCfg, 6),
-            trackedBuff = AuraLaneAvailable(trackedBuffCfg, 4),
-            debuff = AuraLaneAvailable(debuffCfg, 6),
-            status = statusLayerAvailable,
-            si = (runtimeSpellIndicators and runtimeSpellIndicators.enabled == true and (runtimeSpellPlacedAvailable or runtimeSpellEffect ~= nil))
-                or selectedSpellAvailable
-                or false,
-            targetedSpells = kind == "party" and conf.targetedSpellsEnabled == true,
-            auraText = aurasEnabled and customAuraText,
-            text = textAvailable,
-        }
-        self._layerAvailable = layerAvailable
-        if soloLayer and layerAvailable[soloLayer] == false then
-            M.gfPreviewSoloLayer = nil
-            soloLayer = nil
-        end
-        local function LayerOn(key)
-            return layerAvailable[key] ~= false and layerVisible[key] ~= false
-        end
-        local function LayerAlpha(key)
-            if layerAvailable[key] == false then return 0 end
-            return (soloLayer and soloLayer ~= key) and 0.15 or 1
-        end
-        local function AuraPreviewAlpha(cfg)
-            if type(cfg) ~= "table" then return 1 end
-            if cfg.alpha ~= nil then return tonumber(cfg.alpha) or 1 end
-            if cfg.behindBar == true then
-                local v = (tonumber(cfg.behindBarAlpha) or 85) / 100
-                if v < 0 then return 0 end
-                if v > 1 then return 1 end
-                return v
-            end
-            return 1
+        local scene = BuildScene(self, reason)
+        local S = scene.S
+        local textHandles, kind, label, conf, gf = scene.textHandles, scene.kind, scene.label, scene.conf, scene.gf
+        local previewAnimation, hpPct, powerPct, healPct, absorbPct = scene.previewAnimation,
+            scene.hpPct, scene.powerPct, scene.healPct, scene.absorbPct
+        local runtimeSpec, runtimeAuras = scene.runtimeSpec, scene.runtimeAuras
+        local runtimeText, runtimePower, runtimeHealth = scene.runtimeText, scene.runtimePower, scene.runtimeHealth
+        local runtimeBorder, runtimePrediction, runtimeStatus = scene.runtimeBorder, scene.runtimePrediction, scene.runtimeStatus
+        local focus, layerVisible, soloLayer, layerAvailable = scene.focus, scene.layerVisible, scene.soloLayer, scene.layerAvailable
+        local buffCfg, trackedBuffCfg, debuffCfg = scene.buffCfg, scene.trackedBuffCfg, scene.debuffCfg
+        local statusSpec, selectedSpellCfg, selectedPlaced = scene.statusSpec, scene.selectedSpellCfg, scene.selectedPlaced
+        local selectedSpellNeedsPlacementPreview = scene.selectedSpellNeedsPlacementPreview
+        local runtimeSpellIndicators, runtimeSpellItems = scene.runtimeSpellIndicators, scene.runtimeSpellItems
+        local runtimeSpellEffect = scene.runtimeSpellEffect
+        local function StatusConfigAvailable(spec) return SceneStatusAvailable(scene, spec) end
+        local function LayerOn(key) return SceneLayerOn(scene, key) end
+        local function LayerAlpha(key) return SceneLayerAlpha(scene, key) end
+        local function ResolveStatusTexture(spec, runtimeCfg, iconType, variant)
+            return ResolveStatusPreviewTexture(scene, spec, runtimeCfg, iconType, variant)
         end
         local function HideSpellEffectPreview()
             if mock._siPreviewTint then mock._siPreviewTint:Hide() end
@@ -592,7 +1172,9 @@ function Render.Install(box, ctx, deps)
             H.SetOutlineShown(mock, false)
             ApplyFrameBorder(self, runtimeBorder, previewScale)
         end
-        local textBaseLevel = ((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + (Layers.TEXT_BASE_OFFSET or 10)
+        local textBaseLevel = (Layers.HealthLevel and Layers.HealthLevel((mock.GetFrameLevel and mock:GetFrameLevel()) or 1)
+            or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + (Layers.HEALTH_OFFSET or 1)))
+            + (Layers.TEXT_BASE_OFFSET or 10)
         if mock._nameTextLayer then
             if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
             mock._nameTextLayer:ClearAllPoints()
@@ -789,343 +1371,11 @@ function Render.Install(box, ctx, deps)
         ApplyBoundsGuide(self, boundsEdge)
         if self._bounds.SetFrameLevel and mock.GetFrameLevel then self._bounds:SetFrameLevel((mock:GetFrameLevel() or 1) + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
         self._bounds:SetShown(LayerOn("bounds"))
-        local function LayoutHandle(handle, anchor, x, y, defaultAnchor)
-            anchor = anchor or defaultAnchor or "CENTER"
-            if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaultAnchor or "CENTER" end
-            handle._previewScale = previewScale
-            handle._previewWriteScale = previewScale
-            handle:ClearAllPoints()
-            handle:SetPoint(anchor, mock, anchor, ConfigToOffset(x or 0, previewScale), ConfigToOffset(y or 0, previewScale))
-        end
-        local auraDynamicScale = (runtimeAuras and runtimeAuras.dynamicScaleValue) or (gf and gf.GetPreviewDynamicScale and gf.GetPreviewDynamicScale(conf, kind)) or 1
-        local function RuntimeAuraGrowth(growth)
-            if growth == "LEFTUP" then
-                return -1, 1, false, "BOTTOMRIGHT"
-            elseif growth == "LEFTDOWN" then
-                return -1, -1, false, "TOPRIGHT"
-            elseif growth == "RIGHTUP" then
-                return 1, 1, false, "BOTTOMLEFT"
-            elseif growth == "UP" or growth == "UPRIGHT" or growth == "UPLEFT" then
-                return 1, 1, true, "BOTTOMLEFT"
-            elseif growth == "DOWN" or growth == "DOWNRIGHT" or growth == "DOWNLEFT" then
-                return 1, -1, true, "TOPLEFT"
-            end
-            return 1, -1, false, "TOPLEFT"
-        end
-        local function RuntimeAuraAnchor(anchor, fallback)
-            if anchor == "TOPLEFT" or anchor == "TOPRIGHT"
-                or anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT"
-                or anchor == "CENTER" then
-                return anchor
-            end
-            return fallback or "CENTER"
-        end
-        local function RuntimeAuraTextAnchor(anchor, fallback)
-            if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT"
-                or anchor == "LEFT" or anchor == "CENTER" or anchor == "RIGHT"
-                or anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
-                return anchor
-            end
-            return fallback or "CENTER"
-        end
-        local function NormalizeDispelBorderMode(value, legacyEnabled)
-            if value == true then return "SYMBOL" end
-            if value == false then return "OFF" end
-            value = tostring(value or ""):upper()
-            if value == "BORDER" or value == "COLOR" or value == "ON" then return "BORDER" end
-            if value == "SYMBOL" or value == "BORDER_SYMBOL" or value == "BORDER_SYMBOLS"
-                or value == "BORDER+SYMBOL" or value == "ICON" or value == "WITH_SYMBOL" then
-                return "SYMBOL"
-            end
-            if value == "OFF" or value == "NONE" or value == "DISABLED" then return legacyEnabled == true and "SYMBOL" or "OFF" end
-            return legacyEnabled == true and "SYMBOL" or "OFF"
-        end
-        local function PlaceAuraPreviewText(fs, relativeTo, anchor, x, y)
-            if not (fs and relativeTo) then return end
-            anchor = RuntimeAuraTextAnchor(anchor, "CENTER")
-            fs:ClearAllPoints()
-            fs:SetPoint(anchor, relativeTo, anchor, x or 0, y or 0)
-            if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
-                fs:SetJustifyH("LEFT")
-            elseif anchor == "TOPRIGHT" or anchor == "RIGHT" or anchor == "BOTTOMRIGHT" then
-                fs:SetJustifyH("RIGHT")
-            else
-                fs:SetJustifyH("CENTER")
-            end
-            if fs.SetJustifyV then
-                if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT" then
-                    fs:SetJustifyV("TOP")
-                elseif anchor == "BOTTOMLEFT" or anchor == "BOTTOM" or anchor == "BOTTOMRIGHT" then
-                    fs:SetJustifyV("BOTTOM")
-                else
-                    fs:SetJustifyV("MIDDLE")
-                end
-            end
-        end
-        local function LayoutAuraPreviewBorder(border, icon, size, mode)
-            local atlas = DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[mode]
-            if not (border and icon and atlas and border.SetAtlas) then
-                if border then border:Hide() end
-                return
-            end
-            local pad = max(1, floor((tonumber(size) or 24) / 24 + 0.5))
-            border:ClearAllPoints()
-            border:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
-            border:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
-            border:SetAtlas(atlas, TextureKitConstants and TextureKitConstants.IgnoreAtlasSize)
-            border:Show()
-        end
-        local function PreviewAuraState(groupKey, index, handle, cfg)
-            if not (self._animationEnabled == true and handle) then return nil end
-            local buildAuraState = previewAnimation and previewAnimation.BuildAuraState or _G.MSUF_BuildPreviewAnimationAuraState
-            if type(buildAuraState) ~= "function" then return nil end
-            handle._previewAuraStates = handle._previewAuraStates or {}
-            local scratch = handle._previewAuraStates[index] or {}
-            handle._previewAuraStates[index] = scratch
-            return buildAuraState(groupKey, index, scratch, {
-                decimalSeconds = cfg and cfg.cooldownDecimalSeconds == true,
-            }, self._animationElapsed)
-        end
-        local function LayoutAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
-            if not (swipe and icon) then return end
-            remainingFrac = max(0.02, min(1, tonumber(remainingFrac) or 0.48))
-            local w = max(1, floor((tonumber(size) or 1) * remainingFrac + 0.5))
-            swipe:ClearAllPoints()
-            swipe:SetWidth(w)
-            swipe:SetHeight(max(1, tonumber(size) or 1))
-            if reverse == true then
-                swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
-                swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
-            else
-                swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
-                swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
-            end
-        end
-        local function LayoutAuraDurationBar(bar, icon, cfg, size, auraState)
-            if not (bar and icon and cfg and cfg.showDurationBar == true) then
-                if bar then bar:Hide() end
-                return
-            end
-            size = max(1, tonumber(size) or 1)
-            local height = max(1, min(size, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
-            local inset = max(1, floor(size / 32 + 0.5))
-            local frac
-            if cfg.durationBarDirection == "ELAPSED" then
-                frac = auraState and auraState.elapsedFrac or 0.38
-                bar:SetVertexColor(0.22, 0.88, 0.50, 0.92)
-            else
-                frac = auraState and auraState.remainingFrac or 0.62
-                bar:SetVertexColor(0.08, 0.78, 1.00, 0.92)
-            end
-            frac = max(0.02, min(1, tonumber(frac) or 0.62))
-            bar:ClearAllPoints()
-            bar:SetHeight(height)
-            if auraState then
-                bar:SetWidth(max(1, floor(max(1, size - inset * 2) * frac + 0.5)))
-                if cfg.durationBarPosition == "TOP" then
-                    bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-                else
-                    bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-                end
-            elseif cfg.durationBarPosition == "TOP" then
-                bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-                bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-            else
-                bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-                bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-            end
-            bar:Show()
-        end
-        local function RuntimeAuraGridShape(count, perRow, verticalGrowth)
-            count = max(Round(count), 1)
-            perRow = max(Round(perRow), 1)
-            if verticalGrowth == true then
-                local rows = min(count, perRow)
-                return math.ceil(count / perRow), rows
-            end
-            local cols = min(count, perRow)
-            return cols, math.ceil(count / perRow)
-        end
-        local function LayoutAuraGroup(handle, groupKey, cfg, defaults)
-            cfg = cfg or {}
-            defaults = defaults or {}
-            local maxIcons = Int(cfg.max, defaults.max or 6, 0, 40)
-            local perRow = Int(cfg.perRow, defaults.perRow or maxIcons, 1, 40)
-            local rawSize = cfg.size or defaults.size or 16
-            local minSize = defaults.minSize or 8
-            local laneScale = cfg._compiled and previewScale or (previewScale * auraDynamicScale)
-            local size = max(minSize, ScaleValue(rawSize, laneScale, minSize))
-            local spacing = max(0, ScaleValue(cfg.spacing or defaults.spacing or 1, previewScale, 0))
-            local anchor = RuntimeAuraAnchor(cfg.anchor, defaults.anchor or "CENTER")
-            if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaults.anchor or "CENTER" end
-            if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = "CENTER" end
-            local textScale = cfg._compiled and previewScale or laneScale
-            local showCooldown = cfg.showCooldown ~= false
-            local showStacks = cfg.showStacks ~= false
-            local showSwipe = cfg.showCooldownSwipe ~= false
-            local barOnly = cfg.showDurationBar == true and (cfg.durationBarDisplay or "BAR_ONLY") == "BAR_ONLY"
-            local cooldownSwipeReverse = cfg.cooldownSwipeReverse == true
-            local cooldownSize = max(6, ScaleValue(cfg.cooldownSize or defaults.cooldownSize or 8, textScale, 6))
-            local stackSize = max(6, ScaleValue(cfg.stackSize or defaults.stackSize or 10, textScale, 6))
-            local cooldownAnchor = RuntimeAuraTextAnchor(cfg.cooldownAnchor, "CENTER")
-            local stackAnchor = RuntimeAuraTextAnchor(cfg.stackAnchor, "BOTTOMRIGHT")
-            local cooldownX = ConfigToOffset(cfg.cooldownX or 0, textScale)
-            local cooldownY = ConfigToOffset(cfg.cooldownY or 0, textScale)
-            local stackX = ConfigToOffset(cfg.stackX or 0, textScale)
-            local stackY = ConfigToOffset(cfg.stackY or 0, textScale)
-            local dispelMode = groupKey == "debuff" and NormalizeDispelBorderMode(cfg.dispelBorderMode, cfg.showDispelBorder == true or cfg.showDispelSymbol == true) or "OFF"
-            local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
-            local gv = AuraGrowth(growth)
-            local anchorTarget = mock
-            local anchorFrac = GF_PREVIEW_ANCHOR_FRAC[anchor] or GF_PREVIEW_ANCHOR_FRAC.CENTER
-            local ids = GF_AURA_MOCK_ICON_IDS[groupKey] or GF_AURA_MOCK_ICON_IDS.debuff
-            local step = size + spacing
-            AddIconPool(handle, maxIcons)
-            handle._previewRects = handle._previewRects or {}
-            local handleW, handleH, originX, originY
-            if gv.centered then
-                local minL, minB, maxR, maxT
-                for i = 1, maxIcons do
-                    local left, bottom
-                    local totalPrimary = maxIcons * size + max(0, maxIcons - 1) * spacing
-                    local halfOfs = totalPrimary * 0.5
-                    local col = i - 1
-                    if gv.px ~= 0 then
-                        local cx = col * step - halfOfs + size * 0.5
-                        left, bottom = cx - size * 0.5, -size * 0.5
-                    else
-                        local cy = -(col * step - halfOfs) - size * 0.5
-                        left, bottom = -size * 0.5, cy - size * 0.5
-                    end
-                    local right, top = left + size, bottom + size
-                    local rect = handle._previewRects[i] or {}
-                    rect[1], rect[2], rect.anchor = left, bottom, nil
-                    handle._previewRects[i] = rect
-                    minL = minL and min(minL, left) or left
-                    minB = minB and min(minB, bottom) or bottom
-                    maxR = maxR and max(maxR, right) or right
-                    maxT = maxT and max(maxT, top) or top
-                end
-                if not minL then minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5 end
-                handleW = max(1, Round(maxR - minL))
-                handleH = max(1, Round(maxT - minB))
-                originX, originY = -minL, -minB
-            else
-                local xSign, ySign, verticalGrowth, initialAnchor = RuntimeAuraGrowth(growth)
-                local cols, rows = RuntimeAuraGridShape(maxIcons, perRow, verticalGrowth)
-                handleW = max(1, Round(cols * size + max(cols - 1, 0) * spacing))
-                handleH = max(1, Round(rows * size + max(rows - 1, 0) * spacing))
-                originX = Round(anchorFrac[1] * handleW)
-                originY = Round(anchorFrac[2] * handleH)
-                for i = 1, maxIcons do
-                    local idx = i - 1
-                    local col, row
-                    if verticalGrowth == true then
-                        row = idx % perRow
-                        col = (idx - row) / perRow
-                    else
-                        col = idx % perRow
-                        row = (idx - col) / perRow
-                    end
-                    local rect = handle._previewRects[i] or {}
-                    rect[1], rect[2], rect.anchor = col * step * xSign, row * step * ySign, initialAnchor
-                    handle._previewRects[i] = rect
-                end
-            end
-            handle:SetSize(handleW, handleH)
-            handle._previewOriginX = originX
-            handle._previewOriginY = originY
-            handle._previewAnchorFrame = anchorTarget
-            handle._previewScale = previewScale
-            handle._previewWriteScale = cfg._compiled and (previewScale * max(0.0001, auraDynamicScale)) or previewScale
-            handle:ClearAllPoints()
-            if gv.centered then
-                handle:SetPoint(
-                    "BOTTOMLEFT",
-                    anchorTarget,
-                    "CENTER",
-                    ConfigToOffset(cfg.x or 0, previewScale) - originX,
-                    ConfigToOffset(cfg.y or 0, previewScale) - originY
-                )
-            else
-                handle:SetPoint(
-                    anchor,
-                    anchorTarget,
-                    anchor,
-                    ConfigToOffset(cfg.x or 0, previewScale),
-                    ConfigToOffset(cfg.y or 0, previewScale)
-                )
-            end
-            for i = 1, maxIcons do
-                local tex = handle._icons and handle._icons[i]
-                local swipe = handle._iconSwipes and handle._iconSwipes[i]
-                local border = handle._iconBorders and handle._iconBorders[i]
-                local stack = handle._iconStacks and handle._iconStacks[i]
-                local timer = handle._iconTimers and handle._iconTimers[i]
-                local durationBar = handle._iconDurationBars and handle._iconDurationBars[i]
-                local rect = handle._previewRects[i]
-                if tex and rect then
-                    local auraState = PreviewAuraState(groupKey, i, handle, cfg)
-                    tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
-                    if tex.SetAlpha then tex:SetAlpha(barOnly and 0 or 1) end
-                    tex:SetSize(size, size)
-                    tex:ClearAllPoints()
-                    if rect.anchor then
-                        tex:SetPoint(rect.anchor, handle, rect.anchor, rect[1], rect[2])
-                    else
-                        tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", rect[1] + originX, rect[2] + originY)
-                    end
-                    if swipe then
-                        if showSwipe and not barOnly then
-                            LayoutAuraPreviewSwipe(swipe, tex, size, auraState and auraState.remainingFrac, cooldownSwipeReverse)
-                            swipe:Show()
-                        else
-                            swipe:Hide()
-                        end
-                    end
-                    LayoutAuraPreviewBorder(border, tex, size, barOnly and "OFF" or dispelMode)
-                    LayoutAuraDurationBar(durationBar, tex, cfg, size, auraState)
-                    if stack then
-                        SetPreviewFont(stack, stackSize)
-                        stack:SetTextColor(1, 1, 1, 1)
-                        PlaceAuraPreviewText(stack, tex, stackAnchor, stackX, stackY)
-                        stack:SetText(showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
-                        stack:SetShown(showStacks)
-                    end
-                    if timer then
-                        SetPreviewFont(timer, cooldownSize)
-                        timer:SetTextColor(1, 1, 1, 1)
-                        PlaceAuraPreviewText(timer, tex, cooldownAnchor, cooldownX, cooldownY)
-                        timer:SetText(showCooldown and (auraState and auraState.text or (i % 2 == 0 and "12" or "")) or "")
-                        timer:SetShown(showCooldown)
-                    end
-                    tex:Show()
-                end
-            end
-            for i = maxIcons + 1, #(handle._icons or {}) do
-                if handle._icons[i] then handle._icons[i]:Hide() end
-                if handle._iconSwipes and handle._iconSwipes[i] then handle._iconSwipes[i]:Hide() end
-                if handle._iconBorders and handle._iconBorders[i] then handle._iconBorders[i]:Hide() end
-                if handle._iconStacks and handle._iconStacks[i] then handle._iconStacks[i]:Hide() end
-                if handle._iconTimers and handle._iconTimers[i] then handle._iconTimers[i]:Hide() end
-                if handle._iconDurationBars and handle._iconDurationBars[i] then handle._iconDurationBars[i]:Hide() end
-            end
-            return size
-        end
-        LayoutAuraGroup(buffHandle, "buff", buffCfg, {
-            anchor = "BOTTOMRIGHT", growth = "LEFTUP",
-            size = 22, perRow = 4, max = 6, spacing = 1, minSize = 8,
-        })
-        if trackedBuffHandle then
-            LayoutAuraGroup(trackedBuffHandle, "trackedBuff", trackedBuffCfg, {
-                anchor = "TOPLEFT", growth = "RIGHTDOWN",
-                size = 22, perRow = 4, max = 4, spacing = 1, minSize = 8,
-            })
-        end
-        LayoutAuraGroup(debuffHandle, "debuff", debuffCfg, {
-            anchor = "TOPLEFT", growth = "RIGHTDOWN",
-            size = 20, perRow = 3, max = 6, spacing = 1, minSize = 8,
-        })
+        scene.previewScale = previewScale
+        scene.SetPreviewFont = SetPreviewFont
+        RenderAuras(scene)
+        local LayoutHandle = scene.LayoutHandle
+        local PlaceAuraPreviewText = scene.PlaceAuraPreviewText
         local function TargetedAnchor(anchor)
             if anchor == "TOPLEFT" or anchor == "TOP" or anchor == "TOPRIGHT"
                 or anchor == "LEFT" or anchor == "CENTER" or anchor == "RIGHT"
@@ -1277,17 +1527,17 @@ function Render.Install(box, ctx, deps)
                     elseif value == "assistIcon" and gf and gf.GetAssistTexture then
                         path, l, r, t, b = gf.GetAssistTexture(kind, runtimeCfg and runtimeCfg.style)
                     elseif value == "raidMarker" then
-                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "raidMarker", 1)
+                        path, l, r, t, b = ResolveStatusTexture(spec, runtimeCfg, "raidMarker", 1)
                     elseif value == "readyCheckIcon" then
-                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "readyCheck", "ready")
+                        path, l, r, t, b = ResolveStatusTexture(spec, runtimeCfg, "readyCheck", "ready")
                     elseif value == "summonIcon" then
-                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "summon", 1)
+                        path, l, r, t, b = ResolveStatusTexture(spec, runtimeCfg, "summon", 1)
                     elseif value == "resurrectIcon" then
-                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "incomingRes", "resurrect")
+                        path, l, r, t, b = ResolveStatusTexture(spec, runtimeCfg, "incomingRes", "resurrect")
                     elseif value == "pvpIcon" then
-                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "pvp", "Alliance")
+                        path, l, r, t, b = ResolveStatusTexture(spec, runtimeCfg, "pvp", "Alliance")
                     elseif value == "phaseIcon" then
-                        path, l, r, t, b = ResolveStatusPreviewTexture(spec, runtimeCfg, "phase", "phase")
+                        path, l, r, t, b = ResolveStatusTexture(spec, runtimeCfg, "phase", "phase")
                     end
                     if atlas or path then
                         if atlas and tex.SetAtlas then
@@ -1409,157 +1659,10 @@ function Render.Install(box, ctx, deps)
             ConfigureSpellPreviewHandle(spellHandle, nil, selectedPlaced or { type = "icon", size = 20, anchor = "TOPLEFT", x = 0, y = 0 }, selectedSpellIcon, { spellR, spellG, spellB, 1 })
         end
         ApplySpellEffectPreview(runtimeSpellEffect)
-        textHandles.name._previewScale = previewScale
-        textHandles.hpGroup._previewScale = previewScale
-        textHandles.hpLeft._previewScale = previewScale
-        textHandles.hpCenter._previewScale = previewScale
-        textHandles.hpRight._previewScale = previewScale
-        textHandles.powerGroup._previewScale = previewScale
-        textHandles.powerLeft._previewScale = previewScale
-        textHandles.powerCenter._previewScale = previewScale
-        textHandles.powerRight._previewScale = previewScale
-        if not H.PlaceHandleAroundRegions(textHandles.name, mock, { mock._nameFS }, 3) then textHandles.name:Hide() end
-        if H.TextMovesTogether(kind, "hp") then
-            textHandles.hpLeft:Hide()
-            textHandles.hpCenter:Hide()
-            textHandles.hpRight:Hide()
-            if not H.PlaceHandleAroundRegions(textHandles.hpGroup, mock, { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }, 3) then textHandles.hpGroup:Hide() end
-        else
-            textHandles.hpGroup:Hide()
-            if not H.PlaceHandleAroundRegions(textHandles.hpLeft, mock, { mock._hpLeftFS }, 3) then textHandles.hpLeft:Hide() end
-            if not H.PlaceHandleAroundRegions(textHandles.hpCenter, mock, { mock._hpCenterFS }, 3) then textHandles.hpCenter:Hide() end
-            if not H.PlaceHandleAroundRegions(textHandles.hpRight, mock, { mock._hpRightFS }, 3) then textHandles.hpRight:Hide() end
-        end
-        if H.TextMovesTogether(kind, "power") then
-            textHandles.powerLeft:Hide()
-            textHandles.powerCenter:Hide()
-            textHandles.powerRight:Hide()
-            if not H.PlaceHandleAroundRegions(textHandles.powerGroup, mock, { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }, 3) then textHandles.powerGroup:Hide() end
-        else
-            textHandles.powerGroup:Hide()
-            if not H.PlaceHandleAroundRegions(textHandles.powerLeft, mock, { mock._powerLeftFS }, 3) then textHandles.powerLeft:Hide() end
-            if not H.PlaceHandleAroundRegions(textHandles.powerCenter, mock, { mock._powerCenterFS }, 3) then textHandles.powerCenter:Hide() end
-            if not H.PlaceHandleAroundRegions(textHandles.powerRight, mock, { mock._powerRightFS }, 3) then textHandles.powerRight:Hide() end
-        end
-        H.ApplyTextFocus(self, mock)
-        local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
-        local liveFrameStrata, fallbackFrameStrata
-        if gf and type(gf.ForEachFrame) == "function" then
-            gf.ForEachFrame(function(frame, _, frameKind)
-                if not (frame and frame.GetFrameStrata) then return false end
-                local strata = frame:GetFrameStrata()
-                if issecretvalue(strata) == true or not strata or strata == "" then return false end
-                strata = NormalizeFrameStrata(strata, PREVIEW_UNITFRAME_STRATA)
-                if not fallbackFrameStrata then fallbackFrameStrata = strata end
-                if frameKind == kind or frame._msufGFKind == kind then
-                    liveFrameStrata = strata
-                    return true
-                end
-                return false
-            end, true)
-        end
-        liveFrameStrata = NormalizeFrameStrata(liveFrameStrata or fallbackFrameStrata or PREVIEW_UNITFRAME_STRATA, PREVIEW_UNITFRAME_STRATA)
-        if liveFrameStrata == "AUTO" then liveFrameStrata = PREVIEW_UNITFRAME_STRATA end
-        local liveFrameStrataRank = FrameStrataRank(liveFrameStrata)
-        local previewHostStrata = mock.GetFrameStrata and mock:GetFrameStrata() or nil
-        if issecretvalue(previewHostStrata) == true or previewHostStrata == nil or previewHostStrata == "" then
-            previewHostStrata = self.GetFrameStrata and self:GetFrameStrata() or nil
-            if issecretvalue(previewHostStrata) == true or previewHostStrata == "" then previewHostStrata = nil end
-        end
-        local function PreviewStrataOffset(value)
-            local strata = NormalizeFrameStrata(value, "AUTO")
-            if strata == "AUTO" then strata = liveFrameStrata end
-            local rank = FrameStrataRank(strata)
-            if rank == 0 or liveFrameStrataRank == 0 then return 0 end
-            return (rank - liveFrameStrataRank) * PREVIEW_STRATA_LEVEL_STEP
-        end
-        local function ApplyPreviewStrata(handle, value)
-            if handle and handle.SetFrameStrata and previewHostStrata then
-                local currentStrata = handle.GetFrameStrata and handle:GetFrameStrata() or nil
-                if issecretvalue(currentStrata) == true or currentStrata ~= previewHostStrata then
-                    handle:SetFrameStrata(previewHostStrata)
-                end
-            end
-            return PreviewStrataOffset(value)
-        end
-        local buffStrataOffset = ApplyPreviewStrata(buffHandle, buffCfg.strata)
-        local trackedBuffStrataOffset = ApplyPreviewStrata(trackedBuffHandle, trackedBuffCfg.strata)
-        local debuffStrataOffset = ApplyPreviewStrata(debuffHandle, debuffCfg.strata)
-        buffHandle:SetFrameLevel(baseLevel + buffStrataOffset + ClampLayer(buffCfg.layer, 5))
-        if trackedBuffHandle then trackedBuffHandle:SetFrameLevel(baseLevel + trackedBuffStrataOffset + ClampLayer(trackedBuffCfg.layer, 9)) end
-        debuffHandle:SetFrameLevel(baseLevel + debuffStrataOffset + ClampLayer(debuffCfg.layer, 6))
-        for i = 1, #statusHandles do
-            local handle = statusHandles[i]
-            local spec = handle and handle._statusSpec
-            if handle then
-                local runtimeCfg = RuntimeStatusConfig(runtimeStatus, spec)
-                handle:SetFrameLevel(baseLevel + ClampLayer(runtimeCfg and runtimeCfg.layer or (spec and conf[spec.layer]), spec and spec.defaultLayer or 7))
-            end
-        end
-        local spellLayer = conf.spellIndicators and conf.spellIndicators.layer
-        local spellStrata = conf.spellIndicators and conf.spellIndicators.strata
-        if runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.layer ~= nil then spellLayer = runtimeSpec.spellIndicators.layer end
-        if runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.strata ~= nil then spellStrata = runtimeSpec.spellIndicators.strata end
-        local spellStrataOffset = ApplyPreviewStrata(spellHandle, selectedSpellCfg and selectedSpellCfg.strata or spellStrata)
-        spellHandle:SetFrameLevel(baseLevel + spellStrataOffset + ClampLayer(selectedSpellCfg and selectedSpellCfg.layer or spellLayer, 9))
-        for _, handle in pairs(dynamicSpellHandlesActive) do
-            if handle then
-                local handleStrataOffset = ApplyPreviewStrata(handle, handle._msufSpellIndicatorStrata or spellStrata)
-                handle:SetFrameLevel(baseLevel + handleStrataOffset + ClampLayer(handle._msufSpellIndicatorLayer or spellLayer, 9))
-            end
-        end
-        if targetedHandle then targetedHandle:SetFrameLevel(baseLevel + (Layers.TARGETED_SPELLS_BASE_OFFSET or 40) + ClampLayer(conf.targetedSpellsLayer, 10)) end
-        textHandles.name:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.nameLayer or conf.nameTextLayer, 5))
-        textHandles.hpGroup:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
-        textHandles.hpLeft:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
-        textHandles.hpCenter:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
-        textHandles.hpRight:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
-        textHandles.powerGroup:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
-        textHandles.powerLeft:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
-        textHandles.powerCenter:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
-        textHandles.powerRight:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
-        buffHandle:SetShown(layerAvailable.buff and LayerOn("buff"))
-        if trackedBuffHandle then trackedBuffHandle:SetShown(layerAvailable.trackedBuff and LayerOn("trackedBuff")) end
-        debuffHandle:SetShown(layerAvailable.debuff and LayerOn("debuff"))
-        for i = 1, #statusHandles do
-            local handle = statusHandles[i]
-            local spec = handle and handle._statusSpec
-            if handle then handle:SetShown(StatusSpecInMode(spec, statusSpec) and StatusConfigAvailable(spec) and LayerOn("status")) end
-        end
-        local siVisible = layerAvailable.si and LayerOn("si")
-        spellHandle:SetShown(siVisible)
-        for _, handle in pairs(dynamicSpellHandlesActive) do
-            if handle then handle:SetShown(siVisible) end
-        end
-        if targetedHandle then targetedHandle:SetShown(layerAvailable.targetedSpells and LayerOn("targetedSpells")) end
-        buffHandle:SetAlpha(LayerAlpha("buff") * AuraPreviewAlpha(buffCfg))
-        if trackedBuffHandle then trackedBuffHandle:SetAlpha(LayerAlpha("trackedBuff") * AuraPreviewAlpha(trackedBuffCfg)) end
-        debuffHandle:SetAlpha(LayerAlpha("debuff") * AuraPreviewAlpha(debuffCfg))
-        for i = 1, #statusHandles do
-            if statusHandles[i] then statusHandles[i]:SetAlpha(LayerAlpha("status")) end
-        end
-        spellHandle:SetAlpha((selectedSpellCfg and selectedSpellCfg.enabled == false) and (LayerAlpha("si") * 0.45) or LayerAlpha("si"))
-        for _, handle in pairs(dynamicSpellHandlesActive) do
-            if handle then handle:SetAlpha(LayerAlpha("si")) end
-        end
-        if targetedHandle then targetedHandle:SetAlpha(LayerAlpha("targetedSpells")) end
-        textHandles.name:SetAlpha(LayerAlpha("text"))
-        textHandles.hpGroup:SetAlpha(LayerAlpha("text"))
-        textHandles.hpLeft:SetAlpha(LayerAlpha("text"))
-        textHandles.hpCenter:SetAlpha(LayerAlpha("text"))
-        textHandles.hpRight:SetAlpha(LayerAlpha("text"))
-        textHandles.powerGroup:SetAlpha(LayerAlpha("text"))
-        textHandles.powerLeft:SetAlpha(LayerAlpha("text"))
-        textHandles.powerCenter:SetAlpha(LayerAlpha("text"))
-        textHandles.powerRight:SetAlpha(LayerAlpha("text"))
-        for i = 1, #self._layerButtons do
-            local btn = self._layerButtons[i]
-            local available = layerAvailable[btn._layerKey] ~= false
-            btn._layerAvailable = available
-            btn:SetPreviewActive(btn._sectionKey == focus, LayerOn(btn._layerKey), soloLayer == btn._layerKey, available)
-        end
-        if self._selectedHandle and self._selectedHandle.IsShown and not self._selectedHandle:IsShown() then SelectHandle(nil) end
-        RefreshHandleSelection(self)
+        scene.previewScale = previewScale
+        scene.textBaseLevel = textBaseLevel
+        scene.dynamicSpellHandlesActive = dynamicSpellHandlesActive
+        FinalizeScene(scene)
         if profiling then M.ProfileStop("preview", "GroupPreview.Refresh", profileStarted) end
     end
     box:EnableKeyboard(true)

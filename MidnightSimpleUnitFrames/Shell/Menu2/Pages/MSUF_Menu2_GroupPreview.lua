@@ -152,6 +152,11 @@ local function AddGFPreview(ctx, builder)
                 restoreWidth = box.GetWidth and box:GetWidth(),
                 restoreHeight = box.GetHeight and box:GetHeight(),
             })
+            local page = M.GroupPage
+            if page and type(page.RegisterControl) == "function" then
+                page.RegisterControl(box._msuf2PinButton, { key = ctx and ctx.key }, "preview.pin.toggle",
+                    "Pin Preview", "button", "ephemeral")
+            end
         end
         return box
     end

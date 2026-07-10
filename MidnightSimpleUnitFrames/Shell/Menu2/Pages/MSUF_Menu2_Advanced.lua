@@ -9,6 +9,39 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local WL = M.WordList
 local C_Timer = _G.C_Timer
+local function NormalizeControlPath(value)
+    local path = tostring(value or "")
+    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
+    path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    return path
+end
+local function ControlMeta(pageKey, domain, semanticPath, classification, exact)
+    local identity = table.concat({
+        NormalizeControlPath(pageKey),
+        NormalizeControlPath(domain),
+        NormalizeControlPath(semanticPath),
+    }, ".")
+    local meta = {
+        controlId = "menu2." .. identity,
+        identityKey = identity,
+        controlPath = identity:gsub("%.", "/"),
+        classification = classification or "setting",
+    }
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do meta[key] = value end
+    end
+    return meta
+end
+local function RegisterControl(widget, meta, label, kind, values)
+    if not (widget and type(meta) == "table" and type(M.RegisterSearchWidget) == "function") then return widget end
+    local payload = {}
+    for key, value in pairs(meta) do payload[key] = value end
+    payload.label = label or payload.label
+    payload.kind = kind or payload.kind
+    payload.values = values or payload.values
+    M.RegisterSearchWidget(widget, payload)
+    return widget
+end
 local AURA_LAYOUT_OVERRIDE_KEYS = WL "iconSize spacing cooldownTextSize stackTextSize reminderGrowth"
 local AURA_CAPS_OVERRIDE_KEYS = WL "maxBuffs maxDebuffs maxIcons perRow layoutMode growth buffGrowth debuffGrowth rowWrap buffRowWrap debuffRowWrap buffDebuffAnchor splitSpacing stackCountAnchor sortOrder"
 local function CallGlobal(name, ...)
@@ -75,36 +108,45 @@ local function IsEmptyAuraFilterTable(filters)
     return true
 end
 local BindToggleControl, BindDropdownControl = M.BindBoolWidget, M.BindDropdownWidget
-local function BindSliderControl(ctx, slider, getValue, setValue, fallback, step)
-    return M.BindNumberWidget(ctx, slider, getValue, setValue, fallback, { step = step, roundStep = true })
+local function BindSliderControl(ctx, slider, getValue, setValue, fallback, step, metadata)
+    local opts = {}
+    if type(metadata) == "table" then
+        for key, value in pairs(metadata) do opts[key] = value end
+    end
+    opts.step = step
+    opts.roundStep = true
+    return M.BindNumberWidget(ctx, slider, getValue, setValue, fallback, opts)
 end
-local function BindTableToggle(ctx, section, label, getTable, key, default, apply)
+local function BindTableToggle(ctx, section, label, getTable, key, default, apply, metadata)
     return BindToggleControl(ctx, W.Toggle(section, label),
         function() return BoolValue(getTable(), key, default) end,
-        function(v) SetValue(getTable(), key, v, apply) end)
+        function(v) SetValue(getTable(), key, v, apply) end,
+        metadata)
 end
-local function BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply)
+local function BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply, metadata)
     return BindToggleControl(ctx, W.SwitchAt(section, label, x, y, labelWidth),
         function() return BoolValue(getTable(), key, default) end,
-        function(v) SetValue(getTable(), key, v, apply) end)
+        function(v) SetValue(getTable(), key, v, apply) end,
+        metadata)
 end
-local function BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply)
+local function BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply, metadata)
     return BindSliderControl(ctx, W.Slider(section, label, minVal, maxVal, step, width or 300),
         function() return NumValue(getTable(), key, default) end,
         function(v) SetValue(getTable(), key, v, apply) end,
-        default, step)
+        default, step, metadata)
 end
-local function BindTableDropdown(ctx, section, label, values, width, getTable, key, default, apply)
+local function BindTableDropdown(ctx, section, label, values, width, getTable, key, default, apply, metadata)
     return BindDropdownControl(ctx, W.Dropdown(section, label, values, width or 220),
         function()
             local tbl = getTable()
             if tbl and tbl[key] ~= nil then return tbl[key] end
             return default
         end,
-        function(v) SetValue(getTable(), key, v or default, apply) end)
+        function(v) SetValue(getTable(), key, v or default, apply) end,
+        metadata)
 end
-local function BindValueDropdown(ctx, section, label, values, width, getValue, setValue)
-    return BindDropdownControl(ctx, W.Dropdown(section, label, values, width or 220), getValue, setValue)
+local function BindValueDropdown(ctx, section, label, values, width, getValue, setValue, metadata)
+    return BindDropdownControl(ctx, W.Dropdown(section, label, values, width or 220), getValue, setValue, metadata)
 end
 local A3_APPLY_QUEUED = false
 local A3_APPLY_DELAY = 0.04
@@ -234,54 +276,54 @@ end
 local function DividerAt(parent, y, leftPad, rightPad)
     return W.DividerAt(parent, y, leftPad, rightPad)
 end
-local function BindValueToggle(ctx, section, label, getValue, setValue)
-    return BindToggleControl(ctx, W.Toggle(section, label), getValue, setValue)
+local function BindValueToggle(ctx, section, label, getValue, setValue, metadata)
+    return BindToggleControl(ctx, W.Toggle(section, label), getValue, setValue, metadata)
 end
-local function BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue)
-    return BindToggleControl(ctx, W.SwitchAt(section, label, x, y, labelWidth), getValue, setValue)
+local function BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue, metadata)
+    return BindToggleControl(ctx, W.SwitchAt(section, label, x, y, labelWidth), getValue, setValue, metadata)
 end
-local function BindValueSlider(ctx, section, label, minVal, maxVal, step, width, getValue, setValue)
-    return BindSliderControl(ctx, W.Slider(section, label, minVal, maxVal, step, width or 160), getValue, setValue, minVal, step)
+local function BindValueSlider(ctx, section, label, minVal, maxVal, step, width, getValue, setValue, metadata)
+    return BindSliderControl(ctx, W.Slider(section, label, minVal, maxVal, step, width or 160), getValue, setValue, minVal, step, metadata)
 end
-local function ToggleAt(ctx, section, label, x, y, getTable, key, default, apply)
-    return MoveWidget(BindTableToggle(ctx, section, label, getTable, key, default, apply), section, x, y)
+local function ToggleAt(ctx, section, label, x, y, getTable, key, default, apply, metadata)
+    return MoveWidget(BindTableToggle(ctx, section, label, getTable, key, default, apply, metadata), section, x, y)
 end
-local function SwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply)
-    return BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply)
+local function SwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply, metadata)
+    return BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply, metadata)
 end
-local function ValueToggleAt(ctx, section, label, x, y, getValue, setValue)
-    return MoveWidget(BindValueToggle(ctx, section, label, getValue, setValue), section, x, y)
+local function ValueToggleAt(ctx, section, label, x, y, getValue, setValue, metadata)
+    return MoveWidget(BindValueToggle(ctx, section, label, getValue, setValue, metadata), section, x, y)
 end
-local function ValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue)
-    return BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue)
+local function ValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue, metadata)
+    return BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue, metadata)
 end
-local function SliderAt(ctx, section, label, x, y, minVal, maxVal, step, width, getTable, key, default, apply)
-    return MoveWidget(BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply), section, x, y)
+local function SliderAt(ctx, section, label, x, y, minVal, maxVal, step, width, getTable, key, default, apply, metadata)
+    return MoveWidget(BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply, metadata), section, x, y)
 end
-local function ValueSliderAt(ctx, section, label, x, y, minVal, maxVal, step, width, getValue, setValue)
-    return MoveWidget(BindValueSlider(ctx, section, label, minVal, maxVal, step, width, getValue, setValue), section, x, y)
+local function ValueSliderAt(ctx, section, label, x, y, minVal, maxVal, step, width, getValue, setValue, metadata)
+    return MoveWidget(BindValueSlider(ctx, section, label, minVal, maxVal, step, width, getValue, setValue, metadata), section, x, y)
 end
-local function DropdownAt(ctx, section, label, x, y, values, width, getTable, key, default, apply)
-    return MoveWidget(BindTableDropdown(ctx, section, label, values, width, getTable, key, default, apply), section, x, y)
+local function DropdownAt(ctx, section, label, x, y, values, width, getTable, key, default, apply, metadata)
+    return MoveWidget(BindTableDropdown(ctx, section, label, values, width, getTable, key, default, apply, metadata), section, x, y)
 end
-local function ValueDropdownAt(ctx, section, label, x, y, values, width, getValue, setValue)
-    return MoveWidget(BindValueDropdown(ctx, section, label, values, width, getValue, setValue), section, x, y)
+local function ValueDropdownAt(ctx, section, label, x, y, values, width, getValue, setValue, metadata)
+    return MoveWidget(BindValueDropdown(ctx, section, label, values, width, getValue, setValue, metadata), section, x, y)
 end
 local function AddTableControlSpecs(ctx, list, section, getTable, specs, defaultApply)
     M.BuildControlSpecs(specs, {
-        toggle = function(s) return ToggleAt(ctx, section, s[2], s[3], s[4], getTable, s[5], s[6], s[7] or defaultApply) end,
-        switch = function(s) return SwitchAt(ctx, section, s[2], s[3], s[4], s[5], getTable, s[6], s[7], s[8] or defaultApply) end,
-        slider = function(s) return SliderAt(ctx, section, s[2], s[3], s[4], s[5], s[6], s[7], s[8], getTable, s[9], s[10], s[11] or defaultApply) end,
-        dropdown = function(s) return DropdownAt(ctx, section, s[2], s[3], s[4], s[5], s[6], getTable, s[7], s[8], s[9] or defaultApply) end,
+        toggle = function(s) return ToggleAt(ctx, section, s[2], s[3], s[4], getTable, s[5], s[6], s[7] or defaultApply, s.meta) end,
+        switch = function(s) return SwitchAt(ctx, section, s[2], s[3], s[4], s[5], getTable, s[6], s[7], s[8] or defaultApply, s.meta) end,
+        slider = function(s) return SliderAt(ctx, section, s[2], s[3], s[4], s[5], s[6], s[7], s[8], getTable, s[9], s[10], s[11] or defaultApply, s.meta) end,
+        dropdown = function(s) return DropdownAt(ctx, section, s[2], s[3], s[4], s[5], s[6], getTable, s[7], s[8], s[9] or defaultApply, s.meta) end,
     }, nil, list)
     return list
 end
 local function BuildTableControlSpecs(ctx, parent, getTable, defaultApply, specs, customKinds)
     return M.BuildControlSpecs(specs, { ["*"] = function(s)
         local kind = s[2]
-        if kind == "toggle" then return BindTableToggle(ctx, parent, s[3], getTable, s[4], s[5], s[6] or defaultApply), s[1] end
-        if kind == "slider" then return BindTableSlider(ctx, parent, s[3], s[4], s[5], s[6], s[7], getTable, s[8], s[9], s[10] or defaultApply), s[1] end
-        if kind == "dropdown" then return BindTableDropdown(ctx, parent, s[3], s[4], s[5], getTable, s[6], s[7], s[8] or defaultApply), s[1] end
+        if kind == "toggle" then return BindTableToggle(ctx, parent, s[3], getTable, s[4], s[5], s[6] or defaultApply, s.meta), s[1] end
+        if kind == "slider" then return BindTableSlider(ctx, parent, s[3], s[4], s[5], s[6], s[7], getTable, s[8], s[9], s[10] or defaultApply, s.meta), s[1] end
+        if kind == "dropdown" then return BindTableDropdown(ctx, parent, s[3], s[4], s[5], getTable, s[6], s[7], s[8] or defaultApply, s.meta), s[1] end
         local custom = customKinds and customKinds[kind]
         if custom then return custom(ctx, parent, getTable, defaultApply, s), s[1] end
     end })
@@ -361,6 +403,7 @@ local AdvancedPage = M.AdvancedPage or {}
 M.AdvancedPage = AdvancedPage
 M.Assign(AdvancedPage, {
     CallGlobal = CallGlobal, DB = DB, G = G, Bars = Bars, Gameplay = Gameplay,
+    ControlMeta = ControlMeta, RegisterControl = RegisterControl,
     BoolValue = BoolValue, NumValue = NumValue, SetValue = SetValue, DeepCopyTable = DeepCopyTable,
     BindTableToggle = BindTableToggle, BindTableSwitchAt = BindTableSwitchAt, BindTableSlider = BindTableSlider, BindTableDropdown = BindTableDropdown,
     BindValueDropdown = BindValueDropdown, ApplyAuras = ApplyAuras, MoveWidget = MoveWidget, LabelAt = LabelAt, DividerAt = DividerAt,

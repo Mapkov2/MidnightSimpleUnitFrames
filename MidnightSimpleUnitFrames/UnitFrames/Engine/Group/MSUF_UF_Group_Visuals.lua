@@ -1105,13 +1105,6 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
   end
 end
 
-function GroupVisuals.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
-  local fn = frame and frame._msufGFVisualRuntimeHealth
-  if fn then
-    fn(frame, frame._msufGFVisualRuntimeGroup, seedHP, seedMaxHP, event)
-  end
-end
-
 function GroupVisuals.UpdateGoneState(frame, event, unit, seedHP)
   local fn = frame and frame._msufGFVisualRuntimeGone
   if fn then
@@ -1137,18 +1130,11 @@ function GroupVisuals.Apply(frame)
   CompileVisualRuntime(frame and frame.MSUFSpec)
   local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.group
   if frame then
-    local healthFn = cfg and cfg.runtimeOnHealth or nil
     local goneFn = cfg and cfg.runtimeOnDeadBg or nil
     frame._msufGFVisualRuntimeGroup = cfg
-    frame._msufGFVisualRuntimeHealth = healthFn
     frame._msufGFVisualRuntimeGone = goneFn
     frame._msufGFVisualHealthBackgroundTexture = frame.MSUFSpec and frame.MSUFSpec.health and frame.MSUFSpec.health.backgroundTexture or false
-    frame._msufUpdateGroupVisualsHealthValue = healthFn and function(owner, event, unit, seedHP, seedMaxHP)
-      healthFn(owner, cfg, seedHP, seedMaxHP, event)
-    end or nil
-    frame._msufUpdateGroupVisualsGoneState = goneFn and function(owner, event, unit, seedHP)
-      goneFn(owner, cfg, seedHP, event)
-    end or nil
+    frame._msufUpdateGroupVisualsGoneState = goneFn and GroupVisuals.UpdateGoneState or nil
   end
   SetIndicatorRegistration(frame, cfg and cfg.targetIndicator == true, cfg and cfg.focusIndicator == true)
   PrepareVisuals(frame, cfg)
@@ -1181,10 +1167,8 @@ function GroupVisuals.Disable(frame)
   frame._msufGFHealthFadeSecretRangeBoolOut = nil
   frame._msufGFVisualHealthBoolApplied = nil
   frame._msufGFVisualRuntimeGroup = nil
-  frame._msufGFVisualRuntimeHealth = nil
   frame._msufGFVisualRuntimeGone = nil
   frame._msufGFVisualHealthBackgroundTexture = nil
-  frame._msufUpdateGroupVisualsHealthValue = nil
   frame._msufUpdateGroupVisualsGoneState = nil
 end
 

@@ -175,7 +175,6 @@ local function _PushVisualUpdates_Flush()
     --- schedules normally. Cleared at END.
     ---
     --- Same defense-in-depth pattern as _gfRosterFlush.
-    ExportPublic("MSUF_ColorStyleRevision", (_G.MSUF_ColorStyleRevision or 0) + 1)
     --- UF.RefreshColors advances Config.serial before elements read color
     --- settings, so the lazy settings cache is rebuilt once on first use.
     local colorsAlreadyRefreshed = _RefreshUnitFrameColors()
@@ -197,8 +196,11 @@ local function _PushVisualUpdates_Flush()
     --- Sync highlight priority stripe colors when border colors change.
     _ProfiledCall("PrioRows.Reinit", _G.MSUF_PrioRows_Reinit)
 
-    --- Live-update static bar outlines and highlight test border colors.
-    do
+    --- UF.RefreshColors already includes both Borders and Power. Running the
+    --- legacy outline fanout afterwards would compile every unit spec and walk
+    --- every frame a second time. Keep it only for the legacy fallback path,
+    --- where the consolidated UF color refresh is unavailable.
+    if colorsAlreadyRefreshed ~= true then
         local applyAll = _G.MSUF_ApplyBarOutlineThickness_All
         _ProfiledCall("BarOutline.Refresh", applyAll)
     end
