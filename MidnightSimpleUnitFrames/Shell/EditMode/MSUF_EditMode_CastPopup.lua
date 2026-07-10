@@ -138,15 +138,15 @@ local function RefreshUFPreview(reason)
 end
 
 local function ReapplyCastbar(unit)
-    if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then
-        _G.MSUF_UpdateCastbarWidthSourceSync(General(), unit)
-    end
-    if type(_G.MSUF_ApplyCastbarEffectiveSizeUnit) == "function" then
-        _G.MSUF_ApplyCastbarEffectiveSizeUnit(unit)
-    end
     if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
         _G.MSUF_ApplyCastbarUnitAndSync(unit)
     else
+        if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then
+            _G.MSUF_UpdateCastbarWidthSourceSync(General(), unit)
+        end
+        if type(_G.MSUF_ApplyCastbarEffectiveSizeUnit) == "function" then
+            _G.MSUF_ApplyCastbarEffectiveSizeUnit(unit)
+        end
         local fn = (unit == "player" and "MSUF_ReanchorPlayerCastBar")
             or (unit == "target" and "MSUF_ReanchorTargetCastBar")
             or (unit == "focus" and "MSUF_ReanchorFocusCastBar")
@@ -157,8 +157,8 @@ local function ReapplyCastbar(unit)
         elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
             _G.MSUF_UpdateCastbarVisuals(unit)
         end
+        if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then _G.MSUF_PositionCastbarPreviewUnit(unit) end
     end
-    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then _G.MSUF_PositionCastbarPreviewUnit(unit) end
     SyncMovers()
     RefreshUFPreview("EM2_CASTBAR_POPUP_APPLY")
 end

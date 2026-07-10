@@ -51,6 +51,13 @@ local tostring = tostring
 
 ExportPublic("MSUF_INTERRUPT_FEEDBACK_DURATION", _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5)
 
+local ACTIVE_DURATION_OPTIONS = {
+    skipColor = true,
+    skipRegister = true,
+    skipTimeText = true,
+    skipShow = true,
+}
+
 local function IsCastbarEnabledForUnit(unit)
     unit = unit or ""
 
@@ -466,7 +473,7 @@ end
 
 local function CastbarAlreadyIdle(frame)
     if not frame then return true end
-    if frame.MSUF_castActive == true or frame.interrupted or frame.timer or frame.hideTimer then return false end
+    if frame.MSUF_castActive == true or frame.interrupted or frame.hideTimer then return false end
     if frame.IsShown and frame:IsShown() then return false end
     return true
 end
@@ -627,6 +634,55 @@ local function EnsureDriverCallbacks(frame)
             StopDriverFrame(frame, "STOPPED", false)
         end
     end
+
+    frame._msufInactiveRecheckCB = function()
+        frame._msufInactiveRecheckPending = nil
+        local token = frame._msufInactiveRecheckToken
+        frame._msufInactiveRecheckToken = nil
+        if frame._msufHideToken ~= token or not frame.unit then return end
+        frame.hideTimer = nil
+
+        local nextState = BuildState(frame)
+        if CastStateActive(nextState) then
+            frame:Cast(nextState)
+            return
+        end
+
+        _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
+    end
+
+    frame._msufInterruptHideCB = function()
+        local token = frame._msufInterruptHideToken
+        local deadline = frame._msufInterruptHideDeadline
+        if frame._msufHideToken ~= token or not frame.unit then
+            frame._msufInterruptHidePending = nil
+            frame._msufInterruptHideToken = nil
+            frame._msufInterruptHideDeadline = nil
+            return
+        end
+
+        local now = (type(GetTime) == "function") and GetTime() or 0
+        if deadline and deadline > now then
+            C_Timer.After(deadline - now, frame._msufInterruptHideCB)
+            return
+        end
+
+        frame._msufInterruptHidePending = nil
+        frame._msufInterruptHideToken = nil
+        frame._msufInterruptHideDeadline = nil
+        frame.hideTimer = nil
+        local nextState = BuildState(frame)
+        if CastStateActive(nextState) then
+            frame.interrupted = nil
+            frame:Cast(nextState)
+            return
+        end
+
+        if frame.interrupted then
+            frame.interrupted = nil
+            frame:Hide()
+        end
+    end
 end
 
 local function AdvanceCastToken(frame)
@@ -638,8 +694,6 @@ local function InvalidateTargetFocusState(frame)
     ClearStopExpectation(frame)
     ClearStartRetry(frame)
     AdvanceCastToken(frame)
-    frame._msufInterruptToken = (frame._msufInterruptToken or 0) + 1
-    frame.timer = nil
     frame.interrupted = nil
     frame.MSUF_kickInterruptibleConfirmed = nil
     StoreActiveStateIdentity(frame, nil)
@@ -1100,12 +1154,7 @@ local function CreateCastBar(frameName, unit)
                 state.durationObj = durationObj
                 state.text = label or spellName
                 state.icon = icon
-                _G.MSUF_Castbar_ApplyActiveDuration(self, state, {
-                    skipColor = true,
-                    skipRegister = true,
-                    skipTimeText = true,
-                    skipShow = true,
-                })
+                _G.MSUF_Castbar_ApplyActiveDuration(self, state, ACTIVE_DURATION_OPTIONS)
             end
 
             local reverseFill = _G.MSUF_GetReverseFillSafe(self, isChannel)
@@ -1146,43 +1195,23 @@ local function CreateCastBar(frameName, unit)
             end
             self.hideTimer = true
             self._msufHideToken = (self._msufHideToken or 0) + 1
-            local hideToken = self._msufHideToken
-            C_Timer.After(0, function()
-                if not self or self._msufHideToken ~= hideToken or not self.unit then return end
-
-                local nextState = BuildState(self)
-                if CastStateActive(nextState) then
-                    self:Cast(nextState)
-                    return
-                end
-
-                _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
-            end)
-        end
-
-        if self.timer then
-            self._msufInterruptToken = (self._msufInterruptToken or 0) + 1
-            self.timer = nil
-        end
-
-        local feedbackDuration = _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5
-        if type(feedbackDuration) ~= "number" then feedbackDuration = 0.5 end
-        if feedbackDuration < 0 then feedbackDuration = 0 end
-
-        self.timer = true
-        self._msufInterruptToken = (self._msufInterruptToken or 0) + 1
-        local interruptToken = self._msufInterruptToken
-        C_Timer.After(feedbackDuration, function()
-            if self._msufInterruptToken == interruptToken and self.interrupted then
-                self.interrupted = nil
-                self:Hide()
+            EnsureDriverCallbacks(self)
+            self._msufInactiveRecheckToken = self._msufHideToken
+            if not self._msufInactiveRecheckPending then
+                self._msufInactiveRecheckPending = true
+                C_Timer.After(0, self._msufInactiveRecheckCB)
             end
-        end)
+        end
+
     end
 
     function frame:SetInterrupted()
         HideChannelHasteMarkers(self)
         SetSafetyOnUpdate(self, false)
+        self._msufHideToken = (self._msufHideToken or 0) + 1
+        self._msufInactiveRecheckToken = nil
+        self._msufInterruptHideToken = nil
+        self._msufInterruptHideDeadline = nil
         _G.MSUF_CB_ResetStateOnStop(self, "INTERRUPTED")
         self.interrupted = true
         self._msufApiNotInterruptibleRaw = nil
@@ -1232,22 +1261,13 @@ local function CreateCastBar(frameName, unit)
 
         self.hideTimer = true
         self._msufHideToken = (self._msufHideToken or 0) + 1
-        local hideToken = self._msufHideToken
-        C_Timer.After(feedbackDuration, function()
-            if not self or self._msufHideToken ~= hideToken or not self.unit then return end
-
-            local nextState = BuildState(self)
-            if CastStateActive(nextState) then
-                self.interrupted = nil
-                self:Cast(nextState)
-                return
-            end
-
-            if self.interrupted then
-                self.interrupted = nil
-                self:Hide()
-            end
-        end)
+        EnsureDriverCallbacks(self)
+        self._msufInterruptHideToken = self._msufHideToken
+        self._msufInterruptHideDeadline = ((type(GetTime) == "function") and GetTime() or 0) + feedbackDuration
+        if not self._msufInterruptHidePending then
+            self._msufInterruptHidePending = true
+            C_Timer.After(feedbackDuration, self._msufInterruptHideCB)
+        end
     end
 
     function frame:SetSucceeded()
@@ -1319,9 +1339,7 @@ end
 local function CancelTimerField(frame, key)
     if not frame then return end
 
-    if key == "timer" then
-        frame._msufInterruptToken = (frame._msufInterruptToken or 0) + 1
-    elseif key == "hideTimer" then
+    if key == "hideTimer" then
         frame._msufHideToken = (frame._msufHideToken or 0) + 1
     elseif key == "_msufStartRetryTimer" then
         frame._msufStartRetryToken = -1
@@ -1336,7 +1354,6 @@ local function HardHideDriverFrame(frame)
     if not frame then return end
 
     SetSafetyOnUpdate(frame, false)
-    CancelTimerField(frame, "timer")
     CancelTimerField(frame, "hideTimer")
     CancelTimerField(frame, "_msufStopTimer1")
     CancelTimerField(frame, "_msufStopTimer2")
@@ -1409,12 +1426,12 @@ local function ApplyCastbarUnitCold(unit)
         _G.MSUF_ApplyCastbarUnitAndSync(unit)
         return true
     end
-    if unit == "target" and type(_G.MSUF_ReanchorTargetCastBar) == "function" then
-        _G.MSUF_ReanchorTargetCastBar()
-    elseif unit == "focus" and type(_G.MSUF_ReanchorFocusCastBar) == "function" then
-        _G.MSUF_ReanchorFocusCastBar()
-    elseif unit == "player" and type(_G.MSUF_ReanchorPlayerCastBar) == "function" then
-        _G.MSUF_ReanchorPlayerCastBar()
+    if unit == "target" and type(_G.MSUF_ReanchorTargetCastBarBase) == "function" then
+        _G.MSUF_ReanchorTargetCastBarBase()
+    elseif unit == "focus" and type(_G.MSUF_ReanchorFocusCastBarBase) == "function" then
+        _G.MSUF_ReanchorFocusCastBarBase()
+    elseif unit == "player" and type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then
+        _G.MSUF_ReanchorPlayerCastBarBase()
     end
     if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
         _G.MSUF_ApplyCastbarVisualsForUnit(unit)

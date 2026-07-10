@@ -695,8 +695,8 @@ end
 -- Sizing helpers
 ------------------------------------------------------------------------
 
--- Apply a computed (width, height) to a player-style bar, plus icon layout,
--- empower-tick heights and the optional leading-edge spark.
+-- Apply only outer geometry and empower-tick height. Visuals owns icon/text
+-- layout, while Castbars_Core owns the spark follower.
 local function ApplyPlayerCastbarSizeAndLayout(bar, g, w, h)
     if not bar then return end
 
@@ -709,10 +709,6 @@ local function ApplyPlayerCastbarSizeAndLayout(bar, g, w, h)
     SetWidth(bar, w)
     SetHeight(bar, h)
 
-    if bar.statusBar then
-        _G.MSUF_ApplyPlayerCastbarIconLayout(bar, g, -1, 1)
-    end
-
     -- Empower stage ticks follow bar height.
     if bar.empowerStageTicks then
         local barH = bar:GetHeight() or h
@@ -723,40 +719,6 @@ local function ApplyPlayerCastbarSizeAndLayout(bar, g, w, h)
         end
     end
 
-    -- Spark (leading-edge highlight) — lazy-created when first enabled.
-    if bar.statusBar then
-        local showSpark = g and g.castbarShowSpark == true
-        local spark = bar.spark
-        if showSpark and not spark then
-            spark = bar.statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
-            spark:SetTexture(4417031)
-            spark:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
-            spark:SetDesaturated(true)
-            spark:SetVertexColor(1, 1, 1, 1)
-            spark:SetBlendMode("ADD")
-            bar.spark = spark
-        end
-        if spark then
-            if spark.SetShown then
-                spark:SetShown(showSpark)
-            elseif showSpark then
-                spark:Show()
-            else
-                spark:Hide()
-            end
-            if showSpark then
-                local overflow = (g and g.castbarSparkOverflow ~= false)
-                local sparkH = overflow and math.max(4, (bar:GetHeight() or h or 18) * 2.1)
-                    or (bar:GetHeight() or h or 18)
-                spark:SetSize(16, sparkH)
-                local fillTex = bar.statusBar:GetStatusBarTexture()
-                if fillTex then
-                    spark:ClearAllPoints()
-                    spark:SetPoint("CENTER", fillTex, "RIGHT", 0, 0)
-                end
-            end
-        end
-    end
 end
 
 -- Apply the effective runtime size to a unit's castbar(s). Returns true if a
@@ -856,7 +818,7 @@ local function HideCastbar(frame, preview)
 end
 
 -- Shared re-anchor for the Target and Focus castbars.
-local function ReanchorTargetOrFocusCastbar(unit)
+local function ReanchorTargetOrFocusCastbarBase(unit)
     EnsureDB()
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
     local frame = (unit == "target"
@@ -889,52 +851,50 @@ local function ReanchorTargetOrFocusCastbar(unit)
 
     local snap = _G.MSUF_Snap
     if type(snap) == "function" then width = snap(frame, width) end
-    local barH = (frame.GetHeight and frame:GetHeight()) or desiredHeight or 18
-
     SetWidth(frame, width)
-    if frame.statusBar then
-        SetWidth(frame.statusBar, math.max(1, width - barH - 1))
-    end
+    SetHeight(frame, desiredHeight)
     if preview and type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
         _G.MSUF_ApplyPlayerCastbarSizeAndLayout(preview, g, width, desiredHeight)
     end
 
-    local showTime = (type(_G.MSUF_IsCastTimeEnabled) == "function") and _G.MSUF_IsCastTimeEnabled(frame) or true
-    if frame.timeText and frame.statusBar then
-        frame.timeText:Show()
-        SetAlpha(frame.timeText, showTime and 1 or 0)
-        if not showTime then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
-
-        local timeX = g[unit == "target" and "castbarTargetTimeOffsetX" or "castbarFocusTimeOffsetX"]
-        if timeX == nil then timeX = g.castbarPlayerTimeOffsetX or -2 end
-        local timeY = g[unit == "target" and "castbarTargetTimeOffsetY" or "castbarFocusTimeOffsetY"]
-        if timeY == nil then timeY = g.castbarPlayerTimeOffsetY or 0 end
-
-        SetPoint(frame.timeText, "RIGHT", frame.statusBar, "RIGHT", timeX, timeY)
-        if _G.MSUF_SetJustifyHIfChanged then
-            _G.MSUF_SetJustifyHIfChanged(frame.timeText, "RIGHT")
-        else
-            frame.timeText:SetJustifyH("RIGHT")
-        end
-    end
-
-    if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-        _G.MSUF_ApplyCastbarTimeTextLayout(frame, unit)
-    end
-
     local positionPreview = unit == "target" and _G.MSUF_PositionTargetCastbarPreview or _G.MSUF_PositionFocusCastbarPreview
     if preview and positionPreview then positionPreview() end
+    return frame, preview, g
+end
+
+local function RefreshCastbarVisualFollowers(frame, unit, general)
+    if not frame then return end
+    local refreshFrame = _G.MSUF_RefreshCastbarFrame
+    if type(refreshFrame) == "function" then
+        refreshFrame(frame)
+    elseif type(_G.MSUF_ApplyCastbarDetailLayout) == "function" then
+        _G.MSUF_ApplyCastbarDetailLayout(frame, unit)
+    end
+    local applySpark = _G.MSUF_ApplyCastbarSparkVisual
+    if type(applySpark) == "function" then applySpark(frame, general) end
+end
+
+local function ReanchorTargetCastBarBase()
+    return ReanchorTargetOrFocusCastbarBase("target")
+end
+
+local function ReanchorFocusCastBarBase()
+    return ReanchorTargetOrFocusCastbarBase("focus")
 end
 
 function MSUF_ReanchorTargetCastBar()
-    ReanchorTargetOrFocusCastbar("target")
+    local frame, preview, general = ReanchorTargetCastBarBase()
+    RefreshCastbarVisualFollowers(frame, "target", general)
+    RefreshCastbarVisualFollowers(preview, "target", general)
 end
 
 function MSUF_ReanchorFocusCastBar()
-    ReanchorTargetOrFocusCastbar("focus")
+    local frame, preview, general = ReanchorFocusCastBarBase()
+    RefreshCastbarVisualFollowers(frame, "focus", general)
+    RefreshCastbarVisualFollowers(preview, "focus", general)
 end
 
-function MSUF_ReanchorPlayerCastBar()
+local function ReanchorPlayerCastBarBase()
     EnsureDB()
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
 
@@ -974,26 +934,6 @@ function MSUF_ReanchorPlayerCastBar()
     local width, height = MSUF_GetCastbarDesiredSize("player", g, _G.MSUF_PlayerCastbar, 250, 18)
     ApplyPlayerCastbarSizeAndLayout(_G.MSUF_PlayerCastbar, g, width, height)
 
-    if _G.MSUF_PlayerCastbar.timeText and _G.MSUF_PlayerCastbar.statusBar then
-        local timeX = g.castbarPlayerTimeOffsetX or -2
-        local timeY = g.castbarPlayerTimeOffsetY or 0
-        SetPoint(_G.MSUF_PlayerCastbar.timeText, "RIGHT", _G.MSUF_PlayerCastbar.statusBar, "RIGHT", timeX, timeY)
-        if _G.MSUF_SetJustifyHIfChanged then
-            _G.MSUF_SetJustifyHIfChanged(_G.MSUF_PlayerCastbar.timeText, "RIGHT")
-        else
-            _G.MSUF_PlayerCastbar.timeText:SetJustifyH("RIGHT")
-        end
-
-        local showTime = g.showPlayerCastTime ~= false
-        _G.MSUF_PlayerCastbar.timeText:Show()
-        SetAlpha(_G.MSUF_PlayerCastbar.timeText, showTime and 1 or 0)
-        if not showTime then _G.MSUF_PlayerCastbar.timeText:SetText("") end
-    end
-
-    if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-        _G.MSUF_ApplyCastbarTimeTextLayout(_G.MSUF_PlayerCastbar, "player")
-    end
-
     -- Keep the preview size 1:1 with the real bar (show/hide handled elsewhere).
     if _G.MSUF_PlayerCastbarPreview then
         ApplyPlayerCastbarSizeAndLayout(_G.MSUF_PlayerCastbarPreview, g, width, height)
@@ -1001,13 +941,20 @@ function MSUF_ReanchorPlayerCastBar()
     if _G.MSUF_PlayerCastbarPreview and _G.MSUF_PositionPlayerCastbarPreview then
         _G.MSUF_PositionPlayerCastbarPreview()
     end
+    return _G.MSUF_PlayerCastbar, _G.MSUF_PlayerCastbarPreview, g
+end
+
+function MSUF_ReanchorPlayerCastBar()
+    local frame, preview, general = ReanchorPlayerCastBarBase()
+    RefreshCastbarVisualFollowers(frame, "player", general)
+    RefreshCastbarVisualFollowers(preview, "player", general)
 end
 
 MSUF_PlayerCastbarManageHooked = true -- Blizzard fallback removed; nothing to manage here.
 
 function MSUF_ReanchorBossCastBar()
     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
-        _G.MSUF_ApplyBossCastbarPositionSetting(false)
+        _G.MSUF_ApplyBossCastbarPositionSetting(false, true)
     end
     if not InCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
         _G.MSUF_UpdateBossCastbarPreview()
@@ -1025,6 +972,8 @@ end
 ------------------------------------------------------------------------
 ExportPublic("MSUF_ReanchorTargetCastBar", MSUF_ReanchorTargetCastBar)
 ExportPublic("MSUF_ReanchorFocusCastBar", MSUF_ReanchorFocusCastBar)
+ExportPublic("MSUF_ReanchorTargetCastBarBase", ReanchorTargetCastBarBase)
+ExportPublic("MSUF_ReanchorFocusCastBarBase", ReanchorFocusCastBarBase)
 ExportPublic("MSUF_NormalizeCastbarWidthSource", NormalizeWidthSourceKind)
 ExportPublic("MSUF_NormalizePlayerCastbarWidthSource", NormalizeWidthSourceKind)
 ExportPublic("MSUF_GetCastbarWidthSourceKey", function(unit)
@@ -1040,4 +989,5 @@ end)
 ExportPublic("MSUF_ApplyPlayerCastbarSizeAndLayout", ApplyPlayerCastbarSizeAndLayout)
 ExportPublic("MSUF_ApplyPlayerCastbarIconLayout", MSUF_ApplyPlayerCastbarIconLayout)
 ExportPublic("MSUF_ReanchorPlayerCastBar", MSUF_ReanchorPlayerCastBar)
+ExportPublic("MSUF_ReanchorPlayerCastBarBase", ReanchorPlayerCastBarBase)
 ExportPublic("MSUF_ReanchorBossCastBar", MSUF_ReanchorBossCastBar)

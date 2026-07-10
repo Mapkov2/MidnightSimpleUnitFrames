@@ -1817,15 +1817,17 @@ function Ticker.EndDrag()
         end
         --- Offsets already written by OnUpdate. Just finalize pipeline.
         if d.isCastbar then
+            local centralized = false
             if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
                 _G.MSUF_ApplyCastbarUnitAndSync(d.castbarUnit)
+                centralized = true
             else
                 ApplyCastbarDragPosition(d, cx, cy)
             end
             C_Timer.After(0.06, function()
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             end)
-            if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
+            if not centralized and type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
                 _G.MSUF_SyncCastbarPositionPopup(d.castbarUnit)
             end
             if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end

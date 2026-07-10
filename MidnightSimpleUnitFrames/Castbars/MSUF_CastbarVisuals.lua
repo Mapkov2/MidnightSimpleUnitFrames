@@ -13,7 +13,6 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
-local previousUpdateCastbarVisuals = _G.MSUF_UpdateCastbarVisuals
 local issecretvalue = _G.issecretvalue
 
 local function IsSecretValue(value)
@@ -255,7 +254,7 @@ local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     fontString._msufCastbarFontKey = fontCacheKey
 
     if fontString.SetFont then
-        pcall(fontString.SetFont, fontString, fontPath, size, flags)
+        fontString:SetFont(fontPath, size, flags)
     end
 
     if fontString.SetTextColor then fontString:SetTextColor(r, green, b, alpha) end
@@ -618,12 +617,12 @@ end
 
 --- Public visual entry for one frame. Call this after frame creation, anchoring,
 --- profile changes, or castbar size changes.
-local function ApplyCastbarDetailLayout(frame, forcedUnit)
+local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
     if not (frame and frame.statusBar) then return end
     local unit = NormalizeUnit(forcedUnit) or UnitFromFrame(frame)
     local prefix = PrefixForUnit(unit)
     if not prefix then return end
-    local g = GeneralDB()
+    local g = general or GeneralDB()
     ApplyIconLayout(frame, g, unit, prefix)
     ApplyTimeTextLayout(frame, g, unit, prefix)
     ApplySpellTextLayout(frame, g, unit, prefix)
@@ -632,32 +631,9 @@ end
 ExportPublic("MSUF_ApplyCastbarDetailLayout", ApplyCastbarDetailLayout)
 ExportPublic("MSUF_ApplyCastbarDetailTextLayout", ApplyCastbarDetailLayout)
 
-local function ApplyPlayerCastbarDetailFrames()
-    ApplyCastbarDetailLayout(_G.MSUF_PlayerCastbar, "player")
-    ApplyCastbarDetailLayout(_G.MSUF_PlayerCastbarPreview, "player")
-end
-
-local playerReanchorHooked
---- Player castbar reanchor can change the statusbar width after visual refresh.
---- Hook once and replay detail layout immediately after the anchor pass.
-local function HookPlayerCastbarReanchor()
-    if playerReanchorHooked then return end
-    local previous = _G.MSUF_ReanchorPlayerCastBar
-    if type(previous) ~= "function" then return end
-    playerReanchorHooked = true
-    ExportPublic("MSUF_ReanchorPlayerCastBar", function(...)
-        local result = previous(...)
-        ApplyPlayerCastbarDetailFrames()
-        return result
-    end)
-end
-
-HookPlayerCastbarReanchor()
-C_Timer.After(0, HookPlayerCastbarReanchor)
-
 --- Refreshes one existing frame without touching cast state. This is used by the
 --- global visual refresh and by profile/style changes.
-local function RefreshCastbarFrame(frame)
+local function RefreshCastbarFrame(frame, forcedUnit, general)
     if not (frame and frame.statusBar) then
         return
     end
@@ -691,74 +667,6 @@ local function RefreshCastbarFrame(frame)
         end
     end
 
-    ApplyCastbarDetailLayout(frame)
+    ApplyCastbarDetailLayout(frame, forcedUnit, general)
 end
 ExportPublic("MSUF_RefreshCastbarFrame", RefreshCastbarFrame)
-
-local function RefreshCastbarUnit(unit)
-    unit = NormalizeUnit(unit)
-    if unit == "player" then
-        RefreshCastbarFrame(_G.MSUF_PlayerCastbar)
-        RefreshCastbarFrame(_G.MSUF_PlayerCastbarPreview)
-        return true
-    elseif unit == "target" then
-        RefreshCastbarFrame(_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar)
-        RefreshCastbarFrame(_G.MSUF_TargetCastbarPreview)
-        return true
-    elseif unit == "focus" then
-        RefreshCastbarFrame(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar)
-        RefreshCastbarFrame(_G.MSUF_FocusCastbarPreview)
-        return true
-    elseif unit == "boss" then
-        RefreshCastbarFrame(_G.MSUF_BossCastbarPreview)
-        RefreshCastbarFrame(_G.MSUF_BossCastbarPreview1)
-
-        local maxBoss = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
-        if maxBoss < 1 or maxBoss > 12 then maxBoss = 5 end
-        for index = 2, maxBoss do
-            RefreshCastbarFrame(_G["MSUF_BossCastbarPreview" .. index])
-        end
-
-        local bossCastbars = _G.MSUF_BossCastbars
-        if type(bossCastbars) == "table" then
-            for index = 1, #bossCastbars do
-                RefreshCastbarFrame(bossCastbars[index])
-            end
-        end
-        return true
-    end
-    return false
-end
-
-local function UpdateCastbarVisuals(unit, ...)
-    if type(previousUpdateCastbarVisuals) == "function" and previousUpdateCastbarVisuals ~= _G.MSUF_UpdateCastbarVisuals then
-        previousUpdateCastbarVisuals(unit, ...)
-    end
-
-    if RefreshCastbarUnit(unit) then
-        return true
-    end
-
-    RefreshCastbarFrame(_G.MSUF_PlayerCastbar)
-    RefreshCastbarFrame(_G.MSUF_TargetCastbar)
-    RefreshCastbarFrame(_G.MSUF_FocusCastbar)
-    RefreshCastbarFrame(_G.MSUF_PlayerCastbarPreview)
-    RefreshCastbarFrame(_G.MSUF_TargetCastbarPreview)
-    RefreshCastbarFrame(_G.MSUF_FocusCastbarPreview)
-    RefreshCastbarFrame(_G.MSUF_BossCastbarPreview)
-    RefreshCastbarFrame(_G.MSUF_BossCastbarPreview1)
-
-    local maxBoss = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
-    if maxBoss < 1 or maxBoss > 12 then maxBoss = 5 end
-    for index = 2, maxBoss do
-        RefreshCastbarFrame(_G["MSUF_BossCastbarPreview" .. index])
-    end
-
-    local bossCastbars = _G.MSUF_BossCastbars
-    if type(bossCastbars) == "table" then
-        for index = 1, #bossCastbars do
-            RefreshCastbarFrame(bossCastbars[index])
-        end
-    end
-end
-ExportPublic("MSUF_UpdateCastbarVisuals", UpdateCastbarVisuals)
