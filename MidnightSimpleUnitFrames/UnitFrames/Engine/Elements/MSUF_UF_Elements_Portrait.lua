@@ -163,17 +163,6 @@ local function SetVertexColorCached(texture, r, g, b, a)
   end
 end
 
-local function ClearPortraitTexture(texture)
-  if not texture then
-    return
-  end
-  texture:SetTexture(nil)
-  texture._msufTexture = nil
-  texture._msufAtlas = nil
-  texture._msufPortraitGUID = nil
-  texture._msufPortraitKey = nil
-end
-
 local function PortraitFrameVisible(frame)
   if not frame then
     return false

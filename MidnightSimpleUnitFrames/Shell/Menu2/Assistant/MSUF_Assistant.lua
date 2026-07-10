@@ -945,27 +945,6 @@ local function NoMatchFilterLabel(kind, value)
     return "custom filter"
 end
 
-local function NoMatchTSVLine(entry)
-    local function clean(value)
-        value = tostring(value or "")
-        value = value:gsub("[\t\r\n]+", " ")
-        return value
-    end
-    return table.concat({
-        clean(entry.priority or "low"),
-        tostring(tonumber(entry.count) or 0),
-        clean(NoMatchOwnerLabel(entry.owner or "parser-or-help")),
-        clean(entry.tags or "uncategorized"),
-        clean(entry.candidate or NoMatchCandidate(entry.owner)),
-        clean(NoMatchPhraseRef()),
-        clean(entry.advice or NoMatchAdvice(entry.owner)),
-        clean(entry.registryCandidates or NoMatchRegistryCandidateSummary(entry.text or "", 3) or ""),
-        clean(entry.learningPlan or NoMatchLearningPlan(entry)),
-        clean(entry.resolution or ""),
-        clean(entry.resolvedBy or ""),
-    }, "\t")
-end
-
 function A.NoMatchWorklistText(limit, ownerFilter, resolutionFilter, priorityFilter, tagFilter)
     local data = A.GetNoMatchReview and A.GetNoMatchReview(limit or 20, ownerFilter, resolutionFilter, priorityFilter, tagFilter) or { total = 0, items = {}, ownerCounts = {}, resolutionCounts = {}, priorityCounts = {}, tagCounts = {} }
     local lines = {}

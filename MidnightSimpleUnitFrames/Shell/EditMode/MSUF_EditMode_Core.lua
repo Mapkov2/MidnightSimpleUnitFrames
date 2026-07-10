@@ -502,11 +502,6 @@ local function NotifyListeners()
     end
 end
 
---- DB access (always live, never cached)
-local function DB()
-    return _G.MSUF_DB
-end
-
 local function EnsureDB()
     if _G.MSUF_DB then return true end
     local fn = _G.MSUF_EnsureDB

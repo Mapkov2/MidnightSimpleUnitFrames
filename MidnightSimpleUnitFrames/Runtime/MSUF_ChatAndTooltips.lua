@@ -899,12 +899,6 @@ do
     local tooltipEditPreviewActive = false
     local W8 = "Interface/Buttons/WHITE8X8"
 
-    local function MSUF_Tooltip_IsSettingsOnlyPreview()
-        local g = MSUF_GetTooltipGeneral()
-        local provider, anchor = MSUF_NormalizeTooltipSettings(g)
-        return provider == TOOLTIP_PROVIDER_GAME and anchor == TOOLTIP_ANCHOR_EXTERNAL
-    end
-
     local function MSUF_Tooltip_OpenTooltipSettings()
         local menu = _G.MSUF2
         if menu and type(menu.Open) == "function" then

@@ -21,10 +21,6 @@ local currentReport
 local cachedBug
 local manualIssueType
 local manualDescription
-local function Tr(text)
-    return M.Tr and M.Tr(text) or tostring(text or "")
-end
-
 -- Bug report generation walks optional addons and Blizzard APIs; every call stays isolated
 -- so a broken reporter does not create a second Lua error while reporting the first one.
 local function SafePCall(fn, ...)
