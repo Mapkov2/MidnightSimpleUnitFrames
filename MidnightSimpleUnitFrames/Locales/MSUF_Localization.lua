@@ -1,12 +1,14 @@
 --- ============================================================================
 --- MidnightSimpleUnitFrames - Localization Core
 ---
---- Runtime localization scaffold:
+--- Single-locale localization scaffold:
 --- - MSUF.L: active translation table with fallback to the key itself.
---- - MSUF.LOCALE: active menu locale string.
---- - MSUF.AddLocale(locale, dict): register translations for any supported locale.
---- - MSUF.SetLocale(locale): switch menus independently from the Blizzard client;
---- combat requests are deferred until PLAYER_REGEN_ENABLED.
+--- - MSUF.LOCALE: locale selected from SavedVariables/client locale at load time.
+--- - English data ships in the main addon. Non-English data ships in one
+---   LoadOnDemand companion; active-pack guards retain only the selected table.
+--- - Changing locale requires ReloadUI.
+--- - MSUF.SetLocale(locale): records whether a reload is required. It never rebuilds
+---   translation tables during play.
 ---
 --- Translator workflow:
 --- - Add translations in the matching Locales/<locale>.lua file.
@@ -52,11 +54,35 @@ MSUF.LOCALE_NAMES = MSUF.LOCALE_NAMES or {
     zhTW = "繁體中文",
 }
 
-local function SavedLocale()
-    local db = rawget(_G, "MSUF_DB")
+local function LocaleFromDB(db)
     local general = type(db) == "table" and db.general
     local value = type(general) == "table" and general.menuLocale
     if type(value) == "string" and MSUF.SUPPORTED_LOCALES[value] then return value end
+    return nil
+end
+
+local function ActiveProfileLocale()
+    local globalDB = rawget(_G, "MSUF_GlobalDB")
+    local profiles = type(globalDB) == "table" and globalDB.profiles
+    local characters = type(globalDB) == "table" and globalDB.char
+    if type(profiles) ~= "table" or type(characters) ~= "table" then return nil end
+
+    local unitName = _G.UnitName
+    local getRealmName = _G.GetRealmName
+    if type(unitName) ~= "function" or type(getRealmName) ~= "function" then return nil end
+    local name = unitName("player")
+    local realm = getRealmName()
+    if type(name) ~= "string" or name == "" or type(realm) ~= "string" or realm == "" then return nil end
+
+    local character = characters[name .. "-" .. realm]
+    local activeProfile = type(character) == "table" and character.activeProfile
+    local profile = type(activeProfile) == "string" and profiles[activeProfile]
+    return LocaleFromDB(profile)
+end
+
+local function SavedLocale()
+    local value = ActiveProfileLocale() or LocaleFromDB(rawget(_G, "MSUF_DB"))
+    if value then return value end
     return CLIENT_LOCALE
 end
 
@@ -75,26 +101,12 @@ end
 
 EnsureFallback(L)
 
-MSUF.LocaleRegistry = MSUF.LocaleRegistry or {}
-MSUF.LocaleProxies = MSUF.LocaleProxies or {}
-MSUF.LocaleCallbacks = MSUF.LocaleCallbacks or {}
+--- Keep the legacy registry shape for diagnostics without retaining every locale.
+MSUF.LocaleRegistry = { [MSUF.LOCALE] = L }
 
-local function Registry(locale)
-    if not MSUF.SUPPORTED_LOCALES[locale or ""] then locale = "enUS" end
-    MSUF.LocaleRegistry[locale] = MSUF.LocaleRegistry[locale] or {}
-    return MSUF.LocaleRegistry[locale]
-end
-
-local function RebuildActiveLocale()
-    for k in pairs(L) do L[k] = nil end
-    local dict = Registry(MSUF.LOCALE)
-    for k, v in pairs(dict) do
-        if type(k) == "string" and type(v) == "string" then
-            L[k] = v
-        end
-    end
-    EnsureFallback(L)
-end
+--- Defensive sink for third-party callers that try to register an inactive pack.
+--- Built-in packs return before registration, so this table never receives data.
+local INACTIVE_LOCALE = setmetatable({}, { __newindex = function() end })
 
 local function NormalizeLocale(locale)
     if not MSUF.SUPPORTED_LOCALES[locale or ""] then locale = CLIENT_LOCALE end
@@ -102,78 +114,31 @@ local function NormalizeLocale(locale)
     return locale
 end
 
-local function InCombat()
----@diagnostic disable-next-line: undefined-field
-    return (_G.InCombatLockdown and _G.InCombatLockdown())
----@diagnostic disable-next-line: undefined-field
-        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
-end
-
-local function ApplyLocale(locale)
-    MSUF.LOCALE = NormalizeLocale(locale)
-    RebuildActiveLocale()
-    for _, callback in pairs(MSUF.LocaleCallbacks) do
-        if type(callback) == "function" then
-            callback(MSUF.LOCALE)
-        end
-    end
-    return MSUF.LOCALE
-end
-
-local LocaleApplyFrame
-local function EnsureLocaleApplyFrame()
----@diagnostic disable-next-line: undefined-global
-    if LocaleApplyFrame or type(CreateFrame) ~= "function" then return end
----@diagnostic disable-next-line: undefined-global
-    LocaleApplyFrame = CreateFrame("Frame")
-    LocaleApplyFrame:SetScript("OnEvent", function(self, event)
-        if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
-        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        local pending = MSUF.PendingLocale
-        MSUF.PendingLocale = nil
-        if pending then ApplyLocale(pending) end
-    end)
-end
-
 function MSUF.RegisterLocale(locale)
-    if not MSUF.SUPPORTED_LOCALES[locale or ""] then locale = "enUS" end
-    if MSUF.LocaleProxies[locale] then return MSUF.LocaleProxies[locale] end
-    local proxy = {}
-    setmetatable(proxy, {
-        __index = function(_, key)
-            return Registry(locale)[key]
-        end,
-        __newindex = function(_, key, value)
-            if type(key) ~= "string" or type(value) ~= "string" then return end
-            Registry(locale)[key] = value
-            if locale == MSUF.LOCALE then L[key] = value end
-        end,
-    })
-    MSUF.LocaleProxies[locale] = proxy
-    return proxy
+    if locale == MSUF.LOCALE then return L end
+    return INACTIVE_LOCALE
 end
 
 function MSUF.GetEffectiveLocale()
     return MSUF.LOCALE or CLIENT_LOCALE or "enUS"
 end
 
-function MSUF.SetLocale(locale)
-    locale = NormalizeLocale(locale)
-    if InCombat() then
-        MSUF.PendingLocale = locale
-        EnsureLocaleApplyFrame()
-        if LocaleApplyFrame then
-            LocaleApplyFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-        end
-        return MSUF.LOCALE
-    end
-    MSUF.PendingLocale = nil
-    return ApplyLocale(locale)
+function MSUF.ResolveConfiguredLocale(db)
+    return LocaleFromDB(db) or CLIENT_LOCALE or "enUS"
 end
 
-function MSUF.RegisterLocaleCallback(key, callback)
-    if type(key) ~= "string" or type(callback) ~= "function" then return end
-    MSUF.LocaleCallbacks[key] = callback
+function MSUF.SetLocale(locale)
+    locale = NormalizeLocale(locale)
+    local reloadRequired = locale ~= MSUF.LOCALE
+    MSUF.PendingLocale = reloadRequired and locale or nil
+    MSUF.LocaleReloadRequired = reloadRequired or nil
+    return MSUF.LOCALE, reloadRequired
+end
+
+function MSUF.RegisterLocaleCallback()
+    --- Locale tables are immutable for the session, so callbacks are intentionally
+    --- not retained. The compatibility function remains for existing modules.
+    return false
 end
 
 function MSUF.Translate(text)
@@ -187,12 +152,36 @@ end
 _G.MSUF_L = L
 
 function MSUF.AddLocale(locale, dict)
-    if not dict then return end
-    local target = Registry(locale)
+    if locale ~= MSUF.LOCALE or type(dict) ~= "table" then return end
     for k, v in pairs(dict) do
         if type(k) == "string" and type(v) == "string" then
-            target[k] = v
-            if locale == MSUF.LOCALE then L[k] = v end
+            L[k] = v
         end
     end
+end
+
+--- English packs follow this file directly in the main TOC. Non-English packs
+--- share one LoadOnDemand addon; every source file has an active-locale guard,
+--- so only the selected dictionary executes and remains resident.
+if MSUF.LOCALE ~= "enUS" and MSUF.LOCALE ~= "enGB" then
+    local localeAddon = "MidnightSimpleUnitFrames_Locales"
+    local loadAddOn = _G.C_AddOns and _G.C_AddOns.LoadAddOn or _G.LoadAddOn
+    MSUF.LocaleAddonName = localeAddon
+    if type(loadAddOn) == "function" then
+        local loaded, reason = loadAddOn(localeAddon)
+        if loaded then
+            MSUF.LocaleAddonLoaded = true
+            MSUF.LocaleAddonLoadError = nil
+        else
+            MSUF.LocaleAddonLoaded = false
+            MSUF.LocaleAddonLoadError = reason
+        end
+    else
+        MSUF.LocaleAddonLoaded = false
+        MSUF.LocaleAddonLoadError = "LoadAddOn unavailable"
+    end
+else
+    MSUF.LocaleAddonName = nil
+    MSUF.LocaleAddonLoaded = nil
+    MSUF.LocaleAddonLoadError = nil
 end
