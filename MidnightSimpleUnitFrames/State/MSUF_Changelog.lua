@@ -8,10 +8,63 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    currentVersion = "6.0-Beta10",
-    previousVersion = "6.0-Beta9",
-    rangeLabel = "6.0-Beta9 -> 6.0-Beta10",
+    currentVersion = "6.0-Beta11",
+    previousVersion = "6.0-Beta10",
+    rangeLabel = "6.0-Beta10 -> 6.0-Beta11",
     entries = {
+        {
+            version = "6.0-Beta11",
+            date = "2026-07-10",
+            sections = {
+                {
+                    title = "Optional Assistant Runtime",
+                    bullets = {
+                        "Moved the local MSUF Assistant into its own load-on-demand companion addon. The parser, setting graph, knowledge data, and indexes now stay unloaded until you deliberately start the Assistant from Menu2.",
+                        "Added a lightweight Menu2 bridge and start state, so normal menu search remains available while the Assistant has zero idle CPU and memory cost outside an active Assistant session.",
+                        "Improved Assistant request routing, undo/redo, queued work, context handling, diagnostics, and the settings registry; added German/English presentation handling for Assistant dialogs.",
+                    },
+                },
+                {
+                    title = "Menu, Search, And Previews",
+                    bullets = {
+                        "Reworked Menu2 control registration around a shared control catalog and streamlined page/runtime loading.",
+                        "Improved pinned and embedded preview ownership so refreshes survive transient visibility changes while navigating or rebuilding menu pages.",
+                        "Refined group and unit preview rendering, draggable text/handle behavior, control enablement, search descriptions, and dashboard navigation.",
+                    },
+                },
+                {
+                    title = "Unit, Group, And Class Resources",
+                    bullets = {
+                        "Expanded group-frame configuration and runtime refresh handling for layout, visual layers, borders, text placement, status state, and range fading.",
+                        "Improved Class Power controller and mode handling, including Balance Druid resource behavior and more faithful menu previews.",
+                        "Updated unit-frame formatting, layers, rounded-frame effects, fonts, textures, and color application paths to keep live frames and previews in sync.",
+                    },
+                },
+                {
+                    title = "Aura Filtering",
+                    bullets = {
+                        "Added an optional Hide permanent auras filter for unit-frame, custom-container, group-frame, and spell-indicator aura candidates.",
+                        "Kept blacklist state and its menu/Assistant controls synchronized across the relevant unit and group aura scopes.",
+                    },
+                },
+                {
+                    title = "Packaging And Validation",
+                    bullets = {
+                        "Added the Assistant companion addon to release and Perfy staging, with matching interface/version contract checks.",
+                        "Hardened package cleanup and verification to exclude local workflow, graph, cache, and compiled-artifact directories.",
+                    },
+                },
+                {
+                    title = "What To Test First",
+                    bullets = {
+                        "Open Menu2 normally, use regular search, then start the Assistant and verify its dashboard, request handling, undo/redo, and combat-disabled state.",
+                        "Navigate quickly between pages and pinned previews; confirm unit and group preview refreshes and drag handles remain responsive.",
+                        "Test group layouts, status/text/border settings, range fading, and Class Power previews across relevant specs.",
+                        "Toggle Hide permanent auras for unit, custom, and group aura lanes and confirm permanent effects are excluded while timed effects remain.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0-Beta10",
             date = "2026-07-10",
@@ -104,6 +157,69 @@ local data = {
                         "Absorb, heal-absorb, over-absorb, and incoming-heal previews from the menu test controls.",
                         "Group-frame color settings under Advanced Colors and the removed duplicate controls from Group Bars.",
                         "Auras3 buff and debuff lanes after login and after switching edit/preview modes.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.0-Beta8",
+            date = "2026-07-09",
+            sections = {
+                {
+                    title = "Group Auras And Spell Indicators",
+                    bullets = {
+                        "Expanded group-frame tracked aura support so spell-indicator selections can drive tracked buff lanes more reliably.",
+                        "Added multi-ID and alias-aware custom aura tracking for spell indicators, including linked aura IDs and custom spell lists.",
+                        "Added custom corner indicator aura tracking backed by exact SpellID lists and native AuraContainer filters.",
+                        "Added frame-strata support for group aura lanes and spell indicators so tracked buffs, custom indicators, and previews layer more predictably.",
+                        "Improved spell-indicator cooldown text sizing and preview rendering for icon, square, bar, and number placements.",
+                    },
+                },
+                {
+                    title = "Class Power And Aura Tracking",
+                    bullets = {
+                        "Reworked ClassPower aura tracking for WoW 12.1 so aura-driven resources update from incremental UNIT_AURA data and full aura scans when needed.",
+                        "Fixed Balance Druid Eclipse, Celestial Alignment, and Incarnation tracking for color and Astral Power prediction.",
+                        "Improved aura-driven ClassPower modes such as Maelstrom Weapon, Tip of the Spear, Icicles, Demon Hunter soul-fragment states, and Ebon Might.",
+                        "Added a short cast-led correction window for Tip of the Spear stacks while Blizzard aura state catches up.",
+                    },
+                },
+                {
+                    title = "Health, Absorbs, And Frame State",
+                    bullets = {
+                        "Fixed absorb and over-absorb layering by syncing prediction bars to safe frame strata and ignoring secret-backed strata values.",
+                        "Hardened health, gradient, NPC-type, class-color, and power-color paths against invalid or secret unit tokens.",
+                        "Improved dead, offline, and missing-unit health state handling so colors and bars recover cleanly after identity changes.",
+                        "Improved CooldownViewer anchoring checks so unavailable or legacy cooldown frames do not force bad late-anchor behavior.",
+                    },
+                },
+                {
+                    title = "Group Frames, Range Fade, And Previews",
+                    bullets = {
+                        "Fixed group range fade and offline alpha updates with an event-driven range driver for active visible party and raid units.",
+                        "Updated range/offline registration after group-frame identity changes, hide/show transitions, and combat-deferred settle passes.",
+                        "Fixed group preview text dragging so name, health text, and power text handles update cleanly while moving.",
+                        "Improved group page previews so live group frames are preserved when they already cover the selected party or raid scope.",
+                        "Removed targeted-spell cooldown text from live, preview, and test paths.",
+                    },
+                },
+                {
+                    title = "Menu2 And Assistant",
+                    bullets = {
+                        "Updated Group Indicators and Group Auras controls for custom aura tracking, strata/layer handling, and tracked-buff previews.",
+                        "Improved Assistant routing for group aura lanes, spell indicators, text dragging, frame ordering, and health/status settings.",
+                        "Tightened group status registry coverage and menu search wiring for the updated indicator and aura paths.",
+                    },
+                },
+                {
+                    title = "What To Test First",
+                    bullets = {
+                        "Party and raid tracked buffs from spell-indicator selections, especially custom multi-ID entries and linked aura IDs.",
+                        "Custom corner indicators with exact SpellID lists and helpful/harmful filter choices.",
+                        "Range fade and offline alpha after roster changes, party-to-raid conversion, hide/show, combat, and /reload.",
+                        "Absorb, heal-absorb, and over-absorb bars with normal, reverse, clamp, and follow modes.",
+                        "Balance Druid Eclipse colors and aura-driven ClassPower resources on specs that use aura stacks or timers.",
+                        "Group preview dragging for name, health text, power text, aura, and spell-indicator handles.",
                     },
                 },
             },

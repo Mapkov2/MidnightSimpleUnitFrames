@@ -1,5 +1,36 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0-Beta11 - 2026-07-10
+
+### Optional Assistant Runtime
+- Moved the local MSUF Assistant into its own load-on-demand companion addon. The parser, setting graph, knowledge data, and indexes now stay unloaded until you deliberately start the Assistant from Menu2.
+- Added a lightweight Menu2 bridge and start state, so normal menu search remains available while the Assistant has zero idle CPU and memory cost outside an active Assistant session.
+- Improved Assistant request routing, undo/redo, queued work, context handling, diagnostics, and the settings registry; added German/English presentation handling for Assistant dialogs.
+
+### Menu, Search, And Previews
+- Reworked Menu2 control registration around a shared control catalog and streamlined page/runtime loading.
+- Improved pinned and embedded preview ownership so refreshes survive transient visibility changes while navigating or rebuilding menu pages.
+- Refined group and unit preview rendering, draggable text/handle behavior, control enablement, search descriptions, and dashboard navigation.
+
+### Unit, Group, And Class Resources
+- Expanded group-frame configuration and runtime refresh handling for layout, visual layers, borders, text placement, status state, and range fading.
+- Improved Class Power controller and mode handling, including Balance Druid resource behavior and more faithful menu previews.
+- Updated unit-frame formatting, layers, rounded-frame effects, fonts, textures, and color application paths to keep live frames and previews in sync.
+
+### Aura Filtering
+- Added an optional **Hide permanent auras** filter for unit-frame, custom-container, group-frame, and spell-indicator aura candidates.
+- Kept blacklist state and its menu/Assistant controls synchronized across the relevant unit and group aura scopes.
+
+### Packaging And Validation
+- Added the Assistant companion addon to release and Perfy staging, with matching interface/version contract checks.
+- Hardened package cleanup and verification to exclude local workflow, graph, cache, and compiled-artifact directories.
+
+### What To Test First
+- Open Menu2 normally, use regular search, then start the Assistant and verify its dashboard, request handling, undo/redo, and combat-disabled state.
+- Navigate quickly between pages and pinned previews; confirm unit and group preview refreshes and drag handles remain responsive.
+- Test group layouts, status/text/border settings, range fading, and Class Power previews across relevant specs.
+- Toggle **Hide permanent auras** for unit, custom, and group aura lanes and confirm permanent effects are excluded while timed effects remain.
+
 ## 6.0-Beta10 - 2026-07-10
 
 ### Unit Frame Auras - Blacklists And Whitelists
