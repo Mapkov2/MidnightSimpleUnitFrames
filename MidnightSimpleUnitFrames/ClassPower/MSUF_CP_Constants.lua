@@ -167,6 +167,7 @@ K.POWER_TYPE_TOKENS = {
     ["STAGGER"]             = "STAGGER",
     ["WHIRLWIND"]           = "WHIRLWIND",
     ["TIP_OF_THE_SPEAR"]    = "TIP_OF_THE_SPEAR",
+    ["ICICLES"]             = "ICICLES",
     ["EBON_MIGHT"]          = "EBON_MIGHT",
 }
 

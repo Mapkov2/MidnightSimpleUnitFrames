@@ -1,9 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
@@ -17,8 +13,7 @@ local VT = M.ValueTextList
 local floor = math.floor
 local max = math.max
 local min = math.min
-local C_Timer = _G.C_Timer
-local BARS_PAGE_WORK_DELAY = 0.04
+local unpack = unpack or table.unpack
 local OutlineStrata = {}
 OutlineStrata.values = {
     { value = "AUTO", text = "Auto (Frame)" },
@@ -38,31 +33,38 @@ local DISPEL_PURGE_BORDER_121_PTR_MESSAGE = "Dispel uses native 12.1 AuraContain
 local UNITFRAME_DISPEL_AURA_WARNING = "No UnitFrame auras: Dispel Border/Overlay need Player/Target/Focus/Boss auras."
 local UNITFRAME_DISPEL_AURA_WARNING_COLOR = { 0.90, 0.84, 0.76, 1 }
 local UNITFRAME_DISPEL_AURA_UNITS = { "player", "target", "focus", "boss" }
-local UNITFRAME_AURA_LIVE_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
 local UNITFRAME_AURA_APPLY_OPTS = { preview = true, auras = true, notify = false }
-local ROUNDED_PREVIEW_WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local ROUNDED_PREVIEW_MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local ROUNDED_PREVIEW_MASK = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_4x.tga"
 local ROUNDED_PREVIEW_EDGE = ROUNDED_PREVIEW_MASK_ROOT .. "rounded_bar_edge_4x.tga"
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = M.PickDefaults(GP, [[GRADIENT_DIR_KEYS PRIORITY_LABELS]])
-local Call, DB, G, Bars, Unit, ReadG, ReadGBool, ReadB, SetB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, NormalizePriorityKey, RefreshBorderTestModes, SetAbsorbTextureTest, ClearAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars = M.Pick(GP, [[Call DB G Bars Unit ReadG ReadGBool ReadB SetB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor NormalizePriorityKey RefreshBorderTestModes SetAbsorbTextureTest ClearAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars]])
-NormalizePriorityKey = NormalizePriorityKey or function(key) return key end
-local barsPageWorkPending = {}
-local function ScheduleBarsPageWork(key, delay, fn)
-    if type(fn) ~= "function" then return end
-    key = key or fn
-    if barsPageWorkPending[key] then return end
-    barsPageWorkPending[key] = fn
-    local function Run()
-        local cb = barsPageWorkPending[key]
-        barsPageWorkPending[key] = nil
-        if type(cb) == "function" then cb() end
+local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "DISPEL_TYPE", "Any dispel-type debuff", "ANY_DEBUFF", "Any debuff")
+local UNIT_DISPEL_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", "Dispellable by me",
+    "DISPEL_TYPE", "Any dispel-type debuff", "ANY_DEBUFF", "Any debuff")
+local UNIT_DISPEL_STYLES = VT("FULL", "Full Frame", "TOP", "Top Fade", "BOTTOM", "Bottom Fade",
+    "LEFT", "Left Fade", "RIGHT", "Right Fade")
+local Call, DB, G, Bars, ReadG, ReadGBool, ReadB, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, IsGFScope, BarScopeGet, BarScopeSet, BarScopeGetBars, BarScopeSetBars, TextureValues, CurrentPowerBarScopeUnit, SmoothPowerGet, SmoothPowerSet, PriorityOrder, PriorityColor, RefreshBorderTestModes, SetAbsorbTextureTest, SetControlEnabled, SetControlsEnabled, ApplyBars, ControlMeta, RegisterControl = M.Pick(GP, [[Call DB G Bars ReadG ReadGBool ReadB NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope IsGFScope BarScopeGet BarScopeSet BarScopeGetBars BarScopeSetBars TextureValues CurrentPowerBarScopeUnit SmoothPowerGet SmoothPowerSet PriorityOrder PriorityColor RefreshBorderTestModes SetAbsorbTextureTest SetControlEnabled SetControlsEnabled ApplyBars ControlMeta RegisterControl]])
+local function Meta(path, classification, exact)
+    return ControlMeta("opt_bars", "global", path, classification, exact)
+end
+local function RegisterSegment(segment, path, values)
+    RegisterControl(segment, Meta(path, "ephemeral"), nil, "segment", values)
+    if segment and type(segment.buttons) == "table" then
+        for i = 1, #segment.buttons do
+            local item = values and values[i] or {}
+            RegisterControl(segment.buttons[i], Meta(path .. ".option." .. tostring(item.value), "ephemeral"),
+                item.text or item.label or item.value or "", "button")
+        end
     end
-    if C_Timer and C_Timer.After then
-        C_Timer.After(delay or BARS_PAGE_WORK_DELAY, Run)
-    else
-        Run()
+    return segment
+end
+local function RegisterDragRows(container, path)
+    local rows = container and container.rows or {}
+    for i = 1, #rows do
+        RegisterControl(rows[i].frame, Meta(path .. ".slot." .. tostring(i), "action"),
+            "Highlight priority slot " .. tostring(i), "drag")
     end
+    return container
 end
 function OutlineStrata.Normalize(value)
     local normalize = _G.MSUF_NormalizeFrameStrata
@@ -107,17 +109,6 @@ function OutlineStrata.RefreshLabel(slider, value)
         slider._msuf2Title:SetText(M.Tr("Frame outline strata") .. ": " .. OutlineStrata.Label(value))
     end
 end
-local function ApplyService()
-    return M.ApplyService or _G.MSUF_Menu2_ApplyService
-end
-local function BarsProfileStart()
-    return M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStart() or nil
-end
-local function BarsProfileStop(key, started, extraCount)
-    if M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStop then
-        M.ProfileStop("barsPage", key, started, extraCount)
-    end
-end
 local function AnyUnitFrameAuraEnabled()
     local a3 = MSUF and MSUF.MSUF_Auras3
     local model = a3 and a3.MenuModel
@@ -127,742 +118,350 @@ local function AnyUnitFrameAuraEnabled()
     end
     return false
 end
-local function BuildBars(ctx)
-    local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Bars", "Textures, gradients, outlines and highlight borders.", 72)
-    local function SharedBarsControlsActive()
-        return CurrentBarsScope() == "shared"
+
+-- Scope rules are shared by all page sections. Keeping them outside the page builder
+-- prevents every widget callback from being routed through one giant closure.
+local function SharedScope() return CurrentBarsScope() == "shared" end
+local function GroupScope()
+    local scope = CurrentBarsScope()
+    return type(IsGFScope) == "function" and IsGFScope(scope)
+        or scope == "gf_party" or scope == "gf_raid"
+end
+local function ScopedControls() return SharedScope() or ScopeHasOverride(CurrentBarsScope(), "hlOverride") end
+local function HighlightControls() return CurrentBarsScope() ~= nil end
+local function BorderTestScope()
+    local scope = CurrentBarsScope()
+    return scope == "gf_party" and "party" or scope == "gf_raid" and "raid" or scope
+end
+
+-- ApplyService owns batching, profiling, combat deferral and compatibility fallbacks.
+-- The old page duplicated all of that logic in seven near-identical request functions.
+local function RequestApply(method, reason, scope)
+    local service = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    local request = service and service[method]
+    if type(request) == "function" then return request(reason, scope) end
+    return ApplyBars(reason)
+end
+local function RequestOutlineRuntime() return RequestApply("RequestBarOutline", "MSUF2_BAR_OUTLINE", CurrentBarsScope()) end
+local function RequestAggroBorderRuntime() return RequestApply("RequestAggroBorder", "MSUF2_AGGRO_BORDER_RUNTIME", CurrentBarsScope()) end
+local function RequestBossTargetBorderRuntime() return RequestApply("RequestBossTargetBorder", "MSUF2_BOSS_TARGET_BORDER_RUNTIME", "boss") end
+local function RequestHighlightPriorityRuntime(reason)
+    return RequestApply("RequestHighlightPriority", reason or "MSUF2_HIGHLIGHT_PRIORITY_RUNTIME", CurrentBarsScope())
+end
+local function RequestAllHighlightBorderRuntime()
+    return RequestApply("RequestHighlightBorders", "MSUF2_ALL_HIGHLIGHT_BORDER_RUNTIME", CurrentBarsScope())
+end
+local function RequestDispelPurgeBorderRuntime()
+    local result = RequestApply("RequestDispelPurgeBorder", "MSUF2_DISPEL_PURGE_BORDER_RUNTIME", CurrentBarsScope())
+    for _, test in ipairs({
+        { "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode" },
+        { "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode" },
+    }) do
+        local setter = _G[test[2]]
+        if _G[test[1]] and type(setter) == "function" then setter(true, BorderTestScope()) end
     end
-    local function CurrentBarsScopeIsGroupFrame()
-        local scope = CurrentBarsScope()
-        if type(IsGFScope) == "function" then return IsGFScope(scope) end
-        return scope == "gf_party" or scope == "gf_raid"
+    return result
+end
+local function RequestUnitDispelOverlayRuntime(reason)
+    reason = reason or "MSUF2_UF_DISPEL_OVERLAY"
+    local service = M.ApplyService or _G.MSUF_Menu2_ApplyService
+    local request = service and service.RequestUnit
+    if type(request) ~= "function" then return ApplyBars(reason) end
+    local scope = CurrentBarsScope()
+    if scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then
+        return request(scope, reason, UNITFRAME_AURA_APPLY_OPTS)
     end
-    local function ScopedBarsControlsActive()
-        local scope = CurrentBarsScope()
-        return scope == "shared" or ScopeHasOverride(scope, "hlOverride")
+    local result = false
+    for i = 1, #UNITFRAME_DISPEL_AURA_UNITS do
+        result = request(UNITFRAME_DISPEL_AURA_UNITS[i], reason, UNITFRAME_AURA_APPLY_OPTS) ~= false or result
     end
-    local function HighlightControlsActive()
-        return CurrentBarsScope() ~= nil
+    return result
+end
+local function ApplyRoundedRuntime()
+    return RequestApply("RequestRoundedBars", "MSUF2_ROUNDED", CurrentBarsScope())
+end
+
+local function ShowRoundedReloadRequiredPopup()
+    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
+        if _G.print then _G.print(M.Tr("|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload.")) end
+        return
     end
-    local function BorderTestScope()
-        local scope = CurrentBarsScope()
-        if scope == "gf_party" then return "party" end
-        if scope == "gf_raid" then return "raid" end
-        return scope
-    end
-    local function CurrentGroupFrameRefreshKinds()
-        local scope = CurrentBarsScope()
-        if scope == "gf_party" then return "party" end
-        if scope == "gf_raid" then return "raid", "mythicraid" end
-        if scope == "gf_mythicraid" then return "mythicraid" end
-        return nil
-    end
-    local function UnitApplyKey(unit)
-        unit = tostring(unit or "")
-        if unit:match("^boss%d+$") then return "boss" end
-        return unit
-    end
-    local function RequestUnitRuntime(unit, reason, opts)
-        unit = UnitApplyKey(unit)
-        if unit == "" then return false end
-        opts = opts or { preview = true }
-        local applyService = ApplyService()
-        if applyService and type(applyService.RequestUnit) == "function" then
-            return applyService.RequestUnit(unit, reason or "MSUF2_BARS_UNIT_RUNTIME", opts) ~= false
-        end
-        if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
-            return Call("MSUF_UFCore_NotifyConfigChanged", unit, true, true, reason or "MSUF2_BARS_UNIT_RUNTIME")
-        end
-        return false
-    end
-    local function RequestUnitsRuntime(units, reason, opts)
-        local seen
-        local did = false
-        for i = 1, #units do
-            local unit = UnitApplyKey(units[i])
-            if unit ~= "" then
-                if not seen then seen = {} end
-                if not seen[unit] then
-                    seen[unit] = true
-                    did = RequestUnitRuntime(unit, reason, opts) or did
-                end
+    M.InstallStaticPopup("MSUF2_ROUNDED_RELOAD_REQUIRED", {
+        text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
+        button1 = _G.RELOAD or M.Tr("Reload"), hideOnEscape = false,
+        OnAccept = function()
+            if _G.InCombatLockdown and _G.InCombatLockdown() then
+                if _G.print then _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
+            elseif type(_G.ReloadUI) == "function" then
+                _G.ReloadUI()
             end
-        end
-        return did
+        end,
+    })
+    _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
+end
+local function SetRoundedBool(key, value, requireReload)
+    value = value and true or false
+    local bars = Bars()
+    if bars[key] == value then return end
+    bars[key] = value
+    ApplyRoundedRuntime()
+    if requireReload then ShowRoundedReloadRequiredPopup() end
+end
+local function RegisterRoundedSearch(control, label, extraKeywords, help, kind, meta)
+    if not (control and type(M.RegisterSearchWidget) == "function") then return end
+    local keywords = {
+        "rounded texture", "rounded frame texture", "rounded frames", "round corners", "rounded corners",
+        "bars rounded", "enable rounded frames", "disable rounded frames", "abgerundete frames", "runde kanten",
+    }
+    if type(extraKeywords) == "string" then
+        for keyword in extraKeywords:gmatch("[^|]+") do keywords[#keywords + 1] = keyword end
+    elseif type(extraKeywords) == "table" then
+        for i = 1, #extraKeywords do keywords[#keywords + 1] = extraKeywords[i] end
     end
-    local function RequestGroupFrameDirty(dirty, reason)
-        local applyService = ApplyService()
-        if not applyService then return false end
-        local kindA, kindB = CurrentGroupFrameRefreshKinds()
-        if type(applyService.RequestGroupDirtyMask) == "function" then
-            if kindA then
-                local did = applyService.RequestGroupDirtyMask(kindA, dirty, reason or "MSUF2_GF_BARS_RUNTIME") ~= false
-                if kindB then did = (applyService.RequestGroupDirtyMask(kindB, dirty, reason or "MSUF2_GF_BARS_RUNTIME") ~= false) or did end
-                return did
-            end
-            return applyService.RequestGroupDirtyMask(nil, dirty, reason or "MSUF2_GF_BARS_RUNTIME") ~= false
-        end
-        if type(applyService.RequestGroup) == "function" then
-            if kindA then
-                local did = applyService.RequestGroup(kindA, "visual", reason or "MSUF2_GF_BARS_RUNTIME") ~= false
-                if kindB then did = (applyService.RequestGroup(kindB, "visual", reason or "MSUF2_GF_BARS_RUNTIME") ~= false) or did end
-                return did
-            end
-            return applyService.RequestGroup(nil, "visual", reason or "MSUF2_GF_BARS_RUNTIME") ~= false
-        end
-        return false
+    local payload = {
+        label = label, kind = kind or control._msuf2ControlKind or "toggle",
+        anchor = control._msuf2Title or control._msuf2Label or control,
+        values = { "On", "Off", "Enable", "Disable", "Einschalten", "Ausschalten" },
+        keywords = keywords,
+        help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, and mouseover highlights.",
+    }
+    if type(meta) == "table" then for key, value in pairs(meta) do payload[key] = value end end
+    M.RegisterSearchWidget(control, payload)
+end
+
+-- This page preview intentionally remains lightweight; live unit/group previews are
+-- refreshed by ApplyService. Descriptors remove the former texture-by-texture boilerplate.
+local function CreateRoundedTexturePreview(parent, x, y, width)
+    width = max(320, floor((tonumber(width) or 560) + 0.5))
+    local card = W.ControlCard(parent, "Preview", nil, x, y, width, 88)
+    if not card then return end
+    local sample, sampleW, sampleH, powerH = CreateFrame("Frame", nil, card), min(440, max(280, width - 44)), 46, 8
+    sample:SetPoint("TOPLEFT", card, "TOPLEFT", 18, -38)
+    sample:SetSize(sampleW, sampleH)
+    card._msuf2RoundedPreviewSample = sample
+    local regions = {
+        { "bg", "BACKGROUND", -7, { 0.015, 0.020, 0.032, 0.96 }, function(t) t:SetAllPoints(sample) end },
+        { "healthBg", "BORDER", -1, { 0.060, 0.070, 0.075, 1 }, function(texture)
+            texture:SetPoint("TOPLEFT", sample)
+            texture:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, powerH)
+        end },
+        { "health", "ARTWORK", 1, { 0.70, 0.69, 0.30, 0.94 }, function(texture)
+            texture:SetPoint("TOPLEFT", sample)
+            texture:SetSize(floor(sampleW * 0.78 + 0.5), sampleH - powerH)
+        end },
+        { "powerBg", "ARTWORK", 2, { 0.090, 0.055, 0.115, 1 }, function(texture)
+            texture:SetPoint("BOTTOMLEFT", sample)
+            texture:SetPoint("BOTTOMRIGHT", sample)
+            texture:SetHeight(powerH)
+        end },
+        { "power", "ARTWORK", 3, { 0.62, 0.12, 0.78, 1 }, function(texture)
+            texture:SetPoint("BOTTOMLEFT", sample)
+            texture:SetSize(floor(sampleW * 0.66 + 0.5), powerH)
+        end },
+        { "gloss", "ARTWORK", 4, { 1, 1, 1, 0.045 }, function(texture)
+            texture:SetPoint("TOPLEFT", sample)
+            texture:SetPoint("BOTTOMRIGHT", sample, "RIGHT", 0, -1)
+        end },
+    }
+    local helpers = M.PreviewHelpers or {}
+    for i = 1, #regions do
+        local spec = regions[i]
+        local tex = sample:CreateTexture(nil, spec[2], nil, spec[3])
+        spec[5](tex)
+        tex:SetColorTexture(unpack(spec[4]))
+        if helpers.SnapOff then helpers.SnapOff(tex) end
+        local mask = helpers.EnsureRoundedMask and helpers.EnsureRoundedMask(sample, spec[1], sample, tex, "_msuf2RoundedPreviewMasks", ROUNDED_PREVIEW_MASK)
+        if helpers.SetMask then helpers.SetMask(sample, tex, mask, "_msuf2RoundedPreviewMasked") end
     end
-    local function GroupKindMatches(frame, kindA, kindB)
-        if not kindA then return true end
-        local frameKind = frame and frame._msufGFKind
-        return frameKind == kindA or frameKind == kindB
+    for _, textSpec in ipairs({ { "Mapkotwo", "LEFT", 10, 0.42 }, { "404K - 100.0%", "RIGHT", -10, 0.50 } }) do
+        local label = T.Font(sample, "GameFontHighlightSmall", textSpec[1], T.colors.text)
+        label:SetPoint(textSpec[2], sample, textSpec[2], textSpec[3], 4)
+        label:SetWidth(floor(sampleW * textSpec[4]))
+        label:SetJustifyH(textSpec[2])
+        if label.SetShadowOffset then label:SetShadowOffset(1, -1) end
     end
-    local function RefreshGroupFrameVisuals()
-        -- Group frames have their own visual caches. Invalidate them explicitly when global
-        -- bar settings can affect party/raid previews or live secure children.
-        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
-        local dirty = (GF and GF.DIRTY_VISUAL) or true
-        if RequestGroupFrameDirty(dirty, "MSUF2_GF_BARS_VISUALS") then return end
-        if not GF then return end
-        local kindA, kindB = CurrentGroupFrameRefreshKinds()
-        if GF.InvalidateConfCache then GF.InvalidateConfCache() end
-        if GF.RefreshVisuals then
-            if kindA then
-                GF.RefreshVisuals(kindA, dirty)
-                if kindB then GF.RefreshVisuals(kindB, dirty) end
-            else
-                GF.RefreshVisuals(nil, dirty)
-            end
-        elseif _G.MSUF_GF_RefreshOverlays then
-            _G.MSUF_GF_RefreshOverlays()
-        end
+    for i = 1, 2 do
+        local edge = sample:CreateTexture(nil, "OVERLAY", nil, 6)
+        edge:SetTexture(ROUNDED_PREVIEW_EDGE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        edge:SetPoint("TOPLEFT", sample, "TOPLEFT", -i, i)
+        edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", i, -i)
+        edge:SetVertexColor(0, 0, 0, 1)
+        if helpers.SnapOff then helpers.SnapOff(edge) end
     end
-    local function RefreshGroupFrameBorders()
-        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
-        local dirty = (GF and (GF.DIRTY_BORDER or GF.DIRTY_VISUAL)) or true
-        if RequestGroupFrameDirty(dirty, "MSUF2_GF_BARS_BORDER") then return end
-        if not GF then return end
-        local kindA, kindB = CurrentGroupFrameRefreshKinds()
-        if GF.InvalidateConfCache then GF.InvalidateConfCache() end
-        local refreshBorder = _G.MSUF_GF_RefreshBorder
-        if refreshBorder and GF.frames then
-            for frame in pairs(GF.frames) do
-                if GroupKindMatches(frame, kindA, kindB) then
-                    if GF.BuildFrameCache then GF.BuildFrameCache(frame) end
-                    local c = frame and frame._c
-                    if frame and frame.unit and c and GF.DispelScanActive and GF.DispelScanActive(c) and GF._UpdateDispel then
-                        GF._UpdateDispel(frame, frame.unit)
-                    else
-                        refreshBorder(frame, frame and frame.unit)
-                    end
-                end
-            end
-        elseif GF.RefreshVisuals then
-            if kindA then
-                GF.RefreshVisuals(kindA, dirty)
-                if kindB then GF.RefreshVisuals(kindB, dirty) end
-            else
-                GF.RefreshVisuals(nil, dirty)
-            end
-        end
-    end
-    local function RefreshUnitBorders(units, reason)
-        if RequestUnitsRuntime(units, reason or "MSUF2_BORDER", { preview = true }) then return end
-        local UF = MSUF and MSUF.UF
-        local frames = UF and UF.frames
-        for i = 1, #units do
-            local unit = units[i]
-            local frame = (frames and frames[unit]) or _G["MSUF_" .. tostring(unit)]
-            if frame and frame.ForceUpdate then frame:ForceUpdate("MSUF2_BORDER") end
-        end
-    end
-    local function RefreshUnitAuras(units, reason)
-        reason = reason or "MSUF2_UF_DISPEL_OVERLAY"
-        if RequestUnitsRuntime(units, reason, UNITFRAME_AURA_APPLY_OPTS) then return end
-        local UF = MSUF and MSUF.UF
-        local A3 = MSUF and MSUF.MSUF_Auras3 or _G.MSUF_Auras3
-        local frames = UF and UF.frames
-        for i = 1, #units do
-            local unit = units[i]
-            local spec = UF and UF.Config and UF.Config.RefreshUnit and UF.Config.RefreshUnit(unit)
-            local frame = (frames and frames[unit]) or _G["MSUF_" .. tostring(unit)]
-            if frame and UF and type(UF.ApplyElementToFrame) == "function" then
-                UF.ApplyElementToFrame(frame, "Auras", spec or frame.MSUFSpec, reason)
-            elseif A3 and type(A3.RefreshUnit) == "function" then
-                A3.RefreshUnit(unit)
-            end
-        end
-    end
-    local function ApplyUnitDispelOverlayRuntime(reason)
-        Call("MSUF_UFCore_RefreshSettingsCache", reason or "MSUF2_UF_DISPEL_OVERLAY_RUNTIME")
-        RefreshUnitAuras(UNITFRAME_AURA_LIVE_UNITS, reason or "MSUF2_UF_DISPEL_OVERLAY")
-        Call("MSUF_UFPreview_RequestRefresh", reason or "MSUF2_UF_DISPEL_OVERLAY")
-    end
-    local function ApplyOutlineRuntime()
-        Call("MSUF_ApplyBarOutlineThickness_All")
-        local GF = _G.MSUF_NS and _G.MSUF_NS.GF
-        if GF and type(GF.RefreshOutlineGeometry) == "function" then
-            GF.RefreshOutlineGeometry()
-        else
-            Call("MSUF_GF_RefreshOutlineGeometry")
-            RefreshGroupFrameVisuals()
-        end
-        Call("MSUF_ApplyRoundedUnitframes")
-        Call("MSUF_UFPreview_RequestRefresh", "MSUF2_BAR_OUTLINE")
-    end
-    local outlineRuntimeQueued = false
-    local function RequestOutlineRuntime()
-        local applyService = ApplyService()
-        if applyService and type(applyService.RequestBarOutline) == "function" then
-            return applyService.RequestBarOutline("MSUF2_BAR_OUTLINE", CurrentBarsScope())
-        end
-        if outlineRuntimeQueued then return end
-        outlineRuntimeQueued = true
-        ScheduleBarsPageWork("MSUF2_BARS_OUTLINE_RUNTIME", BARS_PAGE_WORK_DELAY, function()
-            outlineRuntimeQueued = false
-            local started = BarsProfileStart()
-            ApplyOutlineRuntime()
-            BarsProfileStop("OutlineRuntime", started)
-        end)
-    end
-    local function ApplyAggroBorderRuntime()
-        Call("MSUF_UFCore_RefreshSettingsCache", "MSUF2_AGGRO_BORDER_RUNTIME")
-        Call("MSUF_ApplyBarOutlineThickness_All")
-        Call("MSUF_AggroOutline_ApplyEventRegistration")
-        RefreshUnitBorders({ "player", "target", "focus", "boss" }, "MSUF2_AGGRO_BORDER_RUNTIME")
-        RefreshGroupFrameBorders()
-        RefreshGroupFrameVisuals()
-    end
-    local function ApplyDispelPurgeBorderRuntime()
-        Call("MSUF_UFCore_RefreshSettingsCache", "MSUF2_DISPEL_BORDER_RUNTIME")
-        Call("MSUF_ApplyBarOutlineThickness_All")
-        Call("MSUF_DispelOutline_ApplyEventRegistration")
-        Call("MSUF_RefreshDispelOutlineStates", true)
-        RefreshUnitBorders({ "player", "target", "focus", "targettarget" }, "MSUF2_DISPEL_BORDER_RUNTIME")
-        Call("MSUF_RefreshUnitDispelOverlays")
-        RefreshGroupFrameBorders()
-        if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(true, BorderTestScope()) end
-        if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(true, BorderTestScope()) end
-    end
-    local function ApplyBossTargetBorderRuntime()
-        local reason = "MSUF2_BOSS_TARGET_BORDER_RUNTIME"
-        Call("MSUF_UFCore_RefreshSettingsCache", reason)
-        if RequestUnitRuntime("boss", reason, { preview = true }) then return end
-        if MSUF and MSUF.UF and MSUF.UF.RefreshBorders then
-            MSUF.UF.RefreshBorders("boss")
-        else
-            RefreshUnitBorders({ "boss1", "boss2", "boss3", "boss4", "boss5" })
-        end
-    end
-    local function ApplyHighlightPriorityRuntime()
-        Call("MSUF_UFCore_RefreshSettingsCache", "MSUF2_HIGHLIGHT_PRIORITY_RUNTIME")
-        RefreshUnitBorders({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }, "MSUF2_HIGHLIGHT_PRIORITY_RUNTIME")
-        RefreshGroupFrameBorders()
-        Call("MSUF_UFPreview_RequestRefresh", "MSUF2_HIGHLIGHT_PRIORITY")
-    end
-    local function ApplyAllHighlightBorderRuntime()
-        ApplyAggroBorderRuntime()
-        ApplyDispelPurgeBorderRuntime()
-        ApplyBossTargetBorderRuntime()
-    end
-    local aggroBorderRuntimeQueued = false
-    local dispelPurgeBorderRuntimeQueued = false
-    local unitDispelOverlayRuntimeQueued = false
-    local bossTargetBorderRuntimeQueued = false
-    local highlightPriorityRuntimeQueued = false
-    local allHighlightBorderRuntimeQueued = false
-    local function RequestAggroBorderRuntime()
-        local applyService = ApplyService()
-        if applyService and type(applyService.RequestAggroBorder) == "function" then
-            return applyService.RequestAggroBorder("MSUF2_AGGRO_BORDER_RUNTIME", CurrentBarsScope())
-        end
-        if aggroBorderRuntimeQueued then return end
-        aggroBorderRuntimeQueued = true
-        ScheduleBarsPageWork("MSUF2_AGGRO_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
-            aggroBorderRuntimeQueued = false
-            local started = BarsProfileStart()
-            ApplyAggroBorderRuntime()
-            BarsProfileStop("AggroBorderRuntime", started)
-        end)
-    end
-    local function RequestDispelPurgeBorderRuntime()
-        local applyService = ApplyService()
-        if applyService and type(applyService.RequestDispelPurgeBorder) == "function" then
-            local result = applyService.RequestDispelPurgeBorder("MSUF2_DISPEL_PURGE_BORDER_RUNTIME", CurrentBarsScope())
-            if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(true, BorderTestScope()) end
-            if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(true, BorderTestScope()) end
-            return result
-        end
-        if dispelPurgeBorderRuntimeQueued then return end
-        dispelPurgeBorderRuntimeQueued = true
-        ScheduleBarsPageWork("MSUF2_DISPEL_PURGE_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
-            dispelPurgeBorderRuntimeQueued = false
-            local started = BarsProfileStart()
-            ApplyDispelPurgeBorderRuntime()
-            BarsProfileStop("DispelPurgeBorderRuntime", started)
-        end)
-    end
-    local function RequestUnitDispelOverlayRuntime(reason)
-        local applyService = ApplyService()
-        if applyService and type(applyService.RequestUnit) == "function" then
-            reason = reason or "MSUF2_UF_DISPEL_OVERLAY"
-            local scope = CurrentBarsScope()
-            if scope == "player" or scope == "target" or scope == "focus" or scope == "boss" then
-                return RequestUnitRuntime(scope, reason, UNITFRAME_AURA_APPLY_OPTS)
-            end
-            return RequestUnitsRuntime(UNITFRAME_DISPEL_AURA_UNITS, reason, UNITFRAME_AURA_APPLY_OPTS)
-        end
-        if unitDispelOverlayRuntimeQueued then return end
-        unitDispelOverlayRuntimeQueued = true
-        ScheduleBarsPageWork("MSUF2_UF_DISPEL_OVERLAY_RUNTIME", BARS_PAGE_WORK_DELAY, function()
-            unitDispelOverlayRuntimeQueued = false
-            local started = BarsProfileStart()
-            ApplyUnitDispelOverlayRuntime(reason)
-            BarsProfileStop("UnitDispelOverlayRuntime", started)
-        end)
-    end
-    local function RequestBossTargetBorderRuntime()
-        local applyService = ApplyService()
-        if applyService and type(applyService.RequestBossTargetBorder) == "function" then
-            return applyService.RequestBossTargetBorder("MSUF2_BOSS_TARGET_BORDER_RUNTIME", "boss")
-        end
-        if bossTargetBorderRuntimeQueued then return end
-        bossTargetBorderRuntimeQueued = true
-        ScheduleBarsPageWork("MSUF2_BOSS_TARGET_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
-            bossTargetBorderRuntimeQueued = false
-            local started = BarsProfileStart()
-            ApplyBossTargetBorderRuntime()
-            BarsProfileStop("BossTargetBorderRuntime", started)
-        end)
-    end
-    local function RequestHighlightPriorityRuntime(reason)
-        local applyService = ApplyService()
-        if applyService and type(applyService.RequestHighlightPriority) == "function" then
-            return applyService.RequestHighlightPriority(reason or "MSUF2_HIGHLIGHT_PRIORITY_RUNTIME", CurrentBarsScope())
-        end
-        if highlightPriorityRuntimeQueued then return end
-        highlightPriorityRuntimeQueued = true
-        ScheduleBarsPageWork("MSUF2_HIGHLIGHT_PRIORITY_RUNTIME", BARS_PAGE_WORK_DELAY, function()
-            highlightPriorityRuntimeQueued = false
-            local started = BarsProfileStart()
-            ApplyHighlightPriorityRuntime()
-            BarsProfileStop("HighlightPriorityRuntime", started)
-        end)
-    end
-    local function RequestAllHighlightBorderRuntime()
-        local applyService = ApplyService()
-        if applyService and type(applyService.RequestHighlightBorders) == "function" then
-            return applyService.RequestHighlightBorders("MSUF2_ALL_HIGHLIGHT_BORDER_RUNTIME", CurrentBarsScope())
-        end
-        if allHighlightBorderRuntimeQueued then return end
-        allHighlightBorderRuntimeQueued = true
-        ScheduleBarsPageWork("MSUF2_ALL_HIGHLIGHT_BORDER_RUNTIME", BARS_PAGE_WORK_DELAY, function()
-            allHighlightBorderRuntimeQueued = false
-            local started = BarsProfileStart()
-            ApplyAllHighlightBorderRuntime()
-            BarsProfileStop("AllHighlightBorderRuntime", started)
-        end)
-    end
-    local function ApplyRoundedRuntime()
-        local applyService = ApplyService()
-        if applyService and type(applyService.RequestRoundedBars) == "function" then
-            return applyService.RequestRoundedBars("MSUF2_ROUNDED", CurrentBarsScope())
-        end
-        Call("MSUF_ApplyRoundedUnitframes")
-        if M.RequestGeneralApply then
-            M.RequestGeneralApply("MSUF2_ROUNDED", { preview = true, applyAll = false, bars = true, barsScope = CurrentBarsScope() })
-        elseif Call("MSUF_UFCore_NotifyConfigChanged", nil, true, true, "MSUF2_ROUNDED") then
-            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_ROUNDED")
-        else
-            Call("MSUF_RefreshAllFrames")
-            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_ROUNDED")
-        end
-        RefreshGroupFrameVisuals()
-        if not RequestGroupFrameDirty(true, "MSUF2_ROUNDED_GF_PREVIEW") then
-            Call("MSUF_GF_RefreshPreviewLayout", "party")
-            Call("MSUF_GF_RefreshPreviewLayout", "raid")
-            Call("MSUF_GF_RefreshPreviewLayout", "mythicraid")
-            Call("MSUF_GF_RefreshPreviewBox")
-        end
-    end
-    local function ShowRoundedReloadRequiredPopup()
-        if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-            if _G.print then _G.print(M.Tr("|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload.")) end
-            return
-        end
-        M.InstallStaticPopup("MSUF2_ROUNDED_RELOAD_REQUIRED", {
-            text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
-            button1 = _G.RELOAD or M.Tr("Reload"),
-            hideOnEscape = false,
-            OnAccept = function()
-                if _G.InCombatLockdown and _G.InCombatLockdown() then
-                    if _G.print then _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
-                    return
-                end
-                if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
-            end,
-        })
-        _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
-    end
-    local function SetRoundedBool(key, value, requireReload)
-        value = value and true or false
-        local bars = Bars()
-        if bars[key] == value then return end
-        bars[key] = value
-        ApplyRoundedRuntime()
-        if requireReload then ShowRoundedReloadRequiredPopup() end
-    end
-    local function RegisterRoundedSearch(control, label, extraKeywords, help, kind)
-        if not (control and type(M.RegisterSearchWidget) == "function") then return end
-        local keywords = {
-            "rounded texture", "rounded frame texture", "rounded frames", "round corners", "rounded corners",
-            "bars rounded", "global style bars rounded", "enable rounded frames", "disable rounded frames",
-            "turn on rounded frames", "turn off rounded frames", "abgerundete frames", "runde kanten",
-            "runde ecken", "abrundung", "abrunden", "einschalten", "ausschalten",
-        }
-        if type(extraKeywords) == "string" and extraKeywords:find("|", 1, true) then
-            for keyword in extraKeywords:gmatch("[^|]+") do keywords[#keywords + 1] = keyword end
-        elseif type(extraKeywords) == "table" then
-            for i = 1, #extraKeywords do keywords[#keywords + 1] = extraKeywords[i] end
-        elseif extraKeywords then
-            keywords[#keywords + 1] = extraKeywords
-        end
-        M.RegisterSearchWidget(control, {
-            label = label,
-            kind = kind or control._msuf2ControlKind or "toggle",
-            anchor = control._msuf2Title or control._msuf2Label or control,
-            values = { "On", "Off", "Enable", "Disable", "Einschalten", "Ausschalten" },
-            keywords = keywords,
-            help = help or "Controls the rounded frame texture style for unit frames, group frames, power bars, and mouseover highlights.",
-        })
-    end
-    local function SnapPreviewRegion(region)
-        if not region then return end
-        if region.SetSnapToPixelGrid then region:SetSnapToPixelGrid(false) end
-        if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
-    end
-    local function MaskRoundedPreviewTexture(sample, key, tex)
-        if not (sample and tex and tex.AddMaskTexture and sample.CreateMaskTexture) then return end
-        sample._msuf2RoundedPreviewMasks = sample._msuf2RoundedPreviewMasks or {}
-        local mask = sample._msuf2RoundedPreviewMasks[key]
-        if not mask then
-            mask = sample:CreateMaskTexture(nil, "ARTWORK")
-            SnapPreviewRegion(mask)
-            sample._msuf2RoundedPreviewMasks[key] = mask
-        end
-        mask:ClearAllPoints()
-        mask:SetTexture(ROUNDED_PREVIEW_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        mask:SetAllPoints(sample)
-        if sample._msuf2RoundedPreviewMasked and sample._msuf2RoundedPreviewMasked[tex] == mask then return end
-        sample._msuf2RoundedPreviewMasked = sample._msuf2RoundedPreviewMasked or {}
-        local old = sample._msuf2RoundedPreviewMasked[tex]
-        if old and tex.RemoveMaskTexture then tex:RemoveMaskTexture(old) end
-        tex:AddMaskTexture(mask)
-        sample._msuf2RoundedPreviewMasked[tex] = mask
-    end
-    local function CreateRoundedTexturePreview(parent, x, y, width)
-        width = max(320, floor((tonumber(width) or 560) + 0.5))
-        local card = W.ControlCard(parent, "Preview", nil, x, y, width, 88)
-        if not card then return nil end
-        local sampleW = min(440, max(280, width - 44))
-        local sampleH = 46
-        local powerH = 8
-        local sample = CreateFrame("Frame", nil, card)
-        sample:SetPoint("TOPLEFT", card, "TOPLEFT", 18, -38)
-        sample:SetSize(sampleW, sampleH)
-        card._msuf2RoundedPreviewSample = sample
-        local function PreviewTex(field, layer, level, r, g, b, a, point)
-            local tex = sample:CreateTexture(nil, layer, nil, level)
-            if field == "_previewBg" then tex:SetTexture(ROUNDED_PREVIEW_WHITE8) end
-            point(tex)
-            tex:SetColorTexture(r, g, b, a)
-            SnapPreviewRegion(tex)
-            sample[field] = tex
-            return tex
-        end
-        local bg = PreviewTex("_previewBg", "BACKGROUND", -7, 0.015, 0.020, 0.032, 0.96, function(tex) tex:SetAllPoints(sample) end)
-        local healthBg = PreviewTex("_previewHealthBg", "BORDER", -1, 0.060, 0.070, 0.075, 1, function(tex)
-            tex:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
-            tex:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, powerH)
-        end)
-        local health = PreviewTex("_previewHealth", "ARTWORK", 1, 0.70, 0.69, 0.30, 0.94, function(tex)
-            tex:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
-            tex:SetSize(floor(sampleW * 0.78 + 0.5), sampleH - powerH)
-        end)
-        local powerBg = PreviewTex("_previewPowerBg", "ARTWORK", 2, 0.090, 0.055, 0.115, 1, function(tex)
-            tex:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", 0, 0)
-            tex:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, 0)
-            tex:SetHeight(powerH)
-        end)
-        local power = PreviewTex("_previewPower", "ARTWORK", 3, 0.62, 0.12, 0.78, 1, function(tex)
-            tex:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", 0, 0)
-            tex:SetSize(floor(sampleW * 0.66 + 0.5), powerH)
-        end)
-        local gloss = PreviewTex("_previewGloss", "ARTWORK", 4, 1, 1, 1, 0.045, function(tex)
-            tex:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
-            tex:SetPoint("BOTTOMRIGHT", sample, "RIGHT", 0, -1)
-        end)
-        local name = T.Font(sample, "GameFontHighlightSmall", "Mapkotwo", T.colors.text)
-        name:SetPoint("LEFT", sample, "LEFT", 10, 4)
-        name:SetWidth(floor(sampleW * 0.42))
-        name:SetJustifyH("LEFT")
-        if name.SetShadowOffset then name:SetShadowOffset(1, -1) end
-        local value = T.Font(sample, "GameFontHighlightSmall", "404K - 100.0%", T.colors.text)
-        value:SetPoint("RIGHT", sample, "RIGHT", -10, 4)
-        value:SetWidth(floor(sampleW * 0.50))
-        value:SetJustifyH("RIGHT")
-        if value.SetShadowOffset then value:SetShadowOffset(1, -1) end
-        for key, tex in pairs({
-            bg = bg,
-            healthBg = healthBg,
-            health = health,
-            powerBg = powerBg,
-            power = power,
-            gloss = gloss,
-        }) do
-            MaskRoundedPreviewTexture(sample, key, tex)
-        end
-        sample._msuf2RoundedPreviewEdges = {}
-        for i = 1, 2 do
-            local edge = sample:CreateTexture(nil, "OVERLAY", nil, 6)
-            edge:SetTexture(ROUNDED_PREVIEW_EDGE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-            edge:SetPoint("TOPLEFT", sample, "TOPLEFT", -i, i)
-            edge:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", i, -i)
-            edge:SetVertexColor(0, 0, 0, 1)
-            SnapPreviewRegion(edge)
-            sample._msuf2RoundedPreviewEdges[i] = edge
-        end
-        function card:RefreshRoundedPreview()
-            sample:SetAlpha((ReadB("roundedFramesEnabled", false) == true) and 1 or 0.62)
-        end
-        card:RefreshRoundedPreview()
-        return card
-    end
-    local dispelTriggers = VT("BY_ME", "Dispellable by me", "DISPEL_TYPE", "Any dispel-type debuff", "ANY_DEBUFF", "Any debuff")
-    local unitDispelOverlayTriggers = VT(
-        "BORDER", "Use Dispel border detects", "BY_ME", "Dispellable by me",
-        "DISPEL_TYPE", "Any dispel-type debuff", "ANY_DEBUFF", "Any debuff")
-    local unitDispelOverlayStyles = VT(
-        "FULL", "Full Frame", "TOP", "Top Fade", "BOTTOM", "Bottom Fade", "LEFT", "Left Fade", "RIGHT", "Right Fade")
-    local function NormalizeDispelTrigger(v)
-        local fn = _G.MSUF_NormalizeDispelBorderTrigger
-        if type(fn) == "function" then return fn(v) end
-        if v == "DISPEL_TYPE" or v == "TYPE" or v == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
-        if v == "ANY_DEBUFF" or v == "ANY" or v == "ALL_DEBUFFS" then return "ANY_DEBUFF" end
-        return "BY_ME"
-    end
-    local function NormalizeUnitDispelOverlayTrigger(v)
-        local fn = _G.MSUF_NormalizeUnitDispelOverlayTrigger
-        if type(fn) == "function" then return fn(v) end
-        if v == "BORDER" or v == "INHERIT" or v == "SAME" then return "BORDER" end
-        return NormalizeDispelTrigger(v)
-    end
-    local function GradientKeyActive(entry, key)
-        return entry and entry.hlOverride == true
-            and entry.gradientOverride == true
-            and entry.gradientOverrideVersion == 2
-            and type(entry.gradientOverrideKeys) == "table"
-            and entry.gradientOverrideKeys[key] == true
-    end
-    local function MarkGradientKey(entry, key)
-        if not entry then return end
-        entry.hlOverride = true
-        entry.gradientOverride = true
-        entry.gradientOverrideVersion = 2
-        if type(entry.gradientOverrideKeys) ~= "table" then entry.gradientOverrideKeys = {} end
-        entry.gradientOverrideKeys[key] = true
-    end
-    local function AdoptChangedGradientKey(entry, key, defaultValue)
-        if not (entry and entry.hlOverride == true and entry[key] ~= nil) then return end
-        if GradientKeyActive(entry, key) then return end
-        local shared = ReadG(key, defaultValue)
-        if entry[key] ~= shared then MarkGradientKey(entry, key) end
-    end
-    local function GradientControlsActive()
-        local scope = CurrentBarsScope()
-        return scope == "shared" or ScopeHasOverride(scope, "hlOverride")
-    end
-    local function TextureControlsActive()
-        local scope = CurrentBarsScope()
-        if scope == "shared" then return true end
-        return IsGFScope(scope) and ScopeHasOverride(scope, "hlOverride")
-    end
-    local function GradientScopeGet(key, defaultValue)
-        local scope = CurrentBarsScope()
-        if scope ~= "shared" and ScopeHasOverride(scope, "hlOverride") then
-            local db = DB()
-            local keys = ScopeDBKeys(scope)
-            for i = 1, #(keys or {}) do
-                local entry = db[keys[i]]
-                AdoptChangedGradientKey(entry, key, defaultValue)
-                if GradientKeyActive(entry, key) and entry[key] ~= nil then return entry[key] end
-            end
-        end
-        return ReadG(key, defaultValue)
-    end
-    local function GradientScopeSet(key, value)
-        local scope = CurrentBarsScope()
-        if scope == "shared" then
-            G()[key] = value
-            return
-        end
-        local db = DB()
-        local keys = ScopeDBKeys(scope)
+    function card:RefreshRoundedPreview() sample:SetAlpha(ReadB("roundedFramesEnabled", false) == true and 1 or 0.62) end
+    card:RefreshRoundedPreview()
+    return card
+end
+
+local function NormalizeDispelTrigger(value)
+    local normalize = _G.MSUF_NormalizeDispelBorderTrigger
+    if type(normalize) == "function" then return normalize(value) end
+    if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
+    if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "ANY_DEBUFF" end
+    return "BY_ME"
+end
+local function NormalizeUnitDispelOverlayTrigger(value)
+    local normalize = _G.MSUF_NormalizeUnitDispelOverlayTrigger
+    if type(normalize) == "function" then return normalize(value) end
+    if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
+    return NormalizeDispelTrigger(value)
+end
+local function NormalizeAggroMode(value)
+    value = tostring(value or "ALL"):upper()
+    if value == "TANK_ONLY" then return "TANK" end
+    if value == "HEALER_ONLY" then return "HEALER" end
+    return (value == "NON_TANK" or value == "HEALER" or value == "TANK") and value or "ALL"
+end
+
+local function GradientKeyActive(entry, key)
+    return entry and entry.hlOverride == true and entry.gradientOverride == true
+        and entry.gradientOverrideVersion == 2 and type(entry.gradientOverrideKeys) == "table"
+        and entry.gradientOverrideKeys[key] == true
+end
+local function MarkGradientKey(entry, key)
+    if not entry then return end
+    entry.hlOverride, entry.gradientOverride, entry.gradientOverrideVersion = true, true, 2
+    if type(entry.gradientOverrideKeys) ~= "table" then entry.gradientOverrideKeys = {} end
+    entry.gradientOverrideKeys[key] = true
+end
+local function GradientScopeGet(key, defaultValue)
+    local scope = CurrentBarsScope()
+    if scope ~= "shared" and ScopeHasOverride(scope, "hlOverride") then
+        local db, keys = DB(), ScopeDBKeys(scope)
         for i = 1, #(keys or {}) do
-            local entryKey = keys[i]
-            db[entryKey] = db[entryKey] or {}
-            MarkGradientKey(db[entryKey], key)
-            db[entryKey][key] = value
+            local entry = db[keys[i]]
+            if entry and entry.hlOverride == true and entry[key] ~= nil and not GradientKeyActive(entry, key)
+                and entry[key] ~= ReadG(key, defaultValue) then MarkGradientKey(entry, key) end
+            if GradientKeyActive(entry, key) and entry[key] ~= nil then return entry[key] end
         end
     end
-    local function CurrentGradientDirectionsForScope()
-        local directions = {}
-        local any = false
-        for dir, key in pairs(GRADIENT_DIR_KEYS) do
-            local on = GradientScopeGet(key, false) == true
-            directions[dir] = on
-            if on then any = true end
-        end
-        if not any then
-            local legacy = GradientScopeGet("gradientDirection", "RIGHT")
-            if not GRADIENT_DIR_KEYS[legacy] then legacy = "RIGHT" end
-            directions[legacy] = true
-        end
-        return directions
+    return ReadG(key, defaultValue)
+end
+local function GradientScopeSet(key, value)
+    local scope = CurrentBarsScope()
+    if scope == "shared" then
+        G()[key] = value
+        return
     end
-    local function ToggleGradientDirectionForScope(direction)
-        direction = GRADIENT_DIR_KEYS[direction] and direction or "RIGHT"
-        local directions = CurrentGradientDirectionsForScope()
-        directions[direction] = not directions[direction]
-        local any = false
-        for dir in pairs(GRADIENT_DIR_KEYS) do
-            if directions[dir] == true then
-                any = true
-                break
-            end
-        end
-        if not any then directions[direction] = true end
-        for dir, key in pairs(GRADIENT_DIR_KEYS) do
-            GradientScopeSet(key, directions[dir] == true)
-        end
-        GradientScopeSet("gradientDirection", direction)
+    local db, keys = DB(), ScopeDBKeys(scope)
+    for i = 1, #(keys or {}) do
+        local entryKey = keys[i]
+        db[entryKey] = db[entryKey] or {}
+        MarkGradientKey(db[entryKey], key)
+        db[entryKey][key] = value
     end
-    local function ApplyGradientRuntime(reason)
-        if (GradientScopeGet("enableGradient", false) == true) or (GradientScopeGet("enablePowerGradient", false) == true) then
-            local strength = tonumber(GradientScopeGet("gradientStrength", nil))
-            if not (strength and strength > 0) then GradientScopeSet("gradientStrength", 0.45) end
+end
+local function GradientControlsActive() return ScopedControls() end
+local function TextureControlsActive() return SharedScope() or GroupScope() and ScopedControls() end
+local function CurrentGradientDirectionsForScope()
+    local directions, any = {}, false
+    for direction, key in pairs(GRADIENT_DIR_KEYS) do
+        directions[direction] = GradientScopeGet(key, false) == true
+        any = any or directions[direction]
+    end
+    if not any then
+        local legacy = GradientScopeGet("gradientDirection", "RIGHT")
+        directions[GRADIENT_DIR_KEYS[legacy] and legacy or "RIGHT"] = true
+    end
+    return directions
+end
+local function ToggleGradientDirectionForScope(direction)
+    direction = GRADIENT_DIR_KEYS[direction] and direction or "RIGHT"
+    local directions = CurrentGradientDirectionsForScope()
+    directions[direction] = not directions[direction]
+    local any = false
+    for candidate in pairs(GRADIENT_DIR_KEYS) do any = any or directions[candidate] == true end
+    if not any then directions[direction] = true end
+    for candidate, key in pairs(GRADIENT_DIR_KEYS) do GradientScopeSet(key, directions[candidate] == true) end
+    GradientScopeSet("gradientDirection", direction)
+end
+local function ApplyGradientRuntime(reason)
+    if GradientScopeGet("enableGradient", false) == true or GradientScopeGet("enablePowerGradient", false) == true then
+        local strength = tonumber(GradientScopeGet("gradientStrength"))
+        if not (strength and strength > 0) then GradientScopeSet("gradientStrength", 0.45) end
+    end
+    return RequestApply("RequestBarGradients", reason or "MSUF2_GRADIENT", CurrentBarsScope())
+end
+
+local function SetOutlineRGB(entry, r, g, b)
+    if entry.barOutlineColorR == r and entry.barOutlineColorG == g and entry.barOutlineColorB == b
+        and entry.barOutlineColorA == 1 and entry.barOutlineColorMode == nil then return false end
+    entry.barOutlineColorMode = nil
+    entry.barOutlineColorR, entry.barOutlineColorG, entry.barOutlineColorB, entry.barOutlineColorA = r, g, b, 1
+    return true
+end
+local function SetOutlineColorForScope(r, g, b)
+    r, g, b = tonumber(r) or 0, tonumber(g) or 0, tonumber(b) or 0
+    local scope, keys = CurrentBarsScope(), ScopeDBKeys(CurrentBarsScope())
+    if scope == "shared" or not keys then return SetOutlineRGB(G(), r, g, b) end
+    ScopeSetOverride(scope, "hlOverride", true)
+    local db, changed = DB(), false
+    for i = 1, #keys do
+        db[keys[i]] = db[keys[i]] or {}
+        changed = SetOutlineRGB(db[keys[i]], r, g, b) or changed
+    end
+    return changed
+end
+local function GeneralBarBackgroundTextureKey()
+    local general = G()
+    return general.barBackgroundTexture == nil and (general.barBgTexture or "") or general.barBackgroundTexture
+end
+local function BarTextureForScope()
+    return not SharedScope() and not GroupScope() and ReadG("barTexture", "Blizzard")
+        or BarScopeGet("barTexture", ReadG("barTexture", "Blizzard"))
+end
+local function SetBarTextureForScope(value)
+    value = value or "Blizzard"
+    if not SharedScope() and not GroupScope() or BarTextureForScope() == value then return false end
+    BarScopeSet("barTexture", value, "MSUF2_BAR_TEXTURE")
+    return true
+end
+local function BarBackgroundTextureForScope()
+    local scope = CurrentBarsScope()
+    if scope ~= "shared" and not GroupScope() then return GeneralBarBackgroundTextureKey() end
+    if scope ~= "shared" and ScopeHasOverride(scope, "hlOverride") then
+        local db, keys = DB(), ScopeDBKeys(scope)
+        for i = 1, #(keys or {}) do
+            local entry = db[keys[i]]
+            if entry and entry.barBackgroundTexture ~= nil then return entry.barBackgroundTexture end
+            if entry and entry.barBgTexture ~= nil then return entry.barBgTexture end
         end
-        local scope = CurrentBarsScope()
-        local applyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
-        if applyService and type(applyService.RequestBarGradients) == "function" then
-            applyService.RequestBarGradients(reason or "MSUF2_GRADIENT", scope)
-            return
-        end
-        if applyService and type(applyService.RequestGeneral) == "function" then
-            applyService.RequestGeneral(reason or "MSUF2_GRADIENT", {
-                preview = true,
-                applyAll = false,
-                notify = false,
-                barGradients = true,
-                barsScope = scope,
-            })
-            return
-        end
-        local started = BarsProfileStart()
-        Call("MSUF_UpdateAllBarGradients", scope)
-        BarsProfileStop("GradientRuntime", started)
     end
-    local function SetOutlineRGB(entry, r, g, b)
-        if entry.barOutlineColorR == r and entry.barOutlineColorG == g and entry.barOutlineColorB == b
-            and entry.barOutlineColorA == 1 and entry.barOutlineColorMode == nil then
-            return false
-        end
-        entry.barOutlineColorMode = nil
-        entry.barOutlineColorR, entry.barOutlineColorG, entry.barOutlineColorB, entry.barOutlineColorA = r, g, b, 1
-        return true
-    end
-    local function SetOutlineColorForScope(r, g, b)
-        r, g, b = tonumber(r) or 0, tonumber(g) or 0, tonumber(b) or 0
-        local scope = CurrentBarsScope()
-        if scope == "shared" then return SetOutlineRGB(G(), r, g, b) end
-        local keys = ScopeDBKeys(scope)
-        if not keys then return SetOutlineRGB(G(), r, g, b) end
-        ScopeSetOverride(scope, "hlOverride", true)
-        local db = DB()
-        local changed = false
-        for i = 1, #keys do
-            local key = keys[i]
-            db[key] = db[key] or {}
-            local entry = db[key]
-            changed = SetOutlineRGB(entry, r, g, b) or changed
-        end
-        return changed
-    end
-    local function BarTextureForScope()
-        local scope = CurrentBarsScope()
-        if scope ~= "shared" and not IsGFScope(scope) then return ReadG("barTexture", "Blizzard") end
-        return BarScopeGet("barTexture", ReadG("barTexture", "Blizzard"))
-    end
-    local function GeneralBarBackgroundTextureKey()
-        local general = G()
-        local key = general.barBackgroundTexture
-        if key == nil then key = general.barBgTexture end
-        return key or ""
-    end
-    local function SetBarTextureForScope(value)
-        value = value or "Blizzard"
-        local scope = CurrentBarsScope()
-        if scope ~= "shared" and not IsGFScope(scope) then return false end
-        if BarTextureForScope() == value then return false end
-        BarScopeSet("barTexture", value, "MSUF2_BAR_TEXTURE")
-        return true
-    end
-    local function BarBackgroundTextureForScope()
-        local scope = CurrentBarsScope()
-        if scope ~= "shared" and not IsGFScope(scope) then return GeneralBarBackgroundTextureKey() end
-        if scope ~= "shared" and ScopeHasOverride(scope, "hlOverride") then
-            local db = DB()
-            local keys = ScopeDBKeys(scope)
-            for i = 1, #(keys or {}) do
-                local entry = db[keys[i]]
-                if entry then
-                    if entry.barBackgroundTexture ~= nil then return entry.barBackgroundTexture end
-                    if entry.barBgTexture ~= nil then return entry.barBgTexture end
-                end
-            end
-        end
-        return GeneralBarBackgroundTextureKey()
-    end
-    local function SetGeneralBarBackgroundTexture(value)
+    return GeneralBarBackgroundTextureKey()
+end
+local function SetBarBackgroundTextureForScope(value)
+    value = value or ""
+    local scope, keys = CurrentBarsScope(), ScopeDBKeys(CurrentBarsScope())
+    if scope == "shared" then
         local general = G()
         if general.barBackgroundTexture == value then return false end
         general.barBackgroundTexture = value
         return true
     end
-    local function SetBarBackgroundTextureForScope(value)
-        value = value or ""
-        local scope = CurrentBarsScope()
-        if scope == "shared" then return SetGeneralBarBackgroundTexture(value) end
-        if not IsGFScope(scope) then return false end
-        local keys = ScopeDBKeys(scope)
-        if not keys then return SetGeneralBarBackgroundTexture(value) end
-        ScopeSetOverride(scope, "hlOverride", true)
-        local db = DB()
-        local changed = false
-        for i = 1, #keys do
-            local key = keys[i]
-            db[key] = db[key] or {}
-            local entry = db[key]
-            if entry.barBackgroundTexture ~= value or entry.barBgTexture ~= value then changed = true end
-            entry.barBackgroundTexture = value
-            entry.barBgTexture = value
-        end
-        return changed
+    if not GroupScope() then return false end
+    if not keys then
+        local general = G()
+        if general.barBackgroundTexture == value then return false end
+        general.barBackgroundTexture = value
+        return true
     end
+    ScopeSetOverride(scope, "hlOverride", true)
+    local db, changed = DB(), false
+    for i = 1, #keys do
+        db[keys[i]] = db[keys[i]] or {}
+        changed = db[keys[i]].barBackgroundTexture ~= value or db[keys[i]].barBgTexture ~= value or changed
+        db[keys[i]].barBackgroundTexture, db[keys[i]].barBgTexture = value, value
+    end
+    return changed
+end
+local function BuildScopeSection(ctx, b)
     local scopeValues = GP.SCOPE_VALUES
     GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
+        selectorMeta = Meta("scope.selector", "ephemeral"),
+        selectorOptionMeta = function(value) return Meta("scope.selector.option." .. tostring(value), "ephemeral") end,
+        overrideMeta = Meta("scope.override.enabled"),
+        resetMeta = Meta("scope.overrides.reset", "action"),
         getValue = function() return CurrentBarsScope() end,
         setValue = function(v)
             G().hpPowerTextSelectedKey = NormalizeScopeKey(v)
@@ -906,15 +505,18 @@ local function BuildBars(ctx)
             end
         end,
     })
+end
+
+local function BuildTextureSection(ctx, b)
     local compactTextures = (ctx.width or 720) < 560
     local textures = b:CollapsibleSection("bars_textures", "Textures & Gradient", compactTextures and 326 or 214, true)
     local leftX, topY = 14, -42
     local rightX = compactTextures and leftX or math.max(340, math.floor((ctx.width or 720) * 0.50))
     local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
     local gradientY = compactTextures and (topY - 126) or topY
-    local function BindTextureDropdown(label, values, getValue, setValue, y)
+    local function BindTextureDropdown(label, values, getValue, setValue, y, path)
         local control = W.Dropdown(textures, label, values, leftW)
-        M.BindDropdownWidget(ctx, control, getValue, setValue)
+        M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
         W.MoveWidget(control, textures, leftX, y, leftW, "LEFT")
         return control
     end
@@ -923,13 +525,13 @@ local function BuildBars(ctx)
             if SetBarTextureForScope(v) then
                 ApplyBars("MSUF2_BAR_TEXTURE")
             end
-        end, topY)
+        end, topY, "textures.foreground")
     local bgTexture = BindTextureDropdown("Background texture", function() return TextureValues("Use foreground texture") end, BarBackgroundTextureForScope,
         function(v)
             if SetBarBackgroundTextureForScope(v) then
                 ApplyBars("MSUF2_BAR_BG_TEXTURE")
             end
-        end, topY - 54)
+        end, topY - 54, "textures.background")
     local gradLabel = T.Font(textures, "GameFontHighlightSmall", M.Tr("Gradient"), T.colors.muted)
     gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
     local SyncGradientControls = M.RefreshProxy()
@@ -937,7 +539,12 @@ local function BuildBars(ctx)
         local control = W.ToggleAt(textures, label, rightX, y, width)
         M.BindBoolWidget(ctx, control,
             function() return GradientScopeGet(key, false) == true end,
-            function(v) GradientScopeSet(key, v and true or false); ApplyGradientRuntime(reason); SyncGradientControls() end)
+            function(v)
+                GradientScopeSet(key, v and true or false)
+                ApplyGradientRuntime(reason)
+                SyncGradientControls()
+            end,
+            Meta("gradient." .. key))
         return control
     end
     local hpGradient = BindGradientToggle("HP bar gradient", gradientY - 24, compactTextures and 150 or 180, "enableGradient", "MSUF2_HP_GRADIENT")
@@ -949,7 +556,8 @@ local function BuildBars(ctx)
             GradientScopeSet("gradientStrength", tonumber(v) or 0.45)
             ApplyGradientRuntime("MSUF2_GRADIENT_STRENGTH")
         end,
-        0.45)
+        0.45,
+        Meta("gradient.strength"))
     W.MoveWidget(strength, textures, rightX, gradientY - 90, compactTextures and math.min(leftW, 300) or 220, "LEFT")
     local padX = compactTextures and math.min(rightX + 210, (ctx.width or 720) - 104) or math.min(rightX + 238, (ctx.width or 720) - 104)
     local pad = T.Panel(textures, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.55 }, T.colors.borderSoft)
@@ -970,6 +578,7 @@ local function BuildBars(ctx)
             ApplyGradientRuntime("MSUF2_GRADIENT_DIRECTION")
             SyncGradientControls()
         end)
+        RegisterControl(btn, Meta("gradient.direction." .. tostring(value), "action"), text, "button")
         directionButtons[value] = btn
         return btn
     end
@@ -993,6 +602,9 @@ local function BuildBars(ctx)
             SetControlEnabled(btn, valueControlsActive)
         end
     end))
+end
+
+local function BuildAbsorbSection(ctx, b)
     local absorb = b:CollapsibleSection("bars_absorb", "Absorb Display", 420, true)
     local absorbW = absorb._msuf2Width or ctx.width or 720
     local absorbLeftX = 30
@@ -1020,7 +632,8 @@ local function BuildBars(ctx)
                 local fallback = AbsorbDefault(defaultValue)
                 BarScopeSet(key, numeric and (tonumber(v) or fallback) or (v or fallback), reason, true)
                 ApplyAbsorbRuntime(reason)
-            end)
+            end,
+            Meta("absorb." .. key))
         W.MoveWidget(control, absorb, x, y, width, "LEFT")
         return control
     end
@@ -1032,7 +645,8 @@ local function BuildBars(ctx)
                 BarScopeSet(key, tonumber(v) or defaultValue, reason, true)
                 ApplyAbsorbRuntime(reason)
             end,
-            defaultValue)
+            defaultValue,
+            Meta("absorb." .. key))
         W.MoveWidget(control, absorb, x, y, width, "LEFT")
         return control
     end
@@ -1049,7 +663,8 @@ local function BuildBars(ctx)
             BarScopeSet("absorbTextMode", mode, "MSUF2_ABSORB_MODE", true)
             ApplyAbsorbRuntime("MSUF2_ABSORB_MODE")
             SyncAbsorbControls()
-        end)
+        end,
+        Meta("absorb.display_mode"))
     W.MoveWidget(absorbMode, absorb, absorbLeftX, -70, absorbLeftW, "LEFT")
     local absorbAnchors = VT(
         1, "Anchor to left side", 2, "Anchor to right side", 3, "Follow HP bar",
@@ -1065,11 +680,11 @@ local function BuildBars(ctx)
     local healPredToggle = W.ToggleAt(absorb, "Heal Prediction Overlay", absorbLeftX, -186, absorbLeftW)
     M.BindBoolWidget(ctx, healPredToggle,
         function()
-            if CurrentBarsScopeIsGroupFrame() then return BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true end
+            if GroupScope() then return BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true end
             return ReadGBool("showSelfHealPrediction", false)
         end,
         function(v)
-            if CurrentBarsScopeIsGroupFrame() then
+            if GroupScope() then
                 BarScopeSet("healPredEnabled", v and true or false, "MSUF2_GF_HEALPRED", true)
                 ApplyBars("MSUF2_GF_HEALPRED")
                 SyncAbsorbControls()
@@ -1079,12 +694,14 @@ local function BuildBars(ctx)
             Call("MSUF_RefreshSelfHealPredUnitEvent")
             ApplyBars("MSUF2_SELF_HEAL")
             SyncAbsorbControls()
-        end)
+        end,
+        Meta("absorb.heal_prediction.enabled"))
     W.LabelAt(absorb, "Textures", absorbRightX, -42, absorbRightW, "GameFontNormalSmall", T.colors.accent)
     local absorbTest = W.ToggleAt(absorb, "Test prediction bars", absorbRightX, -186, absorbRightW)
     M.BindBoolWidget(ctx, absorbTest,
         function() return _G.MSUF_AbsorbTextureTestMode and true or false end,
-        function(v) SetAbsorbTextureTest(v and true or false) end)
+        function(v) SetAbsorbTextureTest(v and true or false) end,
+        Meta("absorb.preview.test", "ephemeral"))
     local overAbsorbOverlay = W.ToggleAt(absorb, "Over-absorb overlay", absorbRightX, -240, absorbRightW)
     M.BindBoolWidget(ctx, overAbsorbOverlay,
         function() return BarScopeGet("overAbsorbOverlay", ReadGBool("overAbsorbOverlay", false)) == true end,
@@ -1092,14 +709,15 @@ local function BuildBars(ctx)
             BarScopeSet("overAbsorbOverlay", v and true or false, "MSUF2_OVER_ABSORB_OVERLAY", true)
             ApplyAbsorbRuntime("MSUF2_OVER_ABSORB_OVERLAY")
             SyncAbsorbControls()
-        end)
+        end,
+        Meta("absorb.over_absorb_overlay"))
     local absorbBarControls = { absorbControls.anchor, absorbControls.texture, absorbControls.healTexture, absorbControls.opacity, absorbControls.healOpacity, overAbsorbOverlay }
     M.TrackRefresh(ctx, SyncAbsorbControls(function()
         local mode = ReadAbsorbDisplayMode()
         local showBar = mode == 2
-        local scopedActive = ScopedBarsControlsActive()
-        local sharedActive = SharedBarsControlsActive()
-        local groupScope = CurrentBarsScopeIsGroupFrame()
+        local scopedActive = ScopedControls()
+        local sharedActive = SharedScope()
+        local groupScope = GroupScope()
         local healPredOn
         if groupScope then
             healPredOn = BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true
@@ -1112,6 +730,9 @@ local function BuildBars(ctx)
         SetControlEnabled(healPredToggle, groupScope and scopedActive or sharedActive)
         SetControlEnabled(absorbControls.healAnchor, scopedActive and healPredOn)
     end))
+end
+
+local function BuildOutlineSection(ctx, b)
     local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 220, false)
     local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, 300)
     M.BindNumberWidget(ctx, outlineSlider,
@@ -1120,7 +741,7 @@ local function BuildBars(ctx)
             BarScopeSetBars("barOutlineThickness", floor((tonumber(v) or 1) + 0.5), "MSUF2_BAR_OUTLINE", true)
             RequestOutlineRuntime()
         end,
-        1, { step = 1, roundStep = true })
+        1, Meta("outline.thickness", "setting", { step = 1, roundStep = true }))
     outline._msuf2OutlineStrata = W.Slider(outline, "", 0, OutlineStrata.count - 1, 1, 300)
     outline._msuf2OutlineStrata:SetValueFormatter(function(value) return OutlineStrata.Label(value) end)
     outline._msuf2OutlineStrata:SetValueParser(function(text) return OutlineStrata.Parse(text) end)
@@ -1131,7 +752,8 @@ local function BuildBars(ctx)
         function(v)
             BarScopeSetBars("barOutlineStrata", OutlineStrata.Value(v), "MSUF2_BAR_OUTLINE_STRATA", true)
             RequestOutlineRuntime()
-        end)
+        end,
+        Meta("outline.strata"))
     outline._msuf2OutlineStrata:HookScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
         OutlineStrata.RefreshLabel(self, value)
@@ -1150,10 +772,14 @@ local function BuildBars(ctx)
             if SetOutlineColorForScope(r, g, b) then
                 RequestOutlineRuntime()
             end
-        end)
+        end,
+        Meta("outline.color"))
     M.BindGateGroup(ctx, nil, {
-        { controls = { outlineSlider, outline._msuf2OutlineStrata, outlineColor }, on = ScopedBarsControlsActive },
+        { controls = { outlineSlider, outline._msuf2OutlineStrata, outlineColor }, on = ScopedControls },
     })
+end
+
+local function BuildRoundedSection(ctx, b)
     local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", 246, true)
     local roundLeftX = 30
     local roundRightX = 330
@@ -1172,8 +798,9 @@ local function BuildBars(ctx)
             function(v)
                 SetRoundedBool(key, v, requireReload)
                 SyncRoundedControls()
-            end)
-        RegisterRoundedSearch(control, label, searchKeywords, help)
+            end,
+            Meta("rounded." .. key))
+        RegisterRoundedSearch(control, label, searchKeywords, help, nil, Meta("rounded." .. key))
         return control
     end
     local roundedControls = M.BuildControlSpecs({
@@ -1193,6 +820,9 @@ local function BuildBars(ctx)
     }, {
         also = function() if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end end,
     }))
+end
+
+local function BuildHighlightSection(ctx, b)
     local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 710, true)
     local hlW = highlights._msuf2Width or ctx.width or 720
     local hlGap = 28
@@ -1204,12 +834,12 @@ local function BuildBars(ctx)
     local highlightTabFrames = {}
     local modesFrame, previewFrame, priorityFrame =
         M.UnitSectionsShared.MakeTabFrames(highlights, -88, hlW, highlightTabFrames, "modes", "preview", "priority")
-    W.SegmentTabs(ctx, highlights, {
+    RegisterSegment(W.SegmentTabs(ctx, highlights, {
         stateKey = "barsHighlightTab", label = "Highlight area",
         values = VT("modes", "Modes", "preview", "Preview", "priority", "Priority"),
         width = min(520, hlInnerW), frames = highlightTabFrames, defaultTab = "modes",
         x = hlLeftX, y = -44,
-    })
+    }), "highlight.workspace_tab", VT("modes", "Modes", "preview", "Preview", "priority", "Priority"))
     W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 542)
     local priorityCardW = min(360, max(260, hlLeftW + 28))
     local priorityCard = W.ControlCard(priorityFrame, "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296)
@@ -1228,7 +858,7 @@ local function BuildBars(ctx)
             BarScopeSet("hlAggroSize", n, "MSUF2_HIGHLIGHT_BORDER", true)
             RequestAllHighlightBorderRuntime()
         end,
-        2, { step = 1, roundStep = true })
+        2, Meta("highlight.border_thickness", "setting", { step = 1, roundStep = true }))
     W.MoveWidget(highlight, modesFrame, hlLeftX, -70, hlLeftW, "LEFT")
     local borderModes = VT(0, "Off", 1, "On")
     local function StopBorderTest(flag, setter, value)
@@ -1236,9 +866,9 @@ local function BuildBars(ctx)
         local fn = _G[setter]
         if type(fn) == "function" then fn(false) end
     end
-    local function BindHighlightDropdown(label, values, y, getValue, setValue)
+    local function BindHighlightDropdown(label, values, y, getValue, setValue, path)
         local control = W.Dropdown(modesFrame, label, values, hlLeftW)
-        M.BindDropdownWidget(ctx, control, getValue, setValue)
+        M.BindDropdownWidget(ctx, control, getValue, setValue, Meta(path))
         W.MoveWidget(control, modesFrame, hlLeftX, y, hlLeftW, "LEFT")
         return control
     end
@@ -1250,16 +880,10 @@ local function BuildBars(ctx)
                 BarScopeSet(key, value, reason, true)
                 StopBorderTest(flag, setter, value)
                 apply()
-            end)
+            end,
+            "highlight.border_mode." .. key)
     end
     local aggroModeValues = VT("ALL", "All roles", "NON_TANK", "Non-tanks", "HEALER", "Healers only", "TANK", "Tanks only")
-    local function NormalizeAggroMode(value)
-        value = tostring(value or "ALL"):upper()
-        if value == "TANK_ONLY" then return "TANK" end
-        if value == "HEALER_ONLY" then return "HEALER" end
-        if value == "NON_TANK" or value == "HEALER" or value == "TANK" then return value end
-        return "ALL"
-    end
     local aggro = BindBorderModeDropdown("Aggro border", "aggroOutlineMode", 1, "MSUF2_AGGRO_BORDER", -136,
         "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", RequestAggroBorderRuntime)
     local aggroMode = BindHighlightDropdown("Aggro shows for", aggroModeValues, -190,
@@ -1267,15 +891,17 @@ local function BuildBars(ctx)
         function(v)
             BarScopeSet("aggroMode", NormalizeAggroMode(v), "MSUF2_AGGRO_MODE", true)
             RequestAggroBorderRuntime()
-        end)
+        end,
+        "highlight.aggro.roles")
     local dispelBorder = BindBorderModeDropdown("Dispel border", "dispelOutlineMode", 1, "MSUF2_DISPEL_BORDER", -244,
         "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", RequestDispelPurgeBorderRuntime)
-    local dispelTrigger = BindHighlightDropdown("Dispel border detects", dispelTriggers, -298,
+    local dispelTrigger = BindHighlightDropdown("Dispel border detects", DISPEL_TRIGGERS, -298,
         function() return NormalizeDispelTrigger(BarScopeGet("dispelBorderTrigger", "DISPEL_TYPE")) end,
         function(v)
             BarScopeSet("dispelBorderTrigger", NormalizeDispelTrigger(v), "MSUF2_DISPEL_TRIGGER", true)
             RequestDispelPurgeBorderRuntime()
-        end)
+        end,
+        "highlight.dispel.trigger")
     local purge = BindBorderModeDropdown("Purge border", "purgeOutlineMode", 0, "MSUF2_PURGE_BORDER", -352,
         "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", RequestDispelPurgeBorderRuntime)
     local bossTarget = BindHighlightDropdown("Boss target border", borderModes, -406,
@@ -1290,7 +916,8 @@ local function BuildBars(ctx)
             general.bossTargetHighlightEnabled = value == 1
             StopBorderTest("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", value)
             RequestBossTargetBorderRuntime()
-        end)
+        end,
+        "highlight.boss_target.mode")
     local dispelPurgePtrHint = W.Text(modesFrame, DISPEL_PURGE_BORDER_121_PTR_MESSAGE, hlLeftX, -456, hlLeftW, T.colors.dim)
     if dispelPurgePtrHint.SetWordWrap then dispelPurgePtrHint:SetWordWrap(true) end
     local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -486, hlLeftW, T.colors.dim)
@@ -1302,7 +929,7 @@ local function BuildBars(ctx)
         local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
         return (tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback) == 1
     end
-    local function BindBorderTestToggle(label, y, flagName, setterName, enabledFn, noScope)
+    local function BindBorderTestToggle(label, y, flagName, setterName, enabledFn, noScope, path)
         local control = W.ToggleAt(previewFrame, label, hlPreviewX, y, hlPreviewW)
         M.BindBoolWidget(ctx, control,
             function() return _G[flagName] and true or false end,
@@ -1316,7 +943,8 @@ local function BuildBars(ctx)
                     if noScope then fn(v and true or false)
                     else fn(v and true or false, BorderTestScope()) end
                 end
-            end)
+            end,
+            Meta(path, "ephemeral"))
         control:HookScript("OnHide", function(self)
             local fn = _G[setterName]
             if _G[flagName] and type(fn) == "function" then
@@ -1326,10 +954,10 @@ local function BuildBars(ctx)
         end)
         return control
     end
-    local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", function() return ScopeBorderModeOn("aggroOutlineMode", 1) end)
-    local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end)
-    local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", function() return ScopeBorderModeOn("purgeOutlineMode", 0) end)
-    local bossTargetTest = BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true)
+    local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", function() return ScopeBorderModeOn("aggroOutlineMode", 1) end, nil, "highlight.preview.aggro")
+    local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end, nil, "highlight.preview.dispel")
+    local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", function() return ScopeBorderModeOn("purgeOutlineMode", 0) end, nil, "highlight.preview.purge")
+    local bossTargetTest = BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true, "highlight.preview.boss_target")
     local scopedBorderControls = { highlight, aggro, dispelBorder, purge }
     local dispelBorderControls = { dispelTrigger, dispelTest }
     local function ClearBorderTestIfDisabled(flagName, setterName, enabled)
@@ -1337,8 +965,8 @@ local function BuildBars(ctx)
         if _G[flagName] and not enabled and type(fn) == "function" then fn(false) end
     end
     M.TrackRefresh(ctx, function()
-        local scopedActive = HighlightControlsActive()
-        local sharedActive = SharedBarsControlsActive()
+        local scopedActive = HighlightControls()
+        local sharedActive = SharedScope()
         local aggroOn = ScopeBorderModeOn("aggroOutlineMode", 1)
         local dispelOn = ScopeBorderModeOn("dispelOutlineMode", 1)
         local purgeOn = ScopeBorderModeOn("purgeOutlineMode", 0)
@@ -1357,86 +985,10 @@ local function BuildBars(ctx)
         SetControlEnabled(purgeTest, scopedActive and purgeOn and not PURGE_BORDER_121_PTR_DISABLED)
         SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
         if dispelPurgePtrHint and dispelPurgePtrHint.SetShown then dispelPurgePtrHint:SetShown(PURGE_BORDER_121_PTR_DISABLED) end
-        if unitAuraDispelHint and unitAuraDispelHint.SetShown then unitAuraDispelHint:SetShown((not CurrentBarsScopeIsGroupFrame()) and not AnyUnitFrameAuraEnabled()) end
+        if unitAuraDispelHint and unitAuraDispelHint.SetShown then unitAuraDispelHint:SetShown((not GroupScope()) and not AnyUnitFrameAuraEnabled()) end
         local hintColor = sharedActive and T.colors.dim or T.colors.muted
         bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
     end)
-    local overlaySectionW = ctx.width or 720
-    local overlayCardWProbe = min(900, max(320, overlaySectionW - 40))
-    local overlayWide = overlayCardWProbe >= 760
-    local overlaySectionH = overlayWide and 358 or 468
-    local overlayCardH = overlayWide and 294 or 404
-    local ufOverlay = b:CollapsibleSection("bars_unit_dispel_overlay", "UnitFrame Dispel Overlay", overlaySectionH, false)
-    local ufOverlayW = ufOverlay._msuf2Width or ctx.width or 720
-    local ufOverlayCardW = min(900, max(320, ufOverlayW - 40))
-    overlayWide = ufOverlayCardW >= 760
-    overlayCardH = overlayWide and 294 or 404
-    local ufOverlayCard = W.ControlCard(ufOverlay, "UnitFrame Dispel Overlay", "Tints unit-frame health bars when a configured debuff condition is active.", 20, -38, ufOverlayCardW, overlayCardH)
-    local function BindUFOverlayDropdown(label, values, key, defaultValue, normalizer, reason, y)
-        local dropdown = W.Dropdown(ufOverlayCard, label, values, 280)
-        M.BindDropdownWidget(ctx, dropdown,
-            function()
-                local value = BarScopeGet(key, defaultValue)
-                return normalizer and normalizer(value) or value
-            end,
-            function(value)
-                BarScopeSet(key, normalizer and normalizer(value) or (value or defaultValue), reason, true)
-                RequestUnitDispelOverlayRuntime(reason)
-            end)
-        W.MoveWidget(dropdown, ufOverlayCard, 16, y, min(280, ufOverlayCardW - 32), "LEFT")
-        return dropdown
-    end
-    local SyncUFOverlayControls = M.RefreshProxy()
-    local function BindUFOverlayToggle(label, key, defaultOn, reason, y)
-        local toggle = W.ToggleAt(ufOverlayCard, label, 16, y, ufOverlayCardW - 32)
-        M.BindBoolWidget(ctx, toggle,
-            function() return BarScopeGet(key, defaultOn) ~= false end,
-            function(value)
-                BarScopeSet(key, value and true or false, reason, true)
-                RequestUnitDispelOverlayRuntime(reason)
-                SyncUFOverlayControls()
-            end)
-        return toggle
-    end
-    local function BindUFOverlaySlider(label, key, defaultValue, reason, y)
-        local slider = W.Slider(ufOverlayCard, label, 0.05, 1, 0.05, 340)
-        M.BindNumberWidget(ctx, slider,
-            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
-            function(value)
-                BarScopeSet(key, tonumber(value) or defaultValue, reason, true)
-                RequestUnitDispelOverlayRuntime(reason)
-            end,
-            defaultValue)
-        W.MoveWidget(slider, ufOverlayCard, 16, y, min(360, ufOverlayCardW - 72), "CENTER")
-        return slider
-    end
-    local ufOverlayToggle = W.SwitchAt(ufOverlayCard, "UnitFrame Dispel Overlay", ufOverlayCardW - 62, -24, 0, "HIDDEN")
-    M.BindBoolWidget(ctx, ufOverlayToggle,
-        function() return BarScopeGet("unitDispelOverlayEnabled", false) == true end,
-        function(v)
-            BarScopeSet("unitDispelOverlayEnabled", v and true or false, "MSUF2_UF_DISPEL_OVERLAY", true)
-            RequestUnitDispelOverlayRuntime("MSUF2_UF_DISPEL_OVERLAY")
-            SyncUFOverlayControls()
-        end)
-    local ufOverlayTrigger = BindUFOverlayDropdown("Overlay detects", unitDispelOverlayTriggers, "unitDispelOverlayTrigger", "BORDER", NormalizeUnitDispelOverlayTrigger, "MSUF2_UF_DISPEL_OVERLAY_TRIGGER", -74)
-    local ufOverlayStyle = BindUFOverlayDropdown("Overlay style", unitDispelOverlayStyles, "unitDispelOverlayStyle", "FULL", nil, "MSUF2_UF_DISPEL_OVERLAY_STYLE", -126)
-    local ufOverlayCurrent = BindUFOverlayToggle("Show on current health only", "unitDispelOverlayOnHealth", true, "MSUF2_UF_DISPEL_OVERLAY_HEALTH", -174)
-    local ufOverlayAlpha = BindUFOverlaySlider("Overlay opacity", "unitDispelOverlayAlpha", 0.35, "MSUF2_UF_DISPEL_OVERLAY_ALPHA", -218)
-    local ufOverlayControls = { ufOverlayTrigger, ufOverlayStyle, ufOverlayCurrent, ufOverlayAlpha }
-    local ufOverlayGroupHintY = overlayWide and -284 or -384
-    local ufOverlayGroupHint = W.Text(ufOverlayCard, "Group frame scopes use Group Frames > Health & Bars > Dispel Overlay.", 16, ufOverlayGroupHintY, ufOverlayCardW - 32, T.colors.muted)
-    if ufOverlayGroupHint.SetWordWrap then ufOverlayGroupHint:SetWordWrap(true) end
-    local ufOverlayUnitAuraHint = W.Text(ufOverlayCard, UNITFRAME_DISPEL_AURA_WARNING, 16, ufOverlayGroupHintY, ufOverlayCardW - 32, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
-    if ufOverlayUnitAuraHint.SetWordWrap then ufOverlayUnitAuraHint:SetWordWrap(true) end
-    M.TrackRefresh(ctx, SyncUFOverlayControls(function()
-        local groupScope = CurrentBarsScopeIsGroupFrame()
-        local activeScope = (not groupScope) and ScopedBarsControlsActive()
-        local overlayOn = activeScope and BarScopeGet("unitDispelOverlayEnabled", false) == true
-        SetControlEnabled(ufOverlayToggle, activeScope)
-        SetControlsEnabled(ufOverlayControls, overlayOn)
-        ufOverlayGroupHint:SetShown(groupScope)
-        ufOverlayUnitAuraHint:SetShown((not groupScope) and not AnyUnitFrameAuraEnabled())
-    end))
     local RefreshPriorityRows
     local prio = W.SwitchAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)
     M.BindBoolWidget(ctx, prio,
@@ -1450,7 +1002,8 @@ local function BuildBars(ctx)
             end
             RequestHighlightPriorityRuntime()
             if RefreshPriorityRows then RefreshPriorityRows() end
-        end)
+        end,
+        Meta("highlight.priority.enabled"))
     local rowMax = 4
     local prioContainer, prioRows, prioCount
     local function SavePriorityRows()
@@ -1472,17 +1025,17 @@ local function BuildBars(ctx)
     local function SetPriorityRowsEnabled(enabled)
         prioContainer:SetRowsEnabled(enabled)
     end
-    prioContainer = M.UnitSectionsShared.MakeDragSortRows(priorityCard, nil, {
+    prioContainer = RegisterDragRows(M.UnitSectionsShared.MakeDragSortRows(priorityCard, nil, {
         x = 16, y = -82, width = min(220, priorityCardW - 32), rowHeight = 22, gap = 4, maxRows = rowMax,
         bg = { 0.12, 0.12, 0.12, 0.85 },
         border = { 0.30, 0.30, 0.30, 0.60 },
         disabledAlpha = 0.4,
-        dragAllowed = function() return HighlightControlsActive() and HighlightPriorityEnabled() end,
+        dragAllowed = function() return HighlightControls() and HighlightPriorityEnabled() end,
         onReorder = SavePriorityRows,
-    })
+    }), "highlight.priority.order")
     prioRows = prioContainer.rows
     RefreshPriorityRows = function()
-        SetControlEnabled(prio, HighlightControlsActive())
+        SetControlEnabled(prio, HighlightControls())
         local order = PriorityOrder()
         prioCount = math.min(#order, rowMax)
         for i = 1, prioCount do
@@ -1496,14 +1049,108 @@ local function BuildBars(ctx)
             row.frame._numText:SetText(tostring(i))
         end
         prioContainer:SetActiveCount(prioCount)
-        SetPriorityRowsEnabled(HighlightControlsActive() and HighlightPriorityEnabled())
+        SetPriorityRowsEnabled(HighlightControls() and HighlightPriorityEnabled())
     end
     M.TrackRefresh(ctx, RefreshPriorityRows)
+end
+
+-- Unit-frame dispel tinting is a separate section and has no dependency on the
+-- highlight-tab frames. Keeping its bindings isolated also leaves headroom for new controls.
+local function BuildUnitDispelOverlaySection(ctx, b)
+    local overlayCardWProbe = min(900, max(320, (ctx.width or 720) - 40))
+    local overlayWide = overlayCardWProbe >= 760
+    local ufOverlay = b:CollapsibleSection("bars_unit_dispel_overlay", "UnitFrame Dispel Overlay",
+        overlayWide and 358 or 468, false)
+    local ufOverlayW = ufOverlay._msuf2Width or ctx.width or 720
+    local ufOverlayCardW = min(900, max(320, ufOverlayW - 40))
+    overlayWide = ufOverlayCardW >= 760
+    local ufOverlayCard = W.ControlCard(ufOverlay, "UnitFrame Dispel Overlay",
+        "Tints unit-frame health bars when a configured debuff condition is active.",
+        20, -38, ufOverlayCardW, overlayWide and 294 or 404)
+    local SyncUFOverlayControls = M.RefreshProxy()
+    local function BindDropdown(label, values, key, defaultValue, normalizer, reason, y)
+        local dropdown = W.Dropdown(ufOverlayCard, label, values, 280)
+        M.BindDropdownWidget(ctx, dropdown,
+            function()
+                local value = BarScopeGet(key, defaultValue)
+                return normalizer and normalizer(value) or value
+            end,
+            function(value)
+                BarScopeSet(key, normalizer and normalizer(value) or (value or defaultValue), reason, true)
+                RequestUnitDispelOverlayRuntime(reason)
+            end,
+            Meta("unit_dispel_overlay." .. key))
+        W.MoveWidget(dropdown, ufOverlayCard, 16, y, min(280, ufOverlayCardW - 32), "LEFT")
+        return dropdown
+    end
+    local function BindToggle(label, key, defaultOn, reason, y)
+        local toggle = W.ToggleAt(ufOverlayCard, label, 16, y, ufOverlayCardW - 32)
+        M.BindBoolWidget(ctx, toggle,
+            function() return BarScopeGet(key, defaultOn) ~= false end,
+            function(value)
+                BarScopeSet(key, value and true or false, reason, true)
+                RequestUnitDispelOverlayRuntime(reason)
+                SyncUFOverlayControls()
+            end,
+            Meta("unit_dispel_overlay." .. key))
+        return toggle
+    end
+    local function BindSlider(label, key, defaultValue, reason, y)
+        local slider = W.Slider(ufOverlayCard, label, 0.05, 1, 0.05, 340)
+        M.BindNumberWidget(ctx, slider,
+            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
+            function(value)
+                BarScopeSet(key, tonumber(value) or defaultValue, reason, true)
+                RequestUnitDispelOverlayRuntime(reason)
+            end,
+            defaultValue, Meta("unit_dispel_overlay." .. key))
+        W.MoveWidget(slider, ufOverlayCard, 16, y, min(360, ufOverlayCardW - 72), "CENTER")
+        return slider
+    end
+    local master = W.SwitchAt(ufOverlayCard, "UnitFrame Dispel Overlay", ufOverlayCardW - 62, -24, 0, "HIDDEN")
+    M.BindBoolWidget(ctx, master,
+        function() return BarScopeGet("unitDispelOverlayEnabled", false) == true end,
+        function(value)
+            BarScopeSet("unitDispelOverlayEnabled", value and true or false, "MSUF2_UF_DISPEL_OVERLAY", true)
+            RequestUnitDispelOverlayRuntime("MSUF2_UF_DISPEL_OVERLAY")
+            SyncUFOverlayControls()
+        end,
+        Meta("unit_dispel_overlay.enabled"))
+    local controls = {
+        BindDropdown("Overlay detects", UNIT_DISPEL_TRIGGERS, "unitDispelOverlayTrigger", "BORDER",
+            NormalizeUnitDispelOverlayTrigger, "MSUF2_UF_DISPEL_OVERLAY_TRIGGER", -74),
+        BindDropdown("Overlay style", UNIT_DISPEL_STYLES, "unitDispelOverlayStyle", "FULL", nil,
+            "MSUF2_UF_DISPEL_OVERLAY_STYLE", -126),
+        BindToggle("Show on current health only", "unitDispelOverlayOnHealth", true,
+            "MSUF2_UF_DISPEL_OVERLAY_HEALTH", -174),
+        BindSlider("Overlay opacity", "unitDispelOverlayAlpha", 0.35, "MSUF2_UF_DISPEL_OVERLAY_ALPHA", -218),
+    }
+    local hintY = overlayWide and -284 or -384
+    local groupHint = W.Text(ufOverlayCard,
+        "Group frame scopes use Group Frames > Health & Bars > Dispel Overlay.",
+        16, hintY, ufOverlayCardW - 32, T.colors.muted)
+    local auraHint = W.Text(ufOverlayCard, UNITFRAME_DISPEL_AURA_WARNING,
+        16, hintY, ufOverlayCardW - 32, UNITFRAME_DISPEL_AURA_WARNING_COLOR)
+    if groupHint.SetWordWrap then groupHint:SetWordWrap(true) end
+    if auraHint.SetWordWrap then auraHint:SetWordWrap(true) end
+    M.TrackRefresh(ctx, SyncUFOverlayControls(function()
+        local groupScope = GroupScope()
+        local activeScope = not groupScope and ScopedControls()
+        SetControlEnabled(master, activeScope)
+        SetControlsEnabled(controls,
+            activeScope and BarScopeGet("unitDispelOverlayEnabled", false) == true)
+        groupHint:SetShown(groupScope)
+        auraHint:SetShown(not groupScope and not AnyUnitFrameAuraEnabled())
+    end))
+end
+
+local function BuildPowerSection(ctx, b)
     local power = b:CollapsibleSection("bars_power", "Bar Animation + Text Accuracy", 152, false)
     local smoothPower = W.Toggle(power, "Smooth power bar")
     M.BindBoolWidget(ctx, smoothPower,
         function() return SmoothPowerGet() end,
-        function(v) SmoothPowerSet(v, "MSUF2_BARS_SMOOTH_POWER") end)
+        function(v) SmoothPowerSet(v, "MSUF2_BARS_SMOOTH_POWER") end,
+        Meta("power.smooth_fill"))
     local realtimePower = W.Toggle(power, "Realtime power text")
     M.BindBoolWidget(ctx, realtimePower,
         function() return ReadB("realtimePowerText", true) ~= false end,
@@ -1517,11 +1164,25 @@ local function BuildBars(ctx)
             M.RequestUnitApply("player", "MSUF2_BARS_REALTIME_POWER", {
                 preview = true, power = true, text = true,
             })
-        end)
+        end,
+        Meta("power.realtime_text"))
     M.BindGateGroup(ctx, nil, {
         { controls = smoothPower, on = function() return CurrentPowerBarScopeUnit() ~= nil end },
-        { controls = realtimePower, on = SharedBarsControlsActive },
+        { controls = realtimePower, on = SharedScope },
     })
+end
+
+local function BuildBars(ctx)
+    local b = W.PageBuilder(ctx)
+    b:GlobalStyleHeader("Bars", "Textures, gradients, outlines and highlight borders.", 72)
+    BuildScopeSection(ctx, b)
+    BuildTextureSection(ctx, b)
+    BuildAbsorbSection(ctx, b)
+    BuildOutlineSection(ctx, b)
+    BuildRoundedSection(ctx, b)
+    BuildHighlightSection(ctx, b)
+    BuildUnitDispelOverlaySection(ctx, b)
+    BuildPowerSection(ctx, b)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 16 })

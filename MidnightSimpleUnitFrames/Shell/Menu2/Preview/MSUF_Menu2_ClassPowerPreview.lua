@@ -18,6 +18,38 @@ local CPPreview = M.ClassPowerPreview or {}
 local Helpers = M.PreviewHelpers or {}
 local ZoomPan = Preview.ZoomPan or {}
 Preview.ZoomPan = ZoomPan
+local function NormalizeControlPath(value)
+    local path = tostring(value or "")
+    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
+    path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    return path
+end
+local function PreviewControlMeta(ctx, semanticPath, classification, exact)
+    local pageKey = NormalizeControlPath((ctx and ctx.key) or M._msuf2SearchBuildKey or M.activeKey or "classpower")
+    if pageKey == "" then pageKey = "classpower" end
+    local path = NormalizeControlPath(semanticPath)
+    local identity = pageKey .. ".class-power-preview." .. path
+    local meta = {
+        controlId = "menu2." .. identity,
+        identityKey = identity,
+        controlPath = identity:gsub("%.", "/"),
+        pageKey = pageKey,
+        classification = classification or "ephemeral",
+    }
+    if meta.classification == "ephemeral" then meta.ephemeral = true end
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do meta[key] = value end
+    end
+    return meta
+end
+local function RegisterPreviewControl(ctx, widget, semanticPath, label, kind, classification, exact)
+    if not (widget and type(M.RegisterSearchWidget) == "function") then return widget end
+    local payload = PreviewControlMeta(ctx, semanticPath, classification, exact)
+    payload.label = label
+    payload.kind = kind
+    M.RegisterSearchWidget(widget, payload)
+    return widget
+end
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -722,6 +754,22 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h:SetScript("OnHide", function(self)
         StopHandleDrag(self, nil, true)
     end)
+    RegisterPreviewControl(preview._catalogCtx, h, "handle." .. tostring(key), label or key, "button", "action", {
+        help = "Moves this Class Resources preview element and opens its quick actions.",
+    })
+    if Helpers.EnsurePreviewHandleGear then
+        local gear = Helpers.EnsurePreviewHandleGear(h, {
+            T = T,
+            Tr = TR,
+            shown = false,
+            openSettings = OpenClassPowerHandleSettings,
+        })
+        RegisterPreviewControl(preview._catalogCtx, gear, "handle." .. tostring(key) .. ".open_settings",
+            "Open " .. tostring(label or key) .. " settings", "button", "navigation", {
+                navigationKey = "classpower",
+                help = "Opens the settings section for this preview element.",
+            })
+    end
     preview.handles[#preview.handles + 1] = h
     h:Hide()
     return h
@@ -1610,7 +1658,12 @@ local function CreateLayerSidebar(box, sideW)
     for i = 1, #CP_PREVIEW_LAYERS do
         local def = CP_PREVIEW_LAYERS[i]
         box.layerVisibility[def.key] = (def.key == "guides") and PreviewGuidesEnabled() or true
-        box.layerButtons[#box.layerButtons + 1] = Helpers.CreateLayerButton(sidebar, box, def, i, sideW, CP_LAYER_BUTTON_OPTS)
+        local btn = Helpers.CreateLayerButton(sidebar, box, def, i, sideW, CP_LAYER_BUTTON_OPTS)
+        RegisterPreviewControl(box._catalogCtx, btn, "layer." .. tostring(def.key),
+            tostring(def.label or def.key) .. " preview layer", "button", "ephemeral", {
+                help = def.tooltip,
+            })
+        box.layerButtons[#box.layerButtons + 1] = btn
     end
 end
 local function RefreshAnimateButton(preview)
@@ -1705,6 +1758,9 @@ local function CreateAnimateButton(preview)
     M.AddTooltip(btn, "Animate Preview", "Animates Class Resource, Player Power, and HP fill values in this preview only.", { hook = true })
     btn._preview = preview
     preview.animateButton = btn
+    RegisterPreviewControl(preview._catalogCtx, btn, "animation.toggle", "Animate Preview", "button", "ephemeral", {
+        help = "Starts or stops preview-only Class Resource, Player Power, and HP fill animation.",
+    })
     RefreshAnimateButton(preview)
     return btn
 end
@@ -1735,6 +1791,7 @@ function Preview.Create(ctx, builder)
     local innerW = max(470, width - 28)
     local sideW = 80
     local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
+    box._catalogCtx = ctx
     box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -38)
     box:SetSize(innerW, 330)
     box.canvasW, box.canvasH = max(340, innerW - sideW - 38), 260
@@ -1743,6 +1800,9 @@ function Preview.Create(ctx, builder)
     if box.EnableKeyboard then box:EnableKeyboard(true) end
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
     box:SetScript("OnKeyDown", HandleKeyDown)
+    RegisterPreviewControl(ctx, box, "keyboard.nudge_surface", "Class Resources preview keyboard controls", "canvas", "ephemeral", {
+        help = "Receives arrow-key nudges for the selected preview handle.",
+    })
     local title = T.Font(box, "GameFontNormal", TR("Class Resources Preview"), T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
     local hint = T.Font(box, "GameFontDisableSmall", TR("drag handles - double-click/settings opens options - right-click actions - Ctrl+wheel zoom"), T.colors.muted)
@@ -1781,9 +1841,24 @@ function Preview.Create(ctx, builder)
             fitReason = "CLASSPOWER_PREVIEW_ZOOM_FIT",
             oneReason = "CLASSPOWER_PREVIEW_ZOOM_1TO1",
         })
+        RegisterPreviewControl(ctx, box.zoomBar, "zoom.surface", "Preview zoom controls", "canvas", "ephemeral", {
+            help = "Accepts Ctrl + mouse wheel for preview zoom.",
+        })
+        local zoomControls = {
+            { "zoomOutButton", "zoom.out", "Zoom out" },
+            { "zoomFitButton", "zoom.fit", "Fit preview" },
+            { "zoomOneButton", "zoom.one_to_one", "Pixel preview" },
+            { "zoomInButton", "zoom.in", "Zoom in" },
+            { "zoomHelpButton", "zoom.help", "Preview controls help" },
+        }
+        for i = 1, #zoomControls do
+            local info = zoomControls[i]
+            RegisterPreviewControl(ctx, box[info[1]], info[2], info[3], "button", "ephemeral")
+        end
     end
     if Helpers.EnsurePreviewControlsHint then
-        Helpers.EnsurePreviewControlsHint(box, box.canvas, { M = M, T = T, Tr = TR })
+        local controlsHint = Helpers.EnsurePreviewControlsHint(box, box.canvas, { M = M, T = T, Tr = TR })
+        RegisterPreviewControl(ctx, controlsHint and controlsHint._close, "hint.dismiss", "Dismiss preview tip", "button", "ephemeral")
     end
     box._animationEnabled = General().classPowerPreviewAnimate == true
     CreateAnimateButton(box)
@@ -1797,6 +1872,9 @@ function Preview.Create(ctx, builder)
     box.canvas:SetScript("OnMouseUp", function(self)
         if ZoomPan.Stop then ZoomPan.Stop(self) end
     end)
+    RegisterPreviewControl(ctx, box.canvas, "canvas", "Class Resources preview canvas", "canvas", "ephemeral", {
+        help = "Selects preview handles and supports Ctrl + drag pan and Ctrl + mouse wheel zoom.",
+    })
     CreateLayerSidebar(box, sideW)
     box.noResource = T.Font(box.canvas, "GameFontDisableSmall", TR("Class resource is disabled for this preview resource."), T.colors.muted)
     box.noResource:SetPoint("CENTER", box.canvas, "CENTER", 0, 28)
@@ -1896,6 +1974,9 @@ function Preview.Create(ctx, builder)
             top = -8,
             pageKey = ctx and ctx.key,
             wrapper = ctx and ctx.wrapper,
+        })
+        RegisterPreviewControl(ctx, box._msuf2PinButton, "pin.toggle", "Pin Preview", "button", "ephemeral", {
+            help = "Keeps this preview visible while editing lower Class Resources options.",
         })
     end
     M.TrackMethodRefresh(ctx, section, "Refresh")

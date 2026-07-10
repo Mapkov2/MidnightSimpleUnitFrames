@@ -960,7 +960,7 @@ builders.RUNTIME = function(env)
             if powerType == "MAELSTROM_WEAPON" then
                 maxP = 10
                 local spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
-                if type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
+                if NotSecret(spellMax) and type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
             elseif powerType == "SOUL_FRAGMENTS_VENG" then
                 maxP = 6
             elseif powerType == "WHIRLWIND" then
@@ -1106,7 +1106,7 @@ builders.RUNTIME = function(env)
             CP_SyncRuntimeOnUpdates(timerActive)
         end
         if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
-            CP_UpdateValues_Stagger(CP.powerType, CP.currentMax)
+            RunActiveUpdate(CP.powerType, CP.currentMax)
         end
     end
 
