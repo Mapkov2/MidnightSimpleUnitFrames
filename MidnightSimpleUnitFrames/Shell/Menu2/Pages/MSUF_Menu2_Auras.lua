@@ -216,6 +216,28 @@ local function AurasMenuCombatLocked()
     if type(_G.MSUF_IsConfigCombatLocked) == "function" then return _G.MSUF_IsConfigCombatLocked() and true or false end
     return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
 end
+local function HandleNestedScrollWheel(scrollFrame, delta, step)
+    delta = tonumber(delta) or 0
+    if delta == 0 or not scrollFrame then return end
+    local range = scrollFrame.GetVerticalScrollRange and scrollFrame:GetVerticalScrollRange() or 0
+    local current = scrollFrame.GetVerticalScroll and scrollFrame:GetVerticalScroll() or 0
+    local leavingTop = delta > 0 and current <= 0.01
+    local leavingBottom = delta < 0 and current >= range - 0.01
+    if range <= 0 or leavingTop or leavingBottom then
+        if scrollFrame.SetPropagateMouseWheel then
+            scrollFrame:SetPropagateMouseWheel(true)
+        else
+            local main = M.scrollFrame
+            local handler = main and main.GetScript and main:GetScript("OnMouseWheel")
+            if type(handler) == "function" then handler(main, delta) end
+        end
+        return
+    end
+    if scrollFrame.SetPropagateMouseWheel then scrollFrame:SetPropagateMouseWheel(false) end
+    local value = current - (delta * (tonumber(step) or 42))
+    if value < 0 then value = 0 elseif value > range then value = range end
+    if scrollFrame.SetVerticalScroll then scrollFrame:SetVerticalScroll(value) end
+end
 local function QueueAurasPageRefresh(ctx, reason)
     if AurasMenuCombatLocked() then return false end
     if M.RequestRefresh then
@@ -1591,10 +1613,12 @@ local function BuildAuraStyleLanePage(ctx, lane)
     SetCurrentLane("auraStyleGFLane", lane)
     BuildAuraStylePage(ctx)
 end
-local function BuildUnitFilterRulesByLane(ctx, b, scope)
-    local section = b:Section("Filter Rules", 512)
+local function BuildUnitFilterRulesByLane(ctx, b, scope, fixedLane)
+    local laneKey = fixedLane == "debuff" and "debuff" or (fixedLane == "buff" and "buff" or CurrentLane("auraFilterLane", "buff"))
+    local compact = fixedLane ~= nil
+    local section = b:CollapsibleSection("unit_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Blizzard Filters", compact and 382 or 512, not compact)
     local w = section._msuf2Width or b.width or 720
-    local lane = CurrentLane("auraFilterLane", "buff")
+    local lane = laneKey
     local laneTitle = lane == "buff" and "Buff Filters" or "Debuff Filters"
     local filterControls = {}
     local enableFilters = BindSwitch(ctx, section, "Enable Filters", 24, -48, 180,
@@ -1603,9 +1627,9 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
             Model.SetScopeFiltersEnabled(scope, v)
             ApplyUnit(ctx, scope, "AURAS3_FILTER_ENABLE", true)
         end)
-    W.LabelAt(section, "Filter Type", 24, -108, 90, "GameFontNormalSmall", T.colors.accent)
-    BuildLaneTabs(ctx, section, "auraFilterLane", 118, -104, min(280, w - 160))
-    local card = Card(section, laneTitle, "Rules for " .. ScopeLabel(scope) .. ".", 24, -152, w - 48, 336)
+    W.LabelAt(section, fixedLane and laneTitle or "Filter Type", 24, compact and -88 or -108, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
+    if not fixedLane then BuildLaneTabs(ctx, section, "auraFilterLane", 118, -104, min(280, w - 160)) end
+    local card = Card(section, laneTitle, "Rules for " .. ScopeLabel(scope) .. ".", 24, compact and -106 or -152, w - 48, compact and 244 or 336)
     local colW = max(280, floor(((w - 48) - 46) / 2))
     local rightX = 24 + colW
     local function FilterToggle(label, key, x, y, tip, conflicts)
@@ -1627,34 +1651,39 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
         filterControls[#filterControls + 1] = widget
         return widget
     end
-    W.LabelAt(card, "Restrictive Tokens", 16, -70, colW, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(card, "Include Modifier", 16, -206, colW, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(card, lane == "buff" and "Defensive Tokens" or "Debuff Tokens", rightX, -70, colW, "GameFontNormalSmall", T.colors.accent)
+    local headingY = compact and -48 or -70
+    local includeHeadingY = compact and -154 or -206
+    local row1, row2, row3, row4 = compact and -76 or -100, compact and -106 or -134, compact and -136 or -168, compact and -184 or -236
+    local stateHeadingY = compact and -132 or -168
+    local stateRow1, stateRow2 = compact and -160 or -198, compact and -190 or -232
+    W.LabelAt(card, "Restrictive Tokens", 16, headingY, colW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(card, "Include Modifier", 16, includeHeadingY, colW, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(card, lane == "buff" and "Defensive Tokens" or "Debuff Tokens", rightX, headingY, colW, "GameFontNormalSmall", T.colors.accent)
     if lane == "buff" then
-        W.LabelAt(card, "Buff State (choose one)", rightX, -168, colW, "GameFontNormalSmall", T.colors.accent)
+        W.LabelAt(card, "Buff State (choose one)", rightX, stateHeadingY, colW, "GameFontNormalSmall", T.colors.accent)
     end
     local filterSpecs = lane == "buff" and {
-        { "Player", "onlyMine", 16, -100, "Narrows to auras applied by the player." },
-        { "Raid", "raid", 16, -134, "Narrows to raid-useful public Buffs." },
-        { "Raid In Combat", "raidInCombat", 16, -168, "Narrows to Buffs Blizzard flags for raid frames while in combat." },
-        { "Include Nameplate-only", "includeNameplateOnly", 16, -236, "Adds Buffs Blizzard marks as nameplate-only." },
-        { "External Defensive", "externalDefensive", rightX, -100, "Narrows to external defensive Buffs from Blizzard's native filter." },
-        { "Big Defensive", "bigDefensive", rightX, -134, "Narrows to major defensive Buffs from Blizzard's native filter." },
-        { "Cancelable", "cancelable", rightX, -198, "Narrows to Buffs that can be cancelled. Mutually exclusive with Not Cancelable.", { "notCancelable" } },
-        { "Not Cancelable", "notCancelable", rightX, -232, "Narrows to Buffs that cannot be cancelled. Mutually exclusive with Cancelable.", { "cancelable" } },
+        { "Player", "onlyMine", 16, row1, "Narrows to auras applied by the player." },
+        { "Raid", "raid", 16, row2, "Narrows to raid-useful public Buffs." },
+        { "Raid In Combat", "raidInCombat", 16, row3, "Narrows to Buffs Blizzard flags for raid frames while in combat." },
+        { "Include Nameplate-only", "includeNameplateOnly", 16, row4, "Adds Buffs Blizzard marks as nameplate-only." },
+        { "External Defensive", "externalDefensive", rightX, row1, "Narrows to external defensive Buffs from Blizzard's native filter." },
+        { "Big Defensive", "bigDefensive", rightX, row2, "Narrows to major defensive Buffs from Blizzard's native filter." },
+        { "Cancelable", "cancelable", rightX, stateRow1, "Narrows to Buffs that can be cancelled. Mutually exclusive with Not Cancelable.", { "notCancelable" } },
+        { "Not Cancelable", "notCancelable", rightX, stateRow2, "Narrows to Buffs that cannot be cancelled. Mutually exclusive with Cancelable.", { "cancelable" } },
     } or {
-        { "Player", "onlyMine", 16, -100, "Narrows to Debuffs applied by the player." },
-        { "Raid", "raid", 16, -134, "Narrows to raid and encounter Debuffs." },
-        { "Raid In Combat", "raidInCombat", 16, -168, "Narrows to Debuffs Blizzard flags for raid frames while in combat." },
-        { "Include Nameplate-only", "includeNameplateOnly", 16, -236, "Adds Debuffs Blizzard marks as nameplate-only." },
-        { "Dispellable", "includeDispellable", rightX, -100, "Narrows to Debuffs Blizzard marks as dispellable by the player." },
-        { "Crowd Control", "crowdControl", rightX, -134, "Narrows to crowd-control Debuffs from Blizzard's native filter." },
+        { "Player", "onlyMine", 16, row1, "Narrows to Debuffs applied by the player." },
+        { "Raid", "raid", 16, row2, "Narrows to raid and encounter Debuffs." },
+        { "Raid In Combat", "raidInCombat", 16, row3, "Narrows to Debuffs Blizzard flags for raid frames while in combat." },
+        { "Include Nameplate-only", "includeNameplateOnly", 16, row4, "Adds Debuffs Blizzard marks as nameplate-only." },
+        { "Dispellable", "includeDispellable", rightX, row1, "Narrows to Debuffs Blizzard marks as dispellable by the player." },
+        { "Crowd Control", "crowdControl", rightX, row2, "Narrows to crowd-control Debuffs from Blizzard's native filter." },
     }
     M.BuildControlSpecs(filterSpecs, {
         ["*"] = function(s) return FilterToggle(s[1], s[2], s[3], s[4], s[5], s[6]) end,
     })
     if lane == "debuff" then
-        local exclusiveDrop = BindDropdown(ctx, card, "Exclusive Mode", rightX, -218, DEBUFF_EXCLUSIVE, min(250, colW - 32),
+        local exclusiveDrop = BindDropdown(ctx, card, "Exclusive Mode", rightX, compact and -168 or -218, DEBUFF_EXCLUSIVE, min(250, colW - 32),
             function() return Model.ReadFilter(scope, lane, "exclusive", "none") end,
             function(v)
                 Model.WriteFilter(scope, lane, "exclusive", v or "none")
@@ -1663,7 +1692,7 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
         AddTooltip(exclusiveDrop, "Exclusive Mode", "Uses Blizzard's debuff mode selector. Other enabled tokens can still narrow the result further.")
         filterControls[#filterControls + 1] = exclusiveDrop
     end
-    W.Text(section, "Native 12.1 AuraContainers use filter tokens plus SpellID candidate filters where the client permits identity filtering.", 24, -506, w - 48, T.colors.muted)
+    W.Text(section, "Native 12.1 AuraContainer tokens; exact SpellID rules use candidate filters.", 24, compact and -370 or -506, w - 48, T.colors.muted)
     M.TrackRefresh(ctx, function()
         local customRules = scope == "shared" or not Model.UseSharedRules(scope)
         local filtersOn = customRules and Model.ScopeFiltersEnabled(scope)
@@ -1671,23 +1700,16 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
         W.SetControlsEnabled(filterControls, filtersOn)
     end)
 end
-local function BuildUnitBlacklist(ctx, b, scope)
-    local section = b:Section("Blacklist", 572)
+local function BuildUnitBlacklist(ctx, b, scope, lane)
+    lane = lane == "debuff" and "debuff" or "buff"
+    local laneTitle = lane == "debuff" and "Debuff" or "Buff"
+    local section = b:CollapsibleSection("unit_aura_blacklist_" .. tostring(scope) .. "_" .. lane, laneTitle .. " Blacklist", 542, false)
     local w = section._msuf2Width or b.width or 720
     local colW = max(310, floor((w - 68) / 2))
     local rightX = 36 + colW + 24
-    local editEnabled = NATIVE_EXACT_AURA_FILTERS_ENABLED and (scope == "shared" or not Model.UseSharedBlacklist(scope))
-    local useShared
-    if scope ~= "shared" then
-        useShared = BindSwitch(ctx, section, "Use Shared Blacklist", 24, -42, 210,
-            function() return Model.UseSharedBlacklist(scope) end,
-            function(v)
-                Model.SetUseSharedBlacklist(scope, v)
-                ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_INHERIT", true)
-            end)
-    end
-    local manual = Card(section, "Blacklist", "SpellIDs hidden through native AuraContainer candidate filters.", 24, -72, colW, 222)
-    local preset = Card(section, "Blacklist Presets", "Preset SpellID groups for the native blacklist.", rightX, -72, colW, 222)
+    local editEnabled = NATIVE_EXACT_AURA_FILTERS_ENABLED
+    local manual = Card(section, laneTitle .. " Blacklist", "SpellIDs hidden only from this frame's " .. laneTitle:lower() .. " container.", 24, -42, colW, 222)
+    local preset = Card(section, "Blacklist Presets", "Preset SpellID groups for this frame's native blacklist.", rightX, -42, colW, 222)
     local inputValue = ""
     local input = BindTextInput(ctx, manual, "Spell ID, spell link, or resolvable spell name", 16, -82, colW - 32,
         function() return inputValue end,
@@ -1696,7 +1718,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
     add:SetPoint("TOPLEFT", manual, "TOPLEFT", 16, -134)
     add:SetScript("OnClick", function()
         local value = input and input.GetText and input:GetText() or inputValue
-        Model.AddBlacklistSpell(scope, value)
+        Model.AddBlacklistSpell(scope, value, lane)
         if input and input.SetText then input:SetText("") end
         inputValue = ""
         ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_ADD", true)
@@ -1705,7 +1727,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
     remove:SetPoint("TOPLEFT", manual, "TOPLEFT", 134, -134)
     remove:SetScript("OnClick", function()
         local value = input and input.GetText and input:GetText() or inputValue
-        Model.RemoveBlacklistSpell(scope, value)
+        Model.RemoveBlacklistSpell(scope, value, lane)
         ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_REMOVE", true)
     end)
     W.Text(manual, NATIVE_EXACT_AURA_FILTERS_TEXT, 16, -176, colW - 32, T.colors.muted)
@@ -1743,17 +1765,17 @@ local function BuildUnitBlacklist(ctx, b, scope)
     addPreset:SetScript("OnClick", function()
         local values = Model.BlacklistSpellValues(CurrentPreset())
         local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
-        Model.AddBlacklistPresetSpell(scope, spellID)
+        Model.AddBlacklistPresetSpell(scope, spellID, lane)
         ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_PRESET_ADD", true)
     end)
     local addPresetGroup = ActionButton(preset, "Add Group", 112)
     addPresetGroup:SetPoint("TOPLEFT", preset, "TOPLEFT", 138, -184)
     addPresetGroup:SetScript("OnClick", function()
-        Model.AddBlacklistPresetGroup(scope, CurrentPreset())
+        Model.AddBlacklistPresetGroup(scope, CurrentPreset(), lane)
         ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true)
     end)
     local blacklistEditControls = { input, add, remove, presetDrop, spellDrop, addPreset, addPresetGroup }
-    local current = Card(section, "Current List", nil, 24, -318, w - 48, 184)
+    local current = Card(section, "Current List", nil, 24, -288, w - 48, 184)
     local prepared = W.Text(current, "", 16, -18, w - 80, T.colors.accent)
     local emptyText = W.Text(current, "No blacklisted spells.", 16, -48, w - 80, T.colors.muted)
     local moreText = W.Text(current, "Click an entry to remove it from this blacklist.", 16, -164, w - 80, T.colors.muted)
@@ -1764,14 +1786,8 @@ local function BuildUnitBlacklist(ctx, b, scope)
     local listChild = CreateFrame("Frame", nil, listScroll)
     listChild:SetSize(w - 104, 116)
     listScroll:SetScrollChild(listChild)
-    listScroll:SetScript("OnMouseWheel", function(self, delta)
-        local step = 42
-        local range = self.GetVerticalScrollRange and self:GetVerticalScrollRange() or 0
-        local value = (self.GetVerticalScroll and self:GetVerticalScroll() or 0) - ((tonumber(delta) or 0) * step)
-        if value < 0 then value = 0 end
-        if value > range then value = range end
-        if self.SetVerticalScroll then self:SetVerticalScroll(value) end
-    end)
+    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
+    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 42) end)
     local rows = {}
     local rowW = w - 112
     local rowH = 22
@@ -1794,7 +1810,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
         row:SetScript("OnLeave", function(self) self.bg:SetColorTexture(0.020, 0.026, 0.052, 0.78) end)
         row:SetScript("OnClick", function(self)
             if not editEnabled then return end
-            Model.RemoveBlacklistSpell(scope, self._msufValue)
+            Model.RemoveBlacklistSpell(scope, self._msufValue, lane)
             ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_REMOVE_ROW", true)
         end)
         row:Hide()
@@ -1802,12 +1818,11 @@ local function BuildUnitBlacklist(ctx, b, scope)
         return row
     end
     M.TrackRefresh(ctx, function()
-        editEnabled = NATIVE_EXACT_AURA_FILTERS_ENABLED and (scope == "shared" or not Model.UseSharedBlacklist(scope))
-        if useShared then W.SetControlEnabled(useShared, true) end
+        editEnabled = NATIVE_EXACT_AURA_FILTERS_ENABLED
         W.SetControlsEnabled(blacklistEditControls, editEnabled)
-        local count = Model.BlacklistPreparedCount(scope)
+        local count = Model.BlacklistPreparedCount(scope, lane)
         prepared:SetText(count == 1 and "1 prepared blacklist entry" or (tostring(count) .. " prepared blacklist entries"))
-        local entries = Model.BlacklistEntries(scope)
+        local entries = Model.BlacklistEntries(scope, lane)
         emptyText:SetShown(#entries == 0)
         listScroll:SetShown(#entries > 0)
         listChild:SetHeight(max(116, (#entries * 24) + 2))
@@ -1892,15 +1907,16 @@ local function CategoryLabel(cat)
     if cat and cat.key == "RAID_BUFFS" then return "Raid / Mythic Buffs" end
     return (cat and cat.label) or (cat and cat.key) or ""
 end
-local function BuildGroupFilters(ctx, b, scope)
-    local section = b:Section("Group Frame Filters", 690)
+local function BuildGroupFilters(ctx, b, scope, fixedLane)
+    local laneKey = fixedLane == "debuff" and "debuff" or (fixedLane == "buff" and "buff" or CurrentLane("auraFilterLane", "buff"))
+    local section = b:CollapsibleSection("group_aura_filters_" .. tostring(scope) .. "_" .. laneKey, "Group Frame Blizzard Filters & Lists", 930, false)
     local w = section._msuf2Width or b.width or 720
-    local lane = CurrentLane("auraFilterLane", "buff")
+    local lane = laneKey
     local laneText = lane == "buff" and "Buff" or "Debuff"
     local filterW = w - 48
     local filter = Card(section, "Native " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, -42, filterW, 234)
-    W.LabelAt(filter, "Filter Type", 16, -72, 90, "GameFontNormalSmall", T.colors.accent)
-    BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180))
+    W.LabelAt(filter, fixedLane and (laneText .. " Content") or "Filter Type", 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
+    if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
     local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
     BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
     W.Text(filter, "Category blacklists below are expanded into SpellID candidate filters for the selected lane.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
@@ -1912,7 +1928,7 @@ local function BuildGroupFilters(ctx, b, scope)
     local meta = af and af.DECLASSIFIED_META
     if not (type(meta) == "table" and #meta > 0) then
         W.Text(blacklist, "No public aura category data is loaded.", 16, -96, w - 96, T.colors.muted)
-        return
+        meta = {}
     end
     local half = ceil(#meta / 2)
     local catColW = max(230, floor((w - 104) / 2))
@@ -1930,8 +1946,37 @@ local function BuildGroupFilters(ctx, b, scope)
         if cat.tooltip then AddTooltip(toggle, CategoryLabel(cat), cat.tooltip) end
         categoryControls[#categoryControls + 1] = toggle
     end
+    local direct = Card(section, "Exact SpellID Blacklist", "Frame-specific exclusions for this Group Frame lane.", 24, -652, w - 48, 222)
+    local directInputValue = ""
+    local directInput = BindTextInput(ctx, direct, "Spell ID, spell link, or spell name", 16, -72, min(420, w - 300),
+        function() return directInputValue end,
+        function(value) directInputValue = value or "" end)
+    local directAdd = ActionButton(direct, "Add", 90)
+    directAdd:SetPoint("TOPLEFT", direct, "TOPLEFT", min(460, w - 252), -90)
+    directAdd:SetScript("OnClick", function()
+        local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
+        if Model.AddGroupBlacklistSpell(scope, lane, value) then
+            if directInput and directInput.SetText then directInput:SetText("") end
+            directInputValue = ""
+            QueueGroupScope(scope, "visual")
+            Rebuild(ctx)
+        end
+    end)
+    local directRemove = ActionButton(direct, "Remove", 96)
+    directRemove:SetPoint("LEFT", directAdd, "RIGHT", 8, 0)
+    directRemove:SetScript("OnClick", function()
+        local value = directInput and directInput.GetText and directInput:GetText() or directInputValue
+        if Model.RemoveGroupBlacklistSpell(scope, lane, value) then
+            QueueGroupScope(scope, "visual")
+            Rebuild(ctx)
+        end
+    end)
+    local directSummary = W.Text(direct, "", 16, -132, w - 80, T.colors.muted)
     M.TrackRefresh(ctx, function()
         W.SetControlsEnabled(categoryControls, NATIVE_EXACT_AURA_FILTERS_ENABLED)
+        W.SetControlsEnabled({ directInput, directAdd, directRemove }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
+        local summary = Model.GroupBlacklistSummary(scope, lane)
+        directSummary:SetText(summary == "" and "No exact SpellID exclusions." or summary)
     end)
 end
 local function BuildAuraFiltersPage(ctx)
@@ -1943,7 +1988,7 @@ local function BuildAuraFiltersPage(ctx)
         BuildGroupFilters(ctx, b, scope)
     else
         BuildUnitFilterRulesByLane(ctx, b, scope)
-        BuildUnitBlacklist(ctx, b, scope)
+        BuildUnitBlacklist(ctx, b, scope, CurrentLane("auraFilterLane", "buff"))
     end
     FinishPage(ctx, b)
 end
@@ -2007,58 +2052,1178 @@ local function BuildUnitAuraPlacementCard(ctx, parent, unit, kind, x, y, width)
     M.TrackRefresh(ctx, RefreshLaneCard)
     return controls
 end
-function M.BuildAuras3UnitSection(ctx, builder, unit)
-    if not Model.UnitSupported(unit) then return end
-    local sec = builder:CollapsibleSection("auras3", "Auras", 622, false)
-    local sectionW = sec._msuf2Width or builder.width or 720
-    local laneCardW = sectionW - 36
-    local top = Card(sec, "Aura Area", "Visibility, placement and icon grid for this unit frame.", 18, -38, sectionW - 36, 112)
-    W.LabelAt(top, "Lane", 16, -66, 54, "GameFontNormalSmall", T.colors.accent)
-    M.unitAuraTabSelection = M.unitAuraTabSelection or {}
-    local function CurrentTab()
-        local tab = M.unitAuraTabSelection[unit] or "buff"
-        if tab ~= "buff" and tab ~= "debuff" then tab = "buff" end
-        return tab
+local UNIT_AURA_WORKSPACE_TABS = VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3"
+local UNIT_AURA_NORMAL_TOOLS = VTP "layout=Layout|filters=Filters|blacklist=Blacklist"
+local UNIT_AURA_CUSTOM_TOOLS = VTP "setup=Setup|whitelist=Whitelist|filters=Filters|layout=Layout|appearance=Icon Style|effect=Full-Frame"
+local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, filters = true, blacklist = true }
+local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, whitelist = true, filters = true, layout = true, appearance = true, effect = true }
+
+local function CurrentUnitAuraTool(unit, container)
+    M.unitAuraToolSelection = M.unitAuraToolSelection or {}
+    local unitState = M.unitAuraToolSelection[unit]
+    if type(unitState) ~= "table" then unitState = {}; M.unitAuraToolSelection[unit] = unitState end
+    local custom = tostring(container or ""):match("^custom") ~= nil
+    local tool = unitState[container]
+    local valid = custom and UNIT_AURA_CUSTOM_TOOL_OK or UNIT_AURA_NORMAL_TOOL_OK
+    if not valid[tool] then tool = custom and "setup" or "layout"; unitState[container] = tool end
+    return tool
+end
+
+local function SetUnitAuraTool(unit, container, tool)
+    M.unitAuraToolSelection = M.unitAuraToolSelection or {}
+    local unitState = M.unitAuraToolSelection[unit]
+    if type(unitState) ~= "table" then unitState = {}; M.unitAuraToolSelection[unit] = unitState end
+    unitState[container] = tool
+end
+
+local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
+    local title = kind == "debuff" and "Debuff Layout" or "Buff Layout"
+    local section = b:Section(title, 190)
+    local w = section._msuf2Width or b.width or 720
+    local inner = w - 48
+    local gap = 10
+    local controls = {}
+    local enable = BindSwitch(ctx, section, "Visible", 24, -62, 104,
+        function() return UnitLaneShown(unit, kind) end,
+        function(v) SetUnitLaneShown(ctx, unit, kind, v, "AURAS3_UNIT_PAGE_" .. (kind == "buff" and "BUFFS" or "DEBUFFS")) end)
+    enable._msuf2GroupFrameGateAlwaysEnabled = true
+    local dropdownW = max(180, floor((inner - 126 - gap * 2) / 2))
+    local anchorX = 24 + 126 + gap
+    local growthX = anchorX + dropdownW + gap
+    controls[#controls + 1] = BindDropdown(ctx, section, "Anchor", anchorX, -34,
+        type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues(), dropdownW,
+        function() return type(Model.ReadLaneAnchor) == "function" and Model.ReadLaneAnchor(unit, kind) or (kind == "buff" and "BOTTOMRIGHT" or "TOPLEFT") end,
+        function(v) if type(Model.WriteLaneAnchor) == "function" then Model.WriteLaneAnchor(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_ANCHOR") end end)
+    controls[#controls + 1] = BindDropdown(ctx, section, "Growth", growthX, -34,
+        type(Model.LaneGrowthValues) == "function" and Model.LaneGrowthValues() or Model.GrowthValues(), dropdownW,
+        function() return type(Model.ReadLaneGrowthPair) == "function" and Model.ReadLaneGrowthPair(unit, kind) or Model.ReadLaneGrowth(unit, kind) end,
+        function(v)
+            if type(Model.WriteLaneGrowthPair) == "function" then Model.WriteLaneGrowthPair(unit, kind, v) else Model.WriteLaneGrowth(unit, kind, v) end
+            ApplyUnit(ctx, unit, "AURAS3_UNIT_GROWTH")
+        end)
+    local col4 = floor((inner - gap * 3) / 4)
+    local function Number(label, col, y, minValue, maxValue, getValue, setValue)
+        local control = BindSlider(ctx, section, label, 24 + (col - 1) * (col4 + gap), y, minValue, maxValue, 1, col4, getValue, setValue)
+        controls[#controls + 1] = control
+        return control
     end
-    local _, laneButtons = BuildActionTabs(ctx, top, LANE_VALUES, 74, -62, 200, CurrentTab, function(kind)
-        M.unitAuraTabSelection[unit] = kind
-        QueueAurasPageRefresh(ctx, "auras-unit-lane-tab")
-    end, 8)
-    local actionsX = max(360, sectionW - 206)
-    local style = ActionButton(top, "Style", 72)
-    style:SetPoint("TOPLEFT", top, "TOPLEFT", actionsX, -62)
-    style:SetScript("OnClick", function() SelectPage("auras3_styling", unit) end)
-    local filters = ActionButton(top, "Filters", 82)
-    filters:SetPoint("LEFT", style, "RIGHT", 8, 0)
-    filters:SetScript("OnClick", function() SelectPage("auras3_filters", unit) end)
-    local dispelWarningNotice
-    if M.UnitSectionsShared and type(M.UnitSectionsShared.CreateSectionNotice) == "function" then
-        dispelWarningNotice = M.UnitSectionsShared.CreateSectionNotice(top, -84)
-        dispelWarningNotice:SetMessage(UNIT_AURA_DISPEL_WARNING, "warning")
+    Number("X", 1, -92, -300, 300, function() return Model.ReadNumber(unit, LaneXKey(kind), 0, -4096, 4096) end,
+        function(v) Model.WriteNumber(unit, LaneXKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_X") end)
+    Number("Y", 2, -92, -300, 300, function() return Model.ReadNumber(unit, LaneYKey(kind), LaneDefaultY(kind), -4096, 4096) end,
+        function(v) Model.WriteNumber(unit, LaneYKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_Y") end)
+    Number("Max", 3, -92, 0, 80, function() return Model.ReadNumber(unit, LaneMaxKey(kind), LaneDefaultMax(kind), 0, 80) end,
+        function(v) Model.WriteNumber(unit, LaneMaxKey(kind), v, 0, 80); ApplyUnit(ctx, unit, "AURAS3_UNIT_MAX") end)
+    Number("Size", 4, -92, 10, 80, function() return Model.ReadNumber(unit, LaneSizeKey(kind), 26, 1, 128) end,
+        function(v) Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128); ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE") end)
+    Number("Per row", 1, -146, 1, 40, function() return Model.ReadLanePerRow(unit, kind) end,
+        function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end)
+    Number("Gap", 2, -146, 0, 12, function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end,
+        function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end)
+    Number("Layer", 3, -146, 0, 30, function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end,
+        function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end)
+    W.Text(section, "Drag the live preview for fast placement; use these values for exact alignment.", 24 + (col4 + gap) * 3, -154, col4, T.colors.muted)
+    M.TrackRefresh(ctx, function()
+        local shown = UnitLaneShown(unit, kind)
+        W.SetControlEnabled(enable, true)
+        W.SetControlsEnabled(controls, shown)
+    end)
+end
+
+local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
+    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters", 150)
+    local w = section._msuf2Width or b.width or 720
+    local inner = w - 48
+    local gap = 10
+    local colW = floor((inner - gap * 3) / 4)
+    local filterControls = {}
+    local own = BindSwitch(ctx, section, "Own filters", 24, -42, colW,
+        function() return not Model.UseSharedRules(unit) end,
+        function(enabled)
+            Model.SetUseSharedRules(unit, not enabled)
+            ApplyUnit(ctx, unit, "AURAS3_UNIT_FILTER_OWNERSHIP", true)
+            Rebuild(ctx)
+        end)
+    AddTooltip(own, "Filter ownership", "Off follows Shared Blizzard filter tokens. Blacklists and Custom whitelists are always frame-specific.")
+    local enabled = BindSwitch(ctx, section, "Enable filters", 24 + colW + gap, -42, colW,
+        function() return Model.ScopeFiltersEnabled(unit) end,
+        function(value) Model.SetScopeFiltersEnabled(unit, value); ApplyUnit(ctx, unit, "AURAS3_FILTER_ENABLE", true) end)
+    local specs = lane == "buff" and {
+        { "Only mine", "onlyMine", "Only auras applied by the player." },
+        { "Raid", "raid", "Blizzard's raid-useful Buff filter." },
+        { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Buff filter." },
+        { "Nameplate-only", "includeNameplateOnly", "Include Buffs marked nameplate-only." },
+        { "External defensive", "externalDefensive", "External defensive Buffs." },
+        { "Big defensive", "bigDefensive", "Major defensive Buffs." },
+        { "Cancelable", "cancelable", "Only cancelable Buffs.", { "notCancelable" } },
+        { "Not cancelable", "notCancelable", "Only non-cancelable Buffs.", { "cancelable" } },
+    } or {
+        { "Only mine", "onlyMine", "Only Debuffs applied by the player." },
+        { "Raid", "raid", "Blizzard's raid Debuff filter." },
+        { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Debuff filter." },
+        { "Nameplate-only", "includeNameplateOnly", "Include Debuffs marked nameplate-only." },
+        { "Dispellable", "includeDispellable", "Debuffs Blizzard marks dispellable." },
+        { "Crowd control", "crowdControl", "Crowd-control Debuffs." },
+    }
+    for i = 1, #specs do
+        local spec = specs[i]
+        local col = ((i - 1) % 4)
+        local row = floor((i - 1) / 4)
+        local control = BindSwitch(ctx, section, spec[1], 24 + col * (colW + gap), -78 - row * 32, colW,
+            function() return Model.ReadFilter(unit, lane, spec[2], false) == true end,
+            function(value)
+                if value == true and type(spec[4]) == "table" then for j = 1, #spec[4] do Model.WriteFilter(unit, lane, spec[4][j], false) end end
+                Model.WriteFilter(unit, lane, spec[2], value)
+                ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_" .. spec[2], true)
+                if spec[4] then QueueAurasPageRefresh(ctx, "auras-filter-conflict") end
+            end)
+        AddTooltip(control, spec[1], spec[3])
+        filterControls[#filterControls + 1] = control
     end
-    local tabFrames = {}
-    local buffFrame, debuffFrame = M.UnitSectionsShared.MakeTabFrames(sec, -170, sectionW, tabFrames, "buff", "debuff")
-    BuildUnitAuraPlacementCard(ctx, buffFrame, unit, "buff", 18, -6, laneCardW)
-    BuildUnitAuraPlacementCard(ctx, debuffFrame, unit, "debuff", 18, -6, laneCardW)
-    local function RefreshTabs()
-        local tab = CurrentTab()
-        for key, frame in pairs(tabFrames) do frame:SetShown(key == tab) end
+    if lane == "debuff" then
+        local exclusive = BindDropdown(ctx, section, "Exclusive", 24 + 2 * (colW + gap), -92, DEBUFF_EXCLUSIVE, colW * 2 + gap,
+            function() return Model.ReadFilter(unit, lane, "exclusive", "none") end,
+            function(value) Model.WriteFilter(unit, lane, "exclusive", value or "none"); ApplyUnit(ctx, unit, "AURAS3_FILTER_DEBUFF_EXCLUSIVE", true) end)
+        filterControls[#filterControls + 1] = exclusive
     end
     M.TrackRefresh(ctx, function()
-        W.SetControlEnabled(laneButtons.buff, true)
-        W.SetControlEnabled(laneButtons.debuff, true)
-        RefreshTabs()
-        if dispelWarningNotice then dispelWarningNotice:SetShown(not AnyUnitFrameAuraEnabled()) end
-        if W.SetCollapsibleBadges then
-            W.SetCollapsibleBadges(sec, {
-                { text = UnitLaneShown(unit, "buff") and "Buffs on" or "Buffs off", kind = UnitLaneShown(unit, "buff") and "ok" or "muted", onlyWhenOpen = true },
-                { text = UnitLaneShown(unit, "debuff") and "Debuffs on" or "Debuffs off", kind = UnitLaneShown(unit, "debuff") and "ok" or "muted", onlyWhenOpen = true },
-                { text = CurrentTab() == "debuff" and "Debuffs" or "Buffs", kind = "accent", onlyWhenOpen = true },
-            })
+        local editable = not Model.UseSharedRules(unit)
+        W.SetControlEnabled(own, true)
+        W.SetControlEnabled(enabled, editable)
+        W.SetControlsEnabled(filterControls, editable and Model.ScopeFiltersEnabled(unit))
+    end)
+end
+
+local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
+    local laneTitle = lane == "debuff" and "Debuff" or "Buff"
+    local section = b:Section(laneTitle .. " Blacklist", 246)
+    local w = section._msuf2Width or b.width or 720
+    local inner = w - 48
+    local inputValue = ""
+    local inputW = max(260, floor(inner * 0.46))
+    local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
+        function() return inputValue end, function(value) inputValue = value or "" end)
+    local add = ActionButton(section, "Add", 86)
+    add:SetPoint("TOPLEFT", section, "TOPLEFT", 34 + inputW, -58)
+    add:SetScript("OnClick", function()
+        local value = input and input.GetText and input:GetText() or inputValue
+        if Model.AddBlacklistSpell(unit, value, lane) then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_ADD", true) end
+        if input and input.SetText then input:SetText("") end
+        inputValue = ""
+    end)
+    local presetW = max(150, floor(inner * 0.22))
+    local spellW = max(210, floor(inner * 0.30))
+    local function CurrentPreset()
+        local key = M.auraBlacklistPreset or "RAID_BUFFS"
+        local values = Model.BlacklistPresetValues()
+        for i = 1, #values do if values[i].value == key then return key end end
+        return values[1] and values[1].value or "RAID_BUFFS"
+    end
+    local preset = W.Dropdown(section, "Preset", function() return Model.BlacklistPresetValues() end, presetW)
+    W.MoveWidget(preset, section, 24, -92, presetW)
+    M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value) M.auraBlacklistPreset = value; M.auraBlacklistSpell = nil; QueueAurasPageRefresh(ctx, "aura-blacklist-preset") end)
+    local spell = W.Dropdown(section, "Spell", function() return Model.BlacklistSpellValues(CurrentPreset()) end, spellW)
+    W.MoveWidget(spell, section, 34 + presetW, -92, spellW)
+    M.BindDropdownWidget(ctx, spell,
+        function()
+            local values, selected = Model.BlacklistSpellValues(CurrentPreset()), M.auraBlacklistSpell
+            for i = 1, #values do if values[i].value == selected then return selected end end
+            return values[1] and values[1].value or nil
+        end,
+        function(value) M.auraBlacklistSpell = value end)
+    local addSpell = ActionButton(section, "Add spell", 96)
+    addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 44 + presetW + spellW, -114)
+    addSpell:SetScript("OnClick", function()
+        local values = Model.BlacklistSpellValues(CurrentPreset())
+        local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
+        if Model.AddBlacklistPresetSpell(unit, spellID, lane) then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_ADD", true) end
+    end)
+    local addSet = ActionButton(section, "Add set", 88)
+    addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
+    addSet:SetScript("OnClick", function()
+        if Model.AddBlacklistPresetGroup(unit, CurrentPreset(), lane) then ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true) end
+    end)
+    local prepared = W.Text(section, "", 24, -154, inner, T.colors.accent)
+    local empty = W.Text(section, "No blocked spells. Add one above or use a preset.", 24, -184, inner, T.colors.muted)
+    local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -178)
+    listScroll:SetSize(inner - 20, 54)
+    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
+    local listChild = CreateFrame("Frame", nil, listScroll)
+    listChild:SetSize(inner - 42, 54)
+    listScroll:SetScrollChild(listChild)
+    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
+    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+    local rows = {}
+    local function EnsureRow(i)
+        local row = rows[i]
+        if row then return row end
+        row = CreateFrame("Button", nil, listChild)
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 22))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 22))
+        row:SetHeight(20)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
+        row.icon:SetSize(17, 17)
+        row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+        row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+        row:SetScript("OnClick", function(self)
+            Model.RemoveBlacklistSpell(unit, self._spellID, lane)
+            ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_REMOVE", true)
+        end)
+        rows[i] = row
+        return row
+    end
+    M.TrackRefresh(ctx, function()
+        local entries = Model.BlacklistEntries(unit, lane)
+        prepared:SetText((#entries == 1 and "1 blocked spell" or tostring(#entries) .. " blocked spells") .. " · click an entry to remove")
+        empty:SetShown(#entries == 0)
+        listScroll:SetShown(#entries > 0)
+        listChild:SetHeight(max(54, #entries * 22))
+        for i = 1, max(#rows, #entries) do
+            local row, entry = rows[i], entries[i]
+            if entry then
+                row = EnsureRow(i)
+                row._spellID = entry.value
+                row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                row.text:SetText(entry.text or entry.value)
+                row:Show()
+            elseif row then row._spellID = nil; row:Hide() end
         end
     end)
 end
-M.RegisterPage("auras3_buffs", { title = "MSUF Aura Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 10 })
-M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 10 })
-M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 31 })
-M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 23 })
+
+local function BuildUnitAuraOwnership(ctx, b, unit)
+    local section = b:Section("Filter Ownership", 92)
+    local w = section._msuf2Width or b.width or 720
+    local function Independent()
+        return not Model.UseSharedRules(unit)
+    end
+    local toggle = BindSwitch(ctx, section, "Edit Blizzard filters independently for " .. ScopeLabel(unit), 24, -40, w - 48,
+        Independent,
+        function(enabled)
+            Model.SetUseSharedRules(unit, not enabled)
+            ApplyUnit(ctx, unit, "AURAS3_UNIT_WORKSPACE_OWNERSHIP", true)
+            Rebuild(ctx)
+        end)
+    AddTooltip(toggle, "Blizzard filter inheritance", "Controls only Blizzard's native Buff/Debuff filter tokens. Blacklists and Custom whitelists always belong to this UnitFrame.")
+    W.Text(section, Independent() and "Custom Blizzard filters active. Lists are always frame-specific." or "Blizzard filters inherited. Blacklists and Custom whitelists remain frame-specific.", 24, -70, w - 48, T.colors.muted)
+end
+
+function M.BuildAuras3GroupLaneWorkspace(ctx, b, scope, lane)
+    lane = lane == "debuff" and "debuff" or "buff"
+    SetCurrentLane("auraStyleGFLane", lane)
+    SetCurrentLane("auraFilterLane", lane)
+    BuildGroupFilters(ctx, b, scope, lane)
+end
+
+local function CreateNestedAuraBuilder(ctx, parentBuilder, body)
+    local entry = body and body._msuf2CollapsibleEntry
+    if not (entry and W.PageBuilder) then return parentBuilder end
+    local bodyWidth = body._msuf2Width or parentBuilder.width or 720
+    local nestedCtx = setmetatable({
+        wrapper = body,
+        width = max(320, bodyWidth - 24),
+        key = ctx and ctx.key,
+        entry = ctx and ctx.entry,
+        _msuf2ContentX = 12,
+        _msuf2TopInset = 0,
+    }, { __index = ctx })
+    function nestedCtx:SetContentHeight(height)
+        height = max(80, ceil(tonumber(height) or 80))
+        if entry.contentHeight == height then return end
+        entry.contentHeight = height
+        body:SetHeight(height)
+        if parentBuilder.RequestRelayoutCollapsibles then parentBuilder:RequestRelayoutCollapsibles() end
+    end
+    local nestedBuilder = W.PageBuilder(nestedCtx)
+    entry._msuf2SettleContentLayout = function()
+        if nestedBuilder.RelayoutCollapsibles then nestedBuilder:RelayoutCollapsibles() end
+        nestedCtx:SetContentHeight(abs(nestedBuilder.y) + 42)
+    end
+    return nestedBuilder
+end
+
+function M.BuildAuras3UnitSection(ctx, builder, unit)
+    if not Model.UnitSupported(unit) then return end
+    M.unitAuraTabSelection = M.unitAuraTabSelection or {}
+    local function CurrentTab()
+        local tab = M.unitAuraTabSelection[unit] or "buff"
+        if tab ~= "buff" and tab ~= "debuff" and tab ~= "custom1" and tab ~= "custom2" and tab ~= "custom3" then tab = "buff" end
+        return tab
+    end
+    local currentTab = CurrentTab()
+    local normalLane = currentTab == "buff" or currentTab == "debuff"
+    local currentTool = CurrentUnitAuraTool(unit, currentTab)
+    local outer = builder:CollapsibleSection("auras", "Auras", 120, false)
+    local auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)
+    local top = auraBuilder:Section("", 104)
+    if top.title then top.title:Hide() end
+    local sectionW = top._msuf2Width or auraBuilder.width or 720
+    W.LabelAt(top, "Container", 16, -22, 68, "GameFontNormalSmall", T.colors.accent)
+    local _, tabButtons = BuildActionTabs(ctx, top, UNIT_AURA_WORKSPACE_TABS, 88, -16, max(430, sectionW - 112), CurrentTab, function(value)
+        M.unitAuraTabSelection[unit] = value
+        Rebuild(ctx)
+    end, 6)
+    W.LabelAt(top, "Edit", 16, -58, 68, "GameFontNormalSmall", T.colors.accent)
+    local tools = normalLane and UNIT_AURA_NORMAL_TOOLS or UNIT_AURA_CUSTOM_TOOLS
+    local _, toolButtons = BuildActionTabs(ctx, top, tools, 88, -52, max(430, sectionW - 112),
+        function() return CurrentUnitAuraTool(unit, currentTab) end,
+        function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end, 6)
+    local workspaceHint = W.Text(top, "Icon text, cooldowns and borders: Appearance > Auras.", 16, -84, sectionW - 32, T.colors.muted)
+    M.TrackRefresh(ctx, function()
+        for _, item in ipairs(UNIT_AURA_WORKSPACE_TABS) do W.SetControlEnabled(tabButtons[item.value], true) end
+        for _, item in ipairs(tools) do W.SetControlEnabled(toolButtons[item.value], true) end
+        workspaceHint:SetText(normalLane and not AnyUnitFrameAuraEnabled()
+            and UNIT_AURA_DISPEL_WARNING
+            or "Icon text, cooldowns and borders: Appearance > Auras.")
+    end)
+
+    if normalLane then
+        SetCurrentLane("auraStyleGFLane", currentTab)
+        SetCurrentLane("auraFilterLane", currentTab)
+        if currentTool == "filters" then
+            BuildCompactUnitAuraFilters(ctx, auraBuilder, unit, currentTab)
+        elseif currentTool == "blacklist" then
+            BuildCompactUnitAuraBlacklist(ctx, auraBuilder, unit, currentTab)
+        else
+            BuildCompactUnitAuraLayout(ctx, auraBuilder, unit, currentTab)
+        end
+    elseif type(M.BuildAuras3CompactCustomWorkspace) == "function" then
+        M.BuildAuras3CompactCustomWorkspace(ctx, auraBuilder, unit, tonumber(currentTab:match("(%d)$")) or 1, currentTool)
+    end
+end
+
+local function BuildAuraContentSource(ctx, b, scope, lane)
+    local compact = scope == "shared" or IsGroupScope(scope)
+    local section = b:Section("Content Source", compact and 92 or 128)
+    local w = section._msuf2Width or b.width or 720
+    local title = lane == "buff" and "Buff rules" or "Debuff rules"
+    if scope == "shared" then
+        W.Text(section, title .. " edited here are the baseline for Player, Target, Focus, and Boss unless a scope override is enabled.", 24, -46, w - 48, T.colors.muted)
+    elseif IsGroupScope(scope) then
+        W.Text(section, ScopeLabel(scope) .. " owns its native group-frame " .. LanePlural(lane):lower() .. " filter and category exclusions.", 24, -46, w - 48, T.colors.muted)
+    else
+        local override = BindSwitch(ctx, section, "Use custom " .. LanePlural(lane):lower() .. " rules for " .. ScopeLabel(scope), 24, -46, w - 48,
+            function() return not Model.UseSharedRules(scope) end,
+            function(enabled)
+                Model.SetUseSharedRules(scope, not enabled)
+                ApplyUnit(ctx, scope, "AURAS3_WORKSPACE_FILTER_OVERRIDE", true)
+                Rebuild(ctx)
+            end)
+        AddTooltip(override, "Content inheritance", "Off: this frame follows Shared aura rules. On: it keeps its own native filters and exceptions.")
+        W.Text(section, Model.UseSharedRules(scope) and "Inherited from Shared. Enable the override only when this frame needs different aura content." or "Override active. Changes below affect only this frame scope.", 24, -88, w - 48, T.colors.muted)
+    end
+end
+
+local function BuildAuraWorkspacePage(ctx, lane)
+    lane = lane == "buff" and "buff" or "debuff"
+    SetCurrentLane("auraStyleGFLane", lane)
+    SetCurrentLane("auraFilterLane", lane)
+
+    local b = W.PageBuilder(ctx)
+    Model.EnsureDB()
+    local title = lane == "buff" and "Buffs" or "Debuffs"
+    local subtitle = lane == "buff"
+        and "Choose which Buffs appear, then configure layout, appearance, cooldowns, stacks, and native duration bars in one workflow."
+        or "Choose which Debuffs appear, then configure layout, dispel presentation, appearance, cooldowns, stacks, and native duration bars."
+    b:GlobalStyleHeader(title, subtitle, 82)
+    local scope = BuildAuraStyleScopeOverrideSection(ctx, b)
+    BuildAuraContentSource(ctx, b, scope, lane)
+
+    if IsGroupScope(scope) then
+        BuildGroupFilters(ctx, b, scope, lane)
+        BuildGroupStyle(ctx, b, scope)
+    else
+        BuildUnitFilterRulesByLane(ctx, b, scope, lane)
+        BuildUnitBlacklist(ctx, b, scope, lane)
+        local layout = b:Section(title .. " Layout & Icon Grid", 438)
+        local lw = layout._msuf2Width or b.width or 720
+        BuildUnitAuraPlacementCard(ctx, layout, scope, lane, 6, -34, lw - 12)
+        BuildUnitStyle(ctx, b, scope)
+    end
+    FinishPage(ctx, b)
+end
+
+local function BuildLegacyAuraWorkspace(ctx, preferredLane)
+    local lane = preferredLane or CurrentLane("auraStyleGFLane", "buff")
+    BuildAuraWorkspacePage(ctx, lane)
+end
+
+local CUSTOM_AURA_TYPES = VTP "BUFF=Buff|DEBUFF=Debuff"
+local CUSTOM_VISUAL_TYPES = VTP "icon=Icon|square=Square|bar=Bar|number=Number|none=Hidden Sensor"
+local CUSTOM_FRAME_EFFECTS = VTP "none=None|healthtint=Health Tint|border=Border|glow=Glow|pulse=Pulse|namecolor=Name Overlay"
+local CUSTOM_STRATA_VALUES = VTP "AUTO=Auto|BACKGROUND=Background|LOW=Low|MEDIUM=Medium|HIGH=High|DIALOG=Dialog|FULLSCREEN=Fullscreen|FULLSCREEN_DIALOG=Fullscreen Dialog|TOOLTIP=Tooltip"
+
+local function BuildCustomContainerPreview(ctx, b, unit, index, item)
+    local section = b:Section("Custom " .. tostring(index) .. " Preview", 190)
+    local w = section._msuf2Width or b.width or 720
+    local box = Card(section, nil, nil, 24, -34, w - 48, 132)
+    local icons = {}
+    for i = 1, 12 do icons[i] = CreateAuraPreviewIcon(box) end
+    local label = W.Text(section, "", 24, -172, w - 48, T.colors.muted)
+    local function Refresh()
+        local current = Model.CustomContainer(unit, index, false) or item
+        local placed = current and current.placed or {}
+        local entries = Model.CustomContainerSpellEntries(unit, index)
+        local size = min(46, max(14, tonumber(placed.size) or 24))
+        local spacing = min(12, max(0, tonumber(placed.spacing) or 2))
+        local perRow = max(1, min(12, tonumber(placed.perRow) or 4))
+        local maxIcons = max(0, min(12, tonumber(placed.max) or 8))
+        local count = min(maxIcons, max(#entries, current and current.enabled == true and 1 or 0))
+        for i = 1, #icons do
+            local icon = icons[i]
+            if i <= count then
+                local col = (i - 1) % perRow
+                local row = floor((i - 1) / perRow)
+                icon:ClearAllPoints()
+                icon:SetSize(size, size)
+                icon:SetPoint("TOPLEFT", box, "TOPLEFT", 12 + col * (size + spacing), -12 - row * (size + spacing))
+                local entry = entries[i]
+                icon.icon:SetTexture(entry and entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                icon.swipe:SetShown(placed.showCooldownSwipe ~= false)
+                icon.stack:SetText(placed.showStacks ~= false and (i == 1 and "2" or "") or "")
+                icon.timer:SetText(placed.showCooldown ~= false and (i == 1 and "8" or "") or "")
+                ApplyAuraPreviewFont(icon.stack, tonumber(placed.stackSize) or 10)
+                ApplyAuraPreviewFont(icon.timer, tonumber(placed.cooldownSize) or 10)
+                icon:Show()
+            else
+                icon:Hide()
+            end
+        end
+        label:SetText((current and current.enabled == true and "Enabled" or "Disabled") .. " · " .. tostring(#entries) .. " whitelisted SpellID" .. (#entries == 1 and "" or "s") .. " · native AuraContainer preview")
+    end
+    M.TrackRefresh(ctx, Refresh)
+    return Refresh
+end
+
+function M.BuildAuras3CustomContainerWorkspace(ctx, b, unit, index)
+    index = max(1, min(type(Model.CustomContainerMax) == "function" and Model.CustomContainerMax() or 3, tonumber(index) or 1))
+    local item = Model.CustomContainer(unit, index, true)
+    if not item then return end
+    item.filters = type(item.filters) == "table" and item.filters or {}
+    item.placed = type(item.placed) == "table" and item.placed or {}
+    item.frame = type(item.frame) == "table" and item.frame or { type = "none", color = { 0.69, 0.50, 0.88, 0.8 }, priority = 5, thickness = 2, strata = "AUTO" }
+    if type(item.frame.color) ~= "table" then item.frame.color = { 0.69, 0.50, 0.88, 0.8 } end
+    local refreshPreview
+    local function Apply(reason, rebuild)
+        ApplyUnit(ctx, unit, reason or "AURAS3_CUSTOM_CONTAINER", rebuild == true)
+        RefreshMiniAuraPreviewNow(refreshPreview)
+    end
+
+    local basics = b:Section("Custom " .. tostring(index) .. " Container", 190)
+    local bw = basics._msuf2Width or b.width or 720
+    local enabled = BindSwitch(ctx, basics, "Enable Custom " .. tostring(index), 24, -48, bw - 48,
+        function() return item.enabled == true end,
+        function(value) item.enabled = value == true; Apply("AURAS3_CUSTOM_CONTAINER_ENABLE") end)
+    local name = BindTextInput(ctx, basics, "Container Name", 24, -92, min(380, bw - 190),
+        function() return item.name or ("Custom " .. tostring(index)) end,
+        function(value) item.name = value ~= "" and value or ("Custom " .. tostring(index)); Apply("AURAS3_CUSTOM_CONTAINER_NAME") end)
+    local auraType = BindDropdown(ctx, basics, "Aura Type", max(420, bw - 260), -92, CUSTOM_AURA_TYPES, min(220, bw - max(420, bw - 260) - 24),
+        function() return item.auraType == "DEBUFF" and "DEBUFF" or "BUFF" end,
+        function(value) item.auraType = value == "DEBUFF" and "DEBUFF" or "BUFF"; Apply("AURAS3_CUSTOM_CONTAINER_TYPE", true); Rebuild(ctx) end)
+    local reset = ActionButton(basics, "Reset Custom " .. tostring(index), 150)
+    reset:SetPoint("TOPLEFT", basics, "TOPLEFT", 24, -158)
+    reset:SetScript("OnClick", function()
+        Model.ResetCustomContainer(unit, index)
+        Apply("AURAS3_CUSTOM_CONTAINER_RESET", true)
+        Rebuild(ctx)
+    end)
+    W.Text(basics, "Maximum: three independent Custom Aura containers per UnitFrame.", 190, -174, bw - 214, T.colors.muted)
+
+    local whitelist = b:Section("Whitelist · Tracked SpellIDs", 330)
+    local ww = whitelist._msuf2Width or b.width or 720
+    W.Text(whitelist, "Only whitelisted auras enter this container. Paste a SpellID, spell link, or resolvable spell name (maximum 40).", 24, -42, ww - 48, T.colors.muted)
+    local inputValue = ""
+    local input = BindTextInput(ctx, whitelist, "Spell", 24, -82, min(430, ww - 260), function() return inputValue end, function(value) inputValue = value or "" end)
+    local add = ActionButton(whitelist, "Add to Whitelist", 142)
+    add:SetPoint("TOPLEFT", whitelist, "TOPLEFT", min(474, ww - 210), -100)
+    add:SetScript("OnClick", function()
+        local value = input and input.GetText and input:GetText() or inputValue
+        if Model.AddCustomContainerSpell(unit, index, value) then
+            if input and input.SetText then input:SetText("") end
+            inputValue = ""
+            Apply("AURAS3_CUSTOM_WHITELIST_ADD", true)
+            Rebuild(ctx)
+        end
+    end)
+    local list = Card(whitelist, "Current Whitelist", "Click an entry to remove it. Scroll for all entries.", 24, -150, ww - 48, 144)
+    local listScroll = CreateFrame("ScrollFrame", nil, list, "UIPanelScrollFrameTemplate")
+    listScroll:SetPoint("TOPLEFT", list, "TOPLEFT", 12, -44)
+    listScroll:SetPoint("BOTTOMRIGHT", list, "BOTTOMRIGHT", -28, 10)
+    if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
+    local listChild = CreateFrame("Frame", nil, listScroll)
+    listChild:SetSize(max(120, ww - 104), 88)
+    listScroll:SetScrollChild(listChild)
+    if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
+    listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 42) end)
+    local rows = {}
+    local function EnsureRow(i)
+        local row = rows[i]
+        if row then return row end
+        row = CreateFrame("Button", nil, listChild)
+        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 23))
+        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 23))
+        row:SetHeight(21)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetPoint("LEFT", row, "LEFT", 4, 0)
+        row.icon:SetSize(18, 18)
+        row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+        row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+        row:SetScript("OnClick", function(self)
+            if self._msufSpellID and Model.RemoveCustomContainerSpell(unit, index, self._msufSpellID) then
+                Apply("AURAS3_CUSTOM_WHITELIST_REMOVE", true)
+                Rebuild(ctx)
+            end
+        end)
+        rows[i] = row
+        return row
+    end
+    M.TrackRefresh(ctx, function()
+        local entries = Model.CustomContainerSpellEntries(unit, index)
+        listChild:SetHeight(max(88, (#entries * 23) + 2))
+        for i = 1, max(#rows, #entries) do
+            local row, entry = rows[i], entries[i]
+            if entry then
+                row = EnsureRow(i)
+                row._msufSpellID = entry.spellID
+                row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                row.text:SetText(entry.text or tostring(entry.spellID))
+                row:Show()
+            elseif row then
+                row._msufSpellID = nil
+                row:Hide()
+            end
+        end
+    end)
+
+    local filters = b:CollapsibleSection("custom_filters_" .. tostring(unit) .. "_" .. tostring(index), "Blizzard Filters", 468, false)
+    local fw = filters._msuf2Width or b.width or 720
+    local filterControls = {}
+    local function FilterToggle(label, key, x, y, conflicts)
+        local control = BindSwitch(ctx, filters, label, x, y, max(250, floor((fw - 72) / 2)),
+            function() return item.filters[key] == true end,
+            function(value)
+                item.filters[key] = value == true
+                if value == true and type(conflicts) == "table" then
+                    for i = 1, #conflicts do item.filters[conflicts[i]] = false end
+                end
+                Apply("AURAS3_CUSTOM_FILTER")
+            end)
+        filterControls[#filterControls + 1] = control
+    end
+    local left, right = 24, 32 + max(250, floor((fw - 72) / 2))
+    FilterToggle("Only my casts", "onlyMine", left, -54)
+    FilterToggle("Raid", "raid", right, -54)
+    FilterToggle("Raid in combat", "raidInCombat", left, -92)
+    FilterToggle("Include nameplate-only", "includeNameplateOnly", right, -92)
+    if item.auraType == "DEBUFF" then
+        FilterToggle("Dispellable", "includeDispellable", left, -130)
+        FilterToggle("Crowd Control", "crowdControl", right, -130)
+    else
+        FilterToggle("Cancelable", "cancelable", left, -130, { "notCancelable" })
+        FilterToggle("Not cancelable", "notCancelable", right, -130, { "cancelable" })
+        FilterToggle("External Defensive", "externalDefensive", left, -168)
+        FilterToggle("Big Defensive", "bigDefensive", right, -168)
+    end
+    local exclusive = BindDropdown(ctx, filters, "Exclusive", 24, -230, DEBUFF_EXCLUSIVE, fw - 48,
+        function() return item.filters.exclusive or "none" end,
+        function(value) item.filters.exclusive = value == "raid" and "raid" or "none"; Apply("AURAS3_CUSTOM_FILTER_EXCLUSIVE") end)
+    W.Text(filters, "These are Blizzard's native AuraContainer filter tokens. The whitelist is applied as an exact candidate filter on top.", 24, -300, fw - 48, T.colors.muted)
+
+    local layout = b:CollapsibleSection("custom_layout_" .. tostring(unit) .. "_" .. tostring(index), "Layout & Positioning", 520, false)
+    local lw = layout._msuf2Width or b.width or 720
+    local half = max(230, floor((lw - 72) / 2))
+    local anchor = BindDropdown(ctx, layout, "Anchor", 24, -54, Model.AuraAnchorValues(), half,
+        function() return item.placed.anchor or "TOPRIGHT" end,
+        function(value) item.placed.anchor = value or "TOPRIGHT"; Apply("AURAS3_CUSTOM_ANCHOR") end)
+    local growth = BindDropdown(ctx, layout, "Growth", 32 + half, -54, Model.LaneGrowthValues(), half,
+        function() return item.placed.growth or "LEFTDOWN" end,
+        function(value) item.placed.growth = value or "LEFTDOWN"; Apply("AURAS3_CUSTOM_GROWTH") end)
+    local function PlacedSlider(label, x, y, minValue, maxValue, key, fallback, width)
+        return BindSlider(ctx, layout, label, x, y, minValue, maxValue, 1, width,
+            function() return tonumber(item.placed[key]) or fallback end,
+            function(value) item.placed[key] = tonumber(value) or fallback; Apply("AURAS3_CUSTOM_" .. key:upper()) end)
+    end
+    PlacedSlider("X Position", 24, -116, -300, 300, "x", 0, half)
+    PlacedSlider("Y Position", 32 + half, -116, -300, 300, "y", 0, half)
+    PlacedSlider("Max Icons", 24, -178, 0, 40, "max", 8, half)
+    PlacedSlider("Icon Size", 32 + half, -178, 8, 128, "size", 24, half)
+    PlacedSlider("Per Row", 24, -240, 1, 20, "perRow", 4, half)
+    PlacedSlider("Spacing", 32 + half, -240, 0, 24, "spacing", 2, half)
+    local layer = BindSlider(ctx, layout, "Draw Order", 24, -302, 0, 30, 1, half,
+        function() return tonumber(item.layer) or 9 end,
+        function(value) item.layer = floor(tonumber(value) or 9); Apply("AURAS3_CUSTOM_LAYER") end)
+    local strata = BindDropdown(ctx, layout, "Frame Strata", 32 + half, -302, CUSTOM_STRATA_VALUES, half,
+        function() return item.strata or "AUTO" end,
+        function(value) item.strata = value or "AUTO"; Apply("AURAS3_CUSTOM_STRATA") end)
+    local cooldown = BindSwitch(ctx, layout, "Cooldown Text", 24, -374, half,
+        function() return item.placed.showCooldown ~= false end,
+        function(value) item.placed.showCooldown = value == true; Apply("AURAS3_CUSTOM_COOLDOWN") end)
+    local swipe = BindSwitch(ctx, layout, "Cooldown Swipe", 32 + half, -374, half,
+        function() return item.placed.showCooldownSwipe ~= false end,
+        function(value) item.placed.showCooldownSwipe = value == true; Apply("AURAS3_CUSTOM_SWIPE") end)
+    local stacks = BindSwitch(ctx, layout, "Stack Count", 24, -412, half,
+        function() return item.placed.showStacks ~= false end,
+        function(value) item.placed.showStacks = value == true; Apply("AURAS3_CUSTOM_STACKS") end)
+
+    local appearance = b:CollapsibleSection("custom_appearance_" .. tostring(unit) .. "_" .. tostring(index), "Icon Appearance", 690, false)
+    local aw = appearance._msuf2Width or b.width or 720
+    local acol = max(230, floor((aw - 72) / 2))
+    local function AppearanceSlider(label, x, y, minValue, maxValue, key, fallback, width)
+        return BindSlider(ctx, appearance, label, x, y, minValue, maxValue, 1, width,
+            function() return tonumber(item.placed[key]) or fallback end,
+            function(value) item.placed[key] = tonumber(value) or fallback; Apply("AURAS3_CUSTOM_APPEARANCE_" .. key:upper()) end)
+    end
+    local tooltip = BindSwitch(ctx, appearance, "Show Tooltip", 24, -54, acol,
+        function() return item.placed.showTooltip ~= false end,
+        function(value) item.placed.showTooltip = value == true; Apply("AURAS3_CUSTOM_TOOLTIP") end)
+    local swipeDirection = BindDropdown(ctx, appearance, "Swipe Direction", 32 + acol, -54, COOLDOWN_SWIPE_DIRECTION_VALUES, acol,
+        function() return item.placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL" end,
+        function(value) item.placed.cooldownSwipeReverse = value == "REVERSE"; Apply("AURAS3_CUSTOM_SWIPE_DIRECTION") end)
+    AppearanceSlider("Cooldown Text Size", 24, -116, 6, 40, "cooldownSize", 14, acol)
+    local cooldownAnchor = BindDropdown(ctx, appearance, "Cooldown Anchor", 32 + acol, -116, Model.AuraAnchorValues(), acol,
+        function() return item.placed.cooldownAnchor or "CENTER" end,
+        function(value) item.placed.cooldownAnchor = value or "CENTER"; Apply("AURAS3_CUSTOM_COOLDOWN_ANCHOR") end)
+    AppearanceSlider("Cooldown X", 24, -178, -40, 40, "cooldownX", 0, acol)
+    AppearanceSlider("Cooldown Y", 32 + acol, -178, -40, 40, "cooldownY", 0, acol)
+    AppearanceSlider("Decimals below sec", 24, -240, 0, 30, "cooldownDecimalSeconds", 3, aw - 48)
+    AppearanceSlider("Stack Text Size", 24, -302, 6, 40, "stackSize", 14, acol)
+    local stackAnchor = BindDropdown(ctx, appearance, "Stack Anchor", 32 + acol, -302, Model.AuraAnchorValues(), acol,
+        function() return item.placed.stackAnchor or "BOTTOMRIGHT" end,
+        function(value) item.placed.stackAnchor = value or "BOTTOMRIGHT"; Apply("AURAS3_CUSTOM_STACK_ANCHOR") end)
+    AppearanceSlider("Stack X", 24, -364, -40, 40, "stackX", 0, acol)
+    AppearanceSlider("Stack Y", 32 + acol, -364, -40, 40, "stackY", 0, acol)
+    local duration = BindSwitch(ctx, appearance, "Show Duration Bar", 24, -426, acol,
+        function() return item.placed.showDurationBar == true end,
+        function(value) item.placed.showDurationBar = value == true; Apply("AURAS3_CUSTOM_DURATION_BAR") end)
+    AppearanceSlider("Duration Bar Height", 32 + acol, -426, 1, 16, "durationBarHeight", 2, acol)
+    local durationDisplay = BindDropdown(ctx, appearance, "Duration Display", 24, -488, DURATION_BAR_DISPLAY_VALUES, acol,
+        function() return item.placed.durationBarDisplay or "BAR_ONLY" end,
+        function(value) item.placed.durationBarDisplay = value or "BAR_ONLY"; Apply("AURAS3_CUSTOM_DURATION_DISPLAY") end)
+    local durationPosition = BindDropdown(ctx, appearance, "Duration Position", 32 + acol, -488, DURATION_BAR_POSITION_VALUES, acol,
+        function() return item.placed.durationBarPosition or "BOTTOM" end,
+        function(value) item.placed.durationBarPosition = value or "BOTTOM"; Apply("AURAS3_CUSTOM_DURATION_POSITION") end)
+    local durationDirection = BindDropdown(ctx, appearance, "Duration Fill", 24, -550, DURATION_BAR_DIRECTION_VALUES, aw - 48,
+        function() return item.placed.durationBarDirection or "REMAINING" end,
+        function(value) item.placed.durationBarDirection = value or "REMAINING"; Apply("AURAS3_CUSTOM_DURATION_DIRECTION") end)
+    W.Text(appearance, "Cooldown and duration visuals use Blizzard bindings; no per-icon Lua OnUpdate is added.", 24, -622, aw - 48, T.colors.muted)
+
+    local effect = b:CollapsibleSection("custom_effect_" .. tostring(unit) .. "_" .. tostring(index), "Full-Frame Effect", 456, false)
+    local ew = effect._msuf2Width or b.width or 720
+    local effectType = BindDropdown(ctx, effect, "Effect", 24, -54, CUSTOM_FRAME_EFFECTS, min(340, ew - 48),
+        function() return item.frame.type or "none" end,
+        function(value) item.frame.type = value or "none"; Apply("AURAS3_CUSTOM_EFFECT") end)
+    local effectStrata = BindDropdown(ctx, effect, "Effect Strata", 370, -54, CUSTOM_STRATA_VALUES, max(220, ew - 394),
+        function() return item.frame.strata or "AUTO" end,
+        function(value) item.frame.strata = value or "AUTO"; Apply("AURAS3_CUSTOM_EFFECT_STRATA") end)
+    local color = W.Color(effect, "Color")
+    M.BindColor(ctx, color,
+        function() local c = item.frame.color; return c[1] or 0.69, c[2] or 0.50, c[3] or 0.88 end,
+        function(r, g, bl) local a = item.frame.color[4] or 0.8; item.frame.color = { r, g, bl, a }; Apply("AURAS3_CUSTOM_EFFECT_COLOR") end)
+    W.MoveWidget(color, effect, 24, -122, min(340, ew - 48), "LEFT")
+    local alpha = BindSlider(ctx, effect, "Opacity", 24, -184, 5, 100, 5, ew - 48,
+        function() return floor(((item.frame.color[4] or 0.8) * 100) + 0.5) end,
+        function(value) item.frame.color[4] = (tonumber(value) or 80) / 100; item.frame.tintAlpha = item.frame.color[4]; Apply("AURAS3_CUSTOM_EFFECT_ALPHA") end)
+    local thickness = BindSlider(ctx, effect, "Border / Glow Thickness", 24, -246, 1, 16, 1, ew - 48,
+        function() return tonumber(item.frame.thickness) or 2 end,
+        function(value) item.frame.thickness = tonumber(value) or 2; Apply("AURAS3_CUSTOM_EFFECT_THICKNESS") end)
+    local priority = BindSlider(ctx, effect, "Priority", 24, -308, 1, 10, 1, ew - 48,
+        function() return tonumber(item.frame.priority) or 5 end,
+        function(value) item.frame.priority = tonumber(value) or 5; Apply("AURAS3_CUSTOM_EFFECT_PRIORITY") end)
+    W.Text(effect, "The Full-Frame effect uses one hidden native AuraSlot for this container's complete whitelist. Visibility remains secret-safe.", 24, -376, ew - 48, T.colors.muted)
+
+    M.TrackRefresh(ctx, function() W.SetControlEnabled(enabled, true) end)
+end
+
+--- Compact, task-focused Custom Aura editor used inside UnitFrame > Auras.
+--- Only one tool is rendered at a time; all values still write to the same
+--- native Custom Container record consumed by runtime and previews.
+function M.BuildAuras3CompactCustomWorkspace(ctx, b, unit, index, tool)
+    index = max(1, min(type(Model.CustomContainerMax) == "function" and Model.CustomContainerMax() or 3, tonumber(index) or 1))
+    local item = Model.CustomContainer(unit, index, true)
+    if not item then return end
+    item.filters = type(item.filters) == "table" and item.filters or {}
+    item.placed = type(item.placed) == "table" and item.placed or {}
+    item.frame = type(item.frame) == "table" and item.frame or { type = "none", color = { 0.69, 0.50, 0.88, 0.8 }, priority = 5, thickness = 2, strata = "AUTO" }
+    if type(item.frame.color) ~= "table" then item.frame.color = { 0.69, 0.50, 0.88, 0.8 } end
+    local function Apply(reason, rebuild)
+        ApplyUnit(ctx, unit, reason or "AURAS3_CUSTOM_CONTAINER", rebuild == true)
+    end
+    local function Grid(w, count, gap)
+        gap = gap or 10
+        return floor(((w - 48) - gap * (count - 1)) / count), gap
+    end
+
+    if tool == "whitelist" then
+        local section = b:Section("Custom " .. tostring(index) .. " Whitelist", 212)
+        local w = section._msuf2Width or b.width or 720
+        local inner = w - 48
+        local inputValue = ""
+        local inputW = max(280, floor(inner * 0.62))
+        local input = BindTextInput(ctx, section, "Spell ID, link, or name", 24, -36, inputW,
+            function() return inputValue end, function(value) inputValue = value or "" end)
+        local add = ActionButton(section, "Add spell", 108)
+        add:SetPoint("TOPLEFT", section, "TOPLEFT", 34 + inputW, -58)
+        add:SetScript("OnClick", function()
+            local value = input and input.GetText and input:GetText() or inputValue
+            if Model.AddCustomContainerSpell(unit, index, value) then
+                if input and input.SetText then input:SetText("") end
+                inputValue = ""
+                Apply("AURAS3_CUSTOM_WHITELIST_ADD", true)
+                Rebuild(ctx)
+            end
+        end)
+        local status = W.Text(section, "", 24, -94, inner, T.colors.accent)
+        local empty = W.Text(section, "No spells tracked. Add up to 40 exact SpellIDs.", 24, -126, inner, T.colors.muted)
+        local listScroll = CreateFrame("ScrollFrame", nil, section, "UIPanelScrollFrameTemplate")
+        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -116)
+        listScroll:SetSize(inner - 20, 82)
+        if listScroll.EnableMouseWheel then listScroll:EnableMouseWheel(true) end
+        local listChild = CreateFrame("Frame", nil, listScroll)
+        listChild:SetSize(inner - 42, 82)
+        listScroll:SetScrollChild(listChild)
+        if listScroll.SetPropagateMouseWheel then listScroll:SetPropagateMouseWheel(false) end
+        listScroll:SetScript("OnMouseWheel", function(self, delta) HandleNestedScrollWheel(self, delta, 32) end)
+        local rows = {}
+        local function EnsureRow(i)
+            local row = rows[i]
+            if row then return row end
+            row = CreateFrame("Button", nil, listChild)
+            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 22))
+            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 22))
+            row:SetHeight(20)
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetPoint("LEFT", row, "LEFT", 3, 0)
+            row.icon:SetSize(17, 17)
+            row.text = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+            row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+            row:SetScript("OnClick", function(self)
+                if self._spellID and Model.RemoveCustomContainerSpell(unit, index, self._spellID) then
+                    Apply("AURAS3_CUSTOM_WHITELIST_REMOVE", true)
+                    Rebuild(ctx)
+                end
+            end)
+            rows[i] = row
+            return row
+        end
+        M.TrackRefresh(ctx, function()
+            local entries = Model.CustomContainerSpellEntries(unit, index)
+            status:SetText((#entries == 1 and "1 tracked spell" or tostring(#entries) .. " tracked spells") .. " · click an entry to remove")
+            empty:SetShown(#entries == 0)
+            listScroll:SetShown(#entries > 0)
+            listChild:SetHeight(max(82, #entries * 22))
+            for i = 1, max(#rows, #entries) do
+                local row, entry = rows[i], entries[i]
+                if entry then
+                    row = EnsureRow(i)
+                    row._spellID = entry.spellID
+                    row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                    row.text:SetText(entry.text or tostring(entry.spellID))
+                    row:Show()
+                elseif row then row._spellID = nil; row:Hide() end
+            end
+        end)
+        return
+    end
+
+    if tool == "filters" then
+        local section = b:Section("Custom " .. tostring(index) .. " Filters", 150)
+        local w = section._msuf2Width or b.width or 720
+        local colW, gap = Grid(w, 4)
+        local controls = {}
+        local master = BindSwitch(ctx, section, "Enable filters", 24, -40, colW,
+            function() return item.filters.enabled ~= false end,
+            function(value) item.filters.enabled = value == true; Apply("AURAS3_CUSTOM_FILTER_ENABLE") end)
+        local specs = item.auraType == "DEBUFF" and {
+            { "Only mine", "onlyMine" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Dispellable", "includeDispellable" }, { "Crowd control", "crowdControl" },
+        } or {
+            { "Only mine", "onlyMine" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
+            { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
+        }
+        for i = 1, #specs do
+            local spec = specs[i]
+            local col = (i - 1) % 4
+            local row = floor((i - 1) / 4)
+            local control = BindSwitch(ctx, section, spec[1], 24 + col * (colW + gap), -76 - row * 32, colW,
+                function() return item.filters[spec[2]] == true end,
+                function(value)
+                    item.filters[spec[2]] = value == true
+                    if value == true and spec[3] then for j = 1, #spec[3] do item.filters[spec[3][j]] = false end end
+                    Apply("AURAS3_CUSTOM_FILTER")
+                    if spec[3] then QueueAurasPageRefresh(ctx, "custom-filter-conflict") end
+                end)
+            controls[#controls + 1] = control
+        end
+        if item.auraType == "DEBUFF" then
+            controls[#controls + 1] = BindDropdown(ctx, section, "Exclusive", 24 + 2 * (colW + gap), -92, DEBUFF_EXCLUSIVE, colW * 2 + gap,
+                function() return item.filters.exclusive or "none" end,
+                function(value) item.filters.exclusive = value or "none"; Apply("AURAS3_CUSTOM_FILTER_EXCLUSIVE") end)
+        end
+        M.TrackRefresh(ctx, function() W.SetControlEnabled(master, true); W.SetControlsEnabled(controls, item.filters.enabled ~= false) end)
+        return
+    end
+
+    if tool == "layout" then
+        local section = b:Section("Custom " .. tostring(index) .. " Layout", 190)
+        local w = section._msuf2Width or b.width or 720
+        local col3, gap3 = Grid(w, 3)
+        BindDropdown(ctx, section, "Anchor", 24, -34, Model.AuraAnchorValues(), col3,
+            function() return item.placed.anchor or "TOPRIGHT" end,
+            function(value) item.placed.anchor = value or "TOPRIGHT"; Apply("AURAS3_CUSTOM_ANCHOR") end)
+        BindDropdown(ctx, section, "Growth", 24 + col3 + gap3, -34, Model.LaneGrowthValues(), col3,
+            function() return item.placed.growth or "LEFTDOWN" end,
+            function(value) item.placed.growth = value or "LEFTDOWN"; Apply("AURAS3_CUSTOM_GROWTH") end)
+        BindDropdown(ctx, section, "Strata", 24 + 2 * (col3 + gap3), -34, CUSTOM_STRATA_VALUES, col3,
+            function() return item.strata or "AUTO" end,
+            function(value) item.strata = value or "AUTO"; Apply("AURAS3_CUSTOM_STRATA") end)
+        local col4, gap4 = Grid(w, 4)
+        local values = {
+            { "X", "x", -300, 300, 0 }, { "Y", "y", -300, 300, 0 }, { "Max", "max", 0, 40, 8 }, { "Size", "size", 8, 128, 24 },
+            { "Per row", "perRow", 1, 20, 4 }, { "Gap", "spacing", 0, 24, 2 }, { "Layer", "layer", 0, 30, 9 },
+        }
+        for i = 1, #values do
+            local spec = values[i]
+            local row = i <= 4 and 0 or 1
+            local col = row == 0 and (i - 1) or (i - 5)
+            BindSlider(ctx, section, spec[1], 24 + col * (col4 + gap4), row == 0 and -92 or -146, spec[3], spec[4], 1, col4,
+                function() return tonumber(spec[2] == "layer" and item.layer or item.placed[spec[2]]) or spec[5] end,
+                function(value)
+                    if spec[2] == "layer" then item.layer = floor(tonumber(value) or spec[5]) else item.placed[spec[2]] = tonumber(value) or spec[5] end
+                    Apply("AURAS3_CUSTOM_" .. spec[2]:upper())
+                end)
+        end
+        W.Text(section, "Drag the Custom handle in the live preview, then fine-tune here.", 24 + 3 * (col4 + gap4), -154, col4, T.colors.muted)
+        return
+    end
+
+    if tool == "appearance" then
+        local section = b:Section("Custom " .. tostring(index) .. " Icon Style", 292)
+        local w = section._msuf2Width or b.width or 720
+        local col4, gap = Grid(w, 4)
+        local function X(col) return 24 + (col - 1) * (col4 + gap) end
+        local function Number(label, col, y, minValue, maxValue, key, fallback)
+            return BindSlider(ctx, section, label, X(col), y, minValue, maxValue, 1, col4,
+                function() return tonumber(item.placed[key]) or fallback end,
+                function(value) item.placed[key] = tonumber(value) or fallback; Apply("AURAS3_CUSTOM_APPEARANCE_" .. key:upper()) end)
+        end
+        BindSwitch(ctx, section, "Tooltip", X(1), -42, col4, function() return item.placed.showTooltip ~= false end,
+            function(value) item.placed.showTooltip = value == true; Apply("AURAS3_CUSTOM_TOOLTIP") end)
+        BindSwitch(ctx, section, "Cooldown text", X(2), -42, col4, function() return item.placed.showCooldown ~= false end,
+            function(value) item.placed.showCooldown = value == true; Apply("AURAS3_CUSTOM_COOLDOWN") end)
+        BindSwitch(ctx, section, "Cooldown swipe", X(3), -42, col4, function() return item.placed.showCooldownSwipe ~= false end,
+            function(value) item.placed.showCooldownSwipe = value == true; Apply("AURAS3_CUSTOM_SWIPE") end)
+        BindSwitch(ctx, section, "Stack count", X(4), -42, col4, function() return item.placed.showStacks ~= false end,
+            function(value) item.placed.showStacks = value == true; Apply("AURAS3_CUSTOM_STACKS") end)
+        BindDropdown(ctx, section, "Swipe", X(1), -76, COOLDOWN_SWIPE_DIRECTION_VALUES, col4,
+            function() return item.placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL" end,
+            function(value) item.placed.cooldownSwipeReverse = value == "REVERSE"; Apply("AURAS3_CUSTOM_SWIPE_DIRECTION") end)
+        Number("Cooldown size", 2, -76, 6, 40, "cooldownSize", 14)
+        BindDropdown(ctx, section, "Cooldown anchor", X(3), -76, Model.AuraAnchorValues(), col4,
+            function() return item.placed.cooldownAnchor or "CENTER" end,
+            function(value) item.placed.cooldownAnchor = value or "CENTER"; Apply("AURAS3_CUSTOM_COOLDOWN_ANCHOR") end)
+        Number("Decimals", 4, -76, 0, 30, "cooldownDecimalSeconds", 3)
+        Number("Cooldown X", 1, -130, -40, 40, "cooldownX", 0)
+        Number("Cooldown Y", 2, -130, -40, 40, "cooldownY", 0)
+        Number("Stack size", 3, -130, 6, 40, "stackSize", 14)
+        BindDropdown(ctx, section, "Stack anchor", X(4), -130, Model.AuraAnchorValues(), col4,
+            function() return item.placed.stackAnchor or "BOTTOMRIGHT" end,
+            function(value) item.placed.stackAnchor = value or "BOTTOMRIGHT"; Apply("AURAS3_CUSTOM_STACK_ANCHOR") end)
+        Number("Stack X", 1, -184, -40, 40, "stackX", 0)
+        Number("Stack Y", 2, -184, -40, 40, "stackY", 0)
+        BindSwitch(ctx, section, "Duration bar", X(3), -192, col4, function() return item.placed.showDurationBar == true end,
+            function(value) item.placed.showDurationBar = value == true; Apply("AURAS3_CUSTOM_DURATION_BAR") end)
+        Number("Bar height", 4, -184, 1, 16, "durationBarHeight", 2)
+        BindDropdown(ctx, section, "Bar display", X(1), -238, DURATION_BAR_DISPLAY_VALUES, col4,
+            function() return item.placed.durationBarDisplay or "BAR_ONLY" end,
+            function(value) item.placed.durationBarDisplay = value or "BAR_ONLY"; Apply("AURAS3_CUSTOM_DURATION_DISPLAY") end)
+        BindDropdown(ctx, section, "Bar position", X(2), -238, DURATION_BAR_POSITION_VALUES, col4,
+            function() return item.placed.durationBarPosition or "BOTTOM" end,
+            function(value) item.placed.durationBarPosition = value or "BOTTOM"; Apply("AURAS3_CUSTOM_DURATION_POSITION") end)
+        BindDropdown(ctx, section, "Bar fill", X(3), -238, DURATION_BAR_DIRECTION_VALUES, col4,
+            function() return item.placed.durationBarDirection or "REMAINING" end,
+            function(value) item.placed.durationBarDirection = value or "REMAINING"; Apply("AURAS3_CUSTOM_DURATION_DIRECTION") end)
+        return
+    end
+
+    if tool == "effect" then
+        local section = b:Section("Custom " .. tostring(index) .. " Full-Frame", 194)
+        local w = section._msuf2Width or b.width or 720
+        local col3, gap = Grid(w, 3)
+        BindDropdown(ctx, section, "Effect", 24, -34, CUSTOM_FRAME_EFFECTS, col3,
+            function() return item.frame.type or "none" end,
+            function(value) item.frame.type = value or "none"; Apply("AURAS3_CUSTOM_EFFECT") end)
+        BindDropdown(ctx, section, "Strata", 24 + col3 + gap, -34, CUSTOM_STRATA_VALUES, col3,
+            function() return item.frame.strata or "AUTO" end,
+            function(value) item.frame.strata = value or "AUTO"; Apply("AURAS3_CUSTOM_EFFECT_STRATA") end)
+        local color = W.Color(section, "Color")
+        M.BindColor(ctx, color,
+            function() local c = item.frame.color; return c[1] or 0.69, c[2] or 0.50, c[3] or 0.88 end,
+            function(r, g, blue) local a = item.frame.color[4] or 0.8; item.frame.color = { r, g, blue, a }; Apply("AURAS3_CUSTOM_EFFECT_COLOR") end)
+        W.MoveWidget(color, section, 24 + 2 * (col3 + gap), -34, col3, "LEFT")
+        BindSlider(ctx, section, "Opacity", 24, -96, 5, 100, 5, col3,
+            function() return floor(((item.frame.color[4] or 0.8) * 100) + 0.5) end,
+            function(value) item.frame.color[4] = (tonumber(value) or 80) / 100; item.frame.tintAlpha = item.frame.color[4]; Apply("AURAS3_CUSTOM_EFFECT_ALPHA") end)
+        BindSlider(ctx, section, "Thickness", 24 + col3 + gap, -96, 1, 16, 1, col3,
+            function() return tonumber(item.frame.thickness) or 2 end,
+            function(value) item.frame.thickness = tonumber(value) or 2; Apply("AURAS3_CUSTOM_EFFECT_THICKNESS") end)
+        BindSlider(ctx, section, "Priority", 24 + 2 * (col3 + gap), -96, 1, 10, 1, col3,
+            function() return tonumber(item.frame.priority) or 5 end,
+            function(value) item.frame.priority = tonumber(value) or 5; Apply("AURAS3_CUSTOM_EFFECT_PRIORITY") end)
+        W.Text(section, "Secret-safe native AuraSlot effect. No aura scan, polling, or per-icon OnUpdate.", 24, -158, w - 48, T.colors.muted)
+        return
+    end
+
+    local section = b:Section("Custom " .. tostring(index) .. " Setup", 132)
+    local w = section._msuf2Width or b.width or 720
+    local inner = w - 48
+    local enabled = BindSwitch(ctx, section, "Enabled", 24, -62, 106,
+        function() return item.enabled == true end,
+        function(value) item.enabled = value == true; Apply("AURAS3_CUSTOM_CONTAINER_ENABLE") end)
+    local nameW = max(260, floor(inner * 0.42))
+    BindTextInput(ctx, section, "Container name", 140, -34, nameW,
+        function() return item.name or ("Custom " .. tostring(index)) end,
+        function(value) item.name = value ~= "" and value or ("Custom " .. tostring(index)); Apply("AURAS3_CUSTOM_CONTAINER_NAME") end)
+    local typeW = max(170, floor(inner * 0.18))
+    BindDropdown(ctx, section, "Aura type", 150 + nameW, -34, CUSTOM_AURA_TYPES, typeW,
+        function() return item.auraType == "DEBUFF" and "DEBUFF" or "BUFF" end,
+        function(value) item.auraType = value == "DEBUFF" and "DEBUFF" or "BUFF"; Apply("AURAS3_CUSTOM_CONTAINER_TYPE", true); Rebuild(ctx) end)
+    local reset = ActionButton(section, "Reset", 88)
+    reset:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -56)
+    reset:SetScript("OnClick", function() Model.ResetCustomContainer(unit, index); Apply("AURAS3_CUSTOM_CONTAINER_RESET", true); Rebuild(ctx) end)
+    local count = #Model.CustomContainerSpellEntries(unit, index)
+    W.Text(section, tostring(count) .. " whitelisted " .. (count == 1 and "spell" or "spells") .. " · style remains live in Menu Preview and Edit Mode.", 24, -104, inner, T.colors.muted)
+    M.TrackRefresh(ctx, function() W.SetControlEnabled(enabled, true) end)
+end
+
+local function BuildCustomAuraPage(ctx)
+    if IsGroupScope(CurrentScope()) then SetCurrentScope("shared") end
+    local scope = CurrentScope()
+    local b = W.PageBuilder(ctx)
+    Model.EnsureDB()
+    b:GlobalStyleHeader("Custom Auras", "Create named, exact SpellID-driven UnitFrame displays. Native AuraSlots drive icons and Full-Frame effects without aura scans or secret-value tests.", 82)
+
+    local customScopes = VTP "shared=Shared|player=Player|target=Target|focus=Focus|boss=Boss"
+    local scopeSection = b:Section("Scope", scope == "shared" and 112 or 164)
+    local sw = scopeSection._msuf2Width or b.width or 720
+    BuildActionTabs(ctx, scopeSection, customScopes, 16, -42, min(600, sw - 32), function() return CurrentScope() end, function(value)
+        SetCurrentScope(value)
+        Rebuild(ctx)
+    end, 6)
+    if scope ~= "shared" then
+        local override = BindSwitch(ctx, scopeSection, "Use custom displays for " .. ScopeLabel(scope), 16, -88, sw - 32,
+            function() return not Model.UseSharedCustomDisplays(scope) end,
+            function(enabled)
+                Model.SetUseSharedCustomDisplays(scope, not enabled)
+                ApplyUnit(ctx, scope, "AURAS3_CUSTOM_SCOPE", true)
+                Rebuild(ctx)
+            end)
+        AddTooltip(override, "Custom Aura inheritance", "Off: this frame uses the Shared custom display list. On: it owns an independent copy.")
+        W.Text(scopeSection, Model.UseSharedCustomDisplays(scope) and "Inherited from Shared." or "Override active for this scope.", 16, -130, sw - 32, T.colors.muted)
+    else
+        W.Text(scopeSection, "Shared displays are inherited by Unitframes without an active Custom Aura override.", 16, -88, sw - 32, T.colors.muted)
+    end
+
+    local selection = M.auraCustomDisplaySelection or {}
+    M.auraCustomDisplaySelection = selection
+    local function Editable()
+        return scope == "shared" or not Model.UseSharedCustomDisplays(scope)
+    end
+    local function Items(editable)
+        return Model.CustomDisplayItems(scope, editable == true and Editable())
+    end
+    local function DisplayValues()
+        local values, items = {}, Items(false)
+        for i = 1, #items do
+            values[#values + 1] = { value = tostring(items[i].id), text = items[i].name or ("Custom Aura " .. tostring(i)) }
+        end
+        return values
+    end
+    local function SelectedID()
+        local id = selection[scope]
+        local item = Model.CustomDisplayByID(scope, id, false)
+        if item then
+            id = tostring(item.id)
+            selection[scope] = id
+        end
+        return id
+    end
+    local function Selected(editable)
+        return Model.CustomDisplayByID(scope, SelectedID(), editable == true and Editable())
+    end
+    local function EnsurePlaced(item)
+        if not item then return nil end
+        if type(item.placed) ~= "table" then item.placed = { type = "icon", anchor = "TOPRIGHT", x = 0, y = 0, size = 24, barWidth = 54 } end
+        return item.placed
+    end
+    local function EnsureFrame(item)
+        if not item then return nil end
+        if type(item.frame) ~= "table" then item.frame = { type = "none", color = { 0.69, 0.50, 0.88, 0.80 }, priority = 5, thickness = 2, strata = "AUTO" } end
+        if type(item.frame.color) ~= "table" then item.frame.color = { 0.69, 0.50, 0.88, 0.80 } end
+        return item.frame
+    end
+    local function Apply(reason, rebuild)
+        -- Custom display fields are edited directly as one coherent record.
+        -- The debounced scoped apply invalidates only the affected native config.
+        ApplyUnit(ctx, scope, reason or "AURAS3_CUSTOM_DISPLAY", rebuild == true)
+    end
+
+    local listSection = b:Section("Displays", 250)
+    local lw = listSection._msuf2Width or b.width or 720
+    local displayDrop = W.Dropdown(listSection, "Selected Display", DisplayValues, min(420, lw - 48))
+    W.MoveWidget(displayDrop, listSection, 24, -54, min(420, lw - 48), "LEFT")
+    M.BindDropdownWidget(ctx, displayDrop, SelectedID, function(value)
+        selection[scope] = value
+        Rebuild(ctx)
+    end)
+    local add = ActionButton(listSection, "New Display", 128)
+    add:SetPoint("TOPLEFT", listSection, "TOPLEFT", 24, -116)
+    add:SetScript("OnClick", function()
+        if not Editable() then Model.SetUseSharedCustomDisplays(scope, false) end
+        local item = Model.AddCustomDisplay(scope)
+        if item then selection[scope] = tostring(item.id) end
+        Apply("AURAS3_CUSTOM_ADD", true)
+        Rebuild(ctx)
+    end)
+    local remove = ActionButton(listSection, "Delete", 104)
+    remove:SetPoint("LEFT", add, "RIGHT", 10, 0)
+    remove:SetScript("OnClick", function()
+        local id = SelectedID()
+        if id and Editable() and Model.RemoveCustomDisplay(scope, id) then
+            selection[scope] = nil
+            Apply("AURAS3_CUSTOM_REMOVE", true)
+            Rebuild(ctx)
+        end
+    end)
+    local enabled = BindSwitch(ctx, listSection, "Enable selected display", 24, -172, lw - 48,
+        function() local item = Selected(false); return item and item.enabled ~= false or false end,
+        function(value) local item = Selected(true); if item then item.enabled = value == true; Apply("AURAS3_CUSTOM_ENABLE") end end)
+    W.Text(listSection, "Exact SpellID filtering is applied only where Blizzard permits aura identity matching for the selected Unit and aura type.", 24, -218, lw - 48, T.colors.muted)
+
+    local detect = b:CollapsibleSection("custom_detection", "Detection", 292, true)
+    local dw = detect._msuf2Width or b.width or 720
+    local name = BindTextInput(ctx, detect, "Display Name", 24, -54, dw - 48,
+        function() local item = Selected(false); return item and item.name or "" end,
+        function(value) local item = Selected(true); if item then item.name = value ~= "" and value or "Custom Aura"; Apply("AURAS3_CUSTOM_NAME", true) end end)
+    local typeDrop = BindDropdown(ctx, detect, "Aura Type", 24, -116, CUSTOM_AURA_TYPES, min(320, dw - 48),
+        function() local item = Selected(false); return item and item.auraType or "BUFF" end,
+        function(value) local item = Selected(true); if item then item.auraType = value == "DEBUFF" and "DEBUFF" or "BUFF"; Apply("AURAS3_CUSTOM_TYPE") end end)
+    local onlyOwn = BindSwitch(ctx, detect, "Only Auras cast by me", 370, -116, max(220, dw - 394),
+        function() local item = Selected(false); return item and item.onlyOwn == true or false end,
+        function(value) local item = Selected(true); if item then item.onlyOwn = value == true; Apply("AURAS3_CUSTOM_OWNER") end end)
+    local spellIDs = BindTextInput(ctx, detect, "Spell IDs (comma-separated)", 24, -184, dw - 48,
+        function() local item = Selected(false); return item and item.spellIDs or "" end,
+        function(value) local item = Selected(true); if item then item.spellIDs = value or ""; Apply("AURAS3_CUSTOM_SPELLS") end end)
+    W.Text(detect, "Use numeric SpellIDs. Multiple IDs form one native candidate set; no Lua aura scan is created.", 24, -244, dw - 48, T.colors.muted)
+
+    local visual = b:CollapsibleSection("custom_visual", "Icon & Placement", 492, true)
+    local vw = visual._msuf2Width or b.width or 720
+    local visualType = BindDropdown(ctx, visual, "Visual", 24, -54, CUSTOM_VISUAL_TYPES, min(320, vw - 48),
+        function() local item = Selected(false); local placed = item and item.placed; return placed and placed.type or "icon" end,
+        function(value) local item = Selected(true); local placed = EnsurePlaced(item); if placed then placed.type = value or "icon"; Apply("AURAS3_CUSTOM_VISUAL") end end)
+    local anchor = BindDropdown(ctx, visual, "Anchor", 24, -116, Model.AuraAnchorValues(), min(320, vw - 48),
+        function() local item = Selected(false); local placed = item and item.placed; return placed and placed.anchor or "TOPRIGHT" end,
+        function(value) local placed = EnsurePlaced(Selected(true)); if placed then placed.anchor = value or "TOPRIGHT"; Apply("AURAS3_CUSTOM_ANCHOR") end end)
+    local strata = BindDropdown(ctx, visual, "Frame Strata", 370, -116, CUSTOM_STRATA_VALUES, max(220, vw - 394),
+        function() local item = Selected(false); return item and item.strata or "AUTO" end,
+        function(value) local item = Selected(true); if item then item.strata = value or "AUTO"; Apply("AURAS3_CUSTOM_STRATA") end end)
+    local function PlacedSlider(label, x, y, minValue, maxValue, key, fallback, width)
+        return BindSlider(ctx, visual, label, x, y, minValue, maxValue, 1, width,
+            function() local item = Selected(false); local placed = item and item.placed; return tonumber(placed and placed[key]) or fallback end,
+            function(value) local placed = EnsurePlaced(Selected(true)); if placed then placed[key] = tonumber(value) or fallback; Apply("AURAS3_CUSTOM_" .. key:upper()) end end)
+    end
+    local half = max(220, floor((vw - 72) / 2))
+    local size = PlacedSlider("Size", 24, -184, 1, 128, "size", 24, half)
+    local barWidth = PlacedSlider("Bar Width", 32 + half, -184, 8, 256, "barWidth", 54, half)
+    local xOffset = PlacedSlider("X Offset", 24, -246, -300, 300, "x", 0, half)
+    local yOffset = PlacedSlider("Y Offset", 32 + half, -246, -300, 300, "y", 0, half)
+    local layer = BindSlider(ctx, visual, "Layer", 24, -308, 0, 30, 1, half,
+        function() local item = Selected(false); return tonumber(item and item.layer) or 9 end,
+        function(value) local item = Selected(true); if item then item.layer = floor(tonumber(value) or 9); Apply("AURAS3_CUSTOM_LAYER") end end)
+    local cooldown = BindSwitch(ctx, visual, "Cooldown Text", 24, -374, half,
+        function() local item = Selected(false); local placed = item and item.placed; return not placed or placed.showCooldown ~= false end,
+        function(value) local placed = EnsurePlaced(Selected(true)); if placed then placed.showCooldown = value == true; Apply("AURAS3_CUSTOM_COOLDOWN") end end)
+    local swipe = BindSwitch(ctx, visual, "Cooldown Swipe", 32 + half, -374, half,
+        function() local item = Selected(false); local placed = item and item.placed; return not placed or placed.showCooldownSwipe ~= false end,
+        function(value) local placed = EnsurePlaced(Selected(true)); if placed then placed.showCooldownSwipe = value == true; Apply("AURAS3_CUSTOM_SWIPE") end end)
+    local stacks = BindSwitch(ctx, visual, "Stack Count", 24, -414, half,
+        function() local item = Selected(false); local placed = item and item.placed; return not placed or placed.showStacks ~= false end,
+        function(value) local placed = EnsurePlaced(Selected(true)); if placed then placed.showStacks = value == true; Apply("AURAS3_CUSTOM_STACKS") end end)
+
+    local effect = b:CollapsibleSection("custom_effect", "Full-Frame Effect", 456, false)
+    local ew = effect._msuf2Width or b.width or 720
+    local effectType = BindDropdown(ctx, effect, "Effect", 24, -54, CUSTOM_FRAME_EFFECTS, min(340, ew - 48),
+        function() local item = Selected(false); local frame = item and item.frame; return frame and frame.type or "none" end,
+        function(value) local frame = EnsureFrame(Selected(true)); if frame then frame.type = value or "none"; Apply("AURAS3_CUSTOM_EFFECT") end end)
+    local effectStrata = BindDropdown(ctx, effect, "Effect Strata", 370, -54, CUSTOM_STRATA_VALUES, max(220, ew - 394),
+        function() local item = Selected(false); local frame = item and item.frame; return frame and frame.strata or "AUTO" end,
+        function(value) local frame = EnsureFrame(Selected(true)); if frame then frame.strata = value or "AUTO"; Apply("AURAS3_CUSTOM_EFFECT_STRATA") end end)
+    local color = W.Color(effect, "Color")
+    M.BindColor(ctx, color,
+        function() local item = Selected(false); local frame = item and item.frame; local c = frame and frame.color; return c and c[1] or 0.69, c and c[2] or 0.50, c and c[3] or 0.88 end,
+        function(r, g, bl) local frame = EnsureFrame(Selected(true)); if frame then local a = frame.color[4] or 0.8; frame.color = { r, g, bl, a }; Apply("AURAS3_CUSTOM_EFFECT_COLOR") end end)
+    W.MoveWidget(color, effect, 24, -122, min(340, ew - 48), "LEFT")
+    local function FrameSlider(label, y, minValue, maxValue, key, fallback)
+        return BindSlider(ctx, effect, label, 24, y, minValue, maxValue, 1, ew - 48,
+            function() local item = Selected(false); local frame = item and item.frame; return tonumber(frame and frame[key]) or fallback end,
+            function(value) local frame = EnsureFrame(Selected(true)); if frame then frame[key] = tonumber(value) or fallback; Apply("AURAS3_CUSTOM_EFFECT_" .. key:upper()) end end)
+    end
+    local alpha = BindSlider(ctx, effect, "Opacity", 24, -184, 5, 100, 5, ew - 48,
+        function()
+            local item = Selected(false)
+            local frame = item and item.frame
+            local c = frame and frame.color
+            return floor(((c and c[4] or frame and frame.tintAlpha or 0.8) * 100) + 0.5)
+        end,
+        function(value)
+            local frame = EnsureFrame(Selected(true))
+            if frame then
+                frame.color[4] = (tonumber(value) or 80) / 100
+                frame.tintAlpha = frame.color[4]
+                Apply("AURAS3_CUSTOM_EFFECT_ALPHA")
+            end
+        end)
+    local thickness = FrameSlider("Border / Glow Thickness", -246, 1, 16, "thickness", 2)
+    local priority = FrameSlider("Priority", -308, 1, 10, "priority", 5)
+    W.Text(effect, "The effect is parented to Blizzard's native AuraSlot. Secret visibility flows through the frame tree without IsShown(), polling, or Lua timers.", 24, -376, ew - 48, T.colors.muted)
+
+    local editorControls = { remove, enabled, name, typeDrop, onlyOwn, spellIDs, visualType, anchor, strata, size, barWidth, xOffset, yOffset, layer, cooldown, swipe, stacks, effectType, effectStrata, color, alpha, thickness, priority }
+    M.TrackRefresh(ctx, function()
+        local item = Selected(false)
+        local editable = Editable()
+        W.SetControlEnabled(add, true)
+        W.SetControlEnabled(displayDrop, item ~= nil)
+        W.SetControlsEnabled(editorControls, item ~= nil and editable)
+    end)
+    FinishPage(ctx, b)
+end
+
+local function BuildMovedAuraPage(ctx)
+    local b = W.PageBuilder(ctx)
+    b:GlobalStyleHeader("Aura Content moved to Frames", "Style stays here under Appearance > Auras. Filters and lists now live directly in each frame's matching Aura menu.", 82)
+    local section = b:Section("Open a Frame", 190)
+    local w = section._msuf2Width or b.width or 720
+    local pages = {
+        { "Player", "uf_player" }, { "Target", "uf_target" }, { "Focus", "uf_focus" },
+        { "Boss", "uf_boss" }, { "Group Frames", "gf_auras" },
+    }
+    local x = 24
+    for i = 1, #pages do
+        local page = pages[i]
+        local button = ActionButton(section, page[1], i == 5 and 132 or 92)
+        button:SetPoint("TOPLEFT", section, "TOPLEFT", x, -58)
+        button:SetScript("OnClick", function() if M.SelectPage then M.SelectPage(page[2]) end end)
+        x = x + (i == 5 and 144 or 104)
+    end
+    W.Text(section, "Open the frame and expand Auras. Buffs and Debuffs contain their own Blizzard filters and blacklists; Custom 1-3 contains its own whitelist. There is no separate Filter tab.", 24, -118, w - 48, T.colors.muted)
+    FinishPage(ctx, b)
+end
+
+-- Appearance keeps the scope-aware style editor. Old content/filter routes remain
+-- as compatibility landings and direct users to the matching frame Aura menu.
+M.RegisterPage("auras3_buffs", { title = "Aura Style: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 22 })
+M.RegisterPage("auras3_debuffs", { title = "Aura Style: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 22 })
+M.RegisterPage("auras3_custom", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 2 })
+M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 42 })
+M.RegisterPage("auras3_filters", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 31 })

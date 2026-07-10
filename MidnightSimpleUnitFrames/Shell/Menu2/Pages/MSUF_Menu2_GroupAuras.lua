@@ -253,10 +253,16 @@ local function BuildGFAuras(ctx)
         M.TrackCollapsibleRefresh(ctx, section, RefreshAuraGroupState)
     end
     BuildAuraGroupSection("buff", "Buffs")
+    if type(M.BuildAuras3GroupLaneWorkspace) == "function" then
+        M.BuildAuras3GroupLaneWorkspace(ctx, b, CurrentScope(), "buff")
+    end
     if GP.BuildSpellIndicatorsSection then
         GP.BuildSpellIndicatorsSection(ctx, b, RefreshPage)
     end
     BuildAuraGroupSection("debuff", "Debuffs")
+    if type(M.BuildAuras3GroupLaneWorkspace) == "function" then
+        M.BuildAuras3GroupLaneWorkspace(ctx, b, CurrentScope(), "debuff")
+    end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 19 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 20 })

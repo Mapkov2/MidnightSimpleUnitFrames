@@ -24,7 +24,11 @@ MSUF.UFPreviewAuras = Auras
 local AURA_HANDLE_FIELDS = {
     buff = { x = "buffGroupOffsetX", y = "buffGroupOffsetY", defaultX = 0, defaultY = 36, label = "Buffs", color = { 0.20, 0.74, 0.42 } },
     debuff = { x = "debuffGroupOffsetX", y = "debuffGroupOffsetY", defaultX = 0, defaultY = 6, label = "Debuffs", color = { 0.84, 0.26, 0.28 } },
+    custom1 = { customIndex = 1, defaultX = 0, defaultY = 0, label = "Custom 1", color = { 0.45, 0.72, 1.00 } },
+    custom2 = { customIndex = 2, defaultX = 0, defaultY = 0, label = "Custom 2", color = { 0.70, 0.48, 1.00 } },
+    custom3 = { customIndex = 3, defaultX = 0, defaultY = 0, label = "Custom 3", color = { 1.00, 0.58, 0.28 } },
 }
+local AURA_PREVIEW_KINDS = { "buff", "debuff", "custom1", "custom2", "custom3" }
 local AURA_TEXTURES = {
     buff = { 135987, 136116, 135932, 136085, 132333, 135981, 136048, 135964 },
     debuff = { 136118, 136139, 136197, 135817, 132851, 136188, 136170, 135813 },
@@ -45,7 +49,14 @@ local function NormalizeKind(kind)
     kind = tostring(kind or ""):lower()
     if kind == "buffs" then kind = "buff" end
     if kind == "debuffs" then kind = "debuff" end
+    local customIndex = kind:match("^custom(%d)$")
+    if customIndex and tonumber(customIndex) >= 1 and tonumber(customIndex) <= 3 then return "custom" .. customIndex end
     return AURA_HANDLE_FIELDS[kind] and kind or nil
+end
+
+local function CustomItem(model, unit, index, create)
+    if not (model and type(model.CustomContainer) == "function") then return nil end
+    return model.CustomContainer(unit, index, create == true)
 end
 function Auras.PreviewUnitKey(unit)
     if unit == nil then return nil end
@@ -130,7 +141,13 @@ function Auras.ReadOffsets(handle)
     local spec = fields and AURA_HANDLE_FIELDS[NormalizeKind(fields.auraPreviewKind)]
     local model = spec and MenuModel()
     local unit = PreviewUnit(handle and handle._preview)
-    if not (spec and model and unit and type(model.ReadNumber) == "function") then return nil end
+    if not (spec and model and unit) then return nil end
+    if spec.customIndex then
+        local item = CustomItem(model, unit, spec.customIndex, false)
+        local placed = item and item.placed
+        return tonumber(placed and placed.x) or 0, tonumber(placed and placed.y) or 0, "x", "y"
+    end
+    if type(model.ReadNumber) ~= "function" then return nil end
     return model.ReadNumber(unit, spec.x, spec.defaultX, -4096, 4096),
         model.ReadNumber(unit, spec.y, spec.defaultY, -4096, 4096),
         spec.x,
@@ -142,9 +159,18 @@ function Auras.WriteOffsets(handle, x, y, reason)
     local spec = kind and AURA_HANDLE_FIELDS[kind]
     local model = spec and MenuModel()
     local unit = PreviewUnit(handle and handle._preview)
-    if not (spec and model and unit and type(model.WriteNumber) == "function") then return false end
-    model.WriteNumber(unit, spec.x, RoundOffset(x), -4096, 4096)
-    model.WriteNumber(unit, spec.y, RoundOffset(y), -4096, 4096)
+    if not (spec and model and unit) then return false end
+    if spec.customIndex then
+        local item = CustomItem(model, unit, spec.customIndex, true)
+        if not item then return false end
+        item.placed = type(item.placed) == "table" and item.placed or {}
+        item.placed.x = RoundOffset(x)
+        item.placed.y = RoundOffset(y)
+    else
+        if type(model.WriteNumber) ~= "function" then return false end
+        model.WriteNumber(unit, spec.x, RoundOffset(x), -4096, 4096)
+        model.WriteNumber(unit, spec.y, RoundOffset(y), -4096, 4096)
+    end
     if reason ~= "UNIT_PREVIEW_DRAG" then
         RefreshRuntime(unit, reason or "MSUF2_UNIT_PREVIEW_AURA_MOVE")
         SyncPopup(unit)
@@ -274,6 +300,25 @@ function Auras.CreateHandles(box, makeHandle)
             section = "auras3",
         }, spec.label, spec.color)
     end
+    for index = 1, 3 do
+        local kind = "custom" .. tostring(index)
+        local field = "handleAuraCustom" .. tostring(index)
+        if not box[field] then
+            local spec = AURA_HANDLE_FIELDS[kind]
+            box[field] = makeHandle(box, "auraCustom" .. tostring(index), {
+                auraPreviewKind = kind,
+                defaultX = spec.defaultX,
+                defaultY = spec.defaultY,
+                visualOnly = true,
+                readOffsets = Auras.ReadOffsets,
+                writeOffsets = Auras.WriteOffsets,
+                dragOffsets = Auras.DragOffsets,
+                clearDragOffsets = Auras.ClearDragOffsets,
+                commitOffsets = Auras.CommitOffsets,
+                section = "auras3",
+            }, spec.label, spec.color)
+        end
+    end
 end
 local function ButtonAnchor(xSign, ySign)
     if ySign > 0 then return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT" end
@@ -402,6 +447,63 @@ local function LaneBounds(cfg, kind, frameW, frameH)
         initialAnchor = initialAnchor,
     }
 end
+
+local function CustomGrowth(growth)
+    growth = tostring(growth or "LEFTDOWN"):upper()
+    if growth == "LEFTUP" then return -1, 1, false end
+    if growth == "RIGHTUP" then return 1, 1, false end
+    if growth == "RIGHTDOWN" then return 1, -1, false end
+    if growth == "UP" then return 1, 1, true end
+    if growth == "DOWN" then return 1, -1, true end
+    return -1, -1, false
+end
+
+local function CustomLaneBounds(item, kind, frameW, frameH)
+    if not (type(item) == "table" and item.enabled == true) then return nil end
+    local placed = type(item.placed) == "table" and item.placed or {}
+    local count = max(0, tonumber(placed.max) or 8)
+    if count <= 0 then return nil end
+    local size = max(1, tonumber(placed.size) or 24)
+    local spacing = max(0, tonumber(placed.spacing) or 2)
+    local perRow = max(1, tonumber(placed.perRow) or 4)
+    local shown = min(max(1, count), PREVIEW_ICONS)
+    local anchor = placed.anchor or "TOPRIGHT"
+    local x, y = tonumber(placed.x) or 0, tonumber(placed.y) or 0
+    local growthX, growthY, vertical = CustomGrowth(placed.growth)
+    local initialAnchor = ButtonAnchor(growthX, growthY)
+    local cols, rows = GridShape(count, perRow, vertical)
+    local laneW = max(1, cols * size + max(cols - 1, 0) * spacing)
+    local laneH = max(1, rows * size + max(rows - 1, 0) * spacing)
+    local baseX, baseY = AnchorBase(anchor, frameW, frameH)
+    local anchorLocalX, anchorLocalY = AnchorOffset(anchor, laneW, laneH)
+    local laneLeft, laneBottom = baseX + x - anchorLocalX, baseY + y - anchorLocalY
+    return {
+        kind = kind,
+        left = laneLeft,
+        right = laneLeft + laneW,
+        bottom = laneBottom,
+        top = laneBottom + laneH,
+        shown = shown,
+        size = size,
+        spacing = spacing,
+        perRow = perRow,
+        x = x,
+        y = y,
+        laneW = laneW,
+        laneH = laneH,
+        laneLeft = laneLeft,
+        laneBottom = laneBottom,
+        growthX = growthX,
+        growthY = growthY,
+        verticalGrowth = vertical == true,
+        initialAnchor = initialAnchor,
+        layer = tonumber(item.layer) or 9,
+        custom = true,
+        item = item,
+        auraType = item.auraType == "DEBUFF" and "debuff" or "buff",
+    }
+end
+
 function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     local runtimeAuras = runtimeSpec and runtimeSpec.auras
     local model = MenuModel()
@@ -411,12 +513,17 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     if not cfg then return nil end
     local buff = LaneBounds(cfg, "buff", frameW, frameH)
     local debuff = LaneBounds(cfg, "debuff", frameW, frameH)
-    if not buff and not debuff then return nil end
-    return { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
+    local state = { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
+    for index = 1, 3 do
+        local kind = "custom" .. tostring(index)
+        state[kind] = CustomLaneBounds(CustomItem(model, key, index, false), kind, frameW, frameH)
+    end
+    if not state.buff and not state.debuff and not state.custom1 and not state.custom2 and not state.custom3 then return nil end
+    return state
 end
 function Auras.ExpandFootprint(state, minX, maxX, minY, maxY)
     if not state then return minX, maxX, minY, maxY end
-    for _, kind in ipairs({ "buff", "debuff" }) do
+    for _, kind in ipairs(AURA_PREVIEW_KINDS) do
         local b = state[kind]
         if b then
             minX = min(minX, b.left)
@@ -458,7 +565,8 @@ local function EnsureVisual(box, kind, baseLevel)
         visual._icons = {}
         box.auraPreviewVisuals[kind] = visual
     end
-    if visual.SetFrameLevel then visual:SetFrameLevel((baseLevel or 0) + (kind == "buff" and 29 or 30)) end
+    local level = kind == "buff" and 29 or (kind == "debuff" and 30 or 32 + (tonumber(kind:match("(%d)$")) or 1))
+    if visual.SetFrameLevel then visual:SetFrameLevel((baseLevel or 0) + level) end
     return visual
 end
 local function CreateIcon(parent)
@@ -534,14 +642,80 @@ local function HideVisual(visual)
         visual._icons[i]:Hide()
     end
 end
+local function HideCustomEffectPreview(mock)
+    if not mock then return end
+    if mock._msufCustomAuraPreviewTint then mock._msufCustomAuraPreviewTint:Hide() end
+    if mock._msufCustomAuraPreviewEdges then
+        for i = 1, #mock._msufCustomAuraPreviewEdges do mock._msufCustomAuraPreviewEdges[i]:Hide() end
+    end
+    if mock._msufCustomAuraSavedNameColor and mock._nameFS and mock._nameFS.SetTextColor then
+        local c = mock._msufCustomAuraSavedNameColor
+        mock._nameFS:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
+    end
+    mock._msufCustomAuraSavedNameColor = nil
+end
+
+local function ApplyCustomEffectPreview(mock, state, S)
+    HideCustomEffectPreview(mock)
+    local selected, selectedPriority
+    for index = 1, 3 do
+        local bounds = state and state["custom" .. tostring(index)]
+        local effect = bounds and bounds.item and bounds.item.frame
+        local kind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
+        if kind ~= "none" then
+            local priority = tonumber(effect.priority) or 5
+            if not selected or priority < selectedPriority then selected, selectedPriority = effect, priority end
+        end
+    end
+    if not selected then return end
+    local color = selected.color or {}
+    local r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 0.8
+    local kind = tostring(selected.type or "none"):lower()
+    if kind == "healthtint" then
+        local tint = mock._msufCustomAuraPreviewTint
+        if not tint then
+            tint = mock:CreateTexture(nil, "OVERLAY")
+            tint:SetTexture(TEX_W8)
+            mock._msufCustomAuraPreviewTint = tint
+        end
+        tint:ClearAllPoints()
+        tint:SetAllPoints(mock._health or mock)
+        tint:SetVertexColor(r, g, b, tonumber(selected.tintAlpha) or a)
+        tint:Show()
+    elseif kind == "namecolor" and mock._nameFS and mock._nameFS.SetTextColor then
+        if mock._nameFS.GetTextColor then
+            local cr, cg, cb, ca = mock._nameFS:GetTextColor()
+            mock._msufCustomAuraSavedNameColor = { cr, cg, cb, ca }
+        end
+        mock._nameFS:SetTextColor(r, g, b, a)
+    elseif kind == "border" or kind == "glow" or kind == "pulse" then
+        local edges = mock._msufCustomAuraPreviewEdges
+        if not edges then
+            edges = {}
+            for i = 1, 4 do
+                edges[i] = mock:CreateTexture(nil, "OVERLAY")
+                edges[i]:SetTexture(TEX_W8)
+            end
+            mock._msufCustomAuraPreviewEdges = edges
+        end
+        local thickness = max(1, S(tonumber(selected.thickness) or (kind == "glow" and 3 or 2)))
+        local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
+        top:ClearAllPoints(); top:SetPoint("TOPLEFT", mock, "TOPLEFT", -thickness, thickness); top:SetPoint("TOPRIGHT", mock, "TOPRIGHT", thickness, thickness); top:SetHeight(thickness)
+        bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", -thickness, -thickness); bottom:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", thickness, -thickness); bottom:SetHeight(thickness)
+        left:ClearAllPoints(); left:SetPoint("TOPLEFT", top, "BOTTOMLEFT"); left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT"); left:SetWidth(thickness)
+        right:ClearAllPoints(); right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT"); right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT"); right:SetWidth(thickness)
+        for i = 1, 4 do edges[i]:SetVertexColor(r, g, b, kind == "glow" and min(1, a * 0.85) or a); edges[i]:Show() end
+    end
+end
 function Auras.Hide(box)
     if not box then return end
     HideHandle(box.handleAuraBuffs)
     HideHandle(box.handleAuraDebuffs)
+    for index = 1, 3 do HideHandle(box["handleAuraCustom" .. tostring(index)]) end
     if box.auraPreviewVisuals then
-        HideVisual(box.auraPreviewVisuals.buff)
-        HideVisual(box.auraPreviewVisuals.debuff)
+        for _, kind in ipairs(AURA_PREVIEW_KINDS) do HideVisual(box.auraPreviewVisuals[kind]) end
     end
+    HideCustomEffectPreview(box.mock)
 end
 local function ValueOr(value, fallback)
     if value ~= nil then return value end
@@ -587,6 +761,29 @@ local function LaneTextConfig(cfg, kind)
         durationBarPosition = ValueOr(cfg.debuffDurationBarPosition, cfg.durationBarPosition) or "BOTTOM",
         durationBarDirection = ValueOr(cfg.debuffDurationBarDirection, cfg.durationBarDirection) or "REMAINING",
         cooldownDecimalSeconds = ValueOr(cfg.debuffCooldownDecimalSeconds, cfg.cooldownDecimalSeconds),
+    }
+end
+
+local function CustomTextConfig(bounds)
+    local placed = bounds and bounds.item and bounds.item.placed or {}
+    return {
+        showStackCount = placed.showStacks ~= false,
+        showCooldownText = placed.showCooldown ~= false,
+        showCooldownSwipe = placed.showCooldownSwipe ~= false,
+        cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
+        stackAnchor = placed.stackAnchor or "BOTTOMRIGHT",
+        stackSize = tonumber(placed.stackSize) or 14,
+        stackX = tonumber(placed.stackX) or 0,
+        stackY = tonumber(placed.stackY) or 0,
+        cooldownSize = tonumber(placed.cooldownSize) or 14,
+        cooldownX = tonumber(placed.cooldownX) or 0,
+        cooldownY = tonumber(placed.cooldownY) or 0,
+        showDurationBar = placed.showDurationBar == true,
+        durationBarHeight = tonumber(placed.durationBarHeight) or 2,
+        durationBarDisplay = placed.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY",
+        durationBarPosition = placed.durationBarPosition == "TOP" and "TOP" or "BOTTOM",
+        durationBarDirection = placed.durationBarDirection == "ELAPSED" and "ELAPSED" or "REMAINING",
+        cooldownDecimalSeconds = tonumber(placed.cooldownDecimalSeconds) or 3,
     }
 end
 
@@ -711,14 +908,15 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         return
     end
     local cfg = state.cfg
-    local textCfg = LaneTextConfig(cfg, kind)
+    local textCfg = bounds.custom and CustomTextConfig(bounds) or LaneTextConfig(cfg, kind)
     local visual = EnsureVisual(box, kind, baseLevel)
     if not visual then
         HideHandle(handle)
         return
     end
     BindDragProxy(visual, handle)
-    local textures = AURA_TEXTURES[kind] or AURA_TEXTURES.buff
+    local textureKind = bounds.auraType or kind
+    local textures = AURA_TEXTURES[textureKind] or AURA_TEXTURES.buff
     local size = max(8, S(bounds.size))
     local step = S((bounds.size or 0) + (bounds.spacing or 0))
     local stackSize = max(7, S(textCfg.stackSize or 14))
@@ -726,7 +924,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local cooldownX = S(textCfg.cooldownX or 0)
     local cooldownY = S(textCfg.cooldownY or 0)
     local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
-    local debuffBorderMode = kind == "debuff" and PreviewDebuffBorderMode(cfg) or "OFF"
+    local debuffBorderMode = textureKind == "debuff" and (bounds.custom and PreviewDebuffBorderMode(bounds.item and bounds.item.placed) or PreviewDebuffBorderMode(cfg)) or "OFF"
     local laneX = S(bounds.laneLeft or ((bounds.baseX or 0) + (bounds.x or 0)))
     local laneY = S(bounds.laneBottom or ((bounds.baseY or 0) + (bounds.y or 0)))
     local handleLeft = S(bounds.left or bounds.laneLeft or 0)
@@ -796,4 +994,9 @@ function Auras.Layout(box, mock, state, S, baseLevel)
     end
     LayoutHandle(box, box.handleAuraBuffs, state, "buff", S, baseLevel)
     LayoutHandle(box, box.handleAuraDebuffs, state, "debuff", S, baseLevel)
+    for index = 1, 3 do
+        local kind = "custom" .. tostring(index)
+        LayoutHandle(box, box["handleAuraCustom" .. tostring(index)], state, kind, S, baseLevel)
+    end
+    ApplyCustomEffectPreview(mock, state, S)
 end

@@ -258,6 +258,9 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                 local cb = W.SwitchAt(popup, cat.label, 16 + col * (opts.categoryColumnWidth or 198), (opts.categoryY or -110) - row * (opts.categoryRowHeight or 28), opts.categoryWidth or 140)
                 cb:SetChecked(scopes[cat.key] == true)
                 cb:SetScript("OnClick", function(self) scopes[cat.key] = self:GetChecked() and true or false end)
+                if cat.description and M.AddTooltip then
+                    M.AddTooltip(cb, cat.label, cat.description, { hook = true, titleAsLine = true })
+                end
                 popup._checks[i] = cb
             end
             local allBtn = CopyPopupButton(popup, M.Tr("All"), 48, "normal")

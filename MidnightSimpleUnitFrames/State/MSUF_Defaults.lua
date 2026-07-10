@@ -2725,6 +2725,14 @@ end
                 highlightOwn = false,
                 hideOthers = false,
             },
+            customDisplays = {
+                serial = 0,
+                shared = { items = {} },
+                perUnit = {},
+            },
+            customContainers = {
+                perUnit = {},
+            },
             shared = {
                 _msufA3_migrated_v11f = true,
                 bossEditTogether = true,
@@ -2958,6 +2966,13 @@ filters = {
     --- 12.1 native AuraContainers do not expose an IMPORTANT filter token.
     if MSUF_DB and MSUF_DB.auras3 then
         local a3 = MSUF_DB.auras3
+        if type(a3.customDisplays) ~= "table" then a3.customDisplays = {} end
+        if type(a3.customDisplays.shared) ~= "table" then a3.customDisplays.shared = { items = {} } end
+        if type(a3.customDisplays.shared.items) ~= "table" then a3.customDisplays.shared.items = {} end
+        if type(a3.customDisplays.perUnit) ~= "table" then a3.customDisplays.perUnit = {} end
+        if type(a3.customDisplays.serial) ~= "number" then a3.customDisplays.serial = 0 end
+        if type(a3.customContainers) ~= "table" then a3.customContainers = {} end
+        if type(a3.customContainers.perUnit) ~= "table" then a3.customContainers.perUnit = {} end
         if type(a3.bossHealAuras) ~= "table" then a3.bossHealAuras = {} end
         if a3.bossHealAuras.highlightOwn == nil then a3.bossHealAuras.highlightOwn = false end
         if a3.bossHealAuras.hideOthers == nil then a3.bossHealAuras.hideOthers = false end

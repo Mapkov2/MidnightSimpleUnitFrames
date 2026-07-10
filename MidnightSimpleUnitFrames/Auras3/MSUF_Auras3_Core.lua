@@ -10,6 +10,62 @@ MSUF = MSUF or (_G.MSUF_NS) or {}
 local type = type
 local tostring = tostring
 
+local function DeepCopy(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return seen[value] end
+    local out = {}
+    seen[value] = out
+    for key, child in pairs(value) do out[DeepCopy(key, seen)] = DeepCopy(child, seen) end
+    return out
+end
+
+local FRAME_LIST_RUNTIME_UNITS = { "player", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5" }
+local FRAME_LIST_SCOPES = { "player", "target", "focus", "boss" }
+
+local function MigrateFrameOwnedAuraLists(auras)
+    if type(auras) ~= "table" then return end
+    local shared = type(auras.shared) == "table" and auras.shared or nil
+    local legacyBlacklist = shared and shared.blacklist
+    if auras._msufA3FrameOwnedLists_v1 ~= true then
+        auras.perUnit = type(auras.perUnit) == "table" and auras.perUnit or {}
+        for i = 1, #FRAME_LIST_RUNTIME_UNITS do
+            local unit = FRAME_LIST_RUNTIME_UNITS[i]
+            local record = type(auras.perUnit[unit]) == "table" and auras.perUnit[unit] or {}
+            auras.perUnit[unit] = record
+            if record.overrideBlacklist ~= true or type(record.blacklist) ~= "table" then
+                record.blacklist = DeepCopy(type(legacyBlacklist) == "table" and legacyBlacklist or { spells = {} })
+            end
+            record.overrideBlacklist = true -- legacy compatibility; ownership is now always local
+        end
+
+        local displays = type(auras.customDisplays) == "table" and auras.customDisplays or {}
+        auras.customDisplays = displays
+        displays.perUnit = type(displays.perUnit) == "table" and displays.perUnit or {}
+        local sharedItems = type(displays.shared) == "table" and displays.shared.items or nil
+        for i = 1, #FRAME_LIST_SCOPES do
+            local scope = FRAME_LIST_SCOPES[i]
+            local record = displays.perUnit[scope]
+            if type(record) ~= "table" or record.override ~= true then
+                displays.perUnit[scope] = {
+                    override = true,
+                    items = DeepCopy(type(sharedItems) == "table" and sharedItems or {}),
+                }
+            end
+        end
+        auras._msufA3FrameOwnedLists_v1 = true
+    end
+
+    -- Shared lists are retired after the one-time fan-out. Keep only the
+    -- scope-aware visual/filter defaults in the Shared Aura Style record.
+    if shared then shared.blacklist = nil end
+    local displays = auras.customDisplays
+    if type(displays) == "table" then
+        displays.shared = type(displays.shared) == "table" and displays.shared or {}
+        displays.shared.items = {}
+    end
+end
+
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
@@ -70,6 +126,7 @@ function A3.EnsureDB()
         end
         db.auras2 = nil
         current._msufAurasRuntime = 3
+        MigrateFrameOwnedAuraLists(current)
         A3.DBRef = current
         return current, current.shared
     end
@@ -78,6 +135,7 @@ function A3.EnsureDB()
     db.auras3 = current
     db.auras2 = nil
     current._msufAurasRuntime = 3
+    MigrateFrameOwnedAuraLists(current)
     A3.DBRef = current
     return current, current.shared
 end

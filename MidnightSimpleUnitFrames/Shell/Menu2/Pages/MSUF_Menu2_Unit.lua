@@ -140,7 +140,7 @@ local UF_COPY_CATEGORIES = {
     { key = "text",         label = "Text",             default = true },
     { key = "portrait",     label = "Portrait",         default = true },
     { key = "power",        label = "Power Bar",        default = true },
-    { key = "auras",        label = "Auras",            default = true },
+    { key = "auras",        label = "Auras · All",      default = true, description = "Copies the complete Aura workspace: visibility, layout, Blizzard filters, Buff/Debuff blacklists, Custom 1-3, their whitelists, Strata, and Full-Frame effects." },
     { key = "castbar",      label = "Castbar",          default = true },
     { key = "status",       label = "Status Icons",     default = true },
     { key = "load",         label = "Load Conditions",  default = true },
@@ -360,6 +360,12 @@ local function CopyAuras3UnitSettings(src, dst)
     local auras = EnsureAuras3CopyDB()
     if type(auras) ~= "table" then return false end
 
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local model = a3 and a3.MenuModel
+    -- Materialize the source's frame-owned lists before copying. This also
+    -- completes the one-time legacy Shared whitelist migration when needed.
+    if model and type(model.CustomContainers) == "function" then model.CustomContainers(src, true) end
+
     local srcFlag, dstFlag = AURA_COPY_FLAGS[src], AURA_COPY_FLAGS[dst]
     if srcFlag and dstFlag then
         local enabled = auras[srcFlag] == true
@@ -375,6 +381,19 @@ local function CopyAuras3UnitSettings(src, dst)
             auras.perUnit[runtimeUnit] = nil
         end
     end)
+
+    local function CopyScopedAuraRecord(rootKey)
+        local root = auras[rootKey]
+        if type(root) ~= "table" then return end
+        root.perUnit = type(root.perUnit) == "table" and root.perUnit or {}
+        local source = root.perUnit[src]
+        root.perUnit[dst] = type(source) == "table" and DeepCopy(source) or nil
+    end
+    -- Custom containers are intentionally outside auras.perUnit. Copy both
+    -- the native containers and the legacy per-frame migration record so no
+    -- whitelist or Full-Frame configuration is silently left behind.
+    CopyScopedAuraRecord("customContainers")
+    CopyScopedAuraRecord("customDisplays")
     ApplyAuras3Unit(dst)
     return true
 end
@@ -433,7 +452,6 @@ local function CopyUnitSettings(unit, target, scopes)
             dst.showInterrupt = src.showInterrupt
             if CopyCastbar(g, srcKey, dstKey) then
                 Call("MSUF_UpdateCastbarWidthSourceSync", g, dstKey)
-                Call("MSUF_ApplyCastbarUnitAndSync", dstKey)
             end
         end
         if scopes.load then CopyFields(dst, src, COPY_LOAD_CONDITION_FIELDS) end
@@ -453,7 +471,6 @@ local function CopyUnitSettings(unit, target, scopes)
             Call("MSUF_RefreshAllIndicators", statusUnit, "MSUF2_COPY_UNIT_STATUS")
             Call("MSUF_RefreshStatusIndicators", statusUnit, "MSUF2_COPY_UNIT_STATUS")
         end
-        Call("MSUF_UFPreview_RequestRefresh", "COPY_UNIT_SETTINGS")
     end
     if target == "all" then
         ConfirmCopyToAll(function()

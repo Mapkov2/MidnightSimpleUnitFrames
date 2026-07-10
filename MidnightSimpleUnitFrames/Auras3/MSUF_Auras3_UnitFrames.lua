@@ -730,13 +730,9 @@ end
 
 local function EffectiveUnitBlacklist(auras, unit)
     if type(auras) ~= "table" then return nil end
-    local shared = type(auras.shared) == "table" and auras.shared or {}
     local perUnit = type(auras.perUnit) == "table" and auras.perUnit or nil
     local unitCfg = perUnit and perUnit[unit] or nil
-    if unitCfg and unitCfg.overrideBlacklist == true and type(unitCfg.blacklist) == "table" then
-        return unitCfg.blacklist
-    end
-    return shared.blacklist
+    return unitCfg and type(unitCfg.blacklist) == "table" and unitCfg.blacklist or nil
 end
 
 local function AuraSpellIDFromKey(value)
@@ -1230,28 +1226,225 @@ local function EmptyUnitFrameConfig(unit)
     }
 end
 
+local function UnitCustomDisplayScope(unit)
+    if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
+    return unit
+end
+
+local function EffectiveUnitCustomDisplays(auras, unit)
+    local root = type(auras) == "table" and auras.customDisplays or nil
+    if type(root) ~= "table" then return nil end
+    local scope = UnitCustomDisplayScope(unit)
+    local record = type(root.perUnit) == "table" and root.perUnit[scope] or nil
+    if type(record) == "table" and record.override == true and type(record.items) == "table" then return record.items end
+    return nil
+end
+
+local function EffectiveUnitCustomContainers(auras, unit)
+    local root = type(auras) == "table" and auras.customContainers or nil
+    local scope = UnitCustomDisplayScope(unit)
+    local record = type(root) == "table" and type(root.perUnit) == "table" and root.perUnit[scope] or nil
+    return type(record) == "table" and type(record.items) == "table" and record.items or nil
+end
+
+local function CustomSpellIDHash(value)
+    local out, count = {}, 0
+    if type(value) == "string" then
+        for token in value:gmatch("%d+") do
+            local spellID = tonumber(token)
+            if spellID and spellID > 0 and out[spellID] ~= true then
+                out[spellID] = true
+                count = count + 1
+            end
+        end
+    elseif type(value) == "table" then
+        for key, enabled in pairs(value) do
+            local raw = (type(enabled) == "number" or type(enabled) == "string") and enabled or key
+            local spellID = tonumber(type(raw) == "number" and raw or tostring(raw):match("%d+"))
+            if enabled ~= false and spellID and spellID > 0 and out[spellID] ~= true then
+                out[spellID] = true
+                count = count + 1
+            end
+        end
+    end
+    return count > 0 and out or nil
+end
+
+local function CompileUnitCustomDisplays(auras, unit)
+    local source = EffectiveUnitCustomDisplays(auras, unit)
+    if type(source) ~= "table" then return nil end
+    local items = {}
+    for i = 1, #source do
+        local entry = source[i]
+        if type(entry) == "table" and entry.enabled ~= false then
+            local includeSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
+            if includeSpellIDs then
+                local helpful = tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
+                items[#items + 1] = {
+                    key = "ufcustom:" .. tostring(entry.id or i),
+                    display = entry.name or ("Custom Aura " .. tostring(i)),
+                    enabled = true,
+                    includeSpellIDs = includeSpellIDs,
+                    nativeFilter = helpful and (entry.onlyOwn == true and "HELPFUL|PLAYER" or "HELPFUL")
+                        or (entry.onlyOwn == true and "HARMFUL|PLAYER" or "HARMFUL"),
+                    onlyOwn = entry.onlyOwn == true,
+                    placed = type(entry.placed) == "table" and entry.placed or nil,
+                    frame = type(entry.frame) == "table" and entry.frame or nil,
+                    layer = entry.layer,
+                    strata = entry.strata,
+                    icon = entry.icon,
+                    color = entry.color or (type(entry.frame) == "table" and entry.frame.color or nil),
+                }
+            end
+        end
+    end
+    if #items == 0 then return nil end
+    return SpellIndicatorsRuntime.CompileSlots and SpellIndicatorsRuntime.CompileSlots(unit, {
+        enabled = true,
+        items = items,
+        layer = 9,
+        strata = "AUTO",
+    }) or nil
+end
+
+local function CompileUnitCustomLane(unit, entry, index)
+    if type(entry) ~= "table" or entry.enabled ~= true then return nil, nil end
+    local includeSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
+    if not includeSpellIDs then return nil, nil end
+    local candidateFilters, candidateFilterSignature = CandidateFiltersFromSpellIDs(includeSpellIDs, "includeSpellIDs")
+    local placed = type(entry.placed) == "table" and entry.placed or {}
+    local filters = type(entry.filters) == "table" and entry.filters or { enabled = true, onlyMine = entry.onlyOwn == true }
+    local helpful = tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
+    local size = ClampNumber(placed.size, 24, 1, 128)
+    local spacing = ClampNumber(placed.spacing, 2, 0, 64)
+    local perRow = ClampNumber(placed.perRow, 4, 1, 40)
+    local maxCount = ClampNumber(placed.max, 8, 0, 40)
+    local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(placed.growth or "LEFTDOWN", "DOWN")
+    local cols, rows = GridShape(maxCount, perRow, verticalGrowth)
+    local lane = FinalizeLane({
+        kind = "custom" .. tostring(index),
+        rootKey = "CustomAuras" .. tostring(index),
+        unit = unit,
+        enabled = maxCount > 0,
+        nativeFilter = NativeFilter(helpful and "HELPFUL" or "HARMFUL", filters),
+        candidateFilters = candidateFilters,
+        candidateFilterSignature = candidateFilterSignature,
+        max = Round(maxCount),
+        size = size,
+        spacing = spacing,
+        step = size + spacing,
+        perRow = Round(perRow),
+        cols = cols,
+        rows = rows,
+        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
+        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing),
+        x = Round(ClampNumber(placed.x, 0, -4096, 4096)),
+        y = Round(ClampNumber(placed.y, 0, -4096, 4096)),
+        anchor = ReadAnchor(placed, nil, "anchor", "TOPRIGHT"),
+        layer = Round(ClampNumber(entry.layer, 9, 0, 30)),
+        strata = NormalizeFrameStrata(entry.strata, "AUTO"),
+        alpha = Clamp01(placed.alpha, 1),
+        growthX = growthX,
+        growthY = growthY,
+        xSign = xSign,
+        ySign = ySign,
+        verticalGrowth = verticalGrowth == true,
+        initialAnchor = ButtonAnchor(xSign, ySign),
+        showCooldownText = placed.showCooldown ~= false,
+        showCooldownSwipe = placed.showCooldownSwipe ~= false,
+        cooldownSwipeReverse = placed.cooldownSwipeReverse == true,
+        showDurationBar = placed.showDurationBar == true,
+        durationBarHeight = ClampNumber(placed.durationBarHeight, DEFAULT_SHARED.durationBarHeight, 1, 16),
+        durationBarDisplay = NormalizeDurationBarDisplay(placed.durationBarDisplay, DEFAULT_SHARED.durationBarDisplay),
+        durationBarPosition = NormalizeDurationBarPosition(placed.durationBarPosition, DEFAULT_SHARED.durationBarPosition),
+        durationBarDirection = NormalizeDurationBarDirection(placed.durationBarDirection, DEFAULT_SHARED.durationBarDirection),
+        showStacks = placed.showStacks ~= false,
+        showTooltip = placed.showTooltip ~= false,
+        showAuraBorder = not helpful and NormalizeDebuffTypeBorderMode(placed.debuffTypeBorderMode, "OFF") ~= "OFF",
+        showAuraSymbol = not helpful and NormalizeDebuffTypeBorderMode(placed.debuffTypeBorderMode, "OFF") == "SYMBOL",
+        cooldownSize = ClampNumber(placed.cooldownSize, DEFAULT_SHARED.cooldownTextSize, 6, 40),
+        cooldownAnchor = ReadAnchor(placed, nil, "cooldownAnchor", "CENTER"),
+        cooldownX = ClampNumber(placed.cooldownX, 0, -2000, 2000),
+        cooldownY = ClampNumber(placed.cooldownY, 0, -2000, 2000),
+        cooldownDecimalSeconds = ClampNumber(placed.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30),
+        stackAnchor = ReadAnchor(placed, nil, "stackAnchor", "BOTTOMRIGHT"),
+        stackSize = ClampNumber(placed.stackSize, DEFAULT_SHARED.stackTextSize, 6, 40),
+        stackX = ClampNumber(placed.stackX, 0, -2000, 2000),
+        stackY = ClampNumber(placed.stackY, 0, -2000, 2000),
+    })
+    local effect
+    if type(entry.frame) == "table" and entry.frame.type and entry.frame.type ~= "none" then
+        effect = {
+            key = "ufcustom_effect:" .. tostring(index),
+            display = entry.name or ("Custom " .. tostring(index)),
+            enabled = true,
+            includeSpellIDs = includeSpellIDs,
+            nativeFilter = lane.nativeFilter,
+            placed = { type = "none", anchor = placed.anchor or "TOPRIGHT", x = 0, y = 0, size = 1 },
+            frame = entry.frame,
+            layer = entry.layer or 9,
+            strata = entry.strata or "AUTO",
+            color = entry.frame.color,
+        }
+    end
+    return lane, effect
+end
+
+local function CompileUnitCustomContainers(auras, unit)
+    local source = EffectiveUnitCustomContainers(auras, unit)
+    if type(source) ~= "table" then return nil, nil end
+    local lanes, effectItems = {}, {}
+    for i = 1, 3 do
+        local lane, effect = CompileUnitCustomLane(unit, source[i], i)
+        if lane then lanes["custom" .. tostring(i)] = lane end
+        if effect then effectItems[#effectItems + 1] = effect end
+    end
+    local effects
+    if #effectItems > 0 and SpellIndicatorsRuntime.CompileSlots then
+        effects = SpellIndicatorsRuntime.CompileSlots(unit, { enabled = true, items = effectItems, layer = 9, strata = "AUTO" })
+    end
+    return lanes, effects
+end
+A3._CompileUnitCustomContainers = CompileUnitCustomContainers
+
 local function BuildUnitFrameConfig(unit, frameSpec)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
     local auras = EnsureDB()
     local iconsEnabled = UnitAuraIconsEnabled(auras, unit)
-    if not iconsEnabled then
+    local customLanes, customEffects = CompileUnitCustomContainers(auras, unit)
+    local hasCustomContainers = customLanes and next(customLanes) ~= nil
+    local legacyCustomDisplays = not EffectiveUnitCustomContainers(auras, unit) and CompileUnitCustomDisplays(auras, unit) or nil
+    if not iconsEnabled and not hasCustomContainers and not customEffects and not legacyCustomDisplays then
         return EmptyUnitFrameConfig(unit)
     end
 
-    local dispelBorder = CompileDispelSensor(unit, frameSpec, false, "border")
-    local dispelOverlay = CompileDispelSensor(unit, frameSpec, false, "overlay")
-    local layout, sharedLayout, filtersRoot = EffectiveUnitTables(auras, unit)
-    local blacklist = EffectiveUnitBlacklist(auras, unit)
-    local candidateFilters, candidateFilterSignature = CandidateFiltersFromBlacklist(blacklist)
-    local buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff", candidateFilters, candidateFilterSignature)
-    local debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff", candidateFilters, candidateFilterSignature)
+    local dispelBorder = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "border") or nil
+    local dispelOverlay = iconsEnabled and CompileDispelSensor(unit, frameSpec, false, "overlay") or nil
+    local buff, debuff
+    if iconsEnabled then
+        local layout, sharedLayout, filtersRoot = EffectiveUnitTables(auras, unit)
+        local blacklist = EffectiveUnitBlacklist(auras, unit)
+        local buffBlacklist = type(blacklist) == "table" and type(blacklist.buffs) == "table" and blacklist.buffs or blacklist
+        local debuffBlacklist = type(blacklist) == "table" and type(blacklist.debuffs) == "table" and blacklist.debuffs or blacklist
+        local buffCandidates, buffCandidateSignature = CandidateFiltersFromBlacklist(buffBlacklist)
+        local debuffCandidates, debuffCandidateSignature = CandidateFiltersFromBlacklist(debuffBlacklist)
+        buff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "buff", buffCandidates, buffCandidateSignature)
+        debuff = CompileUnitLane(unit, sharedLayout, layout, filtersRoot, "debuff", debuffCandidates, debuffCandidateSignature)
+    end
+    local lanes = { buff = buff, debuff = debuff }
+    if customLanes then
+        for key, lane in pairs(customLanes) do lanes[key] = lane end
+    end
     return {
         unit = unit,
         enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
-            or (dispelBorder and dispelBorder.enabled == true) or (dispelOverlay and dispelOverlay.enabled == true),
-        lanes = { buff = buff, debuff = debuff },
+            or (dispelBorder and dispelBorder.enabled == true) or (dispelOverlay and dispelOverlay.enabled == true)
+            or hasCustomContainers or (customEffects and customEffects.enabled == true)
+            or (legacyCustomDisplays and legacyCustomDisplays.enabled == true),
+        lanes = lanes,
         sensors = { dispelBorder = dispelBorder, dispelOverlay = dispelOverlay },
+        spellIndicators = customEffects or legacyCustomDisplays,
         group = false,
         _msufA3ConfigGen = A3._runtimeConfigGen or 1,
         _msufA3VisualGen = A3._nativeVisualGen or 0,
@@ -1409,7 +1602,14 @@ local function FrameAuraConfig(frame, unit)
 end
 
 function A3.BuildAuraLaneMetrics(configOrUnit, kind)
-    kind = (kind == "debuff" or kind == "debuffs") and "debuff" or "buff"
+    local rawKind = tostring(kind or "buff"):lower()
+    local customIndex = rawKind:match("^custom(%d)$")
+    if customIndex then
+        customIndex = math_min(3, math_max(1, tonumber(customIndex) or 1))
+        kind = "custom" .. tostring(customIndex)
+    else
+        kind = (rawKind == "debuff" or rawKind == "debuffs") and "debuff" or "buff"
+    end
     local cfg = type(configOrUnit) == "table" and configOrUnit or A3.ResolveUnitFrameConfig(configOrUnit)
     local lane = cfg and cfg.lanes and cfg.lanes[kind]
     if not lane then return nil end
@@ -1722,20 +1922,7 @@ end
 
 local function ConfigurePTR4AuraContainer(container, unit)
     container:SetUnit(unit)
-    if type(container.SetPrivateAurasEnabled) == "function" then container:SetPrivateAurasEnabled(true) end
     container:SetEnabled(true)
-end
-
-local function FlowDirectionValue(directionName)
-    directionName = tostring(directionName or "RIGHT"):upper()
-    local flow = _G.AnchorUtil and _G.AnchorUtil.FlowDirection
-    if flow then
-        if directionName == "LEFT" and flow.Left ~= nil then return flow.Left end
-        if directionName == "RIGHT" and flow.Right ~= nil then return flow.Right end
-        if directionName == "UP" and flow.Up ~= nil then return flow.Up end
-        if directionName == "DOWN" and flow.Down ~= nil then return flow.Down end
-    end
-    return directionName
 end
 
 local function EnsureRoot(frame)
@@ -1824,6 +2011,20 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.alpha) .. "\030" .. tostring(A3._nativeVisualGen or 0)
 end
 
+local function LaneButtonConfigSignature(lane)
+    return tostring(lane.unit) .. "\030" .. tostring(lane.kind)
+        .. "\030" .. tostring(lane.showCooldownText) .. "\030" .. tostring(lane.showCooldownSwipe)
+        .. "\030" .. tostring(lane.cooldownSwipeReverse) .. "\030" .. tostring(lane.showDurationBar)
+        .. "\030" .. tostring(lane.durationBarDisplay) .. "\030" .. tostring(lane.durationBarDirection)
+        .. "\030" .. tostring(lane.showStacks) .. "\030" .. tostring(lane.showTooltip)
+        .. "\030" .. tostring(lane.showAuraBorder) .. "\030" .. tostring(lane.showAuraSymbol)
+        .. "\030" .. tostring(lane.cooldownSize) .. "\030" .. tostring(lane.cooldownAnchor)
+        .. "\030" .. tostring(lane.cooldownX) .. "\030" .. tostring(lane.cooldownY)
+        .. "\030" .. tostring(lane.cooldownDecimalSeconds) .. "\030" .. tostring(lane.stackAnchor)
+        .. "\030" .. tostring(lane.stackSize) .. "\030" .. tostring(lane.stackX)
+        .. "\030" .. tostring(lane.stackY) .. "\030" .. tostring(A3._nativeVisualGen or 0)
+end
+
 SensorTrackingSignature = function(sensor)
     return tostring(sensor.unit) .. "\030" .. tostring(sensor.kind) .. "\030" .. tostring(sensor.nativeFilter)
         .. "\030" .. tostring(sensor.max) .. "\030" .. tostring(sensor.filterCount) .. "\030" .. tostring(sensor.filterMax)
@@ -1843,9 +2044,9 @@ SensorLayoutSignature = function(sensor)
 end
 
 local DISPEL_SENSOR_ORDER = { "dispelBorder", "dispelOverlay", "dispelCorner" }
-A3._normalAuraLaneOrder = A3._normalAuraLaneOrder or { "buff", "trackedBuff", "debuff", "external" }
+A3._normalAuraLaneOrder = { "buff", "trackedBuff", "debuff", "external", "custom1", "custom2", "custom3" }
 A3._sharedAuraRootKey = A3._sharedAuraRootKey or "UnitAuras"
-local NORMAL_LANE_ROOT_KEYS = { "Buffs", "TrackedBuffs", "Debuffs", "Externals" }
+local NORMAL_LANE_ROOT_KEYS = { "Buffs", "TrackedBuffs", "Debuffs", "Externals", "CustomAuras1", "CustomAuras2", "CustomAuras3" }
 
 local function BuildDispelSensorRootConfig(sensors)
     if type(sensors) ~= "table" then return nil end
@@ -2282,9 +2483,10 @@ local function PrepareAuraButton(button, lane, index)
 
     button:SetMouseMotionEnabled(lane.showTooltip ~= false)
 
-    if button._msufA3ManagedAuraButton ~= true then
-        SyncButtonGeometry(button, lane, index)
-    end
+    -- AuraContainer owns assignment, but MSUF owns the button dimensions and
+    -- grid. Keep managed buttons in sync as well: reusing a native container
+    -- must not leave already-assigned frames at the size from initialization.
+    SyncButtonGeometry(button, lane, index)
     SyncCooldownTextLayering(button)
     button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
     A3._TraceEnd(traceToken)
@@ -2447,26 +2649,64 @@ local function BuildManagedAuraGroupOptions(container, lane)
 end
 
 local function ManagedAuraGroupLayoutOptions(lane)
-    local anchor = lane.initialAnchor or "TOPLEFT"
-    local horizontal = FlowDirectionValue(lane.growthX)
-    local vertical = FlowDirectionValue(lane.growthY)
     local size = lane.size or DEFAULT_SHARED.iconSize
     local spacing = lane.spacing or DEFAULT_SHARED.spacing
-    local perRow = lane.perRow or DEFAULT_SHARED.perRow
     return {
-        anchorPoint = anchor,
-        horizontalGrowthDirection = horizontal,
-        verticalGrowthDirection = vertical,
-        maxFramesPerRow = perRow,
-        frameWidth = size,
-        frameHeight = size,
-        frameSpacingX = spacing,
-        frameSpacingY = spacing,
+        -- Blizzard 12.1.0 (PTR 68569) validates these per-group field names in
+        -- Blizzard_CustomAuraContainer.lua. The previous frameWidth/frameHeight
+        -- names were ignored, so native layout kept stale icon dimensions.
+        elementWidth = size,
+        elementHeight = size,
+        elementSpacingX = spacing,
+        elementSpacingY = spacing,
     }
+end
+
+local function PrepareManagedAuraGroupFrames(container, groupKey, lane)
+    if not (container and groupKey and lane) then return false end
+    container._msufA3ButtonConfigSignatures = container._msufA3ButtonConfigSignatures or {}
+    local configSignature = LaneButtonConfigSignature(lane)
+    local fullPrepare = container._msufA3ButtonConfigSignatures[groupKey] ~= configSignature
+    local seen = {}
+    local any = false
+    local function Prepare(button, index)
+        if not button or seen[button] then return end
+        seen[button] = true
+        button._msufA3ParentFrame = container._msufA3ParentFrame
+        if fullPrepare then
+            PrepareAuraButton(button, lane, index)
+        else
+            -- Size/spacing/anchor/layer changes need geometry only. Avoid
+            -- rebuilding cooldown, font, tooltip, and aura-display bindings on
+            -- every coalesced slider step.
+            SyncButtonGeometry(button, lane, index)
+            button._msufA3LaneLayoutSignature = lane._msufA3LayoutSignature
+        end
+        any = true
+    end
+
+    -- GetFramesByIndex is the authoritative list for frames that currently
+    -- display auras. The cached provider list also covers pooled frames so a
+    -- later assignment cannot revive the old size.
+    local group = type(container.GetAuraGroup) == "function" and container:GetAuraGroup(groupKey) or nil
+    local frames = group and type(group.GetFramesByIndex) == "function" and group:GetFramesByIndex() or nil
+    if type(frames) == "table" then
+        for index = 1, #frames do Prepare(frames[index], index) end
+    end
+    local cached = container._msufA3SharedAuraGroups == true
+        and container._msufA3GroupButtons and container._msufA3GroupButtons[groupKey]
+        or container
+    if type(cached) == "table" then
+        local cachedCount = math_max(tonumber(container.createdButtons) or 0, tonumber(lane.max) or 0, #cached)
+        for index = 1, cachedCount do Prepare(cached[index], index) end
+    end
+    container._msufA3ButtonConfigSignatures[groupKey] = configSignature
+    return any
 end
 
 local function ApplyManagedAuraGroupLayout(container, groupKey, lane)
     container:SetAuraGroupLayout(groupKey, ManagedAuraGroupLayoutOptions(lane))
+    PrepareManagedAuraGroupFrames(container, groupKey, lane)
     A3.nativeAuraRuntimeLayoutError = nil
     return true
 end
@@ -3205,18 +3445,7 @@ function A3._CreateSharedNativeAuraContainer(root, lanes, parentFrame)
 end
 
 function A3._PrepareSharedAuraGroupFrames(container, lane, groupKey)
-    local group = container and type(container.GetAuraGroup) == "function" and container:GetAuraGroup(groupKey) or nil
-    local frames = group and type(group.GetFramesByIndex) == "function" and group:GetFramesByIndex()
-        or (container and container._msufA3GroupButtons and container._msufA3GroupButtons[groupKey])
-    if type(frames) ~= "table" then return false end
-    for index = 1, #frames do
-        local button = frames[index]
-        if button then
-            button._msufA3ParentFrame = container._msufA3ParentFrame
-            PrepareAuraButton(button, lane, index)
-        end
-    end
-    return true
+    return PrepareManagedAuraGroupFrames(container, groupKey, lane)
 end
 
 function A3._ApplySharedAuraContainer(root, lanes, parentFrame, forceRecreate)
@@ -3302,11 +3531,6 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
             ApplyManagedAuraGroupLayout(current, current._msufA3ManagedGroupKey, lane)
         end
         SyncContainerGeometry(current, lane, parentFrame)
-        if layoutChanged then
-            for i = 1, (current.createdButtons or lane.max or 0) do
-                if current[i] then PrepareAuraButton(current[i], lane, i) end
-            end
-        end
         current:Show()
         if not RegisterNativeContainer(current) then return A3._TraceFinish(traceToken, nil) end
         if refresh == true and A3._NativeContainerVisible(current) and type(current.UpdateAllAuras) == "function" then
@@ -3468,6 +3692,9 @@ local function HideState(frame)
     A3._HideLane(root.TrackedBuffs)
     A3._HideLane(root.Debuffs)
     A3._HideLane(root.Externals)
+    A3._HideLane(root.CustomAuras1)
+    A3._HideLane(root.CustomAuras2)
+    A3._HideLane(root.CustomAuras3)
     A3._HideLane(root.DispelSensor)
     A3._HideLane(root.DispelBorderSensor)
     A3._HideLane(root.DispelOverlaySensor)
@@ -3493,6 +3720,9 @@ local function HideState(frame)
     root.TrackedBuffs = nil
     root.Debuffs = nil
     root.Externals = nil
+    root.CustomAuras1 = nil
+    root.CustomAuras2 = nil
+    root.CustomAuras3 = nil
     root.DispelSensor = nil
     root.DispelBorderSensor = nil
     root.DispelOverlaySensor = nil
