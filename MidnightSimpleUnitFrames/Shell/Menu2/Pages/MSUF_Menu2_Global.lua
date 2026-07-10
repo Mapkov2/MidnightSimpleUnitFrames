@@ -13,6 +13,39 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local VTP = M.ValueTextPairs
+local function NormalizeControlPath(value)
+    local path = tostring(value or "")
+    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
+    path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    return path
+end
+local function ControlMeta(pageKey, domain, semanticPath, classification, exact)
+    local identity = table.concat({
+        NormalizeControlPath(pageKey),
+        NormalizeControlPath(domain),
+        NormalizeControlPath(semanticPath),
+    }, ".")
+    local meta = {
+        controlId = "menu2." .. identity,
+        identityKey = identity,
+        controlPath = identity:gsub("%.", "/"),
+        classification = classification or "setting",
+    }
+    if type(exact) == "table" then
+        for key, value in pairs(exact) do meta[key] = value end
+    end
+    return meta
+end
+local function RegisterControl(widget, meta, label, kind, values)
+    if not (widget and type(meta) == "table" and type(M.RegisterSearchWidget) == "function") then return widget end
+    local payload = {}
+    for key, value in pairs(meta) do payload[key] = value end
+    payload.label = label or payload.label
+    payload.kind = kind or payload.kind
+    payload.values = values or payload.values
+    M.RegisterSearchWidget(widget, payload)
+    return widget
+end
 local function Call(name, ...)
     local apply = M.ApplyService
     if apply and type(apply.CallGlobal) == "function" then return apply.CallGlobal(name, ...) end
@@ -327,16 +360,24 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
     local scope = builder:Section("", math.max(opts.minHeight or 128, math.abs(hintY) + (opts.heightPad or 42)))
     if scope.title then scope.title:Hide() end
     local segment = W.ScopeOverrideBar(ctx, scope, scopeOpts)
+    RegisterControl(segment, opts.selectorMeta, opts.selectorLabel or "Editing:", "segment", values)
+    if segment and type(segment.buttons) == "table" and type(opts.selectorOptionMeta) == "function" then
+        for i = 1, #segment.buttons do
+            local item = values[i] or {}
+            RegisterControl(segment.buttons[i], opts.selectorOptionMeta(item.value), item.text or item.label or item.value or "", "button")
+        end
+    end
     local override = W.ToggleAt(scope, opts.toggleLabel or "Use custom settings for this scope", 14, overrideY, opts.toggleWidth or 260)
     M.BindBoolWidget(ctx, override, opts.getOverride or function()
         local current = scopeOpts.getValue and scopeOpts.getValue()
         return current ~= "shared" and opts.hasOverride and opts.hasOverride(current)
-    end, opts.setOverride or M.Noop)
+    end, opts.setOverride or M.Noop, opts.overrideMeta)
     local overrideInfo = W.Text(scope, "", 14, overrideY, ctx.width - 130, T.colors.text)
     local reset = T.Button(scope, opts.resetLabel or "Reset", opts.resetWidth or 76, 22)
     reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -14, overrideY + 8)
     T.CenterButtonLabel(reset)
     if type(opts.reset) == "function" then reset:SetScript("OnClick", opts.reset) end
+    RegisterControl(reset, opts.resetMeta, opts.resetLabel or "Reset", "button")
     local hint = W.Text(scope, opts.hint or "", 14, hintY, ctx.width - 28, T.colors.muted)
     M.TrackRefresh(ctx, function()
         local current = scopeOpts.getValue and scopeOpts.getValue() or "shared"
@@ -577,6 +618,7 @@ M.Assign(GlobalPage, {
     FontValues = FontValues, FontKeyGet = FontKeyGet, FontKeySet = FontKeySet,
     MenuFontValues = MenuFontValues, MenuFontKeyGet = MenuFontKeyGet, MenuFontKeySet = MenuFontKeySet,
     TextureValues = TextureValues,
+    ControlMeta = ControlMeta, RegisterControl = RegisterControl,
     SCOPE_VALUES = GLOBAL_SCOPE_VALUES, CurrentPowerBarScopeUnit = CurrentPowerBarScopeUnit,
     BuildScopeOverrideSection = BuildScopeOverrideSection, SmoothPowerGet = SmoothPowerGet, SmoothPowerSet = SmoothPowerSet,
     NormalizeHpMode = NormalizeHpMode, NormalizePowerMode = NormalizePowerMode,

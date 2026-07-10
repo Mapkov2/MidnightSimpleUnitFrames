@@ -690,7 +690,7 @@ function Text.Create(frame, spec)
   frame.powerText = frame.powerTextRight
 end
 
-local SIG_SPEC_KEYS = { "key", "scope", "width", "height", "font", "fontFlags", "nameFontSize", "healthFontSize", "powerFontSize", "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY", "_msufGFCompileSerial" }
+local SIG_SPEC_KEYS = { "key", "scope", "width", "height", "font", "fontFlags", "nameFontSize", "healthFontSize", "powerFontSize", "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY", "_msufTextLayoutRevision" }
 local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight", "detachedWidth", "detachedX", "detachedY", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
 local SIG_TEXT_KEYS = {
   "anchorToBars", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
@@ -703,7 +703,6 @@ local SIG_TEXT_KEYS = {
   "directPowerLeftPoint", "directPowerLeftRelativePoint", "directPowerLeftX", "directPowerLeftY", "directPowerCenterPoint", "directPowerCenterRelativePoint", "directPowerCenterX", "directPowerCenterY", "directPowerRightPoint", "directPowerRightRelativePoint", "directPowerRightX", "directPowerRightY",
   "shortNumbers", "hidePercentSymbol", "hideNameOnDeadOffline",
 }
-local SIG_TEXT_COLOR_KEYS = { "nameColor", "directNameColor", "directHealthLeftColor", "directHealthCenterColor", "directHealthRightColor", "directPowerLeftColor", "directPowerCenterColor", "directPowerRightColor" }
 local SIG_INLINE_KEYS = { "enabled", "separator", "unit", "colorMode", "targetNameClassColor", "targetNameNpcColor", "targetNameNpcClassColor", "totNameClassColor", "totNameNpcColor", "totNameNpcClassColor", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth" }
 local SIG_PARTS = {}
 
@@ -711,16 +710,6 @@ local function SigAddKeys(parts, n, src, keys)
   for i = 1, #keys do
     n = n + 1
     parts[n] = tostring(src and src[keys[i]])
-  end
-  return n
-end
-
-local function SigAddColor(parts, n, color)
-  n = n + 1
-  if type(color) == "table" then
-    parts[n] = tostring(color.r or color[1]) .. ":" .. tostring(color.g or color[2]) .. ":" .. tostring(color.b or color[3]) .. ":" .. tostring(color.a or color[4] or 1)
-  else
-    parts[n] = ""
   end
   return n
 end
@@ -733,12 +722,8 @@ local function TextApplySignature(spec, text)
   n = n + 1; parts[n] = tostring(spec and spec.showName ~= false)
   n = n + 1; parts[n] = tostring(spec and spec.showHealthText ~= false)
   n = n + 1; parts[n] = tostring(spec and spec.showPowerText ~= false)
-  n = SigAddColor(parts, n, spec and spec.textColor)
   n = SigAddKeys(parts, n, power, SIG_POWER_KEYS)
   n = SigAddKeys(parts, n, text, SIG_TEXT_KEYS)
-  for i = 1, #SIG_TEXT_COLOR_KEYS do
-    n = SigAddColor(parts, n, text and text[SIG_TEXT_COLOR_KEYS[i]])
-  end
   n = SigAddKeys(parts, n, inline, SIG_INLINE_KEYS)
   for i = n + 1, #parts do
     parts[i] = nil
@@ -746,8 +731,54 @@ local function TextApplySignature(spec, text)
   return concat(parts, "\031", 1, n)
 end
 
+local function RefreshAppliedTextColors(frame, spec, text)
+  local rt = frame._msufTextRuntime
+  local base = spec and spec.textColor
+  if rt then
+    rt.textColorR = base and base.r or 1
+    rt.textColorG = base and base.g or 1
+    rt.textColorB = base and base.b or 1
+    rt.textColorA = base and base.a or 1
+    rt.healthTextAlpha = rt.textColorA
+    rt._textGradientPct = nil
+  end
+  if text and text.directLayout == true then
+    if text.healthColorByHealth ~= true then
+      ApplyTextColor(frame.hpTextLeft, text.directHealthLeftColor)
+      ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
+      ApplyTextColor(frame.hpTextRight, text.directHealthRightColor)
+    end
+    if text.powerColorByType ~= true then
+      ApplyTextColor(frame.powerTextLeft, text.directPowerLeftColor)
+      ApplyTextColor(frame.powerTextCenter, text.directPowerCenterColor)
+      ApplyTextColor(frame.powerTextRight, text.directPowerRightColor)
+    end
+  end
+  frame._msufPowerTextColorInitialized = nil
+  if UpdateHealthTextColor then
+    UpdateHealthTextColor(frame, rt, frame.unit)
+  end
+  if frame.nameText then
+    SetNameTextColor(frame, NameTextColor(frame, frame.unit))
+  end
+  frame._msufTextColorRevision = spec and spec._msufTextColorRevision
+end
+
 function Text.Apply(frame, spec)
   local text = spec and spec.text or {}
+  local layoutRevision = spec and spec._msufTextLayoutRevision
+  if layoutRevision ~= nil
+    and frame._msufTextLayoutRevision == layoutRevision
+    and frame.nameText
+    and frame.hpTextLeft
+    and frame.hpTextCenter
+    and frame.hpTextRight
+    and frame.powerTextLeft
+    and frame.powerTextCenter
+    and frame.powerTextRight then
+    RefreshAppliedTextColors(frame, spec, text)
+    return
+  end
   local signature = TextApplySignature(spec, text)
   if frame._msufTextApplySignature == signature
     and frame.nameText
@@ -757,13 +788,7 @@ function Text.Apply(frame, spec)
     and frame.powerTextLeft
     and frame.powerTextCenter
     and frame.powerTextRight then
-    local rt = frame._msufTextRuntime
-    if UpdateHealthTextColor then
-      UpdateHealthTextColor(frame, rt, frame.unit)
-    end
-    if frame.nameText then
-      SetNameTextColor(frame, NameTextColor(frame, frame.unit))
-    end
+    RefreshAppliedTextColors(frame, spec, text)
     return
   end
   Text.Create(frame, spec)
@@ -938,4 +963,6 @@ function Text.Apply(frame, spec)
     SetNameTextColor(frame, NameTextColor(frame, frame.unit))
   end
   frame._msufTextApplySignature = signature
+  frame._msufTextLayoutRevision = layoutRevision
+  frame._msufTextColorRevision = spec and spec._msufTextColorRevision
 end

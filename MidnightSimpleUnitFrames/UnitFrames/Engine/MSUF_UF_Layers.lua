@@ -11,12 +11,17 @@ UF.Layers = Layers
 
 Layers.TEXT_BASE_OFFSET = 10
 Layers.STATUS_BASE_OFFSET = 10
+Layers.HEALTH_OFFSET = 1
 Layers.PORTRAIT_OFFSET = 6
 Layers.PORTRAIT_BORDER_OFFSET = 7
 Layers.POWER_INLINE_OFFSET = 1
 Layers.POWER_DETACHED_DEFAULT = 6
 Layers.TARGETED_SPELLS_BASE_OFFSET = 40
-Layers.PREVIEW_FRAME_BORDER_OFFSET = 40
+Layers.FRAME_BORDER_NORMAL_OFFSET = 35
+Layers.FRAME_BORDER_DEFAULT_OFFSET = 40
+Layers.FRAME_BORDER_OVER_NATIVE_DISPEL_OFFSET = 50
+-- Kept as a compatibility alias for preview code loaded against this contract.
+Layers.PREVIEW_FRAME_BORDER_OFFSET = Layers.FRAME_BORDER_NORMAL_OFFSET
 Layers.PREVIEW_BOUNDS_OFFSET = 48
 
 local floor = math.floor
@@ -35,6 +40,12 @@ end
 function Layers.BaseFrameLevel(frame)
   local base = frame and (frame.Health or frame.hpBar or frame)
   return base and base.GetFrameLevel and (base:GetFrameLevel() or 0) or 0
+end
+
+function Layers.HealthLevel(frameOrLevel)
+  local base = type(frameOrLevel) == "number" and frameOrLevel
+    or (frameOrLevel and frameOrLevel.GetFrameLevel and (frameOrLevel:GetFrameLevel() or 0) or 0)
+  return base + Layers.HEALTH_OFFSET
 end
 
 function Layers.TextLevel(frameOrLevel, layer, fallback)

@@ -309,7 +309,9 @@ function GF.Rebuild(kind)
 end
 
 local function RefreshVisualsNow(kind, mask)
-  if GF.InvalidateCompiledSpecs then
+  local refreshedDomains = GF.RefreshCompiledSpecDomains
+    and GF.RefreshCompiledSpecDomains(kind, mask) == true
+  if not refreshedDomains and GF.InvalidateCompiledSpecs then
     GF.InvalidateCompiledSpecs(kind)
   end
   if not GF.ForEachFrame then return false end
@@ -348,6 +350,9 @@ function GF.MarkDirty(frame, mask)
     return GF.DeferGroupRuntime("refresh", frame and frame._msufGFKind or nil, mask)
   end
   if frame and frame._msufGFKind then
+    if GF.RefreshCompiledSpecDomains then
+      GF.RefreshCompiledSpecDomains(frame._msufGFKind, mask)
+    end
     return ApplyFrameDirty(frame, frame._msufGFKind, mask, "MSUF_GF_MARK_DIRTY")
   end
   return GF.RefreshVisuals(nil, mask)

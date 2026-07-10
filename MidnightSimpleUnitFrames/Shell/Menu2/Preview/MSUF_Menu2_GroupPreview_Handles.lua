@@ -26,6 +26,13 @@ function Handles.Install(box, deps)
     local MSUF = deps.MSUF or MSUF or {}
     local T = deps.T or M.Theme or {}
     local PreviewHelpers = M.PreviewHelpers or {}
+    local function RegisterPreviewControl(widget, semanticPath, label, kind, classification)
+        local page = M.GroupPage
+        if page and type(page.RegisterControl) == "function" then
+            page.RegisterControl(widget, { key = M.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification)
+        end
+        return widget
+    end
     local OpenSection = deps.OpenSection or (M.GroupPreview and M.GroupPreview.OpenSection)
     local WHITE8X8 = deps.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
     local Tr, Round, ResolveAnchor, PointOffset, HandleOffset, OffsetToConfig, CurrentStatusSpec, CurrentSpellConfig, CurrentSpellPlaced, HandleText, HandleOffsets, UpdateHint, RefreshHandleSelection, StatusLabel, StartPan, StopPan, ZoomWheel = M.PickFallbacks(deps, HANDLE_FALLBACKS, [[
@@ -637,6 +644,7 @@ function Handles.Install(box, deps)
             StopHandleDrag(self)
             if box._selectedHandle == self then SelectHandle(nil) end
         end)
+        RegisterPreviewControl(handle, "handle." .. tostring(key), label or key, "button", "action")
         box._handles[key] = handle
         box._handleList[#box._handleList + 1] = handle
         return handle

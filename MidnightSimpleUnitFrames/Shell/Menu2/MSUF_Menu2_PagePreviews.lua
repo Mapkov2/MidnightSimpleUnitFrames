@@ -182,6 +182,7 @@ local function GFPreviewCount(kind)
     if kind == "raid" then return 30 end
     return 5
 end
+local BARS_MENU_PREVIEW_COUNT = 1
 local function LiveRaidKind(gf)
     local kind = gf and type(gf.GetLiveRaidKind) == "function" and gf.GetLiveRaidKind() or nil
     if kind == "mythicraid" then return "mythicraid" end
@@ -205,21 +206,22 @@ local function LiveGroupFramesCoverKind(gf, kind)
     end
     return false
 end
-local function ShowGFPreviewWhenNoLiveFrames(gf, kind)
+local function ShowGFPreviewWhenNoLiveFrames(gf, kind, count)
     if not (gf and type(gf.ShowPreview) == "function" and type(gf.HidePreview) == "function") then return false end
     if LiveGroupFramesCoverKind(gf, kind) then
         gf.HidePreview(kind)
         return false
     end
-    return gf.ShowPreview(kind, GFPreviewCount(kind)) == true
+    return gf.ShowPreview(kind, count or GFPreviewCount(kind)) == true
 end
 
--- The global Bars page previews party and raid at once. Mythic raid stays hidden here because
--- it shares raid settings and would add visual noise without showing a different control path.
+-- The global Bars page only needs one representative frame per group scope to show textures,
+-- gradients, outlines, and highlights. Building the normal 5 + 30 full preview frames here
+-- needlessly applies unit specs, auras, and spell indicators when the page opens.
 local function ShowGFBarMenuPreviews(gf)
     if not gf then return end
-    ShowGFPreviewWhenNoLiveFrames(gf, "party")
-    ShowGFPreviewWhenNoLiveFrames(gf, "raid")
+    ShowGFPreviewWhenNoLiveFrames(gf, "party", BARS_MENU_PREVIEW_COUNT)
+    ShowGFPreviewWhenNoLiveFrames(gf, "raid", BARS_MENU_PREVIEW_COUNT)
     gf.HidePreview("mythicraid")
 end
 local function SetGFPagePreviewFlag(active, kind)

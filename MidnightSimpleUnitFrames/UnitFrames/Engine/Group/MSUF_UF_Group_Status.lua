@@ -364,12 +364,31 @@ local function EnsureUnitlessDriver()
     return unitlessDriver
   end
   unitlessDriver = CreateFrame("Frame")
-  unitlessDriver:SetScript("OnEvent", function(_, event)
+  unitlessDriver:SetScript("OnEvent", function(_, event, unitTarget)
     local list = unitlessFramesByEvent[event]
     if not list then
       return
     end
     local live = GF and GF.frames
+
+    -- READY_CHECK_CONFIRM carries the affected unit token. Updating only that
+    -- frame avoids broadcasting every confirmation across the entire raid.
+    -- READY_CHECK and READY_CHECK_FINISHED remain intentional broadcasts.
+    if event == "READY_CHECK_CONFIRM" and type(unitTarget) == "string" then
+      local frame = GF and type(GF.FrameForUnit) == "function" and GF.FrameForUnit(unitTarget)
+      if frame and (not live or live[frame] == true) then
+        local active = frame._msufActiveElements
+        local registered = unitlessIndexByEvent[event]
+        if active and active.GroupStatusRuntime == true and registered and registered[frame] then
+          RunStatusRuntimeFrame(frame, event, unitTarget)
+          return
+        end
+      end
+      -- A secure-header unit can be rebound before the adapter's unit index is
+      -- refreshed. Preserve correctness by falling through to the old broadcast
+      -- path on a lookup miss; the indexed steady state remains O(1).
+    end
+
     for i = 1, #list do
       local frame = list[i]
       if frame and (not live or live[frame] == true) then

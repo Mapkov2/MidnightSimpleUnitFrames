@@ -754,6 +754,7 @@ local function SuppressNativeOutlineNow(f)
 end
 
 local ApplyToGroupFrame
+local roundedBulkRestoreKinds
 
 local function ResolveGF()
   return (MSUF and MSUF.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF) or nil
@@ -1067,9 +1068,16 @@ ApplyToGroupFrame = function(f, kind)
     ApplyGroupBackdrop(f, kind, false)
 
     local GF = ResolveGF()
-    if hadRounded and GF and GF.MarkDirty and not f._msufRGFDisableRestoreQueued then
+    if hadRounded and GF
+      and (roundedBulkRestoreKinds or type(GF.MarkDirty) == "function")
+      and not f._msufRGFDisableRestoreQueued then
       f._msufRGFDisableRestoreQueued = true
-      GF.MarkDirty(f, (GF.DIRTY_COLOR or 0x08) + (GF.DIRTY_BORDER or 0x10))
+      if roundedBulkRestoreKinds then
+        local restoreKind = type(kind) == "string" and kind or "*"
+        roundedBulkRestoreKinds[restoreKind] = true
+      else
+        GF.MarkDirty(f, (GF.DIRTY_COLOR or 0x08) + (GF.DIRTY_BORDER or 0x10))
+      end
     end
     return
   end
@@ -1161,6 +1169,9 @@ local function ApplyAll()
   end
   ExportPublic("MSUF_RoundedUF_Active", enabled and true or nil)
   ExportPublic("MSUF_RoundedUF_MouseoverActive", (enabled and RoundedMouseoverEnabled()) and true or nil)
+  local bulkGF = ResolveGF()
+  local restoreKinds = bulkGF and type(bulkGF.RefreshVisuals) == "function" and {} or nil
+  roundedBulkRestoreKinds = restoreKinds
   ForEachUnitFrame(function(f)
     if IsGroupFrame(f) then
       ApplyToGroupFrame(f)
@@ -1169,6 +1180,20 @@ local function ApplyAll()
     end
   end)
   ForEachGroupFrame(ApplyToGroupFrame)
+  roundedBulkRestoreKinds = nil
+  if restoreKinds and next(restoreKinds) then
+    local GF = bulkGF
+    if GF then
+      local dirty = (GF.DIRTY_COLOR or 0x08) + (GF.DIRTY_BORDER or 0x10)
+      if restoreKinds["*"] then
+        GF.RefreshVisuals(nil, dirty)
+      else
+        for kind in pairs(restoreKinds) do
+          GF.RefreshVisuals(kind, dirty)
+        end
+      end
+    end
+  end
   if not enabled then
     ExportPublic("MSUF_RoundedUF_Active", nil)
     ExportPublic("MSUF_RoundedUF_MouseoverActive", nil)

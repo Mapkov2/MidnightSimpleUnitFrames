@@ -22,6 +22,13 @@ local min = math.min
 local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 local GROUP_PREVIEW_REFRESH_DELAY = 0.05
 local GROUP_PREVIEW_ANIMATION_INTERVAL = 1 / 20
+local function RegisterGroupPreviewControl(widget, semanticPath, label, kind, classification)
+    local page = M.GroupPage
+    if page and type(page.RegisterControl) == "function" then
+        page.RegisterControl(widget, { key = M.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification)
+    end
+    return widget
+end
 local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
 local LAYER_TEXT_OFF = { 0.30, 0.30, 0.36, 0.55 }
@@ -261,6 +268,7 @@ local function CreatePreviewAnimationButton(box)
     if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
     if btn.SetFrameLevel and parent.GetFrameLevel then btn:SetFrameLevel((parent:GetFrameLevel() or 0) + 85) end
     btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
+    RegisterGroupPreviewControl(btn, "combat_animation", "Combat Preview", "button", "ephemeral")
     if M.AddTooltip then
         M.AddTooltip(btn, "Combat Preview", "Animates health, power, prediction bars, text values, aura timers, and combat-state indicators in this preview only. Pauses during combat.", { hook = true })
     end
@@ -1078,8 +1086,21 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         fitReason = "GROUP_PREVIEW_ZOOM_FIT",
         oneReason = "GROUP_PREVIEW_ZOOM_1TO1",
     })
+    RegisterGroupPreviewControl(box._zoomBar, "zoom.surface", "Preview zoom controls", "canvas", "ephemeral")
+    local zoomControls = {
+        { "_zoomOutButton", "zoom.out", "Zoom out" },
+        { "_zoomFitButton", "zoom.fit", "Fit preview" },
+        { "_zoomOneButton", "zoom.one_to_one", "Pixel preview" },
+        { "_zoomInButton", "zoom.in", "Zoom in" },
+        { "_zoomHelpButton", "zoom.help", "Preview controls help" },
+    }
+    for i = 1, #zoomControls do
+        local info = zoomControls[i]
+        RegisterGroupPreviewControl(box[info[1]], info[2], info[3], "button", "ephemeral")
+    end
     if PreviewHelpers.EnsurePreviewControlsHint then
-        PreviewHelpers.EnsurePreviewControlsHint(box, stage, { M = M, T = T, Tr = R.Tr })
+        local controlsHint = PreviewHelpers.EnsurePreviewControlsHint(box, stage, { M = M, T = T, Tr = R.Tr })
+        RegisterGroupPreviewControl(controlsHint and controlsHint._close, "hint.dismiss", "Dismiss preview tip", "button", "ephemeral")
     end
     R.ZoomWheel = box._zoomWheel or R.ZoomWheel
     CreatePreviewAnimationButton(box)
@@ -1166,6 +1187,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             end
             if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_LAYER") elseif box.Refresh then box:Refresh() end
         end)
+        RegisterGroupPreviewControl(btn, "layer." .. tostring(def[4]), def[1] .. " preview layer", "button", "ephemeral")
         box._layerButtons[#box._layerButtons + 1] = btn
     end
     local mock = CreateFrame("Frame", nil, stage, T.Template())
@@ -1180,6 +1202,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock:SetScript("OnMouseUp", function()
         if stage._msufGFPreviewPanning then R.StopPan(stage) end
     end)
+    RegisterGroupPreviewControl(mock, "canvas", "Group preview canvas", "canvas", "ephemeral")
     box._mock = mock
     box.mock, mock.bounds = mock, bounds
     mock._health = CreateFrame("StatusBar", nil, mock)

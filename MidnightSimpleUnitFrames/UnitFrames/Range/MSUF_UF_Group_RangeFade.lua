@@ -27,6 +27,7 @@ local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
 local GetTime = GetTime
 local unpack = unpack or table.unpack
+local ScheduleOnce = _G.MSUF_ScheduleOnce
 
 local Secrets = MSUF.Secrets or {}
 local issecretvalue = _G.issecretvalue or function(_) return false end
@@ -628,12 +629,19 @@ local function QueueRangeDriverRefresh()
   if rangeDriverRefreshQueued == true then
     return
   end
-  if UF and UF._msufApplyingSpec == true and C_Timer and C_Timer.After then
-    rangeDriverRefreshQueued = true
+  rangeDriverRefreshQueued = true
+  -- Visibility changes arrive in bursts while secure headers create or retire
+  -- children. Rebuilding the shared unit-event subscription for every OnShow /
+  -- OnHide makes a raid header build quadratic. Always coalesce those changes
+  -- into one next-frame rebuild; the frame itself is refreshed synchronously by
+  -- RangeDriverOnShow, so delaying only the shared subscription is safe.
+  if type(ScheduleOnce) == "function" then
+    ScheduleOnce("MSUF_GF_RANGE_DRIVER_REFRESH", RefreshRangeDriverNow)
+  elseif C_Timer and C_Timer.After then
     C_Timer.After(0, RefreshRangeDriverNow)
-    return
+  else
+    RefreshRangeDriverNow()
   end
-  RefreshRangeDriverNow()
 end
 
 local function AddRangeDriverFrame(frame)
@@ -919,6 +927,7 @@ local offlineDelayFrames = {}
 local offlineDelayIndex = {}
 local offlineDelayTimerActive
 local offlineDelayTimerAt
+local offlineDelayTimer
 local ScheduleOfflineDelayTimer
 
 RemoveOfflineDelayFrame = function(frame)
@@ -991,6 +1000,7 @@ local function FlushOfflineDelayFrames()
 end
 
 local function OfflineDelayTimerCallback()
+  offlineDelayTimer = nil
   offlineDelayTimerActive = nil
   offlineDelayTimerAt = nil
   FlushOfflineDelayFrames()
@@ -1005,9 +1015,17 @@ ScheduleOfflineDelayTimer = function(when)
   if delay < 0 then
     delay = 0
   end
+  if offlineDelayTimer and type(offlineDelayTimer.Cancel) == "function" then
+    offlineDelayTimer:Cancel()
+    offlineDelayTimer = nil
+  end
   offlineDelayTimerActive = true
   offlineDelayTimerAt = when
-  C_Timer.After(delay, OfflineDelayTimerCallback)
+  if C_Timer and type(C_Timer.NewTimer) == "function" then
+    offlineDelayTimer = C_Timer.NewTimer(delay, OfflineDelayTimerCallback)
+  else
+    C_Timer.After(delay, OfflineDelayTimerCallback)
+  end
 end
 
 local function OfflineHideReady(frame)

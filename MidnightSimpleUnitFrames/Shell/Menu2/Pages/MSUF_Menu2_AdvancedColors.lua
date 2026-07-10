@@ -13,7 +13,10 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
-local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled]])
+local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled, ControlMeta, RegisterControl = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled ControlMeta RegisterControl]])
+local function Meta(path, classification, exact)
+    return ControlMeta("opt_colors", "advanced", path, classification, exact)
+end
 local KLR, WL, ColorRows, KeyLabelMap, ValueTextPairs, SetControlsEnabled = M.KeyLabelRows, M.WordList, M.ColorRows, M.KeyLabelMap, M.ValueTextPairs, W.SetControlsEnabled
 local ColorValueAt
 
@@ -204,9 +207,9 @@ local function SetHighlightRGB(r, g, b)
     G().highlightColor = { r, g, b }
     ApplyColors()
 end
-function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverride, swatchWidth)
+function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverride, swatchWidth, metadata)
     local color = W.Color(section, label)
-    M.BindColor(ctx, color, getRGB, setRGB)
+    M.BindColor(ctx, color, getRGB, setRGB, metadata)
     if color._msuf2Title then
         local sx, sy = x or 0, y or 0
         local sectionW = section._msuf2Width or 720
@@ -222,7 +225,7 @@ function ColorValueAt(ctx, section, label, x, y, getRGB, setRGB, labelWidthOverr
     end
     return MoveWidget(color, section, x, y)
 end
-local function ApiColorAt(ctx, section, label, x, y, getName, setName, dr, dg, db, apply, labelWidth, swatchWidth)
+local function ApiColorAt(ctx, section, label, x, y, getName, setName, dr, dg, db, apply, labelWidth, swatchWidth, metadata)
     return ColorValueAt(ctx, section, label, x, y,
         function() return ApiRGB(getName, dr, dg, db) end,
         function(r, g, c)
@@ -230,18 +233,18 @@ local function ApiColorAt(ctx, section, label, x, y, getName, setName, dr, dg, d
                 if type(apply) == "function" then apply() else ApplyColors() end
             end
         end,
-        labelWidth, swatchWidth)
+        labelWidth, swatchWidth, metadata or Meta("api." .. tostring(setName or getName)))
 end
-local function GeneralColorAt(ctx, section, label, x, y, prefix, dr, dg, db, apply, labelWidth, swatchWidth)
+local function GeneralColorAt(ctx, section, label, x, y, prefix, dr, dg, db, apply, labelWidth, swatchWidth, metadata)
     return ColorValueAt(ctx, section, label, x, y,
         function() return GeneralRGB(prefix, dr, dg, db) end,
         function(r, g, c)
             SetGeneralRGB(prefix, r, g, c)
             if type(apply) == "function" then apply() else ApplyColors() end
         end,
-        labelWidth, swatchWidth)
+        labelWidth, swatchWidth, metadata or Meta("general." .. tostring(prefix)))
 end
-local function ApiOrGeneralColorAt(ctx, section, label, x, y, getName, setName, prefix, dr, dg, db, apply, alpha)
+local function ApiOrGeneralColorAt(ctx, section, label, x, y, getName, setName, prefix, dr, dg, db, apply, alpha, metadata)
     return ColorValueAt(ctx, section, label, x, y,
         function() return ApiRGB(getName, dr, dg, db) end,
         function(r, g, c)
@@ -250,16 +253,17 @@ local function ApiOrGeneralColorAt(ctx, section, label, x, y, getName, setName, 
                 SetGeneralRGB(prefix, r, g, c)
                 if type(apply) == "function" then apply() else ApplyColors() end
             end
-        end)
+        end,
+        nil, nil, metadata or Meta("general." .. tostring(prefix)))
 end
-local function TableColorAt(ctx, section, label, x, y, getTable, key, dr, dg, db, apply, labelWidth, swatchWidth)
+local function TableColorAt(ctx, section, label, x, y, getTable, key, dr, dg, db, apply, labelWidth, swatchWidth, metadata)
     return ColorValueAt(ctx, section, label, x, y,
         function() return TableRGB(getTable(), key, dr, dg, db) end,
         function(r, g, c)
             SetTableRGB(getTable(), key, r, g, c)
             if type(apply) == "function" then apply() end
         end,
-        labelWidth, swatchWidth)
+        labelWidth, swatchWidth, metadata or Meta("table." .. tostring(key)))
 end
 local function BuildApiColorSpecs(ctx, section, specs, apply)
     return M.BuildControlSpecs(specs, {
@@ -276,7 +280,7 @@ local function BuildApiOrGeneralColorSpecs(ctx, section, specs, apply)
         ["*"] = function(s, i) return ApiOrGeneralColorAt(ctx, section, s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10] or apply, s[11]), s[12] or s[6] or i end,
     })
 end
-local function ButtonAt(parent, label, x, y, width, onClick)
+local function ButtonAt(parent, label, x, y, width, onClick, semanticPath)
     local btn = T.Button(parent, label, width or 150, 22)
     btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
     if type(onClick) == "function" then
@@ -285,6 +289,7 @@ local function ButtonAt(parent, label, x, y, width, onClick)
             if M.RequestRefresh then M.RequestRefresh(nil, "advanced-colors-button") elseif M.Refresh then M.Refresh() end
         end)
     end
+    RegisterControl(btn, Meta(semanticPath, "action"), label, "button")
     return btn
 end
 local function Card(parent, title, subtitle, x, y, width, height)
@@ -389,7 +394,7 @@ local function GroupColorAt(ctx, section, label, x, y, prefix, dr, dg, db, label
     return ColorValueAt(ctx, section, label, x, y,
         function() return GroupRGB(prefix, dr, dg, db) end,
         function(r, g, b) SetGroupRGB(prefix, r, g, b, "MSUF2_GROUP_COLORS", "visual") end,
-        labelWidth, swatchWidth)
+        labelWidth, swatchWidth, Meta("group_frame.color." .. tostring(prefix)))
 end
 local function Clamp01(value, fallback)
     value = tonumber(value)
@@ -406,7 +411,8 @@ local function GroupAlphaSlider(ctx, parent, label, x, y, width, key, defaultVal
     M.BindNumberWidget(ctx, slider,
         function() return GroupNum(key, defaultValue) end,
         function(value) SetGroupValue(key, Clamp01(value, defaultValue), "MSUF2_GROUP_COLORS", "visual") end,
-        defaultValue)
+        defaultValue,
+        Meta("group_frame.alpha." .. tostring(key)))
     MoveWidget(slider, parent, x, y)
     if M.BindSliderLiveLabel then
         M.BindSliderLiveLabel(ctx, slider, function() return GroupNum(key, defaultValue) end,
@@ -466,7 +472,7 @@ local function BuildGroupFrameColors(ctx, b)
     local state = Card(group, "State Tints", "Dead/offline tint and debuff stripe colors.", leftX, secondY, leftW, 300)
     local highlights = Card(group, "Group Highlights", "Target, focus, group-border, and corner-indicator colors.", rightX, wide and secondY or -1008, rightW, 288)
 
-    local mode = ValueDropdownAt(ctx, health, "Bar Color Mode", 16, -54, GROUP_BAR_MODES, min(280, leftW - 32),
+    ValueDropdownAt(ctx, health, "Bar Color Mode", 16, -54, GROUP_BAR_MODES, min(280, leftW - 32),
         GroupBarMode,
         function(value)
             value = value or "GLOBAL"
@@ -475,37 +481,45 @@ local function BuildGroupFrameColors(ctx, b)
                 SetGroupValue("healthColorMode", value, "MSUF2_GROUP_HEALTH_MODE", "visual")
             end
             if M.RequestRefresh then M.RequestRefresh(ctx, "group-colors-mode") end
-        end)
-    local healthColor = ColorValueAt(ctx, health, "Health bar color", 16, -108, GroupHealthBarRGB, SetGroupHealthBarRGB)
-    local hpAlpha = GroupAlphaSlider(ctx, health, "Health bar opacity", 16, -156, max(220, leftW - 58), "hpBarAlpha", 1)
-    local keepText = ValueToggleAt(ctx, health, "Keep text + portrait visible", 16, -212,
+        end,
+        Meta("group_frame.health.mode"))
+    local healthColor = ColorValueAt(ctx, health, "Health bar color", 16, -108, GroupHealthBarRGB, SetGroupHealthBarRGB,
+        nil, nil, Meta("group_frame.health.color"))
+    GroupAlphaSlider(ctx, health, "Health bar opacity", 16, -156, max(220, leftW - 58), "hpBarAlpha", 1)
+    ValueToggleAt(ctx, health, "Keep text + portrait visible", 16, -212,
         function() return GroupBool("alphaExcludeTextPortrait", false) end,
-        function(value) SetGroupValue("alphaExcludeTextPortrait", value and true or false, "MSUF2_GROUP_ALPHA_KEEP_TEXT", "visual") end)
+        function(value) SetGroupValue("alphaExcludeTextPortrait", value and true or false, "MSUF2_GROUP_ALPHA_KEEP_TEXT", "visual") end,
+        Meta("group_frame.health.keep_text_portrait"))
     local healthHint = W.Text(health, "", 16, -244, leftW - 32, T.colors.muted)
     if healthHint.SetWordWrap then healthHint:SetWordWrap(true) end
 
     GroupColorAt(ctx, background, "Background Color", 16, -54, "bg", 0.10, 0.10, 0.10)
     ValueDropdownAt(ctx, background, "Foreground Texture", 16, -92, GroupTextureValues(), min(290, rightW - 32),
         function() return GroupRead("barTexture", "") or "" end,
-        function(value) SetGroupValue("barTexture", value or "", "MSUF2_GROUP_BAR_TEXTURE", "visual", { texture = true }) end)
+        function(value) SetGroupValue("barTexture", value or "", "MSUF2_GROUP_BAR_TEXTURE", "visual", { texture = true }) end,
+        Meta("group_frame.background.foreground_texture"))
     ValueDropdownAt(ctx, background, "Background Texture", 16, -146, GroupTextureValues(), min(290, rightW - 32),
         function() return GroupRead("barBgTexture", "") or "" end,
-        function(value) SetGroupValue("barBgTexture", value or "", "MSUF2_GROUP_BAR_BG_TEXTURE", "visual", { texture = true }) end)
+        function(value) SetGroupValue("barBgTexture", value or "", "MSUF2_GROUP_BAR_BG_TEXTURE", "visual", { texture = true }) end,
+        Meta("group_frame.background.texture"))
     GroupAlphaSlider(ctx, background, "Background opacity", 16, -202, max(220, rightW - 58), "hpBgAlpha", 0.85)
     ValueDropdownAt(ctx, background, "Health color fallback", 16, -258, GROUP_HEALTH_MODES, min(290, rightW - 32),
         function() return GroupRead("healthColorMode", "CLASS") or "CLASS" end,
-        function(value) SetGroupValue("healthColorMode", value or "CLASS", "MSUF2_GROUP_HEALTH_FALLBACK", "visual") end)
+        function(value) SetGroupValue("healthColorMode", value or "CLASS", "MSUF2_GROUP_HEALTH_FALLBACK", "visual") end,
+        Meta("group_frame.health.fallback_mode"))
 
-    local deadToggle = ValueSwitchAt(ctx, state, "Dead / Offline Background", 16, -54, min(260, leftW - 32),
+    ValueSwitchAt(ctx, state, "Dead / Offline Background", 16, -54, min(260, leftW - 32),
         function() return GroupBool("deadBgEnabled", false) end,
-        function(value) SetGroupValue("deadBgEnabled", value and true or false, "MSUF2_GROUP_DEAD_BG", "visual") end)
+        function(value) SetGroupValue("deadBgEnabled", value and true or false, "MSUF2_GROUP_DEAD_BG", "visual") end,
+        Meta("group_frame.state.dead_offline.enabled"))
     local deadColor = GroupColorAt(ctx, state, "Background color", 16, -96, "deadBg", 0.60, 0.05, 0.05)
     local deadAlpha = GroupAlphaSlider(ctx, state, "Dead/offline opacity", 16, -138, max(220, leftW - 58), "deadBgA", 0.90)
     local offline = ValueToggleAt(ctx, state, "Also tint offline members", 16, -184,
         function() return GroupBool("deadBgOffline", true) end,
-        function(value) SetGroupValue("deadBgOffline", value and true or false, "MSUF2_GROUP_DEAD_BG_OFFLINE", "visual") end)
-    local stripeColor = GroupColorAt(ctx, state, "Debuff stripe color", 16, -224, "debuffStripeColor", 0.80, 0.20, 0.20)
-    local stripeAlpha = GroupAlphaSlider(ctx, state, "Debuff stripe opacity", 16, -264, max(220, leftW - 58), "debuffStripeAlpha", 0.60)
+        function(value) SetGroupValue("deadBgOffline", value and true or false, "MSUF2_GROUP_DEAD_BG_OFFLINE", "visual") end,
+        Meta("group_frame.state.dead_offline.include_offline"))
+    GroupColorAt(ctx, state, "Debuff stripe color", 16, -224, "debuffStripeColor", 0.80, 0.20, 0.20)
+    GroupAlphaSlider(ctx, state, "Debuff stripe opacity", 16, -264, max(220, leftW - 58), "debuffStripeAlpha", 0.60)
 
     GroupColorAt(ctx, highlights, "Target Highlight Color", 16, -54, "target", 1, 1, 1)
     GroupColorAt(ctx, highlights, "Focus Highlight Color", 16, -92, "hlFocusColor", 0.50, 0.50, 1.00)
@@ -549,15 +563,6 @@ local function BuildGroupFrameColors(ctx, b)
             end
         end,
     })
-    return {
-        mode = mode,
-        healthColor = healthColor,
-        hpAlpha = hpAlpha,
-        keepText = keepText,
-        deadToggle = deadToggle,
-        stripeColor = stripeColor,
-        stripeAlpha = stripeAlpha,
-    }
 end
 local function NPCColorAt(ctx, section, row, x, y, apply)
     return ColorValueAt(ctx, section, row.label, x, y,
@@ -566,7 +571,13 @@ local function NPCColorAt(ctx, section, row, x, y, apply)
             if not ApiCall("SetNPCColor", row.key, r, g, c) then
                 if type(apply) == "function" then apply() else ApplyColors() end
             end
-        end)
+        end,
+        nil, nil, Meta("npc.color." .. tostring(row.key)))
+end
+local function ResetNPCColors(apiName)
+    if ApiCall(apiName) then return end
+    DB().npcColors = nil
+    ApplyUnitframeColorWithReload()
 end
 local COLOR_HELPERS = {
     ApiColorAt = ApiColorAt,
@@ -736,14 +747,16 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
         function(v)
             M.SetMenuStateValue("colorsPowerToken", v or "MANA")
             if powerColor then powerColor:SetRGB(GetPowerOverrideRGB(M.colorsPowerToken)) end
-        end)
+        end,
+        Meta("power.editor.resource_selector", "ephemeral"))
     powerColor = ColorValueAt(ctx, power, "Color", 360, -10,
         function() return GetPowerOverrideRGB(M.colorsPowerToken or "MANA") end,
-        function(r, g, c) SetPowerOverrideRGB(M.colorsPowerToken or "MANA", r, g, c) end)
+        function(r, g, c) SetPowerOverrideRGB(M.colorsPowerToken or "MANA", r, g, c) end,
+        nil, nil, Meta("power.editor.color"))
     CH.ButtonAt(power, "Reset", 360, -54, 90, function()
         ResetPowerOverride(M.colorsPowerToken or "MANA")
         if powerColor then powerColor:SetRGB(GetPowerOverrideRGB(M.colorsPowerToken or "MANA")) end
-    end)
+    end, "power.editor.reset")
     local classPower = b:CollapsibleSection("colors_class_power", "Class Power Colors", 430, false)
     M.colorsCPToken = M.colorsCPToken or "COMBO_POINTS"
     local cpColor, cpBg
@@ -753,21 +766,24 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
             M.SetMenuStateValue("colorsCPToken", v or "COMBO_POINTS")
             if cpColor then cpColor:SetRGB(GetClassPowerRGB(M.colorsCPToken)) end
             if cpBg then cpBg:SetRGB(GetClassPowerBgRGB(M.colorsCPToken)) end
-        end)
+        end,
+        Meta("class_power.editor.resource_selector", "ephemeral"))
     cpColor = ColorValueAt(ctx, classPower, "Color", 360, -10,
         function() return GetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS") end,
-        function(r, g, c) SetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", r, g, c) end)
+        function(r, g, c) SetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", r, g, c) end,
+        nil, nil, Meta("class_power.editor.foreground_color"))
     cpBg = ColorValueAt(ctx, classPower, "Background", 360, -46,
         function() return GetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS") end,
-        function(r, g, c) SetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS", r, g, c) end)
+        function(r, g, c) SetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS", r, g, c) end,
+        nil, nil, Meta("class_power.editor.background_color"))
     CH.ButtonAt(classPower, "Reset color", 360, -86, 110, function()
         ResetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", false)
         if cpColor then cpColor:SetRGB(GetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS")) end
-    end)
+    end, "class_power.editor.reset_foreground")
     CH.ButtonAt(classPower, "Reset bg", 480, -86, 110, function()
         ResetClassPowerRGB(M.colorsCPToken or "COMBO_POINTS", true)
         if cpBg then cpBg:SetRGB(GetClassPowerBgRGB(M.colorsCPToken or "COMBO_POINTS")) end
-    end)
+    end, "class_power.editor.reset_background")
     ValueDropdownAt(ctx, classPower, "Combo point slot mode", 12, -92, COLOR_DATA.CP_SLOT_MODES, 230,
         function()
             local mode = Bars().classPowerComboPointColorMode or "default"
@@ -777,7 +793,8 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
         function(v)
             Bars().classPowerComboPointColorMode = v or "default"
             ApplyClassPowerColors()
-        end)
+        end,
+        Meta("class_power.combo_slots.mode"))
     for i = 1, #COLOR_DATA.CP_SLOT_TOKENS do
         local token = COLOR_DATA.CP_SLOT_TOKENS[i]
         ColorValueAt(ctx, classPower, tostring(i), 12 + ((i - 1) % 4) * 160, -154 - floor((i - 1) / 4) * 38,
@@ -785,13 +802,13 @@ local function BuildPowerAndClassPowerColors(ctx, b, CH)
             function(r, g, c)
                 Bars().classPowerComboPointColorMode = "custom"
                 SetClassPowerRGB(token, r, g, c)
-            end, 24, 44)
+            end, 24, 44, Meta("class_power.combo_slots.slot." .. tostring(token)))
     end
     CH.ButtonAt(classPower, "Reset slots", 12, -246, 120, function()
         local g = EnsureClassPowerOverrides()
         for i = 1, #COLOR_DATA.CP_SLOT_TOKENS do g.classPowerColorOverrides[COLOR_DATA.CP_SLOT_TOKENS[i]] = nil end
         ApplyClassPowerColors()
-    end)
+    end, "class_power.combo_slots.reset")
 end
 local function BuildAuraAndPortraitColors(ctx, b, CH)
     local auras = b:CollapsibleSection("colors_auras", "Auras", 526, false)
@@ -835,14 +852,11 @@ local function BuildAuraAndPortraitColors(ctx, b, CH)
             G().aurasCooldownTextUseBuckets = v and true or false
             RefreshColorSamples()
             ApplyAuraColors()
-        end)
+        end,
+        Meta("auras.cooldown.color_by_time"))
     local function AuraColorAt(parent, label, y, key, r, g, bcol, after)
-        return ColorValueAt(ctx, parent, label, 16, y,
-            function() return TableRGB(G(), key, r, g, bcol) end,
-            function(nr, ng, nb)
-                SetTableRGB(G(), key, nr, ng, nb)
-                if type(after) == "function" then after() else ApplyAuraColors() end
-            end)
+        return CH.TableColorAt(ctx, parent, label, 16, y, G, key, r, g, bcol,
+            after or ApplyAuraColors, nil, nil, Meta("auras.color." .. tostring(key)))
     end
     local function RefreshTextColors()
         RefreshColorSamples()
@@ -854,39 +868,42 @@ local function BuildAuraAndPortraitColors(ctx, b, CH)
     AuraColorAt(markers, "Stack Count", -62, "aurasStackCountColor", 1, 1, 1, ApplyAuraColors)
     AuraColorAt(markers, "Own Buff", -102, "aurasOwnBuffHighlightColor", 1, 0.85, 0.20, ApplyAuraColors)
     AuraColorAt(markers, "Own Debuff", -142, "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30, ApplyAuraColors)
-    ColorValueAt(ctx, markers, "Pandemic window color", 16, -180, GetPandemicRGB, SetPandemicRGB)
+    ColorValueAt(ctx, markers, "Pandemic window color", 16, -180, GetPandemicRGB, SetPandemicRGB,
+        nil, nil, Meta("auras.pandemic_window.color"))
     ValueSliderAt(ctx, markers, "Safe seconds", 16, -232, 0, 600, 1, colW - 32,
         function() return ReadAuraNumber("aurasCooldownTextSafeSeconds", 60, 0, 600) end,
-        function(v) WriteAuraNumber("aurasCooldownTextSafeSeconds", v, 0, 600) end)
+        function(v) WriteAuraNumber("aurasCooldownTextSafeSeconds", v, 0, 600) end,
+        Meta("auras.cooldown.safe_seconds"))
     ValueSliderAt(ctx, markers, "Warning <= sec", 16, -292, 0, 60, 1, colW - 32,
         function() return ReadAuraNumber("aurasCooldownTextWarningSeconds", 15, 0, 60) end,
-        function(v) WriteAuraNumber("aurasCooldownTextWarningSeconds", v, 0, 60) end)
+        function(v) WriteAuraNumber("aurasCooldownTextWarningSeconds", v, 0, 60) end,
+        Meta("auras.cooldown.warning_seconds"))
     ValueSliderAt(ctx, markers, "Urgent <= sec", 16, -352, 0, 30, 1, colW - 32,
         function() return ReadAuraNumber("aurasCooldownTextUrgentSeconds", 5, 0, 30) end,
-        function(v) WriteAuraNumber("aurasCooldownTextUrgentSeconds", v, 0, 30) end)
+        function(v) WriteAuraNumber("aurasCooldownTextUrgentSeconds", v, 0, 30) end,
+        Meta("auras.cooldown.urgent_seconds"))
     W.Text(auras, "Timer and marker colors are shared by unit and group aura previews.", 24, -440, w - 48, T.colors.muted)
-    CH.ButtonAt(auras, "Reset aura colors", 24, -476, 150, ResetAuraColorSettings)
+    CH.ButtonAt(auras, "Reset aura colors", 24, -476, 150, ResetAuraColorSettings, "auras.reset")
     M.TrackRefresh(ctx, RefreshColorSamples)
 
     local portrait = b:CollapsibleSection("colors_portrait", "Portrait Colors", 180, false)
     ColorValueAt(ctx, portrait, "Border custom color", 12, -10,
         function() return GeneralRGB("portraitBorderColor", 1, 1, 1) end,
-        function(r, g, c) SetAllPortraitRGB("portraitBorderColor", r, g, c) end)
+        function(r, g, c) SetAllPortraitRGB("portraitBorderColor", r, g, c) end,
+        nil, nil, Meta("portrait.border_color"))
     ColorValueAt(ctx, portrait, "Background color", 12, -46,
         function() return GeneralRGB("portraitBgColor", 0.05, 0.05, 0.05) end,
-        function(r, g, c) SetAllPortraitRGB("portraitBgColor", r, g, c) end)
+        function(r, g, c) SetAllPortraitRGB("portraitBgColor", r, g, c) end,
+        nil, nil, Meta("portrait.background_color"))
     CH.ButtonAt(portrait, "Reset portrait colors", 12, -118, 170, function()
         SetAllPortraitRGB("portraitBorderColor", 1, 1, 1)
         SetAllPortraitRGB("portraitBgColor", 0.05, 0.05, 0.05)
         G().portraitBorderColorA = 1
         G().portraitBgColorA = 0.85
         ApplyPortraitColors("PORTRAIT_COLOR_RESET")
-    end)
+    end, "portrait.reset")
 end
-local function BuildColors(ctx)
-    local CH = COLOR_HELPERS
-    local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
+local function BuildFontAndClassColors(ctx, b, CH)
     local font = b:CollapsibleSection("colors_font", "Global Font Color", 100, false)
     CH.ApiColorAt(ctx, font, "Global font color", 12, -10, "GetGlobalFontColor", "SetGlobalFontColor", 1, 1, 1)
     CH.ButtonAt(font, "Use font palette", 12, -50, 150, function()
@@ -895,7 +912,7 @@ local function BuildColors(ctx)
             ClearRGB(G(), "fontColorCustom")
             ApplyColors()
         end
-    end)
+    end, "font.use_palette")
     local tokens = GetClassTokens()
     local classRows = max(1, floor((#tokens + 3) / 4))
     local classResetY = -36 - (classRows * 36)
@@ -913,14 +930,17 @@ local function BuildColors(ctx)
             function() return ClassColorRGB(token) end,
             function(r, g, c)
                 if not ApiCall("SetClassColor", token, r, g, c) then ApplyUnitframeColorWithReload() end
-            end, classLabelW, 44)
+            end, classLabelW, 44, Meta("class_bar.token." .. tostring(token)))
     end
     CH.ButtonAt(classColors, "Reset all class colors", 12, classResetY, 190, function()
         if not ApiCall("ResetAllClassColors") then
             DB().classColors = nil
             ApplyUnitframeColorWithReload()
         end
-    end)
+    end, "class_bar.reset_all")
+end
+
+local function BuildBackgroundAndAppearance(ctx, b, CH)
     local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 226, false)
     LabelAt(background, "Tint applied to the bar background in *all* bar modes. Dark Mode uses this tint too.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
     ApiOrGeneralColorAt(ctx, background, "Bar background tint", 12, -46, "GetClassBarBgColor", "SetClassBarBgColor", "classBarBg", 0, 0, 0, ApplyUnitframeColorWithReload)
@@ -932,7 +952,8 @@ local function BuildColors(ctx)
                 if v then G().barBgClassColor = false end
                 ApplyUnitframeColorWithReload()
             end
-        end)
+        end,
+        Meta("background.follow_health_color"))
     ValueToggleAt(ctx, background, "Health background follows class color", 12, -114,
         function() return ApiValue("GetBarBgClassColor", function() return G().barBgClassColor == true end) end,
         function(v)
@@ -941,16 +962,18 @@ local function BuildColors(ctx)
                 if v then G().barBgMatchHPColor = false end
                 ApplyUnitframeColorWithReload()
             end
-        end)
+        end,
+        Meta("background.follow_class_color"))
     ValueToggleAt(ctx, background, "Custom color in Dark Mode", 12, -142,
         function() return G().darkBgCustomColor == true end,
-        function(v) G().darkBgCustomColor = v and true or false; ApplyUnitframeColorWithReload() end)
+        function(v) G().darkBgCustomColor = v and true or false; ApplyUnitframeColorWithReload() end,
+        Meta("background.dark_mode_custom_color"))
     CH.ButtonAt(background, "Reset to black", 12, -184, 140, function()
         if not ApiCall("ResetClassBarBgColor") then
             ClearRGB(G(), "classBarBg")
             ApplyUnitframeColorWithReload()
         end
-    end)
+    end, "background.reset_to_black")
     local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 350, true)
     local refreshBarModeControls
     local function CurrentBarMode()
@@ -970,7 +993,8 @@ local function BuildColors(ctx)
             g.useClassColors = (mode == "class")
             ApplyUnitframeColorWithReload()
             if refreshBarModeControls then refreshBarModeControls() end
-        end)
+        end,
+        Meta("appearance.bar_mode"))
     local unifiedColor = CH.GeneralColorAt(ctx, appearance, "Unified bar color", 12, -70, "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload)
     local darkColor = ValueSliderAt(ctx, appearance, "Dark mode bar color", 12, -112, 0, 100, 1, 300,
         function()
@@ -983,12 +1007,13 @@ local function BuildColors(ctx)
             G().darkBarGray = (tonumber(v) or 0) / 100
             G().darkBarTone = nil
             ApplyUnitframeColorWithReload()
-        end)
-    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -70, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload)
+        end,
+        Meta("appearance.dark_mode_tone"))
+    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -70, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
     local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -118, 230, G, "enableHealthGradient", true, function()
         ApplyUnitframeColorWithReload()
         if refreshBarModeControls then refreshBarModeControls() end
-    end)
+    end, Meta("appearance.gradient.enabled"))
     local gradientStopsLabel = LabelAt(appearance, "Health gradient stops", 12, -166, 220, "GameFontNormalSmall", T.colors.muted)
     local gradientLow = CH.GeneralColorAt(ctx, appearance, "Low", 12, -196, "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload, 58, 34)
     local gradientMid = CH.GeneralColorAt(ctx, appearance, "Mid", 170, -196, "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload, 58, 34)
@@ -999,7 +1024,7 @@ local function BuildColors(ctx)
         g.healthGradientMidR, g.healthGradientMidG, g.healthGradientMidB = 1, 1, 0
         g.healthGradientHighR, g.healthGradientHighG, g.healthGradientHighB = 0, 1, 0
         ApplyUnitframeColorWithReload()
-    end)
+    end, "appearance.gradient.reset")
     local gradientEditControls = { gradientStrength, gradientStopsLabel, gradientLow, gradientMid, gradientHigh, gradientReset }
     refreshBarModeControls = function()
         local mode = CurrentBarMode()
@@ -1012,18 +1037,17 @@ local function BuildColors(ctx)
     end
     M.TrackRefresh(ctx, refreshBarModeControls)
     refreshBarModeControls()
+end
+
+local function BuildUnitAndNPCColors(ctx, b, CH)
     local unit = b:CollapsibleSection("colors_unit", "Unitframe Colors", 230, false)
     for i = 1, #COLOR_DATA.NPC_ROWS do
         local row = COLOR_DATA.NPC_ROWS[i]
         NPCColorAt(ctx, unit, row, 12, -10 - (i - 1) * 36, ApplyUnitframeColorWithReload)
     end
     CH.ApiColorAt(ctx, unit, "Pet Frame Color", 360, -10, "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0, ApplyUnitframeColorWithReload)
-    CH.ButtonAt(unit, "Reset Unitframe Colors", 12, -190, 190, function()
-        if not ApiCall("ResetAllNPCColors") then
-            DB().npcColors = nil
-            ApplyUnitframeColorWithReload()
-        end
-    end)
+    CH.ButtonAt(unit, "Reset Unitframe Colors", 12, -190, 190,
+        function() ResetNPCColors("ResetAllNPCColors") end, "unitframe.reset")
     local npcType = b:CollapsibleSection("colors_npc_type", "NPC Type Colors", 330, false)
     local npcControls = {}
     local npcMaster
@@ -1042,7 +1066,8 @@ local function BuildColors(ctx)
                     G()[key] = v and true or false
                     ApplyUnitframeColorWithReload()
                 end
-            end))
+            end,
+            Meta("npc_type.option." .. tostring(key))))
     end
     AddNPCTypeToggle("Color HP bar (Class Color mode only)", 32, -38, "GetNPCTypeColorBar", "SetNPCTypeColorBar", "npcTypeColorBar")
     AddNPCTypeToggle("Color name text", 32, -62, "GetNPCTypeColorText", "SetNPCTypeColorText", "npcTypeColorText")
@@ -1056,7 +1081,8 @@ local function BuildColors(ctx)
                 ApplyUnitframeColorWithReload()
             end
             RefreshNPCTypeControls(v and true or false)
-        end)
+        end,
+        Meta("npc_type.enabled"))
     local units = GetNPCTypeUnits()
     LabelAt(npcType, "Apply to:", 12, -94, 120, "GameFontNormalSmall", T.colors.muted)
     for i = 1, #units do
@@ -1071,13 +1097,12 @@ local function BuildColors(ctx)
         local line = floor((i - 1) / 2)
         AddNPCTypeControl(NPCColorAt(ctx, npcType, row, 12 + col * 330, -174 - line * 38, ApplyUnitframeColorWithReload))
     end
-    CH.ButtonAt(npcType, "Reset NPC Type Colors", 12, -292, 190, function()
-        if not ApiCall("ResetNPCTypeColors") then
-            DB().npcColors = nil
-            ApplyUnitframeColorWithReload()
-        end
-    end)
+    CH.ButtonAt(npcType, "Reset NPC Type Colors", 12, -292, 190,
+        function() ResetNPCColors("ResetNPCTypeColors") end, "npc_type.reset")
     M.TrackRefresh(ctx, RefreshNPCTypeControls)
+end
+
+local function BuildBarAndGroupColors(ctx, b, CH)
     local barColors = b:CollapsibleSection("colors_bar_colors", "Bar Colors", 240, false)
     local barLeftX = 30
     local barRightX = max(430, floor((barColors._msuf2Width or ctx.width or 720) * 0.50))
@@ -1092,7 +1117,8 @@ local function BuildColors(ctx)
     local powerBg = barColorControls.powerBg
     ColorValueAt(ctx, barColors, "Purge Border Color", barRightX, -74,
         function() return GeneralRGBAlias("hlPurgeColor", "purgeBorderColor", 1.00, 0.85, 0.00) end,
-        function(r, g, c) SetGeneralRGBAlias("hlPurgeColor", "purgeBorderColor", r, g, c) end)
+        function(r, g, c) SetGeneralRGBAlias("hlPurgeColor", "purgeBorderColor", r, g, c) end,
+        nil, nil, Meta("bar.purge_border_color"))
     ColorValueAt(ctx, barColors, "Bar Outline Color", barRightX, -110,
         function() return GeneralRGB("barOutlineColor", 0, 0, 0) end,
         function(r, g, c)
@@ -1101,7 +1127,8 @@ local function BuildColors(ctx)
             general.barOutlineColorA = 1
             general.barOutlineColorMode = nil
             ApplyGlobalOutlineColor()
-        end)
+        end,
+        nil, nil, Meta("bar.outline_color"))
     local powerBgMatch = ValueToggleAt(ctx, barColors, "Power background matches HP", barRightX, -148,
         function() return ApiValue("GetPowerBarBackgroundMatchHP", function() return G().powerBarBgMatchBarColor == true end) end,
         function(v)
@@ -1110,7 +1137,8 @@ local function BuildColors(ctx)
                 ApplyColors()
             end
             SetControlEnabled(powerBg, not (v and true or false))
-        end)
+        end,
+        Meta("bar.power_background_match_health"))
     CH.ButtonAt(barColors, "Reset Bar Colors", barLeftX, -194, 160, function()
         local g = G()
         ClearRGBAs(g, "absorbBarColor", "healAbsorbBarColor", "powerBarBgColor", "aggroBorder", "purgeBorderColor", "barOutlineColor")
@@ -1118,11 +1146,14 @@ local function BuildColors(ctx)
         ClearRGBs(g, "hlAggroColor", "hlPurgeColor", "aggroBorderColor")
         g.powerBarBgMatchBarColor = nil
         ApplyGlobalOutlineColor()
-    end)
+    end, "bar.reset")
     M.BindGateGroup(ctx, nil, {
         { controls = powerBg, on = function() return not (powerBgMatch:GetChecked() and true or false) end },
     })
     BuildGroupFrameColors(ctx, b)
+end
+
+local function BuildCastbarColors(ctx, b, CH)
     local castbar = b:CollapsibleSection("colors_castbar", "Castbar Colors", 544, false)
     local castW = castbar._msuf2Width or ctx.width or 720
     CH.ApiColorSpecs(ctx, castbar, {
@@ -1150,7 +1181,7 @@ local function BuildColors(ctx)
         function(r, g, c)
             if not ApiSetRGB("SetPlayerCastbarOverrideColor", r, g, c) then ApplyCastbarColors() end
         end,
-        overrideColorLabelW)
+        overrideColorLabelW, nil, Meta("castbar.player_override.custom_color"))
     local overrideEnable
     local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", overrideModeX, -154, ValueTextPairs "CLASS=Class color|CUSTOM=Custom color", overrideModeW,
         function() return ApiValue("GetPlayerCastbarOverrideMode", function() return G().playerCastbarOverrideMode or "CLASS" end) end,
@@ -1160,7 +1191,8 @@ local function BuildColors(ctx)
                 ApplyCastbarColors()
             end
             SetControlEnabled(overrideColor, (overrideEnable and overrideEnable:GetChecked() and true or false) and v == "CUSTOM")
-        end)
+        end,
+        Meta("castbar.player_override.mode"))
     local function RefreshCastbarOverrideControls(enabled)
         if enabled == nil then enabled = overrideEnable and overrideEnable:GetChecked() and true or false end
         SetControlEnabled(overrideMode, enabled)
@@ -1174,7 +1206,8 @@ local function BuildColors(ctx)
                 ApplyCastbarColors()
             end
             RefreshCastbarOverrideControls(v and true or false)
-        end)
+        end,
+        Meta("castbar.player_override.enabled"))
     LabelAt(castbar, "Interrupt Ready Indicator", 12, -244, 260, "GameFontNormal", T.colors.text)
     CH.TableColorSpecs(ctx, castbar, G, {
         { "Ready color (kick available)", 12, -274, "kickReadyColor", 0, 1, 0 },
@@ -1193,14 +1226,18 @@ local function BuildColors(ctx)
         ClearRGB(g, "playerCastbarOverride")
         g.kickReadyColor, g.kickNotReadyColor = nil, nil
         if not apiOwnsRefresh then ApplyCastbarColors() end
-    end)
+    end, "castbar.reset")
     M.TrackRefresh(ctx, RefreshCastbarOverrideControls)
+end
+
+local function BuildHighlightAndGameplayColors(ctx, b, CH)
     local highlight = b:CollapsibleSection("colors_highlight", "Mouseover Highlight", 210, false)
-    local highlightColor = ColorValueAt(ctx, highlight, "Mouseover highlight color", 12, -48, HighlightRGB, SetHighlightRGB)
-    local highlightEnabled = SwitchAt(ctx, highlight, "Mouseover Highlight", 12, -10, 260, G, "highlightEnabled", true, function()
+    local highlightColor = ColorValueAt(ctx, highlight, "Mouseover highlight color", 12, -48, HighlightRGB, SetHighlightRGB,
+        nil, nil, Meta("highlight.mouseover.color"))
+    SwitchAt(ctx, highlight, "Mouseover Highlight", 12, -10, 260, G, "highlightEnabled", true, function()
         SetHighlightRGB(HighlightRGB())
         SetControlEnabled(highlightColor, G().highlightEnabled ~= false)
-    end)
+    end, Meta("highlight.mouseover.enabled"))
     CH.TableColorAt(ctx, highlight, "Boss target highlight color", 12, -104, G, "bossTargetHighlightColor", 1, 0.82, 0, ApplyBossTargetHighlightColor)
     M.BindGateGroup(ctx, nil, {
         { controls = highlightColor, on = function() return G().highlightEnabled ~= false end },
@@ -1216,7 +1253,8 @@ local function BuildColors(ctx)
             SetTableRGB(gp, "combatStateEnterColor", r, g, c)
             if gp.combatStateColorSync then SetTableRGB(gp, "combatStateLeaveColor", r, g, c) end
             ApplyGameplayColors()
-        end)
+        end,
+        nil, nil, Meta("gameplay.combat_enter_color"))
     local gameplayColors = CH.TableColorSpecs(ctx, gameplay, Gameplay, {
         { "Combat Leave text color", 12, -82, "combatStateLeaveColor", 0.7, 0.7, 0.7 },
         { "Crosshair in-range color", 12, -142, "crosshairInRangeColor", 0, 1, 0 },
@@ -1231,7 +1269,8 @@ local function BuildColors(ctx)
         end
         ApplyGameplayColors()
         SetControlEnabled(leaveColor, not (gp.combatStateColorSync == true))
-    end)
+    end,
+    Meta("gameplay.combat_state_color_sync"))
     MoveWidget(sync, gameplay, 360, -82)
     CH.ButtonAt(gameplay, "Reset gameplay colors", 12, -254, 170, function()
         local gp = Gameplay()
@@ -1241,10 +1280,21 @@ local function BuildColors(ctx)
         gp.crosshairInRangeColor = { 0, 1, 0 }
         gp.crosshairOutRangeColor = { 1, 0, 0 }
         ApplyGameplayColors()
-    end)
+    end, "gameplay.reset")
     M.BindGateGroup(ctx, nil, {
         { controls = leaveColor, on = function() return not (Gameplay().combatStateColorSync == true) end },
     })
+end
+
+local function BuildColors(ctx)
+    local b, CH = W.PageBuilder(ctx), COLOR_HELPERS
+    b:GlobalStyleHeader("Colors", "Frame, group-frame, bar, aura, castbar and resource colors.", 72)
+    BuildFontAndClassColors(ctx, b, CH)
+    BuildBackgroundAndAppearance(ctx, b, CH)
+    BuildUnitAndNPCColors(ctx, b, CH)
+    BuildBarAndGroupColors(ctx, b, CH)
+    BuildCastbarColors(ctx, b, CH)
+    BuildHighlightAndGameplayColors(ctx, b, CH)
     BuildPowerAndClassPowerColors(ctx, b, CH)
     BuildAuraAndPortraitColors(ctx, b, CH)
     ctx:SetContentHeight(math.abs(b.y) + 42)

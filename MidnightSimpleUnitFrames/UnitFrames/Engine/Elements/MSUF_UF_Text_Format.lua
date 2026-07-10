@@ -72,10 +72,20 @@ for i = 0, 100 do
   INT_TEXT_0_100[i] = text
   PERCENT_TEXT_0_100[i] = text .. "%"
 end
-for i = 0, 1000 do
-  local text = format("%.1f", i / 10)
-  DECIMAL_TEXT_0_1000[i] = text
-  DECIMAL_PERCENT_TEXT_0_1000[i] = text .. "%"
+
+-- Decimal percentages are optional. Building 2,002 strings at login penalizes
+-- every user even when no text slot enables decimal percentages. Cache each
+-- representation on first use instead; the hot path still becomes a table read
+-- after that value has appeared once.
+local function DecimalPercentText(key, hideSymbol)
+  local cache = hideSymbol and DECIMAL_TEXT_0_1000 or DECIMAL_PERCENT_TEXT_0_1000
+  local text = cache[key]
+  if text == nil then
+    text = format("%.1f", key / 10)
+    if not hideSymbol then text = text .. "%" end
+    cache[key] = text
+  end
+  return text
 end
 
 local function SmallIntegerText(value)
@@ -232,7 +242,7 @@ local function FormatPercentValue(value, hideSymbol, canSecret, decimals)
   if decimals >= 1 and type(value) == "number" then
     local key = floor(value * 10 + 0.5)
     if key >= 0 and key <= 1000 then
-      return hideSymbol and DECIMAL_TEXT_0_1000[key] or DECIMAL_PERCENT_TEXT_0_1000[key]
+      return DecimalPercentText(key, hideSymbol)
     end
     local text = format("%.1f", key / 10)
     return hideSymbol and text or (text .. "%")
@@ -331,7 +341,7 @@ local function SlotPercentPlain(slot, pct)
   if NormalizePercentDecimals(slot.percentDecimals) >= 1 and type(pct) == "number" then
     local key = floor(pct * 10 + 0.5)
     if key >= 0 and key <= 1000 then
-      return slot.hidePercentSymbol and DECIMAL_TEXT_0_1000[key] or DECIMAL_PERCENT_TEXT_0_1000[key]
+      return DecimalPercentText(key, slot.hidePercentSymbol)
     end
     local text = format("%.1f", key / 10)
     return slot.hidePercentSymbol and text or (text .. "%")

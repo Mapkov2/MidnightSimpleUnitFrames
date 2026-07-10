@@ -48,7 +48,6 @@ local function BoxOwnerInactive(box)
     if box and box._msuf2PinnedFloating == true then return false end
     local wrapper = box and (box._msuf2PinnedPreviewWrapper or box._msufGFNativePreviewWrapper)
     if wrapper and wrapper.IsShown and not wrapper:IsShown() then return true end
-    if wrapper and wrapper.IsVisible and not wrapper:IsVisible() then return true end
     return false
 end
 local function RequestRefreshForBox(box, reason)
@@ -57,7 +56,6 @@ local function RequestRefreshForBox(box, reason)
         if UninstallPreviewHooks and not Preview.active then UninstallPreviewHooks() end
         return
     end
-    if box.IsVisible and not box:IsVisible() then return end
     if BoxOwnerInactive(box) then
         CancelQueuedRefresh(box)
         if box.Hide then box:Hide() end
@@ -119,7 +117,10 @@ local function RequestRefreshForBox(box, reason)
         local currentHostShown = box._msuf2UnitPageHostShown
         if not box._msuf2PinnedFloating and type(currentHostShown) == "function" and not currentHostShown() then return end
         local queuedRefresh = Preview.Refresh
-        if type(queuedRefresh) == "function" and box:IsShown() and (not box.IsVisible or box:IsVisible()) then
+        -- IsVisible trails Show/parent visibility changes by a frame. Ownership
+        -- above is based on stable shown/page state, so compose the preview as
+        -- soon as its logical owner is active and let it become visible ready.
+        if type(queuedRefresh) == "function" and box:IsShown() then
             Preview.active = box
             queuedRefresh(box, refreshReason)
         end

@@ -1105,13 +1105,6 @@ local function NeonColor(kind, opts)
     if kind == "warning" then return T.colors.accent2 or { 0.965, 0.760, 0.150, 1 } end
     return T.colors.coreGlow or T.colors.accent or { 0.090, 0.360, 0.540, 1 }
 end
-function T.ClearNeonEdge(frame)
-    if not frame then return frame end
-    frame._msuf2NeonEdge = nil
-    frame._msuf2NeonColor = nil
-    ApplyPanelAssetDepth(frame, frame._msuf2GlassVariant or "card")
-    return frame
-end
 function T.ApplyNeonEdge(frame, kind, opts)
     if not (frame and frame.CreateTexture) then return frame end
     opts = opts or {}
@@ -1719,53 +1712,6 @@ function T.Panel(parent, name, bg, border)
     T.ApplyBackdrop(f, bg or T.colors.panel, border or T.colors.borderSoft)
     if T.ApplyGradient then T.ApplyGradient(f, DynamicGradientFromColor(bg or T.colors.panel), { key = "_msuf2MaterialGradient" }) end
     return f
-end
-function T.ApplyBottomRoundCap(frame, opts)
-    if not (frame and frame.CreateTexture and T.CreateSuperellipseLayers) then return frame end
-    opts = opts or {}
-    local cap = frame._msuf2BottomRoundCap
-    if opts.shown == false then
-        if cap and cap.Hide then cap:Hide() end
-        return frame
-    end
-    if not cap then
-        cap = CreateFrame("Frame", nil, frame)
-        cap:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, -1)
-        cap:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -1)
-        cap:SetHeight(opts.height or 18)
-        if cap.EnableMouse then cap:EnableMouse(false) end
-        frame._msuf2BottomRoundCap = cap
-        local leftCover = cap:CreateTexture(nil, "BORDER", nil, 4)
-        leftCover:SetPoint("BOTTOMLEFT", cap, "BOTTOMLEFT", 0, 0)
-        leftCover:SetSize(18, 18)
-        cap._msuf2LeftCover = leftCover
-        local rightCover = cap:CreateTexture(nil, "BORDER", nil, 4)
-        rightCover:SetPoint("BOTTOMRIGHT", cap, "BOTTOMRIGHT", 0, 0)
-        rightCover:SetSize(18, 18)
-        cap._msuf2RightCover = rightCover
-        local fill, edge = T.CreateSuperellipseLayers(cap, "_msuf2BottomRound", 1, "ARTWORK", "OVERLAY")
-        cap._msuf2Fill = fill
-        cap._msuf2Edge = edge
-    elseif opts.height and cap.SetHeight then
-        cap:SetHeight(opts.height)
-    end
-    if cap.Show then cap:Show() end
-    if cap.SetFrameLevel and frame.GetFrameLevel then cap:SetFrameLevel((frame:GetFrameLevel() or 0) + 6) end
-    local shadow = T.colors.coreShadow or { 0.006, 0.016, 0.032 }
-    local cover = opts.cover or { shadow[1], shadow[2], shadow[3], 0.82 }
-    if cap._msuf2LeftCover then cap._msuf2LeftCover:SetColorTexture(cover[1], cover[2], cover[3], cover[4] or 1) end
-    if cap._msuf2RightCover then cap._msuf2RightCover:SetColorTexture(cover[1], cover[2], cover[3], cover[4] or 1) end
-    local fillColor = opts.fill or T.colors.panel2 or { 0.014, 0.038, 0.072, 0.78 }
-    local edgeColor = opts.border or T.colors.cardBorder or T.colors.borderSoft or { 0.320, 0.460, 0.590, 0.40 }
-    if cap._msuf2Fill then
-        if T.SetFillGradient then
-            T.SetFillGradient(cap._msuf2Fill, fillColor, 0.08, -0.18)
-        else
-            cap._msuf2Fill:SetVertexColor(fillColor[1], fillColor[2], fillColor[3], fillColor[4] or 1)
-        end
-    end
-    if cap._msuf2Edge then cap._msuf2Edge:SetVertexColor(edgeColor[1], edgeColor[2], edgeColor[3], edgeColor[4] or 1) end
-    return frame
 end
 local EDIT_BOX_EDGE_SPECS = { { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 }, { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 }, { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 } }
 local EDIT_BOX_NATIVE_SUFFIXES = WL "Left Right Middle Mid"

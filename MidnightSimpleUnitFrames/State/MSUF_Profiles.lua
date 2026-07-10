@@ -68,10 +68,10 @@ end
 --- Small runtime bridge helpers. Profile code owns the DB mutation, then asks
 --- each subsystem to rebuild whatever cached view it keeps. These wrappers keep
 --- the rest of the file readable and make missing optional modules harmless.
-local function MSUF_ProfileIO_RunEnsureDB(force)
+local function MSUF_ProfileIO_RunEnsureDB(force, allowPersistedFastPath, temporaryProfile)
     local ensureDB = _G.MSUF_EnsureDB
     if type(ensureDB) == "function" then
-        ensureDB(force == true)
+        ensureDB(force == true, allowPersistedFastPath == true, temporaryProfile == true)
         return true
     end
     return false
@@ -726,7 +726,11 @@ function MSUF_InitProfiles()
     --- Without this, CreateSimpleUnitFrame sees conf=nil/{} for pet/targettarget
     --- when the profile was saved from an older version missing those keys,
     --- and UpdateSimpleUnitFrame defaults showPowerText=true since conf.showPower is nil.
-    MSUF_ProfileIO_RunEnsureDB(true)
+    --- The Defaults module persists its completed repair revision on the
+    --- profile. A non-forced ensure still repairs a new/legacy profile, while
+    --- avoiding a second complete pass when this exact profile was already
+    --- repaired earlier in the startup chain.
+    MSUF_ProfileIO_RunEnsureDB(false, true)
  end
 function MSUF_CreateProfile(name)
     if not name or name == "" then  return end
@@ -737,7 +741,10 @@ function MSUF_CreateProfile(name)
     end
     profiles[name] = CopyTable(type(MSUF_DB) == "table" and MSUF_DB or {})
     if MSUF_ProfileIO_TranslateProfileToCurrent then
-        MSUF_ProfileIO_TranslateProfileToCurrent(profiles[name], { source = "profile_create" })
+        MSUF_ProfileIO_TranslateProfileToCurrent(profiles[name], {
+            source = "profile_create",
+            trustNormalizationMarker = true,
+        })
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[name])
     print("|cff00ff00MSUF:|r Created new profile '"..name.."'.")
@@ -752,7 +759,10 @@ function MSUF_SwitchProfile(name)
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
     if MSUF_ProfileIO_TranslateProfileToCurrent then
-        MSUF_ProfileIO_TranslateProfileToCurrent(profiles[name], { source = "profile_switch" })
+        MSUF_ProfileIO_TranslateProfileToCurrent(profiles[name], {
+            source = "profile_switch",
+            trustNormalizationMarker = true,
+        })
     end
     char.activeProfile = name
     MSUF_ActiveProfile = name
@@ -765,7 +775,10 @@ function MSUF_SwitchProfile(name)
             core.InvalidateAllFrameConfigs()
         end
     end
-    MSUF_ProfileIO_RunEnsureDB()
+    --- Stored profiles carry the Defaults completion revision. Imports and
+    --- resets clear/bypass it, so a valid profile can switch without paying a
+    --- second broad default-fill pass while stale/malformed tables still repair.
+    MSUF_ProfileIO_RunEnsureDB(false, true)
     MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_SWITCH", false)
     print("|cff00ff00MSUF:|r Switched to profile '"..name.."'.")
  end
@@ -837,7 +850,10 @@ function MSUF_CopyProfile(sourceName, destName)
     end
     profiles[destName] = CopyTable(src)
     if MSUF_ProfileIO_TranslateProfileToCurrent then
-        MSUF_ProfileIO_TranslateProfileToCurrent(profiles[destName], { source = "profile_copy" })
+        MSUF_ProfileIO_TranslateProfileToCurrent(profiles[destName], {
+            source = "profile_copy",
+            trustNormalizationMarker = true,
+        })
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[destName])
     print("|cff00ff00MSUF:|r Copied '"..sourceName.."' -> '"..destName.."'.")
@@ -1565,6 +1581,11 @@ end
 
 local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA = 600
 local MSUF_PROFILEIO_LEGACY_PROFILE_SCHEMA_56 = 560
+--- This revision describes the normalization performed by
+--- MSUF_ProfileIO_TranslateProfileToCurrent, independently from the broad
+--- default-fill revision owned by MSUF_Defaults.lua. Bump it whenever that
+--- translation pipeline gains a new mandatory repair.
+local MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 1
 local MSUF_PROFILEIO_TEXT_SCOPE_KEYS = {
     "general",
     "player", "target", "targettarget", "tot", "targetoftarget",
@@ -2295,7 +2316,31 @@ end
 MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     if type(profile) ~= "table" then return profile, false end
     context = type(context) == "table" and context or {}
+    --- Only internal callers operating on an already-stored profile may trust
+    --- the persisted marker. Import payloads are deliberately never trusted:
+    --- an external table can contain copied/spoofed internal metadata and must
+    --- still receive the complete validation and legacy-repair pass.
+    if context.trustNormalizationMarker == true
+        and tonumber(profile._msufProfileSchema) == MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
+        and tonumber(profile._msufProfileNormalizationRevision) == MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION
+        and type(profile.general) == "table"
+        and not MSUF_ProfileIO_ProfileNeedsLegacyRepair(profile) then
+        return profile, false
+    end
     local changed = false
+    if context.trustNormalizationMarker ~= true then
+        --- Defaults migrations have their own fast-path markers. Drop them on
+        --- untrusted payloads so a later EnsureDB cannot be tricked into
+        --- skipping validation by metadata copied from an exported profile.
+        if profile._msufDefaultsRevision ~= nil then
+            profile._msufDefaultsRevision = nil
+            changed = true
+        end
+        if profile._msufDispelPriorityMigration ~= nil then
+            profile._msufDispelPriorityMigration = nil
+            changed = true
+        end
+    end
     local schema = MSUF_ProfileIO_DetectProfileSchema(profile, context)
     local legacyProfile = schema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
     MSUF_ProfileIO_NormalizeImportedFontSizes(profile)
@@ -2322,6 +2367,10 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
             profile._msufProfileSchema = MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA
             changed = true
         end
+        if profile._msufProfileNormalizationRevision ~= MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION then
+            profile._msufProfileNormalizationRevision = MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION
+            changed = true
+        end
         if schema < MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
             profile._msufLegacyProfileSchema = nil
         end
@@ -2334,7 +2383,11 @@ MSUF_ProfileIO_TranslateProfilesToCurrent = function(profiles, source)
     local changed = false
     for _, profile in pairs(profiles) do
         if type(profile) == "table" then
-            local _, profileChanged = MSUF_ProfileIO_TranslateProfileToCurrent(profile, { source = source or "profiles", markProfile = true })
+            local _, profileChanged = MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
+                source = source or "profiles",
+                markProfile = true,
+                trustNormalizationMarker = true,
+            })
             changed = profileChanged or changed
             MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
         end
@@ -4708,12 +4761,15 @@ local function MSUF_ProfileIO_MaterializeProfileCopyForExport(profile, profileKe
     MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
         source = "external_export",
         markProfile = true,
+        trustNormalizationMarker = true,
     })
     if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
         _G.MSUF_NormalizePortraitRenderDB(profile)
     end
     local ok, why = MSUF_ProfileIO_WithTemporaryProfileDB(profile, function()
-        MSUF_ProfileIO_RunEnsureDB(true)
+        --- The exported table is a private copy. Let Defaults use its persisted
+        --- revision fast path; missing/stale revisions still run the full pass.
+        MSUF_ProfileIO_RunEnsureDB(false, true, true)
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()
         MSUF_ProfileIO_EnsureGroupFramesDB()
         local auras = MSUF and MSUF.MSUF_Auras3
@@ -4750,7 +4806,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable, isUUFImport
         _G.MSUF_NormalizePortraitRenderDB(newTable)
     end
     if type(_G.MSUF_MigrateDispelPriorityProfile) == "function" then
-        _G.MSUF_MigrateDispelPriorityProfile(newTable)
+        _G.MSUF_MigrateDispelPriorityProfile(newTable, true)
     end
     MSUF_ProfileIO_EnsureProfileSystemInitialized()
     MSUF_ProfileIO_EnsureProfilesTable()

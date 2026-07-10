@@ -33,6 +33,62 @@ local PreviewAuras = MSUF.UFPreviewAuras or {}
 local PreviewRuntime = MSUF.UFPreviewRuntime or {}
 local PreviewZoomPan = MSUF.UFPreviewZoomPan or {}
 local M2 = MSUF.MSUF2 or _G.MSUF2 or {}
+local function RegisterUnitPreviewControl(widget, semanticPath, label, kind, classification, extra, pageKey)
+    local page = M2.UnitPage
+    if page and type(page.RegisterControl) == "function" then
+        page.RegisterControl(widget, { key = pageKey or M2.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification, extra)
+    end
+    return widget
+end
+local UNIT_PREVIEW_ZOOM_CONTROLS = {
+    { "zoomOutButton", "zoom.out", "Zoom out" },
+    { "zoomFitButton", "zoom.fit", "Fit preview" },
+    { "zoomOneButton", "zoom.one_to_one", "Pixel preview" },
+    { "zoomInButton", "zoom.in", "Zoom in" },
+    { "zoomHelpButton", "zoom.help", "Preview controls help" },
+}
+local function UnitPreviewHandleNavigationKey(handle, pageKey)
+    local fields = handle and handle._fields
+    if fields and fields.section == "classPower" then return "classpower" end
+    return pageKey or M2.activeKey
+end
+local function RegisterUnitPreviewRuntimeControls(box, pageKey)
+    if not box then return 0 end
+    local count = 0
+    local function Register(widget, semanticPath, label, kind, classification, extra)
+        if not widget then return end
+        RegisterUnitPreviewControl(widget, semanticPath, label, kind, classification, extra, pageKey)
+        count = count + 1
+    end
+    Register(box.zoomBar, "zoom.surface", "Preview zoom controls", "canvas", "ephemeral")
+    for i = 1, #UNIT_PREVIEW_ZOOM_CONTROLS do
+        local info = UNIT_PREVIEW_ZOOM_CONTROLS[i]
+        Register(box[info[1]], info[2], info[3], "button", "ephemeral")
+    end
+    local controlsHint = box._msuf2PreviewControlsHint
+    Register(controlsHint and controlsHint._close, "hint.dismiss", "Dismiss preview tip", "button", "ephemeral")
+    Register(box.canvas, "canvas", "Unit frame preview canvas", "canvas", "ephemeral")
+    Register(box.animateCombatButton, "combat_animation", "Combat Preview", "button", "ephemeral")
+    for i = 1, #(box.layerButtons or {}) do
+        local button = box.layerButtons[i]
+        Register(button, "layer." .. tostring(button and button.key),
+            tostring((button and button.fs and button.fs.GetText and button.fs:GetText()) or (button and button.key) or "Preview layer") .. " preview layer",
+            "button", "ephemeral")
+    end
+    for i = 1, #(box.handles or {}) do
+        local handle = box.handles[i]
+        local key = handle and handle._key
+        Register(handle, "handle." .. tostring(key), (handle and handle._label) or key, "button", "action")
+        Register(handle and handle._msuf2SettingsGear, "handle." .. tostring(key) .. ".open_settings",
+            "Open " .. tostring((handle and handle._label) or key or "preview element") .. " settings",
+            "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(handle, pageKey) })
+    end
+    Register(box._msuf2PinButton, "pin.toggle", "Pin Preview", "button", "ephemeral")
+    return count
+end
+function Preview.RegisterRuntimeControlsForPage(box, pageKey)
+    return RegisterUnitPreviewRuntimeControls(box, pageKey)
+end
 local Pick = M2.Pick
 local AssignNamedValues = M2.AssignNamedValues
 local F = M2.Fallbacks or {}
@@ -170,12 +226,16 @@ local function RefreshHandleSelectionVisuals(box)
         end
     end
     if selected and guidesOn and PreviewHelpers.EnsurePreviewHandleGear then
-        PreviewHelpers.EnsurePreviewHandleGear(selected, {
+        local gear = PreviewHelpers.EnsurePreviewHandleGear(selected, {
             T = MenuTheme and MenuTheme(),
             Tr = TR,
             shown = true,
             openSettings = function(handle) return OpenPreviewHandleSettings(handle, "gear") end,
         })
+        local previewPageKey = box._msuf2PinnedPreviewPageKey or M2.activeKey
+        RegisterUnitPreviewControl(gear, "handle." .. tostring(selected._key) .. ".open_settings",
+            "Open " .. tostring(selected._label or selected._key or "preview element") .. " settings",
+            "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(selected, previewPageKey) }, previewPageKey)
     end
     UpdateHandleHint(box, selected)
 end
@@ -1417,6 +1477,7 @@ local function BuildPreview(parent, panel, width, height)
         self._msufUFPreviewRefreshHeight = changedHeight
         self:RequestRefresh("UNIT_PREVIEW_SIZE")
     end)
+    RegisterUnitPreviewRuntimeControls(box, M2.activeKey)
     return box
 end
 local CastbarEnabled = PreviewCastbar.Enabled

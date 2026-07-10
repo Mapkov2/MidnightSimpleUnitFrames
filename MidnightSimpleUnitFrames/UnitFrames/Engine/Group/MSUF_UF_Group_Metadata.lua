@@ -40,7 +40,7 @@ Metadata.MASK_FONT = BuildNameSet({
 })
 Metadata.MASK_COLOR = BuildNameSet({
   "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-  "StatusIndicators", "GroupVisuals", "GroupCornerIndicators",
+  "StatusIndicators", "Prediction", "Alpha", "GroupVisuals", "GroupCornerIndicators",
   "Borders",
 })
 Metadata.MASK_BORDER = BuildNameSet({ "Borders", "GroupVisuals" })

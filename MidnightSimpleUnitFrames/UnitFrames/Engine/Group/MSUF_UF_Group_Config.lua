@@ -820,6 +820,8 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "Strata"] = NormalizeFrameOutlineStrata(group.strata)
   out[prefix .. "Alpha"] = group.behindBar == true and LaneAlpha(group) or 1
   out[prefix .. "Filter"] = AuraFilterString(groupKey, group)
+  local blacklist = type(group.blacklist) == "table" and group.blacklist or nil
+  out[prefix .. "HidePermanent"] = group.hidePermanent == true or (blacklist and blacklist.hidePermanent == true) or false
   if group.showTooltip ~= nil then
     out[prefix .. "ShowTooltip"] = group.showTooltip == true
   end
@@ -1091,6 +1093,10 @@ local function CompileCoreAuras(kind, conf)
     layer = Num(buff.trackedLayer, Num(conf.spellIndicators and conf.spellIndicators.layer, 9)),
     strata = buff.trackedStrata or buff.trackedFrameStrata or (conf.spellIndicators and conf.spellIndicators.strata),
     filterToken = buff.trackedOnlyOwn ~= false and "PLAYER" or "ALL",
+    -- The tracked lane is a SpellID whitelist derived from the same Buff
+    -- settings. A permanent-aura exclusion must win over that whitelist too.
+    hidePermanent = buff.hidePermanent == true
+      or (type(buff.blacklist) == "table" and buff.blacklist.hidePermanent == true),
     showTooltip = buff.trackedShowTooltip,
     showCooldownSwipe = buff.trackedShowCooldownSwipe,
     cooldownSwipeReverse = buff.trackedCooldownSwipeReverse,
@@ -1136,6 +1142,131 @@ local function CompileBarBackground(conf)
   }
 end
 
+local function ReplaceTableContents(dst, src)
+  dst = type(dst) == "table" and dst or {}
+  wipe(dst)
+  if type(src) == "table" then
+    for key, value in pairs(src) do
+      dst[key] = value
+    end
+  end
+  return dst
+end
+
+local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOptions)
+  local healthLeft, healthCenter, healthRight = TextSlots(conf)
+  local hpX = Num(conf.hpOffsetX, 0)
+  local hpY = Num(conf.hpOffsetY, 0) + baselineOffset
+  local powerX = Num(conf.powerOffsetX, 0)
+  local powerY = Num(conf.powerOffsetY, 0) + baselineOffset
+  return {
+    anchorToBars = true,
+    nameClassColor = nameTextOptions.nameClassColor == true,
+    nameNpcColor = nameTextOptions.nameNpcColor == true,
+    nameNpcClassColor = nameTextOptions.nameNpcClassColor == true,
+    nameColor = nameTextOptions.nameColor,
+    nameAnchor = conf.nameAnchor or "LEFT",
+    nameX = Num(conf.nameOffsetX, 0),
+    nameY = Num(conf.nameOffsetY, 0) + baselineOffset,
+    nameLayer = Layer(conf.nameTextLayer, 5),
+    nameShorten = nameTextOptions.nameShorten == true,
+    nameShortenMax = nameTextOptions.nameShortenMax,
+    nameShortenSide = nameTextOptions.nameShortenSide,
+    nameShortenDots = nameTextOptions.nameShortenDots,
+    hideNameOnDeadOffline = nameTextOptions.hideNameOnDeadOffline == true,
+    healthColorByHealth = nameTextOptions.healthColorByHealth == true,
+    healthLeft = healthLeft,
+    healthCenter = healthCenter,
+    healthRight = healthRight,
+    healthLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextLeftHidePercentSymbol"),
+    healthCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextCenterHidePercentSymbol"),
+    healthRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol"),
+    healthDelimiter = conf.textDelimiter or " / ",
+    healthPercentDecimals = (conf.healthTextDecimals == true or conf.hpTextDecimals == true) and 1 or 0,
+    healthReverse = conf.hpTextReverse == true,
+    healthLayer = Layer(conf.textLayer, 5),
+    healthX = hpX,
+    healthY = hpY,
+    healthLeftX = hpX + Num(conf.hpTextLeftOffsetX, 0),
+    healthLeftY = hpY + Num(conf.hpTextLeftOffsetY, 0),
+    healthCenterX = hpX + Num(conf.hpTextCenterOffsetX, 0),
+    healthCenterY = hpY + Num(conf.hpTextCenterOffsetY, 0),
+    healthRightX = hpX + Num(conf.hpTextRightOffsetX, 0),
+    healthRightY = hpY + Num(conf.hpTextRightOffsetY, 0),
+    powerLeft = conf.powerTextLeft or "NONE",
+    powerCenter = conf.powerTextCenter or "NONE",
+    powerRight = conf.powerTextRight or "NONE",
+    powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol"),
+    powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol"),
+    powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol"),
+    powerDelimiter = conf.powerTextDelimiter or " / ",
+    powerLayer = Layer(conf.powerTextLayer, 2),
+    powerLeftX = powerX + Num(conf.powerTextLeftOffsetX, 0),
+    powerLeftY = powerY + Num(conf.powerTextLeftOffsetY, 0),
+    powerCenterX = powerX + Num(conf.powerTextCenterOffsetX, 0),
+    powerCenterY = powerY + Num(conf.powerTextCenterOffsetY, 0),
+    powerRightX = powerX + Num(conf.powerTextRightOffsetX, 0),
+    powerRightY = powerY + Num(conf.powerTextRightOffsetY, 0),
+    powerColorByType = ResolvePowerTextColorByType(conf, general),
+    shortNumbers = true,
+  }
+end
+
+local function CompileBorderSpec(kind, conf, general)
+  local dispelBorderEnabled = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlDispelEnabled")
+  if dispelBorderEnabled == nil then
+    dispelBorderEnabled = conf.dispelEnabled == true
+  end
+  local aggroBorderMode = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlAggroEnabled")
+  if aggroBorderMode == nil and GF.GetHighlightVal then
+    aggroBorderMode = GF.GetHighlightVal(kind, "aggroOutlineMode")
+  end
+  if aggroBorderMode == nil then
+    aggroBorderMode = ScopedValue(conf, general, "aggroOutlineMode", nil)
+  end
+  local aggroBorderEnabled
+  if aggroBorderMode == nil then
+    aggroBorderEnabled = conf.aggroEnabled == true
+  else
+    aggroBorderEnabled = tonumber(aggroBorderMode) == 1 or aggroBorderMode == true
+  end
+  local highlightThickness = GF.GetHighlightVal and GF.GetHighlightVal(kind, "highlightBorderThickness")
+  if highlightThickness == nil and GF.GetHighlightVal then
+    highlightThickness = GF.GetHighlightVal(kind, "hlAggroSize")
+  end
+  if highlightThickness == nil then
+    highlightThickness = ScopedValue(conf, general, "highlightBorderThickness", nil)
+      or ScopedValue(conf, general, "hlAggroSize", nil)
+  end
+  local dispelBorderTrigger = ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE")
+  local prioEnabled, prioOrder = CompileBorderPriority(conf, general)
+  local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)
+  local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
+  local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or (bars and bars.barOutlineStrata))
+  return {
+    enabled = conf.borderEnabled ~= false,
+    thickness = borderThickness,
+    strata = borderStrata,
+    r = Num(ScopedValue(conf, general, "barOutlineColorR", conf.borderR or general and general.barBorderR), 0),
+    g = Num(ScopedValue(conf, general, "barOutlineColorG", conf.borderG or general and general.barBorderG), 0),
+    b = Num(ScopedValue(conf, general, "barOutlineColorB", conf.borderB or general and general.barBorderB), 0),
+    a = Num(ScopedValue(conf, general, "barOutlineColorA", conf.borderA or general and general.barBorderA), 1),
+    highlightThickness = Num(highlightThickness, borderThickness),
+    aggro = aggroBorderEnabled == true,
+    aggroMode = conf.aggroMode or general.aggroMode or "ALL",
+    aggroR = Num(general.hlAggroColorR or general.aggroBorderColorR or general.aggroBorderR, 1.00),
+    aggroG = Num(general.hlAggroColorG or general.aggroBorderColorG or general.aggroBorderG, 0.55),
+    aggroB = Num(general.hlAggroColorB or general.aggroBorderColorB or general.aggroBorderB, 0.00),
+    purgeR = Num(general.hlPurgeColorR or general.purgeBorderColorR, 1.00),
+    purgeG = Num(general.hlPurgeColorG or general.purgeBorderColorG, 0.85),
+    purgeB = Num(general.hlPurgeColorB or general.purgeBorderColorB, 0.00),
+    dispel = dispelBorderEnabled == true,
+    dispelTrigger = NormalizeDispelDetectTrigger(dispelBorderTrigger),
+    prioEnabled = prioEnabled,
+    prioOrder = prioOrder,
+  }
+end
+
 local compiledSpecCache = GF._compiledSpec or {}
 GF._compiledSpec = compiledSpecCache
 GF._compiledSpecSerial = GF._compiledSpecSerial or 1
@@ -1150,6 +1281,14 @@ GF._compiledSpecSettingsGenAll = compiledSpecSettingsGenAll
 GF._compiledSpecRevision = GF._compiledSpecRevision or 1
 local compiledSpecRevisionByKind = GF._compiledSpecRevisionByKind or {}
 GF._compiledSpecRevisionByKind = compiledSpecRevisionByKind
+local specDomainSerials = GF._compiledSpecDomainSerials or {}
+GF._compiledSpecDomainSerials = specDomainSerials
+
+local function NextSpecDomainRevision(key)
+  local revision = (tonumber(specDomainSerials[key]) or 0) + 1
+  specDomainSerials[key] = revision
+  return revision
+end
 
 local function BumpCompiledSpecRevision(kind)
   GF._compiledSpecRevision = (GF._compiledSpecRevision or 1) + 1
@@ -1192,52 +1331,24 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = GF.ResolveFontShadow(kind)
   end
 
-  local healthLeft, healthCenter, healthRight = TextSlots(conf)
+  local general = GeneralDB() or {}
   local healthVisual = ResolveHealthVisual(conf)
   local nameTextOptions = ResolveNameTextOptions(kind, conf)
   if type(nameTextOptions.nameColor) == "table" then
     nameTextOptions.nameColor.a = textAlpha
   end
-  local hpX, hpY = Num(conf.hpOffsetX, 0), Num(conf.hpOffsetY, 0) + baselineOffset
-  local powerX, powerY = Num(conf.powerOffsetX, 0), Num(conf.powerOffsetY, 0) + baselineOffset
+  local textSpec = CompileTextSpec(kind, conf, general, baselineOffset, nameTextOptions)
   local status = CompileStatus(kind, conf)
   local group = CompileGroupVisuals(kind, conf)
   local alpha = CompileAlpha(conf)
-  local dispelBorderEnabled = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlDispelEnabled")
-  if dispelBorderEnabled == nil then
-    dispelBorderEnabled = conf.dispelEnabled == true
-  end
-  local general = GeneralDB() or {}
-  local aggroBorderMode = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlAggroEnabled")
-  if aggroBorderMode == nil and GF.GetHighlightVal then
-    aggroBorderMode = GF.GetHighlightVal(kind, "aggroOutlineMode")
-  end
-  if aggroBorderMode == nil then
-    aggroBorderMode = ScopedValue(conf, general, "aggroOutlineMode", nil)
-  end
-  local aggroBorderEnabled
-  if aggroBorderMode == nil then
-    aggroBorderEnabled = conf.aggroEnabled == true
-  else
-    aggroBorderEnabled = tonumber(aggroBorderMode) == 1 or aggroBorderMode == true
-  end
-  local highlightThickness = GF.GetHighlightVal and GF.GetHighlightVal(kind, "highlightBorderThickness")
-  if highlightThickness == nil and GF.GetHighlightVal then
-    highlightThickness = GF.GetHighlightVal(kind, "hlAggroSize")
-  end
-  if highlightThickness == nil then
-    highlightThickness = ScopedValue(conf, general, "highlightBorderThickness", nil)
-      or ScopedValue(conf, general, "hlAggroSize", nil)
-  end
-  local dispelBorderTrigger = ScopedValue(conf, general, "dispelBorderTrigger", "DISPEL_TYPE")
-  local prioEnabled, prioOrder = CompileBorderPriority(conf, general)
   local nameFontSize = Num(conf.nameFontSize, 12)
-  local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)
-  local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
-  local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or (bars and bars.barOutlineStrata))
 
   return {
     _msufGFCompileSerial = GF._compiledSpecSerial or 1,
+    _msufTextLayoutRevision = NextSpecDomainRevision("_msufTextLayoutRevision"),
+    _msufTextColorRevision = NextSpecDomainRevision("_msufTextColorRevision"),
+    _msufPowerVisualRevision = NextSpecDomainRevision("_msufPowerVisualRevision"),
+    _msufBorderVisualRevision = NextSpecDomainRevision("_msufBorderVisualRevision"),
     scope = "group",
     key = "gf_" .. kind,
     unit = unit,
@@ -1296,82 +1407,11 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       barGradient = ResolveBarGradient(conf, general, "enablePowerGradient"),
       smooth = conf.powerSmoothFill == true,
     },
-    text = {
-      anchorToBars = true,
-      nameClassColor = nameTextOptions.nameClassColor == true,
-      nameNpcColor = nameTextOptions.nameNpcColor == true,
-      nameNpcClassColor = nameTextOptions.nameNpcClassColor == true,
-      nameColor = nameTextOptions.nameColor,
-      nameAnchor = conf.nameAnchor or "LEFT",
-      nameX = Num(conf.nameOffsetX, 0),
-      nameY = Num(conf.nameOffsetY, 0) + baselineOffset,
-      nameLayer = Layer(conf.nameTextLayer, 5),
-      nameShorten = nameTextOptions.nameShorten == true,
-      nameShortenMax = nameTextOptions.nameShortenMax,
-      nameShortenSide = nameTextOptions.nameShortenSide,
-      nameShortenDots = nameTextOptions.nameShortenDots,
-      hideNameOnDeadOffline = nameTextOptions.hideNameOnDeadOffline == true,
-      healthColorByHealth = nameTextOptions.healthColorByHealth == true,
-      healthLeft = healthLeft,
-      healthCenter = healthCenter,
-      healthRight = healthRight,
-      healthLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextLeftHidePercentSymbol"),
-      healthCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextCenterHidePercentSymbol"),
-      healthRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "hpTextRightHidePercentSymbol"),
-      healthDelimiter = conf.textDelimiter or " / ",
-      healthPercentDecimals = (conf.healthTextDecimals == true or conf.hpTextDecimals == true) and 1 or 0,
-      healthReverse = conf.hpTextReverse == true,
-      healthLayer = Layer(conf.textLayer, 5),
-      healthX = hpX,
-      healthY = hpY,
-      healthLeftX = hpX + Num(conf.hpTextLeftOffsetX, 0),
-      healthLeftY = hpY + Num(conf.hpTextLeftOffsetY, 0),
-      healthCenterX = hpX + Num(conf.hpTextCenterOffsetX, 0),
-      healthCenterY = hpY + Num(conf.hpTextCenterOffsetY, 0),
-      healthRightX = hpX + Num(conf.hpTextRightOffsetX, 0),
-      healthRightY = hpY + Num(conf.hpTextRightOffsetY, 0),
-      powerLeft = conf.powerTextLeft or "NONE",
-      powerCenter = conf.powerTextCenter or "NONE",
-      powerRight = conf.powerTextRight or "NONE",
-      powerLeftHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextLeftHidePercentSymbol"),
-      powerCenterHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextCenterHidePercentSymbol"),
-      powerRightHidePercentSymbol = ResolveTextSlotHidePercentSymbol(conf, general, "powerTextRightHidePercentSymbol"),
-      powerDelimiter = conf.powerTextDelimiter or " / ",
-      powerLayer = Layer(conf.powerTextLayer, 2),
-      powerLeftX = powerX + Num(conf.powerTextLeftOffsetX, 0),
-      powerLeftY = powerY + Num(conf.powerTextLeftOffsetY, 0),
-      powerCenterX = powerX + Num(conf.powerTextCenterOffsetX, 0),
-      powerCenterY = powerY + Num(conf.powerTextCenterOffsetY, 0),
-      powerRightX = powerX + Num(conf.powerTextRightOffsetX, 0),
-      powerRightY = powerY + Num(conf.powerTextRightOffsetY, 0),
-      powerColorByType = ResolvePowerTextColorByType(conf, general),
-      shortNumbers = true,
-    },
+    text = textSpec,
     prediction = CompilePrediction(kind, conf, texture),
     dispel = CompileDispelVisual(kind, conf),
     status = status,
-    border = {
-      enabled = conf.borderEnabled ~= false,
-      thickness = borderThickness,
-      strata = borderStrata,
-      r = Num(ScopedValue(conf, general, "barOutlineColorR", conf.borderR or general and general.barBorderR), 0),
-      g = Num(ScopedValue(conf, general, "barOutlineColorG", conf.borderG or general and general.barBorderG), 0),
-      b = Num(ScopedValue(conf, general, "barOutlineColorB", conf.borderB or general and general.barBorderB), 0),
-      a = Num(ScopedValue(conf, general, "barOutlineColorA", conf.borderA or general and general.barBorderA), 1),
-      highlightThickness = Num(highlightThickness, borderThickness),
-      aggro = aggroBorderEnabled == true,
-      aggroMode = conf.aggroMode or general.aggroMode or "ALL",
-      aggroR = Num(general.hlAggroColorR or general.aggroBorderColorR or general.aggroBorderR, 1.00),
-      aggroG = Num(general.hlAggroColorG or general.aggroBorderColorG or general.aggroBorderG, 0.55),
-      aggroB = Num(general.hlAggroColorB or general.aggroBorderColorB or general.aggroBorderB, 0.00),
-      purgeR = Num(general.hlPurgeColorR or general.purgeBorderColorR, 1.00),
-      purgeG = Num(general.hlPurgeColorG or general.purgeBorderColorG, 0.85),
-      purgeB = Num(general.hlPurgeColorB or general.purgeBorderColorB, 0.00),
-      dispel = dispelBorderEnabled == true,
-      dispelTrigger = NormalizeDispelDetectTrigger(dispelBorderTrigger),
-      prioEnabled = prioEnabled,
-      prioOrder = prioOrder,
-    },
+    border = CompileBorderSpec(kind, conf, general),
     alpha = alpha,
     auras = CompileCoreAuras(kind, conf),
     group = group,
@@ -1383,6 +1423,182 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     cornerIndicators = GF.CompileCornerIndicators and GF.CompileCornerIndicators(conf) or { enabled = false },
     spellIndicators = GF.CompileSpellIndicators and GF.CompileSpellIndicators(conf) or { enabled = false, items = {} },
   }
+end
+
+local function BumpSpecDomain(base, key)
+  base[key] = NextSpecDomainRevision(key)
+  return base[key]
+end
+
+local function RefreshFontDomain(kind, base, conf)
+  local font = GF.ResolveFontPath and GF.ResolveFontPath(kind) or "Fonts\\FRIZQT__.TTF"
+  local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "OUTLINE"
+  local tr, tg, tb = 1, 1, 1
+  if GF.ResolveFontColor then
+    tr, tg, tb = GF.ResolveFontColor(kind)
+  end
+  local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
+  local baselineOffset = GF.ResolveFontBaselineOffset and GF.ResolveFontBaselineOffset(kind) or 0
+  local fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = true, 1, 1, -1
+  if GF.ResolveFontShadow then
+    fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = GF.ResolveFontShadow(kind)
+  end
+  local general = GeneralDB() or {}
+  local nameTextOptions = ResolveNameTextOptions(kind, conf)
+  if type(nameTextOptions.nameColor) == "table" then
+    nameTextOptions.nameColor.a = textAlpha
+  end
+
+  local nameFontSize = Num(conf.nameFontSize, 12)
+  base.font = font
+  base.fontFlags = fontFlags
+  base.fontSize = nameFontSize
+  base.nameFontSize = nameFontSize
+  base.healthFontSize = Num(conf.hpFontSize, 10)
+  base.powerFontSize = Num(conf.powerFontSize, 9)
+  base.fontShadow = fontShadow == true
+  base.fontShadowAlpha = fontShadowAlpha
+  base.fontShadowX = fontShadowX
+  base.fontShadowY = fontShadowY
+  base.textColor = ReplaceTableContents(base.textColor, { r = tr or 1, g = tg or 1, b = tb or 1, a = textAlpha })
+  base.showName = conf.showName ~= false
+  base.showHealthText = conf.showHPText ~= false
+  base.showPowerText = IsPowerTextEnabled(kind, conf)
+  base.text = ReplaceTableContents(base.text, CompileTextSpec(kind, conf, general, baselineOffset, nameTextOptions))
+  BumpSpecDomain(base, "_msufTextLayoutRevision")
+  BumpSpecDomain(base, "_msufTextColorRevision")
+end
+
+local GROUP_COLOR_KEYS = {
+  "deadBgEnabled", "deadBgOffline", "hoverHighlightEnabled",
+  "deadBgR", "deadBgG", "deadBgB", "deadBgA", "hpBarAlpha", "hpBgAlpha",
+  "hoverHighlightR", "hoverHighlightG", "hoverHighlightB",
+  "targetR", "targetG", "targetB", "focusR", "focusG", "focusB",
+  "dispelOverlayAlpha", "debuffStripeAlpha", "debuffStripeColorR", "debuffStripeColorG", "debuffStripeColorB",
+}
+
+local function RefreshColorDomain(kind, base, conf)
+  local general = GeneralDB() or {}
+  local texture = ResolveTexture(GF.ResolveBarTexture, kind)
+  local backgroundTexture = ResolveTexture(GF.ResolveBarBgTexture, kind)
+  base.texture = texture
+  base.backgroundTexture = backgroundTexture
+  base.backgroundAlpha = Num(conf.hpBgAlpha, 0.85)
+  local healthVisual = ResolveHealthVisual(conf)
+  local health = base.health or {}
+  base.health = health
+  health.texture = texture
+  health.backgroundTexture = backgroundTexture
+  health.mode = healthVisual.mode
+  health.r, health.g, health.b = healthVisual.r, healthVisual.g, healthVisual.b
+  health.gradientLowR, health.gradientLowG, health.gradientLowB = healthVisual.gradientLowR, healthVisual.gradientLowG, healthVisual.gradientLowB
+  health.gradientMidR, health.gradientMidG, health.gradientMidB = healthVisual.gradientMidR, healthVisual.gradientMidG, healthVisual.gradientMidB
+  health.gradientHighR, health.gradientHighG, health.gradientHighB = healthVisual.gradientHighR, healthVisual.gradientHighG, healthVisual.gradientHighB
+  health.background = CompileBarBackground(conf)
+  health.backgroundMatchHealth = healthVisual.backgroundMatchHealth == true
+  health.barGradient = ResolveBarGradient(conf, general, "enableGradient")
+
+  local power = base.power or {}
+  base.power = power
+  power.texture = texture
+  power.backgroundTexture = backgroundTexture
+  power.background = CompileBarBackground(conf)
+  power.mode = conf.powerColorMode or "type"
+  power.barGradient = ResolveBarGradient(conf, general, "enablePowerGradient")
+
+  local tr, tg, tb = 1, 1, 1
+  if GF.ResolveFontColor then
+    tr, tg, tb = GF.ResolveFontColor(kind)
+  end
+  local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
+  base.textColor = ReplaceTableContents(base.textColor, { r = tr or 1, g = tg or 1, b = tb or 1, a = textAlpha })
+  local text = base.text or {}
+  base.text = text
+  local oldHealthColorByHealth = text.healthColorByHealth == true
+  local oldPowerColorByType = text.powerColorByType == true
+  local nameTextOptions = ResolveNameTextOptions(kind, conf)
+  if type(nameTextOptions.nameColor) == "table" then
+    nameTextOptions.nameColor.a = textAlpha
+  end
+  text.nameClassColor = nameTextOptions.nameClassColor == true
+  text.nameNpcColor = nameTextOptions.nameNpcColor == true
+  text.nameNpcClassColor = nameTextOptions.nameNpcClassColor == true
+  text.nameColor = nameTextOptions.nameColor
+  text.healthColorByHealth = nameTextOptions.healthColorByHealth == true
+  text.powerColorByType = ResolvePowerTextColorByType(conf, general)
+  if oldHealthColorByHealth ~= (text.healthColorByHealth == true)
+    or oldPowerColorByType ~= (text.powerColorByType == true) then
+    BumpSpecDomain(base, "_msufTextLayoutRevision")
+  end
+
+  base.prediction = ReplaceTableContents(base.prediction, CompilePrediction(kind, conf, texture))
+  base.dispel = ReplaceTableContents(base.dispel, CompileDispelVisual(kind, conf))
+  base.border = ReplaceTableContents(base.border, CompileBorderSpec(kind, conf, general))
+  base.alpha = ReplaceTableContents(base.alpha, CompileAlpha(conf))
+
+  local nextGroup = CompileGroupVisuals(kind, conf)
+  local group = base.group or {}
+  base.group = group
+  for i = 1, #GROUP_COLOR_KEYS do
+    local key = GROUP_COLOR_KEYS[i]
+    group[key] = nextGroup[key]
+  end
+
+  if GF.CompileCornerIndicators then
+    base.cornerIndicators = ReplaceTableContents(base.cornerIndicators, GF.CompileCornerIndicators(conf))
+  end
+  BumpSpecDomain(base, "_msufTextColorRevision")
+  BumpSpecDomain(base, "_msufPowerVisualRevision")
+  BumpSpecDomain(base, "_msufBorderVisualRevision")
+end
+
+local function RefreshBorderDomain(kind, base, conf)
+  base.border = ReplaceTableContents(base.border, CompileBorderSpec(kind, conf, GeneralDB() or {}))
+  BumpSpecDomain(base, "_msufBorderVisualRevision")
+end
+
+local function DomainMaskHas(mask, flag)
+  mask = tonumber(mask) or 0
+  flag = tonumber(flag) or 0
+  return flag > 0 and mask % (flag * 2) >= flag
+end
+
+--- Refresh color/font/border values in-place. These domains do not change the
+--- structural element/event contract, so callers can keep the compiled base and
+--- per-frame specs instead of dropping the cache and rebuilding all routing.
+function GF.RefreshCompiledSpecDomains(kind, mask)
+  if type(mask) ~= "number" then return false end
+  local font = DomainMaskHas(mask, GF.DIRTY_FONT)
+  local color = DomainMaskHas(mask, GF.DIRTY_COLOR)
+  local border = DomainMaskHas(mask, GF.DIRTY_BORDER)
+  if not (font or color or border) then return false end
+
+  local remainder = mask
+  if font then remainder = remainder - GF.DIRTY_FONT end
+  if color then remainder = remainder - GF.DIRTY_COLOR end
+  if border then remainder = remainder - GF.DIRTY_BORDER end
+  if remainder ~= 0 then return false end
+
+  local function RefreshOne(refreshKind, base)
+    if not base then return end
+    local conf = base._msufGFConf or (GF.GetConf and GF.GetConf(refreshKind)) or {}
+    base._msufGFConf = conf
+    if font then RefreshFontDomain(refreshKind, base, conf) end
+    if color then
+      RefreshColorDomain(refreshKind, base, conf)
+    elseif border then
+      RefreshBorderDomain(refreshKind, base, conf)
+    end
+  end
+
+  if kind then
+    RefreshOne(kind, compiledSpecCache[kind])
+  else
+    for refreshKind, base in pairs(compiledSpecCache) do
+      RefreshOne(refreshKind, base)
+    end
+  end
+  return true
 end
 
 function GF.InvalidateCompiledSpecs(kind)
@@ -1402,10 +1618,15 @@ end
 
 function GF.GetCompiledSpecRevision(kind)
   kind = kind or "party"
+  local base = compiledSpecCache[kind]
   return tostring(GF._compiledSpecRevision or 1)
     .. ":" .. tostring(compiledSpecRevisionByKind[kind] or 1)
     .. ":" .. tostring(GF._compiledSpecSerial or 1)
     .. ":" .. tostring(compiledSpecSerialByKind[kind] or 1)
+    .. ":" .. tostring(base and base._msufTextLayoutRevision or 0)
+    .. ":" .. tostring(base and base._msufTextColorRevision or 0)
+    .. ":" .. tostring(base and base._msufPowerVisualRevision or 0)
+    .. ":" .. tostring(base and base._msufBorderVisualRevision or 0)
 end
 
 function GF.DropCompiledSpecs(kind)
@@ -1454,6 +1675,12 @@ local function CopyShallow(dst, src)
   return dst
 end
 
+local TEXT_SPEC_ROOT_KEYS = {
+  "font", "fontFlags", "fontSize", "nameFontSize", "healthFontSize", "powerFontSize",
+  "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY",
+  "showName", "showHealthText", "showPowerText", "text",
+}
+
 local function PatchFrameSpec(base, kind, frame, unit, conf)
   local spec = frame._msufGFSpec
   if not spec then
@@ -1463,6 +1690,32 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
   if frame._msufGFSpecBase ~= base then
     CopyShallow(spec, base)
     frame._msufGFSpecBase = base
+    frame._msufGFTextLayoutRevision = base._msufTextLayoutRevision
+    frame._msufGFTextColorRevision = base._msufTextColorRevision
+    frame._msufGFPowerVisualRevision = base._msufPowerVisualRevision
+    frame._msufGFBorderVisualRevision = base._msufBorderVisualRevision
+  else
+    if frame._msufGFTextLayoutRevision ~= base._msufTextLayoutRevision then
+      for i = 1, #TEXT_SPEC_ROOT_KEYS do
+        local key = TEXT_SPEC_ROOT_KEYS[i]
+        spec[key] = base[key]
+      end
+      spec._msufTextLayoutRevision = base._msufTextLayoutRevision
+      frame._msufGFTextLayoutRevision = base._msufTextLayoutRevision
+    end
+    if frame._msufGFTextColorRevision ~= base._msufTextColorRevision then
+      spec.textColor = base.textColor
+      spec.texture = base.texture
+      spec.backgroundTexture = base.backgroundTexture
+      spec.backgroundAlpha = base.backgroundAlpha
+      spec._msufTextColorRevision = base._msufTextColorRevision
+      frame._msufGFTextColorRevision = base._msufTextColorRevision
+    end
+    if frame._msufGFBorderVisualRevision ~= base._msufBorderVisualRevision then
+      spec.border = base.border
+      spec._msufBorderVisualRevision = base._msufBorderVisualRevision
+      frame._msufGFBorderVisualRevision = base._msufBorderVisualRevision
+    end
   end
   spec.unit = unit
   spec.key = "gf_" .. kind
@@ -1475,9 +1728,11 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
     power = {}
     frame._msufGFPowerSpec = power
   end
-  if frame._msufGFPowerSpecBase ~= base.power then
+  if frame._msufGFPowerSpecBase ~= base.power
+    or frame._msufGFPowerVisualRevision ~= base._msufPowerVisualRevision then
     CopyShallow(power, base.power)
     frame._msufGFPowerSpecBase = base.power
+    frame._msufGFPowerVisualRevision = base._msufPowerVisualRevision
   end
   power.enabled = powerHeight > 0
   power.height = powerHeight

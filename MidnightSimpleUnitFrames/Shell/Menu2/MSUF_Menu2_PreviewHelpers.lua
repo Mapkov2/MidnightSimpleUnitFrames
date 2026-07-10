@@ -350,10 +350,6 @@ function H.StylePreviewPillButton(btn, T, opts)
     btn:MSUF2RefreshPreviewPill(false, false, false)
     return btn
 end
-function H.HidePreviewHandleContext()
-    local popup = H._previewHandleContextPopup
-    if popup and popup.Hide then popup:Hide() end
-end
 function H.ShowPreviewHandleContext(handle, opts)
     opts = opts or {}
     if not handle then return end

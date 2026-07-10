@@ -646,6 +646,9 @@ local function ClearFrameEvents(frame)
     frame._msufEventNames = nil
     frame._msufFrameUnitEvents = nil
     frame._msufFrameUnitEventTargets = nil
+    frame._msufElementEventRoutes = nil
+    frame._msufEventRouteUnit = nil
+    frame._msufEventRouteNeedsIdentity = nil
   end
 end
 
@@ -835,12 +838,24 @@ function UF.RebuildRuntimeStatusState(frame)
   return true
 end
 
+local function SnapshotEventList(events)
+  if type(events) ~= "table" then return nil end
+  local snapshot = {}
+  for i = 1, #events do snapshot[i] = events[i] end
+  return snapshot
+end
+
 local function RebuildFrameEvents(frame)
   if not frame then return false end
   ClearFrameEvents(frame)
+  local routes = {}
+  frame._msufElementEventRoutes = routes
+  frame._msufEventRouteUnit = frame.unit
   local active = frame._msufActiveElements
   if not active then
+    frame._msufEventRouteNeedsIdentity = false
     UF.RebuildRuntimeStatusState(frame)
+    if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
     return true
   end
   for i = 1, #UF.elementOrder do
@@ -850,16 +865,25 @@ local function RebuildFrameEvents(frame)
       local update = ElementUpdateFunction(frame, name)
       if element and update then
         local events = ElementEvents(element, false, frame, frame.MSUFSpec)
+        local unitlessEvents = ElementEvents(element, true, frame, frame.MSUFSpec)
+        routes[name] = {
+          update = update,
+          -- Providers normally return immutable constants, but snapshot the
+          -- lists so a future provider that reuses/mutates a table cannot make
+          -- the routing comparator accept stale registrations.
+          events = SnapshotEventList(events),
+          unitlessEvents = SnapshotEventList(unitlessEvents),
+        }
         if type(events) == "table" then
           for j = 1, #events do AddEventHandler(frame, events[j], update, false) end
         end
-        events = ElementEvents(element, true, frame, frame.MSUFSpec)
-        if type(events) == "table" then
-          for j = 1, #events do AddEventHandler(frame, events[j], update, true) end
+        if type(unitlessEvents) == "table" then
+          for j = 1, #unitlessEvents do AddEventHandler(frame, unitlessEvents[j], update, true) end
         end
       end
     end
   end
+  frame._msufEventRouteNeedsIdentity = FrameNeedsIdentityLifecycle(frame)
   AddIdentityLifecycleHandlers(frame)
   local events = frame._msufEvents
   local names = frame._msufEventNames
@@ -880,6 +904,63 @@ local function RebuildFrameEvents(frame)
   return true
 end
 UF.RefreshFrameUnitEventRouting = RebuildFrameEvents
+
+local function EventListsMatch(a, b)
+  if a == b then return true end
+  if type(a) ~= "table" then a = nil end
+  if type(b) ~= "table" then b = nil end
+  local count = a and #a or 0
+  if count ~= (b and #b or 0) then return false end
+  for i = 1, count do
+    if a[i] ~= b[i] then return false end
+  end
+  return true
+end
+
+--- Return true when the frame's currently registered event topology still
+--- matches its active elements and current spec. This deliberately compares
+--- dynamic GetEvents/GetUnitlessEvents results instead of trusting a visual
+--- refresh label: health colours, text modes and prediction settings can all
+--- change an element's event membership without changing its update function.
+local function FrameEventRoutingMatches(frame)
+  if not frame or frame._msufEventRouteUnit ~= frame.unit then return false end
+  local routes = frame._msufElementEventRoutes
+  if type(routes) ~= "table" then return false end
+  local active = frame._msufActiveElements
+  for i = 1, #UF.elementOrder do
+    local name = UF.elementOrder[i]
+    if EventElementAllowed(name) == true then
+      local route = routes[name]
+      local element = active and active[name] == true and UF.elements[name] or nil
+      local update = element and ElementUpdateFunction(frame, name) or nil
+      if update then
+        if not route or route.update ~= update then return false end
+        if not EventListsMatch(route.events, ElementEvents(element, false, frame, frame.MSUFSpec)) then
+          return false
+        end
+        if not EventListsMatch(route.unitlessEvents, ElementEvents(element, true, frame, frame.MSUFSpec)) then
+          return false
+        end
+      elseif route then
+        return false
+      end
+    end
+  end
+  return frame._msufEventRouteNeedsIdentity == FrameNeedsIdentityLifecycle(frame)
+end
+UF.FrameEventRoutingMatches = FrameEventRoutingMatches
+
+local function RefreshFrameRoutingAfterElementApply(frame)
+  if not frame then return false end
+  UF.OptimizeFrameHotpaths(frame)
+  if FrameEventRoutingMatches(frame) then
+    -- Event registration can stay intact, but active/update functions may have
+    -- changed for elements that are not frame-event owners.
+    UF.RebuildRuntimeStatusState(frame)
+    return false
+  end
+  return RebuildFrameEvents(frame) == true
+end
 
 function UF.RunLeanIdentity(frame, event)
   if not FrameVisibleForEvent(frame) then return false end
@@ -946,13 +1027,16 @@ function UF.OptimizeFrameHotpaths(frame)
   return true
 end
 
-local function FrameDisableElement(frame, name)
-  if not (frame and frame._msufActiveElements and frame._msufActiveElements[name]) then return false end
+local function FrameDisableElement(frame, name, deferRouting)
+  if not frame then return false end
   local element = UF.elements[name]
-  frame._msufActiveElements[name] = nil
+  local active = frame._msufActiveElements
+  local wasActive = active and active[name] == true
+  if active then active[name] = nil end
   frame[GetUpdateKey(name)] = nil
-  if element and element.Disable then element.Disable(frame) end
-  return true
+  if wasActive and element and element.Disable then element.Disable(frame) end
+  if deferRouting ~= true then RefreshFrameRoutingAfterElementApply(frame) end
+  return wasActive
 end
 
 local function FrameEnableElement(frame, name)
@@ -964,11 +1048,14 @@ local function FrameEnableElement(frame, name)
     element.Create(frame, frame.MSUFSpec)
     frame._msufCreatedElements[name] = true
   end
-  if element.Enable and element.Enable(frame, frame.MSUFSpec) == false then return false end
-  if element.Update then frame[GetUpdateKey(name)] = element.Update end
+  if element.Enable and element.Enable(frame, frame.MSUFSpec) == false then
+    FrameDisableElement(frame, name, true)
+    RefreshFrameRoutingAfterElementApply(frame)
+    return false
+  end
+  frame[GetUpdateKey(name)] = element.Update
   frame._msufActiveElements[name] = true
-  UF.OptimizeFrameHotpaths(frame)
-  if UF._msufApplyingSpec ~= true then RebuildFrameEvents(frame) end
+  RefreshFrameRoutingAfterElementApply(frame)
   return true
 end
 
@@ -1051,7 +1138,7 @@ function UF.DetachFrame(frame)
   UF._msufApplyingSpec = true
   if frame._msufActiveElements then
     for name in pairs(frame._msufActiveElements) do
-      FrameDisableElement(frame, name)
+      FrameDisableElement(frame, name, true)
     end
   end
   ClearFrameEvents(frame)
@@ -1115,7 +1202,8 @@ function UF.ApplyElementToFrame(frame, name, spec, updateReason)
   frame._msufCreatedElements = frame._msufCreatedElements or {}
   frame._msufActiveElements = frame._msufActiveElements or {}
   if ApplyElementAllowed(name) ~= true or UF.ElementEnabled(element, frame, frame.MSUFSpec) == false then
-    FrameDisableElement(frame, name)
+    FrameDisableElement(frame, name, true)
+    if frame._msufElementApplyBatch ~= true then RefreshFrameRoutingAfterElementApply(frame) end
     return true
   end
   if element.Create and not frame._msufCreatedElements[name] then
@@ -1124,37 +1212,64 @@ function UF.ApplyElementToFrame(frame, name, spec, updateReason)
   end
   if element.Apply then element.Apply(frame, frame.MSUFSpec) end
   if element.Enable and element.Enable(frame, frame.MSUFSpec) == false then
-    FrameDisableElement(frame, name)
+    FrameDisableElement(frame, name, true)
+    if frame._msufElementApplyBatch ~= true then RefreshFrameRoutingAfterElementApply(frame) end
     return true
   end
-  if element.Update then frame[GetUpdateKey(name)] = element.Update end
+  frame[GetUpdateKey(name)] = element.Update
   frame._msufActiveElements[name] = true
-  UF.OptimizeFrameHotpaths(frame)
   if updateReason and element.Update then element.Update(frame, updateReason, frame.unit) end
-  if UF._msufApplyingSpec ~= true then RebuildFrameEvents(frame) end
+  if frame._msufElementApplyBatch ~= true then RefreshFrameRoutingAfterElementApply(frame) end
   return true
+end
+
+local function ApplyElementSelection(frame, selection, spec, updateReason, selectionIsMask)
+  if not frame or (selection ~= true and type(selection) ~= "table") then return false end
+  local wasApplying = UF._msufApplyingSpec
+  local wasBatching = frame._msufElementApplyBatch
+  UF._msufApplyingSpec = true
+  frame._msufElementApplyBatch = true
+  if spec then UF.SetFrameSpec(frame, spec) end
+
+  if selectionIsMask == true then
+    local full = selection == true
+    for i = 1, #UF.elementOrder do
+      local name = UF.elementOrder[i]
+      if full or selection[name] == true then
+        UF.ApplyElementToFrame(frame, name, nil, updateReason)
+      end
+    end
+  else
+    for i = 1, #selection do
+      local name = selection[i]
+      if ApplyElementAllowed(name) == true then
+        UF.ApplyElementToFrame(frame, name, nil, updateReason)
+      end
+    end
+  end
+
+  frame._msufElementApplyBatch = wasBatching
+  local rebuilt = false
+  if wasBatching ~= true then rebuilt = RefreshFrameRoutingAfterElementApply(frame) end
+  UF._msufApplyingSpec = wasApplying
+  if rebuilt and wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+  return true
+end
+
+--- Apply an ordered element list as one frame transaction. Element layout and
+--- updates still run in list order, while event routing is validated/rebuilt at
+--- most once after the complete spec has landed.
+function UF.ApplyElementsToFrame(frame, names, spec, updateReason)
+  return ApplyElementSelection(frame, names, spec, updateReason, false)
 end
 
 local DEFAULT_APPLY_MASK = Metadata.defaultApplyMask or true
 
 function UF.ApplySpec(frame, spec, reason, mask)
   if not (frame and spec) then return false end
-  local wasApplying = UF._msufApplyingSpec
-  UF._msufApplyingSpec = true
   UF.AttachFrame(frame, { scope = spec.scope or frame._msufCoreScope or "single" })
-  UF.SetFrameSpec(frame, spec)
   mask = mask or DEFAULT_APPLY_MASK
-  local full = mask == true
-  for i = 1, #UF.elementOrder do
-    local name = UF.elementOrder[i]
-    if full or (type(mask) == "table" and mask[name] == true) then
-      UF.ApplyElementToFrame(frame, name, nil, nil)
-    end
-  end
-  UF.OptimizeFrameHotpaths(frame)
-  RebuildFrameEvents(frame)
-  UF._msufApplyingSpec = wasApplying
-  if wasApplying ~= true and UF.SyncRuntimeDriver then UF.SyncRuntimeDriver() end
+  ApplyElementSelection(frame, mask, spec, nil, true)
   if reason then UF.FrameRuntimeUpdate(frame, reason) end
   return true
 end

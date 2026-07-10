@@ -12,7 +12,7 @@ local max = math.max
 local min = math.min
 local VT = M.ValueTextList
 local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES BLIZZARD_FALLBACK_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice]])
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice, ControlMeta, RegisterControl = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice ControlMeta RegisterControl]])
 SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
@@ -66,6 +66,7 @@ local function BuildGFLayout(ctx)
         M.AddTooltip(openColors, "Group Frame Colors", "Open Colors > Group Frame Colors for shared Party, Raid and Mythic Raid colors.", { hook = true })
     end
     openColors:SetScript("OnClick", OpenGroupFrameColors)
+    RegisterControl(openColors, ctx, "navigation.group_colors", "Group Frame Colors", "button", "navigation", { navigationKey = "opt_colors" })
     W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
     local enableGroup = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Use MSUF group frames", generalLeftX, -64, generalLeftW), "layout"), "enabled", false, "rebuild")
@@ -97,6 +98,7 @@ local function BuildGFLayout(ctx)
         generalNotice, _, generalNoticeButton = CreateSectionNotice(general, -374, "Enable Scope", 104)
     end
     if generalNoticeButton then
+        RegisterControl(generalNoticeButton, ctx, "scope.enable_now", "Enable Scope", "button", "action")
         generalNoticeButton:SetScript("OnClick", function()
             Set(CurrentScope(), "enabled", true, "rebuild")
         end)
@@ -198,7 +200,8 @@ local function BuildGFLayout(ctx)
             conf.sortByRole = (conf.sortMode == "ROLE")
             QueueGF(CurrentScope(), "rebuild")
             if refreshSortingControls then refreshSortingControls() end
-        end)
+        end,
+        ControlMeta(ctx, "field.sortMode"))
     local roleSort = W.ToggleAt(sortCard, "Sort by Role", 16, -110, sortingLeftW - 32)
     M.BindBoolWidget(ctx, roleSort,
         function()
@@ -212,7 +215,8 @@ local function BuildGFLayout(ctx)
             conf.sortMode = v and "ROLE" or "INDEX"
             QueueGF(CurrentScope(), "rebuild")
             if refreshSortingControls then refreshSortingControls() end
-        end)
+        end,
+        ControlMeta(ctx, "field.sortByRole"))
     local playerFirst = BindScopeToggle(ctx, W.ToggleAt(sortCard, "Player first in role", 16, -144, sortingLeftW - 32), "playerFirstInRole", false, "rebuild")
     local roleRows = BuildRoleOrderRows(ctx, roleCard, {
         x = 16,
@@ -263,7 +267,8 @@ local function BuildGFLayout(ctx)
                 Set(scopeKey, "frameScaleMode", "off", "rebuild")
             end
             RefreshScalingState()
-        end)
+        end,
+        ControlMeta(ctx, "field.frameScaleEnabled"))
     local scaleMode = W.Segment(scaleModeCard, "Scale Mode", VT("manual", "Manual", "auto", "Auto"), min(220, scaleLeftW - 32))
     W.MoveWidget(scaleMode, scaleModeCard, 16, -72, min(220, scaleLeftW - 32))
     M.BindSegment(ctx, scaleMode,
@@ -277,14 +282,19 @@ local function BuildGFLayout(ctx)
             M._msuf2LastGroupScaleMode[scopeKey] = mode
             Set(scopeKey, "frameScaleMode", mode, "rebuild")
             RefreshScalingState()
-        end)
+        end,
+        ControlMeta(ctx, "field.frameScaleMode"))
     local function BindScaleSlider(widget, key, default, labelFn)
         M.BindNumberWidget(ctx, widget,
             function() return Num(CurrentScope(), key, default) end,
             function(v)
                 Set(CurrentScope(), key, floor((tonumber(v) or default or 0) + 0.5), "rebuild")
             end,
-            default, { step = 5, roundStep = true })
+            default, (function()
+                local meta = ControlMeta(ctx, "field." .. tostring(key))
+                meta.step, meta.roundStep = 5, true
+                return meta
+            end)())
         local function RefreshLabel()
             if widget and widget._msuf2Title then widget._msuf2Title:SetText(labelFn(Num(CurrentScope(), key, default))) end
         end
@@ -347,7 +357,8 @@ local function BuildGFLayout(ctx)
             local conf = Conf(CurrentScope())
             conf.anchorToFrame = (v == "FREE") and nil or v
             QueueGF(CurrentScope(), "rebuild")
-        end)
+        end,
+        ControlMeta(ctx, "field.anchorToFrame"))
     local anchorPoint = ScopeDropdown(ctx, anchor, "Anchor Point", GF_ANCHOR_POINTS, 160, "anchorPoint", "CENTER", "rebuild", 254, -38, 160)
     local function IsStandardAnchorTarget(value)
         return value == nil or value == "" or value == "FREE" or value == "player" or value == "target"
@@ -371,6 +382,9 @@ local function BuildGFLayout(ctx)
         commitKey = function() return "group:anchorCustom:" .. tostring(CurrentScope()) end,
         pickTitle = "Pick Group Anchor",
         pickKey = function() return "group:anchorPick:" .. tostring(CurrentScope()) end,
+        controlDomain = "group",
+        controlPageKey = ctx and ctx.key,
+        controlPath = "anchor.custom",
     })
     local function RefreshAnchorHeader()
         customAnchor.Refresh()
