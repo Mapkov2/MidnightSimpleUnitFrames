@@ -20,13 +20,18 @@ ADDON_ROOT = REPO_ROOT / "MidnightSimpleUnitFrames"
 TOC = ADDON_ROOT / "MidnightSimpleUnitFrames.toc"
 LOCALE_ADDON_ROOT = REPO_ROOT / "MidnightSimpleUnitFrames_Locales"
 LOCALE_TOC = LOCALE_ADDON_ROOT / "MidnightSimpleUnitFrames_Locales.toc"
+ASSISTANT_ADDON_ROOT = REPO_ROOT / "MidnightSimpleUnitFrames_Assistant"
+ASSISTANT_TOC = ASSISTANT_ADDON_ROOT / "MidnightSimpleUnitFrames_Assistant.toc"
 SUPPORTED_LOCALES = {
     "enUS", "enGB", "deDE", "esES", "esMX", "frFR",
     "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW",
 }
 ENGLISH_LOCALES = {"enUS", "enGB"}
 NON_ENGLISH_LOCALES = SUPPORTED_LOCALES - ENGLISH_LOCALES
-SKIP_DIRS = {"scripts", "docs"}
+SKIP_DIRS = {
+    "scripts", "docs", "tools", "graphify-out", "__pycache__",
+    ".codex-remote-attachments", "_local_workflows",
+}
 INTENTIONALLY_UNLOADED_LUA = {
     # Developer-only diagnostic tools. They are kept in source but excluded
     # from release loading so normal users pay no startup/runtime cost.
@@ -82,7 +87,7 @@ def parse_load_refs() -> tuple[set[str], list[str]]:
     xml_queue: list[Path] = []
     seen_xml: set[Path] = set()
 
-    for toc in [TOC, LOCALE_TOC]:
+    for toc in [TOC, ASSISTANT_TOC, LOCALE_TOC]:
         for line_no, line in enumerate(read(toc).splitlines(), 1):
             item = line.strip()
             if not item or item.startswith("#") or item.startswith("##"):
@@ -166,6 +171,33 @@ def check_locale_addon_contracts() -> None:
         missing = sorted(NON_ENGLISH_LOCALES - companion_refs)
         extra = sorted(companion_refs - NON_ENGLISH_LOCALES)
         raise CheckError(f"locale companion mismatch; missing={missing}, extra={extra}")
+
+
+def toc_field(text: str, name: str) -> str:
+    match = re.search(rf"(?im)^##\s*{re.escape(name)}:\s*([^\r\n]+)", text)
+    return match.group(1).strip() if match else ""
+
+
+def check_assistant_addon_contracts() -> None:
+    if not ASSISTANT_TOC.exists():
+        raise CheckError(f"missing Assistant TOC: {ASSISTANT_TOC}")
+
+    main_toc = read(TOC)
+    assistant_toc = read(ASSISTANT_TOC)
+    require(assistant_toc, "## LoadOnDemand: 1", "Assistant LoadOnDemand")
+    require(assistant_toc, "## Dependencies: MidnightSimpleUnitFrames", "Assistant core dependency")
+    require(
+        assistant_toc,
+        r"..\MidnightSimpleUnitFrames\Shell\Menu2\MSUF_Menu2_AssistantRuntime.xml",
+        "Assistant runtime manifest",
+    )
+    for field in ["Interface", "Version"]:
+        main_value = toc_field(main_toc, field)
+        assistant_value = toc_field(assistant_toc, field)
+        if not main_value or assistant_value != main_value:
+            raise CheckError(
+                f"Assistant {field} mismatch: main={main_value!r}, Assistant={assistant_value!r}"
+            )
 
 
 def check_luac(lua_files: list[Path]) -> None:
@@ -423,7 +455,19 @@ def check_classpower_smoothing_contracts() -> None:
         require(defaults, key, f"ClassPower default {key}")
         require(page, key, f"ClassPower menu control {key}")
     require(page, '"powerSmoothFill"', "Class Resources managed Player power smoothing control")
-    require(page, 'local dpbSmooth = SwitchAt(', "Visible managed Player power smoothing switch")
+    require(
+        page,
+        'local smooth = SwitchAt(self.ctx, layout, "Smooth fill"',
+        "Visible managed Player power smoothing switch",
+    )
+    require(
+        page,
+        'Player, "powerSmoothFill", true, ApplyDetachedPlayerPowerSmoothing, '
+        'Meta("detached_power.layout.smooth_fill")',
+        "Managed Player power smoothing binding and catalog identity",
+    )
+    require(page, 'self:Add("detachedPlayer", smooth)',
+            "Managed Player power smoothing enablement group")
     require(page, "powerSmoothFill = true", "ClassPower one-click Player smoothing")
     require(page, "realtimePowerText = true", "ClassPower one-click frequent Player power updates")
     require(global_page, 'M.RequestUnitApply("player", reason, { preview = true, power = true })',
@@ -456,16 +500,38 @@ def check_portrait_refresh_contracts() -> None:
     )
 
 
+def check_unit_preview_lifecycle_contracts() -> None:
+    api = read(ADDON_ROOT / "Shell" / "Menu2" / "Preview" / "MSUF_Menu2_UnitPreview_API.lua")
+    sections = read(ADDON_ROOT / "Shell" / "Menu2" / "Pages" / "MSUF_Menu2_UnitSections.lua")
+    widgets = read(ADDON_ROOT / "Shell" / "Menu2" / "MSUF_Menu2_Widgets.lua")
+
+    for forbidden in [
+        "if box.IsVisible and not box:IsVisible() then return end",
+        "if wrapper and wrapper.IsVisible and not wrapper:IsVisible() then return true end",
+        "box:IsShown() and (not box.IsVisible or box:IsVisible())",
+    ]:
+        if forbidden in api:
+            raise CheckError("Unit preview refresh ownership must not depend on frame-lagged IsVisible state")
+    require(api, 'if type(queuedRefresh) == "function" and box:IsShown() then',
+            "Unit preview logically-owned queued render")
+    require(sections, "local function PreviewHostShown()", "Unit preview page owner predicate")
+    require(widgets, "local function BodyOwned()", "Pinned preview logical ownership predicate")
+    require(widgets, "if not BodyVisible() then\n            RefreshButton()",
+            "Pinned preview transient visibility preservation")
+
+
 def main() -> int:
     lua_files = all_lua_files()
     check_luac(lua_files)
     check_locale_addon_contracts()
+    check_assistant_addon_contracts()
     check_load_reachability(lua_files)
     check_kernel_castbar_contracts()
     check_group_refresh_contracts()
     check_powerbar_contracts()
     check_classpower_smoothing_contracts()
     check_portrait_refresh_contracts()
+    check_unit_preview_lifecycle_contracts()
     print(f"MSUF static checks: ok ({len(lua_files)} Lua files)")
     return 0
 
