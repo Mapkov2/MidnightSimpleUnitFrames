@@ -11,6 +11,7 @@ M.GroupPreviewRender = Render
 local F = M.Fallbacks or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local issecretvalue = _G.issecretvalue or function(_) return false end
+local wipe = _G.wipe or function(tbl) for key in pairs(tbl) do tbl[key] = nil end return tbl end
 local function DefaultCompiledAuraLane(_, _, fallback) return fallback or {} end
 local function DefaultInt(value, fallback, minValue, maxValue)
     local n = math.floor((tonumber(value) or tonumber(fallback) or 0) + 0.0001)
@@ -33,6 +34,24 @@ local function NormalizeFrameStrata(value, fallback)
 end
 local PREVIEW_UNITFRAME_STRATA = "MEDIUM"
 local PREVIEW_STRATA_LEVEL_STEP = 40
+-- Reserve a local numeric band below the mock so lower configured strata can
+-- be represented without producing negative frame levels. The band is rebased
+-- from the preview box on every refresh, so cached pages cannot accumulate
+-- parent-level changes across Edit Mode transitions.
+local PREVIEW_LOCAL_BASE_OFFSET = 400
+local PREVIEW_FRAME_LEVEL_MAX = 65535
+local function SafePreviewFrameLevel(value)
+    value = math.floor((tonumber(value) or 0) + 0.5)
+    if value < 0 then return 0 end
+    if value > PREVIEW_FRAME_LEVEL_MAX then return PREVIEW_FRAME_LEVEL_MAX end
+    return value
+end
+local function SetPreviewFrameLevel(frame, value)
+    if not (frame and frame.SetFrameLevel) then return 0 end
+    value = SafePreviewFrameLevel(value)
+    frame:SetFrameLevel(value)
+    return value
+end
 local function FrameStrataRank(value)
     local rank = _G.MSUF_FRAME_STRATA_RANK
     return rank and rank[value] or 0
@@ -41,7 +60,7 @@ local function DefaultClassColor(_, r, g, b) return r or 1, g or 1, b or 1 end
 local GROUP_RENDER_FALLBACKS = {
     CompiledSpec = F.Nil, CompiledAuraLane = DefaultCompiledAuraLane, RuntimeStatusConfig = F.Nil,
     CurrentStatusSpec = F.Nil, StatusSpecEnabled = F.False, StatusSpecInMode = F.False, StatusSpecIsText = F.False,
-    StatusText = F.Empty, StatusLabel = F.Status, CurrentSpellConfig = F.Nil, CurrentSpellPlaced = F.Nil,
+    StatusText = F.Empty, StatusLabel = F.Status, CurrentSpellInfo = F.Nil, PreviewAllSpecSpellIcons = F.False, CurrentSpellConfig = F.Nil, CurrentSpellPlaced = F.Nil,
     CurrentSpellTexture = F.QuestionIcon, CurrentSpellColor = F.WhiteRGB, MockSpellTexture = F.QuestionIcon,
     Int = DefaultInt, Round = F.Round, ClampZoom = NumberOrOne, UpdateZoomControls = F.Noop,
     AuraGrowth = DefaultAuraGrowth, ApplyRounded = F.False, ClampLayer = DefaultClampLayer,
@@ -163,6 +182,17 @@ local function BuildScene(box, reason)
         and S.CompiledAuraLane(scene.runtimeAuras, "debuff", rawAuras.debuff or {}) or rawAuras.debuff or {}
     scene.statusSpec = S.CurrentStatusSpec()
     scene.selectedSpellCfg = S.CurrentSpellConfig(kind)
+    -- The selected frame effect belongs to the selected spell, not to whichever
+    -- preview handle happens to render it.  Runtime compilation can temporarily
+    -- hand ownership back to the fallback handle across Edit Mode transitions.
+    scene.selectedSpellEffect = scene.selectedSpellCfg and scene.selectedSpellCfg.frame
+    local selectedEffectKind = type(scene.selectedSpellEffect) == "table"
+        and tostring(scene.selectedSpellEffect.type or "none"):lower() or "none"
+    scene.selectedSpellEffectAvailable = selectedEffectKind ~= "" and selectedEffectKind ~= "none"
+    local _, selectedSpellSpecKey, selectedSpellAuraName = S.CurrentSpellInfo(kind)
+    scene.selectedSpellSpecKey = selectedSpellSpecKey
+    scene.selectedSpellAuraName = selectedSpellAuraName
+    scene.previewAllSpecSpellIcons = S.PreviewAllSpecSpellIcons(kind) == true
     scene.rawSelectedPlaced = scene.selectedSpellCfg and scene.selectedSpellCfg.placed
     scene.selectedPlaced = S.CurrentSpellPlaced(kind)
     scene.selectedSpellPlacedEnabled = scene.selectedPlaced
@@ -170,18 +200,35 @@ local function BuildScene(box, reason)
     scene.selectedSpellNeedsPlacementPreview = scene.selectedSpellCfg ~= nil and scene.rawSelectedPlaced == nil
     scene.runtimeSpellIndicators = runtimeSpec and runtimeSpec.spellIndicators
     scene.runtimeSpellItems = scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.items
+    local previewSpellItems = box._msufGFPreviewSpellItemsScratch or {}
+    box._msufGFPreviewSpellItemsScratch = previewSpellItems
+    wipe(previewSpellItems)
+    scene.previewSpellItems = previewSpellItems
     scene.runtimeSpellPlacedAvailable = false
+    scene.runtimeSpellEffectAvailable = false
     if type(scene.runtimeSpellItems) == "table" then
         for i = 1, #scene.runtimeSpellItems do
             local item = scene.runtimeSpellItems[i]
+            local selectedItem = item and item.specKey == selectedSpellSpecKey and item.auraName == selectedSpellAuraName
             local placed = item and item.placed
-            if placed and (placed.type or "icon") ~= "none" then scene.runtimeSpellPlacedAvailable = true end
-            local effect = item and item.frame
-            if effect and effect.type and effect.type ~= "none" then
-                local currentPriority = tonumber(scene.runtimeSpellEffect and scene.runtimeSpellEffect.priority) or 999
-                if not scene.runtimeSpellEffect or (tonumber(effect.priority) or 5) < currentPriority then
-                    scene.runtimeSpellEffect = effect
+            local placedShown = placed and (placed.type or "icon") ~= "none"
+            if selectedItem or (scene.previewAllSpecSpellIcons and item and item.specKey == selectedSpellSpecKey and placedShown) then
+                scene.previewSpellItems[#scene.previewSpellItems + 1] = item
+            end
+            if selectedItem then
+                if placed and (placed.type or "icon") ~= "none" then scene.runtimeSpellPlacedAvailable = true end
+                local effect = item.frame
+                if effect ~= nil then
+                    scene.selectedSpellEffect = effect
+                    local effectKind = type(effect) == "table" and tostring(effect.type or "none"):lower() or "none"
+                    scene.selectedSpellEffectAvailable = effectKind ~= "" and effectKind ~= "none"
                 end
+                if effect and effect.type and effect.type ~= "none" then
+                    scene.runtimeSpellEffectAvailable = true
+                end
+                if not scene.previewAllSpecSpellIcons then break end
+            elseif scene.previewAllSpecSpellIcons and item and item.specKey == selectedSpellSpecKey and placedShown then
+                scene.runtimeSpellPlacedAvailable = true
             end
         end
     end
@@ -219,7 +266,8 @@ local function BuildScene(box, reason)
         textAvailable = conf.showName ~= false or conf.showHPText ~= false or powerTextEnabled == true
     end
     local selectedSpellAvailable = conf.spellIndicators and conf.spellIndicators.enabled == true
-        and (scene.selectedSpellPlacedEnabled or scene.selectedSpellNeedsPlacementPreview)
+        and (scene.selectedSpellPlacedEnabled or scene.selectedSpellNeedsPlacementPreview
+            or scene.selectedSpellEffectAvailable)
     scene.layerAvailable = {
         guides = true, bounds = true,
         buff = SceneAuraLaneAvailable(scene, scene.buffCfg, 6),
@@ -227,7 +275,7 @@ local function BuildScene(box, reason)
         debuff = SceneAuraLaneAvailable(scene, scene.debuffCfg, 6),
         status = statusAvailable,
         si = scene.runtimeSpellIndicators and scene.runtimeSpellIndicators.enabled == true
-            and (scene.runtimeSpellPlacedAvailable or scene.runtimeSpellEffect ~= nil)
+            and (scene.runtimeSpellPlacedAvailable or scene.runtimeSpellEffectAvailable)
             or selectedSpellAvailable or false,
         targetedSpells = kind == "party" and conf.targetedSpellsEnabled == true,
         auraText = aurasEnabled and customAuraText,
@@ -359,7 +407,7 @@ local function FinalizeScene(scene)
     for i = 1, #auraHandles do
         local item, handle = auraHandles[i], auraHandles[i][1]
         if handle then
-            handle:SetFrameLevel(baseLevel
+            SetPreviewFrameLevel(handle, baseLevel
                 + ApplyHandleStrata(scene, handle, item[2].strata, liveStrata, hostStrata)
                 + S.ClampLayer(item[2].layer, item[3]))
         end
@@ -369,7 +417,7 @@ local function FinalizeScene(scene)
         local spec = handle and handle._statusSpec
         if handle then
             local cfg = S.RuntimeStatusConfig(runtimeStatus, spec)
-            handle:SetFrameLevel(healthBaseLevel + S.ClampLayer(cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7))
+            SetPreviewFrameLevel(handle, healthBaseLevel + S.ClampLayer(cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7))
         end
     end
     local rawIndicators = conf.spellIndicators or {}
@@ -377,21 +425,57 @@ local function FinalizeScene(scene)
     local spellLayer = runtimeIndicators.layer ~= nil and runtimeIndicators.layer or rawIndicators.layer
     local spellStrata = runtimeIndicators.strata ~= nil and runtimeIndicators.strata or rawIndicators.strata
     local selected = scene.selectedSpellCfg
-    S.spellHandle:SetFrameLevel(baseLevel
+    SetPreviewFrameLevel(S.spellHandle, baseLevel
         + ApplyHandleStrata(scene, S.spellHandle, selected and selected.strata or spellStrata, liveStrata, hostStrata)
         + S.ClampLayer(selected and selected.layer or spellLayer, 9))
+    local selectedEffectOwner = box._msufGFSelectedSpellEffectOwner
+    local selectedEffectRoot = selectedEffectOwner and selectedEffectOwner._msufSpellPreviewEffectRoot
+    if selectedEffectRoot and selectedEffectRoot.IsShown and selectedEffectRoot:IsShown() then
+        local priority = max(1, min(10, floor((tonumber(selectedEffectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
+        -- Only one selected full-frame effect is rendered. Its configured live
+        -- strata must not be translated relative to an Edit Mode preview frame:
+        -- that live frame can remain on a higher strata during teardown and
+        -- produce a negative local offset below the menu mock. Keep the preview
+        -- root on the host strata and express priority in a bounded local band.
+        ApplyHandleStrata(scene, selectedEffectRoot, "AUTO", liveStrata, hostStrata)
+        SetPreviewFrameLevel(selectedEffectRoot, baseLevel + 24 + (11 - priority))
+    end
+    if selectedEffectOwner then
+        SetPreviewFrameLevel(selectedEffectOwner, baseLevel + 1)
+    end
+    local selectedIconEffectRoot = S.spellHandle._msufSpellPreviewIconEffectRoot
+    if selectedIconEffectRoot and selectedIconEffectRoot.IsShown and selectedIconEffectRoot:IsShown() then
+        ApplyHandleStrata(scene, selectedIconEffectRoot,
+            selected and selected.strata or spellStrata, liveStrata, hostStrata)
+        SetPreviewFrameLevel(selectedIconEffectRoot, S.spellHandle:GetFrameLevel() + 4)
+    end
     for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
-        handle:SetFrameLevel(baseLevel
+        SetPreviewFrameLevel(handle, baseLevel
             + ApplyHandleStrata(scene, handle, handle._msufSpellIndicatorStrata or spellStrata, liveStrata, hostStrata)
             + S.ClampLayer(handle._msufSpellIndicatorLayer or spellLayer, 9))
+        local effectRoot = handle._msufSpellPreviewEffectRoot
+        if effectRoot and effectRoot.IsShown and effectRoot:IsShown() then
+            local priority = max(1, min(10, floor((tonumber(effectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
+            SetPreviewFrameLevel(effectRoot, baseLevel
+                + ApplyHandleStrata(scene, effectRoot,
+                    effectRoot._msufSpellPreviewStrata or handle._msufSpellIndicatorStrata or spellStrata,
+                    liveStrata, hostStrata)
+                + 24 + (11 - priority))
+        end
+        local iconEffectRoot = handle._msufSpellPreviewIconEffectRoot
+        if iconEffectRoot and iconEffectRoot.IsShown and iconEffectRoot:IsShown() then
+            ApplyHandleStrata(scene, iconEffectRoot,
+                handle._msufSpellIndicatorStrata or spellStrata, liveStrata, hostStrata)
+            SetPreviewFrameLevel(iconEffectRoot, handle:GetFrameLevel() + 4)
+        end
     end
     if S.targetedHandle then
-        S.targetedHandle:SetFrameLevel(healthBaseLevel + (S.Layers.TARGETED_SPELLS_BASE_OFFSET or 40)
+        SetPreviewFrameLevel(S.targetedHandle, healthBaseLevel + (S.Layers.TARGETED_SPELLS_BASE_OFFSET or 40)
             + S.ClampLayer(conf.targetedSpellsLayer, 10))
     end
     for i = 1, #TEXT_LEVEL_SPECS do
         local item = TEXT_LEVEL_SPECS[i]
-        scene.textHandles[item[1]]:SetFrameLevel(scene.textBaseLevel
+        SetPreviewFrameLevel(scene.textHandles[item[1]], scene.textBaseLevel
             + S.ClampLayer(runtimeText[item[2]] or conf[item[3]], item[4]))
     end
     local auraKeys = { "buff", "trackedBuff", "debuff" }
@@ -412,6 +496,9 @@ local function FinalizeScene(scene)
         end
     end
     local spellVisible = scene.layerAvailable.si and SceneLayerOn(scene, "si")
+    if selectedEffectOwner then
+        selectedEffectOwner:SetShown(spellVisible and scene.selectedSpellEffectAvailable == true)
+    end
     S.spellHandle:SetShown(spellVisible)
     S.spellHandle:SetAlpha(selected and selected.enabled == false and SceneLayerAlpha(scene, "si") * 0.45
         or SceneLayerAlpha(scene, "si"))
@@ -818,9 +905,16 @@ function Render.Install(box, ctx, deps)
     local statusHandles = deps.statusHandles or {}
     local spellHandle = deps.spellHandle
     local targetedHandle = deps.targetedHandle
+    local selectedSpellEffectOwner = box._msufGFSelectedSpellEffectOwner
+    if not selectedSpellEffectOwner then
+        selectedSpellEffectOwner = CreateFrame("Frame", nil, mock)
+        selectedSpellEffectOwner:EnableMouse(false)
+        selectedSpellEffectOwner:SetAllPoints(mock)
+        box._msufGFSelectedSpellEffectOwner = selectedSpellEffectOwner
+    end
     local statusSpecs = deps.statusSpecs or {}
-    local CompiledSpec, CompiledAuraLane, RuntimeStatusConfig, CurrentStatusSpec, StatusSpecEnabled, StatusSpecInMode, StatusSpecIsText, StatusText, StatusLabel, CurrentSpellConfig, CurrentSpellPlaced, CurrentSpellTexture, CurrentSpellColor, MockSpellTexture = M.PickFallbacks(deps, GROUP_RENDER_FALLBACKS, [[
-        CompiledSpec CompiledAuraLane RuntimeStatusConfig CurrentStatusSpec StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText StatusLabel CurrentSpellConfig CurrentSpellPlaced CurrentSpellTexture CurrentSpellColor MockSpellTexture
+    local CompiledSpec, CompiledAuraLane, RuntimeStatusConfig, CurrentStatusSpec, StatusSpecEnabled, StatusSpecInMode, StatusSpecIsText, StatusText, StatusLabel, CurrentSpellInfo, PreviewAllSpecSpellIcons, CurrentSpellConfig, CurrentSpellPlaced, CurrentSpellTexture, CurrentSpellColor, MockSpellTexture = M.PickFallbacks(deps, GROUP_RENDER_FALLBACKS, [[
+        CompiledSpec CompiledAuraLane RuntimeStatusConfig CurrentStatusSpec StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText StatusLabel CurrentSpellInfo PreviewAllSpecSpellIcons CurrentSpellConfig CurrentSpellPlaced CurrentSpellTexture CurrentSpellColor MockSpellTexture
     ]])
     local Int, Round, ClampZoom, UpdateZoomControls, AuraGrowth, ApplyRounded, ClampLayer, ClassColor, HealthColor, SelectHandle, NudgeHandlePosition, AddIconPool, RefreshHandleSelection = M.PickFallbacks(deps, GROUP_RENDER_FALLBACKS, [[
         Int Round ClampZoom UpdateZoomControls AuraGrowth ApplyRounded ClampLayer ClassColor HealthColor SelectHandle NudgeHandlePosition AddIconPool RefreshHandleSelection
@@ -865,6 +959,8 @@ function Render.Install(box, ctx, deps)
         CompiledAuraLane = CompiledAuraLane,
         RuntimeStatusConfig = RuntimeStatusConfig,
         CurrentStatusSpec = CurrentStatusSpec,
+        CurrentSpellInfo = CurrentSpellInfo,
+        PreviewAllSpecSpellIcons = PreviewAllSpecSpellIcons,
         StatusSpecEnabled = StatusSpecEnabled,
         StatusSpecInMode = StatusSpecInMode,
         StatusSpecIsText = StatusSpecIsText,
@@ -900,13 +996,48 @@ function Render.Install(box, ctx, deps)
         Layers = Layers,
         issecretvalue = issecretvalue,
     }
+    local function SuspendSpellPreviewRoot(root)
+        if not root then return end
+        local pulse = root._msufSpellPreviewPulse
+        if pulse and pulse.IsPlaying and pulse:IsPlaying() then pulse:Stop() end
+        local glow = root._msufSpellPreviewGlow
+        if glow then
+            if glow.animation and glow.animation.IsPlaying and glow.animation:IsPlaying() then glow.animation:Stop() end
+            if glow.halo then glow.halo:Hide() end
+            if glow.ants then glow.ants:Hide() end
+        end
+        root:Hide()
+    end
+    function box:SuspendSpellPreviewEffects()
+        for _, handle in pairs(self._spellIndicatorHandles or {}) do
+            SuspendSpellPreviewRoot(handle and handle._msufSpellPreviewEffectRoot)
+            SuspendSpellPreviewRoot(handle and handle._msufSpellPreviewIconEffectRoot)
+        end
+        SuspendSpellPreviewRoot(spellHandle and spellHandle._msufSpellPreviewEffectRoot)
+        SuspendSpellPreviewRoot(spellHandle and spellHandle._msufSpellPreviewIconEffectRoot)
+        SuspendSpellPreviewRoot(selectedSpellEffectOwner and selectedSpellEffectOwner._msufSpellPreviewEffectRoot)
+    end
     --- Refresh is menu-only. It reads compiled/runtime-like specs to draw a mock
     --- group frame and must not rebuild secure headers or subscribe to roster
     --- events.
     function box:Refresh(reason)
+        if (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true then
+            self._msufGFRefreshAfterCombat = reason or self._msufGFRefreshAfterCombat or true
+            return
+        end
         if self._msufGFTextDragActive and reason ~= "GROUP_PREVIEW_TEXT_DRAG" and reason ~= "GROUP_PREVIEW_TEXT_DRAG_END" then
             self._msufGFRefreshReason = reason or self._msufGFRefreshReason
             return
+        end
+        -- Rebase the cached preview into a deterministic local level band before
+        -- reading or painting any scene state. Ancestor level changes are not a
+        -- render input and must never leak into configured layer calculations.
+        local previewRootLevel = SafePreviewFrameLevel(self.GetFrameLevel and self:GetFrameLevel() or 0)
+        SetPreviewFrameLevel(self._stage, previewRootLevel + 2)
+        SetPreviewFrameLevel(self._layers, previewRootLevel + 3)
+        SetPreviewFrameLevel(mock, previewRootLevel + PREVIEW_LOCAL_BASE_OFFSET)
+        if self._dragFrame then
+            SetPreviewFrameLevel(self._dragFrame, previewRootLevel + PREVIEW_LOCAL_BASE_OFFSET + 140)
         end
         local profiling = M.PerfProfile and M.PerfProfile.enabled == true and M.ProfileStart and M.ProfileStop
         local profileStarted = profiling and M.ProfileStart() or nil
@@ -921,89 +1052,203 @@ function Render.Install(box, ctx, deps)
         local focus, layerVisible, soloLayer, layerAvailable = scene.focus, scene.layerVisible, scene.soloLayer, scene.layerAvailable
         local buffCfg, trackedBuffCfg, debuffCfg = scene.buffCfg, scene.trackedBuffCfg, scene.debuffCfg
         local statusSpec, selectedSpellCfg, selectedPlaced = scene.statusSpec, scene.selectedSpellCfg, scene.selectedPlaced
+        local selectedSpellEffect = scene.selectedSpellEffect
         local selectedSpellNeedsPlacementPreview = scene.selectedSpellNeedsPlacementPreview
-        local runtimeSpellIndicators, runtimeSpellItems = scene.runtimeSpellIndicators, scene.runtimeSpellItems
-        local runtimeSpellEffect = scene.runtimeSpellEffect
+        local runtimeSpellIndicators, runtimeSpellItems = scene.runtimeSpellIndicators, scene.previewSpellItems
         local function StatusConfigAvailable(spec) return SceneStatusAvailable(scene, spec) end
         local function LayerOn(key) return SceneLayerOn(scene, key) end
         local function LayerAlpha(key) return SceneLayerAlpha(scene, key) end
         local function ResolveStatusTexture(spec, runtimeCfg, iconType, variant)
             return ResolveStatusPreviewTexture(scene, spec, runtimeCfg, iconType, variant)
         end
-        local function HideSpellEffectPreview()
-            if mock._siPreviewTint then mock._siPreviewTint:Hide() end
-            if mock._siPreviewEdges then
-                for i = 1, #mock._siPreviewEdges do
-                    if mock._siPreviewEdges[i] then mock._siPreviewEdges[i]:Hide() end
-                end
-            end
-            if mock._siPreviewSavedNameColor and mock._nameFS and mock._nameFS.SetTextColor then
-                local c = mock._siPreviewSavedNameColor
-                mock._nameFS:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
-            end
-            mock._siPreviewSavedNameColor = nil
+        local function StopPreviewAnimation(group)
+            if group and group.IsPlaying and group:IsPlaying() then group:Stop() end
         end
-        local function EnsureSpellPreviewEdges()
-            if mock._siPreviewEdges then return mock._siPreviewEdges end
-            mock._siPreviewEdges = {}
+        local function HidePreviewGlow(root)
+            local glow = root and root._msufSpellPreviewGlow
+            if not glow then return end
+            StopPreviewAnimation(glow.animation)
+            glow.halo:Hide()
+            glow.ants:Hide()
+        end
+        local function EnsurePreviewGlow(root)
+            local glow = root and root._msufSpellPreviewGlow
+            if glow then return glow end
+            glow = {}
+            glow.halo = root:CreateTexture(nil, "OVERLAY", nil, 6)
+            glow.halo:SetTexture([[Interface\SpellActivationOverlay\IconAlert]])
+            glow.halo:SetTexCoord(0.0078125, 0.5078125, 0.27734375, 0.52734375)
+            glow.halo:SetBlendMode("ADD")
+            glow.ants = root:CreateTexture(nil, "OVERLAY", nil, 7)
+            glow.ants:SetTexture([[Interface\SpellActivationOverlay\IconAlertAnts]])
+            glow.ants:SetBlendMode("ADD")
+            glow.animation = glow.ants:CreateAnimationGroup()
+            glow.animation:SetLooping("REPEAT")
+            local flipbook = glow.animation:CreateAnimation("FlipBook")
+            flipbook:SetFlipBookRows(5)
+            flipbook:SetFlipBookColumns(5)
+            flipbook:SetFlipBookFrames(22)
+            flipbook:SetFlipBookFrameWidth(48)
+            flipbook:SetFlipBookFrameHeight(48)
+            flipbook:SetDuration(0.37)
+            root._msufSpellPreviewGlow = glow
+            return glow
+        end
+        local function ShowPreviewGlow(root, r, g, b, a, padding)
+            local glow = EnsurePreviewGlow(root)
+            if not glow then return end
+            local haloPadding = padding * 1.55
+            glow.halo:ClearAllPoints()
+            glow.halo:SetPoint("TOPLEFT", root, "TOPLEFT", -haloPadding, haloPadding)
+            glow.halo:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", haloPadding, -haloPadding)
+            glow.ants:ClearAllPoints()
+            glow.ants:SetPoint("TOPLEFT", root, "TOPLEFT", -padding, padding)
+            glow.ants:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", padding, -padding)
+            glow.halo:SetDesaturated(true)
+            glow.ants:SetDesaturated(true)
+            glow.halo:SetVertexColor(r, g, b, a)
+            glow.ants:SetVertexColor(r, g, b, a)
+            glow.halo:Show()
+            glow.ants:Show()
+            if not glow.animation:IsPlaying() then glow.animation:Play() end
+        end
+        local function EnsureSpellEffectPreview(handle)
+            local root = handle and handle._msufSpellPreviewEffectRoot
+            if root then return root end
+            root = CreateFrame("Frame", nil, handle)
+            root:EnableMouse(false)
+            root:SetAllPoints(mock)
+            handle._msufSpellPreviewEffectRoot = root
+            return root
+        end
+        local function HideSpellEffectPreview(handle)
+            local root = handle and handle._msufSpellPreviewEffectRoot
+            if not root then return end
+            StopPreviewAnimation(root._msufSpellPreviewPulse)
+            root:SetAlpha(1)
+            HidePreviewGlow(root)
+            root:Hide()
+        end
+        local function EnsureSpellPreviewEdges(root)
+            if root._msufSpellPreviewEdges then return root._msufSpellPreviewEdges end
+            local edges = {}
             for i = 1, 4 do
-                local tex = mock:CreateTexture(nil, "OVERLAY")
-                tex:SetTexture(WHITE8X8)
-                tex:Hide()
-                mock._siPreviewEdges[i] = tex
+                edges[i] = root:CreateTexture(nil, "OVERLAY")
+                edges[i]:SetTexture(WHITE8X8)
+                edges[i]:Hide()
             end
-            return mock._siPreviewEdges
+            root._msufSpellPreviewEdges = edges
+            return edges
         end
-        local function ApplySpellEffectPreview(effect)
-            HideSpellEffectPreview()
-            if type(effect) ~= "table" then return end
+        local function HideSpellPreviewRegions(root)
+            if root._msufSpellPreviewTint then root._msufSpellPreviewTint:Hide() end
+            if root._msufSpellPreviewName then root._msufSpellPreviewName:Hide() end
+            local edges = root._msufSpellPreviewEdges
+            for i = 1, type(edges) == "table" and #edges or 0 do edges[i]:Hide() end
+            StopPreviewAnimation(root._msufSpellPreviewPulse)
+            root:SetAlpha(1)
+            HidePreviewGlow(root)
+        end
+        local function SyncSpellPreviewName(root, source, r, g, b, a)
+            if not source then return end
+            local overlay = root._msufSpellPreviewName
+            if not overlay then
+                overlay = root:CreateFontString(nil, "OVERLAY")
+                root._msufSpellPreviewName = overlay
+            end
+            local path, size, flags = source:GetFont()
+            if path and size then overlay:SetFont(path, size, flags) end
+            if source.GetJustifyH then overlay:SetJustifyH(source:GetJustifyH()) end
+            if source.GetJustifyV then overlay:SetJustifyV(source:GetJustifyV()) end
+            if source.GetShadowColor then overlay:SetShadowColor(source:GetShadowColor()) end
+            if source.GetShadowOffset then overlay:SetShadowOffset(source:GetShadowOffset()) end
+            overlay:ClearAllPoints()
+            overlay:SetAllPoints(source)
+            overlay:SetText(source:GetText())
+            overlay:SetTextColor(r, g, b, a)
+            overlay:SetShown(source.IsShown == nil or source:IsShown())
+        end
+        local function LayoutSpellPreviewEdges(root, effect, r, g, b, a)
+            local edges = EnsureSpellPreviewEdges(root)
+            local glowLike = effect.type == "glow" or effect.type == "pulse"
+            local rawThickness = tonumber(effect.thickness) or (effect.type == "glow" and 3 or 2)
+            local thickness = max(1, ScaleValue(glowLike and max(rawThickness, 3) or rawThickness, mock._previewScale or 1, 1))
+            if glowLike then a = min(1, a * 0.85) end
+            local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
+            top:ClearAllPoints()
+            top:SetPoint("TOPLEFT", mock, "TOPLEFT", -thickness, thickness)
+            top:SetPoint("TOPRIGHT", mock, "TOPRIGHT", thickness, thickness)
+            top:SetHeight(thickness)
+            bottom:ClearAllPoints()
+            bottom:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", -thickness, -thickness)
+            bottom:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", thickness, -thickness)
+            bottom:SetHeight(thickness)
+            left:ClearAllPoints()
+            left:SetPoint("TOPLEFT", top, "BOTTOMLEFT", 0, 0)
+            left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT", 0, 0)
+            left:SetWidth(thickness)
+            right:ClearAllPoints()
+            right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT", 0, 0)
+            right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT", 0, 0)
+            right:SetWidth(thickness)
+            for i = 1, 4 do
+                if edges[i].SetBlendMode then edges[i]:SetBlendMode(glowLike and "ADD" or "BLEND") end
+                edges[i]:SetVertexColor(r, g, b, a)
+                edges[i]:Show()
+            end
+        end
+        local function ApplySpellEffectPreview(handle, effect)
+            if not (handle and type(effect) == "table") then return end
+            local root = EnsureSpellEffectPreview(handle)
+            HideSpellPreviewRegions(root)
+            root:ClearAllPoints()
+            root:SetAllPoints(mock)
+            root._msufSpellPreviewStrata = effect.strata or handle._msufSpellIndicatorStrata
+            root._msufSpellPreviewPriority = max(1, min(10, floor((tonumber(effect.priority) or 5) + 0.5)))
             local color = effect.color or {}
             local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
             local a = color[4] or 1
-            if effect.type == "healthtint" then
-                local tint = mock._siPreviewTint
+            local kind = tostring(effect.type or "none"):lower()
+            if kind == "healthtint" then
+                local tint = root._msufSpellPreviewTint
                 if not tint then
-                    tint = mock:CreateTexture(nil, "OVERLAY")
+                    tint = root:CreateTexture(nil, "OVERLAY")
                     tint:SetTexture(WHITE8X8)
-                    mock._siPreviewTint = tint
+                    root._msufSpellPreviewTint = tint
                 end
                 tint:ClearAllPoints()
                 tint:SetAllPoints(mock._health or mock)
-                tint:SetVertexColor(r, g, b, effect.tintAlpha or a or 0.20)
+                tint:SetBlendMode("BLEND")
+                local tintAlpha = tonumber(effect.tintAlpha or effect.alpha)
+                if tintAlpha == nil then tintAlpha = a > 0 and a or 0.20 end
+                tint:SetVertexColor(r, g, b, max(0, min(1, tintAlpha)))
                 tint:Show()
-            elseif effect.type == "namecolor" then
-                if mock._nameFS and mock._nameFS.SetTextColor then
-                    if mock._nameFS.GetTextColor then
-                        local cr, cg, cb, ca = mock._nameFS:GetTextColor()
-                        mock._siPreviewSavedNameColor = { cr, cg, cb, ca }
+            elseif kind == "namecolor" then
+                SyncSpellPreviewName(root, mock._nameFS, r, g, b, a)
+            elseif kind == "glow" then
+                local padding = max(1, ScaleValue((tonumber(effect.thickness) or 3) + 2, mock._previewScale or 1, 1))
+                ShowPreviewGlow(root, r, g, b, a, padding)
+            elseif kind == "border" or kind == "pulse" then
+                LayoutSpellPreviewEdges(root, effect, r, g, b, a)
+                if kind == "pulse" then
+                    local pulse = root._msufSpellPreviewPulse
+                    if not pulse then
+                        pulse = root:CreateAnimationGroup()
+                        local alpha = pulse:CreateAnimation("Alpha")
+                        alpha:SetFromAlpha(0.45)
+                        alpha:SetToAlpha(1)
+                        alpha:SetDuration(0.7)
+                        if alpha.SetSmoothing then alpha:SetSmoothing("IN_OUT") end
+                        pulse:SetLooping("BOUNCE")
+                        root._msufSpellPreviewPulse = pulse
                     end
-                    mock._nameFS:SetTextColor(r, g, b, a)
+                    if not pulse:IsPlaying() then pulse:Play() end
                 end
-            elseif effect.type == "border" or effect.type == "glow" or effect.type == "pulse" then
-                local edges = EnsureSpellPreviewEdges()
-                local thickness = max(1, ScaleValue(effect.thickness or (effect.type == "glow" and 3 or 2), mock._previewScale or 1, 1))
-                local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
-                top:ClearAllPoints()
-                top:SetPoint("TOPLEFT", mock, "TOPLEFT", -thickness, thickness)
-                top:SetPoint("TOPRIGHT", mock, "TOPRIGHT", thickness, thickness)
-                top:SetHeight(thickness)
-                bottom:ClearAllPoints()
-                bottom:SetPoint("BOTTOMLEFT", mock, "BOTTOMLEFT", -thickness, -thickness)
-                bottom:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", thickness, -thickness)
-                bottom:SetHeight(thickness)
-                left:ClearAllPoints()
-                left:SetPoint("TOPLEFT", top, "BOTTOMLEFT", 0, 0)
-                left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT", 0, 0)
-                left:SetWidth(thickness)
-                right:ClearAllPoints()
-                right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT", 0, 0)
-                right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT", 0, 0)
-                right:SetWidth(thickness)
-                for i = 1, 4 do
-                    edges[i]:SetVertexColor(r, g, b, effect.type == "glow" and min(1, a * 0.85) or a)
-                    edges[i]:Show()
-                end
+            else
+                HideSpellEffectPreview(handle)
+                return
             end
+            root:Show()
         end
         self._title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
         local stageW = self._stage:GetWidth() or (width - 98)
@@ -1179,18 +1424,18 @@ function Render.Install(box, ctx, deps)
             if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
             mock._nameTextLayer:ClearAllPoints()
             mock._nameTextLayer:SetAllPoints(mock)
-            mock._nameTextLayer:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.nameLayer or conf.nameTextLayer, 5))
+            SetPreviewFrameLevel(mock._nameTextLayer, textBaseLevel + ClampLayer(runtimeText.nameLayer or conf.nameTextLayer, 5))
         end
         if mock._healthTextLayer then
             if mock._healthTextLayer.GetParent and mock._healthTextLayer:GetParent() ~= mock and mock._healthTextLayer.SetParent then mock._healthTextLayer:SetParent(mock) end
             mock._healthTextLayer:ClearAllPoints()
             mock._healthTextLayer:SetAllPoints(mock)
-            mock._healthTextLayer:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
+            SetPreviewFrameLevel(mock._healthTextLayer, textBaseLevel + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5))
         end
         if mock._powerTextLayer then
             mock._powerTextLayer:ClearAllPoints()
             mock._powerTextLayer:SetAllPoints(mock)
-            mock._powerTextLayer:SetFrameLevel(textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
+            SetPreviewFrameLevel(mock._powerTextLayer, textBaseLevel + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2))
         end
         local showText = LayerOn("text")
         local fontPath = (runtimeSpec and runtimeSpec.font) or (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
@@ -1369,7 +1614,7 @@ function Render.Install(box, ctx, deps)
             "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerRightMode, powerRightHidePercent))
         local boundsEdge = max(1, outlineEdge)
         ApplyBoundsGuide(self, boundsEdge)
-        if self._bounds.SetFrameLevel and mock.GetFrameLevel then self._bounds:SetFrameLevel((mock:GetFrameLevel() or 1) + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
+        if self._bounds.SetFrameLevel and mock.GetFrameLevel then SetPreviewFrameLevel(self._bounds, (mock:GetFrameLevel() or 1) + (Layers.PREVIEW_BOUNDS_OFFSET or 48)) end
         self._bounds:SetShown(LayerOn("bounds"))
         scene.previewScale = previewScale
         scene.SetPreviewFont = SetPreviewFont
@@ -1569,8 +1814,34 @@ function Render.Install(box, ctx, deps)
         for i = 1, #statusHandles do
             ConfigureStatusHandle(statusHandles[i])
         end
-        local dynamicSpellHandlesActive = {}
-        local dynamicSpellHandlesUsed = false
+        local dynamicSpellHandlesActive = box._msufGFSpellHandlesActiveScratch or {}
+        box._msufGFSpellHandlesActiveScratch = dynamicSpellHandlesActive
+        wipe(dynamicSpellHandlesActive)
+        local selectedRuntimeSpellHandleUsed = false
+        local function HideSpellIconEffectPreview(handle)
+            local root = handle and handle._msufSpellPreviewIconEffectRoot
+            if not root then return end
+            HidePreviewGlow(root)
+            root:Hide()
+        end
+        local function ApplySpellIconEffectPreview(handle, placed, spellSize)
+            if not (handle and placed and placed.type == "icon" and placed.iconEffect == "glow") then
+                HideSpellIconEffectPreview(handle)
+                return
+            end
+            local root = handle._msufSpellPreviewIconEffectRoot
+            if not root then
+                root = CreateFrame("Frame", nil, handle)
+                root:EnableMouse(false)
+                handle._msufSpellPreviewIconEffectRoot = root
+            end
+            root:ClearAllPoints()
+            root:SetAllPoints(handle)
+            local color = handle._msufSpellIndicatorColor or { 1, 1, 1, 1 }
+            ShowPreviewGlow(root, color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1,
+                max(2, spellSize * 0.15))
+            root:Show()
+        end
         local function ConfigureSpellPreviewHandle(handle, item, placed, fallbackTexture, fallbackColor)
             if not (handle and placed) then return false end
             local spellType = placed.type or "icon"
@@ -1578,9 +1849,27 @@ function Render.Install(box, ctx, deps)
             local spellSize = max(14, ScaleValue(spellBaseSize, previewScale, 10))
             local color = item and item.color or fallbackColor
             local spellR, spellG, spellB = (color and color[1]) or 0.69, (color and color[2]) or 0.50, (color and color[3]) or 0.88
+            if handle.SetBackdropColor then handle:SetBackdropColor(spellR * 0.12, spellG * 0.12, spellB * 0.12, 0.42) end
+            if handle.SetBackdropBorderColor then handle:SetBackdropBorderColor(spellR, spellG, spellB, 0.95) end
             handle._icons = handle._icons or {}
             local spellTex = handle._icons[1]
+            local spellSwipe = handle._iconSwipes and handle._iconSwipes[1]
+            local spellStack = handle._iconStacks and handle._iconStacks[1]
             local spellTimer = handle._iconTimers and handle._iconTimers[1]
+            local handleColor = handle._msufSpellIndicatorColor
+            if not handleColor then
+                handleColor = {}
+                handle._msufSpellIndicatorColor = handleColor
+            end
+            handleColor[1], handleColor[2], handleColor[3], handleColor[4] = spellR, spellG, spellB, (color and color[4]) or 1
+            handle._color = handleColor
+            if handle._label and handle._label.SetText then
+                handle._label:SetText(item and (item.display or item.auraName) or "SPELL")
+                handle._label:Show()
+            end
+            if spellSwipe then spellSwipe:Hide() end
+            if spellStack then spellStack:Hide() end
+            if spellTimer then spellTimer:Hide() end
             if spellType == "bar" then
                 local barW = max(spellSize * 2, ScaleValue(placed.barWidth or (spellBaseSize * 3), previewScale, 16))
                 handle:SetSize(barW, spellSize)
@@ -1592,7 +1881,6 @@ function Render.Install(box, ctx, deps)
                     spellTex:SetAllPoints(handle)
                     spellTex:Show()
                 end
-                if spellTimer then spellTimer:Hide() end
             elseif spellType == "square" then
                 handle:SetSize(spellSize, spellSize)
                 if spellTex then
@@ -1603,12 +1891,17 @@ function Render.Install(box, ctx, deps)
                     spellTex:SetAllPoints(handle)
                     spellTex:Show()
                 end
-                if spellTimer then spellTimer:Hide() end
             elseif spellType == "number" then
                 handle:SetSize(max(18, spellSize), max(18, spellSize))
                 if spellTex then spellTex:Hide() end
-                if spellTimer then spellTimer:Hide() end
-                if handle._label and handle._label.SetText then handle._label:SetText("9") end
+                if spellStack then
+                    SetPreviewFont(spellStack, max(8, spellSize * 0.72))
+                    spellStack:SetTextColor(spellR, spellG, spellB, 1)
+                    spellStack:ClearAllPoints()
+                    spellStack:SetPoint("CENTER", handle, "CENTER", 0, 0)
+                    spellStack:SetText(placed.showStacks ~= false and "9" or "")
+                    spellStack:Show()
+                end
             else
                 handle:SetSize(spellSize, spellSize)
                 if spellTex then
@@ -1628,37 +1921,99 @@ function Render.Install(box, ctx, deps)
                     spellTimer:SetText(showCooldown and "12" or "")
                     spellTimer:SetShown(showCooldown)
                 end
-            end
-            if spellType ~= "number" and handle._label and handle._label.SetText then
-                handle._label:SetText(item and (item.display or item.auraName) or "SPELL")
+                if spellSwipe and placed.showCooldownSwipe ~= false then
+                    spellSwipe:ClearAllPoints()
+                    spellSwipe:SetPoint("TOPLEFT", spellTex or handle, "TOPLEFT", 0, 0)
+                    spellSwipe:SetPoint("BOTTOMRIGHT", spellTex or handle, "BOTTOM", 0, 0)
+                    spellSwipe:SetVertexColor(0, 0, 0, 0.32)
+                    spellSwipe:Show()
+                end
+                if spellStack and placed.showStacks ~= false then
+                    SetPreviewFont(spellStack, max(6, spellSize * 0.42))
+                    spellStack:SetTextColor(1, 1, 1, 1)
+                    spellStack:ClearAllPoints()
+                    spellStack:SetPoint("BOTTOMRIGHT", spellTex or handle, "BOTTOMRIGHT", -1, 1)
+                    spellStack:SetText("2")
+                    spellStack:Show()
+                end
             end
             handle._msufSpellIndicatorLayer = item and item.layer or nil
             handle._msufSpellIndicatorStrata = item and item.strata or nil
             LayoutHandle(handle, placed.anchor, placed.x, placed.y, "TOPLEFT")
+            ApplySpellIconEffectPreview(handle, placed, spellSize)
             return true
         end
         if runtimeSpellIndicators and runtimeSpellIndicators.enabled == true and type(runtimeSpellItems) == "table" and box.EnsureSpellIndicatorHandle then
             for i = 1, #runtimeSpellItems do
                 local item = runtimeSpellItems[i]
                 local placed = item and item.placed
-                if placed and (placed.type or "icon") ~= "none" then
-                    local handle = box:EnsureSpellIndicatorHandle(item, i)
-                    if handle and ConfigureSpellPreviewHandle(handle, item, placed) then
-                        dynamicSpellHandlesUsed = true
-                        dynamicSpellHandlesActive[handle._msufSpellIndicatorPreviewKey] = handle
-                    end
+                local selectedItem = item and item.specKey == scene.selectedSpellSpecKey
+                    and item.auraName == scene.selectedSpellAuraName
+                local effect = selectedItem and (item.frame or selectedSpellEffect) or nil
+                local handle = box:EnsureSpellIndicatorHandle(item, i)
+                local placedShown = placed and (placed.type or "icon") ~= "none"
+                if handle and placedShown and ConfigureSpellPreviewHandle(handle, item, placed) then
+                    if selectedItem then selectedRuntimeSpellHandleUsed = true end
+                elseif handle and effect then
+                    handle:SetSize(1, 1)
+                    if handle.SetBackdropColor then handle:SetBackdropColor(0, 0, 0, 0) end
+                    if handle.SetBackdropBorderColor then handle:SetBackdropBorderColor(0, 0, 0, 0) end
+                    if handle._label then handle._label:Hide() end
+                    if handle._icons and handle._icons[1] then handle._icons[1]:Hide() end
+                    if handle._iconSwipes and handle._iconSwipes[1] then handle._iconSwipes[1]:Hide() end
+                    if handle._iconStacks and handle._iconStacks[1] then handle._iconStacks[1]:Hide() end
+                    if handle._iconTimers and handle._iconTimers[1] then handle._iconTimers[1]:Hide() end
+                    handle._msufSpellIndicatorLayer = item.layer
+                    handle._msufSpellIndicatorStrata = item.strata
+                    LayoutHandle(handle, "CENTER", 0, 0, "CENTER")
+                    HideSpellIconEffectPreview(handle)
+                end
+                if handle and (placedShown or effect) then
+                    dynamicSpellHandlesActive[handle._msufSpellIndicatorPreviewKey] = handle
+                    -- Full-frame effects have a stable mock-owned preview root;
+                    -- transient icon handles own only their placed/icon visuals.
+                    HideSpellEffectPreview(handle)
                 end
             end
         end
+        for key, handle in pairs(box._spellIndicatorHandles or {}) do
+            if not dynamicSpellHandlesActive[key] then
+                HideSpellEffectPreview(handle)
+                HideSpellIconEffectPreview(handle)
+            end
+        end
         if box.HideUnusedSpellIndicatorHandles then box:HideUnusedSpellIndicatorHandles(dynamicSpellHandlesActive) end
-        if dynamicSpellHandlesUsed and not selectedSpellNeedsPlacementPreview then
+        if selectedRuntimeSpellHandleUsed then
+            HideSpellEffectPreview(spellHandle)
+            HideSpellIconEffectPreview(spellHandle)
             spellHandle:Hide()
-        else
+        elseif selectedSpellCfg and (scene.selectedSpellPlacedEnabled or selectedSpellNeedsPlacementPreview) then
             local selectedSpellIcon = CurrentSpellTexture(kind)
             local spellR, spellG, spellB = CurrentSpellColor(kind)
-            ConfigureSpellPreviewHandle(spellHandle, nil, selectedPlaced or { type = "icon", size = 20, anchor = "TOPLEFT", x = 0, y = 0 }, selectedSpellIcon, { spellR, spellG, spellB, 1 })
+            local selectedFallbackItem = spellHandle._msufGFSelectedFallbackItem
+            if not selectedFallbackItem then
+                selectedFallbackItem = {}
+                spellHandle._msufGFSelectedFallbackItem = selectedFallbackItem
+            end
+            selectedFallbackItem.specKey = scene.selectedSpellSpecKey
+            selectedFallbackItem.auraName = scene.selectedSpellAuraName
+            selectedFallbackItem.display = scene.selectedSpellAuraName or "Spell"
+            ConfigureSpellPreviewHandle(spellHandle, selectedFallbackItem,
+                selectedPlaced or { type = "icon", size = 20, anchor = "TOPLEFT", x = 0, y = 0 },
+                selectedSpellIcon, { spellR, spellG, spellB, 1 })
+            HideSpellEffectPreview(spellHandle)
+        else
+            HideSpellEffectPreview(spellHandle)
+            HideSpellIconEffectPreview(spellHandle)
+            spellHandle:Hide()
         end
-        ApplySpellEffectPreview(runtimeSpellEffect)
+        selectedSpellEffectOwner:ClearAllPoints()
+        selectedSpellEffectOwner:SetAllPoints(mock)
+        if scene.selectedSpellEffectAvailable and selectedSpellEffect then
+            ApplySpellEffectPreview(selectedSpellEffectOwner, selectedSpellEffect)
+        else
+            HideSpellEffectPreview(selectedSpellEffectOwner)
+        end
         scene.previewScale = previewScale
         scene.textBaseLevel = textBaseLevel
         scene.dynamicSpellHandlesActive = dynamicSpellHandlesActive

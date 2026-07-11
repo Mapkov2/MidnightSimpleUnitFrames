@@ -953,6 +953,53 @@ function HUD.StopTour()
     tourState.step = 0
 end
 
+-- Readable lifecycle helpers for non-visual controllers (for example the
+-- load-on-demand Assistant).  Keep these on the existing HUD owner so callers
+-- never need to retain HUD frames or reproduce button click side effects.
+function HUD.IsHelpShown()
+    return tutorialPanel and tutorialPanel.IsShown and tutorialPanel:IsShown() or false
+end
+
+function HUD.SetHelpShown(shown)
+    shown = shown == true
+    if shown then
+        local panel = EnsureTutorialPanel()
+        if not panel then return false end
+        panel:Show()
+    elseif tutorialPanel then
+        tutorialPanel:Hide()
+    end
+    return HUD.IsHelpShown() == shown
+end
+
+function HUD.IsTourActive()
+    return tourState and (tonumber(tourState.step) or 0) > 0
+        and tourState.card and tourState.card.IsShown and tourState.card:IsShown() or false
+end
+
+function HUD.GetTourStep()
+    return HUD.IsTourActive() and (tonumber(tourState.step) or 1) or 0
+end
+
+function HUD.SetTourActive(active)
+    if active == true then
+        if not HUD.IsTourActive() then HUD.StartTour() end
+    else
+        HUD.StopTour()
+    end
+    return HUD.IsTourActive() == (active == true)
+end
+
+function HUD.SetTourStep(step)
+    step = floor(tonumber(step) or 1)
+    local count = #GetTourSteps()
+    if step < 1 then step = 1 end
+    if step > count then step = count end
+    if not HUD.IsTourActive() then HUD.StartTour() end
+    HUD.TourStep(step)
+    return HUD.GetTourStep() == step
+end
+
 local function EnsureHUD()
     if hudFrame then return end
     RefreshHUDTheme()

@@ -358,3 +358,32 @@ end
 function CastPopup.Sync()
     if pf and pf:IsShown() then Sync() end
 end
+local ASSISTANT_CAST_FIELDS = {
+    x = { "xBox", "position" }, y = { "yBox", "position" },
+    width = { "wBox", "width" }, height = { "hBox", "height" },
+    detached = { "detachBtn", "detach", true },
+}
+function CastPopup.GetAssistantField(field)
+    if not (pf and pf.unit and pf:IsShown()) then return nil end
+    local spec = ASSISTANT_CAST_FIELDS[field]
+    local widget = spec and pf[spec[1]]
+    if not widget then return nil end
+    if spec[3] then return widget._checked == true end
+    return tonumber(widget.GetText and widget:GetText())
+end
+function CastPopup.SetAssistantField(field, value)
+    if Quick.BlockConfigCombatLocked() or not (pf and pf.unit and pf:IsShown()) then return false end
+    local spec = ASSISTANT_CAST_FIELDS[field]
+    local widget = spec and pf[spec[1]]
+    if not widget then return false end
+    if spec[3] then
+        local checked = value == true
+        if widget.SetCheckedVisual then widget:SetCheckedVisual(checked) end
+        widget._checked = checked
+        ApplyDetach(checked)
+    else
+        Quick.SetBoxText(widget, tonumber(value))
+        Apply(spec[2])
+    end
+    return CastPopup.GetAssistantField(field) == (spec[3] and (value == true) or tonumber(value))
+end

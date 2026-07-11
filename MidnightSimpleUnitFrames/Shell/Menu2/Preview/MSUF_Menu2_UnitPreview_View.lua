@@ -33,6 +33,7 @@ local PreviewAuras = MSUF.UFPreviewAuras or {}
 local PreviewRuntime = MSUF.UFPreviewRuntime or {}
 local PreviewZoomPan = MSUF.UFPreviewZoomPan or {}
 local M2 = MSUF.MSUF2 or _G.MSUF2 or {}
+local PreviewHelpers = M2.PreviewHelpers or {}
 local function RegisterUnitPreviewControl(widget, semanticPath, label, kind, classification, extra, pageKey)
     local page = M2.UnitPage
     if page and type(page.RegisterControl) == "function" then
@@ -60,15 +61,34 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         RegisterUnitPreviewControl(widget, semanticPath, label, kind, classification, extra, pageKey)
         count = count + 1
     end
-    Register(box.zoomBar, "zoom.surface", "Preview zoom controls", "canvas", "ephemeral")
+    box._msuf2ZoomCommand = box._msuf2ZoomCommand
+        or (PreviewHelpers.BuildZoomCommand and PreviewHelpers.BuildZoomCommand(box, PreviewZoomPan, "UNIT_PREVIEW_ASSISTANT_ZOOM"))
+    Register(box.zoomBar, "zoom.surface", "Unit Preview Zoom", "slider", "ephemeral", {
+        help = "Sets the Unit preview zoom percentage; Fit and 1:1 remain available as exact actions.",
+        command = box._msuf2ZoomCommand,
+    })
     for i = 1, #UNIT_PREVIEW_ZOOM_CONTROLS do
         local info = UNIT_PREVIEW_ZOOM_CONTROLS[i]
         Register(box[info[1]], info[2], info[3], "button", "ephemeral")
     end
     local controlsHint = box._msuf2PreviewControlsHint
     Register(controlsHint and controlsHint._close, "hint.dismiss", "Dismiss preview tip", "button", "ephemeral")
-    Register(box.canvas, "canvas", "Unit frame preview canvas", "canvas", "ephemeral")
-    Register(box.animateCombatButton, "combat_animation", "Combat Preview", "button", "ephemeral")
+    local previewUnitKey = tostring(pageKey or ""):match("^uf_(.+)$") or box.key
+    box._msuf2PanCommand = box._msuf2PanCommand or (PreviewHelpers.BuildPanCommand and PreviewHelpers.BuildPanCommand(
+        box, PreviewZoomPan,
+        function(dx, dy)
+            if type(Preview.Pan) ~= "function" then return false end
+            local unit = (box._msuf2PanCommand and box._msuf2PanCommand.previewUnitKey) or box.key or previewUnitKey
+            return Preview.Pan(unit, dx, dy)
+        end,
+        { previewSurface = "unit", previewUnitKey = previewUnitKey }
+    ))
+    if box._msuf2PanCommand then box._msuf2PanCommand.previewUnitKey = previewUnitKey end
+    Register(box.canvas, "canvas", "Unit frame preview canvas", "canvas", "ephemeral", {
+        help = "Pans this exact Unit preview canvas by an explicit X/Y delta.",
+        command = box._msuf2PanCommand,
+    })
+    Register(box.animateCombatButton, "combat_animation", "Unit Preview Combat Animation", "button", "ephemeral")
     for i = 1, #(box.layerButtons or {}) do
         local button = box.layerButtons[i]
         Register(button, "layer." .. tostring(button and button.key),
@@ -78,12 +98,27 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
     for i = 1, #(box.handles or {}) do
         local handle = box.handles[i]
         local key = handle and handle._key
-        Register(handle, "handle." .. tostring(key), (handle and handle._label) or key, "button", "action")
-        Register(handle and handle._msuf2SettingsGear, "handle." .. tostring(key) .. ".open_settings",
-            "Open " .. tostring((handle and handle._label) or key or "preview element") .. " settings",
-            "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(handle, pageKey) })
+        if handle and handle._msuf2CommandAction then handle._msuf2CommandAction.previewUnitKey = previewUnitKey end
+        -- Drag handles are direct-manipulation surfaces, not deterministic
+        -- one-shot actions. Their underlying offsets remain Assistant-visible
+        -- through the bound sliders; the adjacent gear is navigation.
+        Register(handle, "handle." .. tostring(key), (handle and handle._label) or key, "button", "ephemeral")
+        local gear = handle and handle._msuf2SettingsGear
+        if gear and gear._msuf2UnitPreviewOpenCommand then
+            Register(gear, "handle." .. tostring(key) .. ".open_settings",
+                "Open " .. tostring((handle and handle._label) or key or "preview element") .. " settings",
+                "button", "action", {
+                    historyMode = "none",
+                    help = "Opens the exact settings section for this preview element.",
+                    command = gear._msuf2UnitPreviewOpenCommand,
+                })
+        else
+            Register(gear, "handle." .. tostring(key) .. ".open_settings",
+                "Open " .. tostring((handle and handle._label) or key or "preview element") .. " settings",
+                "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(handle, pageKey) })
+        end
     end
-    Register(box._msuf2PinButton, "pin.toggle", "Pin Preview", "button", "ephemeral")
+    Register(box._msuf2PinButton, "pin.toggle", "Pin Unit Preview", "toggle", "ephemeral")
     return count
 end
 function Preview.RegisterRuntimeControlsForPage(box, pageKey)
@@ -92,7 +127,6 @@ end
 local Pick = M2.Pick
 local AssignNamedValues = M2.AssignNamedValues
 local F = M2.Fallbacks or {}
-local PreviewHelpers = M2.PreviewHelpers or {}
 local PreviewModel = Preview.Model or {}
 local UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor, CanonKey, CurrentPanelKey, UnitDB, NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, ToTInlineSeparator, ShortenPreviewName, ForceTextUnit, ApplyPanelUnit, EnsureUnitPortraitStyle, PortraitStyleGet, ApplyPortrait, NormalizeStatusPreviewId, ClassColor, HealthColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor, ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor, PreviewNameColor, PreviewToTInlineColor, SetTex, PreviewHealPredictionEnabled, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, LayoutUnitPreviewOverlay, MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, FormatMode, UnitPreviewText = Pick(PreviewModel, [[UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizePreviewRaidGroupNameAnchor CanonKey CurrentPanelKey UnitDB NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet ToTInlineSeparator ShortenPreviewName ForceTextUnit ApplyPanelUnit EnsureUnitPortraitStyle PortraitStyleGet ApplyPortrait NormalizeStatusPreviewId ClassColor HealthColor HealthBackgroundColor PowerBackgroundColor PowerColor ClassPortraitVisual UnitPreviewPortraitTexture FontColor PreviewNameColor PreviewToTInlineColor SetTex PreviewHealPredictionEnabled PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled LayoutUnitPreviewOverlay MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor FormatMode UnitPreviewText]])
 Preview.statusPreviewMode = "current"
@@ -233,9 +267,22 @@ local function RefreshHandleSelectionVisuals(box)
             openSettings = function(handle) return OpenPreviewHandleSettings(handle, "gear") end,
         })
         local previewPageKey = box._msuf2PinnedPreviewPageKey or M2.activeKey
+        if gear and not gear._msuf2UnitPreviewOpenCommand then
+            local targetHandle = selected
+            gear._msuf2UnitPreviewOpenCommand = {
+                kind = "button",
+                historyMode = "none",
+                canExecute = function() return targetHandle ~= nil end,
+                set = function() return OpenPreviewHandleSettings(targetHandle, "assistant") end,
+            }
+        end
         RegisterUnitPreviewControl(gear, "handle." .. tostring(selected._key) .. ".open_settings",
             "Open " .. tostring(selected._label or selected._key or "preview element") .. " settings",
-            "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(selected, previewPageKey) }, previewPageKey)
+            "button", "action", {
+                historyMode = "none",
+                help = "Opens the exact settings section for this preview element.",
+                command = gear and gear._msuf2UnitPreviewOpenCommand,
+            }, previewPageKey)
     end
     UpdateHandleHint(box, selected)
 end
@@ -596,6 +643,120 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
     end
     RefreshHandleSelectionVisuals(box)
 end
+
+local function ExactPreviewDelta(value)
+    value = tonumber(value)
+    if value == nil or value ~= value or value == math.huge or value == -math.huge then return nil end
+    return value
+end
+local function ExactUnitPreviewKey(value)
+    if type(value) ~= "string" or value == "" then return nil end
+    value = value:lower()
+    if UNIT_DATA[value] then return value end
+    if value == "tot" then return "targettarget" end
+    if value == "focus_target" or value == "focustargettarget" then return "focustarget" end
+    if value:match("^boss%d+$") then return "boss" end
+    return nil
+end
+local function FindUnitPreviewHandle(box, handleKey)
+    if not (box and type(handleKey) == "string" and handleKey ~= "") then return nil end
+    local handles = box.handles
+    for i = 1, #(handles or {}) do
+        local handle = handles[i]
+        if handle and handle._key == handleKey then return handle end
+    end
+    return nil
+end
+local function RestoreUnitPreviewSelection(box, previous)
+    if not box then return end
+    if previous and previous._preview == box then
+        SelectPreviewHandle(previous, true)
+    else
+        SelectPreviewHandle(nil, true)
+    end
+end
+
+--- Move one explicitly named handle on the currently visible Unit preview.
+---
+--- This is the deterministic Assistant/Edit Mode entry point. It deliberately
+--- does not consult the shared Edit Mode nudge target or the currently selected
+--- mover. The write is accepted only after exact DB readback; a failed readback
+--- is rolled back before returning false.
+function Preview.NudgeHandle(unitKey, handleKey, dx, dy)
+    if type(M2.IsConfigCombatLocked) == "function" and M2.IsConfigCombatLocked() then return false, "combat-locked" end
+    unitKey = ExactUnitPreviewKey(unitKey)
+    if not unitKey then return false, "unknown-unit" end
+    if type(handleKey) ~= "string" or handleKey == "" then return false, "handle-required" end
+    dx, dy = ExactPreviewDelta(dx), ExactPreviewDelta(dy)
+    if dx == nil or dy == nil then return false, "invalid-delta" end
+
+    local box = Preview.active
+    if not (box and box.IsShown and box:IsShown() and (not box.IsVisible or box:IsVisible())) then return false, "preview-not-visible" end
+    if unitKey ~= ExactUnitPreviewKey(box.key) then return false, "unit-preview-mismatch" end
+    local handle = FindUnitPreviewHandle(box, handleKey)
+    if not handle then return false, "unknown-handle" end
+    if handle._dragging == true or handle._msuf2PreviewHistoryTx then return false, "handle-busy" end
+    if handle._msufPlaced == false or (handle.IsShown and not handle:IsShown()) then return false, "handle-not-visible" end
+
+    local beforeX, beforeY, xKey, yKey = ReadHandleOffsets(handle)
+    if tonumber(beforeX) == nil or tonumber(beforeY) == nil or not xKey or not yKey then return false, "handle-not-readable" end
+    beforeX, beforeY = tonumber(beforeX), tonumber(beforeY)
+    local expectedX, expectedY = RoundOffset(beforeX + dx), RoundOffset(beforeY + dy)
+    local previous = box._selectedHandle
+    SelectPreviewHandle(handle, true)
+    if box._selectedHandle ~= handle then
+        RestoreUnitPreviewSelection(box, previous)
+        return false, "selection-failed"
+    end
+    if expectedX == beforeX and expectedY == beforeY then return true, beforeX, beforeY, beforeX, beforeY end
+
+    local historyStarted = BeginMenuHistory(handle, "Nudge") == true
+    handle._msuf2PreviewHistoryTx = true
+    local wrote = WriteHandleOffsets(handle, expectedX, expectedY, "UNIT_PREVIEW_EXACT_NUDGE") == true
+    local afterX, afterY = ReadHandleOffsets(handle)
+    afterX, afterY = tonumber(afterX), tonumber(afterY)
+    local success = wrote and afterX == expectedX and afterY == expectedY
+    local failureReason
+    if not success then
+        local rolledBack = WriteHandleOffsets(handle, beforeX, beforeY, "UNIT_PREVIEW_EXACT_NUDGE_ROLLBACK") == true
+        local restoredX, restoredY = ReadHandleOffsets(handle)
+        if not rolledBack or tonumber(restoredX) ~= beforeX or tonumber(restoredY) ~= beforeY then
+            failureReason = "rollback-failed"
+        else
+            failureReason = wrote and "readback-mismatch" or "write-failed"
+        end
+    end
+    handle._msuf2PreviewHistoryTx = nil
+    if historyStarted then
+        CommitMenuHistory()
+    elseif success then
+        CheckpointMenuHistory(handle, "Nudge")
+    end
+    if not success then
+        RestoreUnitPreviewSelection(box, previous)
+        return false, failureReason
+    end
+    return true, beforeX, beforeY, afterX, afterY
+end
+function Preview.Pan(unitKey, dx, dy)
+    if type(M2.IsConfigCombatLocked) == "function" and M2.IsConfigCombatLocked() then return false, "combat-locked" end
+    unitKey = ExactUnitPreviewKey(unitKey)
+    if not unitKey then return false, "unknown-unit" end
+    dx, dy = ExactPreviewDelta(dx), ExactPreviewDelta(dy)
+    if dx == nil or dy == nil then return false, "invalid-delta" end
+    local box = Preview.active
+    if not (box and box.IsShown and box:IsShown() and (not box.IsVisible or box:IsVisible())) then return false, "preview-not-visible" end
+    if unitKey ~= ExactUnitPreviewKey(box.key) then return false, "unit-preview-mismatch" end
+    if (box.canvas and box.canvas._msufPreviewPanning) or (box.dragFrame and box.dragFrame._handle) then return false, "preview-busy" end
+    if type(PreviewZoomPan.NudgePan) ~= "function" then return false, "pan-api-unavailable" end
+    return PreviewZoomPan.NudgePan(box, dx, dy)
+end
+ExportPublic("MSUF_UFPreview_NudgeHandle", function(unitKey, handleKey, dx, dy)
+    return Preview.NudgeHandle(unitKey, handleKey, dx, dy)
+end)
+ExportPublic("MSUF_UFPreview_Pan", function(unitKey, dx, dy)
+    return Preview.Pan(unitKey, dx, dy)
+end)
 local NormalizePreviewTextFocusKind = PreviewHelpers.NormalizeTextFocusKind or function(kind)
     if kind == "name" or kind == "hp" or kind == "power" then return kind end
     return nil
@@ -822,6 +983,35 @@ local function MakeHandle(preview, key, fields, label, color)
     h:SetScript("OnDragStop", StopHandleDrag)
     h:SetScript("OnHide", StopHandleDrag)
     h:SetScript("OnKeyDown", PreviewArrowKeyDown)
+    h._msuf2CommandAction = {
+        kind = "button",
+        historyMode = "none",
+        interaction = "preview.handle.select",
+        previewSurface = "unit",
+        previewHandleKey = key,
+        previewUnitKey = preview.key or tostring(M2._msuf2SearchBuildKey or M2.activeKey or ""):match("^uf_(.+)$"),
+        set = function()
+            if h._msufPlaced == false then return false end
+            if h.IsShown and not h:IsShown() then return false end
+            SelectPreviewHandle(h, true)
+            return preview._selectedHandle == h
+        end,
+    }
+    if PreviewHelpers.EnsurePreviewHandleGear then
+        local gear = PreviewHelpers.EnsurePreviewHandleGear(h, {
+            T = MenuTheme and MenuTheme(),
+            Tr = TR,
+            shown = false,
+            openSettings = function(handle) return OpenPreviewHandleSettings(handle, "gear") end,
+        })
+        if gear and not gear._msuf2UnitPreviewOpenCommand then
+            gear._msuf2UnitPreviewOpenCommand = {
+                kind = "button",
+                historyMode = "none",
+                set = function() return OpenPreviewHandleSettings(h, "assistant") end,
+            }
+        end
+    end
     h:Hide()
     preview.handles[#preview.handles + 1] = h
     return h
@@ -966,6 +1156,16 @@ local function CreatePreviewAnimationButton(box)
     btn._preview = box
     if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
     btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
+    btn._msuf2CommandAction = {
+        kind = "toggle",
+        historyMode = "none",
+        get = function() return PreviewAnimationActive(box) end,
+        set = function(enabled)
+            if enabled == true and PreviewAnimationInCombat() then return false end
+            SetPreviewAnimationEnabled(box, enabled == true, "UNIT_PREVIEW_ASSISTANT_ANIMATION")
+            return PreviewAnimationActive(box) == (enabled == true)
+        end,
+    }
     if M2.AddTooltip then
         M2.AddTooltip(btn, "Combat Preview", "Animates health, power, absorbs, cast progress, and combat indicators in this preview only. Pauses during combat.", { hook = true })
     end

@@ -48,8 +48,9 @@ local function IsCurrentPreviewBox(box)
 end
 local function RequestPreviewRefresh(box, reason)
     if not (box and box.Refresh) then return end
-    if box.IsVisible and not box:IsVisible() then return end
     if box.RequestRefresh then
+        -- RequestRefresh owns the deferred render. Do not reject the request
+        -- during an ancestor OnShow: effective visibility lags logical ownership.
         box:RequestRefresh(reason or "GROUP_PREVIEW_PAGE")
     elseif box.IsShown and box:IsShown() then
         box:Refresh()
@@ -70,7 +71,7 @@ function M.ReleaseGFNativePreviews(reason, keepKey)
         local box = previews[i]
         if box and (not keepKey or box._msufGFNativePreviewPageKey ~= keepKey) then
             local record = box._msuf2PinnedPreviewRecord
-            if record and type(record.restore) == "function" then record.restore() end
+            if record and type(record.restore) == "function" then record.restore(true) end
             if box.ReleaseRuntimePreview then box:ReleaseRuntimePreview() end
             if box.Hide then box:Hide() end
         end
@@ -85,7 +86,7 @@ function M.RefreshGFNativePreviews(reason)
         if IsCurrentPreviewBox(box) then
             previews[writeIndex] = box
             writeIndex = writeIndex + 1
-            if (not box.IsVisible or box:IsVisible()) and box.IsShown and box:IsShown() then RequestPreviewRefresh(box, reason or "GROUP_PREVIEW_REFRESH_ALL") end
+            if box.IsShown and box:IsShown() then RequestPreviewRefresh(box, reason or "GROUP_PREVIEW_REFRESH_ALL") end
         elseif box and box.ReleaseRuntimePreview then
             box:ReleaseRuntimePreview()
         end
@@ -93,6 +94,27 @@ function M.RefreshGFNativePreviews(reason)
     for i = writeIndex, #previews do
         previews[i] = nil
     end
+end
+-- Window hide is a suspension for cached pages, while ReleaseGFNativePreviews
+-- deliberately clears the box's local Shown state.  Resume that exact owner
+-- explicitly instead of relying on a page data refresh or an ancestor OnShow.
+function M.ResumeGFNativePreviews(reason, pageKey)
+    local previews = M._gfNativePreviews
+    pageKey = pageKey or M.activeKey
+    if not previews or not pageKey then return false end
+    local resumed = false
+    for i = 1, #previews do
+        local box = previews[i]
+        if IsCurrentPreviewBox(box) and box._msufGFNativePreviewPageKey == pageKey then
+            local hostShown = box._msufGFPreviewHostShown
+            if type(hostShown) ~= "function" or hostShown() then
+                if box.Show then box:Show() end
+                RequestPreviewRefresh(box, reason or "GROUP_PREVIEW_RESUME")
+                resumed = true
+            end
+        end
+    end
+    return resumed
 end
 local function CreateNativeGFPreview(parent, ctx)
     local create = GroupPreview.CreateNative
@@ -112,7 +134,6 @@ local function AddGFPreview(ctx, builder)
         if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return false end
         if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
         if body and body.IsShown and not body:IsShown() then return false end
-        if body and body.IsVisible and not body:IsVisible() then return false end
         if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return false end
         return true
     end
@@ -155,7 +176,7 @@ local function AddGFPreview(ctx, builder)
             local page = M.GroupPage
             if page and type(page.RegisterControl) == "function" then
                 page.RegisterControl(box._msuf2PinButton, { key = ctx and ctx.key }, "preview.pin.toggle",
-                    "Pin Preview", "button", "ephemeral")
+                    "Pin Group Preview", "toggle", "ephemeral")
             end
         end
         return box
@@ -164,6 +185,17 @@ local function AddGFPreview(ctx, builder)
         SetPreviewHeaderStatus(body)
         local preview = EnsurePreview()
         if preview and preview.IsShown and preview:IsShown() then RequestPreviewRefresh(preview, "GROUP_PREVIEW_PAGE_REFRESH") end
+    end
+    M._assistantGroupPreviewEnsurers = M._assistantGroupPreviewEnsurers or {}
+    M._assistantGroupPreviewEnsurers[ctx.key] = function()
+        local entry = body and body._msuf2CollapsibleEntry
+        if entry and type(entry.SetOpenImmediate) == "function" and not entry.SetOpenImmediate(true) then return false end
+        RefreshThisPreview()
+        return box ~= nil and PreviewHostShown()
+    end
+    M.EnsureGroupPagePreviewForAssistant = M.EnsureGroupPagePreviewForAssistant or function(pageKey)
+        local ensure = M._assistantGroupPreviewEnsurers and M._assistantGroupPreviewEnsurers[pageKey]
+        return type(ensure) == "function" and ensure() == true or false
     end
     if body.HookScript then body:HookScript("OnShow", RefreshThisPreview) end
     if body.HookScript then

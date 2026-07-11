@@ -776,6 +776,7 @@ local function EnsureEditModeUIHook()
         if frame and frame:IsShown() then
             if frame.RefreshStatus then frame:RefreshStatus() end
             M.RequestOrRefresh(nil, "edit-mode-ui")
+            M.CallIf(M.ResumeClassPowerPreview, "EDIT_MODE_UI", M.activeKey)
             RequestBossPagePreviewForKey(M.activeKey)
             RequestGroupPagePreviewForKey(M.activeKey)
         else
@@ -870,6 +871,10 @@ local function BuildSecondaryTabs(ctx, key, group)
         btn._msuf2SkipHistoryCheckpoint = true
         btn:SetPoint("TOPLEFT", bar, "TOPLEFT", x, -SECONDARY_NAV_TAB_PAD_Y)
         btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
+        if M.RegisterMenuChromeControl then
+            M.RegisterMenuChromeControl(btn, "secondary-navigation." .. tostring(tab.key), tab.label, "navigation",
+                { navigationKey = tab.key })
+        end
         x = x + w + 6
     end
     ctx._msuf2SecondaryNav = bar
@@ -898,6 +903,10 @@ local function BuildSecondaryRail(ctx, key, group)
         btn._msuf2SkipHistoryCheckpoint = true
         btn:SetPoint("TOPLEFT", rail, "TOPLEFT", 10, y)
         btn:SetScript("OnClick", function() M.SelectPage(tab.key) end)
+        if M.RegisterMenuChromeControl then
+            M.RegisterMenuChromeControl(btn, "secondary-navigation." .. tostring(tab.key), tab.label, "navigation",
+                { navigationKey = tab.key })
+        end
         y = y - 30
     end
     ctx._msuf2SecondaryNav = rail
@@ -1010,6 +1019,11 @@ local function BuildPageEntry(key, hidden)
     if hidden and wrapper.Hide then wrapper:Hide() end
     return entry
 end
+-- Cold-path public entry point used by Search and Assistant V2. Callers must
+-- invoke it only after an explicit menu interaction; it intentionally creates
+-- and caches the requested page's real controls so RuntimeControlCatalog stays
+-- the single executable source of truth.
+M.BuildPageEntry = BuildPageEntry
 local PAGE_HISTORY_LIMIT = 30
 local suppressPageHistory
 local function NormalizePageKey(key)
@@ -1117,6 +1131,8 @@ function M.SelectPage(key)
         M.CallIf(M.ReleasePinnedPreviews, "SELECT_CACHED", key)
         M.CallIf(M.ReleaseGFNativePreviews, "SELECT_CACHED", key)
         RunRefreshers(cached)
+        M.CallIf(M.ResumeClassPowerPreview, "SELECT_CACHED", key)
+        M.CallIf(M.ResumeGFNativePreviews, "SELECT_CACHED", key)
         RequestBossPagePreviewForKey(key)
         RequestGroupPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
@@ -1150,6 +1166,8 @@ function M.SelectPage(key)
     entry.wrapper:Show()
     RememberPrimaryNavPage(key)
     RunRefreshers(entry)
+    M.CallIf(M.ResumeClassPowerPreview, "SELECT_PAGE", key)
+    M.CallIf(M.ResumeGFNativePreviews, "SELECT_PAGE", key)
     SetTitle(key)
     UpdateNav(key)
     if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
@@ -1180,6 +1198,22 @@ local function CreateMinimizedBar(frame)
     local restore = CreateWindowControlButton(bar, "maximize", "Restore", "Restore the minimized MSUF menu.")
     restore:SetPoint("RIGHT", bar, "RIGHT", -31, 0)
     restore:SetScript("OnClick", function() RestoreMinimizedSlashMenu(frame) end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(restore, "window.restore", "Restore MSUF menu", "action", {
+            historyMode = "none",
+            help = "Restores the minimized or maximized MSUF menu window.",
+            command = {
+                kind = "button",
+                historyMode = "none",
+                set = function()
+                    if frame and frame._msuf2WindowState == "maximized" then
+                        return RestoreSlashMenuWindow(frame)
+                    end
+                    return RestoreMinimizedSlashMenu(frame)
+                end,
+            },
+        })
+    end
     bar.restoreButton = restore
     local close = CreateWindowControlButton(bar, "close", "Close", "Close the minimized MSUF menu.")
     close:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
@@ -1233,14 +1267,43 @@ local function BuildWindowShell()
     local close = M.CreateWindowControlButton(f, "close", "Close", "Close the MSUF menu window.")
     close:SetPoint("TOPRIGHT", -4, -4)
     close:SetScript("OnClick", function() M.HideSlashMenuAndMinibar(f) end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(close, "window.close", "Close MSUF menu", "action", {
+            historyMode = "none",
+            help = "Closes the MSUF menu window, including its minimized bar.",
+        })
+    end
+    if M.minimizedBar and M.minimizedBar.closeButton and M.MarkRuntimeControlComponent then
+        M.MarkRuntimeControlComponent(M.minimizedBar.closeButton, close)
+    end
     f.closeButton = close
     local maximize = M.CreateWindowControlButton(f, "maximize", "Maximize", "Maximize or restore the MSUF menu window.")
     maximize:SetPoint("TOPRIGHT", close, "TOPLEFT", -2, 0)
     maximize:SetScript("OnClick", function() MaximizeSlashMenuWindow(f) end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(maximize, "window.maximize", "Maximize MSUF menu", "action", {
+            historyMode = "none",
+            help = "Maximizes the MSUF menu window; the same title-bar button restores it when maximized.",
+            command = {
+                kind = "button",
+                historyMode = "none",
+                set = function()
+                    if f._msuf2WindowState == "maximized" then return false end
+                    return MaximizeSlashMenuWindow(f)
+                end,
+            },
+        })
+    end
     f.maximizeButton = maximize
     local minimize = M.CreateWindowControlButton(f, "minimize", "Minimize", "Collapse the MSUF menu to a small taskbar-style bar.")
     minimize:SetPoint("TOPRIGHT", maximize, "TOPLEFT", -2, 0)
     minimize:SetScript("OnClick", function() MinimizeSlashMenuWindow(f) end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(minimize, "window.minimize", "Minimize MSUF menu", "action", {
+            historyMode = "none",
+            help = "Minimizes the MSUF menu to its compact draggable bar.",
+        })
+    end
     f.minimizeButton = minimize
     return { frame = f }
 end
@@ -1529,11 +1592,21 @@ local function BuildWindowToolbar(state)
     T.CenterButtonLabel(toolbarEdit)
     if T.SkinPrimaryButton then T.SkinPrimaryButton(toolbarEdit) end
     toolbarEdit:SetScript("OnClick", RunToolbarEditMode)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(toolbarEdit, "toolbar.edit-mode", "Edit Mode", "action", {
+            historyMode = "none", help = "Toggles MSUF Edit Mode.",
+        })
+    end
     M.dashboardToolbarEditModeButton = toolbarEdit
     local toolbarTask = T.Button(status, "New Task", 104, 24)
     toolbarTask:SetPoint("RIGHT", toolbarEdit, "LEFT", -12, 0)
     T.CenterButtonLabel(toolbarTask)
     toolbarTask:SetScript("OnClick", RunToolbarNewTask)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(toolbarTask, "toolbar.new-task", "New Task", "action", {
+            historyMode = "none", help = "Starts a new Assistant task.",
+        })
+    end
     local toolbarReset = T.Button(status, "Reset All", 88, 24)
     toolbarReset:SetPoint("RIGHT", toolbarTask, "LEFT", -12, 0)
     T.CenterButtonLabel(toolbarReset)
@@ -1544,6 +1617,16 @@ local function BuildWindowToolbar(state)
             M.ShowPageResetConfirm(key)
         end
     end)
+    if M.RegisterMenuChromeControl then
+        M.RegisterMenuChromeControl(toolbarReset, "toolbar.reset-page", "Reset current page", "action", {
+            confirmRequired = true, historyMode = "none",
+            command = { kind = "button", historyMode = "none", confirmRequired = true, set = function()
+                local key = M.activeKey
+                return key and M.PageHasReset and M.PageHasReset(key) and M.ResetPageToDefaults
+                    and M.ResetPageToDefaults(key) or false
+            end },
+        })
+    end
     local function RefreshToolbarPageReset()
         local key = M.activeKey
         local shown = key and M.PageHasReset and M.PageHasReset(key)
@@ -1675,6 +1758,8 @@ local function InstallWindowLifecycle(state)
         if self.RefreshStatus then self:RefreshStatus() end
         if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
         M.CallIf(M.ResumePinnedPreviews, "WINDOW_SHOW")
+        M.CallIf(M.ResumeClassPowerPreview, "WINDOW_SHOW", M.activeKey)
+        M.CallIf(M.ResumeGFNativePreviews, "WINDOW_SHOW", M.activeKey)
         RequestBossPagePreviewForKey(M.activeKey)
         RequestGroupPagePreviewForKey(M.activeKey)
         M.CallIf(M.UpdateMenuCombatListener)

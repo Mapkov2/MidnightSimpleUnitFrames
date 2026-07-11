@@ -668,6 +668,11 @@ function State.Enter(key)
     end
     if not EnsureDB() then return end
 
+    -- Cancel All is a transactional guarantee. Capture the pre-entry database
+    -- before exposing the active state so an immediate Assistant command cannot
+    -- mutate settings ahead of the old deferred snapshot.
+    SnapshotDB()
+
     active  = true
     unitKey = key or "player"
     enterGeneration = enterGeneration + 1
@@ -696,8 +701,6 @@ function State.Enter(key)
     C_Timer.After(ENTER_DEFER_DELAY, function()
         if enterGeneration ~= enterToken or not (EM2.State and EM2.State.IsActive()) then return end
         if IsConfigCombatLocked() then return end
-
-        SnapshotDB()
 
         --- Clear undo history for new session
         if _G.MSUF_EM_UndoClear then
@@ -1061,6 +1064,11 @@ local function CaptureState(category, key)
         snap.data = DeepCopy(db[key] or {})
     elseif category == "castbar" then
         snap.data = DeepCopy(db.general or {})
+    elseif category == "general" then
+        -- Edit Mode also owns a small number of global layout tools (for
+        -- example the external anchor picker).  Keep them in the Edit Mode
+        -- undo domain without pretending they are castbar changes.
+        snap.data = DeepCopy(db.general or {})
     elseif category == "aura" then
         snap.data = DeepCopy(db.auras3 or {})
     elseif category == "gf" then
@@ -1086,6 +1094,10 @@ local function RestoreState(snap)
         db.general = db.general or {}
         DeepRestore(db.general, snap.data)
         ApplyCastbarUndo(snap.key)
+    elseif snap.category == "general" then
+        db.general = db.general or {}
+        DeepRestore(db.general, snap.data)
+        ApplyAllSettingsSafe()
     elseif snap.category == "aura" then
         db.auras3 = db.auras3 or {}
         DeepRestore(db.auras3, snap.data)
@@ -1113,6 +1125,22 @@ local function RestoreState(snap)
     PublishCompat("MSUF__UndoRestoring", false)
 end
 
+-- Two-phase snapshots are used by fail-closed callers which can only know
+-- whether an external apply succeeded after the DB write.  Failed applies do
+-- not consume undo capacity or destroy the redo stack.
+function Undo.PrepareChange(category, key)
+    if _G.MSUF__UndoRestoring then return nil end
+    return CaptureState(category, key)
+end
+
+function Undo.CommitPrepared(snap)
+    if _G.MSUF__UndoRestoring or type(snap) ~= "table" or type(snap.category) ~= "string" then return false end
+    undoStack[#undoStack + 1] = snap
+    if #undoStack > MAX_UNDO then table.remove(undoStack, 1) end
+    for i = 1, #redoStack do redoStack[i] = nil end
+    return true
+end
+
 function Undo.BeforeChange(category, key, debounce)
     if _G.MSUF__UndoRestoring then return end
     if debounce then
@@ -1122,12 +1150,9 @@ function Undo.BeforeChange(category, key, debounce)
         debounceKey = dk
         debounceTime = now
     end
-    local snap = CaptureState(category, key)
+    local snap = Undo.PrepareChange(category, key)
     if not snap then return end
-    undoStack[#undoStack + 1] = snap
-    if #undoStack > MAX_UNDO then table.remove(undoStack, 1) end
-    --- Clear redo on new action
-    for i = 1, #redoStack do redoStack[i] = nil end
+    return Undo.CommitPrepared(snap)
 end
 
 function Undo.DoUndo()

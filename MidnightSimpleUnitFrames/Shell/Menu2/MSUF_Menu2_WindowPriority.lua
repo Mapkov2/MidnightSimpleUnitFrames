@@ -8,11 +8,17 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local MENU_NORMAL_FRAME_STRATA = "DIALOG"
-local MENU_EDIT_FRAME_STRATA = "FULLSCREEN"
+-- Edit Mode priority is expressed by strata, never by repeatedly raising and
+-- lowering the cached window's numeric frame level. WoW automatically raises
+-- descendants with their parent but does not symmetrically rebase every
+-- explicitly-levelled child when the parent is lowered. Toggling 10 <-> 900
+-- therefore ratcheted cached preview descendants until SetFrameLevel exceeded
+-- the engine's 0..65535 range.
+local MENU_EDIT_FRAME_STRATA = "FULLSCREEN_DIALOG"
 local MENU_NORMAL_FRAME_LEVEL = 10
-local MENU_EDIT_FRAME_LEVEL = 900
+local MENU_EDIT_FRAME_LEVEL = MENU_NORMAL_FRAME_LEVEL
 local MENU_NORMAL_POPUP_FRAME_LEVEL = 120
-local MENU_EDIT_POPUP_FRAME_LEVEL = 980
+local MENU_EDIT_POPUP_FRAME_LEVEL = MENU_NORMAL_POPUP_FRAME_LEVEL
 local function IsMenuEditPriorityActive()
     if type(M.IsMSUFEditModeActive) ~= "function" then return false end
     return M.IsMSUFEditModeActive() == true

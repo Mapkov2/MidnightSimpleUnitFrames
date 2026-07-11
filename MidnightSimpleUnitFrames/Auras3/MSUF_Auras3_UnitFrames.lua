@@ -1562,9 +1562,31 @@ local function ResolveGroupFrameConfig(frame, unit)
     local gen = A3._runtimeConfigGen or 1
     local visualGen = A3._nativeVisualGen or 0
     local cached = frame._msufA3NativeGroupConfig
-    if cached and frame._msufA3NativeGroupSource == source and frame._msufA3NativeGroupSpellSource == spellSource
+    if cached and frame._msufA3NativeGroupSpec == spec
+        and frame._msufA3NativeGroupSource == source and frame._msufA3NativeGroupSpellSource == spellSource
         and frame._msufA3NativeGroupCornerSource == cornerSource and frame._msufA3NativeGroupUnit == unit
         and frame._msufA3NativeGroupGen == gen and frame._msufA3NativeGroupVisualGen == visualGen then
+        return cached
+    end
+    -- Compiled group specs are immutable for their revision. Preview frames all
+    -- use the same spec and the synthetic player unit, so compiling aura lanes,
+    -- dispel sensors, and spell-indicator slots once per frame only duplicates
+    -- tables without changing the result. Share that cold-path config on the spec;
+    -- live frames with distinct unit tokens still receive distinct entries.
+    local sharedCache = spec and spec._msufA3NativeGroupConfigCache
+    local shared = sharedCache and sharedCache[unit]
+    if shared and shared.source == source and shared.spellSource == spellSource
+        and shared.cornerSource == cornerSource and shared.gen == gen and shared.visualGen == visualGen
+    then
+        cached = shared.config
+        frame._msufA3NativeGroupSpec = spec
+        frame._msufA3NativeGroupSource = source
+        frame._msufA3NativeGroupSpellSource = spellSource
+        frame._msufA3NativeGroupCornerSource = cornerSource
+        frame._msufA3NativeGroupUnit = unit
+        frame._msufA3NativeGroupGen = gen
+        frame._msufA3NativeGroupVisualGen = visualGen
+        frame._msufA3NativeGroupConfig = cached
         return cached
     end
     local cfg = {
@@ -1608,6 +1630,7 @@ local function ResolveGroupFrameConfig(frame, unit)
             or (dispelOverlay and dispelOverlay.enabled == true)
             or (dispelCorner and dispelCorner.enabled == true)
     end
+    frame._msufA3NativeGroupSpec = spec
     frame._msufA3NativeGroupSource = source
     frame._msufA3NativeGroupSpellSource = spellSource
     frame._msufA3NativeGroupCornerSource = cornerSource
@@ -1615,6 +1638,18 @@ local function ResolveGroupFrameConfig(frame, unit)
     frame._msufA3NativeGroupGen = gen
     frame._msufA3NativeGroupVisualGen = visualGen
     frame._msufA3NativeGroupConfig = cfg
+    if spec then
+        sharedCache = sharedCache or {}
+        spec._msufA3NativeGroupConfigCache = sharedCache
+        sharedCache[unit] = {
+            source = source,
+            spellSource = spellSource,
+            cornerSource = cornerSource,
+            gen = gen,
+            visualGen = visualGen,
+            config = cfg,
+        }
+    end
     return cfg
 end
 
@@ -1669,11 +1704,18 @@ end
 
 local function ApplyFont(fs, size)
     if not fs then return end
-    local fontPath, fontFlags, r, g, b, _, useShadow
     local readFont = _G.MSUF_GetGlobalFontSettings
-    if type(readFont) == "function" then
-        fontPath, fontFlags, r, g, b, _, useShadow = readFont()
+    local gen = A3._nativeVisualGen or 0
+    if A3._auraFontCacheGen ~= gen or A3._auraFontCacheReader ~= readFont then
+        A3._auraFontCacheGen, A3._auraFontCacheReader = gen, readFont
+        A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow = nil, nil, nil, nil, nil, nil
+        if type(readFont) == "function" then
+            local unusedSize
+            A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, unusedSize, A3._auraFontShadow = readFont()
+        end
     end
+    local fontPath, fontFlags = A3._auraFontPath, A3._auraFontFlags
+    local r, g, b, useShadow = A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow
     fs:SetFont(fontPath or STANDARD_TEXT_FONT, ClampNumber(size, 12, 6, 40), fontFlags or "OUTLINE")
     fs:SetTextColor(r or 1, g or 1, b or 1, 1)
     if useShadow then fs:SetShadowOffset(1, -1) else fs:SetShadowOffset(0, 0) end
@@ -4347,6 +4389,11 @@ local AurasElement = {
 }
 
 function AurasElement.IsEnabled(frame)
+    if IsGroupFrame(frame) and frame._msufGFIsPreviewFrame == true
+        and (tonumber(frame._msufGFPreviewIndex) or 1) > 1
+    then
+        return false
+    end
     local cfg = FrameAuraConfig(frame, frame and frame.unit)
     return cfg and cfg.enabled == true or false
 end
@@ -4361,8 +4408,17 @@ end
 
 function AurasElement.Enable(frame)
     if IsGroupFrame(frame) then
+        -- Native CustomAuraContainer:AddAuraGroup allocates a frame batch up
+        -- front. Group previews can contain 5-40 identical synthetic player
+        -- frames, so duplicating the same native player auras on every row turns
+        -- opening Edit Mode into thousands of AuraButtons. Keep one exact native
+        -- aura sample per preview kind; live group frames are untouched.
+        if frame._msufGFIsPreviewFrame == true and (tonumber(frame._msufGFPreviewIndex) or 1) > 1 then
+            frame._msufA3GroupRuntime = nil
+            HideState(frame)
+            return false
+        end
         frame._msufA3GroupRuntime = true
-        frame._msufA3NativeGroupConfig = nil
         local cfg = ResolveGroupFrameConfig(frame, frame and frame.unit)
         if not (cfg and cfg.enabled) then
             HideState(frame)

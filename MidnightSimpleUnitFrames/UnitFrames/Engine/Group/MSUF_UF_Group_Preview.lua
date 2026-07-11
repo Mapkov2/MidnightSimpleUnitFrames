@@ -637,12 +637,14 @@ local function EnsurePreviewFrame(kind, index, parent)
   end
   local frame = frames[index]
   if frame then
+    frame._msufGFPreviewIndex = index
     if frame:GetParent() ~= parent then frame:SetParent(parent) end
     return frame
   end
 
   frame = CreateFrame("Button", "MSUF_GFPreview_" .. kind .. "_" .. index, parent, "BackdropTemplate")
   frame._msufGFIsPreviewFrame = true
+  frame._msufGFPreviewIndex = index
   frame._msufGFPreviewActive = true
   frame._msufGFKind = kind
   frame._msufIsGroupFrame = true

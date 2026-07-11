@@ -837,12 +837,152 @@ local function GetCastbarOffsetKeys(unit)
     return prefix .. "OffsetX", prefix .. "OffsetY"
 end
 
-local function NudgeTarget(dx, dy)
-    if not EM2.State or not EM2.State.IsActive() then return end
-    if BlockConfigCombatLocked() then return end
+local CASTBAR_NUDGE_UNITS = {
+    castbar_player = "player",
+    castbar_target = "target",
+    castbar_focus  = "focus",
+    castbar_boss   = "boss",
+}
+
+local CASTBAR_NUDGE_DEFAULTS = {
+    player = { 0, 5 },
+    target = { 65, -15 },
+    focus  = { 65, -15 },
+    boss   = { 0, 0 },
+}
+
+local function IsFiniteNudgeNumber(value)
+    return type(value) == "number"
+        and value == value
+        and value > -math.huge
+        and value < math.huge
+end
+
+local function RoundNudgeOffset(value)
+    if type(round) == "function" then return round(value) end
+    return value >= 0 and floor(value + 0.5) or -floor(-value + 0.5)
+end
+
+local function NudgeCastbarDefaultOffsets(unit)
+    local defaults = _G.MSUF_GetCastbarDefaultOffsets
+    if type(defaults) == "function" then
+        local x, y = defaults(unit)
+        x, y = tonumber(x), tonumber(y)
+        if IsFiniteNudgeNumber(x) and IsFiniteNudgeNumber(y) then return x, y end
+        return nil, nil
+    end
+    local fallback = CASTBAR_NUDGE_DEFAULTS[unit]
+    return fallback and fallback[1] or nil, fallback and fallback[2] or nil
+end
+
+local function ReadCastbarOffset(general, key, fallbackKey, defaultValue)
+    local raw = general[key]
+    if raw == nil and fallbackKey then raw = general[fallbackKey] end
+    if raw == nil then raw = defaultValue end
+    local value = tonumber(raw)
+    if not IsFiniteNudgeNumber(value) then return nil end
+    return value
+end
+
+local function CallCastbarNudgeSync(fn, ...)
+    if type(fn) ~= "function" then return true end
+    return pcall(fn, ...)
+end
+
+local function SyncCastbarNudge(unit)
+    local ok = CallCastbarNudgeSync(_G.MSUF_SyncCastbarPositionPopup, unit)
+    if type(_G.MSUF_SyncCastbarPositionPopup) ~= "function" and EM2.CastPopup and EM2.CastPopup.IsOpen then
+        local checked, popupOpen = pcall(EM2.CastPopup.IsOpen)
+        ok = checked and ok
+        if checked and popupOpen then ok = CallCastbarNudgeSync(EM2.CastPopup.Sync) and ok end
+    end
+    if EM2.Movers then ok = CallCastbarNudgeSync(EM2.Movers.SyncAll) and ok end
+    if EM2.Focus then ok = CallCastbarNudgeSync(EM2.Focus.NotifyPositionChanged, "castbar_" .. unit, true) and ok end
+    ok = CallCastbarNudgeSync(RefreshUFPreview, "EM2_CASTBAR_NUDGE", unit) and ok
+    return ok
+end
+
+local function ApplyCastbarNudge(unit)
+    if type(ApplySettingsForKeySafe) ~= "function" then return false end
+    local called, applied = pcall(ApplySettingsForKeySafe, "castbar_" .. unit)
+    return called and applied == true
+end
+
+local function RestoreCastbarNudge(general, xKey, yKey, previousX, previousY, unit)
+    general[xKey], general[yKey] = previousX, previousY
+    ApplyCastbarNudge(unit)
+    SyncCastbarNudge(unit)
+end
+
+local function NudgeCastbar(unit, ndx, ndy)
+    if not CASTBAR_NUDGE_DEFAULTS[unit] then return false end
+    local isActive = EM2.State and EM2.State.IsActive
+    if type(isActive) ~= "function" then return false end
+    local activeOK, active = pcall(isActive)
+    if not activeOK or not active then return false end
+    if type(BlockConfigCombatLocked) ~= "function" then return false end
+    local combatOK, combatLocked = pcall(BlockConfigCombatLocked)
+    if not combatOK or combatLocked then return false end
+    if not IsFiniteNudgeNumber(ndx) or not IsFiniteNudgeNumber(ndy) then return false end
+
     local db = _G.MSUF_DB
-    if not db then return end
-    local s = GetStep()
+    local general = db and db.general
+    if type(general) ~= "table" then return false end
+
+    local keysOK, xKey, yKey = pcall(GetCastbarOffsetKeys, unit)
+    if not keysOK then return false end
+    if type(xKey) ~= "string" or xKey == "" or type(yKey) ~= "string" or yKey == "" then return false end
+    local defaultsOK, defaultX, defaultY = pcall(NudgeCastbarDefaultOffsets, unit)
+    if not defaultsOK then return false end
+    if not IsFiniteNudgeNumber(defaultX) or not IsFiniteNudgeNumber(defaultY) then return false end
+
+    local fallbackX = unit == "focus" and "castbarTargetOffsetX" or nil
+    local fallbackY = unit == "focus" and "castbarTargetOffsetY" or nil
+    local currentX = ReadCastbarOffset(general, xKey, fallbackX, defaultX)
+    local currentY = ReadCastbarOffset(general, yKey, fallbackY, defaultY)
+    if not currentX or not currentY then return false end
+
+    local nextX = RoundNudgeOffset(currentX + ndx)
+    local nextY = RoundNudgeOffset(currentY + ndy)
+    if not IsFiniteNudgeNumber(nextX) or not IsFiniteNudgeNumber(nextY)
+        or abs(nextX) > 4096 or abs(nextY) > 4096
+    then
+        return false
+    end
+    if nextX == currentX and nextY == currentY then return false end
+
+    local undo = EM2.Undo
+    if type(ApplySettingsForKeySafe) ~= "function" then return false end
+    if not (undo and type(undo.PrepareChange) == "function" and type(undo.CommitPrepared) == "function") then return false end
+
+    local snapshotOK, snapshot = pcall(undo.PrepareChange, "castbar", unit)
+    if not snapshotOK or type(snapshot) ~= "table" then return false end
+
+    local previousX, previousY = general[xKey], general[yKey]
+    general[xKey], general[yKey] = nextX, nextY
+
+    if not ApplyCastbarNudge(unit)
+        or tonumber(general[xKey]) ~= nextX
+        or tonumber(general[yKey]) ~= nextY
+        or not SyncCastbarNudge(unit)
+    then
+        RestoreCastbarNudge(general, xKey, yKey, previousX, previousY, unit)
+        return false
+    end
+    local committedOK, committed = pcall(undo.CommitPrepared, snapshot)
+    if not committedOK or committed ~= true then
+        RestoreCastbarNudge(general, xKey, yKey, previousX, previousY, unit)
+        return false
+    end
+    return true
+end
+
+local function NudgeTarget(dx, dy, exactDelta)
+    if not EM2.State or not EM2.State.IsActive() then return false end
+    if BlockConfigCombatLocked() then return false end
+    local db = _G.MSUF_DB
+    if not db then return false end
+    local s = exactDelta and 1 or GetStep()
     local ndx, ndy = dx * s, dy * s
 
     local previewTarget = GetPreviewNudgeTarget()
@@ -850,36 +990,13 @@ local function NudgeTarget(dx, dy)
         previewTarget:Nudge(ndx, ndy)
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
         if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(nil, true) end
-        return
+        return true
     end
 
     if EM2.CastPopup and EM2.CastPopup.IsOpen() then
-        db.general = db.general or {}
-        local g = db.general
         local castPF = _G.MSUF_EM2_CastPopup
         local unit = (EM2.CastPopup.GetUnit and EM2.CastPopup.GetUnit()) or (castPF and castPF.unit)
-        if unit then
-            local xKey, yKey = GetCastbarOffsetKeys(unit)
-            if xKey and yKey then
-                if _G.MSUF_EM_UndoBeforeChange then
-                    _G.MSUF_EM_UndoBeforeChange("castbar", unit, true)
-                end
-                g[xKey] = floor(((tonumber(g[xKey]) or 0) + ndx) + 0.5)
-                g[yKey] = floor(((tonumber(g[yKey]) or 0) + ndy) + 0.5)
-                if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-                    _G.MSUF_ApplyCastbarUnitAndSync(unit)
-                elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-                    _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-                elseif _G.MSUF_UpdateCastbarVisuals then
-                    _G.MSUF_UpdateCastbarVisuals(unit)
-                    EM2.CastPopup.Sync()
-                end
-            end
-        end
-        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-        if EM2.Focus and EM2.Focus.NotifyPositionChanged and unit then EM2.Focus.NotifyPositionChanged("castbar_" .. tostring(unit), true) end
-        RefreshUFPreview("EM2_CASTBAR_NUDGE", unit)
-        return
+        return NudgeCastbar(unit, ndx, ndy)
     end
 
     local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
@@ -947,11 +1064,11 @@ local function NudgeTarget(dx, dy)
             end
         end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-        return
+        return unitKey ~= nil
     end
 
     if EM2.Focus and EM2.Focus.NudgeSelection and EM2.Focus.NudgeSelection(ndx, ndy) then
-        return
+        return true
     end
 
     local key = EM2.State.GetUnitKey() or "player"
@@ -960,11 +1077,11 @@ local function NudgeTarget(dx, dy)
         and _G.MSUF_GF_EM2_NudgePreview(key, ndx, ndy)
     then
         if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
-        return
+        return true
     end
 
     local conf = db[key]
-    if not conf then return end
+    if not conf then return false end
     if _G.MSUF_EM_UndoBeforeChange then
         _G.MSUF_EM_UndoBeforeChange("unit", key, true)
     end
@@ -977,6 +1094,44 @@ local function NudgeTarget(dx, dy)
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
     RefreshUFPreview("EM2_UNIT_NUDGE", key)
+    return true
+end
+
+-- Public, state-preserving movement route for non-visual controllers.  This is
+-- intentionally the same function used by keyboard buttons so unit, castbar,
+-- aura, group, and selected inline-preview moves retain their exact undo/apply
+-- behavior without simulating a hidden secure click.
+function Nudge.Move(dx, dy, targetKey)
+    dx, dy = tonumber(dx), tonumber(dy)
+    if not IsFiniteNudgeNumber(dx) or not IsFiniteNudgeNumber(dy) then return false end
+    if dx == 0 and dy == 0 then return false end
+    local castbarUnit = type(targetKey) == "string" and CASTBAR_NUDGE_UNITS[targetKey] or nil
+    if type(targetKey) == "string" and targetKey:sub(1, 8) == "castbar_" and not castbarUnit then return false end
+    if castbarUnit then
+        local isActive = EM2.State and EM2.State.IsActive
+        if type(isActive) ~= "function" then return false end
+        local activeOK, active = pcall(isActive)
+        if not activeOK or not active then return false end
+        if type(IsConfigCombatLocked) ~= "function" then return false end
+        local combatOK, combatLocked = pcall(IsConfigCombatLocked)
+        if not combatOK or combatLocked then return false end
+    end
+    if type(targetKey) == "string" and targetKey ~= "" then
+        local clearPreview = _G.MSUF_EM2_SetPreviewNudgeTarget
+        if type(clearPreview) == "function" and not pcall(clearPreview, nil) then return false end
+        local setUnitKey = EM2.State and EM2.State.SetUnitKey
+        if type(setUnitKey) ~= "function" then return false end
+        local setOK, selected = pcall(setUnitKey, targetKey)
+        if not setOK or selected == false then return false end
+        if castbarUnit then
+            local getUnitKey = EM2.State and EM2.State.GetUnitKey
+            if type(getUnitKey) ~= "function" then return false end
+            local readOK, currentKey = pcall(getUnitKey)
+            if not readOK or currentKey ~= targetKey then return false end
+        end
+    end
+    if castbarUnit then return NudgeCastbar(castbarUnit, dx, dy) end
+    return NudgeTarget(dx, dy, true) == true
 end
 
 local NUDGE_DIRS = { { "UP", 0, 1 }, { "DOWN", 0, -1 }, { "LEFT", -1, 0 }, { "RIGHT", 1, 0 } }

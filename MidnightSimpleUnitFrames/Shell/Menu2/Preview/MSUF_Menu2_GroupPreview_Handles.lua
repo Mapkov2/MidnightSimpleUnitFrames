@@ -4,6 +4,10 @@
 --- save/write behavior behind drag and keyboard nudges.
 local _, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Handles = M.GroupPreviewHandles or {}
@@ -26,10 +30,10 @@ function Handles.Install(box, deps)
     local MSUF = deps.MSUF or MSUF or {}
     local T = deps.T or M.Theme or {}
     local PreviewHelpers = M.PreviewHelpers or {}
-    local function RegisterPreviewControl(widget, semanticPath, label, kind, classification)
+    local function RegisterPreviewControl(widget, semanticPath, label, kind, classification, extra)
         local page = M.GroupPage
         if page and type(page.RegisterControl) == "function" then
-            page.RegisterControl(widget, { key = M.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification)
+            page.RegisterControl(widget, { key = M.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification, extra)
         end
         return widget
     end
@@ -415,6 +419,129 @@ function Handles.Install(box, deps)
         CheckpointHandleHistory(handle, "Nudge")
         return true
     end
+    local function ExactPreviewDelta(value)
+        value = tonumber(value)
+        if value == nil or value ~= value or value == math.huge or value == -math.huge then return nil end
+        return value
+    end
+    local function ReadHandlePositionExact(handle)
+        if not handle then return nil end
+        local conf = H.Conf(H.CurrentScope())
+        if not conf then return nil end
+        if handle._cfgText then
+            local kind = handle._cfgTextKind or H.CurrentTextKind()
+            local xKey, yKey = H.TextOffsetKeys(kind, handle._cfgTextSlot)
+            if not (xKey and yKey) then return nil end
+            return tonumber(conf[xKey]) or 0, tonumber(conf[yKey]) or 0
+        elseif handle._cfgGroup then
+            local cfg = conf.auras and conf.auras[handle._cfgGroup]
+            if handle._cfgTrackedBuff then return tonumber(cfg and cfg.trackedX) or 0, tonumber(cfg and cfg.trackedY) or 0 end
+            return tonumber(cfg and cfg.x) or 0, tonumber(cfg and cfg.y) or 0
+        elseif handle._cfgStatus then
+            local spec = handle._statusSpec or CurrentStatusSpec()
+            if not (spec and spec.x and spec.y) then return nil end
+            return tonumber(conf[spec.x]) or 0, tonumber(conf[spec.y]) or 0
+        elseif handle._cfgSpell then
+            local placed = SpellPlacedForHandle(handle, false)
+            return tonumber(placed and placed.x) or 0, tonumber(placed and placed.y) or 0
+        elseif handle._cfgTargetedSpells then
+            local partyConf = H.Conf("party") or conf
+            return tonumber(partyConf.targetedSpellsX) or 0, tonumber(partyConf.targetedSpellsY) or 0
+        end
+        return nil
+    end
+    local function WriteHandlePositionExact(handle, x, y, reason)
+        if not handle then return false end
+        x, y = Round(x), Round(y)
+        if handle._cfgText then
+            return WriteTextHandleOffsets(handle, x, y, reason or "Nudge", false, false)
+        end
+        local conf = H.Conf(H.CurrentScope())
+        if not conf then return false end
+        if handle._cfgGroup then
+            conf.auras = conf.auras or {}
+            conf.auras[handle._cfgGroup] = conf.auras[handle._cfgGroup] or {}
+            local cfg = conf.auras[handle._cfgGroup]
+            if handle._cfgTrackedBuff then cfg.trackedX, cfg.trackedY = x, y else cfg.x, cfg.y = x, y end
+        elseif handle._cfgStatus then
+            local spec = handle._statusSpec or CurrentStatusSpec()
+            if not (spec and spec.x and spec.y) then return false end
+            conf[spec.x], conf[spec.y] = x, y
+        elseif handle._cfgSpell then
+            local placed = SpellPlacedForHandle(handle, false)
+            local spellCfg = SpellConfigForHandle(handle, false)
+            if not placed and spellCfg then
+                spellCfg.placed = { type = "icon", size = 18 }
+                placed = spellCfg.placed
+            end
+            if not placed then return false end
+            placed.x, placed.y = x, y
+        elseif handle._cfgTargetedSpells then
+            local partyConf = H.Conf("party") or conf
+            partyConf.targetedSpellsX, partyConf.targetedSpellsY = x, y
+        else
+            return false
+        end
+        RefreshGroupPreviewAfterMove(handle)
+        return true
+    end
+    local function RestoreGroupPreviewSelection(previous)
+        if previous and previous._key and box._handles[previous._key] == previous then SelectHandle(previous) else SelectHandle(nil) end
+    end
+
+    --- Move one explicitly named handle on this exact Group preview surface.
+    --- No Edit Mode mover or shared/stale preview target participates.
+    function box:NudgeHandleExact(handleKey, dx, dy)
+        if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false, "combat-locked" end
+        if type(handleKey) ~= "string" or handleKey == "" then return false, "handle-required" end
+        dx, dy = ExactPreviewDelta(dx), ExactPreviewDelta(dy)
+        if dx == nil or dy == nil then return false, "invalid-delta" end
+        if self._msufGFNativePreviewDisposed then return false, "preview-disposed" end
+        if not (self.IsShown and self:IsShown() and (not self.IsVisible or self:IsVisible())) then return false, "preview-not-visible" end
+        local handle = self._handles and self._handles[handleKey]
+        if not handle then return false, "unknown-handle" end
+        if handle._dragging == true or (self._dragFrame and self._dragFrame._handle) then return false, "handle-busy" end
+        if handle._locked or (handle.IsShown and not handle:IsShown()) then return false, "handle-not-visible" end
+        local beforeX, beforeY = ReadHandlePositionExact(handle)
+        if tonumber(beforeX) == nil or tonumber(beforeY) == nil then return false, "handle-not-readable" end
+        beforeX, beforeY = tonumber(beforeX), tonumber(beforeY)
+        local expectedX, expectedY = Round(beforeX + dx), Round(beforeY + dy)
+        local previous = self._selectedHandle
+        SelectHandle(handle)
+        if self._selectedHandle ~= handle then
+            RestoreGroupPreviewSelection(previous)
+            return false, "selection-failed"
+        end
+        if expectedX == beforeX and expectedY == beforeY then return true, beforeX, beforeY, beforeX, beforeY end
+
+        local outcome
+        local function Mutate()
+            local wrote = WriteHandlePositionExact(handle, expectedX, expectedY, "Exact nudge") == true
+            local afterX, afterY = ReadHandlePositionExact(handle)
+            afterX, afterY = tonumber(afterX), tonumber(afterY)
+            if wrote and afterX == expectedX and afterY == expectedY then
+                outcome = { true, beforeX, beforeY, afterX, afterY }
+                return true
+            end
+            local rolledBack = WriteHandlePositionExact(handle, beforeX, beforeY, "Exact nudge rollback") == true
+            local restoredX, restoredY = ReadHandlePositionExact(handle)
+            local reason = (not rolledBack or tonumber(restoredX) ~= beforeX or tonumber(restoredY) ~= beforeY)
+                and "rollback-failed" or (wrote and "readback-mismatch" or "write-failed")
+            outcome = { false, reason }
+            return false
+        end
+        local capturing = type(M.IsHistoryCapturing) == "function" and M.IsHistoryCapturing()
+        if type(M.CaptureHistory) == "function" and not capturing then
+            M.CaptureHistory(HandleHistoryLabel(handle, "Nudge"),
+                "groupPreview:" .. tostring(H.CurrentScope()) .. ":" .. handleKey .. ":exact-nudge", Mutate)
+        else
+            Mutate()
+            if outcome and outcome[1] then CheckpointHandleHistory(handle, "Nudge") end
+        end
+        if not (outcome and outcome[1]) then RestoreGroupPreviewSelection(previous) end
+        if outcome and outcome[1] then return true, outcome[2], outcome[3], outcome[4], outcome[5] end
+        return false, (outcome and outcome[2]) or "write-failed"
+    end
     local function StopHandleDrag(handle, button)
         if box._stage and box._stage._msufGFPreviewPanning then StopPan(box._stage) end
         if button and button ~= "LeftButton" then return end
@@ -644,7 +771,41 @@ function Handles.Install(box, deps)
             StopHandleDrag(self)
             if box._selectedHandle == self then SelectHandle(nil) end
         end)
-        RegisterPreviewControl(handle, "handle." .. tostring(key), label or key, "button", "action")
+        handle._msuf2CommandAction = {
+            kind = "button",
+            historyMode = "none",
+            interaction = "preview.handle.select",
+            previewSurface = "group",
+            previewHandleKey = key,
+            previewScope = H.CurrentScope(),
+            set = function()
+                if handle.IsShown and not handle:IsShown() then return false end
+                SelectHandle(handle)
+                return box._selectedHandle == handle
+            end,
+        }
+        RegisterPreviewControl(handle, "handle." .. tostring(key), label or key, "button", "ephemeral")
+        if PreviewHelpers.EnsurePreviewHandleGear then
+            local gear = PreviewHelpers.EnsurePreviewHandleGear(handle, {
+                T = T,
+                Tr = Tr,
+                shown = false,
+                openSettings = OpenHandleSettings,
+            })
+            if gear then
+                gear._msuf2GroupPreviewOpenCommand = gear._msuf2GroupPreviewOpenCommand or {
+                    kind = "button",
+                    historyMode = "none",
+                    set = function() return OpenHandleSettings(handle) end,
+                }
+                RegisterPreviewControl(gear, "handle." .. tostring(key) .. ".open_settings",
+                    "Open " .. tostring(label or key) .. " settings", "button", "action", {
+                        historyMode = "none",
+                        help = "Opens the exact Group Frames settings section for this preview element.",
+                        command = gear._msuf2GroupPreviewOpenCommand,
+                    })
+            end
+        end
         box._handles[key] = handle
         box._handleList[#box._handleList + 1] = handle
         return handle
@@ -831,3 +992,40 @@ function Handles.Install(box, deps)
         StopHandleDrag = StopHandleDrag,
     }
 end
+
+local function VisibleGroupPreview()
+    local found
+    local previews = M._gfNativePreviews
+    for i = 1, #(previews or {}) do
+        local box = previews[i]
+        local visible = box
+            and not box._msufGFNativePreviewDisposed
+            and box.IsShown and box:IsShown()
+            and (not box.IsVisible or box:IsVisible())
+        if visible then
+            if found and found ~= box then return nil, "ambiguous-preview" end
+            found = box
+        end
+    end
+    if not found then return nil, "preview-not-visible" end
+    return found
+end
+M.GroupPreview = M.GroupPreview or {}
+function M.GroupPreview.NudgeHandle(handleKey, dx, dy)
+    local box, reason = VisibleGroupPreview()
+    if not box then return false, reason end
+    if type(box.NudgeHandleExact) ~= "function" then return false, "nudge-api-unavailable" end
+    return box:NudgeHandleExact(handleKey, dx, dy)
+end
+function M.GroupPreview.Pan(dx, dy)
+    local box, reason = VisibleGroupPreview()
+    if not box then return false, reason end
+    if type(box.PanExact) ~= "function" then return false, "pan-api-unavailable" end
+    return box:PanExact(dx, dy)
+end
+ExportPublic("MSUF_GroupPreview_NudgeHandle", function(handleKey, dx, dy)
+    return M.GroupPreview.NudgeHandle(handleKey, dx, dy)
+end)
+ExportPublic("MSUF_GroupPreview_Pan", function(dx, dy)
+    return M.GroupPreview.Pan(dx, dy)
+end)

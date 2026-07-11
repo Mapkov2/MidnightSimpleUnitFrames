@@ -145,6 +145,21 @@ local function SmoothTexture(tex)
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
 end
 local Clamp01 = M.Clamp01
+local gradientColorCache = {}
+local function GradientColor(r, g, b, a)
+    local byG = gradientColorCache[r]
+    if not byG then byG = {}; gradientColorCache[r] = byG end
+    local byB = byG[g]
+    if not byB then byB = {}; byG[g] = byB end
+    local byA = byB[b]
+    if not byA then byA = {}; byB[b] = byA end
+    local color = byA[a]
+    if not color then
+        color = _G.CreateColor(r, g, b, a)
+        byA[a] = color
+    end
+    return color
+end
 local function SetTextureColorCached(tex, r, g, b, a)
     if not tex then return end
     r, g, b = r or 0, g or 0, b or 0
@@ -225,7 +240,7 @@ local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preser
         tex._msuf2GradientOrientation = orientation
         tex._msuf2GradientFR, tex._msuf2GradientFG, tex._msuf2GradientFB, tex._msuf2GradientFA = fr, fg, fb, fa
         tex._msuf2GradientTR, tex._msuf2GradientTG, tex._msuf2GradientTB, tex._msuf2GradientTA = tr, tg, tb, ta
-        tex:SetGradient(orientation, _G.CreateColor(fr, fg, fb, fa), _G.CreateColor(tr, tg, tb, ta))
+        tex:SetGradient(orientation, GradientColor(fr, fg, fb, fa), GradientColor(tr, tg, tb, ta))
         return true
     end
     if tex.SetVertexColor then
@@ -376,17 +391,17 @@ function T.RefreshMenuFonts(root)
     RefreshMenuFonts(M.frame, seen)
     RefreshMenuFonts(M.minimizedBar, seen)
 end
+local SUPERELLIPSE_SPECS = {
+    { "L", 0.00, 0.25 },
+    { "M", 0.25, 0.75 },
+    { "R", 0.75, 1.00 },
+}
 local function CreateSuperellipseParts(frame, layer, subLevel)
     local parts = {}
     -- The pill/superellipse skin is three textures, not a nine-slice frame. This keeps
     -- allocation cheap for dense option rows while still allowing gradient fills.
-    local specs = {
-        { "L", 0.00, 0.25 },
-        { "M", 0.25, 0.75 },
-        { "R", 0.75, 1.00 },
-    }
-    for i = 1, #specs do
-        local spec = specs[i]
+    for i = 1, #SUPERELLIPSE_SPECS do
+        local spec = SUPERELLIPSE_SPECS[i]
         local tex = frame:CreateTexture(nil, layer, nil, subLevel or 0)
         tex:SetTexture(T.media.superellipse)
         tex:SetTexCoord(spec[2], spec[3], 0, 1)
@@ -2477,6 +2492,7 @@ end
 local SMOOTH_SCROLL_SPEED = 14
 local SMOOTH_SCROLL_MAX_ELAPSED = 0.050
 local SMOOTH_SCROLL_EPSILON = 0.45
+local SMOOTH_SCROLL_STEP_SEC = 1 / 30
 local function PixelBarTexture(texture)
     if not texture then return texture end
     texture:SetTexture("Interface\\Buttons\\WHITE8X8")
@@ -2538,6 +2554,7 @@ function T.StyleScrollFrame(scroll, anchor)
         end
     end
     local rawSetVerticalScroll = scroll.SetVerticalScroll
+    local smoothScrollElapsed = 0
     local function CurrentMaxScroll()
         local maxScroll = scroll._msuf2MaxScroll
         if maxScroll == nil then
@@ -2565,6 +2582,7 @@ function T.StyleScrollFrame(scroll, anchor)
     end
     local function StopSmoothScroll()
         scroll._msuf2SmoothScrollTarget = nil
+        smoothScrollElapsed = 0
         local driver = scroll._msuf2SmoothScrollDriver
         if driver then driver:Hide() end
     end
@@ -2584,6 +2602,10 @@ function T.StyleScrollFrame(scroll, anchor)
             return
         end
         elapsed = tonumber(elapsed) or 0
+        smoothScrollElapsed = smoothScrollElapsed + elapsed
+        if smoothScrollElapsed < SMOOTH_SCROLL_STEP_SEC then return end
+        elapsed = smoothScrollElapsed
+        smoothScrollElapsed = 0
         if elapsed > SMOOTH_SCROLL_MAX_ELAPSED then elapsed = SMOOTH_SCROLL_MAX_ELAPSED end
         local blend = math.min(1, elapsed * SMOOTH_SCROLL_SPEED)
         if blend <= 0 then return end

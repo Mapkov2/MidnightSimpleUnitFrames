@@ -469,3 +469,34 @@ function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return fals
 function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
 function UnitPopup.Sync() if pf and pf:IsShown() then Sync() end end
+local ASSISTANT_UNIT_FIELDS = {
+    x = { "xBox" }, y = { "yBox" }, width = { "wBox" }, height = { "hBox" },
+    detachedX = { "dpbXBox" }, detachedY = { "dpbYBox" }, detachedWidth = { "dpbWBox" },
+    detachedHeight = { "dpbHBox" }, detachedLayer = { "dpbLevelBox" },
+    detached = { "detachBtn", true }, textOnBar = { "dpbTextBtn", true },
+    syncClass = { "dpbSyncBtn", true }, anchorClass = { "dpbAnchorBtn", true },
+}
+function UnitPopup.GetAssistantField(field)
+    if not (pf and pf.unit and pf:IsShown()) then return nil end
+    local spec = ASSISTANT_UNIT_FIELDS[field]
+    local widget = spec and pf[spec[1]]
+    if not widget then return nil end
+    if spec[2] then return widget._checked == true end
+    return tonumber(widget.GetText and widget:GetText())
+end
+function UnitPopup.SetAssistantField(field, value)
+    if BlockConfigCombatLocked() or not (pf and pf.unit and pf:IsShown()) then return false end
+    local spec = ASSISTANT_UNIT_FIELDS[field]
+    local widget = spec and pf[spec[1]]
+    if not widget then return false end
+    if spec[2] then
+        local checked = value == true
+        if widget.SetCheckedVisual then widget:SetCheckedVisual(checked) end
+        widget._checked = checked
+        if field == "detached" then ApplyDetachPower(checked) else Apply() end
+    else
+        Quick.SetBoxText(widget, tonumber(value))
+        Apply()
+    end
+    return UnitPopup.GetAssistantField(field) == (spec[2] and (value == true) or tonumber(value))
+end

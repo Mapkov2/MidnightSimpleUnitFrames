@@ -649,6 +649,48 @@ function W.PageBuilder(ctx)
         header:HookScript("OnEnter", function() RefreshHeaderTone(true) end)
         header:HookScript("OnLeave", function() RefreshHeaderTone(false) end)
         header:HookScript("OnSizeChanged", RefreshHeaderLayout)
+        if type(M.RegisterSearchWidget) == "function" then
+            local pageToken = tostring(ctx.key or "page"):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", "")
+            local sectionToken = sectionId:lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", "")
+            if pageToken == "" then pageToken = "page" end
+            if sectionToken == "" then sectionToken = "section" end
+            local identity = pageToken .. ".section." .. sectionToken .. ".expanded"
+            local function SetSectionOpenImmediate(value)
+                local wanted = value == true or value == 1
+                    or type(value) == "string" and (value:lower() == "true" or value:lower() == "on" or value == "1")
+                if entry.open == wanted and not entry._msuf2MotionActive then return true end
+                entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
+                entry._msuf2MotionActive = nil
+                entry._msuf2Closing = nil
+                entry.open = wanted
+                M.accordionState[stateKey] = wanted
+                if body.SetAlpha then body:SetAlpha(1) end
+                self:RelayoutCollapsibles()
+                if wanted and type(entry._msuf2SettleContentLayout) == "function" then
+                    entry._msuf2SettleContentLayout()
+                    self:RelayoutCollapsibles()
+                end
+                return entry.open == wanted
+            end
+            entry.SetOpenImmediate = SetSectionOpenImmediate
+            M.RegisterSearchWidget(header, {
+                controlId = "menu2." .. identity,
+                identityKey = identity,
+                controlPath = identity:gsub("%.", "/"),
+                pageKey = pageToken,
+                label = tostring(title or sectionId) .. " section",
+                kind = "toggle",
+                classification = "ephemeral",
+                ephemeral = true,
+                help = "Expands or collapses this options section.",
+                command = {
+                    kind = "toggle",
+                    historyMode = "none",
+                    get = function() return entry.open == true end,
+                    set = SetSectionOpenImmediate,
+                },
+            })
+        end
         self.y = self.y - outer:GetHeight() - 8
         RefreshHeaderLayout()
         RefreshHeaderTone(false)
@@ -1491,6 +1533,8 @@ local function CreateToggle(section, label, x, y, labelWidth)
     labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
     labelHit._msuf2ToggleOwner = btn
     for script, handler in pairs(TOGGLE_LABEL_HOOKS) do labelHit:SetScript(script, handler) end
+    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(labelHit, btn)
+    else labelHit._msuf2ControlPartOf = btn end
     btn._msuf2LabelHit = labelHit
     btn._msuf2UseProxyMouse = true
     if btn.EnableMouse then btn:EnableMouse(false) end
@@ -1628,6 +1672,8 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
         labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
         labelHit._msuf2SwitchOwner = btn
         for script, handler in pairs(SWITCH_LABEL_HOOKS) do labelHit:SetScript(script, handler) end
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(labelHit, btn)
+        else labelHit._msuf2ControlPartOf = btn end
         btn._msuf2LabelHit = labelHit
         btn._msuf2UseProxyMouse = true
         if btn.EnableMouse then btn:EnableMouse(false) end
@@ -1738,23 +1784,31 @@ function W.ScopeOverrideBar(ctx, section, opts)
             y = y - rowStep
         end
         local btn = T.Button(section, Tr(item.text or item.label or item.value or ""), width, buttonH)
-        RegisterSearchObject(btn, item.text or item.label or item.value or "", "button")
+        -- The logical ScopeOverrideBar owns search/catalog identity and values.
+        -- Child buttons are implementation details; registering both creates
+        -- duplicate/unknown controls for one selection.
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, bar)
+        else btn._msuf2ControlPartOf = bar end
         btn:SetPoint("LEFT", section, "TOPLEFT", x, y)
         btn._msuf2Value = item.value
         btn._msuf2BaseWidth = width
         T.CenterButtonLabel(btn)
         if btn.RefreshVisual then btn:RefreshVisual() end
-        btn:SetScript("OnClick", function()
-            if type(opts.setValue) == "function" then opts.setValue(item.value) end
-            if type(opts.onChange) == "function" then opts.onChange(item.value) end
-            if bar.Refresh then bar:Refresh() end
-        end)
+        btn:SetScript("OnClick", function() bar:SetValue(item.value) end)
         bar.buttons[i] = btn
         x = x + width + gap
     end
     function bar:GetValue()
         if type(opts.getValue) == "function" then return opts.getValue() end
         return opts.value
+    end
+    function bar:SetValue(value)
+        local current = self:GetValue()
+        if current == value then self:Refresh(); return false end
+        if type(opts.setValue) == "function" then opts.setValue(value) end
+        if type(opts.onChange) == "function" then opts.onChange(value) end
+        self:Refresh()
+        return self:GetValue() == value
     end
     function bar:GetLayoutMetrics()
         return metrics
@@ -2077,7 +2131,10 @@ function M.SuspendPinnedPreviews(reason)
     for i = 1, #list do
         local record = list[i]
         local box = record and record.box
-        if record and type(record.restore) == "function" then record.restore() end
+        -- Window hide is an ownership boundary.  Force the floating branch back
+        -- into its page even if a queued layout pass already changed the local
+        -- `pinned` flag; visual state (not that flag) is the final authority here.
+        if record and type(record.restore) == "function" then record.restore(true) end
         if record and record.scroll and record.scroll._msuf2PinnedPreviewActiveRecord == record then
             record.scroll._msuf2PinnedPreviewActiveRecord = nil
         end
@@ -2128,7 +2185,7 @@ function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
         end
         if release then
             local box = record and record.box
-            if record and type(record.restore) == "function" then record.restore() end
+            if record and type(record.restore) == "function" then record.restore(true) end
             if record and record.scroll and record.scroll._msuf2PinnedPreviewActiveRecord == record then record.scroll._msuf2PinnedPreviewActiveRecord = nil end
             if box then
                 if box._msuf2PinnedPreviewRecord == record then box._msuf2PinnedPreviewRecord = nil end
@@ -2290,11 +2347,11 @@ function W.AttachPinnedPreview(body, box, opts)
         if record and record.scrim then return record.scrim end
         local scrim = box._msuf2PinnedPreviewScrim
         if not scrim then
-            scrim = CreateFrame("Frame", nil, scrollParent or scroll, "BackdropTemplate")
-            scrim:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            -- The pinned background belongs to the preview's render tree.  A
+            -- separately levelled sibling can sit above children that use fixed
+            -- frame levels after the box is floated to its overlay parent.
+            scrim = box:CreateTexture(nil, "BACKGROUND", nil, -8)
             box._msuf2PinnedPreviewScrim = scrim
-        elseif scrim.SetParent then
-            scrim:SetParent(scrollParent or scroll)
         end
         scrim:Hide()
         if record then record.scrim = scrim end
@@ -2304,13 +2361,11 @@ function W.AttachPinnedPreview(body, box, opts)
         if not (record and record.scrim) then return end
         local scrim = record.scrim
         local bg = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1 })
-        local border = ThemeColor("borderSoft", { 0.070, 0.260, 0.390, 1 })
-        if scrim.SetFrameLevel then scrim:SetFrameLevel(max(0, (tonumber(level) or originalFrameLevel) - 1)) end
         scrim:ClearAllPoints()
         scrim:SetPoint("TOPLEFT", box, "TOPLEFT", -2, 2)
         scrim:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 2, -2)
-        if scrim.SetBackdropColor then scrim:SetBackdropColor(bg[1], bg[2], bg[3], opts.scrimAlpha or 0.94) end
-        if scrim.SetBackdropBorderColor then scrim:SetBackdropBorderColor(border[1], border[2], border[3], opts.scrimBorderAlpha or 0.58) end
+        if scrim.SetColorTexture then scrim:SetColorTexture(bg[1], bg[2], bg[3], opts.scrimAlpha or 0.94) end
+        scrim._msuf2PinnedPreviewOwnerRecord = record
         scrim:Show()
     end
     local function ApplyPinnedPresentation(active, level)
@@ -2334,14 +2389,25 @@ function W.AttachPinnedPreview(body, box, opts)
     end
     local function Restore(force)
         if box._msuf2PinnedPreviewRecord ~= record then return end
-        if not force and not pinned and box._msuf2PinnedFloating ~= true then return end
+        local wasFloating = pinned or box._msuf2PinnedFloating == true
         restoring = true
         pinned = false
         box._msuf2PinnedFloating = nil
         if placeholder then placeholder:Hide() end
         ClearActivePinnedRecord()
-        if record and record.scrim then record.scrim:Hide() end
+        -- The background region is shared by successive records for this box.
+        -- Always reconcile it before considering an early return so logical and
+        -- visual ownership cannot diverge across a queued pin pass.
+        local scrim = (record and record.scrim) or box._msuf2PinnedPreviewScrim
+        if scrim then
+            scrim:Hide()
+            scrim._msuf2PinnedPreviewOwnerRecord = nil
+        end
         ApplyPinnedPresentation(false)
+        if not force and not wasFloating then
+            restoring = false
+            return
+        end
         if not AnchorBoxToRestoreSlot() then
             box:SetParent(originalParent)
             box:ClearAllPoints()
@@ -2434,12 +2500,26 @@ function W.AttachPinnedPreview(body, box, opts)
         RefreshButton()
         applyingPinnedState = false
     end
-    pinBtn:SetScript("OnClick", function()
-        M.previewPinState[stateKey] = not PinEnabled()
-        if not PinEnabled() then
-            Restore(true)
+    local function SetPinEnabled(enabled)
+        enabled = enabled == true
+        if PinEnabled() == enabled then
+            RefreshButton()
+            return true
         end
+        M.previewPinState[stateKey] = enabled
+        if not enabled then Restore(true) end
         ApplyPinnedState()
+        RefreshButton()
+        return PinEnabled() == enabled
+    end
+    pinBtn._msuf2CommandAction = {
+        kind = "toggle",
+        historyMode = "none",
+        get = function() return PinEnabled() end,
+        set = SetPinEnabled,
+    }
+    pinBtn:SetScript("OnClick", function()
+        return SetPinEnabled(not PinEnabled())
     end)
     pinBtn:SetScript("OnEnter", function(self)
         self._msuf2Hover = true
@@ -2457,7 +2537,7 @@ function W.AttachPinnedPreview(body, box, opts)
     for i = #M._pinnedPreviews, 1, -1 do
         local r = M._pinnedPreviews[i]
         if r and r.box == box then  --- same box = this exact page was rebuilt, replace its record
-            if r.restore then r.restore() end
+            if r.restore then r.restore(true) end
             table.remove(M._pinnedPreviews, i)
         end
     end
@@ -2527,6 +2607,8 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     local function StepButton(text)
         local btn = T.Button(section, text, 18, 20)
         SetSearchText(btn, text)
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, slider)
+        else btn._msuf2ControlPartOf = slider end
         return T.CenterButtonLabel(btn)
     end
     local minus = StepButton("-")
@@ -2536,6 +2618,8 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     edit:SetJustifyH("CENTER")
     edit:SetNumeric(false)
     T.SkinEditBox(edit)
+    if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(edit, slider)
+    else edit._msuf2ControlPartOf = slider end
     slider.editBox = edit
     local plus = StepButton("+")
     slider.minusButton = minus
@@ -2734,7 +2818,10 @@ function W.Segment(section, label, values, width)
     for i = 1, count do
         local item = holder.values[i]
         local btn = T.Button(holder, item.text or tostring(item.value), bw, 22)
-        RegisterSearchObject(btn, item.text or item.label or item.value or "", "button")
+        -- A Segment is one logical control. Its option buttons are visual
+        -- parts and must not become duplicate catalog records.
+        if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, holder)
+        else btn._msuf2ControlPartOf = holder end
         btn:SetPoint("LEFT", holder, "LEFT", (i - 1) * (bw + gap), 0)
         btn._msuf2Value = item.value
         holder.buttons[i] = btn

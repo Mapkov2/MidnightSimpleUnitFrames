@@ -114,16 +114,40 @@ end
 function CP.ResolveTextColor(fallbackR, fallbackG, fallbackB, powerColorFn)
     return CP.ResolveColor("RESOURCE_TEXT", fallbackR or 1, fallbackG or 1, fallbackB or 1, powerColorFn)
 end
-function CP.ResolveComboColor(bars, slot, baseR, baseG, baseB)
-    local mode = bars and bars.classPowerComboPointColorMode
+function CP.ResolveSlotColor(bars, resourceToken, slot, baseR, baseG, baseB)
+    local modes = bars and bars.classPowerSlotColorModes
+    local mode = type(modes) == "table" and modes[resourceToken] or nil
+    if mode == nil and resourceToken == "COMBO_POINTS" then mode = bars and bars.classPowerComboPointColorMode end
     if mode ~= "ramp" and mode ~= "custom" then return baseR, baseG, baseB end
     slot = tonumber(slot) or 1
-    if slot < 1 then slot = 1 elseif slot > 7 then slot = 7 end
+    if slot < 1 then slot = 1 elseif slot > 10 then slot = 10 end
     if mode == "custom" then
-        local r, g, b = CP.ColorOverride("classPowerColorOverrides", CP.COMBO_POINT_SLOT_TOKENS[slot])
+        local slotToken = resourceToken == "COMBO_POINTS" and CP.COMBO_POINT_SLOT_TOKENS[slot]
+            or (resourceToken and (resourceToken .. "_" .. tostring(slot)))
+        local r, g, b = CP.ColorOverride("classPowerColorOverrides", slotToken)
         if r then return r, g, b end
+        if resourceToken ~= "COMBO_POINTS" then return baseR, baseG, baseB end
     end
-    return COMBO_POINT_RAMP_R[slot], COMBO_POINT_RAMP_G[slot], COMBO_POINT_RAMP_B[slot]
+    local rampSlot = slot > 7 and 7 or slot
+    return COMBO_POINT_RAMP_R[rampSlot] or baseR, COMBO_POINT_RAMP_G[rampSlot] or baseG, COMBO_POINT_RAMP_B[rampSlot] or baseB
+end
+function CP.ResolveComboColor(bars, slot, baseR, baseG, baseB)
+    return CP.ResolveSlotColor(bars, "COMBO_POINTS", slot, baseR, baseG, baseB)
+end
+function CP.ResolveFullColor(bars, resourceToken, baseR, baseG, baseB)
+    local enabled = bars and bars.classPowerFullColorEnabled
+    if not (type(enabled) == "table" and enabled[resourceToken] == true) then
+        return false, baseR, baseG, baseB
+    end
+    local r, g, b = CP.ColorOverride("classPowerColorOverrides", tostring(resourceToken) .. "_FULL")
+    return true, r or baseR, g or baseG, b or baseB
+end
+function CP.IsFull(spec, valueOverride)
+    if not spec or CP.IsSingleBarMode(spec.mode) then return false end
+    local maxValue = floor(tonumber(spec.segments) or 0)
+    local value = tonumber(valueOverride)
+    if value == nil then value = tonumber(spec.value) or 0 end
+    return maxValue > 0 and value >= maxValue
 end
 function CP.IsCharged(spec, bars, slot)
     return spec and spec.token == "COMBO_POINTS"
@@ -389,6 +413,42 @@ function H.ShowPreviewHandleContext(handle, opts)
             local p = self:GetParent()
             if p then p:Hide() end
         end)
+        if M2 and type(M2.RegisterMenuChromeControl) == "function" then
+            M2.RegisterMenuChromeControl(popup._open, "preview-context.open-settings",
+                "Open selected preview element settings", "action", {
+                    historyMode = "none",
+                    help = "Opens the exact options section for the selected preview element.",
+                    command = {
+                        kind = "button",
+                        historyMode = "none",
+                        canExecute = function()
+                            return popup.IsShown and popup:IsShown()
+                                and popup._handle ~= nil and type(popup._openSettings) == "function"
+                        end,
+                        set = function()
+                            if not (popup.IsShown and popup:IsShown()) then return false end
+                            local h, fn = popup._handle, popup._openSettings
+                            if h == nil or type(fn) ~= "function" then return false end
+                            popup:Hide()
+                            return fn(h, "assistant") ~= false
+                        end,
+                    },
+                })
+            M2.RegisterMenuChromeControl(popup._keep, "preview-context.keep-selected", "Keep preview element selected", "action", {
+                historyMode = "none",
+                help = "Closes the preview quick-actions popup without changing the current selection.",
+                command = {
+                    kind = "button",
+                    historyMode = "none",
+                    canExecute = function() return popup.IsShown and popup:IsShown() end,
+                    set = function()
+                        if not (popup.IsShown and popup:IsShown()) then return false end
+                        popup:Hide()
+                        return true
+                    end,
+                },
+            })
+        end
         H._previewHandleContextPopup = popup
     end
     popup._handle = handle
@@ -548,6 +608,22 @@ function H.ShowPreviewControlsHelp(anchor, opts)
             local p = self:GetParent()
             if p then p:Hide() end
         end)
+        if M2 and type(M2.RegisterMenuChromeControl) == "function" then
+            M2.RegisterMenuChromeControl(close, "preview-controls-help.dismiss", "Got it", "action", {
+                historyMode = "none",
+                help = "Closes the Preview Controls help popup.",
+                command = {
+                    kind = "button",
+                    historyMode = "none",
+                    canExecute = function() return popup.IsShown and popup:IsShown() end,
+                    set = function()
+                        if not (popup.IsShown and popup:IsShown()) then return false end
+                        popup:Hide()
+                        return true
+                    end,
+                },
+            })
+        end
         popup._close = close
         H._previewControlsHelpPopup = popup
     end
@@ -642,6 +718,14 @@ function H.InstallZoomPan(ZoomPan, opts)
     local function Round(value)
         return floor((tonumber(value) or 0) + 0.5)
     end
+    local function ExactPanNumber(value)
+        value = tonumber(value)
+        if value == nil or value ~= value or value == math.huge or value == -math.huge or math.abs(value) > 100000 then return nil end
+        return Round(value)
+    end
+    local function SameOffset(left, right)
+        return math.abs((tonumber(left) or 0) - (tonumber(right) or 0)) < 0.01
+    end
     local function PanKey(name)
         return tostring(opts.panPrefix or "_msufPreview") .. name
     end
@@ -678,21 +762,57 @@ function H.InstallZoomPan(ZoomPan, opts)
     end
     function ZoomPan.ApplyPan(box)
         if opts.panMode == "topLeft" then
-            if not (box and box._stage and box._mock) then return end
+            if not (box and box._stage and box._mock and box._mock.GetPoint) then return false end
             local x = (tonumber(box._mockBaseOffsetX) or 0) + (tonumber(box._zoomPanX) or 0)
             local y = (tonumber(box._mockBaseOffsetY) or 0) + (tonumber(box._zoomPanY) or 0)
             box._mock:ClearAllPoints()
             box._mock:SetPoint("TOPLEFT", box._stage, "TOPLEFT", x, y)
-            return
+            local point, relative, relativePoint, actualX, actualY = box._mock:GetPoint(1)
+            return point == "TOPLEFT" and relative == box._stage and relativePoint == "TOPLEFT"
+                and SameOffset(actualX, x) and SameOffset(actualY, y)
         end
-        if not (box and box.canvas and box.mock) then return end
+        if not (box and box.canvas and box.mock and box.mock.GetPoint) then return false end
         local panX, panY = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
+        local expectedX = (tonumber(box._mockBaseOffsetX) or 0) + panX
+        local expectedY = (tonumber(box._mockBaseOffsetY) or 0) + panY
         box.mock:ClearAllPoints()
-        box.mock:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._mockBaseOffsetX) or 0) + panX, (tonumber(box._mockBaseOffsetY) or 0) + panY)
+        box.mock:SetPoint("CENTER", box.canvas, "CENTER", expectedX, expectedY)
         if box._detachedCastPreview and box.mock.cast and box.mock.cast:IsShown() then
             box.mock.cast:ClearAllPoints()
             box.mock.cast:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._detachedCastBaseOffsetX) or 0) + panX, (tonumber(box._detachedCastBaseOffsetY) or 0) + panY)
         end
+        local point, relative, relativePoint, actualX, actualY = box.mock:GetPoint(1)
+        return point == "CENTER" and relative == box.canvas and relativePoint == "CENTER"
+            and SameOffset(actualX, expectedX) and SameOffset(actualY, expectedY)
+    end
+    function ZoomPan.GetPan(box)
+        if not box then return nil end
+        return tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
+    end
+    function ZoomPan.SetPan(box, x, y)
+        if not box then return false, "preview-unavailable" end
+        x, y = ExactPanNumber(x), ExactPanNumber(y)
+        if x == nil or y == nil then return false, "invalid-pan" end
+        local beforeX, beforeY = ZoomPan.GetPan(box)
+        if beforeX == x and beforeY == y then return true, beforeX, beforeY, beforeX, beforeY end
+        box._zoomPanX, box._zoomPanY = x, y
+        local appliedOk, applied = pcall(ZoomPan.ApplyPan, box)
+        local afterX, afterY = ZoomPan.GetPan(box)
+        if appliedOk and applied == true and afterX == x and afterY == y then
+            return true, beforeX, beforeY, afterX, afterY
+        end
+        box._zoomPanX, box._zoomPanY = beforeX, beforeY
+        local rollbackOk, rolledBack = pcall(ZoomPan.ApplyPan, box)
+        local restoredX, restoredY = ZoomPan.GetPan(box)
+        if not rollbackOk or rolledBack ~= true or restoredX ~= beforeX or restoredY ~= beforeY then return false, "rollback-failed" end
+        return false, appliedOk and "pan-readback-mismatch" or "pan-write-failed"
+    end
+    function ZoomPan.NudgePan(box, dx, dy)
+        dx, dy = ExactPanNumber(dx), ExactPanNumber(dy)
+        if dx == nil or dy == nil then return false, "invalid-delta" end
+        local beforeX, beforeY = ZoomPan.GetPan(box)
+        if beforeX == nil or beforeY == nil then return false, "preview-unavailable" end
+        return ZoomPan.SetPan(box, beforeX + dx, beforeY + dy)
     end
     function ZoomPan.SetZoom(box, zoom, reason)
         if not box then return end
@@ -974,6 +1094,70 @@ function H.BuildZoomBar(box, surface, opts)
     surface:SetScript("OnHide", stopPan)
     return zoomBar, ZoomWheel
 end
+
+-- One logical zoom setting owns the +/-/Fit/1:1 button cluster.  The buttons
+-- remain available as explicit actions, while this command supplies natural
+-- relative changes ("zoom in", "more", "less") with exact readback.
+function H.BuildZoomCommand(box, zoomPan, reason)
+    if not (box and type(zoomPan) == "table" and type(zoomPan.SetZoom) == "function") then return nil end
+    local minZoom = tonumber(zoomPan.MIN) or 0.35
+    local maxZoom = tonumber(zoomPan.MAX) or 4.0
+    return {
+        kind = "slider",
+        historyMode = "none",
+        min = floor(minZoom * 100 + 0.5),
+        max = floor(maxZoom * 100 + 0.5),
+        step = 25,
+        percentIsValue = true,
+        get = function()
+            local scale = tonumber(box._manualZoom) or tonumber(box._mockScale)
+                or tonumber(box._mockAutoScale) or 1
+            return floor(scale * 100 + 0.5)
+        end,
+        set = function(value)
+            value = tonumber(value)
+            if not value then return false end
+            zoomPan.SetZoom(box, value / 100, reason or "ASSISTANT_PREVIEW_ZOOM")
+            local scale = tonumber(box._manualZoom) or tonumber(box._mockScale)
+                or tonumber(box._mockAutoScale) or 1
+            return floor(scale * 100 + 0.5) == floor(value + 0.5)
+        end,
+    }
+end
+function H.BuildPanCommand(box, zoomPan, nudge, metadata)
+    if not (box and type(zoomPan) == "table" and type(zoomPan.GetPan) == "function") then return nil end
+    metadata = type(metadata) == "table" and metadata or {}
+    local function ParseDelta(value)
+        if type(value) == "table" then
+            return tonumber(value.dx or value.x or value[1]), tonumber(value.dy or value.y or value[2])
+        end
+        if type(value) == "string" then
+            local x, y = value:match("^%s*([%+%-]?%d+%.?%d*)%s*[,;/ ]%s*([%+%-]?%d+%.?%d*)%s*$")
+            return tonumber(x), tonumber(y)
+        end
+        return nil
+    end
+    local command = {
+        kind = "button",
+        historyMode = "none",
+        skipNavigation = true,
+        previewSurface = metadata.previewSurface,
+        previewUnitKey = metadata.previewUnitKey,
+        interaction = "preview.canvas.pan",
+        get = function()
+            local x, y = zoomPan.GetPan(box)
+            return { x = x, y = y }
+        end,
+        set = function(value)
+            local dx, dy = ParseDelta(value)
+            if dx == nil or dy == nil then return false end
+            if type(nudge) == "function" then return nudge(dx, dy) end
+            if type(zoomPan.NudgePan) ~= "function" then return false end
+            return zoomPan.NudgePan(box, dx, dy)
+        end,
+    }
+    return command
+end
 function H.IsTextInputFocused()
     local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
     return focus and focus.IsObjectType and focus:IsObjectType("EditBox")
@@ -1201,6 +1385,31 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
         owner.layerVisibility[self.key] = owner.layerVisibility[self.key] == false
         self:Refresh()
     end)
+    -- Layer pills are toggles, not fire-and-forget buttons.  Expose the exact
+    -- state transition to RuntimeControlCatalog so Assistant requests such as
+    -- "show Guides" and "hide Guides" are idempotent and disabled layers can
+    -- fail closed instead of silently inverting another state.
+    btn._msuf2CommandAction = {
+        kind = "toggle",
+        historyMode = "none",
+        get = function()
+            return LayerButtonAvailableFor(owner, btn.key, opts)
+                and LayerButtonOnFor(owner, btn.key, opts) or false
+        end,
+        set = function(value)
+            if not LayerButtonAvailableFor(owner, btn.key, opts) then return false end
+            local desired = value == true
+            local current = LayerButtonOnFor(owner, btn.key, opts) and true or false
+            if current == desired then return true end
+            if opts.OnClick then
+                opts.OnClick(btn, owner)
+            else
+                owner.layerVisibility[btn.key] = desired
+                btn:Refresh()
+            end
+            return (LayerButtonOnFor(owner, btn.key, opts) and true or false) == desired
+        end,
+    }
     btn:SetScript("OnEnter", function(self)
         local available = LayerButtonAvailableFor(owner, self.key, opts)
         local on = LayerButtonOnFor(owner, self.key, opts)

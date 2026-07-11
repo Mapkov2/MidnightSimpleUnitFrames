@@ -22,10 +22,10 @@ local min = math.min
 local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
 local GROUP_PREVIEW_REFRESH_DELAY = 0.05
 local GROUP_PREVIEW_ANIMATION_INTERVAL = 1 / 20
-local function RegisterGroupPreviewControl(widget, semanticPath, label, kind, classification)
+local function RegisterGroupPreviewControl(widget, semanticPath, label, kind, classification, extra)
     local page = M.GroupPage
     if page and type(page.RegisterControl) == "function" then
-        page.RegisterControl(widget, { key = M.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification)
+        page.RegisterControl(widget, { key = M.activeKey }, "preview." .. tostring(semanticPath), label, kind, classification, extra)
     end
     return widget
 end
@@ -33,6 +33,7 @@ local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
 local LAYER_TEXT_OFF = { 0.30, 0.30, 0.36, 0.55 }
 local LAYER_TEXT_HIGHLIGHT = { 0.90, 0.92, 1.00, 1.00 }
+local HANDLE_FALLBACK_COLOR = { 0.70, 0.80, 1.00 }
 local GF_PREVIEW_ROLE = Specs.ROLE or "HEALER"
 local SECTION_PAGE, PAGE_FOCUS, GF_PREVIEW_CLASSES, GF_PREVIEW_NAMES, GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS, GF_AURA_GROWTH_TABLE, GF_STATUS_RUNTIME_KEYS = PickDefaults(Specs, [[
     SECTION_PAGE PAGE_FOCUS CLASSES NAMES ANCHOR_FRAC AURA_MOCK_ICON_IDS AURA_GROWTH_TABLE STATUS_RUNTIME_KEYS
@@ -144,8 +145,9 @@ local function OpenGFSection(sectionKey)
             explicit = true,
             changedAt = GetTime and GetTime() or 0,
         })
-        M.SelectPage(pageKey)
+        return M.SelectPage(pageKey) ~= false
     end
+    return false
 end
 local function PreviewAnimationInCombat()
     return (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true
@@ -172,7 +174,6 @@ end
 local function StopPreviewAnimationDriver(box)
     if not (box and box.SetScript) then return end
     box:SetScript("OnUpdate", nil)
-    if box.UnregisterEvent then box:UnregisterEvent("PLAYER_REGEN_DISABLED") end
 end
 local function KillPreviewAnimationForCombat(box)
     if not box then return end
@@ -244,6 +245,10 @@ end
 local function TogglePreviewAnimation(box)
     SetPreviewAnimationEnabled(box, not PreviewAnimationActive(box), "GROUP_PREVIEW_COMBAT_ANIMATE_TOGGLE")
 end
+local function PreviewAllSpecSpellIcons(kind)
+    local state = M.gfPreviewAllSpecSpellIcons
+    return type(state) == "table" and state[kind or CurrentScope()] == true
+end
 local function CreatePreviewAnimationButton(box)
     if not box or box._previewAnimationButton then return end
     local parent = box._stage or box
@@ -268,7 +273,17 @@ local function CreatePreviewAnimationButton(box)
     if PreviewHelpers.StylePreviewPillButton then PreviewHelpers.StylePreviewPillButton(btn, T, { fontField = "fs" }) end
     if btn.SetFrameLevel and parent.GetFrameLevel then btn:SetFrameLevel((parent:GetFrameLevel() or 0) + 85) end
     btn:SetScript("OnClick", function(self) TogglePreviewAnimation(self._preview) end)
-    RegisterGroupPreviewControl(btn, "combat_animation", "Combat Preview", "button", "ephemeral")
+    btn._msuf2CommandAction = {
+        kind = "toggle",
+        historyMode = "none",
+        get = function() return PreviewAnimationActive(box) end,
+        set = function(enabled)
+            if enabled == true and PreviewAnimationInCombat() then return false end
+            SetPreviewAnimationEnabled(box, enabled == true, "GROUP_PREVIEW_ASSISTANT_ANIMATION")
+            return PreviewAnimationActive(box) == (enabled == true)
+        end,
+    }
+    RegisterGroupPreviewControl(btn, "combat_animation", "Group Preview Combat Animation", "button", "ephemeral")
     if M.AddTooltip then
         M.AddTooltip(btn, "Combat Preview", "Animates health, power, prediction bars, text values, aura timers, and combat-state indicators in this preview only. Pauses during combat.", { hook = true })
     end
@@ -930,37 +945,39 @@ local function RefreshHandleSelection(box)
     for i = 1, #handles do
         local handle = handles[i]
         if handle then
-            local color = handle._color or { 0.7, 0.8, 1.0 }
+            local color = handle._color or HANDLE_FALLBACK_COLOR
             local isSelected = handle == selected
             local isHover = handle._hovering == true
             local isDrag = handle._dragging == true
-            if handle._selectFill then handle._selectFill:SetColorTexture(color[1], color[2], color[3], guidesOn and (isDrag and 0.18 or (isHover and 0.14 or 0)) or 0) end
-            if handle._selectBorder then
-                handle._selectBorder:SetShown(guidesOn and (isSelected or isHover))
-                handle._selectBorder:SetBackdropBorderColor(color[1], color[2], color[3], isSelected and 0.70 or 0.72)
+            local visualState = (guidesOn and 1 or 0) + (isSelected and 2 or 0) + (isHover and 4 or 0)
+                + (isDrag and 8 or 0) + (handle._locked and 16 or 0) + (handle._cfgText and 32 or 0)
+            local r, g, b = color[1], color[2], color[3]
+            if handle._msufGFSelectionVisualState ~= visualState
+                or handle._msufGFSelectionVisualR ~= r
+                or handle._msufGFSelectionVisualG ~= g
+                or handle._msufGFSelectionVisualB ~= b then
+                handle._msufGFSelectionVisualState = visualState
+                handle._msufGFSelectionVisualR = r
+                handle._msufGFSelectionVisualG = g
+                handle._msufGFSelectionVisualB = b
+                if handle._selectFill then handle._selectFill:SetColorTexture(r, g, b, guidesOn and (isDrag and 0.18 or (isHover and 0.14 or 0)) or 0) end
+                if handle._selectBorder then
+                    handle._selectBorder:SetShown(guidesOn and (isSelected or isHover))
+                    handle._selectBorder:SetBackdropBorderColor(r, g, b, isSelected and 0.70 or 0.72)
+                end
+                if handle.SetBackdropBorderColor then
+                    local borderAlpha = guidesOn and (isSelected and 0.70 or (isHover and 0.85 or (handle._locked and 0.55 or 0.95))) or 0
+                    if handle._cfgText then borderAlpha = 0 end
+                    handle:SetBackdropBorderColor(r, g, b, borderAlpha)
+                end
+                if handle.SetBackdropColor and not handle._cfgText then
+                    local alpha = guidesOn and 0.42 or 0
+                    handle:SetBackdropColor(r * 0.12, g * 0.12, b * 0.12, alpha)
+                end
+                if handle._cfgText and handle.SetBackdropColor then handle:SetBackdropColor(0, 0, 0, 0) end
+                if handle._msuf2SettingsGear then handle._msuf2SettingsGear:SetShown(guidesOn and isSelected) end
             end
-            if handle.SetBackdropBorderColor then
-                local borderAlpha = guidesOn and (isSelected and 0.70 or (isHover and 0.85 or (handle._locked and 0.55 or 0.95))) or 0
-                if handle._cfgText then borderAlpha = 0 end
-                handle:SetBackdropBorderColor(color[1], color[2], color[3], borderAlpha)
-            end
-            if handle.SetBackdropColor and not handle._cfgText then
-                local alpha = guidesOn and 0.42 or 0
-                handle:SetBackdropColor(color[1] * 0.12, color[2] * 0.12, color[3] * 0.12, alpha)
-            end
-            if handle._cfgText and handle.SetBackdropColor then handle:SetBackdropColor(0, 0, 0, 0) end
-            if handle._msuf2SettingsGear then handle._msuf2SettingsGear:SetShown(guidesOn and isSelected) end
         end
-    end
-    if selected and guidesOn and PreviewHelpers.EnsurePreviewHandleGear then
-        PreviewHelpers.EnsurePreviewHandleGear(selected, {
-            T = T,
-            Tr = Tr,
-            shown = true,
-            openSettings = function(handle)
-                if handle and handle._sectionKey then OpenGFSection(handle._sectionKey) end
-            end,
-        })
     end
     UpdateHint(box, selected)
 end
@@ -999,6 +1016,8 @@ local NativeDeps = {
     HandleOffset = HandleOffset,
     OffsetToConfig = OffsetToConfig,
     CurrentStatusSpec = CurrentStatusSpec,
+    CurrentSpellInfo = CurrentSpellInfo,
+    PreviewAllSpecSpellIcons = PreviewAllSpecSpellIcons,
     CurrentSpellConfig = CurrentSpellConfig,
     CurrentSpellPlaced = CurrentSpellPlaced,
     HandleText = HandleText,
@@ -1086,7 +1105,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         fitReason = "GROUP_PREVIEW_ZOOM_FIT",
         oneReason = "GROUP_PREVIEW_ZOOM_1TO1",
     })
-    RegisterGroupPreviewControl(box._zoomBar, "zoom.surface", "Preview zoom controls", "canvas", "ephemeral")
+    box._msuf2ZoomCommand = box._msuf2ZoomCommand
+        or (PreviewHelpers.BuildZoomCommand and PreviewHelpers.BuildZoomCommand(box, GFZoomPan, "GROUP_PREVIEW_ASSISTANT_ZOOM"))
+    RegisterGroupPreviewControl(box._zoomBar, "zoom.surface", "Group Preview Zoom", "slider", "ephemeral", {
+        help = "Sets the Group preview zoom percentage; Fit and 1:1 remain available as exact actions.",
+        command = box._msuf2ZoomCommand,
+    })
     local zoomControls = {
         { "_zoomOutButton", "zoom.out", "Zoom out" },
         { "_zoomFitButton", "zoom.fit", "Fit preview" },
@@ -1187,6 +1211,24 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             end
             if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_LAYER") elseif box.Refresh then box:Refresh() end
         end)
+        btn._msuf2CommandAction = {
+            kind = "toggle",
+            historyMode = "none",
+            get = function()
+                if btn._layerAvailable == false then return false end
+                if M.gfPreviewSoloLayer ~= nil then return M.gfPreviewSoloLayer == btn._layerKey end
+                return M.gfPreviewLayerVisible[btn._layerKey] ~= false
+            end,
+            set = function(enabled)
+                if btn._layerAvailable == false then return false end
+                enabled = enabled == true
+                M.gfPreviewSoloLayer = nil
+                M.gfPreviewLayerVisible[btn._layerKey] = enabled
+                if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_ASSISTANT_LAYER")
+                elseif box.Refresh then box:Refresh() end
+                return (M.gfPreviewLayerVisible[btn._layerKey] ~= false) == enabled
+            end,
+        }
         RegisterGroupPreviewControl(btn, "layer." .. tostring(def[4]), def[1] .. " preview layer", "button", "ephemeral")
         box._layerButtons[#box._layerButtons + 1] = btn
     end
@@ -1202,9 +1244,28 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock:SetScript("OnMouseUp", function()
         if stage._msufGFPreviewPanning then R.StopPan(stage) end
     end)
-    RegisterGroupPreviewControl(mock, "canvas", "Group preview canvas", "canvas", "ephemeral")
     box._mock = mock
     box.mock, mock.bounds = mock, bounds
+    function box:PanExact(dx, dy)
+        if type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() then return false, "combat-locked" end
+        if self._msufGFNativePreviewDisposed then return false, "preview-disposed" end
+        if not (self.IsShown and self:IsShown() and (not self.IsVisible or self:IsVisible())) then return false, "preview-not-visible" end
+        if (self._stage and self._stage._msufGFPreviewPanning) or (self._dragFrame and self._dragFrame._handle) then return false, "preview-busy" end
+        if type(GFZoomPan.NudgePan) ~= "function" then return false, "pan-api-unavailable" end
+        return GFZoomPan.NudgePan(self, dx, dy)
+    end
+    box._msuf2PanCommand = box._msuf2PanCommand or (PreviewHelpers.BuildPanCommand and PreviewHelpers.BuildPanCommand(
+        box, GFZoomPan,
+        function(dx, dy)
+            if not (M.GroupPreview and type(M.GroupPreview.Pan) == "function") then return false end
+            return M.GroupPreview.Pan(dx, dy)
+        end,
+        { previewSurface = "group" }
+    ))
+    RegisterGroupPreviewControl(mock, "canvas", "Group preview canvas", "canvas", "ephemeral", {
+        help = "Pans this exact Group preview canvas by an explicit X/Y delta.",
+        command = box._msuf2PanCommand,
+    })
     mock._health = CreateFrame("StatusBar", nil, mock)
     mock._health:SetMinMaxValues(0, 1)
     mock._health:SetValue(0.72)
@@ -1288,6 +1349,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
     end
     function box:RequestRefresh(reason)
+        if PreviewAnimationInCombat() then
+            self._msufGFRefreshAfterCombat = reason or self._msufGFRefreshAfterCombat or true
+            if self.CancelPendingRefresh then self:CancelPendingRefresh() end
+            return
+        end
+        self._msufGFRefreshAfterCombat = nil
         local hostShown = self._msufGFPreviewHostShown
         if type(hostShown) == "function" and not hostShown() then
             self:ReleaseRuntimePreview()
@@ -1309,9 +1376,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if not self then return end
             if serial ~= self._msufGFRefreshSerial then return end
             self._msufGFRefreshQueued = nil
+            if PreviewAnimationInCombat() then
+                self._msufGFRefreshAfterCombat = self._msufGFRefreshReason or self._msufGFRefreshAfterCombat or true
+                return
+            end
             if self._msufGFNativePreviewDisposed then return end
             if self.IsShown and not self:IsShown() then return end
-            if self.IsVisible and not self:IsVisible() then return end
             local currentHostShown = self._msufGFPreviewHostShown
             if type(currentHostShown) == "function" and not currentHostShown() then
                 self:ReleaseRuntimePreview()
@@ -1326,6 +1396,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
         self._msufGFRefreshQueued = nil
         self._msufGFRefreshReason = nil
+        if self.SuspendSpellPreviewEffects then self:SuspendSpellPreviewEffects() end
         StopHandleDrag(self and self._selectedHandle)
         self._selectedHandle = nil
         if PreviewHelpers.ReleaseKeyboardCapture then
@@ -1335,17 +1406,32 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end
     end
     box:HookScript("OnShow", function(self)
+        if self.RegisterEvent then
+            self:RegisterEvent("PLAYER_REGEN_DISABLED")
+            self:RegisterEvent("PLAYER_REGEN_ENABLED")
+        end
         if PreviewAnimationActive(self) then StartPreviewAnimationDriver(self) end
         RefreshPreviewAnimationButton(self)
         self:RequestRefresh("GROUP_PREVIEW_SHOW")
     end)
     box:HookScript("OnHide", function(self)
         StopPreviewAnimationDriver(self)
+        if self.UnregisterEvent then
+            self:UnregisterEvent("PLAYER_REGEN_DISABLED")
+            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        end
         self:ReleaseRuntimePreview()
     end)
     box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
             KillPreviewAnimationForCombat(self)
+            if self.SuspendSpellPreviewEffects then self:SuspendSpellPreviewEffects() end
+            self._msufGFRefreshAfterCombat = self._msufGFRefreshReason or self._msufGFRefreshAfterCombat or true
+            if self.CancelPendingRefresh then self:CancelPendingRefresh() end
+        elseif event == "PLAYER_REGEN_ENABLED" and self._msufGFRefreshAfterCombat then
+            local reason = self._msufGFRefreshAfterCombat
+            self._msufGFRefreshAfterCombat = nil
+            self:RequestRefresh(type(reason) == "string" and reason or "GROUP_PREVIEW_REGEN")
         end
     end)
     box:HookScript("OnSizeChanged", function(self, width, height)
