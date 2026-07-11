@@ -1,6 +1,6 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.0-Beta12 - Unreleased
+## 6.0-Beta12 - 2026-07-11
 
 ### Highlights
 - **One self-contained addon:** The Assistant runtime and every locale are again shipped from the main MSUF addon. Installation and release packages no longer depend on separate companion folders.
